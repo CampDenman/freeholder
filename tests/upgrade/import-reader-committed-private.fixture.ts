@@ -12,7 +12,7 @@ import { customerMagicLinks } from "@/core/contacts/schema";
 import { consumeCustomerMagicLink } from "@/core/auth/magic-links/service";
 import { hashCustomerMagicLinkToken } from "@/core/auth/two-factor-crypto";
 import { actorFromToken } from "@/core/http/actor";
-import { createDataRequest, verifyDataRequest, createMyDataRequest, fulfillDataRequest, downloadMyDataRequestArtifact } from "@/core/privacy/service";
+import { addRetentionException, createDataRequest, verifyDataRequest, createMyDataRequest, fulfillDataRequest, downloadMyDataRequestArtifact } from "@/core/privacy/service";
 import { importRuns } from "@/core/plugins/schema";
 import { readerOwnershipReview, resolveReaderOwnership } from "@/core/import/reader-ownership-review";
 import { readerOwnershipReceipts } from "@/core/import/reader-ownership-schema";
@@ -40,6 +40,14 @@ it("does not disclose actual pre78 private imported history through only current
   const row = reviewed.rows[0]!;
   expect(row).toMatchObject({ receiptId: null, postId: "10", commentId: "20", email: null });
   const original = await createContact.call({ name: "Actual original reader chosen by the owner" }, owner);
+  if (process.env.FREEHOLDER_READER_UPGRADE_HOLD_BEFORE_REVIEW === "1") {
+    const erasure = await createDataRequest.call({ contactId: fixture.originalId, request: { kind: "erasure" } }, owner);
+    await addRetentionException.call({ dataRequestId: erasure.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Fictional original committed reader evidence held before verification" }, owner);
+    await expect(resolveReaderOwnership.call({ id: fixture.id, receiptId: row.receiptId, postId: row.postId, commentId: row.commentId, contactId: original.id, confirmation: "ASSIGN ORIGINAL READER" }, owner)).rejects.toMatchObject({ code: "conflict" });
+    expect(await db().select().from(readerOwnershipReceipts)).toHaveLength(0);
+    expect((await db().select().from(blogReaderComments))[0]).toEqual(before);
+    return;
+  }
   await resolveReaderOwnership.call({ id: fixture.id, receiptId: row.receiptId, postId: row.postId, commentId: row.commentId, contactId: original.id, confirmation: "ASSIGN ORIGINAL READER" }, owner);
   const [after] = await db().select().from(blogReaderComments);
   expect(after).toMatchObject({ id: before!.id, source: before!.source, externalId: before!.externalId, body: READER_UPGRADE_BODY, status: "pending", authorName: before!.authorName, createdAt: before!.createdAt, contactId: original.id });
