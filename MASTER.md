@@ -6064,6 +6064,16 @@ deployments are portable, testable and incapable of silently forking the truth.
   reader 78 preserves identical product and migration source; its ancestry
   differences contain documentation and test corrections only. Protected
   qualification and actual provider acceptance remain open. C3.34 remains unchecked.)*
+  *(Credential-binding follow-up, 2026-11-12: protected CodeQL identified an
+  unkeyed provider-secret fingerprint. Its replacement uses a purpose-separated
+  HMAC with independently configured private material and explicit retained
+  current/previous-key candidates, with no unkeyed or embedded-secret fallback.
+  Five targeted native controls pass, including actual local delivery through
+  wrapping-key rotation with the original resource witness unchanged and
+  replacement-provider-key refusal with zero physical attempts. Two pure
+  controls prove independent-key binding and refusal when no private key is
+  configured; full TypeScript and focused lint pass. The new protected scan and
+  refreshed production build/browser proof remain pending.)*
   *(Receipt-integrity follow-up, 2026-11-12: one actual native before control
   showed that a parseable original artifact with a mismatched checksum could
   be rewritten as completed by the lead erasure worker. The source repair uses
