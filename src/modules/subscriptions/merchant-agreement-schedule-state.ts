@@ -7,9 +7,11 @@ import { getService, type ServiceContext } from "@/core/service";
 import { invoiceMerchantTaxQuoteLines, invoiceMerchantTaxQuotes } from "@/modules/invoicing/merchant-tax-schema";
 import { invoiceLines, invoices } from "@/modules/invoicing/schema";
 import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agreement-schema";
-import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
+import { subscriptionProviderScheduleOperations } from "./provider-schedule-schema";
+import type { subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { scheduleQuiescenceCovers } from "./provider-schedule-proof";
-import { subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
+import { subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts } from "./schema";
+import type { subscriptionMerchantScopes, subscriptions } from "./schema";
 const application = z.object({ invoiceId: z.uuid(), paymentId: z.uuid() }).nullable();
 
 /** Shared exact-agreement proof; callers decide which original buyers belong
