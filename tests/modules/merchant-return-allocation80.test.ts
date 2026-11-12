@@ -44,20 +44,23 @@ describe.runIf(hasDatabase)("original seller return allocation80",{timeout:60000
   expect((await getInvoice.call({id:invoiceId},OWNER)).invoice).toMatchObject({status:"paid",paidMinor:5250});
   return{invoiceId,orderId:placed.order.id};
  }
- it("reserves seller B's returned line only against seller B's actual payment",async()=>{
+ it("reserves a returned line only against its own seller's original payment",async()=>{
   const {invoiceId,orderId}=await paid("destination");
+  const invoice=await getInvoice.call({id:invoiceId},OWNER);
+  const originalPayments=invoice.payments.filter(payment=>payment.status==="succeeded").sort((a,b)=>a.createdAt.getTime()-b.createdAt.getTime()||a.id.localeCompare(b.id));
+  expect(originalPayments).toHaveLength(2);
+  const target=originalPayments[1]!;
+  const [route]=await db().select().from(merchantPaymentRoutes).where(eq(merchantPaymentRoutes.paymentId,target.id));
+  const [original]=await db().select().from(invoiceMerchantAllocations).where(eq(invoiceMerchantAllocations.id,route!.allocationId));
   const lines=await db().select().from(orderItems).where(eq(orderItems.orderId,orderId));
-  const returned=lines.find(line=>line.unitAmountMinor===1000)!;
+  const returned=lines.find(line=>line.snapshot.sellerUserId===original!.sellerUserId)!;
   expect(returned).toBeDefined();
   const requested=await requestReturn.call({orderId,reason:"Synthetic original seller return",restock:false,items:[{orderItemId:returned.id,quantity:1}]},OWNER);
   await decideReturn.call({id:requested.return.id,decision:"approved"},OWNER);
   await receiveReturn.call({id:requested.return.id,restock:false},OWNER);
   await prepareReturnRefund.call({id:requested.return.id,idempotencyKey:randomUUID()},OWNER);
-  const [original]=await db().select({id:invoiceMerchantAllocations.id}).from(invoiceMerchantAllocations)
-   .where(eq(invoiceMerchantAllocations.sellerUserId,fixture!.sellers[1]!.userId));
-  const [route]=await db().select().from(merchantPaymentRoutes).where(eq(merchantPaymentRoutes.allocationId,original!.id));
   const reservations=await db().select().from(returnRefundAllocations).where(eq(returnRefundAllocations.returnId,requested.return.id));
   expect(reservations).toHaveLength(1);
-  expect(reservations[0]).toMatchObject({paymentId:route!.paymentId,amountMinor:1050,currency:"CAD"});
+  expect(reservations[0]).toMatchObject({paymentId:route!.paymentId,amountMinor:original!.totalMinor,currency:"CAD"});
  });
 });
