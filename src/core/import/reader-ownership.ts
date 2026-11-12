@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C2.29/C3.46: retain proved source ownership; never infer it from an old email.
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { importRuns } from "@/core/plugins/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { actorString, ServiceError, type Actor, type Tx } from "@/core/service";
 import { readerOwnershipKey } from "./reader-ownership-key";
@@ -72,14 +73,29 @@ async function projectReviewedReaderOwners(tx: Tx, source: ReaderSource, owners:
       select id,kind,origin,coalesce(nullif(preview->>'readerSourceSite',''),nullif(checkpoint->>'readerSourceSite',''),nullif(preview#>>'{wordpress,site,url}',''),origin) as site
       from import_runs where kind in ('wordpress-wxr','wordpress-rest')
         and (${after}::uuid is null or id>${after}::uuid)
-        and (jsonb_path_exists(preview,'$.pages[*].readerComments[*]') or jsonb_path_exists(checkpoint,'$.pendingBlogPosts[*].comments[*]'))
+        and (jsonb_path_exists(preview,'$.pages[*].readerComments[*]') or jsonb_path_exists(checkpoint,'$.pendingBlogPosts[*].comments[*]')
+          or exists(select 1 from blog_reader_comments comment where comment.source='import:'||import_runs.id::text))
       order by id limit 500`);
     if (!candidates.length) break;
     const ids = candidates.flatMap(candidate => {
       try { return canonicalReaderSite({ ...candidate, site: candidate.site ?? undefined }) === site ? [candidate.id] : []; }
       catch { return []; } // An unrelated malformed legacy URL is not this proved instance.
     });
-    if (ids.length) await tx.execute(sql`with decision as (select ${encoded}::jsonb as owners)
+    if (ids.length) {
+      // A retained original is evidence for its actual erasure request, never
+      // authority to move that evidence to a newly selected person.
+      const [blocked] = await tx.execute<{ blocked: boolean }>(sql`select exists(
+        select 1 from blog_reader_comments comment join data_requests request on request.contact_id=comment.contact_id
+        where comment.source in (${sql.join(ids.map(id => sql`'import:'||${id}::text`), sql`,`)})
+          and ${encoded}::jsonb ? comment.external_id
+          and request.kind='erasure' and request.status in ('in_progress','completed','partially_completed')
+      ) as blocked`);
+      if (blocked?.blocked) throw new ServiceError("conflict", "A retained original reader is covered by an active or acknowledged erasure and cannot be reassigned.");
+      await tx.execute(sql`update blog_reader_comments comment set contact_id=(decision.owners->>comment.external_id)::uuid,updated_at=clock_timestamp()
+        from (select ${encoded}::jsonb as owners) decision
+        where comment.source in (${sql.join(ids.map(id => sql`'import:'||${id}::text`), sql`,`)})
+          and decision.owners ? comment.external_id and comment.contact_id is distinct from (decision.owners->>comment.external_id)::uuid`);
+      await tx.execute(sql`with decision as (select ${encoded}::jsonb as owners)
       update import_runs source set
         preview=case when jsonb_typeof(source.preview->'pages')='array' then jsonb_set(source.preview,'{pages}',
           coalesce((select jsonb_agg(case when jsonb_typeof(page->'readerComments')='array'
@@ -102,6 +118,7 @@ async function projectReviewedReaderOwners(tx: Tx, source: ReaderSource, owners:
         or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(source.checkpoint->'pendingBlogPosts')='array' then source.checkpoint->'pendingBlogPosts' else '[]'::jsonb end) post
           cross join lateral jsonb_array_elements(case when jsonb_typeof(post->'comments')='array' then post->'comments' else '[]'::jsonb end) reader
           where decision.owners ? ((post->>'key')||':'||(reader->>'id'))))`);
+    }
     after = candidates.at(-1)!.id;
     if (candidates.length < 500) break;
   }
@@ -168,3 +185,36 @@ export async function acceptReaderOwnership(tx: Tx, source: ReaderSource, post: 
   if (receipt.contactId !== contactId) throw new ServiceError("conflict", "The comment no longer matches its original reader owner.");
 }
 
+
+
+/** A legacy contact pointer or current mailbox cannot disclose imported
+ * history. Only the original-coordinate receipt authorizes its owner. */
+export async function ownedReaderComments<T extends { source: string; externalId: string | null; contactId: string | null }>(tx: Tx, rows: T[], contactId: string): Promise<T[]> {
+  const imported = rows.filter(row => row.source.startsWith("import:"));
+  if (!imported.length) return rows;
+  const [sealed] = await tx.execute<{ present: boolean }>(sql`select exists(select 1 from import_reader_ownership_keys) as present`);
+  if (!sealed?.present) {
+    const [receipts] = await tx.select({ id: readerOwnershipReceipts.id }).from(readerOwnershipReceipts).limit(1);
+    if (receipts) throw new ServiceError("conflict", "The original reader receipt key is missing. Restore its matching backup.");
+    return rows.filter(row => !row.source.startsWith("import:"));
+  }
+  const key = await readerOwnershipKey(tx, { readOnly: true });
+  const runIds = [...new Set(imported.map(row => row.source.slice(7)).filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)))];
+  const sources = new Map<string, typeof importRuns.$inferSelect>();
+  for (let offset = 0; offset < runIds.length; offset += BATCH) {
+    for (const source of await tx.select().from(importRuns).where(inArray(importRuns.id, runIds.slice(offset, offset + BATCH)))) sources.set(source.id, source);
+  }
+  const digests = new Map<T, string>();
+  for (const row of imported) {
+    const source = sources.get(row.source.slice(7)), coordinates = row.externalId?.split(":");
+    if (!source || coordinates?.length !== 2) continue;
+    try { digests.set(row, key.digest("source", readerSourceIdentity(source, coordinates[0]!, coordinates[1]!))); }
+    catch (error) { if (!(error instanceof ServiceError)) throw error; }
+  }
+  const values = [...new Set(digests.values())], owned = new Set<string>();
+  for (let offset = 0; offset < values.length; offset += BATCH) {
+    const receipts = await tx.select({ digest: readerOwnershipReceipts.sourceDigest }).from(readerOwnershipReceipts).where(and(inArray(readerOwnershipReceipts.sourceDigest, values.slice(offset, offset + BATCH)), eq(readerOwnershipReceipts.contactId, contactId), inArray(readerOwnershipReceipts.state, ["bound", "erased"])));
+    for (const receipt of receipts) owned.add(receipt.digest);
+  }
+  return rows.filter(row => !row.source.startsWith("import:") || owned.has(digests.get(row) ?? ""));
+}

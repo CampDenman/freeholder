@@ -17,7 +17,7 @@ import { blogPosts } from "./blog-schema";
 import { blogReaderComments as comments } from "./blog-comments-schema";
 import { isPublicPage, loadBlogSettings } from "./blog-service";
 import { markReaderOwnershipWriter } from "@/core/import/reader-ownership-key";
-import { acceptReaderOwnership, assertOriginalReaderPayload, readerOwnershipForComment } from "@/core/import/reader-ownership";
+import { acceptReaderOwnership, assertOriginalReaderPayload, ownedReaderComments, readerOwnershipForComment } from "@/core/import/reader-ownership";
 import { importRuns } from "@/core/plugins/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { withoutPrivacyHold } from "@/core/retention/holds";
@@ -42,7 +42,7 @@ registerContactReference({
 });
 registerContactPrivacySource({
   scope: "cms.readerComments", tables: ["blog_reader_comments"], eraseOrder: 20,
-  exportData: (tx, contactId) => tx.select().from(comments).where(eq(comments.contactId, contactId)),
+  exportData: async (tx, contactId) => ownedReaderComments(tx, await tx.select().from(comments).where(eq(comments.contactId, contactId)), contactId),
   erase: async (tx, contactId) => {
     await markReaderOwnershipWriter(tx);
     const identity = await contactPrivacyIdentity(tx, contactId);
@@ -124,10 +124,14 @@ export const importReaderComment = defineService({
     await markReaderOwnershipWriter(ctx.tx);
     const source = `import:${input.runId}`;
     const [prior] = await ctx.tx.select().from(comments).where(and(eq(comments.source, source), eq(comments.externalId, input.externalId))).limit(1);
-    if (prior) return prior;
     const [original] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.runId)).limit(1);
     const separator = input.externalId.lastIndexOf(":"), postKey = input.externalId.slice(0, separator), commentKey = input.externalId.slice(separator + 1);
     if (!original || separator < 1 || !commentKey) throw new ServiceError("conflict", "Stage the original reader source before importing this comment.");
+    if (prior) {
+      const ownership = await readerOwnershipForComment(ctx.tx, original, postKey, commentKey);
+      if (ownership.contactId !== prior.contactId) throw new ServiceError("conflict", "This retained comment needs original reader review before it can be reused.");
+      return prior;
+    }
     assertOriginalReaderPayload(original, postKey, commentKey, input);
     const ownership = await readerOwnershipForComment(ctx.tx, original, postKey, commentKey);
     if (input.sourceContactId && ownership.contactId !== input.sourceContactId) throw new ServiceError("conflict", "This comment's supplied identity differs from its original reader owner.");
