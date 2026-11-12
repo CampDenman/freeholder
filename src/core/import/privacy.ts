@@ -13,9 +13,9 @@ import { registerContactReference } from "@/core/contacts/service";
 import { importRuns } from "@/core/plugins/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
-import { completeRetentionSourceSnapshot, retentionSourceSnapshotIsComplete } from "@/core/privacy/retention-snapshots";
+import { completeRetentionSourceSnapshot, retentionSourceMemberIsHeld, retentionSourceSnapshotIsComplete } from "@/core/privacy/retention-snapshots";
 import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
-import { ServiceError, type Actor, type Tx } from "@/core/service";
+import { ServiceError, type Actor, type ServiceContext, type Tx } from "@/core/service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { z } from "zod";
 import { assertImportBatchAccess } from "./batch-context";
@@ -206,6 +206,36 @@ async function ownedSourceKeys(tx: Tx, run: Run): Promise<string[]> {
 }
 const sourceHold = z.object({ exceptionId: z.uuid(), requestId: z.uuid(), uploadId: z.uuid() });
 
+/** A retained raw-source family can still contain later unheld originals.
+ * Actual canonical membership across every live hold is the only exclusion;
+ * no current mailbox or executor establishes who owns opaque file contents.
+ * Unknown original holds remain protected by the shared physical boundary and
+ * keep the actual job pending for review rather than claiming byte deletion.
+ */
+async function eraseUnheldOriginals(tx: Tx, context: { requestId: string; service: ServiceContext }): Promise<{ affected: number; pendingJobs: string[] }> {
+  if (context.service.tx !== tx) throw new ServiceError("internal", "Original source cleanup requires the actual privacy transaction.");
+  const pendingJobs: string[] = [];
+  for await (const run of runs(tx, true)) {
+    const unheld: string[] = [], generations = new Map<string, boolean>();
+    for (const key of await ownedSourceKeys(tx, run)) {
+      const uploadId = z.uuid().parse(key.split("/")[2]);
+      let held = generations.get(uploadId);
+      if (held === undefined) {
+        held = await retentionSourceMemberIsHeld(tx, "imports.readerSources", run.id, uploadId, ["imports.readerSources", "cms.readerComments"]);
+        generations.set(uploadId, held);
+      }
+      if (!held) unheld.push(key);
+    }
+    if (unheld.length && object(run.checkpoint).sourceGraph && !["committed", "reconciled", "published"].includes(run.status)) await invalidateImportGraph(tx, run);
+    for (let offset = 0; offset < unheld.length; offset += 25) {
+      const originalJobId = randomUUID();
+      const queued = await context.service.queueJob(IMPORT_SOURCE_ERASURE_JOB, { requestId: context.requestId, originalJobId, keys: unheld.slice(offset, offset + 25) }, { id: originalJobId });
+      pendingJobs.push(queued.id);
+    }
+  }
+  return { affected: 0, pendingJobs };
+}
+
 registerContactPrivacySource({
   scope: "imports.readerSources", tables: ["import_runs"], retentionScopes: ["cms.readerComments"], eraseOrder: 10,
   captureRetention: async (tx, _contactId, context) => {
@@ -244,6 +274,7 @@ registerContactPrivacySource({
     // A historical missing receipt is review debt, never an empty capture.
     if (!await retentionSourceSnapshotIsComplete(tx, context.exceptionId, "imports.readerSources")) throw new ServiceError("conflict", "Review this older hold's original uploads before fulfilling the request.");
   },
+  eraseUnheld: (tx, _contactId, context) => eraseUnheldOriginals(tx, context),
   exportData: async (tx, contactId) => {
     // A current address can retire an unbound source during erasure, but
     // cannot prove ownership of its historical name/body for disclosure.
