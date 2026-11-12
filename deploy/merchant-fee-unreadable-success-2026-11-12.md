@@ -43,7 +43,10 @@ exists. Capacity and the original key stay reserved; the existing bounded
 resource recovery must identify that original operation before acceptance.
 An error never supplies a new replacement-key permission. No migration,
 historical money, accepted resource or old refused row is rewritten. This
-source repair is not yet qualified by types, lint or unchanged native AFTER.
+source repair now passes full Node22 typecheck, changed-source lint and three
+affected changelog controls after actual generation from613 changesets. All
+source processes exited0 and drained. The original test and SQL hashes stay
+unchanged; native AFTER remains pending its separate lease.
 The later preserved-clone review must report actual returned200 as review/debt
 with no additional POST or financial-history rewrite; that check remains
 pending. Fee-caller, all bank/action states, human flows and actual provider
