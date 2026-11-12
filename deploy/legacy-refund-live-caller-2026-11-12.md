@@ -217,3 +217,47 @@ unfinished capabilities. A process restart loses only the private completed
 answer cache and leaves durable unknown admission debt; full restart recovery
 still requires actual original-provider evidence. No real provider acceptance,
 deployment, independent security sign-off or stable release is supplied here.
+
+## Browser qualification diagnosis
+
+At protected PR #694 head `5dff3f92`, all 32 native shards passed. Browser
+shard 3 failed the unchanged five-second first group-message assertion twice,
+then reached the unchanged thirty-minute job limit with 26 of 62 cases
+started. Its duplicated production build consumed fourteen minutes; the
+Application gates job had already built and checked the same source in its
+own successful ten-minute-fifty-two-second job. The failed runner retained no
+downloadable browser diagnostic artifact. The cause of that message failure
+remains unknown.
+
+A separate exact-`5dff3f92` production build passed its artifact scrub, then
+the original message setup and five-second assertion passed locally: message
+visibility/navigation took 873 ms. The probe stopped before any SFU step,
+retained only sanitized status/timing/error fields, and drained its browser,
+server and all database backends. This local pass does not classify the CI
+failure as flaky or close browser qualification. Evidence remains in
+`/tmp/freeholder-ci694-group-message-{build.log,probe.json,allowlisted.json,probe-drain.json}`.
+
+The follow-up test/workflow change preserves the original setup, assertion,
+case deadline, three complete shards and job deadline. It adds a failure-only
+allowlisted JSON report and reuses the same-run Application gates build,
+transporting only checked standalone/static/BUILD_ID paths in a checksummed
+archive with pinned actions and a second standalone gate after extraction.
+Public assets (including checked OpenMLS WASM) and migrations still come from
+the same checkout through the existing browser launcher. No `NEXT_PUBLIC`
+configuration or `next.config.ts` environment substitution exists in this
+source; browser database/LiveKit settings are runtime settings.
+
+Node 22 full types and the focused changed-file lint passed after correcting
+an unsafe untyped YAML parse in the new test stanza; its original 38 lint
+diagnostics are preserved. The initial two-file run passed all 12 assertions;
+the corrected stanza then passed incremental types, its targeted lint and
+exactly the five new sanitizer/workflow assertions (seven unchanged assertions
+were excluded from that retry). The existing workflow integrity gate passed.
+A bounded synthetic archive roundtrip preserved dependency symlinks/native
+bytes, excluded environment/source/cache paths and refused a changed checksum.
+A read-only audit of the preserved exact-`5dff3f92` standalone found 60 links,
+all contained and non-dangling, plus four native runtime files. This does not
+claim that the new remote artifact transport or the complete browser shard has
+passed. Evidence is `/tmp/freeholder-ci694-followup-{source-test-report.json,source5-retry.json,artifact-transport.json}`
+and the corresponding types/lint/workflow logs. The protected pipeline remains
+pending; no CI failure has been classified as resolved by the local pass.

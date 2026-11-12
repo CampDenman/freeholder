@@ -1,6 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { parse } from "yaml";
 import {
   inspectProtectedFanIn,
   inspectWorkflowDocument,
@@ -138,5 +140,43 @@ ${body}
           echo "$NEEDS" | jq -e 'all(.[]; .result == "success")'
 `), ".github/workflows/ci.yml"),
     ).toEqual([]);
+  });
+});
+
+describe("browser runtime and diagnostic artifact boundaries", () => {
+  type Step = { run?: string; uses?: string; if?: string; with?: Record<string, unknown> };
+  const workflow = parse(readFileSync(".github/workflows/ci.yml", "utf8")) as {
+    jobs: {
+      application: { steps: Step[] };
+      browser: { needs: string; "timeout-minutes": number; strategy: { matrix: { shard: string[] } }; steps: Step[] };
+    };
+  };
+  const application = workflow.jobs.application;
+  const browser = workflow.jobs.browser;
+
+  it("runs every shard against this run's checked build within the existing deadline", () => {
+    expect(browser.needs).toBe("application");
+    expect(browser["timeout-minutes"]).toBe(30);
+    expect(browser.strategy.matrix.shard).toEqual(["1/3", "2/3", "3/3"]);
+    expect(browser.steps.some((step: { run?: string }) => step.run?.includes("pnpm build"))).toBe(false);
+    const upload = application.steps.find(step => step.with?.name === "browser-runtime");
+    const download = browser.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/download-artifact@"));
+    expect(upload?.with?.name).toBe("browser-runtime");
+    expect(download?.with?.name).toBe(upload?.with?.name);
+    expect(download?.with).not.toHaveProperty("run-id");
+    expect(download?.with).not.toHaveProperty("repository");
+    expect(application.steps.some((step: { run?: string }) => step.run === "pnpm artifact:check")).toBe(true);
+    expect(browser.steps.some((step: { run?: string }) => step.run?.includes("sha256sum -c browser-runtime.tar.sha256") && step.run.includes("node scripts/standalone-artifact-gate.mjs"))).toBe(true);
+    const pack = application.steps.find((step: { run?: string }) => step.run?.includes("tar -cf"));
+    expect(pack?.run?.split("\n")[0]).toBe('tar -cf "$RUNNER_TEMP/browser-runtime.tar" .next/standalone .next/static .next/BUILD_ID');
+    expect(browser.steps.some((step: { run?: string }) => step.run === "pnpm test:browser --shard=${{ matrix.shard }}")).toBe(true);
+  });
+
+  it("uploads only the explicit sanitized failure report, including failed attempts before a successful retry", () => {
+    const uploads = browser.steps.filter((step: { uses?: string }) => step.uses?.startsWith("actions/upload-artifact@"));
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0]?.if).toBe("${{ always() }}");
+    expect(uploads[0]?.with?.path).toBe("test-results/browser/**/group-message-allowlisted.json");
+    expect(uploads[0]?.with?.["if-no-files-found"]).toBe("ignore");
   });
 });
