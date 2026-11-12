@@ -25,6 +25,7 @@ import {
 import { FileField } from "./FileField";
 import { acceptAttribute } from "@/core/media/validation";
 import { formScreening } from "@/adapters/form-screening";
+import { issueLeadNotice, LEAD_NOTICE_FIELD } from "./lead-notice";
 import { leadSink } from "@/adapters/lead-sink";
 import {
   failureFromQuery,
@@ -140,6 +141,7 @@ export function RenderedForm({
   action?: (form: FormData) => Promise<void>;
   extraFields?: React.ReactNode;
 }) {
+  const leadNotice = issueLeadNotice(form.slug, t("forms.public.notice.leadSink", { provider: "Paradise Modern" }));
   // Only an answer problem marks fields, and only with the form's own rules:
   // the same schema the service applied, so the marks cannot disagree with
   // the refusal. A playground or server refusal leaves every field unmarked.
@@ -150,6 +152,7 @@ export function RenderedForm({
     <form action={action} className="grid max-w-prose gap-4">
       <input type="hidden" name="form_slug" value={form.slug} />
       <input type="hidden" name={STAMP_FIELD} value={form.stamp} />
+      {leadNotice ? <input type="hidden" name={LEAD_NOTICE_FIELD} value={leadNotice} /> : null}
       {extraFields}
 
       {failed ? (

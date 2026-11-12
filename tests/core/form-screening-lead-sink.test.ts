@@ -8,6 +8,12 @@
 // provider's required fields plus the screened text. The lead sink is its own
 // switch, copies only accepted submissions from a form that showed its
 // notice, and never drops a lead silently.
+import { eq, sql } from "drizzle-orm";
+import { users } from "@/core/auth/schema";
+import { contactPrivacySources, addRetentionException, createDataRequest } from "@/core/privacy/service";
+import { listLeadCopyRecovery, reconcileLeadCopy, retryLeadCopy } from "@/modules/forms/lead-copy-services";
+import { finishLeadCopy } from "@/modules/forms/lead-copy-state";
+import { minimizeLeadCopies } from "@/modules/forms/lead-copy-privacy";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,13 +23,16 @@ import { SCREENING_TIMEOUT_MS } from "@/adapters/form-screening/paradise";
 import { leadSink } from "@/adapters/lead-sink";
 import { db } from "@/core/db";
 import { resetEnvForTests } from "@/core/env";
+import { enqueue } from "@/core/events/outbox";
+import type { Actor } from "@/core/service";
 import { outboxEvents } from "@/core/events/schema";
 import { HONEYPOT_FIELD, issueStamp, STAMP_FIELD } from "@/modules/forms/antispam";
 import { RenderedForm } from "@/modules/forms/block";
 import type { Translate } from "@/core/i18n";
 import type { FormField } from "@/modules/forms/fields";
 import { copySubmissionToLeadSink, leadCopy } from "@/modules/forms/lead-sink";
-import { formSubmissions } from "@/modules/forms/schema";
+import { issueLeadNotice, LEAD_NOTICE_FIELD, openLeadNotice } from "@/modules/forms/lead-notice";
+import { formLeadCopies, formSubmissions } from "@/modules/forms/schema";
 import {
   BLOCKED_REASON,
   openScreening,
@@ -95,6 +104,7 @@ const FIELDS: FormField[] = [
 ] as FormField[];
 
 const answers = (over: Record<string, unknown> = {}) => ({
+  [LEAD_NOTICE_FIELD]: issueLeadNotice("contact", "Copy my enquiry to Paradise Modern for follow-up."),
   name: "Grace Hopper",
   email: "grace@example.test",
   phone: "+1 604 555 0100",
@@ -264,6 +274,17 @@ describe("what a lead copy carries", () => {
   });
 });
 
+describe("lead page-address disclosure (C3.34)", () => {
+  it("does not copy query or fragment credentials in a public page address", () => {
+    const copy = leadCopy({ slug: "contact", fields: FIELDS }, { id: "00000000-0000-4000-8000-000000000079", data: answers(), sourceUrl: "/contact?access=synthetic-private-link#synthetic-private-fragment" });
+    expect(copy.pageUrl).toBe("http://localhost:3000/contact");
+  });
+  it("does not copy a private appointment capability from the page path", () => {
+    const copy = leadCopy({ slug: "contact", fields: FIELDS }, { id: "00000000-0000-4000-8000-000000000079", data: answers(), sourceUrl: "/portal/appointments/synthetic-private-capability/intake" });
+    expect(copy.pageUrl).toBe("http://localhost:3000/");
+  });
+});
+
 describe.runIf(hasDatabase)("screening and the lead sink with a database", () => {
   beforeEach(async () => {
     await truncateSpine();
@@ -274,21 +295,31 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     await closeDb();
   });
 
+  // Simulate the durable crash window between submission commit and dispatch.
+  // The real service, audit and outbox are used; only its later delivery is explicit.
+  async function submitCommitted(input: Parameters<typeof submitForm.call>[0], actor: Actor) {
+    return db().transaction(async tx => {
+      const queued: Array<{ eventName: string; payload: unknown; id?: string }> = [];
+      const result = await submitForm.call(input, actor, { tx, queued });
+      for (const event of queued) await enqueue(tx, event.eventName, event.payload);
+      return result;
+    });
+  }
   async function only() {
     const rows = await db().select().from(formSubmissions);
     expect(rows).toHaveLength(1);
     return rows[0]!;
   }
 
-  async function submittedPayload(): Promise<Record<string, unknown>> {
+  async function submittedPayload(submissionId?: string): Promise<Record<string, unknown>> {
     const rows = await db().select().from(outboxEvents);
-    const event = rows.find((row) => row.eventName === "forms.submitted");
+    const event = rows.find((row) => row.eventName === "forms.submitted" && (!submissionId || (row.payload as Record<string, unknown>).submissionId === submissionId));
     return event!.payload as Record<string, unknown>;
   }
 
   it("leaves submissions alone and seals nothing while both categories are off", async () => {
     expect(await sealSiteSubmission({ slug: "contact", values: answers(), request: { ip: "203.0.113.9" } })).toBeUndefined();
-    await submitForm.call({ slug: "contact", values: answers() }, ANONYMOUS);
+    await submitCommitted({ slug: "contact", values: answers() }, ANONYMOUS);
     expect((await only()).status).toBe("received");
     expect(calls).toHaveLength(0);
   });
@@ -306,7 +337,7 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
       client_ip: "203.0.113.9",
       submission: { message: "Do you shoot in November?" },
     });
-    await submitForm.call({ slug: "contact", values, screening }, ANONYMOUS);
+    await submitCommitted({ slug: "contact", values, screening }, ANONYMOUS);
     expect((await only()).status).toBe("received");
     expect((await submittedPayload()).fromSiteForm).toBe(true);
   });
@@ -317,7 +348,7 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     const screening = await sealSiteSubmission({ slug: "contact", values, request: { ip: "203.0.113.9" } });
     expect(calls).toHaveLength(0);
     expect(openScreening(screening, "contact", values)).toBe("unscreened");
-    await submitForm.call({ slug: "contact", values, screening }, ANONYMOUS);
+    await submitCommitted({ slug: "contact", values, screening }, ANONYMOUS);
     const row = await only();
     expect(row.status).toBe("spam");
     expect(row.spamReasons.join(" ")).toContain("hidden from people");
@@ -337,7 +368,7 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     reply = () => new Response(JSON.stringify({ allow: false }), { status: 200 });
     const values = answers();
     const screening = await sealSiteSubmission({ slug: "contact", values, request: { ip: "203.0.113.9" } });
-    await submitForm.call({ slug: "contact", values, screening }, ANONYMOUS);
+    await submitCommitted({ slug: "contact", values, screening }, ANONYMOUS);
     const row = await only();
     expect(row.status).toBe("spam");
     expect(row.spamReasons).toEqual([BLOCKED_REASON]);
@@ -347,7 +378,7 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     configure(SCREENING);
     const values = answers({ [HONEYPOT_FIELD]: "filled" });
     const screening = sealScreening("allow", "contact", values);
-    await submitForm.call({ slug: "contact", values, screening }, ANONYMOUS);
+    await submitCommitted({ slug: "contact", values, screening }, ANONYMOUS);
     const row = await only();
     expect(row.status).toBe("spam");
     expect(row.spamReasons.join(" ")).toContain("hidden from people");
@@ -358,7 +389,7 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     reply = () => Promise.reject(new Error("down"));
     const values = answers();
     const screening = await sealSiteSubmission({ slug: "contact", values, request: { ip: "203.0.113.9" } });
-    await submitForm.call({ slug: "contact", values, screening }, ANONYMOUS);
+    await submitCommitted({ slug: "contact", values, screening }, ANONYMOUS);
     expect((await only()).status).toBe("received");
 
     calls = [];
@@ -369,7 +400,7 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
 
   it("holds an anonymous API submission without a seal as unchecked", async () => {
     configure({ ...SCREENING, LEAD_SINK_PROVIDER: "paradise" });
-    await submitForm.call({ slug: "contact", values: answers() }, ANONYMOUS);
+    await submitCommitted({ slug: "contact", values: answers() }, ANONYMOUS);
     const row = await only();
     expect(row.status).toBe("spam");
     expect(row.spamReasons).toEqual([UNCHECKED_REASON]);
@@ -378,7 +409,7 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
 
   it("accepts an API-key submission without a seal, and never copies it", async () => {
     configure({ ...SCREENING, LEAD_SINK_PROVIDER: "paradise" });
-    const { submissionId } = await submitForm.call({ slug: "contact", values: answers() }, API_KEY);
+    const { submissionId } = await submitCommitted({ slug: "contact", values: answers() }, API_KEY);
     expect((await only()).status).toBe("received");
     const payload = await submittedPayload();
     expect(payload.fromSiteForm).toBe(false);
@@ -390,7 +421,7 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
   it("copies an accepted site-form submission only when the lead sink is on", async () => {
     const values = answers();
     const sealed = sealScreening("unscreened", "contact", values);
-    await submitForm.call({ slug: "contact", values, sourceUrl: "/contact", screening: sealed }, ANONYMOUS);
+    await submitCommitted({ slug: "contact", values, sourceUrl: "/contact", screening: sealed }, ANONYMOUS);
     const payload = await submittedPayload();
     await copySubmissionToLeadSink(payload);
     expect(calls).toHaveLength(0);
@@ -400,6 +431,12 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     expect(openScreening(await sealSiteSubmission({ slug: "contact", values, request: undefined }), "contact", values)).toBe("unscreened");
     expect(calls).toHaveLength(0);
     await copySubmissionToLeadSink(payload);
+    expect(calls).toHaveLength(0);
+    const freshValues = answers();
+    const fresh = await submitCommitted({ slug: "contact", values: freshValues, sourceUrl: "/contact", screening: sealScreening("unscreened", "contact", freshValues) }, ANONYMOUS);
+    const freshPayload = await submittedPayload(fresh.submissionId);
+    reply = () => new Response(JSON.stringify({ accepted: true, id: "original-lead-1" }), { status: 201 });
+    await copySubmissionToLeadSink(freshPayload);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe("https://pm.example.test/api/collect/lead");
     expect(calls[0]!.body).toMatchObject({
@@ -408,39 +445,179 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
       phone: "+1 604 555 0100",
       message: "Do you shoot in November?",
       source: "form:contact",
-      externalId: payload.submissionId,
+      externalId: freshPayload.submissionId,
       referer: "http://localhost:3000/contact",
     });
+  });
+
+  it("does not copy a screening-only submission into a lead destination enabled later", async () => {
+    configure(SCREENING);
+    const values = answers();
+    const screening = await sealSiteSubmission({ slug: "contact", values, request: { ip: "203.0.113.9" } });
+    await submitCommitted({ slug: "contact", values, screening }, ANONYMOUS);
+    const payload = await submittedPayload(); expect(payload.fromSiteForm).toBe(true);
+    calls = [];
+    configure({ ...SINK, PARADISEMODERN_API_KEY: "fictional-replacement-lead-site-key", PARADISEMODERN_URL: "https://replacement-lead.example.test" });
+    await copySubmissionToLeadSink(payload);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("does not repeat an original lead copy after its accepted reply is lost", async () => {
+    configure(SINK);
+    const values = answers();
+    const screening = await sealSiteSubmission({ slug: "contact", values, request: undefined });
+    await submitCommitted({ slug: "contact", values, screening }, ANONYMOUS);
+    const payload = await submittedPayload(); let remoteCopies = 0;
+    setParadiseFetchForTests(async () => {
+      remoteCopies++;
+      if (remoteCopies === 1) throw new Error("Synthetic remote lead accepted before its reply was lost");
+      return new Response(JSON.stringify({ id: remoteCopies, accepted: true }), { status: 201 });
+    });
+    await copySubmissionToLeadSink(payload).catch(() => undefined);
+    await copySubmissionToLeadSink(payload).catch(() => undefined);
+    expect(remoteCopies).toBe(1);
   });
 
   it("never copies quarantined submissions", async () => {
     configure(SINK);
     const values = answers({ [HONEYPOT_FIELD]: "filled" });
-    const { submissionId } = await submitForm.call(
+    const { submissionId } = await submitCommitted(
       { slug: "contact", values, screening: sealScreening("unscreened", "contact", values) },
       ANONYMOUS,
     );
-    await copySubmissionToLeadSink({ submissionId, fromSiteForm: true });
+    await expect(copySubmissionToLeadSink({ submissionId, fromSiteForm: true })).rejects.toThrow("legacy");
     expect(calls).toHaveLength(0);
   });
 
-  it("throws on every failure so the outbox retries and dead-letters it, without the visitor's answers", async () => {
+  it("retains unknown physical outcomes and blocks replay without disclosing answers", async () => {
     configure(SINK);
     const values = answers();
-    const { submissionId } = await submitForm.call(
-      { slug: "contact", values, screening: sealScreening("unscreened", "contact", values) },
-      ANONYMOUS,
-    );
-    for (const status of [503, 400]) {
-      reply = () => new Response(JSON.stringify({ code: "INVALID", echo: "grace@example.test" }), { status });
-      const error = await copySubmissionToLeadSink({ submissionId, fromSiteForm: true }).then(
-        () => null,
-        (caught: unknown) => caught as Error,
-      );
-      expect(error).toBeInstanceOf(Error);
-      expect(error!.message).toContain(`HTTP ${status}`);
-      expect(error!.message).toContain("replay");
-      expect(error!.message).not.toContain("grace@example.test");
-    }
+    const { submissionId } = await submitCommitted({ slug: "contact", values, screening: sealScreening("unscreened", "contact", values) }, ANONYMOUS);
+    const payload = await submittedPayload(submissionId);
+    reply = () => new Response(JSON.stringify({ code: "UNAVAILABLE", echo: "grace@example.test" }), { status: 503 });
+    await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("unknown");
+    await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("review");
+    expect(calls).toHaveLength(1);
+    const [copy] = await db().select().from(formLeadCopies);
+    expect(copy!.state).toBe("unknown");
+    expect(JSON.stringify(copy!.attempts)).not.toContain("grace@example.test");
+    expect(copy!.encryptedRequest).not.toContain("grace@example.test");
+  });
+  async function acceptedCopy() {
+    configure(SINK);
+    const values = answers();
+    const submission = await submitCommitted({ slug: "contact", values, sourceUrl: "/contact?access=synthetic-private-link", screening: sealScreening("unscreened", "contact", values) }, ANONYMOUS);
+    return submittedPayload(submission.submissionId);
+  }
+  const HUMAN = { ...OWNER, security: { twoFactorRequired: false, twoFactorEnrolled: true, twoFactorVerified: true, stepUpValid: true } };
+  const review = (copy: typeof formLeadCopies.$inferSelect, outcome: "copied" | "not_copied" = "not_copied") => ({ id: copy.id, expectedRevision: copy.revision, operationId: copy.attempts[0]!.id, outcome, originalResourceEvidence: "Fictional provider independently identified the original account and request.", finalProviderEvidence: "Fictional exact original provider operation has this verified final outcome.", stoppedCallerEvidence: "Fictional original caller processes and all remote pending operations are stopped.", providerOperationRef: "fictional-provider-operation-79", confirmation: "ORIGINAL LEAD OUTCOME VERIFIED" });
+  it("delivers one actual post-commit inline lead and refuses replay", async () => {
+    configure(SINK); reply = () => new Response('{"accepted":true,"id":79}', { status: 201 });
+    const values = answers();
+    const result = await submitForm.call({ slug: "contact", values, screening: sealScreening("unscreened", "contact", values) }, ANONYMOUS);
+    expect(calls).toHaveLength(1);
+    await copySubmissionToLeadSink(await submittedPayload(result.submissionId));
+    expect(calls).toHaveLength(1);
+    expect((await db().select().from(formLeadCopies))[0]!.state).toBe("copied");
+  });
+  it("refuses a replacement lead account and restores the original frozen request", async () => {
+    const payload = await acceptedCopy();
+    const [copy] = await db().select().from(formLeadCopies);
+    await db().update(formSubmissions).set({ data: { email: "replacement@example.test", message: "Edited after admission" } });
+    configure({ ...SINK, PARADISEMODERN_API_KEY: "fictional-replacement-key", PARADISEMODERN_URL: "https://replacement-lead.example.test" });
+    await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("original"); expect(calls).toHaveLength(0);
+    configure(SINK); reply = () => new Response(JSON.stringify({ accepted: true, id: "original-79" }), { status: 201 });
+    await copySubmissionToLeadSink(payload); await copySubmissionToLeadSink(payload);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.body).toMatchObject({ email: "grace@example.test", referer: "http://localhost:3000/contact" });
+    expect(JSON.stringify(calls[0]!.body)).not.toContain("synthetic-private-link");
+    expect((await db().select().from(formLeadCopies).where(eq(formLeadCopies.id, copy!.id)))[0]!.attempts[0]!.observed).toBe("copied");
+  });
+  it("keeps invalid accepted replies unknown and never replays them", async () => {
+    const payload = await acceptedCopy(); reply = () => new Response('{"accepted":false,"id":79}', { status: 200 });
+    await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("unknown");
+    await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("review"); expect(calls).toHaveLength(1);
+  });
+  it("retries an explicit rate-limit refusal using the same original request", async () => {
+    const payload = await acceptedCopy(); reply = () => new Response('{}', { status: 429 });
+    await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("rate limit");
+    reply = () => new Response('{"accepted":true,"id":79}', { status: 201 });
+    await copySubmissionToLeadSink(payload); expect(calls).toHaveLength(2); expect(calls[0]!.body).toEqual(calls[1]!.body);
+    const [copy] = await db().select().from(formLeadCopies); expect(copy!.attempts.map(attempt => attempt.observed)).toEqual(["not_copied", "copied"]);
+  });
+  it("requires fresh human proof before admitting exactly one original-account retry", async () => {
+    await db().insert(users).values({ id: OWNER.userId, email: "owner@example.test", role: "owner" });
+    const payload = await acceptedCopy(); reply = () => Promise.reject(new Error("Fictional lost original reply"));
+    await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("unknown");
+    const [copy] = await db().select().from(formLeadCopies); const proof = review(copy!);
+    for (const actor of [{ kind: "system" as const }, API_KEY, { ...HUMAN, keyScopes: ["forms.reconcileLeadCopy"] }]) await expect(reconcileLeadCopy.call(proof, actor)).rejects.toMatchObject({ code: "permission" });
+    await expect(reconcileLeadCopy.call(proof, { ...HUMAN, security: { ...HUMAN.security, stepUpValid: false } })).rejects.toMatchObject({ code: "step_up_required" });
+    await reconcileLeadCopy.call(proof, HUMAN);
+    const [reviewed] = await db().select().from(formLeadCopies); expect(reviewed!.attempts[0]!.observed).toBe("unknown"); expect(reviewed!.attempts[0]!.humanOutcome).toBe("not_copied");
+    const retry = { id: reviewed!.id, expectedRevision: reviewed!.revision, confirmation: "RETRY ORIGINAL LEAD COPY" };
+    await retryLeadCopy.call(retry, HUMAN); await expect(retryLeadCopy.call(retry, HUMAN)).rejects.toMatchObject({ code: "conflict" });
+    const event = (await db().select().from(outboxEvents)).find(event => event.eventName === "forms.leadCopyRequested")!;
+    reply = () => new Response('{"accepted":true,"id":79}', { status: 201 });
+    await copySubmissionToLeadSink(event.payload); expect(calls).toHaveLength(2);
+    const dto = await listLeadCopyRecovery.call({}, HUMAN); expect(JSON.stringify(dto)).not.toMatch(/resourceDigest|requestDigest|encryptedRequest|credentialFingerprint|grace@example.test/);
+  });
+  it("preserves copied erasure as pending until original-provider removal is verified", async () => {
+    await db().insert(users).values({ id: OWNER.userId, email: "owner@example.test", role: "owner" });
+    const payload = await acceptedCopy(); reply = () => new Response('{"accepted":true,"id":"fictional-provider-operation-79"}', { status: 201 });
+    await copySubmissionToLeadSink(payload);
+    const [submission] = await db().select().from(formSubmissions);
+    const request = await createDataRequest.call({ contactId: submission!.contactId!, request: { kind: "erasure" } }, HUMAN);
+    const source = contactPrivacySources().find(source => source.scope === "forms.leadCopies")!;
+    const result = await db().transaction(tx => source.erase(tx, submission!.contactId!, { requestId: request.id }));
+    expect(result.pendingJobs).toHaveLength(1);
+    const [retired] = await db().select().from(formLeadCopies); expect(retired!.retiredAt).toBeTruthy(); expect(retired!.encryptedRequest).toBeNull(); expect(retired!.providerRef).toBeNull();
+    await reconcileLeadCopy.call({ ...review(retired!, "copied"), remoteErasureEvidence: "Fictional original provider confirms this exact lead and all copies are erased." }, HUMAN);
+    expect(await db().transaction(tx => minimizeLeadCopies(tx, [retired!.id], true))).toEqual([]);
+    const [minimized] = await db().select().from(formLeadCopies); expect(minimized!.encryptedRequest).toBeNull(); expect(minimized!.attempts[0]!.observed).toBe("copied");
+  });
+  it("rechecks direct and inherited holds before lead payload minimization", async () => {
+    await db().insert(users).values({ id: OWNER.userId, email: "owner@example.test", role: "owner" });
+    const payload = await acceptedCopy(); reply = () => new Response('{"accepted":true,"id":79}', { status: 201 }); await copySubmissionToLeadSink(payload);
+    const [submission] = await db().select().from(formSubmissions), [copy] = await db().select().from(formLeadCopies);
+    const request = await createDataRequest.call({ contactId: submission!.contactId!, request: { kind: "erasure" } }, HUMAN);
+    await addRetentionException.call({ dataRequestId: request.id, scope: "forms.submissions", reason: "legal_obligation", legalBasis: "Fictional independently documented original form evidence must be preserved." }, HUMAN);
+    expect(await db().transaction(tx => minimizeLeadCopies(tx, [copy!.id]))).toEqual([copy!.id]);
+    expect((await db().select().from(formLeadCopies))[0]!.encryptedRequest).toBeTruthy();
+  });
+  it("retains late positive replies after human resolution without inventing another call", async () => {
+    await db().insert(users).values({ id: OWNER.userId, email: "owner@example.test", role: "owner" });
+    const payload = await acceptedCopy(); reply = () => Promise.reject(new Error("Fictional lost reply")); await copySubmissionToLeadSink(payload).catch(() => undefined);
+    const [copy] = await db().select().from(formLeadCopies); await reconcileLeadCopy.call(review(copy!, "not_copied"), HUMAN);
+    await finishLeadCopy(copy!.id, copy!.attempts[0]!.id, { observed: "copied", providerRef: "late-original-79", response: { accepted: true, id: "late-original-79" } });
+    const [late] = await db().select().from(formLeadCopies); expect(late!.state).toBe("unknown"); expect(late!.attempts[0]!).toMatchObject({ observed: "copied", humanOutcome: "not_copied" });
+    await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("review"); expect(calls).toHaveLength(1);
+  });
+  it("blocks old-image reads and forged changes to observed lead journals", async () => {
+    const payload = await acceptedCopy(); reply = () => new Response('{"accepted":true,"id":79}', { status: 201 }); await copySubmissionToLeadSink(payload);
+    await expect(db().execute(sql`select data from form_submissions`)).rejects.toThrow();
+    const [copy] = await db().select().from(formLeadCopies);
+    await expect(db().transaction(async tx => { await tx.execute(sql`select set_config('freeholder.lead_copy_v1','1',true)`); await tx.update(formLeadCopies).set({ attempts: [] }).where(eq(formLeadCopies.id, copy!.id)); })).rejects.toThrow();
+    await expect(db().delete(formLeadCopies)).rejects.toThrow();
+    expect(calls).toHaveLength(1);
+  });
+
+});
+
+describe("original rendered lead notice", () => {
+  it("binds the rendered form, origin and original account without exposing credentials", () => {
+    configure(SINK);
+    const token = issueLeadNotice("contact", "Copy this enquiry to Paradise Modern for follow-up.")!;
+    expect(token).not.toContain(PM.PARADISEMODERN_API_KEY + ":");
+    expect(openLeadNotice(token, "contact")?.baseUrl).toBe(PM.PARADISEMODERN_URL);
+    expect(openLeadNotice(token, "other")).toBeNull();
+    expect(openLeadNotice(token + "x", "contact")).toBeNull();
+    configure({ ...SINK, PARADISEMODERN_URL: "https://replacement.example.test" });
+    expect(openLeadNotice(token, "contact")?.baseUrl).toBe(PM.PARADISEMODERN_URL);
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 86_400_001);
+    expect(openLeadNotice(token, "contact")).toBeNull();
+  });
+  it("does not issue a destination receipt for an unsafe provider address", () => {
+    configure({ ...SINK, PARADISEMODERN_URL: "https://unsafe.example.test?synthetic=private" });
+    expect(issueLeadNotice("contact", "Copy this enquiry to Paradise Modern for follow-up.")).toBeUndefined();
   });
 });

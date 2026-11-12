@@ -33,6 +33,7 @@ export default defineModule({
       "forms.created",
       "forms.updated",
       "forms.submitted",
+      "forms.leadCopyRequested",
       "forms.trashed",
       "forms.restored",
       "forms.purged",
