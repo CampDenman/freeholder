@@ -60,7 +60,10 @@ export async function importBatchTargets(ctx: ServiceContext): Promise<Array<{ w
   return rows.flatMap(row => {
     if (row.slug === null) return [];
     const metadata = row.metadata as Record<string, unknown>;
-    return [{ targetSlug: row.slug, pageId: row.pageId, ...(typeof metadata.wpId === "string" ? { wpId: metadata.wpId } : {}), ...(typeof metadata.sourcePath === "string" ? { sourcePath: metadata.sourcePath } : {}) }];
+    // Static metadata retains the literal URL pathname. The shared content
+    // link resolver uses its source path without the leading slash.
+    const sourcePath = typeof metadata.sourcePath === "string" ? metadata.format === "archive-zip" ? metadata.sourcePath.replace(/^\//, "") : metadata.sourcePath : undefined;
+    return [{ targetSlug: row.slug, pageId: row.pageId, ...(typeof metadata.wpId === "string" ? { wpId: metadata.wpId } : {}), ...(sourcePath !== undefined ? { sourcePath } : {}) }];
   });
 }
 
