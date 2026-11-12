@@ -89,6 +89,14 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     await expect(commitImport.call({ id }, OWNER)).rejects.toThrow(/review/);
   });
 
+  it("imports an anonymous historical comment without creating or claiming a CRM person", async () => {
+    const id = await stage(SOURCE.replace(`<wp:comment_author_email>${EMAIL}</wp:comment_author_email>`, ""));
+    expect((await db().select().from(readerOwnershipReceipts))[0]).toMatchObject({ state: "unbound", contactId: null, addressDigest: null });
+    expect((await commitImport.call({ id }, OWNER)).status).toBe("committed");
+    expect((await db().select().from(blogReaderComments))[0]).toMatchObject({ contactId: null, body: "Original reader's unchanged comment.", status: "approved" });
+    expect(await db().select().from(contacts)).toHaveLength(0);
+  });
+
   it("keeps the already-recorded original reader when identical source is staged after an address change", async () => {
     const reader = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
     const first = await stageReviewed(reader.id);
