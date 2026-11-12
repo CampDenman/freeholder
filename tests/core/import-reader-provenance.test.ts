@@ -37,12 +37,20 @@ async function boundReader(id: string) {
   return preview.pages[0]?.readerComments[0]?.contactId;
 }
 async function verifiedOwner() {
-  await db().insert(users).values({ id: OWNER.userId, email: "fixture-source-owner@example.test", role: "owner" });
-  await db().insert(totpFactors).values({ userId: OWNER.userId, encryptedSecret: "fixture-only-source-owner-factor" });
+  await db().insert(users).values({ id: OWNER.userId, email: "fixture-source-owner@example.test", role: "owner" }).onConflictDoNothing();
+  await db().insert(totpFactors).values({ userId: OWNER.userId, encryptedSecret: "fixture-only-source-owner-factor" }).onConflictDoNothing();
   const session = await db().transaction(tx => createSession(tx, OWNER.userId, { twoFactorVerified: true }));
   const actor = await actorFromToken(session.token);
   if (actor.kind !== "user" || !actor.sessionId) throw new Error("The actual fixture owner session was not resolved.");
   return actor;
+}
+async function stageReviewed(contactId: string, payload = SOURCE, reviewer?: Awaited<ReturnType<typeof verifiedOwner>>) {
+  const id = await stage(payload), owner = reviewer ?? await verifiedOwner();
+  const review = await readerOwnershipReview.call({ id }, owner);
+  expect(review.rows).toHaveLength(1);
+  const reader = review.rows[0]!;
+  await resolveReaderOwnership.call({ id, receiptId: reader.receiptId, postId: reader.postId, commentId: reader.commentId, contactId, confirmation: "ASSIGN ORIGINAL READER" }, owner);
+  return id;
 }
 async function ambiguousSource() {
   const original = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
@@ -53,7 +61,7 @@ async function ambiguousSource() {
 }
 async function publishedReader(held: boolean) {
   const reader = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
-  const id = await stage();
+  const id = await stageReviewed(reader.id);
   await commitImport.call({ id }, OWNER); await reconcileImport.call({ id }, OWNER); await publishImport.call({ id }, OWNER);
   const [comment] = await db().select().from(blogReaderComments);
   if (!comment) throw new Error("The actual original comment was not published.");
@@ -93,7 +101,7 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
 
   it("keeps the already-recorded original reader when identical source is staged after an address change", async () => {
     const reader = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
-    const first = await stage();
+    const first = await stageReviewed(reader.id);
     expect(await boundReader(first)).toBe(reader.id);
     await updateContact.call({ id: reader.id, email: "changed-reader@example.test" }, OWNER);
     const repeated = await stage();
@@ -102,7 +110,7 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
 
   it("does not assign the same original comment to the new holder of its old email", async () => {
     const reader = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
-    const first = await stage();
+    const first = await stageReviewed(reader.id);
     expect(await boundReader(first)).toBe(reader.id);
     await updateContact.call({ id: reader.id, email: "changed-reader@example.test" }, OWNER);
     const later = (await resolveContact.call({ name: "Different reader", email: EMAIL }, OWNER)).contact;
@@ -114,7 +122,7 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
   it("retains separate original provenance after merge undo and subsequent email reassignment", async () => {
     const original = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
     const separate = (await resolveContact.call({ name: "Separate reader", email: "separate-reader@example.test" }, OWNER)).contact;
-    const first = await stage();
+    const first = await stageReviewed(original.id);
     const merged = await mergeContacts.call({ survivingId: separate.id, duplicateId: original.id }, OWNER);
     expect(await boundReader(first)).toBe(separate.id);
     await undoContactMerge.call({ operationId: merged.mergeOperationId }, OWNER);
@@ -127,7 +135,7 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
 
   it("keeps an opaque erasure fence after removing reader data and refuses the same original source", async () => {
     const reader = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
-    await stage();
+    await stageReviewed(reader.id);
     const adapter = contactPrivacySources().find(value => value.scope === "imports.readerOwnership")!;
     const exported = await db().transaction(tx => adapter.exportData(tx, reader.id));
     expect(exported).toHaveLength(1);
@@ -143,7 +151,7 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
 
   it("preserves the named reader hold while preventing a held witness from authorizing another import", async () => {
     const reader = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
-    const first = await stage();
+    const first = await stageReviewed(reader.id);
     const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, OWNER);
     await verifyDataRequest.call({ id: request.id, method: "Fictional source reader identity verified" }, OWNER);
     await addRetentionException.call({ dataRequestId: request.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Fictional retained original reader dispute" }, OWNER);
@@ -154,10 +162,11 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
   });
 
   it("uses a normalized merge witness for 1001 readers and restores every exact original owner", async () => {
-    const original = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
     const separate = (await resolveContact.call({ name: "Separate reader", email: "separate-reader@example.test" }, OWNER)).contact;
     const comments = Array.from({ length: 1001 }, (_, index) => `<wp:comment><wp:comment_id>${index + 1}</wp:comment_id><wp:comment_author>Original reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Fictional original reader ${index}.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>`).join("");
-    await stage(SOURCE.replace(/<wp:comment>[\s\S]*?<\/wp:comment>/, comments));
+    const id = await stage(SOURCE.replace(/<wp:comment>[\s\S]*?<\/wp:comment>/, comments));
+    await commitImport.call({ id }, OWNER);
+    const original = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
     const merged = await mergeContacts.call({ survivingId: separate.id, duplicateId: original.id }, OWNER);
     const [operation] = await db().select().from(contactMergeOperations).where(eq(contactMergeOperations.id, merged.mergeOperationId));
     const references = z.array(z.object({ table: z.string(), before: z.unknown(), after: z.unknown() })).parse(operation?.referenceState);
@@ -174,7 +183,7 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     const second = (await resolveContact.call({ name: "Second site reader", email: secondEmail }, OWNER)).contact;
     const sourceA = SOURCE.replace("<link>https://fictional-reader-source.example</link>", "<link>https://fictional-reader-source.example/site-a/</link>");
     const sourceB = SOURCE.replace("<link>https://fictional-reader-source.example</link>", "<link>https://fictional-reader-source.example/site-b/</link>").replace(EMAIL, secondEmail);
-    const runA = await stage(sourceA), runB = await stage(sourceB);
+    const runA = await stageReviewed(first.id, sourceA), runB = await stageReviewed(second.id, sourceB);
     expect(await boundReader(runA)).toBe(first.id);
     expect(await boundReader(runB)).toBe(second.id);
   });
@@ -285,7 +294,7 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     const owner = await verifiedOwner(), oldKey = Buffer.alloc(32, 3).toString("hex"), newKey = Buffer.alloc(32, 4).toString("hex");
     vi.stubEnv("CREDENTIAL_KEY", oldKey); vi.stubEnv("CREDENTIAL_KEY_PREVIOUS", ""); resetEnvForTests();
     const original = (await resolveContact.call({ email: EMAIL }, OWNER)).contact;
-    await stage();
+    await stageReviewed(original.id, SOURCE, owner);
     const [before] = await db().select().from(readerOwnershipKeys), receipts = await db().select().from(readerOwnershipReceipts);
     vi.stubEnv("CREDENTIAL_KEY", newKey); vi.stubEnv("CREDENTIAL_KEY_PREVIOUS", oldKey); resetEnvForTests();
     expect(await rotateCredentials.call({}, owner)).toEqual({ examined: 1, rotated: 1, failed: 0 });

@@ -209,3 +209,15 @@ Reader source has subsequently rebased onto protected main `13f63be0` (PR
 invoice/subscription policy entries and the reader receipt entries. The next
 proof database must apply official migrations through 74 before explicit
 unjournalled 78; the earlier 73+78 database is not a 74–78 upgrade rehearsal.
+
+
+A further first-source control reproduced an original-owner guess: with no
+previous source receipt or address history, the current email holder became the
+historical reader's bound owner. The importer now leaves that receipt in human
+review with no contact pointer. The email match is a candidate, never original
+ownership evidence. Known-owner positive fixtures now use the actual freshly
+verified owner review service before later identity/merge/erasure checks. A
+first source with no existing person still follows the separately bounded new
+person path; this change does not claim otherwise. The new before control failed
+on the preceding source; its after and the updated positive controls still need
+qualification with the complete migration chain.
