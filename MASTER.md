@@ -3959,15 +3959,15 @@ reading chat logs.
   witnesses; the orphan timer forgot an unresolved writer; and replacement
   storage acknowledged cleanup while the original bytes remained. All five
   now pass locally in `tests/core/media-write-ownership.test.ts` against the
-  receipt-based PUT/DELETE repair under qualification (explicit local SQL75,
-  not a contiguous migration or release claim). Original intent, resource
+  receipt-based PUT/DELETE repair under qualification (initially explicit local
+  SQL75; final contiguous qualification is recorded below). Original intent, resource
   namespace and positive observations survive failures. Unknown operations
   block automatic retries and cleanup. Eight local controls now cover fresh human recovery, bounded contact
   merge/undo witnesses and truthful pending erasure (seven passed initially;
   the remaining erasure fixture used a non-erasable staff account, was
   corrected to an ordinary customer and passed on its own). Evidence:
   `tests/core/media-write-recovery.test.ts`; `/admin/media/recovery` and all
-  four locale strings are implemented but not yet production-browser accepted.
+  four locale strings have local production-browser evidence below.
   The bounded multipart source increment reserves original CREATE intent
   before provider I/O, keeps per-call receipts and an immutable completion
   manifest, and verifies cancellation against original ListParts rather than
@@ -3989,10 +3989,15 @@ reading chat logs.
   The 13 directly changed capture/shared-adoption, owned published-file erasure,
   named-hold and social producer controls now pass together. A conformant
   single-materialization/404-peer COMPLETE recovery control and final live SDK
-  generation pass separately. No whole-product suite, final contiguous upgrade,
-  four-locale production browser or stable acceptance is inferred from those
-  source repairs.
-  Contiguous upgrade/older-writer proof,
+  generation pass separately. Final integration on main `13f63be0` applies the
+  full journal0–75 normally, passes live SDK8 and preserves five table hashes
+  from an actual pre75 HTTP-upload database on upgrade. Historical receipts
+  remain unverified. `tests/browser/media-storage-recovery.spec.ts` passes all
+  four locales on the Node22 production build, including 320px/both themes,
+  selected Axe checks, keyboard use, fresh verification, actual local absence,
+  replacement-resource refusal and private audit/HTTP boundaries. These are
+  local synthetic-provider checks, not whole-product or stable acceptance.
+  Actual old-writer drain,
   original-byte cross-target recovery and live storage acceptance remain
   required before this item can close. C3.22/C11.08 and independent C11.10
   remain open. This introduces no scope deferral.

@@ -99,8 +99,35 @@ The temporary direct-abort refusal in root75 WIP was a compatibility regression
 in an unfinished repair. Original main72 cancellation worked; it is not counted
 as a preexisting launch defect.
 
-Further qualification remains for four-locale owner browser acceptance and
-contiguous upgrade on the final composed source.
+Final integration on actual main `13f63be0`, with the source commits through
+`3e4cd817`, supplies these additional local checks:
+
+- The normal migrator applies the full contiguous journal0–75 to a fresh
+  disposable database: 76 entries, with final timestamp `1793310000055`.
+- A separate clone of the drained pre75 main74 HTTP-upload database upgrades
+  through that same journal. All five original table counts and canonical row
+  hashes remain unchanged (`assets`, `media_uploads`, `media_objects`, `users`,
+  `contacts`; the new owner column is excluded from the comparison). Its actual
+  prior-runtime uploaded asset remains present. Its one historical object gets
+  an unverified receipt with no invented namespace, digest or positive ACK.
+  This database preservation proof does not establish object-byte recovery.
+- Live SDK generation passes all 8 controls against contiguous75.
+- Node22 production build and standalone scrub pass: 21,571 files /
+  261,376,109 bytes, with no source or environment leakage.
+- `tests/browser/media-storage-recovery.spec.ts` passes all four locale
+  journeys in 44.2s against that production artifact. At 320px, both themes
+  pass the selected Axe WCAG checks with no horizontal overflow. The journeys
+  exercise Arabic RTL, fresh-verification refusal, keyboard confirmation,
+  actual local-provider absence, replacement multipart namespace refusal,
+  audit evidence redaction and private HTTP-phase refusal. They use synthetic
+  fixtures and local storage, not a Replit/S3 account acceptance.
+- Final local gate components pass: lint, licensing, release notes, plan,
+  playground policy and 42 contract files (380 passing controls plus one
+  explicit exclusion). The first full gate process reports a typecheck heap
+  exhaustion with Node22's default heap; the same full typecheck passes with
+  `NODE_OPTIONS=--max-old-space-size=8192`. That failed process is retained as
+  a resource failure rather than described as an entirely green invocation.
+
 Breaking migration75 requires actual old direct
 writers to stop and drain. Readiness refusal cannot stop an already admitted
 network request. Cross-target adoption/source cleanup, live storage acceptance
