@@ -139,3 +139,12 @@ Evidence: `/tmp/freeholder-legacy-refund-c0-refined-original-after.json`,
 `/tmp/freeholder-legacy-refund-c0-refined-original-after-ledger.json`.
 The original 4c proof remains separate; neither result extends acceptance to
 the fourteen new fault controls, which are still pending.
+
+A further isolated hardening binds the full immutable refund tuple into the
+server-created marker and checks the original input against the stored row
+before dispatch. No reason or contact copy is included in that marker. Old
+candidate markers lacking these facts are not backfilled or converted. Two
+additional drafted controls alter an unsubmitted amount/currency and require
+zero provider POSTs plus retained review debt. The expanded sixteen controls
+and this hardening's source gates are pending; prior 4c/8dc proofs are not
+extended to the new source.

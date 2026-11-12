@@ -79,8 +79,10 @@ async function originalPaymentMatches(tx: Tx, original: Record<string, unknown>)
     && Boolean(parent.providerAccountId && parent.applicationFeeMinor && parent.applicationFeeMinor > 0) === original.refundApplicationFee);
 }
 
-export function refundReservationMarker(refund: Pick<Refund, "id" | "requestHash">) {
-  return sign({ protocol: version, refundId: refund.id, requestHash: refund.requestHash, physicalState: "unsubmitted" });
+export function refundReservationMarker(refund: Pick<Refund, "id" | "paymentId" | "invoiceId" | "provider" | "amountMinor" | "currency" | "idempotencyKey" | "requestHash">) {
+  return sign({ protocol: version, physicalState: "unsubmitted", refundId: refund.id, paymentId: refund.paymentId,
+    invoiceId: refund.invoiceId, provider: refund.provider, amountMinor: refund.amountMinor, currency: refund.currency,
+    idempotencyKey: refund.idempotencyKey, requestHash: refund.requestHash });
 }
 async function rawEvents(tx: Tx, refundId: string) {
   return tx.select().from(moneyStateEvents).where(and(eq(moneyStateEvents.subjectType, "refund"), eq(moneyStateEvents.subjectId, refundId)))

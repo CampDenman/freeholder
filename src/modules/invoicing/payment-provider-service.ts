@@ -798,6 +798,10 @@ export const claimProviderRefund = defineService({
       if (existing.provider !== source.payment.provider) throw new ServiceError("conflict", "The original payment provider changed. Restore its original refund evidence before proceeding.");
     }
     const refund = await ctx.call(createRefund, input);
+    if (refund.paymentId !== input.paymentId || refund.amountMinor !== input.amountMinor || refund.idempotencyKey !== input.idempotencyKey
+      || refund.invoiceId !== source.payment.invoiceId || refund.currency !== source.payment.currency || refund.provider !== source.payment.provider) {
+      throw new ServiceError("conflict", "The stored refund differs from its original request and payment. Reconcile it before proceeding.");
+    }
     if (["succeeded", "failed", "cancelled"].includes(refund.status)) return { refund, dispatch: null, replay: null, persist: null };
     if (refund.status === "processing") {
       const replay = await legacyRefundFinishedResult(ctx.tx, refund);
@@ -805,7 +809,7 @@ export const claimProviderRefund = defineService({
     }
     if (refund.status !== "created") throw new ServiceError("conflict", "The original refund is already admitted. Reconcile its actual result instead of sending another provider request.");
     const dispatch = await admitLegacyRefundDispatch(ctx, refund, { paymentId: source.payment.id, providerRef: source.payment.providerRef ?? source.payment.id,
-      currency: source.payment.currency, amountMinor: refund.amountMinor, reason: refund.reason ?? input.reason, idempotencyKey: refund.idempotencyKey,
+      currency: source.payment.currency, amountMinor: refund.amountMinor, reason: input.reason, idempotencyKey: refund.idempotencyKey,
       providerAccountId: source.routing.providerAccountId,
       refundApplicationFee: Boolean(source.routing.providerAccountId && source.routing.applicationFeeMinor && source.routing.applicationFeeMinor > 0) },
     { amountMinor: source.payment.amountMinor, requestHash: source.payment.requestHash });

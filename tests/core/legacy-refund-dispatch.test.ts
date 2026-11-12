@@ -83,6 +83,17 @@ describe.runIf(hasDatabase)("legacy refund original physical dispatch", () => {
     expect(refund).not.toHaveBeenCalled();
     expect(await row(request.idempotencyKey)).toMatchObject({ status: "created", providerRef: null });
   });
+  it.each(["amount", "currency"] as const)("refuses a corrupted unsubmitted refund %s before any provider POST", async field => {
+    const original = await payment(`unsubmitted-${field}`);
+    const request = input(original.id, `unsubmitted-${field}-refund`);
+    const reserved = await createRefund.call(request, OWNER);
+    await db().update(refunds).set(field === "amount" ? { amountMinor: 500 } : { currency: "USD" }).where(eq(refunds.id, reserved.id));
+    const refund = edge(async () => ({ providerRef: "re_NeverCorruptAdmission", status: "succeeded" }));
+    await expect(submitProviderRefund.call(request, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    await expect(cancelRefund.call({ id: reserved.id, reason: "Do not release an altered original reservation." }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    expect(refund).not.toHaveBeenCalled();
+    expect(await row(request.idempotencyKey)).toMatchObject({ status: "created", providerRef: null });
+  });
   it.each([
     ["transport", new Error("Synthetic response lost after provider acceptance")],
     ["already", new AdapterError("payments", "stripe", "invalid_request", "Synthetic already-refunded answer", false, "charge_already_refunded")],
