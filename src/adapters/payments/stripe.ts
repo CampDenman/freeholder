@@ -9,6 +9,7 @@ import { number, object, paymentFetch, providerJson, text } from "./http";
 import { applyDestinationCharge, assertMerchantAttempt, assertMerchantIntent, merchantAttemptMetadata, merchantChargeScope, merchantIntentEvidence, validateMerchantChargeScope } from "./stripe-merchant-scope";
 import { stripeMerchantFees } from "./stripe-merchant-fees";
 import { stripeCheckoutEvidence } from "./stripe-merchant-capture";
+import { inspectStripeMerchantPayment } from "./stripe-merchant-inspection";
 import { stripeMerchantRecovery } from "./stripe-merchant-recovery";
 import type {
   CheckoutCaptureResult,
@@ -409,6 +410,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     platformAccountIdentity,
     ...stripeMerchantFees(chargeApi),
     ...stripeMerchantRecovery(chargeApi),
+    inspectMerchantPayment: request => inspectStripeMerchantPayment(request, (path, scope) => api(path, { method: "GET" }, scope)),
     async supportedCurrencies() { return []; },
     async supportedMethods(context) {
       const methods: PaymentMethodOffer[] = [{ id: "card", label: "Card or supported wallet", kind: "card", recurring: true }];

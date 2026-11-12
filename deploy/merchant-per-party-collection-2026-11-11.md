@@ -64,6 +64,16 @@ paid amounts remain positive facts. The five-file mocked-provider run passed
 refund fixtures were updated to mock the newly required platform read. These
 counts do not claim database or real-account acceptance.
 
+Original-charge inspection now reads the actual PaymentIntent, then its Charge,
+original platform application fee and destination Transfer. Eight focused mocked
+HTTP controls pass, including positive money committed before a later fee read
+fails, original fee/transfer lineage, foreign metadata, missing transfers and
+fee-currency disagreement. Full TypeScript and focused lint pass at this stage.
+A successful customer charge alone does not assert completed seller settlement;
+fee correction and refund history must still satisfy the immutable commission.
+These controls cover newly committed payment-attempt metadata; scheduled
+subscription charge-origin proof is a separate source integration still underway.
+
 The remaining full specification is still required: immutable per-party issue
 snapshots and route admission on one invoice; original-merchant tax and fee
 integration; payment/refund/dispute and partial/unknown recovery; original
@@ -83,3 +93,6 @@ Recovery uses [original Session expiry](https://docs.stripe.com/api/checkout/ses
 and the documented [Checkout intent cancellation exception](https://docs.stripe.com/api/payment_intents/cancel).
 Destination refunds and disputes debit the platform balance even with
 `on_behalf_of`; the setting changes settlement merchant, not charge namespace.
+
+Charge inspection also follows the official [PaymentIntent](https://docs.stripe.com/api/payment_intents/object),
+[Charge](https://docs.stripe.com/api/charges/object), and [Transfer](https://docs.stripe.com/api/transfers/object) object contracts.

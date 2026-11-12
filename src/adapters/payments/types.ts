@@ -134,12 +134,22 @@ export interface CheckoutCaptureResult extends MerchantChargeScope {
   providerChargeRef?: string;
   applicationFeeRef?: string;
   transferRef?: string;
+  applicationFeeCurrency?: string;
+  observedApplicationFeeMinor?: number;
+  merchantSettlementVerified?: boolean;
   providerRef: string;
   status: "pending" | "succeeded" | "failed";
   amountMinor?: number;
   currency?: string;
   occurredAt?: string;
   applicationFeeMinor?: number;
+}
+
+export interface MerchantPaymentInspectionRequest extends MerchantChargeScope {
+  providerPlatformAccountId: string;
+  paymentAttemptId: string;
+  providerRef: string;
+  onPaymentObserved?: (evidence: CheckoutCaptureResult) => Promise<void>;
 }
 
 export interface RefundRequest extends MerchantChargeScope {
@@ -370,6 +380,7 @@ export interface PaymentAdapter {
   /** A missing lookup is unresolved, never evidence that a timed-out refund did not happen. */
   recoverMerchantFeeRefund?(request: MerchantFeeRefundRequest): Promise<MerchantFeeRefundResult | null>;
   recoverMerchantPayment?(request: MerchantPaymentRecoveryRequest): Promise<MerchantPaymentRecovery>;
+  inspectMerchantPayment?(request: MerchantPaymentInspectionRequest): Promise<CheckoutCaptureResult>;
   /** Expires only the authenticated original session; never a new charge or a manual absence claim. */
   retireMerchantPayment?(request: MerchantPaymentRecoveryRequest): Promise<MerchantPaymentRecovery>;
   supportedCurrencies(): Promise<readonly string[]>;
