@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // C2.29/C11.10: the ordinary orphan sweep must honor an explicit raw-source hold.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { db } from "@/core/db";
+import { importRuns } from "@/core/plugins/schema";
 import { storage, resetStorageForTests } from "@/adapters/storage";
 import { resolveContact } from "@/core/contacts/service";
 import { createDataRequest, verifyDataRequest, addRetentionException, removeRetentionException, fulfillDataRequest } from "@/core/privacy/service";
@@ -23,6 +26,12 @@ async function held() {
   expect(result.request.status).toBe("partially_completed");
   return { run, upload, hold, key: `imports/${run.id}/${upload.uploadId}/00000.part` };
 }
+async function expireSourceWindow(id: string) {
+  const [run] = await db().select().from(importRuns).where(eq(importRuns.id, id));
+  const checkpoint = run!.checkpoint as Record<string, unknown>;
+  checkpoint.sourceUpload = { ...checkpoint.sourceUpload as Record<string, unknown>, expiresAt: new Date(Date.now() - 1_000).toISOString() };
+  await db().update(importRuns).set({ checkpoint }).where(eq(importRuns.id, id));
+}
 describe.runIf(hasDatabase)("held original import bytes", () => {
   beforeEach(async () => { await truncateSpine(); resetStorageForTests(); });
   afterAll(closeDb);
@@ -32,8 +41,9 @@ describe.runIf(hasDatabase)("held original import bytes", () => {
     expect(await storage().get(key)).toEqual(bytes);
   });
   it("allows cleanup after the actual hold is removed", async () => {
-    const { key, hold } = await held();
+    const { run, key, hold } = await held();
     await removeRetentionException.call({ id: hold.id }, OWNER);
+    await expireSourceWindow(run.id);
     await cleanupOrphanedMedia(new Date(Date.now() + 25 * 3_600_000));
     expect(await storage().get(key)).toBeUndefined();
   });
@@ -41,6 +51,7 @@ describe.runIf(hasDatabase)("held original import bytes", () => {
     const { run, key } = await held();
     const next = await beginSourceUpload.call({ id: run.id, filename: "replacement.xml", bytes: bytes.byteLength }, OWNER);
     await uploadSourceChunk.call({ id: run.id, uploadId: next.uploadId, index: 0, bytes }, OWNER);
+    await expireSourceWindow(run.id);
     await cleanupOrphanedMedia(new Date(Date.now() + 25 * 3_600_000));
     expect(await storage().get(key)).toEqual(bytes);
     expect(await storage().get(`imports/${run.id}/${next.uploadId}/00000.part`)).toBeUndefined();

@@ -6,18 +6,21 @@ import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import encodeQR from "qr";
+import {db} from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   defineOrchestratedService,
-  defineService,
   ServiceError,
   actorString,
   permits,
   type ServiceContext,
+  type Actor,
 } from "@/core/service";
+import {defineMediaService as defineService} from "./guarded-service";
+import {putWithReceipt,originalStoredObject} from "./write-ledger";
+import {assertOriginalUploadWritable} from "./upload-ownership";
 import { siteOrigin } from "@/core/seo/origin";
-import { storage } from "@/adapters/storage";
-import { deleteUnownedPendingObjects, reservePendingMediaObject as reserveObject } from "./object-ledger";
+import { deleteUnownedPendingObjects, reservePendingMediaObject as reserveObject,registerPendingObjectOwner } from "./object-ledger";
 import {
   CAPTURE_SOURCES,
   CAPTURE_STATUSES,
@@ -30,6 +33,13 @@ import {
 } from "./schema";
 
 const CAPTURE_TTL_MS = 24 * 60 * 60 * 1000;
+// Logical chunks/items retain their physical witness until their own durable
+// transaction retires that pointer. An orphan timer is not that authority.
+registerPendingObjectOwner("capture/",async key=>{
+ const chunk=await db().select({id:mediaCaptureChunks.id}).from(mediaCaptureChunks).where(eq(mediaCaptureChunks.storageKey,key)).limit(1);if(chunk.length)return true;
+ const item=await db().select({id:mediaCaptureItems.id}).from(mediaCaptureItems).where(eq(mediaCaptureItems.stagedKey,key)).limit(1);if(item.length)return true;
+ return Boolean((await db().select({id:mediaCaptureSessions.id}).from(mediaCaptureSessions).where(eq(mediaCaptureSessions.stagedKey,key)).limit(1)).length);
+});
 const id = z.string().uuid();
 const token = z.string().trim().min(16).max(128);
 const source = z.enum(CAPTURE_SOURCES);
@@ -255,10 +265,10 @@ function assertSameSession(
 }
 
 /** Provider writes follow the shared pending-object reservation. */
-async function storeBytes(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
+async function storeBytes(key: string, bytes: Uint8Array, contentType: string,actor:Actor): Promise<void> {
   const body = new Uint8Array(bytes.byteLength);
   body.set(bytes);
-  await storage().put(key, body, contentType);
+  await putWithReceipt({key,body,contentType,role:"original",requiresReservation:true},actor);
 }
 
 async function appendItem(
@@ -273,18 +283,7 @@ async function appendItem(
     checksumSha256?: string;
   },
 ) {
-  if (!input.uploadId) {
-    await ctx.tx
-      .insert(mediaObjects)
-      .values({
-        key: input.key,
-        role: "original",
-        state: "pending",
-        bytes: input.bytes,
-        contentType: input.contentType,
-      })
-      .onConflictDoNothing();
-  }
+  await assertCapturePhysicalOwner(ctx,input.key);
   await ctx.tx.insert(mediaCaptureItems).values({
     sessionId: existing.id,
     filename: input.filename,
@@ -307,6 +306,11 @@ async function appendItem(
     .where(eq(mediaCaptureSessions.id, existing.id))
     .returning();
   return updated!;
+}
+async function assertCapturePhysicalOwner(ctx:Pick<ServiceContext,"tx">,key:string):Promise<void>{
+ const [reservation]=await ctx.tx.select({owner:mediaObjects.ownerContactId}).from(mediaObjects).where(eq(mediaObjects.key,key)).limit(1);
+ if(!reservation)throw new ServiceError("conflict","The original capture reservation was retired; it cannot be recreated after storage work.");
+ await assertOriginalUploadWritable(ctx.tx,reservation.owner,null);
 }
 
 async function applyCaptureTarget(
@@ -727,7 +731,7 @@ export const attachCaptureUpload = defineOrchestratedService({
       { ...access, contentType: input.contentType, bytes: input.bytes.byteLength },
       actor,
     );
-    await storeBytes(claimed.key, input.bytes, input.contentType);
+    await storeBytes(claimed.key, input.bytes, input.contentType,actor);
     return applyCaptureOriginal.call(
       {
         ...access,
@@ -1138,6 +1142,7 @@ const applyCaptureChunk = defineService({
     bytes: z.number().int(),
   }),
   handler: async (input, ctx) => {
+    await assertCapturePhysicalOwner(ctx,input.key);
     const authorized = await authorizedSession(ctx, input, "media.appendCaptureChunk");
     assertSameSession(authorized, input.sessionId);
     // The session row, not the (possibly not yet existing) chunk row, is the
@@ -1169,9 +1174,8 @@ const applyCaptureChunk = defineService({
         target: [mediaCaptureChunks.sessionId, mediaCaptureChunks.sequence],
         set: { storageKey: input.key, bytes: input.bytes, contentType: input.contentType },
       });
-    // The chunk row owns the key now; the pending ledger entry is released so
-    // the orphan sweep never deletes a live timeslice.
-    await ctx.tx.delete(mediaObjects).where(eq(mediaObjects.key, input.key));
+    // The chunk row declares live ownership; retain its physical receipt and
+    // pending pointer until the guarded cleanup actually removes its bytes.
     if (previous && previous.storageKey !== input.key) {
       await deleteAfterCommit(ctx, [previous.storageKey]);
     }
@@ -1218,7 +1222,7 @@ export const appendCaptureChunk = defineOrchestratedService({
       },
       actor,
     );
-    await storage().put(claimed.key, input.bytes, input.contentType);
+    await putWithReceipt({key:claimed.key,body:new Uint8Array(input.bytes),contentType:input.contentType,role:"original",requiresReservation:true},actor);
     return applyCaptureChunk.call(
       {
         ...access,
@@ -1392,8 +1396,9 @@ export const assembleCapture = defineOrchestratedService({
     const parts: Uint8Array<ArrayBuffer>[] = [];
     let total = 0;
     for (const key of claimed.chunkKeys) {
-      const body = await storage().get(key);
+      const captured=await originalStoredObject(key),body = await captured.store.get(key);
       if (!body) throw new ServiceError("conflict", "A recorded chunk disappeared from storage.");
+      const{createHash}=await import("node:crypto");if(body.byteLength!==captured.receipt.bytes||createHash("sha256").update(body).digest("hex")!==captured.receipt.sha256)throw new ServiceError("conflict","An original recording chunk changed after its accepted write.");
       parts.push(body);
       total += body.byteLength;
     }
@@ -1406,7 +1411,7 @@ export const assembleCapture = defineOrchestratedService({
       assembled.set(part, offset);
       offset += part.byteLength;
     }
-    await storage().put(claimed.key, assembled, claimed.contentType);
+    await putWithReceipt({key:claimed.key,body:assembled,contentType:claimed.contentType,role:"original",requiresReservation:true},actor);
     return applyCaptureAssembly.call(
       {
         ...access,

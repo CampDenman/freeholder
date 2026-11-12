@@ -11,6 +11,7 @@ import { socialAdapters } from "@/adapters/social";
 import { decryptSecret } from "@/core/connections/crypto";
 import { assets } from "@/core/media/schema";
 import { registerStoredOriginal } from "@/core/media/service";
+import {putWithReceipt} from "@/core/media/write-ledger";
 import { sniffRasterImage, sniffVideo } from "@/core/media/validation";
 import {
   defineOrchestratedService,
@@ -141,7 +142,7 @@ async function storeRendition(
   const key = storageKey(filename, new Date(), randomUUID());
   const body = new Uint8Array(bytes.byteLength);
   body.set(bytes);
-  await storage().put(key, body, mime);
+  await putWithReceipt({key,body,contentType:mime,role:"original"},{kind:"system"});
   const asset = await registerStoredOriginal.call(
     {
       key,

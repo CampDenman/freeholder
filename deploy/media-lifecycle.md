@@ -3,6 +3,49 @@
 Copyright (C) 2026 Tony Aly
 SPDX-License-Identifier: Apache-2.0
 
+## Original storage recovery (C1.12/C3.22/C11.08, in qualification)
+
+An upload request can fail after the provider has stored its bytes, or while
+the provider can still finish later. The new physical-operation receipts are
+reserved before PUT/DELETE and keep the exact object key, resource fingerprint,
+digest, byte count and original contact pointer. A positive provider response
+is preserved separately from a person's later review. Neither a timer nor a
+missing object settles an unknown call. Parallel rendition failures retain
+every sibling's witness. New rendition keys do not overwrite attached bytes.
+
+On `/admin/media/recovery`, a signed-in media manager completes fresh security
+verification, checks the original provider's final operation reference and
+proves all original writers are stopped. Restore the original private storage
+configuration before reviewing a resource; do not paste credentials into a
+form or chat. Verify the displayed operation, resource fingerprint and file
+digest/byte count, then record its final applied/unapplied outcome. Present
+objects must match their exact bytes; absent objects require both final
+provider evidence and stopped-writer evidence. Only a digest of the evidence
+is retained. A recorded positive acknowledgement cannot be changed to an
+unapplied outcome. Reload a changed receipt rather than overwrite newer facts.
+
+Legacy receipts start unverified with no guessed resource fingerprint.
+Explicit review of their original resource is required. Agents, system actors,
+plugins and personal API keys cannot supply this human review. HTTP and SDK
+call `media.reconcileStorageOperation`; its claim/apply services are internal,
+and the recovery action is excluded from MCP tools. The owner screen uses the
+same service, permission and audit path. Retrying cleanup after review never
+replays an unresolved physical PUT or DELETE automatically.
+
+Privacy erasure captures original receipt IDs and reports pending jobs until
+cleanup in the original resource and personal-field minimization finish. A
+named `media.storageOperations` or `members` hold preserves those references.
+Merge/undo records bounded pointer/hash witnesses rather than copying keys or
+evidence into contact history; changed physical facts prevent undo. Minimal
+retired-key digests remain to prevent reuse after erasure.
+
+Qualification is incomplete: five original provider-failure regressions pass
+locally, but the new recovery/privacy journeys, contiguous SQL75 ancestry,
+older-writer refusal, direct multipart/capture adoption and actual provider
+acceptance are still required. MASTER §43 keeps C1.12 open. Stop all older
+writers before migration; rollback requires the matching pre-upgrade database
+and original object snapshot and must preserve acknowledged erasures.
+
 Freeholder treats an uploaded filename and browser MIME as claims. The server
 accepts an original only after matching its filename extension, declared type,
 byte signature and per-kind size limit. SVG and HTML are not accepted as media.
@@ -164,3 +207,16 @@ existing original and variant. A compatibility trigger mirrors writes made by
 the previous release and inventories originals it creates, so an image-swap
 rollback remains writable. Do not reverse the migration until all newer
 application processes are stopped and a verified backup exists.
+
+
+Replit storage integrity recovery (C1.12/C11.08): the server refuses
+`STORAGE_EMULATOR_HOST`, including when an existing connection is reused. A
+cached original bucket cannot become proof about another endpoint. Uploads use
+the pinned SDK's exact credential-broker protocol with provider retries disabled;
+the SDK never receives checksum-cleanup DELETE authority. The adapter verifies
+the complete target SHA-256 after the provider acknowledges the PUT. The storage
+receipt records that positive fact before readback. A failed readback keeps the
+write unknown and blocks replay or automatic cleanup until original-resource
+recovery; it never turns the provider's positive response into absence. Preserve
+the original resource, database and private configuration while reconciling it.
+Local installed-SDK interception is not actual Replit launch acceptance.

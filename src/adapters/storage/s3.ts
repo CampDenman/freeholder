@@ -12,6 +12,7 @@
 import { AwsClient } from "aws4fetch";
 import type {
   MultipartPart,
+  MultipartInspection,
   SignedUrlOptions,
   StorageAdapter,
   StoredObject,
@@ -38,7 +39,8 @@ export interface S3Config {
 const DEFAULT_EXPIRY_SECONDS = 60 * 15;
 
 function xmlValue(xml: string, name: string): string | undefined {
-  return xml.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`))?.[1];
+  return xml.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`))?.[1]
+    ?.replace(/&(quot|apos|lt|gt|amp);/g, (_, entity: string) => ({quot:'"',apos:"'",lt:"<",gt:">",amp:"&"})[entity]!);
 }
 
 function xmlEscape(value: string): string {
@@ -72,6 +74,9 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     secretAccessKey: config.secretAccessKey,
     region: config.region,
     service: "s3",
+    // Physical-operation receipts own retries. CREATE cannot be replayed
+    // invisibly after an ambiguous 5xx response creates a remote resource.
+    retries: 0,
   });
 
   const origin = config.endpoint.replace(/\/+$/, "");
@@ -93,6 +98,28 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     return target;
   };
 
+  async function inspectMultipart(key: string, uploadId: string): Promise<MultipartInspection> {
+    const parts: MultipartPart[] = [];
+    let marker: string | undefined;
+    for (let page = 0; page < 11; page++) {
+      const url = multipartUrl(key, uploadId);
+      if (marker) url.searchParams.set("part-number-marker", marker);
+      const response = await client.fetch(url), xml = await response.text();
+      if (response.status === 404 && xmlValue(xml, "Code") === "NoSuchUpload") return { state: "absent" };
+      if (!response.ok || !/<ListPartsResult(?:\s|>)/.test(xml) || /<Error(?:\s|>)/.test(xml)) throw new Error(`storage: inspect original multipart upload failed (${response.status})`);
+      for (const match of xml.matchAll(/<Part>([\s\S]*?)<\/Part>/g)) {
+        const partNumber = Number(xmlValue(match[1]!, "PartNumber")), etag = xmlValue(match[1]!, "ETag"), bytes = Number(xmlValue(match[1]!, "Size"));
+        if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000 || !etag || !Number.isSafeInteger(bytes) || bytes < 0 || parts.some(part => part.partNumber === partNumber)) throw new Error("storage: invalid original multipart part inventory");
+        parts.push({ partNumber, etag, bytes });
+      }
+      if (xmlValue(xml, "IsTruncated") !== "true") return { state: "open", parts };
+      const next = xmlValue(xml, "NextPartNumberMarker");
+      if (!next || next === marker || parts.length > 10000) throw new Error("storage: incomplete original multipart part inventory");
+      marker = next;
+    }
+    throw new Error("storage: original multipart inventory exceeds the supported bound");
+  }
+
   return {
     id: "s3",
     isPublic: config.isPublic ?? false,
@@ -100,18 +127,19 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     // completion service can inspect or scan it. Direct upload is therefore a
     // private-bucket capability, not merely an S3 capability.
     directMultipart: config.isPublic ? undefined : {
-      async create(key, contentType) {
+      async create(key, contentType, observation) {
         const response = await client.fetch(multipartUrl(key), {
           method: "POST",
           headers: { "content-type": contentType },
         });
         const body = await response.text();
         const uploadId = xmlValue(body, "UploadId");
-        if (!response.ok || !uploadId) {
+        if (!response.ok || !uploadId || uploadId.length > 4096 || /[\u0000-\u001f]/.test(uploadId)) {
           throw new Error(
             `storage: start multipart upload for ${key} failed (${response.status}) ${body}`,
           );
         }
+        await observation?.onAccepted?.({ uploadId });
         return { uploadId };
       },
 
@@ -129,29 +157,41 @@ export function createS3Storage(config: S3Config): StorageAdapter {
       },
 
       async listParts(key, uploadId) {
-        const response = await client.fetch(multipartUrl(key, uploadId));
-        if (!response.ok) {
-          throw new Error(
-            `storage: list multipart parts for ${key} failed (${response.status})`,
-          );
+        const result = await inspectMultipart(key, uploadId);
+        if (result.state === "absent") throw new Error("storage: the original multipart upload is no longer present");
+        return result.parts;
+      },
+      inspect: inspectMultipart,
+      async listUploadsForKey(key) {
+        const ids: string[] = [];
+        let keyMarker: string | undefined, uploadMarker: string | undefined;
+        for (let page = 0; page < 100; page++) {
+          const url = new URL(storageBase);
+          url.searchParams.set("uploads", "");
+          url.searchParams.set("prefix", key);
+          if (keyMarker) url.searchParams.set("key-marker", keyMarker);
+          if (uploadMarker) url.searchParams.set("upload-id-marker", uploadMarker);
+          const response = await client.fetch(url), xml = await response.text();
+          if (!response.ok || !/<ListMultipartUploadsResult(?:\s|>)/.test(xml) || /<Error(?:\s|>)/.test(xml)) throw new Error("storage: original multipart inventory could not be established");
+          for (const match of xml.matchAll(/<Upload>([\s\S]*?)<\/Upload>/g)) {
+            const actualKey = xmlValue(match[1]!, "Key"), id = xmlValue(match[1]!, "UploadId");
+            if (!actualKey || !id || id.length > 4096 || /[\u0000-\u001f]/.test(id)) throw new Error("storage: invalid original multipart inventory");
+            if (actualKey === key) {
+              if (ids.includes(id)) throw new Error("storage: repeated original multipart inventory entry");
+              ids.push(id);
+            }
+          }
+          const truncated = xmlValue(xml, "IsTruncated");
+          if (truncated === "false") return ids;
+          if (truncated !== "true") throw new Error("storage: incomplete original multipart inventory");
+          const nextKey = xmlValue(xml, "NextKeyMarker"), nextUpload = xmlValue(xml, "NextUploadIdMarker");
+          if (!nextKey || !nextUpload || (nextKey === keyMarker && nextUpload === uploadMarker)) throw new Error("storage: incomplete original multipart inventory");
+          keyMarker = nextKey; uploadMarker = nextUpload;
         }
-        const xml = await response.text();
-        return [...xml.matchAll(/<Part>([\s\S]*?)<\/Part>/g)]
-          .map((match): MultipartPart | undefined => {
-            const partNumber = Number(xmlValue(match[1]!, "PartNumber"));
-            const etag = xmlValue(match[1]!, "ETag");
-            const bytes = Number(xmlValue(match[1]!, "Size"));
-            if (!Number.isInteger(partNumber) || !etag) return undefined;
-            return {
-              partNumber,
-              etag,
-              bytes: Number.isFinite(bytes) ? bytes : undefined,
-            };
-          })
-          .filter((part): part is MultipartPart => Boolean(part));
+        throw new Error("storage: original multipart inventory exceeds the supported bound");
       },
 
-      async complete(key, uploadId, parts) {
+      async complete(key, uploadId, parts, observation) {
         const body = `<CompleteMultipartUpload>${[...parts]
           .sort((a, b) => a.partNumber - b.partNumber)
           .map(
@@ -164,11 +204,13 @@ export function createS3Storage(config: S3Config): StorageAdapter {
           headers: { "content-type": "application/xml" },
           body,
         });
-        if (!response.ok) {
+        const acknowledgement = await response.text();
+        if (!response.ok || /<Error(?:\s|>)/.test(acknowledgement) || !/<CompleteMultipartUploadResult(?:\s|\/|>)/.test(acknowledgement)) {
           throw new Error(
-            `storage: complete multipart upload for ${key} failed (${response.status}) ${await response.text()}`,
+            `storage: complete original multipart upload failed (${response.status})`,
           );
         }
+        await observation?.onAccepted?.();
         const result = await client.fetch(objectUrl(key), { method: "HEAD" });
         if (!result.ok) {
           throw new Error(
@@ -184,15 +226,17 @@ export function createS3Storage(config: S3Config): StorageAdapter {
         };
       },
 
-      async abort(key, uploadId) {
+      async abort(key, uploadId, observation) {
         const response = await client.fetch(multipartUrl(key, uploadId), {
           method: "DELETE",
         });
-        if (!response.ok && response.status !== 404) {
+        const body = await response.text();
+        if (!response.ok && !(response.status === 404 && xmlValue(body, "Code") === "NoSuchUpload")) {
           throw new Error(
             `storage: abort multipart upload for ${key} failed (${response.status})`,
           );
         }
+        await observation?.onAccepted?.();
       },
     },
 

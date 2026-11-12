@@ -18,6 +18,7 @@ import { cleanupOrphanedMedia } from "@/core/media/service";
 import { startImport } from "@/core/import/service";
 import { beginSourceUpload, previewFromUpload, uploadSourceChunk } from "@/core/import/source-upload";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { confirmStoppedUnappliedDelete } from "../helpers/stopped-storage-delete";
 
 const EMAIL = "raw-reader@example.test";
 const source = new TextEncoder().encode(`<rss xmlns:wp="http://wordpress.org/export/1.2/" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Raw source fixture</title><link>https://source.example</link><item><title>Fixture article</title><link>https://source.example/article</link><wp:post_id>10</wp:post_id><wp:post_name>article</wp:post_name><wp:post_type>post</wp:post_type><wp:status>publish</wp:status><content:encoded>Ordinary article</content:encoded><wp:comment><wp:comment_id>20</wp:comment_id><wp:comment_author>Fixture reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Private source reader data.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment></item></channel></rss>`);
@@ -49,6 +50,7 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
     expect(jobs.items.filter(job => JSON.stringify(job.data.keys) === JSON.stringify([key])).length).toBeGreaterThanOrEqual(2);
     expect(new TextDecoder().decode(await store.get(key))).toContain(EMAIL);
     unavailable.mockRestore();
+    await confirmStoppedUnappliedDelete(key);
     await cleanupOrphanedMedia(new Date(Date.now() + 25 * 60 * 60 * 1000));
     expect(await store.get(key)).toBeUndefined();
   });
@@ -159,41 +161,35 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
     await cleanupOrphanedMedia(new Date(Date.now() + 25 * 60 * 60 * 1000));
     expect(await store.get(key)).toEqual(lostAcknowledgement ? source : undefined);
   });
-  it("keeps each identical concurrent write unresolved until its own provider outcome", async () => {
+  it("refuses an identical concurrent chunk before a second physical write and preserves the original pending outcome", async () => {
     const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
     const upload = await beginSourceUpload.call({ id: run.id, filename: "source.xml", bytes: source.byteLength }, OWNER);
-    const key = `imports/${run.id}/${upload.uploadId}/00000.part`, store = storage(), put = store.put.bind(store);
-    const resume: Array<() => void> = [];
-    let reached!: () => void;
-    const bothEntered = new Promise<void>(resolve => { reached = resolve; });
-    vi.spyOn(store, "put").mockImplementation(async (...args) => {
-      await new Promise<void>(resolve => { resume.push(resolve); if (resume.length === 2) reached(); });
-      return put(...args);
-    });
+    const key = `imports/${run.id}/${upload.uploadId}/00000.part`, store = storage(), original = store.put.bind(store);
+    let reached!: () => void, resume!: () => void;
+    const entered = new Promise<void>(resolve => { reached = resolve; });
+    const release = new Promise<void>(resolve => { resume = resolve; });
+    const put = vi.spyOn(store, "put").mockImplementationOnce(async (...args) => { reached(); await release; return original(...args); });
     const input = { id: run.id, uploadId: upload.uploadId, index: 0, bytes: source };
     const first = uploadSourceChunk.call(input, OWNER).then(() => "accepted", () => "refused");
-    const second = uploadSourceChunk.call(input, OWNER).then(() => "accepted", () => "refused");
     try {
-      await bothEntered;
+      await entered;
+      await expect(uploadSourceChunk.call(input, OWNER)).rejects.toThrow(/unresolved storage write/);
+      expect(put).toHaveBeenCalledTimes(1);
       const [saved] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
       const checkpoint = saved!.checkpoint as Record<string, unknown>;
-      expect(checkpoint.sourceWrites).toHaveLength(2);
+      expect(checkpoint.sourceWrites).toHaveLength(1);
       checkpoint.sourceUpload = { ...checkpoint.sourceUpload as Record<string, unknown>, expiresAt: new Date(Date.now() - 1_000).toISOString() };
       await db().update(importRuns).set({ checkpoint }).where(eq(importRuns.id, run.id));
       await db().update(mediaObjects).set({ createdAt: new Date(Date.now() - 26 * 60 * 60 * 1000) }).where(eq(mediaObjects.key, key));
-      resume[0]!();
-      expect(await Promise.race([first, second])).toBe("refused");
-      const [between] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
-      expect((between!.checkpoint as Record<string, unknown>).sourceWrites).toHaveLength(1);
       await cleanupOrphanedMedia();
       expect(await db().select().from(mediaObjects).where(eq(mediaObjects.key, key))).toHaveLength(1);
-      resume[1]!();
-      expect(await Promise.all([first, second])).toEqual(["refused", "refused"]);
+      resume();
+      expect(await first).toBe("refused");
       const [finished] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
       expect((finished!.checkpoint as Record<string, unknown>).sourceWrites).toHaveLength(0);
       await cleanupOrphanedMedia(new Date(Date.now() + 25 * 60 * 60 * 1000));
       expect(await store.get(key)).toBeUndefined();
-    } finally { for (const release of resume) release(); await Promise.all([first, second]); }
+    } finally { resume(); await first; }
   });
 
   it("does not retain the private source prefix in its original-actor chunk audit", async () => {

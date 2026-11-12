@@ -1,0 +1,214 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// C1.12/C11.08: commit original intent, call its provider, then record facts.
+import {createHash,randomUUID} from "node:crypto";
+import {and,asc,eq,inArray,isNull} from "drizzle-orm";
+import {boundStorage} from "@/adapters/storage";
+import type {MultipartPart,StorageBinding} from "@/adapters/storage/types";
+import {db} from "@/core/db";
+import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
+import {actorString,ServiceError,type ServiceContext,type Tx} from "@/core/service";
+import {mediaObjects,mediaUploads} from "./schema";
+import {mediaObjectWrites} from "./write-schema";
+import {mediaMultipartOperations,mediaMultipartResources} from "./multipart-schema";
+import {allowMediaReceiptWrites,lockObjectDigest,objectKeyDigest,storageOperationsHeld} from "./write-ledger";
+import {assertOriginalUploadWritable} from "./upload-ownership";
+
+type Resource=typeof mediaMultipartResources.$inferSelect;
+type Upload=typeof mediaUploads.$inferSelect;
+export type BoundMultipart=Awaited<ReturnType<typeof boundStorage>>&{resource:Resource};
+const uncertain=["started","unknown"]as const;
+const partsHash=(parts:MultipartPart[])=>createHash("sha256").update(JSON.stringify(parts.map(({partNumber,etag})=>({partNumber,etag})))).digest("hex");
+function conflict(message="This original multipart operation needs recovery before another physical call."):never{throw new ServiceError("conflict",message);}
+
+/** Caller has already authorized this logical reservation in the same TX. */
+export async function reserveMultipart(ctx:ServiceContext,upload:Upload,binding:StorageBinding):Promise<string>{
+ await lockContactIdentityForRead(ctx.tx);await lockObjectDigest(ctx.tx,objectKeyDigest(upload.storageKey));await allowMediaReceiptWrites(ctx.tx);
+ await assertOriginalUploadWritable(ctx.tx,upload.ownerContactId,upload.uploadedBy);
+ const[resource]=await ctx.tx.insert(mediaMultipartResources).values({uploadId:upload.id,key:upload.storageKey,keyDigest:objectKeyDigest(upload.storageKey),namespace:binding.namespace,storageKind:binding.kind,storageLocation:{...binding.location},contentType:upload.declaredMime,expectedBytes:upload.expectedBytes,actor:actorString(ctx.actor),contactId:upload.ownerContactId,state:"creating"}).returning();
+ const[operation]=await ctx.tx.insert(mediaMultipartOperations).values({resourceId:resource!.id,kind:"create",state:"started",actor:actorString(ctx.actor)}).returning();
+ return operation!.id;
+}
+
+export async function multipartResource(uploadId:string):Promise<Resource>{
+ const[resource]=await db().select().from(mediaMultipartResources).where(eq(mediaMultipartResources.uploadId,uploadId)).limit(1);
+ if(!resource)conflict("The original multipart resource is unavailable. Restore its exact receipt.");
+ return resource;
+}
+export async function originalMultipart(uploadId:string):Promise<BoundMultipart>{
+ const resource=await multipartResource(uploadId),captured=await boundStorage();
+ if(!resource.namespace||resource.namespace!==captured.binding.namespace||!captured.store.directMultipart)conflict("Restore this multipart upload's exact original private storage resource.");
+ if(resource.redactedAt){
+  const restored=await db().select({key:mediaObjects.key}).from(mediaObjects).where(eq(mediaObjects.uploadId,uploadId));
+  const original=restored.find(row=>objectKeyDigest(row.key)===resource.keyDigest);
+  if(!original)conflict("Restore the original object key from verified provider evidence before cleaning up this minimized resource.");
+  return{...captured,resource:{...resource,key:original.key}};
+ }
+ return{...captured,resource};
+}
+export async function originalMultipartParts(uploadId:string):Promise<MultipartPart[]>{
+ const captured=await originalMultipart(uploadId),multipart=captured.store.directMultipart!;
+ if(!multipart.inspect)return multipart.listParts(captured.resource.key,captured.resource.providerUploadId!);
+ const inspection=await multipart.inspect(captured.resource.key,captured.resource.providerUploadId!);
+ if(inspection.state==="open")return inspection.parts;
+ const completed=await db().select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,captured.resource.id),eq(mediaMultipartOperations.kind,"complete"))).orderBy(asc(mediaMultipartOperations.createdAt),asc(mediaMultipartOperations.id));
+ const original=completed.filter(row=>row.state!=="not_applied").at(-1);
+ if(original&&await captured.store.head(captured.resource.key))return original.parts;
+ conflict("The original multipart state cannot be established from its receipts.");
+}
+async function lockedOperation(tx:Tx,id:string,allowMinimized=false){
+ const[identity]=await tx.select({digest:mediaMultipartResources.keyDigest}).from(mediaMultipartOperations).innerJoin(mediaMultipartResources,eq(mediaMultipartResources.id,mediaMultipartOperations.resourceId)).where(eq(mediaMultipartOperations.id,id)).limit(1);
+ if(!identity)conflict("The original multipart call receipt is missing.");
+ await lockObjectDigest(tx,identity.digest);await allowMediaReceiptWrites(tx);
+ const[operation]=await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,id)).limit(1).for("update");
+ const[resource]=await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.id,operation!.resourceId)).limit(1).for("update");
+ if(!operation||!resource||(resource.redactedAt&&!allowMinimized))conflict();
+ return{operation,resource};
+}
+async function notAttempted(id:string):Promise<void>{
+ await db().transaction(async tx=>{
+  await lockContactIdentityForRead(tx);const{operation,resource}=await lockedOperation(tx,id),now=new Date();
+  if(operation.state!=="started"||operation.providerAcceptedAt)return;
+  await tx.update(mediaMultipartOperations).set({state:"not_applied",verifiedAt:now,updatedAt:now}).where(eq(mediaMultipartOperations.id,id));
+  await tx.update(mediaMultipartResources).set({state:operation.kind==="create"?"aborted":"open",...(operation.kind==="create"?{retiredAt:now}:{}),updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
+  await tx.update(mediaUploads).set({state:operation.kind==="complete"?"uploading":"aborted",updatedAt:now}).where(eq(mediaUploads.id,resource.uploadId));
+  if(operation.kind==="create")await tx.delete(mediaObjects).where(and(eq(mediaObjects.key,resource.key),eq(mediaObjects.state,"pending")));
+ });
+}
+/** A later rejection cannot erase an earlier positive provider fact. */
+export async function observeMultipart(id:string,options:{accepted?:boolean;uploadId?:string;verified?:boolean;unknown?:boolean;originalKey?:string}):Promise<void>{
+ await db().transaction(async tx=>{
+  await lockContactIdentityForRead(tx);const{operation,resource}=await lockedOperation(tx,id,Boolean(options.accepted)),now=new Date();
+  if(resource.redactedAt&&operation.providerAcceptedAt&&operation.state==="accepted"&&resource.retiredAt&&options.accepted)return;
+  if(options.uploadId&&resource.providerUploadId&&resource.providerUploadId!==options.uploadId)conflict("The provider named a different original multipart upload.");
+  const late=Boolean(resource.redactedAt&&operation.createdAt<=resource.redactedAt&&options.accepted);
+  const accepted=options.accepted||Boolean(operation.providerAcceptedAt)||operation.state==="accepted";
+  await tx.update(mediaMultipartOperations).set({state:options.unknown||late?"unknown":accepted||options.verified?"accepted":"unknown",...(options.accepted&&!operation.providerAcceptedAt?{providerAcceptedAt:now}:{}),...(options.verified?{verifiedAt:now}:{}),...(options.uploadId?{observedProviderUploadId:options.uploadId}:{}),updatedAt:now}).where(eq(mediaMultipartOperations.id,id));
+  const state=options.unknown||late?"unknown":operation.kind==="create"&&accepted?"open":operation.kind==="complete"&&accepted?"completing":operation.kind==="abort"&&accepted?"aborting":resource.state;
+  await tx.update(mediaMultipartResources).set({state,...(late?{retiredAt:null}:{}),...(options.uploadId?{providerUploadId:options.uploadId}:{}),...(operation.kind==="abort"&&options.accepted?{abortAcknowledgedAt:resource.abortAcknowledgedAt??now}:{}),updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
+  if(late&&options.originalKey){if(objectKeyDigest(options.originalKey)!==resource.keyDigest)conflict("The late provider fact names a different original object key.");await tx.insert(mediaObjects).values({key:options.originalKey,uploadId:resource.uploadId,role:"staged",state:"pending",contentType:resource.contentType,bytes:resource.expectedBytes}).onConflictDoNothing();}
+  if(options.uploadId)await tx.update(mediaUploads).set({providerUploadId:options.uploadId,updatedAt:now}).where(eq(mediaUploads.id,resource.uploadId));
+ });
+ await(await import("./erasure-cohorts")).reconcileMediaErasureCohorts({multipartOperationId:id}).catch(()=>{});
+}
+
+export async function createOriginalMultipart(uploadId:string,operationId:string):Promise<void>{
+ let captured:BoundMultipart;
+ try{captured=await originalMultipart(uploadId);}catch(error){await notAttempted(operationId);throw error;}
+ let acknowledged=false,observedId:string|undefined;
+ try{
+  const result=await captured.store.directMultipart!.create(captured.resource.key,captured.resource.contentType,{onAccepted:async result=>{acknowledged=true;observedId=result?.uploadId;if(!observedId)conflict();await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,uploadId:observedId});}});
+  acknowledged=true;observedId=result.uploadId;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,uploadId:observedId});
+ }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,uploadId:observedId,unknown:true}).catch(()=>{});throw error;}
+}
+
+/** Use the common contact → object → resource → upload lock ordering. */
+export async function lockMultipartUpload(tx:Tx,uploadId:string,allowMinimized=false):Promise<{resource:Resource;upload:Upload}>{
+ await lockContactIdentityForRead(tx);
+ const[identity]=await tx.select({digest:mediaMultipartResources.keyDigest}).from(mediaMultipartResources).where(eq(mediaMultipartResources.uploadId,uploadId)).limit(1);
+ if(!identity)conflict("This legacy multipart upload needs its original resource confirmed first.");
+ await lockObjectDigest(tx,identity.digest);await allowMediaReceiptWrites(tx);
+ const[resource]=await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.uploadId,uploadId)).limit(1).for("update");
+ const[upload]=await tx.select().from(mediaUploads).where(eq(mediaUploads.id,uploadId)).limit(1).for("update");
+ if(!resource||!upload||(resource.redactedAt&&!allowMinimized)||!resource.namespace||!resource.providerUploadId)conflict();
+ return{resource,upload};
+}
+export async function claimMultipartComplete(ctx:ServiceContext,uploadId:string,parts:MultipartPart[]):Promise<{operationId:string;recoverOnly:boolean}>{
+ const{resource,upload}=await lockMultipartUpload(ctx.tx,uploadId);await assertOriginalUploadWritable(ctx.tx,upload.ownerContactId,upload.uploadedBy);
+ if(upload.expiresAt<=new Date())conflict("The original upload reservation expired before completion admission.");
+ if(["aborted","expired","failed"].includes(upload.state)||["unverified","creating","aborting","aborted"].includes(resource.state))conflict();
+ const manifest=parts.map(({partNumber,etag})=>({partNumber,etag})),digest=partsHash(manifest);
+ const operations=await ctx.tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.resourceId,resource.id)).orderBy(asc(mediaMultipartOperations.createdAt),asc(mediaMultipartOperations.id)).for("update");
+ if(operations.some(row=>row.kind!=="complete"&&uncertain.includes(row.state as typeof uncertain[number])))conflict();
+ const prior=operations.filter(row=>row.kind==="complete"&&row.state!=="not_applied").at(-1);
+ if(prior){if(prior.partsDigest!==digest)conflict("The original completion used a different exact part manifest.");return{operationId:prior.id,recoverOnly:true};}
+ if(resource.state!=="open")conflict();
+ const[operation]=await ctx.tx.insert(mediaMultipartOperations).values({resourceId:resource.id,kind:"complete",state:"started",providerUploadId:resource.providerUploadId,parts:manifest,partsDigest:digest,actor:actorString(ctx.actor)}).returning();
+ await ctx.tx.update(mediaMultipartResources).set({state:"completing",updatedAt:new Date()}).where(eq(mediaMultipartResources.id,resource.id));
+ await ctx.tx.update(mediaUploads).set({state:"processing",updatedAt:new Date()}).where(eq(mediaUploads.id,upload.id));
+ return{operationId:operation!.id,recoverOnly:false};
+}
+export async function completeOriginalMultipart(uploadId:string,operationId:string,recoverOnly:boolean):Promise<BoundMultipart>{
+ let captured:BoundMultipart;
+ try{captured=await originalMultipart(uploadId);}catch(error){if(!recoverOnly)await notAttempted(operationId);throw error;}
+ const[operation]=await db().select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,operationId)).limit(1);
+ if(!operation||operation.resourceId!==captured.resource.id||operation.kind!=="complete"||operation.providerUploadId!==captured.resource.providerUploadId)conflict();
+ let acknowledged=Boolean(operation.providerAcceptedAt);
+ try{
+  if(recoverOnly){
+   // No duplicate COMPLETE. Recovery inspects this exact original resource;
+   // full content verification still precedes adoption and asset attachment.
+   if(!await captured.store.head(captured.resource.key))conflict();
+   if(!captured.store.directMultipart!.inspect)conflict("This provider cannot verify original multipart recovery.");
+   if((await captured.store.directMultipart!.inspect(captured.resource.key,operation.providerUploadId!)).state!=="absent")conflict("The original multipart upload is still open; its completion is unresolved.");
+  }else{
+   await captured.store.directMultipart!.complete(captured.resource.key,operation.providerUploadId!,operation.parts,{onAccepted:async()=>{acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}});
+   acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});
+  }
+  return captured;
+ }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true}).catch(()=>{});throw error;}
+}
+
+/** The COMPLETE intent already committed before I/O; this is its object fact. */
+export async function adoptCompletedMultipart(uploadId:string,operationId:string,sha256:string|null,bytes:number,requireExpected=true):Promise<void>{
+ await db().transaction(async tx=>{
+  await lockContactIdentityForRead(tx);const{operation,resource}=await lockedOperation(tx,operationId);
+  const[upload]=await tx.select().from(mediaUploads).where(eq(mediaUploads.id,uploadId)).limit(1).for("update");
+  if(!upload||operation.kind!=="complete"||resource.uploadId!==uploadId||!Number.isSafeInteger(bytes)||bytes<0||(requireExpected&&bytes!==resource.expectedBytes))conflict();
+  // Preserve an already-admitted physical fact even if its owner was erased
+  // while the provider worked. This is no permission to publish or write more.
+  const existing=resource.objectReceiptId?(await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,resource.objectReceiptId)).limit(1))[0]:null;
+  if(existing&&(existing.sha256!==sha256||existing.bytes!==bytes||existing.namespace!==resource.namespace))conflict("The original completed object changed.");
+  const id=existing?.id??randomUUID(),now=new Date();
+  if(!existing)await tx.insert(mediaObjectWrites).values({id,operation:"put",key:resource.key,keyDigest:resource.keyDigest,namespace:resource.namespace,storageKind:resource.storageKind,storageLocation:resource.storageLocation,sha256,bytes,contentType:resource.contentType,actor:operation.actor,contactId:resource.contactId,state:"accepted",observedAcceptedAt:operation.providerAcceptedAt});
+  await tx.update(mediaMultipartOperations).set({state:"accepted",verifiedAt:now,updatedAt:now}).where(eq(mediaMultipartOperations.id,operation.id));
+  await tx.update(mediaMultipartResources).set({state:"completed",completedAt:resource.completedAt??now,retiredAt:resource.retiredAt??now,objectReceiptId:id,updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
+ });
+}
+
+export async function claimMultipartAbort(ctx:Pick<ServiceContext,"tx"|"actor">,uploadId:string,allowMinimized=false):Promise<{operationId:string;terminal:boolean}>{
+ const{resource,upload}=await lockMultipartUpload(ctx.tx,uploadId,allowMinimized);
+ if(upload.state==="complete")return{operationId:resource.id,terminal:true};
+ if(["completing","completed","aborting"].includes(resource.state))conflict("Finish or recover the original active operation before aborting this upload.");
+ if(await storageOperationsHeld(ctx.tx,[resource.contactId]))conflict("A named hold preserves this original multipart resource.");
+ const outstanding=await ctx.tx.select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,resource.id),inArray(mediaMultipartOperations.state,uncertain))).limit(1);
+ if(outstanding.length)conflict();
+ if(resource.state==="aborted"&&resource.retiredAt)return{operationId:resource.id,terminal:true};
+ const[operation]=await ctx.tx.insert(mediaMultipartOperations).values({resourceId:resource.id,kind:"abort",state:"started",providerUploadId:resource.providerUploadId,actor:actorString(ctx.actor)}).returning();
+ await ctx.tx.update(mediaMultipartResources).set({state:"aborting",updatedAt:new Date()}).where(eq(mediaMultipartResources.id,resource.id));
+ await ctx.tx.update(mediaUploads).set({state:"aborted",completedAt:new Date(),updatedAt:new Date()}).where(eq(mediaUploads.id,uploadId));
+ return{operationId:operation!.id,terminal:false};
+}
+export async function abortOriginalMultipart(uploadId:string,operationId:string):Promise<void>{
+ let captured:BoundMultipart;
+ try{captured=await originalMultipart(uploadId);}catch(error){await notAttempted(operationId);throw error;}
+ let acknowledged=false;
+ try{
+  await captured.store.directMultipart!.abort(captured.resource.key,captured.resource.providerUploadId!,{onAccepted:async()=>{acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}});
+  acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});
+  if(!captured.store.directMultipart!.inspect)conflict("The original provider cannot verify multipart retirement.");
+  const inspection=await captured.store.directMultipart!.inspect(captured.resource.key,captured.resource.providerUploadId!);
+  if(inspection.state!=="absent")conflict("The original multipart resource remains open after its abort acknowledgement; keep this receipt for recovery.");
+  // An ABORT acknowledgement says nothing about a separately completed object.
+  if(await captured.store.head(captured.resource.key))conflict("A completed original object remains; its tracked cleanup needs recovery.");
+  await db().transaction(async tx=>{
+   await lockContactIdentityForRead(tx);const{resource,operation}=await lockedOperation(tx,operationId,true),now=new Date();
+   if(operation.kind!=="abort"||resource.uploadId!==uploadId)conflict();
+   await tx.update(mediaMultipartOperations).set({state:"accepted",verifiedAt:now,updatedAt:now}).where(eq(mediaMultipartOperations.id,operation.id));
+   await tx.update(mediaMultipartResources).set({state:"aborted",retiredAt:now,updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
+   const unsettled=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.keyDigest,resource.keyDigest),isNull(mediaObjectWrites.deletedAt))).limit(1);
+   if(!unsettled.length)await tx.delete(mediaObjects).where(and(eq(mediaObjects.key,captured.resource.key),eq(mediaObjects.state,"pending")));
+  });
+ }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true}).catch(()=>{});throw error;}
+}
+/** Existing expiry/erasure authority may retire a known, idle original upload. */
+export async function retireKnownMultipart(uploadId:string):Promise<boolean>{
+ try{
+  const captured=await originalMultipart(uploadId);
+  if(captured.resource.retiredAt)return true;
+  if(captured.resource.state!=="open")return false;
+  const claim=await db().transaction(async tx=>claimMultipartAbort({tx,actor:{kind:"system"}},uploadId,Boolean(captured.resource.redactedAt)));
+  if(claim.terminal)return true;
+  await abortOriginalMultipart(uploadId,claim.operationId);return true;
+ }catch{return false;}
+}

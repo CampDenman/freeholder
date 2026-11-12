@@ -130,3 +130,36 @@ customers, recordings, transcripts and stored files together. A fresh isolated
 database run passed 43 source/hold/audit/provider checks across six files; all
 fast gates passed (368 contracts with one deliberate skip). These are combined
 source checks, not independent sign-off or live-provider acceptance.
+
+## Original physical storage receipts (C3.22/C2.29/C11.10)
+
+New upload reservations capture the private resource namespace before their
+first chunk. Each chunk uses the same captured adapter and namespace for its
+physical PUT receipt. A later resource switch cannot continue the reservation,
+read a coincidentally matching object, or authorize erasure of that resource.
+All at most 25 chunk reservations enter guarded pending ownership before any
+chunk is sent. An expired never-sent reservation can be discarded only when no
+physical operation was ever admitted; erasure does not guess a provider DELETE.
+Raw source writes use the same guarded physical ledger as other pending media;
+cleanup removes bytes only after the original provider operation is settled.
+
+Migration 75 marks existing pending source objects as unverified. Their original
+namespace is deliberately unknown. The existing fresh-human storage recovery
+service must verify the actual original resource, exact byte count and digest,
+provider outcome and stopped-writer evidence before those bytes can be read or
+deleted. It cannot infer the original resource from current configuration.
+Unresolved logical `checkpoint.sourceWrites` continue to block source erasure;
+this receipt integration does not independently settle a lost logical metadata
+acknowledgement or prove a writer stopped.
+
+Local qualification on the migration-75 source repair covered 20 finite real
+service/database controls: the full source-object cleanup file, multi-megabyte
+chunk deletion, a pre-erasure opaque upload refusal, a named held graph's release,
+unknown DELETE recovery with stale-step-up refusal, no-op DELETE refusal,
+never-sent reservation erasure, and resource replacement before and after the
+original erasure finished. The replacement-store controls preserve its unrelated
+bytes and record zero replacement PUT/DELETE calls on replay. Separate archive
+cleanup and actual-window hold controls also passed. Type checking, lint and the
+380 static contract checks passed, with the existing one documented skip. These
+are local synthetic provider proofs; actual provider recovery, the unresolved
+logical-write recovery workflow and independent security review remain open.

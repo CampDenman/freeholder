@@ -71,6 +71,10 @@ export function clipSnippet(value: string | null | undefined): string | null {
 export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   invoice_market_policies: "Original merchant ownership and private financial routing; read through authorized invoice documents, never as separate search hits.",
   subscription_market_policies: "Frozen merchant agreement identity and private routing; reached through authorized agreements.",
+  media_object_writes:"Private physical-operation receipts; inspect through human storage recovery, not global search.",
+  media_uploads:"Private original upload reservations and ownership; accessed through their authorized upload capability.",
+  media_objects:"Private physical ownership pointers; the authorized library asset is the searchable record.",
+  media_multipart_resources:"Private original multipart resource identities; inspect through human storage recovery.",
   mail_record_subjects: "Private ownership join; mail status uses its own scoped service and receipt identities are not searchable titles.",
   contact_relationships:
     "Join table of two contacts; find each person through the contact source.",

@@ -20,7 +20,7 @@
     "start": "node scripts/start.mjs",
     "start:replit": "node scripts/start-replit.mjs",
     "lint": "NODE_OPTIONS=--max-old-space-size=8192 eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "NODE_OPTIONS=--max-old-space-size=8192 tsc --noEmit",
     "test": "vitest run",
     "gates": "node scripts/fast-gates.mjs",
     "test:a11y": "playwright test tests/browser/accessibility.spec.ts --config playwright.a11y.config.ts",

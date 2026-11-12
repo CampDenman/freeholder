@@ -3,7 +3,10 @@
 // Shared infrastructure: reserve before provider I/O on the owning service TX.
 import { mediaObjects } from "./schema";
 import type { ServiceContext } from "@/core/service";
-import { storage } from "@/adapters/storage";
+import {actorString} from "@/core/service";
+import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
+import {originalUploadContact,assertOriginalUploadWritable} from "./upload-ownership";
+import {allowMediaReceiptWrites} from "./write-ledger";
 
 const owners = new Map<string, (key: string, now: Date) => Promise<boolean>>();
 export function registerPendingObjectOwner(prefix: string, owns: (key: string, now: Date) => Promise<boolean>): void {
@@ -17,16 +20,21 @@ export async function pendingObjectIsOwned(key: string, now = new Date()): Promi
 /** A queued deletion never overrides later, explicitly retained ownership. */
 export async function deleteUnownedPendingObjects(keys: readonly string[]): Promise<{ deleted: number }> {
   let deleted = 0;
-  for (const key of keys) if (!await pendingObjectIsOwned(key)) { await storage().delete(key); deleted += 1; }
+  const{deleteWithReceipt,discardUnwrittenObjectReservation}=await import("./write-ledger");
+  for (const key of keys) if (!await pendingObjectIsOwned(key)&&(await discardUnwrittenObjectReservation(key)||await deleteWithReceipt(key))) deleted += 1;
   return { deleted };
 }
 
 /** The caller authorizes the operation and derives its own storage namespace. */
 export async function reservePendingMediaObject(
-  ctx: Pick<ServiceContext, "tx">,
+  ctx: Pick<ServiceContext, "tx"|"actor">,
   input: { key: string; role: "original" | "staged"; contentType: string; bytes: number },
 ): Promise<void> {
+  await lockContactIdentityForRead(ctx.tx);
+  await allowMediaReceiptWrites(ctx.tx);
+  const uploadedBy=actorString(ctx.actor),ownerContactId=await originalUploadContact(ctx.tx,uploadedBy);
+  await assertOriginalUploadWritable(ctx.tx,ownerContactId,uploadedBy);
   await ctx.tx.insert(mediaObjects).values({
-    key: input.key, role: input.role, state: "pending", bytes: input.bytes, contentType: input.contentType,
+    key: input.key, role: input.role, state: "pending", bytes: input.bytes, contentType: input.contentType,ownerContactId,
   }).onConflictDoNothing();
 }

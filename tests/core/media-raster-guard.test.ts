@@ -15,6 +15,7 @@ import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
 import { updateBusiness } from "@/core/settings/service";
 import { assets } from "@/core/media/schema";
+import {putWithReceipt} from "@/core/media/write-ledger";
 import {
   backfillWatermarks,
   registerStoredOriginal,
@@ -243,7 +244,7 @@ describe.runIf(hasDatabase)("rescanning a legacy library", () => {
 
   it("refuses to register a stored SVG labelled PNG", async () => {
     const key = `staged/${randomUUID()}/logo.png`;
-    await storage().put(key, svg, "image/png");
+    await putWithReceipt({key,body:svg,contentType:"image/png",role:"original"},{kind:"system"});
     sharpInputs.length = 0;
     const refused = await failure(
       registerStoredOriginal.call(
@@ -261,7 +262,7 @@ describe.runIf(hasDatabase)("rescanning a legacy library", () => {
     // refuses it before sharp sees it.
     const png = await raster("png");
     const key = `staged/${randomUUID()}/swap.png`;
-    await storage().put(key, svg, "image/png");
+    await putWithReceipt({key,body:svg,contentType:"image/png",role:"original"},{kind:"system"});
     const readRange = vi
       .spyOn(storage(), "readRange")
       .mockResolvedValue(png.slice(0, Math.min(png.byteLength, 65_536)));
@@ -284,7 +285,7 @@ describe.runIf(hasDatabase)("rescanning a legacy library", () => {
   it("registers a stored PNG with renditions", async () => {
     const png = await raster("png");
     const key = `staged/${randomUUID()}/photo.png`;
-    await storage().put(key, png, "image/png");
+    await putWithReceipt({key,body:png,contentType:"image/png",role:"original"},{kind:"system"});
     const asset = await registerStoredOriginal.call(
       { key, filename: "photo.png", contentType: "image/png", bytes: png.byteLength, source: "import" },
       { kind: "system" },

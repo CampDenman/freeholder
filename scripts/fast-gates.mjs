@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { missingContractEvidence } from "./contract-evidence.mjs";
 
 const steps = [
-  { name: "typecheck", run: "pnpm exec tsc --noEmit" },
+  { name: "typecheck", run: "pnpm typecheck" },
   { name: "lint", run: "pnpm lint" },
   { name: "license headers", run: "node scripts/license-headers.mjs" },
   { name: "release notes", run: "node scripts/changelog-gate.mjs" },

@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // C2.29/C11.10: raw provider copies cannot outlive a completed erasure receipt.
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { importRuns } from "@/core/plugins/schema";
@@ -10,6 +13,8 @@ import { addRetentionException, registerContactPrivacySource } from "@/core/priv
 import { getJob, stopJobs, type JobExecutionContext } from "@/core/jobs";
 import { eraseImportSourceObjects } from "@/core/jobs/core-jobs";
 import { storage, resetStorageForTests } from "@/adapters/storage";
+import { resetEnvForTests } from "@/core/env";
+import { putWithReceipt } from "@/core/media/write-ledger";
 import { resolveContact } from "@/core/contacts/service";
 import { createDataRequest, verifyDataRequest, fulfillDataRequest } from "@/core/privacy/service";
 import { auditLog } from "@/core/events/schema";
@@ -19,6 +24,7 @@ import { previewFromSource } from "@/core/import/service";
 import { startImport } from "@/core/import/service";
 import { beginSourceUpload, uploadSourceChunk, previewFromUpload } from "@/core/import/source-upload";
 import { OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
+import { confirmStoppedUnappliedDelete } from "../helpers/stopped-storage-delete";
 
 const EMAIL = "raw-erasure-reader@example.test";
 const bytes = new TextEncoder().encode(`<rss xmlns:wp="http://wordpress.org/export/1.2/"><channel><title>Fixture</title><item><title>Fixture page</title><wp:post_id>10</wp:post_id><wp:post_type>post</wp:post_type><wp:comment><wp:comment_id>20</wp:comment_id><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Private source copy.</wp:comment_content></wp:comment></item></channel></rss>`);
@@ -83,6 +89,8 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
     await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/provider outage/);
     expect(await status(request.id)).toBe("in_progress");
     failure.mockRestore();
+    await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/unresolved physical/);
+    await confirmStoppedUnappliedDelete(key);
     await eraseImportSourceObjects.handler(job.data, context(job.id));
     expect(await storage().get(key)).toBeUndefined();
     expect(await status(request.id)).toBe("completed");
@@ -96,7 +104,7 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
     const job = await jobFor(result);
     await expire(run.id);
     vi.spyOn(storage(), "delete").mockResolvedValueOnce(undefined);
-    await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/not confirmed/);
+    await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/not confirmed|still present/);
     expect(await storage().get(key)).toBeDefined();
     expect(await status(request.id)).toBe("in_progress");
   });
@@ -110,6 +118,65 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
     expect(receipt.outcomes.find(item => item.scope === "imports.readerSources")?.outcome).toBe("retained");
     expect(await storage().get(key)).toBeDefined();
   });
+
+  it("keeps erasure pending across a store switch and deletes only the actual original private source", async () => {
+    const rootA = await mkdtemp(join(tmpdir(), "freeholder-raw-source-store-a-"));
+    const rootB = await mkdtemp(join(tmpdir(), "freeholder-raw-source-store-b-"));
+    const select = (root: string) => { vi.stubEnv("FREEHOLDER_STORAGE", "local"); vi.stubEnv("LOCAL_STORAGE_ROOT", root); resetEnvForTests(); resetStorageForTests(); };
+    try {
+      select(rootA);
+      const { request, run, key } = await pending(), original = storage();
+      expect(await original.get(key)).toEqual(bytes);
+      const result = await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER), job = await jobFor(result);
+      await expire(run.id);
+      select(rootB);
+      const replacement = storage(), other = new TextEncoder().encode("Fictional independent object in the replacement store.");
+      await replacement.put(key, other, "application/octet-stream");
+      const refused = await eraseImportSourceObjects.handler(job.data, context(job.id)).then(() => false, () => true);
+      expect({ refused, originalPresent: Boolean(await original.get(key)), replacementUnchanged: Buffer.from(await replacement.get(key) ?? []).equals(Buffer.from(other)), requestStatus: await status(request.id) }).toEqual({ refused: true, originalPresent: true, replacementUnchanged: true, requestStatus: "in_progress" });
+      select(rootA);
+      await eraseImportSourceObjects.handler(job.data, context(job.id));
+      expect(await original.get(key)).toBeUndefined();
+      expect(await replacement.get(key)).toEqual(other);
+      expect(await status(request.id)).toBe("completed");
+      select(rootB);
+      const currentReplacement = storage(), deletes = vi.spyOn(currentReplacement, "delete"), puts = vi.spyOn(currentReplacement, "put");
+      await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/original|resource|pending/);
+      await expect(putWithReceipt({ key, body: bytes, contentType: "application/octet-stream", role: "staged" }, OWNER)).rejects.toThrow(/original storage resource/);
+      expect(deletes).not.toHaveBeenCalled();
+      expect(puts).not.toHaveBeenCalled();
+      expect(await replacement.get(key)).toEqual(other);
+    } finally {
+      vi.unstubAllEnvs(); resetEnvForTests(); resetStorageForTests();
+      await rm(rootA, { recursive: true, force: true }); await rm(rootB, { recursive: true, force: true });
+    }
+  });
+  it("keeps a reserved source upload and its reads bound to the original private resource", async () => {
+    const rootA = await mkdtemp(join(tmpdir(), "freeholder-source-upload-a-"));
+    const rootB = await mkdtemp(join(tmpdir(), "freeholder-source-upload-b-"));
+    const select = (root: string) => { vi.stubEnv("FREEHOLDER_STORAGE", "local"); vi.stubEnv("LOCAL_STORAGE_ROOT", root); resetEnvForTests(); resetStorageForTests(); };
+    try {
+      select(rootA);
+      const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
+      const upload = await beginSourceUpload.call({ id: run.id, filename: "source.xml", bytes: bytes.byteLength }, OWNER);
+      const key = `imports/${run.id}/${upload.uploadId}/00000.part`, original = storage();
+      select(rootB);
+      const replacement = storage();
+      await expect(uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER)).rejects.toThrow(/original private storage/);
+      expect(await replacement.get(key)).toBeUndefined();
+      select(rootA);
+      await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
+      expect(await original.get(key)).toEqual(bytes);
+      select(rootB);
+      await replacement.put(key, bytes, "application/octet-stream");
+      await expect(previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).rejects.toThrow(/original storage resource/);
+      expect(await replacement.get(key)).toEqual(bytes);
+    } finally {
+      vi.unstubAllEnvs(); resetEnvForTests(); resetStorageForTests();
+      await rm(rootA, { recursive: true, force: true }); await rm(rootB, { recursive: true, force: true });
+    }
+  });
+
   it("does not retain erased reader details in the import source audit", async () => {
     const reader = await resolveContact.call({ email: EMAIL }, OWNER);
     const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);

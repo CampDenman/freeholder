@@ -1017,7 +1017,11 @@ export const SERVICE_NAMES = [
   "media.list",
   "media.listAltTextSuggestionStates",
   "media.listCaptureSessions",
+  "media.listMultipartOperations",
+  "media.listStorageOperations",
   "media.purge",
+  "media.reconcileMultipartOperation",
+  "media.reconcileStorageOperation",
   "media.rescan",
   "media.resolveAsset",
   "media.resolveImage",
@@ -5673,9 +5677,25 @@ export interface ServiceCatalog {
     input: { status?: "pending" | "live" | "preview" | "confirmed" | "discarded" | "expired" };
     output: { id: string; source: "camera" | "microphone" | "screen" | "share_sheet" | "camera_roll" | "upload_link" | "import" | "social"; status: "pending" | "live" | "preview" | "confirmed" | "discarded" | "expired"; targetType: string | null; targetId: string | null; uploadCount: number; displaySurface: string | null; permissionGrantedAt: string | null; trimStartMs: number; trimEndMs: number | null; caption: string | null; focalX: number; focalY: number; staged: boolean; stagedMime: string | null; stagedFilename: string | null; items: { id: string; filename: string; bytes: number; mime: string; assetId: string | null }[]; uploadId: string | null; assetId: string | null; expiresAt: string; completedAt: string | null; captureUrl: string | null; [key: string]: unknown }[];
   };
+  "media.listMultipartOperations": {
+    input: { limit?: number };
+    output: { rows: { resource: { id: string; uploadId: string; key: string; namespace: string | null; providerUploadId: string | null; state: "unverified" | "creating" | "open" | "completing" | "completed" | "aborting" | "aborted" | "unknown"; expectedBytes: number; contentType: string; objectReceiptId: string | null; retiredAt: string | null; updatedAt: string }; operation: { id: string; kind: "create" | "complete" | "abort"; state: string; providerAcceptedAt: string | null; updatedAt: string } | null; witness: string; sha256: string | null; bytes: number | null }[] };
+  };
+  "media.listStorageOperations": {
+    input: { limit?: number };
+    output: { rows: { id: string; operation: "put" | "delete"; key: string; namespace: string | null; bytes: number | null; sha256: string | null; contentType: string; state: string; observedAcceptedAt: string | null; createdAt: string; updatedAt: string }[] };
+  };
   "media.purge": {
     input: { id: string; confirmation: string };
     output: { ok: true; assetId: string; objects: number };
+  };
+  "media.reconcileMultipartOperation": {
+    input: { resourceId: string; operationId?: string; expectedWitness: string; originalNamespace: string; providerUploadId?: string; originalKey?: string; action: "verify_original" | "applied" | "not_applied" | "cleanup"; sha256?: string; bytes?: number; providerFinalReference: string; providerEvidence: string; stoppedWriterEvidence: string; confirmation: "ORIGINAL MULTIPART RESOURCE CONFIRMED" };
+    output: { ok: true; needsCleanup: boolean };
+  };
+  "media.reconcileStorageOperation": {
+    input: { id: string; expectedUpdatedAt: string; originalNamespace: string; originalKey?: string; outcome: "applied" | "not_applied"; sha256?: string; bytes?: number; providerFinalReference: string; providerEvidence: string; stoppedWriterEvidence: string; confirmation: "ORIGINAL STORAGE OUTCOME CONFIRMED" };
+    output: { ok: true };
   };
   "media.rescan": {
     input: { id: string };
@@ -9194,7 +9214,11 @@ export interface FreeholderApi {
     list: (input?: ServiceCatalog["media.list"]["input"]) => Promise<ServiceCatalog["media.list"]["output"]>;
     listAltTextSuggestionStates: (input: ServiceCatalog["media.listAltTextSuggestionStates"]["input"]) => Promise<ServiceCatalog["media.listAltTextSuggestionStates"]["output"]>;
     listCaptureSessions: (input?: ServiceCatalog["media.listCaptureSessions"]["input"]) => Promise<ServiceCatalog["media.listCaptureSessions"]["output"]>;
+    listMultipartOperations: (input?: ServiceCatalog["media.listMultipartOperations"]["input"]) => Promise<ServiceCatalog["media.listMultipartOperations"]["output"]>;
+    listStorageOperations: (input?: ServiceCatalog["media.listStorageOperations"]["input"]) => Promise<ServiceCatalog["media.listStorageOperations"]["output"]>;
     purge: (input: ServiceCatalog["media.purge"]["input"]) => Promise<ServiceCatalog["media.purge"]["output"]>;
+    reconcileMultipartOperation: (input: ServiceCatalog["media.reconcileMultipartOperation"]["input"]) => Promise<ServiceCatalog["media.reconcileMultipartOperation"]["output"]>;
+    reconcileStorageOperation: (input: ServiceCatalog["media.reconcileStorageOperation"]["input"]) => Promise<ServiceCatalog["media.reconcileStorageOperation"]["output"]>;
     rescan: (input: ServiceCatalog["media.rescan"]["input"]) => Promise<ServiceCatalog["media.rescan"]["output"]>;
     resolveAsset: (input: ServiceCatalog["media.resolveAsset"]["input"]) => Promise<ServiceCatalog["media.resolveAsset"]["output"]>;
     resolveImage: (input: ServiceCatalog["media.resolveImage"]["input"]) => Promise<ServiceCatalog["media.resolveImage"]["output"]>;
