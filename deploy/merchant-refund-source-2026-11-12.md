@@ -104,3 +104,35 @@ cash lock, admitted-writer snapshot, inspection-owned observations, versioned
 return resolution, late contradictory facts, fee/reversal caller completion,
 SQL alternate-writer guards and full source/native/UI integration must still
 qualify before returning an applied/returned disposition to a real lifecycle.
+
+## Unregistered shared-core phase checkpoint
+
+Eleven separate core source files now define the original cash owner, common
+refund-reservation capture, one physical refund caller/ACK/finish, return
+inspection admission, primary/state capture, actual read completion and versioned
+cash disposition. Full explicit Node22 TypeScript and changed-file lint pass.
+These definitions are not registered, called by the existing refund core, or
+included in the assembled80 SQL. They supply no native qualification.
+
+Return and payment application share the original platform/charge-namespace/PI
+advisory lock. Existing reservations without a captured original request are not
+silently adopted. Planned common createRefund integration covers prepared
+return batches as well as direct owner actions. Opaque source FKs use the
+existing payment or subscription cash receipt; human free-text reasons are not
+copied into a second ledger, and no private customer/contact record is added.
+
+A return inspection binds its exact source/caller inventory. Its own independent
+observations are excluded from that admission snapshot and separately bound by
+an own-evidence digest. A sequential state ledger prevents selecting an earlier
+optimistic state after a later contradictory state. Finalization requires the
+actual finished read promise, quiesced creation callers, unchanged source
+inventory, complete raw return proof and un-applied cash under the shared lock.
+Later outside or own observations invalidate a prior closure instead of
+rewriting financial facts. Versioned return receipts support fresh reinspection.
+
+Recorded fee operations currently remain unresolved in this draft unless their
+separate actual physical-caller proof is integrated. Fee/reversal automation,
+bank-return state recovery, alternate-writer SQL guards, privacy reopening and
+periodic crash-window repair, human recovery surfaces and full native/browser
+acceptance remain active completion work. This conservative intermediate state
+is not a feature deferral or permission to activate the new model.
