@@ -20,6 +20,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { contacts } from "@/core/contacts/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { merchantTaxProfiles } from "./merchant-tax-schema";
 
 const amount = (name: string) => bigint(name, { mode: "number" }).notNull().default(0);
 const signedAmount = (name: string) => bigint(name, { mode: "number" }).notNull();
@@ -120,6 +121,8 @@ export const taxRegistrations = pgTable(
   "tax_registrations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** NULL is the historical site business, never an unspecified seller. */
+    merchantProfileId: uuid("merchant_profile_id").references(() => merchantTaxProfiles.id, { onDelete: "restrict" }),
     zoneId: uuid("zone_id").notNull().references(() => taxZones.id, { onDelete: "restrict" }),
     number: text("number"),
     scheme: text("scheme", { enum: ["standard", "oss", "ioss", "simplified"] })
@@ -136,6 +139,7 @@ export const taxRegistrations = pgTable(
   },
   (t) => [
     index("tax_registrations_zone_idx").on(t.zoneId, t.status),
+    index("tax_registrations_merchant_idx").on(t.merchantProfileId, t.zoneId, t.status),
     check("tax_registrations_threshold_valid", sql`${t.thresholdMinor} >= 0`),
     check(
       "tax_registrations_threshold_currency_valid",
@@ -149,6 +153,8 @@ export const taxExemptions = pgTable(
   "tax_exemptions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** A customer's exemption applies only to its explicitly selected business. */
+    merchantProfileId: uuid("merchant_profile_id").references(() => merchantTaxProfiles.id, { onDelete: "restrict" }),
     contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "restrict" }),
     zoneId: uuid("zone_id").notNull().references(() => taxZones.id, { onDelete: "restrict" }),
     kind: text("kind", { enum: ["reseller", "nonprofit", "reverse_charge", "diplomatic"] }).notNull(),
@@ -163,6 +169,7 @@ export const taxExemptions = pgTable(
   },
   (t) => [
     index("tax_exemptions_contact_idx").on(t.contactId, t.status),
+    index("tax_exemptions_merchant_idx").on(t.merchantProfileId, t.contactId, t.zoneId),
     index("tax_exemptions_zone_idx").on(t.zoneId, t.status),
     check("tax_exemptions_status_valid", sql`${t.status} in ('pending','valid','expired','revoked')`),
     check(

@@ -43,3 +43,4 @@ export {
   merchantPaymentObservations, merchantPaymentEventReceipts,
   merchantFeeRefunds, merchantFeeObservations,
 } from "./merchant-collection-schema";
+export { merchantTaxProfiles, merchantTaxProfileVersions, invoiceMerchantTaxQuotes, invoiceMerchantTaxQuoteLines } from "./merchant-tax-schema";
