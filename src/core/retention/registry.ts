@@ -93,6 +93,9 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+  merchant_payment_dispatch_finishes: "Immutable actual original caller completion; money outcome remains independent and is reconciled through the original invoice.",
+  merchant_payment_dispatch_stops: "Exact original hosting stop reviews; private operational proof cannot be an age sweep or contact search.",
+  merchant_payment_resource_bindings: "Original physical acknowledgements or explicit provider request-log review, retained with the existing invoice owner. Not a second contact identity.",
   merchant_payment_dispatches: "Immutable original payment dispatch admission and full-request digest; actual original effects require explicit provider recovery, never an age sweep or contact search.",
   merchant_payment_creation_refusals: "Append-only actual per-dispatch provider refusal evidence, retained with the payment rather than content search or TTL deletion.",
   merchant_payment_requests: "Immutable original provider metadata references; current invoice contact remains ownership authority and money history retains the opaque witness.",

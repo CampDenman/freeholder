@@ -357,3 +357,45 @@ native source acceptance. Those remain required before model activation.
 The documented provider lookup is [Stripe list refunds](https://docs.stripe.com/api/refunds/list);
 our bounded empty-result policy never treats an inventory as proof that an
 unknown physical creation had no effect.
+
+### Physical creator admission, 2026-11-12
+
+The actual schema80 checkout before control at `faf7de49` reached a second
+physical Checkout POST while the first HTTP caller was paused. The two bodies
+and idempotency keys were byte identical; this was a local source admission
+failure, not evidence of a second Stripe charge. Both callers were released and
+awaited before the finite case drained. The original before log is
+`/tmp/freeholder-merchant-creator-before-v4.log` (5.386-second case).
+
+The repair admits one physical creation per payment. Each admission stores its
+full provider argument digest and actual process birth, and returns a private
+completion nonce to the caller. A wrapper records actual provider-promise
+completion independently of customer payment application, including thrown
+calls. Failed completion commits remain available for that same process to
+flush; a timer, lease or provider zero-money resource never stands in for this
+receipt. Invoice sibling creation and privacy debt checks include unfinished
+creators. A positive provider resource acknowledgement is retained separately
+from money application.
+
+When that process was lost, a freshly verified person must review the exact
+caller, request digest and actual hosting stop evidence. An observable original
+process birth that is still live is refused. Cross-host evidence remains an
+explicit human review; the application does not claim to observe remote process
+termination. This review makes no charged/uncharged decision.
+
+Provider metadata can be edited. A discovered metadata-only resource may retain
+positive customer cash, but cannot supply a checkout resume URL, authorize a
+cancellation or release another attempt from an unpaid status. Negative recovery
+requires the original physical acknowledgement or a separate freshly verified
+person's review of the original provider request log, actual account,
+idempotency key, complete arguments and resulting resource. Canonical provider
+terminal zero-money proof remains independently required. These reviews retain
+purpose-specific evidence digests, reviewer identity and immutable lineage, as
+in the existing recovery review patterns; operators retain the original logs.
+
+Full 8GB TypeScript and focused lint pass. Four no-database files pass 50
+controls, including actual Linux child-process birth/exit, unknown-host handling
+and completion-cache resource filtering. Fresh normal0–80 schema and native
+controls remain pending. No v4 schema qualification transfers to its changed SQL.
+Full refund, settlement, external schedule lifecycle, browser and actual-provider
+acceptance remain open; the new marketplace collection mode remains disabled.

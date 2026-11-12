@@ -5,10 +5,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { eq, sql } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { db } from "@/core/db";
+import { env } from "@/core/env";
+import { beginPaymentCheckout } from "@/modules/invoicing/payment-provider-service";
 import { ready } from "@/core/runtime";
 import { AdapterError } from "@/adapters/types";
 import { createPayment, failPayment, getInvoice } from "@/modules/invoicing/invoice-service";
-import { claimMerchantPaymentDispatch } from "@/modules/invoicing/merchant-payment-request";
+import { claimMerchantPaymentDispatch, performMerchantPaymentDispatch, reviewMerchantPaymentResourceOrigin } from "@/modules/invoicing/merchant-payment-request";
 import { reconcileMerchantCheckout } from "@/modules/invoicing/merchant-payment-recovery";
 import { merchantPaymentRequests, merchantPaymentDispatches, merchantPaymentCreationRefusals, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts } from "@/modules/invoicing/merchant-payment-recovery-schema";
 import { invoiceMerchantAllocations, invoices, payments } from "@/modules/invoicing/schema";
@@ -50,7 +52,10 @@ describe.runIf(hasDatabase)("original merchant payment recovery on schema80", { 
     fixture = await seedMerchantCheckout80("destination");
     const placed = await fixture.checkout(), invoiceId = placed.order.invoiceId!;
     const payment = await createPayment.call({ invoiceId, provider: "stripe", method: "saved_method", amountMinor: placed.order.totalMinor, idempotencyKey: crypto.randomUUID() }, OWNER);
-    await claimMerchantPaymentDispatch.call({ paymentId: payment.id, requestDigest: "a".repeat(64) }, SYSTEM);
+    const dispatch = await claimMerchantPaymentDispatch.call({ paymentId: payment.id, requestDigest: "a".repeat(64) }, SYSTEM);
+    // Actual promise completion and original provider ACK are independent of
+    // the subsequent cancellation/read failure under test.
+    await performMerchantPaymentDispatch(dispatch, payment.id, async () => ({ providerRef: "pi_originalSaved" }));
     expect(await failure(failPayment.call({ id: payment.id, code: "human_not_charged", message: "No provider absence proof" }, OWNER))).toMatchObject({ code: "conflict" });
     expect(await failure(createPayment.call({ invoiceId, provider: "stripe", method: "hosted_checkout", amountMinor: payment.amountMinor, idempotencyKey: crypto.randomUUID() }, OWNER))).toMatchObject({ code: "conflict" });
     const terminal = { state: "not_paid" as const, paymentRef: "pi_originalSaved", intentStatus: "canceled" as const, amountReceivedMinor: 0 as const };
@@ -70,4 +75,34 @@ describe.runIf(hasDatabase)("original merchant payment recovery on schema80", { 
     expect(replacement.id).not.toBe(payment.id);
     expect((await getInvoice.call({ id: invoiceId }, OWNER)).invoice.paidMinor).toBe(0);
   });
+  it("accepts a later original PaymentIntent when initial hosted ACK contained only the Checkout ID", async () => {
+    fixture = await seedMerchantCheckout80("destination");
+    const placed = await fixture.checkout(), invoiceId = placed.order.invoiceId!;
+    fixture.stripe.createCheckout = async request => ({ providerRef: "cs_onlyInitial", url: "https://checkout.example.test/original",
+      providerPlatformAccountId: request.providerPlatformAccountId, providerAccountId: request.providerAccountId,
+      destinationAccountId: request.destinationAccountId, settlementMerchantAccountId: request.settlementMerchantAccountId, applicationFeeMinor: request.applicationFeeMinor });
+    const started = await beginPaymentCheckout.call({ invoiceId, provider: "stripe", successUrl: env().APP_URL, cancelUrl: env().APP_URL, idempotencyKey: crypto.randomUUID() }, OWNER);
+    expect(started.payment.providerRef).toBe("cs_onlyInitial");
+    fixture.stripe.recoverMerchantPayment = async () => ({ state: "not_paid", checkoutRef: "cs_onlyInitial", paymentRef: "pi_laterOriginal", sessionStatus: "expired", intentStatus: "canceled", amountReceivedMinor: 0 });
+    expect((await reconcileMerchantCheckout.call({ paymentId: started.payment.id, action: "inspect" }, OWNER)).payment.status).toBe("failed");
+    expect(await db().select().from(merchantPaymentTerminalReceipts)).toEqual([expect.objectContaining({ checkoutRef: "cs_onlyInitial", paymentRef: "pi_laterOriginal" })]);
+  });
+
+  it("requires actual original-request provenance before a metadata-only zero-money result releases another attempt", async () => {
+    fixture = await seedMerchantCheckout80("destination");
+    const placed = await fixture.checkout(), invoiceId = placed.order.invoiceId!;
+    const payment = await createPayment.call({ invoiceId, provider: "stripe", method: "saved_method", amountMinor: placed.order.totalMinor, idempotencyKey: crypto.randomUUID() }, OWNER);
+    const digest = "b".repeat(64), dispatch = await claimMerchantPaymentDispatch.call({ paymentId: payment.id, requestDigest: digest }, SYSTEM);
+    await expect(performMerchantPaymentDispatch(dispatch, payment.id, async () => { throw new Error("Lost creation ACK; actual caller has finished"); })).rejects.toThrow("Lost creation ACK");
+    fixture.stripe.recoverMerchantIntent = async () => ({ state: "not_paid", paymentRef: "pi_discovered", intentStatus: "canceled", amountReceivedMinor: 0 });
+    expect((await reconcileMerchantCheckout.call({ paymentId: payment.id, action: "inspect" }, OWNER)).state).toBe("unresolved");
+    expect(await db().select().from(merchantPaymentTerminalReceipts)).toHaveLength(0);
+    await expect(reconcileMerchantCheckout.call({ paymentId: payment.id, action: "retire", paymentRef: "pi_discovered" }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    await reviewMerchantPaymentResourceOrigin.call({ dispatchId: dispatch.dispatchId, expectedRequestDigest: digest, resourceRef: "pi_discovered",
+      providerRequestReference: "req_originalLog", providerEvidence: "Synthetic human review of the exact original account, key, full request arguments and provider resource log.",
+      confirmation: "ORIGINAL PROVIDER REQUEST VERIFIED" }, OWNER);
+    expect((await reconcileMerchantCheckout.call({ paymentId: payment.id, action: "inspect" }, OWNER)).payment.status).toBe("failed");
+    expect((await getInvoice.call({ id: invoiceId }, OWNER)).invoice.paidMinor).toBe(0);
+  });
+
 });

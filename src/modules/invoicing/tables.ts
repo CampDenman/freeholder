@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-export { merchantPaymentRequests, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts, merchantPaymentDispatches, merchantPaymentCreationRefusals } from "./merchant-payment-recovery-schema";
+export { merchantPaymentRequests, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts, merchantPaymentDispatches, merchantPaymentDispatchFinishes, merchantPaymentDispatchStops, merchantPaymentResourceBindings, merchantPaymentCreationRefusals } from "./merchant-payment-recovery-schema";
 export {
   creditNoteLines,
   creditNotes,

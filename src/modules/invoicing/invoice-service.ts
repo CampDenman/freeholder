@@ -58,7 +58,7 @@ import { quoteTax } from "./tax-service";
 import {calculateInvoiceAmounts} from "./invoice-amounts";
 import {prepareMerchantInvoiceTax,freezeMerchantInvoiceTax} from "./merchant-tax-invoice";
 import {allowMerchantTaxWrites} from "./merchant-tax-store";
-import {captureMerchantPaymentRequest,assertMerchantPaymentTerminal} from "./merchant-payment-request";
+import {captureMerchantPaymentRequest,assertMerchantPaymentTerminal,assertInvoiceMerchantCreatorsQuiesced} from "./merchant-payment-request";
 import {invoiceMerchantDependencyFingerprints,exportMerchantRecoveryHistory} from "./merchant-payment-dependencies";
 import { allocateSettledPayment } from "./payment-plan-ledger";
 
@@ -943,6 +943,7 @@ export const createPayment = defineService({
       throw new ServiceError("validation", "The payment exceeds this invoice's outstanding balance.");
     }
     const routing = await reserveMerchantCharge(ctx, invoice, input);
+    if (routing.providerPlatformAccountId && input.method !== "provider_schedule") await assertInvoiceMerchantCreatorsQuiesced(ctx, invoice.id);
     const [created] = await ctx.tx
       .insert(payments)
       .values({

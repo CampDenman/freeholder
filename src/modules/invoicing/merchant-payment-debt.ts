@@ -7,7 +7,7 @@ import { defineService, ServiceError } from "@/core/service";
 import { routingForPayment } from "./merchant-charge";
 import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations } from "./merchant-collection-schema";
 import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations";
-import { assertMerchantPaymentTerminal } from "./merchant-payment-request";
+import { assertMerchantCreatorsQuiesced, assertMerchantPaymentTerminal } from "./merchant-payment-request";
 import { paymentDisputes, payments, refunds } from "./schema";
 
 const reason = z.enum(["original_scope", "unknown_payment", "unapplied_money", "provider_settlement", "commission", "refund", "dispute"]);
@@ -24,6 +24,8 @@ export const merchantPaymentRecoveryDebt = defineService({
     try { await assertNoUnappliedMerchantCharge(ctx, payment.invoiceId); }
     catch (error) { if (error instanceof ServiceError && error.code === "conflict") reasons.add("unapplied_money"); else throw error; }
     if (["created", "processing"].includes(payment.status)) reasons.add("unknown_payment");
+    try { await assertMerchantCreatorsQuiesced(ctx, paymentId); }
+    catch (error) { if (error instanceof ServiceError && error.code === "conflict") reasons.add("unknown_payment"); else throw error; }
     if (["failed", "cancelled"].includes(payment.status)) {
       try { await assertMerchantPaymentTerminal(ctx, paymentId); }
       catch (error) { if (error instanceof ServiceError && error.code === "conflict") reasons.add("unknown_payment"); else throw error; }

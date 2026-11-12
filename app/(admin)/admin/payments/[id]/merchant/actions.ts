@@ -7,6 +7,7 @@ import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { actorString, ServiceError } from "@/core/service";
 import { reconcileMerchantCheckout } from "@/modules/invoicing/merchant-payment-recovery";
 import { inspectMerchantPayment } from "@/modules/invoicing/payment-provider-service";
+import { reviewMerchantPaymentCallerStopped, reviewMerchantPaymentResourceOrigin } from "@/modules/invoicing/merchant-payment-request";
 import { requireStaffActor } from "../../../guard";
 import { sealCheckoutLink } from "./checkout-link";
 
@@ -18,7 +19,13 @@ export async function reconcileMerchantPaymentAction(form: FormData): Promise<vo
   const actor = { ...await requireStaffActor("invoicing", "manage"), request: requestMetadataFromHeaders(await headers()) };
   let state: string;
   try {
-    if (field("action") === "inspect_charge") {
+    if (field("action") === "review_caller_stop") {
+      await reviewMerchantPaymentCallerStopped.call({ dispatchId: field("dispatchId"), expectedCallerId: field("expectedCallerId"), expectedRequestDigest: field("expectedRequestDigest"), hostingEvidence: field("hostingEvidence"), confirmation: field("confirmation") }, actor);
+      state = "caller_reviewed";
+    } else if (field("action") === "review_resource_origin") {
+      await reviewMerchantPaymentResourceOrigin.call({ dispatchId: field("dispatchId"), expectedRequestDigest: field("expectedRequestDigest"), resourceRef: field("resourceRef"), providerRequestReference: field("providerRequestReference"), providerEvidence: field("providerEvidence"), confirmation: field("confirmation") }, actor);
+      state = "origin_reviewed";
+    } else if (field("action") === "inspect_charge") {
       const result = await inspectMerchantPayment.call({ paymentId }, actor);
       state = result.unapplied ? "unresolved" : result.evidence.status === "succeeded" ? "paid" : "pending";
     } else {

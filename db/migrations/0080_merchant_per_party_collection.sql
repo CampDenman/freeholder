@@ -665,7 +665,7 @@ END $$;
 CREATE TRIGGER order_commercial_item_guard BEFORE INSERT OR UPDATE OR DELETE ON order_items FOR EACH ROW EXECUTE FUNCTION freeholder_order_commercial_item_guard();
 --> statement-breakpoint
 -- Source: deploy/merchant-payment-schema80.fragment.sql
--- SHA256: eca9896422379a90a01e61449a9b2b6c43b4074c1a4cd4de4c5a1d468ff0def7
+-- SHA256: 83099afa10407ad1adae701c07228ecedd15c2fe3f01e9dfdc4f584ee8224d11
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- freeholder:schema-breaking Per-party collection requires original merchant receipts and guarded payment writers. Stop and drain old payment writers before upgrade; rollback restores the exact pre-upgrade database and provider reconciliation state.
@@ -903,10 +903,75 @@ CREATE TABLE merchant_payment_requests (
 --> statement-breakpoint
 CREATE TABLE merchant_payment_dispatches (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), payment_id uuid NOT NULL REFERENCES merchant_payment_requests(payment_id) ON DELETE RESTRICT,
- ordinal integer NOT NULL CHECK(ordinal>0), request_digest text NOT NULL CHECK(request_digest ~ '^[a-f0-9]{64}$'), dispatched_at timestamptz NOT NULL DEFAULT now()
+ ordinal integer NOT NULL CHECK(ordinal>0), request_digest text NOT NULL CHECK(request_digest ~ '^[a-f0-9]{64}$'), dispatched_at timestamptz NOT NULL DEFAULT now(),
+ caller jsonb NOT NULL CHECK(jsonb_typeof(caller)='object' AND caller ?& ARRAY['id','pid','host','startedAt','bootId','pidNamespace','startTicks']),
+ completion_nonce_hash text NOT NULL CHECK(completion_nonce_hash ~ '^[a-f0-9]{64}$')
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX merchant_payment_dispatches_ordinal_idx ON merchant_payment_dispatches(payment_id,ordinal);
+--> statement-breakpoint
+CREATE TABLE merchant_payment_dispatch_finishes (
+ dispatch_id uuid PRIMARY KEY REFERENCES merchant_payment_dispatches(id) ON DELETE RESTRICT,
+ caller_instance_id uuid NOT NULL, outcome text NOT NULL CHECK(outcome IN('returned','threw')),
+ provider_ref text, finished_at timestamptz NOT NULL DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE merchant_payment_dispatch_stops (
+ dispatch_id uuid PRIMARY KEY REFERENCES merchant_payment_dispatches(id) ON DELETE RESTRICT,
+ caller_instance_id uuid NOT NULL, request_digest text NOT NULL CHECK(request_digest ~ '^[a-f0-9]{64}$'),
+ mechanical_check text NOT NULL CHECK(mechanical_check IN('original_process_absent','unobservable_host_review')),
+ hosting_evidence_digest text NOT NULL CHECK(hosting_evidence_digest ~ '^[a-f0-9]{64}$'), reviewed_by text NOT NULL,
+ reviewed_at timestamptz NOT NULL DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE merchant_payment_resource_bindings (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), payment_id uuid NOT NULL REFERENCES merchant_payment_requests(payment_id) ON DELETE RESTRICT,
+ dispatch_id uuid NOT NULL REFERENCES merchant_payment_dispatches(id) ON DELETE RESTRICT,
+ resource_ref text NOT NULL, resource_kind text NOT NULL CHECK(resource_kind IN('checkout','intent')),
+ origin text NOT NULL CHECK(origin IN('physical_ack','human_request_review')), evidence_digest text NOT NULL CHECK(evidence_digest ~ '^[a-f0-9]{64}$'),
+ reviewed_by text, observed_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT merchant_payment_resource_bindings_ref CHECK(((resource_kind='checkout' AND resource_ref ~ '^cs_[A-Za-z0-9_]+$')OR(resource_kind='intent' AND resource_ref ~ '^pi_[A-Za-z0-9_]+$')) IS TRUE)
+);
+--> statement-breakpoint
+CREATE INDEX merchant_payment_resource_bindings_payment_idx ON merchant_payment_resource_bindings(payment_id);
+--> statement-breakpoint
+CREATE UNIQUE INDEX merchant_payment_resource_bindings_evidence_idx ON merchant_payment_resource_bindings(payment_id,evidence_digest);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_merchant_creators_quiesced(target uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT NOT EXISTS(SELECT 1 FROM merchant_payment_dispatches d
+  LEFT JOIN merchant_payment_dispatch_finishes f ON f.dispatch_id=d.id LEFT JOIN merchant_payment_dispatch_stops r ON r.dispatch_id=d.id
+  WHERE d.payment_id=target AND f.dispatch_id IS NULL AND r.dispatch_id IS NULL)
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_merchant_resource_bound(target uuid,ref text,kind text) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT CASE WHEN EXISTS(SELECT 1 FROM merchant_payment_resource_bindings WHERE payment_id=target AND resource_kind=kind AND origin='physical_ack')
+  THEN EXISTS(SELECT 1 FROM merchant_payment_resource_bindings WHERE payment_id=target AND resource_kind=kind AND origin='physical_ack' AND resource_ref=ref)
+  ELSE coalesce((SELECT resource_ref=ref FROM merchant_payment_resource_bindings WHERE payment_id=target AND resource_kind=kind AND origin='human_request_review' ORDER BY observed_at DESC,id DESC LIMIT 1),false) END
+$$;
+--> statement-breakpoint
+CREATE FUNCTION guard_merchant_payment_caller_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original merchant_payment_dispatches%ROWTYPE;
+BEGIN
+ IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Original physical caller and resource evidence is immutable' USING ERRCODE='23514'; END IF;
+ IF current_setting('freeholder.merchant_dispatch_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Original physical work requires its current guarded caller' USING ERRCODE='23514'; END IF;
+ SELECT * INTO original FROM merchant_payment_dispatches WHERE id=NEW.dispatch_id FOR UPDATE;
+ IF original.id IS NULL THEN RAISE EXCEPTION 'Restore the actual original physical request' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='merchant_payment_resource_bindings' THEN
+  IF NEW.payment_id<>original.payment_id OR(NEW.origin='physical_ack' AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_finishes WHERE dispatch_id=original.id))
+   OR(NEW.origin='human_request_review' AND(NEW.reviewed_by IS NULL OR NOT freeholder_merchant_creators_quiesced(original.payment_id))) THEN
+   RAISE EXCEPTION 'A resource binding needs its actual original acknowledgement or stopped-caller request review' USING ERRCODE='23514'; END IF;
+ ELSE
+  IF NEW.caller_instance_id::text IS DISTINCT FROM original.caller->>'id' THEN RAISE EXCEPTION 'The actual original physical caller cannot be replaced' USING ERRCODE='23514'; END IF;
+  IF TG_TABLE_NAME='merchant_payment_dispatch_stops' AND NEW.request_digest IS DISTINCT FROM original.request_digest THEN RAISE EXCEPTION 'The stopped caller proof belongs to another request' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER merchant_payment_dispatch_finishes_guard BEFORE INSERT OR UPDATE OR DELETE ON merchant_payment_dispatch_finishes FOR EACH ROW EXECUTE FUNCTION guard_merchant_payment_caller_receipt();
+--> statement-breakpoint
+CREATE TRIGGER merchant_payment_dispatch_stops_guard BEFORE INSERT OR UPDATE OR DELETE ON merchant_payment_dispatch_stops FOR EACH ROW EXECUTE FUNCTION guard_merchant_payment_caller_receipt();
+--> statement-breakpoint
+CREATE TRIGGER merchant_payment_resource_bindings_guard BEFORE INSERT OR UPDATE OR DELETE ON merchant_payment_resource_bindings FOR EACH ROW EXECUTE FUNCTION guard_merchant_payment_caller_receipt();
 --> statement-breakpoint
 CREATE TABLE merchant_payment_creation_refusals (
  dispatch_id uuid PRIMARY KEY REFERENCES merchant_payment_dispatches(id) ON DELETE RESTRICT,
@@ -959,8 +1024,11 @@ DECLARE parent payments%ROWTYPE; earlier integer; original text;
 BEGIN
  IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Each original physical dispatch remains immutable.' USING ERRCODE='23514'; END IF;
  SELECT * INTO parent FROM payments WHERE id=NEW.payment_id FOR UPDATE;
+ PERFORM pg_advisory_xact_lock(hashtext('invoice:'||parent.invoice_id::text));
+ IF EXISTS(SELECT 1 FROM payments sibling WHERE sibling.invoice_id=parent.invoice_id AND sibling.id<>parent.id AND NOT freeholder_merchant_creators_quiesced(sibling.id)) THEN
+  RAISE EXCEPTION 'An original invoice creator still needs actual finish or stopped-caller proof' USING ERRCODE='23514'; END IF;
  SELECT count(*),min(request_digest) INTO earlier,original FROM merchant_payment_dispatches WHERE payment_id=NEW.payment_id;
- IF parent.id IS NULL OR parent.status NOT IN('created','processing') OR parent.method NOT IN('hosted_checkout','saved_method') OR NEW.ordinal<>earlier+1
+ IF current_setting('freeholder.merchant_dispatch_v1',true) IS DISTINCT FROM '1' OR earlier>0 OR parent.id IS NULL OR parent.status NOT IN('created','processing') OR parent.method NOT IN('hosted_checkout','saved_method') OR NEW.ordinal<>earlier+1
   OR(earlier>0 AND NEW.request_digest IS DISTINCT FROM original) OR(earlier=0 AND(parent.provider_ref IS NOT NULL OR parent.provider_checkout_ref IS NOT NULL)) THEN
   RAISE EXCEPTION 'Admit only the original unchanged request before another physical dispatch.' USING ERRCODE='23514'; END IF;
  RETURN NEW;
@@ -976,9 +1044,11 @@ BEGIN
  IF parent.id IS NULL OR parent.method NOT IN('hosted_checkout','saved_method')
   OR(parent.method='hosted_checkout' AND(NEW.checkout_ref IS NULL OR(parent.provider_checkout_ref IS NOT NULL AND parent.provider_checkout_ref IS DISTINCT FROM NEW.checkout_ref)))
   OR(parent.method='saved_method' AND(NEW.checkout_ref IS NOT NULL OR NEW.payment_ref IS NULL))
-  OR(NEW.payment_ref IS NOT NULL AND parent.provider_ref IS NOT NULL AND parent.provider_ref IS DISTINCT FROM NEW.payment_ref) THEN
+  OR(NEW.payment_ref IS NOT NULL AND parent.provider_ref ~ '^pi_' AND parent.provider_ref IS DISTINCT FROM NEW.payment_ref) THEN
   RAISE EXCEPTION 'This cancellation fact belongs to another original payment or checkout.' USING ERRCODE='23514'; END IF;
- IF TG_TABLE_NAME='merchant_payment_terminal_receipts' AND(parent.status='succeeded' OR EXISTS(SELECT 1 FROM merchant_payment_observations WHERE payment_id=NEW.payment_id AND status='succeeded')) THEN
+ IF NOT freeholder_merchant_resource_bound(NEW.payment_id,coalesce(NEW.checkout_ref,NEW.payment_ref),CASE WHEN parent.method='hosted_checkout' THEN 'checkout' ELSE 'intent' END) THEN
+  RAISE EXCEPTION 'Metadata alone is not an original creation acknowledgement or verified request log' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='merchant_payment_terminal_receipts' AND(NOT freeholder_merchant_creators_quiesced(NEW.payment_id) OR parent.status='succeeded' OR EXISTS(SELECT 1 FROM merchant_payment_observations WHERE payment_id=NEW.payment_id AND status='succeeded')) THEN
   RAISE EXCEPTION 'Positive money cannot be replaced by a no-charge terminal claim.' USING ERRCODE='23514'; END IF;
  RETURN NEW;
 END $$;
@@ -1003,7 +1073,7 @@ DECLARE dispatched integer;
 BEGIN
  IF NEW.status IN('failed','cancelled') AND OLD.status IN('created','processing') AND(EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=NEW.id)OR EXISTS(SELECT 1 FROM merchant_invoice_payment_routes WHERE payment_id=NEW.id)OR EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=NEW.id)) THEN
   SELECT count(*) INTO dispatched FROM merchant_payment_dispatches WHERE payment_id=NEW.id;
-  IF NOT EXISTS(SELECT 1 FROM merchant_payment_requests WHERE payment_id=NEW.id)OR EXISTS(SELECT 1 FROM merchant_payment_observations WHERE payment_id=NEW.id AND status='succeeded')OR
+  IF NOT freeholder_merchant_creators_quiesced(NEW.id) OR NOT EXISTS(SELECT 1 FROM merchant_payment_requests WHERE payment_id=NEW.id)OR EXISTS(SELECT 1 FROM merchant_payment_observations WHERE payment_id=NEW.id AND status='succeeded')OR
    NOT(EXISTS(SELECT 1 FROM merchant_payment_terminal_receipts WHERE payment_id=NEW.id)
     OR(dispatched=0 AND OLD.provider_ref IS NULL AND OLD.provider_checkout_ref IS NULL)
     OR(dispatched>0 AND OLD.provider_ref IS NULL AND OLD.provider_checkout_ref IS NULL AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatches d LEFT JOIN merchant_payment_creation_refusals r ON r.dispatch_id=d.id WHERE d.payment_id=NEW.id AND r.dispatch_id IS NULL))) THEN

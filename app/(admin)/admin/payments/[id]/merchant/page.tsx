@@ -13,7 +13,7 @@ import { reconcileMerchantPaymentAction } from "./actions";
 import { readCheckoutLink } from "./checkout-link";
 
 export const dynamic = "force-dynamic";
-const states = ["unresolved", "ambiguous", "open", "pending", "paid", "not_paid"];
+const states = ["unresolved", "ambiguous", "open", "pending", "paid", "not_paid", "caller_reviewed", "origin_reviewed"];
 
 export default async function MerchantPaymentPage({ params, searchParams }: {
   params: Promise<{ id: string }>; searchParams: Promise<{ offset?: string; saved?: string; error?: string }>;
@@ -70,7 +70,30 @@ export default async function MerchantPaymentPage({ params, searchParams }: {
       </div>)}
     </div></CardBody></Card>
     <Card><CardHeader title={t("merchantPayments.dispatches")} /><CardBody><div className="grid gap-2 text-sm">
-      {review.dispatches.map(dispatch => <p key={dispatch.id}>#{dispatch.ordinal} · {date(dispatch.dispatchedAt)}{dispatch.refusalCode ? <> · <code>{dispatch.refusalCode}</code></> : null}</p>)}
+      {review.dispatches.map(dispatch => <div key={dispatch.id} className="grid gap-3 border-b border-rule py-3">
+        <p>#{dispatch.ordinal} · {date(dispatch.dispatchedAt)}{dispatch.refusalCode ? <> · <code>{dispatch.refusalCode}</code></> : null}</p>
+        <p><bdi>{dispatch.caller.host}</bdi> · {t("merchantPayments.callerProcess", { pid: dispatch.caller.pid })} · <code>{dispatch.caller.id}</code></p>
+        <p>{t("merchantPayments.callerBirth", { at: dispatch.caller.startedAt })}</p>
+        <p>{dispatch.finishedAt ? t("merchantPayments.callerFinished") : dispatch.stopReviewedAt ? t("merchantPayments.callerStopReviewed") : t("merchantPayments.callerUnfinished")}</p>
+        {!dispatch.finishedAt && !dispatch.stopReviewedAt && canManage && stepUpValid ? dispatch.liveness === "live"
+          ? <Callout>{t("merchantPayments.callerLive")}</Callout>
+          : <form action={reconcileMerchantPaymentAction} className="grid gap-3">
+            <input type="hidden" name="paymentId" value={id} /><input type="hidden" name="dispatchId" value={dispatch.id} /><input type="hidden" name="expectedCallerId" value={dispatch.caller.id} /><input type="hidden" name="expectedRequestDigest" value={dispatch.requestDigest} />
+            <input type="hidden" name="confirmation" value="ORIGINAL PAYMENT CALLER STOP VERIFIED" />
+            <p>{t(dispatch.liveness === "absent" ? "merchantPayments.callerAbsent" : "merchantPayments.callerUnobservable")}</p>
+            <Field label={t("merchantPayments.hostingEvidence")} htmlFor={`hosting-${dispatch.id}`}><Input id={`hosting-${dispatch.id}`} name="hostingEvidence" minLength={30} maxLength={2000} required /></Field>
+            <Button type="submit" name="action" value="review_caller_stop" variant="quiet">{t("merchantPayments.reviewCallerStop")}</Button>
+          </form> : null}
+        {(dispatch.finishedAt || dispatch.stopReviewedAt) && canManage && stepUpValid && !review.resourceBindings.some(binding => binding.origin === "physical_ack" && binding.resourceKind === (review.payment.method === "hosted_checkout" ? "checkout" : "intent")) ? <form action={reconcileMerchantPaymentAction} className="grid gap-3">
+          <input type="hidden" name="paymentId" value={id} /><input type="hidden" name="dispatchId" value={dispatch.id} /><input type="hidden" name="expectedRequestDigest" value={dispatch.requestDigest} /><input type="hidden" name="confirmation" value="ORIGINAL PROVIDER REQUEST VERIFIED" />
+          <p>{t("merchantPayments.originalRequestHint")}</p>
+          <Field label={t(review.payment.method === "hosted_checkout" ? "merchantPayments.checkoutReference" : "merchantPayments.paymentReference")} htmlFor={`resource-${dispatch.id}`}><Input id={`resource-${dispatch.id}`} name="resourceRef" maxLength={200} pattern={review.payment.method === "hosted_checkout" ? "cs_[A-Za-z0-9_]+" : "pi_[A-Za-z0-9_]+"} required /></Field>
+          <Field label={t("merchantPayments.providerRequestReference")} htmlFor={`request-${dispatch.id}`}><Input id={`request-${dispatch.id}`} name="providerRequestReference" maxLength={200} pattern="req_[A-Za-z0-9_]+" required /></Field>
+          <Field label={t("merchantPayments.providerOriginEvidence")} htmlFor={`evidence-${dispatch.id}`}><Input id={`evidence-${dispatch.id}`} name="providerEvidence" minLength={30} maxLength={2000} required /></Field>
+          <Button type="submit" name="action" value="review_resource_origin" variant="quiet">{t("merchantPayments.reviewResourceOrigin")}</Button>
+        </form> : null}
+      </div>)}
+      {review.resourceBindings.map(binding => <p key={binding.id}><bdi>{binding.resourceRef}</bdi> · {t(binding.origin === "physical_ack" ? "merchantPayments.resourceAcknowledged" : "merchantPayments.resourceReviewed")}</p>)}
       {review.retirementAcks.map(ack => <p key={ack.id}><code>{ack.kind}</code> · <bdi>{ack.checkoutRef ?? ack.paymentRef}</bdi> · {date(ack.observedAt)}</p>)}
     </div></CardBody></Card>
     <Card><CardHeader title={t("merchantPayments.fees")} /><CardBody><div className="grid gap-2 text-sm">

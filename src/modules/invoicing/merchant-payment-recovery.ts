@@ -1,31 +1,38 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: read/cancel exact original resources; no human absence or new charge.
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, type MerchantIntentRecoveryRequest, type MerchantPaymentRecoveryRequest } from "@/adapters/payments";
-import { actorString, defineOrchestratedService, defineService, ServiceError } from "@/core/service";
+import { actorString, defineOrchestratedService, defineService, ServiceError, type Actor } from "@/core/service";
 import { paymentRow } from "./contract";
 import { assertChargeEvidence, paymentRouting, routingForPayment, verifiedCheckoutSession } from "./merchant-charge";
 import { merchantPaymentObservations } from "./merchant-collection-schema";
 import { merchantObservationRef, merchantPaymentEvidence, recordMerchantPaymentObservation } from "./merchant-payment-observations";
-import { merchantPaymentRequests, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts } from "./merchant-payment-recovery-schema";
+import { merchantPaymentRequests, merchantPaymentResourceBindings, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts } from "./merchant-payment-recovery-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { applyPaymentCheckout, recordProviderPaymentResult } from "./payment-provider-service";
 import { invoices, payments } from "./schema";
 import { merchantCheckoutReference as checkoutRef, merchantIntentReference as paymentRef, merchantTerminalProof as terminal } from "./merchant-terminal-proof";
+import { flushLocalMerchantPaymentDispatchFinishes } from "./merchant-payment-request";
 
 export const merchantPaymentRecoverySource = defineService({
   name: "invoicing.merchantPaymentRecoverySource", summary: "Read the exact original request and charge namespace without replacing its provider contact after a CRM merge.",
   kind: "query", permission: "system", external: false, input: z.object({ paymentId: z.uuid() }),
-  output: z.object({ payment: paymentRow, routing: paymentRouting, providerInvoiceRef: z.uuid(), providerContactRef: z.uuid() }),
+  output: z.object({ payment: paymentRow, routing: paymentRouting, providerInvoiceRef: z.uuid(), providerContactRef: z.uuid(), originalResourceRefs: z.array(z.string()) }),
   handler: async ({ paymentId }, ctx) => {
     const [source] = await ctx.tx.select({ payment: payments, request: merchantPaymentRequests }).from(payments)
       .innerJoin(merchantPaymentRequests, eq(merchantPaymentRequests.paymentId, payments.id)).where(eq(payments.id, paymentId));
     if (!source || source.payment.provider !== "stripe" || !["hosted_checkout", "saved_method"].includes(source.payment.method) || !source.payment.idempotencyKey) throw new ServiceError("conflict", "This original payment has no durable provider request proof. Restore its actual receipt; do not infer a historical request from today's buyer.");
     const routing = await routingForPayment(ctx, paymentId);
     if (!routing.providerPlatformAccountId || source.request.providerInvoiceRef !== source.payment.invoiceId) throw new ServiceError("conflict", "The original merchant request has no matching immutable invoice and platform scope.");
-    return { payment: source.payment, routing, providerInvoiceRef: source.request.providerInvoiceRef, providerContactRef: source.request.providerContactRef };
+    const bindings = await ctx.tx.select().from(merchantPaymentResourceBindings).where(eq(merchantPaymentResourceBindings.paymentId, paymentId)).orderBy(desc(merchantPaymentResourceBindings.observedAt), desc(merchantPaymentResourceBindings.id)).limit(1001);
+    if (bindings.length > 1000) throw new ServiceError("conflict", "The original provider request provenance exceeds its review bound.");
+    const originalResourceRefs = ["checkout", "intent"].flatMap(kind => {
+      const matching = bindings.filter(binding => binding.resourceKind === kind), acks = matching.filter(binding => binding.origin === "physical_ack");
+      return acks.length ? [...new Set(acks.map(binding => binding.resourceRef))] : matching.length ? [matching[0]!.resourceRef] : [];
+    });
+    return { payment: source.payment, routing, providerInvoiceRef: source.request.providerInvoiceRef, providerContactRef: source.request.providerContactRef, originalResourceRefs };
   },
 });
 
@@ -37,7 +44,7 @@ export const retainMerchantRetirementAck = defineService({
     const source = await ctx.callAsSystem(merchantPaymentRecoverySource, { paymentId: input.paymentId });
     if (source.payment.providerCheckoutRef && source.payment.providerCheckoutRef !== input.checkoutRef) throw new ServiceError("conflict", "This acknowledgement belongs to another original checkout.");
     if (source.payment.method === "hosted_checkout" ? !input.checkoutRef : input.checkoutRef || !input.paymentRef || input.kind !== "intent_canceled") throw new ServiceError("conflict", "The physical cancellation must identify this original payment's actual resource type.");
-    if (input.paymentRef && source.payment.providerRef && source.payment.providerRef !== input.paymentRef) throw new ServiceError("conflict", "This acknowledgement belongs to another original PaymentIntent.");
+    if (input.paymentRef && source.payment.providerRef?.startsWith("pi_") && source.payment.providerRef !== input.paymentRef) throw new ServiceError("conflict", "This acknowledgement belongs to another original PaymentIntent.");
     if (input.kind === "intent_canceled" && !input.paymentRef) throw new ServiceError("validation", "The original canceled authorization must identify its PaymentIntent.");
     await ctx.tx.insert(merchantPaymentRetirementAcks).values({ ...input, evidenceDigest: merchantTaxDigest(input) }).onConflictDoNothing();
     ctx.setSubject("payment", input.paymentId);
@@ -56,7 +63,8 @@ export const applyMerchantTerminalReceipt = defineService({
     const positives = await ctx.tx.select({ id: merchantPaymentObservations.id }).from(merchantPaymentObservations).where(and(eq(merchantPaymentObservations.paymentId, paymentId), eq(merchantPaymentObservations.status, "succeeded"))).limit(1);
     if (!current || current.status === "succeeded" || positives.length || current.providerCheckoutRef && current.providerCheckoutRef !== proof.checkoutRef
       || (source.payment.method === "hosted_checkout" ? !proof.checkoutRef : Boolean(proof.checkoutRef || proof.sessionStatus || !proof.paymentRef))
-      || proof.paymentRef && current.providerRef && current.providerRef !== proof.paymentRef) throw new ServiceError("conflict", "Positive money or a different original resource needs reconciliation before any terminal claim.");
+      || proof.paymentRef && current.providerRef?.startsWith("pi_") && current.providerRef !== proof.paymentRef
+      || !source.originalResourceRefs.includes(proof.checkoutRef ?? proof.paymentRef ?? "")) throw new ServiceError("conflict", "Positive money or an unproved original request/resource needs reconciliation before any terminal claim.");
     const [existing] = await ctx.tx.select().from(merchantPaymentTerminalReceipts).where(eq(merchantPaymentTerminalReceipts.paymentId, paymentId));
     const values = { paymentId, ...proof, checkoutRef: proof.checkoutRef ?? null, sessionStatus: proof.sessionStatus ?? null, paymentRef: proof.paymentRef ?? null };
     if (existing && Object.entries(values).some(([key, value]) => existing[key as keyof typeof existing] !== value)) throw new ServiceError("conflict", "This original attempt already has contradictory terminal provider evidence.");
@@ -66,13 +74,10 @@ export const applyMerchantTerminalReceipt = defineService({
   },
 });
 
-export const reconcileMerchantCheckout = defineOrchestratedService({
-  name: "invoicing.reconcileMerchantCheckout", summary: "Recover or retire the authenticated original checkout or saved-method PaymentIntent; unknown effects remain blocked and positive money is retained first.",
-  kind: "mutation", permission: "scoped", stepUp: true, writeClass: "money",
-  input: z.object({ paymentId: z.uuid(), action: z.enum(["inspect", "retire"]), checkoutRef: checkoutRef.optional(), paymentRef: paymentRef.optional() }).strict(),
-  output: z.object({ payment: paymentRow, state: z.enum(["unresolved", "ambiguous", "open", "pending", "paid", "not_paid"]), checkoutRef: checkoutRef.optional(), paymentRef: paymentRef.optional(), checkoutUrl: z.string().url().optional(), checkoutExpiresAt: z.iso.datetime().optional(), unapplied: z.boolean() }),
-  handler: async (input, caller) => {
+type RecoveryInput = { paymentId: string; action: "inspect" | "retire"; checkoutRef?: string; paymentRef?: string };
+async function reconcileOriginalMerchantResource(input: RecoveryInput, caller: Actor) {
     const system = { kind: "system", request: caller.request } as const;
+    await flushLocalMerchantPaymentDispatchFinishes(input.paymentId);
     const source = await merchantPaymentRecoverySource.call({ paymentId: input.paymentId }, system);
     const { routing } = source, adapter = paymentAdapter(source.payment.provider);
     const saved = source.payment.method === "saved_method";
@@ -80,6 +85,10 @@ export const reconcileMerchantCheckout = defineOrchestratedService({
     if (saved ? !adapter.recoverMerchantIntent || input.action === "retire" && !adapter.retireMerchantIntent : !adapter.recoverMerchantPayment || input.action === "retire" && !adapter.retireMerchantPayment) throw new ServiceError("conflict", "The configured provider cannot reconcile this original merchant payment.");
     if (source.payment.providerCheckoutRef && input.checkoutRef && source.payment.providerCheckoutRef !== input.checkoutRef) throw new ServiceError("conflict", "Use this payment's exact original checkout reference.");
     if (saved && source.payment.providerRef && input.paymentRef && source.payment.providerRef !== input.paymentRef) throw new ServiceError("conflict", "Use this payment's exact original PaymentIntent reference.");
+    const original = saved
+      ? source.payment.providerRef ?? input.paymentRef ?? source.originalResourceRefs.find(ref => ref.startsWith("pi_"))
+      : source.payment.providerCheckoutRef ?? input.checkoutRef ?? source.originalResourceRefs.find(ref => ref.startsWith("cs_"));
+    if (input.action === "retire" && (!original || !source.originalResourceRefs.includes(original))) throw new ServiceError("conflict", "Inspect this resource and verify its actual original provider request before canceling it. A metadata match alone cannot supply that provenance.");
     let current = source.payment, unapplied = false;
     const observe: NonNullable<MerchantIntentRecoveryRequest["onPaymentObserved"]> = async evidence => {
       await recordMerchantPaymentObservation.call({ paymentId: current.id, providerEventRef: merchantObservationRef(evidence), evidence }, system);
@@ -100,27 +109,41 @@ export const reconcileMerchantCheckout = defineOrchestratedService({
     if (saved) {
       const intentRequest: MerchantIntentRecoveryRequest = { ...routing, providerPlatformAccountId: routing.providerPlatformAccountId!, paymentAttemptId: current.id,
         invoiceId: source.providerInvoiceRef, contactId: source.providerContactRef, amountMinor: current.amountMinor, currency: current.currency,
-        createdAt: current.createdAt.toISOString(), idempotencyKey: current.idempotencyKey, paymentRef: current.providerRef ?? input.paymentRef,
+        createdAt: current.createdAt.toISOString(), idempotencyKey: current.idempotencyKey, paymentRef: original,
         onPaymentObserved: observe, onRetirementAcknowledged: async proof => { await retainMerchantRetirementAck.call({ paymentId: current.id, ...proof }, system); } };
       const result = input.action === "retire" ? await adapter.retireMerchantIntent!(intentRequest) : await adapter.recoverMerchantIntent!(intentRequest);
       if (result.state === "paid" || result.state === "pending") await observe(result.evidence);
-      else if (result.state === "not_paid") current = await applyMerchantTerminalReceipt.call({ paymentId: current.id, initiatedBy: actorString(caller), ...terminal.parse(result) }, system);
-      return { payment: current, state: result.state, paymentRef: "paymentRef" in result ? result.paymentRef : undefined, unapplied };
+      else if (result.state === "not_paid" && source.originalResourceRefs.includes(result.paymentRef)) current = await applyMerchantTerminalReceipt.call({ paymentId: current.id, initiatedBy: actorString(caller), ...terminal.parse(result) }, system);
+      return { payment: current, state: result.state === "not_paid" && !source.originalResourceRefs.includes(result.paymentRef) ? "unresolved" as const : result.state, paymentRef: "paymentRef" in result ? result.paymentRef : undefined, unapplied };
     }
     const request: MerchantPaymentRecoveryRequest = { ...routing, providerPlatformAccountId: routing.providerPlatformAccountId!, paymentAttemptId: current.id,
       invoiceId: source.providerInvoiceRef, contactId: source.providerContactRef, amountMinor: current.amountMinor, currency: current.currency,
-      createdAt: current.createdAt.toISOString(), idempotencyKey: current.idempotencyKey, checkoutRef: current.providerCheckoutRef ?? input.checkoutRef,
+      createdAt: current.createdAt.toISOString(), idempotencyKey: current.idempotencyKey, checkoutRef: original,
       onPaymentObserved: (_checkoutRef, evidence) => observe(evidence), onRetirementAcknowledged: async proof => { await retainMerchantRetirementAck.call({ paymentId: current.id, ...proof }, system); } };
     const result = input.action === "retire" ? await adapter.retireMerchantPayment!(request) : await adapter.recoverMerchantPayment!(request);
     if (result.state === "paid") await observe(result.evidence);
-    else if (result.state === "open") current = await applyPaymentCheckout.call({ paymentId: current.id, checkout: verifiedCheckoutSession.parse(result.checkout), initiatedBy: actorString(caller) }, system);
-    else if (result.state === "not_paid") current = await applyMerchantTerminalReceipt.call({ paymentId: current.id, initiatedBy: actorString(caller), ...terminal.parse(result) }, system);
+    else if (result.state === "open" && source.originalResourceRefs.includes(result.checkout.providerRef)) current = await applyPaymentCheckout.call({ paymentId: current.id, checkout: verifiedCheckoutSession.parse(result.checkout), initiatedBy: actorString(caller) }, system);
+    else if (result.state === "not_paid" && source.originalResourceRefs.includes(result.checkoutRef)) current = await applyMerchantTerminalReceipt.call({ paymentId: current.id, initiatedBy: actorString(caller), ...terminal.parse(result) }, system);
     else if (result.state === "pending") await recordMerchantPaymentObservation.call({ paymentId: current.id, providerEventRef: merchantObservationRef(result.evidence), evidence: merchantPaymentEvidence.parse(result.evidence) }, system);
-    return { payment: current, state: result.state,
+    const boundOpen = result.state === "open" && source.originalResourceRefs.includes(result.checkout.providerRef);
+    const unboundTerminal = result.state === "not_paid" && !source.originalResourceRefs.includes(result.checkoutRef);
+    return { payment: current, state: result.state === "open" && !boundOpen || unboundTerminal ? "unresolved" as const : result.state,
       checkoutRef: result.state === "open" ? result.checkout.providerRef : "checkoutRef" in result ? result.checkoutRef : undefined,
-      checkoutUrl: result.state === "open" ? result.checkout.url : undefined,
-      checkoutExpiresAt: result.state === "open" ? result.checkout.expiresAt : undefined, unapplied };
-  },
+      checkoutUrl: boundOpen ? result.checkout.url : undefined,
+      checkoutExpiresAt: boundOpen ? result.checkout.expiresAt : undefined, unapplied };
+}
+
+/** Only an already-authorized checkout parent uses this fixed read-only path. */
+export function inspectMerchantCheckoutForRetry(paymentId: string, caller: Actor) {
+  return reconcileOriginalMerchantResource({ paymentId, action: "inspect" }, caller);
+}
+
+export const reconcileMerchantCheckout = defineOrchestratedService({
+  name: "invoicing.reconcileMerchantCheckout", summary: "Recover or retire the authenticated original checkout or saved-method PaymentIntent; unknown effects remain blocked and positive money is retained first.",
+  kind: "mutation", permission: "scoped", stepUp: true, writeClass: "money",
+  input: z.object({ paymentId: z.uuid(), action: z.enum(["inspect", "retire"]), checkoutRef: checkoutRef.optional(), paymentRef: paymentRef.optional() }).strict(),
+  output: z.object({ payment: paymentRow, state: z.enum(["unresolved", "ambiguous", "open", "pending", "paid", "not_paid"]), checkoutRef: checkoutRef.optional(), paymentRef: paymentRef.optional(), checkoutUrl: z.string().url().optional(), checkoutExpiresAt: z.iso.datetime().optional(), unapplied: z.boolean() }),
+  handler: reconcileOriginalMerchantResource,
 });
 
 export default [merchantPaymentRecoverySource, retainMerchantRetirementAck, applyMerchantTerminalReceipt, reconcileMerchantCheckout];

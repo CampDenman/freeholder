@@ -43,8 +43,9 @@ import {
 import { observeProviderPayout } from "./advanced-money-service";
 import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment, verifiedCheckoutSession } from "./merchant-charge";
 import { merchantObservationRef, merchantPaymentEvidence, recordMerchantPaymentObservation } from "./merchant-payment-observations";
-import { merchantPaymentRequests } from "./merchant-payment-recovery-schema";
-import { claimMerchantPaymentDispatch, merchantCreationRefusalCode, retainMerchantCreationRefusal } from "./merchant-payment-request";
+import { merchantPaymentDispatches, merchantPaymentRequests } from "./merchant-payment-recovery-schema";
+import { inspectMerchantCheckoutForRetry } from "./merchant-payment-recovery";
+import { claimMerchantPaymentDispatch, merchantCreationRefusalCode, performMerchantPaymentDispatch, retainMerchantCreationRefusal } from "./merchant-payment-request";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { invoiceMerchantCollections, merchantPaymentRoutes, merchantPaymentEventReceipts } from "./merchant-collection-schema";
 import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
@@ -788,7 +789,7 @@ export const claimPaymentCheckout = defineService({
   kind: "mutation",
   permission: "system",
   input: beginCheckoutInput.extend({ initiatedBy }),
-  output: z.object({ payment: paymentRow, invoice: invoiceRow, email: z.string(), name: z.string(), providerCustomerRef: z.string().nullable(), providerRequestContactRef: z.uuid().optional(), routing: paymentRouting }),
+  output: z.object({ payment: paymentRow, invoice: invoiceRow, email: z.string(), name: z.string(), providerCustomerRef: z.string().nullable(), providerRequestContactRef: z.uuid().optional(), creationAdmitted: z.boolean(), routing: paymentRouting }),
   handler: async (input, ctx) => {
     if (input.saveMethod && input.saveMethodConsent !== true) throw new ServiceError("validation", "Saving a payment method requires the customer's explicit consent.");
     const adapter = paymentAdapter(input.provider);
@@ -825,7 +826,8 @@ export const claimPaymentCheckout = defineService({
     const [request] = routing.providerPlatformAccountId ? await ctx.tx.select().from(merchantPaymentRequests).where(eq(merchantPaymentRequests.paymentId, payment.id)) : [];
     if (routing.providerPlatformAccountId && (!request || request.providerInvoiceRef !== invoice.id)) throw new ServiceError("conflict", "Restore this attempt's actual original provider request before another hosted call.");
     const [customer] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, invoice.contactId), eq(paymentProviderCustomers.provider, input.provider), originalProviderPlatform(paymentProviderCustomers.providerPlatformAccountId, routing.providerPlatformAccountId), eq(paymentProviderCustomers.providerAccountId, routing.providerAccountId ?? ""))).orderBy(desc(paymentProviderCustomers.updatedAt)).limit(1);
-    return { routing, payment, invoice, email: contact.email, name: contact.name, providerCustomerRef: customer?.providerCustomerRef ?? null, providerRequestContactRef: request?.providerContactRef };
+    const [admission] = routing.providerPlatformAccountId ? await ctx.tx.select({ id: merchantPaymentDispatches.id }).from(merchantPaymentDispatches).where(eq(merchantPaymentDispatches.paymentId, payment.id)).limit(1) : [];
+    return { creationAdmitted: Boolean(admission), routing, payment, invoice, email: contact.email, name: contact.name, providerCustomerRef: customer?.providerCustomerRef ?? null, providerRequestContactRef: request?.providerContactRef };
   },
 });
 
@@ -955,6 +957,11 @@ export const beginPaymentCheckout = defineOrchestratedService({
     const cancelUrl = sameInstanceUrl(input.cancelUrl);
     const source = await claimPaymentCheckout.call({ ...input, initiatedBy: by }, system);
     const { payment, invoice } = source;
+    if (source.routing.providerPlatformAccountId && source.creationAdmitted) {
+      const original = await inspectMerchantCheckoutForRetry(payment.id, caller);
+      if (original.state !== "open" || !original.checkoutRef || !original.checkoutUrl) throw new ServiceError("conflict", "The original payment is already admitted. Refresh the invoice or reconcile that exact original resource before another creation.");
+      return { payment: original.payment, checkout: { ...source.routing, providerRef: original.checkoutRef, url: original.checkoutUrl, expiresAt: original.checkoutExpiresAt } };
+    }
     const providerRequest = {
         invoiceId: invoice.id,
         invoiceNumber: invoice.number!,
@@ -975,7 +982,8 @@ export const beginPaymentCheckout = defineOrchestratedService({
     const dispatch = source.routing.providerPlatformAccountId ? await claimMerchantPaymentDispatch.call({ paymentId: payment.id, requestDigest: merchantTaxDigest(providerRequest) }, system) : null;
     let checkout: z.infer<typeof checkoutSession>;
     try {
-      checkout = await paymentAdapter(input.provider).createCheckout(providerRequest);
+      const create = () => paymentAdapter(input.provider).createCheckout(providerRequest);
+      checkout = dispatch ? await performMerchantPaymentDispatch(dispatch, payment.id, create) : await create();
     } catch (error) {
       if (definitiveRefusal(error) && payment.status === "created") {
         const code = merchantCreationRefusalCode.safeParse(error instanceof AdapterError ? error.providerCode : undefined);
