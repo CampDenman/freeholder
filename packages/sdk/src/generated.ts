@@ -836,6 +836,7 @@ export const SERVICE_NAMES = [
   "imports.readerOwnershipReview",
   "imports.reconcile",
   "imports.resolveReaderOwnership",
+  "imports.resolveReaderOwnershipBatch",
   "imports.reviewConflicts",
   "imports.rollback",
   "imports.sourceGraph",
@@ -4957,6 +4958,10 @@ export interface ServiceCatalog {
     input: { id: string; receiptId: string | null; postId: string; commentId: string; contactId: string; confirmation: "ASSIGN ORIGINAL READER" };
     output: { receiptId: string; state: "bound" };
   };
+  "imports.resolveReaderOwnershipBatch": {
+    input: { id: string; assignments: { receiptId: string | null; postId: string; commentId: string; contactId: string }[]; confirmation: "ASSIGN SELECTED ORIGINAL READERS" };
+    output: { assigned: number };
+  };
   "imports.reviewConflicts": {
     input: { id: string; graph?: { generation: string; sourceRevision: string; planRevision: number }; conflicts: { slug: string; resolution: "keep-existing" | "replace" | "rename"; renamedSlug?: string }[] };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -9035,6 +9040,7 @@ export interface FreeholderApi {
     readerOwnershipReview: (input: ServiceCatalog["imports.readerOwnershipReview"]["input"]) => Promise<ServiceCatalog["imports.readerOwnershipReview"]["output"]>;
     reconcile: (input: ServiceCatalog["imports.reconcile"]["input"]) => Promise<ServiceCatalog["imports.reconcile"]["output"]>;
     resolveReaderOwnership: (input: ServiceCatalog["imports.resolveReaderOwnership"]["input"]) => Promise<ServiceCatalog["imports.resolveReaderOwnership"]["output"]>;
+    resolveReaderOwnershipBatch: (input: ServiceCatalog["imports.resolveReaderOwnershipBatch"]["input"]) => Promise<ServiceCatalog["imports.resolveReaderOwnershipBatch"]["output"]>;
     reviewConflicts: (input: ServiceCatalog["imports.reviewConflicts"]["input"]) => Promise<ServiceCatalog["imports.reviewConflicts"]["output"]>;
     rollback: (input: ServiceCatalog["imports.rollback"]["input"]) => Promise<ServiceCatalog["imports.rollback"]["output"]>;
     sourceGraph: (input: ServiceCatalog["imports.sourceGraph"]["input"]) => Promise<ServiceCatalog["imports.sourceGraph"]["output"]>;

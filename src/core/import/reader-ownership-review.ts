@@ -121,7 +121,9 @@ export const resolveReaderOwnership = defineService({
 export const resolveReaderOwnershipBatch = defineService({
   name: "imports.resolveReaderOwnershipBatch", summary: "Assign explicitly selected original readers to their chosen people in one audited transaction.",
   kind: "mutation", permission: "scoped", agentCallable: false, stepUp: true,
-  auditInputFields: ["id", "assignments"],
+  // Every nested single-row service records its own contact-subject audit.
+  // The batch summary must not copy other people into a shared audit row.
+  auditInputFields: ["id"],
   input: z.object({ id: z.uuid(), assignments: z.object({ receiptId: z.uuid().nullable(), postId: originalId, commentId: originalId, contactId: z.uuid() }).array().min(1).max(500), confirmation: z.literal("ASSIGN SELECTED ORIGINAL READERS") }),
   output: z.object({ assigned: z.number().int().min(1).max(500) }),
   handler: async (input, ctx) => {

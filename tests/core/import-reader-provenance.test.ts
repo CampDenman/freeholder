@@ -8,6 +8,7 @@ import { users, totpFactors, sessions } from "@/core/auth/schema";
 import { createSession } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { db } from "@/core/db";
+import { auditLog } from "@/core/events/schema";
 import { importRuns } from "@/core/plugins/schema";
 import { createContact, mergeContacts, resolveContact, undoContactMerge, updateContact } from "@/core/contacts/service";
 import { contactMergeOperations, contacts } from "@/core/contacts/schema";
@@ -203,6 +204,13 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     expect(await boundReader(id)).toBeUndefined();
     await expect(resolveReaderOwnershipBatch.call({ id, assignments: [choices[0], choices[0]], confirmation: "ASSIGN SELECTED ORIGINAL READERS" }, owner)).rejects.toMatchObject({ code: "validation" });
     expect(await db().select().from(readerOwnershipReceipts)).toEqual(before);
+    expect(await db().select().from(auditLog).where(eq(auditLog.action, "imports.resolveReaderOwnership"))).toHaveLength(0);
+    expect(await resolveReaderOwnershipBatch.call({ id, assignments: choices, confirmation: "ASSIGN SELECTED ORIGINAL READERS" }, owner)).toEqual({ assigned: 2 });
+    const singles = await db().select().from(auditLog).where(eq(auditLog.action, "imports.resolveReaderOwnership"));
+    expect(singles).toHaveLength(2);
+    for (const single of singles) expect(single).toMatchObject({ actor: `user:${OWNER.userId}`, subjectType: "contact", subjectId: chosen.id });
+    const [batch] = await db().select().from(auditLog).where(eq(auditLog.action, "imports.resolveReaderOwnershipBatch"));
+    expect(batch?.diff).toEqual({ id });
   });
 
   it("refuses bulk reader decisions from agents, personal keys, stale sessions or oversized input", async () => {
