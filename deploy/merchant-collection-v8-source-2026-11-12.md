@@ -53,3 +53,24 @@ pass; SQL remains the exact hash above. Logs are
 A new normal-v8 migration, actual model-to-SQL parity for both new retention
 tables, the unchanged actual legacy hold test, canonical lifecycle controls,
 provider/runtime upgrade and full product acceptance remain unqualified.
+
+
+Fresh ordinary migration qualification (2026-11-12): exact sourcef64c54db,
+SQL1ac4652c, NEW database
+`freeholder_collection80_normal_v8_test_20261112`. The actual normal0–80
+Drizzle migration passed5.877s, with81 journal entries and latest timestamp
+1793310000060. There was no explicit fragment application or change to v7.
+The diagnostic loads the actual two retention models from this source and
+compares their SQL columns/types/null/default presence, ordered primary keys,
+foreign-key columns/targets/delete actions and check names. Snapshot parity
+is5columns/1PK/1FK/3checks; membership is4columns/1PK/1FK/0checks. Six actual
+retention triggers and the two declared indexes are present, alongside the
+prior fifteen refund tables/seven guards/setup fields. Runner exited0; a
+separate read-only activity check returned no active v8 database work.
+
+Script and log: `/tmp/freeholder-collection80-normal-diagnostic-v8.mjs` and
+`.log`; drain `/tmp/freeholder-collection80-normal-diagnostic-v8-drain.json`.
+This fresh schema proof supplies no native domain lifecycle, populated history
+upgrade, old-software readiness, real provider or stable acceptance. The
+unchanged legacy hold and canonical lifecycle controls are the next separate
+qualification steps under the shared database allocation.

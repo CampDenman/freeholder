@@ -6398,6 +6398,15 @@ deployments are portable, testable and incapable of silently forking the truth.
   fresh migration/model parity and actual held-byte/canonical native controls
   remain pending. No old v7 database or provider acceptance is implied. See
   `deploy/merchant-collection-v8-source-2026-11-12.md`.
+  Fresh normal80 v8 migration qualification 2026-11-12: exactf64c54db and
+  SQL1ac4652c migrated ordinary0–80 into a NEW disposable v8 database5.877s,
+  with81 journal entries/max1793310000060. Both actual retention Drizzle
+  models match SQL columns/types/null/defaults/ordered primary and foreign
+  keys/delete actions/check names; six guards and two indexes are present.
+  Existing refund-table/setup guards remain present. All database work drained.
+  This is fresh schema qualification only: actual unchanged held-byte and
+  canonical lifecycle controls, populated upgrade, cold-runtime and provider
+  acceptance remain required. Original v7 SQL/database/evidence are preserved.
   Original-hold snapshot source draft 2026-11-12: an actual new HTTP-crawl
   control recorded a pending reader hold but cleanup deleted its private
   original because membership was only captured at fulfillment. A separate
