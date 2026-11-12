@@ -6,6 +6,7 @@ import { withoutPrivacyHold } from "@/core/retention/holds";
 import { importRuns } from "@/core/plugins/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { actorString, ServiceError, type Actor, type Tx } from "@/core/service";
+import { markImportGraphWriter } from "./graph-writer";
 import { readerOwnershipKey } from "./reader-ownership-key";
 import { readerOwnershipReceipts } from "./reader-ownership-schema";
 import "./reader-ownership-registry";
@@ -106,6 +107,9 @@ async function projectReviewedReaderOwners(tx: Tx, source: ReaderSource, owners:
             or not ${withoutPrivacyHold(sql`comment.contact_id`, "imports.readerSources")})
       ) as blocked`);
       if (blocked?.blocked) throw new ServiceError("conflict", "A retained original reader is covered by an erasure or legal hold and cannot be reassigned.");
+      // Human choice and original/hold validation have already passed. The
+      // same atomic projection also reaches private schema73 batch rows.
+      await markImportGraphWriter(tx);
       await tx.execute(sql`update blog_reader_comments comment set contact_id=(decision.owners->>comment.external_id)::uuid,updated_at=clock_timestamp()
         from (select ${encoded}::jsonb as owners) decision
         where comment.source in (${sql.join(ids.map(id => sql`'import:'||${id}::text`), sql`,`)})

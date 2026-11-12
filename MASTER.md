@@ -5095,9 +5095,17 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   source-specific acceptance remain pending; operational limits and all evidence
   are recorded in `deploy/blog-wordpress-2026-11-07.md`.)*
 
+  *(Update 2026-11-12: a real501-item WXR private-reader before control exposed
+  missing schema73 writer admission during a fresh owner's source review. The
+  narrow service repair passes the unchanged after control, preserving private
+  child refusal, original receipt/source ownership and existing hold/erasure
+  checks. Evidence: `deploy/import-reader-privacy.md`. Protected qualification
+  and the full existing C2.29/C3.46 requirements remain open.)*
+
 ### 43.8 C3 — Living contract, plugins, packages, and portable operation
 
 #### One generated platform contract
+
 - [x] **C3.01** Add required output schemas to every service and validate
   handler responses against them in tests and development.
   (`ServiceDef.output`; `assertOutput` in development/tests; OpenAPI 200

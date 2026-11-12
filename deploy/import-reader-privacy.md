@@ -474,3 +474,40 @@ After these fixture corrections, all required local source gates passed again:
 full types, lint, license, release-note, plan, playground and 384 contracts with
 26 expected database-only exclusions. The protected exact-head rerun remains
 pending; local fixture qualification does not substitute for protected checks.
+
+
+The actual main182 private graph-reader review before control fails in10.14s
+on test-only checkpoint50954844. It uploads and indexes a real501-item WXR,
+keeps its first original reader unbound, and correctly requires human review
+before importing the comment. The actual fresh signed-in owner can review it
+through the parent; direct child review is refused. Applying that exact human
+choice then hits schema73 SQL55000 because the shared cache projection had78
+reader admission but lacked73 graph-writer admission for its private child.
+The native process exited and its normal79 fixture had no nonidle backends.
+
+The narrow source repair adds graph-writer ABI admission after the existing
+human choice, current permissions, exact original coordinates and hold/erasure
+checks. It grants no additional caller authority and changes no source identity,
+original receipt owner, private child entry rule or SQL guard. Its exact native
+after control remains pending; no completion or stable claim is added.
+
+
+The unchanged private graph-reader after case passes in9.00s on signed repair
+6f531c25, after full types and targeted lint passed. It preserves direct child
+review refusal and the original receipt ID/first-run/creator, applies the chosen
+existing person's ID only through the verified human review, keeps the private
+child's operation checkpoint unchanged, and retains the exact original comment
+body. Review alone creates no imported comment. The native process exited and
+the owned normal79 database had no nonidle backends before handoff. This is a
+shared-service graph-review repair; no API/schema/label change, fresh production
+build, new owner-browser qualification, provider acceptance or checklist closure
+is claimed by this control.
+
+
+The private graph-reader fix also passes its complete source gates on70292fa5:
+full types, whole-repository lint, licensing, release notes, plan/F-matrix,
+playground policy and44 contract files (384 passed,26 expected database
+exclusions,31.63 seconds for contracts). The independent frozen offline install
+completed in696ms. All source processes exited before protected PR publication.
+The source/schema/API/locale boundary above is unchanged; complete item, actual
+provider, cutover and stable signatures remain pending.
