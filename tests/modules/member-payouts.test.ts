@@ -28,6 +28,8 @@ import {
 import { memberPayouts } from "@/modules/members/schema";
 import { addCartItem, getOrCreateCart } from "@/modules/catalog/cart";
 import { checkoutCart } from "@/modules/catalog/orders";
+import { orderSellers } from "@/modules/catalog/market";
+import { products, productVariants } from "@/modules/catalog/schema";
 import { getProductVariants } from "@/modules/catalog/variants";
 import { createPayment, settlePayment } from "@/modules/invoicing/invoice-service";
 import { invoices } from "@/modules/invoicing/schema";
@@ -55,6 +57,25 @@ describe.runIf(hasDatabase)("member payouts (C12.09)", () => {
     await updateMembershipRules.call({ marketplaceEnabled: true, listingReview: false, siteFeeBps: 1000, holdDays: 7 }, OWNER);
   });
   afterAll(closeDb);
+
+  it("keeps the purchased seller and shipping owner after the live listing changes", async () => {
+    const listing = await createListing.call({ acceptPolicy: true, title: "Original purchased download", kind: "digital", price: "40" }, RAE);
+    await savePayoutInstructions.call({ instructions: "Recorded original account" }, RAE);
+    await setPayoutAccountStatus.call({ userId: RAE.userId, status: "ready" }, OWNER);
+    const { contact } = await resolveContact.call({ email: "original-owner-buyer@example.test", name: "Buyer" }, OWNER);
+    const cart = await getOrCreateCart.call({ currency: "CAD", contactId: contact.id }, OWNER);
+    const variantId = await variantOf(listing.productId);
+    await addCartItem.call({ cartId: cart.cart.id, cartToken: cart.cart.token ?? undefined, variantId }, ANONYMOUS);
+    const order = await checkoutCart.call({ cartId: cart.cart.id, contactId: contact.id, idempotencyKey: "original-owner-checkout", acceptedTerms: true }, OWNER);
+    await db().update(products).set({ sellerUserId: SAM.userId }).where(eq(products.id, listing.productId));
+    await db().update(productVariants).set({ requiresShipping: true }).where(eq(productVariants.id, variantId));
+    const purchased = await orderSellers.call({ orderId: order.order.id }, { kind: "system" });
+    expect(purchased.lines).toMatchObject([{ sellerUserId: RAE.userId, requiresShipping: false }]);
+    const payment = await createPayment.call({ invoiceId: order.order.invoiceId!, provider: "manual", method: "bank_transfer", amountMinor: 4000, idempotencyKey: "original-owner-payment" }, OWNER);
+    await settlePayment.call({ id: payment.id, providerRef: "original-owner-recorded-bank-transfer" }, OWNER);
+    await onOrderPaid({ orderId: order.order.id });
+    expect((await sitePayouts.call({}, OWNER)).payouts).toMatchObject([{ sellerId: RAE.userId, grossMinor: 4000, feeMinor: 400, netMinor: 3600 }]);
+  });
 
   it("keeps an issued order's fee and hold model when the site changes its defaults before payment", async () => {
     const listing = await createListing.call({ acceptPolicy: true, title: "Frozen invoice terms", kind: "digital", price: "40" }, RAE);

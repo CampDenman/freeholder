@@ -13327,6 +13327,14 @@ whatever is best for the people using the site.
   destination charges at checkout through the payout provider (Stripe
   Connect first), with the site fee taken as an application fee, refunds
   and disputes on the seller's account. Split from C12.26 on 2026-10-15.
+  Original-order ownership repair 2026-11-11: checkout freezes each purchased
+  line's seller and shipping requirement before invoice issue, and seller
+  settlement reads that receipt instead of a later catalog edit. The actual
+  prior-image failure and bounded qualification are recorded in
+  `deploy/original-order-seller-2026-11-11.md` and
+  `tests/modules/member-payouts.test.ts`. Historical lines without this receipt
+  are not backfilled from current owners. Full merchant integration and live
+  acceptance remain required; this repair does not close C12.38.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query
