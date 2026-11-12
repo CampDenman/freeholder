@@ -76,7 +76,7 @@ export async function assertLegacyReaderSafety(tx: Tx, run: Run): Promise<void> 
   if (erasure) throw new ServiceError("conflict", "This older import predates reader-erasure protection. Roll it back, review the source for erased readers, and start a new import before publishing comments.");
 }
 
-async function subject(tx: Tx, contactId: string) {
+async function subject(tx: Tx, contactId: string, includeUnboundAddresses = true) {
   const identity = await contactPrivacyIdentity(tx, contactId);
   const emails = new Set(identity.emails), seen = new Set(identity.contactIds);
   const comments = await tx.select({ source: blogReaderComments.source, externalId: blogReaderComments.externalId })
@@ -84,7 +84,7 @@ async function subject(tx: Tx, contactId: string) {
   const references = new Set(comments.filter(comment => comment.externalId).map(comment => `${comment.source}:${comment.externalId}`));
   return (runId: string, key: string, comment: Json) => typeof comment.contactId === "string"
     ? seen.has(comment.contactId)
-    : emails.has(email(comment.email)) || references.has(`import:${runId}:${key}:${String(comment.id)}`);
+    : includeUnboundAddresses && emails.has(email(comment.email)) || references.has(`import:${runId}:${key}:${String(comment.id)}`);
 }
 
 type SourceEntry = { runId: string; stage: "preview" | "pending"; key: string; comment: Json };
@@ -220,7 +220,9 @@ registerContactPrivacySource({
     }
   },
   exportData: async (tx, contactId) => {
-    const matches = await subject(tx, contactId), result: SourceEntry[] = [];
+    // A current address can retire an unbound source during erasure, but
+    // cannot prove ownership of its historical name/body for disclosure.
+    const matches = await subject(tx, contactId, false), result: SourceEntry[] = [];
     for await (const run of runs(tx, false)) result.push(...sourceEntries(run).filter(entry => matches(run.id, entry.key, entry.comment)));
     return result;
   },
