@@ -4,6 +4,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
+import { withDeploymentContinuation } from "@/core/runtime/deployment-admission";
 import { subscriptionMerchantScopes, subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
 import { reconcileMerchantTaxErasureEvidence } from "@/modules/subscriptions/provider-schedule-erasure";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
@@ -43,6 +44,12 @@ async function factRow(ctx: ServiceContext, table: string, column: string, id: s
   return rows[0]!.fact;
 }
 
+function restoredId(value: unknown): string {
+  const parsed = z.uuid().safeParse(value);
+  if (!parsed.success) throw new ServiceError("conflict", "Restore the original financial evidence linkage before repairing its erasure receipt.");
+  return parsed.data;
+}
+
 export const originalMerchantRefundRepairSource = defineService({
   name: "invoicing.originalMerchantRefundRepairSource", summary: "Resolve original financial evidence to its frozen merchant profile without consulting current accounts or email.",
   kind: "query", permission: "system", external: false, input: originalRefundRepairPointer,
@@ -53,13 +60,13 @@ export const originalMerchantRefundRepairSource = defineService({
     let owner = fact;
     if (pointer.kind === "refund_finish") {
       const dispatch = await factRow(ctx, "merchant_refund_dispatches", "id", pointer.id);
-      owner = await factRow(ctx, "merchant_refund_requests", "id", z.uuid().parse(dispatch.request_id));
+      owner = await factRow(ctx, "merchant_refund_requests", "id", restoredId(dispatch.request_id));
     } else if (pointer.kind === "refund_ack" || pointer.kind === "refund_retirement") {
-      owner = await factRow(ctx, "merchant_refund_requests", "id", z.uuid().parse(fact.request_id));
+      owner = await factRow(ctx, "merchant_refund_requests", "id", restoredId(fact.request_id));
     } else if (["cash_primary", "cash_state", "cash_finish"].includes(pointer.kind)) {
-      owner = await factRow(ctx, "merchant_cash_return_inspections", "id", z.uuid().parse(fact.inspection_id));
+      owner = await factRow(ctx, "merchant_cash_return_inspections", "id", restoredId(fact.inspection_id));
     }
-    const paymentId = z.uuid().nullable().parse(owner.payment_id), receiptId = z.uuid().nullable().parse(owner.subscription_charge_receipt_id);
+    const paymentId = owner.payment_id === null ? null : restoredId(owner.payment_id), receiptId = owner.subscription_charge_receipt_id === null ? null : restoredId(owner.subscription_charge_receipt_id);
     if ((paymentId === null) === (receiptId === null)) throw new ServiceError("conflict", "Restore the one actual original financial owner before erasure repair.");
     const profiles: string[] = [];
     if (paymentId) {
@@ -87,8 +94,12 @@ export const originalMerchantRefundRepairSource = defineService({
 /** Manifest-registered outbox listener; both calls occur AFTER source commit. */
 export async function onOriginalMerchantRefundEvidence(payload: unknown): Promise<void> {
   const source = await originalMerchantRefundRepairSource.call(originalRefundRepairPointer.parse(payload), { kind: "system" });
-  const result = await reconcileMerchantTaxErasureEvidence.call(source, { kind: "system" });
-  if (result.recoveryRequired) throw new ServiceError("conflict", "Restore the exact original erasure receipt; the financial evidence remains committed.");
+  // An actual durable fact is already admitted. Cleanup may continue during
+  // draining; the core helper still refuses new queue work after a seal.
+  await withDeploymentContinuation(async () => {
+    const result = await reconcileMerchantTaxErasureEvidence.call(source, { kind: "system" });
+    if (result.recoveryRequired) throw new ServiceError("conflict", "Restore the exact original erasure receipt; the financial evidence remains committed.");
+  });
 }
 
 export default [originalMerchantRefundRepairSource];
