@@ -93,6 +93,11 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+  merchant_payment_dispatches: "Immutable original payment dispatch admission and full-request digest; actual original effects require explicit provider recovery, never an age sweep or contact search.",
+  merchant_payment_creation_refusals: "Append-only actual per-dispatch provider refusal evidence, retained with the payment rather than content search or TTL deletion.",
+  merchant_payment_requests: "Immutable original provider metadata references; current invoice contact remains ownership authority and money history retains the opaque witness.",
+  merchant_payment_retirement_acks: "Append-only original provider cancellation acknowledgements, private financial recovery evidence rather than searchable content or disposable TTL data.",
+  merchant_payment_terminal_receipts: "Original provider terminal-zero-money proof retained with its payment; no human absence attestation or time-based deletion.",
   merchant_tax_profiles: "Original tax business and retained financial proof; holds and explicit minimization use commerce.merchantTax, never an age-based purge.",
   booking_market_policies: "Original accepted member commercial policy and private contact owner; controlled by shared booking/money and privacy services.",
   booking_merchant_scopes: "Private original booking account and tax destination witness; personal copies minimized by original buyer and merchant rights, never content-search data.",

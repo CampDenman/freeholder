@@ -10,6 +10,9 @@ import merchantPaymentObservationServices from "./merchant-payment-observations"
 import merchantTaxServices from "./merchant-tax";
 import merchantInvoiceScopeServices from "./merchant-invoice-scope";
 import merchantPaymentReviewServices from "./merchant-payment-review";
+import merchantPaymentRecoveryServices from "./merchant-payment-recovery";
+import merchantPaymentRequestServices from "./merchant-payment-request";
+import merchantSubscriptionApplicationServices from "./merchant-subscription-application";
 import merchantFeeServices from "./merchant-fee-service";
 import {siteMerchantTaxServices} from "./merchant-tax-profiles";
 import merchantSettlementServices from "./merchant-settlement";
@@ -41,6 +44,9 @@ export default [
   ...merchantPaymentObservationServices,
   ...merchantFeeServices,
   ...merchantPaymentReviewServices,
+  ...merchantPaymentRecoveryServices,
+  ...merchantPaymentRequestServices,
+  ...merchantSubscriptionApplicationServices,
   ...merchantInvoiceScopeServices,
   ...merchantTaxServices,
   ...siteMerchantTaxServices,

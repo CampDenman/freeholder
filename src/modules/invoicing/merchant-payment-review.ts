@@ -2,13 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Owner review includes unapplied physical money, never just settled balances.
 import { createHash } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, ServiceError } from "@/core/service";
 import { paymentRow } from "./contract";
-import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations } from "./merchant-collection-schema";
+import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
+import { merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
+import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { paymentRouting, routingForPayment } from "./merchant-charge";
 import { payments } from "./schema";
+import { merchantPaymentRequests, merchantPaymentDispatches, merchantPaymentCreationRefusals, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts } from "./merchant-payment-recovery-schema";
 
 export function merchantPaymentWitness(payment: z.infer<typeof paymentRow>, routing: z.infer<typeof paymentRouting>): string {
   return createHash("sha256").update(JSON.stringify({ id: payment.id, invoiceId: payment.invoiceId, provider: payment.provider, method: payment.method,
@@ -24,11 +27,16 @@ const observed = z.object({ id: z.uuid(), providerApiVersion: z.string().nullabl
 const feeOperation = z.object({ id: z.uuid(), amountMinor: amount, currency: z.string(), status: z.string(), providerRef: z.string().nullable(),
   applicationFeeRef: z.string(), targetRetainedFeeMinor: amount, observedOriginalFeeMinor: amount, createdAt: z.date() });
 const feeObserved = z.object({ id: z.uuid(), operationId: z.uuid(), providerRef: z.string(), applicationFeeRef: z.string(), amountMinor: amount, currency: z.string(), bindingVerified: z.boolean(), observedAt: z.date() });
+const dispatch = z.object({ id: z.uuid(), ordinal: z.number().int().positive(), requestDigest: z.string(), dispatchedAt: z.date(), refusalCode: z.string().nullable() });
+const retirementAck = z.object({ id: z.uuid(), checkoutRef: z.string(), paymentRef: z.string().nullable(), kind: z.enum(["session_expired", "intent_canceled"]), observedAt: z.date() });
+const terminalReceipt = z.object({ checkoutRef: z.string(), paymentRef: z.string().nullable(), sessionStatus: z.enum(["expired", "complete"]), intentStatus: z.string().nullable(), amountReceivedMinor: z.literal(0), observedAt: z.date() });
 
 export const merchantPaymentReview = defineService({
   name: "invoicing.merchantPaymentReview", summary: "Review expected original accounts, every retained positive charge and independent fee recovery for one merchant payment.",
   kind: "query", permission: "scoped", input: z.object({ paymentId: z.uuid(), offset: z.number().int().min(0).max(100000).default(0) }).strict(),
-  output: z.object({ payment: paymentRow, routing: paymentRouting, witness: z.string().length(64), observations: z.array(observed), feeOperations: z.array(feeOperation), feeObservations: z.array(feeObserved), hasMore: z.boolean(), nextOffset: z.number().int().nullable() }).nullable(),
+  output: z.object({ payment: paymentRow, routing: paymentRouting, witness: z.string().length(64), observations: z.array(observed), feeOperations: z.array(feeOperation), feeObservations: z.array(feeObserved),
+    originalRequest: z.object({ providerInvoiceRef: z.uuid(), providerContactRef: z.uuid(), requestDigest: z.string() }).nullable(), dispatches: z.array(dispatch), retirementAcks: z.array(retirementAck), terminalReceipt: terminalReceipt.nullable(),
+    hasMore: z.boolean(), nextOffset: z.number().int().nullable() }).nullable(),
   handler: async ({ paymentId, offset }, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, paymentId));
     if (!payment) throw new ServiceError("not_found", "That original payment is not here.");
@@ -38,9 +46,28 @@ export const merchantPaymentReview = defineService({
     const feeOperations = await ctx.tx.select().from(merchantFeeRefunds).where(eq(merchantFeeRefunds.paymentId, paymentId)).orderBy(asc(merchantFeeRefunds.createdAt), asc(merchantFeeRefunds.id)).limit(201).offset(offset);
     const feeObservations = await ctx.tx.select({ observation: merchantFeeObservations }).from(merchantFeeObservations).innerJoin(merchantFeeRefunds, eq(merchantFeeRefunds.id, merchantFeeObservations.operationId))
       .where(eq(merchantFeeRefunds.paymentId, paymentId)).orderBy(asc(merchantFeeObservations.observedAt), asc(merchantFeeObservations.id)).limit(201).offset(offset);
-    const hasMore = observations.length > 200 || feeOperations.length > 200 || feeObservations.length > 200;
-    return { payment, routing, witness: merchantPaymentWitness(payment, routing), observations: observations.slice(0, 200), feeOperations: feeOperations.slice(0, 200), feeObservations: feeObservations.slice(0, 200).map(row => row.observation), hasMore, nextOffset: hasMore ? offset + 200 : null };
+    const [request] = await ctx.tx.select().from(merchantPaymentRequests).where(eq(merchantPaymentRequests.paymentId, paymentId));
+    const dispatches = await ctx.tx.select({ id: merchantPaymentDispatches.id, ordinal: merchantPaymentDispatches.ordinal, requestDigest: merchantPaymentDispatches.requestDigest, dispatchedAt: merchantPaymentDispatches.dispatchedAt, refusalCode: merchantPaymentCreationRefusals.providerCode })
+      .from(merchantPaymentDispatches).leftJoin(merchantPaymentCreationRefusals, eq(merchantPaymentCreationRefusals.dispatchId, merchantPaymentDispatches.id)).where(eq(merchantPaymentDispatches.paymentId, paymentId)).orderBy(asc(merchantPaymentDispatches.ordinal)).limit(201).offset(offset);
+    const retirementAcks = await ctx.tx.select().from(merchantPaymentRetirementAcks).where(eq(merchantPaymentRetirementAcks.paymentId, paymentId)).orderBy(asc(merchantPaymentRetirementAcks.observedAt), asc(merchantPaymentRetirementAcks.id)).limit(201).offset(offset);
+    const [terminal] = await ctx.tx.select().from(merchantPaymentTerminalReceipts).where(eq(merchantPaymentTerminalReceipts.paymentId, paymentId));
+    const hasMore = observations.length > 200 || feeOperations.length > 200 || feeObservations.length > 200 || dispatches.length > 200 || retirementAcks.length > 200;
+    return { payment, routing, witness: merchantPaymentWitness(payment, routing), observations: observations.slice(0, 200), feeOperations: feeOperations.slice(0, 200), feeObservations: feeObservations.slice(0, 200).map(row => row.observation),
+      originalRequest: request ?? null, dispatches: dispatches.slice(0, 200), retirementAcks: retirementAcks.slice(0, 200), terminalReceipt: terminal ? terminalReceipt.parse(terminal) : null, hasMore, nextOffset: hasMore ? offset + 200 : null };
   },
 });
 
-export default [merchantPaymentReview];
+export const listInvoiceMerchantPayments = defineService({
+  name: "invoicing.invoiceMerchantPayments", summary: "List the actual original merchant payment routes attached to one invoice for owner reconciliation.",
+  kind: "query", permission: "scoped", input: z.object({ invoiceId: z.uuid() }), output: z.array(z.uuid()),
+  handler: async ({ invoiceId }, ctx) => {
+    const rows = await ctx.tx.select({ id: payments.id }).from(payments)
+      .leftJoin(merchantPaymentRoutes, eq(merchantPaymentRoutes.paymentId, payments.id))
+      .leftJoin(merchantInvoicePaymentRoutes, eq(merchantInvoicePaymentRoutes.paymentId, payments.id))
+      .leftJoin(merchantAgreementPaymentRoutes, eq(merchantAgreementPaymentRoutes.paymentId, payments.id))
+      .where(and(eq(payments.invoiceId, invoiceId), or(isNotNull(merchantPaymentRoutes.paymentId), isNotNull(merchantInvoicePaymentRoutes.paymentId), isNotNull(merchantAgreementPaymentRoutes.paymentId))))
+      .orderBy(asc(payments.createdAt), asc(payments.id));
+    return rows.map(row => row.id);
+  },
+});
+export default [merchantPaymentReview, listInvoiceMerchantPayments];

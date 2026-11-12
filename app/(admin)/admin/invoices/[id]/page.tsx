@@ -24,6 +24,7 @@ import {
 import { scheduleRemindersAction } from "../../../recurring-actions";
 import { listInvoiceReminders } from "@/modules/invoicing/recurring-service";
 import { getPaymentPlan } from "@/modules/invoicing/advanced-money-service";
+import { listInvoiceMerchantPayments } from "@/modules/invoicing/merchant-payment-review";
 import { requireStaffActor } from "../../guard";
 import { formatPpm, invoiceLineAmounts, invoiceTone, money, quantityFromMicros } from "../format";
 import { domainOrNull } from "../../../read-helpers";
@@ -58,6 +59,7 @@ export default async function InvoiceDetailPage({
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
   const invoice = bundle.invoice;
+  const merchantPayments = new Set(await listInvoiceMerchantPayments.call({ invoiceId: id }, actor));
   const errorCode = ["validation", "conflict", "not_found", "permission", "rate_limited"].includes(query.error ?? "")
     ? query.error!
     : query.error
@@ -293,6 +295,7 @@ export default async function InvoiceDetailPage({
                 <li key={payment.id} className="flex flex-wrap gap-2">
                   <Pill>{payment.status}</Pill>
                   <span>{payment.provider} · {money(payment.amountMinor, payment.currency)}</span>
+                  {merchantPayments.has(payment.id) ? <a className="text-accent underline" href={`/admin/payments/${payment.id}/merchant`}>{t("merchantPayments.title")}</a> : null}
                 </li>
               ))}
             </ul>

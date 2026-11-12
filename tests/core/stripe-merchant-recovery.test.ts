@@ -10,7 +10,7 @@ const request: MerchantPaymentRecoveryRequest = {
   paymentAttemptId: "34cbbd41-75db-4c78-a0c5-5f2fd342d921", invoiceId: "b29a005b-aef5-4c99-94e0-c98630870854", contactId: "a028eff0-638d-447c-bdc1-585052b66157",
   amountMinor: 1200, currency: "CAD", createdAt: "2026-11-01T00:00:00.000Z", idempotencyKey: "recovery-original",
 };
-const metadata = { freeholder_payment_id: request.paymentAttemptId, freeholder_platform_account_id: request.providerPlatformAccountId, freeholder_contact_id: request.contactId };
+const metadata = { freeholder_payment_id: request.paymentAttemptId, freeholder_platform_account_id: request.providerPlatformAccountId, freeholder_contact_id: request.contactId, freeholder_invoice_id: request.invoiceId };
 function session(changes: Record<string, unknown> = {}) {
   return { id: "cs_original", mode: "payment", metadata, client_reference_id: request.invoiceId, created: Date.parse(request.createdAt) / 1000,
     amount_total: 1200, currency: "cad", status: "open", payment_status: "unpaid", payment_intent: null,
@@ -32,6 +32,18 @@ function provider(respond: (url: URL, init: RequestInit) => unknown) {
 }
 
 describe("original merchant Checkout recovery (C12.26/C12.38)", () => {
+  it.each(["freeholder_contact_id", "freeholder_invoice_id"])("refuses terminal-zero proof for contradictory original %s", async field => {
+    const p = provider(() => session({ status: "expired", url: null, metadata: { ...metadata, [field]: "00000000-0000-4000-8000-000000000999" } }));
+    await expect(p.recover({ ...request, checkoutRef: "cs_original" })).rejects.toMatchObject({ code: "provider_failure" });
+    expect(p.fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+  it.each(["freeholder_contact_id", "freeholder_invoice_id"])("retains positive cash but refuses customer application for contradictory original %s", async field => {
+    const observed = vi.fn(async () => undefined);
+    const p = provider(() => session({ status: "complete", payment_status: "paid", payment_intent: intent(), metadata: { ...metadata, [field]: "00000000-0000-4000-8000-000000000999" } }));
+    expect(await p.retire({ ...request, checkoutRef: "cs_original", onPaymentObserved: observed })).toMatchObject({ state: "paid", evidence: { amountMinor: 1200, currency: "CAD", customerChargeVerified: false, merchantRouteVerified: false } });
+    expect(observed).toHaveBeenCalledWith("cs_original", expect.objectContaining({ status: "succeeded", amountMinor: 1200, customerChargeVerified: false }));
+    expect(p.fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
   it("finds a lost original session across complete pages after the CREATE replay window without another CREATE", async () => {
     const p = provider(url => {
       if (url.pathname === "/v1/checkout/sessions") return url.searchParams.has("starting_after")

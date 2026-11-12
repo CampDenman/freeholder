@@ -52,7 +52,7 @@ import { requireCartAccess } from "./cart-access";
 import { getCart } from "./cart";
 import { availability } from "./inventory";
 import { checkoutCart } from "./orders";
-import { quoteMerchantCheckout } from "./merchant-checkout-quote";
+import { quoteMerchantCheckoutForBuyer } from "./merchant-checkout-quote";
 import { resolvePrice } from "./pricing";
 import { ORDER_STATUSES } from "./contract";
 import {
@@ -379,16 +379,6 @@ export const shopperCheckout = defineService({
     if (basket.lines.length === 0) {
       throw new ServiceError("validation", "The cart is empty.");
     }
-    // This parent has proved cart authority. Keep the actual caller for the
-    // quote's verified-email exemption decision; a system elevation here
-    // would quote another customer's exemption before their email proof.
-    const commercial = await ctx.call(quoteMerchantCheckout, {
-      cartId: input.cartId, cartToken: input.cartToken, email: input.email,
-      shippingAddress: input.shippingAddress, taxDestination: input.taxDestination,
-      shippingMethodId: input.shippingMethodId, couponCode: input.couponCode,
-    });
-    if (commercial && (input.taxQuoteDigest !== commercial.taxQuoteDigest || input.commercialQuoteDigest !== commercial.commercialQuoteDigest)) throw new ServiceError("conflict", "Review and accept the actual original merchants, complete tax and commercial quote before checkout.");
-
     // Proof of the email: the signed-in visitor's linked contact carries it,
     // or an authorized staff caller already holds contact authority. Everyone
     // else gets the platform's existing proof — a customer magic link — and
@@ -410,6 +400,15 @@ export const shopperCheckout = defineService({
         contactId = resolved.contact.id;
       }
     }
+
+    // Cart authority is already proved. Carry only the parent's actual
+    // verified buyer, never the anonymous cart's remembered contact/email.
+    const commercial = await ctx.callAsSystem(quoteMerchantCheckoutForBuyer, {
+      cartId: input.cartId, cartToken: input.cartToken, contactId,
+      shippingAddress: input.shippingAddress, taxDestination: input.taxDestination,
+      shippingMethodId: input.shippingMethodId, couponCode: input.couponCode,
+    });
+    if (commercial && (input.taxQuoteDigest !== commercial.taxQuoteDigest || input.commercialQuoteDigest !== commercial.commercialQuoteDigest)) throw new ServiceError("conflict", "Review and accept the actual original merchants, complete tax and commercial quote before checkout.");
 
     // C1.38: the public playground sends no mail, so the usual proof (a
     // magic link) can never arrive. A reserved, undeliverable address is

@@ -43,6 +43,9 @@ import {
 import { observeProviderPayout } from "./advanced-money-service";
 import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment, verifiedCheckoutSession } from "./merchant-charge";
 import { merchantObservationRef, merchantPaymentEvidence, recordMerchantPaymentObservation } from "./merchant-payment-observations";
+import { merchantPaymentRequests } from "./merchant-payment-recovery-schema";
+import { claimMerchantPaymentDispatch, merchantCreationRefusalCode, retainMerchantCreationRefusal } from "./merchant-payment-request";
+import { merchantTaxDigest } from "./merchant-tax-store";
 import { invoiceMerchantCollections, merchantPaymentRoutes, merchantPaymentEventReceipts } from "./merchant-collection-schema";
 import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
@@ -777,7 +780,7 @@ export const claimPaymentCheckout = defineService({
   kind: "mutation",
   permission: "system",
   input: beginCheckoutInput.extend({ initiatedBy }),
-  output: z.object({ payment: paymentRow, invoice: invoiceRow, email: z.string(), name: z.string(), providerCustomerRef: z.string().nullable(), routing: paymentRouting }),
+  output: z.object({ payment: paymentRow, invoice: invoiceRow, email: z.string(), name: z.string(), providerCustomerRef: z.string().nullable(), providerRequestContactRef: z.uuid().optional(), routing: paymentRouting }),
   handler: async (input, ctx) => {
     if (input.saveMethod && input.saveMethodConsent !== true) throw new ServiceError("validation", "Saving a payment method requires the customer's explicit consent.");
     const adapter = paymentAdapter(input.provider);
@@ -811,8 +814,10 @@ export const claimPaymentCheckout = defineService({
     // again, and an old one could outlive the provider's idempotency window.
     assertRetryableAttempt(payment, "payment");
     const routing = await routingForPayment(ctx, payment.id);
+    const [request] = routing.providerPlatformAccountId ? await ctx.tx.select().from(merchantPaymentRequests).where(eq(merchantPaymentRequests.paymentId, payment.id)) : [];
+    if (routing.providerPlatformAccountId && (!request || request.providerInvoiceRef !== invoice.id)) throw new ServiceError("conflict", "Restore this attempt's actual original provider request before another hosted call.");
     const [customer] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, invoice.contactId), eq(paymentProviderCustomers.provider, input.provider), originalProviderPlatform(paymentProviderCustomers.providerPlatformAccountId, routing.providerPlatformAccountId), eq(paymentProviderCustomers.providerAccountId, routing.providerAccountId ?? ""))).orderBy(desc(paymentProviderCustomers.updatedAt)).limit(1);
-    return { routing, payment, invoice, email: contact.email, name: contact.name, providerCustomerRef: customer?.providerCustomerRef ?? null };
+    return { routing, payment, invoice, email: contact.email, name: contact.name, providerCustomerRef: customer?.providerCustomerRef ?? null, providerRequestContactRef: request?.providerContactRef };
   },
 });
 
@@ -938,12 +943,10 @@ export const beginPaymentCheckout = defineOrchestratedService({
     const cancelUrl = sameInstanceUrl(input.cancelUrl);
     const source = await claimPaymentCheckout.call({ ...input, initiatedBy: by }, system);
     const { payment, invoice } = source;
-    let checkout: z.infer<typeof checkoutSession>;
-    try {
-      checkout = await paymentAdapter(input.provider).createCheckout({
+    const providerRequest = {
         invoiceId: invoice.id,
         invoiceNumber: invoice.number!,
-        contactId: invoice.contactId,
+        contactId: source.providerRequestContactRef ?? invoice.contactId,
         currency: invoice.currency,
         amountMinor: payment.amountMinor,
         description: `Invoice ${invoice.number}`,
@@ -956,10 +959,16 @@ export const beginPaymentCheckout = defineOrchestratedService({
         saveMethod: input.saveMethod,
         providerCustomerRef: source.providerCustomerRef ?? undefined,
         ...source.routing,
-      });
+    };
+    const dispatch = source.routing.providerPlatformAccountId ? await claimMerchantPaymentDispatch.call({ paymentId: payment.id, requestDigest: merchantTaxDigest(providerRequest) }, system) : null;
+    let checkout: z.infer<typeof checkoutSession>;
+    try {
+      checkout = await paymentAdapter(input.provider).createCheckout(providerRequest);
     } catch (error) {
       if (definitiveRefusal(error) && payment.status === "created") {
-        await recordProviderPaymentResult.call({ paymentId: payment.id, initiatedBy: by, outcome: { kind: "fail", code: "provider_refused", message: `${input.provider} refused to open this checkout.` } }, system);
+        const code = merchantCreationRefusalCode.safeParse(error instanceof AdapterError ? error.providerCode : undefined);
+        const refusal = dispatch && code.success ? await retainMerchantCreationRefusal.call({ paymentId: payment.id, dispatchId: dispatch.dispatchId, providerCode: code.data }, system) : null;
+        if (!source.routing.providerPlatformAccountId || refusal?.mayFail) await recordProviderPaymentResult.call({ paymentId: payment.id, initiatedBy: by, outcome: { kind: "fail", code: "provider_refused", message: `${input.provider} refused to open this checkout.` } }, system);
       }
       return adapterFailure(error);
     }

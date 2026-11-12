@@ -17,6 +17,7 @@ import { payments } from "@/modules/invoicing/schema";
 import { bookingCommercialSources, bookings } from "@/core/scheduling/schema";
 import { bookingMarketPolicies, bookingMerchantScopes } from "./booking-merchant-schema";
 import { subscriptionMarketPolicies } from "@/modules/subscriptions/schema";
+import { invoiceMerchantDependencyFingerprints } from "@/modules/invoicing/merchant-payment-dependencies";
 
 export async function merchantIdentityErased(tx:Tx,userId:string,contactId?:string|null):Promise<boolean>{
   await lockContactIdentityForRead(tx);
@@ -101,10 +102,12 @@ registerIdentityReference("invoice_merchant_allocations",
 // column or a second repoint of that original allocation.
 const collectionWitness=z.array(z.object({id:z.uuid(),fingerprint:z.string().regex(/^[0-9a-f]{64}$/)})).max(5000);
 async function collectionSnapshot(tx:Tx,ids:string[]){
- const rows=await tx.select({id:invoiceMerchantCollections.allocationId,material:sql<string>`to_jsonb(${invoiceMerchantCollections})::text`})
+ const rows=await tx.select({id:invoiceMerchantCollections.allocationId,invoiceId:invoiceMerchantCollections.invoiceId,material:sql<string>`to_jsonb(${invoiceMerchantCollections})::text`})
   .from(invoiceMerchantCollections).innerJoin(invoiceMerchantAllocations,eq(invoiceMerchantAllocations.id,invoiceMerchantCollections.allocationId))
   .where(inArray(invoiceMerchantAllocations.merchantContactId,ids)).orderBy(invoiceMerchantCollections.allocationId).limit(5001);
- return rows.length>5000?null:rows.map(({id,material})=>({id,fingerprint:createHash("sha256").update(material).digest("hex")}));
+ if(rows.length>5000)return null;
+ const dependencies=await invoiceMerchantDependencyFingerprints(tx,[...new Set(rows.map(row=>row.invoiceId))]);
+ return dependencies===null?null:rows.map(({id,invoiceId,material})=>({id,fingerprint:createHash("sha256").update(JSON.stringify({material,paymentDependencies:dependencies.get(invoiceId)})).digest("hex")}));
 }
 registerContactReference({
  table:"invoice_merchant_collections",columns:[],repoint:async()=>undefined,
@@ -129,6 +132,8 @@ async function bookingScopePointers(tx:Tx,ids:string[]):Promise<RawPointer[]|nul
  const invoiceScopes=await tx.select().from(invoiceMerchantScopes).where(inArray(invoiceMerchantScopes.bookingId,rows.map(row=>row.scope.bookingId))).orderBy(invoiceMerchantScopes.invoiceId).limit(5001);
  if(rows.length+invoiceScopes.length>5000)return null;
  const invoiceIds=invoiceScopes.map(row=>row.invoiceId);
+ const dependencies=await invoiceMerchantDependencyFingerprints(tx,invoiceIds);
+ if(dependencies===null)return null;
  const routes=invoiceIds.length?await tx.select({route:merchantInvoicePaymentRoutes,payment:payments}).from(merchantInvoicePaymentRoutes).innerJoin(payments,eq(payments.id,merchantInvoicePaymentRoutes.paymentId)).where(inArray(merchantInvoicePaymentRoutes.invoiceId,invoiceIds)).orderBy(merchantInvoicePaymentRoutes.paymentId).limit(5001):[];
  if(rows.length+invoiceScopes.length+routes.length>5000)return null;
  const paymentIds=routes.map(row=>row.payment.id);
@@ -141,7 +146,7 @@ async function bookingScopePointers(tx:Tx,ids:string[]):Promise<RawPointer[]|nul
   const ownedInvoices=invoiceScopes.filter(row=>row.bookingId===scope.bookingId),ownedIds=new Set(ownedInvoices.map(row=>row.invoiceId));
   const ownedRoutes=routes.filter(row=>ownedIds.has(row.route.invoiceId)),ownedPayments=new Set(ownedRoutes.map(row=>row.payment.id));
   const ownedFees=feeOperations.filter(row=>ownedPayments.has(row.paymentId)),feeIds=new Set(ownedFees.map(row=>row.id));
-  return{id:scope.bookingId,contactId:scope.merchantContactId,material:JSON.stringify({scope,source,invoices:ownedInvoices,routes:ownedRoutes,observations:observations.filter(row=>ownedPayments.has(row.paymentId)),feeOperations:ownedFees,feeObservations:feeObservations.filter(row=>feeIds.has(row.operationId))})};
+  return{id:scope.bookingId,contactId:scope.merchantContactId,material:JSON.stringify({scope,source,invoices:ownedInvoices,paymentDependencies:ownedInvoices.map(invoice=>({invoiceId:invoice.invoiceId,fingerprint:dependencies.get(invoice.invoiceId)})),routes:ownedRoutes,observations:observations.filter(row=>ownedPayments.has(row.paymentId)),feeOperations:ownedFees,feeObservations:feeObservations.filter(row=>feeIds.has(row.operationId))})};
  });
 }
 registerIdentityReference("booking_merchant_scopes",

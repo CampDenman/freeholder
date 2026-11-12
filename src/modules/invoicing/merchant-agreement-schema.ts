@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.26/C12.38: a new agreement's payment never invents an order allocation.
 import { sql } from "drizzle-orm";
-import { bigint, check, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { bigint, check, index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAtColumn } from "@/core/db/columns";
-import { subscriptions } from "@/modules/subscriptions/schema";
+import { subscriptions, subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
 import { payments } from "./schema";
 
 export const merchantAgreementPaymentRoutes = pgTable("merchant_agreement_payment_routes", {
@@ -23,10 +23,11 @@ export const merchantAgreementPaymentRoutes = pgTable("merchant_agreement_paymen
   providerInvoiceRef: text("provider_invoice_ref"),
   providerPaymentIntentRef: text("provider_payment_intent_ref"),
   providerChargeRef: text("provider_charge_ref"),
-  originalChargeReceiptId: uuid("original_charge_receipt_id"),
+  originalChargeReceiptId: uuid("original_charge_receipt_id").references(() => subscriptionProviderChargeReceipts.id, { onDelete: "restrict" }),
   createdAt: createdAtColumn(),
 }, (t) => [
   index("merchant_agreement_payment_routes_subscription_idx").on(t.subscriptionId),
+  uniqueIndex("merchant_agreement_payment_routes_receipt_idx").on(t.originalChargeReceiptId),
   check("merchant_agreement_payment_routes_version", sql`${t.agreementRoutingVersion} = 1`),
   check("merchant_agreement_payment_routes_fee", sql`${t.applicationFeeMinor} >= 0`),
   check("merchant_agreement_payment_routes_scope", sql`${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$' and ${t.recipientAccountId} ~ '^acct_[A-Za-z0-9]+$'

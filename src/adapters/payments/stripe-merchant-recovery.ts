@@ -5,7 +5,7 @@ import { AdapterError } from "../types";
 import { number, object, text } from "./http";
 import { assertMerchantAttempt, merchantAttemptMetadata, merchantChargeScope, validateMerchantChargeScope } from "./stripe-merchant-scope";
 import { stripeCheckoutEvidence } from "./stripe-merchant-capture";
-import type { MerchantChargeScope, MerchantPaymentRecovery, MerchantPaymentRecoveryRequest } from "./types";
+import type { CheckoutCaptureResult, MerchantChargeScope, MerchantPaymentRecovery, MerchantPaymentRecoveryRequest } from "./types";
 
 type Api = (path: string, init: RequestInit, scope: MerchantChargeScope) => Promise<Record<string, unknown>>;
 const unproven = () => new AdapterError("payments", "stripe", "provider_failure", "The original merchant payment still needs provider reconciliation.", true);
@@ -20,23 +20,32 @@ function validateRequest(request: MerchantPaymentRecoveryRequest): void {
     || !/^[A-Z]{3}$/.test(request.currency) || !Number.isFinite(Date.parse(request.createdAt)) || !request.idempotencyKey || request.idempotencyKey.length > 240) throw unproven();
   if (request.checkoutRef) checkoutReference(request.checkoutRef);
 }
-function boundSession(request: MerchantPaymentRecoveryRequest, session: Record<string, unknown>): string {
+function originalCustomerMatches(request: MerchantPaymentRecoveryRequest, session: Record<string, unknown>): boolean {
+  const metadata = object(session.metadata), intent = object(session.payment_intent), intentMetadata = object(intent?.metadata);
+  return session.client_reference_id === request.invoiceId && metadata?.freeholder_invoice_id === request.invoiceId && metadata.freeholder_contact_id === request.contactId
+    && (!intent || intentMetadata?.freeholder_invoice_id === request.invoiceId && intentMetadata.freeholder_contact_id === request.contactId
+      && intentMetadata.freeholder_payment_id === request.paymentAttemptId && intentMetadata.freeholder_platform_account_id === request.providerPlatformAccountId);
+}
+function boundSession(request: MerchantPaymentRecoveryRequest, session: Record<string, unknown>, exactCustomer = true): string {
   const reference = text(session.id);
   if (!reference) throw unproven();
   checkoutReference(reference);
   assertMerchantAttempt(request, request.paymentAttemptId, session.metadata);
-  if (session.mode !== "payment" || session.client_reference_id !== request.invoiceId
-    || !text(object(session.metadata)?.freeholder_contact_id)
-    || number(session.amount_total) === undefined || (number(session.amount_total) ?? -1) < 0 || !/^[A-Z]{3}$/.test(text(session.currency)?.toUpperCase() ?? "")
-    || (number(session.created) ?? -1) * 1000 < Date.parse(request.createdAt) - 120_000) throw unproven();
+  if (session.mode !== "payment" || exactCustomer && (!originalCustomerMatches(request, session)
+    || session.amount_total !== request.amountMinor || text(session.currency)?.toUpperCase() !== request.currency
+    || (number(session.created) ?? -1) * 1000 < Date.parse(request.createdAt) - 120_000)) throw unproven();
   return reference;
+}
+function cashEvidence(request: MerchantPaymentRecoveryRequest, session: Record<string, unknown>): CheckoutCaptureResult {
+  const evidence = stripeCheckoutEvidence({ ...request, checkoutRef: boundSession(request, session, false) }, session);
+  return evidence.status === "succeeded" && !originalCustomerMatches(request, session) ? { ...evidence, customerChargeVerified: false, merchantRouteVerified: false } : evidence;
 }
 
 export function stripeMerchantRecovery(api: Api) {
   async function notifyPositive(request: MerchantPaymentRecoveryRequest, session: Record<string, unknown>) {
-    const reference = boundSession(request, session);
+    const reference = boundSession(request, session, false);
     if (session.payment_status === "paid" || object(session.payment_intent)?.status === "succeeded") {
-      const evidence = stripeCheckoutEvidence({ ...request, checkoutRef: reference }, session);
+      const evidence = cashEvidence(request, session);
       if (evidence.status === "succeeded") await request.onPaymentObserved?.(reference, evidence);
     }
   }
@@ -46,7 +55,7 @@ export function stripeMerchantRecovery(api: Api) {
     if (request.checkoutRef) {
       const reference = checkoutReference(request.checkoutRef);
       const session = await api(`/v1/checkout/sessions/${encodeURIComponent(reference)}?expand%5B%5D=payment_intent`, { method: "GET" }, request);
-      if (boundSession(request, session) !== reference) throw unproven();
+      if (boundSession(request, session, false) !== reference) throw unproven();
       await notifyPositive(request, session);
       return session;
     }
@@ -61,7 +70,7 @@ export function stripeMerchantRecovery(api: Api) {
         if (!session || !text(session.id)) throw unproven();
         const metadata = object(session.metadata);
         if (metadata?.freeholder_payment_id !== request.paymentAttemptId || metadata.freeholder_platform_account_id !== request.providerPlatformAccountId) continue;
-        boundSession(request, session);
+        boundSession(request, session, false);
         await notifyPositive(request, session);
         found.push(session);
       }
@@ -78,9 +87,10 @@ export function stripeMerchantRecovery(api: Api) {
   }
 
   function resultFor(request: MerchantPaymentRecoveryRequest, session: Record<string, unknown>): MerchantPaymentRecovery {
-    const checkoutRef = boundSession(request, session);
-    const evidence = stripeCheckoutEvidence({ ...request, checkoutRef }, session);
+    const checkoutRef = boundSession(request, session, false);
+    const evidence = cashEvidence(request, session);
     if (evidence.status === "succeeded") return { state: "paid", checkoutRef, evidence };
+    boundSession(request, session);
     if (evidence.status === "failed") {
       const intent = object(session.payment_intent);
       return { state: "not_paid", checkoutRef, ...(text(intent?.id) ? { paymentRef: text(intent?.id) } : {}), sessionStatus: "expired", intentStatus: text(intent?.status) ?? null, amountReceivedMinor: 0 };
@@ -108,8 +118,9 @@ export function stripeMerchantRecovery(api: Api) {
       if (!found) return { state: "unresolved" };
       if (Array.isArray(found)) return { state: "ambiguous", checkoutRefs: found as string[] };
       let session = found as Record<string, unknown>;
-      const checkoutRef = boundSession(request, session);
+      const checkoutRef = boundSession(request, session, false);
       if (session.payment_status === "paid" || object(session.payment_intent)?.status === "succeeded") return resultFor(request, session);
+      boundSession(request, session);
       if (session.status === "open") {
         session = await api(`/v1/checkout/sessions/${encodeURIComponent(checkoutRef)}/expire`, { method: "POST", headers: { "idempotency-key": `${request.idempotencyKey}:expire` } }, request);
         if (boundSession(request, session) !== checkoutRef || session.status !== "expired") throw unproven();

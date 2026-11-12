@@ -72,7 +72,7 @@ export const captureBookingMarketPolicy = defineService({
       merchantName: policy.merchantName, merchantSupport: policy.merchantSupport,
       taxProfileId: profile.profileId, taxProfileVersion: profile.profileVersion, taxLiability: profile.liability,
       taxDestination: input.taxDestination ?? null, quoteDigest: input.taxQuoteDigest ?? null,
-      commercialQuoteDigest: quote?.commercialQuoteDigest ?? null, commercialPrice: quote?.price ?? null });
+      commercialQuoteDigest: quote?.commercialQuoteDigest ?? null, commercialPrice: quote?.price ?? null, taxOccurredAt: quote?.tax.occurredAt ?? null });
     ctx.setSubject("booking", booking.id);
     return { captured: true };
   },
@@ -102,7 +102,7 @@ export const completeBookingTaxQuote = defineService({
     if (quote.tax.quoteDigest !== quoteDigest || quote.commercialQuoteDigest !== commercialQuoteDigest) throw new ServiceError("conflict", "Review the actual original booking price, public business and tax terms before accepting billing.");
     if (scope.quoteDigest === null && scope.taxDestination === null) {
       if (booking.invoiceId) throw new ServiceError("conflict", "An already billed appointment cannot acquire invented original tax terms.");
-      await ctx.tx.update(bookingMerchantScopes).set({ taxDestination: destination, quoteDigest, commercialQuoteDigest, commercialPrice: quote.price }).where(eq(bookingMerchantScopes.bookingId, bookingId));
+      await ctx.tx.update(bookingMerchantScopes).set({ taxDestination: destination, quoteDigest, commercialQuoteDigest, commercialPrice: quote.price, taxOccurredAt: quote.tax.occurredAt }).where(eq(bookingMerchantScopes.bookingId, bookingId));
     } else if (scope.quoteDigest !== quoteDigest || scope.commercialQuoteDigest !== commercialQuoteDigest || JSON.stringify(bookingTaxDestination.parse(scope.taxDestination)) !== JSON.stringify(destination)) {
       throw new ServiceError("conflict", "The appointment's actual tax quote changed. Review and accept its current terms before booking.");
     }
@@ -138,14 +138,14 @@ export const resolveBookingMerchantTaxSource = defineService({
     const [original] = await ctx.tx.select({ booking: bookings, scope: bookingMerchantScopes }).from(bookings)
       .innerJoin(bookingMerchantScopes, eq(bookingMerchantScopes.bookingId, bookings.id)).where(eq(bookings.id, input.sourceId!));
     if (!original || original.booking.marketPolicyVersion !== 1 || original.booking.contactId !== input.contactId || original.scope.destinationErasedAt || original.scope.merchantIdentityErasedAt
-      || !original.scope.taxDestination || !original.scope.quoteDigest || !original.scope.commercialQuoteDigest || !original.scope.commercialPrice) throw new ServiceError("conflict", "The original booking needs its buyer's accepted business, price and tax quote before billing.");
+      || !original.scope.taxDestination || !original.scope.quoteDigest || !original.scope.commercialQuoteDigest || !original.scope.commercialPrice || !original.scope.taxOccurredAt) throw new ServiceError("conflict", "The original booking needs its buyer's accepted business, price and tax quote before billing.");
     const { booking, scope } = original, price = bookingCommercialPrice.parse(scope.commercialPrice), line = input.lines[0];
     if (input.currency !== price.currency || price.seats !== booking.capacityUsed || input.shippingMinor !== 0 || input.lines.length !== 1 || !line
       || line.quantityMicros !== 1000000 || line.unitAmountMinor !== price.baseAmountMinor || line.discountMinor !== 0 || line.taxCategoryCode !== price.taxCategoryCode || line.requiresShipping
       || (line.sourceType !== undefined && (line.sourceType !== "booking" || line.sourceId !== booking.id))
       || (line.sourceType === undefined && line.sourceId !== undefined)
       || merchantTaxDigest(bookingTaxDestination.parse(scope.taxDestination)) !== merchantTaxDigest(bookingTaxDestination.parse(input.destination))) throw new ServiceError("conflict", "The invoice differs from the original booking's accepted money or declared tax destination.");
-    return [{ sellerUserId: scope.sellerUserId, profileId: scope.taxProfileId, profileVersion: scope.taxProfileVersion, linePositions: [0], shippingMinor: 0, expectedQuoteDigest: digest.parse(scope.quoteDigest) }];
+    return [{ sellerUserId: scope.sellerUserId, profileId: scope.taxProfileId, profileVersion: scope.taxProfileVersion, linePositions: [0], shippingMinor: 0, expectedQuoteDigest: digest.parse(scope.quoteDigest), occurredAt: scope.taxOccurredAt! }];
   },
 });
 registerMerchantTaxSourceResolver("booking", (input, ctx) => ctx.callAsSystem(resolveBookingMerchantTaxSource, input));

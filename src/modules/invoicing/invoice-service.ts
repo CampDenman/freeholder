@@ -58,6 +58,8 @@ import { quoteTax } from "./tax-service";
 import {calculateInvoiceAmounts} from "./invoice-amounts";
 import {prepareMerchantInvoiceTax,freezeMerchantInvoiceTax} from "./merchant-tax-invoice";
 import {allowMerchantTaxWrites} from "./merchant-tax-store";
+import {captureMerchantPaymentRequest,assertMerchantPaymentTerminal} from "./merchant-payment-request";
+import {invoiceMerchantDependencyFingerprints,exportMerchantRecoveryHistory} from "./merchant-payment-dependencies";
 import { allocateSettledPayment } from "./payment-plan-ledger";
 
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
@@ -192,27 +194,28 @@ async function invoiceBundle(tx: Tx, id: string) {
 interface PointerRow {
   id: string;
   contactId: string;
+  fingerprint?: string;
 }
 
 function registerPointer(
   table: "invoices" | "tax_exemptions" | "payment_provider_customers" | "payment_methods",
-  selectRows: (tx: Tx, ids: string[]) => Promise<PointerRow[]>,
+  selectRows: (tx: Tx, ids: string[]) => Promise<PointerRow[] | null>,
   repointRows: (tx: Tx, from: string, to: string) => Promise<unknown>,
 ): void {
   registerContactReference({
     table,
     repoint: repointRows,
-    captureForUndo: async (tx, duplicateId, survivingId) => ({
-      state: await selectRows(tx, [duplicateId, survivingId]),
-      undoable: true,
-    }),
-    restoreAfterUndo: async (tx, beforeState, afterState, duplicateId) => {
-      const schema = z.array(z.object({ id: z.string().uuid(), contactId: z.string().uuid() }));
+    captureForUndo: async (tx, duplicateId, survivingId) => {
+      const state = await selectRows(tx, [duplicateId, survivingId]);
+      return { state: state ?? [], undoable: state !== null, ...(state === null ? { blocker: "Original invoice financial dependencies exceed the bounded undo limit." } : {}) };
+    },
+    restoreAfterUndo: async (tx, beforeState, afterState, duplicateId, survivingId) => {
+      const schema = z.array(z.object({ id: z.string().uuid(), contactId: z.string().uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional() }));
       const before = schema.parse(beforeState);
       const after = schema.parse(afterState);
-      const current = after.length ? await selectRows(tx, [...new Set(after.map((row) => row.contactId))]) : [];
-      const currentById = new Map(current.map((row) => [row.id, row.contactId]));
-      if (current.length !== after.length || after.some((row) => currentById.get(row.id) !== row.contactId)) {
+      const current = await selectRows(tx, [duplicateId, survivingId]);
+      const currentById = new Map(current?.map((row) => [row.id, row]) ?? []);
+      if (current === null || current.length !== after.length || after.some((row) => currentById.get(row.id)?.contactId !== row.contactId || currentById.get(row.id)?.fingerprint !== row.fingerprint)) {
         throw new ServiceError(
           "conflict",
           `A ${table.replaceAll("_", " ")} record changed after this merge. Leave the merge in place or restore that record first.`,
@@ -236,7 +239,12 @@ function registerPointer(
 
 registerPointer(
   "invoices",
-  (tx, ids) => tx.select({ id: invoices.id, contactId: invoices.contactId }).from(invoices).where(inArray(invoices.contactId, ids)),
+  async (tx, ids) => {
+    const rows = await tx.select({ id: invoices.id, contactId: invoices.contactId }).from(invoices).where(inArray(invoices.contactId, ids)).orderBy(asc(invoices.id)).limit(5001);
+    if (rows.length > 5000) return null;
+    const fingerprints = await invoiceMerchantDependencyFingerprints(tx, rows.map(row => row.id));
+    return fingerprints === null ? null : rows.map(row => ({ ...row, ...(fingerprints.has(row.id) ? { fingerprint: fingerprints.get(row.id)! } : {}) }));
+  },
   (tx, from, to) => tx.update(invoices).set({ contactId: to }).where(eq(invoices.contactId, from)),
 );
 registerPointer(
@@ -286,12 +294,13 @@ registerSearchSource({
 
 registerContactPrivacySource({
   scope: "commerce.money",
-  tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods"],
+  tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods", "merchant_payment_requests", "merchant_payment_dispatches", "merchant_payment_creation_refusals", "merchant_payment_retirement_acks", "merchant_payment_terminal_receipts", "merchant_payment_observations", "merchant_fee_refunds", "merchant_fee_observations"],
   exportData: async (tx, contactId) => {
     const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId));
     const ids = owned.map((row) => row.id);
     return {
       invoices: await Promise.all(ids.map((id) => invoiceBundle(tx, id))),
+      merchantRecovery: await exportMerchantRecoveryHistory(tx, ids),
       taxExemptions: await tx.select().from(taxExemptions).where(eq(taxExemptions.contactId, contactId)),
       paymentProviderCustomers: await tx.select().from(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, contactId)),
       paymentMethods: await tx.select().from(paymentMethods).where(eq(paymentMethods.contactId, contactId)),
@@ -962,6 +971,7 @@ export const createPayment = defineService({
         applicationFeeMinor: routing.applicationFeeMinor, providerApiVersion: input.method === "provider_schedule" ? routing.providerApiVersion as "2026-10-28.endive" : null, originKind: input.method === "provider_schedule" ? "provider_schedule" : "attempt",
         providerSubscriptionRef: routing.providerSubscriptionRef, providerInvoiceRef: routing.providerInvoiceRef, providerPaymentIntentRef: routing.providerPaymentIntentRef, providerChargeRef: routing.providerChargeRef, originalChargeReceiptId: routing.originalChargeReceiptId });
     } else if (routing.providerAccountId) await ctx.tx.insert(paymentMerchantRoutes).values({ paymentId: created!.id, providerAccountId: routing.providerAccountId, applicationFeeMinor: routing.applicationFeeMinor });
+    await captureMerchantPaymentRequest(ctx, created!, invoice, routing);
     await stateEvent(ctx, "payment", created!.id, null, "created");
     ctx.queueEvent("payment.created", { paymentId: created!.id, invoiceId: invoice.id, contactId: invoice.contactId });
     ctx.setSubject("payment", created!.id);
@@ -1021,6 +1031,7 @@ export const failPayment = defineService({
     if (!inArrayValue(payment.status, ["created", "processing"])) {
       throw new ServiceError("conflict", "A terminal payment cannot fail again.");
     }
+    await assertMerchantPaymentTerminal(ctx, payment.id);
     const [updated] = await ctx.tx.update(payments).set({ status: "failed", failureCode: input.code, failureMessage: input.message, failedAt: new Date() }).where(eq(payments.id, payment.id)).returning();
     await stateEvent(ctx, "payment", payment.id, payment.status, "failed", input.code);
     ctx.queueEvent("payment.failed", { paymentId: payment.id, invoiceId: payment.invoiceId, code: input.code });
@@ -1044,7 +1055,8 @@ export const cancelPayment = defineService({
     if (!inArrayValue(payment.status, ["created", "processing"])) {
       throw new ServiceError("conflict", "A terminal payment cannot be cancelled.");
     }
-    if (payment.method === "hosted_checkout") {
+    const merchantTerminal = await assertMerchantPaymentTerminal(ctx, payment.id);
+    if (payment.method === "hosted_checkout" && !merchantTerminal) {
       throw new ServiceError("conflict", "A hosted checkout must be reconciled with its provider before its payment can be closed.");
     }
     const [updated] = await ctx.tx

@@ -196,3 +196,55 @@ in checkout URLs. Six focused no-database files passed 106 controls and full
 TypeScript plus focused lint passed. The prepared-buyer private quote phase
 is the next composition step for scoped checkout callers; assembled80 native,
 SDK and browser qualification remain open.
+
+## Original request and unknown-checkout source checkpoint
+
+Each new hosted/saved-method request retains its original opaque provider
+invoice/contact references before I/O. The current invoice-to-contact pointer
+remains the authority for permissions, erasure and merge. Physical checkout
+creation admits a durable dispatch with the full original argument digest and
+the original key. Changed parameters cannot replay it. A later refused call
+does not clear an earlier unknown call: ordinary failure/cancellation requires
+either proved no dispatch, explicit definitive refusals for every admitted
+creation call, or the exact provider resource's terminal zero-money receipt.
+Positive cash always prevents a no-charge conclusion.
+
+Original Checkout search never interprets an empty bounded listing as absence.
+Provider expiration/cancellation acknowledgements commit independently before
+subsequent reads. Negative terminal proof compares actual original invoice and
+contact metadata; contradictory positive money is still retained, unapplied.
+Two before controls on the earlier disabled80 adapter reproduced the missing
+negative metadata comparison. Its corrected complete HTTP suite passes 15
+controls, including positive-cash preservation. This is source qualification of
+the unpublished80 implementation, not an unchanged-main production defect.
+
+The protocol follows Stripe's current [Checkout expiration](https://docs.stripe.com/api/checkout/sessions/expire)
+and [PaymentIntent cancellation](https://docs.stripe.com/api/payment_intents/cancel)
+contracts. Expired Checkout prevents customer completion; direct cancellation
+of a Checkout-owned intent uses only the documented `requires_capture`
+exception. Processing or unidentified money stays unresolved. Provider account
+acceptance and every supported partial/unknown resolution still need actual
+qualification; no financial model has been enabled.
+
+The owner review exposes original accounts, retained money, commission facts,
+physical dispatches and cancellation evidence. A recovered original checkout
+link uses a five-minute authenticated browser witness bound to its payment and
+owner. The four locale catalogs contain its action and outcome copy. Shared
+invoice/contact merge receipts include bounded fingerprints of new payment
+requests, dispatches, cash, fees, refunds and disputes; unchanged legacy
+invoice history retains its existing receipt shape. Financial privacy export
+includes this original recovery history without reassigning its opaque
+provider contact reference. Native merge/erasure/hold, all method recovery,
+per-allocation settlement and actual owner/buyer browser qualification remain
+required before source activation.
+
+At this source freeze, full TypeScript and focused lint pass; nine no-database
+files pass 131 controls. These include the authenticated owner-link, private
+service/audit, locale, original recovery, booking consent and tax contracts.
+The common subscription application reader proves one exact original receipt
+has a succeeded payment, verified customer cash, immutable route and canonical
+invoice/tax lines; other unapplied invoice cash returns pending. New original
+receipt IDs have unique payment bindings. No schema80 SQL or native recovery
+case has been applied yet. Saved-method dispatch/recovery, full per-party
+settlement and composed lifecycle/source/browser acceptance are still active
+completion work, not new stable deferrals.
