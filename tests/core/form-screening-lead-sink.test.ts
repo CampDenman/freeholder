@@ -542,6 +542,44 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     expect(JSON.stringify(calls[0]!.body)).not.toContain("synthetic-private-link");
     expect((await db().select().from(formLeadCopies).where(eq(formLeadCopies.id, copy!.id)))[0]!.attempts[0]!.observed).toBe("copied");
   });
+  it("preserves the original provider binding across configured wrapping-key rotation", async () => {
+    const payload = await acceptedCopy();
+    const [original] = await db().select().from(formLeadCopies);
+    const key = process.env.CREDENTIAL_KEY, previous = process.env.CREDENTIAL_KEY_PREVIOUS;
+    expect(key).toBeTruthy();
+    try {
+      process.env.CREDENTIAL_KEY = "1122334455667788".repeat(4);
+      process.env.CREDENTIAL_KEY_PREVIOUS = key;
+      resetEnvForTests();
+      reply = () => new Response('{"accepted":true,"id":"fictional-original-after-rotation"}', { status: 201 });
+      await copySubmissionToLeadSink(payload);
+      expect(calls).toHaveLength(1);
+      const [after] = await db().select().from(formLeadCopies);
+      expect(after?.state).toBe("copied"); expect(after?.resourceDigest).toBe(original!.resourceDigest);
+    } finally {
+      if (key === undefined) delete process.env.CREDENTIAL_KEY; else process.env.CREDENTIAL_KEY = key;
+      if (previous === undefined) delete process.env.CREDENTIAL_KEY_PREVIOUS; else process.env.CREDENTIAL_KEY_PREVIOUS = previous;
+      resetEnvForTests();
+    }
+  });
+  it("refuses a replacement provider key even when the original wrapping key is retained", async () => {
+    const payload = await acceptedCopy();
+    const key = process.env.CREDENTIAL_KEY, previous = process.env.CREDENTIAL_KEY_PREVIOUS;
+    expect(key).toBeTruthy();
+    try {
+      process.env.CREDENTIAL_KEY = "1122334455667788".repeat(4);
+      process.env.CREDENTIAL_KEY_PREVIOUS = key;
+      process.env.PARADISEMODERN_API_KEY = "fictional-replacement-provider-key";
+      resetEnvForTests();
+      await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("original");
+      expect(calls).toHaveLength(0);
+      expect((await db().select().from(formLeadCopies))[0]?.attempts).toEqual([]);
+    } finally {
+      if (key === undefined) delete process.env.CREDENTIAL_KEY; else process.env.CREDENTIAL_KEY = key;
+      if (previous === undefined) delete process.env.CREDENTIAL_KEY_PREVIOUS; else process.env.CREDENTIAL_KEY_PREVIOUS = previous;
+      resetEnvForTests();
+    }
+  });
   it("keeps invalid accepted replies unknown and never replays them", async () => {
     const payload = await acceptedCopy(); reply = () => new Response('{"accepted":false,"id":79}', { status: 200 });
     await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("unknown");

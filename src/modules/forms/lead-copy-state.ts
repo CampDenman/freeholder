@@ -14,7 +14,7 @@ import { mailReceipts, type MailReceipts } from "@/core/mail/receipts";
 import { decryptMailOutbox, encryptMailOutbox } from "@/core/mail/outbox-crypto";
 import { ServiceError, type Tx } from "@/core/service";
 import { leadCopy } from "./lead-sink";
-import { leadCredentialFingerprint, type LeadNotice } from "./lead-notice";
+import { leadCredentialFingerprints, type LeadNotice } from "./lead-notice";
 import { formLeadCopies, formSubmissions, type LeadCopyAttempt } from "./schema";
 import type { FormField } from "./fields";
 export async function leadCopyReceipts(tx: Tx) {
@@ -59,7 +59,8 @@ export async function claimLeadCopy(copyId: string, site: ParadiseSite) {
     const [copy] = await tx.select().from(formLeadCopies).where(eq(formLeadCopies.id, copyId)).for("update");
     if (!copy) throw new ServiceError("conflict", "The original lead-copy witness is missing.");
     if (copy.state === "cancelled" || (["copied", "not_copied"].includes(copy.state) && copy.admittedAttempt <= copy.attempts.length)) return null;
-    if (copy.kind !== "site_notice" || copy.retiredAt || !copy.encryptedRequest || !copy.submissionId || !site.apiKey || copy.originalBaseUrl !== site.baseUrl || copy.resourceDigest !== receipts.digest("provider:lead-resource", JSON.stringify([site.baseUrl, leadCredentialFingerprint(site.baseUrl, site.apiKey)]))) throw new ServiceError("conflict", "Restore the evidenced original lead account; today's replacement or a legacy destination cannot be used.");
+    if (copy.kind !== "site_notice" || copy.retiredAt || !copy.encryptedRequest || !copy.submissionId || !site.apiKey || copy.originalBaseUrl !== site.baseUrl
+      || !leadCredentialFingerprints(site.baseUrl, site.apiKey).some(fingerprint => copy.resourceDigest === receipts.digest("provider:lead-resource", JSON.stringify([site.baseUrl, fingerprint])))) throw new ServiceError("conflict", "Restore the evidenced original lead account; today's replacement or a legacy destination cannot be used.");
     const [parent] = await tx.select({ id: formSubmissions.id, status: formSubmissions.status }).from(formSubmissions).where(eq(formSubmissions.id, copy.submissionId)).for("update");
     if (!parent || copy.attempts.some(attempt => effectiveLeadAttempt(attempt) !== "not_copied") || copy.admittedAttempt !== copy.attempts.length + 1 || copy.admittedAttempt > 20) throw new ServiceError("conflict", "The original lead-copy outcome needs provider and stopped-caller review before another request.");
     if (parent.status !== "received") { await tx.update(formLeadCopies).set({ state: "cancelled", updatedAt: new Date() }).where(eq(formLeadCopies.id, copy.id)); return null; }
