@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Bounded per-kind retention policies (C11.14). C11.14 is now checked; these
-// suites keep the retention guarantees honest.
+// Bounded per-kind retention policies (C11.14). The lifecycle re-audit is
+// open; these suites retain every existing retention guarantee.
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, is, sql } from "drizzle-orm";
@@ -35,9 +35,10 @@ import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
 describe("C11.14 retention leftovers", () => {
-  it("keeps C11.14 checked and names the closed restore worklist", () => {
+  it("keeps the demonstrated lifecycle re-audit open while retaining restore evidence", () => {
     const master = readFileSync("MASTER.md", "utf8");
-    expect(master).toMatch(/- \[x\] \*\*C11\.14\*\*/);
+    expect(master.match(/^- \[[ x]\] \*\*C11\.14\*\*/m)?.[0]).toBe("- [ ] **C11.14**");
+    expect(master).toContain("tests/core/forms-delete-recovery.test.ts");
     expect(master).toContain("retention.listPolicies");
     expect(master).toContain("core.applyRetention");
     const remaining = readFileSync("tests/core/record-participation.test.ts", "utf8");
