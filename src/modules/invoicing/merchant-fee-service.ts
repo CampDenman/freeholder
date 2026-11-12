@@ -98,8 +98,10 @@ export const applyMerchantFeeResult = defineService({
   handler: async ({ operationId, outcome, providerRef }, ctx) => {
     const [original] = await ctx.tx.select().from(merchantFeeRefunds).where(eq(merchantFeeRefunds.id, operationId)).for("update");
     if (!original) throw new ServiceError("not_found", "That original fee operation is not here.");
-    if (original.status === "accepted" || original.status === "refused") return original;
+    // A terminal result is idempotent for reconciliation, but cannot grant
+    // a paused caller fresh permission to perform its original POST.
     if (outcome === "dispatching" && original.status !== "reserved") throw new ServiceError("conflict", "Reconcile the original fee operation without dispatching it again.");
+    if (original.status === "accepted" || original.status === "refused") return original;
     if (outcome === "dispatching") {
       const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, original.paymentId));
       const target = payment ? await originalMerchantFeeTarget(ctx, payment, await routingForPayment(ctx, payment.id)) : null;

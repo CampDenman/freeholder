@@ -13819,6 +13819,20 @@ whatever is best for the people using the site.
   guard to old history or establish an actual production/provider upgrade.
   Remaining full fee/bank/partial/human/provider controls still require
   qualification. C12.38 is open.
+
+  Stale fee dispatch BEFORE 2026-11-12 (C5.19/C12.38): exact64347385 on
+  normal v9/SQL958 failed in 7.261s after two real caller promises drained.
+  One caller paused before dispatch; another completed the original operation.
+  A terminal return then bypassed the first caller's dispatch refusal. Under a
+  documented provider-key pruning model and Date-only simulated 25-hour advance,
+  the same original key created two distinct 100-cent resources. Independent
+  readback retained one accepted operation, both bound physical observations,
+  canonical target400 and the intact customer refund/credit1200. The populated
+  before database and eight original money-table hashes are preserved separately.
+  A minimal source correction checks dispatch eligibility before the terminal
+  idempotent return. No SQL or old money changes; source/native AFTER proof is
+  pending. C12.38 stays open. See
+  `deploy/merchant-fee-stale-dispatch-2026-11-12.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original
