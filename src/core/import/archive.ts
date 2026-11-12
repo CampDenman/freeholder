@@ -83,13 +83,15 @@ function regularEntry(entry: Entry): void {
 class SourceReader extends RandomAccessReader {
   private readBytes = 0;
   private reads = 0;
-  constructor(private readonly source: ArchiveSource, private readonly budget: { deadline: number }) { super(); }
+  constructor(private readonly source: ArchiveSource, private readonly budget: { deadline: number; maxReads?: number }) { super();
+    if (budget.maxReads !== undefined && (!Number.isSafeInteger(budget.maxReads) || budget.maxReads < 1 || budget.maxReads > 40_032)) throw new Error("The ZIP reader budget is invalid.");
+  }
   override _readStreamForRange(start: number, end: number): Readable {
     const source = this.source;
     const checked = async (from: number, to: number) => {
       if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to < from || to > source.bytes) throw new Error("The ZIP refers to bytes outside the uploaded file.");
       this.readBytes += to - from;
-      if (++this.reads > 20_000 || this.readBytes > source.bytes * 3 + 8 * 1024 * 1024 || Date.now() > this.budget.deadline) throw new Error("The ZIP exceeds its bounded read budget.");
+      if (++this.reads > (this.budget.maxReads ?? 20_000) || this.readBytes > source.bytes * 3 + 8 * 1024 * 1024 || Date.now() > this.budget.deadline) throw new Error("The ZIP exceeds its bounded read budget.");
       const bytes = await source.readRange(from, to);
       if (bytes.byteLength !== to - from) throw new Error("Part of the uploaded ZIP is missing or changed.");
       return Buffer.from(bytes);
@@ -269,3 +271,7 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
     return { contentVersion: preserveRootTarget ? 2 : 1, pages, assets: [...assetByUrl.values()], site: { url: base.href, hosts: [base.host.toLowerCase()], basePath: base.pathname.replace(/^\/+|\/+$/g, "") }, report: { entries: count, expandedBytes, ignored: entries.filter(({ path }) => !HTML.test(path) && !mediaPath(path)).slice(0, 100).map(({ path }) => path), unresolvedImages: [...unresolvedImages], root } };
   } finally { zip.close(); }
 }
+
+// C3.47: the durable directory adapter uses the same ZIP validation and CRC
+// reader as ordinary static imports; source paths never become filesystem paths.
+export { safePath as archiveEntryPath, regularEntry as assertArchiveEntry, SourceReader as ArchiveRangeReader, readEntry as readArchiveEntryBytes };

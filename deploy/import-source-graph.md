@@ -312,3 +312,36 @@ The first privacy-fix gate run caught only a test catch binding typed as any.
 After annotating it unknown, the complete gate rerun passed: full types, lint,
 license, notes, plan/F-matrix, playground and 384 contracts with 26 expected
 exclusions. The corrected protected head still needs its exact CI rerun.
+
+
+## Static ZIP original-directory foundation (source only)
+
+The isolated directory adapter retains real `archive-zip` file paths, physical
+local-frame ranges, sizes, CRC values and supported media kinds. It does not
+manufacture WordPress IDs, authors, taxonomies or menus. Its directory fingerprint
+binds normalized directory facts; it does not substitute for the original private
+range reader's manifest authorization and cryptographic chunk digests.
+
+Validation caps the complete directory at 10,000 entries and 16 MB of metadata,
+retains the existing 100 MB expansion limit, checks actual local header/name
+consistency, refuses overlapping frames and preserves literal encoded paths.
+Local frames and selected payloads are read in physical source order so a hostile
+central-directory ordering cannot repeatedly download private chunks. One payload
+phase selects at most 500 distinct files within the ordinary 20 MB body budget,
+with the existing single-media 25 MB allowance. No source body is copied into the
+directory facts. The ordinary small-ZIP path retains its prior read cap; only the
+new bounded 10,000-entry adapter has its own larger fixed metadata-read allowance.
+
+All 43 pure directory/ordinary-archive controls pass in 1.71 seconds, including
+real 501-file and 10,000-file ZIPs, the first excess entry, hostile paths/flags,
+CRC damage, invalid declared UTF-8, contradictory local names, raw frame order,
+original file reads and a real bounded 500-file payload phase. Lint and targeted
+changed-module/type tests pass using the same installed locked dependencies,
+without dependency installation or artifact copying. No database was used.
+
+This is an internal primitive, not a shipped resumable ZIP pipeline. The existing
+runtime still has its 500-page small-ZIP limit. Graph catalog/phase integration,
+privacy/ownership/recovery native proofs and owner browser acceptance remain
+required. Durable crawl response/frontier schema81 has not been written or
+journalled here; its actual 79/80 predecessors must exist before a contiguous
+qualification claim. C3.47 and stable readiness remain open.
