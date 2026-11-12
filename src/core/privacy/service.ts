@@ -150,6 +150,13 @@ export interface ContactPrivacySource {
   exportData: (tx: Tx, contactId: string) => Promise<unknown>;
   /** Protect held copies; context.requestId identifies the hold's originating request. */
   retain?: (tx: Tx, contactId: string, context: { requestId: string; exceptionId: string; service?: ServiceContext }) => Promise<void>;
+  /** Non-destructive original-membership capture when a documented hold is
+   * recorded, including before identity verification. Unlike retain, this
+   * must not disable credentials, retire data or perform provider I/O.
+   * isNew identifies the actual first insert; updates must not silently
+   * expand an originally empty source-generation snapshot.
+   */
+  captureRetention?: (tx: Tx, contactId: string, context: { requestId: string; exceptionId: string; isNew: boolean; service: ServiceContext }) => Promise<void>;
   erase: (
     tx: Tx,
     contactId: string,
@@ -952,6 +959,11 @@ export const addRetentionException = defineService({
     if (!privacySourceRegistry.some((source) => source.scope === input.scope)) {
       throw new ServiceError("validation", "Choose a registered personal-data scope.");
     }
+    // refusePendingErasure holds the shared identity and request locks, so
+    // concurrent hold changes cannot turn an update into an invented first
+    // snapshot. The unique request/scope index backs this exact lookup.
+    const [previous] = await ctx.tx.select({ id: privacyRetentionExceptions.id }).from(privacyRetentionExceptions)
+      .where(and(eq(privacyRetentionExceptions.dataRequestId, request.id), eq(privacyRetentionExceptions.scope, input.scope))).limit(1);
     const [exception] = await ctx.tx
       .insert(privacyRetentionExceptions)
       .values({
@@ -977,6 +989,11 @@ export const addRetentionException = defineService({
         },
       })
       .returning();
+    const sources = privacySourceRegistry.filter(source => source.scope === input.scope || source.retentionScopes?.includes(input.scope))
+      .toSorted((a, b) => (a.eraseOrder ?? 100) - (b.eraseOrder ?? 100) || a.scope.localeCompare(b.scope));
+    for (const source of sources) {
+      await source.captureRetention?.(ctx.tx, request.contactId, { requestId: request.id, exceptionId: exception!.id, isNew: !previous, service: ctx });
+    }
     ctx.setSubject("retentionException", exception!.id);
     return exception!;
   },
