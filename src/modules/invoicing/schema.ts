@@ -420,37 +420,9 @@ export const invoiceMerchantAllocationLines = pgTable("invoice_merchant_allocati
 /** C12.38: original portions of ONE invoice, including its site's own lines.
  * Account/business identity remains on the original parent market policy;
  * these private financial facts never copy a member's personal profile. */
-export const invoiceMerchantAllocations = pgTable("invoice_merchant_allocations", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  invoiceId: uuid("invoice_id").notNull().references(() => invoiceMarketPolicies.invoiceId, { onDelete: "restrict" }),
-  sellerKey: text("seller_key").notNull(),
-  sellerUserId: uuid("seller_user_id"),
-  merchantContactId: uuid("merchant_contact_id").references(() => contacts.id, { onDelete: "restrict" }),
-  subtotalMinor: amount("subtotal_minor"),
-  discountMinor: amount("discount_minor"),
-  shippingMinor: amount("shipping_minor"),
-  taxMinor: amount("tax_minor"),
-  totalMinor: amount("total_minor"),
-  revenueMinor: amount("revenue_minor"),
-  feeMinor: amount("fee_minor"),
-  createdAt: createdAtColumn(),
-}, (t) => [
-  uniqueIndex("invoice_merchant_allocations_seller_idx").on(t.invoiceId, t.sellerKey),
-  index("invoice_merchant_allocations_contact_idx").on(t.merchantContactId),
-  check("invoice_merchant_allocations_owner", sql`(${t.sellerUserId} is null and ${t.sellerKey} = 'site' and ${t.merchantContactId} is null and ${t.feeMinor} = 0) or (${t.sellerUserId} is not null and ${t.sellerKey} = 'seller:' || ${t.sellerUserId}::text)`),
-  check("invoice_merchant_allocations_amounts", sql`${t.subtotalMinor} >= 0 and ${t.discountMinor} between 0 and ${t.subtotalMinor} and ${t.shippingMinor} >= 0 and ${t.taxMinor} >= 0 and ${t.revenueMinor} = ${t.subtotalMinor} - ${t.discountMinor} and ${t.totalMinor} = ${t.revenueMinor} + ${t.shippingMinor} + ${t.taxMinor} and ${t.feeMinor} between 0 and ${t.revenueMinor}`),
-]);
 
-export const invoiceMerchantAllocationLines = pgTable("invoice_merchant_allocation_lines", {
-  invoiceLineId: uuid("invoice_line_id").primaryKey().references(() => invoiceLines.id, { onDelete: "restrict" }),
-  allocationId: uuid("allocation_id").notNull().references(() => invoiceMerchantAllocations.id, { onDelete: "restrict" }),
-  requiresShipping: boolean("requires_shipping").notNull(),
-  revenueMinor: amount("revenue_minor"),
-  feeMinor: amount("fee_minor"),
-}, (t) => [
-  index("invoice_merchant_allocation_lines_allocation_idx").on(t.allocationId),
-  check("invoice_merchant_allocation_lines_amounts", sql`${t.revenueMinor} >= 0 and ${t.feeMinor} between 0 and ${t.revenueMinor}`),
-]);
+
+
 
 export const payments = pgTable(
   "payments",
