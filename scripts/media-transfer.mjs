@@ -90,8 +90,15 @@ export function createS3Store(environment, prefix, { allowInsecureHttp = false, 
 }
 
 export async function createReplitStore(environment, prefix) {
+  // The Google client gives this ambient override precedence even over an
+  // explicit API endpoint. It must not redirect an original-resource restore.
+  const requireOriginalEndpoint = () => {
+    if (environment.STORAGE_EMULATOR_HOST || process.env.STORAGE_EMULATOR_HOST) throw new Error(`${prefix}: Replit transfers refuse STORAGE_EMULATOR_HOST. Restore the original provider configuration.`);
+  };
+  requireOriginalEndpoint();
   const bucketId = required(environment, `${prefix}_REPLIT_BUCKET_ID`);
   const { Client } = await import("@replit/object-storage");
+  requireOriginalEndpoint();
   const client = new Client({ bucketId });
   let writableBucket;
   const destination = () => (writableBucket ??= (async () => {
@@ -101,6 +108,7 @@ export async function createReplitStore(environment, prefix) {
     // API rather than an overwrite-capable wrapper. No ambient credentials
     // or default bucket may replace this explicit original resource.
     const { Storage } = await import("@google-cloud/storage");
+    requireOriginalEndpoint();
     const google = new Storage({ projectId: "", credentials: {
       audience: "replit", subject_token_type: "access_token", type: "external_account",
       token_url: "http://127.0.0.1:1106/token", universe_domain: "googleapis.com",
@@ -120,7 +128,10 @@ export async function createReplitStore(environment, prefix) {
     },
     async put(key, bytes, contentType) {
       try {
-        await (await destination()).file(key).save(Buffer.from(bytes), { preconditionOpts: { ifGenerationMatch: 0 }, metadata: { contentType } });
+        // The SDK's checksum-error cleanup deletes by name without a
+        // generation constraint. Never give it that authority: our caller
+        // verifies the complete original and target SHA-256 independently.
+        await (await destination()).file(key).save(Buffer.from(bytes), { validation: false, preconditionOpts: { ifGenerationMatch: 0 }, metadata: { contentType } });
       } catch (error) {
         const code = error && typeof error === "object" && "code" in error ? error.code : "unclassified";
         throw new Error(`${prefix}: create-only PUT ${key} failed (${code}).`);

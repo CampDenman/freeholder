@@ -19,7 +19,13 @@ const source = { async get() { return original; }, async put() { throw new Error
 
 describe("media transfer concurrent target ownership (C11.08)", () => {
   beforeEach(() => { provider.read.mockReset(); provider.upload.mockReset(); provider.save.mockReset(); });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+  it("refuses an ambient emulator before resolving the original Replit resource", async () => {
+    vi.stubEnv("STORAGE_EMULATOR_HOST", "http://synthetic-unintended.invalid");
+    await expect(createReplitStore({ TARGET_REPLIT_BUCKET_ID: "original-private-target" }, "TARGET")).rejects.toThrow(/STORAGE_EMULATOR_HOST/);
+    expect(provider.read).not.toHaveBeenCalled();
+    expect(provider.save).not.toHaveBeenCalled();
+  });
   it("preserves an S3 target created after its absence check", async () => {
     let actual: Uint8Array | undefined;
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -86,5 +92,28 @@ describe("media transfer concurrent target ownership (C11.08)", () => {
       TARGET_S3_ACCESS_KEY_ID: "SYNTHETIC_KEY", TARGET_S3_SECRET_ACCESS_KEY: "synthetic-fixture-only-secret" }, "TARGET");
     await expect(copyManifestObjects({ manifest, source, target })).resolves.toMatchObject({ objects: 1, skipped: 0 });
     expect(actual).toEqual(original);
+  });
+  it("preserves a newer Replit target when the upload's checksum response is missing", async () => {
+    let actual: Uint8Array | undefined, destructiveCleanup = 0;
+    provider.read.mockImplementation(async () => actual
+      ? { ok: true, value: [Buffer.from(actual)] }
+      : { ok: false, error: { statusCode: 404, message: "Synthetic absent target" } });
+    provider.save.mockImplementation(async (bytes: Buffer, options: { validation?: boolean }) => {
+      actual = new Uint8Array(bytes);
+      // A later authorized writer replaces the object while the first
+      // upload is processing its response. Google Storage7.22's installed
+      // _validateIntegrity calls an unconditioned delete on a missing CRC.
+      // The separate real-SDK probe confirms this provider-client behavior.
+      actual = different;
+      if (options.validation !== false) {
+        destructiveCleanup += 1;
+        actual = undefined;
+        throw Object.assign(new Error("Synthetic SDK checksum cleanup"), { code: "FILE_NO_UPLOAD" });
+      }
+    });
+    const target = await createReplitStore({ TARGET_REPLIT_BUCKET_ID: "original-private-target" }, "TARGET");
+    await expect(copyManifestObjects({ manifest, source, target })).rejects.toThrow();
+    expect(destructiveCleanup).toBe(0);
+    expect(actual).toEqual(different);
   });
 });

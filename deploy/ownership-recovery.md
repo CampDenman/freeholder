@@ -17,10 +17,23 @@ the official Google Storage SDK with `ifGenerationMatch: 0` and the same
 local credential broker used by the pinned Replit SDK; the original bucket ID
 remains explicit. No ambient Google credentials or replacement bucket are
 used. A concurrent winner or unsupported precondition stops the transfer;
-there is no overwrite fallback. On a later run, matching bytes skip normally
+an ambient `STORAGE_EMULATOR_HOST` is refused before either Replit client is
+initialized because it would override that provider endpoint. There is no
+overwrite fallback. On a later run, matching bytes skip normally
 and different bytes still refuse. Keep source writers quiescent for the
 database/object snapshot and complete real-provider acceptance before a
 final-candidate recovery sign-off.
+
+The Google SDK's automatic checksum-error deletion is disabled because that
+cleanup does not constrain the target generation. Freeholder still verifies
+the complete original and target SHA-256 itself. A checksum failure stops
+the transfer and preserves the target for inspection; it never authorizes a
+name-only delete that could remove a newer writer's object.
+
+Run `node scripts/verify-storage-sdk-cleanup.mjs` to reproduce the installed
+SDK behavior and check the four safe-copy/failure outcomes. All transports
+in that rehearsal are in memory; it supplies SDK evidence, not live-provider
+or cross-target release acceptance.
 
 Provider contracts: [S3 conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html)
 and [Cloud Storage request preconditions](https://cloud.google.com/storage/docs/request-preconditions).

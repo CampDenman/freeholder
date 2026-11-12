@@ -11210,12 +11210,18 @@ schema they inherit reads as a designed thing rather than an excavation.
   Concurrent target admission repair 2026-11-11: two further synthetic
   provider controls reproduced an S3/Replit target created after its absence
   check being overwritten by the transfer. Provider-enforced create-only
-  preconditions now preserve that winner and stop the transfer. All 34
+  preconditions now preserve that winner and stop the transfer. All 36
   focused transfer and transport controls pass; real final-candidate cross-target/provider
   acceptance remains open. `tests/core/media-transfer-create-only.test.ts`;
   changeset `media-transfer-create-only.md`. The exact Google Storage SDK
   already used by the pinned Replit package is now a direct dependency so its
   supported conditional-upload API can be called without an unsafe wrapper.
+  Installed-SDK rehearsal additionally reproduced checksum-error cleanup
+  deleting a newer object by name; disabling that cleanup preserves the
+  winner while Freeholder's own complete SHA-256 verification still rejects
+  changed bytes. `scripts/verify-storage-sdk-cleanup.mjs` exercises four
+  in-memory SDK modes without provider requests. Ambient emulator endpoint
+  overrides are refused before Replit clients initialize.
   *(Partial 2026-09-12: `tests/browser/demo-scenarios.spec.ts` already proves
   role-guided demo load/reload/reset/purge. `tests/core/c11-08-install-update-journey.test.ts`
   loads that demo, runs WordPress REST parse → preview → commit (CMS draft
