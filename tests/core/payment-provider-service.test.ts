@@ -421,7 +421,7 @@ describe.runIf(hasDatabase)("payment provider services", () => {
       expect(createCheckout.mock.calls.map(([request]) => request.idempotencyKey)).toEqual(["owner-timeout-1", "owner-timeout-1"]);
     });
 
-    it("commits the refund reservation before the provider is called and converges a retry after a lost answer", async () => {
+    it("commits the refund admission before provider I/O and retains a lost answer without another POST", async () => {
       const { refund } = hostedStripe();
       const payment = await settledStripePayment("owner-refund");
       const input = { paymentId: payment.id, amountMinor: 4_000, reason: "Customer returned part of the order", idempotencyKey: "owner-refund-1" };
@@ -433,24 +433,25 @@ describe.runIf(hasDatabase)("payment provider services", () => {
       });
       await expect(submitProviderRefund.call(input, OWNER)).rejects.toThrow();
       expect(seen.open).toBe(0);
-      expect(seen.reserved).toMatchObject([{ status: "created", amountMinor: 4_000 }]);
+      expect(seen.reserved).toMatchObject([{ status: "processing", amountMinor: 4_000 }]);
       // The attempt survives the failure, still reserving its amount.
-      expect(await db().select().from(refunds)).toMatchObject([{ status: "created", idempotencyKey: "owner-refund-1" }]);
-
-      refund.mockResolvedValueOnce({ providerRef: "re_1", status: "succeeded" });
-      const settled = await submitProviderRefund.call(input, OWNER);
-      expect(settled).toMatchObject({ status: "succeeded", providerRef: "re_1" });
+      expect(await db().select().from(refunds)).toMatchObject([{ status: "processing", idempotencyKey: "owner-refund-1", providerRef: null }]);
+      await expect(submitProviderRefund.call(input, OWNER)).rejects.toMatchObject({ code: "conflict" });
       expect(await db().select().from(refunds)).toHaveLength(1);
-      expect(refund.mock.calls.map(([request]) => request.idempotencyKey)).toEqual(["owner-refund-1", "owner-refund-1"]);
-      expect((await getInvoice.call({ id: payment.invoiceId }, OWNER)).invoice.refundedMinor).toBe(4_000);
+      expect(refund.mock.calls.map(([request]) => request.idempotencyKey)).toEqual(["owner-refund-1"]);
+      expect((await getInvoice.call({ id: payment.invoiceId }, OWNER)).invoice.refundedMinor).toBe(0);
+      expect((await reconcilePaymentProviders.call({}, OWNER)).refundsNeedingReview).toMatchObject([{ status: "processing", amountMinor: 4_000 }]);
     });
 
-    it("records a definitive provider refusal and releases the refund reservation", async () => {
+    it("keeps a thrown provider error reserved until its original physical outcome is proven", async () => {
       const { refund } = hostedStripe();
       const payment = await settledStripePayment("owner-refused");
       refund.mockRejectedValueOnce(new AdapterError("payments", "stripe", "invalid_request", "Refund amount is invalid.", false, "amount_too_small"));
-      expect(await failure(submitProviderRefund.call({ paymentId: payment.id, amountMinor: 4_000, reason: "Refused by provider", idempotencyKey: "owner-refused-1" }, OWNER))).toMatchObject({ code: "validation" });
-      expect(await db().select().from(refunds)).toMatchObject([{ status: "failed", failureCode: "provider_refused" }]);
+      const input = { paymentId: payment.id, amountMinor: 4_000, reason: "Refused by provider", idempotencyKey: "owner-refused-1" };
+      expect(await failure(submitProviderRefund.call(input, OWNER))).toMatchObject({ code: "conflict" });
+      expect(await db().select().from(refunds)).toMatchObject([{ status: "processing", failureCode: null, providerRef: null }]);
+      await expect(submitProviderRefund.call(input, OWNER)).rejects.toMatchObject({ code: "conflict" });
+      expect(refund).toHaveBeenCalledTimes(1);
     });
 
     const sameKeyInFlight = () => new AdapterError("payments", "stripe", "invalid_request", "The payment provider refused the request (idempotency_error).", false, "idempotency_error");
@@ -469,7 +470,7 @@ describe.runIf(hasDatabase)("payment provider services", () => {
       refund.mockRejectedValueOnce(sameKeyInFlight());
       await expect(submitProviderRefund.call({ paymentId: payment.id, amountMinor: 4_000, reason: "Double-clicked refund", idempotencyKey: "owner-in-flight-refund" }, OWNER)).rejects.toThrow();
       // The first request may still refund the money: the amount stays reserved.
-      expect(await db().select().from(refunds)).toMatchObject([{ status: "created" }]);
+      expect(await db().select().from(refunds)).toMatchObject([{ status: "processing" }]);
 
       const { invoice } = await issuedInvoice("checkout-in-flight");
       createCheckout.mockRejectedValueOnce(sameKeyInFlight());
@@ -549,9 +550,10 @@ describe.runIf(hasDatabase)("payment provider services", () => {
       refund.mockRejectedValueOnce(new AdapterError("payments", "stripe", "invalid_request", "The payment provider refused the request (charge_already_refunded).", false, "charge_already_refunded"));
       await expect(submitProviderRefund.call({ paymentId: payment.id, amountMinor: 4_000, reason: "Refunded in the provider dashboard", idempotencyKey: "already-refunded-1" }, OWNER)).rejects.toThrow();
       const [recorded] = await db().select().from(refunds);
-      expect(recorded).toMatchObject({ status: "failed", failureCode: "provider_already_refunded" });
+      expect(recorded).toMatchObject({ status: "processing", failureCode: null, providerRef: null });
       const books = await reconcilePaymentProviders.call({}, OWNER);
-      expect(books.refundsNeedingReview).toMatchObject([{ id: recorded!.id, failureCode: "provider_already_refunded" }]);
+      expect(books.refundsNeedingReview).toMatchObject([{ id: recorded!.id, status: "processing" }]);
+      expect(refund).toHaveBeenCalledTimes(1);
     });
 
     it("elevates orchestrator phases only as the system and keeps who asked in the audit", async () => {

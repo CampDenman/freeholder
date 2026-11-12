@@ -7024,8 +7024,11 @@ owner operations, never substitute for them.
   signed/idempotent webhooks, saved methods, disputes and refunds.
   (Reopened 2026-11-12: actual main allowed cancellation during an accepted
   provider refund's delayed acknowledgement, sent a replacement request, and
-  left refunded money unapplied. The isolated journal repair and prepared,
-  pending, unknown and corruption acceptance remain in progress.) *(Evidence:
+  left refunded money unapplied. The isolated journal repair passes the
+  original caller control and 17 bounded prepared, pending, unknown, binding,
+  corruption and rotation controls. Adjacent regression qualification,
+  protected checks, historical terminal recovery and real-provider acceptance
+  remain open; see `deploy/legacy-refund-live-caller-2026-11-12.md`.) *(Evidence:
   one capability-discovered adapter contract for owner-attested offline money,
   Stripe Checkout and PayPal Orders v2; exact-minor-unit conversion across
   ISO zero/two/three/four-decimal currencies; authenticated raw-byte Stripe

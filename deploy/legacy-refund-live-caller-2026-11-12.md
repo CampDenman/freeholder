@@ -1,8 +1,8 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # C5.06 / C11.10: legacy refund caller investigation
 
-Product source is actual protected main commit
-`a2e503fe6fed3c6c8bbfc3249b5535f939ad6c24`. The product files are unchanged.
+The BEFORE product source was actual protected main commit
+`a2e503fe6fed3c6c8bbfc3249b5535f939ad6c24`, with unchanged product files.
 The isolated fixture uses actual invoice/payment/refund shared services and
 pauses only the synthetic provider edge. It attempts local cancellation and
 a new-key replacement while the first physical refund promise remains live,
@@ -16,7 +16,7 @@ never invents a provider that accepts two full refunds of one charge. The
 potential loss is the first true positive after local cancellation, alongside
 an unnecessary replacement request.
 
-The source seam is a hypothesis until this fixture reaches its assertions.
+The initial source hypothesis was qualified by the BEFORE result below.
 `submitProviderRefund` commits a created reservation before its provider
 await; `cancelRefund` permits created/processing reservations to be cancelled;
 new reservations exclude cancelled refunds; `settleRefund` rejects a later
@@ -91,9 +91,8 @@ The signed original scope contains financial IDs, money and digests, not a
 second copy of the buyer's contact or refund reason. Ordinary erasure clears
 personal invoice/payment/refund fields without deleting this journal.
 
-The repair and ten targeted native controls are source drafts awaiting their
-own exact type/lint/private/audit checks and native acceptance. No AFTER
-result or protected release is claimed here.
+The initial repair had ten drafted controls; its subsequent source and native
+qualification is recorded below. No protected release is claimed here.
 
 On source `4c369f9ef4c64d95725fd3bc0815a2ab7c0f5237`, explicit Node 22 full
 8GB type checking and final incremental type checking passed. Changed-file
@@ -112,8 +111,8 @@ exit was zero and final active database backends were `[]`.
 Evidence: `/tmp/freeholder-legacy-refund-c0-original-after.json`,
 `/tmp/freeholder-legacy-refund-c0-original-after.log`, and
 `/tmp/freeholder-legacy-refund-c0-original-after-ledger.json`.
-The ten broader controls, full protected checks and provider acceptance
-remain open. This is a coding-agent proof, not an independent human security
+At that checkpoint, the ten broader controls, full protected checks and provider
+acceptance remained open. This is a coding-agent proof, not an independent human security
 sign-off.
 
 A separate source refinement additionally pins the original parent payment
@@ -138,7 +137,7 @@ Evidence: `/tmp/freeholder-legacy-refund-c0-refined-original-after.json`,
 `/tmp/freeholder-legacy-refund-c0-refined-original-after.log`, and
 `/tmp/freeholder-legacy-refund-c0-refined-original-after-ledger.json`.
 The original 4c proof remains separate; neither result extends acceptance to
-the fourteen new fault controls, which are still pending.
+the fourteen new fault controls before their later runs below.
 
 A further isolated hardening binds the full immutable refund tuple into the
 server-created marker and checks the original input against the stored row
@@ -146,7 +145,7 @@ before dispatch. No reason or contact copy is included in that marker. Old
 candidate markers lacking these facts are not backfilled or converted. Two
 additional drafted controls alter an unsubmitted amount/currency and require
 zero provider POSTs plus retained review debt. The expanded sixteen controls
-and this hardening's source gates are pending; prior 4c/8dc proofs are not
+and this hardening's source gates were then pending; prior 4c/8dc proofs are not
 extended to the new source.
 
 The final unsubmitted guard accepts only the single authenticated creation
@@ -155,4 +154,47 @@ restore reset the row to created and lost its admission event. This does not
 change birth validation used to recover a completed result. One additional
 drafted control retains an actual positive observation and applied 1000 while
 refusing a second POST after that controlled restore fault. The seventeen
-controls and this final guard still await their own qualification.
+controls and this final guard were then frozen for the qualification below.
+
+## Frozen repair qualification
+
+Exact product/test source `878a6e4b64509cb35ff7ebb8a3072ce2ff6cc40e` passed
+Node 22 incremental types, focused lint and all 12 private/audit controls.
+Full Node 22 types also passed on its parent `6f4f5882`; the only later product
+change tightens unsubmitted authority to the single authenticated creation
+event. No schema or dependency changed. The original unchanged live-caller
+fixture passed again in 4.817 seconds, with one POST, one admitted/finished
+original success and 1000 CAD applied. Its actual read-only ledger and final
+active-backend check are retained in
+`/tmp/freeholder-legacy-refund-c0-birth-original-after-ledger.json`.
+
+All seventeen unique fault controls then passed in three disjoint bounded
+groups, with unchanged test deadlines, source and normal79 disposable schema:
+
+| Group | Passed | Actual boundaries |
+| --- | --- | --- |
+| 1 | 4 | Live/duplicate/human/forged-phase refusal; current prepared reservation; altered unsubmitted amount and currency |
+| 2 | 6 | Historical unmarked debt; transport/already-refunded/in-use throws; positive-before-projection replay; independent persistence failure and server-held retry |
+| 3 | 7 | Restored-created positive history; corrupt admission; altered parent amount/hash; previous-key verification-only; configured key rotation; authenticated terminal failure after a pending caller finished |
+
+Evidence is `/tmp/freeholder-legacy-refund-c0-group{1,2,3}.json`, corresponding
+`.log` files and `-ledger.json` snapshots. Each runner exited zero and each
+final active-backend query returned `[]`. Group 2 independently retained one
+original succeeded 1000 CAD refund and exactly one created/admitted/finished
+receipt before successful projection. Group 3 retained the original pending
+resource's signed terminal-failure fact before a new request returned 1000;
+the payment's refunded amount was exactly 1000. Skipped controls in one group
+are supplied by the other groups, not counted as additional passes.
+
+Existing hosted, Terminal and catalog-return assertions that expected a
+second POST after a lost answer are being aligned to the retained processing
+debt contract. Their exact adjacent native runs and the full pre-push gates
+remain required before the normal protected PR.
+
+Historical failed/cancelled rows may hide older accepted money; this repair
+does not invent negative evidence or reconcile that history automatically.
+Later bank failure/return and recipient/fee reconciliation remain separate
+unfinished capabilities. A process restart loses only the private completed
+answer cache and leaves durable unknown admission debt; full restart recovery
+still requires actual original-provider evidence. No real provider acceptance,
+deployment, independent security sign-off or stable release is supplied here.
