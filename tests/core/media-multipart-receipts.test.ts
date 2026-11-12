@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: preserve supported direct uploads in their original resource.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
+import {createHash} from "node:crypto";
 import {db} from "@/core/db";
 import {users} from "@/core/auth/schema";
 import {eq} from "drizzle-orm";
@@ -27,16 +28,18 @@ const ORIGINAL="https://original-multipart.example.test",REPLACEMENT="https://re
 const pdf=new Uint8Array(Buffer.from("%PDF-1.7\nSynthetic private multipart fixture.\n%%EOF\n"));
 describe.runIf(hasDatabase)("original multipart operation receipts (C1.12)",()=>{
  let calls:{method:string;url:URL}[];let assembled:boolean,aborted:boolean,created:boolean,lostCreate:boolean,headFailures:number,abortStaysOpen:boolean,lateCreate:boolean;
+ let completionGates:Array<()=>Promise<void>>;
  beforeAll(ready,60000);
  beforeEach(async()=>{
   await truncateSpine();await db().insert(users).values({id:OWNER.userId,email:"owner@example.test",role:"owner"});
   calls=[];assembled=false;aborted=false;created=false;lostCreate=false;headFailures=0;abortStaysOpen=false;lateCreate=false;
+  completionGates=[];
   for(const[name,value]of Object.entries({FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:ORIGINAL,S3_REGION:"test-1",S3_BUCKET:"media",S3_ACCESS_KEY_ID:"synthetic-only",S3_SECRET_ACCESS_KEY:"synthetic-only",S3_PUBLIC:"false",MALWARE_SCANNER:"none"}))vi.stubEnv(name,value);
   resetEnvForTests();resetStorageForTests();resetMalwareScannerForTests();
   vi.spyOn(globalThis,"fetch").mockImplementation(async(input,init)=>{
    const request=input instanceof Request?input:new Request(input,init),url=new URL(request.url);calls.push({method:request.method,url});
    if(request.method==="POST"&&url.searchParams.has("uploads")){created=!lateCreate;if(lostCreate)throw new Error("Synthetic CREATE reply lost after provider admission");return new Response("<InitiateMultipartUploadResult><UploadId>original-upload</UploadId></InitiateMultipartUploadResult>");}
-   if(request.method==="POST"&&url.searchParams.has("uploadId")){assembled=true;return new Response("<CompleteMultipartUploadResult><ETag>original-object</ETag></CompleteMultipartUploadResult>");}
+   if(request.method==="POST"&&url.searchParams.has("uploadId")){const gate=completionGates.shift();if(gate)await gate();if(assembled)return new Response("<Error><Code>NoSuchUpload</Code></Error>",{status:404});assembled=true;return new Response("<CompleteMultipartUploadResult><ETag>original-object</ETag></CompleteMultipartUploadResult>");}
    if(request.method==="DELETE"&&url.searchParams.has("uploadId")){aborted=!abortStaysOpen;return new Response(null,{status:204});}
    if(request.method==="DELETE"){assembled=false;return new Response(null,{status:204});}
    if(request.method==="GET"&&url.searchParams.has("uploads"))return new Response(`<ListMultipartUploadsResult>${created&&!aborted&&!assembled?`<Upload><Key>${url.searchParams.get("prefix")!}</Key><UploadId>original-upload</UploadId></Upload>`:""}<IsTruncated>false</IsTruncated></ListMultipartUploadsResult>`);
@@ -108,5 +111,22 @@ describe.runIf(hasDatabase)("original multipart operation receipts (C1.12)",()=>
   const unresolved=(await listMultipartOperations.call({},OWNER)).rows[0]!;await reconcileMultipartOperation.call({...review(unresolved),originalKey:original.key},OWNER);await eraseMultipartOperations(job!.data);
   expect((await db().select().from(dataRequests).where(eq(dataRequests.id,request.id)))[0]?.status).toBe("completed");expect((await db().select().from(mediaMultipartResources))[0]?.state).toBe("aborted");expect((await db().select().from(mediaMultipartResources))[0]?.contactId).toBeNull();
   expect(calls.filter(call=>call.method==="POST"&&call.url.searchParams.has("uploads"))).toHaveLength(1);expect(calls.filter(call=>call.method==="DELETE"&&call.url.searchParams.has("uploadId"))).toHaveLength(1);
+ });
+ it("preserves a refused peer COMPLETE separately from the original finalized object",async()=>{
+  const reservation=await begin();let releaseFirst!:()=>void,releaseSecond!:()=>void;
+  completionGates=[()=>new Promise<void>(resolve=>{releaseFirst=resolve;}),()=>new Promise<void>(resolve=>{releaseSecond=resolve;})];
+  const first=complete(reservation.id).then(result=>({result}),(_error:unknown)=>({failed:true}));let second:ReturnType<typeof first.then>|undefined;
+  try{
+   await vi.waitFor(()=>expect(releaseFirst).toBeTypeOf("function"),{timeout:5000});
+   const original=(await listMultipartOperations.call({},OWNER)).rows[0]!;await reconcileMultipartOperation.call(review(original,"not_applied"),OWNER);
+   second=complete(reservation.id,"new-part").then(result=>({result}),(_error:unknown)=>({failed:true}));await vi.waitFor(()=>expect(releaseSecond).toBeTypeOf("function"),{timeout:5000});
+   releaseFirst();const outcome=await first;expect(outcome).toMatchObject({result:{ok:true}});
+   const resource=(await db().select().from(mediaMultipartResources))[0]!;expect(resource.retiredAt).not.toBeNull();expect(resource.state).toBe("completed");expect(resource.providerUploadId).toBe("original-upload");
+   const journal=await db().select().from(mediaMultipartOperations);expect(journal.filter(row=>row.kind==="complete"&&row.state==="started")).toHaveLength(1);
+   releaseSecond();expect(await second).toMatchObject({failed:true});
+   const unresolved=(await listMultipartOperations.call({},OWNER)).rows.find(row=>row.operation?.kind==="complete")!;
+   await reconcileMultipartOperation.call({...review(unresolved,"not_applied"),sha256:createHash("sha256").update(pdf).digest("hex"),bytes:pdf.byteLength},OWNER);
+   const settled=(await db().select().from(mediaMultipartOperations)).filter(row=>row.kind==="complete");expect(settled.filter(row=>row.state==="accepted")).toHaveLength(1);expect(settled.filter(row=>row.state==="not_applied")).toHaveLength(1);
+  }finally{releaseFirst?.();releaseSecond?.();await Promise.allSettled([first,...(second?[second]:[])]);}
  });
 });

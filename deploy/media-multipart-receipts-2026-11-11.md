@@ -75,16 +75,32 @@ Capture followup preserves declared logical ownership beside physical receipts,
 binds stored reads/derivation to accepted original bytes, and retires only exact
 subject-owned capture and attached-asset pointers through shared erasure/purge
 composition. Social's two stored-adoption producers use the same PUT ledger.
-Both named media hold scopes propagate to the owning physical records. Focused
-capture, raster, social, published-asset erasure and hold controls are prepared
-for final native qualification; this paragraph does not claim they passed.
+Both named media hold scopes propagate to the owning physical records. The
+directly affected final 13 controls pass together in 98.72s across four files:
+capture 5, staged-raster 3, published-asset erasure plus both named hold scopes 3,
+and social accepted/failed adoption 2. Thirty unrelated cases were deliberately
+unselected. The known subject's bytes and metadata retire while an unrelated
+owner recording/library asset remain intact. Full fast gates also pass.
+
+One subsequent peer-COMPLETE control uses S3-conformant semantics: there is only
+one materialization, and the gated peer receives HTTP404 NoSuchUpload after the
+original call finalizes the resource. Original publication correctly succeeds;
+its resource ID, positive ACK and immutable parts remain unchanged. The first
+probe fails in 10.22s only because this in-progress recovery implementation
+could not reconcile the refused peer as not-applied while the original object's
+bytes existed. The bounded repair allows that decision only with no ACK on the
+peer, another positively acknowledged/verified COMPLETE on the same resource,
+and current full bytes matching its independent accepted receipt. The after
+control passes in 12.07s; final live SDK8 passes in 3.22s with no additional
+artifact drift. This is a compatibility defect in the unfinished repair, not an
+original-main publication failure or a second effect excluded by S3's contract.
 
 The temporary direct-abort refusal in root75 WIP was a compatibility regression
 in an unfinished repair. Original main72 cancellation worked; it is not counted
 as a preexisting launch defect.
 
-Further qualification remains for the final focused capture/shared-adoption
-increment, four-locale owner browser acceptance and contiguous upgrade.
+Further qualification remains for four-locale owner browser acceptance and
+contiguous upgrade on the final composed source.
 Breaking migration75 requires actual old direct
 writers to stop and drain. Readiness refusal cannot stop an already admitted
 network request. Cross-target adoption/source cleanup, live storage acceptance

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: fresh human evidence resolves each original multipart outcome.
 import {createHash,randomUUID} from "node:crypto";
-import {and,asc,eq,inArray,isNull} from "drizzle-orm";
+import {and,asc,eq,inArray,isNull,isNotNull,ne} from "drizzle-orm";
 import {z} from "zod";
 import {boundStorage} from "@/adapters/storage";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
@@ -73,7 +73,14 @@ const applyMultipartRecovery=defineService({
   human(ctx.actor);const{resource,operation,key}=await capture(ctx.tx,input);await allowMediaReceiptWrites(ctx.tx);
   if(input.action!=="verify_original"&&!operation)throw new ServiceError("validation","Choose the exact original physical call before recording its outcome.");
   if(input.action==="verify_original"&&operation)throw new ServiceError("validation","Record this physical call's outcome explicitly.");
-  if(input.action==="not_applied"&&(input.proof.state==="object"||(operation?.kind==="create"&&input.proof.state!=="absent")))throw new ServiceError("conflict","Current original-provider evidence does not establish that this operation was unapplied.");
+  if(input.action==="not_applied"&&input.proof.state==="object"){
+   // One COMPLETE closes this original provider upload. A later refused peer
+   // is a distinct physical call; the first call's object is not its ACK.
+   const original=resource.objectReceiptId?(await ctx.tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,resource.objectReceiptId)).limit(1))[0]:null;
+   const independent=operation?.kind==="complete"?await ctx.tx.select({id:mediaMultipartOperations.id}).from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,resource.id),ne(mediaMultipartOperations.id,operation.id),eq(mediaMultipartOperations.kind,"complete"),eq(mediaMultipartOperations.state,"accepted"),isNotNull(mediaMultipartOperations.providerAcceptedAt),isNotNull(mediaMultipartOperations.verifiedAt))).limit(1):[];
+   if(!independent.length||!original||original.state!=="accepted"||original.deletedAt||original.namespace!==input.originalNamespace||original.sha256!==input.proof.sha256||original.bytes!==input.proof.bytes)throw new ServiceError("conflict","Current original-provider evidence does not establish that this operation was unapplied.");
+  }
+  if(input.action==="not_applied"&&operation?.kind==="create"&&input.proof.state!=="absent")throw new ServiceError("conflict","Current original-provider evidence does not establish that this operation was unapplied.");
   if(input.action==="applied"&&operation?.kind==="complete"&&input.proof.state!=="object")throw new ServiceError("conflict","The original completed object must be verified before recording completion.");
   const now=new Date(),evidenceDigest=createHash("sha256").update(JSON.stringify({...input,actor:actorString(ctx.actor)})).digest("hex");
   let objectReceiptId=resource.objectReceiptId;
