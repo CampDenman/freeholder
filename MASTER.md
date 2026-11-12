@@ -13526,6 +13526,34 @@ whatever is best for the people using the site.
   account. Split from C12.26 on 2026-10-15. This follows Stripe's current
   [charge types](https://docs.stripe.com/connect/charges) and
   [refund/dispute documentation](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
+  Original fee-job runtime repair 2026-11-12: the first actual mixed-order
+  capture control reached payment completion and exposed an unregistered
+  invoicing.reconcileOriginalMerchantFee job on unreleased80 sourcee4500e3e.
+  The independently committed physical charge observation survives, while
+  the logical settlement transaction correctly rolls back. The invoicing
+  module now exports the real defined recovery job through its normal boot
+  loader. Actual native payment completion then settled both original
+  portions; the three earnings after-controls pass. This is development-source
+  evidence, not a claim about main or an actual provider account.
+  Original per-business earnings source increment 2026-11-12: new version1
+  order payments reconcile each original allocation, line commission and
+  provider namespace before recording seller earnings. Recipient, commission,
+  creator, refund or dispute debt keeps that seller in review; a second seller
+  cannot inherit another portion's paid state. Refund listeners reconcile
+  seller portions separately and never dispatch these already-collected
+  earnings again. Legacy direct references and settlement logic remain on
+  their original path. Actual native before qualification reproduced the
+  paid-invoice earnings refusal on the previous single-seller path. All three
+  after-controls pass: direct and destination orders preserve each original
+  allocation's fees/reference, automatic earnings and replay; missing actual
+  settlement proof keeps only the affected portion in review. Final full
+  TypeScript, whole-tree lint, licensing, release notes, plan, F-matrix,
+  playground and all44 source-contract suites pass (384 controls,26 skips),
+  with the separate missing activity-label/playground decisions repaired.
+  The fee-job and replay
+  fixture failures remain recorded in
+  `deploy/merchant-earnings-source-2026-11-12.md`.
+  This increment does not close C12.38 or supply actual provider acceptance.
   New subscription provider-origin source work verifies the authenticated
   original subscription/invoice/PaymentIntent relation on its explicit charge
   namespace, without inventing an order payment-attempt identifier. Nineteen

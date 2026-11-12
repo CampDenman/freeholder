@@ -169,7 +169,10 @@ leaves customer certificates to their own commerce.money privacy source; the
 erased profile already refuses future tax quotes. The original certificate
 assertion remains and the after-control also checks the complete held row and
 that the buyer's own actual erasure minimizes it after hold release. Types
-and focused lint pass; the after-control is pending. Before report:
+and focused lint pass. The unchanged native certificate assertion then passed
+on actual3359e1d0/schema-v4 in5.12s, including preservation of the entire held
+buyer row, actual buyer hold release and that buyer's own subsequent erasure.
+After report: /tmp/freeholder-tax80-held-buyer-certificate-after.json. Before report:
 /tmp/freeholder-tax80-held-buyer-certificate-before.json. This is unreleased80
 source qualification, not an unchanged-main/production incident or independent
 security sign-off.

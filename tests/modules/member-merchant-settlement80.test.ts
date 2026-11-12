@@ -46,7 +46,7 @@ describe.runIf(hasDatabase)("original per-business merchant earnings80",{timeout
  }
  it.each(["direct","destination"] as const)("records both sellers from their original %s portions without dispatching another payout",async kind=>{
   const {invoiceId,orderId}=await paid(kind);
-  expect(await recordPayouts.call({orderId},SYSTEM)).toEqual({recorded:2});
+  // The actual paid event records these earnings; explicit replay adds none.
   expect(await recordPayouts.call({orderId},SYSTEM)).toEqual({recorded:0});
   const allocations=await db().select().from(invoiceMerchantAllocations).where(eq(invoiceMerchantAllocations.invoiceId,invoiceId));
   const rows=await db().select().from(memberPayouts);
@@ -63,7 +63,7 @@ describe.runIf(hasDatabase)("original per-business merchant earnings80",{timeout
  });
  it("keeps an original portion in review until its actual settlement evidence is verified",async()=>{
   const {invoiceId,orderId}=await paid("destination",true);
-  expect(await recordPayouts.call({orderId},SYSTEM)).toEqual({recorded:2});
+  expect(await recordPayouts.call({orderId},SYSTEM)).toEqual({recorded:0});
   const rows=await db().select().from(memberPayouts);
   expect(rows.map(value=>value.state).sort()).toEqual(["paid","review"]);
   expect((await getInvoice.call({id:invoiceId},OWNER)).invoice.paidMinor).toBe(5250);

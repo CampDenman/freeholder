@@ -201,12 +201,24 @@ export const recordPayouts = defineService({
     });
     const frozen = order.invoiceId ? await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: order.invoiceId }) : null;
     const rules = frozen ?? await marketRules(ctx);
-    const settled = rules.model === "seller_merchant" && order.invoiceId && frozen?.sellerUserId ? await ctx.callAsSystem(merchantSettlement,{invoiceId:order.invoiceId,sellerUserId:frozen.sellerUserId}) : null;
-    if(rules.model === "seller_merchant" && (!settled || order.lines.some(line=>line.sellerUserId!==frozen?.sellerUserId))) throw new ServiceError("conflict","The original seller payment needs reconciliation.");
+    const settlements = new Map<string, Awaited<ReturnType<typeof merchantSettlement.call>>>();
+    if (rules.model === "seller_merchant") {
+      for (const sellerUserId of new Set(originalLines.map(line=>line.sellerUserId))) {
+        settlements.set(sellerUserId,await ctx.callAsSystem(merchantSettlement,{invoiceId:order.invoiceId,sellerUserId}));
+      }
+    }
     let fees=originalLines.map(line=>marketFeeMinor(line.revenueMinor,rules.siteFeeBps));
+    if (frozen?.collectionVersion === 1 && rules.model === "seller_merchant") {
+      fees = originalLines.map(line=>{
+        const original=settlements.get(line.sellerUserId)?.lineFees?.find(fee=>fee.invoiceLineId===line.invoiceLineId);
+        if(!original || original.revenueMinor!==line.revenueMinor)throw new ServiceError("conflict","Reconcile this seller's original invoice earnings before recording its payout.");
+        return original.feeMinor;
+      });
+    }
     if(frozen && fees.reduce((sum,fee)=>sum+fee,0)!==frozen.feeMinor){
-      // Older invoices froze commission against pre-discount catalog totals.
-      // Preserve that exact known fee; never reprice an issued provider charge.
+      // Pre-allocation invoices may have frozen commission against their gross
+      // catalog amount. New allocations always retain their exact line fees.
+      if(frozen.collectionVersion===1)throw new ServiceError("conflict","Reconcile the original seller fee allocation before recording earnings.");
       const legacy=originalLines.map(line=>marketFeeMinor(line.originalMinor,rules.siteFeeBps));
       if(legacy.reduce((sum,fee)=>sum+fee,0)!==frozen.feeMinor)throw new ServiceError("conflict","Reconcile the original seller fee allocation before recording earnings.");
       fees=legacy;
@@ -214,6 +226,7 @@ export const recordPayouts = defineService({
     let recorded = 0;
     for (const [position,line] of originalLines.entries()) {
       if(recordedItems.has(line.orderItemId))continue;
+      const settled=settlements.get(line.sellerUserId);
       const fee=fees[position]!;
       if(fee>line.revenueMinor)throw new ServiceError("conflict","The original seller fee exceeds this line's invoice revenue. Reconcile its existing terms first.");
       const now = new Date();
@@ -267,10 +280,16 @@ export const reversePayouts = defineService({
     if (!orderId && !direct) return { changed: 0 };
     const source = orderId ? eq(memberPayouts.orderId, orderId) : eq(memberPayouts.invoiceId, input.invoiceId);
     const policy = await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:input.invoiceId});
-    if(policy?.model === "seller_merchant" && policy.sellerUserId) {
-      const settled = await ctx.callAsSystem(merchantSettlement,{invoiceId:input.invoiceId,sellerUserId:policy.sellerUserId});
-      const changed = await ctx.tx.update(memberPayouts).set({state:settled.state,note:settled.state === "cancelled" ? "Original seller payment refunded in full." : "Review the original seller payment's refund or dispute."}).where(and(source,eq(memberPayouts.model,"seller_merchant"))).returning({id:memberPayouts.id});
-      return {changed:changed.length};
+    if(policy?.model === "seller_merchant") {
+      const sellers=await ctx.tx.selectDistinct({sellerId:memberPayouts.sellerId}).from(memberPayouts).where(and(source,eq(memberPayouts.model,"seller_merchant")));
+      let count=0;
+      for(const {sellerId} of sellers){
+        const settled=await ctx.callAsSystem(merchantSettlement,{invoiceId:input.invoiceId,sellerUserId:sellerId});
+        const changed=await ctx.tx.update(memberPayouts).set({state:settled.state,note:settled.state === "cancelled" ? "Original seller payment refunded in full." : settled.state === "review" ? "Review the original seller payment's refund or dispute." : null})
+          .where(and(source,eq(memberPayouts.model,"seller_merchant"),eq(memberPayouts.sellerId,sellerId))).returning({id:memberPayouts.id});
+        count+=changed.length;
+      }
+      return {changed:count};
     }
     const full = orderId ? totalMinor !== null && input.amountMinor >= totalMinor : input.amountMinor >= direct!.grossMinor;
     const open = await ctx.tx
