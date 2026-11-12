@@ -6064,7 +6064,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   body and durable recovery debt. Focused lint and 17 private/schema contracts
   pass; the targeted intact/corrupt native after pair passed in 10.53 seconds,
   preserving the corrupted original body/hash and pending source debt while
-  the intact receipt completed. The first previous
+  the intact receipt completed. Current full source gates pass: TypeScript,
+  full lint, license/release/plan/playground checks and all 384 static controls
+  (26 declared database-only cases skipped). The first aggregate found a
+  generated changelog ordering mismatch from source composition; the existing
+  generator corrected that one-line move and the full aggregate passed.
+  The first previous
   runtime fixture stopped before its form assertions because its transport
   readiness poll incorrectly required healthy jobs while jobs were disabled;
   the corrected fixture records raw health responses and requires a real local
