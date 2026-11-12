@@ -109,8 +109,8 @@ export async function bindOwnedReaderSources(tx: Tx, preview: Json, source: Read
       select requested.digest from jsonb_to_recordset(${JSON.stringify(checks.slice(offset, offset + BATCH))}::jsonb)
         requested(digest text,email text,candidate uuid)
       where exists(select 1 from import_reader_ownership_receipts prior
-          where prior.address_digest=requested.digest and prior.contact_id is not null
-            and (prior.state='erased' or prior.contact_id is distinct from requested.candidate))
+          where prior.address_digest=requested.digest
+            and (prior.state='erased' or (prior.contact_id is not null and prior.contact_id is distinct from requested.candidate)))
         or exists(select 1 from audit_log history join contacts person on person.id::text=history.subject_id
           where history.subject_type='contact' and history.action in ('contacts.create','contacts.resolve','contacts.update')
             and lower(history.diff->>'email')=requested.email and person.id is distinct from requested.candidate)
