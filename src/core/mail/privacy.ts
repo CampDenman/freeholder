@@ -113,7 +113,7 @@ registerRetentionSource({
       if (batch.length === 0) break;
       const minimized = await db().transaction(tx => minimizeCarrierGrants(tx, batch.map(row => row.id)));
       purged += minimized;
-      if (batch.length < RETENTION_PURGE_BATCH) break;
+      if (minimized === 0 || batch.length < RETENTION_PURGE_BATCH) break;
     }
     return purged;
   },

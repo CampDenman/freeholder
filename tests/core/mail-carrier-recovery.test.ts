@@ -11,8 +11,10 @@ import { resetEnvForTests } from "@/core/env";
 import { auditLog } from "@/core/events/schema";
 import { carrierResource } from "@/core/mail/carrier-operations";
 import { confirmCarrierWithdrawal, listCarrierGrantRecovery } from "@/core/mail/carrier-services";
-import { rememberProviderGrant, withdrawDetachedGrants } from "@/core/mail/permission";
+import { mirrorMarketingWithdrawal, rememberProviderGrant, withdrawDetachedGrants } from "@/core/mail/permission";
 import { mailProviderGrants } from "@/core/mail/schema";
+import { addRetentionException, createDataRequest } from "@/core/privacy/service";
+import { retentionSources } from "@/core/retention/registry";
 import { consentRecords } from "@/core/privacy/schema";
 import { ready } from "@/core/runtime";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
@@ -70,4 +72,54 @@ describe.runIf(hasDatabase)("carrier final-outcome review (C3.31)", () => {
     expect((await db().select().from(mailProviderGrants))[0]?.carrierOperations).toEqual(refused?.carrierOperations);
     expect(await withdrawDetachedGrants([original.id])).toEqual({ removed: 1, waiting: 0 }); expect(calls).toBe(1);
   });
+
+  it("rechecks a grant hold added after retention took its exemption snapshot", async () => {
+    const original = await grant();
+    const [consent] = await db().select().from(consentRecords).where(eq(consentRecords.id, original.consentRecordId!));
+    setParadiseFetchForTests(async () => new Response('{"success":true}', { status: 200 }));
+    await mirrorMarketingWithdrawal({ contactId: consent!.contactId, purpose: "marketing", channel: "email", state: "withdrawn" });
+    const cachedArgs = { cutoff: new Date(Date.now() + 60_000), exceptContactIds: [] };
+    const request = await createDataRequest.call({ contactId: consent!.contactId, request: { kind: "erasure" } }, HUMAN);
+    await addRetentionException.call({ dataRequestId: request.id, scope: "mail.provider_grants", reason: "legal_obligation", legalBasis: "Fictional named dispute requires this exact original grant to be preserved." }, HUMAN);
+    const source = retentionSources().find(item => item.kind === "mail_provider_grants")!;
+    expect(await source.purge(cachedArgs)).toBe(0);
+    expect((await db().select().from(mailProviderGrants))[0]?.email).toBe(original.email);
+  });
+  it("preserves a detached positive grant whose original holder cannot be proved outside a named hold", async () => {
+    const original = await grant();
+    const [consent] = await db().select().from(consentRecords).where(eq(consentRecords.id, original.consentRecordId!));
+    setParadiseFetchForTests(async () => new Response('{"success":true}', { status: 200 }));
+    await mirrorMarketingWithdrawal({ contactId: consent!.contactId, purpose: "marketing", channel: "email", state: "withdrawn" });
+    const request = await createDataRequest.call({ contactId: consent!.contactId, request: { kind: "erasure" } }, HUMAN);
+    await addRetentionException.call({ dataRequestId: request.id, scope: "mail.provider_grants", reason: "legal_obligation", legalBasis: "Fictional original grant remains covered by an independently documented named hold." }, HUMAN);
+    // A populated legacy orphan, not an inference from today's address owner.
+    await db().update(mailProviderGrants).set({ consentRecordId: null }).where(eq(mailProviderGrants.id, original.id));
+    expect(await withdrawDetachedGrants([original.id])).toEqual({ removed: 0, waiting: 1 });
+    expect((await db().select().from(mailProviderGrants))[0]?.email).toBe(original.email);
+  });
+
+  it("minimizes a known grant outside another person's current named hold", async () => {
+    const original = await grant();
+    const [consent] = await db().select().from(consentRecords).where(eq(consentRecords.id, original.consentRecordId!));
+    setParadiseFetchForTests(async () => new Response('{"success":true}', { status: 200 }));
+    await mirrorMarketingWithdrawal({ contactId: consent!.contactId, purpose: "marketing", channel: "email", state: "withdrawn" });
+    const [other] = await db().insert(contacts).values({ name: "Fictional unrelated held person", email: "other@example.test" }).returning();
+    const request = await createDataRequest.call({ contactId: other!.id, request: { kind: "erasure" } }, HUMAN);
+    await addRetentionException.call({ dataRequestId: request.id, scope: "mail.provider_grants", reason: "legal_obligation", legalBasis: "Fictional independent hold belongs only to this other original person." }, HUMAN);
+    const source = retentionSources().find(item => item.kind === "mail_provider_grants")!;
+    expect(await source.purge({ cutoff: new Date(Date.now() + 60_000), exceptContactIds: [] })).toBe(1);
+    expect((await db().select().from(mailProviderGrants))[0]?.email).toBe("");
+  });
+  it("honors an inherited privacy-record hold at the final address minimization", async () => {
+    const original = await grant();
+    const [consent] = await db().select().from(consentRecords).where(eq(consentRecords.id, original.consentRecordId!));
+    setParadiseFetchForTests(async () => new Response('{"success":true}', { status: 200 }));
+    await mirrorMarketingWithdrawal({ contactId: consent!.contactId, purpose: "marketing", channel: "email", state: "withdrawn" });
+    const request = await createDataRequest.call({ contactId: consent!.contactId, request: { kind: "erasure" } }, HUMAN);
+    await addRetentionException.call({ dataRequestId: request.id, scope: "privacy.records", reason: "legal_obligation", legalBasis: "Fictional consent evidence and every dependent original grant remain legally held." }, HUMAN);
+    const source = retentionSources().find(item => item.kind === "mail_provider_grants")!;
+    expect(await source.purge({ cutoff: new Date(Date.now() + 60_000), exceptContactIds: [] })).toBe(0);
+    expect((await db().select().from(mailProviderGrants))[0]?.email).toBe(original.email);
+  });
+
 });
