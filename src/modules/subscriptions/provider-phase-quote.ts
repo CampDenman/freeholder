@@ -33,9 +33,11 @@ async function proveOriginalPeriod(ctx:ServiceContext,parent:typeof subscription
   const [invoice]=await ctx.tx.select().from(invoices).where(and(eq(invoices.sourceType,"subscription"),eq(invoices.sourceId,sourceId))).limit(1).for("share");
   if(!invoice||invoice.status!=="paid"||invoice.paidMinor!==invoice.totalMinor||invoice.refundedMinor!==0||invoice.contactId!==parent.contactId||invoice.currency!==parent.currency)throw new ServiceError("conflict","Pay and reconcile the actual original first-period invoice before starting a separate renewal schedule.");
   const lines=await ctx.tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId,invoice.id)).orderBy(invoiceLines.position).limit(3);
-  if(!lines.length||lines.length>2||lines.some(line=>line.sourceType!=="subscription"||line.sourceId!==parent.id
-    ||line.snapshot.subscriptionTermsId!==terms.id||line.snapshot.subscriptionPeriodStart!==parent.currentPeriodStart.toISOString()
-    ||line.snapshot.subscriptionPeriodEnd!==parent.currentPeriodEnd.toISOString()))throw new ServiceError("conflict","The paid invoice does not prove this original accepted period.");
+  if(!lines.length||lines.length>2||lines.some(line=>{
+    const proof=line.snapshot&&typeof line.snapshot==="object"&&!Array.isArray(line.snapshot)?line.snapshot as Record<string,unknown>:null;
+    return !proof||line.sourceType!=="subscription"||line.sourceId!==parent.id||proof.subscriptionTermsId!==terms.id
+      ||proof.subscriptionPeriodStart!==parent.currentPeriodStart.toISOString()||proof.subscriptionPeriodEnd!==parent.currentPeriodEnd.toISOString();
+  }))throw new ServiceError("conflict","The paid invoice does not prove this original accepted period.");
   const money=await ctx.tx.select().from(payments).where(eq(payments.invoiceId,invoice.id)).orderBy(payments.id).limit(5001);
   if(money.length>5000)throw new ServiceError("conflict","The original first-period money history exceeds the bounded proof.");
   for(const payment of money){
