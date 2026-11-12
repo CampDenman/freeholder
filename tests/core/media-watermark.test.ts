@@ -28,6 +28,7 @@ import {
 import { buildWatermarked } from "@/core/media/watermark";
 import { backfillWatermarks } from "@/core/media/service";
 import { assets, mediaObjects } from "@/core/media/schema";
+import { allowMediaReceiptWrites } from "@/core/media/write-ledger";
 import { storage } from "@/adapters/storage";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
@@ -267,12 +268,16 @@ describe.runIf(hasDatabase)("backfilling marks onto an existing library", { time
       .update(assets)
       .set({ variants: { watermarked: {} } })
       .where(eq(assets.id, asset.id));
-    await db().insert(mediaObjects).values({
-      key: `${asset.storageKey}.wm.800.webp`,
-      contentType: "image/webp",
-      role: "variant",
-      bytes: 12,
-      state: "pending",
+    // A declared pending-pointer race, not a fabricated provider acceptance.
+    await db().transaction(async tx => {
+      await allowMediaReceiptWrites(tx);
+      await tx.insert(mediaObjects).values({
+        key: `${asset.storageKey}.wm.800.webp`,
+        contentType: "image/webp",
+        role: "variant",
+        bytes: 12,
+        state: "pending",
+      });
     });
 
     const apply = getService("media.applyWatermarkBackfill");

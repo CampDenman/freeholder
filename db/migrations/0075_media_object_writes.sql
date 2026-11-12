@@ -265,6 +265,18 @@ CREATE TRIGGER media_objects_pre_io_admission BEFORE INSERT OR DELETE ON media_o
 CREATE FUNCTION freeholder_media_runtime_admission() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF current_setting('freeholder.media_runtime_v1',true) IS DISTINCT FROM '1' THEN
+  -- Old writers cannot register or become running. The host operator must
+  -- still be able to drain existing rows before replacing those processes.
+  IF TG_OP='UPDATE' AND NEW.instance_id=OLD.instance_id
+   AND ((OLD.state='running' AND NEW.state IN ('draining','stopped'))
+    OR (OLD.state='draining' AND NEW.state IN ('draining','drained','stopped'))
+    OR (OLD.state='drained' AND NEW.state IN ('drained','stopped'))
+    OR (OLD.state='stopped' AND NEW.state='stopped'))
+   AND (NEW.hold_operation_id IS NOT DISTINCT FROM OLD.hold_operation_id
+    OR EXISTS(SELECT 1 FROM deployment_admission_holds hold
+      WHERE hold.operation_id=NEW.hold_operation_id AND hold.released_at IS NULL)) THEN
+   RETURN NEW;
+  END IF;
   RAISE EXCEPTION 'The storage schema requires the current runtime writer' USING ERRCODE='23514';
  END IF;
  RETURN NEW;

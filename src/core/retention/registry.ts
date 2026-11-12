@@ -98,8 +98,6 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   media_uploads:"Original reservations survive unresolved physical work; guarded lifecycle and subject erasure own retirement.",
   media_objects:"Original object ownership survives unknown writes; guarded physical cleanup and privacy jobs remove it.",
   media_multipart_resources:"Original multipart resources survive timers; explicit original-provider retirement and subject erasure own cleanup.",
-  media_multipart_operations:"Immutable physical-call evidence; named holds and verified resource cleanup govern minimization, not age.",
-  media_erasure_cohorts:"Minimal request/source identifiers preserve original erasure authority after payload minimization and late provider facts.",
   media_object_writes: "Original physical-operation and retired-key receipts are not a TTL store. Privacy minimizes personal fields only after settled original cleanup; unresolved work keeps its erasure receipt pending.",
   mail_record_subjects: "Mail receipt ownership follows the receipt; personal fields use the three mail retention kinds.",
   contact_relationships: "Join table of two contacts; not a TTL store.",

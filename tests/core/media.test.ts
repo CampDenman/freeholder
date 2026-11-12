@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { db } from "@/core/db";
+import { allowMediaReceiptWrites } from "@/core/media/write-ledger";
 import { GET as serveMedia } from "../../app/media/[...key]/route";
 import { GET as downloadMedia } from "../../app/media/download/[id]/route";
 import { GET as discover } from "../../app/.well-known/freeholder/route";
@@ -362,7 +363,7 @@ describe.runIf(hasDatabase)("the asset library", () => {
     expect(asset.checksumSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(asset.uploadedBy).toBe(`user:${STAFF.userId}`);
     // The storage key is sanitised; the owner's filename is not.
-    expect(asset.storageKey).toMatch(/^\d{4}\/\d{2}\/[a-f0-9]{8}-coast-sunrise\.png$/);
+    expect(asset.storageKey).toMatch(/^\d{4}\/\d{2}\/[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}-coast-sunrise\.png$/);
 
     const store = storage();
     expect(await store.get(asset.storageKey)).toBeDefined();
@@ -1230,6 +1231,11 @@ describe.runIf(hasDatabase)("the asset library", () => {
           assembled = true;
           return new Response("<CompleteMultipartUploadResult />");
         }
+        if (request.method === "GET" && url.searchParams.get("uploadId")) {
+          return assembled
+            ? new Response("<Error><Code>NoSuchUpload</Code></Error>", { status: 404 })
+            : new Response(`<ListPartsResult><IsTruncated>false</IsTruncated><Part><PartNumber>1</PartNumber><ETag>"part-etag"</ETag><Size>${pdf.byteLength}</Size></Part></ListPartsResult>`);
+        }
         if (request.method === "HEAD") {
           if (!assembled) return new Response(null, { status: 404 });
           return new Response(null, {
@@ -1418,14 +1424,12 @@ describe.runIf(hasDatabase)("the asset library", () => {
       STAFF,
     );
     const old = new Date("2020-01-01T00:00:00.000Z");
-    await db()
-      .update(mediaUploads)
-      .set({ expiresAt: old })
-      .where(eq(mediaUploads.id, reservation.id));
-    await db()
-      .update(mediaObjects)
-      .set({ createdAt: old })
-      .where(eq(mediaObjects.uploadId, reservation.id));
+    // Declared expired reservation; fixture-only writes use the guarded lane.
+    await db().transaction(async tx => {
+      await allowMediaReceiptWrites(tx);
+      await tx.update(mediaUploads).set({ expiresAt: old }).where(eq(mediaUploads.id, reservation.id));
+      await tx.update(mediaObjects).set({ createdAt: old }).where(eq(mediaObjects.uploadId, reservation.id));
+    });
     const result = await cleanupOrphanedMedia(
       new Date("2020-01-03T00:00:00.000Z"),
     );

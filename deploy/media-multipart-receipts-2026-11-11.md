@@ -128,6 +128,26 @@ Final integration on actual main `13f63be0`, with the source commits through
   `NODE_OPTIONS=--max-old-space-size=8192`. That failed process is retained as
   a resource failure rather than described as an entirely green invocation.
 
+The first protected CI run on `438a85af` found integration defects in this
+repair. Its runtime guard also rejected the host operator's updates that drain
+existing runtime rows. The narrowed guard permits monotonic drain/stop updates
+for an existing identity and valid hold, while refusing unversioned runtime
+registration and restart. A new fresh normal journal0–75 database applies that
+exact SQL. Seven native deployment/queue/FK-inventory controls pass together in
+61.66s, including an unversioned operator that drains an existing runtime while
+old registration and restart remain refused. Two stale private-table opt-outs
+were removed: those child tables have no direct contact FK, and their resource
+parents already own privacy and retention.
+
+Five old media fixture assertions also pass after correction (44.17s): original
+keys retain the full reserved UUID, the synthetic S3 peer implements actual
+ListParts/NoSuchUpload semantics, declared pending/expired fixtures use guarded
+test transactions, and the UTC connection assertion includes runtime admission.
+No production admission guard or behavior assertion was removed. The typecheck
+script now uses the same 8GB heap policy as lint, including the fast-gate path.
+Adjacent raw import-source cleanup failures remain under repair; protected CI
+and the final composed candidate are not yet green.
+
 Breaking migration75 requires actual old direct
 writers to stop and drain. Readiness refusal cannot stop an already admitted
 network request. Cross-target adoption/source cleanup, live storage acceptance

@@ -95,7 +95,10 @@ describe.runIf(hasDatabase)("every database session runs in UTC", () => {
   });
 
   it("pins TimeZone on the connection rather than trusting the server default", async () => {
-    expect(SESSION_SETTINGS).toEqual({ TimeZone: "UTC" });
+    expect(SESSION_SETTINGS).toEqual({
+      TimeZone: "UTC",
+      options: "-c freeholder.media_runtime_v1=1",
+    });
     // The app's own pool, asked the way an operator would ask psql.
     const shown = await db().execute<{ TimeZone: string }>(sql`show timezone`);
     expect(shown[0]).toEqual({ TimeZone: "UTC" });

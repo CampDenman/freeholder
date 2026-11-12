@@ -20,6 +20,22 @@ describe.runIf(hasDatabase)('C10.33 real PostgreSQL same-lock call admission fen
   beforeAll(async()=>{queue=new PgBoss({connectionString:process.env.DATABASE_URL!,schedule:false,supervise:false,max:1});await queue.start();});
   beforeEach(()=>resetDeploymentFixture(connection));
   afterAll(async()=>{await queue?.stop({graceful:true});await connection.end();await closeDb();});
+  it('lets an unversioned operator drain existing runtimes while refusing old registration and restart',async()=>{
+    const operationId=randomUUID(),runtime=randomUUID(),unknownRuntime=randomUUID();
+    expect((await connection`SELECT current_setting('freeholder.media_runtime_v1',true) AS version`)[0]!.version).not.toBe('1');
+    await admitDeploymentRuntime(runtime);
+    await expect(connection`INSERT INTO deployment_admission_runtimes(instance_id,state)VALUES(${unknownRuntime},'running')`).rejects.toMatchObject({code:'23514'});
+    await runDeploymentOperator(request(operationId,'begin'),connection);
+    try{
+      expect((await connection`SELECT state,hold_operation_id FROM deployment_admission_runtimes WHERE instance_id=${runtime}`)[0]).toMatchObject({state:'draining',hold_operation_id:operationId});
+      await expect(connection`UPDATE deployment_admission_runtimes SET state='running' WHERE instance_id=${runtime}`).rejects.toMatchObject({code:'23514'});
+      await connection`UPDATE deployment_admission_runtimes SET state='drained' WHERE instance_id=${runtime} AND hold_operation_id=${operationId}`;
+      expect((await connection`SELECT state FROM deployment_admission_runtimes WHERE instance_id=${runtime}`)[0]!.state).toBe('drained');
+    }finally{
+      await runDeploymentOperator(request(operationId,'release','private_restored'),connection);
+      await connection`UPDATE deployment_admission_runtimes SET state='stopped' WHERE instance_id=${runtime}`;
+    }
+  });
   it('waits for the admitted transaction to commit before exposing the hold and never hides its late call',async()=>{
     const operationId=randomUUID(),runtime=randomUUID(),caller=randomUUID(),callee=randomUUID(),call=randomUUID();
     await connection`INSERT INTO roles(key,name,is_system)VALUES('deployment-test-member','Synthetic member',false) ON CONFLICT DO NOTHING`;
