@@ -11,7 +11,9 @@ type SnapshotReader = Pick<Tx, "select">;
 
 export async function retentionSourceSnapshotIsComplete(tx: SnapshotReader, exceptionId: string, sourceScope: string): Promise<boolean> {
   const [row] = await tx.select({ version: privacyRetentionSourceSnapshots.captureVersion, expected: privacyRetentionSourceSnapshots.memberCount,
-    actual: sql<number>`(select count(*)::integer from privacy_retention_source_members m where m.exception_id=${privacyRetentionSourceSnapshots.exceptionId} and m.source_scope=${privacyRetentionSourceSnapshots.sourceScope})` }).from(privacyRetentionSourceSnapshots)
+    // Bind the exact pair: a single-table Drizzle select strips outer Column
+    // qualifiers inside SQL expressions, which would correlate m to itself.
+    actual: sql<number>`(select count(*)::integer from privacy_retention_source_members m where m.exception_id=${exceptionId} and m.source_scope=${sourceScope})` }).from(privacyRetentionSourceSnapshots)
     .where(and(eq(privacyRetentionSourceSnapshots.exceptionId, exceptionId), eq(privacyRetentionSourceSnapshots.sourceScope, sourceScope))).limit(1);
   return row?.version === 1 && row.expected === row.actual;
 }
