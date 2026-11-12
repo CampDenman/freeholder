@@ -173,3 +173,15 @@ charge defaults retain their original protocol. Seven adapter/protocol files
 passed 129 controls and four source/privacy/audit contract files passed 30.
 Full TypeScript and focused lint passed. Migration80 remains unapplied and
 unjournalled; this is not a native migration, provider-account or release claim.
+
+The next booking source slice derives its accepted price, seats, currency,
+payment mode and tax category from the actual original product. Separate tax
+and public-business consent digests bind the original platform/recipient and
+merchant support identity. The invoice tax hook checks the original buyer and
+exact accepted line money. Public booking displays that business and tax total
+before consent in all four locales. First pricing of an unpriced appointment
+requires an explicit current quote; rescheduling copies its original terms.
+Pure consent, locale and private-service controls passed; the audit-label run
+identified the tax-erasure label supplied by the pending upstream order/tax
+checkpoint. Full booking database/browser and owner quoting qualification are
+still required; no migration or provider mode has been activated.

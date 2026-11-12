@@ -9,7 +9,7 @@ import { bookingMerchantScopes } from "./booking-merchant-schema";
 registerContactPrivacySource({
   scope: "contact.bookingMerchantTax", tables: ["booking_merchant_scopes", "booking_commercial_sources"], retentionScopes: ["contact.bookings", "commerce.money"], eraseOrder: 5,
   exportData: async (tx, contactId) => ({
-    destinations: await tx.select({ bookingId: bookingMerchantScopes.bookingId, taxDestination: bookingMerchantScopes.taxDestination, quoteDigest: bookingMerchantScopes.quoteDigest })
+    destinations: await tx.select({ bookingId: bookingMerchantScopes.bookingId, taxDestination: bookingMerchantScopes.taxDestination, quoteDigest: bookingMerchantScopes.quoteDigest, commercialQuoteDigest: bookingMerchantScopes.commercialQuoteDigest, commercialPrice: bookingMerchantScopes.commercialPrice })
       .from(bookingMerchantScopes).innerJoin(bookings, eq(bookings.id, bookingMerchantScopes.bookingId)).where(eq(bookings.contactId, contactId)),
     originalSources: await tx.select({ source: bookingCommercialSources }).from(bookingCommercialSources).innerJoin(bookings, eq(bookings.id, bookingCommercialSources.bookingId)).where(eq(bookings.contactId, contactId)),
   }),

@@ -62,7 +62,7 @@ CREATE TABLE booking_merchant_scopes (
  merchant_contact_id uuid REFERENCES contacts(id) ON DELETE RESTRICT, collection_kind text NOT NULL,
  provider_platform_account_id text NOT NULL, charge_account_id text, recipient_account_id text NOT NULL, settlement_merchant_account_id text NOT NULL,
  merchant_name text NOT NULL, merchant_support jsonb, tax_profile_id uuid NOT NULL, tax_profile_version integer NOT NULL,
- tax_liability text NOT NULL, tax_destination jsonb, quote_digest text, destination_erased_at timestamptz, merchant_identity_erased_at timestamptz,
+ tax_liability text NOT NULL, tax_destination jsonb, quote_digest text, commercial_quote_digest text, commercial_price jsonb, destination_erased_at timestamptz, merchant_identity_erased_at timestamptz,
  created_at timestamptz NOT NULL DEFAULT now(),
  CONSTRAINT booking_merchant_scopes_version CHECK(merchant_scope_version=1 AND tax_profile_version>0),
  CONSTRAINT booking_merchant_scopes_route CHECK(provider_platform_account_id ~ '^acct_[A-Za-z0-9]+$' AND recipient_account_id ~ '^acct_[A-Za-z0-9]+$'
@@ -71,6 +71,8 @@ CREATE TABLE booking_merchant_scopes (
  CONSTRAINT booking_merchant_scopes_tax CHECK(tax_liability='seller' AND((tax_destination IS NULL AND quote_digest IS NULL AND destination_erased_at IS NULL)
   OR destination_erased_at IS NOT NULL OR(coalesce(tax_destination->>'country' ~ '^[A-Z]{2}$',false) AND quote_digest IS NOT NULL))),
  CONSTRAINT booking_merchant_scopes_digest CHECK(quote_digest IS NULL OR quote_digest ~ '^[a-f0-9]{64}$'),
+ CONSTRAINT booking_merchant_scopes_commercial CHECK((commercial_price IS NULL AND commercial_quote_digest IS NULL AND quote_digest IS NULL)
+  OR(commercial_price IS NOT NULL AND jsonb_typeof(commercial_price)='object' AND commercial_quote_digest IS NOT NULL AND commercial_quote_digest ~ '^[a-f0-9]{64}$' AND quote_digest IS NOT NULL)),
  CONSTRAINT booking_merchant_scopes_profile_fk FOREIGN KEY(tax_profile_id,tax_profile_version) REFERENCES merchant_tax_profile_versions(profile_id,version) ON DELETE RESTRICT
 );
 --> statement-breakpoint
@@ -300,16 +302,17 @@ BEGIN
  SELECT * INTO parent FROM bookings WHERE id=NEW.booking_id;
  SELECT * INTO policy FROM booking_market_policies WHERE booking_id=NEW.booking_id;
  IF TG_OP='UPDATE' THEN
-  IF(to_jsonb(NEW)-ARRAY['merchant_contact_id','merchant_name','merchant_support','merchant_identity_erased_at','tax_destination','quote_digest','destination_erased_at']) IS DISTINCT FROM(to_jsonb(OLD)-ARRAY['merchant_contact_id','merchant_name','merchant_support','merchant_identity_erased_at','tax_destination','quote_digest','destination_erased_at'])
+  IF(to_jsonb(NEW)-ARRAY['merchant_contact_id','merchant_name','merchant_support','merchant_identity_erased_at','tax_destination','quote_digest','commercial_quote_digest','commercial_price','destination_erased_at']) IS DISTINCT FROM(to_jsonb(OLD)-ARRAY['merchant_contact_id','merchant_name','merchant_support','merchant_identity_erased_at','tax_destination','quote_digest','commercial_quote_digest','commercial_price','destination_erased_at'])
    OR(OLD.merchant_identity_erased_at IS NOT NULL AND NEW.merchant_identity_erased_at IS DISTINCT FROM OLD.merchant_identity_erased_at)
    OR(OLD.destination_erased_at IS NOT NULL AND NEW.destination_erased_at IS DISTINCT FROM OLD.destination_erased_at)
    OR((NEW.merchant_name IS DISTINCT FROM OLD.merchant_name OR NEW.merchant_support IS DISTINCT FROM OLD.merchant_support) AND(NEW.merchant_name IS DISTINCT FROM '[privacy-erased-merchant]' OR NEW.merchant_support IS NOT NULL OR NEW.merchant_identity_erased_at IS NULL)) THEN
    RAISE EXCEPTION 'Original booking identity and namespace cannot be rebound.' USING ERRCODE='23514';
   END IF;
-  IF NEW.quote_digest IS DISTINCT FROM OLD.quote_digest OR NEW.tax_destination IS DISTINCT FROM OLD.tax_destination THEN
-   IF NEW.destination_erased_at IS NOT NULL AND NEW.tax_destination='{}'::jsonb AND NEW.quote_digest IS NOT DISTINCT FROM OLD.quote_digest THEN NULL;
+  IF NEW.quote_digest IS DISTINCT FROM OLD.quote_digest OR NEW.tax_destination IS DISTINCT FROM OLD.tax_destination OR NEW.commercial_quote_digest IS DISTINCT FROM OLD.commercial_quote_digest OR NEW.commercial_price IS DISTINCT FROM OLD.commercial_price THEN
+   IF NEW.destination_erased_at IS NOT NULL AND NEW.tax_destination='{}'::jsonb AND NEW.quote_digest IS NOT DISTINCT FROM OLD.quote_digest AND NEW.commercial_quote_digest IS NOT DISTINCT FROM OLD.commercial_quote_digest AND NEW.commercial_price IS NOT DISTINCT FROM OLD.commercial_price THEN NULL;
    ELSIF OLD.tax_destination IS NULL AND OLD.quote_digest IS NULL AND OLD.destination_erased_at IS NULL AND parent.invoice_id IS NULL
-    AND NEW.tax_destination IS NOT NULL AND NEW.quote_digest IS NOT NULL AND NEW.destination_erased_at IS NULL
+    AND OLD.commercial_quote_digest IS NULL AND OLD.commercial_price IS NULL
+    AND NEW.tax_destination IS NOT NULL AND NEW.quote_digest IS NOT NULL AND NEW.commercial_quote_digest IS NOT NULL AND NEW.commercial_price IS NOT NULL AND NEW.destination_erased_at IS NULL
     AND NOT EXISTS(SELECT 1 FROM contacts WHERE id=parent.contact_id AND source='privacy-erasure') THEN NULL;
    ELSE RAISE EXCEPTION 'Only the first explicit quote or irreversible destination minimization may change booking tax evidence.' USING ERRCODE='23514'; END IF;
   END IF;

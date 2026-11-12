@@ -8862,5 +8862,8 @@
   "customerInvoice.remainingInvoice": "Reste à payer sur cette facture : {amount}",
   "customerInvoice.merchants": "Commerçants de cette facture",
   "store.checkout.billingTaxLegend": "Lieu de facturation pour les taxes",
-  "customerInvoice.merchantPartsHint": "Il s’agit d’une seule facture. Le paiement de chaque commerçant est autorisé séparément et les montants déjà payés restent enregistrés."
+  "customerInvoice.merchantPartsHint": "Il s’agit d’une seule facture. Le paiement de chaque commerçant est autorisé séparément et les montants déjà payés restent enregistrés.",
+  "publicBooking.taxTotal": "Taxes comprises dans le total : {amount}.",
+  "publicBooking.taxLocation": "Indiquez votre pays, région et code postal de facturation pour consulter le devis fiscal du commerçant.",
+  "publicBooking.acceptMerchant": "J’accepte le prix, le devis fiscal et les conditions d’annulation du commerçant nommé ci-dessus."
 }

@@ -6,14 +6,15 @@ import { z } from "zod";
 import { ServiceError, type ServiceContext } from "@/core/service";
 
 import { bookingCommercialSources, bookings } from "./schema";
+import type { bookingCommercialSelection } from "./commercial-quote";
 
 export const bookingCommercialSource = z.object({ serviceOfferingId: z.uuid(), productId: z.uuid(), sellerUserId: z.uuid().nullable() });
 let resolve: ((ctx: ServiceContext, offeringId: string) => Promise<z.infer<typeof bookingCommercialSource> | null>) | undefined;
 export function registerBookingCommercialSourceResolver(next: NonNullable<typeof resolve>): void { resolve = next; }
 
 export const bookingTaxDestination = z.object({ country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/),
-  region: z.string().trim().min(1).max(200).optional(), postalCode: z.string().trim().min(1).max(40).optional(), city: z.string().trim().min(1).max(200).optional() }).strict();
-export type BookingCommercialCapture = { bookingId: string; rescheduledFromId?: string; taxDestination?: z.infer<typeof bookingTaxDestination>; commercialQuoteDigest?: string };
+  region: z.string().trim().toUpperCase().max(100).optional(), postalCode: z.string().trim().toUpperCase().max(30).optional(), city: z.string().trim().max(200).optional() }).strict();
+export type BookingCommercialCapture = { bookingId: string; rescheduledFromId?: string; taxDestination?: z.infer<typeof bookingTaxDestination>; taxQuoteDigest?: string; commercialQuoteDigest?: string; commercialSelection?: z.infer<typeof bookingCommercialSelection> };
 let capture: ((ctx: ServiceContext, input: BookingCommercialCapture) => Promise<void>) | undefined;
 
 export function registerBookingCommercialCapture(next: NonNullable<typeof capture>): void { capture = next; }

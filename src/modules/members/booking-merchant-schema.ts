@@ -9,6 +9,7 @@ import { contacts } from "@/core/contacts/schema";
 import { createdAtColumn } from "@/core/db/columns";
 import { merchantTaxProfileVersions } from "@/modules/invoicing/merchant-tax-schema";
 import { bookings } from "@/core/scheduling/schema";
+import type { BookingCommercialPrice } from "@/core/scheduling/commercial-quote";
 
 export const bookingMarketPolicies = pgTable("booking_market_policies", {
   bookingId: uuid("booking_id").primaryKey().references(() => bookings.id, { onDelete: "restrict" }),
@@ -37,6 +38,8 @@ export const bookingMerchantScopes = pgTable("booking_merchant_scopes", {
   taxLiability: text("tax_liability", { enum: ["platform", "seller"] }).notNull(),
   taxDestination: jsonb("tax_destination").$type<TaxAddress | Record<string, never>>(),
   quoteDigest: text("quote_digest"),
+  commercialQuoteDigest: text("commercial_quote_digest"),
+  commercialPrice: jsonb("commercial_price").$type<BookingCommercialPrice>(),
   destinationErasedAt: timestamp("destination_erased_at", { withTimezone: true }),
   merchantIdentityErasedAt: timestamp("merchant_identity_erased_at", { withTimezone: true }),
   createdAt: createdAtColumn(),
@@ -49,4 +52,5 @@ export const bookingMerchantScopes = pgTable("booking_merchant_scopes", {
     and ((${t.collectionKind} = 'direct' and ${t.chargeAccountId} is not null and ${t.chargeAccountId} = ${t.recipientAccountId}) or (${t.collectionKind} = 'destination' and ${t.chargeAccountId} is null))`),
   check("booking_merchant_scopes_tax", sql`${t.taxLiability} = 'seller' and ((${t.taxDestination} is null and ${t.quoteDigest} is null and ${t.destinationErasedAt} is null) or ${t.destinationErasedAt} is not null or (coalesce(${t.taxDestination}->>'country' ~ '^[A-Z]{2}$',false) and ${t.quoteDigest} is not null))`),
   check("booking_merchant_scopes_digest", sql`${t.quoteDigest} is null or ${t.quoteDigest} ~ '^[a-f0-9]{64}$'`),
+  check("booking_merchant_scopes_commercial", sql`(${t.commercialPrice} is null and ${t.commercialQuoteDigest} is null and ${t.quoteDigest} is null) or (${t.commercialPrice} is not null and jsonb_typeof(${t.commercialPrice}) = 'object' and ${t.commercialQuoteDigest} is not null and ${t.commercialQuoteDigest} ~ '^[a-f0-9]{64}$' and ${t.quoteDigest} is not null)`),
 ]);

@@ -8862,5 +8862,8 @@
   "customerInvoice.remainingInvoice": "Remaining on this invoice: {amount}",
   "customerInvoice.merchants": "Merchants on this invoice",
   "store.checkout.billingTaxLegend": "Billing location for tax",
-  "customerInvoice.merchantPartsHint": "This is one invoice. Each merchant’s payment is authorized separately, and amounts already paid stay recorded."
+  "customerInvoice.merchantPartsHint": "This is one invoice. Each merchant’s payment is authorized separately, and amounts already paid stay recorded.",
+  "publicBooking.taxTotal": "Tax included in the total: {amount}.",
+  "publicBooking.taxLocation": "Enter your billing country, region and postal code to review the merchant’s tax quote.",
+  "publicBooking.acceptMerchant": "I agree to the named merchant’s price, tax quote and cancellation policy shown above."
 }

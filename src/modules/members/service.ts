@@ -35,6 +35,7 @@ import payoutServices, { payoutAdapters } from "./payouts";
 import "./booking-merchant-privacy";
 import orderCommercialServices from "./order-commercial";
 import bookingMerchantServices from "./booking-merchant";
+import bookingMerchantQuoteServices from "./booking-merchant-quote";
 import merchantServices from "./market-merchant";
 import protectionServices from "./protection";
 import reputationServices from "./reputation";
@@ -464,6 +465,7 @@ export async function activeMember(ctx: ServiceContext, userId: string) {
 export default [
   ...merchantServices,
   ...bookingMerchantServices,
+  ...bookingMerchantQuoteServices,
   ...orderCommercialServices,
   ...graphServices,
   ...postServices,

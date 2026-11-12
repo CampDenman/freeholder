@@ -21,6 +21,7 @@
 // **Everything emits a timeline event**, so the CRM shows a client's whole
 // history without booking knowing the CRM exists.
 import { bookingTaxDestination, captureBookingCommercialPolicy } from "./commercial-policy";
+import { bookingCommercialSelection } from "./commercial-quote";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
@@ -308,6 +309,8 @@ export const createBooking = defineService({
     serviceOfferingId: z.uuid().nullish(),
     taxDestination: bookingTaxDestination.optional(),
     commercialQuoteDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    taxQuoteDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    commercialSelection: bookingCommercialSelection.optional(),
     secondaryCalendarIds: z.array(z.uuid()).max(10).default([]),
     startsAt: z.iso.datetime(),
     endsAt: z.iso.datetime(),
@@ -399,7 +402,7 @@ export const createBooking = defineService({
         throw error;
       });
 
-    await captureBookingCommercialPolicy(ctx, { bookingId: created!.id, taxDestination: input.taxDestination, commercialQuoteDigest: input.commercialQuoteDigest });
+    await captureBookingCommercialPolicy(ctx, { bookingId: created!.id, taxDestination: input.taxDestination, taxQuoteDigest: input.taxQuoteDigest, commercialQuoteDigest: input.commercialQuoteDigest, commercialSelection: input.commercialSelection });
     await recordOnTimeline(ctx, {
       contactId: resolved.contact.id,
       bookingId: created!.id,

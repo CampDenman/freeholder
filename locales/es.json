@@ -8862,5 +8862,8 @@
   "customerInvoice.remainingInvoice": "Pendiente en esta factura: {amount}",
   "customerInvoice.merchants": "Comerciantes en esta factura",
   "store.checkout.billingTaxLegend": "Ubicación de facturación para impuestos",
-  "customerInvoice.merchantPartsHint": "Esta es una sola factura. El pago de cada comerciante se autoriza por separado y los importes ya pagados quedan registrados."
+  "customerInvoice.merchantPartsHint": "Esta es una sola factura. El pago de cada comerciante se autoriza por separado y los importes ya pagados quedan registrados.",
+  "publicBooking.taxTotal": "Impuestos incluidos en el total: {amount}.",
+  "publicBooking.taxLocation": "Indica el país, la región y el código postal de facturación para consultar los impuestos del comerciante.",
+  "publicBooking.acceptMerchant": "Acepto el precio, los impuestos y la política de cancelación del comerciante indicado arriba."
 }
