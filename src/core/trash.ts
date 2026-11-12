@@ -122,6 +122,8 @@ export interface TrashFamilyOptions<TRecord> {
    * there is nothing a contact-scoped hold could name.
    */
   holdGuard?: SQL;
+  /** Acquire the family's shared identity/writer fences before deleting. */
+  beforePurge?: (tx: Tx) => Promise<void>;
   /** Deletes child rows that belong to the purged record(s), in-transaction. */
   purgeChildren?: (tx: Tx, ids: string[]) => Promise<void>;
   /** Refuses restoration the family cannot honour (a taken slug). */
@@ -211,6 +213,7 @@ export function makeTrashServices<TRecord = Record<string, unknown> & { id: stri
     input: z.object({ id, confirmation: z.literal("PURGE") }),
     output: idOut,
     handler: async (input, ctx) => {
+      await options.beforePurge?.(ctx.tx);
       let removed: { id: string } | undefined;
       try {
         [removed] = await ctx.tx
@@ -252,6 +255,7 @@ export function makeTrashServices<TRecord = Record<string, unknown> & { id: stri
     input: z.object({}),
     output: z.object({ purged: z.number().int().nonnegative() }),
     handler: async (_input, ctx) => {
+      await options.beforePurge?.(ctx.tx);
       const where = and(
         lt(table.trashedAt, new Date(Date.now() - TRASH_WINDOW_MS)),
         options.holdGuard,

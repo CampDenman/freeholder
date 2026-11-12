@@ -68,3 +68,60 @@ receipt can complete while an opaque original WXR still contains reader data.
 The retained-source cleanup follow-up must make that receipt wait for confirmed
 provider cleanup. This increment does not claim full raw-object erasure or close
 C2.29/C11.10.
+
+## Durable original-reader ownership follow-up
+
+The local follow-up reserves `0078_import_reader_ownership.sql` after the
+frozen 73–77 chain. It is intentionally not journalled while its predecessors
+remain under composition. Isolated tests explicitly apply its source SQL;
+that is not a contiguous upgrade rehearsal, deployment or completed C2.29.
+
+Three actual shared-service before controls lost a known reader or rebound
+their identical original comment to another contact after address change,
+address reuse and merge undo. All three after controls passed in 38.97 seconds.
+A second run passed real erasure/reimport fencing, a named reader hold and
+exact normalized merge/undo for 1,001 reader receipts in 17.14 seconds. The
+merge ledger holds a constant-size witness reference rather than another copy
+of those reader identities. Explicit search/retention treatment covers the
+current contact FK; historical before/after UUIDs are documented immutable
+witness exclusions, owned by the same reader privacy source.
+
+An additional real before control found two WordPress instances under one host
+colliding when post/comment IDs overlapped. It failed in 7.86 seconds. The
+current source scopes receipts to the original WXR site URL and preserves that
+context for deferred cutover. A fresh v2 proof database then passed all four
+context/owner controls in 28.81 seconds: distinct site instances, real verified
+owner selection followed by actual comment commit, denial of properly scoped
+agents/personal keys/stale verification, and source-only DTO privacy.
+
+The next real boundary failed in 7.97 seconds: resolving the receipt to A
+without projecting A into cached reader copies let the different email holder
+B's erasure remove A's pending comment. Owner resolution now updates those
+matching original-instance/post/comment pointers in the same transaction while
+preserving source bodies and original executor metadata. That exact after
+control passed in 8.48 seconds. Eleven distinct reader controls have passed
+across these staged runs; they are not a final combined v2 qualification.
+
+Previously unseen ambiguous readers remain unbound in a durable review state.
+The owner page shows at most 50 original readers, searches the existing contact
+spine, and records the explicit choice through the shared audited service.
+Erased receipts cannot be reassigned, and retained records with active or
+acknowledged erasures cannot authorize another import. Wrapped receipt keys
+stay out of subject exports and participate in credential rotation.
+
+The current revision still needs the full v2 regression and inventory run,
+live SDK generation, production build/browser qualification, complete
+contiguous upgrade and independent review. These software proofs supply no
+human security signature or actual source/provider acceptance.
+
+Two further actual failures exposed a separate hold boundary: an approved held
+comment stayed public after acknowledged erasure, and rolling its import back
+deleted the held evidence through the page cascade. The three-control before
+run failed those two assertions while ordinary unheld rollback passed, in
+19.02 seconds. Shared CMS deletion now honors dependent reader holds, and
+reader rollback deletes only unheld rows. Public comment reads veto active or
+acknowledged erasure without changing the privately held original moderation
+state. Rollback records and displays retained private pages, including graph
+child aggregation. The exact three after controls passed in 25.03 seconds;
+focused lint and full typecheck also passed. These are staged local proofs,
+not the still-required complete regression or contiguous migration rehearsal.

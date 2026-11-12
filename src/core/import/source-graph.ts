@@ -14,6 +14,7 @@ import { assertCurrentImportAuthority } from "./authority";
 import { markImportGraphWriter } from "./graph-writer";
 import { importGraphVersionSchema } from "./graph-version";
 import { archivePreviewDigest } from "./archive-plan";
+import { canonicalReaderSite } from "./reader-ownership";
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? { ...value as Record<string, unknown> } : {};
 const uploadSchema = z.object({ uploadId: z.uuid(), filename: z.string(), bytes: z.number().int().positive(), chunkBytes: z.number().int().positive(), digests: z.record(z.string(), z.string()), received: z.array(z.number().int().nonnegative()), expiresAt: z.iso.datetime() });
@@ -101,6 +102,7 @@ export const applyWxrIndex = defineService({
     const total = (kind: string) => counts.find(row => row.kind === kind)?.total ?? 0;
     const summary = { indexed: input.cursor.ordinal, pages: total("page"), posts: total("post"), media: total("attachment"), menus: total("menu"), skipped: total("skipped") };
     const checkpoint = object(run.checkpoint);
+    checkpoint.readerSourceSite = canonicalReaderSite({ kind: run.kind, origin: run.origin, site: input.headerMetadata.site.url });
     // The upload reservation remains until the whole graph is accepted. The
     // retained descriptor keeps the same original objects available later.
     if (input.done) delete checkpoint.sourceUpload;

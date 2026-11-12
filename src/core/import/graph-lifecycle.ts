@@ -55,9 +55,10 @@ export async function advanceGraphLifecycle(ctx: ServiceContext, before: Run, op
   }
   if (!remaining && operation === "imports.rollback") {
     await releaseImportSources(ctx, before, checkpoint);
-    const summaries = await ctx.tx.select({ kept: sql<unknown>`${importRuns.checkpoint}->'rolledBack'->'keptMedia'` }).from(importSourceBatches).innerJoin(importRuns, eq(importRuns.id, importSourceBatches.childRunId)).where(eq(importSourceBatches.graphId, graph.id));
+    const summaries = await ctx.tx.select({ kept: sql<unknown>`${importRuns.checkpoint}->'rolledBack'->'keptMedia'`, pages: sql<unknown>`${importRuns.checkpoint}->'rolledBack'->'keptPages'` }).from(importSourceBatches).innerJoin(importRuns, eq(importRuns.id, importSourceBatches.childRunId)).where(eq(importSourceBatches.graphId, graph.id));
     const keptMedia = [...new Set(summaries.flatMap(summary => z.array(z.uuid()).max(500).parse(summary.kept ?? [])))];
-    checkpoint.rolledBack = { fromStatus: before.status, keptMedia };
+    const keptPages = [...new Set(summaries.flatMap(summary => z.array(z.uuid()).max(500).parse(summary.pages ?? [])))];
+    checkpoint.rolledBack = { fromStatus: before.status, keptMedia, keptPages };
   }
   await ctx.tx.update(importSourceGraphs).set({ leaseToken: null, leaseActor: null, leaseUntil: null, updatedAt: new Date() }).where(eq(importSourceGraphs.id, graph.id));
   const [row] = await ctx.tx.update(importRuns).set({ status: remaining ? before.status : target, checkpoint, counts, error: null }).where(eq(importRuns.id, before.id)).returning();

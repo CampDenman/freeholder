@@ -17,7 +17,7 @@ CREATE TABLE import_reader_ownership_receipts (
  created_by text NOT NULL,
  created_by_key_id uuid,
  contact_id uuid REFERENCES contacts(id),
- state text NOT NULL CHECK (state IN ('unbound','bound','erased') AND ((state='unbound')=(contact_id IS NULL))),
+ state text NOT NULL CHECK (state IN ('unbound','review','bound','erased') AND ((state IN ('unbound','review'))=(contact_id IS NULL))),
  created_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now()
 );

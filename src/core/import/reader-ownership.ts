@@ -1,8 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C2.29/C3.46: retain proved source ownership; never infer it from an old email.
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { contacts } from "@/core/contacts/schema";
+import { dataRequests } from "@/core/privacy/schema";
 import { actorString, ServiceError, type Actor, type Tx } from "@/core/service";
 import { readerOwnershipKey } from "./reader-ownership-key";
 import { readerOwnershipReceipts } from "./reader-ownership-schema";
@@ -14,7 +15,7 @@ const items = (value: unknown): Json[] => Array.isArray(value) ? value.map(objec
 const email = (value: unknown) => typeof value === "string" ? value.trim().toLowerCase() : "";
 const MAX_PHASE_READERS = 10_000;
 const BATCH = 500;
-export type ReaderSource = { kind: string | null; origin: string | null };
+export type ReaderSource = { kind: string | null; origin: string | null; site?: string; preview?: unknown; checkpoint?: unknown };
 export type ReaderSourceContext = ReaderSource & { id: string };
 export async function lockReaderOwnershipBindings(tx: Tx) {
   const [result] = await tx.execute<{ locked: boolean }>(sql`select pg_try_advisory_xact_lock(hashtext('import-reader-ownership-bind-v1')) as locked`);
@@ -23,17 +24,54 @@ export async function lockReaderOwnershipBindings(tx: Tx) {
 export class ReaderOwnershipErasedError extends ServiceError {
   constructor() { super("conflict", "This original source includes an erased reader. Remove their original reader data and review the source before importing comments."); }
 }
+export function canonicalReaderSite(source: ReaderSource): string {
+  const preview = object(source.preview), checkpoint = object(source.checkpoint);
+  const selected = [source.site, preview.readerSourceSite, checkpoint.readerSourceSite, object(object(preview.wordpress).site).url, source.origin].find(value => typeof value === "string" && value.length > 0);
+  if (typeof selected !== "string") throw new ServiceError("conflict", "The original WordPress instance needs owner review.");
+  let site: URL;
+  try { site = new URL(selected); }
+  catch { throw new ServiceError("validation", "The original WordPress instance URL is invalid."); }
+  if (!["http:", "https:"].includes(site.protocol) || site.username || site.password) throw new ServiceError("validation", "The original WordPress instance URL is invalid.");
+  site.hash = ""; site.search = ""; site.pathname = site.pathname.replace(/\/+$/, "") || "/";
+  return site.href;
+}
 export function readerSourceIdentity(source: ReaderSource, post: string, comment: string) {
-  if (!["wordpress-wxr", "wordpress-rest"].includes(source.kind ?? "") || !source.origin || !post || !comment || post.length > 128 || comment.length > 128) throw new ServiceError("conflict", "The original source/post/comment identity needs owner review before importing readers.");
-  const origin = new URL(source.origin);
-  origin.hash = ""; origin.search = ""; origin.pathname = origin.pathname.replace(/\/+$/, "") || "/";
-  return JSON.stringify(["wordpress", origin.href, post, comment]);
+  if (!["wordpress-wxr", "wordpress-rest"].includes(source.kind ?? "") || !/^[1-9][0-9]{0,127}$/.test(post) || !/^[1-9][0-9]{0,127}$/.test(comment)) throw new ServiceError("conflict", "Original WordPress post and comment IDs are required; positional identities cannot establish reader ownership.");
+  return JSON.stringify(["wordpress", canonicalReaderSite(source), post, comment]);
 }
 export function assertOriginalReaderPayload(run: { preview: unknown; checkpoint: unknown }, post: string, comment: string, input: { name: string; email: string | null; body: string }) {
   const preview = items(object(run.preview).pages).filter(page => page.wpId === post).flatMap(page => items(page.readerComments));
   const pending = items(object(run.checkpoint).pendingBlogPosts).filter(page => page.key === post).flatMap(page => items(page.comments));
   const original = [...preview, ...pending].find(reader => reader.id === comment);
   if (!original || original.name !== input.name || email(original.email) !== email(input.email) || original.body !== input.body) throw new ServiceError("conflict", "This comment no longer matches its staged original reader. Review the source before importing it.");
+}
+
+/** Project the proved owner into every still-cached copy of this exact source
+ * identity. Privacy must not fall back to a later holder of the old address.
+ * Reader bodies and the original import executor remain untouched.
+ */
+export async function projectReviewedReaderOwner(tx: Tx, source: ReaderSource, post: string, comment: string, contactId: string) {
+  const site = canonicalReaderSite(source);
+  await tx.execute(sql`update import_runs source set
+    preview=case when jsonb_typeof(source.preview->'pages')='array' then jsonb_set(source.preview,'{pages}',
+      coalesce((select jsonb_agg(case when page->>'wpId'=${post} and jsonb_typeof(page->'readerComments')='array'
+        then jsonb_set(page,'{readerComments}',coalesce((select jsonb_agg(case when reader->>'id'=${comment}
+          then (reader-'readerOwnershipReviewRequired')||jsonb_build_object('contactId',${contactId}::text) else reader end order by readers.n)
+          from jsonb_array_elements(page->'readerComments') with ordinality as readers(reader,n)),'[]'::jsonb))
+        else page end order by pages.n) from jsonb_array_elements(source.preview->'pages') with ordinality as pages(page,n)),'[]'::jsonb))
+      else source.preview end,
+    checkpoint=case when jsonb_typeof(source.checkpoint->'pendingBlogPosts')='array' then jsonb_set(source.checkpoint,'{pendingBlogPosts}',
+      coalesce((select jsonb_agg(case when post->>'key'=${post} and jsonb_typeof(post->'comments')='array'
+        then jsonb_set(post,'{comments}',coalesce((select jsonb_agg(case when reader->>'id'=${comment}
+          then (reader-'readerOwnershipReviewRequired')||jsonb_build_object('contactId',${contactId}::text) else reader end order by readers.n)
+          from jsonb_array_elements(post->'comments') with ordinality as readers(reader,n)),'[]'::jsonb))
+        else post end order by posts.n) from jsonb_array_elements(source.checkpoint->'pendingBlogPosts') with ordinality as posts(post,n)),'[]'::jsonb))
+      else source.checkpoint end,
+    updated_at=clock_timestamp()
+    where source.kind in ('wordpress-wxr','wordpress-rest')
+      and coalesce(nullif(source.preview->>'readerSourceSite',''),nullif(source.checkpoint->>'readerSourceSite',''),nullif(source.preview#>>'{wordpress,site,url}',''),source.origin) in (${site},${site.replace(/\/$/, "")})
+      and (jsonb_path_exists(source.preview,'$.pages[*] ? (@.wpId == $post).readerComments[*] ? (@.id == $comment)',jsonb_build_object('post',${post}::text,'comment',${comment}::text),true)
+        or jsonb_path_exists(source.checkpoint,'$.pendingBlogPosts[*] ? (@.key == $post).comments[*] ? (@.id == $comment)',jsonb_build_object('post',${post}::text,'comment',${comment}::text),true))`);
 }
 
 /** This helper receives the already-cloned preview under the identity lock. */
@@ -56,6 +94,12 @@ export async function bindOwnedReaderSources(tx: Tx, preview: Json, source: Read
     const batch = await tx.select().from(readerOwnershipReceipts).where(inArray(readerOwnershipReceipts.sourceDigest, rows.slice(offset, offset + BATCH).map(row => row.sourceDigest))).for("update");
     for (const receipt of batch) recorded.set(receipt.sourceDigest, receipt);
   }
+  const ownerIds = [...new Set([...known.values(), ...[...recorded.values()].flatMap(receipt => receipt.contactId ? [receipt.contactId] : [])])];
+  const retired = new Set<string>();
+  for (let offset = 0; offset < ownerIds.length; offset += BATCH) {
+    const requests = await tx.selectDistinct({ contactId: dataRequests.contactId }).from(dataRequests).where(and(inArray(dataRequests.contactId, ownerIds.slice(offset, offset + BATCH)), eq(dataRequests.kind, "erasure"), inArray(dataRequests.status, ["in_progress", "completed", "partially_completed"])));
+    for (const request of requests) retired.add(request.contactId);
+  }
   const checks = [...new Map(rows.filter(row => row.addressDigest).map(row => [row.addressDigest, { digest: row.addressDigest, email: email(row.comment.email), candidate: known.get(email(row.comment.email)) ?? null }])).values()];
   const ambiguous = new Set<string>();
   for (let offset = 0; offset < checks.length; offset += BATCH) {
@@ -75,26 +119,37 @@ export async function bindOwnedReaderSources(tx: Tx, preview: Json, source: Read
   }
   for (const row of rows) {
     delete row.comment.contactId;
+    delete row.comment.readerOwnershipReviewRequired;
     const receipt = recorded.get(row.sourceDigest);
-    if (receipt?.state === "erased") throw new ReaderOwnershipErasedError();
+    if (receipt?.state === "erased" || receipt?.contactId && retired.has(receipt.contactId)) throw new ReaderOwnershipErasedError();
     if (receipt?.contactId) { row.comment.contactId = receipt.contactId; continue; }
     const candidate = known.get(email(row.comment.email));
-    if (row.addressDigest && ambiguous.has(row.addressDigest)) throw new ServiceError("conflict", "This source reader's historical ownership is ambiguous or erased. An owner must review their original identity.");
+    if (receipt?.state === "review" || candidate && retired.has(candidate) || row.addressDigest && ambiguous.has(row.addressDigest)) {
+      row.comment.readerOwnershipReviewRequired = true;
+      if (receipt?.state === "unbound") await tx.update(readerOwnershipReceipts).set({ state: "review", updatedAt: new Date() }).where(eq(readerOwnershipReceipts.id, receipt.id));
+      continue;
+    }
     if (candidate) row.comment.contactId = candidate;
   }
   for (let offset = 0; offset < rows.length; offset += BATCH) {
     const missing = rows.slice(offset, offset + BATCH).filter(row => !recorded.has(row.sourceDigest));
-    if (missing.length) await tx.insert(readerOwnershipReceipts).values(missing.map(row => ({ sourceDigest: row.sourceDigest, addressDigest: row.addressDigest, firstRunId: source.id, createdBy: actorString(actor), createdByKeyId: actor.kind === "user" || actor.kind === "agent" ? actor.keyId ?? null : null, contactId: typeof row.comment.contactId === "string" ? row.comment.contactId : null, state: typeof row.comment.contactId === "string" ? "bound" as const : "unbound" as const }))).onConflictDoNothing();
+    if (missing.length) await tx.insert(readerOwnershipReceipts).values(missing.map(row => ({ sourceDigest: row.sourceDigest, addressDigest: row.addressDigest, firstRunId: source.id, createdBy: actorString(actor), createdByKeyId: actor.kind === "user" || actor.kind === "agent" ? actor.keyId ?? null : null, contactId: typeof row.comment.contactId === "string" ? row.comment.contactId : null, state: row.comment.readerOwnershipReviewRequired === true ? "review" as const : typeof row.comment.contactId === "string" ? "bound" as const : "unbound" as const }))).onConflictDoNothing();
   }
   return preview;
 }
 
-export async function acceptReaderOwnership(tx: Tx, source: ReaderSource, post: string, comment: string, contactId: string | null) {
+export async function readerOwnershipForComment(tx: Tx, source: ReaderSource, post: string, comment: string) {
   const key = await readerOwnershipKey(tx);
   const sourceDigest = key.digest("source", readerSourceIdentity(source, post, comment));
   const [receipt] = await tx.select().from(readerOwnershipReceipts).where(eq(readerOwnershipReceipts.sourceDigest, sourceDigest)).limit(1).for("update");
   if (!receipt) throw new ServiceError("conflict", "Stage and review the original reader source before committing this comment.");
   if (receipt.state === "erased") throw new ReaderOwnershipErasedError();
+  if (receipt.state === "review") throw new ServiceError("conflict", "An owner must review this original reader before importing their comment.");
+  if (receipt.contactId && (await tx.select({ id: dataRequests.id }).from(dataRequests).where(and(eq(dataRequests.contactId, receipt.contactId), eq(dataRequests.kind, "erasure"), inArray(dataRequests.status, ["in_progress", "completed", "partially_completed"]))).limit(1)).length) throw new ReaderOwnershipErasedError();
+  return receipt;
+}
+export async function acceptReaderOwnership(tx: Tx, source: ReaderSource, post: string, comment: string, contactId: string | null) {
+  const receipt = await readerOwnershipForComment(tx, source, post, comment);
   if (receipt.contactId && receipt.contactId !== contactId) throw new ServiceError("conflict", "The comment no longer matches its original reader owner.");
   if (!receipt.contactId && contactId) await tx.update(readerOwnershipReceipts).set({ contactId, state: "bound", updatedAt: new Date() }).where(eq(readerOwnershipReceipts.id, receipt.id));
 }

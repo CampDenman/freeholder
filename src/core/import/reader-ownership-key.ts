@@ -20,10 +20,11 @@ function fingerprint() {
   if (!material) throw new ServiceError("conflict", "Restore the original private reader-receipt configuration before continuing.");
   return createHash("sha256").update(`${CONTEXT}\0`).update(material).digest("hex");
 }
-export async function readerOwnershipKey(tx: Tx) {
-  await markReaderOwnershipWriter(tx);
+export async function readerOwnershipKey(tx: Tx, options: { readOnly?: boolean } = {}) {
+  if (!options.readOnly) await markReaderOwnershipWriter(tx);
   let [stored] = await tx.select().from(readerOwnershipKeys).where(eq(readerOwnershipKeys.id, 1)).limit(1);
   if (!stored) {
+    if (options.readOnly) throw new ServiceError("conflict", "The original reader receipt key is unavailable. Restore its matching backup.");
     if ((await tx.select({ id: readerOwnershipReceipts.id }).from(readerOwnershipReceipts).limit(1)).length) throw new ServiceError("conflict", "The original reader receipt key is missing. Restore its matching backup.");
     await tx.insert(readerOwnershipKeys).values({ id: 1, encryptedKey: encryptMailOutbox(randomBytes(32).toString("base64url"), CONTEXT), wrappingFingerprint: fingerprint() }).onConflictDoNothing();
     [stored] = await tx.select().from(readerOwnershipKeys).where(eq(readerOwnershipKeys.id, 1)).limit(1);
@@ -33,7 +34,7 @@ export async function readerOwnershipKey(tx: Tx) {
   try { key = Buffer.from(decryptMailOutbox(stored.encryptedKey, CONTEXT), "base64url"); }
   catch { throw new ServiceError("conflict", "The original reader receipt key cannot be read. Restore its matching private configuration."); }
   if (key.length !== 32) throw new ServiceError("conflict", "The original reader receipt key is invalid. Restore its matching backup.");
-  if (stored.wrappingFingerprint !== fingerprint()) await tx.update(readerOwnershipKeys).set({ encryptedKey: encryptMailOutbox(key.toString("base64url"), CONTEXT), wrappingFingerprint: fingerprint() }).where(eq(readerOwnershipKeys.id, 1));
+  if (!options.readOnly && stored.wrappingFingerprint !== fingerprint()) await tx.update(readerOwnershipKeys).set({ encryptedKey: encryptMailOutbox(key.toString("base64url"), CONTEXT), wrappingFingerprint: fingerprint() }).where(eq(readerOwnershipKeys.id, 1));
   return { digest(kind: "source" | "address", value: string) { return createHmac("sha256", key).update(`${CONTEXT}\0${kind}\0`).update(value).digest("hex"); } };
 }
 
