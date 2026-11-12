@@ -13842,13 +13842,13 @@ whatever is best for the people using the site.
   clients drained. Whole current-source integration remains open.
   No SQL or old money changes. C12.38 stays open. See
   `deploy/merchant-fee-stale-dispatch-2026-11-12.md`.
-  Current-main financial composition 2026-11-12: exact73e145af merges protected
-  mainbad846e4 (#694) and both fee repairs while preserving SQL958, all published
-  migrations and helper46. Full source gates passed at5f53daf5 (384 assertions,
-  26 explicit DB skips); exact73 post-merge types, six-file lint,12 CI controls,
+  Current-main financial composition 2026-11-12: exact `73e145af` merges protected
+  main `bad846e4` (#694) and both fee repairs while preserving SQL958, all published
+  migrations and helper `46a6ec02`. Full source gates passed at `5f53daf5` (384 assertions,
+  26 explicit DB skips); exact `73e145af` post-merge types, six-file lint, 12 CI controls,
   metadata and workflow gates pass. Five targeted native controls also pass:
-  legacy caller5.257s, merchant caller6.062s, installment fee6.967s, unreadable
-  success recovery6.451s and stale dispatch6.355s. Independent per-case ledgers
+  legacy caller 5.257s, merchant caller 6.062s, installment fee 6.967s, unreadable
+  success recovery 6.451s and stale dispatch 6.355s. Independent per-case ledgers
   verify original cash/resource ownership and no remaining database clients.
   The new collection model stays disabled; full financial/browser/provider/
   recovery acceptance and C12.38 remain open. Exact scope and preserved evidence
