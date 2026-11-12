@@ -284,3 +284,31 @@ boundaries remain authoritative. REST comment parsing, full WordPress parity,
 ZIP/crawl durable continuation, actual cutover/provider acceptance, independent
 review and stable readiness remain open. This source increment does not close
 C3.47 or change the version/announcement status.
+
+
+A further actual pure before control found native JSON syntax failures quote
+original record content. The initial-preview error handler retains that message
+on the run, so raw parsing must not supply source excerpts. The controlled
+fictional input before failed in 871ms because its body appeared in the error.
+The parser now reports only the original record ordinal and a constant invalid
+UTF-8/JSON diagnostic, with no original exception cause retained. All 23
+JSON/range/REST after controls pass in 5.19 seconds; the original malformed-input
+refusals and byte/identity checks remain unchanged. This diagnostic-only repair
+changes no valid-source result, actor authority, source byte or schema. The
+current protected head still requires its complete gate rerun.
+
+
+Protected CI on REST head 4a3d701f passed all 46 checks, including the newly
+added real English subdirectory owner journey. Browser shard 2 passed 64 tests
+in 12.5 minutes and its current production artifact scrub passed: 21,325 files,
+262,314,077 bytes, no source/environment leakage. That shard ran all four REST
+locale journeys; English selected /site-a/ through the real HTTP action before
+501-record interruption, restore, publication and rollback. This supplies the
+current subdirectory artifact result previously pending; it is not the old 0180
+root artifact. The diagnostic-only privacy correction requires a new exact-head
+protected rerun despite preserving all valid-source results.
+
+The first privacy-fix gate run caught only a test catch binding typed as any.
+After annotating it unknown, the complete gate rerun passed: full types, lint,
+license, notes, plan/F-matrix, playground and 384 contracts with 26 expected
+exclusions. The corrected protected head still needs its exact CI rerun.

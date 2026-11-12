@@ -49,7 +49,7 @@ describe("bounded original REST JSON ranges (C3.47)", () => {
     });
 
   it("does not echo malformed original record content in parser failures", async () => {
-    const failure: unknown = await readJsonSourcePhase(original(new TextEncoder().encode('[{"id":1,"body":Mia}]')).source).catch(error => error);
+    const failure: unknown = await readJsonSourcePhase(original(new TextEncoder().encode('[{"id":1,"body":Mia}]')).source).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(Error);
     if (!(failure instanceof Error)) throw new Error("The malformed source did not produce a parser failure.");
     expect(failure.message).not.toContain("Mia");
