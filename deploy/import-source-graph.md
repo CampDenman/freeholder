@@ -444,3 +444,16 @@ and media receipts retain their source/preview/manifest checks against that owne
 The asset receipt still belongs to its real child batch; neither the original
 source run ID nor its storage identity is rewritten. Full types and targeted lint
 pass. The unchanged fresh lifecycle control remains pending its next sole-PG lease.
+
+
+With the root-source repair, the fresh lifecycle reached actual image creation,
+501-page publication, cross-batch link acceptance and complete page rollback in
+49.65 seconds. Its last fixture assertion wrongly required zero raw Asset rows.
+Read-only evidence instead showed the exact original Asset already trashed,
+with every child/root kept-media and kept-page list empty. The existing shared
+rollback service deliberately uses recoverable trash. This was a fixture-policy
+error, not an observed cleanup/ordering defect; no production retention/deletion
+guard was changed. The corrected control requires the exact original Asset to
+be trashed, zero active assets, zero actual page/section usage and real public
+media delivery changing from 200 to 404 through the existing route. The earlier
+failure remains preserved; this corrected full case still needs its next run.

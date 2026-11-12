@@ -9,6 +9,8 @@ import { stopJobs } from "@/core/jobs";
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { importRuns, importSourceEntries } from "@/core/plugins/schema";
 import { assets } from "@/core/media/schema";
+import { assetUsage } from "@/core/media/service";
+import { GET as readPublicMedia } from "../../app/media/[...key]/route";
 import { beginSourceUpload, previewFromUpload, uploadSourceChunk } from "@/core/import/source-upload";
 import { commitImport, publishImport, reconcileImport, reviewImportConflicts, rollbackImport, startImport } from "@/core/import/service";
 import { importGraphVersionSchema } from "@/core/import/graph-version";
@@ -66,7 +68,9 @@ describe.runIf(hasDatabase)("actual durable static ZIP source (C3.47)", { timeou
     let committed = await commitImport.call({ id: run.id, graph }, OWNER);
     for (let phase = 0; phase < 6 && committed.status === "previewed"; phase++) committed = await commitImport.call({ id: run.id, graph }, OWNER);
     expect(committed.status).toBe("committed");
-    expect(await db().select().from(assets)).toHaveLength(1);
+    const originalImages = await db().select().from(assets);
+    expect(originalImages).toHaveLength(1);
+    const originalImage = originalImages[0]!;
     expect(await db().select().from(blogPosts)).toHaveLength(0);
     expect(await db().select().from(blogAuthors)).toHaveLength(0);
     expect(await db().select().from(blogTerms)).toHaveLength(0);
@@ -80,11 +84,19 @@ describe.runIf(hasDatabase)("actual durable static ZIP source (C3.47)", { timeou
     for (let phase = 0; phase < 6 && published.status === "reconciled"; phase++) published = await publishImport.call({ id: run.id, graph }, OWNER);
     expect(published.status).toBe("published");
     expect((await db().select().from(pages).where(sql`${pages.slug} like 'zip/%'`)).filter(page => page.status === "published")).toHaveLength(501);
+    const publicRequest = () => readPublicMedia(new Request("http://qualification.test/media/original"), { params: Promise.resolve({ key: originalImage.storageKey.split("/") }) });
+    expect((await publicRequest()).status).toBe(200);
     let reversed = await rollbackImport.call({ id: run.id, graph }, OWNER);
     for (let phase = 0; phase < 6 && reversed.status !== "rolled_back"; phase++) reversed = await rollbackImport.call({ id: run.id, graph }, OWNER);
     expect(reversed.status).toBe("rolled_back");
     expect(await db().select().from(pages).where(sql`${pages.slug} like 'zip/%'`)).toHaveLength(0);
-    expect(await db().select().from(assets)).toHaveLength(0);
+    // Import rollback deliberately uses recoverable trash; raw row deletion
+    // would discard that recovery policy. The exact original must be unusable.
+    const remaining = await db().select().from(assets);
+    expect(remaining.map(asset => ({ id: asset.id, status: asset.status }))).toEqual([{ id: originalImage.id, status: "trashed" }]);
+    expect(remaining.filter(asset => asset.status !== "trashed")).toHaveLength(0);
+    expect(await assetUsage.call({ id: originalImage.id }, OWNER)).toEqual({ pages: 0, sections: 0 });
+    expect((await publicRequest()).status).toBe(404);
     expect((await db().select().from(importRuns).where(eq(importRuns.id, run.id)))[0]?.createdBy).toBe(`user:${OWNER.userId}`);
   });
 });
