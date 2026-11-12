@@ -8888,9 +8888,9 @@
   "merchantPayments.checkoutReferenceHint": "اتركه فارغًا للبحث في الحساب الأصلي. يجب أن يطابق المرجع طلب الدفع هذا تمامًا.",
   "merchantPayments.result.pending": "لا تزال الدفعة الأصلية قيد الانتظار لدى المزوّد.",
   "merchantPayments.title": "مراجعة دفعة التاجر",
-  "merchantPayments.terminal": "أُغلقت عملية الدفع الأصلية لدى المزوّد دون استلام أموال.",
+  "merchantPayments.terminal": "وصلت دفعة المزود الأصلية إلى حالة نهائية دون استلام أموال.",
   "merchantPayments.recipientAccount": "الحساب المستلم الأصلي",
-  "merchantPayments.result.not_paid": "أُغلقت عملية الدفع الأصلية ولم تُستلم أموال.",
+  "merchantPayments.result.not_paid": "وصلت الدفعة الأصلية إلى حالة نهائية ولم تُستلم أي أموال.",
   "merchantPayments.result.paid": "تم التحقق من الخصم الأصلي للعميل. راجع أدناه أي التزامات منفصلة لتسوية التاجر أو العمولة.",
   "merchantPayments.openCheckout": "فتح الدفع الأصلي",
   "merchantPayments.inspect": "فحص الدفع الأصلي",
@@ -8973,5 +8973,7 @@
   "merchantTax.error.not_found": "لم يعد النشاط أو المنطقة الضريبية المختارة متاحًا.",
   "merchantTax.title": "ضرائب نشاطك التجاري",
   "merchantTax.scheme.oss": "OSS",
-  "merchantTax.nonCollectionReason": "سبب عدم التحصيل"
+  "merchantTax.nonCollectionReason": "سبب عدم التحصيل",
+  "merchantPayments.paymentReference": "مرجع PaymentIntent الأصلي",
+  "merchantPayments.retireIntent": "إلغاء دفعة البطاقة الأصلية غير المحصلة"
 }

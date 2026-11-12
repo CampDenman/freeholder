@@ -8888,9 +8888,9 @@
   "merchantPayments.checkoutReferenceHint": "Déjalo en blanco para buscar en la cuenta original. La referencia debe coincidir exactamente con esta solicitud de pago.",
   "merchantPayments.result.pending": "El pago original sigue pendiente en el proveedor.",
   "merchantPayments.title": "Revisión del pago al comerciante",
-  "merchantPayments.terminal": "El pago original está cerrado en el proveedor y no se recibieron fondos.",
+  "merchantPayments.terminal": "El pago original del proveedor es definitivo y no se recibió dinero.",
   "merchantPayments.recipientAccount": "Cuenta receptora original",
-  "merchantPayments.result.not_paid": "El pago original está cerrado y no se recibieron fondos.",
+  "merchantPayments.result.not_paid": "El pago original es definitivo y no se recibieron fondos.",
   "merchantPayments.result.paid": "Se verificó el cargo original al cliente. Revisa por separado las obligaciones de liquidación o comisión que aparecen abajo.",
   "merchantPayments.openCheckout": "Abrir pago original",
   "merchantPayments.inspect": "Comprobar pago original",
@@ -8973,5 +8973,7 @@
   "merchantTax.error.not_found": "La empresa o jurisdicción seleccionada ya no está disponible.",
   "merchantTax.title": "Impuestos de tu empresa",
   "merchantTax.scheme.oss": "OSS",
-  "merchantTax.nonCollectionReason": "Motivo para no recaudar"
+  "merchantTax.nonCollectionReason": "Motivo para no recaudar",
+  "merchantPayments.paymentReference": "Referencia original de PaymentIntent",
+  "merchantPayments.retireIntent": "Cancelar el pago original con tarjeta sin cobrar"
 }

@@ -248,8 +248,9 @@ CREATE TABLE merchant_payment_creation_refusals (
 --> statement-breakpoint
 CREATE TABLE merchant_payment_retirement_acks (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), payment_id uuid NOT NULL REFERENCES merchant_payment_requests(payment_id) ON DELETE RESTRICT,
- checkout_ref text NOT NULL CHECK(checkout_ref ~ '^cs_[A-Za-z0-9_]+$'), payment_ref text CHECK(payment_ref IS NULL OR payment_ref ~ '^pi_[A-Za-z0-9_]+$'),
- kind text NOT NULL CHECK(kind IN('session_expired','intent_canceled')), evidence_digest text NOT NULL, observed_at timestamptz NOT NULL DEFAULT now()
+ checkout_ref text CHECK(checkout_ref IS NULL OR checkout_ref ~ '^cs_[A-Za-z0-9_]+$'), payment_ref text CHECK(payment_ref IS NULL OR payment_ref ~ '^pi_[A-Za-z0-9_]+$'),
+ kind text NOT NULL CHECK(kind IN('session_expired','intent_canceled')), evidence_digest text NOT NULL, observed_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT merchant_payment_retirement_acks_resource CHECK(((kind='session_expired' AND checkout_ref IS NOT NULL) OR(kind='intent_canceled' AND payment_ref IS NOT NULL)) IS TRUE)
 );
 --> statement-breakpoint
 CREATE INDEX merchant_payment_retirement_acks_payment_idx ON merchant_payment_retirement_acks(payment_id);
@@ -258,9 +259,9 @@ CREATE UNIQUE INDEX merchant_payment_retirement_acks_evidence_idx ON merchant_pa
 --> statement-breakpoint
 CREATE TABLE merchant_payment_terminal_receipts (
  payment_id uuid PRIMARY KEY REFERENCES merchant_payment_requests(payment_id) ON DELETE RESTRICT,
- checkout_ref text NOT NULL CHECK(checkout_ref ~ '^cs_[A-Za-z0-9_]+$'), payment_ref text CHECK(payment_ref IS NULL OR payment_ref ~ '^pi_[A-Za-z0-9_]+$'),
- session_status text NOT NULL, intent_status text, amount_received_minor integer NOT NULL CHECK(amount_received_minor=0), observed_at timestamptz NOT NULL DEFAULT now(),
- CONSTRAINT merchant_payment_terminal_receipts_terminal CHECK((session_status='expired' AND((payment_ref IS NULL AND intent_status IS NULL)OR(payment_ref IS NOT NULL AND intent_status IN('canceled','requires_payment_method','requires_confirmation','requires_action'))))OR(session_status='complete' AND payment_ref IS NOT NULL AND intent_status='canceled'))
+ checkout_ref text CHECK(checkout_ref IS NULL OR checkout_ref ~ '^cs_[A-Za-z0-9_]+$'), payment_ref text CHECK(payment_ref IS NULL OR payment_ref ~ '^pi_[A-Za-z0-9_]+$'),
+ session_status text, intent_status text, amount_received_minor integer NOT NULL CHECK(amount_received_minor=0), observed_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT merchant_payment_terminal_receipts_terminal CHECK(((checkout_ref IS NULL AND session_status IS NULL AND payment_ref IS NOT NULL AND intent_status='canceled') OR(checkout_ref IS NOT NULL AND((session_status='expired' AND((payment_ref IS NULL AND intent_status IS NULL)OR(payment_ref IS NOT NULL AND intent_status IN('canceled','requires_payment_method','requires_confirmation','requires_action'))))OR(session_status='complete' AND payment_ref IS NOT NULL AND intent_status='canceled')))) IS TRUE)
 );
 --> statement-breakpoint
 CREATE FUNCTION guard_merchant_payment_request() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -304,7 +305,10 @@ DECLARE parent payments%ROWTYPE;
 BEGIN
  IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Retain every original provider terminal fact.' USING ERRCODE='23514'; END IF;
  SELECT * INTO parent FROM payments WHERE id=NEW.payment_id FOR UPDATE;
- IF parent.id IS NULL OR parent.method<>'hosted_checkout' OR(parent.provider_checkout_ref IS NOT NULL AND parent.provider_checkout_ref IS DISTINCT FROM NEW.checkout_ref) THEN
+ IF parent.id IS NULL OR parent.method NOT IN('hosted_checkout','saved_method')
+  OR(parent.method='hosted_checkout' AND(NEW.checkout_ref IS NULL OR(parent.provider_checkout_ref IS NOT NULL AND parent.provider_checkout_ref IS DISTINCT FROM NEW.checkout_ref)))
+  OR(parent.method='saved_method' AND(NEW.checkout_ref IS NOT NULL OR NEW.payment_ref IS NULL))
+  OR(NEW.payment_ref IS NOT NULL AND parent.provider_ref IS NOT NULL AND parent.provider_ref IS DISTINCT FROM NEW.payment_ref) THEN
   RAISE EXCEPTION 'This cancellation fact belongs to another original payment or checkout.' USING ERRCODE='23514'; END IF;
  IF TG_TABLE_NAME='merchant_payment_terminal_receipts' AND(parent.status='succeeded' OR EXISTS(SELECT 1 FROM merchant_payment_observations WHERE payment_id=NEW.payment_id AND status='succeeded')) THEN
   RAISE EXCEPTION 'Positive money cannot be replaced by a no-charge terminal claim.' USING ERRCODE='23514'; END IF;

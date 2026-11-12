@@ -8888,9 +8888,9 @@
   "merchantPayments.checkoutReferenceHint": "Leave blank to search the original account. A reference must match this exact payment request.",
   "merchantPayments.result.pending": "The original provider payment is still pending.",
   "merchantPayments.title": "Merchant payment review",
-  "merchantPayments.terminal": "The original provider checkout is terminal with no received money.",
+  "merchantPayments.terminal": "The original provider payment is terminal with no received money.",
   "merchantPayments.recipientAccount": "Original receiving account",
-  "merchantPayments.result.not_paid": "The original checkout is terminal and no funds were received.",
+  "merchantPayments.result.not_paid": "The original payment is terminal and no funds were received.",
   "merchantPayments.result.paid": "The original customer charge is verified. Review any separate merchant settlement or commission debt below.",
   "merchantPayments.openCheckout": "Open original checkout",
   "merchantPayments.inspect": "Check original checkout",
@@ -8973,5 +8973,7 @@
   "merchantTax.error.not_found": "The selected business or jurisdiction is no longer available.",
   "merchantTax.title": "Your business taxes",
   "merchantTax.scheme.oss": "OSS",
-  "merchantTax.nonCollectionReason": "Reason for not collecting"
+  "merchantTax.nonCollectionReason": "Reason for not collecting",
+  "merchantPayments.paymentReference": "Original PaymentIntent reference",
+  "merchantPayments.retireIntent": "Cancel original unpaid card payment"
 }

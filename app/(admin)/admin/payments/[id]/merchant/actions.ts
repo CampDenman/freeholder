@@ -24,7 +24,7 @@ export async function reconcileMerchantPaymentAction(form: FormData): Promise<vo
     } else {
       const action = field("action");
       if (action !== "inspect" && action !== "retire") throw new ServiceError("validation", "Choose an original payment reconciliation action.");
-      const result = await reconcileMerchantCheckout.call({ paymentId, action, ...(field("checkoutRef") ? { checkoutRef: field("checkoutRef") } : {}) }, actor);
+      const result = await reconcileMerchantCheckout.call({ paymentId, action, ...(field("checkoutRef") ? { checkoutRef: field("checkoutRef") } : {}), ...(field("paymentRef") ? { paymentRef: field("paymentRef") } : {}) }, actor);
       state = result.unapplied ? "unresolved" : result.state;
       if (result.state === "open" && result.checkoutUrl && result.checkoutExpiresAt) {
         const kept = sealCheckoutLink({ paymentId, owner: actorString(actor), url: result.checkoutUrl, expiresAt: result.checkoutExpiresAt });

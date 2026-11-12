@@ -8888,9 +8888,9 @@
   "merchantPayments.checkoutReferenceHint": "Laissez vide pour rechercher dans le compte initial. La référence doit correspondre exactement à cette demande de paiement.",
   "merchantPayments.result.pending": "Le paiement initial est encore en attente chez le prestataire.",
   "merchantPayments.title": "Vérification du paiement marchand",
-  "merchantPayments.terminal": "Le paiement initial est clos chez le prestataire, sans fonds reçus.",
+  "merchantPayments.terminal": "Le paiement d’origine du prestataire est terminé sans encaissement.",
   "merchantPayments.recipientAccount": "Compte bénéficiaire initial",
-  "merchantPayments.result.not_paid": "Le paiement initial est clos et aucun fonds n’a été reçu.",
+  "merchantPayments.result.not_paid": "Le paiement d’origine est terminé et aucun fonds n’a été reçu.",
   "merchantPayments.result.paid": "Le débit client initial est vérifié. Vérifiez séparément ci-dessous les obligations de règlement et de commission.",
   "merchantPayments.openCheckout": "Ouvrir le paiement initial",
   "merchantPayments.inspect": "Vérifier le paiement initial",
@@ -8973,5 +8973,7 @@
   "merchantTax.error.not_found": "L’entreprise ou le territoire sélectionné n’est plus disponible.",
   "merchantTax.title": "Les taxes de votre entreprise",
   "merchantTax.scheme.oss": "OSS",
-  "merchantTax.nonCollectionReason": "Motif de non-perception"
+  "merchantTax.nonCollectionReason": "Motif de non-perception",
+  "merchantPayments.paymentReference": "Référence PaymentIntent d’origine",
+  "merchantPayments.retireIntent": "Annuler le paiement par carte d’origine non encaissé"
 }

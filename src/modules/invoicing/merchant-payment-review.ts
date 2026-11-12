@@ -28,8 +28,8 @@ const feeOperation = z.object({ id: z.uuid(), amountMinor: amount, currency: z.s
   applicationFeeRef: z.string(), targetRetainedFeeMinor: amount, observedOriginalFeeMinor: amount, createdAt: z.date() });
 const feeObserved = z.object({ id: z.uuid(), operationId: z.uuid(), providerRef: z.string(), applicationFeeRef: z.string(), amountMinor: amount, currency: z.string(), bindingVerified: z.boolean(), observedAt: z.date() });
 const dispatch = z.object({ id: z.uuid(), ordinal: z.number().int().positive(), requestDigest: z.string(), dispatchedAt: z.date(), refusalCode: z.string().nullable() });
-const retirementAck = z.object({ id: z.uuid(), checkoutRef: z.string(), paymentRef: z.string().nullable(), kind: z.enum(["session_expired", "intent_canceled"]), observedAt: z.date() });
-const terminalReceipt = z.object({ checkoutRef: z.string(), paymentRef: z.string().nullable(), sessionStatus: z.enum(["expired", "complete"]), intentStatus: z.string().nullable(), amountReceivedMinor: z.literal(0), observedAt: z.date() });
+const retirementAck = z.object({ id: z.uuid(), checkoutRef: z.string().nullable(), paymentRef: z.string().nullable(), kind: z.enum(["session_expired", "intent_canceled"]), observedAt: z.date() });
+const terminalReceipt = z.object({ checkoutRef: z.string().nullable(), paymentRef: z.string().nullable(), sessionStatus: z.enum(["expired", "complete"]).nullable(), intentStatus: z.string().nullable(), amountReceivedMinor: z.literal(0), observedAt: z.date() });
 
 export const merchantPaymentReview = defineService({
   name: "invoicing.merchantPaymentReview", summary: "Review expected original accounts, every retained positive charge and independent fee recovery for one merchant payment.",

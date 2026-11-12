@@ -48,11 +48,13 @@ export default async function MerchantPaymentPage({ params, searchParams }: {
       </dl>
       {review.terminalReceipt ? <Callout>{t("merchantPayments.terminal")}</Callout> : null}
       {originalCheckoutUrl ? <a className="text-accent underline" href={originalCheckoutUrl} rel="noreferrer">{t("merchantPayments.openCheckout")}</a> : null}
-      {review.payment.method === "hosted_checkout" && canManage && stepUpValid ? <form action={reconcileMerchantPaymentAction} className="grid gap-3">
+      {["hosted_checkout", "saved_method"].includes(review.payment.method) && canManage && stepUpValid ? <form action={reconcileMerchantPaymentAction} className="grid gap-3">
         <input type="hidden" name="paymentId" value={id} />
-        <Field label={t("merchantPayments.checkoutReference")} htmlFor="original-checkout"><Input id="original-checkout" name="checkoutRef" defaultValue={review.payment.providerCheckoutRef ?? ""} maxLength={200} pattern="cs_[A-Za-z0-9_]+" /></Field>
+        {review.payment.method === "saved_method"
+          ? <Field label={t("merchantPayments.paymentReference")} htmlFor="original-intent"><Input id="original-intent" name="paymentRef" defaultValue={review.payment.providerRef ?? ""} maxLength={200} pattern="pi_[A-Za-z0-9_]+" /></Field>
+          : <Field label={t("merchantPayments.checkoutReference")} htmlFor="original-checkout"><Input id="original-checkout" name="checkoutRef" defaultValue={review.payment.providerCheckoutRef ?? ""} maxLength={200} pattern="cs_[A-Za-z0-9_]+" /></Field>}
         <p className="text-sm text-ink-muted">{t("merchantPayments.checkoutReferenceHint")}</p>
-        <div className="flex flex-wrap gap-3"><Button type="submit" name="action" value="inspect">{t("merchantPayments.inspect")}</Button><Button type="submit" name="action" value="retire" variant="quiet">{t("merchantPayments.retire")}</Button></div>
+        <div className="flex flex-wrap gap-3"><Button type="submit" name="action" value="inspect">{t("merchantPayments.inspect")}</Button><Button type="submit" name="action" value="retire" variant="quiet">{t(review.payment.method === "saved_method" ? "merchantPayments.retireIntent" : "merchantPayments.retire")}</Button></div>
       </form> : null}
       {canManage && stepUpValid && review.payment.providerRef?.startsWith("pi_") ? <form action={reconcileMerchantPaymentAction}><input type="hidden" name="paymentId" value={id} /><Button type="submit" name="action" value="inspect_charge" variant="quiet">{t("merchantPayments.inspectCharge")}</Button></form> : null}
       {canManage && !stepUpValid ? <Callout><a className="text-accent underline" href={`/security/verify?returnTo=${encodeURIComponent(`/admin/payments/${id}/merchant`)}`}>{t("merchantPayments.verify")}</a></Callout> : null}
@@ -69,7 +71,7 @@ export default async function MerchantPaymentPage({ params, searchParams }: {
     </div></CardBody></Card>
     <Card><CardHeader title={t("merchantPayments.dispatches")} /><CardBody><div className="grid gap-2 text-sm">
       {review.dispatches.map(dispatch => <p key={dispatch.id}>#{dispatch.ordinal} · {date(dispatch.dispatchedAt)}{dispatch.refusalCode ? <> · <code>{dispatch.refusalCode}</code></> : null}</p>)}
-      {review.retirementAcks.map(ack => <p key={ack.id}><code>{ack.kind}</code> · <bdi>{ack.checkoutRef}</bdi> · {date(ack.observedAt)}</p>)}
+      {review.retirementAcks.map(ack => <p key={ack.id}><code>{ack.kind}</code> · <bdi>{ack.checkoutRef ?? ack.paymentRef}</bdi> · {date(ack.observedAt)}</p>)}
     </div></CardBody></Card>
     <Card><CardHeader title={t("merchantPayments.fees")} /><CardBody><div className="grid gap-2 text-sm">
       {review.feeOperations.map(operation => <p key={operation.id}>{money(operation.amountMinor, operation.currency)} · <code>{operation.status}</code> · <bdi>{operation.providerRef}</bdi></p>)}

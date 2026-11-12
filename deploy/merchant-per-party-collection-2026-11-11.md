@@ -276,3 +276,24 @@ phase attempts every authenticated event before returning an application
 error, so one policy mismatch does not hide another positive observation.
 Six focused no-database controls and the full TypeScript check pass for this
 source increment. Contiguous SQL and native source qualification are pending.
+
+### Saved-card source recovery increment
+
+Saved-method recovery now uses its actual original PaymentIntent in the
+shared owner reconciliation service. A cancellation acknowledgement commits
+before the final provider read; that acknowledgement alone never releases
+another attempt. Terminal receipts distinguish a real Checkout Session from
+a saved-card intent with no session. The latter requires an authenticated
+canceled intent and exactly zero received money. Pending, missing, ambiguous
+and positive outcomes remain blocked or recorded as unapplied cash.
+The owner form has both resource paths in all four locale catalogs.
+
+The adapter and terminal-proof controls pass 39 cases, and the combined
+financial/scope staging batch passes 43 cases; locale and journal controls
+pass 62 cases. The full 8 GB TypeScript check and focused lint pass. The
+fresh regenerated migration and three prepared native checkout/recovery
+cases remain pending for this increment. The earlier frozen schema candidate and its native tax tests are
+kept separately; their SQL evidence is not attributed to this changed schema.
+The actual checkout fixture uses real member/catalog/tax/quote/issue services
+with a test payment edge, and its direct/destination mixed-cart cases do not
+constitute real provider-account acceptance.
