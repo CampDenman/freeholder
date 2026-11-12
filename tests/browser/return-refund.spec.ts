@@ -184,8 +184,13 @@ test.describe("attested offline return refund (C5.19)",()=>{
       }
       await form.getByRole("button").focus();
       await page.keyboard.press("Enter");
-      await expect(page).toHaveURL(/saved=submitReturnProviderRefund/);
+      // These raw pre-existing processing rows deliberately have no signed
+      // caller history. They cannot authorize another physical submission.
+      const reviewError="The original refund is already admitted. Reconcile its actual result instead of sending another provider request.";
+      await expect(page).toHaveURL(/error=/);
+      expect(new URL(page.url()).searchParams.get("error")).toBe(reviewError);
       expect((await db().select().from(returnRequests).where(eq(returnRequests.id,returnId)))[0]!.status).toBe("received");
+      expect((await db().select().from(creditNotes).where(eq(creditNotes.invoiceId,invoiceId)))[0]!.status).toBe("draft");
       const assigned=await db().select().from(refunds).where(eq(refunds.invoiceId,invoiceId));
       expect(assigned).toHaveLength(2);
       expect(assigned.every(refund=>refund.status==="processing")).toBe(true);
@@ -202,7 +207,12 @@ test.describe("attested offline return refund (C5.19)",()=>{
         await page.goto(`/admin/returns?id=${returnId}`);
         await form.getByRole("button").focus();
         await page.keyboard.press("Enter");
-        await expect(page).toHaveURL(/saved=submitReturnProviderRefund/);
+        if(index+1<assigned.length){
+          await expect(page).toHaveURL(/error=/);
+          expect(new URL(page.url()).searchParams.get("error")).toBe(reviewError);
+          expect((await db().select().from(returnRequests).where(eq(returnRequests.id,returnId)))[0]!.status).toBe("received");
+          expect((await db().select().from(creditNotes).where(eq(creditNotes.invoiceId,invoiceId)))[0]!.status).toBe("draft");
+        }else await expect(page).toHaveURL(/saved=submitReturnProviderRefund/);
       }
       await confirm(0);
       await expect(form.getByRole("button")).toBeVisible();

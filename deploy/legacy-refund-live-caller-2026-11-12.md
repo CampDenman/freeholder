@@ -261,3 +261,33 @@ claim that the new remote artifact transport or the complete browser shard has
 passed. Evidence is `/tmp/freeholder-ci694-followup-{source-test-report.json,source5-retry.json,artifact-transport.json}`
 and the corresponding types/lint/workflow logs. The protected pipeline remains
 pending; no CI failure has been classified as resolved by the local pass.
+
+The new protected run `43311908611` at PR head `47599dcb` completed all
+three archive handoffs and browser shards within their existing budgets.
+Browser shards 1 and 2 passed; shard 3 ran all 62 cases in 6.3 minutes,
+including a passing original encrypted group/SFU case. Its sole four failing
+cases are the four locales of the historical provider-return fixture. That
+fixture directly seeds processing refunds and synthetic provider references
+without signed caller receipts, then expects a successful submit while they
+remain processing. The containment guard instead returns its explicit
+already-admitted/reconcile error. All 32 native shards passed again.
+
+The narrow fixture correction requires that exact review error and an open
+return/draft credit while any historical installment remains processing.
+Only after both original synthetic confirmations may the original final
+1000/issued-credit reconciliation assertion pass. It changes no guard, money
+expectation or deadline and fabricates no historical caller authority. That
+fixture correction passed focused lint and all four production-browser
+locales on normal79: EN 7.396s, ES 6.084s, FR 6.756s and AR 6.731s, with zero
+skips, retries or unexpected outcomes. Product/public/config/dependency inputs
+were verified identical between `5dff3f92` and `47599dcb` before reusing the
+preserved `5dff3f92` runtime. Only the corrected fixture was copied outside
+`.next`; BUILD_ID and standalone server SHA remained unchanged. The runner
+exited zero, port 3176 closed and an actual read-only PostgreSQL query found
+no remaining target backends. The missing `psql` command was not a test
+failure; the installed postgres-js client completed that same drain query.
+Evidence is `/tmp/freeholder-ci694-return-fixture-provenance.json` and
+`/tmp/freeholder-ci694-return4-{browser.json,drain.json}`. A fresh normal
+protected run remains required; the earlier message failure's cause remains
+unknown. Synthetic original-state confirmations do not supply live-provider
+acceptance.
