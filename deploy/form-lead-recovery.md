@@ -70,3 +70,13 @@ stopped-caller recovery, original-provider erasure and privacy completion, and
 confirmation that no private page capability is sent. Local intercepted HTTP
 and fixture SQL controls do not supply that acceptance or the owner's security
 sign-off.
+
+Form purge prepares this evidence before deleting its parent. Retired settled
+copies detach and minimize under the current identity/hold guard; unresolved
+remote work refuses the whole transaction. The scheduled trash sweep uses the
+same preparation boundary and rechecks final eligibility before deletion.
+Unstarted retired copies cancel their original queue delivery without contacting
+the provider. Two local PostgreSQL controls cover the settled manual purge and
+unstarted scheduled sweep, including later original queue delivery with zero
+provider requests. Migration79 remains unjournalled until its preceding source
+migrations are composed; no contiguous upgrade acceptance is claimed here.

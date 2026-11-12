@@ -124,6 +124,8 @@ export interface TrashFamilyOptions<TRecord> {
   holdGuard?: SQL;
   /** Acquire the family's shared identity/writer fences before deleting. */
   beforePurge?: (tx: Tx) => Promise<void>;
+  /** Prepare guarded child evidence before a parent DELETE can cascade or detach it. */
+  preparePurge?: (tx: Tx, ids: string[]) => Promise<void>;
   /** Deletes child rows that belong to the purged record(s), in-transaction. */
   purgeChildren?: (tx: Tx, ids: string[]) => Promise<void>;
   /** Refuses restoration the family cannot honour (a taken slug). */
@@ -215,6 +217,13 @@ export function makeTrashServices<TRecord = Record<string, unknown> & { id: stri
     handler: async (input, ctx) => {
       await options.beforePurge?.(ctx.tx);
       let removed: { id: string } | undefined;
+      if (options.preparePurge) {
+        const [eligible] = await ctx.tx.select({ id: table.id }).from(table).where(and(eq(table.id, input.id), isNotNull(table.trashedAt), options.holdGuard, ...ownership(ctx.actor)));
+        if (!eligible) throw new ServiceError("conflict", "That record cannot be purged. It may be unavailable or subject to a retention hold.");
+        // The preparer takes any identity locks before parent locks. The final
+        // DELETE rechecks eligibility; a refusal rolls preparation back too.
+        await options.preparePurge(ctx.tx, [eligible.id]);
+      }
       try {
         [removed] = await ctx.tx
           .delete(table)
@@ -267,9 +276,15 @@ export function makeTrashServices<TRecord = Record<string, unknown> & { id: stri
         .orderBy(asc(table.id))
         .limit(PURGE_BATCH_LIMIT)
         .for("update", { skipLocked: true });
-      const removed = await ctx.tx
+      // Prepared families must retain their foreign-key evidence until this
+      // phase finishes. Other families keep the existing SKIP LOCKED path.
+      const prepared = options.preparePurge
+        ? await ctx.tx.select({ id: table.id }).from(table).where(where).orderBy(asc(table.id)).limit(PURGE_BATCH_LIMIT)
+        : null;
+      if (prepared?.length) await options.preparePurge!(ctx.tx, prepared.map(row => row.id));
+      const removed = prepared && !prepared.length ? [] : await ctx.tx
         .delete(table)
-        .where(inArray(table.id, batch))
+        .where(prepared ? and(inArray(table.id, prepared.map(row => row.id)), where) : inArray(table.id, batch))
         .returning({ id: table.id });
       if (options.purgeChildren && removed.length > 0) {
         await options.purgeChildren(ctx.tx, removed.map((r) => r.id));

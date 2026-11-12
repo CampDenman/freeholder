@@ -255,7 +255,7 @@ const trash = makeTrashServices({
   rowSchema: formRow,
   subjectKind: "form",
   gone: "That form is gone.",
-  purgeChildren: async (tx, ids) => {
+  preparePurge: async (tx, ids) => {
     const submissions = await tx.select({ id: formSubmissions.id }).from(formSubmissions).where(inArray(formSubmissions.formId, ids));
     const pending = await retireLeadCopies(tx, submissions.map(row => row.id));
     if (pending.length) throw new ServiceError("conflict", "Resolve original lead outcomes and remote erasure before purging this form.");
