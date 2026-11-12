@@ -6,6 +6,7 @@ import { AdapterError } from "@/adapters/types";
 import { payoutProvider } from "@/adapters/payouts";
 import { retainPaymentProviderEvidence } from "@/modules/invoicing/payment-provider-service";
 import { applyPayoutWebhook } from "@/modules/members/provider-payouts";
+import { resolveSubscriptionProviderScope, type SubscriptionProviderScopeInput } from "@/modules/invoicing/merchant-provider-stage";
 
 export const dynamic = "force-dynamic";
 
@@ -24,21 +25,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
   request.headers.forEach((value, key) => { headers[key.toLowerCase()] = value; });
   let events;
   try {
-    events = await provider.webhook({ headers, body, receivedAt: new Date().toISOString() });
+    const verificationRequest = { headers, body, receivedAt: new Date().toISOString(), resolveSubscriptionScope: (input: SubscriptionProviderScopeInput) => resolveSubscriptionProviderScope(id === "stripe_connect" ? "stripe" : id, input) };
+    events = await provider.webhook(verificationRequest);
   } catch (error) {
     if (error instanceof AdapterError) return new Response(null, { status: error.code === "authentication" ? 401 : error.code === "unavailable" || error.code === "provider_failure" || error.retryable ? 503 : 400 });
     throw error;
   }
   // Events for transfers that are not this site's (a shared provider
   // account) are acknowledged and ignored, so the provider keeps the endpoint.
-  const staged = [];
-  for (const event of events) {
-    if (event.kind === "payment") {
-      const [financial] = await retainPaymentProviderEvidence("stripe", [event.event]);
-      staged.push({ ...event, event: financial! });
-    } else staged.push(event);
-  }
-  events = staged;
+  const financial = await retainPaymentProviderEvidence("stripe", events.flatMap(event => event.kind === "payment" ? [event.event] : []));
+  let financialIndex = 0;
+  events = events.map(event => event.kind === "payment" ? { ...event, event: financial[financialIndex++]! } : event);
   await applyPayoutWebhook.call({ provider: provider.id, events }, { kind: "system" });
   return new Response(null, { status: 200 });
 }

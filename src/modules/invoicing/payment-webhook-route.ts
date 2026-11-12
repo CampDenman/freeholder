@@ -9,6 +9,7 @@ import { AdapterError } from "@/adapters/types";
 import { ServiceError } from "@/core/service";
 import { processPaymentProviderEvents, retainPaymentProviderEvidence } from "./payment-provider-service";
 import { readBoundedBytes, RequestBodyError } from "@/core/http/body";
+import { resolveSubscriptionProviderScope, type SubscriptionProviderScopeInput } from "./merchant-provider-stage";
 
 const MAX_WEBHOOK_BYTES = 1_048_576;
 
@@ -22,7 +23,8 @@ export function paymentWebhookRoute(provider: HostedPaymentProviderId) {
     try {
       const body = await rawRequest(request);
       const headers = Object.fromEntries([...request.headers.entries()].map(([key, value]) => [key.toLowerCase(), value]));
-      const verified = await paymentAdapter(provider).verifyWebhook({ headers, body, receivedAt });
+      const verificationRequest = { headers, body, receivedAt, resolveSubscriptionScope: (input: SubscriptionProviderScopeInput) => resolveSubscriptionProviderScope(provider, input) };
+      const verified = await paymentAdapter(provider).verifyWebhook(verificationRequest);
       const events = await retainPaymentProviderEvidence(provider, verified);
       const result = await processPaymentProviderEvents.call(
         {

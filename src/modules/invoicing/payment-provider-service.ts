@@ -583,13 +583,21 @@ export const retainMerchantProviderEvent = defineService({
 /** Call only after exact raw signature verification, outside an applying TX. */
 export async function retainPaymentProviderEvidence(providerId: z.infer<typeof provider>, events: readonly PaymentProviderEvent[]): Promise<PaymentProviderEvent[]> {
   const prepared: PaymentProviderEvent[] = [];
+  const errors: unknown[] = [];
   for (const original of events) {
-    const event = await retainSubscriptionProviderEvidence(providerId, original);
-    if (event.providerPlatformAccountId && ["payment_processing", "payment_succeeded", "payment_failed", "payment_cancelled"].includes(event.kind)) {
-      await retainMerchantProviderEvent.call({ provider: providerId, event: paymentEvent.parse(event) }, { kind: "system" });
+    try {
+      const event = await retainSubscriptionProviderEvidence(providerId, original);
+      if (event.providerPlatformAccountId && ["payment_processing", "payment_succeeded", "payment_failed", "payment_cancelled"].includes(event.kind)) {
+        await retainMerchantProviderEvent.call({ provider: providerId, event: paymentEvent.parse(event) }, { kind: "system" });
+      }
+      prepared.push(event);
+    } catch (error) {
+      // Each cash receipt owns a committed short phase. A later policy failure
+      // must not prevent retention of the other authenticated positive facts.
+      errors.push(error);
     }
-    prepared.push(event);
   }
+  if (errors.length) throw errors[0];
   return prepared;
 }
 
