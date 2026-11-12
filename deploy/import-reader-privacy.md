@@ -447,3 +447,30 @@ For this partial C2.29/C3.46/C3.47 repair, applicable F01–F12 evidence is:
 Protected exact-head CI and normal queue integration are still required.
 These criteria describe the qualified increment, not closure of the broader
 unchecked C-items or permission to announce stable readiness.
+
+
+Exact-head PR #687 CI exposed stale adjacent test prerequisites. Five media
+receipt positives needed an explicit fresh human choice for their declared
+original reader, and internal media claims needed the actual private preview
+digest rather than the public DTO that strips reader bindings. The synthetic
+claim-expiry setup now uses the current writer admission in its own transaction.
+All five original lost-reply/concurrency/actor/CRM assertions passed in 26.63
+seconds on a cloned normal 0–78 disposable database.
+
+The other exact CI failures were the same missing human prerequisites in the
+WordPress flow/raw-comment audit and two privacy positives, a fabricated first
+comment ID 0, and direct legacy-fixture writes caught by migration 78's writer
+protection. Fixtures now declare each original person through the actual fresh
+owner service, use positive original comment IDs, and mark only legacy-state
+setup/migration replay as the current writer. The deliberate prior-writer
+refusal remains unmarked. All original payload, source-coordinate, unrelated
+reader, old-image refusal, rollback, media and privacy assertions remain intact.
+These 20 exact after controls passed in 162.48 seconds, with 37 other tests
+intentionally filtered. No product source, SQL, permission, timeout or safety
+assertion changed. All three production browser CI jobs passed on the original
+PR head; exact corrected-head protected CI is still required.
+
+After these fixture corrections, all required local source gates passed again:
+full types, lint, license, release-note, plan, playground and 384 contracts with
+26 expected database-only exclusions. The protected exact-head rerun remains
+pending; local fixture qualification does not substitute for protected checks.

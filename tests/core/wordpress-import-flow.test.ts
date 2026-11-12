@@ -31,6 +31,8 @@ import { listReaderComments } from "@/modules/cms/blog-comments";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { registerPublishVeto } from "@/core/privacy/publish-veto";
 import { resolveRedirect } from "@/core/seo/service";
+import { resolveContact } from "@/core/contacts/service";
+import { reviewOriginalImportedReader } from "../helpers/import-reader-review";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const getPinnedBytes = vi.hoisted(() => vi.fn());
@@ -89,6 +91,8 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     // Nothing is written by a preview.
     expect(await pageAt("2025/03/first-wood-firing")).toBeUndefined();
 
+    const originalReader = await resolveContact.call({ email: "reader@example.net" }, OWNER);
+    await reviewOriginalImportedReader({ id: started.id, postId: "20", commentId: "1", contactId: originalReader.contact.id });
     const committed = await commitImport.call({ id: started.id }, OWNER);
     expect(committed.status).toBe("committed");
     expect(committed.counts).toMatchObject({
@@ -193,6 +197,8 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     await updateSection.call({ key: "nav", locale: "en", blocks: [{ id: "nav", type: "nav", props: { links: existing } }] }, OWNER);
     const run = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: FIXTURE }, OWNER);
+    const originalReader = await resolveContact.call({ email: "reader@example.net" }, OWNER);
+    await reviewOriginalImportedReader({ id: run.id, postId: "20", commentId: "1", contactId: originalReader.contact.id });
     await commitImport.call({ id: run.id }, OWNER); await reconcileImport.call({ id: run.id }, OWNER); await publishImport.call({ id: run.id }, OWNER);
     const [section] = await db().select().from(sections).where(and(eq(sections.key, "nav"), eq(sections.locale, "en")));
     const links = (section!.blocks as Array<{ props: { links: Array<{ label: string; href: string; depth?: number }> } }>)[0]!.props.links;
@@ -206,6 +212,8 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
   it("preserves a later owner-duplicated nav block during import rollback", async () => {
     const run = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: FIXTURE }, OWNER);
+    const originalReader = await resolveContact.call({ email: "reader@example.net" }, OWNER);
+    await reviewOriginalImportedReader({ id: run.id, postId: "20", commentId: "1", contactId: originalReader.contact.id });
     await commitImport.call({ id: run.id }, OWNER); await reconcileImport.call({ id: run.id }, OWNER); await publishImport.call({ id: run.id }, OWNER);
     const [section] = await db().select().from(sections).where(and(eq(sections.key, "nav"), eq(sections.locale, "en")));
     const blocks = section!.blocks as Array<{ id: string; type: string; props: Record<string, unknown> }>;
@@ -223,6 +231,8 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     expect(source).toContain("Private future title");
     const run = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: source }, OWNER);
+    const originalReader = await resolveContact.call({ email: "reader@example.net" }, OWNER);
+    await reviewOriginalImportedReader({ id: run.id, postId: "20", commentId: "1", contactId: originalReader.contact.id });
     await commitImport.call({ id: run.id }, OWNER); await reconcileImport.call({ id: run.id }, OWNER);
     const published = await publishImport.call({ id: run.id }, OWNER);
     expect(published.checkpoint).toMatchObject({ skippedMenuLinks: [{ href: "/blog/upcoming-sale", reason: "imported destination is not public" }] });
@@ -235,6 +245,8 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
   it("refuses vetoed labels at cutover and makes publish/rollback retries stable", async () => {
     const run = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: FIXTURE }, OWNER);
+    const originalReader = await resolveContact.call({ email: "reader@example.net" }, OWNER);
+    await reviewOriginalImportedReader({ id: run.id, postId: "20", commentId: "1", contactId: originalReader.contact.id });
     await commitImport.call({ id: run.id }, OWNER); await reconcileImport.call({ id: run.id }, OWNER);
     const about = (await pageAt("about"))!;
     registerPublishVeto({ id: `test.import-nav-${run.id}`, appliesTo: page => page.id === about.id, blocks: async () => true });
@@ -255,6 +267,8 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     await ensureDefaults.call({ locale }, OWNER);
     const run = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: FIXTURE }, OWNER);
+    const originalReader = await resolveContact.call({ email: "reader@example.net" }, OWNER);
+    await reviewOriginalImportedReader({ id: run.id, postId: "20", commentId: "1", contactId: originalReader.contact.id });
     await commitImport.call({ id: run.id }, OWNER); await reconcileImport.call({ id: run.id }, OWNER);
     const published = await publishImport.call({ id: run.id }, OWNER);
     expect(published.checkpoint).toMatchObject({ navApplied: { locale } });
@@ -277,6 +291,8 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     await db().delete(pages).where(eq(pages.slug, "blog"));
     const started = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: started.id, payload: FIXTURE }, OWNER);
+    const originalReader = await resolveContact.call({ email: "reader@example.net" }, OWNER);
+    await reviewOriginalImportedReader({ id: started.id, postId: "20", commentId: "1", contactId: originalReader.contact.id });
     const committed = await commitImport.call({ id: started.id }, OWNER);
     expect(committed.counts).toMatchObject({ pages: 6, media: 1, mediaFailed: 1 });
     expect((await pageAt("blog"))!.blocks).toEqual(
@@ -302,6 +318,8 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
   it("refuses to commit over an existing page until the conflict is reviewed", async () => {
     const started = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: started.id, payload: FIXTURE }, OWNER);
+    const originalReader = await resolveContact.call({ email: "reader@example.net" }, OWNER);
+    await reviewOriginalImportedReader({ id: started.id, postId: "20", commentId: "1", contactId: originalReader.contact.id });
     const { createPage } = await import("@/modules/cms/service");
     await createPage.call(
       { slug: "about", title: "About", blocks: [{ id: "h", type: "heading", props: { text: "About", level: 1 } }] },
@@ -323,6 +341,8 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     await publishPage.call({ id: page.id, published: true, publishedAt: originalDate }, OWNER);
     const started = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: started.id, payload: FIXTURE }, OWNER);
+    const originalReader = await resolveContact.call({ email: "reader@example.net" }, OWNER);
+    await reviewOriginalImportedReader({ id: started.id, postId: "20", commentId: "1", contactId: originalReader.contact.id });
     await reviewImportConflicts.call({ id: started.id, conflicts: [{ slug: page.slug, resolution: "replace" }] }, OWNER);
     const committed = await commitImport.call({ id: started.id }, OWNER);
     expect(committed.counts).toMatchObject({ commentsImported: 0, commentsStaged: 2, commentsSkipped: 0 });
@@ -348,6 +368,8 @@ describe.runIf(hasDatabase)("WordPress import studio", { timeout: 60_000 }, () =
     const [comment] = await db().insert(blogReaderComments).values({ pageId: page.id, authorName: "Original Reader", body: "Original approved history", status: "approved" }).returning();
     const started = await startImport.call({ origin: "https://old.example.org", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: started.id, payload: FIXTURE }, OWNER);
+    const originalReader = await resolveContact.call({ email: "reader@example.net" }, OWNER);
+    await reviewOriginalImportedReader({ id: started.id, postId: "20", commentId: "1", contactId: originalReader.contact.id });
     await reviewImportConflicts.call({ id: started.id, conflicts: [{ slug: "about", resolution: "replace" }] }, OWNER);
     await commitImport.call({ id: started.id }, OWNER);
     expect(await listReaderComments.call({ pageId: page.id }, { kind: "anonymous" })).toHaveLength(1);

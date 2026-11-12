@@ -24,6 +24,7 @@ import { previewFromSource } from "@/core/import/service";
 import { startImport } from "@/core/import/service";
 import { beginSourceUpload, uploadSourceChunk, previewFromUpload } from "@/core/import/source-upload";
 import { OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
+import { reviewOriginalImportedReader } from "../helpers/import-reader-review";
 import { confirmStoppedUnappliedDelete } from "../helpers/stopped-storage-delete";
 
 const EMAIL = "raw-erasure-reader@example.test";
@@ -196,6 +197,7 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
     const page = await createPage.call({ title: "Fixture", slug: "raw-audit-fixture" }, OWNER);
     const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: new TextDecoder().decode(bytes) }, OWNER);
+    await reviewOriginalImportedReader({ id: run.id, postId: "10", commentId: "20", contactId: reader.contact.id });
     const comment = await importReaderComment.call({ runId: run.id, externalId: "10:20", pageId: page.id, name: "Private reader", email: EMAIL, body: "Private source copy.", status: "approved" }, OWNER);
     await db().insert(auditLog).values({ actor: `user:${OWNER.userId}`, action: "cms.importReaderComment", subjectType: "blog_comment", subjectId: comment.id, diff: { runId: run.id, name: "Private reader", email: EMAIL, body: "Private source copy." } });
     const request = await createDataRequest.call({ contactId: reader.contact.id, request: { kind: "erasure" } }, OWNER);

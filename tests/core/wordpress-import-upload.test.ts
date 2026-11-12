@@ -41,7 +41,7 @@ function largeExport(posts: number): string {
       `<p>${Array.from({ length: 90 }, (_, w) => WORDS[(n + p + w) % WORDS.length]).join(" ")} ${"é"} <!-- not an </item> --></p>`,
     ).join("\n");
     const comments = Array.from({ length: 4 }, (_, c) =>
-      `<wp:comment><wp:comment_id>${n * 10 + c}</wp:comment_id><wp:comment_content><![CDATA[${"A thoughtful note about the firing. ".repeat(30)}]]></wp:comment_content><wp:comment_approved><![CDATA[1]]></wp:comment_approved></wp:comment>`,
+      `<wp:comment><wp:comment_id>${n * 10 + c + 1}</wp:comment_id><wp:comment_content><![CDATA[${"A thoughtful note about the firing. ".repeat(30)}]]></wp:comment_content><wp:comment_approved><![CDATA[1]]></wp:comment_approved></wp:comment>`,
     ).join("\n");
     parts.push(
       `<item><title><![CDATA[Firing log ${n}]]></title><link>https://old.example.org/${2020 + (n % 5)}/0${1 + (n % 9)}/firing-log-${n}/</link><dc:creator><![CDATA[maple]]></dc:creator><content:encoded><![CDATA[<!-- wp:paragraph -->\n${paragraphs}\n<!-- /wp:paragraph --> This CDATA says </item> and <item> on purpose.]]></content:encoded><wp:post_id>${1000 + n}</wp:post_id><wp:post_date_gmt><![CDATA[2024-0${1 + (n % 9)}-1${n % 10} 08:00:00]]></wp:post_date_gmt><wp:post_name><![CDATA[firing-log-${n}]]></wp:post_name><wp:status><![CDATA[publish]]></wp:status><wp:post_type><![CDATA[post]]></wp:post_type><wp:post_password><![CDATA[]]></wp:post_password>${comments}</item>\n`,
