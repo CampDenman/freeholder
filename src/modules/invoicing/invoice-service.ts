@@ -57,6 +57,7 @@ import {
 import { quoteTax } from "./tax-service";
 import {calculateInvoiceAmounts} from "./invoice-amounts";
 import {prepareMerchantInvoiceTax,freezeMerchantInvoiceTax} from "./merchant-tax-invoice";
+import {allowMerchantTaxWrites} from "./merchant-tax-store";
 import { allocateSettledPayment } from "./payment-plan-ledger";
 
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
@@ -222,6 +223,7 @@ function registerPointer(
       if (table === "invoices") {
         await tx.update(invoices).set({ contactId: duplicateId }).where(inArray(invoices.id, movedIds));
       } else if (table === "tax_exemptions") {
+        await allowMerchantTaxWrites(tx);
         await tx.update(taxExemptions).set({ contactId: duplicateId }).where(inArray(taxExemptions.id, movedIds));
       } else if (table === "payment_provider_customers") {
         await tx.update(paymentProviderCustomers).set({ contactId: duplicateId }).where(inArray(paymentProviderCustomers.id, movedIds));
@@ -240,7 +242,7 @@ registerPointer(
 registerPointer(
   "tax_exemptions",
   (tx, ids) => tx.select({ id: taxExemptions.id, contactId: taxExemptions.contactId }).from(taxExemptions).where(inArray(taxExemptions.contactId, ids)),
-  (tx, from, to) => tx.update(taxExemptions).set({ contactId: to }).where(eq(taxExemptions.contactId, from)),
+  async (tx, from, to) => {await allowMerchantTaxWrites(tx);return tx.update(taxExemptions).set({ contactId: to }).where(eq(taxExemptions.contactId, from));},
 );
 registerPointer(
   "payment_provider_customers",
@@ -296,6 +298,7 @@ registerContactPrivacySource({
     };
   },
   erase: async (tx, contactId, context) => {
+    await allowMerchantTaxWrites(tx);
     const providerErasure=await queuePaymentProviderErasure(tx,contactId,context);
     const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId));
     const ids = owned.map((row) => row.id);

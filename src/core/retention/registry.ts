@@ -93,6 +93,7 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+  merchant_tax_profiles: "Original tax business and retained financial proof; holds and explicit minimization use commerce.merchantTax, never an age-based purge.",
   booking_market_policies: "Original accepted member commercial policy and private contact owner; controlled by shared booking/money and privacy services.",
   booking_merchant_scopes: "Private original booking account and tax destination witness; personal copies minimized by original buyer and merchant rights, never content-search data.",
   booking_commercial_sources: "Immutable original booking offering/product/seller provenance, private operational history rather than content search or age-sweep data.",

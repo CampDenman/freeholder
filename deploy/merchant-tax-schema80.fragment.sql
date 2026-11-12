@@ -3,7 +3,7 @@
 -- Warm older readers must actually stop/drain. These triggers are not SELECT
 -- fences or a security boundary against the trusted database owner.
 CREATE TABLE merchant_tax_profiles (
- id uuid PRIMARY KEY DEFAULT gen_random_uuid(), seller_user_id uuid, seller_key text NOT NULL UNIQUE,
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), seller_user_id uuid, seller_key text NOT NULL,
  contact_id uuid REFERENCES contacts(id) ON DELETE RESTRICT,
  current_version integer NOT NULL DEFAULT 0 CHECK(current_version>=0),
  state text NOT NULL DEFAULT 'active' CHECK(state IN ('active','erased')),
@@ -11,6 +11,8 @@ CREATE TABLE merchant_tax_profiles (
  CHECK((seller_user_id IS NULL AND seller_key='site' AND contact_id IS NULL)
   OR(seller_user_id IS NOT NULL AND seller_key='seller:'||seller_user_id::text AND(contact_id IS NOT NULL OR state='erased')))
 );
+--> statement-breakpoint
+CREATE UNIQUE INDEX merchant_tax_profiles_owner_idx ON merchant_tax_profiles(seller_key);
 --> statement-breakpoint
 CREATE INDEX merchant_tax_profiles_contact_idx ON merchant_tax_profiles(contact_id);
 --> statement-breakpoint
@@ -22,10 +24,13 @@ CREATE TABLE merchant_tax_profile_versions (
  non_collection_reason text, rules_snapshot jsonb NOT NULL CHECK(jsonb_typeof(rules_snapshot)='array' AND jsonb_array_length(rules_snapshot)<=1000),
  merchant_name text, merchant_support jsonb, declaration_digest text NOT NULL CHECK(declaration_digest ~ '^[a-f0-9]{64}$'),
  created_at timestamptz NOT NULL DEFAULT now(), erased_at timestamptz,
- UNIQUE(profile_id,version), UNIQUE(profile_id,request_key),
  CHECK(erased_at IS NOT NULL OR(jsonb_typeof(origin)='object' AND coalesce((origin->>'country') ~ '^[A-Z]{2}$',false))),
  CHECK(erased_at IS NOT NULL OR collection_status<>'not_registered' OR coalesce(length(trim(non_collection_reason)) BETWEEN 3 AND 1000,false))
 );
+--> statement-breakpoint
+CREATE UNIQUE INDEX merchant_tax_profile_versions_version_idx ON merchant_tax_profile_versions(profile_id,version);
+--> statement-breakpoint
+CREATE UNIQUE INDEX merchant_tax_profile_versions_request_idx ON merchant_tax_profile_versions(profile_id,request_key);
 --> statement-breakpoint
 ALTER TABLE tax_registrations ADD COLUMN merchant_profile_id uuid REFERENCES merchant_tax_profiles(id) ON DELETE RESTRICT;
 --> statement-breakpoint
@@ -43,9 +48,11 @@ CREATE TABLE invoice_merchant_tax_quotes (
  shipping_minor bigint NOT NULL CHECK(shipping_minor BETWEEN 0 AND 9007199254740991),
  shipping_tax_minor bigint NOT NULL CHECK(shipping_tax_minor BETWEEN 0 AND 9007199254740991),
  tax_minor bigint NOT NULL CHECK(tax_minor BETWEEN 0 AND 9007199254740991), created_at timestamptz NOT NULL DEFAULT now(),
- UNIQUE(invoice_id,seller_key), FOREIGN KEY(profile_id,profile_version) REFERENCES merchant_tax_profile_versions(profile_id,version) ON DELETE RESTRICT,
+ CONSTRAINT invoice_merchant_tax_quotes_version_fk FOREIGN KEY(profile_id,profile_version) REFERENCES merchant_tax_profile_versions(profile_id,version) ON DELETE RESTRICT,
  CHECK((seller_user_id IS NULL AND seller_key='site') OR(seller_user_id IS NOT NULL AND seller_key='seller:'||seller_user_id::text))
 );
+--> statement-breakpoint
+CREATE UNIQUE INDEX invoice_merchant_tax_quotes_party_idx ON invoice_merchant_tax_quotes(invoice_id,seller_key);
 --> statement-breakpoint
 CREATE INDEX invoice_merchant_tax_quotes_profile_idx ON invoice_merchant_tax_quotes(profile_id);
 --> statement-breakpoint
@@ -137,7 +144,7 @@ BEGIN
  IF TG_TABLE_NAME='invoice_merchant_tax_quotes' THEN
   SELECT * INTO business FROM merchant_tax_profiles WHERE id=NEW.profile_id;
   SELECT * INTO declaration FROM merchant_tax_profile_versions WHERE profile_id=NEW.profile_id AND version=NEW.profile_version;
-  IF business.id IS NULL OR business.state<>'active' OR declaration.id IS NULL OR declaration.erased_at IS NOT NULL
+  IF business.id IS NULL OR business.state<>'active' OR business.current_version<>NEW.profile_version OR declaration.id IS NULL OR declaration.erased_at IS NOT NULL
    OR business.seller_key<>NEW.seller_key OR declaration.liability<>NEW.liability
    OR NOT EXISTS(SELECT 1 FROM invoices WHERE id=NEW.invoice_id AND status='draft') THEN
    RAISE EXCEPTION 'Invoice tax receipt does not match its original draft and business' USING ERRCODE='23514';
@@ -169,3 +176,26 @@ BEGIN
 END $$;
 --> statement-breakpoint
 CREATE TRIGGER merchant_collection_runtime_admission BEFORE INSERT OR UPDATE ON deployment_admission_runtimes FOR EACH ROW EXECUTE FUNCTION freeholder_merchant_collection_runtime_admission();
+
+--> statement-breakpoint
+-- Older merge writers cannot create or undo a move without the original tax
+-- witness. No historical reference_state is backfilled from today's owners.
+CREATE FUNCTION freeholder_merchant_tax_merge_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='INSERT' THEN
+  IF EXISTS(SELECT 1 FROM merchant_tax_profiles p WHERE p.contact_id IN(NEW.duplicate_contact_id,NEW.surviving_contact_id))
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(NEW.reference_state) e WHERE e->>'table'='merchant_tax_profiles') THEN
+   RAISE EXCEPTION 'This contact merge requires original business tax ownership evidence' USING ERRCODE='23514';
+  END IF;
+ ELSE
+  IF OLD.undone_at IS NULL AND NEW.undone_at IS NOT NULL
+   AND EXISTS(SELECT 1 FROM merchant_tax_profiles p WHERE p.contact_id IN(OLD.duplicate_contact_id,OLD.surviving_contact_id))
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(OLD.reference_state) e WHERE e->>'table'='merchant_tax_profiles') THEN
+   RAISE EXCEPTION 'This historical merge has no original business tax ownership witness' USING ERRCODE='23514';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER merchant_tax_merge_guard BEFORE INSERT OR UPDATE OF undone_at ON contact_merge_operations
+ FOR EACH ROW EXECUTE FUNCTION freeholder_merchant_tax_merge_guard();
