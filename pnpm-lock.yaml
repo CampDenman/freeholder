@@ -82,8 +82,8 @@ importers:
         specifier: 8.0.1
         version: 8.0.1
       pg-boss:
-        specifier: ~12.37.1
-        version: 12.37.1(@opentelemetry/api@1.9.1)
+        specifier: ~12.38.1
+        version: 12.38.1(@opentelemetry/api@1.9.1)
       postgres:
         specifier: ^3.4.9
         version: 3.4.9
@@ -2356,8 +2356,8 @@ packages:
   pend@1.2.0:
     resolution: {integrity: sha512-F3asv42UuXchdzt+xXqfW1OGlVBe+mxa2mqI0pg5yAHZPvFmY3Y6drSf/GQ1A86WgWEN9Kzh/WrgKa6iGcHXLg==}
 
-  pg-boss@12.37.1:
-    resolution: {integrity: sha512-LghWeOIbMCiLcTY3+8MInXaJ0wk0AOkbeUZ8oE+cGO0uoheGSW3GK57eDqEbrDGpwTIpX9BVphvdvWEDYTcJ9A==}
+  pg-boss@12.38.1:
+    resolution: {integrity: sha512-g7zSszWPsakw+Ng5Uqa/DiW8mz8CVnuO17VQ7CXaPsfgFj5Z+wSmP8CBGIgwGB82DNFpdP+wCbt89pal3fwxRQ==}
     engines: {node: '>=22.12.0'}
     hasBin: true
     peerDependencies:
@@ -2538,8 +2538,8 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
-  serialize-error@13.0.2:
-    resolution: {integrity: sha512-G+YKwp9I6IvWMe5RlwqxdmTPIcq/G8HK/sU51gdV1XAJznYkRSTB0ph+zB9AfSxG0fx6xrqYA6i9HeIcHFTXow==}
+  serialize-error@13.1.0:
+    resolution: {integrity: sha512-FT1EL2Pz7lAWA48I6Qb1qHEvGT9ZGz2pb1sYZ9Dhu2t+RmHN6O12WMu7HzFcqFRQaUWEl3Q+++EYBTrZpCoykQ==}
     engines: {node: '>=20'}
 
   sharp@0.35.5:
@@ -2709,8 +2709,8 @@ packages:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
 
-  type-fest@5.9.0:
-    resolution: {integrity: sha512-yANm3Jr3GiJ1qgJlxGAVxTOIcEOk1rhQHamlXtnrCK7EHP4HeM9OGxtMg/W7HFdrVzw/ZWJKGVIJusVH85sLtw==}
+  type-fest@5.10.0:
+    resolution: {integrity: sha512-NoSdpq/WEiAg5sjmBkmV/hfxv6HJH4NqPNrqjtSO5CwRmpsDfaf4begxW34KdJykH/l1yHtwBWQkCRdoXO8mPA==}
     engines: {node: '>=20'}
 
   typed-emitter@2.1.0:
@@ -4835,13 +4835,13 @@ snapshots:
 
   pend@1.2.0: {}
 
-  pg-boss@12.37.1(@opentelemetry/api@1.9.1):
+  pg-boss@12.38.1(@opentelemetry/api@1.9.1):
     dependencies:
       '@opentelemetry/api': 1.9.1
       cron-parser: 5.10.2
       pg: 8.23.1
       rrule-temporal: 2.2.8
-      serialize-error: 13.0.2
+      serialize-error: 13.1.0
     transitivePeerDependencies:
       - pg-native
 
@@ -5017,10 +5017,10 @@ snapshots:
 
   semver@7.8.5: {}
 
-  serialize-error@13.0.2:
+  serialize-error@13.1.0:
     dependencies:
       non-error: 0.1.0
-      type-fest: 5.9.0
+      type-fest: 5.10.0
 
   sharp@0.35.5(@types/node@26.6.5):
     dependencies:
@@ -5170,7 +5170,7 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
 
-  type-fest@5.9.0:
+  type-fest@5.10.0:
     dependencies:
       tagged-tag: 1.0.0
 
