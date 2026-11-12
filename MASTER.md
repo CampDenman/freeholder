@@ -11434,6 +11434,16 @@ schema they inherit reads as a designed thing rather than an excavation.
   byte facts and namespaces;11 controls and full source types/lint pass.
   No82 SQL/journal, transfer service, adoption, source deletion or contact/
   retention integration is enabled. Those requirements remain open.
+  Committed storage-observation hook 2026-11-12: domains can register a
+  named callback receiving only the original physical receipt UUID after its
+  transaction commits. Every callback runs; a dependent failure produces a
+  generic pending-recovery error and retains the original positive fact.
+  Domains must use their own original erasure membership, shared SYSTEM
+  service and durable/periodic retry instead of inheriting executor identity.
+  Four pure hook controls and one actual PostgreSQL commit-boundary control
+  pass (4.25s), with full types/lint. No new domain is registered by this
+  infrastructure increment. See
+  `deploy/storage-observation-hook-source-2026-11-12.md`.
   Physical read-key preparation 2026-11-12: the original-storage resolver
   now returns its actual read key; retained sources, recording assembly and
   staged-file validation use that key for provider reads while preserving

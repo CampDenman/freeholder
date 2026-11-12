@@ -13,6 +13,7 @@ import { assets, mediaObjects, mediaUploads } from "./schema";
 import { mediaObjectWrites } from "./write-schema";
 import { pendingObjectIsOwned } from "./object-ledger";
 import {mediaMultipartResources} from "./multipart-schema";
+import {reconcileCommittedStorageObservation} from "./observation-hooks";
 import {assertOriginalUploadWritable,assertMediaActorLive} from "./upload-ownership";
 import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 
@@ -168,6 +169,7 @@ export async function observeStorageOperation(id: string, accepted: boolean, set
     }
   });
   await reconcileMediaErasureCohorts({objectReceiptId:id}).catch(()=>{});
+  await reconcileCommittedStorageObservation(id);
 }
 
 export async function storageOperationsHeld(tx: Tx, owners: Array<string | null>): Promise<boolean> {
