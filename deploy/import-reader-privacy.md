@@ -190,7 +190,22 @@ recovery and preserved original source executor; Spanish/French/Arabic exercise
 sealed ambiguity through actual HTTP staging. All four use 320px, both themes,
 Axe, keyboard assignment, actual comment commit and audit/privacy assertions.
 
-The current source still needs combined 22-reader qualification, broad existing
+The current source still needs combined 23-reader qualification, broad existing
 source regressions and the complete contiguous migration/recovery rehearsal.
 No source-specific live cutover, provider acceptance, independent security
 review, C2.29/C3.46 closure or stable readiness is claimed.
+
+The additional retirement-address before control genuinely failed in 9.64
+seconds: a different original comment identity sharing an unbound retired
+address silently created another CRM person. The ambiguity query had excluded
+the owner-null fence. The corrected predicate retains that erased witness as
+a reason for owner review, without inventing the former owner. Its exact
+after passed in 8.39 seconds, including a verified human deliberately creating
+and selecting the new person while the old owner stays null and its original
+retirement-request witness stays unchanged. Schema 78 did not change.
+
+Reader source has subsequently rebased onto protected main `13f63be0` (PR
+#682). Additive search/retention conflicts retained both the merged private
+invoice/subscription policy entries and the reader receipt entries. The next
+proof database must apply official migrations through 74 before explicit
+unjournalled 78; the earlier 73+78 database is not a 74–78 upgrade rehearsal.
