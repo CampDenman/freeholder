@@ -11,10 +11,16 @@ let subscriptionChargeObserver: Retainer | undefined;
 /** Capture-only phase: no later invoice policy or auxiliary fee work. */
 export function registerSubscriptionProviderChargeObserver(observer: Retainer): void { subscriptionChargeObserver = observer; }
 
+/** Recovery jobs have original-cohort authority, rather than webhook authority.
+ * Both boundaries require the same committed primary-cash phase before reads. */
+export function assertSubscriptionProviderCaptureReady(): void {
+  if (!subscriptionChargeObserver) throw new ServiceError("conflict", "The original subscription cash receipt phase is unavailable before provider inspection.");
+}
+
 export async function observeSubscriptionProviderCharge(providerId: string, event: PaymentProviderEvent): Promise<PaymentProviderEvent> {
   if (event.kind !== "subscription_period_paid" || !event.providerPlatformAccountId) return event;
-  if (!subscriptionChargeObserver) throw new ServiceError("conflict", "The original subscription cash receipt phase is unavailable; retry authenticated feedback after recovery.");
-  return subscriptionChargeObserver(providerId, event);
+  assertSubscriptionProviderCaptureReady();
+  return subscriptionChargeObserver!(providerId, event);
 }
 
 export interface SubscriptionProviderScopeInput {
@@ -36,7 +42,7 @@ export function registerSubscriptionProviderScopeResolver(resolver: ScopeResolve
 export async function resolveSubscriptionProviderScope(providerId: string, input: SubscriptionProviderScopeInput): Promise<SubscriptionProviderWebhookScope | null> {
   if (subscriptionScopeResolver) {
     const scope = await subscriptionScopeResolver(providerId, input);
-    if (scope && !subscriptionChargeObserver) throw new ServiceError("conflict", "The original subscription cash receipt phase is unavailable before provider inspection.");
+    if (scope) assertSubscriptionProviderCaptureReady();
     return scope;
   }
   // An admitted new schedule must never fall back to an older protocol if its

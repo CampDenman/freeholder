@@ -5,6 +5,12 @@ import type { PaymentProviderEvent } from "@/adapters/payments";
 
 afterEach(() => vi.resetModules());
 describe("original subscription webhook scope phase", () => {
+  it("requires the actual committed cash observer before original-cohort recovery reads", async () => {
+    const { assertSubscriptionProviderCaptureReady, registerSubscriptionProviderChargeObserver } = await import("@/modules/invoicing/merchant-provider-stage");
+    expect(() => assertSubscriptionProviderCaptureReady()).toThrow(/cash receipt phase/i);
+    registerSubscriptionProviderChargeObserver(async (_provider, event) => event);
+    expect(() => assertSubscriptionProviderCaptureReady()).not.toThrow();
+  });
   it("keeps legacy lookup optional and refuses tagged new schedules without their source resolver", async () => {
     const { resolveSubscriptionProviderScope } = await import("@/modules/invoicing/merchant-provider-stage");
     const base = { providerSubscriptionRef: "sub_original", metadata: { freeholder_subscription_id: crypto.randomUUID() } };
