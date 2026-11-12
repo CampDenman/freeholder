@@ -59,4 +59,9 @@ describe("original storage transfer evidence",()=>{
   const endpoint=authenticated.href;
   expect(()=>checkedTransferBinding({kind:"s3",namespace:storageNamespace({id:"s3",endpoint,bucket:"source"}),location:{endpoint,bucket:"source"}})).toThrow();
  });
+ it("returns a validation error for an unsupported local source instead of a server schema exception",()=>{
+  let caught:unknown;
+  try{checkedTransferBinding({kind:"local",namespace:"a".repeat(64),location:{root:"/synthetic/local"}});}catch(error){caught=error;}
+  expect(caught).toMatchObject({code:"validation"});
+ });
 });

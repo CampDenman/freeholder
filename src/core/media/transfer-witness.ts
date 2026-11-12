@@ -14,7 +14,9 @@ export const transferBindingSchema=z.discriminatedUnion("kind",[
  z.object({kind:z.literal("replit"),namespace:digest,location:z.object({bucket:z.string().min(1).max(1024)}).strict()}).strict(),
 ]);
 export function checkedTransferBinding(input:StorageBinding):StorageBinding{
- const binding=transferBindingSchema.parse(input);
+ const parsed=transferBindingSchema.safeParse(input);
+ if(!parsed.success)throw new ServiceError("validation","Choose an explicit S3 or Replit storage resource without credentials or extra fields.");
+ const binding=parsed.data;
  const expected=binding.kind==="s3"?storageNamespace({id:"s3",endpoint:binding.location.endpoint,bucket:binding.location.bucket}):storageNamespace({id:"replit",bucket:binding.location.bucket});
  if(binding.namespace!==expected)throw new ServiceError("conflict","The captured storage resource does not match its original namespace.");
  if(binding.kind==="s3"){

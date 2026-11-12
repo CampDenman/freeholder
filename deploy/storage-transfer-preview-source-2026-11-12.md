@@ -41,3 +41,11 @@ tree was reused after exact manifest/lock comparison; pnpm's worktree-path
 warning was retained and did not trigger an install. All native sessions drained; separate SQL
 confirmed no remaining database backends, fsync on and the explicit local
 jit-off profile.
+
+Follow-up source validation: unsupported local storage and malformed captured
+bindings now produce an explicit service validation error instead of a raw
+schema exception. Full Node22 types, changed-file lint and all12 affected
+evidence projection controls pass. The authenticated-URL refusal fixture
+constructs its explicit fake userinfo through URL properties; the original
+credential-shaped literal was removed from the unpublished PR history after
+the secret scanner flagged it. The scanner configuration is unchanged.
