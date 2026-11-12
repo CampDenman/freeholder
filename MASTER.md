@@ -3953,6 +3953,14 @@ reading chat logs.
   quarantine/rescan; 30-day trash, restore, owner-confirmed purge and scheduled
   cleanup; admin/API/MCP parity; 83 focused media/storage/scanner/MCP tests;
   changeset `media-lifecycle.md`; runbook `deploy/media-lifecycle.md` **F04** `/admin/media` upload, trash, restore, purge. **F05** `media.upload`/`beginUpload`/`completeUpload`/`abortUpload`/`trash`/`restore`/`purge` at `/api/v1/media.*` and `/api/media/uploads`; OpenAPI/SDK, MCP `media_*`. **F07** service permission checks and destructive confirmation on the caller. **F09** operator runbook `deploy/media-lifecycle.md`. **F12** changeset `media-lifecycle.md` landed with the rest of the spine.)
+  A further actual installed-SDK server probe reproduced an untracked DELETE
+  on Replit upload checksum failure and accepted bytes through an ambient
+  emulator endpoint. The isolated repair rejects emulator routing on binding
+  and reuse, disables SDK checksum cleanup, and verifies complete target SHA-256
+  itself. Positive PUT acknowledgments are recorded before readback; a later
+  verification failure keeps the original write unknown with its positive fact
+  intact. Ten local adapter controls passed; composed native qualification and
+  actual Replit acceptance remain required.
   Reopened 2026-11-11 by five real private-storage regressions: a completed
   PUT with a lost acknowledgement lost its tracking row; a rejected request
   could finish writing later; one failed parallel rendition dropped sibling

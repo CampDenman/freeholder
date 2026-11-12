@@ -98,6 +98,7 @@ export interface StorageAdapter {
     key: string,
     body: Uint8Array<ArrayBuffer>,
     contentType: string,
+    observation?: { onAccepted?: () => Promise<void> },
   ): Promise<StoredObject>;
 
   get(key: string): Promise<Uint8Array<ArrayBuffer> | undefined>;

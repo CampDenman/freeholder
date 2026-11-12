@@ -134,13 +134,16 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:C
   if (admission.reused) return;
   let providerAccepted = false;
   try {
-    await store.put(input.key, body, input.contentType);
+    await store.put(input.key, body, input.contentType, { onAccepted: async () => {
+      providerAccepted = true;
+      await observeStorageOperation(admission.id, true, false);
+    } });
     providerAccepted = true;
     await observeStorageOperation(admission.id, true);
   } catch (error) {
     // Even if outcome recording itself failed, the original started row still
     // protects this key. No elapsed-time rule converts it into absence.
-    await observeStorageOperation(admission.id, providerAccepted).catch(() => {});
+    await observeStorageOperation(admission.id, providerAccepted, false).catch(() => {});
     throw error;
   }
 }

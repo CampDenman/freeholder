@@ -207,3 +207,16 @@ existing original and variant. A compatibility trigger mirrors writes made by
 the previous release and inventories originals it creates, so an image-swap
 rollback remains writable. Do not reverse the migration until all newer
 application processes are stopped and a verified backup exists.
+
+
+Replit storage integrity recovery (C1.12/C11.08): the server refuses
+`STORAGE_EMULATOR_HOST`, including when an existing connection is reused. A
+cached original bucket cannot become proof about another endpoint. Uploads use
+the pinned SDK's exact credential-broker protocol with provider retries disabled;
+the SDK never receives checksum-cleanup DELETE authority. The adapter verifies
+the complete target SHA-256 after the provider acknowledges the PUT. The storage
+receipt records that positive fact before readback. A failed readback keeps the
+write unknown and blocks replay or automatic cleanup until original-resource
+recovery; it never turns the provider's positive response into absence. Preserve
+the original resource, database and private configuration while reconciling it.
+Local installed-SDK interception is not actual Replit launch acceptance.

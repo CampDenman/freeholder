@@ -10,6 +10,8 @@
 // hands back a path served by the platform's own media route. That is the same
 // shape a private S3 bucket takes, which is why the contract makes `url` async
 // and `isPublic` explicit rather than assuming either.
+import type { Bucket } from "@google-cloud/storage";
+import { createHash } from "node:crypto";
 import type { StorageAdapter, StoredObject } from "@/adapters/storage/types";
 import { storageNamespace } from "@/core/media/storage-quota";
 
@@ -31,7 +33,12 @@ interface ReplitClient {
   delete(name: string): Promise<{ ok: boolean; error?: { message: string; statusCode?: number } }>;
 }
 
+function requireOriginalEndpoint(): void {
+  if (process.env.STORAGE_EMULATOR_HOST !== undefined) throw new Error("Replit storage refuses STORAGE_EMULATOR_HOST; restore the original provider endpoint.");
+}
+
 async function connect(config: ReplitConfig): Promise<ReplitClient> {
+  requireOriginalEndpoint();
   try {
     // Keep the narrow local shape so provider SDK changes are contained at the
     // adapter boundary rather than leaking through core.
@@ -39,6 +46,7 @@ async function connect(config: ReplitConfig): Promise<ReplitClient> {
     const mod = (await import(specifier)) as {
       Client: new (options?: { bucketId?: string }) => ReplitClient;
     };
+    requireOriginalEndpoint();
     return new mod.Client(
       config.bucketId ? { bucketId: config.bucketId } : undefined,
     );
@@ -56,7 +64,7 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
   // once, then give the SDK that explicit ID. A later default cannot silently
   // become evidence about an older bucket.
   let bucket: Promise<string> | undefined;
-  const bucketOnce = () => (bucket ??= (async () => {
+  const bucketOnce = () => { requireOriginalEndpoint(); return (bucket ??= (async () => {
     if (config.bucketId) return config.bucketId;
     const response = await fetch("http://127.0.0.1:1106/object-storage/default-bucket", { signal: AbortSignal.timeout(10_000) });
     if (!response.ok) throw new Error("Replit's original object-storage bucket is unavailable.");
@@ -77,9 +85,32 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
     const id = value && typeof value === "object" && "bucketId" in value ? value.bucketId : undefined;
     if (typeof id !== "string" || !/^[a-zA-Z0-9._-]{1,255}$/.test(id)) throw new Error("Replit did not return a valid original bucket ID.");
     return id;
-  })());
+  })()); };
   let client: Promise<ReplitClient> | undefined;
-  const clientOnce = () => (client ??= bucketOnce().then(bucketId => connect({ ...config, bucketId })));
+  const clientOnce = async () => {
+    requireOriginalEndpoint();
+    const value = await (client ??= bucketOnce().then(bucketId => connect({ ...config, bucketId })));
+    requireOriginalEndpoint();
+    return value;
+  };
+  let writableBucket: Promise<Bucket> | undefined;
+  const writableOnce = async () => {
+    requireOriginalEndpoint();
+    const value = await (writableBucket ??= (async () => {
+      const bucketId = await bucketOnce();
+      const { Storage } = await import("@google-cloud/storage");
+      requireOriginalEndpoint();
+      // Exact official Replit1.0.0 credential-broker protocol. Its upload
+      // wrapper cannot disable GCS's autonomous checksum-error DELETE.
+      return new Storage({ projectId: "", retryOptions: { autoRetry: false, maxRetries: 0 }, credentials: {
+        audience: "replit", subject_token_type: "access_token", type: "external_account",
+        token_url: "http://127.0.0.1:1106/token", universe_domain: "googleapis.com",
+        credential_source: { url: "http://127.0.0.1:1106/credential", format: { type: "json", subject_token_field_name: "access_token" } },
+      } }).bucket(bucketId);
+    })());
+    requireOriginalEndpoint();
+    return value;
+  };
 
   return {
     id: "replit",
@@ -87,18 +118,24 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
     isPublic: false,
     async binding() {
       const bucketId = await bucketOnce();
+      requireOriginalEndpoint();
       return { kind: "replit", namespace: storageNamespace({ id: "replit", bucket: bucketId }), location: { bucket: bucketId } };
     },
 
-    async put(key, body, contentType): Promise<StoredObject> {
-      const result = await (
-        await clientOnce()
-      ).uploadFromBytes(key, Buffer.from(body));
-      if (!result.ok) {
-        throw new Error(
-          `storage: upload of ${key} failed — ${result.error?.message ?? "unknown error"}`,
-        );
+    async put(key, body, contentType, observation): Promise<StoredObject> {
+      const file = (await writableOnce()).file(key);
+      requireOriginalEndpoint();
+      try {
+        // Never authorize SDK integrity cleanup. Verify every target byte
+        // ourselves, while retaining the positive ACK before readback.
+        await file.save(Buffer.from(body), { validation: false, metadata: { contentType } });
+      } catch {
+        throw new Error("storage: original Replit upload was not acknowledged");
       }
+      await observation?.onAccepted?.();
+      requireOriginalEndpoint();
+      const [actual] = await file.download({ validation: false });
+      if (actual.length !== body.byteLength || createHash("sha256").update(actual).digest("hex") !== createHash("sha256").update(body).digest("hex")) throw new Error("storage: original Replit upload failed full-byte verification");
       return { key, bytes: body.byteLength, contentType };
     },
 

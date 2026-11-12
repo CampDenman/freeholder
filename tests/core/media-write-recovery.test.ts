@@ -77,6 +77,22 @@ describe.runIf(hasDatabase)("original media recovery (C1.12/C11.08)", () => {
     expect((await db().select().from(mediaObjectWrites))[0]?.state).toBe("unknown");
   });
 
+  it("keeps an observed positive PUT unknown when subsequent byte verification fails", async () => {
+    const store = storage();
+    const put = vi.spyOn(store, "put").mockImplementation(async (_key, _body, _contentType, observation) => {
+      await observation?.onAccepted?.();
+      throw new Error("Synthetic readback failed after actual positive upload acknowledgment");
+    });
+    const remove = vi.spyOn(store, "delete");
+    await failure(uploadAsset.call(request(), OWNER));
+    const [receipt] = await db().select().from(mediaObjectWrites);
+    expect(receipt?.state).toBe("unknown");
+    expect(receipt?.observedAcceptedAt).toBeInstanceOf(Date);
+    expect(put).toHaveBeenCalledTimes(1); expect(remove).not.toHaveBeenCalled();
+    expect((await failure(putWithReceipt({ key: receipt!.key, body: body(), contentType: "application/pdf", role: "original" }, OWNER))).code).toBe("conflict");
+    expect(put).toHaveBeenCalledTimes(1);
+  });
+
   it("cleans a settled pending file only in its original resource and retires its key", async () => {
     const { store, row } = await positivePending();
     const result = await cleanupOrphanedMedia(new Date(Date.now() + 2 * 86_400_000));
