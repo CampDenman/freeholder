@@ -61,7 +61,8 @@ describe.runIf(hasDatabase)("original line commission across actual installments
     expect(frozen).toMatchObject({ revenueMinor: 100, feeMinor: 10 });
 
     const requests = new Map<string, InvoiceForCharge>(), byPaymentIntent = new Map<string, InvoiceForCharge>();
-    const feeReturned = new Map<string, number>(), refundsCreated: number[] = [], feesCreated: number[] = [];
+    const feeReturned = new Map<string, number>(), customerReturned = new Map<string, number>(), seenCustomerKeys = new Set<string>(), seenFeeKeys = new Set<string>();
+    const refundsCreated: number[] = [], feesCreated: number[] = [];
     fixture.stripe.createCheckout = async request => {
       const ordinal = requests.size, session = `cs_installment${ordinal}`, intent = `pi_installment${ordinal}`;
       requests.set(session, request); byPaymentIntent.set(intent, request);
@@ -77,6 +78,9 @@ describe.runIf(hasDatabase)("original line commission across actual installments
     fixture.stripe.captureCheckout = async request => cash(`pi_installment${Number(request.checkoutRef.slice(-1))}`);
     fixture.stripe.inspectMerchantPayment = async request => { const actual = cash(request.providerRef); await request.onPaymentObserved?.(actual); return actual; };
     fixture.stripe.createMerchantRefund = async request => {
+      const originalCash = byPaymentIntent.get(request.paymentProviderRef), alreadyReturned = customerReturned.get(request.paymentProviderRef) ?? 0;
+      if (!originalCash || seenCustomerKeys.has(request.idempotencyKey) || alreadyReturned + request.amountMinor > originalCash.amountMinor) throw Error("The original cash resource cannot create this additional effect.");
+      seenCustomerKeys.add(request.idempotencyKey); customerReturned.set(request.paymentProviderRef, alreadyReturned + request.amountMinor);
       refundsCreated.push(request.amountMinor);
       const actual = { ...request, providerRef: `re_installment${request.paymentProviderRef.slice(-1)}`, paymentProviderRef: request.paymentProviderRef,
         status: "succeeded" as const, providerStatus: "succeeded" as const, bindingVerified: true };
@@ -87,7 +91,8 @@ describe.runIf(hasDatabase)("original line commission across actual installments
     fixture.stripe.refundMerchantFee = async request => {
       const ordinal = Number(request.applicationFeeRef.slice(-1)), source = byPaymentIntent.get(`pi_installment${ordinal}`)!;
       const returned = feeReturned.get(request.applicationFeeRef) ?? 0;
-      if (request.amountMinor + returned > source.applicationFeeMinor!) throw Error("The actual original fee resource has no such refund capacity.");
+      if (seenFeeKeys.has(request.idempotencyKey) || request.amountMinor + returned > source.applicationFeeMinor!) throw Error("The actual original fee resource has no such additional effect capacity.");
+      seenFeeKeys.add(request.idempotencyKey);
       feesCreated.push(request.amountMinor); feeReturned.set(request.applicationFeeRef, returned + request.amountMinor);
       const actual = { providerRef: `fr_installment${ordinal}`, applicationFeeRef: request.applicationFeeRef, amountMinor: request.amountMinor, currency: request.currency, bindingVerified: true };
       actualFees.set(request.applicationFeeRef, actual); await request.onFeeRefundObserved?.(actual); return actual;
@@ -110,5 +115,7 @@ describe.runIf(hasDatabase)("original line commission across actual installments
     const operations = await Promise.all(captures.map(paymentId => db().select().from(merchantFeeRefunds).where(eq(merchantFeeRefunds.paymentId, paymentId))));
     expect(operations.map(rows => ({ amount: rows[0]!.amountMinor, retained: rows[0]!.targetRetainedFeeMinor, status: rows[0]!.status })))
       .toEqual([{ amount: 3, retained: 0, status: "accepted" }, { amount: 7, retained: 10, status: "accepted" }]);
+    for (const paymentId of captures) expect((await reconcileMerchantApplicationFee.call({ paymentId }, OWNER)).state).toBe("satisfied");
+    expect(feesCreated).toEqual([3, 7]);
   });
 });
