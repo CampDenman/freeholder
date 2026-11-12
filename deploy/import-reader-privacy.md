@@ -171,4 +171,26 @@ controls in 143.13 seconds, and live SDK regeneration passes all eight controls
 in 3.10 seconds. Migration 78 remains unjournalled. V3 still needs broad base
 regressions, new production/browser proof and the complete contiguous migration
 rehearsal; v2 browser evidence is historical. Three adjacent unknown-reader
-export/direct-commit/restaging controls are prepared, and have not yet run.
+export/direct-commit/restaging controls then genuinely failed in 17.24 seconds:
+the actual completed export artifact disclosed the old name/address/body,
+direct cutover bound the later address-holder, and restaging refused without
+offering owner review. Exports now require a recorded pointer/comment
+association; conservative address matching remains for erasure. An originally
+unbound reader cannot silently resolve a later existing CRM person. The owner
+can review that reader, including after restaging. A source may reuse a new
+contact actually admitted earlier in its own atomic mutation; that transient
+proof never supplies a later phase/process with guessed ownership.
+
+All three exact after controls plus the two-comments/one-new-person positive
+passed in 23.79 seconds. The current repaired production artifact builds on
+local Node 22.23.2 with the ordinary 4 GiB application heap and passes scrub:
+20,608 files, 248,245,163 bytes, no source/environment leakage. Its four-locale
+owner browser run passes 4/4 in 50.2 seconds. English exercises unsealed legacy
+recovery and preserved original source executor; Spanish/French/Arabic exercise
+sealed ambiguity through actual HTTP staging. All four use 320px, both themes,
+Axe, keyboard assignment, actual comment commit and audit/privacy assertions.
+
+The current source still needs combined 22-reader qualification, broad existing
+source regressions and the complete contiguous migration/recovery rehearsal.
+No source-specific live cutover, provider acceptance, independent security
+review, C2.29/C3.46 closure or stable readiness is claimed.
