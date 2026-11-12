@@ -36,7 +36,7 @@ describe.runIf(hasDatabase)("original returned-line fee budget80", { timeout: 60
   it("refunds the original credited line commission instead of its gross share across differently taxed lines", async () => {
     fixture = await seedMerchantCheckout80("direct");
     const seller = fixture.sellers[0]!;
-    const category = await createTaxCategory.call({ code: "fixture-different-rate", name: "Synthetic different-rate product" }, OWNER);
+    const category = await createTaxCategory.call({ code: "fixture_different_rate", name: "Synthetic different-rate product" }, OWNER);
     const extraRate = await addTaxRate.call({ zoneId: fixture.zone.id, categoryId: category.id,
       name: "Synthetic category levy", jurisdiction: "Synthetic separate category jurisdiction", ratePpm: 150000 }, OWNER);
     const configuration = await merchantTaxZoneConfiguration.call({ zoneId: fixture.zone.id }, seller);
