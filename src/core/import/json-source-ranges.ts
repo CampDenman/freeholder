@@ -88,7 +88,13 @@ export async function readJsonSourcePhase(source: ImportSourceRanges, previous?:
     }
     const original = await source.readRange(start, end);
     if (original.byteLength !== end - start) throw new Error("The original JSON entry returned an incomplete range.");
-    const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(original));
+    let value: unknown;
+    try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(original)); }
+    catch {
+      // Native JSON errors can quote original content. This message may be
+      // retained on an import run; preserve position without copying its body.
+      throw new Error(`Original JSON entry ${cursor.ordinal + 1} is not valid UTF-8 JSON.`);
+    }
     await skipWhitespace();
     const separator = await byte();
     if (separator !== 0x2c && separator !== 0x5d) throw new Error("The original JSON array has an invalid entry separator.");

@@ -48,6 +48,14 @@ describe("bounded original REST JSON ranges (C3.47)", () => {
       await expect(readJsonSourcePhase(original(new TextEncoder().encode(input)).source)).rejects.toThrow();
     });
 
+  it("does not echo malformed original record content in parser failures", async () => {
+    const failure: unknown = await readJsonSourcePhase(original(new TextEncoder().encode('[{"id":1,"body":Mia}]')).source).catch(error => error);
+    expect(failure).toBeInstanceOf(Error);
+    if (!(failure instanceof Error)) throw new Error("The malformed source did not produce a parser failure.");
+    expect(failure.message).not.toContain("Mia");
+    expect(failure.message).toContain("JSON");
+  });
+
   it("refuses a trailing comma at the exact 500-object continuation boundary", async () => {
     const bytes = new TextEncoder().encode(`${JSON.stringify(Array.from({ length: 500 }, (_, id) => ({ id }))).slice(0, -1)},]`);
     const first = await readJsonSourcePhase(original(bytes).source);
