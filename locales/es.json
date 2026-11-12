@@ -8825,6 +8825,7 @@
   "mail.carrier.state.unknown": "Resultado del proveedor desconocido",
   "mail.carrier.erasedAddress": "Dirección borrada: revisar la operación del proveedor original",
   "audit.mail.settleCarrierErasure": "Se conciliaron las pruebas de borrado del proveedor original",
+  "audit.privacy.settleFormLeadErasure": "Se verificaron las pruebas de borrado del contacto potencial original",
   "forms.leads.pending": "Las pruebas del proveedor original necesitan revisión; la consulta permanece aquí.",
   "forms.leads.operation": "Solicitud física",
   "forms.leads.legacy": "Destino original sin demostrar. Recupera sus pruebas originales; no se puede usar otra cuenta.",

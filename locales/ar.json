@@ -8825,6 +8825,7 @@
   "mail.carrier.state.unknown": "نتيجة المزوّد غير معروفة",
   "mail.carrier.erasedAddress": "عنوان محذوف — راجع عملية المزوّد الأصلي",
   "audit.mail.settleCarrierErasure": "تمت مطابقة أدلة محو المزوّد الأصلي",
+  "audit.privacy.settleFormLeadErasure": "تم التحقق من أدلة محو نسخة العميل المحتمل الأصلية",
   "forms.leads.pending": "يحتاج دليل المزود الأصلي إلى مراجعة؛ يبقى الاستفسار هنا.",
   "forms.leads.operation": "الطلب الفعلي",
   "forms.leads.legacy": "الوجهة الأصلية غير مثبتة. استعد أدلتها الأصلية؛ لا يمكن استخدام حساب بديل.",

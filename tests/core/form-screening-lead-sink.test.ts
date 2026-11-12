@@ -602,7 +602,7 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     const [late] = await db().select().from(formLeadCopies); expect(late!.state).toBe("unknown"); expect(late!.attempts[0]!).toMatchObject({ observed: "copied", humanOutcome: "not_copied" });
     await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("review"); expect(calls).toHaveLength(1);
   });
-  it("reopens completed lead erasure after a contradictory late positive reply", async () => {
+  it.each(["intact", "corrupt"] as const)("reopens completed lead erasure after a contradictory late positive reply with an %s artifact", async artifactState => {
     await db().insert(users).values({ id: OWNER.userId, email: "owner@example.test", role: "owner" });
     const payload = await acceptedCopy(); reply = () => Promise.reject(new Error("Fictional lost original lead reply"));
     await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("unknown");
@@ -629,6 +629,18 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     expect(resolved!.attempts[0]!.reviewHistory?.map(review => review.outcome)).toEqual(["not_copied", "copied"]);
     const latest = (await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id)))[0]!.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
     const repairJob = await getJob("core.eraseFormLeadCopies", latest.outcomes.find(outcome => outcome.scope === "forms.leadCopies")!.pendingJobs![0]!);
+    if (artifactState === "corrupt") {
+      const [originalArtifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
+      const corrupted = { ...(originalArtifact!.body as Record<string, unknown>), note: "Fictional parseable original artifact corruption." };
+      await db().update(dataRequestArtifacts).set({ body: corrupted }).where(eq(dataRequestArtifacts.id, originalArtifact!.id));
+      await expect(eraseFormLeadCopies(repairJob!.data)).rejects.toThrow(/receipt|recovery/i);
+      expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]!.status).toBe("in_progress");
+      const [unrepaired] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
+      expect(unrepaired!.body).toEqual(corrupted);
+      expect(unrepaired!.sha256).toBe(originalArtifact!.sha256);
+      expect((await db().select().from(formLeadCopies))[0]!.privacyPending).toBe(true);
+      return;
+    }
     await eraseFormLeadCopies(repairJob!.data);
     expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]!.status).toBe("completed");
     expect((await db().select().from(formLeadCopies))[0]!.encryptedRequest).toBeNull();

@@ -12,7 +12,7 @@
 // never `contacts.create`, reached through `ctx.callAsSystem` so the elevation
 // is one greppable call rather than a service that quietly trusts its caller.
 import { z } from "zod";
-import "./lead-copy-privacy";
+import { settleFormLeadErasure } from "./lead-copy-privacy";
 import leadCopyServices from "./lead-copy-services";
 import { retireLeadCopies } from "./lead-copy-state";
 import { stageLeadCopy } from "./lead-copy-state";
@@ -1326,6 +1326,7 @@ export default [
   verifyDemoForms,
   submitForm,
   listSubmissions,
+  settleFormLeadErasure,
   listSubmissionFiles,
   openSubmissionFile,
   reviewSubmission,

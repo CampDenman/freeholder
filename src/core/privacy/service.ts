@@ -206,6 +206,11 @@ function artifactChecksum(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
 }
 
+/** Source workers must verify the exact current receipt before acknowledging it. */
+export function erasureArtifactIsIntact(artifact: { body: unknown; sha256: string } | undefined): boolean {
+  return Boolean(artifact && artifact.sha256 === artifactChecksum(artifact.body));
+}
+
 function requireUser(actor: Actor): Extract<Actor, { kind: "user" }> {
   if (actor.kind !== "user") {
     throw new ServiceError("permission", "Sign in as a person to continue.");
@@ -1641,7 +1646,7 @@ export const reopenErasureJob = defineService({
     const receipt = parsed.success ? parsed.data : null;
     const outcome = receipt?.outcomes.find(item => item.scope === input.scope);
     ctx.setSubject("dataRequest", request.id);
-    if (!artifact || !receipt || !outcome || artifact.sha256 !== artifactChecksum(artifact.body)) {
+    if (!artifact || !receipt || !outcome || !erasureArtifactIsIntact(artifact)) {
       const resolution = "New source evidence requires recovery of the exact original erasure receipt before completion.";
       const changed = request.status !== "in_progress" || request.fulfilledAt !== null || request.resolution !== resolution;
       if (changed) await ctx.tx.update(dataRequests).set({ status: "in_progress", fulfilledAt: null, resolution }).where(eq(dataRequests.id, request.id));

@@ -8825,6 +8825,7 @@
   "mail.carrier.state.unknown": "Résultat du prestataire inconnu",
   "mail.carrier.erasedAddress": "Adresse effacée — vérifier l’opération du fournisseur d’origine",
   "audit.mail.settleCarrierErasure": "Preuves d’effacement du fournisseur d’origine rapprochées",
+  "audit.privacy.settleFormLeadErasure": "Preuves d’effacement du prospect d’origine vérifiées",
   "forms.leads.pending": "Les preuves du fournisseur initial doivent être vérifiées ; la demande reste ici.",
   "forms.leads.operation": "Requête physique",
   "forms.leads.legacy": "Destination initiale non prouvée. Restaurez ses preuves originales ; un autre compte ne peut pas être utilisé.",

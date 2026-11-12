@@ -84,5 +84,21 @@ provider requests. Migration 79 is now journaled normally after the qualified
 reader-78 source. Local fresh 0–79 and populated 78→79 migration proofs pass;
 the latter preserves original answer/contact/form hashes and leaves historical
 provider outcomes unknown and unbound. Ten targeted native recovery controls
-pass on that full chain. Actual prior-runtime-78 HTTP refusal, the rest of the
-composed controls and the final production owner journey remain open.
+pass on that full chain. A subsequent actual unchanged prior-runtime-78
+HTTP control delivered exactly one enquiry to a loopback provider, then fully
+stopped before migration79. On cold restart its old-column read and valid
+submission were refused, with no further provider request and unchanged
+original rows, bootstrap hash and build identifier. The preserved artifact ran
+in place without copying or patching it. Its raw health responses were 503 with
+`no_live_producer` / `no_live_worker` because jobs were deliberately off; this
+is not deployment health acceptance. The rest of the composed controls and
+the final production owner journey remain open.
+
+A local corruption control demonstrated that parsing a receipt body alone
+could acknowledge an artifact with a mismatched checksum. The pending source
+repair checks the shared canonical checksum and keeps receipt/witness locks,
+current hold checks, minimization and acknowledgment in one private SYSTEM
+transaction. A damaged original artifact leaves recovery pending and is never
+rewritten as proof. Both the intact and corrupt native after controls pass:
+the intact receipt completes; the corrupt body and original hash remain
+unchanged with source debt pending.
