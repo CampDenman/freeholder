@@ -33,4 +33,33 @@ refusal against schema 80 is not this refund test.
 Explicit Node 22 full 8GB type checking and a final incremental type check
 passed. Focused lint passed after annotating a test-only rejection value as
 `unknown`. All processes exited zero; no database operation ran in that
-source window. The single native control remains pending.
+source window.
+
+The single native BEFORE then reached its real assertion and failed in
+4.785 seconds on the normal79 disposable database. The original caller was
+locally cancelled while its positive ACK was paused. A replacement request
+reached the provider, which correctly refused it as already refunded. The
+first positive could not settle the cancelled original row. The final
+synthetic ledger retained:
+
+| Row | State | Money / provider fact |
+| --- | --- | --- |
+| Original refund | cancelled | 1000; provider reference NULL |
+| Replacement refund | failed | 1000; `provider_already_refunded` |
+| Successful payment | succeeded | paid 1000; refunded 0 |
+
+No provider over-refund was invented: the edge accepted exactly the first
+1000, then rejected the excess replacement. Both actual caller promises
+were released and awaited before the assertion. The runner exited one and
+the final database active-backend query returned `[]`. Product source,
+schema, deadlines and PostgreSQL durability settings were unchanged.
+
+The first attempted command was refused by sandbox networking with EPERM
+before any test/database operation. Its zero-test report is preserved;
+the identical escalated actual run produced the assertion above.
+
+Evidence remains in `/tmp/freeholder-legacy-refund-caller-before-native-actual.json`,
+`/tmp/freeholder-legacy-refund-caller-before-native-actual.log`,
+`/tmp/freeholder-legacy-refund-caller-before-ledger.json`, and
+`/tmp/freeholder-legacy-refund-caller-before-drain.json`.
+The narrow protected repair and its AFTER acceptance remain open.
