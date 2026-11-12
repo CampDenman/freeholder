@@ -222,7 +222,8 @@ export const recordInvoicePayout = defineService({
     const settled = rules.model === "seller_merchant" ? await ctx.callAsSystem(merchantSettlement,{invoiceId:invoice.id,sellerUserId}) : null;
     // Tax collected belongs to the site, which files it; the seller's share is the pre-tax amount.
     const gross = invoice.totalMinor - invoice.taxMinor;
-    const fee = marketFeeMinor(gross, rules.siteFeeBps);
+    const fee = frozen?.feeMinor ?? marketFeeMinor(gross, rules.siteFeeBps);
+    if (!Number.isSafeInteger(gross) || gross<0 || !Number.isSafeInteger(fee) || fee<0 || fee>gross) throw new ServiceError("conflict","Reconcile this invoice's original seller earnings before recording its payout.");
     const now = new Date();
     const [created] = await ctx.tx
       .insert(memberPayouts)

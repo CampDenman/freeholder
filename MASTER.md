@@ -13535,6 +13535,19 @@ whatever is best for the people using the site.
   loader. Actual native payment completion then settled both original
   portions; the three earnings after-controls pass. This is development-source
   evidence, not a claim about main or an actual provider account.
+  Original single-invoice earnings increment 2026-11-12: an actual public
+  merchant booking, canonical issued invoice and captured payment exposed the
+  remaining legacy-route assumption: the8400CAD-minor invoice was paid with
+  its original route and verified observation, but no earnings were recorded.
+  Settlement now uses retained booking/agreement payment scopes and original
+  frozen invoice commission. Full Node22 TypeScript and changed-file lint
+  pass, as do15 focused composition/internal/SDK-schema controls. Both
+  direct and destination booking after-controls pass, including
+  automatic earnings and replay; the agreement branch remains source-only.
+  An attempted historical subscription regression creates a new agreement
+  without its required tax declaration and correctly refuses; it supplies no
+  pre80 compatibility evidence. Genuine old-software upgrade qualification
+  remains required. See `deploy/merchant-invoice-earnings-source-2026-11-12.md`.
   Original per-business earnings source increment 2026-11-12: new version1
   order payments reconcile each original allocation, line commission and
   provider namespace before recording seller earnings. Recipient, commission,

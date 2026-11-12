@@ -8,6 +8,9 @@ import { getInvoiceMarketPolicy } from "./market-policy";
 import { invoiceMerchantAllocationLines, invoiceMerchantAllocations, invoices, paymentDisputes, paymentMerchantRoutes, payments } from "./schema";
 import { invoiceMerchantCollections, merchantPaymentRoutes } from "./merchant-collection-schema";
 import { merchantPaymentRecoveryDebt } from "./merchant-payment-debt";
+import { invoiceMerchantScopes } from "./merchant-invoice-scope-schema";
+import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
+import { routingForPayment } from "./merchant-charge";
 
 export const merchantSettlement = defineService({
   name: "invoicing.merchantSettlement", summary: "Verify original-account settlement before recording a directly paid seller's earnings.",
@@ -54,6 +57,34 @@ export const merchantSettlement = defineService({
         reference: amount===0n ? `invoice-zero:${original.allocation.id}` : `stripe-${original.collection.collectionKind}:${original.allocation.id}`, paidAt: invoice.paidAt, lineFees };
     }
     if (policy.sellerUserId !== sellerUserId || !policy.providerAccountId) throw unproven();
+    const [single] = await ctx.tx.select({id:invoiceMerchantScopes.invoiceId}).from(invoiceMerchantScopes).where(eq(invoiceMerchantScopes.invoiceId,invoiceId)).limit(1);
+    const [agreement] = single ? [] : await ctx.tx.select({id:merchantAgreementPaymentRoutes.paymentId}).from(merchantAgreementPaymentRoutes)
+      .innerJoin(payments,eq(payments.id,merchantAgreementPaymentRoutes.paymentId)).where(eq(payments.invoiceId,invoiceId)).limit(1);
+    if (single || agreement) {
+      const attempts = await ctx.tx.select().from(payments).where(eq(payments.invoiceId,invoiceId));
+      let amount=0n,fee=0n,returned=0n,review=false;
+      let collectionKind:"direct"|"destination"|undefined;
+      for(const payment of attempts){
+        const route=await routingForPayment(ctx,payment.id);
+        const kind=route.destinationAccountId?"destination":"direct";
+        if(!route.providerPlatformAccountId || route.applicationFeeMinor===undefined || (single ? route.invoiceScopeId!==invoiceId : !route.agreementSubscriptionId)
+          || (route.destinationAccountId??route.providerAccountId)!==policy.providerAccountId
+          || (route.settlementMerchantAccountId??route.providerAccountId)!==policy.providerAccountId
+          || (collectionKind!==undefined&&kind!==collectionKind) || payment.provider!=="stripe" || payment.currency!==invoice.currency
+          || !Number.isSafeInteger(payment.amountMinor)||payment.amountMinor<=0 || !Number.isSafeInteger(payment.refundedMinor)
+          || payment.refundedMinor<0||payment.refundedMinor>payment.amountMinor || !Number.isSafeInteger(route.applicationFeeMinor)
+          || route.applicationFeeMinor<0||route.applicationFeeMinor>payment.amountMinor)throw unproven();
+        collectionKind=kind;
+        review ||= (await ctx.callAsSystem(merchantPaymentRecoveryDebt,{paymentId:payment.id})).pending;
+        if(payment.status!=="succeeded")continue;
+        if(!payment.providerRef?.startsWith("pi_"))throw unproven();
+        amount+=BigInt(payment.amountMinor);fee+=BigInt(route.applicationFeeMinor);returned+=BigInt(payment.refundedMinor);
+      }
+      if(amount!==BigInt(invoice.totalMinor)||fee!==BigInt(policy.feeMinor)||!collectionKind)throw unproven();
+      const fullyReturned=amount>0n&&returned===amount;
+      return{state:review||(returned>0n&&!fullyReturned)?"review" as const:fullyReturned?"cancelled" as const:"paid" as const,
+        reference:`stripe-${collectionKind}:${invoiceId}`,paidAt:invoice.paidAt};
+    }
     const captured = await ctx.tx.select({payment:payments,route:paymentMerchantRoutes}).from(payments)
       .leftJoin(paymentMerchantRoutes,eq(paymentMerchantRoutes.paymentId,payments.id))
       .where(and(eq(payments.invoiceId,invoiceId),eq(payments.status,"succeeded")));
