@@ -224,24 +224,32 @@ LEAD_SINK_PROVIDER=paradise
 
 A switch of its own, off by default; screening never turns it on. After an
 accepted (never quarantined) submission from a site form — one that showed
-the notice below, proven by the same seal — has committed, an outbox listener
+the notice below, proven by a separate encrypted rendered-notice receipt and
+the site-form seal — has committed, an outbox listener
 copies it to `POST /api/collect/lead`. Owner entries and API or MCP
 submissions are never copied. Nor is a submission an owner later rescues
 from the spam queue: rescuing it puts the person on the contact spine but
 does not copy it to the lead sink. **What is copied:** the name, email
 and phone answers (when the form has them), the longest prose answer, every
 non-empty answer keyed by its field label, the form's slug, the absolute
-address of the page it was sent from, and Freeholder's submission id so the
+public page address (without query, fragment or private capability paths), and
+Freeholder's submission id so the
 copy points back at the original. **Why:** so an owner who keeps enquiries in
 that CRM finds them there.
 
-The submission is always kept in Freeholder first. Every failed copy is
-retried by the outbox with backoff and, after its last attempt, kept as a
-dead letter under **Jobs → Outbox** for 90 days, where the owner can replay
-it once the cause is fixed; no lead is dropped silently. Its error names the
-HTTP status and the provider's code, never the visitor's answers. While it is
-on, every form shows a notice naming the provider and listing what is
-copied, in every locale.
+The submission is always kept in Freeholder first. A durable physical-request
+witness precedes each provider call. The outbox retries transient delivery
+work and can dead-letter it under **Jobs → Outbox**, while ambiguous provider
+results block another physical POST until fresh human review proves its final
+original outcome and stopped callers. A rate-limit refusal can admit the same
+frozen request again; permanent refusals remain logged. Neither an older
+screening-only form nor today's replacement account supplies permission for a
+copy. Recovery never substitutes a current account for an original one.
+**Forms → Original lead copies** provides verified human recovery and remote
+erasure evidence, with no provider I/O in that review. See
+[Original form lead copies](form-lead-recovery.md) for the exact recovery and
+pending privacy workflow. While the category is on, every form names the
+provider and copied fields in every locale.
 
 ## Agent / model gateway
 

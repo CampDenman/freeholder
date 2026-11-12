@@ -16,7 +16,7 @@ export async function reviewLeadCopyAction(form: FormData): Promise<void> {
     if (text("action") === "retry") {
       await retryLeadCopy.call({ id: text("id"), expectedRevision: Number(text("expectedRevision")), confirmation: text("confirmation") }, actor);
     } else {
-      await reconcileLeadCopy.call({ id: text("id"), expectedRevision: Number(text("expectedRevision")), operationId: text("operationId"), outcome: text("outcome"), originalResourceEvidence: text("originalResourceEvidence"), finalProviderEvidence: text("finalProviderEvidence"), stoppedCallerEvidence: text("stoppedCallerEvidence"), providerOperationRef: text("providerOperationRef"), ...(text("remoteErasureEvidence") ? { remoteErasureEvidence: text("remoteErasureEvidence") } : {}), confirmation: text("confirmation") }, actor);
+      await reconcileLeadCopy.call({ id: text("id"), expectedRevision: Number(text("expectedRevision")), ...(text("operationId") ? { operationId: text("operationId") } : {}), outcome: text("outcome"), originalResourceEvidence: text("originalResourceEvidence"), finalProviderEvidence: text("finalProviderEvidence"), stoppedCallerEvidence: text("stoppedCallerEvidence"), providerOperationRef: text("providerOperationRef"), ...(text("remoteErasureEvidence") ? { remoteErasureEvidence: text("remoteErasureEvidence") } : {}), confirmation: text("confirmation") }, actor);
     }
   } catch (error) {
     if (error instanceof ServiceError && error.code === "step_up_required") redirect(`/security/verify?returnTo=${encodeURIComponent(PATH)}`);

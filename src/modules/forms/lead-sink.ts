@@ -23,7 +23,7 @@ import { emailFrom, messageFrom, nameFrom, type FormField } from "./fields";
 
 // Form return addresses can contain reusable appointment or sign-in access.
 // Only a public page path is useful attribution; credentials never are.
-const PRIVATE_LEAD_PATH = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:admin|portal|account|security|login|sign-in|reset|preview-access|setup|playground|messages|call|m|feed|community|join|orders|checkout|cart|buy|book|gifts|memberships|member-files|member-blobs)(?:\/|$)/i;
+const PRIVATE_LEAD_PATH = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(?:admin|portal|account|security|login|sign-in|reset|preview-access|setup|playground|messages|call|m|feed|community|join|orders|checkout|cart|buy|book|gifts|memberships|member-files|member-blobs|capture|gift|registry|ics|s|privacy|preview)(?:\/|$)/i;
 function leadPageUrl(sourceUrl: string): string | undefined {
   const origin = new URL(env().APP_URL).origin;
   try {

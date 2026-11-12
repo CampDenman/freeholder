@@ -7,6 +7,7 @@
 // about us?" question is a database write, not a deploy.
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -149,6 +150,7 @@ export const formSubmissionFiles = pgTable(
 export type LeadCopyAttempt = {
   id: string; attempt: number; observed: "running" | "unknown" | "copied" | "not_copied";
   humanOutcome?: "copied" | "not_copied"; reviewDigest?: string;
+  reviewHistory?: Array<{ outcome: "copied" | "not_copied"; digest: string }>;
   responseDigest?: string; providerRef?: string; httpStatus?: number;
 };
 export const formLeadCopies = pgTable("form_lead_copies", {
@@ -167,10 +169,16 @@ export const formLeadCopies = pgTable("form_lead_copies", {
   revision: integer("revision").notNull().default(0),
   retiredAt: timestamp("retired_at", { withTimezone: true }),
   remoteErasedAt: timestamp("remote_erased_at", { withTimezone: true }),
+  remoteErasureDigest: text("remote_erasure_digest"),
+  privacyPending: boolean("privacy_pending").notNull().default(false),
+  lastReconciledAt: timestamp("last_reconciled_at", { withTimezone: true }),
+  legacyOutcome: text("legacy_outcome", { enum: ["copied", "not_copied"] }),
+  legacyReviews: jsonb("legacy_reviews").$type<Array<{ outcome: "copied" | "not_copied"; digest: string }>>().notNull().default([]),
+  erasureRequests: jsonb("erasure_requests").$type<string[]>().notNull().default([]),
   erasureRequestId: uuid("erasure_request_id").references(() => dataRequests.id, { onDelete: "restrict" }),
   reviewDigest: text("review_digest"),
   providerRef: text("provider_ref"),
   providerRefDigest: text("provider_ref_digest"),
   lastError: text("last_error"),
   createdAt: createdAtColumn(), updatedAt: updatedAtColumn(),
-}, t => [uniqueIndex("form_lead_copies_submission_idx").on(t.submissionId), index("form_lead_copies_state_idx").on(t.state, t.createdAt)]);
+}, t => [uniqueIndex("form_lead_copies_submission_idx").on(t.submissionId), index("form_lead_copies_state_idx").on(t.state, t.createdAt), index("form_lead_copies_privacy_idx").on(t.lastReconciledAt.asc().nullsFirst(), t.id).where(sql`${t.privacyPending}`)]);

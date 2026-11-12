@@ -1087,7 +1087,15 @@ export const eraseFormLeadCopies = defineJob({
   },
 });
 
+/** Repair the crash window after a durable late lead reply, even while forms is disabled. */
+export const reconcileFormLeadErasure = defineJob({
+  name: "core.reconcileFormLeadErasure", summary: "Reconcile original lead erasure receipts against durable provider evidence.",
+  schedule: "* * * * *", concurrency: 1,
+  handler: async () => { const { reconcileFormLeadErasure: reconcile } = await import("@/modules/forms/lead-copy-privacy"); return reconcile(); },
+});
+
 export default [
+  reconcileFormLeadErasure,
   eraseFormLeadCopies,
   sweepSessions,
   deliverSecurityNotices,

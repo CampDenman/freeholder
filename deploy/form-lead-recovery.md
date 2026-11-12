@@ -26,8 +26,10 @@ Open **Forms → Original lead copies** using a freshly verified person with
 forms management access. Identify the original provider account and physical
 request, obtain its final provider outcome, and prove the original caller and
 all pending remote work have stopped. Record those independent facts. Human
-proof stays distinct from observed HTTP replies; a conflicting late positive
-reply restores an unknown outcome. Reviews perform no provider I/O. Only
+proof stays distinct from observed HTTP replies and every prior human review
+remains in the witness. A conflicting late positive restores an unknown outcome;
+a later freshly verified review can resolve it without rewriting that history.
+Reviews perform no provider I/O. Only
 requests proved not copied and stopped can be admitted for a new frozen retry.
 A current replacement account never substitutes for the original. Agent, key,
 plugin and system callers cannot provide this confirmation.
@@ -37,15 +39,27 @@ copied requests remain pending until the final original outcome and, when
 copied, the original provider's erasure are verified. This is a durable core
 job, so disabling forms cannot turn it into a completed receipt. Current direct
 and inherited holds are checked under the shared identity lock before personal
-payload minimization. Minimal original operation witnesses survive, including
-late acknowledgments; no clock, current address, account replacement or missing
+payload minimization. Minimal original operation and erasure-cohort witnesses
+survive, including
+late acknowledgments. Final removal proof covers the exact current physical
+facts; an older timestamp cannot settle a contradictory later observation.
+Late facts reopen their original privacy receipts through the shared system
+service. A bounded core reconciliation closes the crash window after reply
+commit; a missing or corrupt original artifact leaves its request in progress
+and requires restoration of the exact original receipt. No replacement scope
+or artifact is invented; no clock, current address, account replacement or missing
 local row supplies evidence of a remote deletion. Payload retention policies
 can minimize settled encrypted bodies without deleting their witnesses.
 
 Migration 79 renames the form answer column so an older worker fails before
-reading an enquiry for provider I/O. Existing events without a rendered notice
-or original destination remain explicitly unproven; migration creates no
-invented account bindings. Restore matching database/private keys and guarded
+reading an enquiry for provider I/O. Historical accepted submissions enter an
+explicitly unknown inventory unless
+durable event provenance proves they were never site-form submissions. The
+inventory invents no destination, credential binding, physical caller or
+provider result. Fresh human original-provider final/removal proof can resolve
+that historical debt; a legacy row can never be admitted for a new POST.
+Existing events without an original notice or destination cannot be copied
+into today’s account. Restore matching database/private keys and guarded
 image together for rollback. Missing receipt keys block reuse of retained
 witnesses. Preserve original backup and evidence; do not replay legacy events
 into today's provider account.
