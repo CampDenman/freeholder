@@ -1262,6 +1262,18 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F11** — Release notes and qualified claims: `.changeset/blog-wordpress-structure.md`, `deploy/blog-wordpress-2026-11-07.md`.
 - **F12** — Native import/privacy regressions: `tests/core/wordpress-import-flow.test.ts`, `tests/core/blog-structure-comments.test.ts`; the production-build browser and ten hosted demo checks passed, including the single 301. Production and actual source URL acceptance remain open in `deploy/blog-wordpress-2026-11-07.md`.
 
+
+The private graph-reader review correction is covered by
+`tests/core/import-graph-reader-review.test.ts`: a real501-item WXR requires
+fresh human review before importing its unknown reader, denies direct private
+child review, and projects the exact chosen person while retaining original
+receipt ownership and the child's operation checkpoint. The before SQL55000
+and unchanged after9.00s are recorded in `deploy/import-reader-privacy.md`.
+The repair adds only73 graph-writer ABI admission after existing checks in
+`reader-ownership.ts`; API/schema/locale surfaces remain unchanged. Changeset:
+`.changeset/graph-reader-owner-review.md`. No complete C2.29/C3.46 acceptance
+or new production/browser/provider qualification is claimed by this fix.
+
 ## C3.01 — Add required output schemas to every service and validate
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/service-output.test.ts`.
