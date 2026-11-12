@@ -66,7 +66,9 @@ export function createS3Store(environment, prefix, { allowInsecureHttp = false, 
   if (style !== "path" && style !== "virtual") {
     throw new Error(`${prefix}_S3_ADDRESSING_STYLE must be path or virtual.`);
   }
-  const client = new AwsClient({ accessKeyId, secretAccessKey, region, service: "s3" });
+  // Stop on provider failure and let the operator resume after inspecting it.
+  // In particular, an unsupported condition must not trigger ten more PUTs.
+  const client = new AwsClient({ accessKeyId, secretAccessKey, region, service: "s3", retries: 0 });
   const url = (key) => s3ObjectUrl(endpoint, bucket, key, style);
   return {
     async get(key) {
@@ -80,7 +82,7 @@ export function createS3Store(environment, prefix, { allowInsecureHttp = false, 
         method: "PUT",
         redirect: "error",
         body: new Blob([bytes], { type: contentType }),
-        headers: { "content-length": String(bytes.byteLength) },
+        headers: { "content-length": String(bytes.byteLength), "if-none-match": "*" },
       });
       if (!response.ok) throw new Error(`${prefix}: PUT ${key} failed (${response.status}).`);
     },
@@ -88,9 +90,32 @@ export function createS3Store(environment, prefix, { allowInsecureHttp = false, 
 }
 
 export async function createReplitStore(environment, prefix) {
+  // The Google client gives this ambient override precedence even over an
+  // explicit API endpoint. It must not redirect an original-resource restore.
+  const requireOriginalEndpoint = () => {
+    if (environment.STORAGE_EMULATOR_HOST || process.env.STORAGE_EMULATOR_HOST) throw new Error(`${prefix}: Replit transfers refuse STORAGE_EMULATOR_HOST. Restore the original provider configuration.`);
+  };
+  requireOriginalEndpoint();
   const bucketId = required(environment, `${prefix}_REPLIT_BUCKET_ID`);
   const { Client } = await import("@replit/object-storage");
+  requireOriginalEndpoint();
   const client = new Client({ bucketId });
+  let writableBucket;
+  const destination = () => (writableBucket ??= (async () => {
+    // Pinned @replit/object-storage 1.0.0 uses this same official Google
+    // client and platform credential broker. Its upload wrapper exposes no
+    // generation precondition, so use the provider's supported create-only
+    // API rather than an overwrite-capable wrapper. No ambient credentials
+    // or default bucket may replace this explicit original resource.
+    const { Storage } = await import("@google-cloud/storage");
+    requireOriginalEndpoint();
+    const google = new Storage({ projectId: "", credentials: {
+      audience: "replit", subject_token_type: "access_token", type: "external_account",
+      token_url: "http://127.0.0.1:1106/token", universe_domain: "googleapis.com",
+      credential_source: { url: "http://127.0.0.1:1106/credential", format: { type: "json", subject_token_field_name: "access_token" } },
+    } });
+    return google.bucket(bucketId);
+  })());
   return {
     async get(key) {
       const result = await client.downloadAsBytes(key);
@@ -101,10 +126,15 @@ export async function createReplitStore(environment, prefix) {
       if (!result.value) throw new Error(`${prefix}: GET ${key} omitted its successful result.`);
       return new Uint8Array(Buffer.concat(result.value));
     },
-    async put(key, bytes) {
-      const result = await client.uploadFromBytes(key, Buffer.from(bytes));
-      if (!result.ok) {
-        throw new Error(`${prefix}: PUT ${key} failed (${result.error?.message ?? "unknown error"}).`);
+    async put(key, bytes, contentType) {
+      try {
+        // The SDK's checksum-error cleanup deletes by name without a
+        // generation constraint. Never give it that authority: our caller
+        // verifies the complete original and target SHA-256 independently.
+        await (await destination()).file(key).save(Buffer.from(bytes), { validation: false, preconditionOpts: { ifGenerationMatch: 0 }, metadata: { contentType } });
+      } catch (error) {
+        const code = error && typeof error === "object" && "code" in error ? error.code : "unclassified";
+        throw new Error(`${prefix}: create-only PUT ${key} failed (${code}).`);
       }
     },
   };
