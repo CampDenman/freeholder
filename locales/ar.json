@@ -53,6 +53,7 @@
   "admin.role.playground": "زائر العرض التجريبي",
   "admin.overview.activity": "ما تغيّر",
   "admin.overview.activityAll": "تضمين الأعمال الخلفية",
+  "admin.activity.merchantErasureRecoveryUpdated": "تم تحديث متابعة محو بيانات النشاط التجاري",
   "admin.activity.subscriptionRecoveryUpdated": "تم تحديث أعمال استعادة الاشتراك",
   "admin.activity.formSubmitted": "أرسل زائر نموذجًا",
   "admin.activity.cartStarted": "بدأ متسوّق سلة شراء",

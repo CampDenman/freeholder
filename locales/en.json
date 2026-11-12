@@ -55,6 +55,7 @@
   "admin.role.playground": "Demo visitor",
   "admin.overview.activity": "What changed",
   "admin.overview.activityAll": "Include background work",
+  "admin.activity.merchantErasureRecoveryUpdated": "Business erasure recovery was updated",
   "admin.activity.subscriptionRecoveryUpdated": "Subscription recovery work was updated",
   "admin.activity.formSubmitted": "A visitor sent a form",
   "admin.activity.cartStarted": "A shopper started a cart",

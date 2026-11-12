@@ -211,6 +211,7 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "subscriptions.observeMerchantScheduleCancellation": "admin.activity.subscriptionRecoveryUpdated",
   "subscriptions.retainMerchantScheduleInventory": "admin.activity.subscriptionRecoveryUpdated",
   "subscriptions.reopenMerchantScheduleErasures": "admin.activity.subscriptionRecoveryUpdated",
+  "subscriptions.reconcileMerchantTaxErasureEvidence": "admin.activity.merchantErasureRecoveryUpdated",
   "subscriptions.completeProviderChargeFee": "admin.activity.paymentUpdated",
   "invoicing.recordCustomerPaymentObservation": "admin.activity.paymentUpdated",
   "invoicing.voidCreditNote": "admin.activity.creditNoteVoided",
