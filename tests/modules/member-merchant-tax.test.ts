@@ -18,7 +18,7 @@ import {previewMerchantTax} from "@/modules/invoicing/merchant-tax-preview";
 import {getInvoiceMerchantTaxReceipt} from "@/modules/invoicing/merchant-tax";
 import {registerMerchantTaxSourceResolver,type merchantTaxSourceParty} from "@/modules/invoicing/merchant-tax-invoice";
 import {createDraftInvoice,issueInvoice} from "@/modules/invoicing/invoice-service";
-import {addTaxRate,createTaxZone,setTaxRegistration} from "@/modules/invoicing/tax-service";
+import {addTaxRate,createTaxZone,listTaxThresholds,setTaxRegistration} from "@/modules/invoicing/tax-service";
 import {invoiceLines,taxLines} from "@/modules/invoicing/schema";
 import {invoiceMerchantTaxQuotes,merchantTaxProfiles,merchantTaxProfileVersions} from "@/modules/invoicing/merchant-tax-schema";
 import {ANONYMOUS,closeDb,CUSTOMER,failure,hasDatabase,OWNER,truncateSpine} from "../helpers/spine";
@@ -170,5 +170,13 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
   await removeRetentionException.call({id:hold.id},OWNER);
   await fulfillDataRequest.call({id:await request("erasure"),confirmation:"ERASE"},OWNER);
   expect((await db().select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id,first.profileId)))[0]).toMatchObject({state:"erased",contactId:null});
+ });
+ it("keeps a seller's issued sales out of the historical site-only registration threshold",async()=>{
+  const registration=await setTaxRegistration.call({zoneId,number:"LEGACY-SITE-ONLY",status:"monitoring",thresholdMinor:100,thresholdCurrency:"CAD"},OWNER);
+  const first=await declare();
+  sourceParties=[{sellerUserId:SELLER.userId,profileId:first.profileId,profileVersion:1,linePositions:[0],shippingMinor:101,occurredAt}];
+  const created=await draft();await issueInvoice.call({id:created.invoice.id},OWNER);
+  const report=await listTaxThresholds.call({asOf:new Date(),window:"calendar_year"},OWNER);
+  expect(report.thresholds.find(row=>row.registration.id===registration.id)).toMatchObject({grossSalesMinor:0,transactions:0,state:"below"});
  });
 });
