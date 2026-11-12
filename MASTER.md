@@ -5957,7 +5957,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   384 controls with26 declared database exclusions; full typecheck, lint,
   license, release and plan gates passed. The current production artifact
   passed all four en/es/fr/ar owner journeys, including a second final review
-  after address minimization, at320px in both themes with keyboard and Axe.
+  after address minimization, at 320px in both themes with keyboard and Axe.
   Earlier first-withdrawal timestamps/proof remained intact and the erased
   address stayed absent. The initial extension incorrectly observed the first
   review's persistent success notice; waiting for the actual second action
@@ -6053,8 +6053,17 @@ deployments are portable, testable and incapable of silently forking the truth.
   valid submission with specific missing-old-column evidence, made no further
   provider call, and preserved the exact original rows, bootstrap hash and build
   identifier. The preserved artifact ran in place without copying or patching it.
-  The remaining composed native controls, live SDK, production/browser and protected qualification remain
-  open, along with actual provider acceptance. C3.34 remains unchecked.)*
+  All 46 current composed source controls and all eight live SDK checks now pass. The Node22
+  production build and artifact scrub pass, and the actual production owner
+  journey passes in English, Spanish, French and Arabic at 320px, in both
+  themes, including axe, keyboard recovery, private-data exclusion and the
+  shared-service audit. A first browser fixture stopped before the UI because
+  its direct source caller could not resolve a lazy-import alias; a static
+  function import passed three targeted native controls before a fresh build
+  and all four browser journeys passed. The clean replay onto actual merged
+  reader 78 preserves identical product and migration source; its ancestry
+  differences contain documentation and test corrections only. Protected
+  qualification and actual provider acceptance remain open. C3.34 remains unchecked.)*
   *(Receipt-integrity follow-up, 2026-11-12: one actual native before control
   showed that a parseable original artifact with a mismatched checksum could
   be rewritten as completed by the lead erasure worker. The source repair uses

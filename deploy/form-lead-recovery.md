@@ -91,8 +91,15 @@ submission were refused, with no further provider request and unchanged
 original rows, bootstrap hash and build identifier. The preserved artifact ran
 in place without copying or patching it. Its raw health responses were 503 with
 `no_live_producer` / `no_live_worker` because jobs were deliberately off; this
-is not deployment health acceptance. The rest of the composed controls and
-the final production owner journey remain open.
+is not deployment health acceptance. All 46 composed source controls and the
+eight live SDK checks pass. The Node22 production build/scrub and four-locale owner
+journey pass, including both themes, 320px, axe, keyboard review, private-data
+exclusion and the shared-service audit. A direct browser-fixture caller first
+exposed an unresolved lazy-import alias before reaching the UI; the static
+loading correction passed three targeted native controls, a fresh production
+build and all four browser journeys. Product and migration source remain
+identical after the replay onto actual merged reader 78. Protected release
+qualification and the actual provider account acceptance remain open.
 
 A local corruption control demonstrated that parsing a receipt body alone
 could acknowledge an artifact with a mismatched checksum. The pending source
