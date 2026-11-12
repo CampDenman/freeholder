@@ -9,13 +9,14 @@ import { dataRequestArtifacts, dataRequests, privacyRetentionExceptions } from "
 import { erasureArtifactIsIntact } from "@/core/privacy/service";
 import { defineService, ServiceError } from "@/core/service";
 import { merchantPhysicalCaller } from "@/modules/invoicing/merchant-physical-caller";
-import { merchantTaxProfiles } from "@/modules/invoicing/merchant-tax-schema";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { subscriptionChargeScope, subscriptionMerchantScope } from "./merchant-scope-contract";
 import { scheduleCallerHasStopped, scheduleKnownResources } from "./provider-schedule-proof";
-import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
+import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { subscriptionMerchantScopes, subscriptions } from "./schema";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
+import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
+import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
 
 const nonceDigest = (nonce: string) => createHash("sha256").update(nonce).digest("hex");
 const originalJob = z.object({ profileId: z.uuid(), requestId: z.uuid(), cohortId: z.uuid(), originalJobId: z.uuid() });
@@ -38,11 +39,13 @@ export const merchantScheduleCancellationTargets = defineService({
     cancellationOperations: z.array(z.object({ providerSubscriptionRef: z.string(), operationId: z.uuid() })) })).max(5000),
   handler: async (input, ctx) => {
     await lockContactIdentityForRead(ctx.tx);
-    const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, input.requestId)).limit(1);
-    const [cohort] = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(eq(subscriptionProviderScheduleErasures.id, input.cohortId)).limit(1);
-    if (!request || request.kind !== "erasure" || !request.verifiedAt || !cohort || cohort.profileId !== input.profileId || cohort.requestId !== input.requestId
-      || cohort.privacyScope !== "commerce.merchantTax" || cohort.jobId !== input.originalJobId || !cohort.jobIds.includes(input.originalJobId)) throw new ServiceError("permission", "This recovery read is not owned by its original merchant erasure task.");
-    const scopes = await ctx.tx.select().from(subscriptionMerchantScopes).where(eq(subscriptionMerchantScopes.taxProfileId, input.profileId)).orderBy(subscriptionMerchantScopes.subscriptionId).limit(5001);
+    const { cohort } = await originalScheduleCohortAuthority(ctx.tx, input);
+    const scopes = await ctx.tx.select().from(subscriptionMerchantScopes).where(cohort.subscriptionId
+      ? and(eq(subscriptionMerchantScopes.subscriptionId, cohort.subscriptionId), eq(subscriptionMerchantScopes.taxProfileId, input.profileId))
+      : eq(subscriptionMerchantScopes.taxProfileId, input.profileId)).orderBy(subscriptionMerchantScopes.subscriptionId).limit(5001);
+    if (!await merchantScheduleCohortInventoryCovers(ctx.tx, cohort, new Set(scopes.map(row => row.subscriptionId)))) {
+      throw new ServiceError("conflict", "Restore every originally admitted agreement before recovering this schedule cohort.");
+    }
     if (scopes.length > 5000) throw new ServiceError("conflict", "The original merchant agreement inventory needs bounded operator recovery.");
     const targets = [];
     for (const row of scopes) {
@@ -74,15 +77,17 @@ export const claimMerchantScheduleCancellation = defineService({
   handler: async (input, ctx) => {
     await lockContactIdentity(ctx.tx);
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
-    const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, input.requestId)).limit(1).for("update");
-    const [cohort] = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(eq(subscriptionProviderScheduleErasures.id, input.cohortId)).limit(1).for("update");
-    const [profile] = await ctx.tx.select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id, input.profileId)).limit(1).for("update");
-    if (!request || request.kind !== "erasure" || !request.verifiedAt || !profile || !cohort || cohort.profileId !== input.profileId
-      || cohort.requestId !== input.requestId || cohort.privacyScope !== "commerce.merchantTax" || cohort.jobId !== input.originalJobId
-      || !cohort.jobIds.includes(input.originalJobId) || profile.state !== "erased" && profile.contactId !== request.contactId) throw new ServiceError("permission", "This physical operation is not owned by its original verified merchant erasure task.");
+    const { request, cohort } = await originalScheduleCohortAuthority(ctx.tx, input, true);
+    if (cohort.subscriptionId !== null && cohort.subscriptionId !== input.subscriptionId) {
+      throw new ServiceError("permission", "This buyer's original task does not authorize another agreement.");
+    }
+    const originalIds = await ctx.tx.select({ id: subscriptionMerchantScopes.subscriptionId }).from(subscriptionMerchantScopes)
+      .where(cohort.subscriptionId ? and(eq(subscriptionMerchantScopes.subscriptionId, cohort.subscriptionId), eq(subscriptionMerchantScopes.taxProfileId, input.profileId))
+        : eq(subscriptionMerchantScopes.taxProfileId, input.profileId)).limit(5001);
+    if (originalIds.length > 5000 || !await merchantScheduleCohortInventoryCovers(ctx.tx, cohort, new Set(originalIds.map(row => row.id)))) return { mode: "blocked" as const };
     const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, input.requestId)).limit(1).for("update");
     const receipt = z.object({ outcomes: z.array(z.object({ scope: z.string(), outcome: z.string(), pendingJobs: z.array(z.uuid()).optional() }).passthrough()) }).passthrough().safeParse(artifact?.body);
-    const outcome = receipt.success ? receipt.data.outcomes.find(value => value.scope === "commerce.merchantTax") : undefined;
+    const outcome = receipt.success ? receipt.data.outcomes.find(value => value.scope === cohort.privacyScope) : undefined;
     // The existing final phase commits artifact recovery. No physical mutation
     // is admitted from a missing/corrupt/stale receipt in this earlier phase.
     if (!erasureArtifactIsIntact(artifact) || outcome?.outcome !== "pending" || !outcome.pendingJobs?.includes(input.originalJobId)) return { mode: "blocked" as const };

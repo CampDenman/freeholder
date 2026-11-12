@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C1.08: fact and repair admission commit together; receipt repair is separate.
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { defineJob, enqueueJob, registerJob } from "@/core/jobs";
@@ -9,8 +9,9 @@ import { erasureArtifactIsIntact, reopenErasureJob } from "@/core/privacy/servic
 import { dataRequestArtifacts } from "@/core/privacy/schema";
 import { defineService, getService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
-import { subscriptionMerchantScopes } from "./schema";
-import { subscriptionProviderScheduleErasures } from "./provider-schedule-schema";
+import { subscriptionMerchantScopes, subscriptions } from "./schema";
+import { merchantAgreementScheduleState } from "./merchant-agreement-schedule-state";
+import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 
 const REPAIR_JOB = "subscriptions.reconcileMerchantScheduleErasure";
 const STOP_JOB = "subscriptions.quiesceMerchantSchedules";
@@ -26,7 +27,8 @@ export async function enqueueMerchantScheduleErasureRepair(tx: Tx, input: z.infe
   if (!scope) throw new ServiceError("conflict", "Restore the original agreement scope before retaining its erasure repair admission.");
   await tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
   const affected = await tx.update(subscriptionProviderScheduleErasures).set({ state: "pending" }).where(and(eq(subscriptionProviderScheduleErasures.profileId, scope.profileId),
-    eq(subscriptionProviderScheduleErasures.privacyScope, "commerce.merchantTax"), sql`${subscriptionProviderScheduleErasures.subscriptionId} is null`)).returning({ id: subscriptionProviderScheduleErasures.id });
+    or(and(eq(subscriptionProviderScheduleErasures.privacyScope, "commerce.merchantTax"), sql`${subscriptionProviderScheduleErasures.subscriptionId} is null`),
+      and(eq(subscriptionProviderScheduleErasures.privacyScope, "subscriptions.agreements"), eq(subscriptionProviderScheduleErasures.subscriptionId, input.subscriptionId))))).returning({ id: subscriptionProviderScheduleErasures.id });
   if (!affected.length) return;
   await enqueueJob(tx, REPAIR_JOB, input, { idempotencyKey: `schedule-erasure-evidence:${input.subscriptionId}:${input.evidenceDigest}` });
 }
@@ -59,8 +61,7 @@ export const reconcileMerchantTaxErasureEvidence = defineService({
 });
 
 async function reconcileOriginalProfile(ctx: ServiceContext, input: z.infer<typeof profileRepair>): Promise<z.infer<typeof result>> {
-    const cohorts = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(and(eq(subscriptionProviderScheduleErasures.profileId, input.profileId),
-      eq(subscriptionProviderScheduleErasures.privacyScope, "commerce.merchantTax"), sql`${subscriptionProviderScheduleErasures.subscriptionId} is null`))
+    const cohorts = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(eq(subscriptionProviderScheduleErasures.profileId, input.profileId))
       .orderBy(subscriptionProviderScheduleErasures.requestId, subscriptionProviderScheduleErasures.id).limit(5001);
     if (cohorts.length > 5000) throw new ServiceError("conflict", "The original erasure cohort inventory needs bounded operator recovery.");
     let reopened = 0, recoveryRequired = false, currentlySafe = false;
@@ -74,13 +75,21 @@ async function reconcileOriginalProfile(ctx: ServiceContext, input: z.infer<type
       await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${cohort.requestId}`}))`);
       const [current] = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(eq(subscriptionProviderScheduleErasures.id, cohort.id)).limit(1).for("update");
       if (!current || current.profileId !== input.profileId || current.requestId !== cohort.requestId) throw new ServiceError("conflict", "Restore the immutable original cohort linkage before receipt repair.");
+      let cohortSafe = currentlySafe;
+      if (current.privacyScope === "subscriptions.agreements") {
+        const [original] = current.subscriptionId ? await ctx.tx.select({ subscription: subscriptions, scope: subscriptionMerchantScopes, resource: subscriptionProviderScheduleResources })
+          .from(subscriptions).innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptions.id))
+          .leftJoin(subscriptionProviderScheduleResources, eq(subscriptionProviderScheduleResources.subscriptionId, subscriptions.id))
+          .where(eq(subscriptions.id, current.subscriptionId)).limit(1) : [];
+        cohortSafe = !!original && original.scope.taxProfileId === current.profileId && (await merchantAgreementScheduleState(ctx, original)).safe;
+      }
       const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, current.requestId)).limit(1).for("update");
       const parsed = z.object({ outcomes: z.array(z.object({ scope: z.string(), outcome: z.string(), pendingJobs: z.array(z.uuid()).optional() }).passthrough()) }).passthrough().safeParse(artifact?.body);
       const outcome = parsed.success ? parsed.data.outcomes.find(value => value.scope === current.privacyScope) : undefined;
       // Another real cohort task may already have covered this delayed
       // notification. Current complete provider/financial proof, not a clock
       // or an old completed flag alone, permits that duplicate to converge.
-      if (current.state === "completed" && currentlySafe && erasureArtifactIsIntact(artifact) && outcome?.outcome === "erased") continue;
+      if (current.state === "completed" && cohortSafe && erasureArtifactIsIntact(artifact) && outcome?.outcome === "erased") continue;
       // Work already visible on its real original task needs no invented
       // replacement task. Failed tasks retain ordinary owner retry/review.
       if (erasureArtifactIsIntact(artifact) && outcome?.outcome === "pending" && outcome.pendingJobs?.includes(current.jobId)) continue;

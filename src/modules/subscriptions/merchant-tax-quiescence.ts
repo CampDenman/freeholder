@@ -9,81 +9,23 @@ import { defineJob, enqueueJob, registerJob } from "@/core/jobs";
 import { completeErasureJob } from "@/core/privacy/service";
 import { dataRequests } from "@/core/privacy/schema";
 import { defineService, getService, ServiceError, type ServiceContext } from "@/core/service";
-import { invoiceMerchantTaxQuoteLines, invoiceMerchantTaxQuotes, merchantTaxProfiles } from "@/modules/invoicing/merchant-tax-schema";
-import { invoiceLines, invoices } from "@/modules/invoicing/schema";
-import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agreement-schema";
+import { merchantTaxProfiles } from "@/modules/invoicing/merchant-tax-schema";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { paymentAdapter } from "@/adapters/payments";
 import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
-import { scheduleCallerHasStopped, scheduleKnownResources, scheduleOperationDigest, scheduleQuiescenceCovers } from "./provider-schedule-proof";
-import { subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
+import { scheduleCallerHasStopped, scheduleKnownResources, scheduleOperationDigest } from "./provider-schedule-proof";
+import { subscriptionMerchantScopes, subscriptions } from "./schema";
 import scheduleCallerServices from "./provider-schedule-callers";
 import scheduleErasureServices from "./provider-schedule-erasure";
 import { claimMerchantScheduleCancellation, flushMerchantScheduleCallerFinishes, merchantScheduleCancellationTargets, observeMerchantScheduleCancellation, performMerchantScheduleCancellation, retainMerchantScheduleCancellation } from "./provider-schedule-callers";
 import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
+import buyerErasureServices, { completeBuyerAgreementErasure } from "./buyer-agreement-erasure";
+import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
 
 const JOB = "subscriptions.quiesceMerchantSchedules";
 const jobInput = z.object({ profileId: z.uuid(), requestId: z.uuid(), originalJobId: z.uuid(), cohortId: z.uuid() });
-const application = z.object({ invoiceId: z.uuid(), paymentId: z.uuid() }).nullable();
-
-/** Shared exact-agreement proof; callers decide which original buyers belong
- * to their operation. No provider I/O or local-status shortcut is introduced. */
-export async function merchantAgreementScheduleState(ctx:ServiceContext,agreement:{
-  subscription:typeof subscriptions.$inferSelect;scope:typeof subscriptionMerchantScopes.$inferSelect;
-  resource:typeof subscriptionProviderScheduleResources.$inferSelect|null;
-}):Promise<{safe:boolean;external:boolean}>{
-  let external=false;
-    const routes = await ctx.tx.select().from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.subscriptionId, agreement.subscription.id)).limit(5001);
-    if (routes.length > 5000) return { safe: false, external: true };
-    if (routes.length) external = true;
-    for (const route of routes) {
-      if (route.providerPlatformAccountId !== agreement.scope.providerPlatformAccountId || route.chargeAccountId !== agreement.scope.chargeAccountId
-        || route.recipientAccountId !== agreement.scope.recipientAccountId || route.settlementMerchantAccountId !== agreement.scope.settlementMerchantAccountId) return { safe: false, external: true };
-      const debt = getService("invoicing.merchantPaymentRecoveryDebt");
-      if (!debt || z.object({ pending: z.boolean() }).passthrough().parse(await ctx.callAsSystem(debt, { paymentId: route.paymentId })).pending) return { safe: false, external: true };
-    }
-    const operations = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, agreement.subscription.id)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
-    const receipts = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId, agreement.subscription.id)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001);
-    const observations = await ctx.tx.select().from(subscriptionProviderChargeObservations).where(eq(subscriptionProviderChargeObservations.subscriptionId, agreement.subscription.id)).orderBy(subscriptionProviderChargeObservations.id).limit(5001);
-    if (!agreement.resource || operations.length > 5000 || receipts.length > 5000 || observations.length > 5000) return { safe: false, external: true };
-    const neverAdmitted = agreement.resource.state === "uncreated" && agreement.resource.operationRevision === 0
-      && !agreement.resource.providerSubscriptionRef && !agreement.resource.providerCustomerRef && !agreement.subscription.providerRef
-      && !operations.length && !receipts.length && !observations.length;
-    if (neverAdmitted) return { safe: true, external };
-    external = true;
-    if (!scheduleQuiescenceCovers(agreement.resource, operations)) return { safe: false, external };
-    for (const resource of agreement.resource.stoppedProof!.resources) for (const invoice of resource.invoices) {
-      if (!invoice.zeroTotalInvoiceId) continue;
-      const [zero] = await ctx.tx.select().from(invoices).where(eq(invoices.id, invoice.zeroTotalInvoiceId)).limit(1);
-      if (!zero || zero.sourceType !== "subscription" || zero.sourceId?.split(":")[0] !== agreement.subscription.id
-        || zero.currency !== agreement.subscription.currency || zero.totalMinor !== 0 || zero.paidMinor !== 0 || zero.status !== "paid") return { safe: false, external };
-      const [quote] = await ctx.tx.select().from(invoiceMerchantTaxQuotes).where(and(eq(invoiceMerchantTaxQuotes.invoiceId, zero.id),
-        eq(invoiceMerchantTaxQuotes.profileId, agreement.scope.taxProfileId), eq(invoiceMerchantTaxQuotes.profileVersion, agreement.scope.taxProfileVersion))).limit(1);
-      const lines = await ctx.tx.select({ quoteId: invoiceMerchantTaxQuoteLines.quoteId }).from(invoiceLines)
-        .leftJoin(invoiceMerchantTaxQuoteLines, eq(invoiceMerchantTaxQuoteLines.invoiceLineId, invoiceLines.id)).where(eq(invoiceLines.invoiceId, zero.id));
-      if (!quote || !quote.evidenceDigest || !lines.length || lines.some(line => line.quoteId !== quote.id)) return { safe: false, external };
-    }
-    const coverage = agreement.resource.stoppedProof!.resources.flatMap(resource => resource.invoices.flatMap(invoice => invoice.paid.map(paid => ({ ...paid, providerSubscriptionRef: resource.providerSubscriptionRef, providerInvoiceRef: invoice.providerInvoiceRef }))));
-    if (coverage.length !== receipts.length) return { safe: false, external };
-    for (const observation of observations) {
-      const receipt = receipts.find(row => row.providerPaymentIntentRef === observation.providerPaymentIntentRef);
-      if (!receipt || receipt.providerPlatformAccountId !== observation.providerPlatformAccountId || receipt.chargeAccountId !== observation.chargeAccountId
-        || receipt.providerSubscriptionRef !== observation.providerSubscriptionRef || receipt.providerInvoiceRef !== observation.providerInvoiceRef
-        || (observation.providerChargeRef !== null && receipt.providerChargeRef !== observation.providerChargeRef) || receipt.amountMinor !== observation.amountMinor || receipt.currency !== observation.currency) return { safe: false, external };
-    }
-    for (const receipt of receipts) {
-      if (!observations.some(observation => observation.providerPaymentIntentRef === receipt.providerPaymentIntentRef && observation.customerChargeVerified)) return { safe: false, external };
-      const covered = coverage.find(row => row.receiptId === receipt.id);
-      if (!covered || covered.providerSubscriptionRef !== receipt.providerSubscriptionRef || covered.providerInvoiceRef !== receipt.providerInvoiceRef || covered.providerPaymentIntentRef !== receipt.providerPaymentIntentRef) return { safe: false, external };
-      const prove = getService("invoicing.subscriptionChargeApplication"), debt = getService("invoicing.merchantPaymentRecoveryDebt");
-      if (!prove || !debt) return { safe: false, external };
-      const applied = application.parse(await ctx.callAsSystem(prove, { receiptId: receipt.id }));
-      if (!applied || applied.invoiceId !== covered.invoiceId || applied.paymentId !== covered.paymentId) return { safe: false, external };
-      const financial = z.object({ pending: z.boolean() }).passthrough().parse(await ctx.callAsSystem(debt, { paymentId: applied.paymentId }));
-      if (financial.pending) return { safe: false, external };
-    }
-  return {safe:true,external};
-}
+import { merchantAgreementScheduleState } from "./merchant-agreement-schedule-state";
+export { merchantAgreementScheduleState } from "./merchant-agreement-schedule-state";
 
 /** No provider I/O; all positive money and current original receipts are checked. */
 export async function merchantTaxScheduleState(ctx: ServiceContext, profileId: string): Promise<{ safe: boolean; external: boolean }> {
@@ -156,9 +98,8 @@ export const retainMerchantScheduleInventory = defineService({
   handler: async (input, ctx) => {
     await lockContactIdentity(ctx.tx);
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
-    const [cohort] = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(eq(subscriptionProviderScheduleErasures.id, input.cohortId)).limit(1).for("update");
-    if (!cohort || cohort.profileId !== input.profileId || cohort.requestId !== input.requestId || cohort.jobId !== input.originalJobId
-      || !cohort.jobIds.includes(input.originalJobId)) throw new ServiceError("permission", "This original inventory does not belong to the current merchant erasure task.");
+    const { cohort } = await originalScheduleCohortAuthority(ctx.tx, input, true);
+    if (cohort.subscriptionId !== null && cohort.subscriptionId !== input.subscriptionId) throw new ServiceError("permission", "This inventory belongs to another original buyer agreement.");
     const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, input.subscriptionId)).limit(1).for("update");
     const [scope] = await ctx.tx.select().from(subscriptionMerchantScopes).where(eq(subscriptionMerchantScopes.subscriptionId, input.subscriptionId)).limit(1);
     const [resource] = await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId, input.subscriptionId)).limit(1).for("update");
@@ -202,8 +143,10 @@ export const settleMerchantTaxSchedules = defineService({
     await lockContactIdentity(ctx.tx);
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
     const [cohort] = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(eq(subscriptionProviderScheduleErasures.id, input.cohortId)).limit(1).for("update");
-    if (!cohort || cohort.profileId !== input.profileId || cohort.requestId !== input.requestId || cohort.privacyScope !== "commerce.merchantTax"
+    if (!cohort || cohort.profileId !== input.profileId || cohort.requestId !== input.requestId
       || !cohort.jobIds.includes(input.originalJobId)) throw new ServiceError("conflict", "This actual task is not a member of the original merchant erasure cohort.");
+    if (cohort.privacyScope === "subscriptions.agreements") return ctx.callAsSystem(completeBuyerAgreementErasure, input);
+    if (cohort.privacyScope !== "commerce.merchantTax" || cohort.subscriptionId !== null) throw new ServiceError("permission", "Restore the original schedule privacy scope before completing its task.");
     const state = await merchantTaxScheduleState(ctx, input.profileId);
     if (!state.safe) return { settled: false, recoveryRequired: false };
     const complete = getService("invoicing.completeMerchantTaxErasure");
@@ -261,4 +204,4 @@ export const quiesceMerchantSchedules = defineJob({
   },
 });
 registerJob(quiesceMerchantSchedules);
-export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices];
+export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices];

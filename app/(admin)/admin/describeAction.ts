@@ -205,6 +205,8 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "invoicing.reconcileMerchantApplicationFee": "admin.activity.refundUpdated",
   "members.completeBookingTaxQuote": "admin.activity.bookingUpdated",
   "subscriptions.prepareMerchantTaxErasure": "admin.activity.subscriptionRecoveryUpdated",
+  "subscriptions.prepareBuyerAgreementErasure": "admin.activity.subscriptionRecoveryUpdated",
+  "subscriptions.completeBuyerAgreementErasure": "admin.activity.subscriptionRecoveryUpdated",
   "subscriptions.settleMerchantTaxSchedules": "admin.activity.subscriptionRecoveryUpdated",
   "subscriptions.retainProviderCharge": "admin.activity.paymentUpdated",
   "subscriptions.claimMerchantScheduleCancellation": "admin.activity.subscriptionRecoveryUpdated",
