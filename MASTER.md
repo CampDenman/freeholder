@@ -13656,9 +13656,14 @@ whatever is best for the people using the site.
   Types/lint and42 source controls pass; one live-registry check is skipped
   without a database. Current native after/new-report checks and live SDK8
   now pass, and the original ordinary-site currency control still passes.
-  Browser proof, customer exemption requests and merchant approval remain
-  required. This does not enable the collection model or supply actual account,
-  provider, independent review or stable acceptance.
+  Customer exemption request/history and business-only review source now
+  exists through eight shared services and four-locale screens. Requests
+  derive the actual signed-in buyer, authorized cart business and original
+  jurisdiction; approval requires verified evidence and real billing safety.
+  Full types/lint and47 source controls pass, with one live-registry skip.
+  Native authorization/quote/approval/expiry, updated SDK and browser acceptance
+  remain required. This does not enable the collection model or supply actual
+  account, provider, independent review or stable acceptance.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query

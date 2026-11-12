@@ -9,6 +9,8 @@ import {actorFromToken} from "@/core/http/actor";
 import {ServiceError} from "@/core/service";
 import {merchantTaxFormValues} from "@/modules/invoicing/merchant-tax-form";
 import {saveMyMerchantTaxProfile} from "@/modules/invoicing/merchant-tax-profiles";
+import {reviewMemberMerchantTaxExemption} from "@/modules/invoicing/merchant-tax-exemptions";
+import {merchantTaxExemptionReviewValues} from "@/modules/invoicing/merchant-tax-exemption-form";
 export async function saveMemberTaxAction(form:FormData):Promise<void>{
  try{
   const parsed=saveMyMerchantTaxProfile.def.input.safeParse({...merchantTaxFormValues(form),liability:"seller"});
@@ -16,4 +18,12 @@ export async function saveMemberTaxAction(form:FormData):Promise<void>{
   await saveMyMerchantTaxProfile.call(parsed.data,await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value));
  }catch(error){if(error instanceof ServiceError)redirect(`/portal/payouts/tax?error=${error.code}`);throw error;}
  redirect("/portal/payouts/tax?saved=1");
+}
+export async function reviewMemberTaxExemptionAction(form:FormData):Promise<void>{
+ try{
+  const parsed=reviewMemberMerchantTaxExemption.def.input.safeParse(merchantTaxExemptionReviewValues(form));
+  if(!parsed.success)throw new ServiceError("validation","Review the original customer evidence and expiry.");
+  await reviewMemberMerchantTaxExemption.call(parsed.data,await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value));
+ }catch(error){if(error instanceof ServiceError)redirect(`/portal/payouts/tax?reviewError=${error.code}`);throw error;}
+ redirect("/portal/payouts/tax?reviewed=1");
 }

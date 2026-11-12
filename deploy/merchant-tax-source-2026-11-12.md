@@ -173,3 +173,18 @@ and focused lint pass; the after-control is pending. Before report:
 /tmp/freeholder-tax80-held-buyer-certificate-before.json. This is unreleased80
 source qualification, not an unchanged-main/production incident or independent
 security sign-off.
+
+Customer request and business review source is now implemented through eight
+registered shared services. The requester is the actual signed-in contact,
+the cart capability remains private, and the selected business must be in
+that actual merchant cart. The same original jurisdiction selector derives
+the zone without locale guesses. Pending requests do not change tax; only
+the actual business can approve verified evidence after the real billing
+safety guard. Expiry, original status and per-customer serialization prevent
+stale/repeated decisions. Certificates stay out of audit inputs and private
+SQL failures are redacted. Customer history/request screens and owner/member
+review forms exist in all four locales. Full types, focused lint and47 source
+controls pass (one live-registry control skipped without a database). Native
+permission/quote/approval/expiry, live SDK and production browser qualification
+remain pending; this does not claim official VAT-provider validation or full
+C12.38 acceptance. No DDL or collection activation is added by these services.

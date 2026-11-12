@@ -10,7 +10,7 @@ import {ServiceError} from "@/core/service";
 import {Callout} from "@/ui/primitives";
 import {loadMerchantTaxEditor,MerchantTaxEditor,type MerchantTaxEditorQuery} from "@/ui/MerchantTaxEditor";
 import {getLocale,getT} from "../../../../i18n";
-import {saveMemberTaxAction} from "./actions";
+import {saveMemberTaxAction,reviewMemberTaxExemptionAction} from "./actions";
 export const dynamic="force-dynamic";
 export async function generateMetadata():Promise<Metadata>{return{title:(await getT())("merchantTax.title"),robots:{index:false,follow:false}};}
 export default async function MemberTaxPage({searchParams}:{searchParams:Promise<MerchantTaxEditorQuery>}){
@@ -22,5 +22,5 @@ export default async function MemberTaxPage({searchParams}:{searchParams:Promise
   if(!(error instanceof ServiceError)||!["permission","conflict"].includes(error.code))throw error;
   return<div className="grid gap-4"><a href="/portal/payouts" className="text-sm underline">{t("merchantTax.backToPayouts")}</a><h1 className="text-2xl font-semibold">{t("merchantTax.title")}</h1><Callout>{t(`merchantTax.error.${error.code}`)}</Callout></div>;
  }
- return<div className="grid gap-6"><div><a href="/portal/payouts" className="text-sm underline">{t("merchantTax.backToPayouts")}</a><h1 className="mt-3 text-2xl font-semibold">{t("merchantTax.title")}</h1></div><MerchantTaxEditor data={data} query={query} path="/portal/payouts/tax" site={false} action={saveMemberTaxAction} t={t} locale={locale}/></div>;
+ return<div className="grid gap-6"><div><a href="/portal/payouts" className="text-sm underline">{t("merchantTax.backToPayouts")}</a><h1 className="mt-3 text-2xl font-semibold">{t("merchantTax.title")}</h1></div><MerchantTaxEditor data={data} query={query} path="/portal/payouts/tax" site={false} action={saveMemberTaxAction} reviewAction={reviewMemberTaxExemptionAction} t={t} locale={locale}/></div>;
 }

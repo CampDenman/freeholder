@@ -20,6 +20,7 @@ import merchantTaxQuiescenceServices from "@/modules/subscriptions/merchant-tax-
 import merchantFeeServices from "./merchant-fee-service";
 import {siteMerchantTaxServices} from "./merchant-tax-profiles";
 import {siteMerchantTaxThresholds} from "./merchant-tax-thresholds";
+import {siteMerchantTaxExemptionServices} from "./merchant-tax-exemptions";
 import merchantSettlementServices from "./merchant-settlement";
 import advancedMoneyServices from "./advanced-money-service";
 import paymentProviderServices from "./payment-provider-service";
@@ -60,6 +61,7 @@ export default [
   ...merchantTaxQuiescenceServices,
   ...siteMerchantTaxServices,
   siteMerchantTaxThresholds,
+  ...siteMerchantTaxExemptionServices,
   ...merchantSettlementServices,
   ...demoServices,
   ...recurringServices,
