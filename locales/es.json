@@ -8792,5 +8792,20 @@
   "privacy.retention.mediaStorageOperations": "Operaciones de almacenamiento originales",
   "audit.privacy.reopenErasureJob": "Reabrió un borrado tras nuevas pruebas del origen",
   "media.recovery.originalKey": "Clave original del objeto según las pruebas verificadas del proveedor",
-  "audit.media.retireOwnedAssetsForErasure": "Retirada de archivos del titular original para su supresión verificada"
+  "audit.media.retireOwnedAssetsForErasure": "Retirada de archivos del titular original para su supresión verificada",
+  "mail.carrier.title": "Revisar consentimiento y retiradas del proveedor",
+  "mail.carrier.intro": "Revise cada solicitud en el proveedor original. Confirme la retirada final solo con el registro final exacto del proveedor y pruebas de que sus procesos se han detenido. Un rechazo o una respuesta perdida mantiene el consentimiento pendiente.",
+  "mail.carrier.empty": "No hay consentimientos del proveedor pendientes de revisión.",
+  "mail.carrier.legacy": "No se conservó la cuenta original del proveedor. La cuenta configurada hoy no demuestra dónde se registró este consentimiento.",
+  "mail.carrier.pending": "Esta retirada original requiere revisión. No se repetirá automáticamente.",
+  "mail.carrier.confirm": "He verificado que el proveedor original no conserva un consentimiento de marketing activo para esta dirección y que todos los procesos originales se han detenido.",
+  "mail.carrier.record": "Registrar retirada verificada",
+  "mail.carrier.activityConfirmed": "Se verificó de forma independiente una retirada en el proveedor original",
+  "mail.carrier.kind.send": "Envío",
+  "mail.carrier.kind.consent": "Registro de consentimiento",
+  "mail.carrier.kind.withdraw": "Retirada",
+  "mail.carrier.state.running": "Proceso aún sin resolver",
+  "mail.carrier.state.confirmed": "Respuesta positiva del proveedor observada",
+  "mail.carrier.state.refused": "Rechazo del proveedor observado",
+  "mail.carrier.state.unknown": "Resultado del proveedor desconocido"
 }

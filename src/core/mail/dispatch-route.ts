@@ -20,6 +20,7 @@ export const dispatchRouteSchema = z.object({
   host: z.string().max(2_000).nullable(), port: z.number().int().nullable(),
   tlsMode: z.enum(["implicit_tls", "required_starttls"]).nullable(),
   user: z.string().max(2_000).nullable(), providerIdentity: z.string().max(2_000).nullable(),
+  carrierResourceDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   authorizationDigest: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 export type DispatchRoute = z.infer<typeof dispatchRouteSchema>;
@@ -54,6 +55,7 @@ export async function originalMailRoute(tx: Tx, input: MailRouteInput, receipts:
     tlsMode: input.provider === "smtp" ? (current.SMTP_SECURE === "true" || (current.SMTP_SECURE === undefined && Number(current.SMTP_PORT ?? "587") === 465) ? "implicit_tls" : "required_starttls") : null,
     user: input.provider === "smtp" ? current.SMTP_USER ?? null : null,
     providerIdentity: sender?.providerIdentity ?? null,
+    ...(input.provider === "paradise" ? { carrierResourceDigest: receipts.digest("provider:paradise-resource", JSON.stringify([paradiseBaseUrl(), current.PARADISEMODERN_API_KEY])) } : {}),
     authorizationDigest: receipts.digest("dispatch-authorization", JSON.stringify(credentials)),
   });
 }

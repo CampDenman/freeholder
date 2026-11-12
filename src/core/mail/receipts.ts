@@ -24,6 +24,7 @@ function wrappingFingerprint(): string {
 export async function mailReceipts(tx: Tx): Promise<MailReceipts> {
   await tx.execute(sql`select set_config(${CAPABILITY}, '1', true)`);
   await tx.execute(sql`select set_config('freeholder.mail_dispatch_v1', '1', true)`);
+  await tx.execute(sql`select set_config('freeholder.mail_carrier_v1', '1', true)`);
   const fingerprint = wrappingFingerprint();
   let [stored] = await tx.select().from(mailReceiptKeys).where(eq(mailReceiptKeys.id, 1)).limit(1);
   if (!stored) {
@@ -32,6 +33,8 @@ export async function mailReceipts(tx: Tx): Promise<MailReceipts> {
       union all select 1 from mail_provider_events where recipient_digest is not null or external_event_digest is not null or provider_ref_digest is not null
       union all select 1 from mail_suppressions where email_digest is not null
       union all select 1 from mail_record_subjects where evidence_digest is not null
+      union all select 1 from mail_provider_grants where resource_digest is not null or email_digest is not null or review_digest is not null or carrier_operations<>'[]'::jsonb
+      union all select 1 from mail_dispatches where carrier_operations<>'[]'::jsonb
     ) as present`);
     if (existing?.present) throw new ServiceError("conflict", "The original mail receipt key is missing. Restore its exact database backup before retrying.");
     await tx.insert(mailReceiptKeys).values({ id: 1, encryptedKey: encryptMailOutbox(randomBytes(32).toString("base64url"), KEY_CONTEXT), wrappingFingerprint: fingerprint }).onConflictDoNothing();

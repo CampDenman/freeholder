@@ -98,31 +98,34 @@ its method, time, source page, terms version, wording when it was kept, the
 IP address the opt-in came from when one was recorded, and `freeholder-consent:<id>` as the
 evidence reference; the source page is sent without its query string or
 fragment — and sends again under a new `requestId`. Freeholder remembers each
-grant it recorded there (`mail_provider_grants`) and the address it was
-recorded under. Freeholder never synthesizes consent: no record, no send.
+new grant intent there (`mail_provider_grants`), before consent HTTP starts,
+with the original address and a keyed account/resource binding. Each send,
+consent and withdrawal request keeps its own durable intent and observed
+outcome, independently of the surrounding message result. Freeholder never synthesizes consent: no record, no send.
 
 A withdrawal (unsubscribe, preference change) is mirrored to
 `POST /api/site-self/email/consent/withdraw` only for those remembered grants,
 with the grant's address — so a contact whose email has changed since is
 withdrawn where the provider holds them, and a denial or a contact never
-granted there sends nothing. It runs through the outbox and is retried while
-the provider is unreachable; a permanent refusal is recorded on the grant and
-logged once rather than retried into a dead letter; the public playground
-skips it.
+granted there sends nothing. It runs through the outbox with one physical
+claim per request. A refusal, missing acknowledgment or lost reply remains
+pending for original-provider review and is never automatically repeated.
+The public playground skips it. See [carrier recovery](mail-carrier-recovery.md).
 
 **Privacy.** The remembered grants are the person's data. They are included
 in a data export (`mail.provider_grants`). Erasure detaches any grant the
 carrier still holds from the contact and queues a job that withdraws it at
-the carrier and then deletes the row; the erasure receipt stays "pending"
+the carrier and then minimizes the address, retaining only private operation receipts; the erasure receipt stays "pending"
 until that job finishes. Deleting a contact detaches its grants the same way,
-and a sweep every ten minutes withdraws and deletes them. A grant is
+and a sweep every ten minutes withdraws and minimizes eligible addresses. A grant is
 withdrawn through the Paradise Modern credentials whichever adapter is the
 campaign carrier now, since a grant recorded there stays there after a
 switch. Without `PARADISEMODERN_API_KEY` the detached grants are kept, the
 erasure stays pending, and `freeholder doctor` warns
-(`mail.providerGrants`) until the key is set and the next sweep finishes
-them; the public playground never touches them. Withdrawn or
-refused grants age out under the `mail_provider_grants` retention kind. The delivery worker also rechecks consent immediately before
+(`mail.providerGrants`). Restoring the exact original account allows an
+unattempted withdrawal; already refused or uncertain requests still need
+review. The public playground never touches them. Only positively withdrawn
+grant addresses age out under the `mail_provider_grants` retention kind; minimal keyed operation receipts remain. The delivery worker also rechecks consent immediately before
 every campaign send, so a withdrawal stops the next message even before the
 mirror lands.
 

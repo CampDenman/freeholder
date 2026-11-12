@@ -22,7 +22,8 @@
 // Campaigns also keep the site's own one-click unsubscribe, so a reader never
 // meets a provider-inserted footer or link: a marketing send without the
 // site's List-Unsubscribe headers is refused here rather than sent.
-import { paradiseRequest, ParadiseRequestError } from "@/adapters/paradise/http";
+import { paradiseSite, type ParadiseSite } from "@/adapters/paradise/config";
+import { paradiseRequest, ParadiseRequestError, type ParadiseResponse } from "@/adapters/paradise/http";
 import {
   MailAdapterError,
   type MailAdapter,
@@ -36,6 +37,11 @@ export interface ParadiseMailOptions {
   from?: string;
   /** Subscription topic campaign mail is sent under (`PARADISEMODERN_MAIL_TOPIC`). */
   topic: string;
+}
+
+/** HTTP success alone does not acknowledge removal of the original grant. */
+export function assertParadiseWithdrawalReply(response: ParadiseResponse<unknown>): void {
+  if (!response.body || typeof response.body !== "object" || (response.body as Record<string, unknown>).success !== true) throw new ParadiseRequestError("Paradise Modern did not acknowledge withdrawal of the original grant.", response.status, false, "invalid_withdrawal_ack");
 }
 
 function parseFrom(value: string | undefined): { from?: string; fromName?: string } {
@@ -92,13 +98,9 @@ function wirePermission(permission: MailPermission, topic: string) {
 }
 
 export function createParadiseMail(options: ParadiseMailOptions): MailAdapter {
-  async function submit(message: OutboundEmail, permission: MailPermission, attempt: "first" | "consented") {
+  async function submit(message: OutboundEmail, permission: MailPermission, attempt: "first" | "consented", site: ParadiseSite) {
     const sender = parseFrom(message.from ?? options.from);
-    return paradiseRequest<{ messageId?: string; deliveryId?: string; unsubscribe?: string }>(
-      "/api/site-self/email/send",
-      {
-        timeoutMs: 30_000,
-        body: {
+    const body = {
           to: message.to,
           subject: message.subject,
           text: message.text,
@@ -118,9 +120,13 @@ export function createParadiseMail(options: ParadiseMailOptions): MailAdapter {
           ...(message.dispatchId || message.deliveryId
             ? { requestId: `freeholder:${message.dispatchId ?? message.deliveryId}${attempt === "consented" ? ":consented" : ""}` }
             : {}),
-        },
-      },
-    );
+    };
+    const execute = async () => {
+      const response = await paradiseRequest<{ messageId?: string; deliveryId?: string; unsubscribe?: string }>("/api/site-self/email/send", { timeoutMs: 30_000, body, site });
+      if (!(response.body.messageId ?? response.body.deliveryId)) throw new MailAdapterError("Paradise Modern accepted the request without a message id.");
+      return response;
+    };
+    return message.carrierJournal ? message.carrierJournal.request({ kind: "send", key: attempt, body, ...(permission.purpose === "marketing" && permission.evidence ? { evidenceRef: permission.evidence.evidenceRef } : {}) }, site, execute) : execute();
   }
 
   return {
@@ -160,13 +166,14 @@ export function createParadiseMail(options: ParadiseMailOptions): MailAdapter {
         );
       }
 
+      const site = paradiseSite();
       let response;
       let grantRecorded: { email: string; evidenceRef: string } | undefined;
       try {
-        response = await submit(message, permission, "first");
+        response = await submit(message, permission, "first", site);
       } catch (error) {
         const refused =
-          error instanceof ParadiseRequestError && error.code === "EMAIL_CONSENT_REQUIRED";
+          error instanceof ParadiseRequestError && [403, 409].includes(error.status) && error.code === "EMAIL_CONSENT_REQUIRED";
         if (!refused || permission.purpose !== "marketing" || !permission.evidence) {
           // (`evidence` is always present for marketing here; the check
           // narrows the type.)
@@ -176,16 +183,22 @@ export function createParadiseMail(options: ParadiseMailOptions): MailAdapter {
         // or the mirror has not run). Record the retained evidence, then
         // once more.
         try {
-          await paradiseRequest("/api/site-self/email/consent", {
-            body: {
+          const body = {
               email: message.to,
               topic: options.topic,
               directPermission: true,
               ...permission.evidence,
-            },
-          });
+          };
+          const grant = { email: message.to, evidenceRef: permission.evidence.evidenceRef };
+          const execute = async () => {
+            const response = await paradiseRequest<{ id?: unknown }>("/api/site-self/email/consent", { body, site });
+            if (!(typeof response.body.id === "number" && response.body.id > 0) && !(typeof response.body.id === "string" && response.body.id.trim())) throw new ParadiseRequestError("Paradise Modern did not identify the original consent record.", response.status, false, "invalid_consent_ack");
+            return response;
+          };
+          if (message.carrierJournal) await message.carrierJournal.request({ kind: "consent", key: "consent", body, grant }, site, execute);
+          else await execute();
           grantRecorded = { email: message.to, evidenceRef: permission.evidence.evidenceRef };
-          response = await submit(message, permission, "consented");
+          response = await submit(message, permission, "consented", site);
         } catch (retryError) {
           throw asMailError(retryError);
         }
@@ -198,7 +211,7 @@ export function createParadiseMail(options: ParadiseMailOptions): MailAdapter {
     },
     async recordWithdrawal(email) {
       try {
-        await paradiseRequest("/api/site-self/email/consent/withdraw", { body: { email } });
+        assertParadiseWithdrawalReply(await paradiseRequest("/api/site-self/email/consent/withdraw", { body: { email } }));
       } catch (error) {
         throw asMailError(error);
       }

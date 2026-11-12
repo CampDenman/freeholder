@@ -7,10 +7,11 @@
 // is the person's data: exported with them, and erased with them. Erasure
 // cannot simply delete it, because the carrier still holds a grant for that
 // address; it detaches the open grants from the contact, queues one job that
-// withdraws them at the carrier and then deletes the rows, and reports that
+// withdraws them at the carrier and minimizes their addresses, and reports that
 // job as pending on the erasure receipt until it has finished.
 import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { enqueueJob } from "@/core/jobs";
+import { minimizeCarrierGrants } from "./carrier-retention";
 import { mailProviderGrants } from "@/core/mail/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { consentRecords } from "@/core/privacy/schema";
@@ -22,8 +23,8 @@ import "./record-privacy";
 
 export const PROVIDER_GRANTS_SCOPE = "mail.provider_grants";
 
-function grantsOf(tx: Tx, contactId: string) {
-  return tx
+async function grantsOf(tx: Tx, contactId: string) {
+  const rows = await tx
     .select({
       id: mailProviderGrants.id,
       provider: mailProviderGrants.provider,
@@ -31,12 +32,16 @@ function grantsOf(tx: Tx, contactId: string) {
       consentRecordId: mailProviderGrants.consentRecordId,
       withdrawnAt: mailProviderGrants.withdrawnAt,
       withdrawalError: mailProviderGrants.withdrawalError,
+      originalBaseUrl: mailProviderGrants.resourceBaseUrl,
+      operations: mailProviderGrants.carrierOperations,
+      reviewedAt: mailProviderGrants.reviewedAt,
       createdAt: mailProviderGrants.createdAt,
     })
     .from(mailProviderGrants)
     .innerJoin(consentRecords, eq(consentRecords.id, mailProviderGrants.consentRecordId))
     .where(eq(consentRecords.contactId, contactId))
     .orderBy(asc(mailProviderGrants.createdAt));
+  return rows.map(({ operations, ...row }) => ({ ...row, operations: operations.map(({ id, kind, state, httpStatus, providerCode }) => ({ id, kind, state, httpStatus, providerCode })) }));
 }
 
 registerContactPrivacySource({
@@ -48,14 +53,14 @@ registerContactPrivacySource({
   erase: async (tx, contactId, context) => {
     const grants = await grantsOf(tx, contactId);
     if (grants.length === 0) return { affected: 0 };
-    const finished = grants.filter((grant) => grant.withdrawnAt || grant.withdrawalError);
-    const open = grants.filter((grant) => !grant.withdrawnAt && !grant.withdrawalError);
+    const finished = grants.filter((grant) => grant.withdrawnAt);
+    const open = grants.filter((grant) => !grant.withdrawnAt);
     if (finished.length) {
-      await tx.delete(mailProviderGrants).where(inArray(mailProviderGrants.id, finished.map((grant) => grant.id)));
+      await minimizeCarrierGrants(tx, finished.map(grant => grant.id));
     }
     if (open.length === 0) return { affected: grants.length };
     // Detached: no longer linked to the person, kept only until the carrier
-    // has been told, then deleted by the job.
+    // has been told, then minimized by the job.
     const job = await enqueueJob(
       tx,
       "core.withdrawProviderGrants",
@@ -79,7 +84,7 @@ registerContactPrivacySource({
 });
 
 /**
- * Finished grants (withdrawn, or refused permanently) age out. Open grants
+ * Only positively withdrawn grants age out. Refusals and unknowns stay pending. Open grants
  * never do: the carrier still holds them, and a later withdrawal needs them.
  */
 registerRetentionSource({
@@ -90,7 +95,8 @@ registerRetentionSource({
     let purged = 0;
     for (;;) {
       const finishedBefore = and(
-        or(isNotNull(mailProviderGrants.withdrawnAt), isNotNull(mailProviderGrants.withdrawalError)),
+        isNotNull(mailProviderGrants.withdrawnAt),
+        isNull(mailProviderGrants.redactedAt),
         sql`${mailProviderGrants.updatedAt} < ${args.cutoff.toISOString()}::timestamptz`,
         args.exceptContactIds.length
           ? or(
@@ -105,11 +111,8 @@ registerRetentionSource({
         .where(finishedBefore)
         .limit(RETENTION_PURGE_BATCH);
       if (batch.length === 0) break;
-      const deleted = await db()
-        .delete(mailProviderGrants)
-        .where(and(inArray(mailProviderGrants.id, batch.map((row) => row.id)), finishedBefore))
-        .returning({ id: mailProviderGrants.id });
-      purged += deleted.length;
+      const minimized = await db().transaction(tx => minimizeCarrierGrants(tx, batch.map(row => row.id)));
+      purged += minimized;
       if (batch.length < RETENTION_PURGE_BATCH) break;
     }
     return purged;

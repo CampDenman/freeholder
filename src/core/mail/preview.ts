@@ -70,7 +70,7 @@ export function previewMailDailyCap(
  * Statuses that count against the cap: everything handed to (or on its way
  * to) a provider. Held and suppressed messages never left.
  */
-const COUNTED = ["queued", "submitted", "delivered", "bounced", "complained", "failed"] as const;
+const COUNTED = ["queued", "unknown", "submitted", "delivered", "bounced", "complained", "failed"] as const;
 
 async function sentInLastDay(tx: Tx): Promise<number> {
   const [row] = await tx

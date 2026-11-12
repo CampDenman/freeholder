@@ -13,6 +13,11 @@
 // cannot accidentally broadcast through their own Gmail, because the
 // email-marketing module refuses an adapter that is not `bulk` or `both`.
 
+/** Internal worker hook: one persisted intent/outcome for each carrier HTTP call. */
+export interface MailCarrierJournal {
+  request<T>(operation: { kind: "send" | "consent"; key: string; body: unknown; evidenceRef?: string; grant?: { email: string; evidenceRef: string } }, resource: { baseUrl: string; apiKey: string | undefined }, execute: () => Promise<T>): Promise<T>;
+}
+
 export interface OutboundEmail {
   to: string;
   subject: string;
@@ -26,6 +31,8 @@ export interface OutboundEmail {
   deliveryId?: string;
   /** Assigned by the worker's durable physical-call claim, never by a caller. */
   dispatchId?: string;
+  /** Worker-only journal; never accepted in staged message input. */
+  carrierJournal?: MailCarrierJournal;
   /** Narrow allowlist, validated before the encrypted outbox is written. */
   headers?: {
     "List-Unsubscribe"?: string;
