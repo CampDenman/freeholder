@@ -17,9 +17,11 @@ failed against prior image `b50282e5`: after checkout, a catalog edit changed
 the recorded seller from the original purchaser's counterparty to a different
 member and changed a digital order's shipping flag. On the allocation77
 source rehearsal, the original-owner regression and three existing payout
-journeys passed. The independent main-based source repair must also pass those
-four controls and protected CI before merge; the larger unpublished77 schema
-is not part of this repair.
+journeys passed. The independent repair based on main `e4b2271f` also passed
+all four payout controls on an unchanged official74 database (42.68s), live
+SDK generation8/8, full type/lint/license/release/plan gates and all42 static
+contract files (380 passed, one documented exclusion). Protected CI remains
+required before merge; unpublished77 is not part of this repair.
 
 The same test continues through actual shared-service payment settlement and
 seller earnings, asserting the original seller and original 40.00/4.00/36.00
