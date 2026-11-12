@@ -14,6 +14,7 @@ import { mediaObjectWrites } from "./write-schema";
 import { pendingObjectIsOwned } from "./object-ledger";
 import {mediaMultipartResources} from "./multipart-schema";
 import {assertOriginalUploadWritable,assertMediaActorLive} from "./upload-ownership";
+import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 
 export const MEDIA_WRITES_SCOPE = "media.storageOperations";
 const unsettled = new Set(["unverified", "started", "unknown"]);
@@ -166,7 +167,7 @@ export async function observeStorageOperation(id: string, accepted: boolean, set
       await tx.insert(mediaObjects).values({ key: row.key, role: "original", state: "pending", contentType: row.contentType, bytes: row.bytes ?? 0 }).onConflictDoNothing();
     }
   });
-  await(await import("./erasure-cohorts")).reconcileMediaErasureCohorts({objectReceiptId:id}).catch(()=>{});
+  await reconcileMediaErasureCohorts({objectReceiptId:id}).catch(()=>{});
 }
 
 export async function storageOperationsHeld(tx: Tx, owners: Array<string | null>): Promise<boolean> {
@@ -203,7 +204,6 @@ export async function deleteWithReceipt(key: string,captured?:CapturedStorage): 
     const id = randomUUID(), original = history.filter(row => row.operation === "put" && row.state === "accepted" && !row.deletedAt).at(-1) ?? history.at(-1);
     await tx.insert(mediaObjectWrites).values({ id, operation: "delete", key, keyDigest: objectKeyDigest(key), namespace: binding.namespace, storageKind: binding.kind, storageLocation: binding.location,
       sha256: original?.sha256 ?? null, bytes: original?.bytes ?? null, contentType: original?.contentType ?? "application/octet-stream", actor: "system:media-cleanup", contactId: original?.contactId ?? null, state: "started" });
-    const{originalMediaErasureRequests,captureMediaErasureCohort}=await import("./erasure-cohorts");
     for(const request of await originalMediaErasureRequests(tx,history.map(row=>row.id)))await captureMediaErasureCohort(tx,request.requestId,request.scope as "media.storageOperations"|"media.multipartOperations",[id]);
     return { done: false as const, id };
   });
