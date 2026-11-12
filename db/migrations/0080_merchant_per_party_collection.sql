@@ -214,7 +214,7 @@ CREATE TRIGGER merchant_tax_merge_guard BEFORE INSERT OR UPDATE OF undone_at ON 
  FOR EACH ROW EXECUTE FUNCTION freeholder_merchant_tax_merge_guard();
 --> statement-breakpoint
 -- Source: deploy/subscription-merchant-scope80.fragment.sql
--- SHA256: 5f8023d41f75d0b8e592b1050fb42e1c7a9d61d0a91dd0787f70b8a201bc104b
+-- SHA256: 1466027d7ab7fd2bf89d4bb2c5f75b4625658f25f24996bb8a495852c7a8b1a0
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- C12.38: fragment for commerce-owned0080; do not apply before full composition.
@@ -283,7 +283,7 @@ CREATE TABLE subscription_provider_charge_receipts (
  subscription_id uuid NOT NULL REFERENCES subscription_merchant_scopes(subscription_id) ON DELETE RESTRICT,
  provider_platform_account_id text NOT NULL, charge_account_id text,
  provider_subscription_ref text NOT NULL, provider_api_version text NOT NULL DEFAULT '2026-10-28.endive', provider_invoice_ref text NOT NULL,
- provider_payment_intent_ref text NOT NULL, provider_charge_ref text NOT NULL,
+ provider_payment_intent_ref text NOT NULL, provider_charge_ref text,
  amount_minor bigint NOT NULL, currency text NOT NULL, application_fee_ref text,
  observed_application_fee_minor bigint, observed_application_fee_currency text,
  actual_destination_account_id text, actual_settlement_merchant_account_id text, merchant_route_verified boolean NOT NULL DEFAULT false, customer_charge_verified boolean NOT NULL DEFAULT false,
@@ -303,11 +303,12 @@ BEGIN
  IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Observed original subscription money cannot be deleted' USING ERRCODE='23514'; END IF;
  IF current_setting('freeholder.subscription_scope_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Subscription money requires its authenticated current writer' USING ERRCODE='23514'; END IF;
  IF TG_OP='UPDATE' THEN
-  IF (to_jsonb(NEW)-'application_fee_ref'-'observed_application_fee_minor'-'observed_application_fee_currency') IS DISTINCT FROM (to_jsonb(OLD)-'application_fee_ref'-'observed_application_fee_minor'-'observed_application_fee_currency')
+  IF (to_jsonb(NEW)-'provider_charge_ref'-'application_fee_ref'-'observed_application_fee_minor'-'observed_application_fee_currency') IS DISTINCT FROM (to_jsonb(OLD)-'provider_charge_ref'-'application_fee_ref'-'observed_application_fee_minor'-'observed_application_fee_currency')
+   OR OLD.provider_charge_ref IS NOT NULL AND NEW.provider_charge_ref IS DISTINCT FROM OLD.provider_charge_ref
    OR OLD.application_fee_ref IS NOT NULL AND NEW.application_fee_ref IS DISTINCT FROM OLD.application_fee_ref
    OR OLD.observed_application_fee_minor IS NOT NULL AND NEW.observed_application_fee_minor IS DISTINCT FROM OLD.observed_application_fee_minor
    OR OLD.observed_application_fee_currency IS NOT NULL AND NEW.observed_application_fee_currency IS DISTINCT FROM OLD.observed_application_fee_currency THEN
-   RAISE EXCEPTION 'Original subscription money is immutable; only missing authenticated fee facts may be completed' USING ERRCODE='23514';
+   RAISE EXCEPTION 'Original subscription money is immutable; only missing authenticated charge and fee facts may be completed' USING ERRCODE='23514';
   END IF;
  END IF;
  IF NOT EXISTS(SELECT 1 FROM subscription_merchant_scopes scope WHERE scope.subscription_id=NEW.subscription_id
@@ -362,7 +363,7 @@ CREATE TRIGGER subscription_scope_legacy_merge_admission BEFORE INSERT ON contac
 CREATE TABLE subscription_provider_charge_observations (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), subscription_id uuid NOT NULL REFERENCES subscription_merchant_scopes(subscription_id) ON DELETE RESTRICT,
  provider_platform_account_id text NOT NULL, charge_account_id text, provider_api_version text NOT NULL,
- provider_subscription_ref text NOT NULL, provider_invoice_ref text NOT NULL, provider_payment_intent_ref text NOT NULL, provider_charge_ref text NOT NULL,
+ provider_subscription_ref text NOT NULL, provider_invoice_ref text NOT NULL, provider_payment_intent_ref text NOT NULL, provider_charge_ref text,
  amount_minor bigint NOT NULL, currency text NOT NULL, actual_destination_account_id text, actual_settlement_merchant_account_id text,
  merchant_route_verified boolean NOT NULL, customer_charge_verified boolean NOT NULL, observation_digest text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
  CONSTRAINT subscription_charge_observations_money CHECK(amount_minor BETWEEN 1 AND 9007199254740991 AND currency ~ '^[A-Z]{3}$'),
