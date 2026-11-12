@@ -13797,6 +13797,14 @@ whatever is best for the people using the site.
   No missing original resource binding is inferred or history rewritten.
   The response fault and provider edges are synthetic. See
   `deploy/merchant-fee-unreadable-success-2026-11-12.md`; C12.38 remains open.
+  Original installment fee split 2026-11-12: test-only457/current17d with
+  normal-v9 SQL958 passed6.800s. One300CAD-cent invoice freezes20 commission;
+  actual50+250 captures freeze3+17 fees. Returning its zero-tax100 line refunds
+  customer50+50 and original fees3+7, with bound observations and canonical
+  retained targets0+10. Both reconciliations replay without another fee POST;
+  separate database work drained. All provider edges and contrast tax are
+  synthetic. This qualifies that split, with no historical money or SQL
+  changes, new model activation, actual provider or full C12.38 closure.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

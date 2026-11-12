@@ -119,3 +119,28 @@ matching the order's invoice reference. The catalog source and SQL guard both
 check this round trip. This small unqualified follow-up changes the new fragment
 hash; the previously recorded4b64 hash remains the exact earlier source check.
 No existing database or original financial record is changed.
+
+Original partial-payment fee allocation qualification: test-only457 on the
+current17d product and normal-v9 SQL958 passed6.800s. Real catalog, checkout,
+payment, return, credit and fee services created one300CAD-cent invoice
+(200 net plus100 synthetic contrast tax), with a frozen20 commission. Its
+original50 and250 captures froze3 and17 fees. Returning the zero-tax100 line
+caused actual50 plus50 customer refunds and3 plus7 fee refunds, bound to their
+respective original resources. Independent ledger readback confirms matching
+fee observations and canonical retained targets0 and10. The fixture enforces
+each original resource's actual capacity and distinct physical keys; both
+subsequent reconciliations are satisfied without another fee POST. The
+synthetic100-percent tax rate is only a source-test contrast, not a legal tax
+determination or provider-account acceptance.
+
+Full Node22 typecheck and single-fixture lint passed before this case. The
+first launch encountered sandbox EPERM before connecting or running any test;
+its zero-test report is preserved. The authorized same-case launch outside
+that network restriction passed, exited0, and separate activity readback
+confirmed no active database work. No product source, migration or historical
+money changed during this qualification; the old112 clone was not used.
+Evidence: `/tmp/freeholder-fee-installments80-native-v2-v9.{json,log}` and
+`/tmp/freeholder-fee-installments80-native-v9-{ledger,drain}.json`.
+This proves the specified original installment split, while the remaining
+partial-unit, mixed/manual, destination, caller, bank and actual acceptance
+requirements stay open. C5.19/C12.38 remain open and the model stays disabled.
