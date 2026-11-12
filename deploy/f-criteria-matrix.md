@@ -2012,8 +2012,9 @@ public image delivery refusal. The prepared-child identical-restore before/after
 proof also passes on fresh normal0–79 while preserving its original checkpoint.
 `deploy/import-source-graph.md` records the exact sources, failed attempts and
 limits; `.changeset/durable-static-zip-source.md` supplies the feature note. ZIP
-privacy/hold/namespace and current production owner-browser cases are prepared
-but remain unqualified here. These additive ZIP proofs do not extend the earlier
+privacy/hold/namespace controls now pass on normal0–79, including late erasure
+refusal, exact named holds and same-key replacement-store refusal. Current
+production artifact and owner-browser acceptance remain required. These additive ZIP proofs do not extend the earlier
 WXR/REST browser evidence or close C3.47; durable live crawl and actual cutover
 remain required.
 

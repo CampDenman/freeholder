@@ -515,3 +515,21 @@ changed-file lint also pass. The local JIT/fsync profile above still applies.
 The new ZIP privacy/hold and storage-namespace controls are prepared but unrun;
 current ZIP production artifact/browser and complete crawl acceptance remain
 required. No existing migration was edited and no schema81 was added.
+
+
+Exactly three additional ZIP graph boundary cases pass in 20.00 seconds on
+`1836ea578866b2812fe5454737b9cbb70c6473fe` and the owned normal0–79 fixture.
+The two existing WXR counterparts were intentionally filtered. A real unparsed
+501-file ZIP is invalidated by actual erasure, and its in-flight index result is
+refused. A real named reader-source hold preserves the exact original through
+rollback until that hold is removed. An independent same-key copy in storage B
+authorizes no reads or writes: continuation produces zero B GET/PUT/DELETE and
+zero accepted entries, while returning to actual original storage A resumes
+500 entries. Both stores' bytes remain unchanged during the refusal.
+
+All test processes exited successfully and the fixture database had no nonidle
+backends before the next native lease. The existing local JIT/fsync profile
+applies. These are source-specific local controls, not actual-provider object
+recovery or default-JIT acceptance. Current ZIP production artifact, live SDK
+verification, four-locale owner browser, protected qualification and durable
+live crawl response/frontier integration remain required.
