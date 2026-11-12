@@ -78,3 +78,11 @@ catalogs include the editor and meaningful retention labels. Full types,
 focused lint and 74 form/translation/audit/registry source controls pass. These
 screens still need the assembled80 native and production browser qualification;
 source forms do not provide human or provider sign-off.
+
+Public quote permission is not private customer-pricing permission. The named
+email enrichment path now checks the existing scoped `catalog.resolvePrice`
+authority; three direct access-policy controls cover a quote-only connector,
+private pricing grants and role names without grants. A person's verified own
+email still uses its original self path. The actual restricted-agent/customer
+exemption native journey remains part of assembled80 qualification. This is
+unreleased source review, not a claim of a reproduced main/production breach.

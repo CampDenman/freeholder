@@ -5,7 +5,7 @@ import {and,eq,inArray} from "drizzle-orm";
 import {z} from "zod";
 import {contacts} from "@/core/contacts/schema";
 import {publicMerchantSupport} from "@/core/commerce/merchant-identity";
-import {defineService,getService,permits,ServiceError,type ServiceContext} from "@/core/service";
+import {defineService,getService,ServiceError,type ServiceContext} from "@/core/service";
 import {merchantTaxAddress} from "@/modules/invoicing/merchant-tax-contract";
 import {currentMerchantTaxProfile,merchantTaxBusinessIdentity} from "@/modules/invoicing/merchant-tax";
 import {previewMerchantTax} from "@/modules/invoicing/merchant-tax-preview";
@@ -20,6 +20,7 @@ import {quoteShipping} from "./shipping";
 import {resolveCartPromotions} from "./promotions";
 import {allocateDiscount} from "./promo-quote";
 import {currentOrderCommercialTerms,orderCommercialConsentDigest} from "./order-commercial-consent";
+import {canReadNamedBuyerTax} from "./merchant-tax-buyer-authority";
 const minor=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const amounts=z.object({subtotalMinor:minor,discountMinor:minor,shippingMinor:minor,taxMinor:minor,totalMinor:minor});
 const publicQuoteInput=z.object({cartId:z.uuid(),cartToken:z.uuid().optional(),email:z.string().trim().email().toLowerCase().max(320).optional(),shippingAddress:merchantTaxAddress.optional(),taxDestination:merchantTaxAddress.optional(),shippingMethodId:z.uuid().optional(),locationId:z.uuid().optional(),couponCode:z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9-]{2,31}$/).optional()});
@@ -75,7 +76,7 @@ export const quoteMerchantCheckout=defineService({
   // A cart token is not authority over the email holder's exemption records.
   let contactId:string|null=null;
   if(input.email&&ctx.actor.kind==="user"){const[person]=await ctx.tx.select({id:contacts.id,source:contacts.source}).from(contacts).where(and(eq(contacts.userId,ctx.actor.userId),eq(contacts.email,input.email))).limit(1);if(person&&person.source!=="privacy-erasure")contactId=person.id;}
-  if(!contactId&&input.email&&permits(ctx.actor,"scoped","catalog.quoteMerchantCheckout","query")){const[person]=await ctx.tx.select({id:contacts.id,source:contacts.source}).from(contacts).where(eq(contacts.email,input.email)).limit(1);if(person&&person.source!=="privacy-erasure")contactId=person.id;}
+  if(!contactId&&input.email&&canReadNamedBuyerTax(ctx.actor)){const[person]=await ctx.tx.select({id:contacts.id,source:contacts.source}).from(contacts).where(eq(contacts.email,input.email)).limit(1);if(person&&person.source!=="privacy-erasure")contactId=person.id;}
   return quoteForBuyer({...input,contactId},ctx);
  },
 });
