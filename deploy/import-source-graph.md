@@ -213,3 +213,25 @@ keyboard, Axe and Arabic RTL. Playwright, standalone servers and database client
 drained with exit zero. Exact protected integration and broader source/provider
 acceptance remain required. This locally qualified uploaded-REST increment does
 not complete live REST discovery, durable ZIP/crawl continuation or C3.47.
+
+
+## Selected REST instance boundary
+
+Inspection after the root-site qualification found a separate subdirectory
+boundary in the existing shared start operation. A bounded actual start/crawl
+control now proves it: selecting `https://fictional-rest-instances.example/site-a/`
+saved only its host, sent the public API requests to `/wp-json/` at that host,
+and staged a different host-root article/site instead of the selected instance.
+The before failure is an exact four-field value mismatch, not a reader ownership
+failure. REST comment parsing is not implemented, so no wrong-person claim is
+made from this control.
+
+Two earlier attempts stopped in fixture setup (a standard reset hook timeout,
+then duplicate fixture plugin reviews). Their logs/source are retained separately;
+neither supplies product before evidence. The final append-only fresh-UUID
+fixture preserves existing review rows and reached the actual target assertions.
+Its runner reported 4.72 seconds, but a coordinator grant race overlapped the
+commerce repeat on another database. That overlap is explicit: this supplies a
+deterministic wrong-target observation, not quiet-lane/performance evidence.
+The frozen0180 root-site artifact facts above remain valid; the subdirectory
+repair and its affected qualification remain required before normal integration.
