@@ -336,3 +336,24 @@ capture and active external stopping remain work in progress. Full TypeScript,
 focused lint and eight source-control files (88 cases) pass on this composition.
 Its regenerated migration requires a new fresh-database run; the previous
 schema's native results do not qualify these changed SQL constraints.
+
+### Original refund lookup foundation
+
+The read-only Stripe refund recovery adapter keeps the original platform,
+charge namespace and frozen protocol on every read. A reference already held
+by an immutable physical acknowledgement is distinct from a newly supplied
+candidate: the latter must prove the original refund/platform metadata.
+Lookup retains every matching result before reading another page. Conflicting
+amounts, currency or PaymentIntent ownership remain explicit unverified
+observations; multiple effects are ambiguous, and a complete empty result is
+unresolved. Optional charge/reversal enrichment cannot discard primary refund
+evidence. The helper performs no POST.
+
+This adapter increment passes full TypeScript, focused lint and 11 new actual
+mock-HTTP controls, together with 27 existing saved-card/Checkout recovery
+controls. It does not yet provide the durable refund request/dispatch ledger,
+independent POST observation, unapplied-money resolution, owner flows or
+native source acceptance. Those remain required before model activation.
+The documented provider lookup is [Stripe list refunds](https://docs.stripe.com/api/refunds/list);
+our bounded empty-result policy never treats an inventory as proof that an
+unknown physical creation had no effect.

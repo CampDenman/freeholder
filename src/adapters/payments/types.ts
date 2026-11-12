@@ -184,6 +184,37 @@ export interface RefundResult extends MerchantChargeScope {
   failureCode?: "provider_cancelled";
 }
 
+/** Actual original-account refund evidence, independent of invoice application. */
+export interface MerchantRefundObservation extends PaymentAccountScope {
+  providerRef: string;
+  paymentProviderRef: string;
+  providerChargeRef?: string;
+  amountMinor: number;
+  currency: string;
+  status: "pending" | "succeeded" | "failed";
+  failureCode?: "provider_cancelled";
+  transferReversalRef?: string;
+  sourceTransferReversalRef?: string;
+  bindingVerified: boolean;
+}
+export interface MerchantRefundRecoveryRequest extends MerchantChargeScope {
+  providerPlatformAccountId: string;
+  refundAttemptId: string;
+  paymentId: string;
+  paymentProviderRef: string;
+  amountMinor: number;
+  currency: string;
+  /** Only a reference already retained from this original physical operation. */
+  originalRefundRef?: string;
+  /** A supplied candidate must independently prove its original metadata. */
+  candidateRefundRef?: string;
+  onRefundObserved: (evidence: MerchantRefundObservation) => Promise<void>;
+}
+export type MerchantRefundRecovery =
+  | { state: "unresolved" }
+  | { state: "ambiguous"; refundRefs: readonly string[] }
+  | { state: "observed"; evidence: MerchantRefundObservation };
+
 export interface SavedMethodRevocationRequest extends PaymentAccountScope {
   providerRef: string;
   idempotencyKey: string;
@@ -451,6 +482,7 @@ export interface PaymentAdapter {
   retireMerchantPayment?(request: MerchantPaymentRecoveryRequest): Promise<MerchantPaymentRecovery>;
   recoverMerchantIntent?(request: MerchantIntentRecoveryRequest): Promise<MerchantIntentRecovery>;
   retireMerchantIntent?(request: MerchantIntentRecoveryRequest): Promise<MerchantIntentRecovery>;
+  recoverMerchantRefund?(request: MerchantRefundRecoveryRequest): Promise<MerchantRefundRecovery>;
   supportedCurrencies(): Promise<readonly string[]>;
   supportedMethods(context: {
     country: string;
