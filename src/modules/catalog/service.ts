@@ -1048,10 +1048,12 @@ registerSearchSource({
 });
 
 import publicBookingServices from "./public-booking";
+import {originalMerchantReturnFeeSource} from "./merchant-return-fee-source";
 import customerReturnServices from "./customer-returns";
 export {myOrderReturns,requestMyReturn} from "./customer-returns";
 
 export default [
+  originalMerchantReturnFeeSource,
   ...bookingCommercialSourceServices,
   ...marketServices,
   ...orderCommercialServices,

@@ -39,7 +39,18 @@ rechecked before admission. Actual positive observations remain independent.
 Existing accepted112 history must stay unchanged and require explicit review;
 there is no automatic charge or negative refund. No new table, foreign key,
 SQL fragment or public API is added. The original-source getter is SYSTEM only,
-external false, always registered for original financial history. Legacy and
+external false, registered by its owning catalog module. Legacy and
 non-order fee paths retain their prior behavior. Full partial/manual mixing,
 fee/reversal callers, banking transitions, human/browser/provider acceptance and
 the remaining C12.38 specification are still required. The model stays disabled.
+
+
+Rounding source review: the actual RMA `returnCredit` computes each amount as
+floor(originalAmount × cumulativeUnits / originalUnits) minus the previous
+cumulative floor, then passes the exact net/tax amounts to `createCreditNote`.
+The credit service stores those inputs without recalculating tax. For original
+tax1 across3 units, a first two-unit return is0 tax; if an earlier one-unit
+return precedes the two-unit return, the latter is1, with all three totaling1.
+The fee target validates the combined original returned quantity/net/tax, not a
+fresh per-return tax quote. A current-service three-unit regression remains
+needed before claiming this rounding boundary qualified.

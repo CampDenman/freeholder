@@ -43,7 +43,8 @@ describe.runIf(hasDatabase && process.env.TEST_ORIGINAL_FEE_HISTORY === "1")("ac
       recoverMerchantFeeRefund: async () => { throw Error("The retained accepted fee is already known."); },
     });
     expect(await reconcileMerchantApplicationFee.call({ paymentId: original.paymentId }, OWNER)).toMatchObject({ state: "review", operation: null });
-    expect(await merchantPaymentRecoveryDebt.call({ paymentId: original.paymentId }, system)).toMatchObject({ pending: true, reasons: expect.arrayContaining(["commission"]) });
+    const debt = await merchantPaymentRecoveryDebt.call({ paymentId: original.paymentId }, system);
+    expect(debt.pending).toBe(true); expect(debt.reasons).toContain("commission");
     expect(posts).toBe(0); expect(await originalMoney()).toEqual(before);
   });
 });
