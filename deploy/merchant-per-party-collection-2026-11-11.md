@@ -325,3 +325,14 @@ SQL and its hash did not change. The native recovery fixture also compares
 all eight recovery/evidence table column sets with the actually applied
 independent SQL. The exact remaining saved-card case is pending its repeat;
 the two successful checkout cases are not attributed to that recovery path.
+
+The next combined candidate incorporates original subscription tax-erasure
+preparation, the immutable selected tax-zone witness and per-business threshold
+reports. The reproduced legacy site report counted a seller's issued invoice;
+the repaired legacy query excludes explicit merchant-tax receipt invoices.
+The report source, privacy preparation and full external schedule lifecycle
+have separate qualification boundaries. Actual first-charge-before-create-ACK
+capture and active external stopping remain work in progress. Full TypeScript,
+focused lint and eight source-control files (88 cases) pass on this composition.
+Its regenerated migration requires a new fresh-database run; the previous
+schema's native results do not qualify these changed SQL constraints.
