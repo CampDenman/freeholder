@@ -249,3 +249,38 @@ frozen0180 root-site artifact qualification remains separate from this narrow
 source repair; protected integration and any affected subdirectory artifact
 acceptance remain required. This does not add REST reader-comment parsing or
 close live discovery/durable ZIP/crawl/WordPress acceptance.
+
+
+## REST review on actual protected migration 78 main
+
+Reader provenance PR #687 merged normally as
+`bf131de797cb97a8b929e749d88a2176dfad3c03`. The REST-only commits now replay
+on that actual main ancestry, with product files and SQL identical to the
+previously qualified source checkpoint 6b05fdff. All prior SQL remains unchanged;
+this increment adds no migration or table. Local full types, lint, license,
+release-note, plan, playground and 384 contract gates passed again, with 26
+expected database-only exclusions. MASTER §43.1 is unchanged.
+
+The preserved 0180 root-site production artifact predates the narrow selected
+subdirectory fix. Its real root-site SDK/native/four-locale evidence above is
+retained with that scope; it is not attributed to a subdirectory artifact.
+The actual start/preview subdirectory before/after controls remain the source
+proof for that fix. A new English owner production case selects /site-a/,
+uploads 501 originals from that instance and checks the actual HTTP-created run
+retains its selected origin, then uses the existing interruption, identical-byte
+restore, publication and full rollback journey. Protected CI must build and run
+that current case before integration; no local subdirectory artifact result is
+claimed here. Other locale journeys retain their original root-site inputs.
+
+Applicable F01–F12 evidence for this partial C3.47/C3.46 repair uses existing
+migration 73 constraints and immutable source/lease/actor records, shared
+transactional CMS/media paths and rollback ownership (F01–F03); existing
+translated owner progress/review/restore controls and unchanged HTTP/MCP/SDK
+contracts (F04–F06); actual source/body/metadata bounds, duplicate/replay/source
+refusal and source privacy/hold recovery (F07–F09); owner source-file guidance,
+release notes and the real 501-source end-to-end native/browser paths (F10–F12).
+There is no new CRM FK or source body copy. Existing contact registry and erasure
+boundaries remain authoritative. REST comment parsing, full WordPress parity,
+ZIP/crawl durable continuation, actual cutover/provider acceptance, independent
+review and stable readiness remain open. This source increment does not close
+C3.47 or change the version/announcement status.
