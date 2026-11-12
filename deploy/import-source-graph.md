@@ -235,3 +235,17 @@ commerce repeat on another database. That overlap is explicit: this supplies a
 deterministic wrong-target observation, not quiet-lane/performance evidence.
 The frozen0180 root-site artifact facts above remain valid; the subdirectory
 repair and its affected qualification remain required before normal integration.
+
+
+The selected-instance repair now passes the unchanged four-field control in
+4.12 seconds on its separately granted lane: the new run retains `/site-a/`,
+its default public requests address that instance's API, and its staged site and
+article belong to the selected instance. Source lint and full types pass.
+Starting a new non-root REST source now retains its selected path while excluding
+query/fragment from site identity. Root-site starts retain their previous value;
+existing saved runs are preserved rather than inferred or rewritten from links.
+No parser, reader assignment, schema, deadline or fsync setting changed. The
+frozen0180 root-site artifact qualification remains separate from this narrow
+source repair; protected integration and any affected subdirectory artifact
+acceptance remain required. This does not add REST reader-comment parsing or
+close live discovery/durable ZIP/crawl/WordPress acceptance.

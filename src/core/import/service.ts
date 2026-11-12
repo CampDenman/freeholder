@@ -435,7 +435,13 @@ export const startImport = defineService({
     }
     if (input.kind === "archive" && (url.search || url.hash)) throw new ServiceError("validation", "An archive source URL cannot contain a query or fragment.");
     if (input.approvedMediaOrigins.length && !["html", "rss", "atom", "sitemap"].includes(input.kind)) throw new ServiceError("validation", "Additional media origins apply to generic public sources.");
-    const origin = input.kind === "archive" || ["html", "rss", "atom", "sitemap"].includes(input.kind) && (url.pathname !== "/" || url.search) ? url.href : url.origin;
+    // Separate WordPress instances can share a host. Keep the selected REST
+    // instance path; query/fragment fields are not part of its site identity.
+    // Existing saved runs remain unchanged and are never guessed from links.
+    const restSiteUrl = new URL(url.href);
+    restSiteUrl.search = ""; restSiteUrl.hash = "";
+    const origin = input.kind === "wordpress-rest" && url.pathname !== "/" ? restSiteUrl.href
+      : input.kind === "archive" || ["html", "rss", "atom", "sitemap"].includes(input.kind) && (url.pathname !== "/" || url.search) ? url.href : url.origin;
     const [row] = await ctx.tx
       .insert(importRuns)
       .values({
