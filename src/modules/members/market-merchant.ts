@@ -11,7 +11,8 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { okResult } from "@/core/contract";
 import { invoices } from "@/modules/invoicing/schema";
 import { getInvoiceMarketPolicy, invoiceMarketPolicy, marketFeeMinor, registerInvoiceMarketResolver, registerInvoiceMerchantVerifier } from "@/modules/invoicing/market-policy";
-import { orderInvoiceRevenue,orderSellers } from "@/modules/catalog/market";
+import { orderInvoiceRevenue,orderSellers,orderInvoiceLineOwners } from "@/modules/catalog/market";
+import { invoiceMerchantLineOwner, registerInvoiceMerchantLineResolver } from "@/modules/invoicing/merchant-allocations";
 import { products } from "@/modules/catalog/schema";
 import { plans, subscriptions } from "@/modules/subscriptions/schema";
 import { getSubscriptionMarketPolicy, registerSubscriptionMarketResolver, registerSubscriptionPlanMarketResolver, registerSubscriptionMerchantVerifier, subscriptionMarketPolicy, type SubscriptionMarketPolicy } from "@/modules/subscriptions/market-policy";
@@ -105,6 +106,22 @@ export const resolveInvoiceMarketPolicy = defineService({
 
 registerInvoiceMarketResolver((invoiceId, ctx) => ctx.callAsSystem(resolveInvoiceMarketPolicy, { invoiceId }));
 
+export const resolveInvoiceMerchantLineOwners = defineService({
+  name: "members.resolveInvoiceMerchantLineOwners", summary: "Resolve original member order line owners against the unified contact spine.",
+  kind: "query", permission: "system", external: false,
+  input: z.object({ invoiceId: z.uuid() }), output: invoiceMerchantLineOwner.array().nullable(),
+  handler: async ({ invoiceId }, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
+    const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, invoiceId));
+    if (!invoice || invoice.sourceType !== "order" || !invoice.sourceId || !z.uuid().safeParse(invoice.sourceId).success) return null;
+    const lines = await ctx.callAsSystem(orderInvoiceLineOwners, { orderId: invoice.sourceId, invoiceId });
+    const sellerIds = [...new Set(lines.flatMap(line => line.sellerUserId ? [line.sellerUserId] : []))];
+    const owners = sellerIds.length ? await ctx.tx.select({ userId: contacts.userId, id: contacts.id }).from(contacts).where(inArray(contacts.userId, sellerIds)) : [];
+    return lines.map(line => ({ ...line, merchantContactId: owners.find(owner => owner.userId === line.sellerUserId)?.id ?? null }));
+  },
+});
+registerInvoiceMerchantLineResolver((invoiceId, ctx) => ctx.callAsSystem(resolveInvoiceMerchantLineOwners, { invoiceId }));
+
 export const verifyInvoiceMerchantAccount = defineService({
   name: "members.verifyInvoiceMerchantAccount", summary: "Verify that an issued invoice's original seller account remains authorized.",
   kind: "query", permission: "system", external: false,
@@ -139,4 +156,4 @@ export const verifySubscriptionMerchantAccount = defineService({
   },
 });
 registerSubscriptionMerchantVerifier(async (subscriptionId, ctx) => { await ctx.callAsSystem(verifySubscriptionMerchantAccount, { subscriptionId }); });
-export default [resolveInvoiceMarketPolicy, resolveSubscriptionMarketPolicy, resolveSubscriptionPlanMarketPolicy, verifyInvoiceMerchantAccount, verifySubscriptionMerchantAccount];
+export default [resolveInvoiceMarketPolicy, resolveInvoiceMerchantLineOwners, resolveSubscriptionMarketPolicy, resolveSubscriptionPlanMarketPolicy, verifyInvoiceMerchantAccount, verifySubscriptionMerchantAccount];

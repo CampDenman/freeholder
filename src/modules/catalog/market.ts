@@ -191,6 +191,23 @@ export const orderInvoiceRevenue = defineService({
   },
 });
 
+export const orderInvoiceLineOwners = defineService({
+  name: "catalog.orderInvoiceLineOwners", summary: "Read proven original seller and shipping ownership for every order invoice line.",
+  kind: "query", permission: "system", external: false,
+  input: z.object({ orderId: uuid, invoiceId: uuid }),
+  output: listed(row({ invoiceLineId: uuid, sellerUserId: uuid.nullable(), requiresShipping: z.boolean() })),
+  handler: async (input, ctx) => {
+    const revenue = await ctx.callAsSystem(orderInvoiceRevenue, input);
+    const items = await ctx.tx.select().from(orderItems).where(eq(orderItems.orderId, input.orderId));
+    return revenue.map(line => {
+      const item = items.find(item => item.id === line.orderItemId);
+      const original = z.object({ invoiceLineId: uuid, sellerUserId: uuid.nullable(), requiresShipping: z.boolean() }).safeParse(item?.snapshot);
+      if (!original.success || original.data.invoiceLineId !== line.invoiceLineId) throw new ServiceError("conflict", "This original order has no proven seller and shipping ownership. Historical money must be reconciled before allocation.");
+      return original.data;
+    });
+  },
+});
+
 export const anonymizeSellerOrderReceipts = defineService({
   name: "catalog.anonymizeSellerOrderReceipts", summary: "Project settled original order ownership to the member erasure identity in the privacy transaction.",
   kind: "mutation", permission: "system", external: false,
@@ -236,4 +253,4 @@ export const memberOrdersForContact = defineService({
   },
 });
 
-export default [marketListings, orderSellers, orderInvoiceRevenue, anonymizeSellerOrderReceipts, orderForInvoice, memberOrdersForContact];
+export default [marketListings, orderSellers, orderInvoiceRevenue, orderInvoiceLineOwners, anonymizeSellerOrderReceipts, orderForInvoice, memberOrdersForContact];

@@ -7,6 +7,7 @@ import { publicMerchantSupport } from "@/core/commerce/merchant-identity";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { invoiceMarketPolicies, invoices } from "./schema";
+import { captureInvoiceMerchantAllocations } from "./merchant-allocations";
 
 export const invoiceMarketPolicy = z.object({
   model: z.enum(["hold", "instant", "seller_merchant"]),
@@ -55,6 +56,7 @@ export const captureInvoiceMarketPolicy = defineService({
       throw new ServiceError("conflict", "This seller invoice needs a verified merchant account and a valid application fee.");
     }
     await ctx.tx.insert(invoiceMarketPolicies).values({ invoiceId, ...policy });
+    await ctx.callAsSystem(captureInvoiceMerchantAllocations, { invoiceId });
     ctx.setSubject("invoice", invoiceId);
     return { captured: true };
   },
