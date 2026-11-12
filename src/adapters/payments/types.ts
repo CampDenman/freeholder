@@ -18,10 +18,22 @@ export interface PaymentAdapterCapabilities {
   strongCustomerAuthentication: boolean;
   /** Charge, refund and service payments on an identified seller account. */
   sellerMerchantCharges?: boolean;
+  /** Platform-owned charges with a distinct connected settlement recipient. */
+  destinationMerchantCharges?: boolean;
 }
 
 /** Supplied by canonical ledger policy, never by a buyer's request. */
 export interface PaymentAccountScope { providerAccountId?: string }
+
+/** Frozen ledger facts. A destination is never the charge object's account. */
+export interface MerchantChargeScope extends PaymentAccountScope {
+  /** Authenticated platform that originally created the charge. */
+  providerPlatformAccountId?: string;
+  /** Destination charge recipient; the charge remains on the platform. */
+  destinationAccountId?: string;
+  /** Stripe settlement merchant, independent of the charge namespace. */
+  settlementMerchantAccountId?: string;
+}
 
 export interface PaymentMethodOffer {
   id: string;
@@ -38,7 +50,7 @@ export interface PaymentMethodOffer {
   recurring: boolean;
 }
 
-export interface InvoiceForCharge extends PaymentAccountScope {
+export interface InvoiceForCharge extends MerchantChargeScope {
   applicationFeeMinor?: number;
   invoiceId: string;
   invoiceNumber: string;
@@ -57,7 +69,7 @@ export interface InvoiceForCharge extends PaymentAccountScope {
   providerCustomerRef?: string;
 }
 
-export interface CheckoutSession extends PaymentAccountScope {
+export interface CheckoutSession extends MerchantChargeScope {
   /** Checkout/session/order reference used until settlement finishes. */
   providerRef: string;
   /** Settlement reference when the provider creates it with the checkout. */
@@ -105,12 +117,15 @@ export interface MethodSetupRecovery extends PaymentAccountScope {
   event?: PaymentProviderEvent;
 }
 
-export interface CheckoutCaptureRequest extends PaymentAccountScope {
+export interface CheckoutCaptureRequest extends MerchantChargeScope {
   checkoutRef: string;
   idempotencyKey: string;
 }
 
-export interface CheckoutCaptureResult extends PaymentAccountScope {
+export interface CheckoutCaptureResult extends MerchantChargeScope {
+  providerChargeRef?: string;
+  applicationFeeRef?: string;
+  transferRef?: string;
   providerRef: string;
   status: "pending" | "succeeded" | "failed";
   amountMinor?: number;
@@ -119,9 +134,11 @@ export interface CheckoutCaptureResult extends PaymentAccountScope {
   applicationFeeMinor?: number;
 }
 
-export interface RefundRequest extends PaymentAccountScope {
+export interface RefundRequest extends MerchantChargeScope {
   /** Return the collected platform fee along with a direct-charge refund. */
   refundApplicationFee?: boolean;
+  /** Reverse the original destination transfer in proportion to this refund. */
+  reverseTransfer?: boolean;
   paymentId: string;
   providerRef: string;
   currency: string;
@@ -130,7 +147,7 @@ export interface RefundRequest extends PaymentAccountScope {
   idempotencyKey: string;
 }
 
-export interface RefundResult extends PaymentAccountScope {
+export interface RefundResult extends MerchantChargeScope {
   providerRef: string;
   status: "pending" | "succeeded" | "failed";
   /** A definite provider cancellation is unsuccessful, not a card decline. */
@@ -142,7 +159,7 @@ export interface SavedMethodRevocationRequest extends PaymentAccountScope {
   idempotencyKey: string;
 }
 
-export interface OffSessionChargeRequest extends PaymentAccountScope {
+export interface OffSessionChargeRequest extends MerchantChargeScope {
   applicationFeeMinor?: number;
   methodRef: string;
   customerRef?: string;
@@ -154,7 +171,10 @@ export interface OffSessionChargeRequest extends PaymentAccountScope {
   idempotencyKey: string;
 }
 
-export interface OffSessionChargeResult extends PaymentAccountScope {
+export interface OffSessionChargeResult extends MerchantChargeScope {
+  providerChargeRef?: string;
+  applicationFeeRef?: string;
+  transferRef?: string;
   applicationFeeMinor?: number;
   providerRef: string;
   status: "pending" | "succeeded" | "failed";
@@ -210,6 +230,24 @@ export interface SavedPaymentMethodEvidence {
   last4?: string;
   expiryMonth?: number;
   expiryYear?: number;
+}
+
+/** Exact frozen commission refund, independent of a customer refund's result. */
+export interface MerchantFeeRefundRequest extends MerchantChargeScope {
+  providerPlatformAccountId: string;
+  applicationFeeRef: string;
+  providerChargeRef: string;
+  amountMinor: number;
+  currency: string;
+  operationId: string;
+  idempotencyKey: string;
+}
+
+export interface MerchantFeeRefundResult {
+  providerRef: string;
+  applicationFeeRef: string;
+  amountMinor: number;
+  currency: string;
 }
 
 export type PaymentProviderEvent = PaymentAccountScope & (
@@ -286,6 +324,11 @@ export interface PaymentAdapter {
   readonly id: string;
   readonly status: AdapterStatus;
   capabilities(): PaymentAdapterCapabilities;
+  /** Provider read outside business transactions; never an owner attestation. */
+  platformAccountIdentity?(): Promise<{ providerPlatformAccountId: string }>;
+  refundMerchantFee?(request: MerchantFeeRefundRequest): Promise<MerchantFeeRefundResult>;
+  /** A missing lookup is unresolved, never evidence that a timed-out refund did not happen. */
+  recoverMerchantFeeRefund?(request: MerchantFeeRefundRequest): Promise<MerchantFeeRefundResult | null>;
   supportedCurrencies(): Promise<readonly string[]>;
   supportedMethods(context: {
     country: string;

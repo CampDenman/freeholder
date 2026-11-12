@@ -13498,8 +13498,15 @@ whatever is best for the people using the site.
   decoding on the new key. Changeset `member-call-removal.md`.)*
 - [ ] **C12.38** Let sellers be the merchant of record: direct or
   destination charges at checkout through the payout provider (Stripe
-  Connect first), with the site fee taken as an application fee, refunds
-  and disputes on the seller's account. Split from C12.26 on 2026-10-15.
+  Connect first), with the site fee taken as an application fee. Direct
+  charge, refund and dispute objects belong to the original seller account;
+  destination charge, refund and dispute objects belong to the original
+  platform account, with the original connected recipient and settlement
+  merchant recorded separately. `on_behalf_of` does not move destination
+  refunds, disputes or Stripe's platform balance liability to the seller's
+  account. Split from C12.26 on 2026-10-15. This follows Stripe's current
+  [charge types](https://docs.stripe.com/connect/charges) and
+  [refund/dispute documentation](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
   Original-order ownership repair 2026-11-11: checkout freezes each purchased
   line's seller and shipping requirement before invoice issue, and seller
   settlement reads that receipt instead of a later catalog edit. The actual
