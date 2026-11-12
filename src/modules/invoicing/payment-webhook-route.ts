@@ -22,8 +22,8 @@ export function paymentWebhookRoute(provider: HostedPaymentProviderId) {
     try {
       const body = await rawRequest(request);
       const headers = Object.fromEntries([...request.headers.entries()].map(([key, value]) => [key.toLowerCase(), value]));
-      const events = await paymentAdapter(provider).verifyWebhook({ headers, body, receivedAt });
-      await retainPaymentProviderEvidence(provider, events);
+      const verified = await paymentAdapter(provider).verifyWebhook({ headers, body, receivedAt });
+      const events = await retainPaymentProviderEvidence(provider, verified);
       const result = await processPaymentProviderEvents.call(
         {
           provider,

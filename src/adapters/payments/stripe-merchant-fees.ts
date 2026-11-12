@@ -4,7 +4,7 @@
 import { AdapterError } from "../types";
 import { number, object, text } from "./http";
 import { validateMerchantChargeScope } from "./stripe-merchant-scope";
-import type { MerchantChargeScope, MerchantFeeRefundRequest, MerchantFeeRefundResult } from "./types";
+import type { MerchantChargeScope, MerchantFeeRefundRequest, MerchantFeeRefundResult, MerchantFeeObservation } from "./types";
 
 type Api = (path: string, init: RequestInit, scope: MerchantChargeScope) => Promise<Record<string, unknown>>;
 const unresolved = () => new AdapterError("payments", "stripe", "provider_failure", "Stripe did not prove the original application-fee refund.", true);
@@ -16,6 +16,14 @@ function originalFee(request: MerchantFeeRefundRequest, fee: Record<string, unkn
   if (fee.id !== request.applicationFeeRef || account !== (request.destinationAccountId ?? request.providerAccountId)
     || charge !== request.providerChargeRef || text(fee.currency)?.toUpperCase() !== request.currency
     || (number(fee.amount) ?? -1) < request.amountMinor) throw unresolved();
+}
+
+function physicalRefund(request: MerchantFeeRefundRequest, value: Record<string, unknown>): MerchantFeeObservation | null {
+  const providerRef = text(value.id), applicationFeeRef = text(value.fee), amountMinor = number(value.amount), currency = text(value.currency)?.toUpperCase();
+  if (!providerRef || !/^fr_[A-Za-z0-9]+$/.test(providerRef) || !applicationFeeRef || !/^fee_[A-Za-z0-9]+$/.test(applicationFeeRef)
+    || amountMinor === undefined || amountMinor < 0 || !currency || !/^[A-Z]{3}$/.test(currency)) return null;
+  return { providerRef, applicationFeeRef, amountMinor, currency, bindingVerified: applicationFeeRef === request.applicationFeeRef
+    && amountMinor === request.amountMinor && currency === request.currency && text(object(value.metadata)?.freeholder_fee_refund_id) === request.operationId };
 }
 
 function refundEvidence(request: MerchantFeeRefundRequest, value: Record<string, unknown>): MerchantFeeRefundResult {
@@ -49,6 +57,8 @@ export function stripeMerchantFees(api: Api) {
       const { scope, path } = await prepare(request);
       const form = new URLSearchParams({ amount: String(request.amountMinor), "metadata[freeholder_fee_refund_id]": request.operationId });
       const result = await api(`${path}/refunds`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": request.idempotencyKey }, body: form }, scope);
+      const observed = physicalRefund(request, result);
+      if (observed) await request.onFeeRefundObserved?.(observed);
       return refundEvidence(request, result);
     },
     async recoverMerchantFeeRefund(request: MerchantFeeRefundRequest): Promise<MerchantFeeRefundResult | null> {
@@ -64,6 +74,8 @@ export function stripeMerchantFees(api: Api) {
           if (!row || !text(row.id)) throw unresolved();
           if (text(object(row.metadata)?.freeholder_fee_refund_id) !== request.operationId) continue;
           if (found) throw unresolved();
+          const observed = physicalRefund(request, row);
+          if (observed) await request.onFeeRefundObserved?.(observed);
           found = refundEvidence(request, row);
         }
         if (!result.has_more) return found;

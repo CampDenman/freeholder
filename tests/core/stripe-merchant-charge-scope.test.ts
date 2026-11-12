@@ -177,6 +177,14 @@ describe("original direct and destination charge accounts (C12.26/C12.38)", () =
     expect(new Headers(init?.headers).get("idempotency-key")).toBe("original-refund");
   });
 
+  it.each([direct, destination])("refunds an original scheduled charge without fabricating attempt metadata: %j", async scope => {
+    const p = provider([{ id: "acct_platform" }, { id: "in_original", subscription: "sub_original", payment_intent: "pi_original" }, { id: "acct_platform" }, { ...intent(scope), metadata: {} }, { id: "acct_platform" }, { id: "re_original", status: "succeeded", payment_intent: "pi_original", amount: 300, currency: "cad" }]);
+    expect(await p.adapter.refund({ ...scope, paymentId: paymentAttemptId, providerRef: "pi_original", amountMinor: 300, currency: "CAD", reverseTransfer: Boolean(scope.destinationAccountId), idempotencyKey: "original-scheduled-refund", subscriptionOrigin: { providerSubscriptionRef: "sub_original", providerInvoiceRef: "in_original", providerPaymentIntentRef: "pi_original" } })).toMatchObject({ status: "succeeded", providerRef: "re_original" });
+    const transport = p.fetcher.mock.calls.filter(([url]) => !(typeof url === "string" ? url : url instanceof URL ? url.href : url.url).endsWith("/v1/account"));
+    expect(transport).toHaveLength(3);
+    for (const [, init] of transport) expect(new Headers(init?.headers).get("stripe-account")).toBe(scope.providerAccountId ?? null);
+  });
+
   it("refuses changed destination evidence before refund dispatch", async () => {
     const p = provider([{ id: "acct_platform" }, { ...intent(destination), transfer_data: { destination: "acct_other" } }]);
     await expect(p.adapter.refund({ ...destination, paymentId: paymentAttemptId, providerRef: "pi_original", amountMinor: 300, currency: "CAD", reverseTransfer: true, idempotencyKey: "original-refund" })).rejects.toMatchObject({ code: "provider_failure" });

@@ -41,5 +41,5 @@ export {
   invoiceMerchantCollections,
   merchantPaymentRoutes,
   merchantPaymentObservations, merchantPaymentEventReceipts,
-  merchantFeeRefunds,
+  merchantFeeRefunds, merchantFeeObservations,
 } from "./merchant-collection-schema";

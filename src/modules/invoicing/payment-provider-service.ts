@@ -48,6 +48,7 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { nextCollectionAmount } from "./merchant-collection";
 import { invoicePaymentDueAmount } from "./invoice-payment-due";
 import { getInvoiceMarketPolicy } from "./market-policy";
+import { retainSubscriptionProviderEvidence } from "./merchant-provider-stage";
 import { originalProviderPlatform } from "./provider-platform-scope";
 import {
   invoices,
@@ -136,7 +137,7 @@ const savedMethodEvent = z.object({
   settlementMerchantAccountId: paymentRouting.shape.settlementMerchantAccountId,
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["saved_method_added", "saved_method_removed"]),
-  setup:z.object({attemptId:z.uuid(),subscriptionId:z.uuid(),checkoutRef:z.string().min(1).max(500),setupIntentRef:z.string().min(1).max(500)}).optional(),
+  setup:z.object({attemptId:z.uuid(),subscriptionId:z.uuid(),checkoutRef:z.string().min(1).max(500),setupIntentRef:z.string().min(1).max(500),settlementMerchantAccountId:paymentRouting.shape.settlementMerchantAccountId}).optional(),
   providerCustomerRef: z.string().trim().min(1).max(500).optional(),
   contactId: z.string().uuid().optional(),
   method: methodEvidence,
@@ -157,6 +158,8 @@ const subscriptionBillingEvent = z.object({
   periodEnd: z.string().datetime().optional(),
   invoiceProviderRef: z.string().trim().min(1).max(500).optional(),
   paymentProviderRef: z.string().trim().min(1).max(500).optional(),
+  subscriptionChargeReceiptId: z.uuid().optional(), providerChargeRef: z.string().min(1).max(500).optional(),
+  observedApplicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(), applicationFeeCurrency: currency.optional(),
   applicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
 });
 const payoutEvent = z.object({
@@ -563,11 +566,16 @@ export const retainMerchantProviderEvent = defineService({
 });
 
 /** Call only after exact raw signature verification, outside an applying TX. */
-export async function retainPaymentProviderEvidence(providerId: z.infer<typeof provider>, events: readonly PaymentProviderEvent[]): Promise<void> {
-  for (const event of events) {
-    if (!event.providerPlatformAccountId || !["payment_processing", "payment_succeeded", "payment_failed", "payment_cancelled"].includes(event.kind)) continue;
-    await retainMerchantProviderEvent.call({ provider: providerId, event: paymentEvent.parse(event) }, { kind: "system" });
+export async function retainPaymentProviderEvidence(providerId: z.infer<typeof provider>, events: readonly PaymentProviderEvent[]): Promise<PaymentProviderEvent[]> {
+  const prepared: PaymentProviderEvent[] = [];
+  for (const original of events) {
+    const event = await retainSubscriptionProviderEvidence(providerId, original);
+    if (event.providerPlatformAccountId && ["payment_processing", "payment_succeeded", "payment_failed", "payment_cancelled"].includes(event.kind)) {
+      await retainMerchantProviderEvent.call({ provider: providerId, event: paymentEvent.parse(event) }, { kind: "system" });
+    }
+    prepared.push(event);
   }
+  return prepared;
 }
 
 /** Not registered in API/MCP: only a route that has verified exact raw bytes calls it. */
@@ -982,7 +990,7 @@ export const inspectMerchantPayment = defineOrchestratedService({
     const { payment, routing } = await providerPaymentSource.call({ paymentId }, system);
     const adapter = paymentAdapter(payment.provider);
     if (!routing.providerPlatformAccountId || !payment.providerRef?.startsWith("pi_") || !adapter.inspectMerchantPayment) throw new ServiceError("conflict", "This payment needs its original merchant platform and PaymentIntent before inspection.");
-    if (routing.originalChargeReceiptId) throw new ServiceError("conflict", "Inspect this scheduled charge through its original subscription invoice-payment receipt.");
+    const subscriptionOrigin = routing.originalChargeReceiptId ? { providerSubscriptionRef: routing.providerSubscriptionRef!, providerInvoiceRef: routing.providerInvoiceRef!, providerPaymentIntentRef: routing.providerPaymentIntentRef! } : undefined;
     let current = payment, unapplied = false;
     const observe = async (evidence: z.infer<typeof merchantPaymentEvidence>) => {
       await recordMerchantPaymentObservation.call({ paymentId, providerEventRef: merchantObservationRef(evidence), evidence }, system);
@@ -999,7 +1007,7 @@ export const inspectMerchantPayment = defineOrchestratedService({
       }
     };
     let evidence: z.infer<typeof merchantPaymentEvidence>;
-    try { evidence = await adapter.inspectMerchantPayment({ ...routing, providerPlatformAccountId: routing.providerPlatformAccountId, paymentAttemptId: paymentId, providerRef: payment.providerRef, onPaymentObserved: observe }); }
+    try { evidence = await adapter.inspectMerchantPayment({ ...routing, providerPlatformAccountId: routing.providerPlatformAccountId, ...(subscriptionOrigin ? { subscriptionOrigin } : { paymentAttemptId: paymentId }), providerRef: payment.providerRef, onPaymentObserved: observe }); }
     catch (error) { return adapterFailure(error); }
     await observe(evidence);
     return { payment: current, evidence, unapplied };
@@ -1036,6 +1044,7 @@ export const submitProviderRefund = defineOrchestratedService({
         reason: input.reason,
         idempotencyKey: input.idempotencyKey,
         ...routing,
+        ...(routing.originalChargeReceiptId ? { subscriptionOrigin: { providerSubscriptionRef: routing.providerSubscriptionRef!, providerInvoiceRef: routing.providerInvoiceRef!, providerPaymentIntentRef: routing.providerPaymentIntentRef! } } : {}),
         reverseTransfer: Boolean(routing.destinationAccountId),
         refundApplicationFee: Boolean(!routing.providerPlatformAccountId && routing.providerAccountId && routing.applicationFeeMinor && routing.applicationFeeMinor > 0),
       });

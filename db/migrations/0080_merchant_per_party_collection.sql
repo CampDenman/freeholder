@@ -99,7 +99,7 @@ CREATE TABLE merchant_payment_observations (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), payment_id uuid NOT NULL REFERENCES payments(id) ON DELETE RESTRICT,
  provider_event_ref text NOT NULL, provider_ref text NOT NULL, status text NOT NULL, amount_minor bigint NOT NULL,
  currency text NOT NULL, provider_platform_account_id text NOT NULL, charge_account_id text, recipient_account_id text, settlement_merchant_account_id text,
- application_fee_minor bigint, provider_charge_ref text, application_fee_ref text, transfer_ref text, route_verified boolean NOT NULL DEFAULT false, customer_charge_verified boolean NOT NULL DEFAULT false, application_fee_currency text, observed_application_fee_minor bigint, settlement_verified boolean NOT NULL DEFAULT false,
+ application_fee_minor bigint, provider_charge_ref text, application_fee_ref text, transfer_ref text, route_verified boolean NOT NULL DEFAULT false, customer_charge_verified boolean NOT NULL DEFAULT false, application_fee_currency text, observed_application_fee_minor bigint, observed_fee_refunded_minor bigint, settlement_verified boolean NOT NULL DEFAULT false,
  observed_at timestamptz NOT NULL DEFAULT now(),
  CONSTRAINT merchant_payment_observations_status CHECK(status IN('pending','succeeded','failed')),
  CONSTRAINT merchant_payment_observations_amount CHECK(amount_minor>=0 AND (application_fee_minor IS NULL OR application_fee_minor>=0)),
@@ -129,25 +129,39 @@ END $$;
 CREATE TRIGGER merchant_payment_event_receipt_guard BEFORE UPDATE OR DELETE ON merchant_payment_event_receipts FOR EACH ROW EXECUTE FUNCTION guard_merchant_payment_event_receipt();
 --> statement-breakpoint
 CREATE TABLE merchant_fee_refunds (
- id uuid PRIMARY KEY DEFAULT gen_random_uuid(), refund_id uuid NOT NULL REFERENCES refunds(id) ON DELETE RESTRICT,
- payment_id uuid NOT NULL REFERENCES payments(id) ON DELETE RESTRICT,
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), refund_id uuid REFERENCES refunds(id) ON DELETE RESTRICT, source_key text NOT NULL, purpose text NOT NULL,
+ original_charge_receipt_id uuid, observed_original_fee_minor bigint NOT NULL, target_retained_fee_minor bigint NOT NULL,
+ payment_id uuid NOT NULL REFERENCES payments(id) ON DELETE RESTRICT, provider_platform_account_id text NOT NULL,
  application_fee_ref text NOT NULL, provider_charge_ref text NOT NULL, amount_minor bigint NOT NULL,
  currency text NOT NULL, idempotency_key text NOT NULL, attempt_number integer NOT NULL DEFAULT 1, status text NOT NULL DEFAULT 'reserved', provider_ref text,
  dispatched_at timestamptz, accepted_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
- CONSTRAINT merchant_fee_refunds_amount CHECK(amount_minor>0),
+ CONSTRAINT merchant_fee_refunds_amount CHECK(amount_minor>0 AND observed_original_fee_minor>=amount_minor AND target_retained_fee_minor>=0),
+ CONSTRAINT merchant_fee_refunds_purpose CHECK((purpose='customer_refund' AND refund_id IS NOT NULL) OR (purpose='commission_reconciliation' AND refund_id IS NULL)),
  CONSTRAINT merchant_fee_refunds_attempt CHECK(attempt_number>0),
+ CONSTRAINT merchant_fee_refunds_platform CHECK(provider_platform_account_id ~ '^acct_[A-Za-z0-9]+$'),
  CONSTRAINT merchant_fee_refunds_currency CHECK(currency ~ '^[A-Z]{3}$'),
  CONSTRAINT merchant_fee_refunds_status CHECK(status IN('reserved','dispatching','accepted','unknown','refused')),
  CONSTRAINT merchant_fee_refunds_accepted CHECK(status<>'accepted' OR(provider_ref IS NOT NULL AND accepted_at IS NOT NULL))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX merchant_fee_refunds_original_refund_idx ON merchant_fee_refunds(refund_id,attempt_number);
+CREATE UNIQUE INDEX merchant_fee_refunds_source_attempt_idx ON merchant_fee_refunds(source_key,attempt_number);
 --> statement-breakpoint
-CREATE UNIQUE INDEX merchant_fee_refunds_unresolved_idx ON merchant_fee_refunds(refund_id) WHERE status<>'refused';
+CREATE UNIQUE INDEX merchant_fee_refunds_unresolved_idx ON merchant_fee_refunds(source_key) WHERE status<>'refused';
 --> statement-breakpoint
 CREATE UNIQUE INDEX merchant_fee_refunds_key_idx ON merchant_fee_refunds(idempotency_key);
 --> statement-breakpoint
-CREATE UNIQUE INDEX merchant_fee_refunds_provider_ref_idx ON merchant_fee_refunds(provider_ref);
+CREATE UNIQUE INDEX merchant_fee_refunds_provider_ref_idx ON merchant_fee_refunds(provider_platform_account_id,provider_ref);
+--> statement-breakpoint
+CREATE TABLE merchant_fee_observations (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), operation_id uuid NOT NULL REFERENCES merchant_fee_refunds(id) ON DELETE RESTRICT,
+ provider_ref text NOT NULL, application_fee_ref text NOT NULL, amount_minor bigint NOT NULL, currency text NOT NULL,
+ binding_verified boolean NOT NULL, observed_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT merchant_fee_observations_money CHECK(amount_minor>=0 AND currency ~ '^[A-Z]{3}$')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX merchant_fee_observations_fact_idx ON merchant_fee_observations(operation_id,provider_ref,application_fee_ref,amount_minor,currency,binding_verified);
+--> statement-breakpoint
+CREATE TRIGGER merchant_fee_observation_guard BEFORE UPDATE OR DELETE ON merchant_fee_observations FOR EACH ROW EXECUTE FUNCTION guard_merchant_payment_event_receipt();
 --> statement-breakpoint
 CREATE FUNCTION guard_invoice_merchant_collection() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE original invoice_merchant_allocations%ROWTYPE; parent invoices%ROWTYPE; policy invoice_market_policies%ROWTYPE;
@@ -210,7 +224,7 @@ BEGIN
  SELECT * INTO payment FROM payments WHERE id=NEW.payment_id;
  IF payment.id IS NULL OR original.allocation_id IS NULL OR payment.invoice_id<>original.invoice_id OR payment.provider<>'stripe'
   OR payment.status<>'created' OR payment.method NOT IN('hosted_checkout','saved_method')
-  OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments p ON p.id=o.payment_id WHERE p.invoice_id=payment.invoice_id AND o.status='succeeded' AND p.status<>'succeeded')
+  OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments p ON p.id=o.payment_id WHERE p.invoice_id=payment.invoice_id AND o.status='succeeded' AND(p.status<>'succeeded' OR o.amount_minor<>p.amount_minor OR o.currency<>p.currency OR(o.provider_ref IS DISTINCT FROM p.provider_ref AND o.provider_ref IS DISTINCT FROM p.provider_checkout_ref)))
   OR NEW.application_fee_minor>payment.amount_minor OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=NEW.payment_id)
   OR EXISTS(SELECT 1 FROM payments p WHERE p.invoice_id=payment.invoice_id AND p.id<>NEW.payment_id AND p.status IN('created','processing')) THEN
   RAISE EXCEPTION 'Reserve one original merchant payment before provider dispatch.' USING ERRCODE='23514';
@@ -244,7 +258,7 @@ BEGIN
   OR NEW.charge_account_id IS DISTINCT FROM original.charge_account_id OR NEW.recipient_account_id IS DISTINCT FROM original.recipient_account_id
   OR NEW.settlement_merchant_account_id IS DISTINCT FROM original.settlement_merchant_account_id
   OR(NEW.origin_kind='provider_schedule') IS DISTINCT FROM(payment.method='provider_schedule')
-  OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments p ON p.id=o.payment_id WHERE p.invoice_id=payment.invoice_id AND o.status='succeeded' AND p.status<>'succeeded')
+  OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments p ON p.id=o.payment_id WHERE p.invoice_id=payment.invoice_id AND o.status='succeeded' AND(p.status<>'succeeded' OR o.amount_minor<>p.amount_minor OR o.currency<>p.currency OR(o.provider_ref IS DISTINCT FROM p.provider_ref AND o.provider_ref IS DISTINCT FROM p.provider_checkout_ref)))
   OR NEW.application_fee_minor>payment.amount_minor
   OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=NEW.payment_id)
   OR EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=NEW.payment_id)
@@ -350,7 +364,7 @@ $$;
 CREATE TRIGGER merchant_payment_state_guard BEFORE UPDATE OF status ON payments FOR EACH ROW EXECUTE FUNCTION guard_merchant_payment_state();
 --> statement-breakpoint
 CREATE FUNCTION guard_merchant_fee_refund() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE original refunds%ROWTYPE; original_fee bigint; prior merchant_fee_refunds%ROWTYPE; reserved numeric;
+DECLARE original refunds%ROWTYPE; parent payments%ROWTYPE; original_fee bigint; original_platform text; original_receipt uuid; prior merchant_fee_refunds%ROWTYPE; reserved numeric; accepted numeric; target_fee bigint;
 BEGIN
  IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Original commission refund operations are retained financial evidence.' USING ERRCODE='23514'; END IF;
  IF TG_OP='UPDATE' THEN
@@ -363,20 +377,36 @@ BEGIN
    OR(OLD.status='dispatching' AND NEW.status='reserved') THEN
    RAISE EXCEPTION 'Original commission money, positive acknowledgements and unknown outcomes are immutable.' USING ERRCODE='23514';
   END IF;
+  IF NEW.status='accepted' AND NOT EXISTS(SELECT 1 FROM merchant_fee_observations o WHERE o.operation_id=NEW.id AND o.binding_verified
+    AND o.provider_ref=NEW.provider_ref AND o.application_fee_ref=NEW.application_fee_ref AND o.amount_minor=NEW.amount_minor AND o.currency=NEW.currency) THEN
+   RAISE EXCEPTION 'Commit the exact physical fee acknowledgement before applying it.' USING ERRCODE='23514';
+  END IF;
   RETURN NEW;
  END IF;
- SELECT * INTO original FROM refunds WHERE id=NEW.refund_id;
- PERFORM 1 FROM payments WHERE id=NEW.payment_id FOR UPDATE;
- SELECT application_fee_minor INTO original_fee FROM(SELECT application_fee_minor FROM merchant_payment_routes WHERE payment_id=NEW.payment_id
-  UNION ALL SELECT application_fee_minor FROM merchant_agreement_payment_routes WHERE payment_id=NEW.payment_id) original_route LIMIT 1;
- SELECT * INTO prior FROM merchant_fee_refunds WHERE refund_id=NEW.refund_id ORDER BY attempt_number DESC LIMIT 1;
- SELECT COALESCE(sum(amount_minor),0) INTO reserved FROM merchant_fee_refunds WHERE payment_id=NEW.payment_id AND status<>'refused';
- IF original.id IS NULL OR original.payment_id<>NEW.payment_id OR original.status<>'succeeded' OR original_fee IS NULL
+ SELECT * INTO parent FROM payments WHERE id=NEW.payment_id FOR UPDATE;
+ SELECT application_fee_minor,platform_id,receipt_id INTO original_fee,original_platform,original_receipt FROM(
+  SELECT r.application_fee_minor,c.provider_platform_account_id platform_id,NULL::uuid receipt_id FROM merchant_payment_routes r JOIN invoice_merchant_collections c ON c.allocation_id=r.allocation_id WHERE r.payment_id=NEW.payment_id
+  UNION ALL SELECT application_fee_minor,provider_platform_account_id,original_charge_receipt_id FROM merchant_agreement_payment_routes WHERE payment_id=NEW.payment_id) original_route LIMIT 1;
+ IF parent.amount_minor>0 THEN target_fee:=floor(original_fee::numeric*(parent.amount_minor-parent.refunded_minor)/parent.amount_minor)::bigint; END IF;
+ IF NEW.refund_id IS NOT NULL THEN SELECT * INTO original FROM refunds WHERE id=NEW.refund_id; END IF;
+ SELECT * INTO prior FROM merchant_fee_refunds WHERE source_key=NEW.source_key ORDER BY attempt_number DESC LIMIT 1;
+ SELECT COALESCE(sum(amount_minor),0),COALESCE(sum(amount_minor) FILTER(WHERE status='accepted'),0) INTO reserved,accepted
+  FROM merchant_fee_refunds WHERE payment_id=NEW.payment_id AND application_fee_ref=NEW.application_fee_ref AND status<>'refused';
+ IF parent.id IS NULL OR original_fee IS NULL OR NEW.provider_platform_account_id IS DISTINCT FROM original_platform OR NEW.original_charge_receipt_id IS DISTINCT FROM original_receipt
+  OR(NEW.purpose='customer_refund' AND(original.id IS NULL OR original.payment_id<>NEW.payment_id OR original.status<>'succeeded'))
   OR NEW.status<>'reserved' OR NEW.provider_ref IS NOT NULL OR NEW.dispatched_at IS NOT NULL OR NEW.accepted_at IS NOT NULL
-  OR NEW.currency<>original.currency OR reserved+NEW.amount_minor>original_fee
+  OR NEW.currency<>parent.currency OR NEW.target_retained_fee_minor IS DISTINCT FROM target_fee
+  OR NEW.source_key IS DISTINCT FROM('merchant-fee:'||parent.id::text||':'||target_fee::text)
+  OR NEW.amount_minor::numeric IS DISTINCT FROM NEW.observed_original_fee_minor::numeric-target_fee-accepted
+  OR reserved+NEW.amount_minor>NEW.observed_original_fee_minor
+  OR EXISTS(SELECT 1 FROM merchant_fee_refunds WHERE payment_id=NEW.payment_id AND status IN('reserved','dispatching','unknown'))
+  OR EXISTS(SELECT 1 FROM merchant_fee_observations o JOIN merchant_fee_refunds r ON r.id=o.operation_id WHERE r.payment_id=NEW.payment_id AND r.status<>'accepted')
+  OR NOT EXISTS(SELECT 1 FROM merchant_payment_observations o WHERE o.payment_id=NEW.payment_id AND o.customer_charge_verified AND o.route_verified
+   AND o.provider_charge_ref=NEW.provider_charge_ref AND o.application_fee_ref=NEW.application_fee_ref
+   AND o.observed_application_fee_minor=NEW.observed_original_fee_minor AND o.application_fee_currency=NEW.currency)
   OR NEW.attempt_number<>COALESCE(prior.attempt_number,0)+1
   OR(prior.id IS NOT NULL AND(prior.status<>'refused' OR prior.amount_minor<>NEW.amount_minor OR prior.application_fee_ref<>NEW.application_fee_ref OR prior.provider_charge_ref<>NEW.provider_charge_ref)) THEN
-  RAISE EXCEPTION 'Reserve exact original commission only after the independent customer refund succeeds.' USING ERRCODE='23514';
+  RAISE EXCEPTION 'Reserve only the exact remaining original fee after its cumulative customer refunds and prior fee operations.' USING ERRCODE='23514';
  END IF;
  RETURN NEW;
 END;

@@ -3,7 +3,7 @@
 // C12.26/C12.38: exact fee refunds keep their own provider acknowledgement.
 import { describe, expect, it, vi } from "vitest";
 import { createStripePayments } from "@/adapters/payments/stripe";
-import type { MerchantFeeRefundRequest } from "@/adapters/payments/types";
+import type { MerchantFeeRefundRequest, MerchantFeeObservation } from "@/adapters/payments/types";
 
 const request: MerchantFeeRefundRequest = {
   providerPlatformAccountId: "acct_platform", destinationAccountId: "acct_seller", settlementMerchantAccountId: "acct_seller",
@@ -69,6 +69,28 @@ describe("exact original application-fee refunds (C12.26/C12.38)", () => {
   ])("preserves ambiguous or incomplete recovery for review: %j", async result => {
     const p = provider([identity, fee, identity, result]);
     await expect(p.recover(request)).rejects.toMatchObject({ code: "provider_failure" });
+  });
+
+  it("retains a positive fee ACK with a mismatched amount before refusing logical application", async () => {
+    const p = provider([identity, fee, identity, { ...refund, amount: 18 }]);
+    const observed: MerchantFeeObservation[] = [];
+    await expect(p.issue({ ...request, onFeeRefundObserved: async fact => { observed.push(fact); } })).rejects.toMatchObject({ code: "provider_failure", retryable: true });
+    expect(observed).toEqual([{ providerRef: "fr_original", applicationFeeRef: "fee_original", amountMinor: 18, currency: "CAD", bindingVerified: false }]);
+    expect(p.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+  });
+
+  it("commits an original positive recovery before another page can fail", async () => {
+    const p = provider([identity, fee, identity, { data: [refund], has_more: true }, identity, new Response(JSON.stringify({ error: { code: "temporary_unavailable" } }), { status: 503 })]);
+    const observed: MerchantFeeObservation[] = [];
+    await expect(p.recover({ ...request, onFeeRefundObserved: async fact => { observed.push(fact); } })).rejects.toMatchObject({ code: "provider_failure" });
+    expect(observed).toEqual([{ providerRef: "fr_original", applicationFeeRef: "fee_original", amountMinor: 17, currency: "CAD", bindingVerified: true }]);
+    expect(p.fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
+  it("keeps an uncommitted callback unknown and never dispatches a second physical fee refund", async () => {
+    const p = provider([identity, fee, identity, refund]);
+    await expect(p.issue({ ...request, onFeeRefundObserved: async () => { throw new Error("Receipt database unavailable"); } })).rejects.toThrow("Receipt database");
+    expect(p.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
 
   it("keeps an acknowledgement failure unknown, without sending another fee refund", async () => {

@@ -9,6 +9,7 @@ import { number, object, paymentFetch, providerJson, text } from "./http";
 import { applyDestinationCharge, assertMerchantAttempt, assertMerchantIntent, merchantAttemptMetadata, merchantChargeScope, merchantIntentEvidence, validateMerchantChargeScope } from "./stripe-merchant-scope";
 import { stripeMerchantFees } from "./stripe-merchant-fees";
 import { stripeCheckoutEvidence } from "./stripe-merchant-capture";
+import { proveStripeSubscriptionPayment } from "./stripe-subscription-origin";
 import { inspectStripeMerchantPayment } from "./stripe-merchant-inspection";
 import { stripeMerchantRecovery } from "./stripe-merchant-recovery";
 import type {
@@ -556,13 +557,14 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     captureCheckout,
     async refund(request) {
       validateMerchantChargeScope(request);
-      merchantAttemptMetadata(request, request.paymentId);
+      if (request.subscriptionOrigin && (!request.providerPlatformAccountId || request.subscriptionOrigin.providerPaymentIntentRef !== request.providerRef)) throw new AdapterError("payments", "stripe", "invalid_request", "The refund requires its exact original subscription charge origin.");
+      if (!request.subscriptionOrigin) merchantAttemptMetadata(request, request.paymentId);
       if (request.reverseTransfer && !request.destinationAccountId) throw new AdapterError("payments", "stripe", "invalid_request", "A transfer reversal needs its original destination charge.");
       if (request.destinationAccountId && request.refundApplicationFee && !request.reverseTransfer) throw new AdapterError("payments", "stripe", "invalid_request", "A destination application-fee refund also requires its original transfer reversal.");
       if (request.providerPlatformAccountId) {
-        const intent = await chargeApi(`/v1/payment_intents/${encodeURIComponent(request.providerRef)}`, { method: "GET" }, request);
+        const intent = request.subscriptionOrigin ? await proveStripeSubscriptionPayment(api, request, request.subscriptionOrigin) : await chargeApi(`/v1/payment_intents/${encodeURIComponent(request.providerRef)}`, { method: "GET" }, request);
         if (intent.id !== request.providerRef || intent.status !== "succeeded" || intent.currency !== request.currency.toLowerCase() || (number(intent.amount_received) ?? -1) < request.amountMinor) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not identify the original refund payment.", true);
-        assertMerchantAttempt(request, request.paymentId, intent.metadata);
+        if (!request.subscriptionOrigin) assertMerchantAttempt(request, request.paymentId, intent.metadata);
         assertMerchantIntent(request, intent);
       }
       const form = new URLSearchParams({ payment_intent: request.providerRef, amount: String(request.amountMinor) });

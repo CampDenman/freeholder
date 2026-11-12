@@ -31,7 +31,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
   }
   // Events for transfers that are not this site's (a shared provider
   // account) are acknowledged and ignored, so the provider keeps the endpoint.
-  for (const event of events) if (event.kind === "payment") await retainPaymentProviderEvidence("stripe", [event.event]);
+  const staged = [];
+  for (const event of events) {
+    if (event.kind === "payment") {
+      const [financial] = await retainPaymentProviderEvidence("stripe", [event.event]);
+      staged.push({ ...event, event: financial! });
+    } else staged.push(event);
+  }
+  events = staged;
   await applyPayoutWebhook.call({ provider: provider.id, events }, { kind: "system" });
   return new Response(null, { status: 200 });
 }

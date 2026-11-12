@@ -7,6 +7,8 @@ import marketPolicyServices from "./market-policy";
 import merchantAllocationServices from "./merchant-allocations";
 import merchantCollectionServices from "./merchant-collection";
 import merchantPaymentObservationServices from "./merchant-payment-observations";
+import merchantPaymentReviewServices from "./merchant-payment-review";
+import merchantFeeServices from "./merchant-fee-service";
 import merchantSettlementServices from "./merchant-settlement";
 import advancedMoneyServices from "./advanced-money-service";
 import paymentProviderServices from "./payment-provider-service";
@@ -34,6 +36,8 @@ export default [
   ...merchantAllocationServices,
   ...merchantCollectionServices,
   ...merchantPaymentObservationServices,
+  ...merchantFeeServices,
+  ...merchantPaymentReviewServices,
   ...merchantSettlementServices,
   ...demoServices,
   ...recurringServices,

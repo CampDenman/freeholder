@@ -4,6 +4,7 @@
 
 import { createHash } from "node:crypto";
 import { captureInvoiceMarketPolicy, getInvoiceMarketPolicy } from "./market-policy";
+import { queueMerchantFeeReconciliation } from "./merchant-fee-service";
 import { reserveMerchantCharge } from "./merchant-charge";
 import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -1177,6 +1178,7 @@ export const settlePayment = defineService({
       // guessing wrong misfiles somebody's commission (C9.10).
       payload: { paymentId: payment.id, amountMinor: payment.amountMinor, paidMinor, totalMinor: invoice.totalMinor, currency: invoice.currency, sourceType: invoice.sourceType },
     });
+    await queueMerchantFeeReconciliation(ctx, payment.id);
     ctx.queueEvent("payment.succeeded", { paymentId: payment.id, invoiceId: invoice.id, contactId: invoice.contactId, amountMinor: payment.amountMinor });
     ctx.queueEvent(invoiceStatus === "paid" ? "invoice.paid" : "invoice.partiallyPaid", { invoiceId: invoice.id, contactId: invoice.contactId, paidMinor });
     if (invoiceStatus === "paid" && invoice.sourceType === "unlock") {
@@ -1382,6 +1384,7 @@ export const settleRefund = defineService({
       subjectId: invoice.id,
       payload: { refundId: refund.id, amountMinor: refund.amountMinor, refundedMinor: invoiceRefunded, currency: invoice.currency, full: invoiceStatus === "refunded" },
     });
+    await queueMerchantFeeReconciliation(ctx, payment.id);
     ctx.queueEvent("refund.succeeded", { refundId: refund.id, paymentId: payment.id, invoiceId: invoice.id, contactId: invoice.contactId, amountMinor: refund.amountMinor });
     if (invoiceStatus === "refunded") ctx.queueEvent("invoice.refunded", { invoiceId: invoice.id, contactId: invoice.contactId });
     ctx.setSubject("refund", refund.id);

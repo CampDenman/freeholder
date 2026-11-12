@@ -117,3 +117,40 @@ owner recovery interfaces, four-locale browser and live SDK/API/MCP permission
 qualification. The provider model registry still excludes seller_merchant.
 This checkpoint must not be described as activation, stable completion,
 provider-account acceptance or an independently reviewed security sign-off.
+
+## Original fee recovery and scheduled-origin source checkpoint
+
+The subscription origin proof is now integrated into original charge inspection
+and customer refund dispatch. Scheduled charges prove the actual original
+InvoicePayment/PaymentIntent relation and do not invent Freeholder attempt
+metadata. The subscription witness must commit before ordinary billing applies.
+The verified webhook phase can return a private durable subscription receipt
+ID through the startup registry; ordinary application receives that prepared
+event only afterwards.
+
+The new common commission ledger supports an original observed fee greater
+than the frozen merchandise commission, including a scheduled percentage fee.
+It derives a cumulative retained-fee target, counts earlier accepted corrections
+and customer refund operations, and refuses another dispatch while a prior
+operation is unknown. Actual fee-refund acknowledgements commit independently
+before the logical operation transition. A failed auxiliary read or logical
+application therefore cannot erase a positive ACK. A provider-side fee refund
+outside the known ledger remains review debt; it is not silently adopted as an
+unknown operation or ignored before another POST. Currency disagreement remains
+review debt. New provider operations carry the original platform namespace.
+
+Customer settlement/refund commits enqueue a separate fee reconciliation job.
+Its failure does not rewind customer money. An accepted fee operation is not a
+claim that all current commission obligations are reconciled; the job re-reads
+actual provider evidence before reporting satisfaction. Owner review has a
+scoped shared service exposing retained physical money and fee facts, including
+unapplied positive observations and paginated history. Further owner UI and
+unknown-payment recovery integration remain required.
+
+Seven focused no-database files passed 102 controls, and full TypeScript plus
+focused lint passed at this checkpoint. This includes scheduled-origin,
+inspection/refund, exact fee-ACK, cumulative arithmetic and private-service/audit
+contracts. It does not claim native financial journeys, database migration80,
+real provider accounts, all four locale flows or completed privacy/merge/hold
+qualification. `merchant-invoice-source-inventory-2026-11-11.md` records the
+additional inherited-source paths that must be complete before activation.

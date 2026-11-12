@@ -136,6 +136,7 @@ export interface CheckoutCaptureResult extends MerchantChargeScope {
   transferRef?: string;
   applicationFeeCurrency?: string;
   observedApplicationFeeMinor?: number;
+  observedFeeRefundedMinor?: number;
   merchantSettlementVerified?: boolean;
   providerRef: string;
   status: "pending" | "succeeded" | "failed";
@@ -145,14 +146,22 @@ export interface CheckoutCaptureResult extends MerchantChargeScope {
   applicationFeeMinor?: number;
 }
 
+export interface MerchantSubscriptionChargeOrigin {
+  providerSubscriptionRef: string;
+  providerInvoiceRef: string;
+  providerPaymentIntentRef: string;
+}
+
 export interface MerchantPaymentInspectionRequest extends MerchantChargeScope {
   providerPlatformAccountId: string;
-  paymentAttemptId: string;
+  paymentAttemptId?: string;
+  subscriptionOrigin?: MerchantSubscriptionChargeOrigin;
   providerRef: string;
   onPaymentObserved?: (evidence: CheckoutCaptureResult) => Promise<void>;
 }
 
 export interface RefundRequest extends MerchantChargeScope {
+  subscriptionOrigin?: MerchantSubscriptionChargeOrigin;
   /** Return the collected platform fee along with a direct-charge refund. */
   refundApplicationFee?: boolean;
   /** Reverse the original destination transfer in proportion to this refund. */
@@ -254,7 +263,12 @@ export interface SavedPaymentMethodEvidence {
 }
 
 /** Exact frozen commission refund, independent of a customer refund's result. */
+export interface MerchantFeeObservation {
+  providerRef: string; applicationFeeRef: string; amountMinor: number; currency: string; bindingVerified: boolean;
+}
+
 export interface MerchantFeeRefundRequest extends MerchantChargeScope {
+  onFeeRefundObserved?: (observation: MerchantFeeObservation) => Promise<void>;
   providerPlatformAccountId: string;
   applicationFeeRef: string;
   providerChargeRef: string;
@@ -339,7 +353,7 @@ export type PaymentProviderEvent = MerchantChargeScope & (
   | {
       id: string;
       kind: "saved_method_added" | "saved_method_removed";
-      setup?: { attemptId: string; subscriptionId: string; checkoutRef: string; setupIntentRef: string };
+      setup?: { attemptId: string; subscriptionId: string; checkoutRef: string; setupIntentRef: string; settlementMerchantAccountId?: string };
       providerCustomerRef?: string;
       contactId?: string;
       method: SavedPaymentMethodEvidence;
@@ -368,6 +382,10 @@ export type PaymentProviderEvent = MerchantChargeScope & (
       invoiceProviderRef?: string;
       paymentProviderRef?: string;
       applicationFeeMinor?: number;
+      subscriptionChargeReceiptId?: string;
+      providerChargeRef?: string;
+      observedApplicationFeeMinor?: number;
+      applicationFeeCurrency?: string;
     });
 
 export interface PaymentAdapter {

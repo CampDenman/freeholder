@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.26/C12.38: commit physical charge facts before balance reconciliation.
 import { createHash } from "node:crypto";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { invoiceMerchantCollections, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
@@ -21,7 +21,7 @@ export const merchantPaymentEvidence = z.object({
   merchantRouteVerified: z.boolean().optional(),
   customerChargeVerified: z.boolean().optional(),
   applicationFeeCurrency: z.string().regex(/^[A-Z]{3}$/).optional(), observedApplicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
-  merchantSettlementVerified: z.boolean().optional(),
+  merchantSettlementVerified: z.boolean().optional(), observedFeeRefundedMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
 });
 
 export function merchantObservationRef(evidence: z.infer<typeof merchantPaymentEvidence>): string {
@@ -30,7 +30,7 @@ export function merchantObservationRef(evidence: z.infer<typeof merchantPaymentE
 
 export async function assertNoUnappliedMerchantCharge(ctx: ServiceContext, invoiceId: string): Promise<void> {
   const [debt] = await ctx.tx.select({ id: merchantPaymentObservations.id }).from(merchantPaymentObservations)
-    .innerJoin(payments, eq(payments.id, merchantPaymentObservations.paymentId)).where(and(eq(payments.invoiceId, invoiceId), eq(merchantPaymentObservations.status, "succeeded"), ne(payments.status, "succeeded"))).limit(1);
+    .innerJoin(payments, eq(payments.id, merchantPaymentObservations.paymentId)).where(and(eq(payments.invoiceId, invoiceId), eq(merchantPaymentObservations.status, "succeeded"), sql`(${payments.status} <> 'succeeded' or ${merchantPaymentObservations.amountMinor} <> ${payments.amountMinor} or ${merchantPaymentObservations.currency} <> ${payments.currency} or (${merchantPaymentObservations.providerRef} is distinct from ${payments.providerRef} and ${merchantPaymentObservations.providerRef} is distinct from ${payments.providerCheckoutRef}))`)).limit(1);
   if (debt) throw new ServiceError("conflict", "Reconcile the recorded positive provider charge before creating another payment attempt.");
 }
 
@@ -61,7 +61,7 @@ export const recordMerchantPaymentObservation = defineService({
       recipientAccountId, settlementMerchantAccountId, applicationFeeMinor: evidence.applicationFeeMinor ?? null,
       providerChargeRef: evidence.providerChargeRef ?? null, applicationFeeRef: evidence.applicationFeeRef ?? null, transferRef: evidence.transferRef ?? null, routeVerified,
       customerChargeVerified: evidence.customerChargeVerified === true,
-      applicationFeeCurrency: evidence.applicationFeeCurrency ?? null, observedApplicationFeeMinor: evidence.observedApplicationFeeMinor ?? null,
+      applicationFeeCurrency: evidence.applicationFeeCurrency ?? null, observedApplicationFeeMinor: evidence.observedApplicationFeeMinor ?? null, observedFeeRefundedMinor: evidence.observedFeeRefundedMinor ?? null,
       settlementVerified: routeVerified && evidence.merchantSettlementVerified === true,
     };
     const [existing] = await ctx.tx.select().from(merchantPaymentObservations).where(and(eq(merchantPaymentObservations.paymentId, paymentId), eq(merchantPaymentObservations.providerEventRef, providerEventRef)));

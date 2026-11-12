@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Original customer collection is retained before auxiliary settlement reads.
 import { AdapterError } from "../types";
+import { proveStripeSubscriptionPayment } from "./stripe-subscription-origin";
 import { number, object, text } from "./http";
 import { assertMerchantAttempt, merchantAttemptMetadata, merchantIntentEvidence, validateMerchantChargeScope } from "./stripe-merchant-scope";
 import type { CheckoutCaptureResult, MerchantPaymentInspectionRequest, PaymentAccountScope } from "./types";
@@ -12,10 +13,13 @@ const ref = (value: unknown) => typeof value === "string" ? value : text(object(
 export async function inspectStripeMerchantPayment(request: MerchantPaymentInspectionRequest, read: Read): Promise<CheckoutCaptureResult> {
   validateMerchantChargeScope(request);
   if (!/^pi_[A-Za-z0-9]+$/.test(request.providerRef)) throw new AdapterError("payments", "stripe", "invalid_request", "Inspect the original PaymentIntent reference.");
-  merchantAttemptMetadata(request, request.paymentAttemptId);
-  const intent = await read(`/v1/payment_intents/${encodeURIComponent(request.providerRef)}`, request);
+  if (request.subscriptionOrigin && (request.paymentAttemptId || request.subscriptionOrigin.providerPaymentIntentRef !== request.providerRef)) throw new AdapterError("payments", "stripe", "invalid_request", "Use one exact original charge origin for inspection.");
+  if (!request.subscriptionOrigin) merchantAttemptMetadata(request, request.paymentAttemptId);
+  const intent = request.subscriptionOrigin
+    ? await proveStripeSubscriptionPayment((path, _init, scope) => read(path, scope), request, request.subscriptionOrigin)
+    : await read(`/v1/payment_intents/${encodeURIComponent(request.providerRef)}`, request);
   let customerChargeVerified = intent.status === "succeeded";
-  try { assertMerchantAttempt(request, request.paymentAttemptId, intent.metadata); } catch { customerChargeVerified = false; }
+  if (!request.subscriptionOrigin) { try { assertMerchantAttempt(request, request.paymentAttemptId, intent.metadata); } catch { customerChargeVerified = false; } }
   if (intent.id !== request.providerRef) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return the original PaymentIntent.", true);
   const amountMinor = number(intent.amount_received), currency = text(intent.currency)?.toUpperCase();
   if (amountMinor === undefined || amountMinor < 0 || !currency || !/^[A-Z]{3}$/.test(currency)) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return the original actual money amount.", true);
@@ -46,7 +50,8 @@ export async function inspectStripeMerchantPayment(request: MerchantPaymentInspe
     const recipient = request.destinationAccountId ?? request.providerAccountId;
     if (actualFee.id === applicationFeeRef && ref(actualFee.account) === recipient && originalCharge === evidence.providerChargeRef
       && actualFeeAmount !== undefined && actualFeeAmount >= 0 && actualFeeCurrency && /^[A-Z]{3}$/.test(actualFeeCurrency)) {
-      evidence = { ...evidence, observedApplicationFeeMinor: actualFeeAmount, applicationFeeCurrency: actualFeeCurrency };
+      evidence = { ...evidence, observedApplicationFeeMinor: actualFeeAmount, applicationFeeCurrency: actualFeeCurrency,
+        ...(number(actualFee.amount_refunded) !== undefined ? { observedFeeRefundedMinor: number(actualFee.amount_refunded) } : {}) };
       // Currency disagreement remains visible; never refund using invented FX.
       feeVerified = actualFeeCurrency === currency && actualFeeAmount === fee;
       await request.onPaymentObserved?.(evidence);

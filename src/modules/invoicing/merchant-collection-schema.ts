@@ -90,6 +90,7 @@ export const merchantPaymentObservations = pgTable("merchant_payment_observation
   customerChargeVerified: boolean("customer_charge_verified").notNull().default(false),
   applicationFeeCurrency: text("application_fee_currency"),
   observedApplicationFeeMinor: bigint("observed_application_fee_minor", { mode: "number" }),
+  observedFeeRefundedMinor: bigint("observed_fee_refunded_minor", { mode: "number" }),
   settlementVerified: boolean("settlement_verified").notNull().default(false),
   observedAt: createdAtColumn(),
 }, (t) => [
@@ -119,8 +120,14 @@ export const merchantPaymentEventReceipts = pgTable("merchant_payment_event_rece
 /** Independent exact commission outcome; never rewinds a customer refund. */
 export const merchantFeeRefunds = pgTable("merchant_fee_refunds", {
   id: uuid("id").primaryKey().defaultRandom(),
-  refundId: uuid("refund_id").notNull().references(() => refunds.id, { onDelete: "restrict" }),
+  refundId: uuid("refund_id").references(() => refunds.id, { onDelete: "restrict" }),
+  sourceKey: text("source_key").notNull(),
+  purpose: text("purpose", { enum: ["customer_refund", "commission_reconciliation"] }).notNull(),
+  originalChargeReceiptId: uuid("original_charge_receipt_id"),
+  observedOriginalFeeMinor: bigint("observed_original_fee_minor", { mode: "number" }).notNull(),
+  targetRetainedFeeMinor: bigint("target_retained_fee_minor", { mode: "number" }).notNull(),
   paymentId: uuid("payment_id").notNull().references(() => payments.id, { onDelete: "restrict" }),
+  providerPlatformAccountId: text("provider_platform_account_id").notNull(),
   applicationFeeRef: text("application_fee_ref").notNull(),
   providerChargeRef: text("provider_charge_ref").notNull(),
   amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
@@ -134,13 +141,30 @@ export const merchantFeeRefunds = pgTable("merchant_fee_refunds", {
   createdAt: createdAtColumn(),
   updatedAt: updatedAtColumn(),
 }, (t) => [
-  uniqueIndex("merchant_fee_refunds_original_refund_idx").on(t.refundId, t.attemptNumber),
-  uniqueIndex("merchant_fee_refunds_unresolved_idx").on(t.refundId).where(sql`${t.status} <> 'refused'`),
+  uniqueIndex("merchant_fee_refunds_source_attempt_idx").on(t.sourceKey, t.attemptNumber),
+  uniqueIndex("merchant_fee_refunds_unresolved_idx").on(t.sourceKey).where(sql`${t.status} <> 'refused'`),
   uniqueIndex("merchant_fee_refunds_key_idx").on(t.idempotencyKey),
-  uniqueIndex("merchant_fee_refunds_provider_ref_idx").on(t.providerRef),
-  check("merchant_fee_refunds_amount", sql`${t.amountMinor} > 0`),
+  uniqueIndex("merchant_fee_refunds_provider_ref_idx").on(t.providerPlatformAccountId, t.providerRef),
+  check("merchant_fee_refunds_amount", sql`${t.amountMinor} > 0 and ${t.observedOriginalFeeMinor} >= ${t.amountMinor} and ${t.targetRetainedFeeMinor} >= 0`),
+  check("merchant_fee_refunds_purpose", sql`(${t.purpose} = 'customer_refund' and ${t.refundId} is not null) or (${t.purpose} = 'commission_reconciliation' and ${t.refundId} is null)`),
   check("merchant_fee_refunds_attempt", sql`${t.attemptNumber} > 0`),
+  check("merchant_fee_refunds_platform", sql`${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$'`),
   check("merchant_fee_refunds_currency", sql`${t.currency} ~ '^[A-Z]{3}$'`),
   check("merchant_fee_refunds_status", sql`${t.status} in ('reserved','dispatching','accepted','unknown','refused')`),
   check("merchant_fee_refunds_accepted", sql`${t.status} <> 'accepted' or (${t.providerRef} is not null and ${t.acceptedAt} is not null)`),
+]);
+
+/** Physical acknowledgements commit before a logical fee-operation transition. */
+export const merchantFeeObservations = pgTable("merchant_fee_observations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  operationId: uuid("operation_id").notNull().references(() => merchantFeeRefunds.id, { onDelete: "restrict" }),
+  providerRef: text("provider_ref").notNull(),
+  applicationFeeRef: text("application_fee_ref").notNull(),
+  amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
+  currency: text("currency").notNull(),
+  bindingVerified: boolean("binding_verified").notNull(),
+  observedAt: createdAtColumn(),
+}, t => [
+  uniqueIndex("merchant_fee_observations_fact_idx").on(t.operationId, t.providerRef, t.applicationFeeRef, t.amountMinor, t.currency, t.bindingVerified),
+  check("merchant_fee_observations_money", sql`${t.amountMinor} >= 0 and ${t.currency} ~ '^[A-Z]{3}$'`),
 ]);
