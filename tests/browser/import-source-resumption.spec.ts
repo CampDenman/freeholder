@@ -15,17 +15,23 @@ import { C11_BASE_URL, seedC11Owner, useOwnerSession } from "./owner-session";
 const ORIGIN = "https://fictionalresumptionsourcewithalonghostname.example";
 const source = () => Buffer.from(`<rss xmlns:wp="urn:wordpress" xmlns:content="urn:content"><channel><title>Fictional saved source</title><link>${ORIGIN}</link>${Array.from({ length: 501 }, (_, index) => `<item><title>Fictional saved page ${index}</title><link>${ORIGIN}/resumed/page-${index}</link><wp:post_id>${index + 1}</wp:post_id><wp:post_type>page</wp:post_type><wp:status>publish</wp:status><content:encoded><![CDATA[<p>Fictional saved body ${index}.</p>${index === 0 ? `<p><a href="${ORIGIN}/resumed/page-500">Last saved page</a></p>` : ""}]]></content:encoded></item>`).join("")}</channel></rss>`);
 
+const restSource = () => Buffer.from(JSON.stringify(Array.from({ length: 501 }, (_, index) => ({
+  id: index + 1, type: "page", status: "publish", link: `${ORIGIN}/resumed/page-${index}`,
+  title: { rendered: `Fictional saved page ${index}` },
+  content: { rendered: `<p>Fictional saved body ${index} العربية.</p>${index === 0 ? `<p><a href="${ORIGIN}/resumed/page-500">Last saved page</a></p>` : ""}` },
+}))));
+
 test.describe("saved source owner journey (C3.47)", () => {
   test.setTimeout(180_000);
   test.afterAll(closeDb);
-  for (const locale of ["en", "es", "fr", "ar"] as const) {
-    test(`${locale}: pause, return, restore identical bytes, publish and reverse 501 pages`, async ({ browser }) => {
+  for (const kind of ["wordpress-wxr", "wordpress-rest"] as const) for (const locale of ["en", "es", "fr", "ar"] as const) {
+    test(`${kind} ${locale}: pause, return, restore identical bytes, publish and reverse 501 pages`, async ({ browser }) => {
       const session = await seedC11Owner("Saved source qualification");
       await db().update(businessProfile).set({ defaultLocale: locale, enabledLocales: ["en", "es", "fr", "ar"] }).where(eq(businessProfile.id, 1));
       const context = await browser.newContext({ baseURL: C11_BASE_URL, viewport: { width: 320, height: 900 } });
       await useOwnerSession(context, session);
       await context.addCookies([{ name: CSRF_COOKIE, value: issueCsrfToken(), url: C11_BASE_URL }]);
-      const page = await context.newPage(), t = translator(locale), file = { name: "fictional-saved-original.xml", mimeType: "application/xml", buffer: source() };
+      const page = await context.newPage(), t = translator(locale), file = kind === "wordpress-rest" ? { name: "fictional-saved-original.json", mimeType: "application/json", buffer: restSource() } : { name: "fictional-saved-original.xml", mimeType: "application/xml", buffer: source() };
       const press = async (name: string) => { await page.getByRole("button", { name, exact: true }).focus(); await page.keyboard.press("Enter"); };
       // A 500-page receipt takes longer than a DOM assertion. Await the real
       // bounded RPC outcome before inspecting the next control or resetting
@@ -43,7 +49,7 @@ test.describe("saved source owner journey (C3.47)", () => {
       };
       await page.goto("/admin/imports");
       await page.locator("#origin").fill(ORIGIN);
-      await page.locator("#kind").selectOption("wordpress-wxr");
+      await page.locator("#kind").selectOption(kind);
       await page.locator("#origin").focus(); await page.keyboard.press("Enter");
       await expect(page).toHaveURL(/\/admin\/imports\/[a-f0-9-]+$/);
       const id = new URL(page.url()).pathname.split("/").at(-1)!;
@@ -60,7 +66,7 @@ test.describe("saved source owner journey (C3.47)", () => {
         expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         for (const selector of ["#source-file", "#graph-conflict-slug", "#graph-conflict-resolution", "#graph-conflict-renamed"]) expect(await page.locator(selector).evaluate(element => { const box = element.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth; })).toBe(true);
-        await page.screenshot({ path: test.info().outputPath(`${locale}-${theme}-saved-source.png`) });
+        await page.screenshot({ path: test.info().outputPath(`${kind}-${locale}-${theme}-saved-source.png`) });
       }
       await page.locator("#graph-conflict-slug").fill("resumed/page-500");
       await page.locator("#graph-conflict-resolution").selectOption("rename");

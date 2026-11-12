@@ -153,3 +153,33 @@ namespace. These are required dependencies, not optional deferrals.
 Historical reader-email ownership, complete source-specific cutover and actual
 provider/owner acceptance also remain required. Coding-agent review is not the
 independent security sign-off in C11.10.
+
+
+## Uploaded REST source qualification on reader78
+
+The uploaded REST increment now composes on qualified reader78 checkpoint
+`05337220` with the current physical source namespace and original-reader hold
+boundaries intact. Its source head before the browser fixture is `5ac57f46`.
+Full types pass. The unchanged JSON/range and REST index pure controls passed
+22 cases on the reader source integration; no parser was changed in the final
+reader rebase.
+
+A fresh normal 0–78 database then passed the actual 501-record REST source
+lifecycle in 110.12 seconds. Independent processes accepted 500 and then one
+original JSON range, using distinct worker PIDs. The normal CMS spine published
+all 501 posts with their shared author/category, reconciled their source links,
+and rolled back every imported page/post/author/category. No migration SQL was
+applied manually, no source identity was synthesized from position, and no test
+deadline, storage guard or assertion was weakened. The initial attempt on the
+older reader database stopped at the worker's deliberate requirement that a
+disposable name contain `test`; that configuration refusal is retained separately
+from the successful explicitly named fresh-database proof.
+
+The shared owner browser fixture now covers both actual WXR XML and actual REST
+JSON originals, including pause after the accepted 500-page receipt, reload,
+identical-source restore, reviewed cross-batch rename, public links, publication
+and reversal in four locales. The new REST browser cases are written and pass
+static checks; their production execution, current SDK refresh and final source
+gates remain pending. This uploaded JSON source increment does not supply live
+REST discovery or durable ZIP/crawl response/frontier storage. C3.47 and stable
+acceptance remain open.
