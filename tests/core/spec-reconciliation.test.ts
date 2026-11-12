@@ -26,7 +26,7 @@ describe("C11.16 spec reconciliation", () => {
       checklistItems(master).map((item) => [item.id, item.checked]),
     );
     const incompleteProduct = checklistItems(master).filter((item) =>
-      /^C(?:[1-9]|10)\./.test(item.id) && !item.checked);
+      (/^C(?:[1-9]|10)\./.test(item.id) || item.id === "C11.14") && !item.checked);
     if (incompleteProduct.length > 0) {
       expect(items.get("C11.16"), `Unfinished product items: ${incompleteProduct.map((item) => item.id).join(", ")}`).toBe(false);
     }
@@ -37,6 +37,8 @@ describe("C11.16 spec reconciliation", () => {
       "C11.05",
       "C11.08",
       "C11.10",
+      // Actual held-form deletion exposed an incomplete lifecycle audit.
+      "C11.14",
       "C11.17",
     ]) {
       expect(items.get(id)).toBe(false);
@@ -52,10 +54,9 @@ describe("C11.16 spec reconciliation", () => {
     expect(items.get("C11.11")).toBe(true);
     expect(recon).toContain("C11.11");
     expect(recon).toContain("perf-reference-run-2026-09-27");
-    // C11.14 is checked with its five proofs; the reconciliation table must
-    // still record where its evidence lives.
-    expect(items.get("C11.14")).toBe(true);
-    expect(recon).toContain("C11.14");
+    // Historical proofs remain recorded alongside the actual newly exposed
+    // gap; correcting the form paths does not close the wider audit by prose.
+    expect(recon).toContain("tests/core/forms-delete-recovery.test.ts");
   });
 
   it("does not claim DONE and leaves the owner signature blank", () => {

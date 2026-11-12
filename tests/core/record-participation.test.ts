@@ -111,9 +111,10 @@ describe("user-owned record participation (C11.14)", () => {
     expect(source).toContain("auditLog");
   });
 
-  it("names the closed worklist on the checked C11.14 item", () => {
+  it("retains prior record evidence while the demonstrated lifecycle re-audit remains open", () => {
     const master = readFileSync("MASTER.md", "utf8");
-    expect(master).toMatch(/- \[x\] \*\*C11\.14\*\*/);
+    expect(master).toMatch(/- \[ \] \*\*C11\.14\*\*/);
+    expect(master).toContain("tests/core/forms-delete-recovery.test.ts");
     for (const gap of C11_14_REMAINING) {
       expect(master, gap).toContain(gap);
     }
