@@ -18,6 +18,7 @@ import { createPage, ensureDefaults, publishPage } from "@/modules/cms/service";
 import { setPostMeta } from "@/modules/cms/blog-service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
+import { reviewOriginalImportedReader } from "../helpers/import-reader-review";
 
 const EMAIL = "cached-reader@example.test";
 const COMMENT = "Erase this reader comment and its cached copy.";
@@ -58,6 +59,7 @@ async function replacement() {
   const page = await createPage.call({ slug: "erasure-source", title: "Existing article", blocks: [{ id: "heading", type: "heading", props: { text: "Existing article", level: 1 } }] }, OWNER);
   await setPostMeta.call({ pageId: page.id, isPost: true }, OWNER); await publishPage.call({ id: page.id, published: true }, OWNER);
   const run = await stage();
+  await reviewOriginalImportedReader({ id: run.id, postId: "10", commentId: "20", contactId: reader.contact.id });
   await reviewImportConflicts.call({ id: run.id, conflicts: [{ slug: "erasure-source", resolution: "replace" }] }, OWNER);
   await commitImport.call({ id: run.id }, OWNER);
   return { run, reader: reader.contact };
@@ -86,6 +88,8 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     await expect(getContact.call({ id: reader.contact.id }, actor)).rejects.toMatchObject({ code: "permission" });
     const preview = await previewFromSource.call({ id: run.id, payload: SOURCE }, actor);
     expect(JSON.stringify(preview)).not.toContain(reader.contact.id);
+    expect(JSON.stringify(preview)).not.toContain("readerOwnershipReviewRequired");
+    await reviewOriginalImportedReader({ id: run.id, postId: "10", commentId: "20", contactId: reader.contact.id });
     const listed = await listImports.call({}, { ...actor, scopes: ["imports.list"] });
     expect(JSON.stringify(listed)).not.toContain(reader.contact.id);
     expect(JSON.stringify(await savedRun(run.id))).toContain(reader.contact.id);
@@ -133,6 +137,7 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     const other = `<wp:comment><wp:comment_id>21</wp:comment_id><wp:comment_author>Other reader</wp:comment_author><wp:comment_author_email>other-reader@example.test</wp:comment_author_email><wp:comment_content>Unrelated comment remains.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>`;
     const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: SOURCE.replace("</item>", `${other}</item>`) }, OWNER);
+    await reviewOriginalImportedReader({ id: run.id, postId: "10", commentId: "20", contactId: reader.contact.id });
     const adapter = contactPrivacySources().find(source => source.scope === "imports.readerSources")!;
     const exported = await db().transaction(tx => adapter.exportData(tx, reader.contact.id));
     expect(JSON.stringify(exported)).toContain(COMMENT);
