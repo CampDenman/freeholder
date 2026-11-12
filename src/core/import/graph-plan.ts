@@ -37,8 +37,8 @@ export const prepareSourceGraphPlan = defineService({
     }
     if (planned.media.length) await ctx.tx.insert(importSourceMedia).values(planned.media.map(item => ({ graphId: graph.id, key: item.key, planned: item })));
     await ctx.tx.update(importSourceGraphs).set({ planMetadata: planned.catalog }).where(eq(importSourceGraphs.id, graph.id));
-    const counts = { ...object(run.counts), media: planned.media.length, menus: planned.catalog.menus.length };
-    await ctx.tx.update(importRuns).set({ counts, error: null }).where(eq(importRuns.id, run.id));
+    const counts = { ...object(run.counts), ...(run.kind === "archive" ? { mediaWarnings: Array.isArray(planned.catalog.report.unresolvedImages) ? planned.catalog.report.unresolvedImages.length : 0 } : {}), media: planned.media.length, menus: planned.catalog.menus.length };
+    await ctx.tx.update(importRuns).set({ counts, error: null, ...(run.kind === "archive" ? { checkpoint: { ...object(run.checkpoint), report: planned.catalog.report } } : {}) }).where(eq(importRuns.id, run.id));
     ctx.setSubject("import_run", run.id);
     return { id: run.id, status: run.status, error: null, counts, graph: input.version };
   },

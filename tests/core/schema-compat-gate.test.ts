@@ -108,7 +108,7 @@ describe("the acknowledgement", () => {
 });
 
 describe("the migrations already in the tree", () => {
-  it("the reviewed baseline is the acknowledged one-time N-1 break", async () => {
+  it("acknowledges the reviewed baseline and the exact original-carrier reader fence", async () => {
     const { readdirSync, readFileSync } = await import("node:fs");
     const dir = "db/migrations";
     const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();

@@ -52,14 +52,37 @@ import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/
 describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
   beforeEach(truncateSpine);
   afterAll(closeDb);
-  afterEach(()=>vi.restoreAllMocks());
+  let restorePayoutAdapter:(()=>void)|undefined;
+  afterEach(()=>{vi.restoreAllMocks();restorePayoutAdapter?.();restorePayoutAdapter=undefined;});
 
-  async function paidPhysical(split = false, adjusted = false, fromBalance = false) {
+  async function paidPhysical(split = false, adjusted = false, fromBalance = false, directSeller = false) {
+    if(directSeller){
+      const {ready}=await import("@/core/runtime");
+      const {users}=await import("@/core/auth/schema");
+      const {updateBusiness}=await import("@/core/settings/service");
+      const {joinSite,updateMembershipRules}=await import("@/modules/members/service");
+      const {memberPayoutAccounts,memberSettings}=await import("@/modules/members/schema");
+      const {registerPayoutAdapter,payoutAdapters}=await import("@/modules/members/payouts");
+      await ready();
+      await db().insert(users).values({id:OWNER.userId,email:"original-seller@example.test",role:"owner"});
+      await updateBusiness.call({name:"Original seller return proof",country:"CA",baseCurrency:"CAD",timezone:"UTC"},OWNER);
+      await joinSite.call({handle:"original_seller",displayName:"Original Seller",meetsMinimumAge:true,isAdult:true},OWNER);
+      await updateMembershipRules.call({marketplaceEnabled:true,listingReview:false,siteFeeBps:1000,holdDays:14},OWNER);
+      // Exercise the internal direct-charge boundary, which remains disabled
+      // in owner configuration until complete provider acceptance.
+      const original=payoutAdapters().find(adapter=>adapter.id==="stripe_connect")!;
+      restorePayoutAdapter=()=>registerPayoutAdapter(original);
+      registerPayoutAdapter({id:"stripe_connect",models:["hold","instant","seller_merchant"],manual:false});
+      await db().update(memberSettings).set({payoutModel:"seller_merchant",payoutAdapter:"stripe_connect"}).where(eq(memberSettings.id,1));
+      await db().insert(memberPayoutAccounts).values({userId:OWNER.userId,adapter:"stripe_connect",status:"ready",externalAccountId:"acct_originalseller",chargesReady:true,merchantName:"Original Seller",merchantSupport:{email:"support@seller.example",phone:null,url:null,address:null}});
+      const manual=paymentAdapters.createManualPayments();
+      vi.spyOn(paymentAdapters,"paymentAdapter").mockReturnValue({...manual,id:"stripe",capabilities:()=>({...manual.capabilities(),sellerMerchantCharges:true})});
+    }
     const studio = await createLocationService.call(
       { name: "Studio", slug: "ful-studio", city: "Courtenay", country: "CA" },
       OWNER,
     );
-    const product = await createProduct.call({ name: "Print", slug: "ful-print", kind: "physical" }, OWNER);
+    const product = await createProduct.call({ name: "Print", slug: "ful-print", kind: "physical", ...(directSeller?{sellerUserId:OWNER.userId}:{}) }, OWNER);
     const updated = await applyVariantMatrix.call({ productId: product.id, expectedVersion: product.version }, OWNER);
     const variant = (await getProductVariants.call({ productId: updated.id }, OWNER)).variants[0]!;
     const list = await createPriceList.call({ name: "CAD retail", currency: "CAD", kind: "retail" }, OWNER);
@@ -96,14 +119,14 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
     payment = await createPayment.call(
       {
         invoiceId: placed.order.invoiceId!,
-        provider: "manual",
-        method: "bank_transfer",
+        provider: directSeller?"stripe":"manual",
+        method: directSeller?"provider_schedule":"bank_transfer",
         amountMinor: split ? 1_000 : placed.order.totalMinor,
         idempotencyKey: `pay-${placed.order.id}`,
       },
-      OWNER,
+      directSeller?{kind:"system"}:OWNER,
     );
-    await settlePayment.call({ id: payment.id, providerRef: `manual:${placed.order.id}` }, OWNER);
+    await settlePayment.call({ id: payment.id, providerRef: directSeller?`pi_${payment.id}`:`manual:${placed.order.id}` }, directSeller?{kind:"system"}:OWNER);
     }
     if (split) {
       const second = await createPayment.call({invoiceId:placed.order.invoiceId!,provider:"manual",method:"cash",amountMinor:placed.order.totalMinor-1_000,idempotencyKey:`pay-rest-${placed.order.id}`},OWNER);
@@ -119,8 +142,8 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
     return receiveReturn.call({id:requested.return.id},OWNER);
   }
 
-  async function providerReturn(split=false) {
-    const original=await paidPhysical(split);
+  async function providerReturn(split=false,directSeller=false) {
+    const original=await paidPhysical(split,false,false,directSeller);
     const {payments}=await import("@/modules/invoicing/schema");
     const rows=await db().select().from(payments).where(eq(payments.invoiceId,original.paid.order.invoiceId!));
     for(const payment of rows) await db().update(payments).set({provider:"stripe",providerRef:`pi_${payment.id}`}).where(eq(payments.id,payment.id));
@@ -336,11 +359,12 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
   });
 
   it("reconciles normalized authenticated feedback only on the original seller account",async()=>{
-    const {received,paid,payment,refund}=await providerReturn();
-    const {invoiceMarketPolicies,paymentMerchantRoutes}=await import("@/modules/invoicing/schema");
-    const merchantContact=await createContact.call({name:"Synthetic original seller"},OWNER);
-    await db().insert(invoiceMarketPolicies).values({invoiceId:paid.order.invoiceId!,model:"seller_merchant",adapter:"stripe_connect",siteFeeBps:1000,holdDays:14,feeMinor:450,sellerUserId:OWNER.userId,merchantName:"Original Seller",merchantContactId:merchantContact.id,providerAccountId:"acct_originalseller"});
-    await db().insert(paymentMerchantRoutes).values({paymentId:payment.id,providerAccountId:"acct_originalseller",applicationFeeMinor:450});
+    const {received,paid,payment,refund}=await providerReturn(false,true);
+    const {invoiceMerchantAllocations,paymentMerchantRoutes}=await import("@/modules/invoicing/schema");
+    // Checkout freezes the original seller and exact merchandise fee before
+    // issue; refund reconciliation must preserve this complete evidence.
+    expect(await db().select().from(invoiceMerchantAllocations).where(eq(invoiceMerchantAllocations.invoiceId,paid.order.invoiceId!))).toEqual([expect.objectContaining({sellerUserId:OWNER.userId,revenueMinor:4000,shippingMinor:500,totalMinor:4500,feeMinor:400})]);
+    expect(await db().select().from(paymentMerchantRoutes).where(eq(paymentMerchantRoutes.paymentId,payment.id))).toEqual([expect.objectContaining({providerAccountId:"acct_originalseller",applicationFeeMinor:400})]);
     refund.mockImplementation(async request=>{
       expect(request.providerAccountId).toBe("acct_originalseller");
       expect(request.refundApplicationFee).toBe(true);

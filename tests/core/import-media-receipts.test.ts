@@ -16,6 +16,8 @@ import { resolveContact } from "@/core/contacts/service";
 import { uploadAsset } from "@/core/media/service";
 import { createPage, ensureDefaults, publishPage } from "@/modules/cms/service";
 import { commitImport, previewFromSource, reviewImportConflicts, startImport } from "@/core/import/service";
+import { markReaderOwnershipWriter } from "@/core/import/reader-ownership-key";
+import { reviewOriginalImportedReader } from "../helpers/import-reader-review";
 import { archivePreviewDigest } from "@/core/import/archive-plan";
 import { bindImportMediaBytes, claimImportMedia, type ImportMediaReceipt } from "@/core/import/media-receipts";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
@@ -26,7 +28,14 @@ const XML = readFileSync("tests/fixtures/wordpress/sample-export.xml", "utf8");
 type Checkpoint = { media?: Array<{ assetId?: string }>; mediaClaims?: Array<{ key: string; token: string; expiresAt: string }> };
 async function staged() {
   const run = await startImport.call({ kind: "wordpress-wxr", origin: "https://old.example.org" }, OWNER);
-  return previewFromSource.call({ id: run.id, payload: XML }, OWNER);
+  await previewFromSource.call({ id: run.id, payload: XML }, OWNER);
+  // The fictional source explicitly declares this original reader. A matching
+  // address alone is deliberately insufficient for the publication positives.
+  const original = await resolveContact.call({ email: "reader@example.net" }, OWNER);
+  await reviewOriginalImportedReader({ id: run.id, postId: "20", commentId: "1", contactId: original.contact.id });
+  // Media claim orchestration binds the actual private preview, not its public
+  // DTO, which intentionally omits internal reader ownership facts.
+  return current(run.id);
 }
 async function current(id: string) { return (await db().select().from(importRuns).where(eq(importRuns.id, id)))[0]!; }
 const gate = () => {
@@ -93,7 +102,12 @@ describe.runIf(hasDatabase)("atomic import media receipts (C3.22)", { timeout: 6
     await entered.promise;
     const before = await current(run.id), checkpoint = before.checkpoint as Checkpoint;
     const prior = checkpoint.mediaClaims![0]!;
-    await db().update(importRuns).set({ checkpoint: { ...checkpoint, mediaClaims: checkpoint.mediaClaims!.map(claim => ({ ...claim, expiresAt: new Date(0).toISOString() })) } }).where(eq(importRuns.id, run.id));
+    await db().transaction(async tx => {
+      // Test-only expiry setup uses the guarded current writer in the same
+      // transaction; production SQL protection remains enabled.
+      await markReaderOwnershipWriter(tx);
+      await tx.update(importRuns).set({ checkpoint: { ...checkpoint, mediaClaims: checkpoint.mediaClaims!.map(claim => ({ ...claim, expiresAt: new Date(0).toISOString() })) } }).where(eq(importRuns.id, run.id));
+    });
     const replacement = await claimImportMedia.call({ id: run.id, key: prior.key, previewDigest: archivePreviewDigest(run.preview) }, OWNER);
     expect(replacement.token).not.toBe(prior.token);
     resume.open();

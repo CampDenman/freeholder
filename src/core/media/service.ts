@@ -447,6 +447,7 @@ async function prepareDerivedObjects(
     kind: MediaKind;
     scan: MalwareScanResult;
     body?: Uint8Array<ArrayBuffer>;
+    physicalKey?: string;
     uploadId?: string;
   },
   mark: WatermarkMark | undefined,
@@ -459,7 +460,7 @@ async function prepareDerivedObjects(
   let variants: VariantSet = {};
   const renditionVersion = randomUUID();
   if (input.kind === "image" && scan.status === "ready") {
-    const body = input.body ?? (await(captured?.store??storage()).get(input.key));
+    const body = input.body ?? (await(captured?.store??storage()).get(input.physicalKey??input.key));
     if (!body) throw new Error(`storage: ${input.key} disappeared during processing`);
     // Upload validation already sniffed the prefix; the stored bytes are
     // checked again here because they are what sharp would actually read.
@@ -1573,14 +1574,14 @@ export const registerStoredOriginal = defineOrchestratedService({
   handler: async (input, actor) => {
     const captured=await originalStoredObject(input.key);
     if(input.bytes!==captured.receipt.bytes||(input.checksumSha256&&input.checksumSha256!==captured.receipt.sha256))throw new ServiceError("conflict","The staged metadata does not match its original accepted byte witness.");
-    const head = await captured.store.head(input.key);
+    const head = await captured.store.head(captured.key);
     if (!head) throw new ServiceError("not_found", "The staged file is gone.");
     if(head.bytes!==captured.receipt.bytes)throw new ServiceError("conflict","The original staged object has different bytes.");
-    const prefix = await captured.store.readRange(input.key, 0, SIGNATURE_BYTES - 1);
+    const prefix = await captured.store.readRange(captured.key, 0, SIGNATURE_BYTES - 1);
     const suffixStart = Math.max(0, input.bytes - SIGNATURE_BYTES);
     const suffix =
       suffixStart > 0
-        ? await captured.store.readRange(input.key, suffixStart, input.bytes - 1)
+        ? await captured.store.readRange(captured.key, suffixStart, input.bytes - 1)
         : undefined;
     try {
       const validated = validateMediaFile({
@@ -1590,7 +1591,7 @@ export const registerStoredOriginal = defineOrchestratedService({
         prefix: mediaSignatureSample(prefix ?? new Uint8Array(), suffix ?? new Uint8Array()),
       });
       const verified = await scanStoredAndHash(
-        input.key,
+        captured.key,
         input.filename,
         validated.mime,
         input.bytes,
@@ -1600,6 +1601,7 @@ export const registerStoredOriginal = defineOrchestratedService({
       const prepared = await prepareDerivedObjects(
         {
           key: input.key,
+          physicalKey: captured.key,
           kind: validated.kind,
           scan: verified.scan,
         },

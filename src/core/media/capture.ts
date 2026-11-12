@@ -1397,7 +1397,7 @@ export const assembleCapture = defineOrchestratedService({
     const parts: Uint8Array<ArrayBuffer>[] = [];
     let total = 0;
     for (const key of claimed.chunkKeys) {
-      const captured=await originalStoredObject(key),body = await captured.store.get(key);
+      const captured=await originalStoredObject(key),body = await captured.store.get(captured.key);
       if (!body) throw new ServiceError("conflict", "A recorded chunk disappeared from storage.");
       const{createHash}=await import("node:crypto");if(body.byteLength!==captured.receipt.bytes||createHash("sha256").update(body).digest("hex")!==captured.receipt.sha256)throw new ServiceError("conflict","An original recording chunk changed after its accepted write.");
       parts.push(body);

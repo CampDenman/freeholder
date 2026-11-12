@@ -1262,6 +1262,18 @@ this addendum also includes C10.33 instead of weakening either gate.
 - **F11** — Release notes and qualified claims: `.changeset/blog-wordpress-structure.md`, `deploy/blog-wordpress-2026-11-07.md`.
 - **F12** — Native import/privacy regressions: `tests/core/wordpress-import-flow.test.ts`, `tests/core/blog-structure-comments.test.ts`; the production-build browser and ten hosted demo checks passed, including the single 301. Production and actual source URL acceptance remain open in `deploy/blog-wordpress-2026-11-07.md`.
 
+
+The private graph-reader review correction is covered by
+`tests/core/import-graph-reader-review.test.ts`: a real501-item WXR requires
+fresh human review before importing its unknown reader, denies direct private
+child review, and projects the exact chosen person while retaining original
+receipt ownership and the child's operation checkpoint. The before SQL55000
+and unchanged after9.00s are recorded in `deploy/import-reader-privacy.md`.
+The repair adds only73 graph-writer ABI admission after existing checks in
+`reader-ownership.ts`; API/schema/locale surfaces remain unchanged. Changeset:
+`.changeset/graph-reader-owner-review.md`. No complete C2.29/C3.46 acceptance
+or new production/browser/provider qualification is claimed by this fix.
+
 ## C3.01 — Add required output schemas to every service and validate
 
 - **F01** — No item-dedicated migration is named in §43; schema is owned per-module and applied through `db/migrations/0000_reviewed-baseline.sql` (reviewed baseline, C10.19); database coverage in `tests/core/service-output.test.ts`.
@@ -2001,6 +2013,25 @@ inside a carrier consent/retry protocol, nor live carrier acceptance.
 - **F10** — `app/(admin)/admin/imports/GraphImportControls.tsx` explains saved progress, source restoration and total source/file budgets. A fresh authenticated request advances each phase; no stored credential or fabricated unattended actor is introduced.
 - **F11** — `.changeset/resumable-wordpress-source.md` and `deploy/import-source-graph.md` identify the WXR increment, completed local qualification and required other adapters, protected checks, physical writes and actual acceptance. MASTER remains the sole product/status authority.
 - **F12** — Actual local 501-page publication/rollback, cross-process indexing, media/menu recovery, stale review refusal and privacy/hold evidence are recorded in `deploy/import-source-graph.md`. This partial WXR evidence closes neither C3.22 nor C3.47 and supplies no independent review or stable release signature.
+
+
+The uploaded static ZIP increment adds real original-file directory/range/digest
+contracts (`archive-directory.ts`, `archive-index.ts`, `archive-graph-contract.ts`)
+and reuses the existing schema73 graph, shared CMS/media services and exact live
+parent context. Its actual 501-page native lifecycle passes with independent
+indexing processes, shared media, explicit publication, recoverable rollback and
+public image delivery refusal. The prepared-child identical-restore before/after
+proof also passes on fresh normal0–79 while preserving its original checkpoint.
+`deploy/import-source-graph.md` records the exact sources, failed attempts and
+limits; `.changeset/durable-static-zip-source.md` supplies the feature note. ZIP
+privacy/hold/namespace controls now pass on normal0–79, including late erasure
+refusal, exact named holds and same-key replacement-store refusal. Its current
+Node22 production artifact passes the standard scrub, and all four actual
+501-file owner-browser journeys pass at 320px with keyboard, both-theme Axe,
+Arabic RTL, identical-source restoration, publication and rollback. Protected
+qualification and the complete live-crawl adapter remain required. These additive ZIP proofs do not extend the earlier
+WXR/REST browser evidence or close C3.47; durable live crawl and actual cutover
+remain required.
 
 ## C4.01 — Build the work board, task tree/dependency view, assignment
 

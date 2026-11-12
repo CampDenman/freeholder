@@ -114,7 +114,7 @@ export default async function ImportRunPage({
       <Card>
         <CardHeader title={t("imports.progress")} />
         <CardBody>
-          {graph ? <GraphImportControls id={id} status={run.status} version={graph.version} upload={graph.upload} indexComplete={graph.indexComplete} planFrozen={graph.planFrozen} planReady={graph.planReady} invalidated={graph.invalidated} labels={{
+          {graph ? <GraphImportControls id={id} status={run.status} sourceKind={run.kind ?? "html"} version={graph.version} upload={graph.upload} indexComplete={graph.indexComplete} planFrozen={graph.planFrozen} planReady={graph.planReady} invalidated={graph.invalidated} labels={{
             intro: t("imports.resume.intro"), index: t("imports.resume.index"), commit: t("imports.resume.commit"), pause: t("imports.resume.pause"), working: t("imports.resume.working"), failed: t("imports.resume.failed"), saved: t("imports.resume.saved"), restoreHint: t("imports.resume.restoreHint"), limits: t("imports.resume.limits"), reviewHint: t("imports.resume.reviewHint"),
             review: t("imports.review"), slug: t("imports.slug"), slugHint: t("cms.field.slugHint"), keep: t("imports.keepExisting"), replace: t("imports.replace"), rename: t("imports.rename"), renamedSlug: t("imports.renamedSlug"), reconcile: t("imports.reconcile"), publish: t("imports.publish"), rollback: t("imports.rollback"), upload: t("imports.upload"), uploadHint: t("imports.uploadHint"), stage: t("imports.stage"), uploading: t("imports.uploading"), readingSource: t("imports.readingSource"), uploadFailed: t("imports.uploadFailed"),
           }} /> : <ImportStepForms

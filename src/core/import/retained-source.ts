@@ -46,6 +46,13 @@ export function retainedSourceFromRun(run: { id: string; checkpoint: unknown }):
   const parsed = retainedImportSourceSchema.safeParse(object(run.checkpoint).retainedSource);
   return parsed.success && parsed.data.runId === run.id && parsed.data.revision === revision(parsed.data.bytes, parsed.data.chunkBytes, parsed.data.chunkDigests) ? parsed.data : null;
 }
+/** Byte/owner equivalence only, never authorization to read an old locator.
+ * A live parent operation may use its separately verified identical restore;
+ * the historical descriptor remains unchanged as the original witness. */
+export function sameRetainedOriginal(left: RetainedImportSource, right: RetainedImportSource): boolean {
+  return left.runId === right.runId && left.revision === right.revision && left.bytes === right.bytes && left.chunkBytes === right.chunkBytes
+    && left.chunkDigests.length === right.chunkDigests.length && left.chunkDigests.every((digest, index) => digest === right.chunkDigests[index]);
+}
 export function retainedSourceChunkKey(source: RetainedImportSource, index: number): string {
   if (!Number.isInteger(index) || index < 0 || index >= source.chunkDigests.length) throw new ServiceError("validation", "That source chunk is outside the manifest.");
   return `imports/${source.runId}/${source.uploadId}/${String(index).padStart(5, "0")}.part`;
@@ -90,7 +97,7 @@ export async function readRetainedSourceChunk(input: RetainedImportSource, index
   if (!active || active.uploadId !== source.uploadId || active.revision !== source.revision || active.expiresAt !== source.expiresAt) throw new ServiceError("conflict", "The retained source was replaced. Reload the import before retrying.");
   const captured = await originalStoredObject(key);
   if (captured.store.isPublic) throw new ServiceError("conflict", "Import source files require private object storage.");
-  const bytes = await captured.store.get(key);
+  const bytes = await captured.store.get(captured.key);
   const expected = Math.min(source.chunkBytes, source.bytes - index * source.chunkBytes);
   if (!bytes || bytes.byteLength !== expected || createHash("sha256").update(bytes).digest("hex") !== source.chunkDigests[index]) throw new ServiceError("conflict", "The stored source chunk is missing or differs from its verified upload. Upload the source again.");
   return bytes;

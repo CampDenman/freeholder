@@ -22,10 +22,15 @@ failure rolls back the hold and all earlier snapshot effects. Existing
 `retain` callbacks remain fulfillment-only. Existing sources without the new
 callback keep their behavior, API permissions and audit identity.
 
-Source and native qualification are pending. The three actual-service
-controls cover inherited scope capture before verification, real insert vs
-update identity, atomic rollback on first creation and preservation of the
-prior hold/snapshot on a failed update. The crawl domain must separately
+Full Node22 types, focused lint and15 private/schema source controls pass.
+The three actual-service PostgreSQL controls pass4.47s/3.97s/4.05s and cover
+inherited scope capture before verification, real insert vs update identity,
+atomic rollback on first creation and preservation of the prior hold/snapshot
+on a failed update. The runner and database backends drained. Whole-repository
+lint101.7s, licensing, generated changelog, plan and playground gates pass,
+as do all44 source contract files (384 controls,26 declared skips). The
+dependency tree was reused after exact manifest/lock comparison; the worktree
+path warning is retained. The crawl domain must separately
 record normalized original source-generation membership and qualify its
 held-byte, zero-response, late-fact, update, expiry and release paths. The
 core callback alone does not close C3.47 or prove provider acceptance.

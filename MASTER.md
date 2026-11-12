@@ -5095,9 +5095,17 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   source-specific acceptance remain pending; operational limits and all evidence
   are recorded in `deploy/blog-wordpress-2026-11-07.md`.)*
 
+  *(Update 2026-11-12: a real501-item WXR private-reader before control exposed
+  missing schema73 writer admission during a fresh owner's source review. The
+  narrow service repair passes the unchanged after control, preserving private
+  child refusal, original receipt/source ownership and existing hold/erasure
+  checks. Evidence: `deploy/import-reader-privacy.md`. Protected qualification
+  and the full existing C2.29/C3.46 requirements remain open.)*
+
 ### 43.8 C3 — Living contract, plugins, packages, and portable operation
 
 #### One generated platform contract
+
 - [x] **C3.01** Add required output schemas to every service and validate
   handler responses against them in tests and development.
   (`ServiceDef.output`; `assertOutput` in development/tests; OpenAPI 200
@@ -5950,6 +5958,25 @@ deployments are portable, testable and incapable of silently forking the truth.
   request link. Capturing the actual request before minimization passed its
   bounded after control; populated75-to76 upgrade preserved six original
   tables, and live SDK8 plus internal-boundary5 passed.
+  Clean release composition on the corrected75 foundation passed the normal
+  0–76 journal (77 entries) and all26 current native carrier/recovery/preview
+  controls in one batch. Own package/production builds and artifact scrub
+  passed (21,148 files /268,969,797 bytes). All44 source contract files passed
+  384 controls with26 declared database exclusions; full typecheck, lint,
+  license, release and plan gates passed. The current production artifact
+  passed all four en/es/fr/ar owner journeys, including a second final review
+  after address minimization, at 320px in both themes with keyboard and Axe.
+  Earlier first-withdrawal timestamps/proof remained intact and the erased
+  address stayed absent. The initial extension incorrectly observed the first
+  review's persistent success notice; waiting for the actual second action
+  corrected that fixture, with no product change. Protected CI and actual
+  provider acceptance remain required.
+  Protected CI found two older flat-call spy assertions and a migration
+  inventory assumption. The two mail cases now require the exact original
+  request/scope/job and a real shared transaction/event queue; both pass.
+  The schema contract explicitly checks76's already declared breaking rename,
+  rollback reason and refusal of a compatible-risk release; all12 schema
+  controls pass. These corrections change no product, SQL or UI behavior.
   See `deploy/mail-carrier-recovery.md` and the C3.31–C3.39
   source/live evidence worksheet `deploy/provider-preview-acceptance.md`.
   No live provider acceptance or independent security sign-off is supplied.)*
@@ -6064,7 +6091,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   body and durable recovery debt. Focused lint and 17 private/schema contracts
   pass; the targeted intact/corrupt native after pair passed in 10.53 seconds,
   preserving the corrupted original body/hash and pending source debt while
-  the intact receipt completed. The first previous
+  the intact receipt completed. Current full source gates pass: TypeScript,
+  full lint, license/release/plan/playground checks and all 384 static controls
+  (26 declared database-only cases skipped). The first aggregate found a
+  generated changelog ordering mismatch from source composition; the existing
+  generator corrected that one-line move and the full aggregate passed.
+  The first previous
   runtime fixture stopped before its form assertions because its transport
   readiness poll incorrectly required healthy jobs while jobs were disabled;
   the corrected fixture records raw health responses and requires a real local
@@ -6407,15 +6439,29 @@ deployments are portable, testable and incapable of silently forking the truth.
   This is fresh schema qualification only: actual unchanged held-byte and
   canonical lifecycle controls, populated upgrade, cold-runtime and provider
   acceptance remain required. Original v7 SQL/database/evidence are preserved.
-  Original-hold snapshot source draft 2026-11-12: an actual new HTTP-crawl
+  Exact a67/v8 local boundary qualification now passes the unchanged upload
+  oracle (8.39s), its four lifecycle cases (22.10s total), five canonical
+  transaction/SQL integrity controls and actual old847 write/cleanup refusal.
+  The paired current setup/old cleanup preserves bytes with zero provider
+  DELETEs even after checkpoint loss. These are frozen-source local proofs;
+  current protected REST/ZIP/reader/storage source is now being composed
+  separately before final qualification. All published0–79 SQL files and
+  journal entries remain byte-identical; unpublished80 stays1ac4652c.
+  This new current-main composition has not yet passed source/native/SDK
+  qualification and supplies no provider or stable sign-off.
+  Original-hold snapshot source increment 2026-11-12: an actual new HTTP-crawl
   control recorded a pending reader hold but cleanup deleted its private
   original because membership was only captured at fulfillment. A separate
   optional non-destructive privacy-source callback now composes original
   membership capture with the actual hold upsert, including inherited
   scopes and before identity verification. Updates receive the original
   insert identity; existing destructive retain callbacks are not invoked.
-  Source/native qualification and normalized crawl-generation integration
-  remain pending. See `deploy/privacy-original-hold-snapshot-2026-11-12.md`.
+  FullNode22 types/focused lint and15 private/schema controls pass. Three
+  actual normal79 atomic service controls pass4.47s/3.97s/4.05s. Whole lint,
+  licensing, changelog, plan, playground and all44 source contracts pass
+  (384 controls,26 skips). Normalized crawl-generation integration and its
+  held-byte/lifecycle acceptance remain separate requirements. See
+  `deploy/privacy-original-hold-snapshot-2026-11-12.md`.
   *(Update 2026-11-11: local WXR qualification now includes an actual 501-page
   publication/rollback with two independent indexing processes, identical-source
   restore after a committed batch, global media receipt recovery and nested
@@ -6426,6 +6472,21 @@ deployments are portable, testable and incapable of silently forking the truth.
   remain required. Physical media PUT and original storage namespace
   recovery are separate required dependencies. Source/evidence:
   `deploy/import-source-graph.md`; no completion or release claim.)*
+  *(Update 2026-11-12: uploaded REST continuation and selected WordPress instance
+  paths are protected-main changes. An additional uploaded static ZIP source
+  increment has local real 501-page independent-process indexing, shared image,
+  explicit publication and recoverable rollback proof; public image delivery
+  changes from 200 to 404. Its prepared private child also resumes after an
+  identical verified original restore without rewriting the original source
+  witness, on a fresh normal 0–79 journal. Three ZIP privacy/hold/namespace
+  controls also pass: late-result erasure refusal, named original-source holds
+  and a same-key replacement-store refusal with zero replacement I/O. The
+  Node22 production artifact scrub and all four real 501-file owner-browser
+  journeys also pass, including identical-source restore, 320px keyboard,
+  both-theme Axe, Arabic RTL, publication and rollback. Protected checks,
+  durable live crawl response/frontier storage and actual cutover remain
+  required; no schema81 or C3.47 closure is claimed. Exact evidence:
+  `deploy/import-source-graph.md`.)*
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
@@ -11427,6 +11488,54 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Verified-transfer source foundation 2026-11-12: four unregistered models
+  keep immutable source/target locators, distinct logical and physical target
+  keys, exact original receipt membership and original receipt contact subjects.
+  A pure evidence projection refuses unresolved/redacted/missing/divergent
+  byte facts and namespaces;11 controls and full source types/lint pass.
+  No82 SQL/journal, copy service, adoption, source deletion or contact/
+  retention integration is enabled. Those requirements remain open.
+  Owner-preview source increment 2026-11-12: a shared human-only query captures
+  the configured source outside its transaction and reads complete requested
+  object histories under existing object locks. It refuses unresolved facts,
+  resource mismatches, named storage holds and oversized histories. The
+  result explicitly grants no copy, adoption or deletion authority. Full
+  Node22 types/changed-source lint and51 selected controls pass; actual
+  normal79 service controls pass3/3 (4.20s/3.95s/4.35s), and actual SDK
+  generation passes8/8. Generated-file full types/whole lint and all source
+  gates pass after actual changelog regeneration repaired its sole drift
+  failure (affected3 controls pass). This does
+  not complete site inventory, provider bytes or original-domain ownership
+  and quiescence proof. See
+  `deploy/storage-transfer-preview-source-2026-11-12.md`.
+  Committed storage-observation hook 2026-11-12: domains can register a
+  named callback receiving only the original physical receipt UUID after its
+  transaction commits. Every callback runs; a dependent failure produces a
+  generic pending-recovery error and retains the original positive fact.
+  Domains must use their own original erasure membership, shared SYSTEM
+  service and durable/periodic retry instead of inheriting executor identity.
+  Four pure hook controls and one actual PostgreSQL commit-boundary control
+  pass (4.25s), with full types/lint. No new domain is registered by this
+  infrastructure increment. See
+  `deploy/storage-observation-hook-source-2026-11-12.md`.
+  Versioned transfer transport foundation 2026-11-12: the existing provider
+  factories now offer captured resource/key/revision reads and conditional
+  deletion. S3 sends the actual strong ETag in If-Match; Replit pins body
+  reads and deletion to the actual generation string. Wrong keys/resources,
+  missing revisions, conflicts and unsupported conditions refuse without an
+  unconditional fallback.21 actual-factory/adjacent controls and full source
+  types/lint pass. The copy CLI still uses only GET/create-only PUT; no
+  cleanup command, adoption service or provider acceptance is supplied.
+  See `deploy/storage-transfer-transport-source-2026-11-12.md`.
+  Physical read-key preparation 2026-11-12: the original-storage resolver
+  now returns its actual read key; retained sources, recording assembly and
+  staged-file validation use that key for provider reads while preserving
+  logical references. Current resolution still returns its original key.
+  Full Node22 types/changed-file lint pass. Actual normal79 capture assembly
+  and retained multi-megabyte WXR controls pass8.72s/6.08s;25 other controls
+  were deliberately filtered. This supplies no namespace adoption or final
+  cross-target recovery acceptance. See
+  `deploy/storage-transfer-source-2026-11-12.md`.
   Transfer read-refusal repair 2026-11-11: two adapter-boundary controls
   reproduced an occupied Replit target being overwritten and reported
   restored after its first read returned 403 or 503. The transfer now stops

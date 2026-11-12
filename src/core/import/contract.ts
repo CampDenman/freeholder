@@ -97,7 +97,7 @@ export function assertPublicHttpUrl(value: string): URL {
 }
 
 export class ImporterPhaseLimitError extends Error {
-  constructor(readonly limit: "pages" | "bytes" | "depth", message: string) { super(message); }
+  constructor(readonly limit: "pages" | "bytes" | "depth" | "entries", message: string) { super(message); }
 }
 
 export function enforceImporterLimits(

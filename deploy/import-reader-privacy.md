@@ -409,3 +409,126 @@ remain required. REST/ZIP/crawl durable continuation and actual cutover, wider
 WordPress acceptance, live provider acceptance and independent human security
 review remain outside this qualified reader increment. C2.29/C3.46/C3.47 and
 stable readiness stay open until their complete acceptance requirements pass.
+
+
+## Protected migration-77 ancestry and reader-78 review
+
+On 2026-11-12 this increment was rebased onto the actual protected migration-77
+main merge `1a783186dde4df89c9e6a8eb6a5569449faab388` (PR #686), rather than
+publishing the earlier composed dependency stack. The rebased source at
+`eee9690e` has identical product files and migration bytes to qualified reader
+checkpoint `05337220`; every predecessor SQL file through 77 is also identical.
+The already qualified `b2885475` standalone remains preserved, unchanged. Its
+browser proof and the earlier native/upgrade/hold evidence above are reused
+with that explicit equivalence; they are not newly executed exact-head runs.
+Full types, lint, license, release-note, plan, playground and contract gates
+were rerun after this ancestry change: 384 passed and 26 expected exclusions.
+MASTER §43.1 is byte-for-byte unchanged from protected main.
+
+For this partial C2.29/C3.46/C3.47 repair, applicable F01–F12 evidence is:
+
+- F01–F03: normalized migration 78 constraints and ownership/merge witnesses;
+  shared transactional owner resolution, original-source authorization,
+  personal audit and contact merge/undo, including the real 1,001-reader case.
+- F04–F06: bounded original-by-original owner forms, explicit empty choices,
+  refusals/recovery and all four translated locale journeys. HTTP/MCP/SDK
+  expose the same registry and deliberately refuse nonhuman ownership
+  decisions, including otherwise scoped agents; live SDK checks passed.
+- F07–F09: current-mailbox and unchanged-prior-runtime disclosure repros,
+  canonical pending holds, sealed-key recovery, erasure/retention/export,
+  explicit contact-FK inventories and actual normal populated upgrade proofs.
+  Backups retain the normalized private ledger with the ordinary database;
+  this is not a new cross-provider restore or independent security sign-off.
+- F10–F12: owner instructions explain why historical addresses need explicit
+  review; no implicit contact creation or seeded identity guesses. Release
+  notes and this evidence record accompany the real upload/review/commit,
+  account export, merge/undo and owner-browser composition proofs.
+
+Protected exact-head CI and normal queue integration are still required.
+These criteria describe the qualified increment, not closure of the broader
+unchecked C-items or permission to announce stable readiness.
+
+
+Exact-head PR #687 CI exposed stale adjacent test prerequisites. Five media
+receipt positives needed an explicit fresh human choice for their declared
+original reader, and internal media claims needed the actual private preview
+digest rather than the public DTO that strips reader bindings. The synthetic
+claim-expiry setup now uses the current writer admission in its own transaction.
+All five original lost-reply/concurrency/actor/CRM assertions passed in 26.63
+seconds on a cloned normal 0–78 disposable database.
+
+The other exact CI failures were the same missing human prerequisites in the
+WordPress flow/raw-comment audit and two privacy positives, a fabricated first
+comment ID 0, and direct legacy-fixture writes caught by migration 78's writer
+protection. Fixtures now declare each original person through the actual fresh
+owner service, use positive original comment IDs, and mark only legacy-state
+setup/migration replay as the current writer. The deliberate prior-writer
+refusal remains unmarked. All original payload, source-coordinate, unrelated
+reader, old-image refusal, rollback, media and privacy assertions remain intact.
+These 20 exact after controls passed in 162.48 seconds, with 37 other tests
+intentionally filtered. No product source, SQL, permission, timeout or safety
+assertion changed. All three production browser CI jobs passed on the original
+PR head; exact corrected-head protected CI is still required.
+
+After these fixture corrections, all required local source gates passed again:
+full types, lint, license, release-note, plan, playground and 384 contracts with
+26 expected database-only exclusions. The protected exact-head rerun remains
+pending; local fixture qualification does not substitute for protected checks.
+
+
+The actual main182 private graph-reader review before control fails in10.14s
+on test-only checkpoint50954844. It uploads and indexes a real501-item WXR,
+keeps its first original reader unbound, and correctly requires human review
+before importing the comment. The actual fresh signed-in owner can review it
+through the parent; direct child review is refused. Applying that exact human
+choice then hits schema73 SQL55000 because the shared cache projection had78
+reader admission but lacked73 graph-writer admission for its private child.
+The native process exited and its normal79 fixture had no nonidle backends.
+
+The narrow source repair adds graph-writer ABI admission after the existing
+human choice, current permissions, exact original coordinates and hold/erasure
+checks. It grants no additional caller authority and changes no source identity,
+original receipt owner, private child entry rule or SQL guard. Its exact native
+after control remains pending; no completion or stable claim is added.
+
+
+The unchanged private graph-reader after case passes in9.00s on signed repair
+6f531c25, after full types and targeted lint passed. It preserves direct child
+review refusal and the original receipt ID/first-run/creator, applies the chosen
+existing person's ID only through the verified human review, keeps the private
+child's operation checkpoint unchanged, and retains the exact original comment
+body. Review alone creates no imported comment. The native process exited and
+the owned normal79 database had no nonidle backends before handoff. This is a
+shared-service graph-review repair; no API/schema/label change, fresh production
+build, new owner-browser qualification, provider acceptance or checklist closure
+is claimed by this control.
+
+
+The private graph-reader fix also passes its complete source gates on70292fa5:
+full types, whole-repository lint, licensing, release notes, plan/F-matrix,
+playground policy and44 contract files (384 passed,26 expected database
+exclusions,31.63 seconds for contracts). The independent frozen offline install
+completed in696ms. All source processes exited before protected PR publication.
+The source/schema/API/locale boundary above is unchanged; complete item, actual
+provider, cutover and stable signatures remain pending.
+
+
+## Canonical original-upload hold composition
+
+The current-main migration-80 composition retains the protected REST/ZIP and
+reader-recovery implementation, including exact original-source restoration and
+physical read-key resolution. It overlays the separately qualified canonical
+retention callback: actual first-hold source/generation members are captured
+inside the existing hold transaction, including an empty capture, before one
+normalized completion receipt. Renewals and fulfillment never recapture later
+uploads. Current cleanup uses canonical membership and its caller's actual
+transaction; checkpoint nonces remain an older-reader projection.
+
+The earlier exact local-v8 snapshot passed the unchanged pending-hold oracle,
+four additional hold boundaries, and actual older-source creation/cleanup
+refusals. Those are preserved scoped proofs, not qualification of this newly
+composed current-main tree. See
+`deploy/import-upload-pending-hold-source-2026-11-12.md` for their precise source
+identities and limits. The fresh composition still requires its own source and
+native checks. No stable, provider, cutover or independent-review closure is
+claimed here.
