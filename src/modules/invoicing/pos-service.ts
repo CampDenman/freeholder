@@ -32,7 +32,7 @@ import {
   recordProviderRefundResult,
   refundNeedsReview,
 } from "./payment-provider-service";
-import { forgetCompletedLegacyRefund, legacyRefundObservation, performLegacyRefundDispatch } from "./legacy-refund-dispatch";
+import { forgetCompletedLegacyRefund, performLegacyRefundDispatch, type legacyRefundObservation } from "./legacy-refund-dispatch";
 import { invoices, payments, refunds } from "./schema";
 
 const id = z.string().uuid();
