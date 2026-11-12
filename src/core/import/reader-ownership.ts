@@ -124,12 +124,11 @@ export async function bindOwnedReaderSources(tx: Tx, preview: Json, source: Read
     if (receipt?.state === "erased" || receipt?.contactId && retired.has(receipt.contactId)) throw new ReaderOwnershipErasedError();
     if (receipt?.contactId) { row.comment.contactId = receipt.contactId; continue; }
     const candidate = known.get(email(row.comment.email));
-    if (receipt?.state === "review" || candidate && (receipt?.state === "unbound" || retired.has(candidate)) || row.addressDigest && ambiguous.has(row.addressDigest)) {
+    if (receipt?.state === "review" || candidate || row.addressDigest && ambiguous.has(row.addressDigest)) {
       row.comment.readerOwnershipReviewRequired = true;
       if (receipt?.state === "unbound") await tx.update(readerOwnershipReceipts).set({ state: "review", updatedAt: new Date() }).where(eq(readerOwnershipReceipts.id, receipt.id));
       continue;
     }
-    if (candidate) row.comment.contactId = candidate;
   }
   for (let offset = 0; offset < rows.length; offset += BATCH) {
     const missing = rows.slice(offset, offset + BATCH).filter(row => !recorded.has(row.sourceDigest));
