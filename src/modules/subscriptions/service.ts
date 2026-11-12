@@ -629,6 +629,31 @@ export async function raiseInvoice(
     periodEnd: Date;
   },
 ): Promise<string> {
+  // Serialize the original one-time obligation with the invoice it creates.
+  // In particular, a no-card trial has no signup invoice to carry this fee.
+  // A durable invoice witness also preserves the same first-period payload
+  // after later renewals, without inferring ordering from transaction dates.
+  const sourceId = `${subscription.id}:${options.periodStart.toISOString()}`;
+  const [original] = await ctx.tx.select({
+    acceptedSetupFeeMinor: subscriptions.acceptedSetupFeeMinor,
+    setupFeeInvoiceId: subscriptions.setupFeeInvoiceId,
+  }).from(subscriptions).where(eq(subscriptions.id, subscription.id)).for("update");
+  if (!original) throw new ServiceError("not_found", "That subscription is not here.");
+  let setupFeeMinor = options.setupFeeMinor ?? 0;
+  if (original.acceptedSetupFeeMinor !== null) {
+    const [feeInvoice] = original.setupFeeInvoiceId
+      ? await ctx.tx.select({ sourceType: invoices.sourceType, sourceId: invoices.sourceId, status: invoices.status })
+        .from(invoices).where(eq(invoices.id, original.setupFeeInvoiceId)).for("update")
+      : [];
+    if (original.setupFeeInvoiceId && (!feeInvoice || feeInvoice.sourceType !== "subscription" || feeInvoice.sourceId?.split(":")[0] !== subscription.id)) {
+      throw new ServiceError("conflict", "The original setup-fee invoice cannot be proved.");
+    }
+    if (feeInvoice?.status === "void") {
+      throw new ServiceError("conflict", "Review the voided original setup-fee invoice before billing another period.");
+    }
+    setupFeeMinor = !original.setupFeeInvoiceId || feeInvoice?.sourceId === sourceId
+      ? original.acceptedSetupFeeMinor : 0;
+  }
   const [variant] = await ctx.tx
     .select({ sku: productVariants.sku, name: products.name })
     .from(productVariants)
@@ -655,13 +680,13 @@ export async function raiseInvoice(
   ];
   // Charged once, on the first invoice only, because that is what a setup fee
   // is — a line on a renewal would be a second one.
-  if (options.setupFeeMinor && options.setupFeeMinor > 0) {
+  if (setupFeeMinor > 0) {
     lines.push({
       sourceType: "subscription" as const,
       sourceId: subscription.id,
       description: `${variant?.name ?? "Subscription"} — setup`,
       quantityMicros: QUANTITY_SCALE,
-      unitAmountMinor: options.setupFeeMinor,
+      unitAmountMinor: setupFeeMinor,
     });
   }
 
@@ -674,7 +699,7 @@ export async function raiseInvoice(
     // agreement has to name which period each invoice is for, or the second
     // month collides with the first. The same compound-id convention the
     // deposit/balance pair uses.
-    sourceId: `${subscription.id}:${options.periodStart.toISOString()}`,
+    sourceId,
     // One invoice per subscription per period, whatever retries the sweep
     // makes. The period start is in the key because that is what makes this
     // period's invoice a different request from the last one's.
@@ -698,6 +723,11 @@ export async function raiseInvoice(
           },
   });
   const issued = await ctx.callAsSystem(issueInvoice, { id: draft.invoice.id });
+  if (original.acceptedSetupFeeMinor !== null && original.acceptedSetupFeeMinor > 0 && !original.setupFeeInvoiceId) {
+    await ctx.tx.execute(sql`select set_config('freeholder.subscription_setup_fee_v1','1',true)`);
+    await ctx.tx.update(subscriptions).set({ setupFeeInvoiceId: issued.invoice.id })
+      .where(eq(subscriptions.id, subscription.id));
+  }
   return issued.invoice.id;
 }
 
@@ -810,6 +840,7 @@ export const subscribe = defineService({
         planId: plan.id,
         productVariantId: variantId,
         currency,
+        acceptedSetupFeeMinor: plan.setupFeeMinor,
         billingMode: plan.billingMode,
         provider: paymentMethod?.provider ?? (plan.billingMode !== "manual" ? paymentAdapter().id : null),
         paymentMethodId: paymentMethod?.id ?? null,
@@ -1702,6 +1733,8 @@ registerContactPrivacySource({
         planId: subscriptions.planId,
         status: subscriptions.status,
         currency: subscriptions.currency,
+        acceptedSetupFeeMinor: subscriptions.acceptedSetupFeeMinor,
+        setupFeeInvoiceId: subscriptions.setupFeeInvoiceId,
         currentPeriodStart: subscriptions.currentPeriodStart,
         currentPeriodEnd: subscriptions.currentPeriodEnd,
         cancelledAt: subscriptions.cancelledAt,

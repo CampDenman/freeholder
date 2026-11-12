@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: freeze new seller agreements before any setup, invoice or access.
 import { createHash } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { getMerchantCollectionConfiguration } from "@/modules/invoicing/merchant-collection";
@@ -12,7 +12,7 @@ import { subscriptionMerchantScope, type subscriptionTaxDestination } from "./me
 import type { SubscriptionMarketPolicy } from "./market-policy";
 
 const profileReceipt = z.object({ profileId: z.uuid(), profileVersion: z.number().int().positive(), liability: z.enum(["platform", "seller"]) });
-export const merchantSubscriptionUndo = z.object({ movedIds: z.array(z.uuid()).max(5000), originalEvidence: z.array(z.object({ kind: z.enum(["scope", "cash", "cash_observation", "schedule_resource", "schedule_operation"]), id: z.uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) })).max(5000) });
+export const merchantSubscriptionUndo = z.object({ movedIds: z.array(z.uuid()).max(5000), originalEvidence: z.array(z.object({ kind: z.enum(["scope", "cash", "cash_observation", "schedule_resource", "schedule_operation", "setup_fee"]), id: z.uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) })).max(5000) });
 
 /** Store bounded fingerprints rather than personal destinations in merge history. */
 export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[]) {
@@ -41,6 +41,12 @@ export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[])
     .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderScheduleOperations.id).limit(5001 - evidence.length);
   if (operations.length + evidence.length > 5000) return { evidence: [], overflow: true };
   evidence.push(...operations.map(row => fingerprint(row, "schedule_operation")));
+  const setupFees = await tx.select({ id: subscriptions.id,
+    material: sql<string>`jsonb_build_object('acceptedSetupFeeMinor',${subscriptions.acceptedSetupFeeMinor},'setupFeeInvoiceId',${subscriptions.setupFeeInvoiceId})::text` })
+    .from(subscriptions).where(and(inArray(subscriptions.contactId, contactIds), isNotNull(subscriptions.acceptedSetupFeeMinor)))
+    .orderBy(subscriptions.id).limit(5001 - evidence.length);
+  if (setupFees.length + evidence.length > 5000) return { evidence: [], overflow: true };
+  evidence.push(...setupFees.map(row => fingerprint(row, "setup_fee")));
   return { evidence, overflow: false };
 }
 

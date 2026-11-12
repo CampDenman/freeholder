@@ -157,6 +157,10 @@ export const subscriptions = pgTable(
      * standing agreement about a price, so it holds its currency the same way.
      */
     currency: text("currency").notNull(),
+    /** NULL is an unknown historical obligation; never copy a later plan fee. */
+    acceptedSetupFeeMinor: bigint("accepted_setup_fee_minor", { mode: "number" }),
+    /** The first actual invoice discharges this one-time billing obligation. */
+    setupFeeInvoiceId: uuid("setup_fee_invoice_id").references(() => invoices.id, { onDelete: "restrict" }),
     /** Copied from the plan, because a plan can be edited and this cannot. */
     billingMode: text("billing_mode", { enum: BILLING_MODES }).notNull(),
     /** Whose schedule this is, when billing mode is `provider`. */
@@ -216,6 +220,8 @@ export const subscriptions = pgTable(
   },
   (t) => [
     check("subscriptions_merchant_scope_version", sql`${t.merchantScopeVersion} in (0,1)`),
+    check("subscriptions_accepted_setup_fee", sql`${t.acceptedSetupFeeMinor} is null or ${t.acceptedSetupFeeMinor} between 0 and 9007199254740991`),
+    check("subscriptions_setup_fee_invoice", sql`${t.setupFeeInvoiceId} is null or ${t.acceptedSetupFeeMinor} is not null`),
     uniqueIndex("subscriptions_public_request_idx").on(t.contactId, t.publicRequestKey).where(sql`${t.publicRequestKey} is not null`),
     index("subscriptions_signup_idx").on(t.signupPending, t.signupInvoiceId),
     index("subscriptions_contact_idx").on(t.contactId),

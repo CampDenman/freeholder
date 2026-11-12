@@ -9726,8 +9726,12 @@ customer has one secure, comprehensible home for the relationship.
   worst outcome available here.
   Sixteen tests in `tests/modules/loyalty-rewards.test.ts`; the C9.11 suite
   passes unchanged. Changeset `loyalty-tiers-rewards.md`. **F04** `/admin/loyalty` tiers/rewards. **F05** `loyalty.saveTier`/`saveReward`/`redeem`/`reevaluateTier`/`tiers`/`rewards` at `/api/v1/loyalty.*`, MCP `loyalty_*`. **F07** `tests/modules/loyalty-rewards.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/loyalty-rewards.test.ts` is the composition proof.)
-- [x] **C9.13** Build plans, the subscription lifecycle and its events, trials,
+- [ ] **C9.13** Build plans, the subscription lifecycle and its events, trials,
   `manual` billing, pause/cancel and portal self-service.
+  (Reopened 2026-11-12: an actual no-card trial with a 500-minor-unit
+  setup fee raised its first renewal for 2000 rather than 2500. The narrow
+  accepted-fee snapshot and first-invoice witness repair awaits composed
+  schema and native acceptance; historical unknown fees must not be backfilled.)
   (Split under §43.17.1: the original line carried seven capabilities, and
   three of them turn on something the platform does not have yet. **C9.33**
   takes the two automatic billing modes and proration. §4.15 wants `platform`
