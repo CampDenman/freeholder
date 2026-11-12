@@ -13558,6 +13558,13 @@ whatever is best for the people using the site.
   version0 historical policies and no invented allocations. Evidence remains
   `deploy/merchant-invoice-portions-2026-11-11.md`; full80 routing/tax/human
   integration and actual acceptance remain required before this item closes.
+  The tax increment binds deliberate site/seller liability and a versioned
+  original merchant profile to each party's quote before issue. Site-only
+  registrations and exemptions must never become a seller's configuration.
+  Mixed-party freight and shipping tax use exact original per-party receipts;
+  missing or ambiguous ownership refuses new collection. Profile ownership,
+  merge/undo, privacy/holds and all human/API surfaces remain required. This
+  source work is under implementation and supplies no tax or live acceptance.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query
