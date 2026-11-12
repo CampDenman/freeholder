@@ -65,3 +65,16 @@ native order/booking/agreement and privacy/hold/merge controls, owner/member and
 buyer flows in all four locales, SDK and production browser qualification,
 original provider schedule quiescence/amendment and actual enabled-account
 payment acceptance. Existing source repair evidence remains preserved.
+
+Owner/member editor source now exists at `/admin/invoices/tax/business` and
+`/portal/payouts/tax`, linked from the existing tax studio and payouts page.
+Both use the actual query/save services and actor permissions. The forms expose
+the business origin, explicit collecting/monitoring policies, exact declared
+threshold currencies and public site invoice details. Jurisdiction selection
+keeps original profile ownership private. The parser groups only identical
+explicit rate declarations and rejects missing currencies, unsupported amount
+precision, exponent notation and oversized form bodies. All four locale
+catalogs include the editor and meaningful retention labels. Full types,
+focused lint and 74 form/translation/audit/registry source controls pass. These
+screens still need the assembled80 native and production browser qualification;
+source forms do not provide human or provider sign-off.

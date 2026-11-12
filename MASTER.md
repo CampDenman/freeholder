@@ -13604,6 +13604,13 @@ whatever is best for the people using the site.
   upgrade or native commercial acceptance. All human flows, complete billing
   integration, populated upgrade and actual account qualification remain
   required; see `deploy/merchant-tax-source-2026-11-12.md`.
+  Owner/member tax editor source is now linked at
+  `/admin/invoices/tax/business` and `/portal/payouts/tax`, through the same
+  actor-scoped query/save services as the API. All four locale catalogs,
+  explicit rate ownership, exact currency parsing and retention labels are
+  present; full types/lint and74 source form/i18n/audit/registry controls pass.
+  These screens remain unqualified in the assembled80 native/production
+  journeys. C12.38 and all remaining acceptance requirements stay open.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query

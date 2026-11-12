@@ -70,6 +70,7 @@ export default async function TaxStudioPage({
           {t("tax.title")}
         </h1>
         <p className="mt-1 max-w-prose text-sm text-ink-muted">{t("tax.intro")}</p>
+        <a className="mt-3 inline-block text-sm underline" href="/admin/invoices/tax/business">{t("merchantTax.siteTitle")}</a>
       </div>
       {errorCode ? (
         <Callout tone="danger" icon={<WarningCircle size={17} weight="fill" />}>
