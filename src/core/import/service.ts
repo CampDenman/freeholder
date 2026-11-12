@@ -50,7 +50,7 @@ import { safeImportHref } from "./content-links";
 import { genericPreview, genericPlanSchema, parseGenericHtml, stageGenericPages } from "./generic-plan";
 import { approvedMediaOrigins, approvedMediaOriginsSchema, allowedMediaOrigins } from "./media-origins";
 import { parseGenericFeed } from "./generic-feed";
-import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
+import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun, sameRetainedOriginal } from "./retained-source";
 import importMediaReceiptServices, { bindImportMediaBytes, claimImportMedia } from "./media-receipts";
 import { assertImportBatchAccess, isPrivateImportBatch, callImportService, currentImportBatch, importBatchTargets, importBatchSharedMedia, importBatchSourceOwner, lockImportBatchParent, recordImportBatchTarget, recordImportBatchMedia } from "./batch-context";
 import graphBatchServices, { advanceGraphCommit } from "./graph-batches";
@@ -530,7 +530,7 @@ async function archiveCommitSource(run: typeof importRuns.$inferSelect, ctx: Ser
   const batch = currentImportBatch(run.id);
   const parent = await importBatchSourceOwner(ctx, run);
   const active = parent && retainedSourceFromRun(parent);
-  if (!binding.success || !active || active.runId !== (batch?.rootId ?? run.id) || archivePreviewDigest(active) !== archivePreviewDigest(binding.data.source) || binding.data.previewDigest !== archivePreviewDigest(run.preview)) throw new ServiceError("conflict", "The archive preview no longer matches its retained private source.");
+  if (!binding.success || !active || active.runId !== (batch?.rootId ?? run.id) || !(batch ? sameRetainedOriginal(active, binding.data.source) : archivePreviewDigest(active) === archivePreviewDigest(binding.data.source)) || binding.data.previewDigest !== archivePreviewDigest(run.preview)) throw new ServiceError("conflict", "The archive preview no longer matches its retained private source.");
   const completedKeys = [...mediaRecordsFrom(run.checkpoint), ...await importBatchSharedMedia(ctx)].filter(record => record.assetId).map(record => record.key);
   if (batch?.kind === "media") {
     if (plan.media.length !== 1) throw new ServiceError("conflict", "Restore one original archive file in its bounded graph phase.");

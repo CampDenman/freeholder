@@ -8,6 +8,7 @@ import { importRuns } from "@/core/plugins/schema";
 import { assets } from "@/core/media/schema";
 import { defineService, permits, ServiceError, type ServiceContext } from "@/core/service";
 import { archivePreviewDigest } from "./archive-plan";
+import { retainedImportSourceSchema, retainedSourceFromRun, sameRetainedOriginal } from "./retained-source";
 import { assertNoPendingSourceUpload } from "./source-lifecycle";
 import { currentImportBatch, importBatchSourceOwner, lockImportBatchParent, bindImportBatchMedia, recordImportBatchMedia } from "./batch-context";
 import { assertCurrentImportAuthority } from "./authority";
@@ -35,8 +36,8 @@ async function snapshot(ctx: ServiceContext, run: Run, witness: string): Promise
   const preview = object(run.preview), checkpoint = object(run.checkpoint);
   if (preview.sourceFormat === "static-archive") {
     const owner = await importBatchSourceOwner(ctx, run);
-    const bound = object(checkpoint.archiveSource), source = object(bound.source), retained = object(object(owner.checkpoint).retainedSource);
-    if (bound.previewDigest !== witness || source.runId !== owner.id || (run.status === "previewed" && (retained.runId !== owner.id || retained.uploadId !== source.uploadId || retained.revision !== source.revision))) throw new ServiceError("conflict", "The archive preview has no matching private source.");
+    const bound = object(checkpoint.archiveSource), source = retainedImportSourceSchema.safeParse(bound.source), retained = retainedSourceFromRun(owner);
+    if (bound.previewDigest !== witness || !source.success || source.data.runId !== owner.id || (run.status === "previewed" && (!retained || (currentImportBatch(run.id) ? !sameRetainedOriginal(retained, source.data) : retained.uploadId !== source.data.uploadId || retained.revision !== source.data.revision)))) throw new ServiceError("conflict", "The archive preview has no matching private source.");
   }
 }
 function planned(run: Run, key: string) {

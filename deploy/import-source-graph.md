@@ -477,3 +477,20 @@ expectation failure above remains a fixture-policy diagnostic. Production ZIP
 artifact/browser, cancellation/privacy/hold/namespace controls and durable live
 crawl continuation remain required. No migration 81, C3.47 completion, stable
 readiness, permanent byte erasure or deployed cutover is claimed.
+
+
+The prepared-private-child boundary before control genuinely failed on unchanged
+source `de2f214e` in 10.91 seconds. After actual 501-file ZIP indexing and accepted
+private media preview, it refused direct child access, verified an identical
+replacement upload and proved that the stored child checkpoint was unchanged.
+Resuming through the actual root then refused the historical physical descriptor
+instead of using the newly verified identical original. The process exited and
+its owned normal 0–78 database had no nonidle backends before handoff. This is a
+resume defect, not evidence of a cross-owner read or overwritten original.
+
+The source repair keeps the historical child descriptor intact and compares its
+original root, revision, byte geometry and complete chunk digests to the active
+parent's retained source only after the exact parent service context has passed
+its existing authority/lease/batch guards. Reads still use the active parent's
+verified current physical locator and its namespace/expiry checks. Ordinary
+non-graph archive binding remains exact. The native after control is not yet run.
