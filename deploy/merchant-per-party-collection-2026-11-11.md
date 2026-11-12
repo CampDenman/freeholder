@@ -248,3 +248,31 @@ receipt IDs have unique payment bindings. No schema80 SQL or native recovery
 case has been applied yet. Saved-method dispatch/recovery, full per-party
 settlement and composed lifecycle/source/browser acceptance are still active
 completion work, not new stable deferrals.
+
+### Current combined source candidate, 2026-11-12
+
+The financial source has been composed onto the actual migration 0–79 source
+checkpoint `eba0220f`; migrations 75–79 and their existing journal entries are
+preserved. The earlier SQL diagnostic used normal migrations 0–77 followed by
+explicit unpublished fragments and passed. That result did not qualify
+migration 79, a contiguous migration 80, or any native payment service.
+
+The isolated candidate now assembles migration 80 from the owned tax,
+subscription scope, subscription lifecycle, order and payment fragments with
+`scripts/assemble-merchant-schema80.mjs`, and appends its local journal entry.
+This is unpublished test source. New provider schedules remain guarded and
+the seller-as-merchant model remains unavailable while its lifecycle,
+settlement and refund recovery are completed. Changes to an owned fragment
+require regenerating the assembled migration before testing. Old warm tax
+readers and already admitted provider calls must actually stop and drain;
+no SQL trigger is claimed to intercept an old SELECT or cancel remote work.
+
+Both financial webhook gateways now forward the authenticated subscription
+scope lookup. Only the payment adapter may invoke that lookup after raw-byte
+signature and timestamp verification. The registry preserves the actual
+platform, original charge account and frozen protocol; tagged new schedule
+feedback refuses missing source integration. The independent cash evidence
+phase attempts every authenticated event before returning an application
+error, so one policy mismatch does not hide another positive observation.
+Six focused no-database controls and the full TypeScript check pass for this
+source increment. Contiguous SQL and native source qualification are pending.

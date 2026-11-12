@@ -561,6 +561,13 @@
       "when": 1793310000059,
       "tag": "0079_form_original_lead_copies",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1793310000060,
+      "tag": "0080_merchant_per_party_collection",
+      "breakpoints": true
     }
   ]
 }
