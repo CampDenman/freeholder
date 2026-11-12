@@ -6412,6 +6412,19 @@ deployments are portable, testable and incapable of silently forking the truth.
   This splits a required delivery portion from C3.22; both remain open until
   their complete source and acceptance criteria pass. Migration 73 follows
   merged mail recovery 72 in the contiguous journal.
+  Original-hold snapshot source increment 2026-11-12: an actual new HTTP-crawl
+  control recorded a pending reader hold but cleanup deleted its private
+  original because membership was only captured at fulfillment. A separate
+  optional non-destructive privacy-source callback now composes original
+  membership capture with the actual hold upsert, including inherited
+  scopes and before identity verification. Updates receive the original
+  insert identity; existing destructive retain callbacks are not invoked.
+  FullNode22 types/focused lint and15 private/schema controls pass. Three
+  actual normal79 atomic service controls pass4.47s/3.97s/4.05s. Whole lint,
+  licensing, changelog, plan, playground and all44 source contracts pass
+  (384 controls,26 skips). Normalized crawl-generation integration and its
+  held-byte/lifecycle acceptance remain separate requirements. See
+  `deploy/privacy-original-hold-snapshot-2026-11-12.md`.
   *(Update 2026-11-11: local WXR qualification now includes an actual 501-page
   publication/rollback with two independent indexing processes, identical-source
   restore after a committed batch, global media receipt recovery and nested
