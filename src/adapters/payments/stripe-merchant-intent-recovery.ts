@@ -38,7 +38,10 @@ function evidence(request: MerchantIntentRecoveryRequest, intent: Record<string,
   const positive = intent.status === "succeeded" || amountMinor > 0;
   return { providerRef, ...merchantIntentEvidence(request, intent), amountMinor, currency,
     status: positive ? "succeeded" : intent.status === "canceled" ? "failed" : "pending",
-    customerChargeVerified: positive && originalOwner(request, intent),
+    // Captured money is retained above even while this original intent can
+    // still collect more. Only its succeeded protocol state may release the
+    // ordinary paid projection and the next merchant portion.
+    customerChargeVerified: intent.status === "succeeded" && originalOwner(request, intent),
     ...(!originalOwner(request, intent) || intent.status !== "succeeded" ? { merchantRouteVerified: false, merchantSettlementVerified: false } : {}),
     ...(typeof intent.latest_charge === "string" ? { providerChargeRef: intent.latest_charge } : {}) };
 }

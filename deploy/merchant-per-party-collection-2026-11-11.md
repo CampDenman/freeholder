@@ -297,3 +297,13 @@ kept separately; their SQL evidence is not attributed to this changed schema.
 The actual checkout fixture uses real member/catalog/tax/quote/issue services
 with a test payment edge, and its direct/destination mixed-cart cases do not
 constitute real provider-account acceptance.
+
+A follow-up aligns saved-card recovery with the existing inspection boundary:
+positive captured money on an unfinished authorization is retained but does
+not project the ordinary payment as complete, even if that captured amount
+happens to equal the local request. The new-source HTTP control covers that
+case. Stripe documents that a partially captured PaymentIntent can remain in
+`requires_capture` with money still authorized until final capture or release
+([Stripe multicapture](https://docs.stripe.com/payments/multicapture?platform=web&ui=elements)).
+This is a defensive source contract; no claim is made that the current
+application requests multicapture or that this was an unchanged-main defect.

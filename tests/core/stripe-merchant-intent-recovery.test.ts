@@ -66,9 +66,14 @@ describe("original saved-card PaymentIntent recovery (C12.38)", () => {
   });
   it("retains partial captured money while leaving its unfinished authorization unretired", async () => {
     const observed = vi.fn(async () => undefined), p = provider(() => intent({ status: "requires_capture", amount_received: 400 }));
-    expect(await p.retire({ ...original, paymentRef: "pi_original", onPaymentObserved: observed })).toMatchObject({ state: "paid", evidence: { amountMinor: 400, merchantRouteVerified: false, merchantSettlementVerified: false } });
+    expect(await p.retire({ ...original, paymentRef: "pi_original", onPaymentObserved: observed })).toMatchObject({ state: "paid", evidence: { amountMinor: 400, customerChargeVerified: false, merchantRouteVerified: false, merchantSettlementVerified: false } });
     expect(observed).toHaveBeenCalledOnce();
     expect(p.fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+  it("does not project a still-open authorization as complete even when its captured amount equals this invoice attempt", async () => {
+    const observed = vi.fn(async () => undefined), p = provider(() => intent({ status: "requires_capture", amount: 1600, amount_received: original.amountMinor, amount_capturable: 400 }));
+    expect(await p.recover({ ...original, paymentRef: "pi_original", onPaymentObserved: observed })).toMatchObject({ state: "paid", evidence: { amountMinor: original.amountMinor, customerChargeVerified: false } });
+    expect(observed).toHaveBeenCalledWith(expect.objectContaining({ status: "succeeded", amountMinor: original.amountMinor, customerChargeVerified: false }));
   });
   it("commits positive page evidence before a later page fails", async () => {
     const observed = vi.fn(async () => undefined), p = provider(url => url.searchParams.has("starting_after")
