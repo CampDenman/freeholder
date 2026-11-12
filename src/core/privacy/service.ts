@@ -32,6 +32,7 @@ import {
 } from "@/core/contacts/service";
 import { db } from "@/core/db";
 import {lockContactIdentity} from "@/core/contacts/identity-lock";
+import {privacyRetentionSourceSnapshots} from "./retention-schema";
 import {contactPrivacyIdentity,contactPrivacyHistory,contactHistoryOwnership} from "./contact-identity";
 import { auditLog } from "@/core/events/schema";
 import { enqueueJob } from "@/core/jobs";
@@ -1402,7 +1403,7 @@ registerContactPrivacySource({
 
 registerContactPrivacySource({
   scope: "privacy.records",
-  tables: ["consent_records", "data_requests"],
+  tables: ["consent_records", "data_requests", "privacy_retention_source_snapshots", "privacy_retention_source_members"],
   exportData: async (tx, contactId) => {
     const requests = await tx
       .select()
@@ -1436,6 +1437,10 @@ registerContactPrivacySource({
         .orderBy(asc(consentRecords.occurredAt)),
       requests,
       artifacts,
+      retentionSourceSnapshots: requests.length ? await tx.select({ exceptionId: privacyRetentionSourceSnapshots.exceptionId, sourceScope: privacyRetentionSourceSnapshots.sourceScope,
+        captureVersion: privacyRetentionSourceSnapshots.captureVersion, capturedAt: privacyRetentionSourceSnapshots.capturedAt }).from(privacyRetentionSourceSnapshots)
+        .innerJoin(privacyRetentionExceptions, eq(privacyRetentionExceptions.id, privacyRetentionSourceSnapshots.exceptionId))
+        .where(inArray(privacyRetentionExceptions.dataRequestId, requests.map(request => request.id))) : [],
     };
   },
   erase: async (tx, contactId, context) => {

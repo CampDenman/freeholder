@@ -172,6 +172,7 @@ export {
   privacyRetentionExceptions,
   mediaConsents,
 } from "@/core/privacy/schema";
+export { privacyRetentionSourceSnapshots, privacyRetentionSourceMembers } from "@/core/privacy/retention-schema";
 export {
   businessLocations,
   openingHours,

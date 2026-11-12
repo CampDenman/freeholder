@@ -6380,6 +6380,15 @@ deployments are portable, testable and incapable of silently forking the truth.
   This splits a required delivery portion from C3.22; both remain open until
   their complete source and acceptance criteria pass. Migration 73 follows
   merged mail recovery 72 in the contiguous journal.
+  Canonical original-retention draft 2026-11-12: a second actual control on
+  protected main reproduced the same pre-verification hold gap for uploaded
+  WXR bytes. New unpublished80 capture receipts and immutable source/generation
+  members distinguish known empty from missing history. Checkpoint witnesses
+  become compatibility projections; shared cleanup rechecks ownership inside
+  actual physical admission, with SQL fences for older workers. Domain wiring,
+  source/SQL qualification, a new normal-v8 database and actual unchanged
+  legacy AFTER/boundary controls remain pending. See
+  `deploy/privacy-canonical-retention-source-2026-11-12.md`.
   Original-hold snapshot source draft 2026-11-12: an actual new HTTP-crawl
   control recorded a pending reader hold but cleanup deleted its private
   original because membership was only captured at fulfillment. A separate

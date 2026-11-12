@@ -47,6 +47,7 @@ export async function discardUnwrittenObjectReservation(key:string):Promise<bool
  if(await pendingObjectIsOwned(key))return false;
  return db().transaction(async tx=>{
   await lockContactIdentityForRead(tx);await lockObject(tx,key);await allowMediaReceiptWrites(tx);
+  if(await pendingObjectIsOwned(key,new Date(),tx))return false;
   const[object]=await tx.select().from(mediaObjects).where(eq(mediaObjects.key,key)).limit(1).for("update");
   if(!object||object.state!=="pending"||(await records(tx,key)).length)return false;
   const active=await tx.select({id:mediaUploads.id}).from(mediaUploads).where(and(eq(mediaUploads.storageKey,key),inArray(mediaUploads.state,["created","uploading","uploaded","processing"]),gt(mediaUploads.expiresAt,new Date()))).limit(1);
@@ -188,6 +189,7 @@ export async function deleteWithReceipt(key: string,captured?:CapturedStorage): 
     await lockContactIdentityForRead(tx);
     await lockObject(tx, key);
     await allowMediaReceiptWrites(tx);
+    if (await pendingObjectIsOwned(key, new Date(), tx)) return null;
     const [object] = await tx.select().from(mediaObjects).where(eq(mediaObjects.key, key)).limit(1).for("update");
     const history = await records(tx, key);
     const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.keyDigest,objectKeyDigest(key)),isNull(mediaMultipartResources.retiredAt))).limit(1);
