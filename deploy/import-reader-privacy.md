@@ -351,3 +351,16 @@ seconds. The runner variant `--committed-private-hold` preserves this case.
 An erasure-status check alone does not protect every active hold. The original
 metadata assertions remain unchanged and the repair must respect the canonical
 active hold scopes, including before verification. No stable closure is claimed.
+
+
+After the local disk event, SDK/inventory attempts were invalidated before any
+case executed because Postgres reported recovery mode (`57P03`). Once actual
+recovery and its checkpoint completed, live SDK regeneration passed eight
+controls in 3.59 seconds and changed only the six catalog lines for the new
+human-only batch operation. Both exact contact-FK inventories passed in 36.58
+seconds. The batch audit now stores only its import-run ID; each actual nested
+single-reader service retains its complete source-coordinate/contact-subject
+audit. The exact atomic rollback/audit control passed in 7.29 seconds: a stale
+later original leaves zero personal success audits, while two valid choices
+produce two real personal audits and an ID-only summary. The pending-hold repair
+and current production browser remain unqualified.

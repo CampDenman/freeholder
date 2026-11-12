@@ -89,7 +89,7 @@ test.describe("original reader ownership review (C2.29/C3.46)", () => {
       expect(audit).toMatchObject({ actor: "user:00000000-0000-4000-8000-000000000001", subjectType: "contact", subjectId: original.id });
       const [batchAudit] = await db().select().from(auditLog).where(eq(auditLog.action, "imports.resolveReaderOwnershipBatch"));
       expect(batchAudit).toMatchObject({ actor: "user:00000000-0000-4000-8000-000000000001", subjectType: "import_run", subjectId: run.id });
-      expect(JSON.stringify(batchAudit?.diff)).not.toContain(EMAIL);
+      expect(batchAudit?.diff).toEqual({ id: run.id });
       expect(JSON.stringify(audit?.diff)).not.toContain(EMAIL); expect(JSON.stringify(audit?.diff)).not.toContain("Original fictional reader evidence.");
     } finally { await context.close(); }
   });
