@@ -13830,8 +13830,13 @@ whatever is best for the people using the site.
   canonical target400 and the intact customer refund/credit1200. The populated
   before database and eight original money-table hashes are preserved separately.
   A minimal source correction checks dispatch eligibility before the terminal
-  idempotent return. No SQL or old money changes; source/native AFTER proof is
-  pending. C12.38 stays open. See
+  idempotent return. Full Node22 types/changed-source lint/actual generated
+  release note/three changelog controls/metadata gates pass. The byte-identical
+  original AFTER passed in6.609s on exact72ac85e8/SQL958: one original key,
+  accepted100 resource and bound observation, customer refund/credit1200 intact,
+  all caller/database work drained. The populated BEFORE clone remains unchanged;
+  its dedicated review and whole current-source integration are still open.
+  No SQL or old money changes. C12.38 stays open. See
   `deploy/merchant-fee-stale-dispatch-2026-11-12.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile

@@ -37,7 +37,19 @@ reserved-to-dispatching transition. Terminal reconciliation stays idempotent,
 while a paused dispatch caller receives the existing conflict before provider I/O.
 No SQL, registered service, key, original money row or accepted history changes.
 
-Full source qualification and the byte-identical original native AFTER control
-remain pending. Historical excess money requires review; this source correction
-does not rewrite or automatically recover it. Full C12.38, provider acceptance,
-independent review and stable sign-off remain open.
+The repair at `4fda521b` passed full Node22 typechecking, changed-source lint,
+actual614-note generation, three changelog controls and license/plan/note gates.
+The byte-identical original fixture (SHA256
+`8b10169f85c3992aec0d8397dc8a0d635ffd38d0a07c134ef8777321b3c7625b`)
+then passed in6.609s on exact `72ac85e8` / normal v9 / unchanged SQL958. The
+owned backend accepted only one100-cent resource under the original key even
+after its modeled expiry; independent readback found one accepted operation,
+one bound physical observation and the intact customer refund/credit1200.
+All caller work and database clients drained. Logs and ledger are preserved as
+`/tmp/freeholder-stale-fee-dispatch-after-*`; the actual populated BEFORE clone
+remains unchanged and has not been migrated or used for this resettable AFTER.
+
+Historical excess money requires review; this source correction does not
+rewrite or automatically recover it. A dedicated review of the old two-resource
+snapshot and whole current-source integration remain outstanding. Full C12.38,
+provider acceptance, independent review and stable sign-off remain open.
