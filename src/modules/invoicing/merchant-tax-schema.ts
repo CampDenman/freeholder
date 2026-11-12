@@ -69,6 +69,8 @@ export const invoiceMerchantTaxQuotes = pgTable("invoice_merchant_tax_quotes", {
   liability: text("liability",{enum:["platform","seller"]}).notNull(),
   evidenceDigest: text("evidence_digest").notNull(),
   occurredAt: timestamp("occurred_at",{withTimezone:true}).notNull(),
+  /** Original selected jurisdiction, including zero-tax monitoring sales. */
+  zoneId: uuid("zone_id"),
   shippingMinor: bigint("shipping_minor",{mode:"number"}).notNull(),
   shippingTaxMinor: bigint("shipping_tax_minor",{mode:"number"}).notNull(),
   taxMinor: bigint("tax_minor",{mode:"number"}).notNull(),
@@ -76,6 +78,7 @@ export const invoiceMerchantTaxQuotes = pgTable("invoice_merchant_tax_quotes", {
 },t=>[
   uniqueIndex("invoice_merchant_tax_quotes_party_idx").on(t.invoiceId,t.sellerKey),
   index("invoice_merchant_tax_quotes_profile_idx").on(t.profileId),
+  index("invoice_merchant_tax_quotes_threshold_idx").on(t.profileId,t.zoneId,t.occurredAt),
   foreignKey({name:"invoice_merchant_tax_quotes_version_fk",columns:[t.profileId,t.profileVersion],foreignColumns:[merchantTaxProfileVersions.profileId,merchantTaxProfileVersions.version]}).onDelete("restrict"),
   check("invoice_merchant_tax_quotes_owner",sql`(${t.sellerUserId} is null and ${t.sellerKey}='site') or (${t.sellerUserId} is not null and ${t.sellerKey}='seller:'||${t.sellerUserId}::text)`),
   check("invoice_merchant_tax_quotes_amounts",sql`${t.shippingMinor} between 0 and 9007199254740991 and ${t.shippingTaxMinor} between 0 and 9007199254740991 and ${t.taxMinor} between 0 and 9007199254740991`),

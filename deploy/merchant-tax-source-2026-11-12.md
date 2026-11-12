@@ -93,3 +93,26 @@ rechecks holds and provider quiescence, then minimizes the profile and settles
 that job in the same transaction. A corrupt artifact commits shared recovery
 state before the worker reports failure. Full types and focused lint pass;
 intact/corrupt/hold/provider native controls remain open on assembled80.
+
+The assembled source candidate now applies the ordinary journal0–80 to a
+fresh disposable database (81 entries). Six distinct actual native controls
+pass: own-profile/private-service permissions; separate business registrations
+and anonymous/nonexempt consent; invoice TaxLine/freight/registration snapshots;
+source-ownership/coverage rollback; verified-erasure collection refusal; and
+private export with contact merge/undo. The invoice fixture uses an explicit
+trusted test-only manual source, so it does not supply checkout or provider
+acceptance. The unheld erasure control currently refuses because the real
+subscriptions.prepareMerchantTaxErasure service is missing from the combined
+registry; that service and the held/after-release control remain required.
+Reports: /tmp/freeholder-tax80-native-v2.json, -v3.json and -v5.json. Earlier
+incorrect zero-rate, source-enum and missing-receipt fixture expectations are
+preserved in their failed reports and corrected without weakening assertions.
+
+A further unpublished source increment freezes the selected original tax-zone
+ID alongside each quote, including zero-tax monitoring sales, and checks it
+against the original immutable profile version. This supports per-business
+threshold reporting without guessing from current jurisdictions or rate names.
+Full types and focused lint pass. This changes the unpublished80 fragment; it
+is not applied to the qualified original v2 database or its SQL hash, and
+requires new ordinary migration/invoice qualification. Threshold reporting and
+merchant-owned customer exemption workflows remain unfinished.

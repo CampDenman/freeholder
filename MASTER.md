@@ -13624,6 +13624,13 @@ whatever is best for the people using the site.
   present; full types/lint and74 source form/i18n/audit/registry controls pass.
   These screens remain unqualified in the assembled80 native/production
   journeys. C12.38 and all remaining acceptance requirements stay open.
+  The combined candidate now passes a fresh ordinary0–80 migration (81
+  entries) and six distinct native tax/ownership/invoice/export/merge controls.
+  Unheld erasure correctly refuses the missing subscription tax-erasure safety
+  service; its integration and hold-release proof remain required. A later
+  unpublished increment adds original selected-zone provenance for threshold
+  reporting, with types/lint only; it has not been applied to that candidate.
+  Per-business threshold and customer-exemption workflows remain unfinished.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query

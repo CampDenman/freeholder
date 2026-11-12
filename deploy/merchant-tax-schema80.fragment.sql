@@ -45,6 +45,7 @@ CREATE TABLE invoice_merchant_tax_quotes (
  seller_user_id uuid, seller_key text NOT NULL,
  profile_id uuid NOT NULL REFERENCES merchant_tax_profiles(id) ON DELETE RESTRICT, profile_version integer NOT NULL CHECK(profile_version>0),
  liability text NOT NULL CHECK(liability IN ('platform','seller')), evidence_digest text NOT NULL CHECK(evidence_digest ~ '^[a-f0-9]{64}$'),occurred_at timestamptz NOT NULL,
+ zone_id uuid,
  shipping_minor bigint NOT NULL CHECK(shipping_minor BETWEEN 0 AND 9007199254740991),
  shipping_tax_minor bigint NOT NULL CHECK(shipping_tax_minor BETWEEN 0 AND 9007199254740991),
  tax_minor bigint NOT NULL CHECK(tax_minor BETWEEN 0 AND 9007199254740991), created_at timestamptz NOT NULL DEFAULT now(),
@@ -55,6 +56,8 @@ CREATE TABLE invoice_merchant_tax_quotes (
 CREATE UNIQUE INDEX invoice_merchant_tax_quotes_party_idx ON invoice_merchant_tax_quotes(invoice_id,seller_key);
 --> statement-breakpoint
 CREATE INDEX invoice_merchant_tax_quotes_profile_idx ON invoice_merchant_tax_quotes(profile_id);
+--> statement-breakpoint
+CREATE INDEX invoice_merchant_tax_quotes_threshold_idx ON invoice_merchant_tax_quotes(profile_id,zone_id,occurred_at);
 --> statement-breakpoint
 CREATE TABLE invoice_merchant_tax_quote_lines (
  invoice_line_id uuid PRIMARY KEY REFERENCES invoice_lines(id) ON DELETE CASCADE,
@@ -146,6 +149,8 @@ BEGIN
   SELECT * INTO declaration FROM merchant_tax_profile_versions WHERE profile_id=NEW.profile_id AND version=NEW.profile_version;
   IF business.id IS NULL OR business.state<>'active' OR business.current_version<>NEW.profile_version OR declaration.id IS NULL OR declaration.erased_at IS NOT NULL
    OR business.seller_key<>NEW.seller_key OR declaration.liability<>NEW.liability
+   OR (NEW.zone_id IS NULL AND declaration.collection_status='registered')
+   OR (NEW.zone_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(declaration.rules_snapshot) rule WHERE rule->'zone'->>'id'=NEW.zone_id::text))
    OR NOT EXISTS(SELECT 1 FROM invoices WHERE id=NEW.invoice_id AND status='draft') THEN
    RAISE EXCEPTION 'Invoice tax receipt does not match its original draft and business' USING ERRCODE='23514';
   END IF;
