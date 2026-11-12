@@ -142,7 +142,7 @@ describe("audit log labels", () => {
       .filter(([name, service]) => service.def.kind === "mutation" && needsOwnLine(name))
       .map(([name]) => name)
       .filter((name) => !OWNER_ACTIVITY_LABELS[name]);
-    expect(unmapped).toEqual([]);
+    expect(unmapped, `Missing owner activity labels: ${unmapped.join(", ")}`).toEqual([]);
     for (const name of ["apikeys.create", "auth.login", "invoicing.cancelRefund", "members.resolveDispute", "catalog.removePriceRule", "entitlements.grant"]) {
       expect(needsOwnLine(name), name).toBe(true);
     }

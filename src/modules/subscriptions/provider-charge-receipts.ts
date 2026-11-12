@@ -13,6 +13,7 @@ import { invoices } from "@/modules/invoicing/schema";
 import { subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
 import { subscriptionChargeScope, subscriptionMerchantScope } from "./merchant-scope-contract";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
+import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
 
 const account = z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200);
 const reference = z.string().min(1).max(500);
@@ -92,10 +93,18 @@ export const retainProviderCharge = defineService({
         && input.settlementMerchantAccountId === (original.scope.collectionKind === "destination" ? original.scope.settlementMerchantAccountId : undefined) };
     const observed = { ...facts, ...actualRoute }, observationDigest = createHash("sha256").update(JSON.stringify(observed)).digest("hex");
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_scope_v1','1',true)`);
-    await ctx.tx.insert(subscriptionProviderChargeObservations).values({ ...observed, observationDigest }).onConflictDoNothing();
+    const [newObservation] = await ctx.tx.insert(subscriptionProviderChargeObservations).values({ ...observed, observationDigest }).onConflictDoNothing().returning({ id: subscriptionProviderChargeObservations.id });
     const [observation] = await ctx.tx.select({ id: subscriptionProviderChargeObservations.id }).from(subscriptionProviderChargeObservations)
       .where(and(eq(subscriptionProviderChargeObservations.subscriptionId, original.subscription.id), eq(subscriptionProviderChargeObservations.observationDigest, observationDigest)));
     if (!observation) throw new ServiceError("conflict", "The authenticated original cash observation could not be retained.");
+    if (newObservation) {
+      await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
+      const [resource] = await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId, original.subscription.id)).limit(1).for("update");
+      if (!resource) throw new ServiceError("conflict", "Restore the original resource witness before retaining new authenticated cash.");
+      await ctx.tx.update(subscriptionProviderScheduleResources).set({ evidenceRevision: resource.evidenceRevision + 1, state: "unknown", stoppedProof: null, recoveryPending: true, updatedAt: new Date() })
+        .where(eq(subscriptionProviderScheduleResources.subscriptionId, resource.subscriptionId));
+      await enqueueMerchantScheduleErasureRepair(ctx.tx, { subscriptionId: original.subscription.id, evidenceDigest: observationDigest });
+    }
     const [existing] = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(and(
       eq(subscriptionProviderChargeReceipts.providerPlatformAccountId, original.scope.providerPlatformAccountId),
       sql`${subscriptionProviderChargeReceipts.chargeAccountId} is not distinct from ${original.scope.chargeAccountId}`,

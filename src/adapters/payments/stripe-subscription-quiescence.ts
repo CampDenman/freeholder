@@ -84,7 +84,7 @@ export async function pauseOriginalStripeMerchantSchedule(api: StripeSubscriptio
  * stopping that original resource; it remains separate reconciliation debt.
  * This does not resolve pending invoice items or any earlier invoice/PI.
  * https://docs.stripe.com/api/subscriptions/cancel */
-export async function cancelOriginalStripeMerchantSchedule(api: StripeSubscriptionRead, resource: OriginalStripeMerchantSchedule, input: {
+export async function cancelOriginalStripeMerchantSchedule(api: StripeSubscriptionRead, resource: OriginalStripeMerchantScheduleLocator & { providerCustomerRef?: string }, input: {
   onCancelled: (actual: { providerSubscriptionRef: string; state: "cancelled"; source: "readback" | "delete_ack" }) => Promise<void>;
 }) {
   validate(resource);

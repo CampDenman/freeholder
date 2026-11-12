@@ -127,6 +127,7 @@
   "admin.activity.planSaved": "حُفظت خطة اشتراك",
   "admin.activity.subscriptionRenewed": "جُدّدت اشتراكات",
   "admin.activity.subscriptionBillingUpdated": "حُدّث جدول فوترة اشتراك",
+  "admin.activity.subscriptionRecoveryUpdated": "تم تحديث أعمال استعادة الاشتراك",
   "admin.activity.subscriptionPlanChanged": "غيّر مشترك خطته",
   "admin.activity.subscriptionPaused": "أُوقف اشتراك مؤقتًا",
   "admin.activity.subscriptionResumed": "استؤنف اشتراك",

@@ -129,6 +129,7 @@
   "admin.activity.planSaved": "A subscription plan was saved",
   "admin.activity.subscriptionRenewed": "Subscriptions were renewed",
   "admin.activity.subscriptionBillingUpdated": "A subscription's billing schedule was updated",
+  "admin.activity.subscriptionRecoveryUpdated": "Subscription recovery work was updated",
   "admin.activity.subscriptionPlanChanged": "A subscriber changed plans",
   "admin.activity.subscriptionPaused": "A subscription was paused",
   "admin.activity.subscriptionResumed": "A subscription was resumed",

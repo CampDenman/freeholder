@@ -129,6 +129,7 @@
   "admin.activity.planSaved": "Se guardó un plan de suscripción",
   "admin.activity.subscriptionRenewed": "Se renovaron suscripciones",
   "admin.activity.subscriptionBillingUpdated": "Se actualizó el calendario de cobro de una suscripción",
+  "admin.activity.subscriptionRecoveryUpdated": "Se actualizó la recuperación de una suscripción",
   "admin.activity.subscriptionPlanChanged": "Un suscriptor cambió de plan",
   "admin.activity.subscriptionPaused": "Se pausó una suscripción",
   "admin.activity.subscriptionResumed": "Se reanudó una suscripción",

@@ -11,9 +11,16 @@ import { dataRequests } from "@/core/privacy/schema";
 import { defineService, getService, ServiceError, type ServiceContext } from "@/core/service";
 import { invoiceMerchantTaxQuoteLines, invoiceMerchantTaxQuotes, merchantTaxProfiles } from "@/modules/invoicing/merchant-tax-schema";
 import { invoiceLines, invoices } from "@/modules/invoicing/schema";
+import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agreement-schema";
+import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
+import { paymentAdapter } from "@/adapters/payments";
 import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
-import { scheduleQuiescenceCovers } from "./provider-schedule-proof";
+import { scheduleCallerHasStopped, scheduleKnownResources, scheduleOperationDigest, scheduleQuiescenceCovers } from "./provider-schedule-proof";
 import { subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
+import scheduleCallerServices from "./provider-schedule-callers";
+import scheduleErasureServices from "./provider-schedule-erasure";
+import { claimMerchantScheduleCancellation, flushMerchantScheduleCallerFinishes, merchantScheduleCancellationTargets, observeMerchantScheduleCancellation, performMerchantScheduleCancellation, retainMerchantScheduleCancellation } from "./provider-schedule-callers";
+import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
 
 const JOB = "subscriptions.quiesceMerchantSchedules";
 const jobInput = z.object({ profileId: z.uuid(), requestId: z.uuid(), originalJobId: z.uuid(), cohortId: z.uuid() });
@@ -34,8 +41,21 @@ export async function merchantTaxScheduleState(ctx: ServiceContext, profileId: s
     .leftJoin(subscriptionProviderScheduleResources, eq(subscriptionProviderScheduleResources.subscriptionId, subscriptions.id))
     .where(eq(subscriptionMerchantScopes.taxProfileId, profileId)).orderBy(subscriptions.id).limit(5001);
   if (agreements.length > 5000) return { safe: false, external: true };
-  let external = paymentDebt.hasHistory;
+  const cohorts = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(eq(subscriptionProviderScheduleErasures.profileId, profileId)).limit(5001);
+  if (cohorts.length > 5000) return { safe: false, external: true };
+  const currentAgreementIds = new Set(agreements.map(agreement => agreement.subscription.id));
+  for (const cohort of cohorts) if (!await merchantScheduleCohortInventoryCovers(ctx.tx, cohort, currentAgreementIds)) return { safe: false, external: true };
+  let external = paymentDebt.hasHistory || cohorts.length > 0;
   for (const agreement of agreements) {
+    const routes = await ctx.tx.select().from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.subscriptionId, agreement.subscription.id)).limit(5001);
+    if (routes.length > 5000) return { safe: false, external: true };
+    if (routes.length) external = true;
+    for (const route of routes) {
+      if (route.providerPlatformAccountId !== agreement.scope.providerPlatformAccountId || route.chargeAccountId !== agreement.scope.chargeAccountId
+        || route.recipientAccountId !== agreement.scope.recipientAccountId || route.settlementMerchantAccountId !== agreement.scope.settlementMerchantAccountId) return { safe: false, external: true };
+      const debt = getService("invoicing.merchantPaymentRecoveryDebt");
+      if (!debt || z.object({ pending: z.boolean() }).passthrough().parse(await ctx.callAsSystem(debt, { paymentId: route.paymentId })).pending) return { safe: false, external: true };
+    }
     const operations = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, agreement.subscription.id)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
     const receipts = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId, agreement.subscription.id)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001);
     const observations = await ctx.tx.select().from(subscriptionProviderChargeObservations).where(eq(subscriptionProviderChargeObservations.subscriptionId, agreement.subscription.id)).orderBy(subscriptionProviderChargeObservations.id).limit(5001);
@@ -77,13 +97,6 @@ export async function merchantTaxScheduleState(ctx: ServiceContext, profileId: s
       if (financial.pending) return { safe: false, external };
     }
   }
-  if (!external) {
-    const [originalCohort] = await ctx.tx.select({ id: subscriptionProviderScheduleErasures.id }).from(subscriptionProviderScheduleErasures)
-      .where(eq(subscriptionProviderScheduleErasures.profileId, profileId)).limit(1);
-    // A retained cohort proves there was original external history. A partial
-    // restore cannot turn its missing children into a no-schedules proof.
-    if (originalCohort) return { safe: false, external: true };
-  }
   return { safe: true, external };
 }
 
@@ -110,11 +123,61 @@ export const prepareMerchantTaxErasure = defineService({
       return { pendingJobs: [cohort.jobId] };
     }
     const id = randomUUID(), originalJobId = randomUUID(), jobKey = `merchant-tax-quiescence:${profileId}:${requestId}`;
-    const job = await enqueueJob(ctx.tx, JOB, { profileId, requestId, originalJobId, cohortId: id }, { id: originalJobId, idempotencyKey: jobKey });
+    const originalAgreements = await ctx.tx.select({ id: subscriptionMerchantScopes.subscriptionId }).from(subscriptionMerchantScopes)
+      .where(eq(subscriptionMerchantScopes.taxProfileId, profileId)).orderBy(subscriptionMerchantScopes.subscriptionId).limit(5001);
+    if (originalAgreements.length > 5000) throw new ServiceError("conflict", "The original agreement inventory needs bounded recovery before admitting its erasure task.");
+    const job = await enqueueJob(ctx.tx, JOB, { profileId, requestId, originalJobId, cohortId: id, originalAgreementIds: originalAgreements.map(row => row.id) }, { id: originalJobId, idempotencyKey: jobKey });
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
     await ctx.tx.insert(subscriptionProviderScheduleErasures).values({ id, profileId, requestId, privacyScope: "commerce.merchantTax", originalJobId: job.id, jobId: job.id, jobKey, jobIds: [job.id] });
     ctx.setSubject("dataRequest", requestId);
     return { pendingJobs: [job.id] };
+  },
+});
+
+const stoppedInventory = z.object({ subscriptionId: z.uuid(), resources: z.array(z.object({ providerSubscriptionRef: z.string(),
+  state: z.enum(["paused", "cancelled"]), invoices: z.array(z.object({ providerInvoiceRef: z.string(), state: z.enum(["paid", "void", "draft", "open", "uncollectible"]) })).max(2000) })).max(5000) });
+export const retainMerchantScheduleInventory = defineService({
+  name: "subscriptions.retainMerchantScheduleInventory", summary: "Retain authenticated original stopped-resource inventory without inventing resolution of earlier invoices.",
+  kind: "mutation", permission: "system", external: false, auditInputFields: ["cohortId", "subscriptionId"],
+  input: jobInput.merge(stoppedInventory), output: z.object({ quiesced: z.boolean() }),
+  handler: async (input, ctx) => {
+    await lockContactIdentity(ctx.tx);
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
+    const [cohort] = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(eq(subscriptionProviderScheduleErasures.id, input.cohortId)).limit(1).for("update");
+    if (!cohort || cohort.profileId !== input.profileId || cohort.requestId !== input.requestId || cohort.jobId !== input.originalJobId
+      || !cohort.jobIds.includes(input.originalJobId)) throw new ServiceError("permission", "This original inventory does not belong to the current merchant erasure task.");
+    const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, input.subscriptionId)).limit(1).for("update");
+    const [scope] = await ctx.tx.select().from(subscriptionMerchantScopes).where(eq(subscriptionMerchantScopes.subscriptionId, input.subscriptionId)).limit(1);
+    const [resource] = await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId, input.subscriptionId)).limit(1).for("update");
+    const operations = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, input.subscriptionId))
+      .orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
+    if (!parent || !scope || scope.taxProfileId !== input.profileId || !resource || operations.length > 5000) throw new ServiceError("conflict", "Restore the original agreement before retaining its stopped inventory.");
+    const known = scheduleKnownResources(resource, operations);
+    if (!known || known.size !== input.resources.length || new Set(input.resources.map(value => value.providerSubscriptionRef)).size !== known.size
+      || input.resources.some(value => !known.has(value.providerSubscriptionRef))) return { quiesced: false };
+    await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
+    let updatedOperations = operations;
+    for (const actual of input.resources) {
+      const original = [...updatedOperations].reverse().find(operation => operation.kind === "cancel" && operation.originalRequest.providerSubscriptionRef === actual.providerSubscriptionRef);
+      if (!original) return { quiesced: false };
+      const history = z.array(z.record(z.string(), z.unknown())).max(5000).parse(original.providerObservation.history ?? []), inventoryDigest = merchantTaxDigest(actual);
+      if (!history.some(entry => entry.source === "authenticated_invoice_inventory" && entry.inventoryDigest === inventoryDigest)) {
+        const observation = { ...original.providerObservation, history: [...history, { source: "authenticated_invoice_inventory", inventoryDigest, ...actual }] };
+        await ctx.tx.update(subscriptionProviderScheduleOperations).set({ providerObservation: observation }).where(eq(subscriptionProviderScheduleOperations.id, original.id));
+        updatedOperations = updatedOperations.map(operation => operation.id === original.id ? { ...operation, providerObservation: observation } : operation);
+      }
+    }
+    // Earlier invoices require their own actual PI/cash/application/financial
+    // evidence. This first boundary can settle only a genuinely empty inventory.
+    if (input.resources.some(value => value.invoices.length) || operations.length !== resource.operationRevision
+      || updatedOperations.some((operation, index) => operation.operationRevision !== index + 1 || !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation))) return { quiesced: false };
+    const proof = { operationRevision: resource.operationRevision, evidenceRevision: resource.evidenceRevision,
+      journalDigest: scheduleOperationDigest(updatedOperations), resources: input.resources.map(actual => ({ providerSubscriptionRef: actual.providerSubscriptionRef,
+        providerState: actual.state, invoiceEnumerationDigest: merchantTaxDigest(actual.invoices), invoices: [] })) };
+    await ctx.tx.update(subscriptionProviderScheduleResources).set({ state: "quiesced", stoppedProof: proof, recoveryPending: false, updatedAt: new Date() })
+      .where(eq(subscriptionProviderScheduleResources.subscriptionId, resource.subscriptionId));
+    ctx.setSubject("subscription", parent.id);
+    return { quiesced: true };
   },
 });
 
@@ -152,6 +215,32 @@ export const quiesceMerchantSchedules = defineJob({
     const input = jobInput.parse(data);
     if (context && context.id !== input.originalJobId) throw new ServiceError("conflict", "The running job does not match its durable original task payload.");
     await context?.throwIfCancelled();
+    const targets = await merchantScheduleCancellationTargets.call(input, { kind: "system" });
+    const adapter = paymentAdapter("stripe");
+    for (const target of targets) {
+      await flushMerchantScheduleCallerFinishes(target.subscriptionId);
+      if (target.providerSubscriptionRefs.length && !adapter.cancelMerchantSchedule) throw new ServiceError("conflict", "Restore the original provider cancellation adapter before admitting this task.");
+      for (const providerSubscriptionRef of target.providerSubscriptionRefs) {
+        await context?.throwIfCancelled();
+        const claim = await claimMerchantScheduleCancellation.call({ ...input, subscriptionId: target.subscriptionId, providerSubscriptionRef }, { kind: "system" });
+        if (claim.mode === "dispatch") {
+          await performMerchantScheduleCancellation(claim, target.subscriptionId, () => adapter.cancelMerchantSchedule!({ ...claim.request,
+            onCancelled: actual => retainMerchantScheduleCancellation(claim, actual).then(() => undefined) }));
+        }
+      }
+      if (!target.providerSubscriptionRefs.length) continue;
+      const current = (await merchantScheduleCancellationTargets.call(input, { kind: "system" })).find(value => value.subscriptionId === target.subscriptionId);
+      if (!current?.request.providerCustomerRef || !adapter.inspectMerchantScheduleInvoices) continue;
+      const resources = [];
+      for (const providerSubscriptionRef of current.providerSubscriptionRefs) {
+        await context?.throwIfCancelled();
+        const actual = await adapter.inspectMerchantScheduleInvoices({ ...current.request, providerCustomerRef: current.request.providerCustomerRef, providerSubscriptionRef });
+        const cancellation = [...current.cancellationOperations].reverse().find(value => value.providerSubscriptionRef === providerSubscriptionRef);
+        if (cancellation && actual.state === "cancelled") await observeMerchantScheduleCancellation.call({ operationId: cancellation.operationId, providerSubscriptionRef, source: "readback" }, { kind: "system" });
+        resources.push({ providerSubscriptionRef, state: actual.state, invoices: actual.invoices });
+      }
+      await retainMerchantScheduleInventory.call({ ...input, subscriptionId: target.subscriptionId, resources }, { kind: "system" });
+    }
     const result = await settleMerchantTaxSchedules.call(input, { kind: "system" });
     // Recovery must commit before the queue records an unsuccessful attempt.
     if (!result.settled) throw new ServiceError("conflict", result.recoveryRequired ? "Restore the original merchant erasure artifact before retrying." : "Original provider schedules or financial recovery work remain unresolved.");
@@ -159,4 +248,4 @@ export const quiesceMerchantSchedules = defineJob({
   },
 });
 registerJob(quiesceMerchantSchedules);
-export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules];
+export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices];
