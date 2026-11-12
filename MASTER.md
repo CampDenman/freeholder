@@ -6389,6 +6389,15 @@ deployments are portable, testable and incapable of silently forking the truth.
   source/SQL qualification, a new normal-v8 database and actual unchanged
   legacy AFTER/boundary controls remain pending. See
   `deploy/privacy-canonical-retention-source-2026-11-12.md`.
+  Composed normal80 v8 source qualification 2026-11-12: Node22 full types,
+  changed-source lint and 29 source controls pass across documented finite
+  runs; 24 database controls are explicitly skipped without a database.
+  The stale compatibility inventory was corrected to require the actual80
+  rename, breaking declaration, stop/drain and exact rollback acknowledgement.
+  Canonical release notes are regenerated. SQL SHA256 remains1ac4652c;
+  fresh migration/model parity and actual held-byte/canonical native controls
+  remain pending. No old v7 database or provider acceptance is implied. See
+  `deploy/merchant-collection-v8-source-2026-11-12.md`.
   Original-hold snapshot source draft 2026-11-12: an actual new HTTP-crawl
   control recorded a pending reader hold but cleanup deleted its private
   original because membership was only captured at fulfillment. A separate

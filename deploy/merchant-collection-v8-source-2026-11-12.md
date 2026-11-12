@@ -32,3 +32,24 @@ checks, a NEW ordinary0–80 v8 migration and explicitly selected native control
 remain required. Do not run this source against the old normal-v7 database or
 claim actual provider/cold-runtime/populated-upgrade acceptance from composition.
 The new merchant model remains disabled; C12.38 and the full stable gate stay open.
+
+
+Source qualification of the composed candidate (2026-11-12): full Node22
+TypeScript, changed-source ESLint and changed compatibility-test lint pass.
+Finite source batches supply 29 unique passing controls; 24 database controls
+are explicitly skipped. The first batch preserved a stale compatibility-test
+failure: its inventory admitted renames only for76/79, despite actual80's
+subscription-column rename and explicit breaking-upgrade declaration. The
+correction requires that exact rename, its stop/drain/cold-readiness/exact
+pre-upgrade restore/provider-effects rollback text and the additional original
+retention cleanup stop requirement. It still rejects a compatible declaration.
+Only the failed four-case inventory group and the unrun three release-note
+controls were repeated. Existing passed controls were preserved.
+
+Actual canonical release-note generation and the subsequent three controls
+pass; SQL remains the exact hash above. Logs are
+`/tmp/freeholder-collection80-v8-{types,lint,contracts}-v1.*` and
+`/tmp/freeholder-collection80-v8-{schema,changelog,testlint}-v2.*`.
+A new normal-v8 migration, actual model-to-SQL parity for both new retention
+tables, the unchanged actual legacy hold test, canonical lifecycle controls,
+provider/runtime upgrade and full product acceptance remain unqualified.
