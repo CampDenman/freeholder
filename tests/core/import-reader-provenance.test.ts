@@ -306,4 +306,31 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     expect((await db().select().from(readerOwnershipReceipts))[0]).toMatchObject({ firstRunId: first, contactId: null, state: "erased", retirementRequestId: request.id, createdBy: `user:${OWNER.userId}` });
     expect(await db().select().from(contacts).where(eq(contacts.email, EMAIL))).toHaveLength(0);
   });
+
+  it("does not export an originally unbound historical reader to a later address-holder", async () => {
+    const owner = await verifiedOwner();
+    await stage();
+    const later = (await resolveContact.call({ name: "Later email holder", email: EMAIL }, OWNER)).contact;
+    const request = await createDataRequest.call({ contactId: later.id, request: { kind: "export" } }, owner);
+    await verifyDataRequest.call({ id: request.id, method: "Fictional later address-holder verified" }, owner);
+    const result = await fulfillDataRequest.call({ id: request.id }, owner);
+    expect(result.request.status).toBe("completed");
+    const artifact = z.object({ sources: z.record(z.string(), z.unknown()) }).parse(result.artifact.body);
+    expect(artifact.sources["imports.readerSources"]).toEqual([]);
+    expect(JSON.stringify(artifact)).not.toContain("Original reader's unchanged comment.");
+  });
+
+  for (const restage of [false, true]) it(`requires original-reader review when a previously unknown address now belongs to a CRM person (restage=${restage})`, async () => {
+    const owner = await verifiedOwner(), first = await stage();
+    const later = (await resolveContact.call({ name: "Later email holder", email: EMAIL }, OWNER)).contact;
+    const id = restage ? await stage() : first;
+    await expect(commitImport.call({ id }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    expect(await db().select().from(blogReaderComments)).toHaveLength(0);
+    const review = await readerOwnershipReview.call({ id }, owner);
+    expect(review.rows).toHaveLength(1);
+    const reader = review.rows[0]!;
+    await resolveReaderOwnership.call({ id, receiptId: reader.receiptId, postId: reader.postId, commentId: reader.commentId, contactId: later.id, confirmation: "ASSIGN ORIGINAL READER" }, owner);
+    expect((await commitImport.call({ id }, OWNER)).status).toBe("committed");
+    expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([later.id]);
+  });
 });

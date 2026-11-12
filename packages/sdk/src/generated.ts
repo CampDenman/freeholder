@@ -4947,14 +4947,14 @@ export interface ServiceCatalog {
   };
   "imports.readerOwnershipReview": {
     input: { id: string; after?: string };
-    output: { rows: { receiptId: string; postId: string; commentId: string; name: string; email: string | null; excerpt: string }[]; next: string | null };
+    output: { rows: { receiptId: string | null; postId: string; commentId: string; name: string; email: string | null; excerpt: string }[]; next: string | null };
   };
   "imports.reconcile": {
     input: { id: string; counts?: { pages: number; media: number; redirects: number }; graph?: { generation: string; sourceRevision: string; planRevision: number } };
     output: { id: string; source: string; status: "discover" | "mapped" | "previewed" | "committed" | "reconciled" | "published" | "rolled_back" | "failed"; checkpoint: unknown; preview: unknown; counts: unknown; error: string | null; createdBy: string; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "imports.resolveReaderOwnership": {
-    input: { id: string; receiptId: string; postId: string; commentId: string; contactId: string; confirmation: "ASSIGN ORIGINAL READER" };
+    input: { id: string; receiptId: string | null; postId: string; commentId: string; contactId: string; confirmation: "ASSIGN ORIGINAL READER" };
     output: { receiptId: string; state: "bound" };
   };
   "imports.reviewConflicts": {
