@@ -37,10 +37,15 @@ current common returned-unapplied disposition; it cannot invent a paid invoice
 for returned cash. Nonempty invoice inventory is still pending in the existing
 worker, and no source-only helper proves those provider outcomes.
 
-Finite qualification prepared here: seven DB-free original-authority controls,
-existing original-inventory/caller-proof tests and private/audit inventories.
-Types, lint and these controls have not yet run on this increment. Native follow-up
-must prove: a buyer different from the merchant; one actual cancellation with
+Source qualification at e1afb8c9: full Node22 types passed on 2682f34a;
+the first focused lint stopped on two type-only import diagnostics. That exact
+import-only correction passed incremental types and changed-file lint. The five
+finite DB-free files then passed all 33 assertions: original buyer authority 7,
+original cohort inventory 6, current caller/resource proof 8, internal services 5,
+and owner audit labels 7. There were no failed or skipped assertions. The first
+lint log and JSON counts were preserved under /tmp/freeholder-subscription-buyer-erasure80-*;
+all runners exited before handing resources back. This is source qualification,
+not a native, provider or privacy-completion claim. Native follow-up must prove: a buyer different from the merchant; one actual cancellation with
 no duplicate while its caller is paused; current hold refusal; missing/restored
 original inventory; corrupted artifact preserving positive facts; and a late
 positive after an actually completed buyer erasure. Fresh assembled terms schema
