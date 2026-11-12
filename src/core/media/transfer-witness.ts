@@ -9,12 +9,12 @@ import { storageNamespace } from "./storage-quota";
 import { objectKeyDigest } from "./write-ledger";
 import type { mediaObjectWrites } from "./write-schema";
 const digest=z.string().regex(/^[a-f0-9]{64}$/);
-const location=z.discriminatedUnion("kind",[
+export const transferBindingSchema=z.discriminatedUnion("kind",[
  z.object({kind:z.literal("s3"),namespace:digest,location:z.object({endpoint:z.string().url(),bucket:z.string().min(1).max(1024)}).strict()}).strict(),
  z.object({kind:z.literal("replit"),namespace:digest,location:z.object({bucket:z.string().min(1).max(1024)}).strict()}).strict(),
 ]);
 export function checkedTransferBinding(input:StorageBinding):StorageBinding{
- const binding=location.parse(input);
+ const binding=transferBindingSchema.parse(input);
  const expected=binding.kind==="s3"?storageNamespace({id:"s3",endpoint:binding.location.endpoint,bucket:binding.location.bucket}):storageNamespace({id:"replit",bucket:binding.location.bucket});
  if(binding.namespace!==expected)throw new ServiceError("conflict","The captured storage resource does not match its original namespace.");
  if(binding.kind==="s3"){

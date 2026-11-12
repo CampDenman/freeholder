@@ -45,6 +45,8 @@ export const mediaStorageTransferObjects=pgTable("media_storage_transfer_objects
  uniqueIndex("media_storage_transfer_objects_key_idx").on(t.planId,t.keyDigest),
  uniqueIndex("media_storage_transfer_objects_target_idx").on(t.planId,t.targetKeyDigest),
  index("media_storage_transfer_objects_state_idx").on(t.planId,t.state),
+ index("media_storage_transfer_objects_target_receipt_idx").on(t.targetReceiptId),
+ index("media_storage_transfer_objects_source_delete_idx").on(t.sourceDeleteReceiptId),
  check("media_storage_transfer_objects_digests",sql`${t.keyDigest} ~ '^[a-f0-9]{64}$' and ${t.targetKeyDigest} ~ '^[a-f0-9]{64}$' and ${t.targetKeyDigest} <> ${t.keyDigest} and ${t.sha256} ~ '^[a-f0-9]{64}$' and ${t.originalReceiptSetDigest} ~ '^[a-f0-9]{64}$'`),
  check("media_storage_transfer_objects_size",sql`${t.bytes} >= 0 and ${t.bytes} <= 9007199254740991`),
  check("media_storage_transfer_objects_key",sql`length(${t.key}) between 1 and 2048 and length(${t.targetKey}) between 1 and 2048 and ${t.targetKey} <> ${t.key} and length(${t.contentType}) between 1 and 255`),
@@ -62,6 +64,7 @@ export const mediaStorageTransferReceipts=pgTable("media_storage_transfer_receip
  createdAt:createdAtColumn(),
 },t=>[
  uniqueIndex("media_storage_transfer_receipts_original_idx").on(t.objectId,t.receiptId),
+ index("media_storage_transfer_receipts_receipt_idx").on(t.receiptId),
  check("media_storage_transfer_receipts_witness",sql`${t.originalWitnessDigest} ~ '^[a-f0-9]{64}$'`),
 ]);
 

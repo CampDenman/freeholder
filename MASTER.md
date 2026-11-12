@@ -11429,11 +11429,24 @@ schema they inherit reads as a designed thing rather than an excavation.
   → restore on another Tier-1 target → signed update → failed-update rollback.
   Verified-transfer source foundation 2026-11-12: four unregistered models
   keep immutable source/target locators, distinct logical and physical target
-  keys, exact original receipt membership and all original contact subjects.
+  keys, exact original receipt membership and original receipt contact subjects.
   A pure evidence projection refuses unresolved/redacted/missing/divergent
   byte facts and namespaces;11 controls and full source types/lint pass.
-  No82 SQL/journal, transfer service, adoption, source deletion or contact/
+  No82 SQL/journal, copy service, adoption, source deletion or contact/
   retention integration is enabled. Those requirements remain open.
+  Owner-preview source increment 2026-11-12: a shared human-only query captures
+  the configured source outside its transaction and reads complete requested
+  object histories under existing object locks. It refuses unresolved facts,
+  resource mismatches, named storage holds and oversized histories. The
+  result explicitly grants no copy, adoption or deletion authority. Full
+  Node22 types/changed-source lint and51 selected controls pass; actual
+  normal79 service controls pass3/3 (4.20s/3.95s/4.35s), and actual SDK
+  generation passes8/8. Generated-file full types/whole lint and all source
+  gates pass after actual changelog regeneration repaired its sole drift
+  failure (affected3 controls pass). This does
+  not complete site inventory, provider bytes or original-domain ownership
+  and quiescence proof. See
+  `deploy/storage-transfer-preview-source-2026-11-12.md`.
   Committed storage-observation hook 2026-11-12: domains can register a
   named callback receiving only the original physical receipt UUID after its
   transaction commits. Every callback runs; a dependent failure produces a

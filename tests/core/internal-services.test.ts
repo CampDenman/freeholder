@@ -401,6 +401,7 @@ const CALLER_AUTHORIZED_PHASES = [
   "media.claimProxyUpload",
   "media.claimStorageRecovery",
   "media.applyStorageRecovery",
+  "media.storageTransferInventory",
   "media.claimMultipartRecovery",
   "media.applyMultipartRecovery",
   "media.claimMultipartCleanup",

@@ -65,6 +65,7 @@ import mailServices from "@/core/mail/service";
 import mailOAuthServices from "@/core/mail/oauth";
 import mediaServices from "@/core/media/service";
 import mediaRecoveryServices from "@/core/media/write-recovery";
+import mediaTransferPreviewServices from "@/core/media/transfer-preview";
 import multipartRecoveryServices from "@/core/media/multipart-recovery";
 import notificationServices from "@/core/notifications/service";
 import taskServices from "@/core/tasks/service";
@@ -178,6 +179,7 @@ const services: Service[] = [
   ...mailOAuthServices,
   ...mediaServices,
   ...mediaRecoveryServices,
+  ...mediaTransferPreviewServices,
   ...multipartRecoveryServices,
   ...notificationServices,
   ...schedulingServices,
