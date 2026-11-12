@@ -13812,8 +13812,13 @@ whatever is best for the people using the site.
   credit, one accepted100 fee/bound observation, canonical retained target400;
   the fixture asserts one customer and one fee POST. Database work drained.
   Actual provider edges are synthetic. Oldv8 and the actual accepted112 clone
-  stay unchanged; populated-history review and the remaining full fee/bank/
-  partial/human/provider controls still require qualification. C12.38 is open.
+  stay unchanged. Separate populated112 review passed0.549s using qualified
+  component source and the clone's originalSQL1ac: review/debt remained, zero
+  provider POSTs, all eight original financial-table golden hashes unchanged,
+  journal81 unchanged and no v9 target function. This does not apply the new
+  guard to old history or establish an actual production/provider upgrade.
+  Remaining full fee/bank/partial/human/provider controls still require
+  qualification. C12.38 is open.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

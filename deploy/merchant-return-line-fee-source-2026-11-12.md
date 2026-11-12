@@ -164,8 +164,28 @@ Actual AFTER logs/ledger/drain:
 `/tmp/freeholder-line-fee-credit80-after-current-native-v9-ledger.json`,
 `/tmp/freeholder-line-fee-credit80-after-current-native-v9-drain.json`.
 This qualifies the original direct single-seller/two-tax-line RMA scenario on
-the reconciled source. The separate populated112 review/no-history-rewrite
-fixture is still unexecuted. Partial-unit/current-service, multiple original
+the reconciled source. Partial-unit/current-service, multiple original
 fee-resource, mixed/manual ambiguity, destination/reversal, fee-caller, bank,
 human/browser and actual provider-account acceptance remain required. It does
 not close C5.19/C12.38 or activate the new merchant model.
+
+Preserved populated112 review qualification: the separately cloned actual
+BEFORE database remained on its original normal-v8 SQL1ac, with81 journal
+entries and no new-v9 target function. Qualified29cc source (11cf doc-only
+head) ran `merchant-rma-fee-restored80.test.ts` with no truncate, seed or DDL.
+It passed0.549s: reconciliation returned review with no operation, financial
+recovery debt remained pending, and no provider POST occurred. Independent
+before/after inspection compared all eight original financial-table hashes
+against the clone's original golden proof, not only a test-local snapshot.
+Every hash stayed identical; the accepted112 resource and its old retained
+target388 remain unchanged. A truthful inspection observation still records
+original fee500 and returned112. Runner exited0; separate activity readback
+confirmed no active clone work.
+
+Evidence: `/tmp/freeholder-line-fee-credit80-populated-history-native-v8.{json,log}`,
+its `-ledger.json` and `-drain.json`, and
+`/tmp/freeholder-line-fee-credit80-history-{preflight,postflight}.json`.
+This is current-source review and preservation of actual old populated history,
+not application of the new guard to that database, a production upgrade or an
+actual provider-account result. No accepted money was rewritten or recovered
+through another charge.
