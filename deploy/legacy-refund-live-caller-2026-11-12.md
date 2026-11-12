@@ -94,3 +94,24 @@ personal invoice/payment/refund fields without deleting this journal.
 The repair and ten targeted native controls are source drafts awaiting their
 own exact type/lint/private/audit checks and native acceptance. No AFTER
 result or protected release is claimed here.
+
+On source `4c369f9ef4c64d95725fd3bc0815a2ab7c0f5237`, explicit Node 22 full
+8GB type checking and final incremental type checking passed. Changed-file
+lint passed after one POS observation-schema import was made type-only;
+private/audit controls passed 12/12. Source review confirmed invoice bundles
+and customer money exports exclude state-event journal rows; audit output
+stores filtered inputs and never the private phase's returned capability.
+
+The ORIGINAL unchanged live-caller fixture then passed in 4.799 seconds on
+the disposable normal79 schema. Its assertions prove cancellation/replacement
+refusal and one actual POST. Independent read-only ledger evidence shows one
+original refund succeeded for 1000 CAD at `re_OriginalLive`, the payment's
+refunded amount is 1000, no replacement refund row exists, and exactly one
+admission plus one finished actual success observation was retained. Runner
+exit was zero and final active database backends were `[]`.
+Evidence: `/tmp/freeholder-legacy-refund-c0-original-after.json`,
+`/tmp/freeholder-legacy-refund-c0-original-after.log`, and
+`/tmp/freeholder-legacy-refund-c0-original-after-ledger.json`.
+The ten broader controls, full protected checks and provider acceptance
+remain open. This is a coding-agent proof, not an independent human security
+sign-off.
