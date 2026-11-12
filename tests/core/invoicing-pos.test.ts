@@ -172,7 +172,7 @@ describe.runIf(hasDatabase)("in-person payments", { timeout: 30_000 }, () => {
       });
       const refunded = await refundInPersonPayment.call({ paymentId: taken.payment.id, amountMinor: 1_000, reason: "Customer changed their mind.", idempotencyKey: "terminal-refund-1" }, OWNER);
       expect(refundSeen.open).toBe(0);
-      expect(refundSeen.rows).toMatchObject([{ status: "created", amountMinor: 1_000 }]);
+      expect(refundSeen.rows).toMatchObject([{ status: "processing", amountMinor: 1_000 }]);
       expect(refunded).toMatchObject({ status: "succeeded", providerRef: "re_terminal" });
     });
 

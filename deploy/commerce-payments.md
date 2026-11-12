@@ -131,8 +131,12 @@ money.
   choreography belongs to C5.21; current callers are scoped API/MCP/admin
   clients.
 - `invoicing.submitProviderRefund` reserves the amount in Freeholder first,
-  submits one idempotent provider refund, then starts or settles the existing
-  refund state machine.
+  commits its original processing claim, and submits the provider refund once.
+  The completed provider answer is retained independently before the ledger
+  projection. A retry can apply a retained answer; it does not repeat a live
+  or uncertain provider request. Current prepared-return reservations carry
+  the same server-created authority. Historical reservations without that
+  authority require reconciliation, including rows still labelled created.
 - `invoicing.recordOfflinePayment` and `recordOfflineRefund` require a plain-
   language owner evidence note and accept an external statement/reference.
 - masked saved-method listings expose brand/label/last four/expiry only. The
@@ -153,7 +157,8 @@ money.
   whose exact signed net does not equal the bank deposit. Reconciliation is
   therefore evidence, not a checkbox.
 
-Hosted provider calls occur inside an idempotent service transaction. Stripe,
+Hosted provider calls occur outside business-service transactions, between
+short committed claim and observation/application phases. Stripe,
 PayPal, Square, and Mollie receive their documented request-idempotency value;
 Razorpay uses a deterministic reference and retrieves an existing link before
 create. Paystack and Flutterwave receive a deterministic unique transaction
@@ -163,8 +168,16 @@ an idempotency key, so an HTTP-response-loss incident can require recheck or
 operator reconciliation instead of blind creation. Paystack and Flutterwave
 also do not document provider-side refund replay under a caller key; after a
 committed local refund Freeholder returns the existing row, but an ambiguous
-provider-response failure must be reconciled before retry. The eventual webhook
-remains authoritative for asynchronous settlement.
+provider-response failure must be reconciled before retry. The refund path
+keeps uncertain throws reserved for every provider, including already-refunded
+or in-use responses. Authenticated exact-resource feedback can converge
+asynchronous settlement; it does not prove a still-live caller has finished.
+
+Original refund journal authentication uses the existing private wrapping
+key and configured previous key during rotation, with the mandatory server
+session secret as the existing fallback. Preserve these configured keys in
+recovery backups. Missing keys or damaged authority fail closed; neither a
+refund's age nor its local status supplies a replacement provider fact.
 
 ## Webhook threat and failure behavior
 

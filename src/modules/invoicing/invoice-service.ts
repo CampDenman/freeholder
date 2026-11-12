@@ -8,6 +8,8 @@ import { captureOriginalMerchantRefund } from "./merchant-refund-capture";
 import { assertOriginalMerchantRefundResult, assertOriginalMerchantRefundStart, retireOriginalMerchantRefund } from "./merchant-refund-core-guards";
 import { queueMerchantFeeReconciliation } from "./merchant-fee-service";
 import { reserveMerchantCharge } from "./merchant-charge";
+import { isHostedPaymentProvider } from "@/adapters/payments/providers";
+import { assertLegacyRefundRelease, refundReservationMarker } from "./legacy-refund-dispatch";
 import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -1233,7 +1235,7 @@ export const createRefund = defineService({
       reason: input.reason,
     }).returning();
     await captureOriginalMerchantRefund(ctx, payment, created!);
-    await stateEvent(ctx, "refund", created!.id, null, "created", input.reason);
+    await stateEvent(ctx, "refund", created!.id, null, "created", input.reason, refundReservationMarker(created!));
     ctx.queueEvent("refund.created", { refundId: created!.id, paymentId: payment.id, invoiceId: payment.invoiceId });
     ctx.setSubject("refund", created!.id);
     return created!;
@@ -1274,6 +1276,7 @@ export const startRefund = defineService({
     await lock(ctx.tx, "refund", input.id);
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
     if (!refund) throw new ServiceError("not_found", "That refund is not here.");
+    if (isHostedPaymentProvider(refund.provider) && ctx.actor.kind !== "system") throw new ServiceError("permission", "A hosted refund must be observed through its original provider.");
     if (refund.status === "processing") {
       if (!input.providerRef || refund.providerRef === input.providerRef) return refund;
       const originalMerchant = await assertOriginalMerchantRefundStart(ctx, refund, input.providerRef);
@@ -1306,7 +1309,7 @@ export const failRefund = defineService({
     if (!refund) throw new ServiceError("not_found", "That refund is not here.");
     if (refund.status === "failed") return refund;
     if (!inArrayValue(refund.status, ["created", "processing"])) throw new ServiceError("conflict", "A terminal refund cannot fail again.");
-    await assertOriginalMerchantRefundResult(ctx, refund, "failed");
+    if (!await assertOriginalMerchantRefundResult(ctx, refund, "failed")) await assertLegacyRefundRelease(ctx, refund);
     const [updated] = await ctx.tx.update(refunds).set({ status: "failed", failureCode: input.code, failureMessage: input.message, failedAt: new Date() }).where(eq(refunds.id, refund.id)).returning();
     await stateEvent(ctx, "refund", refund.id, refund.status, "failed", input.code);
     ctx.queueEvent("refund.failed", { refundId: refund.id, paymentId: refund.paymentId, code: input.code });
@@ -1331,7 +1334,7 @@ export const cancelRefund = defineService({
     if (!inArrayValue(refund.status, ["created", "processing"])) {
       throw new ServiceError("conflict", "A terminal refund cannot be cancelled.");
     }
-    await retireOriginalMerchantRefund(ctx, refund);
+    if (!await retireOriginalMerchantRefund(ctx, refund)) await assertLegacyRefundRelease(ctx, refund);
     const [updated] = await ctx.tx
       .update(refunds)
       .set({ status: "cancelled", failureCode: null, failureMessage: null })
@@ -1355,6 +1358,7 @@ export const settleRefund = defineService({
     await lock(ctx.tx, "refund", input.id);
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
     if (!refund) throw new ServiceError("not_found", "That refund is not here.");
+    if (isHostedPaymentProvider(refund.provider) && ctx.actor.kind !== "system") throw new ServiceError("permission", "A hosted refund's actual positive result must be confirmed through its original provider.");
     if (ctx.actor.kind!=="system" && (await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:refund.invoiceId}))?.model === "seller_merchant") throw new ServiceError("permission","A direct seller refund must be confirmed through its original provider account.");
     const prepared=await ctx.tx.execute<{bound:boolean}>(sql`select freeholder_refund_is_prepared_return(${refund.id}::uuid) as bound`);
     if(prepared[0]?.bound && ctx.actor.kind!=="system") throw new ServiceError("permission","Confirm a prepared return through its original provider or its verified offline return action.");

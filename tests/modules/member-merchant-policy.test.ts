@@ -17,8 +17,7 @@ import { verifyInvoiceMerchantAccount } from "@/modules/members/market-merchant"
 import { memberPayoutAccounts, memberPayouts, memberSettings } from "@/modules/members/schema";
 import { getInvoiceMarketPolicy } from "@/modules/invoicing/market-policy";
 import { invoices, paymentMethods, paymentProviderCustomers, paymentProviderEvents, payments } from "@/modules/invoicing/schema";
-import { processPaymentProviderEvents } from "@/modules/invoicing/payment-provider-service";
-import { createRefund, startRefund } from "@/modules/invoicing/invoice-service";
+import { processPaymentProviderEvents, submitProviderRefund } from "@/modules/invoicing/payment-provider-service";
 import { attachProviderSchedule, cancelAgreement, changePlan } from "@/modules/subscriptions/billing";
 import { getSubscription, renewDue, savePlan, subscribe } from "@/modules/subscriptions/service";
 import { getSubscriptionMarketPolicy } from "@/modules/subscriptions/market-policy";
@@ -181,7 +180,12 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     const manual = adapters.createManualPayments();
     const createRecurringSchedule = vi.fn<adapters.PaymentAdapter["createRecurringSchedule"]>().mockResolvedValue({ providerRef: "sub_direct", providerAccountId: "acct_original", applicationFeePercent: 10 });
     const cancelRecurringSchedule = vi.fn<adapters.PaymentAdapter["cancelRecurringSchedule"]>().mockResolvedValue();
-    const stripe = { ...manual, id: "stripe", createRecurringSchedule, cancelRecurringSchedule, capabilities: () => ({ ...manual.capabilities(), subscriptions: true, offSessionCharges: true, savedMethods: true, sellerMerchantCharges: true }) };
+    const refund = vi.fn<adapters.PaymentAdapter["refund"]>().mockImplementation(async request=>{
+      expect(request.providerAccountId).toBe("acct_original");
+      expect(request.providerRef).toBe("pi_direct_period");
+      return {providerRef:"re_direct_period",providerAccountId:"acct_original",status:"pending"};
+    });
+    const stripe = { ...manual, id: "stripe", createRecurringSchedule, cancelRecurringSchedule, refund, capabilities: () => ({ ...manual.capabilities(), subscriptions: true, offSessionCharges: true, savedMethods: true, sellerMerchantCharges: true }) };
     vi.spyOn(adapters,"paymentAdapter").mockReturnValue(stripe);
     const planId = await offer("provider");
     await directModel();
@@ -210,8 +214,8 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     expect(await db().select().from(memberPayouts)).toHaveLength(1);
     await expect(deliver({...event,id:"evt_extra_charge",paymentProviderRef:"pi_extra_charge"})).rejects.toMatchObject({code:"conflict"});
     expect(await db().select().from(payments)).toHaveLength(1);
-    const refund=await createRefund.call({paymentId:payment!.id,amountMinor:1000,reason:"Buyer refunded on original account",idempotencyKey:"direct-period-refund"},OWNER);
-    await startRefund.call({id:refund.id,providerRef:"re_direct_period"},OWNER);
+    await submitProviderRefund.call({paymentId:payment!.id,amountMinor:1000,reason:"Buyer refunded on original account",idempotencyKey:"direct-period-refund"},OWNER);
+    expect(refund).toHaveBeenCalledTimes(1);
     await processPaymentProviderEvents.call({provider:"stripe",bodySha256:"e".repeat(64),receivedAt,events:[{id:"evt_direct_period_refund",kind:"refund_succeeded",providerRef:"re_direct_period",paymentProviderRef:"pi_direct_period",providerAccountId:"acct_original",amountMinor:1000,currency:"CAD",occurredAt:receivedAt}]},SYSTEM);
     expect(await reversePayouts.call({invoiceId:payment!.invoiceId,amountMinor:1000},SYSTEM)).toEqual({changed:1});
     expect((await db().select().from(memberPayouts))[0]!.state).toBe("cancelled");

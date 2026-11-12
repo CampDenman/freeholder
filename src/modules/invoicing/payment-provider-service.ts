@@ -17,7 +17,7 @@ import {lockContactIdentity} from "@/core/contacts/identity-lock";
 import { contacts } from "@/core/contacts/schema";
 import { env } from "@/core/env";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { actorString, defineOrchestratedService, defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import { actorString, defineOrchestratedService, defineService, ServiceError, type Actor, type ServiceContext, type Tx } from "@/core/service";
 import {
   adapterStatus,
   checkoutSession,
@@ -56,6 +56,8 @@ import { invoicePaymentDueAmount } from "./invoice-payment-due";
 import { getInvoiceMarketPolicy } from "./market-policy";
 import { retainSubscriptionProviderEvidence } from "./merchant-provider-stage";
 import { originalProviderPlatform } from "./provider-platform-scope";
+import { admitLegacyRefundDispatch, completedLegacyRefundFor, forgetCompletedLegacyRefund, legacyRefundDispatch, legacyRefundFinishedResult, legacyRefundObservation,
+  performLegacyRefundDispatch, retainLegacyRefundCaller, retainLegacyRefundTerminal } from "./legacy-refund-dispatch";
 import {
   invoices,
   moneyStateEvents,
@@ -410,6 +412,8 @@ async function processRefundEvent(providerId: string, event: z.infer<typeof refu
     await ctx.callAsSystem(settleRefund, { id: refund.id, providerRef: event.providerRef, processedAt: new Date(event.occurredAt) });
     return "refund_succeeded";
   }
+  await retainLegacyRefundTerminal(ctx, refund, { providerEventId: event.id, providerRef: event.providerRef, paymentProviderRef: event.paymentProviderRef,
+    amountMinor: event.amountMinor, currency: event.currency });
   await ctx.callAsSystem(failRefund, { id: refund.id, code: event.failureCode ?? "provider_failed", message: event.failureCode === "provider_cancelled" ? `${providerId} confirmed that the refund was cancelled.` : `${providerId} reported that the refund failed.` });
   return "refund_failed";
 }
@@ -899,9 +903,65 @@ export const claimProviderRefund = defineService({
   kind: "mutation",
   permission: "system",
   input: z.object({ paymentId: z.string().uuid(), amountMinor: positiveMinor, reason: z.string().trim().min(3).max(1_000), idempotencyKey, initiatedBy }),
-  output: refundRow,
-  handler: async ({ initiatedBy: _initiatedBy, ...input }, ctx) => ctx.call(createRefund, input),
+  external: false,
+  auditInputFields: ["paymentId", "amountMinor", "initiatedBy"],
+  output: z.object({ refund: refundRow, dispatch: legacyRefundDispatch.nullable(), replay: legacyRefundObservation.nullable(), persist: legacyRefundDispatch.nullable() }),
+  handler: async ({ initiatedBy: _initiatedBy, ...input }, ctx) => {
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`refund-idempotency:${input.idempotencyKey}`}))`);
+    const source = await ctx.callAsSystem(providerPaymentSource, { paymentId: input.paymentId });
+    const originals = await ctx.tx.select().from(refunds).where(and(eq(refunds.paymentId, input.paymentId), eq(refunds.idempotencyKey, input.idempotencyKey))).limit(2);
+    if (originals.length > 1) throw new ServiceError("conflict", "The original refund key has conflicting provider records. Reconcile them before proceeding.");
+    const existing = originals[0];
+    // Existing rows take the refund lock before the payment lock, matching
+    // settlement. A fresh row is still invisible to other transactions.
+    if (existing) await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`refund:${existing.id}`}))`);
+    if (existing) {
+      const persist = completedLegacyRefundFor(existing);
+      if (persist) {
+        if (persist.request.paymentId !== input.paymentId || persist.request.amountMinor !== input.amountMinor || persist.request.reason !== input.reason
+          || persist.request.idempotencyKey !== input.idempotencyKey) throw new ServiceError("conflict", "This refund key already belongs to a different original request.");
+        return { refund: existing, dispatch: null, replay: null, persist };
+      }
+      if (existing.provider !== source.payment.provider) throw new ServiceError("conflict", "The original payment provider changed. Restore its original refund evidence before proceeding.");
+    }
+    const refund = await ctx.call(createRefund, input);
+    if (refund.paymentId !== input.paymentId || refund.amountMinor !== input.amountMinor || refund.idempotencyKey !== input.idempotencyKey
+      || refund.invoiceId !== source.payment.invoiceId || refund.currency !== source.payment.currency || refund.provider !== source.payment.provider) {
+      throw new ServiceError("conflict", "The stored refund differs from its original request and payment. Reconcile it before proceeding.");
+    }
+    if (["succeeded", "failed", "cancelled"].includes(refund.status)) return { refund, dispatch: null, replay: null, persist: null };
+    if (refund.status === "processing") {
+      const replay = await legacyRefundFinishedResult(ctx.tx, refund);
+      if (replay && replay.status !== "unknown" && replay.providerRef) return { refund, dispatch: null, replay, persist: null };
+    }
+    if (refund.status !== "created") throw new ServiceError("conflict", "The original refund is already admitted. Reconcile its actual result instead of sending another provider request.");
+    const dispatch = await admitLegacyRefundDispatch(ctx, refund, { paymentId: source.payment.id, providerRef: source.payment.providerRef ?? source.payment.id,
+      currency: source.payment.currency, amountMinor: refund.amountMinor, reason: input.reason, idempotencyKey: refund.idempotencyKey,
+      providerAccountId: source.routing.providerAccountId,
+      refundApplicationFee: Boolean(source.routing.providerAccountId && source.routing.applicationFeeMinor && source.routing.applicationFeeMinor > 0) },
+    { amountMinor: source.payment.amountMinor, requestHash: source.payment.requestHash });
+    const [claimed] = await ctx.tx.select().from(refunds).where(eq(refunds.id, refund.id));
+    return { refund: claimed!, dispatch, replay: null, persist: null };
+  },
 });
+
+export const recordProviderRefundCaller = defineService({
+  name: "invoicing.recordProviderRefundCaller", summary: "Retain the actual original physical refund caller's completed answer before logical application.",
+  kind: "mutation", permission: "system", external: false,
+  auditInputFields: ["dispatchId", "initiatedBy"],
+  input: z.object({ dispatchId: z.uuid(), completionNonce: z.uuid(), initiatedBy }),
+  output: z.object({ recoveryRequired: z.boolean(), result: legacyRefundObservation }),
+  handler: (input, ctx) => retainLegacyRefundCaller(ctx, input),
+});
+
+/** Retry only the independently failed persistence of an actually completed
+ * server-held caller. This function never starts provider work. */
+export async function persistProviderRefundCaller(dispatch: { dispatchId: string; completionNonce: string }, by: string, system: Actor) {
+  const retained = await recordProviderRefundCaller.call({ dispatchId: dispatch.dispatchId, completionNonce: dispatch.completionNonce, initiatedBy: by }, system);
+  forgetCompletedLegacyRefund(dispatch.dispatchId);
+  if (retained.recoveryRequired) throw new ServiceError("conflict", "The actual provider answer is retained, but its original refund evidence needs recovery before application.");
+  return retained.result;
+}
 
 export const recordProviderRefundResult = defineService({
   name: "invoicing.recordProviderRefundResult",
@@ -920,6 +980,23 @@ export const recordProviderRefundResult = defineService({
   output: refundRow,
   handler: async (input, ctx) => {
     const outcome = input.outcome;
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`refund:${input.refundId}`}))`);
+    const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.refundId)).for("update");
+    if (!refund) throw new ServiceError("not_found", "The original refund is unavailable.");
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment:${refund.paymentId}`}))`);
+    await ctx.tx.select({ id: payments.id }).from(payments).where(eq(payments.id, refund.paymentId)).for("update");
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`invoice:${refund.invoiceId}`}))`);
+    // Merchant mutations below enforce their immutable request, actual caller
+    // finish and resource ACK through the shared state-machine guards. Legacy
+    // payments require their separate authenticated original caller journal.
+    const routing = await routingForPayment(ctx, refund.paymentId);
+    if (!routing.providerPlatformAccountId) {
+      const actual = await legacyRefundFinishedResult(ctx.tx, refund);
+      const matches = outcome.kind === "settle" ? actual?.status === "succeeded" && actual.providerRef === outcome.providerRef
+        : outcome.kind === "start" ? actual?.status === "pending" && actual.providerRef === outcome.providerRef
+          : actual?.status === "failed" && Boolean(actual.providerRef);
+      if (!matches) throw new ServiceError("conflict", "The original completed provider caller does not prove this refund transition.");
+    }
     if (outcome.kind === "settle") return ctx.call(settleRefund, { id: input.refundId, providerRef: outcome.providerRef, processedAt: new Date() });
     if (outcome.kind === "start") return ctx.call(startRefund, { id: input.refundId, providerRef: outcome.providerRef });
     return ctx.call(failRefund, { id: input.refundId, code: outcome.code, message: outcome.message });
@@ -1072,33 +1149,26 @@ export const submitProviderRefund = defineOrchestratedService({
     if (!payment.providerRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment does not have a refundable hosted-provider settlement.");
     if (!paymentAdapter(payment.provider).capabilities().refunds) throw new ServiceError("conflict", `${payment.provider} refunds are not implemented by this adapter.`);
     if (routing.providerPlatformAccountId) return submitOriginalMerchantRefund(input, caller);
-    // The existing historical provider route retains its original contract.
-    // New merchant requests use their captured body and one physical caller.
-    const refund = await claimProviderRefund.call({ ...input, initiatedBy: by }, system);
-    if (refund.status !== "created") return refund;
-    assertRetryableAttempt(refund, "refund");
-    let result: Awaited<ReturnType<PaymentAdapter["refund"]>>;
-    try {
-      result = await paymentAdapter(payment.provider).refund({
-        paymentId: payment.id,
-        providerRef: payment.providerRef,
-        currency: payment.currency,
-        amountMinor: input.amountMinor,
-        reason: input.reason,
-        idempotencyKey: input.idempotencyKey,
-        ...routing,
-        ...(routing.originalChargeReceiptId ? { subscriptionOrigin: { providerApiVersion: routing.providerApiVersion as "2026-10-28.endive", providerSubscriptionRef: routing.providerSubscriptionRef!, providerInvoiceRef: routing.providerInvoiceRef!, providerPaymentIntentRef: routing.providerPaymentIntentRef! } } : {}),
-        reverseTransfer: Boolean(routing.destinationAccountId),
-        refundApplicationFee: Boolean(!routing.providerPlatformAccountId && routing.providerAccountId && routing.applicationFeeMinor && routing.applicationFeeMinor > 0),
-      });
-    } catch (error) {
-      const refused = refundRefusalCode(error);
-      if (refused) {
-        await recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "fail", code: refused, message: refundRefusalMessage(refused, payment.provider) } }, system);
+    // Admission commits before the provider is asked. A crash leaves
+    // processing debt; a retry can apply a retained answer, never resend POST.
+    const claimed = await claimProviderRefund.call({ ...input, initiatedBy: by }, system);
+    const { refund, dispatch, replay, persist } = claimed;
+    if (!dispatch && !replay && !persist) return refund;
+    let result: z.infer<typeof legacyRefundObservation>;
+    if (persist) result = await persistProviderRefundCaller(persist, by, system);
+    else if (replay) result = replay;
+    else if (dispatch) {
+      try {
+        result = await performLegacyRefundDispatch(dispatch, () => paymentAdapter(payment.provider).refund(dispatch.request), () => persistProviderRefundCaller(dispatch, by, system));
+      } catch (error) {
+        // A thrown answer, including already-refunded/in-use errors, cannot
+        // prove that this original physical request never moved money.
+        if (error instanceof ServiceError) throw error;
+        throw new ServiceError("conflict", "The provider result is uncertain. Check the original refund before trying again.");
       }
-      return adapterFailure(error);
-    }
+    } else return refund;
     assertProviderAccount(routing, result);
+    if (result.status === "unknown" || !result.providerRef) throw new ServiceError("conflict", "The original refund caller finished without a proven provider result. Reconcile it before refunding again.");
     if (result.status === "succeeded") return recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "settle", providerRef: result.providerRef } }, system);
     if (result.status === "failed") return recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "fail", code: result.failureCode ?? "provider_failed", message: result.failureCode === "provider_cancelled" ? `${payment.provider} confirmed that the refund was cancelled.` : `${payment.provider} reported that the refund failed.` } }, system);
     return recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "start", providerRef: result.providerRef } }, system);
@@ -1350,6 +1420,7 @@ export default [
   recordProviderPaymentResult,
   claimProviderRefund,
   recordProviderRefundResult,
+  recordProviderRefundCaller,
   beginPaymentCheckout,
   completePaymentCheckout,
   inspectMerchantPayment,

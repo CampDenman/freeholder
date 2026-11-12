@@ -305,17 +305,19 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
     expect(final.creditNotes.reduce((sum,note)=>sum+note.taxMinor,0)).toBe(300);
   });
 
-  it("retries a lost provider response using the reserved request without sending a second refund",async()=>{
+  it("keeps a lost provider response reserved without sending another refund or closing the return",async()=>{
     const {received,paid,refund}=await providerReturn();
     refund.mockRejectedValueOnce(new Error("synthetic response loss"));
-    refund.mockResolvedValue({providerRef:"re_recovered_return",status:"succeeded"});
     const input={id:received.return.id,idempotencyKey:`lost-provider-return-${received.return.id}`};
     await expect(submitReturnProviderRefund.call(input,OWNER)).rejects.toBeDefined();
-    const first=refund.mock.calls[0]![0];
     expect((await getInvoice.call({id:paid.order.invoiceId!},OWNER)).invoice.refundedMinor).toBe(0);
-    expect((await submitReturnProviderRefund.call(input,OWNER)).return.status).toBe("refunded");
-    expect(refund.mock.calls[1]![0]).toEqual(first);
-    expect((await getInvoice.call({id:paid.order.invoiceId!},OWNER)).refunds).toHaveLength(1);
+    await expect(submitReturnProviderRefund.call(input,OWNER)).rejects.toMatchObject({code:"conflict"});
+    expect(refund).toHaveBeenCalledTimes(1);
+    const invoice=await getInvoice.call({id:paid.order.invoiceId!},OWNER);
+    expect(invoice.refunds).toMatchObject([{status:"processing",providerRef:null}]);
+    expect(invoice.invoice.refundedMinor).toBe(0);
+    expect(invoice.creditNotes[0]!.status).toBe("draft");
+    expect((await getReturn.call({id:input.id},OWNER)).return.status).toBe("received");
   });
 
   it("retries only a refused installment after another installment already succeeded",async()=>{

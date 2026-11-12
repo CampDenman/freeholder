@@ -20,15 +20,16 @@ async function originalRefund(ctx: ServiceContext, refund: typeof refunds.$infer
   return request;
 }
 /** Called after the existing refund lock; dispatch takes that lock before cash too. */
-export async function retireOriginalMerchantRefund(ctx: ServiceContext, refund: typeof refunds.$inferSelect): Promise<void> {
+export async function retireOriginalMerchantRefund(ctx: ServiceContext, refund: typeof refunds.$inferSelect): Promise<boolean> {
   const original = await originalRefund(ctx, refund);
-  if (!original) return;
+  if (!original) return false;
   const [dispatch] = await ctx.tx.select({ id: merchantRefundDispatches.id }).from(merchantRefundDispatches).where(eq(merchantRefundDispatches.requestId, original.id)).limit(1);
   if (dispatch) throw new ServiceError("conflict", "This original refund was physically admitted. Reconcile its actual provider outcome; cancelling its local row cannot release that money.");
   await allowOriginalMerchantRefundWrites(ctx.tx);
   await ctx.tx.insert(merchantRefundReservationRetirements).values({ requestId: original.id, requestDigest: original.requestDigest,
     reason: "cancelled_before_dispatch", initiatedBy: actorString(ctx.actor) }).onConflictDoNothing();
   queueOriginalMerchantRefundRepair(ctx, { kind: "refund_retirement", id: original.id });
+  return true;
 }
 export async function assertOriginalMerchantRefundStart(ctx: ServiceContext, refund: typeof refunds.$inferSelect, providerRef?: string): Promise<boolean> {
   const original = await originalRefund(ctx, refund);
@@ -42,12 +43,12 @@ export async function assertOriginalMerchantRefundStart(ctx: ServiceContext, ref
   }
   return true;
 }
-export async function assertOriginalMerchantRefundResult(ctx: ServiceContext, refund: typeof refunds.$inferSelect, outcome: "succeeded" | "failed", providerRef?: string): Promise<void> {
+export async function assertOriginalMerchantRefundResult(ctx: ServiceContext, refund: typeof refunds.$inferSelect, outcome: "succeeded" | "failed", providerRef?: string): Promise<boolean> {
   const original = await originalRefund(ctx, refund);
-  if (!original) return;
+  if (!original) return false;
   await assertMerchantRefundCreatorsQuiesced(ctx, original.id);
   const [retired] = await ctx.tx.select().from(merchantRefundReservationRetirements).where(eq(merchantRefundReservationRetirements.requestId, original.id));
-  if (outcome === "failed" && retired?.requestDigest === original.requestDigest) return;
+  if (outcome === "failed" && retired?.requestDigest === original.requestDigest) return true;
   const bindings = await ctx.tx.select().from(merchantRefundResourceBindings).where(eq(merchantRefundResourceBindings.requestId, original.id)).limit(5001);
   const acks = bindings.filter(row => row.origin === "physical_ack"), refs = new Set((acks.length ? acks : bindings).map(row => row.providerRef));
   if (bindings.length > 5000 || refs.size !== 1 || providerRef && !refs.has(providerRef)) throw new ServiceError("conflict", "Restore the one actual original resource ACK or verified request-log binding before changing this refund.");
@@ -65,5 +66,6 @@ export async function assertOriginalMerchantRefundResult(ctx: ServiceContext, re
     await allowOriginalMerchantRefundWrites(ctx.tx);
     await ctx.tx.insert(merchantRefundTerminalReceipts).values({ requestId: original.id, observationId: actual.id }).onConflictDoNothing();
   }
+  return true;
 }
 // Uncalled until the complete schema and common refund mutation hooks compose.
