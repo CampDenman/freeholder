@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C3.47: actual ZIP bytes retain file identities without synthetic WP records.
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { readArchiveDirectory, readArchiveOriginalFile, readArchiveOriginalFiles } from "@/core/import/archive-directory";
 import { indexArchivePhase } from "@/core/import/archive-index";
@@ -149,6 +150,19 @@ describe("bounded original ZIP indexing phases (C3.47)", () => {
     await expect(indexArchivePhase(bytesSource(storedZip(files)), directory, first.cursor)).rejects.toThrow(/changed/);
     const final = await indexArchivePhase(original, directory, first.cursor);
     expect(final).toMatchObject({ done: true, entries: [{ file: { path: "notes.txt", kind: "ignored", url: null } }] });
+  });
+
+  it("hashes actual media bytes in their own bounded phase without emitting payload copies", async () => {
+    const body = "F".repeat(21 * 1024 * 1024);
+    const source = bytesSource(storedZip([{ path: "site/index.html", body: "<h1>Fictional media archive</h1>" }, { path: "site/film.mp4", body }]));
+    const directory = await readArchiveDirectory(source, "https://fictional-zip.example/");
+    const first = await indexArchivePhase(source, directory);
+    expect(first.entries).toHaveLength(1); expect(first.done).toBe(false);
+    const media = await indexArchivePhase(source, directory, first.cursor);
+    expect(media.entries).toHaveLength(1); expect(media.done).toBe(true);
+    expect(media.entries[0]).toMatchObject({ file: { path: "site/film.mp4", kind: "asset", bytes: body.length }, contentDigest: createHash("sha256").update(body).digest("hex") });
+    expect(media.cursor.bodyBytes).toBe(first.cursor.bodyBytes);
+    expect(JSON.stringify(media.entries)).not.toContain(body.slice(0, 100));
   });
 
 });

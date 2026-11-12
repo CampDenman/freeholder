@@ -48,13 +48,18 @@ export async function indexArchivePhase(source: ArchiveSource, directory: Archiv
   const base = new URL(directory.origin), selected: ArchiveDirectoryFile[] = [];
   let phaseBytes = 0;
   for (const file of directory.files.slice(cursor.nextFile, cursor.nextFile + 500)) {
-    if (file.kind === "page" && phaseBytes + file.bytes > ARCHIVE_LIMITS.bodyBytes) break;
-    if (file.kind === "page") phaseBytes += file.bytes;
+    const bytes = file.kind === "ignored" ? 0 : file.bytes;
+    if (phaseBytes + bytes > ARCHIVE_LIMITS.bodyBytes) {
+      // The ordinary reader permits one media file up to 25MB by itself.
+      if (!selected.length && file.kind === "asset" && bytes <= ARCHIVE_LIMITS.mediaBytes) selected.push(file);
+      break;
+    }
+    phaseBytes += bytes;
     selected.push(file);
   }
-  const pages = selected.filter(file => file.kind === "page");
-  const payloads = pages.length ? await readArchiveOriginalFiles(source, directory, pages.map(file => file.path)) : new Map<string, Uint8Array>();
-  if (!pages.length) {
+  const eligible = selected.filter(file => file.kind !== "ignored");
+  const payloads = eligible.length ? await readArchiveOriginalFiles(source, directory, eligible.map(file => file.path)) : new Map<string, Uint8Array>();
+  if (!eligible.length) {
     const current = await readArchiveDirectory(source, directory.origin);
     if (current.directoryFingerprint !== directory.directoryFingerprint || current.root !== directory.root) throw new Error("The accepted original ZIP directory changed.");
   }
@@ -72,11 +77,12 @@ export async function indexArchivePhase(source: ArchiveSource, directory: Archiv
     if (Date.now() > deadline) throw new Error("The ZIP indexing phase exceeded its time budget.");
     const entry: ArchiveIndexedFile = { format: "archive-zip", ordinal: cursor.nextFile,
       identity: sha(`archive-zip\0${file.path}`), file, factsDigest: sha(JSON.stringify(file)) };
+    if (file.kind !== "ignored") entry.contentDigest = sha(payloads.get(file.path)!);
     if (file.kind === "page") {
       const bytes = payloads.get(file.path)!;
       const page = parseArchiveOriginalPage(bytes, file.url!, { base, assetByUrl: assets, used, unresolvedImages: new Set(), preserveRootTarget: true });
       const { body: _body, ...metadata } = page;
-      entry.page = metadata; entry.contentDigest = sha(bytes);
+      entry.page = metadata;
       const images = bodyImageRefs(page.body);
       if (images.length) entry.images = images;
       cursor.bodyBytes += bytes.byteLength;

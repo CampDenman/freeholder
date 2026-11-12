@@ -372,3 +372,13 @@ and lint pass against the existing installed dependencies. No PG, browser,
 provider request, new migration or production build was used. Runtime source
 binding, media/CMS graph integration and actual interruption/publication/rollback
 qualification still remain required; C3.47 stays open.
+
+
+A subsequent source-only phase refinement also validates and hashes actual
+media payloads, rather than deriving content hashes from directory facts.
+Content and media share the ordinary 20MB read phase, with a single media file
+up to 25MB in its own phase. A real 21MB original-file control proves the phase
+boundary, digest and absence of returned payload copies; page-body accounting
+remains separate. The updated directory/static/content batch passes 55 pure
+controls in 3.05 seconds, with targeted types and lint. These primitives still
+have no runtime source-graph integration or schema 81 acceptance.
