@@ -6,7 +6,7 @@ import { hiddenListings } from "./listing-gate";
 import bookingCommercialSourceServices from "./booking-commercial-source";
 import marketServices from "./market";
 import orderCommercialServices from "./order-commercial";
-import {quoteMerchantCheckout} from "./merchant-checkout-quote";
+import {quoteMerchantCheckout,quoteMerchantCheckoutForBuyer} from "./merchant-checkout-quote";
 import { and, asc, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
@@ -1056,6 +1056,7 @@ export default [
   ...marketServices,
   ...orderCommercialServices,
   quoteMerchantCheckout,
+  quoteMerchantCheckoutForBuyer,
   ...publicBookingServices,
   ...customerReturnServices,
   ...demoServices,

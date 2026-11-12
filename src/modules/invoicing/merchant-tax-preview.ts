@@ -20,7 +20,7 @@ export const merchantTaxQuoteItem=z.object({id:z.string().min(1).max(200),quanti
 export const merchantTaxPreviewInput=z.object({profileId:z.uuid(),profileVersion:z.number().int().positive(),contactId:z.uuid().nullable(),destination:merchantTaxAddress,currency:z.string().regex(/^[A-Z]{3}$/),items:z.array(merchantTaxQuoteItem).min(1).max(1000),shippingMinor:minor.default(0),occurredAt:z.coerce.date().default(()=>new Date())});
 const detail=taxQuote.extend({registrationNumbers:z.array(z.object({lineIndex:z.number().int().nonnegative(),number:z.string().nullable()}))});
 const amounts=z.object({subtotalMinor:minor,discountMinor:minor,shippingMinor:minor,shippingTaxMinor:minor,taxMinor:minor,totalMinor:minor});
-export const merchantTaxPreviewOutput=z.object({sellerUserId:z.uuid().nullable(),profileId:z.uuid(),profileVersion:z.number().int().positive(),liability:z.enum(["platform","seller"]),quote:detail,preDiscountQuote:detail,amounts,quoteDigest:z.string().regex(/^[a-f0-9]{64}$/)});
+export const merchantTaxPreviewOutput=z.object({sellerUserId:z.uuid().nullable(),profileId:z.uuid(),profileVersion:z.number().int().positive(),liability:z.enum(["platform","seller"]),occurredAt:z.date(),quote:detail,preDiscountQuote:detail,amounts,quoteDigest:z.string().regex(/^[a-f0-9]{64}$/)});
 export const previewMerchantTax=defineService({
  name:"invoicing.previewMerchantTax",summary:"Quote the original declared merchant's pinned business policy before buyer consent.",kind:"query",permission:"system",external:false,
  input:merchantTaxPreviewInput,output:merchantTaxPreviewOutput,
@@ -54,6 +54,6 @@ export const previewMerchantTax=defineService({
   // registration numbers, exemption IDs and declaration hashes never leave here.
   const publicQuote=(value:typeof quote)=>({lines:value.lines,exemptionKind:value.exemption?.kind??null});
   const quoteDigest=merchantTaxDigest({version:1,profileId:input.profileId,profileVersion:input.profileVersion,liability:found.version.liability,date:input.occurredAt.toISOString().slice(0,10),currency:input.currency,destination:input.destination,items:input.items,shippingMinor:input.shippingMinor,quote:publicQuote(quote),preDiscountQuote:publicQuote(preDiscountQuote),amounts:actualAmounts});
-  return merchantTaxPreviewOutput.parse({sellerUserId,profileId:input.profileId,profileVersion:input.profileVersion,liability:found.version.liability,quote,preDiscountQuote,amounts:actualAmounts,quoteDigest});
+  return merchantTaxPreviewOutput.parse({sellerUserId,profileId:input.profileId,profileVersion:input.profileVersion,liability:found.version.liability,occurredAt:input.occurredAt,quote,preDiscountQuote,amounts:actualAmounts,quoteDigest});
  },
 });

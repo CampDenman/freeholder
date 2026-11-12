@@ -5,7 +5,7 @@ import {and,eq,inArray} from "drizzle-orm";
 import {z} from "zod";
 import {contacts} from "@/core/contacts/schema";
 import {publicMerchantSupport} from "@/core/commerce/merchant-identity";
-import {defineService,getService,permits,ServiceError} from "@/core/service";
+import {defineService,getService,permits,ServiceError,type ServiceContext} from "@/core/service";
 import {merchantTaxAddress} from "@/modules/invoicing/merchant-tax-contract";
 import {currentMerchantTaxProfile,merchantTaxBusinessIdentity} from "@/modules/invoicing/merchant-tax";
 import {previewMerchantTax} from "@/modules/invoicing/merchant-tax-preview";
@@ -22,14 +22,13 @@ import {allocateDiscount} from "./promo-quote";
 import {currentOrderCommercialTerms,orderCommercialConsentDigest} from "./order-commercial-consent";
 const minor=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const amounts=z.object({subtotalMinor:minor,discountMinor:minor,shippingMinor:minor,taxMinor:minor,totalMinor:minor});
-export const quoteMerchantCheckout=defineService({
- name:"catalog.quoteMerchantCheckout",summary:"Review actual merchant business identities and exact taxes before accepting this authorized cart.",kind:"query",permission:"public",
- input:z.object({cartId:z.uuid(),cartToken:z.uuid().optional(),email:z.string().trim().email().toLowerCase().max(320).optional(),shippingAddress:merchantTaxAddress.optional(),taxDestination:merchantTaxAddress.optional(),shippingMethodId:z.uuid().optional(),locationId:z.uuid().optional(),couponCode:z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9-]{2,31}$/).optional()}),
- output:z.object({currency:z.string(),taxQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/),commercialQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/),collectionKind:z.enum(["direct","destination"]),amounts,parties:z.array(z.object({sellerUserId:z.uuid().nullable(),merchantName:z.string().min(1).max(200),merchantSupport:publicMerchantSupport,liability:z.enum(["platform","seller"]),pricesIncludeTax:z.boolean(),amounts}))}).nullable(),
- handler:async(input,ctx)=>{
-  const access=await requireCartAccess(ctx,input,"catalog.quoteMerchantCheckout","query");
-  if(access.cart.status!=="open"||access.cart.kind!=="cart")throw new ServiceError("conflict","Review an open cart before accepting a merchant quote.");
+const publicQuoteInput=z.object({cartId:z.uuid(),cartToken:z.uuid().optional(),email:z.string().trim().email().toLowerCase().max(320).optional(),shippingAddress:merchantTaxAddress.optional(),taxDestination:merchantTaxAddress.optional(),shippingMethodId:z.uuid().optional(),locationId:z.uuid().optional(),couponCode:z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9-]{2,31}$/).optional()});
+const quoteOutput=z.object({currency:z.string(),taxQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/),commercialQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/),collectionKind:z.enum(["direct","destination"]),amounts,parties:z.array(z.object({sellerUserId:z.uuid().nullable(),merchantName:z.string().min(1).max(200),merchantSupport:publicMerchantSupport,liability:z.enum(["platform","seller"]),pricesIncludeTax:z.boolean(),amounts}))}).nullable();
+const preparedQuoteInput=publicQuoteInput.omit({email:true}).extend({contactId:z.uuid().nullable()});
+
+async function quoteForBuyer(input:z.infer<typeof preparedQuoteInput>,ctx:ServiceContext){
   const basket=await ctx.callAsSystem(getCart,{cartId:input.cartId});
+  if(basket.cart.status!=="open"||basket.cart.kind!=="cart")throw new ServiceError("conflict","Review an open cart before accepting a merchant quote.");
   if(!basket.lines.length||!basket.allPriced||!basket.allAvailable)throw new ServiceError("conflict","Every original cart item needs its current price and availability before quoting.");
   const original=await ctx.tx.select({variantId:productVariants.id,sellerUserId:products.sellerUserId,taxCategoryId:products.taxCategoryId,requiresShipping:productVariants.requiresShipping}).from(productVariants).innerJoin(products,eq(products.id,productVariants.productId)).where(inArray(productVariants.id,basket.lines.map(line=>line.variantId))).orderBy(productVariants.id).for("share");
   if(original.length!==new Set(basket.lines.map(line=>line.variantId)).size||basket.lines.some(line=>original.find(row=>row.variantId===line.variantId)?.requiresShipping!==line.requiresShipping))throw new ServiceError("conflict","The original cart ownership or shipping terms changed. Refresh the quote.");
@@ -55,10 +54,7 @@ export const quoteMerchantCheckout=defineService({
   const categoryIds=[...new Set(original.flatMap(row=>row.taxCategoryId?[row.taxCategoryId]:[]))];
   const categories=categoryIds.length?await ctx.tx.select({id:taxCategories.id,code:taxCategories.code}).from(taxCategories).where(inArray(taxCategories.id,categoryIds)).orderBy(taxCategories.id).for("share"):[];
   const items=basket.lines.map((line,position)=>{const owner=original.find(row=>row.variantId===line.variantId)!;const category=owner.taxCategoryId?categories.find(row=>row.id===owner.taxCategoryId)?.code:"standard";if(!category)throw new ServiceError("conflict","The original product tax category is unavailable.");return{id:`line:${position}`,sellerUserId:owner.sellerUserId,quantityMicros:line.quantity*1000000,unitAmountMinor:line.unitAmountMinor!,discountMinor:discounts[position]??0,category,requiresShipping:line.requiresShipping};});
-  // A cart token is not authority over the email holder's exemption records.
-  let contactId:string|null=null;
-  if(input.email&&ctx.actor.kind==="user"){const[person]=await ctx.tx.select({id:contacts.id,source:contacts.source}).from(contacts).where(and(eq(contacts.userId,ctx.actor.userId),eq(contacts.email,input.email))).limit(1);if(person&&person.source!=="privacy-erasure")contactId=person.id;}
-  if(!contactId&&input.email&&permits(ctx.actor,"scoped","catalog.quoteMerchantCheckout","query")){const[person]=await ctx.tx.select({id:contacts.id,source:contacts.source}).from(contacts).where(eq(contacts.email,input.email)).limit(1);if(person&&person.source!=="privacy-erasure")contactId=person.id;}
+  const contactId=input.contactId;
   const freight=allocateMerchantGrossFreight(items,shippingMinor),results:Array<{sellerUserId:string|null;merchantName:string;merchantSupport:z.infer<typeof publicMerchantSupport>;liability:"platform"|"seller";pricesIncludeTax:boolean;amounts:z.infer<typeof amounts>;quoteDigest:string}>=[],occurredAt=new Date();
   for(const portion of freight){
    const profile=await ctx.callAsSystem(currentMerchantTaxProfile,{sellerUserId:portion.sellerUserId});
@@ -69,5 +65,22 @@ export const quoteMerchantCheckout=defineService({
   }
   const total=amounts.parse(Object.fromEntries(["subtotalMinor","discountMinor","shippingMinor","taxMinor","totalMinor"].map(key=>[key,sumMinor(results.map(row=>row.amounts[key as keyof z.infer<typeof amounts>]),"Merchant quote amount")])));
   return{currency:basket.cart.currency,taxQuoteDigest:merchantTaxConsentDigest(results),commercialQuoteDigest:orderCommercialConsentDigest(commercial),collectionKind:commercial.collectionKind,amounts:total,parties:results.map(({quoteDigest:_privateQuote,...publicParty})=>publicParty)};
+}
+
+export const quoteMerchantCheckout=defineService({
+ name:"catalog.quoteMerchantCheckout",summary:"Review actual merchant business identities and exact taxes before accepting this authorized cart.",kind:"query",permission:"public",
+ input:publicQuoteInput,output:quoteOutput,
+ handler:async(input,ctx)=>{
+  await requireCartAccess(ctx,input,"catalog.quoteMerchantCheckout","query");
+  // A cart token is not authority over the email holder's exemption records.
+  let contactId:string|null=null;
+  if(input.email&&ctx.actor.kind==="user"){const[person]=await ctx.tx.select({id:contacts.id,source:contacts.source}).from(contacts).where(and(eq(contacts.userId,ctx.actor.userId),eq(contacts.email,input.email))).limit(1);if(person&&person.source!=="privacy-erasure")contactId=person.id;}
+  if(!contactId&&input.email&&permits(ctx.actor,"scoped","catalog.quoteMerchantCheckout","query")){const[person]=await ctx.tx.select({id:contacts.id,source:contacts.source}).from(contacts).where(eq(contacts.email,input.email)).limit(1);if(person&&person.source!=="privacy-erasure")contactId=person.id;}
+  return quoteForBuyer({...input,contactId},ctx);
  },
+});
+
+export const quoteMerchantCheckoutForBuyer=defineService({
+ name:"catalog.quoteMerchantCheckoutForBuyer",summary:"Quote a cart and buyer whose authority the actual checkout parent has already established.",kind:"query",permission:"system",external:false,
+ input:preparedQuoteInput,output:quoteOutput,handler:quoteForBuyer,
 });

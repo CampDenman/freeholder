@@ -16,7 +16,10 @@ import {merchantTaxConsentDigest} from "./merchant-tax-consent";
 const minor=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const merchantTaxSourceRequest=z.object({sourceType:z.string().min(1),sourceId:z.string().optional(),contactId:z.uuid(),currency:z.string().regex(/^[A-Z]{3}$/),
  lines:z.array(z.object({sourceType:z.string().optional(),sourceId:z.string().optional(),quantityMicros:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),unitAmountMinor:minor,discountMinor:minor,taxCategoryCode:z.string(),requiresShipping:z.boolean(),snapshot:z.record(z.string(),z.unknown())})).min(1).max(1000),shippingMinor:minor,destination:merchantTaxAddress,expectedQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/).optional()});
-export const merchantTaxSourceParty=z.object({sellerUserId:z.uuid().nullable(),profileId:z.uuid(),profileVersion:z.number().int().positive(),linePositions:z.array(z.number().int().nonnegative()).min(1).max(1000),shippingMinor:minor,expectedQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/).optional()});
+export const merchantTaxSourceParty=z.object({sellerUserId:z.uuid().nullable(),profileId:z.uuid(),profileVersion:z.number().int().positive(),linePositions:z.array(z.number().int().nonnegative()).min(1).max(1000),shippingMinor:minor,expectedQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/).optional(),
+ // Only a trusted original-source resolver supplies this date. It is absent
+ // from public draft/cart input and must come from actual accepted period facts.
+ occurredAt:z.coerce.date().optional()});
 type SourceRequest=z.infer<typeof merchantTaxSourceRequest>;
 type Party=z.infer<typeof merchantTaxSourceParty>;
 type Resolver=(input:SourceRequest,ctx:ServiceContext)=>Promise<Party[]>;
@@ -40,7 +43,7 @@ export async function prepareMerchantInvoiceTax(input:SourceRequest,ctx:ServiceC
  for(const party of [...parties].sort((a,b)=>(a.sellerUserId??"").localeCompare(b.sellerUserId??""))){
   const positions=[...party.linePositions].sort((a,b)=>a-b);
   const items=positions.map(position=>{const line=request.lines[position]!;return merchantTaxQuoteItem.parse({id:`line:${position}`,quantityMicros:line.quantityMicros,unitAmountMinor:line.unitAmountMinor,discountMinor:line.discountMinor,category:line.taxCategoryCode,requiresShipping:line.requiresShipping});});
-  const result=await ctx.callAsSystem(previewMerchantTax,{profileId:party.profileId,profileVersion:party.profileVersion,contactId:request.contactId,destination:request.destination,currency:request.currency,items,shippingMinor:party.shippingMinor,occurredAt});
+  const result=await ctx.callAsSystem(previewMerchantTax,{profileId:party.profileId,profileVersion:party.profileVersion,contactId:request.contactId,destination:request.destination,currency:request.currency,items,shippingMinor:party.shippingMinor,occurredAt:party.occurredAt??occurredAt});
   if(result.sellerUserId!==party.sellerUserId)throw new ServiceError("conflict","The tax profile does not belong to the original commercial source's business.");
   if(party.expectedQuoteDigest&&party.expectedQuoteDigest!==result.quoteDigest)throw new ServiceError("conflict","The buyer's accepted tax quote changed. Review the current original business quote before paying.");
   prepared.push({party:{...party,linePositions:positions},result});
@@ -66,7 +69,7 @@ export async function freezeMerchantInvoiceTax(plan:Awaited<ReturnType<typeof pr
   const owned=party.linePositions.map(position=>{const line=byPosition.get(position);if(!line)throw new ServiceError("conflict","The original business has no matching invoice line.");return line;});
   if(sumMinor(owned.map(line=>line.taxMinor),"Original business item tax")+result.amounts.shippingTaxMinor!==result.amounts.taxMinor)throw new ServiceError("conflict","The original business's invoice tax does not match its quote.");
   const evidenceDigest=merchantTaxDigest({version:1,quoteDigest:result.quoteDigest,invoiceId:invoice.id,contactId:invoice.contactId,sourceType:invoice.sourceType,sourceId:invoice.sourceId,sellerUserId:party.sellerUserId,lines:owned.map(line=>({id:line.id,position:line.position,sourceType:line.sourceType,sourceId:line.sourceId,quantityMicros:line.quantityMicros,unitAmountMinor:line.unitAmountMinor,subtotalMinor:line.subtotalMinor,discountMinor:line.discountMinor,taxMinor:line.taxMinor,totalMinor:line.totalMinor})),amounts:result.amounts});
-  const[quote]=await ctx.tx.insert(invoiceMerchantTaxQuotes).values({invoiceId:invoice.id,sellerUserId:party.sellerUserId,sellerKey:party.sellerUserId===null?"site":`seller:${party.sellerUserId}`,profileId:party.profileId,profileVersion:party.profileVersion,liability:result.liability,evidenceDigest,shippingMinor:result.amounts.shippingMinor,shippingTaxMinor:result.amounts.shippingTaxMinor,taxMinor:result.amounts.taxMinor}).returning({id:invoiceMerchantTaxQuotes.id});
+  const[quote]=await ctx.tx.insert(invoiceMerchantTaxQuotes).values({invoiceId:invoice.id,sellerUserId:party.sellerUserId,sellerKey:party.sellerUserId===null?"site":`seller:${party.sellerUserId}`,profileId:party.profileId,profileVersion:party.profileVersion,liability:result.liability,evidenceDigest,occurredAt:result.occurredAt,shippingMinor:result.amounts.shippingMinor,shippingTaxMinor:result.amounts.shippingTaxMinor,taxMinor:result.amounts.taxMinor}).returning({id:invoiceMerchantTaxQuotes.id});
   await ctx.tx.insert(invoiceMerchantTaxQuoteLines).values(owned.map(line=>({invoiceLineId:line.id,quoteId:quote!.id})));
  }
 }

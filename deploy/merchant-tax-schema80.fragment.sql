@@ -44,7 +44,7 @@ CREATE TABLE invoice_merchant_tax_quotes (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), invoice_id uuid NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
  seller_user_id uuid, seller_key text NOT NULL,
  profile_id uuid NOT NULL REFERENCES merchant_tax_profiles(id) ON DELETE RESTRICT, profile_version integer NOT NULL CHECK(profile_version>0),
- liability text NOT NULL CHECK(liability IN ('platform','seller')), evidence_digest text NOT NULL CHECK(evidence_digest ~ '^[a-f0-9]{64}$'),
+ liability text NOT NULL CHECK(liability IN ('platform','seller')), evidence_digest text NOT NULL CHECK(evidence_digest ~ '^[a-f0-9]{64}$'),occurred_at timestamptz NOT NULL,
  shipping_minor bigint NOT NULL CHECK(shipping_minor BETWEEN 0 AND 9007199254740991),
  shipping_tax_minor bigint NOT NULL CHECK(shipping_tax_minor BETWEEN 0 AND 9007199254740991),
  tax_minor bigint NOT NULL CHECK(tax_minor BETWEEN 0 AND 9007199254740991), created_at timestamptz NOT NULL DEFAULT now(),

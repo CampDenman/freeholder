@@ -68,6 +68,7 @@ export const invoiceMerchantTaxQuotes = pgTable("invoice_merchant_tax_quotes", {
   profileVersion: integer("profile_version").notNull(),
   liability: text("liability",{enum:["platform","seller"]}).notNull(),
   evidenceDigest: text("evidence_digest").notNull(),
+  occurredAt: timestamp("occurred_at",{withTimezone:true}).notNull(),
   shippingMinor: bigint("shipping_minor",{mode:"number"}).notNull(),
   shippingTaxMinor: bigint("shipping_tax_minor",{mode:"number"}).notNull(),
   taxMinor: bigint("tax_minor",{mode:"number"}).notNull(),

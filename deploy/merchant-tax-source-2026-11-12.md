@@ -23,6 +23,15 @@ draft preparation proves each original item, quantity, discount, category,
 business and buyer before storing its receipt. Historical epoch0 orders are not
 backfilled from current settings.
 
+An internal prepared-buyer quote phase lets the actual checkout parent reuse
+its already-proved cart/contact authority. It accepts only that parent's proved
+contact or NULL; public email claims still confer no exemption access. It is
+excluded from external key, SDK, OpenAPI and MCP capabilities. Trusted original
+source resolvers may supply the actual accepted period's tax date. Public draft
+input cannot choose a date. The immutable invoice tax receipt stores that date;
+late cash after a policy wipe still requires its original frozen receipt or
+explicit recovery, never a replacement policy.
+
 Source controls also register original tax and order contact pointers for merge
 and bounded exact undo. New declarations or source changes invalidate old undo
 witnesses. The tax privacy source retains its declaration until real external
@@ -33,7 +42,11 @@ invoice audit projections omit private buyer/tax payloads.
 Focused source checks: 30 tests pass across invoice amounts, merchant tax
 calculation, merchant allocation amounts, gross freight and the private service
 boundary. These are arithmetic and boundary controls, not native commercial
-journeys. Current application gates are being run separately.
+journeys. The complete local application gates passed on checkpoint0da33b00: all44
+contract files,384 passed and26 explicit database skips, plus full types/lint,
+metadata, release notes, plan and playground policy. The additive prepared-buyer
+and original-date change passes full types, focused lint and13 private/tax
+controls. Those source controls do not qualify provider or native journeys.
 
 The initial SQL diagnostic uses the normal journal0–77 (78 entries), then two
 explicit unpublished80 fragments. The first attempts exposed a CASE-expression
@@ -42,7 +55,8 @@ the error. The third fresh rehearsal created all seven tax/order tables. Its
 report explicitly says `fullSchema80Qualified:false`:
 `/tmp/freeholder-tax-order-schema80-diagnostic-v3.log`. The fourth fresh rehearsal also
 includes the commercial-consent column and passes; its current report is
-`/tmp/freeholder-tax-order-schema80-diagnostic-v4.log`. No contiguous0–80 upgrade,
+`/tmp/freeholder-tax-order-schema80-diagnostic-v4.log`. The fifth fresh rehearsal also verifies the new original tax-date column and
+passes (`/tmp/freeholder-tax-order-schema80-diagnostic-v5.log`). No contiguous0–80 upgrade,
 populated80 preservation or native service acceptance is claimed by that proof.
 
 Required work still includes the complete assembled80 migration and predecessor
