@@ -6095,6 +6095,7 @@
   "social.variantStatus.draft": "Borrador",
   "social.variantStatus.pending_review": "Hay que revisar",
   "social.variantStatus.rejected": "Rechazado",
+  "subscriptions.merchantTermsNotice": "Esta cotización muestra el precio y las condiciones de facturación de tu membresía. Los impuestos se calculan en cada factura según la política aceptada de este negocio y la ubicación que declaraste.",
   "subscriptions.action.cancel": "Cancelar",
   "subscriptions.action.changePlan": "Cambiar de plan",
   "subscriptions.action.pause": "Pausar",

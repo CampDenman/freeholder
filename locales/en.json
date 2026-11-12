@@ -6095,6 +6095,7 @@
   "social.variantStatus.draft": "Draft",
   "social.variantStatus.pending_review": "Needs review",
   "social.variantStatus.rejected": "Rejected",
+  "subscriptions.merchantTermsNotice": "Your membership price and billing terms are shown with this quote. Tax is calculated for each invoice using this business’s accepted policy and your declared location.",
   "subscriptions.action.cancel": "Cancel",
   "subscriptions.action.changePlan": "Change plan",
   "subscriptions.action.pause": "Pause",

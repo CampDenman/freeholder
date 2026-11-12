@@ -35,6 +35,7 @@ import { products, productVariants } from "@/modules/catalog/schema";
 import { invoices, paymentMethods } from "@/modules/invoicing/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { merchantTaxProfiles, merchantTaxProfileVersions } from "@/modules/invoicing/merchant-tax-schema";
+import type { SubscriptionCommercialSnapshot, SubscriptionInitialTaxQuote } from "./merchant-terms-contract";
 
 export const PLAN_INTERVALS = ["day", "week", "month", "year"] as const;
 export const BILLING_MODES = ["provider", "platform", "manual"] as const;
@@ -298,6 +299,40 @@ export const subscriptionMerchantScopes = pgTable("subscription_merchant_scopes"
     and ((${t.collectionKind}='direct' and ${t.chargeAccountId} is not null and ${t.chargeAccountId}=${t.recipientAccountId}) or (${t.collectionKind}='destination' and ${t.chargeAccountId} is null))`),
   check("subscription_merchant_scopes_tax", sql`${t.taxProfileVersion}>0 and ${t.taxLiability} in ('platform','seller')
     and ((${t.taxDestination} is null and ${t.redactedAt} is not null) or (${t.taxDestination} is not null and ${t.redactedAt} is null and jsonb_typeof(${t.taxDestination})='object' and (${t.taxDestination}->>'country') ~ '^[A-Z]{2}$')) is true`),
+]);
+
+/** Each amendment is a new accepted snapshot; the original charge scope stays
+ * independent and no pre80 agreement receives reconstructed commercial terms. */
+export const subscriptionCommercialTerms = pgTable("subscription_commercial_terms", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  subscriptionId: uuid("subscription_id").notNull().references(() => subscriptions.id, { onDelete: "restrict" }),
+  revision: integer("revision").notNull(),
+  previousTermsId: uuid("previous_terms_id"),
+  snapshot: jsonb("snapshot").$type<SubscriptionCommercialSnapshot>().notNull(),
+  profileId: uuid("profile_id").notNull().references(() => merchantTaxProfiles.id, { onDelete: "restrict" }),
+  profileVersion: integer("profile_version").notNull(),
+  taxLiability: text("tax_liability", { enum: ["platform", "seller"] }).notNull(),
+  taxDestination: jsonb("tax_destination").$type<TaxAddress>(),
+  acceptedQuoteDigest: text("accepted_quote_digest").notNull(),
+  initialTaxQuote: jsonb("initial_tax_quote").$type<SubscriptionInitialTaxQuote>().notNull(),
+  firstPeriodTaxQuote: jsonb("first_period_tax_quote").$type<SubscriptionInitialTaxQuote>().notNull(),
+  renewalTaxQuote: jsonb("renewal_tax_quote").$type<SubscriptionInitialTaxQuote>().notNull(),
+  noticeDigest: text("notice_digest").notNull(),
+  noticeSnapshot: jsonb("notice_snapshot").$type<{ locale: "en" | "es" | "fr" | "ar"; text: string }>().notNull(),
+  quoteOccurredAt: timestamp("quote_occurred_at", { withTimezone: true }).notNull(),
+  effectivePeriodStart: timestamp("effective_period_start", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull(),
+  acceptanceSource: text("acceptance_source", { enum: ["public_join", "owner_subscription", "amendment"] }).notNull(),
+  redactedAt: timestamp("redacted_at", { withTimezone: true }),
+  createdAt: createdAtColumn(),
+}, t => [
+  uniqueIndex("subscription_commercial_terms_revision").on(t.subscriptionId, t.revision),
+  index("subscription_commercial_terms_profile").on(t.profileId),
+  foreignKey({ name: "subscription_commercial_terms_profile_version_fk", columns: [t.profileId, t.profileVersion], foreignColumns: [merchantTaxProfileVersions.profileId, merchantTaxProfileVersions.version] }).onDelete("restrict"),
+  foreignKey({ name: "subscription_commercial_terms_previous_fk", columns: [t.previousTermsId], foreignColumns: [t.id] }).onDelete("restrict"),
+  check("subscription_commercial_terms_revision_check", sql`${t.revision}>0 and ((${t.revision}=1 and ${t.previousTermsId} is null) or (${t.revision}>1 and ${t.previousTermsId} is not null))`),
+  check("subscription_commercial_terms_acceptance", sql`${t.acceptanceSource} in ('public_join','owner_subscription','amendment') and ${t.acceptedQuoteDigest} ~ '^[a-f0-9]{64}$' and ${t.noticeDigest} ~ '^[a-f0-9]{64}$'`),
+  check("subscription_commercial_terms_tax", sql`${t.profileVersion}>0 and ${t.taxLiability} in ('platform','seller') and ((${t.taxDestination} is null and ${t.redactedAt} is not null) or (${t.taxDestination} is not null and ${t.redactedAt} is null and jsonb_typeof(${t.taxDestination})='object' and (${t.taxDestination}->>'country') ~ '^[A-Z]{2}$')) is true`),
 ]);
 
 /** Authenticated positive scheduled money survives later invoice/fee reconciliation. */

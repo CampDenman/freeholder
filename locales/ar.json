@@ -6789,6 +6789,7 @@
   "social.variantStatus.draft": "مسودة",
   "social.variantStatus.pending_review": "يحتاج مراجعة",
   "social.variantStatus.rejected": "مرفوض",
+  "subscriptions.merchantTermsNotice": "يعرض هذا العرض سعر عضويتك وشروط فوترة الاشتراك. تُحتسب الضريبة لكل فاتورة وفق سياسة هذا النشاط التجاري التي وافقت عليها والموقع الذي صرّحت به.",
   "subscriptions.action.cancel": "إلغاء",
   "subscriptions.action.pause": "إيقاف مؤقت",
   "subscriptions.action.resume": "المتابعة",

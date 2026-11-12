@@ -6095,6 +6095,7 @@
   "social.variantStatus.draft": "Brouillon",
   "social.variantStatus.pending_review": "À relire",
   "social.variantStatus.rejected": "Refusé",
+  "subscriptions.merchantTermsNotice": "Ce devis présente le prix et les conditions de facturation de votre abonnement. Les taxes de chaque facture sont calculées selon la politique acceptée de cette entreprise et votre lieu déclaré.",
   "subscriptions.action.cancel": "Résilier",
   "subscriptions.action.changePlan": "Changer de forfait",
   "subscriptions.action.pause": "Mettre en pause",
