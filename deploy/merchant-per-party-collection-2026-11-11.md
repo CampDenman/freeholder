@@ -185,3 +185,14 @@ Pure consent, locale and private-service controls passed; the audit-label run
 identified the tax-erasure label supplied by the pending upstream order/tax
 checkpoint. Full booking database/browser and owner quoting qualification are
 still required; no migration or provider mode has been activated.
+
+The order issue and collection resolvers now consume the original pre-draft
+commercial witness, including its model, fees, platform, recipient and exact
+per-party tax profile. They do not replace those terms with today's site
+configuration. Cart checkout displays every named business, its tax and total,
+and binds separate accepted business and tax digests. Quote review uses the
+existing bounded private return-cookie flow; customer addresses do not travel
+in checkout URLs. Six focused no-database files passed 106 controls and full
+TypeScript plus focused lint passed. The prepared-buyer private quote phase
+is the next composition step for scoped checkout callers; assembled80 native,
+SDK and browser qualification remain open.

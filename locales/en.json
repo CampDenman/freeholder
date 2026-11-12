@@ -8867,5 +8867,12 @@
   "customerInvoice.merchantPartsHint": "This is one invoice. Each merchant’s payment is authorized separately, and amounts already paid stay recorded.",
   "publicBooking.taxTotal": "Tax included in the total: {amount}.",
   "publicBooking.taxLocation": "Enter your billing country, region and postal code to review the merchant’s tax quote.",
-  "publicBooking.acceptMerchant": "I agree to the named merchant’s price, tax quote and cancellation policy shown above."
+  "publicBooking.acceptMerchant": "I agree to the named merchant’s price, tax quote and cancellation policy shown above.",
+  "store.checkout.merchantReview": "Merchant and tax quote",
+  "store.checkout.acceptMerchantQuote": "I accept the named businesses, tax and total shown in this quote.",
+  "store.checkout.merchantTaxTotal": "Tax: {tax}. Business total: {total}.",
+  "store.checkout.reviewMerchantQuote": "Review merchant quote",
+  "store.checkout.merchantGrandTotal": "Order total: {amount}.",
+  "store.checkout.merchantReviewHint": "Review each business and its total before placing this order. Update the quote after changing your address, delivery or coupon.",
+  "store.checkout.merchantQuoteChanged": "The quote needs current address, delivery or price details. Review your answers and request an updated quote."
 }

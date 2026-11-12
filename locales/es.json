@@ -8867,5 +8867,12 @@
   "customerInvoice.merchantPartsHint": "Esta es una sola factura. El pago de cada comerciante se autoriza por separado y los importes ya pagados quedan registrados.",
   "publicBooking.taxTotal": "Impuestos incluidos en el total: {amount}.",
   "publicBooking.taxLocation": "Indica el país, la región y el código postal de facturación para consultar los impuestos del comerciante.",
-  "publicBooking.acceptMerchant": "Acepto el precio, los impuestos y la política de cancelación del comerciante indicado arriba."
+  "publicBooking.acceptMerchant": "Acepto el precio, los impuestos y la política de cancelación del comerciante indicado arriba.",
+  "store.checkout.merchantReview": "Comerciantes e impuestos",
+  "store.checkout.acceptMerchantQuote": "Acepto los negocios indicados, los impuestos y el total de este presupuesto.",
+  "store.checkout.merchantTaxTotal": "Impuestos: {tax}. Total del negocio: {total}.",
+  "store.checkout.reviewMerchantQuote": "Revisar presupuesto de comerciantes",
+  "store.checkout.merchantGrandTotal": "Total del pedido: {amount}.",
+  "store.checkout.merchantReviewHint": "Revisa cada negocio y su total antes de hacer el pedido. Actualiza el presupuesto si cambias la dirección, el envío o el cupón.",
+  "store.checkout.merchantQuoteChanged": "El presupuesto necesita los datos actuales de dirección, envío o precios. Revisa tus respuestas y actualízalo."
 }

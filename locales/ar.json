@@ -8867,5 +8867,12 @@
   "customerInvoice.merchantPartsHint": "هذه فاتورة واحدة. يتم تفويض دفعة كل تاجر على حدة، وتبقى المبالغ المدفوعة مسجلة.",
   "publicBooking.taxTotal": "الضريبة المشمولة في الإجمالي: {amount}.",
   "publicBooking.taxLocation": "أدخل بلد الفوترة والمنطقة والرمز البريدي لمراجعة عرض ضريبة التاجر.",
-  "publicBooking.acceptMerchant": "أوافق على السعر والضريبة وسياسة الإلغاء للتاجر المذكور أعلاه."
+  "publicBooking.acceptMerchant": "أوافق على السعر والضريبة وسياسة الإلغاء للتاجر المذكور أعلاه.",
+  "store.checkout.merchantReview": "التجار وعرض الضريبة",
+  "store.checkout.acceptMerchantQuote": "أوافق على الأنشطة التجارية المذكورة والضريبة والإجمالي الموضّح في هذا العرض.",
+  "store.checkout.merchantTaxTotal": "الضريبة: {tax}. إجمالي النشاط التجاري: {total}.",
+  "store.checkout.reviewMerchantQuote": "مراجعة عرض التجار",
+  "store.checkout.merchantGrandTotal": "إجمالي الطلب: {amount}.",
+  "store.checkout.merchantReviewHint": "راجع كل نشاط تجاري وإجماليه قبل تقديم الطلب. حدّث العرض بعد تغيير العنوان أو التوصيل أو القسيمة.",
+  "store.checkout.merchantQuoteChanged": "يحتاج العرض إلى تفاصيل العنوان أو التوصيل أو السعر الحالية. راجع إجاباتك واطلب عرضًا محدّثًا."
 }

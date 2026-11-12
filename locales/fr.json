@@ -8867,5 +8867,12 @@
   "customerInvoice.merchantPartsHint": "Il s’agit d’une seule facture. Le paiement de chaque commerçant est autorisé séparément et les montants déjà payés restent enregistrés.",
   "publicBooking.taxTotal": "Taxes comprises dans le total : {amount}.",
   "publicBooking.taxLocation": "Indiquez votre pays, région et code postal de facturation pour consulter le devis fiscal du commerçant.",
-  "publicBooking.acceptMerchant": "J’accepte le prix, le devis fiscal et les conditions d’annulation du commerçant nommé ci-dessus."
+  "publicBooking.acceptMerchant": "J’accepte le prix, le devis fiscal et les conditions d’annulation du commerçant nommé ci-dessus.",
+  "store.checkout.merchantReview": "Commerçants et taxes",
+  "store.checkout.acceptMerchantQuote": "J’accepte les entreprises nommées, les taxes et le total indiqués dans ce devis.",
+  "store.checkout.merchantTaxTotal": "Taxes : {tax}. Total de l’entreprise : {total}.",
+  "store.checkout.reviewMerchantQuote": "Vérifier le devis des commerçants",
+  "store.checkout.merchantGrandTotal": "Total de la commande : {amount}.",
+  "store.checkout.merchantReviewHint": "Vérifiez chaque entreprise et son total avant de commander. Actualisez le devis après toute modification d’adresse, de livraison ou de code promotionnel.",
+  "store.checkout.merchantQuoteChanged": "Le devis nécessite vos coordonnées, votre livraison et les prix à jour. Vérifiez vos réponses et actualisez le devis."
 }

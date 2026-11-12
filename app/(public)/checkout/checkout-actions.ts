@@ -61,7 +61,7 @@ const KEPT_FIELDS = ["email", "name", "street1", "city", "region", "postalCode",
  * (the public-form-return pattern) and send them to the refusal, with the
  * fields it is about named in the URL — codes only, never text.
  */
-async function refuse(path: string, form: FormData, reason: string, fields: readonly CheckoutField[] = []): Promise<never> {
+async function keepCheckoutAnswers(form: FormData): Promise<void> {
   const values: Record<string, string> = {};
   for (const name of KEPT_FIELDS) values[name] = text(form, name);
   const kept = encodeFormReturn(CHECKOUT_RETURN_KEY, values);
@@ -75,8 +75,20 @@ async function refuse(path: string, form: FormData, reason: string, fields: read
       maxAge: FORM_RETURN_MAX_AGE,
     });
   }
+}
+
+async function refuse(path: string, form: FormData, reason: string, fields: readonly CheckoutField[] = []): Promise<never> {
+  await keepCheckoutAnswers(form);
   const named = fields.length ? `&fields=${fields.join(",")}` : "";
   redirect(`${path}?error=${reason}${named}`);
+}
+
+/** Re-render the actual quote with private answers kept in the caller's cookie. */
+export async function reviewMerchantCheckoutAction(form: FormData): Promise<void> {
+  const path = await localize("/checkout");
+  if (!(await readShopperCart())) redirect(`${path}?error=expired`);
+  await keepCheckoutAnswers(form);
+  redirect(`${path}?review=1`);
 }
 
 export async function shopperCheckoutAction(form: FormData): Promise<void> {
@@ -137,6 +149,8 @@ export async function shopperCheckoutAction(form: FormData): Promise<void> {
         acceptedTerms: true,
         termsVersion: text(form, "termsVersion") || undefined,
         termsHash: text(form, "termsHash") || undefined,
+        taxQuoteDigest: text(form, "taxQuoteDigest") || undefined,
+        commercialQuoteDigest: text(form, "commercialQuoteDigest") || undefined,
         idempotencyKey: text(form, "idempotencyKey") || randomUUID(),
         locale: await getLocale(),
       },

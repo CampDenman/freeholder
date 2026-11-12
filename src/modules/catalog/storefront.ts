@@ -52,6 +52,7 @@ import { requireCartAccess } from "./cart-access";
 import { getCart } from "./cart";
 import { availability } from "./inventory";
 import { checkoutCart } from "./orders";
+import { quoteMerchantCheckout } from "./merchant-checkout-quote";
 import { resolvePrice } from "./pricing";
 import { ORDER_STATUSES } from "./contract";
 import {
@@ -339,6 +340,8 @@ export const shopperCheckout = defineService({
     acceptedTerms: z.literal(true),
     termsVersion: z.string().trim().min(1).max(100).optional(),
     termsHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    taxQuoteDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    commercialQuoteDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     idempotencyKey: z.string().trim().min(8).max(240),
     locale: z.string().trim().min(2).max(35).optional(),
   }),
@@ -376,6 +379,15 @@ export const shopperCheckout = defineService({
     if (basket.lines.length === 0) {
       throw new ServiceError("validation", "The cart is empty.");
     }
+    // This parent has proved cart authority. Keep the actual caller for the
+    // quote's verified-email exemption decision; a system elevation here
+    // would quote another customer's exemption before their email proof.
+    const commercial = await ctx.call(quoteMerchantCheckout, {
+      cartId: input.cartId, cartToken: input.cartToken, email: input.email,
+      shippingAddress: input.shippingAddress, taxDestination: input.taxDestination,
+      shippingMethodId: input.shippingMethodId, couponCode: input.couponCode,
+    });
+    if (commercial && (input.taxQuoteDigest !== commercial.taxQuoteDigest || input.commercialQuoteDigest !== commercial.commercialQuoteDigest)) throw new ServiceError("conflict", "Review and accept the actual original merchants, complete tax and commercial quote before checkout.");
 
     // Proof of the email: the signed-in visitor's linked contact carries it,
     // or an authorized staff caller already holds contact authority. Everyone
@@ -444,6 +456,8 @@ export const shopperCheckout = defineService({
       ...(input.termsHash ? { termsHash: input.termsHash } : {}),
       ...(input.shippingAddress ? { shippingAddress: input.shippingAddress } : {}),
       ...(input.taxDestination ? { taxDestination: input.taxDestination } : {}),
+      ...(input.taxQuoteDigest ? { taxQuoteDigest: input.taxQuoteDigest } : {}),
+      ...(input.commercialQuoteDigest ? { commercialQuoteDigest: input.commercialQuoteDigest } : {}),
       ...(input.shippingMethodId ? { shippingMethodId: input.shippingMethodId } : {}),
       ...(input.couponCode ? { couponCode: input.couponCode } : {}),
     });
