@@ -1649,13 +1649,13 @@ export const reopenErasureJob = defineService({
       return { jobId: null, recoveryRequired: true, changed };
     }
     if (outcome.outcome === "retained") return { jobId: null, recoveryRequired: false, changed: false };
-    if (outcome.outcome === "pending" && outcome.pendingJobs?.length) return { jobId: outcome.pendingJobs[0]!, recoveryRequired: false, changed: false };
-    if (outcome.outcome !== "erased") throw new ServiceError("conflict", "The original erasure outcome needs recovery before it can be reopened.");
+    if (outcome.outcome !== "erased" && outcome.outcome !== "pending") throw new ServiceError("conflict", "The original erasure outcome needs recovery before it can be reopened.");
     const idempotencyKey = `reopen-erasure:${request.id}:${input.scope}:${input.idempotencyKey}`;
     const [claim] = await ctx.tx.select({ jobId: jobIdempotencyKeys.jobId }).from(jobIdempotencyKeys).where(and(eq(jobIdempotencyKeys.jobName, input.jobName), eq(jobIdempotencyKeys.idempotencyKey, idempotencyKey))).limit(1);
+    if (claim && outcome.pendingJobs?.includes(claim.jobId)) return { jobId: claim.jobId, recoveryRequired: false, changed: false };
     const originalJobId = claim?.jobId ?? randomUUID();
     const job = await enqueueJob(ctx.tx, input.jobName, { ...input.jobData, requestId: request.id, originalJobId }, { id: originalJobId, idempotencyKey });
-    outcome.outcome = "pending"; outcome.pendingJobs = [job.id];
+    outcome.outcome = "pending"; outcome.pendingJobs = [...new Set([...(outcome.pendingJobs ?? []), job.id])];
     await saveArtifact(ctx.tx, request, { ...receipt, status: "in_progress", generatedAt: new Date().toISOString(), note: "New original-source evidence reopened its erasure work; documented retention exceptions remain unchanged." });
     await ctx.tx.update(dataRequests).set({ status: "in_progress", fulfilledAt: null, resolution: "Waiting for registered source erasure jobs after new original evidence." }).where(eq(dataRequests.id, request.id));
     await ctx.emitTimeline({ contactId: request.contactId, eventType: "contact.dataRequestErasurePending", subjectType: "dataRequest", subjectId: request.id, payload: { kind: "erasure", status: "in_progress", scope: input.scope } });

@@ -39,6 +39,11 @@ describe.runIf(hasDatabase)("reopen original erasure receipts", () => {
     expect(after.outcomes.find(outcome => outcome.scope === "contact.notes")).toMatchObject({ outcome: "pending", pendingJobs: [first.jobId] });
     expect(after.outcomes.filter(outcome => outcome.outcome === "retained")).toEqual(before.outcomes.filter(outcome => outcome.outcome === "retained"));
     const audits = await db().select().from(auditLog).where(eq(auditLog.action, "privacy.reopenErasureJob")); expect(audits).toHaveLength(1); expect(audits[0]!.diff).toEqual({ requestId: request!.id, scope: "contact.notes" });
+    const second = await reopenErasureJob.call({ ...input(original.request.id), jobData: { proof: "fictional-second-original-source-evidence" }, idempotencyKey: "fictional-second-source-version" }, { kind: "system" });
+    expect(second.jobId).not.toBe(first.jobId);
+    const both = (await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request!.id)))[0]!.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
+    expect(both.outcomes.find(outcome => outcome.scope === "contact.notes")!.pendingJobs).toEqual([first.jobId, second.jobId]);
+    expect(await reopenErasureJob.call(input(original.request.id), { kind: "system" })).toMatchObject({ jobId: first.jobId, changed: false });
   });
   it("requires restoration of a missing original artifact without fabricating one", async () => {
     const original = await completed();
