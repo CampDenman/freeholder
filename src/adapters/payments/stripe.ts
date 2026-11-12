@@ -284,6 +284,25 @@ export function stripePaymentEvents(payload: Record<string, unknown>): PaymentPr
   if (account !== undefined && (typeof account !== "string" || !/^acct_[A-Za-z0-9]+$/.test(account) || account.length > 200)) throw new AdapterError("payments", "stripe", "invalid_request", "Stripe sent an invalid account scope.");
   const value = object(object(payload.data)?.object);
   return stripeEvents(payload).map(event => {
+    const metadata = object(value?.metadata);
+    const platform = text(metadata?.freeholder_platform_account_id);
+    const paymentAttemptId = text(metadata?.freeholder_payment_id);
+    if ((platform || paymentAttemptId) && ["payment_processing", "payment_succeeded", "payment_failed", "payment_cancelled"].includes(event.kind)) {
+      if (!platform || !/^acct_[A-Za-z0-9]+$/.test(platform) || !paymentAttemptId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(paymentAttemptId)) throw new AdapterError("payments", "stripe", "invalid_request", "Stripe did not identify a complete original merchant payment attempt.");
+      if (event.kind === "payment_processing" || event.kind === "payment_succeeded" || event.kind === "payment_failed" || event.kind === "payment_cancelled") {
+        const intent = String(payload.type).startsWith("payment_intent.") ? value : undefined;
+        const destination = object(intent?.transfer_data)?.destination;
+        const destinationAccountId = typeof destination === "string" ? destination : text(object(destination)?.id);
+        const settlementMerchantAccountId = typeof intent?.on_behalf_of === "string" ? intent.on_behalf_of : text(object(intent?.on_behalf_of)?.id);
+        const fee = intent?.application_fee_amount === null ? 0 : number(intent?.application_fee_amount);
+        return { ...event, providerPlatformAccountId: platform, ...(account ? { providerAccountId: account } : {}), paymentAttemptId,
+          ...(destinationAccountId ? { destinationAccountId } : {}), ...(settlementMerchantAccountId ? { settlementMerchantAccountId } : {}),
+          ...(fee !== undefined ? { applicationFeeMinor: fee } : {}),
+          ...(typeof intent?.latest_charge === "string" ? { providerChargeRef: intent.latest_charge } : text(object(intent?.latest_charge)?.id) ? { providerChargeRef: text(object(intent?.latest_charge)?.id) } : {}),
+          customerChargeVerified: Boolean(intent && event.kind === "payment_succeeded" && intent.status === "succeeded" && number(intent.amount_received) !== undefined),
+          merchantRouteVerified: Boolean(intent && Object.hasOwn(intent, "transfer_data") && Object.hasOwn(intent, "on_behalf_of") && fee !== undefined && (object(intent.transfer_data)?.amount == null || object(intent.transfer_data)?.amount === intent.amount_received)) };
+      }
+    }
     if (!account) return event;
     if (event.kind === "payment_succeeded" && String(payload.type).startsWith("checkout.session.")) {
       // A Checkout Session does not prove the application's collected fee.
@@ -730,7 +749,14 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       try { payload = JSON.parse(raw.toString("utf8")); } catch { throw new AdapterError("payments", "stripe", "invalid_request", "Stripe sent invalid JSON."); }
       const parsed = object(payload);
       if (!parsed) throw new AdapterError("payments", "stripe", "invalid_request", "Stripe sent an invalid event.");
-      const events = stripePaymentEvents(parsed);
+      let events = stripePaymentEvents(parsed);
+      const taggedPlatform = events.find(event => event.providerPlatformAccountId)?.providerPlatformAccountId;
+      const requiresActualPlatform = Boolean(taggedPlatform) || events.some(event => event.kind.startsWith("refund_") || event.kind.startsWith("dispute_"));
+      if (requiresActualPlatform) {
+        const actual = await platformAccountIdentity();
+        if (taggedPlatform && taggedPlatform !== actual.providerPlatformAccountId) throw new AdapterError("payments", "stripe", "authentication", "The webhook belongs to a different original platform account.");
+        events = events.map(event => ({ ...event, providerPlatformAccountId: actual.providerPlatformAccountId }));
+      }
       const value = object(object(parsed.data)?.object);
       const metadata=object(value?.metadata);
       // A partially tagged setup cannot reach the expanded-method normalizer

@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.26/C12.38: provider charge namespace is independent of its destination.
+import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createStripePayments } from "@/adapters/payments/stripe";
 import type { InvoiceForCharge, MerchantChargeScope } from "@/adapters/payments/types";
@@ -24,7 +25,7 @@ function provider(responses: unknown[]) {
   return { fetcher, adapter: createStripePayments({ secretKey: "sk_merchant_scope_fixture", webhookSecrets: ["whsec_merchant_scope_fixture"], apiBase: "https://stripe.example.test", fetch: fetcher }) };
 }
 function intent(scope: MerchantChargeScope) {
-  return { id: "pi_original", metadata, status: "succeeded", currency: "cad", amount_received: 1200, amount: 1200, application_fee_amount: 100,
+  return { id: "pi_original", latest_charge: "ch_original", metadata, status: "succeeded", currency: "cad", amount_received: 1200, amount: 1200, application_fee_amount: 100,
     transfer_data: scope.destinationAccountId ? { destination: scope.destinationAccountId } : null, on_behalf_of: scope.settlementMerchantAccountId ?? null };
 }
 function form(init?: RequestInit) {
@@ -45,6 +46,52 @@ describe("original direct and destination charge accounts (C12.26/C12.38)", () =
     expect(form(init).get("payment_intent_data[on_behalf_of]")).toBe(scope.settlementMerchantAccountId ?? null);
     expect(form(init).get("payment_intent_data[application_fee_amount]")).toBe("100");
     expect(new Headers(init?.headers).get("idempotency-key")).toBe(invoice.idempotencyKey);
+  });
+
+  function webhook(value: Record<string, unknown>, type = "payment_intent.succeeded", account?: string) {
+    const at = 1_700_000_000;
+    const body = JSON.stringify({ id: "evt_original", type, created: at, ...(account ? { account } : {}), data: { object: value } });
+    const signature = createHmac("sha256", "whsec_merchant_scope_fixture").update(`${at}.${body}`).digest("hex");
+    return { body: new TextEncoder().encode(body), headers: { "stripe-signature": `t=${at},v1=${signature}` }, receivedAt: new Date(at * 1000).toISOString() };
+  }
+
+  it.each([direct, destination])("authenticates the platform and preserves actual paid webhook routing: %j", async scope => {
+    const p = provider([{ id: "acct_platform" }]);
+    const events = await p.adapter.verifyWebhook(webhook(intent(scope), "payment_intent.succeeded", scope.providerAccountId));
+    expect(events).toEqual([expect.objectContaining({ ...scope, kind: "payment_succeeded", providerRef: "pi_original", paymentAttemptId,
+      amountMinor: 1200, applicationFeeMinor: 100, providerChargeRef: "ch_original", customerChargeVerified: true, merchantRouteVerified: true })]);
+    expect(new Headers(p.fetcher.mock.calls[0]![1]?.headers).has("stripe-account")).toBe(false);
+  });
+
+  it("refuses replacement-platform webhook credentials after signature verification", async () => {
+    const p = provider([{ id: "acct_replacement" }]);
+    await expect(p.adapter.verifyWebhook(webhook(intent(destination)))).rejects.toMatchObject({ code: "authentication" });
+    expect(p.fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("retains a paid Session as positive unverified money until original intent evidence arrives", async () => {
+    const p = provider([{ id: "acct_platform" }]);
+    const [event] = await p.adapter.verifyWebhook(webhook({ id: "cs_original", metadata, mode: "payment", payment_status: "paid", amount_total: 1200, currency: "cad", payment_intent: "pi_original" }, "checkout.session.completed"));
+    expect(event).toMatchObject({ kind: "payment_succeeded", paymentAttemptId, providerPlatformAccountId: "acct_platform", amountMinor: 1200, customerChargeVerified: false, merchantRouteVerified: false });
+  });
+
+  it("keeps actual webhook recipient disagreement and overpayment for independent review", async () => {
+    const p = provider([{ id: "acct_platform" }]);
+    const [event] = await p.adapter.verifyWebhook(webhook({ ...intent(destination), amount_received: 1300, transfer_data: { destination: "acct_other" } }));
+    expect(event).toMatchObject({ kind: "payment_succeeded", amountMinor: 1300, destinationAccountId: "acct_other", customerChargeVerified: true });
+  });
+
+  it("retains a partial destination transfer as a settlement disagreement", async () => {
+    const p = provider([{ id: "acct_platform" }]);
+    const [event] = await p.adapter.verifyWebhook(webhook({ ...intent(destination), transfer_data: { destination: "acct_seller", amount: 1100 } }));
+    expect(event).toMatchObject({ kind: "payment_succeeded", amountMinor: 1200, customerChargeVerified: true, merchantRouteVerified: false });
+  });
+
+  it("does not call the provider for a forged merchant webhook", async () => {
+    const p = provider([]);
+    const request = webhook(intent(destination));
+    await expect(p.adapter.verifyWebhook({ ...request, body: new TextEncoder().encode("{}") })).rejects.toMatchObject({ code: "authentication" });
+    expect(p.fetcher).not.toHaveBeenCalled();
   });
 
   it("refuses replacement platform credentials before creating or reading a charge", async () => {

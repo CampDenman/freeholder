@@ -284,12 +284,18 @@ export type MerchantPaymentRecovery =
   | { state: "pending" | "paid"; checkoutRef: string; evidence: CheckoutCaptureResult }
   | { state: "not_paid"; checkoutRef: string; paymentRef?: string; sessionStatus: "expired" | "complete"; intentStatus: string | null; amountReceivedMinor: 0 };
 
-export type PaymentProviderEvent = PaymentAccountScope & (
+export type PaymentProviderEvent = MerchantChargeScope & (
   | {
       id: string;
       kind: "payment_processing" | "payment_succeeded" | "payment_failed" | "payment_cancelled";
       providerRef: string;
       checkoutRef?: string;
+      paymentAttemptId?: string;
+      customerChargeVerified?: boolean;
+      merchantRouteVerified?: boolean;
+      providerChargeRef?: string;
+      applicationFeeRef?: string;
+      transferRef?: string;
       amountMinor?: number;
       currency?: string;
       occurredAt: string;

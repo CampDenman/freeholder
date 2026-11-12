@@ -54,6 +54,16 @@ and revocation; old records remain explicitly NULL rather than being rebound
 to today's credentials. Provider lookup does not rewrite old contact metadata
 after a legitimate contact merge.
 
+A further adapter checkpoint authenticates the actual platform for newly tagged
+payment webhooks and for refund/dispute events. It preserves original attempt
+metadata, the actual PaymentIntent charge reference and actual recipient/fee
+facts. A paid Checkout Session without its original intent proof remains a
+positive observation requiring verification. Recipient disagreement and excess
+paid amounts remain positive facts. The five-file mocked-provider run passed
+97 controls before the additional partial-transfer control; the earlier legacy
+refund fixtures were updated to mock the newly required platform read. These
+counts do not claim database or real-account acceptance.
+
 The remaining full specification is still required: immutable per-party issue
 snapshots and route admission on one invoice; original-merchant tax and fee
 integration; payment/refund/dispute and partial/unknown recovery; original

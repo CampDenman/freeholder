@@ -25,6 +25,7 @@ export function stripeCheckoutEvidence(request: CheckoutCaptureRequest, value: R
     const amountMinor = number(intent.amount_received), currency = text(intent.currency)?.toUpperCase();
     if (amountMinor === undefined || amountMinor < 0 || !currency || !/^[A-Z]{3}$/.test(currency)) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return the original paid amount and currency.", true);
     return { providerRef, ...merchantIntentEvidence(request, intent), status: "succeeded", amountMinor, currency, customerChargeVerified,
+      ...(typeof intent.latest_charge === "string" ? { providerChargeRef: intent.latest_charge } : text(object(intent.latest_charge)?.id) ? { providerChargeRef: text(object(intent.latest_charge)?.id) } : {}),
       ...(!customerChargeVerified || fee === undefined || fee < 0 || intent.amount_received !== value.amount_total || intent.currency !== value.currency ? { merchantRouteVerified: false } : {}),
       ...(fee !== undefined && fee >= 0 ? { applicationFeeMinor: fee } : {}) };
   }
