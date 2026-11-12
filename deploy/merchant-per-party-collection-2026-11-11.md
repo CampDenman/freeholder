@@ -307,3 +307,21 @@ case. Stripe documents that a partially captured PaymentIntent can remain in
 ([Stripe multicapture](https://docs.stripe.com/payments/multicapture?platform=web&ui=elements)).
 This is a defensive source contract; no claim is made that the current
 application requests multicapture or that this was an unchanged-main defect.
+
+Native source qualification on a fresh, ordinary 0–80 database first reached
+an existing single-seller cart admission boundary. The new path now permits
+mixed carts only with an actual verified per-party platform configuration;
+the unconfigured legacy boundary remains. With the fixture configuring that
+platform before adding cart items, actual direct and destination two-seller
+checkout each produced one invoice, exact tax/portion conservation, frozen
+original charge/recipient namespaces, and refusal of a whole-invoice charge.
+A brief separately allocated append-only REST test overlapped this run on a
+different database; no quiet-lane or performance claim is made.
+
+The saved-card native case then exposed six ORM timestamps which used the
+shared `created_at` builder for SQL columns named `observed_at`, `received_at`
+or `dispatched_at`. The ORM now names those existing SQL columns explicitly;
+SQL and its hash did not change. The native recovery fixture also compares
+all eight recovery/evidence table column sets with the actually applied
+independent SQL. The exact remaining saved-card case is pending its repeat;
+the two successful checkout cases are not attributed to that recovery path.

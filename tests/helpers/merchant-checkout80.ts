@@ -39,6 +39,7 @@ export async function seedMerchantCheckout80(collectionKind: "direct" | "destina
     await db().insert(users).values([{ id: OWNER.userId, email: "merchant-fixture-owner@example.test", role: "owner" }, ...sellers.map((seller, index) => ({ id: seller.userId, email: `merchant-fixture-seller-${index}@example.test`, role: "customer" }))]);
     await updateBusiness.call({ name: "Synthetic current merchant checkout", country: "CA", baseCurrency: "CAD", timezone: "UTC" }, OWNER);
     await updateMembershipRules.call({ marketplaceEnabled: true, listingReview: false, payoutAdapter: "stripe_connect", payoutModel: "seller_merchant", siteFeeBps: 1000 }, OWNER);
+    await configureMerchantCollection.call({ collectionKind }, OWNER);
     const zone = await createTaxZone.call({ name: "Fixture merchant jurisdiction", country: "CA", regions: ["BC"], basis: "destination", pricesIncludeTax: false, roundingScope: "line", roundingMode: "half_up" }, OWNER);
     const rate = await addTaxRate.call({ zoneId: zone.id, name: "Fixture business tax", jurisdiction: "Synthetic fixture jurisdiction", ratePpm: 50000, appliesToShipping: true }, OWNER);
     const buyer = (await resolveContact.call({ email: MERCHANT_FIXTURE_BUYER_EMAIL, name: "Fixture buyer" }, OWNER)).contact;
@@ -55,7 +56,6 @@ export async function seedMerchantCheckout80(collectionKind: "direct" | "destina
       const variant = (await getProductVariants.call({ productId: listing.productId }, OWNER)).variants[0]!;
       await addCartItem.call({ cartId: cart.id, cartToken: cart.token, variantId: variant.id }, ANONYMOUS);
     }
-    await configureMerchantCollection.call({ collectionKind }, OWNER);
     const quoteInput = { cartId: cart.id, cartToken: cart.token, taxDestination: MERCHANT_FIXTURE_DESTINATION };
     const review = () => quoteMerchantCheckout.call(quoteInput, ANONYMOUS);
     const checkout = async () => {

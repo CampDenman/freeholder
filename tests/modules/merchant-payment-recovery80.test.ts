@@ -2,23 +2,32 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: actual current checkout/service spine; provider edge is synthetic.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
 import { AdapterError } from "@/adapters/types";
 import { createPayment, failPayment, getInvoice } from "@/modules/invoicing/invoice-service";
 import { claimMerchantPaymentDispatch } from "@/modules/invoicing/merchant-payment-request";
 import { reconcileMerchantCheckout } from "@/modules/invoicing/merchant-payment-recovery";
-import { merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts } from "@/modules/invoicing/merchant-payment-recovery-schema";
+import { merchantPaymentRequests, merchantPaymentDispatches, merchantPaymentCreationRefusals, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts } from "@/modules/invoicing/merchant-payment-recovery-schema";
 import { invoiceMerchantAllocations, invoices, payments } from "@/modules/invoicing/schema";
-import { invoiceMerchantCollections } from "@/modules/invoicing/merchant-collection-schema";
+import { invoiceMerchantCollections, merchantPaymentObservations, merchantPaymentEventReceipts, merchantFeeObservations } from "@/modules/invoicing/merchant-collection-schema";
 import { ANONYMOUS, closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 import { seedMerchantCheckout80 } from "../helpers/merchant-checkout80";
 
 const SYSTEM = { kind: "system" } as const;
 describe.runIf(hasDatabase)("original merchant payment recovery on schema80", { timeout: 60000 }, () => {
   let fixture: Awaited<ReturnType<typeof seedMerchantCheckout80>> | undefined;
-  beforeAll(ready, 60000);
+  beforeAll(async () => {
+    await ready();
+    // Compare the independent applied SQL with every original-recovery ORM
+    // column before exercising money. The shared createdAt builder always
+    // means created_at; another property name cannot rename that column.
+    const tables = [merchantPaymentRequests, merchantPaymentDispatches, merchantPaymentCreationRefusals, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts, merchantPaymentObservations, merchantPaymentEventReceipts, merchantFeeObservations].map(getTableConfig);
+    const columns = await db().execute<{ table_name: string; column_name: string }>(sql`select table_name,column_name from information_schema.columns where table_schema='public' and table_name in (${sql.join(tables.map(table => sql`${table.name}`), sql`,`)})`);
+    for (const table of tables) expect(columns.filter(column => column.table_name === table.name).map(column => column.column_name).sort()).toEqual(table.columns.map(column => column.name).sort());
+  }, 60000);
   beforeEach(truncateSpine);
   afterEach(() => { fixture?.cleanup(); fixture = undefined; vi.restoreAllMocks(); });
   afterAll(closeDb);

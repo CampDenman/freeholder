@@ -21,19 +21,19 @@ export const merchantPaymentRetirementAcks = pgTable("merchant_payment_retiremen
   paymentId: uuid("payment_id").notNull().references(() => merchantPaymentRequests.paymentId, { onDelete: "restrict" }),
   checkoutRef: text("checkout_ref"), paymentRef: text("payment_ref"),
   kind: text("kind", { enum: ["session_expired", "intent_canceled"] }).notNull(),
-  evidenceDigest: text("evidence_digest").notNull(), observedAt: createdAtColumn(),
+  evidenceDigest: text("evidence_digest").notNull(), observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [index("merchant_payment_retirement_acks_payment_idx").on(t.paymentId), uniqueIndex("merchant_payment_retirement_acks_evidence_idx").on(t.paymentId, t.evidenceDigest),
   check("merchant_payment_retirement_acks_kind", sql`${t.kind} in ('session_expired','intent_canceled')`),
   check("merchant_payment_retirement_acks_refs", sql`((${t.checkoutRef} is null or ${t.checkoutRef} ~ '^cs_[A-Za-z0-9_]+$') and (${t.paymentRef} is null or ${t.paymentRef} ~ '^pi_[A-Za-z0-9_]+$') and ((${t.kind}='session_expired' and ${t.checkoutRef} is not null) or (${t.kind}='intent_canceled' and ${t.paymentRef} is not null))) is true`)]);
 
 export const merchantPaymentDispatches = pgTable("merchant_payment_dispatches", {
   id: uuid("id").primaryKey().defaultRandom(), paymentId: uuid("payment_id").notNull().references(() => merchantPaymentRequests.paymentId, { onDelete: "restrict" }),
-  ordinal: integer("ordinal").notNull(), requestDigest: text("request_digest").notNull(), dispatchedAt: createdAtColumn(),
+  ordinal: integer("ordinal").notNull(), requestDigest: text("request_digest").notNull(), dispatchedAt: timestamp("dispatched_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [uniqueIndex("merchant_payment_dispatches_ordinal_idx").on(t.paymentId, t.ordinal), check("merchant_payment_dispatches_ordinal", sql`${t.ordinal}>0`), check("merchant_payment_dispatches_digest", sql`${t.requestDigest} ~ '^[a-f0-9]{64}$'`)]);
 
 export const merchantPaymentCreationRefusals = pgTable("merchant_payment_creation_refusals", {
   dispatchId: uuid("dispatch_id").primaryKey().references(() => merchantPaymentDispatches.id, { onDelete: "restrict" }),
-  providerCode: text("provider_code").notNull(), observedAt: createdAtColumn(),
+  providerCode: text("provider_code").notNull(), observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const merchantPaymentTerminalReceipts = pgTable("merchant_payment_terminal_receipts", {

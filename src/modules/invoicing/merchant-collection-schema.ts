@@ -93,7 +93,7 @@ export const merchantPaymentObservations = pgTable("merchant_payment_observation
   observedApplicationFeeMinor: bigint("observed_application_fee_minor", { mode: "number" }),
   observedFeeRefundedMinor: bigint("observed_fee_refunded_minor", { mode: "number" }),
   settlementVerified: boolean("settlement_verified").notNull().default(false),
-  observedAt: createdAtColumn(),
+  observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex("merchant_payment_observations_event_idx").on(t.paymentId, t.providerEventRef),
   index("merchant_payment_observations_payment_idx").on(t.paymentId, t.observedAt),
@@ -111,7 +111,7 @@ export const merchantPaymentEventReceipts = pgTable("merchant_payment_event_rece
   // This is a provider assertion, not an adopted payment ownership FK.
   claimedPaymentId: uuid("claimed_payment_id"),
   evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(),
-  receivedAt: createdAtColumn(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [
   uniqueIndex("merchant_payment_event_receipts_event_idx").on(t.providerPlatformAccountId, sql`coalesce(${t.chargeAccountId}, '')`, t.providerEventRef),
   check("merchant_payment_event_receipts_scope", sql`${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$' and (${t.chargeAccountId} is null or ${t.chargeAccountId} ~ '^acct_[A-Za-z0-9]+$')`),
@@ -164,7 +164,7 @@ export const merchantFeeObservations = pgTable("merchant_fee_observations", {
   amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
   currency: text("currency").notNull(),
   bindingVerified: boolean("binding_verified").notNull(),
-  observedAt: createdAtColumn(),
+  observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [
   uniqueIndex("merchant_fee_observations_fact_idx").on(t.operationId, t.providerRef, t.applicationFeeRef, t.amountMinor, t.currency, t.bindingVerified),
   check("merchant_fee_observations_money", sql`${t.amountMinor} >= 0 and ${t.currency} ~ '^[A-Z]{3}$'`),

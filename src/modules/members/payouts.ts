@@ -18,6 +18,7 @@ import { orderForInvoice, orderInvoiceRevenue, orderSellers, registerSellerGate 
 import { PAYOUT_PROVIDER_IDS } from "@/adapters/payouts";
 import { getInvoiceMarketPolicy, marketFeeMinor } from "@/modules/invoicing/market-policy";
 import { merchantSettlement } from "@/modules/invoicing/merchant-settlement";
+import { getMerchantCollectionConfiguration } from "@/modules/invoicing/merchant-collection";
 import { notifyMember } from "./notify";
 import { openMessage, sealMessage } from "./message-crypto";
 import {
@@ -102,7 +103,9 @@ registerSellerGate(async (ctx, sellerIds) => {
   if (!adapter || !adapter.models.includes(rules.model)) return "Buying from members is not set up on this site yet.";
   const members = sellerIds.filter((id): id is string => id !== null);
   if (rules.model === "seller_merchant" && sellerIds.length > 1) {
-    return "Each seller is paid directly, so check out one seller at a time.";
+    // New per-party checkout freezes its original business/tax/charge scopes
+    // on one invoice. An older, unconfigured direct path has no such proof.
+    if (rules.adapter !== "stripe_connect" || !await ctx.callAsSystem(getMerchantCollectionConfiguration, {})) return "Each seller is paid directly, so check out one seller at a time.";
   }
   if (members.length === 0) return null;
   const ready = await ctx.tx
