@@ -6017,8 +6017,18 @@ deployments are portable, testable and incapable of silently forking the truth.
   passed, as did the real populated old-image-to-79 history control and the
   multiple-cohort receipt control. The four shared reopening controls also
   passed. These use fixture SQL/intercepted HTTP, not the actual provider.
-  Migration 79 is intentionally unjournaled until predecessor ancestry is
-  valid; final composed production/browser and full-chain qualification remain
+  Normal migration 79 is now composed on the qualified reader-78 source.
+  On 2026-11-12, the fresh normal 0–79 chain applied all 80 entries and ten
+  targeted native controls passed, covering lost acknowledgments, original
+  account refusal, unknown outcomes, holds, late positive replies, reopened
+  erasure, legacy review, both purge paths and guarded old-column/journal reads.
+  A populated normal 78→79 migration preserved the exact normalized contact,
+  form and answer hashes and created only unbound unknown legacy inventory.
+  The initial populated fixture failed JSON parameter serialization before
+  inserting its enquiry; its corrected fixture passed in a separate database.
+  The schema-risk contract requires the exact acknowledged rename and restore
+  reason. Actual prior-runtime-78 HTTP refusal, the remaining composed native
+  controls, live SDK, production/browser and protected qualification remain
   open, along with actual provider acceptance. C3.34 remains unchecked.)*
   *(Progress 2026-10-23, C3.33 and C3.34: the categories are
   `src/adapters/form-screening/` and `src/adapters/lead-sink/` (contracts in

@@ -124,6 +124,17 @@ describe("the migrations already in the tree", () => {
     expect(assertSchemaRisk("breaking", [review]).ok).toBe(true);
     for (const file of files.slice(1)) {
       const later = reviewMigration(file, readFileSync(`${dir}/${file}`, "utf8"));
+      if (file === "0076_mail_carrier_operations.sql" || file === "0079_form_original_lead_copies.sql") {
+        expect(later.ok).toBe(true);
+        expect(later.acknowledged).toBe(true);
+        expect(later.breaking.map(statement => statement.id)).toEqual(["rename"]);
+        expect(later.reason).toMatch(file.startsWith("0076")
+          ? /guarded image.*matching database\/private receipt keys for rollback/
+          : /guarded image.*matching database and private keys for rollback.*legacy destinations are not backfilled/);
+        expect(assertSchemaRisk("compatible", [later]).ok).toBe(false);
+        expect(assertSchemaRisk("breaking", [later]).ok).toBe(true);
+        continue;
+      }
       expect({ file, ok: later.ok, breaking: later.breaking }).toEqual({
         file,
         ok: true,

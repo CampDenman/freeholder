@@ -51,8 +51,10 @@ or artifact is invented; no clock, current address, account replacement or missi
 local row supplies evidence of a remote deletion. Payload retention policies
 can minimize settled encrypted bodies without deleting their witnesses.
 
-Migration 79 renames the form answer column so an older worker fails before
-reading an enquiry for provider I/O. Historical accepted submissions enter an
+Migration 79 renames the form answer column so an older worker fails when
+reading an enquiry for provider I/O. Stop and drain all older processes before
+the upgrade: a column fence cannot recall a request already admitted to the
+network. Historical accepted submissions enter an
 explicitly unknown inventory unless
 durable event provenance proves they were never site-form submissions. The
 inventory invents no destination, credential binding, physical caller or
@@ -78,5 +80,9 @@ same preparation boundary and rechecks final eligibility before deletion.
 Unstarted retired copies cancel their original queue delivery without contacting
 the provider. Two local PostgreSQL controls cover the settled manual purge and
 unstarted scheduled sweep, including later original queue delivery with zero
-provider requests. Migration79 remains unjournalled until its preceding source
-migrations are composed; no contiguous upgrade acceptance is claimed here.
+provider requests. Migration 79 is now journaled normally after the qualified
+reader-78 source. Local fresh 0–79 and populated 78→79 migration proofs pass;
+the latter preserves original answer/contact/form hashes and leaves historical
+provider outcomes unknown and unbound. Ten targeted native recovery controls
+pass on that full chain. Actual prior-runtime-78 HTTP refusal, the rest of the
+composed controls and the final production owner journey remain open.
