@@ -130,7 +130,6 @@
   "admin.activity.planSaved": "Se guardó un plan de suscripción",
   "admin.activity.subscriptionRenewed": "Se renovaron suscripciones",
   "admin.activity.subscriptionBillingUpdated": "Se actualizó el calendario de cobro de una suscripción",
-  "admin.activity.subscriptionRecoveryUpdated": "Se actualizó la recuperación de una suscripción",
   "admin.activity.subscriptionPlanChanged": "Un suscriptor cambió de plan",
   "admin.activity.subscriptionPaused": "Se pausó una suscripción",
   "admin.activity.subscriptionResumed": "Se reanudó una suscripción",
@@ -9038,5 +9037,15 @@
   "merchantTax.exemption.destination": "Destino fiscal del cliente",
   "merchantTax.exemption.title": "Sus solicitudes de exención fiscal",
   "merchantTax.exemption.request": "Solicitar exención",
-  "merchantTax.exemption.reviewHint": "Aquí solo aparecen solicitudes para este negocio. La aprobación cambia futuras cotizaciones cuando los calendarios de facturación originales son seguros; las facturas emitidas conservan su evidencia fiscal original."
+  "merchantTax.exemption.reviewHint": "Aquí solo aparecen solicitudes para este negocio. La aprobación cambia futuras cotizaciones cuando los calendarios de facturación originales son seguros; las facturas emitidas conservan su evidencia fiscal original.",
+  "audit.invoicing.reservedOriginalRefund": "Reembolso original reservado",
+  "audit.invoicing.startedOriginalRefund": "Solicitud del reembolso original iniciada",
+  "audit.invoicing.recordedOriginalRefundReference": "Referencia del reembolso original registrada",
+  "audit.invoicing.finishedOriginalRefund": "Finalización de la solicitud de reembolso registrada",
+  "audit.invoicing.recordedOriginalRefundResponse": "Respuesta del reembolso original registrada",
+  "audit.invoicing.preparedOriginalCashReturn": "Revisión de devolución de fondos preparada",
+  "audit.invoicing.recordedOriginalProviderCash": "Fondos originales del proveedor registrados",
+  "audit.invoicing.recordedOriginalCashReturnEvidence": "Pruebas de devolución de fondos originales registradas",
+  "audit.invoicing.finishedOriginalCashReturnReview": "Finalización de la revisión de devolución registrada",
+  "audit.invoicing.confirmedOriginalCashReturn": "Devolución íntegra de los fondos originales confirmada"
 }

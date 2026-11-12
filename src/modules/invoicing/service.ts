@@ -3,6 +3,12 @@
 // One registry export for the convergent money module (C5.02-C5.05).
 
 import invoiceServices from "./invoice-service";
+import originalRefundPhaseServices0 from "./merchant-refund-request";
+import originalRefundPhaseServices1 from "./merchant-refund-dispatch";
+import originalRefundPhaseServices2 from "./merchant-refund-observations";
+import originalRefundPhaseServices3 from "./merchant-refund-execution";
+import originalRefundPhaseServices4 from "./merchant-cash-return-service";
+import originalRefundPhaseServices5 from "./merchant-subscription-disposition";
 import marketPolicyServices from "./market-policy";
 import merchantAllocationServices from "./merchant-allocations";
 import merchantCollectionServices from "./merchant-collection";
@@ -44,6 +50,12 @@ import "./reporting";
 import "./funnel";
 
 export default [
+  ...originalRefundPhaseServices0,
+  ...originalRefundPhaseServices1,
+  ...originalRefundPhaseServices2,
+  ...originalRefundPhaseServices3,
+  ...originalRefundPhaseServices4,
+  ...originalRefundPhaseServices5,
   ...marketPolicyServices,
   ...merchantAllocationServices,
   ...merchantCollectionServices,

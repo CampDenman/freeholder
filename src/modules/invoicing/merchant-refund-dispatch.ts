@@ -5,6 +5,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
+import { assertMerchantCreatorsQuiesced } from "./merchant-payment-request";
 import { startRefund } from "./invoice-service";
 import { merchantPhysicalCaller } from "./merchant-physical-caller";
 import { lockMerchantRefundCash } from "./merchant-refund-origin";
@@ -34,6 +35,7 @@ export const claimMerchantRefundDispatch = defineService({
     await lockMerchantRefundCash(ctx, { ...snapshot, providerRef: snapshot.originalPaymentRef });
     const [original] = await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, requestId)).for("update");
     if (!original || merchantTaxDigest(original.originalRequest) !== original.requestDigest) throw new ServiceError("conflict", "The actual original refund arguments need recovery.");
+    if (original.paymentId) await assertMerchantCreatorsQuiesced(ctx, original.paymentId);
     const [retired] = await ctx.tx.select().from(merchantRefundReservationRetirements).where(eq(merchantRefundReservationRetirements.requestId, requestId));
     if (retired) throw new ServiceError("conflict", "This exact original reservation was retired before dispatch and cannot authorize a provider request.");
     const previous = await ctx.tx.select({ id: merchantRefundDispatches.id }).from(merchantRefundDispatches).where(eq(merchantRefundDispatches.requestId, requestId)).limit(1);
@@ -134,4 +136,6 @@ export async function flushLocalMerchantRefundDispatchFinishes(requestId: string
     await finishMerchantRefundDispatch.call({ dispatchId, completionNonce: local.nonce }, { kind: "system" }); finished.delete(dispatchId);
   }
 }
-// Registration waits for assembled SQL/negative recovery/observer qualification.
+// Private registration is present; qualification still requires assembled SQL/negative recovery/observer qualification.
+
+export default [claimMerchantRefundDispatch, recordMerchantRefundResourceAcknowledgement, finishMerchantRefundDispatch];

@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: immutable cash-owner arguments, including money with no local invoice.
+import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { stripeMerchantRefundBody } from "@/adapters/payments/stripe-merchant-refund-body";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
@@ -71,6 +72,7 @@ export const claimMerchantRefundRequest = defineService({
       providerPlatformAccountId: cash.providerPlatformAccountId, ...(cash.chargeAccountId ? { providerAccountId: cash.chargeAccountId } : {}),
       providerApiVersion: cash.providerApiVersion, currency: cash.currency, amountMinor: value.amountMinor,
       idempotencyKey: `freeholder-merchant-refund:${id}`, frozenBody, reverseTransfer: false, refundApplicationFee: false });
+    await allowOriginalMerchantRefundWrites(ctx.tx);
     const [saved] = await ctx.tx.insert(merchantRefundRequests).values({ id, purpose, refundId: null,
       paymentId: cash.paymentId, originalObservationId: cash.originalObservationId, subscriptionChargeReceiptId: cash.subscriptionChargeReceiptId,
       subscriptionChargeObservationId: cash.subscriptionChargeObservationId, providerPlatformAccountId: cash.providerPlatformAccountId,
@@ -81,4 +83,6 @@ export const claimMerchantRefundRequest = defineService({
     return merchantRefundRequestRow.parse(saved);
   },
 });
-// Unregistered until the matching application guard, dispatch and evidence qualify.
+// Privately registered source prototype; still requires the matching application guard, dispatch and evidence qualify.
+
+export default [claimMerchantRefundRequest];

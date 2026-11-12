@@ -9,8 +9,11 @@ const fragments = [
   "deploy/merchant-tax-schema80.fragment.sql",
   "deploy/subscription-merchant-scope80.fragment.sql",
   "deploy/subscription-schedule-lifecycle80.fragment.sql",
+  "deploy/subscription-setup-fee80.fragment.sql",
   "deploy/order-commercial-schema80.fragment.sql",
   "deploy/merchant-payment-schema80.fragment.sql",
+  "deploy/merchant-refund-schema80.fragment.sql",
+  "deploy/merchant-refund-guards80.fragment.sql",
 ];
 const header = `-- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0

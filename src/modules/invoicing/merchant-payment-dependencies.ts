@@ -7,6 +7,7 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
 import { merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
 import { merchantPaymentCreationRefusals, merchantPaymentDispatches, merchantPaymentDispatchFinishes, merchantPaymentDispatchStops, merchantPaymentResourceBindings, merchantPaymentRequests, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts } from "./merchant-payment-recovery-schema";
+import { merchantRefundDependencyFingerprints } from "./merchant-refund-dependencies";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { invoices, paymentDisputes, payments, refunds } from "./schema";
 
@@ -40,11 +41,17 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   const feeAcks = feeOperations.length ? await tx.select().from(merchantFeeObservations).where(inArray(merchantFeeObservations.operationId, feeOperations.map(row => row.id))).orderBy(asc(merchantFeeObservations.id)).limit(5001) : [];
   count += refusals.length + feeAcks.length + finishes.length + stops.length;
   if (count > 5000) return null;
+  // These invoices are one original contact-merge cohort. Any late financial
+  // child makes the operation non-undoable, without adding unparsed fields to
+  // the existing invoice reference receipt.
+  const refundChildren = await merchantRefundDependencyFingerprints(tx, { paymentIds,
+    subscriptionChargeReceiptIds: scoped.map(row => row.agreementRoute?.originalChargeReceiptId).filter((id): id is string => Boolean(id)) });
+  if (refundChildren.incomplete || count + refundChildren.entries.length > 5000) return null;
   return new Map(parent.map(invoice => {
     const money = scoped.filter(row => row.payment.invoiceId === invoice.id), ids = new Set(money.map(row => row.payment.id));
     const sends = dispatches.filter(row => ids.has(row.paymentId)), sendIds = new Set(sends.map(row => row.id));
     const fees = feeOperations.filter(row => ids.has(row.paymentId)), feeIds = new Set(fees.map(row => row.id));
-    return [invoice.id, merchantTaxDigest({ invoice, money, requests: requests.filter(row => ids.has(row.paymentId)), dispatches: sends, bindings: bindings.filter(row => ids.has(row.paymentId)),
+    return [invoice.id, merchantTaxDigest({ invoice, money, refundChildren, requests: requests.filter(row => ids.has(row.paymentId)), dispatches: sends, bindings: bindings.filter(row => ids.has(row.paymentId)),
       refusals: refusals.filter(row => sendIds.has(row.dispatchId)), finishes: finishes.filter(row => sendIds.has(row.dispatchId)), stops: stops.filter(row => sendIds.has(row.dispatchId)), acks: acks.filter(row => ids.has(row.paymentId)), terminals: terminals.filter(row => ids.has(row.paymentId)),
       observed: observed.filter(row => ids.has(row.paymentId)), fees, feeAcks: feeAcks.filter(row => feeIds.has(row.operationId)),
       customerRefunds: customerRefunds.filter(row => ids.has(row.paymentId)), disputes: disputes.filter(row => ids.has(row.paymentId)) })];

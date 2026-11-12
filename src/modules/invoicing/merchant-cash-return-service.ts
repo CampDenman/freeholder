@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: independent cash evidence, real read completion and atomic disposition.
+import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -56,6 +57,7 @@ export const prepareMerchantCashReturnInspection = defineService({
     const history = await merchantRefundCashHistory(ctx, cash);
     if (history.incomplete || !history.creatorsQuiesced) throw new ServiceError("conflict", "The complete original money/caller inventory must be restored and quiesced before final return inspection.");
     const completionNonce = randomBytes(32).toString("base64url");
+    await allowOriginalMerchantRefundWrites(ctx.tx);
     const [saved] = await ctx.tx.insert(merchantCashReturnInspections).values({ paymentId: cash.paymentId, originalObservationId: cash.originalObservationId,
       subscriptionChargeReceiptId: cash.subscriptionChargeReceiptId, subscriptionChargeObservationId: cash.subscriptionChargeObservationId,
       providerPlatformAccountId: cash.providerPlatformAccountId, chargeAccountId: cash.chargeAccountId, providerApiVersion: cash.providerApiVersion,
@@ -74,6 +76,7 @@ export const recordCashReturnPrimaryObservation = defineService({
   handler: async ({ inspectionId, completionNonce, evidence }, ctx) => {
     const original = await callerForInspection(ctx, inspectionId, completionNonce);
     const evidenceDigest = merchantTaxDigest(evidence);
+    await allowOriginalMerchantRefundWrites(ctx.tx);
     await ctx.tx.insert(merchantCashReturnPrimaryObservations).values({ inspectionId, evidence, evidenceDigest }).onConflictDoNothing();
     const [saved] = await ctx.tx.select({ id: merchantCashReturnPrimaryObservations.id }).from(merchantCashReturnPrimaryObservations)
       .where(and(eq(merchantCashReturnPrimaryObservations.inspectionId, inspectionId), eq(merchantCashReturnPrimaryObservations.evidenceDigest, evidenceDigest)));
@@ -92,6 +95,7 @@ export const recordCashReturnObservation = defineService({
     const evidenceDigest = merchantTaxDigest(evidence);
     const [last] = await ctx.tx.select({ sequence: merchantCashReturnObservations.sequence }).from(merchantCashReturnObservations)
       .where(eq(merchantCashReturnObservations.inspectionId, inspectionId)).orderBy(desc(merchantCashReturnObservations.sequence)).limit(1);
+    await allowOriginalMerchantRefundWrites(ctx.tx);
     await ctx.tx.insert(merchantCashReturnObservations).values({ inspectionId, sequence: (last?.sequence ?? 0) + 1, evidence, evidenceDigest }).onConflictDoNothing();
     const [saved] = await ctx.tx.select({ id: merchantCashReturnObservations.id }).from(merchantCashReturnObservations)
       .where(and(eq(merchantCashReturnObservations.inspectionId, inspectionId), eq(merchantCashReturnObservations.evidenceDigest, evidenceDigest)));
@@ -106,6 +110,7 @@ export const finishMerchantCashReturnInspection = defineService({
   handler: async ({ inspectionId, completionNonce }, ctx) => {
     const original = await callerForInspection(ctx, inspectionId, completionNonce), local = localFinishes.get(inspectionId);
     if (!local || local.nonce !== completionNonce) throw new ServiceError("permission", "Only an actually finished original read promise can record this finish receipt.");
+    await allowOriginalMerchantRefundWrites(ctx.tx);
     await ctx.tx.insert(merchantCashReturnInspectionFinishes).values({ inspectionId, callerInstanceId: original.caller.id, outcome: local.outcome }).onConflictDoNothing();
     ctx.setSubject(original.paymentId ? "payment" : "subscription_provider_charge", original.paymentId ?? original.subscriptionChargeReceiptId!);
     return { finished: true as const };
@@ -155,6 +160,7 @@ export const finalizeUnappliedCashReturn = defineService({
     if (!current) return { returnReceiptId: null, settled: false };
     const cash: MerchantRefundCashOrigin = current.cash;
     const evidenceDigest = merchantTaxDigest({ inspectionId, observationId, ownEvidenceDigest: current.own.digest, sourceHistoryDigest: inspection.sourceHistoryDigest });
+    await allowOriginalMerchantRefundWrites(ctx.tx);
     await ctx.tx.insert(merchantUnappliedChargeResolutions).values({ inspectionId, returnObservationId: observationId, paymentId: cash.paymentId, originalObservationId: cash.originalObservationId,
       subscriptionChargeReceiptId: cash.subscriptionChargeReceiptId, subscriptionChargeObservationId: cash.subscriptionChargeObservationId, providerPlatformAccountId: cash.providerPlatformAccountId,
       chargeAccountId: cash.chargeAccountId, originalPaymentRef: cash.providerRef, originalCashAmountMinor: cash.amountMinor, currency: cash.currency,
@@ -178,5 +184,7 @@ export async function originalCashReturnedDisposition(ctx: ServiceContext, recei
   }
   return null;
 }
-// Unregistered until complete financial dispatch, alternate-writer SQL, privacy,
+// Privately registered source prototype; still requires complete financial dispatch, alternate-writer SQL, privacy,
 // live native races and UI/API/MCP qualification are integrated on fresh80.
+
+export default [prepareMerchantCashReturnInspection, recordCashReturnPrimaryObservation, recordCashReturnObservation, finishMerchantCashReturnInspection, finalizeUnappliedCashReturn];

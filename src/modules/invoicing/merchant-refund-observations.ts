@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: actual refund facts commit before policy or invoice application.
+import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, ServiceError } from "@/core/service";
@@ -50,6 +51,7 @@ export const recordMerchantRefundObservation = defineService({
       failureReason: evidence.failureReason ?? null, failureBalanceTransactionRef: evidence.failureBalanceTransactionRef ?? null,
       transferReversalRef: evidence.transferReversalRef ?? null, sourceTransferReversalRef: evidence.sourceTransferReversalRef ?? null,
       bindingVerified, evidenceDigest: merchantTaxDigest({ paymentId, subscriptionChargeReceiptId, inspectionId: inspectionBound ? inspection.id : null, claimedInspectionId: inspectionId ?? null, claimedRequestId: requestId ?? null, ...evidence, bindingVerified }) };
+    await allowOriginalMerchantRefundWrites(ctx.tx);
     await ctx.tx.insert(merchantRefundObservations).values(values).onConflictDoNothing();
     const [saved] = await ctx.tx.select().from(merchantRefundObservations).where(eq(merchantRefundObservations.evidenceDigest, values.evidenceDigest));
     if (!saved || Object.entries(values).some(([key, value]) => saved[key as keyof typeof saved] !== value)) throw new ServiceError("conflict", "The actual original refund evidence needs recovery; earlier observations were preserved.");
@@ -57,4 +59,6 @@ export const recordMerchantRefundObservation = defineService({
     return { observationId: saved.id, bindingVerified: saved.bindingVerified };
   },
 });
-// Registration waits for the complete dispatch, application guard and recovery path.
+// Private registration is present; qualification still requires the complete dispatch, application guard and recovery path.
+
+export default [recordMerchantRefundObservation];

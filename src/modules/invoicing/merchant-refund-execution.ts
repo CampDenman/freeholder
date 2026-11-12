@@ -74,4 +74,6 @@ export async function submitOriginalMerchantRefund(input: { paymentId: string; a
       ? { kind: "fail", code: actual.failureCode ?? "provider_failed", message: "The original provider confirmed this refund was unsuccessful." }
       : { kind: "start", providerRef: actual.providerRef } }, system);
 }
-// Registry/private inventory integration and financial SQL qualification pending.
+// Private registry metadata is present; financial SQL/native qualification pending.
+
+export default [merchantRefundOperationState];

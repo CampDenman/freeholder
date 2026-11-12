@@ -27,5 +27,7 @@ export const subscriptionChargeDisposition = defineService({
     return returned ? { kind: "returned_unapplied" as const, ...returned } : null;
   },
 });
-// No registry export until schema, fee/recipient callers and atomic alternate-
+// Private prototype still requires schema, fee/recipient callers and atomic alternate-
 // writer guards qualify. Missing current integration must remain fail-closed.
+
+export default [subscriptionChargeDisposition];

@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, type MerchantChargeScope } from "@/adapters/payments";
 import { ServiceError, type ServiceContext } from "@/core/service";
+import { reserveOriginalSubscriptionCashApplication } from "./merchant-refund-application";
 import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations";
 import { invoicePaymentDueAmount } from "./invoice-payment-due";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
@@ -30,6 +31,7 @@ export async function reserveAgreementCharge(ctx: ServiceContext, invoice: typeo
   if (!original) return null;
   if (invoice.sourceType !== "subscription" || invoice.sourceId?.split(":")[0] !== original.subscriptionId || original.agreementRoutingVersion !== 1
     || request.provider !== "stripe" || !["hosted_checkout", "saved_method", "provider_schedule"].includes(request.method)) throw new ServiceError("conflict", "This payment does not match its original new merchant agreement.");
+  if (original.providerOrigin?.receiptId) await reserveOriginalSubscriptionCashApplication(ctx, original.providerOrigin.receiptId);
   await assertNoUnappliedMerchantCharge(ctx, invoice.id);
   const scope = scopeSchema.parse(original.scope);
   const adapter = paymentAdapter(request.provider);

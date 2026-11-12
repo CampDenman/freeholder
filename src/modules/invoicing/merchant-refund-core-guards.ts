@@ -1,12 +1,13 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: every shared refund mutation respects original physical admission.
+import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { and, eq } from "drizzle-orm";
 import { actorString, ServiceError, type ServiceContext } from "@/core/service";
 import { routingForPayment } from "./merchant-charge";
 import { assertMerchantRefundCreatorsQuiesced } from "./merchant-refund-dispatch";
 import { lockMerchantRefundCash } from "./merchant-refund-origin";
-import { merchantRefundDispatches, merchantRefundObservations, merchantRefundRequests, merchantRefundReservationRetirements, merchantRefundResourceBindings } from "./merchant-refund-schema";
+import { merchantRefundDispatches, merchantRefundObservations, merchantRefundRequests, merchantRefundReservationRetirements, merchantRefundTerminalReceipts, merchantRefundResourceBindings } from "./merchant-refund-schema";
 import type { refunds } from "./schema";
 async function originalRefund(ctx: ServiceContext, refund: typeof refunds.$inferSelect) {
   const routing = await routingForPayment(ctx, refund.paymentId);
@@ -14,6 +15,7 @@ async function originalRefund(ctx: ServiceContext, refund: typeof refunds.$infer
   const [request] = await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.refundId, refund.id));
   if (!request || request.paymentId !== refund.paymentId || request.amountMinor !== refund.amountMinor || request.currency !== refund.currency) throw new ServiceError("conflict", "Restore the exact original merchant refund receipt before changing its money state.");
   await lockMerchantRefundCash(ctx, { ...request, providerRef: request.originalPaymentRef });
+  await allowOriginalMerchantRefundWrites(ctx.tx);
   return request;
 }
 /** Called after the existing refund lock; dispatch takes that lock before cash too. */
@@ -22,6 +24,7 @@ export async function retireOriginalMerchantRefund(ctx: ServiceContext, refund: 
   if (!original) return;
   const [dispatch] = await ctx.tx.select({ id: merchantRefundDispatches.id }).from(merchantRefundDispatches).where(eq(merchantRefundDispatches.requestId, original.id)).limit(1);
   if (dispatch) throw new ServiceError("conflict", "This original refund was physically admitted. Reconcile its actual provider outcome; cancelling its local row cannot release that money.");
+  await allowOriginalMerchantRefundWrites(ctx.tx);
   await ctx.tx.insert(merchantRefundReservationRetirements).values({ requestId: original.id, requestDigest: original.requestDigest,
     reason: "cancelled_before_dispatch", initiatedBy: actorString(ctx.actor) }).onConflictDoNothing();
 }
@@ -55,5 +58,10 @@ export async function assertOriginalMerchantRefundResult(ctx: ServiceContext, re
   // Later bank/action contradictions require their explicit current-state
   // reconciliation receipt. Historic positive money is never overwritten.
   if (observations.length > 5000 || succeeded && (failed || unresolvedAction) || outcome === "succeeded" && !succeeded || outcome === "failed" && !failed) throw new ServiceError("conflict", "Retain the actual original terminal refund proof; unknown or contradictory cash cannot release its reservation.");
+  if (outcome === "failed") {
+    const actual = bound.find(row => row.status === "failed" || row.status === "canceled")!;
+    await allowOriginalMerchantRefundWrites(ctx.tx);
+    await ctx.tx.insert(merchantRefundTerminalReceipts).values({ requestId: original.id, observationId: actual.id }).onConflictDoNothing();
+  }
 }
 // Uncalled until the complete schema and common refund mutation hooks compose.

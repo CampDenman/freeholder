@@ -130,7 +130,6 @@
   "admin.activity.planSaved": "Une formule d'abonnement a été enregistrée",
   "admin.activity.subscriptionRenewed": "Des abonnements ont été renouvelés",
   "admin.activity.subscriptionBillingUpdated": "Le calendrier de facturation d'un abonnement a été mis à jour",
-  "admin.activity.subscriptionRecoveryUpdated": "Le suivi de récupération d’un abonnement a été mis à jour",
   "admin.activity.subscriptionPlanChanged": "Un abonné a changé de formule",
   "admin.activity.subscriptionPaused": "Un abonnement a été mis en pause",
   "admin.activity.subscriptionResumed": "Un abonnement a repris",
@@ -9038,5 +9037,15 @@
   "merchantTax.exemption.destination": "Destination fiscale du client",
   "merchantTax.exemption.title": "Vos demandes d’exonération fiscale",
   "merchantTax.exemption.request": "Demander une exonération",
-  "merchantTax.exemption.reviewHint": "Seules les demandes destinées à cette entreprise apparaissent ici. L’approbation modifie les futurs devis une fois les échéanciers de facturation d’origine sécurisés ; les factures émises conservent leurs preuves fiscales d’origine."
+  "merchantTax.exemption.reviewHint": "Seules les demandes destinées à cette entreprise apparaissent ici. L’approbation modifie les futurs devis une fois les échéanciers de facturation d’origine sécurisés ; les factures émises conservent leurs preuves fiscales d’origine.",
+  "audit.invoicing.reservedOriginalRefund": "Remboursement d’origine réservé",
+  "audit.invoicing.startedOriginalRefund": "Demande de remboursement d’origine commencée",
+  "audit.invoicing.recordedOriginalRefundReference": "Référence du remboursement d’origine enregistrée",
+  "audit.invoicing.finishedOriginalRefund": "Fin de la demande de remboursement enregistrée",
+  "audit.invoicing.recordedOriginalRefundResponse": "Réponse au remboursement d’origine enregistrée",
+  "audit.invoicing.preparedOriginalCashReturn": "Examen de restitution des fonds préparé",
+  "audit.invoicing.recordedOriginalProviderCash": "Fonds du paiement d’origine enregistrés",
+  "audit.invoicing.recordedOriginalCashReturnEvidence": "Preuves de restitution des fonds d’origine enregistrées",
+  "audit.invoicing.finishedOriginalCashReturnReview": "Fin de l’examen de restitution enregistrée",
+  "audit.invoicing.confirmedOriginalCashReturn": "Restitution complète des fonds d’origine confirmée"
 }

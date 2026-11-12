@@ -130,7 +130,6 @@
   "admin.activity.planSaved": "A subscription plan was saved",
   "admin.activity.subscriptionRenewed": "Subscriptions were renewed",
   "admin.activity.subscriptionBillingUpdated": "A subscription's billing schedule was updated",
-  "admin.activity.subscriptionRecoveryUpdated": "Subscription recovery work was updated",
   "admin.activity.subscriptionPlanChanged": "A subscriber changed plans",
   "admin.activity.subscriptionPaused": "A subscription was paused",
   "admin.activity.subscriptionResumed": "A subscription was resumed",
@@ -9038,5 +9037,15 @@
   "merchantTax.exemption.destination": "Customer tax destination",
   "merchantTax.exemption.title": "Your tax exemption requests",
   "merchantTax.exemption.request": "Request exemption",
-  "merchantTax.exemption.reviewHint": "Only requests for this business appear here. Approval changes future quotes after the original billing schedules are safe; issued invoices keep their original tax evidence."
+  "merchantTax.exemption.reviewHint": "Only requests for this business appear here. Approval changes future quotes after the original billing schedules are safe; issued invoices keep their original tax evidence.",
+  "audit.invoicing.reservedOriginalRefund": "Reserved an original refund",
+  "audit.invoicing.startedOriginalRefund": "Started an original refund request",
+  "audit.invoicing.recordedOriginalRefundReference": "Recorded the original refund reference",
+  "audit.invoicing.finishedOriginalRefund": "Recorded completion of an original refund request",
+  "audit.invoicing.recordedOriginalRefundResponse": "Recorded an original refund response",
+  "audit.invoicing.preparedOriginalCashReturn": "Prepared an original cash return review",
+  "audit.invoicing.recordedOriginalProviderCash": "Recorded original provider cash",
+  "audit.invoicing.recordedOriginalCashReturnEvidence": "Recorded original cash return evidence",
+  "audit.invoicing.finishedOriginalCashReturnReview": "Recorded completion of a cash return review",
+  "audit.invoicing.confirmedOriginalCashReturn": "Confirmed the complete return of original cash"
 }

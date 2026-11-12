@@ -128,7 +128,6 @@
   "admin.activity.planSaved": "حُفظت خطة اشتراك",
   "admin.activity.subscriptionRenewed": "جُدّدت اشتراكات",
   "admin.activity.subscriptionBillingUpdated": "حُدّث جدول فوترة اشتراك",
-  "admin.activity.subscriptionRecoveryUpdated": "تم تحديث أعمال استعادة الاشتراك",
   "admin.activity.subscriptionPlanChanged": "غيّر مشترك خطته",
   "admin.activity.subscriptionPaused": "أُوقف اشتراك مؤقتًا",
   "admin.activity.subscriptionResumed": "استؤنف اشتراك",
@@ -9038,5 +9037,15 @@
   "merchantTax.exemption.destination": "الوجهة الضريبية للعميل",
   "merchantTax.exemption.title": "طلبات الإعفاء الضريبي الخاصة بك",
   "merchantTax.exemption.request": "طلب إعفاء",
-  "merchantTax.exemption.reviewHint": "تظهر هنا طلبات هذا النشاط فقط. تغيّر الموافقة عروض الأسعار المستقبلية بعد تأمين جداول الفوترة الأصلية، وتحتفظ الفواتير الصادرة بأدلتها الضريبية الأصلية."
+  "merchantTax.exemption.reviewHint": "تظهر هنا طلبات هذا النشاط فقط. تغيّر الموافقة عروض الأسعار المستقبلية بعد تأمين جداول الفوترة الأصلية، وتحتفظ الفواتير الصادرة بأدلتها الضريبية الأصلية.",
+  "audit.invoicing.reservedOriginalRefund": "حُجز استرداد المبلغ الأصلي",
+  "audit.invoicing.startedOriginalRefund": "بُدئ طلب استرداد المبلغ الأصلي",
+  "audit.invoicing.recordedOriginalRefundReference": "سُجّل مرجع استرداد المبلغ الأصلي",
+  "audit.invoicing.finishedOriginalRefund": "سُجّل اكتمال طلب استرداد المبلغ",
+  "audit.invoicing.recordedOriginalRefundResponse": "سُجّل رد استرداد المبلغ الأصلي",
+  "audit.invoicing.preparedOriginalCashReturn": "أُعدّت مراجعة إعادة الأموال الأصلية",
+  "audit.invoicing.recordedOriginalProviderCash": "سُجّلت الأموال الأصلية لدى المزوّد",
+  "audit.invoicing.recordedOriginalCashReturnEvidence": "سُجّلت أدلة إعادة الأموال الأصلية",
+  "audit.invoicing.finishedOriginalCashReturnReview": "سُجّل اكتمال مراجعة إعادة الأموال",
+  "audit.invoicing.confirmedOriginalCashReturn": "تأكدت إعادة الأموال الأصلية كاملة"
 }

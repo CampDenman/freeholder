@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: every new merchant refund reservation captures its original POST once.
+import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { stripeMerchantRefundBody } from "@/adapters/payments/stripe-merchant-refund-body";
@@ -31,6 +32,7 @@ export async function captureOriginalMerchantRefund(ctx: ServiceContext, payment
     frozenBody: stripeMerchantRefundBody({ refundAttemptId: id, paymentId: payment.id, paymentProviderRef: cash.providerRef,
       amountMinor: refund.amountMinor, providerPlatformAccountId: cash.providerPlatformAccountId }),
   };
+  await allowOriginalMerchantRefundWrites(ctx.tx);
   await ctx.tx.insert(merchantRefundRequests).values({ id, purpose: "invoice_refund", refundId: refund.id, paymentId: payment.id,
     originalObservationId: cash.originalObservationId, subscriptionChargeReceiptId: null, subscriptionChargeObservationId: null,
     providerPlatformAccountId: cash.providerPlatformAccountId, chargeAccountId: cash.chargeAccountId, providerApiVersion: cash.providerApiVersion,
