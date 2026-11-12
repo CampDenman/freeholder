@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C3.22/C11.08: original physical intent survives network/process failure.
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, gt, sql } from "drizzle-orm";
 import { boundStorage } from "@/adapters/storage";
 import { db } from "@/core/db";
 import { contacts } from "@/core/contacts/schema";
@@ -12,6 +12,8 @@ import { actorString, ServiceError, type Actor, type Tx } from "@/core/service";
 import { assets, mediaObjects, mediaUploads } from "./schema";
 import { mediaObjectWrites } from "./write-schema";
 import { pendingObjectIsOwned } from "./object-ledger";
+import {mediaMultipartResources} from "./multipart-schema";
+import {assertOriginalUploadWritable,assertMediaActorLive} from "./upload-ownership";
 
 export const MEDIA_WRITES_SCOPE = "media.storageOperations";
 const unsettled = new Set(["unverified", "started", "unknown"]);
@@ -39,6 +41,19 @@ export async function discardUnwrittenProxyReservation(uploadId: string, key: st
     return true;
   });
 }
+/** A missing physical intent proves this guarded reservation never admitted I/O. */
+export async function discardUnwrittenObjectReservation(key:string):Promise<boolean>{
+ if(await pendingObjectIsOwned(key))return false;
+ return db().transaction(async tx=>{
+  await lockContactIdentityForRead(tx);await lockObject(tx,key);await allowMediaReceiptWrites(tx);
+  const[object]=await tx.select().from(mediaObjects).where(eq(mediaObjects.key,key)).limit(1).for("update");
+  if(!object||object.state!=="pending"||(await records(tx,key)).length)return false;
+  const active=await tx.select({id:mediaUploads.id}).from(mediaUploads).where(and(eq(mediaUploads.storageKey,key),inArray(mediaUploads.state,["created","uploading","uploaded","processing"]),gt(mediaUploads.expiresAt,new Date()))).limit(1);
+  const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.keyDigest,objectKeyDigest(key)),isNull(mediaMultipartResources.retiredAt))).limit(1);
+  if(active.length||multipart.length)return false;
+  await tx.delete(mediaObjects).where(eq(mediaObjects.key,key));return true;
+ });
+}
 async function records(tx: Tx, key: string) {
   return tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest, objectKeyDigest(key))).orderBy(asc(mediaObjectWrites.createdAt), asc(mediaObjectWrites.id)).for("update");
 }
@@ -46,29 +61,41 @@ async function records(tx: Tx, key: string) {
 export type TrackedPut = {
   key: string; body: Uint8Array<ArrayBuffer>; contentType: string;
   role: "original" | "variant"; uploadId?: string; ownerAssetId?: string;
+  requiresReservation?:boolean; originalKey?:string;
 };
+export type CapturedStorage=Awaited<ReturnType<typeof boundStorage>>;
 
 /** Caller has already authorized the ordinary upload/backfill/rescan operation.
  * This is shared infrastructure, not authority to retry anyone's old intent.
  */
-export async function putWithReceipt(input: TrackedPut, actor: Actor): Promise<void> {
-  const { store, binding } = await boundStorage();
-  const sha256 = createHash("sha256").update(input.body).digest("hex");
+export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:CapturedStorage): Promise<void> {
+  const body=new Uint8Array(input.body);
+  const { store, binding } = captured??await boundStorage();
+  const sha256 = createHash("sha256").update(body).digest("hex");
   const admission = await db().transaction(async tx => {
     await lockContactIdentityForRead(tx);
+    await assertMediaActorLive(tx,actor);
     await lockObject(tx, input.key);
     await allowMediaReceiptWrites(tx);
+    let originalOwner:string|null|undefined,originalActor:string|null=null;
     if (input.uploadId) {
       const [upload] = await tx.select().from(mediaUploads).where(eq(mediaUploads.id, input.uploadId)).limit(1).for("update");
-      if (!upload || upload.storageKey !== input.key || upload.state !== "processing" || upload.expiresAt <= new Date()) throw new ServiceError("conflict", "This upload no longer accepts a physical write. Start a new upload.");
+      if (!upload || (input.role==="original"?upload.storageKey!==input.key:!input.key.startsWith(`${upload.storageKey}.r-`)) || upload.state !== "processing" || upload.expiresAt <= new Date()) throw new ServiceError("conflict", "This upload no longer accepts a physical write. Start a new upload.");
+      originalOwner=upload.ownerContactId;originalActor=upload.uploadedBy;
+      await assertOriginalUploadWritable(tx,originalOwner,originalActor);
     }
+    const [reserved]=await tx.select().from(mediaObjects).where(eq(mediaObjects.key,input.originalKey??input.key)).limit(1).for("update");
+    if(input.requiresReservation&&!reserved)throw new ServiceError("conflict","The original object reservation was retired before storage admission.");
+    if(originalOwner===undefined&&reserved){originalOwner=reserved.ownerContactId;await assertOriginalUploadWritable(tx,originalOwner,null);}
+    const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.keyDigest,objectKeyDigest(input.key)),isNull(mediaMultipartResources.retiredAt))).limit(1);
+    if(multipart.length)throw new ServiceError("conflict","The original multipart resource still owns this object key.");
     const history = await records(tx, input.key);
     if (history.some(row => row.redactedAt || unsettled.has(row.state))) throw new ServiceError("conflict", "An original storage operation is unresolved or retired. Start a new upload or review its original receipt.");
     const original = history.filter(row => row.namespace === binding.namespace);
     if (original.some(row => row.operation === "delete" && row.state === "accepted")) throw new ServiceError("conflict", "This original object key was retired. Start a new upload.");
     const accepted = original.find(row => row.operation === "put" && row.state === "accepted" && !row.deletedAt);
     if (accepted) {
-      if (accepted.sha256 !== sha256 || accepted.bytes !== input.body.byteLength || accepted.contentType !== input.contentType) throw new ServiceError("conflict", "The original upload has different bytes. Start a new upload rather than overwrite it.");
+      if (accepted.sha256 !== sha256 || accepted.bytes !== body.byteLength || accepted.contentType !== input.contentType) throw new ServiceError("conflict", "The original upload has different bytes. Start a new upload rather than overwrite it.");
       return { reused: true as const, id: accepted.id };
     }
     const [object] = await tx.select().from(mediaObjects).where(eq(mediaObjects.key, input.key)).limit(1).for("update");
@@ -78,18 +105,20 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor): Promise<v
       const [asset] = await tx.select({ uploadedBy: assets.uploadedBy }).from(assets).where(eq(assets.id, input.ownerAssetId)).limit(1);
       uploader = asset?.uploadedBy?.match(/^user:([0-9a-f-]{36})$/i)?.[1] ?? null;
     }
-    const [contact] = uploader ? await tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.userId, uploader)).limit(1) : [];
+    const [contact] = originalOwner===undefined&&uploader ? await tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.userId, uploader)).limit(1) : [];
+    const contactId=originalOwner===undefined?contact?.id??null:originalOwner;
+    await assertOriginalUploadWritable(tx,contactId,originalActor);
     const id = randomUUID();
     await tx.insert(mediaObjectWrites).values({ id, operation: "put", key: input.key, keyDigest: objectKeyDigest(input.key), namespace: binding.namespace, storageKind: binding.kind,
-      storageLocation: binding.location, sha256, bytes: input.body.byteLength, contentType: input.contentType, actor: actorString(actor), contactId: contact?.id ?? null, state: "started" });
-    await tx.insert(mediaObjects).values({ key: input.key, contentType: input.contentType, role: input.role, bytes: input.body.byteLength, uploadId: input.uploadId, state: "pending" })
-      .onConflictDoUpdate({ target: mediaObjects.key, set: { contentType: input.contentType, role: input.role, bytes: input.body.byteLength, updatedAt: new Date() } });
+      storageLocation: binding.location, sha256, bytes: body.byteLength, contentType: input.contentType, actor: actorString(actor), contactId, state: "started" });
+    await tx.insert(mediaObjects).values({ key: input.key, contentType: input.contentType, role: input.role, bytes: body.byteLength, uploadId: input.uploadId,ownerContactId:contactId, state: "pending" })
+      .onConflictDoUpdate({ target: mediaObjects.key, set: { contentType: input.contentType, role: input.role, bytes: body.byteLength, updatedAt: new Date() } });
     return { reused: false as const, id };
   });
   if (admission.reused) return;
   let providerAccepted = false;
   try {
-    await store.put(input.key, input.body, input.contentType);
+    await store.put(input.key, body, input.contentType);
     providerAccepted = true;
     await observeStorageOperation(admission.id, true);
   } catch (error) {
@@ -123,7 +152,7 @@ export async function observeStorageOperation(id: string, accepted: boolean, set
 export async function storageOperationsHeld(tx: Tx, owners: Array<string | null>): Promise<boolean> {
   const holds = await tx.select({ contactId: dataRequests.contactId }).from(privacyRetentionExceptions)
     .innerJoin(dataRequests, eq(dataRequests.id, privacyRetentionExceptions.dataRequestId))
-    .where(and(inArray(privacyRetentionExceptions.scope, [MEDIA_WRITES_SCOPE, "members"]),
+    .where(and(inArray(privacyRetentionExceptions.scope, [MEDIA_WRITES_SCOPE, "media.multipartOperations", "members"]),
       sql`(${privacyRetentionExceptions.expiresAt} is null or ${privacyRetentionExceptions.expiresAt}>clock_timestamp())`));
   return holds.some(hold => owners.includes(null) || owners.includes(hold.contactId));
 }
@@ -131,15 +160,17 @@ export async function storageOperationsHeld(tx: Tx, owners: Array<string | null>
 /** Delete only an unowned, settled object in its original resource namespace.
  * The durable delete attempt fences a concurrent/future PUT for this key.
  */
-export async function deleteWithReceipt(key: string): Promise<boolean> {
+export async function deleteWithReceipt(key: string,captured?:CapturedStorage): Promise<boolean> {
   if (await pendingObjectIsOwned(key)) return false;
-  const { store, binding } = await boundStorage();
+  const { store, binding } = captured??await boundStorage();
   const claim = await db().transaction(async tx => {
     await lockContactIdentityForRead(tx);
     await lockObject(tx, key);
     await allowMediaReceiptWrites(tx);
     const [object] = await tx.select().from(mediaObjects).where(eq(mediaObjects.key, key)).limit(1).for("update");
     const history = await records(tx, key);
+    const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.keyDigest,objectKeyDigest(key)),isNull(mediaMultipartResources.retiredAt))).limit(1);
+    if(multipart.length)return null;
     if (!history.length || history.some(row => unsettled.has(row.state))) return null;
     const live = history.filter(row => !row.deletedAt);
     if (live.some(row => !row.namespace || row.namespace !== binding.namespace)) return null;

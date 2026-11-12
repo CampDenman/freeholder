@@ -8779,5 +8779,15 @@
   "media.recovery.object": "Objeto original",
   "media.recovery.receipt": "Comprobante de la operación",
   "media.recovery.acknowledged": "El proveedor confirmó esta operación. No se puede sustituir ese hecho por un resultado de operación no aplicada.",
-  "media.recovery.bytes": "Cantidad de bytes del archivo original"
+  "media.recovery.bytes": "Cantidad de bytes del archivo original",
+  "media.recovery.abort": "Cancelar carga reanudable",
+  "media.recovery.cleanup": "Limpiar el recurso original",
+  "media.recovery.complete": "Completar carga reanudable",
+  "media.recovery.create": "Iniciar carga reanudable",
+  "media.recovery.multipart": "Carga reanudable original",
+  "media.recovery.multipartConfirm": "Confirmo el recurso multiparte original y que sus escritores anteriores se han detenido.",
+  "media.recovery.providerUploadId": "ID de carga del proveedor original (si se conoce)",
+  "media.recovery.verifyOriginal": "Verificar el recurso original",
+  "privacy.retention.mediaMultipartOperations": "Reservas de carga y operaciones multiparte originales",
+  "privacy.retention.mediaStorageOperations": "Operaciones de almacenamiento originales"
 }

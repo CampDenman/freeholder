@@ -463,6 +463,10 @@ export const eraseMediaStorageOperations = defineJob({
     return erase(data);
   },
 });
+export const eraseMediaMultipartOperations=defineJob({
+ name:"core.eraseMediaMultipartOperations",summary:"Finish original upload erasure only after verified physical retirement.",retry:{limit:40,delaySeconds:60,backoff:true,maxDelaySeconds:3600},concurrency:1,
+ handler:async(data,context)=>{if(!context)throw new Error("Original upload erasure requires a durable worker identity.");await context.throwIfCancelled();const{eraseMultipartOperations}=await import("@/core/media/multipart-privacy");return eraseMultipartOperations(data);},
+});
 
 /** Unconfirmed recordings and leftover chunks must not outlive the session. */
 export const expireCaptureSessions = defineJob({
@@ -1101,6 +1105,7 @@ export default [
   eraseImportSourceObjects,
   eraseMailRecords,
   eraseMediaStorageOperations,
+  eraseMediaMultipartOperations,
   expireAgentApprovals,
   runPlaybooks,
   assembleBriefings,

@@ -19,6 +19,8 @@ import "@/core/runs/spine";
 import "@/core/mail/privacy";
 import "@/core/mail/ownership";
 import "@/core/media/write-ownership";
+import "@/core/media/multipart-ownership";
+import "@/core/media/multipart-privacy";
 import "@/core/media/write-privacy";
 import agentServices from "@/core/agents/service";
 import agentExecution from "@/core/agents/execution";
@@ -63,6 +65,7 @@ import mailServices from "@/core/mail/service";
 import mailOAuthServices from "@/core/mail/oauth";
 import mediaServices from "@/core/media/service";
 import mediaRecoveryServices from "@/core/media/write-recovery";
+import multipartRecoveryServices from "@/core/media/multipart-recovery";
 import notificationServices from "@/core/notifications/service";
 import taskServices from "@/core/tasks/service";
 import noteServices from "@/core/notes/service";
@@ -174,6 +177,7 @@ const services: Service[] = [
   ...mailOAuthServices,
   ...mediaServices,
   ...mediaRecoveryServices,
+  ...multipartRecoveryServices,
   ...notificationServices,
   ...schedulingServices,
   ...availabilityServices,

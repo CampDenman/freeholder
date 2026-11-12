@@ -36,10 +36,15 @@ export interface MultipartPart {
   etag: string;
   bytes?: number;
 }
+export type MultipartInspection = { state: "open"; parts: MultipartPart[] } | { state: "absent" };
+export interface MultipartObservation {
+  /** Commit the positive provider fact before subsequent inspection can fail. */
+  onAccepted?: (result?: { uploadId: string }) => Promise<void>;
+}
 
 /** Optional capability: only object stores that really support it expose it. */
 export interface DirectMultipartStorage {
-  create(key: string, contentType: string): Promise<{ uploadId: string }>;
+  create(key: string, contentType: string, observation?: MultipartObservation): Promise<{ uploadId: string }>;
   signPart(
     key: string,
     uploadId: string,
@@ -47,12 +52,17 @@ export interface DirectMultipartStorage {
     expiresIn?: number,
   ): Promise<{ url: string; method: "PUT" }>;
   listParts(key: string, uploadId: string): Promise<MultipartPart[]>;
+  /** Absence is authoritative NoSuchUpload, not an empty object HEAD. */
+  inspect?(key: string, uploadId: string): Promise<MultipartInspection>;
+  /** Complete exact-key inventory, including uploads whose CREATE reply was lost. */
+  listUploadsForKey?(key: string): Promise<string[]>;
   complete(
     key: string,
     uploadId: string,
     parts: MultipartPart[],
+    observation?: MultipartObservation,
   ): Promise<StoredObjectHead>;
-  abort(key: string, uploadId: string): Promise<void>;
+  abort(key: string, uploadId: string, observation?: MultipartObservation): Promise<void>;
 }
 
 export interface SignedUrlOptions {

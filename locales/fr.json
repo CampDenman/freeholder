@@ -8779,5 +8779,15 @@
   "media.recovery.object": "Objet d’origine",
   "media.recovery.receipt": "Reçu de l’opération",
   "media.recovery.acknowledged": "Le fournisseur a accusé réception de cette opération. Ce fait ne peut pas être remplacé par un résultat indiquant qu’elle n’a pas été exécutée.",
-  "media.recovery.bytes": "Taille du fichier d’origine en octets"
+  "media.recovery.bytes": "Taille du fichier d’origine en octets",
+  "media.recovery.abort": "Annuler le téléversement reprenable",
+  "media.recovery.cleanup": "Nettoyer la ressource initiale",
+  "media.recovery.complete": "Terminer le téléversement reprenable",
+  "media.recovery.create": "Démarrer le téléversement reprenable",
+  "media.recovery.multipart": "Téléversement reprenable initial",
+  "media.recovery.multipartConfirm": "Je confirme la ressource multipart initiale et l’arrêt de ses écritures précédentes.",
+  "media.recovery.providerUploadId": "Identifiant du téléversement chez le fournisseur initial (si connu)",
+  "media.recovery.verifyOriginal": "Vérifier la ressource initiale",
+  "privacy.retention.mediaMultipartOperations": "Réservations de téléversement et opérations multipart initiales",
+  "privacy.retention.mediaStorageOperations": "Opérations de stockage initiales"
 }

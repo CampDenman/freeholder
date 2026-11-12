@@ -9,12 +9,14 @@ import encodeQR from "qr";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   defineOrchestratedService,
-  defineService,
   ServiceError,
   actorString,
   permits,
   type ServiceContext,
+  type Actor,
 } from "@/core/service";
+import {defineMediaService as defineService} from "./guarded-service";
+import {putWithReceipt} from "./write-ledger";
 import { siteOrigin } from "@/core/seo/origin";
 import { storage } from "@/adapters/storage";
 import { deleteUnownedPendingObjects, reservePendingMediaObject as reserveObject } from "./object-ledger";
@@ -24,7 +26,6 @@ import {
   mediaCaptureChunks,
   mediaCaptureItems,
   mediaCaptureSessions,
-  mediaObjects,
   mediaUploads,
   assets,
 } from "./schema";
@@ -255,10 +256,10 @@ function assertSameSession(
 }
 
 /** Provider writes follow the shared pending-object reservation. */
-async function storeBytes(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
+async function storeBytes(key: string, bytes: Uint8Array, contentType: string,actor:Actor): Promise<void> {
   const body = new Uint8Array(bytes.byteLength);
   body.set(bytes);
-  await storage().put(key, body, contentType);
+  await putWithReceipt({key,body,contentType,role:"original",requiresReservation:true},actor);
 }
 
 async function appendItem(
@@ -274,16 +275,7 @@ async function appendItem(
   },
 ) {
   if (!input.uploadId) {
-    await ctx.tx
-      .insert(mediaObjects)
-      .values({
-        key: input.key,
-        role: "original",
-        state: "pending",
-        bytes: input.bytes,
-        contentType: input.contentType,
-      })
-      .onConflictDoNothing();
+    await reserveObject(ctx,{key:input.key,role:"original",bytes:input.bytes,contentType:input.contentType});
   }
   await ctx.tx.insert(mediaCaptureItems).values({
     sessionId: existing.id,
@@ -727,7 +719,7 @@ export const attachCaptureUpload = defineOrchestratedService({
       { ...access, contentType: input.contentType, bytes: input.bytes.byteLength },
       actor,
     );
-    await storeBytes(claimed.key, input.bytes, input.contentType);
+    await storeBytes(claimed.key, input.bytes, input.contentType,actor);
     return applyCaptureOriginal.call(
       {
         ...access,
@@ -1169,9 +1161,8 @@ const applyCaptureChunk = defineService({
         target: [mediaCaptureChunks.sessionId, mediaCaptureChunks.sequence],
         set: { storageKey: input.key, bytes: input.bytes, contentType: input.contentType },
       });
-    // The chunk row owns the key now; the pending ledger entry is released so
-    // the orphan sweep never deletes a live timeslice.
-    await ctx.tx.delete(mediaObjects).where(eq(mediaObjects.key, input.key));
+    // The chunk row declares live ownership; retain its physical receipt and
+    // pending pointer until the guarded cleanup actually removes its bytes.
     if (previous && previous.storageKey !== input.key) {
       await deleteAfterCommit(ctx, [previous.storageKey]);
     }
@@ -1218,7 +1209,7 @@ export const appendCaptureChunk = defineOrchestratedService({
       },
       actor,
     );
-    await storage().put(claimed.key, input.bytes, input.contentType);
+    await putWithReceipt({key:claimed.key,body:new Uint8Array(input.bytes),contentType:input.contentType,role:"original",requiresReservation:true},actor);
     return applyCaptureChunk.call(
       {
         ...access,
@@ -1406,7 +1397,7 @@ export const assembleCapture = defineOrchestratedService({
       assembled.set(part, offset);
       offset += part.byteLength;
     }
-    await storage().put(claimed.key, assembled, claimed.contentType);
+    await putWithReceipt({key:claimed.key,body:assembled,contentType:claimed.contentType,role:"original",requiresReservation:true},actor);
     return applyCaptureAssembly.call(
       {
         ...access,

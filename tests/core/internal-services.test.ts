@@ -223,6 +223,7 @@ const INTERNAL = [
 const CALLER_AUTHORIZED_PHASES = [
   "catalog.anonymizeSellerOrderReceipts",
   "catalog.orderInvoiceRevenue",
+  "media.reserveProxyObject",
   "subscriptions.claimTrialCardSetup",
   "subscriptions.applyTrialCardSetup",
   "subscriptions.claimTrialSetupDispatch",
@@ -386,6 +387,9 @@ const CALLER_AUTHORIZED_PHASES = [
   "media.claimProxyUpload",
   "media.claimStorageRecovery",
   "media.applyStorageRecovery",
+  "media.claimMultipartRecovery",
+  "media.applyMultipartRecovery",
+  "media.claimMultipartCleanup",
   "media.completeUploadSource",
   "media.confirmCaptureApply",
   "media.confirmCaptureSource",

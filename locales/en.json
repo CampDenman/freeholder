@@ -8779,5 +8779,15 @@
   "media.recovery.object": "Original object",
   "media.recovery.receipt": "Operation receipt",
   "media.recovery.acknowledged": "The provider acknowledged this operation. That fact cannot be replaced with an unapplied outcome.",
-  "media.recovery.bytes": "Original file byte count"
+  "media.recovery.bytes": "Original file byte count",
+  "media.recovery.abort": "Cancel resumable upload",
+  "media.recovery.cleanup": "Clean up original resource",
+  "media.recovery.complete": "Complete resumable upload",
+  "media.recovery.create": "Start resumable upload",
+  "media.recovery.multipart": "Original resumable upload",
+  "media.recovery.multipartConfirm": "I confirm the original multipart resource and that its prior writers have stopped.",
+  "media.recovery.providerUploadId": "Original provider upload ID (if known)",
+  "media.recovery.verifyOriginal": "Verify original resource",
+  "privacy.retention.mediaMultipartOperations": "Original upload reservations and multipart operations",
+  "privacy.retention.mediaStorageOperations": "Original storage operations"
 }

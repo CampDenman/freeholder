@@ -8,8 +8,8 @@
 import { z } from "zod";
 import { and, count, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
-import { pendingObjectIsOwned } from "./object-ledger";
-import { putWithReceipt, deleteWithReceipt, discardUnwrittenProxyReservation, type TrackedPut } from "./write-ledger";
+import { pendingObjectIsOwned, reservePendingMediaObject } from "./object-ledger";
+import { putWithReceipt, deleteWithReceipt, discardUnwrittenProxyReservation, discardUnwrittenObjectReservation, type TrackedPut } from "./write-ledger";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { db, type Database } from "@/core/db";
 import {
@@ -22,17 +22,22 @@ import {
 import {
   actorString,
   defineOrchestratedService,
-  defineService,
   permits,
   ServiceError,
   type Actor,
   type ServiceContext,
   type Tx,
 } from "@/core/service";
-import { storage } from "@/adapters/storage";
+import { storage, boundStorage } from "@/adapters/storage";
+import {defineMediaService as defineService} from "./guarded-service";
+import {allowMediaReceiptWrites} from "./write-ledger";
+import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
+import {originalUploadContact,assertOriginalUploadWritable} from "./upload-ownership";
+import {reserveMultipart,createOriginalMultipart,originalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart,type BoundMultipart} from "./multipart-operations";
 import {
   storageKey,
   type MultipartPart,
+  type StorageAdapter,
 } from "@/adapters/storage/types";
 import { malwareScanner, type MalwareScanResult } from "@/adapters/malware";
 import { underLegalHold } from "@/core/media/abuse-evidence";
@@ -242,12 +247,18 @@ const verifyCaptureUpload = defineService({
   },
 });
 
-async function putTrackedObject(input: TrackedPut, actor: Actor): Promise<void> {
-  await putWithReceipt(input, actor);
+const reserveProxyObject = defineService({
+ name:"media.reserveProxyObject",summary:"Reserve the original owner before scanning a one-shot upload.",kind:"mutation",permission:"public",external:false,writeClass:"write",auditInputFields:[],
+ input:z.object({key:z.string().min(1),contentType:z.string(),bytes:z.number().int().positive(),provenance:provenanceSchema}),output:okResult,
+ handler:async(input,ctx)=>{await checkCaptureUpload(ctx.tx,ctx.actor,input.provenance);await reservePendingMediaObject(ctx,{...input,role:"original"});return{ok:true as const};},
+});
+
+async function putTrackedObject(input: TrackedPut, actor: Actor,captured?:BoundMultipart): Promise<void> {
+  await putWithReceipt(input, actor,captured);
 }
 
-async function putTrackedObjects(inputs: TrackedPut[], actor: Actor, ownerAssetId?: string): Promise<void> {
-  const outcomes = await Promise.allSettled(inputs.map(input => putWithReceipt({ ...input, ownerAssetId }, actor)));
+async function putTrackedObjects(inputs: TrackedPut[], actor: Actor, ownerAssetId?: string,captured?:BoundMultipart): Promise<void> {
+  const outcomes = await Promise.allSettled(inputs.map(input => putWithReceipt({ ...input, ownerAssetId }, actor,captured)));
   const failure = outcomes.find(result => result.status === "rejected");
   if (failure?.status === "rejected") throw failure.reason;
 }
@@ -277,8 +288,9 @@ async function scanStoredAndHash(
   filename: string,
   contentType: string,
   bytes: number,
+  store:StorageAdapter=storage(),
 ): Promise<{ scan: MalwareScanResult; checksumSha256: string }> {
-  const source = await storage().stream(key);
+  const source = await store.stream(key);
   if (!source) throw new Error(`storage: ${key} disappeared before scanning`);
   const scanner = malwareScanner();
   if (scanner.id === "none") {
@@ -306,7 +318,7 @@ async function scanStoredAndHash(
   }
   // A scanner can fail before consuming the stream. Quarantine truth and the
   // original's digest are independent, so finish the digest with a fresh read.
-  const retry = await storage().stream(key);
+  const retry = await store.stream(key);
   if (!retry) throw new Error(`storage: ${key} disappeared before hashing`);
   return { scan, checksumSha256: await sha256Stream(retry) };
 }
@@ -413,11 +425,11 @@ async function watermarkMarkFrom(
 }
 
 /** Brand mark for orchestrators: DB snapshot, then logo bytes with no tx held. */
-async function loadWatermarkMark(): Promise<WatermarkMark | undefined> {
+async function loadWatermarkMark(store:StorageAdapter=storage()): Promise<WatermarkMark | undefined> {
   const source = await watermarkMarkFrom(db());
   if (!source) return undefined;
   let logo: Uint8Array<ArrayBuffer> | undefined;
-  if (source.logoKey) logo = (await storage().get(source.logoKey)) ?? undefined;
+  if (source.logoKey) logo = (await store.get(source.logoKey)) ?? undefined;
   return { logo, text: source.text };
 }
 
@@ -437,6 +449,7 @@ async function prepareDerivedObjects(
   },
   mark: WatermarkMark | undefined,
   actor: Actor,
+  captured?:BoundMultipart,
 ): Promise<PreparedOriginal> {
   const scan = scanFields(input.scan);
   const trackedKeys = [input.key];
@@ -444,7 +457,7 @@ async function prepareDerivedObjects(
   let variants: VariantSet = {};
   const renditionVersion = randomUUID();
   if (input.kind === "image" && scan.status === "ready") {
-    const body = input.body ?? (await storage().get(input.key));
+    const body = input.body ?? (await(captured?.store??storage()).get(input.key));
     if (!body) throw new Error(`storage: ${input.key} disappeared during processing`);
     // Upload validation already sniffed the prefix; the stored bytes are
     // checked again here because they are what sharp would actually read.
@@ -469,7 +482,8 @@ async function prepareDerivedObjects(
         contentType: rendition.contentType,
         role: "variant" as const,
         uploadId: input.uploadId,
-      })), actor,
+        originalKey:input.key,
+      })), actor,undefined,captured,
     );
     trackedKeys.push(...built.map((rendition) => rendition.key));
     variants = toVariantSet(built);
@@ -489,7 +503,8 @@ async function prepareDerivedObjects(
           contentType: rendition.contentType,
           role: "variant" as const,
           uploadId: input.uploadId,
-        })), actor,
+          originalKey:input.key,
+        })), actor,undefined,captured,
       );
       trackedKeys.push(...marked.map((rendition) => rendition.key));
       variants = withWatermarked(variants, marked);
@@ -668,6 +683,9 @@ const applyStoredOriginal = defineService({
   }),
   output: assetRow,
   handler: async (input, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
+    const[originalObject]=await ctx.tx.select({owner:mediaObjects.ownerContactId}).from(mediaObjects).where(eq(mediaObjects.key,input.key)).limit(1);
+    await assertOriginalUploadWritable(ctx.tx,originalObject?.owner??null,null);
     if (input.importReceipt && input.uploadId) throw new ServiceError("validation", "An import receipt uses its own source claim, not an upload-session claim.");
     if (
       input.provenance.captureToken ||
@@ -681,6 +699,7 @@ const applyStoredOriginal = defineService({
       const session = await lockedUploadSession(ctx.tx, input.uploadId);
       if (!session) throw new ServiceError("not_found", "That upload is not here.");
       requireUploadAccess(ctx.actor, session.uploadedBy);
+      await assertOriginalUploadWritable(ctx.tx,session.ownerContactId,session.uploadedBy);
       // The reservation decides what the file is for: the proxy body cannot
       // turn a private form upload into a public library file, or back.
       const reserved = (session.provenance ?? {}) as { purpose?: "form" };
@@ -766,7 +785,7 @@ export const uploadAsset = defineOrchestratedService({
         actor,
       );
     }
-    const body = input.bytes;
+    const body = new Uint8Array(input.bytes);
     if (body.byteLength > PROXY_UPLOAD_LIMIT) {
       throw new ServiceError(
         "validation",
@@ -799,6 +818,8 @@ export const uploadAsset = defineOrchestratedService({
         if (claimed.asset) return claimed.asset;
         key = claimed.key;
         uploadId = claimed.uploadId;
+      } else {
+        await reserveProxyObject.call({key,contentType:validated.mime,bytes:body.byteLength,provenance:input.provenance},actor);
       }
       const scan = await scanBytes(body, input.filename, validated.mime);
       if (
@@ -816,6 +837,7 @@ export const uploadAsset = defineOrchestratedService({
         contentType: validated.mime,
         role: "original",
         uploadId,
+        requiresReservation: true,
       }, actor);
       const prepared = await prepareDerivedObjects(
         {
@@ -876,7 +898,7 @@ const beginUploadOutput = z.object({
 
 const beginUploadApply = defineService({
   name: "media.beginUploadApply",
-  summary: "Record a reserved upload after the storage provider has accepted it.",
+  summary: "Reserve original ownership and physical intent before storage work.",
   kind: "mutation",
   permission: "public",
   external: false,
@@ -884,11 +906,15 @@ const beginUploadApply = defineService({
   input: uploadIntent.extend({
     key: z.string().min(1),
     strategy: z.enum(["direct_multipart", "proxy"]),
-    providerUploadId: z.string().min(1).optional(),
+    binding:z.object({kind:z.enum(["s3","local","replit"]),namespace:z.string().regex(/^[a-f0-9]{64}$/),location:z.record(z.string(),z.string())}).optional(),
   }),
-  output: beginUploadOutput,
+  auditInputFields:["strategy"],
+  output: beginUploadOutput.extend({operationId:uuid.nullable()}),
   handler: async (input, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
     await checkCaptureUpload(ctx.tx, ctx.actor, input.provenance);
+    const uploadedBy=input.provenance.captureToken?`capture:${input.provenance.captureToken}`:actorString(ctx.actor);
+    const ownerContactId=await originalUploadContact(ctx.tx,uploadedBy);
     const [session] = await ctx.tx
       .insert(mediaUploads)
       .values({
@@ -897,10 +923,8 @@ const beginUploadApply = defineService({
         filename: input.filename,
         declaredMime: input.contentType,
         expectedBytes: input.bytes,
-        providerUploadId: input.providerUploadId,
-        uploadedBy: input.provenance.captureToken
-          ? `capture:${input.provenance.captureToken}`
-          : actorString(ctx.actor),
+        ownerContactId,
+        uploadedBy,
         source: input.provenance.captureToken ? "capture" : input.source,
         provenance: input.provenance,
         mediaMetadata: input.metadata,
@@ -913,7 +937,10 @@ const beginUploadApply = defineService({
       role: "staged",
       state: "pending",
       contentType: input.contentType,
+      ownerContactId,
     });
+    if(input.strategy==="direct_multipart"&&!input.binding)throw new ServiceError("conflict","Direct uploads require their original storage binding.");
+    const operationId=input.strategy==="direct_multipart"?await reserveMultipart(ctx,session!,input.binding!):null;
     ctx.setSubject("mediaUpload", session!.id);
     return {
       id: session!.id,
@@ -924,6 +951,7 @@ const beginUploadApply = defineService({
           ? Math.ceil(input.bytes / MULTIPART_PART_BYTES)
           : null,
       expiresAt: session!.expiresAt,
+      operationId,
     };
   },
 });
@@ -958,7 +986,7 @@ export const beginUpload = defineOrchestratedService({
       );
     }
 
-    const store = storage();
+    const {store,binding} = await boundStorage();
     const strategy = store.directMultipart
       ? ("direct_multipart" as const)
       : ("proxy" as const);
@@ -970,28 +998,18 @@ export const beginUpload = defineOrchestratedService({
     }
 
     const key = storageKey(input.filename, new Date(), randomUUID());
-    let providerUploadId: string | undefined;
-    try {
-      if (store.directMultipart) {
-        providerUploadId = (
-          await store.directMultipart.create(key, input.contentType)
-        ).uploadId;
-      }
-      return await beginUploadApply.call(
+    const reserved = await beginUploadApply.call(
         {
           ...input,
           key,
           strategy,
-          providerUploadId,
+          binding,
         },
         actor,
       );
-    } catch (error) {
-      if (providerUploadId && store.directMultipart) {
-        await store.directMultipart.abort(key, providerUploadId).catch(() => undefined);
-      }
-      throw error;
-    }
+    if(reserved.operationId)await createOriginalMultipart(reserved.id,reserved.operationId);
+    const{operationId:_,...result}=reserved;
+    return result;
   },
 });
 
@@ -1108,13 +1126,7 @@ export const uploadStatus = defineOrchestratedService({
       session.providerUploadId &&
       !["complete", "failed", "aborted", "expired"].includes(session.state)
     ) {
-      const multipart = storage().directMultipart;
-      if (multipart) {
-        parts = await multipart.listParts(
-          session.storageKey,
-          session.providerUploadId,
-        );
-      }
+      parts=await originalMultipartParts(input.id);
     }
     return {
       id: session.id,
@@ -1151,11 +1163,13 @@ const signUploadClaim = defineService({
     partNumbers: z.array(z.number().int()),
   }),
   handler: async (input, ctx) => {
-    const session = await lockedUploadSession(ctx.tx, input.id);
+    const {upload:session,resource}=await lockMultipartUpload(ctx.tx,input.id);
     if (!session || session.strategy !== "direct_multipart") {
       throw new ServiceError("not_found", "That direct upload is not here.");
     }
     requireUploadAccess(ctx.actor, session.uploadedBy);
+    await assertOriginalUploadWritable(ctx.tx,session.ownerContactId,session.uploadedBy);
+    if(resource.state!=="open")throw new ServiceError("conflict","The original multipart upload no longer accepts new part signatures.");
     if (session.expiresAt <= new Date()) {
       throw new ServiceError("conflict", "That upload reservation has expired.");
     }
@@ -1208,7 +1222,7 @@ export const signUploadParts = defineOrchestratedService({
   }),
   handler: async (input, actor) => {
     const claimed = await signUploadClaim.call(input, actor);
-    const multipart = storage().directMultipart;
+    const captured=await originalMultipart(input.id),multipart=captured.store.directMultipart;
     if (!multipart) {
       throw new ServiceError("conflict", "Direct uploads are unavailable.");
     }
@@ -1252,7 +1266,8 @@ const failDirectUpload = defineService({
     if (session.state === "complete") {
       throw new ServiceError("conflict", "That upload already became a library file.");
     }
-    await ctx.tx.delete(mediaObjects).where(eq(mediaObjects.key, input.storageKey));
+    // Only the receipt-backed cleanup may remove physical ownership. A failed
+    // validation result never asserts that a DELETE actually completed.
     await ctx.tx
       .update(mediaUploads)
       .set({ state: "failed", failureReason: input.message, updatedAt: new Date() })
@@ -1321,9 +1336,10 @@ const multipartPartSchema = z.object({
 const completeUploadSource = defineService({
   name: "media.completeUploadSource",
   summary: "Authorize a direct upload before assembling and scanning stored bytes.",
-  kind: "query",
+  kind: "mutation",
   permission: "public",
   external: false,
+  writeClass:"write",auditInputFields:["id"],
   input: z.object({
     id: z.string().uuid(),
     parts: z.array(multipartPartSchema).min(1).max(MAX_MULTIPART_PARTS),
@@ -1342,6 +1358,7 @@ const completeUploadSource = defineService({
       provenance: provenanceSchema,
       metadata: mediaMetadataSchema,
       parts: z.array(multipartPartSchema),
+      operationId:uuid,recoverOnly:z.boolean(),
     }),
   ]),
   handler: async (input, ctx) => {
@@ -1391,6 +1408,7 @@ const completeUploadSource = defineService({
         `This file requires exactly ${expectedParts} ordered upload parts.`,
       );
     }
+    const claim=await claimMultipartComplete(ctx,session.id,parts);
     return {
       kind: "open" as const,
       id: session.id,
@@ -1403,6 +1421,7 @@ const completeUploadSource = defineService({
       provenance: session.provenance as z.output<typeof provenanceSchema>,
       metadata: session.mediaMetadata as z.output<typeof mediaMetadataSchema>,
       parts,
+      ...claim,
     };
   },
 });
@@ -1425,22 +1444,12 @@ export const completeUpload = defineOrchestratedService({
       actor,
     );
     if (source.kind === "done") return source.result;
-    const multipart = storage().directMultipart;
-    if (!multipart) {
-      throw new ServiceError("conflict", "Direct uploads are unavailable.");
-    }
-
-    // If the object store completed the upload but the process died before the
-    // database apply committed, HEAD turns the retry into recovery.
-    const completed =
-      (await storage().head(source.storageKey)) ??
-      (await multipart.complete(
-        source.storageKey,
-        source.providerUploadId,
-        source.parts,
-      ));
+    const captured=await completeOriginalMultipart(source.id,source.operationId,source.recoverOnly);
+    const completed=await captured.store.head(source.storageKey);
+    if(!completed)throw new ServiceError("conflict","The original completed object is not available for validation.");
     const fail = async (message: string) => {
-      await storage().delete(source.storageKey).catch(() => undefined);
+      await adoptCompletedMultipart(source.id,source.operationId,null,completed.bytes,false);
+      await deleteWithReceipt(source.storageKey,captured).catch(() => undefined);
       return failDirectUpload.call(
         { id: source.id, storageKey: source.storageKey, message },
         actor,
@@ -1452,14 +1461,14 @@ export const completeUpload = defineOrchestratedService({
       );
     }
 
-    const prefix = await storage().readRange(
+    const prefix = await captured.store.readRange(
       source.storageKey,
       0,
       SIGNATURE_BYTES - 1,
     );
     const suffixStart = Math.max(0, completed.bytes - SIGNATURE_BYTES);
     const suffix = suffixStart > 0
-      ? await storage().readRange(
+      ? await captured.store.readRange(
           source.storageKey,
           suffixStart,
           completed.bytes - 1,
@@ -1480,7 +1489,9 @@ export const completeUpload = defineOrchestratedService({
         source.filename,
         validated.mime,
         completed.bytes,
+        captured.store,
       );
+      await adoptCompletedMultipart(source.id,source.operationId,verified.checksumSha256,completed.bytes);
       const provenance = source.provenance;
       if (provenance.captureToken || provenance.captureSessionId) {
         return applyCaptureComplete.call(
@@ -1505,7 +1516,7 @@ export const completeUpload = defineOrchestratedService({
           scan: verified.scan,
           uploadId: source.id,
         },
-        await loadWatermarkMark(), actor,
+        await loadWatermarkMark(captured.store), actor, captured,
       );
       const asset = await applyStoredOriginal.call(
         {
@@ -1626,9 +1637,10 @@ const abortUploadClaim = defineService({
     alreadyTerminal: z.boolean(),
     storageKey: z.string(),
     providerUploadId: z.string().nullable(),
+    operationId:uuid.nullable(),
   }),
   handler: async (input, ctx) => {
-    const session = await lockedUploadSession(ctx.tx, input.id);
+    const session = await uploadSession(ctx.tx, input.id);
     if (!session) throw new ServiceError("not_found", "That upload is not here.");
     requireUploadAccess(ctx.actor, session.uploadedBy);
     if (session.state === "complete") {
@@ -1636,7 +1648,12 @@ const abortUploadClaim = defineService({
         alreadyTerminal: true,
         storageKey: session.storageKey,
         providerUploadId: session.providerUploadId,
+        operationId:null,
       };
+    }
+    if(session.strategy==="direct_multipart"){
+      const claim=await claimMultipartAbort(ctx,session.id);
+      return{alreadyTerminal:claim.terminal,storageKey:session.storageKey,providerUploadId:session.providerUploadId,operationId:claim.terminal?null:claim.operationId};
     }
     await ctx.tx
       .update(mediaUploads)
@@ -1647,6 +1664,7 @@ const abortUploadClaim = defineService({
       alreadyTerminal: false,
       storageKey: session.storageKey,
       providerUploadId: session.providerUploadId,
+      operationId:null,
     };
   },
 });
@@ -1679,6 +1697,7 @@ export const abortUpload = defineOrchestratedService({
   handler: async (input, actor) => {
     const claimed = await abortUploadClaim.call(input, actor);
     if (claimed.alreadyTerminal) return { ok: true };
+    if(claimed.operationId){await abortOriginalMultipart(input.id,claimed.operationId);return abortUploadApply.call({id:input.id,storageKey:claimed.storageKey},actor);}
     if (claimed.providerUploadId) throw new ServiceError("conflict", "Confirm this multipart upload's original storage resource before aborting it.");
     if (!await discardUnwrittenProxyReservation(input.id, claimed.storageKey) && !await deleteWithReceipt(claimed.storageKey)) throw new ServiceError("conflict", "The upload is stopped, but its original storage operation remains unresolved.");
     return abortUploadApply.call(
@@ -3294,7 +3313,6 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
   orphanedObjects: number;
   prunedSessions: number;
 }> {
-  const store = storage();
   const expired = await db()
     .select()
     .from(mediaUploads)
@@ -3312,14 +3330,15 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
     .limit(100);
   let expiredUploads = 0;
   for (const upload of expired) {
-    if (store.directMultipart && upload.providerUploadId) {
-      // A legacy multipart ID carries no original resource binding. Keep its
-      // ownership until the original upload has been reviewed; never abort
-      // that ID in a replacement bucket merely because its timer expired.
+    if (upload.strategy==="direct_multipart") {
+      if(!await retireKnownMultipart(upload.id))continue;
+      const remaining=await db().select({key:mediaObjects.key}).from(mediaObjects).where(eq(mediaObjects.key,upload.storageKey)).limit(1);
+      if(remaining.length&&!await deleteWithReceipt(upload.storageKey))continue;
+    }else if(!await discardUnwrittenObjectReservation(upload.storageKey)&&!await deleteWithReceipt(upload.storageKey)){
       continue;
     }
-    if (!await deleteWithReceipt(upload.storageKey)) continue;
     await db().transaction(async (tx) => {
+      await allowMediaReceiptWrites(tx);
       await tx
         .update(mediaUploads)
         .set({ state: "expired", completedAt: now, updatedAt: now })
@@ -3342,15 +3361,18 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
     if (await deleteWithReceipt(object.key)) orphanedObjects += 1;
   }
   const terminalCutoff = new Date(now.getTime() - TRASH_RETENTION_MS);
-  const pruned = await db()
-    .delete(mediaUploads)
+  const pruned = await db().transaction(async tx=>{
+    await allowMediaReceiptWrites(tx);
+    return tx.delete(mediaUploads)
     .where(
       and(
         inArray(mediaUploads.state, ["complete", "failed", "aborted", "expired"]),
         lt(mediaUploads.updatedAt, terminalCutoff),
+        sql`not exists(select 1 from media_multipart_resources resource where resource.upload_id=${mediaUploads.id} and resource.retired_at is null)`,
+        sql`not exists(select 1 from media_object_writes receipt where receipt.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(${mediaUploads.storageKey},'UTF8')),'hex') and receipt.state in('unverified','started','unknown'))`,
       ),
     )
-    .returning({ id: mediaUploads.id });
+    .returning({ id: mediaUploads.id });});
   return {
     expiredUploads,
     orphanedObjects,
@@ -3364,6 +3386,7 @@ export default [
   applyStoredOriginal,
   beginUpload,
   beginUploadApply,
+  reserveProxyObject,
   uploadStatus,
   uploadStatusSource,
   signUploadParts,

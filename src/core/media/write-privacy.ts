@@ -16,7 +16,7 @@ import { mediaObjectWrites } from "./write-schema";
 export const MEDIA_WRITE_ERASURE_JOB = "core.eraseMediaStorageOperations";
 const payload = z.object({ requestId: z.uuid(), originalJobId: z.uuid(), ids: z.array(z.uuid()).min(1).max(500) });
 const receipt = z.object({ format: z.literal("freeholder.erasure-receipt"), outcomes: z.array(z.object({ scope: z.string(), outcome: z.string(), pendingJobs: z.array(z.uuid()).optional() })) });
-async function minimize(tx: Tx, ids: string[]): Promise<number> {
+export async function minimizeMediaStorageOperations(tx: Tx, ids: string[]): Promise<number> {
   await allowMediaReceiptWrites(tx);
   let affected = 0;
   const rows = await tx.select().from(mediaObjectWrites).where(and(inArray(mediaObjectWrites.id, ids), isNull(mediaObjectWrites.redactedAt)))
@@ -42,7 +42,7 @@ registerContactPrivacySource({
     if (!rows.length) return { affected: 0 };
     const ids = rows.map(row => row.id);
     // No provider call is made while the parent erasure transaction is open.
-    await minimize(tx, ids);
+    await minimizeMediaStorageOperations(tx, ids);
     const pending = await tx.select({ id: mediaObjectWrites.id }).from(mediaObjectWrites)
       .where(and(inArray(mediaObjectWrites.id, ids), isNull(mediaObjectWrites.redactedAt))).orderBy(asc(mediaObjectWrites.id));
     const pendingJobs: string[] = [];
@@ -83,7 +83,7 @@ export async function eraseMediaStorageOperations(data: Record<string, unknown>)
     const related = await tx.select({ id: mediaObjectWrites.id }).from(mediaObjectWrites).where(and(
       inArray(mediaObjectWrites.keyDigest, [...new Set(captured.map(row => row.keyDigest))]),
       or(inArray(mediaObjectWrites.id, input.ids), contacts.length ? inArray(mediaObjectWrites.contactId, contacts) : undefined)));
-    const erased = await minimize(tx, related.map(row => row.id));
+    const erased = await minimizeMediaStorageOperations(tx, related.map(row => row.id));
     const pending = await tx.select({ id: mediaObjectWrites.id }).from(mediaObjectWrites)
       .where(and(inArray(mediaObjectWrites.id, related.map(row => row.id)), isNull(mediaObjectWrites.redactedAt))).limit(1);
     return { erased, pending: pending.length > 0 };

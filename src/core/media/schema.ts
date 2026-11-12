@@ -23,6 +23,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { contacts } from "@/core/contacts/schema";
 
 export const assets = pgTable(
   "assets",
@@ -197,6 +198,8 @@ export const mediaUploads = pgTable(
     detectedMime: text("detected_mime"),
     expectedBytes: bigint("expected_bytes", { mode: "number" }).notNull(),
     providerUploadId: text("provider_upload_id"),
+    // The original reservation owner survives an authorized owner finishing it.
+    ownerContactId: uuid("owner_contact_id").references(() => contacts.id, { onDelete: "restrict" }),
     assetId: uuid("asset_id").references(() => assets.id, {
       onDelete: "set null",
     }),
@@ -218,6 +221,7 @@ export const mediaUploads = pgTable(
     uniqueIndex("media_uploads_storage_key_unique").on(t.storageKey),
     index("media_uploads_state_expiry_idx").on(t.state, t.expiresAt),
     index("media_uploads_asset_idx").on(t.assetId),
+    index("media_uploads_owner_idx").on(t.ownerContactId),
     check("media_uploads_expected_bytes_positive", sql`${t.expectedBytes} > 0`),
   ],
 );
@@ -231,6 +235,7 @@ export const mediaObjects = pgTable(
   "media_objects",
   {
     key: text("key").primaryKey(),
+    ownerContactId: uuid("owner_contact_id").references(() => contacts.id, { onDelete: "restrict" }),
     assetId: uuid("asset_id").references(() => assets.id, {
       onDelete: "cascade",
     }),
@@ -251,6 +256,7 @@ export const mediaObjects = pgTable(
     index("media_objects_asset_idx").on(t.assetId),
     index("media_objects_pending_idx").on(t.state, t.createdAt),
     index("media_objects_upload_idx").on(t.uploadId),
+    index("media_objects_owner_idx").on(t.ownerContactId),
     check(
       "media_objects_attachment_consistent",
       sql`(${t.state} = 'attached' and ${t.assetId} is not null) or ${t.state} = 'pending'`,

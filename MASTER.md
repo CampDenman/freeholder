@@ -3968,7 +3968,17 @@ reading chat logs.
   corrected to an ordinary customer and passed on its own). Evidence:
   `tests/core/media-write-recovery.test.ts`; `/admin/media/recovery` and all
   four locale strings are implemented but not yet production-browser accepted.
-  Direct multipart/capture adoption, contiguous upgrade/older-writer proof,
+  The bounded multipart source increment reserves original CREATE intent
+  before provider I/O, keeps per-call receipts and an immutable completion
+  manifest, and verifies cancellation against original ListParts rather than
+  object HEAD alone. Capture PUTs use the same write ledger. Four-locale
+  multipart recovery, original reservation ownership, contact merge/undo and
+  pending-erasure controls are implemented but still under qualification;
+  `tests/core/media-multipart-receipts.test.ts` and
+  `tests/core/media-multipart-adapter.test.ts` record that boundary. Migration75
+  is breaking: old direct writers must actually stop and drain before upgrade;
+  readiness refusal is not proof that already admitted network work stopped.
+  Contiguous upgrade/older-writer proof,
   original-byte cross-target recovery and live storage acceptance remain
   required before this item can close. C3.22/C11.08 and independent C11.10
   remain open. This introduces no scope deferral.

@@ -20,11 +20,24 @@ import {
 } from "@/core/media/service";
 import { ServiceError } from "@/core/service";
 import { reconcileStorageOperation } from "@/core/media/write-recovery";
+import { reconcileMultipartOperation } from "@/core/media/multipart-recovery";
 import { getT } from "../i18n";
 
 export interface MediaActionState {
   error?: string;
   saved?: boolean;
+}
+
+export async function reconcileMultipartAction(_previous: MediaActionState, form: FormData): Promise<MediaActionState> {
+  const t = await getT();
+  try {
+    const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
+    await reconcileMultipartOperation.call({resourceId:text(form,"resourceId"),operationId:text(form,"operationId")||undefined,
+      expectedWitness:text(form,"expectedWitness"),originalNamespace:text(form,"originalNamespace"),providerUploadId:text(form,"providerUploadId")||undefined,
+      action:text(form,"action"),sha256:text(form,"sha256")||undefined,bytes:text(form,"bytes")?Number(text(form,"bytes")):undefined,
+      providerFinalReference:text(form,"providerFinalReference"),providerEvidence:text(form,"providerEvidence"),stoppedWriterEvidence:text(form,"stoppedWriterEvidence"),confirmation:text(form,"confirmation")},actor);
+    revalidatePath("/admin/media/recovery"); return {saved:true};
+  } catch { return {error:t("media.recovery.failed")}; }
 }
 
 export async function reconcileStorageAction(_previous: MediaActionState, form: FormData): Promise<MediaActionState> {
