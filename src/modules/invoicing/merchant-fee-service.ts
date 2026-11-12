@@ -10,6 +10,7 @@ import { actorString, defineOrchestratedService, defineService, ServiceError, ty
 import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations } from "./merchant-collection-schema";
 import { paymentRouting, routingForPayment } from "./merchant-charge";
 import { remainingMerchantFeeRefund } from "./merchant-fee-amounts";
+import { originalMerchantFeeTarget } from "./merchant-line-fee-target";
 import { merchantObservationRef, recordMerchantPaymentObservation } from "./merchant-payment-observations";
 import { paymentRow } from "./contract";
 import { payments } from "./schema";
@@ -43,7 +44,12 @@ export const claimMerchantFeeReconciliation = defineService({
     if (!routing.providerPlatformAccountId || routing.applicationFeeMinor === undefined || payment.amountMinor <= 0) throw new ServiceError("conflict", "The original merchant commission needs review.");
     const operations = await ctx.tx.select().from(merchantFeeRefunds).where(eq(merchantFeeRefunds.paymentId, paymentId)).orderBy(desc(merchantFeeRefunds.createdAt));
     const pending = operations.find(row => ["reserved", "dispatching", "unknown"].includes(row.status));
-    if (pending) return { state: "pending" as const, operation: pending, routing };
+    const targetRetainedFeeMinor = await originalMerchantFeeTarget(ctx, payment, routing);
+    if (pending) {
+      if (pending.status === "reserved" && (targetRetainedFeeMinor === null || pending.targetRetainedFeeMinor !== targetRetainedFeeMinor)) return { state: "review" as const, operation: null, routing };
+      return { state: "pending" as const, operation: pending, routing };
+    }
+    if (targetRetainedFeeMinor === null) return { state: "review" as const, operation: null, routing };
     const [unapplied] = await ctx.tx.select({ id: merchantFeeObservations.id }).from(merchantFeeObservations)
       .innerJoin(merchantFeeRefunds, eq(merchantFeeRefunds.id, merchantFeeObservations.operationId))
       .where(and(eq(merchantFeeRefunds.paymentId, paymentId), sql`${merchantFeeRefunds.status} <> 'accepted'`)).limit(1);
@@ -58,7 +64,6 @@ export const claimMerchantFeeReconciliation = defineService({
     // A dashboard/manual refund is an actual fact, but it is not silently
     // adopted as our missing operation or ignored before another dispatch.
     if (knownReturned !== BigInt(proof.observedFeeRefundedMinor)) return { state: "review" as const, operation: null, routing };
-    const targetRetainedFeeMinor = Number(BigInt(routing.applicationFeeMinor) * BigInt(payment.amountMinor - payment.refundedMinor) / BigInt(payment.amountMinor));
     const next = remainingMerchantFeeRefund({ observedOriginalFeeMinor: proof.observedApplicationFeeMinor, targetRetainedFeeMinor, operations: history });
     if (next.state !== "ready") return { state: next.state === "pending" ? "pending" as const : "review" as const, operation: null, routing };
     if (next.amountMinor === 0) return { state: "satisfied" as const, operation: null, routing };
@@ -96,6 +101,11 @@ export const applyMerchantFeeResult = defineService({
     if (!original) throw new ServiceError("not_found", "That original fee operation is not here.");
     if (original.status === "accepted" || original.status === "refused") return original;
     if (outcome === "dispatching" && original.status !== "reserved") throw new ServiceError("conflict", "Reconcile the original fee operation without dispatching it again.");
+    if (outcome === "dispatching") {
+      const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, original.paymentId));
+      const target = payment ? await originalMerchantFeeTarget(ctx, payment, await routingForPayment(ctx, payment.id)) : null;
+      if (target === null || target !== original.targetRetainedFeeMinor) throw new ServiceError("conflict", "The original line commission changed before dispatch. Keep this reservation for review without sending it.");
+    }
     if (outcome === "accepted" && !providerRef) throw new ServiceError("conflict", "The actual original fee acknowledgement is required.");
     if (outcome === "refused" && original.status === "unknown") throw new ServiceError("conflict", "A missing fee lookup cannot release an unknown original operation.");
     const [saved] = await ctx.tx.update(merchantFeeRefunds).set({ status: outcome, ...(outcome === "dispatching" ? { dispatchedAt: new Date() } : {}), ...(outcome === "accepted" ? { providerRef, acceptedAt: new Date() } : {}), updatedAt: new Date() }).where(eq(merchantFeeRefunds.id, operationId)).returning();

@@ -5,6 +5,7 @@ import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, ServiceError } from "@/core/service";
 import { originalMerchantRefundDebt } from "./merchant-refund-debt";
+import { originalMerchantFeeTarget } from "./merchant-line-fee-target";
 import { routingForPayment } from "./merchant-charge";
 import { invoiceMerchantCollections, merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
 import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations";
@@ -57,10 +58,11 @@ export const merchantPaymentRecoveryDebt = defineService({
       const returned = BigInt(feeState?.returned ?? "0");
       const mismatchedOriginalFee = await ctx.tx.select({ id: merchantFeeRefunds.id }).from(merchantFeeRefunds).where(and(eq(merchantFeeRefunds.paymentId, paymentId), eq(merchantFeeRefunds.status, "accepted"), sql`${merchantFeeRefunds.applicationFeeRef} is distinct from ${proof?.applicationFeeRef ?? null}`)).limit(1);
       if (mismatchedOriginalFee.length) reasons.add("commission");
-      const target = BigInt(routing.applicationFeeMinor) * BigInt(payment.amountMinor - payment.refundedMinor) / BigInt(payment.amountMinor);
+      const target = await originalMerchantFeeTarget(ctx, payment, routing);
+      if (target === null) reasons.add("commission");
       const zeroFee = proof?.settlementVerified && proof.applicationFeeMinor === 0 && routing.applicationFeeMinor === 0 && !proof.applicationFeeRef && returned === 0n;
       if (!zeroFee && (!proof?.applicationFeeRef || proof.observedApplicationFeeMinor === null || proof.observedFeeRefundedMinor === null || !Number.isSafeInteger(proof.observedApplicationFeeMinor) || !Number.isSafeInteger(proof.observedFeeRefundedMinor) || proof.applicationFeeCurrency !== payment.currency
-        || BigInt(proof.observedFeeRefundedMinor) !== returned || BigInt(proof.observedApplicationFeeMinor) - returned !== target)) reasons.add("commission");
+        || BigInt(proof.observedFeeRefundedMinor) !== returned || target === null || BigInt(proof.observedApplicationFeeMinor) - returned !== BigInt(target))) reasons.add("commission");
       // Destination refund/debit closure needs an actual reversal witness.
       // The current capture-only proof deliberately refuses to infer it.
       if (routing.destinationAccountId && payment.refundedMinor > 0) reasons.add("refund");

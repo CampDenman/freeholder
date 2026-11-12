@@ -13747,6 +13747,14 @@ whatever is best for the people using the site.
   complete bank/action state, exact fee/reversal, return allocation, privacy,
   human/browser and runtime-upgrade qualification remain required. The new
   merchant model remains disabled, C12.38 open. See the same source report.
+  Returned-line commission BEFORE 2026-11-12: actual isolateda652/v8SQL1ac
+  failed5.354s after real5400CAD-cent sale and1200 return/refund. The credited
+  line freezes100 commission; gross-ratio reconciliation accepted112 instead.
+  A synthetic fee edge supplies the provider result, not actual account
+  acceptance. Genuine populated history is cloned unchanged with eight money
+  table hashes; the proposed exact original-line/source-bound repair remains
+  unqualified. No accepted fee, refund or payout is rewritten. See
+  `deploy/merchant-return-line-fee-source-2026-11-12.md`. C12.38 stays open.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

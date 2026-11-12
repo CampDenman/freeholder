@@ -27,6 +27,7 @@ import originalSubscriptionCashServices from "@/modules/subscriptions/provider-c
 import originalSubscriptionScopeServices from "@/modules/subscriptions/provider-webhook-scope";
 import merchantTaxQuiescenceServices from "@/modules/subscriptions/merchant-tax-quiescence";
 import merchantFeeServices from "./merchant-fee-service";
+import {originalMerchantReturnFeeSource} from "@/modules/catalog/merchant-return-fee-source";
 import {siteMerchantTaxServices} from "./merchant-tax-profiles";
 import {siteMerchantTaxThresholds} from "./merchant-tax-thresholds";
 import {siteMerchantTaxExemptionServices} from "./merchant-tax-exemptions";
@@ -66,6 +67,7 @@ export default [
   ...merchantCollectionServices,
   ...merchantPaymentObservationServices,
   ...merchantFeeServices,
+  originalMerchantReturnFeeSource,
   ...merchantPaymentReviewServices,
   ...merchantPaymentRecoveryServices,
   ...merchantPaymentRequestServices,
