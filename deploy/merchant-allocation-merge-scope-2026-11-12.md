@@ -20,8 +20,12 @@ No public filtering parameter, identity repoint, SQL or provider behavior is
 added. Historical fingerprints may conservatively refuse undo when their
 older broader evidence cannot be proved. Stored artifacts are not rewritten.
 
-Qualification of this source repair is pending. The unchanged actual-service
-control will again reserve another seller's refund and require successful
-undo, then create this seller's refund and require refusal while preserving
-the original immutable financial child. The original failed runner, full
-synthetic merge/route/refund ledger and backend-drain evidence are preserved.
+Full Node22 types and focused lint pass. The unchanged actual-service control
+passes6.63s on the same normal-v7 SQL: another seller's refund permits undo,
+then this seller's new refund child blocks undo while retaining the current
+owner and immutable child. Independent SQL confirms two merge operations
+with exactly the first undone, two refunds and two original request children;
+the runner and all database backends drained. The original failed runner,
+full synthetic merge/route/refund ledger and before/after drain evidence are
+preserved. This is local combined-source evidence, not protected main,
+provider acceptance or complete financial lifecycle qualification.

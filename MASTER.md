@@ -13534,8 +13534,12 @@ whatever is best for the people using the site.
   control failed because an unrelated seller's refund changed the first
   seller's whole-invoice collection fingerprint. A new internal scope
   derives exact payments from original allocation routes; ordinary buyer
-  invoice fingerprints retain their default behavior. Source/native
-  qualification remains pending; the own-refund assertion was not reached.
+  invoice fingerprints retain their default behavior. Full Node22 types and
+  focused lint pass; the unchanged actual mixed-seller control now passes
+  6.63s on the same normal-v7 schema, including successful unrelated-party
+  undo and refusal after the original seller's new child. Backend drain and
+  independent ledger inspection pass; whole financial/provider acceptance
+  remains open.
   See `deploy/merchant-allocation-merge-scope-2026-11-12.md`.
   Seller refund merge source increment 2026-11-12: the existing parsed tax
   profile fingerprint now includes bounded original payment/cash ownership
