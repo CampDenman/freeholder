@@ -1049,6 +1049,7 @@ export const SERVICE_NAMES = [
   "media.listCaptureSessions",
   "media.listMultipartOperations",
   "media.listStorageOperations",
+  "media.previewStorageTransfer",
   "media.purge",
   "media.reconcileMultipartOperation",
   "media.reconcileStorageOperation",
@@ -5842,6 +5843,10 @@ export interface ServiceCatalog {
     input: { limit?: number };
     output: { rows: { id: string; operation: "put" | "delete"; key: string; namespace: string | null; bytes: number | null; sha256: string | null; contentType: string; state: string; observedAcceptedAt: string | null; createdAt: string; updatedAt: string }[] };
   };
+  "media.previewStorageTransfer": {
+    input: { keys: string[]; target: { kind: "s3"; namespace: string; location: { endpoint: string; bucket: string } } | { kind: "replit"; namespace: string; location: { bucket: string } } };
+    output: { source: { kind: "s3"; namespace: string; location: { endpoint: string; bucket: string } } | { kind: "replit"; namespace: string; location: { bucket: string } }; target: { kind: "s3"; namespace: string; location: { endpoint: string; bucket: string } } | { kind: "replit"; namespace: string; location: { bucket: string } }; inventoryDigest: string; objects: { key: string; keyDigest: string; sha256: string; bytes: number; contentType: string; originalReceiptCount: number }[]; permitsCopy: false; permitsAdoption: false; permitsSourceDeletion: false };
+  };
   "media.purge": {
     input: { id: string; confirmation: string };
     output: { ok: true; assetId: string; objects: number };
@@ -9431,6 +9436,7 @@ export interface FreeholderApi {
     listCaptureSessions: (input?: ServiceCatalog["media.listCaptureSessions"]["input"]) => Promise<ServiceCatalog["media.listCaptureSessions"]["output"]>;
     listMultipartOperations: (input?: ServiceCatalog["media.listMultipartOperations"]["input"]) => Promise<ServiceCatalog["media.listMultipartOperations"]["output"]>;
     listStorageOperations: (input?: ServiceCatalog["media.listStorageOperations"]["input"]) => Promise<ServiceCatalog["media.listStorageOperations"]["output"]>;
+    previewStorageTransfer: (input: ServiceCatalog["media.previewStorageTransfer"]["input"]) => Promise<ServiceCatalog["media.previewStorageTransfer"]["output"]>;
     purge: (input: ServiceCatalog["media.purge"]["input"]) => Promise<ServiceCatalog["media.purge"]["output"]>;
     reconcileMultipartOperation: (input: ServiceCatalog["media.reconcileMultipartOperation"]["input"]) => Promise<ServiceCatalog["media.reconcileMultipartOperation"]["output"]>;
     reconcileStorageOperation: (input: ServiceCatalog["media.reconcileStorageOperation"]["input"]) => Promise<ServiceCatalog["media.reconcileStorageOperation"]["output"]>;
