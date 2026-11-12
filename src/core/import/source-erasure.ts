@@ -3,7 +3,7 @@
 // C2.29/C11.10: original provider bytes are part of the erasure receipt.
 import { z } from "zod";
 import { boundStorage } from "@/adapters/storage";
-import { deleteWithReceipt } from "@/core/media/write-ledger";
+import { deleteWithReceipt, discardUnwrittenObjectReservation } from "@/core/media/write-ledger";
 import { pendingObjectIsOwned } from "@/core/media/object-ledger";
 import { completeErasureJob } from "@/core/privacy/service";
 
@@ -22,7 +22,7 @@ export async function eraseImportSourceObjects(data: Record<string, unknown>): P
   // Neither a timeout nor GET-not-found is cancellation evidence.
   for (const key of input.keys) if (await pendingObjectIsOwned(key)) throw new Error("Source storage ownership or an unresolved provider write keeps erasure pending.");
   for (const key of input.keys) {
-    if (!await deleteWithReceipt(key, captured)) throw new Error("The original storage resource or unresolved physical operation keeps source erasure pending.");
+    if (!await discardUnwrittenObjectReservation(key) && !await deleteWithReceipt(key, captured)) throw new Error("The original storage resource or unresolved physical operation keeps source erasure pending.");
   }
   await completeErasureJob.call({ requestId: input.requestId, scope: IMPORT_SOURCE_ERASURE_SCOPE, jobId: input.originalJobId }, { kind: "system" });
   return { erased: input.keys.length };

@@ -137,6 +137,9 @@ New upload reservations capture the private resource namespace before their
 first chunk. Each chunk uses the same captured adapter and namespace for its
 physical PUT receipt. A later resource switch cannot continue the reservation,
 read a coincidentally matching object, or authorize erasure of that resource.
+All at most 25 chunk reservations enter guarded pending ownership before any
+chunk is sent. An expired never-sent reservation can be discarded only when no
+physical operation was ever admitted; erasure does not guess a provider DELETE.
 Raw source writes use the same guarded physical ledger as other pending media;
 cleanup removes bytes only after the original provider operation is settled.
 

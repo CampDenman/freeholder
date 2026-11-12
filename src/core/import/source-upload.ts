@@ -197,6 +197,9 @@ const beginApply = defineService({
       ...((ctx.actor.kind === "agent" || ctx.actor.kind === "user") && ctx.actor.keyId ? { uploaderIdentity: { kind: "key" as const, id: ctx.actor.keyId } } : ctx.actor.kind === "user" ? { uploaderIdentity: { kind: "user" as const, id: ctx.actor.userId } } : {}),
       expiresAt: new Date(Date.now() + UPLOAD_TTL_MS).toISOString(),
     };
+    // Every fresh reservation has guarded pre-I/O ownership, including chunks
+    // never sent. A missing physical intent can then prove no PUT was admitted.
+    for (let index = 0; index < upload.chunks; index++) await reservePendingMediaObject(ctx, { key: partKey(upload, index), role: "staged", contentType: "application/octet-stream", bytes: expectedChunkSize(upload, index) });
     // Reserve cleanup before the first provider write. Abandoned uploads and
     // lost acknowledgements still have an exact durable deletion task.
     await ctx.queueJob("core.deleteCaptureObjects", { keys: allKeys(upload) }, { startAfter: new Date(upload.expiresAt) });

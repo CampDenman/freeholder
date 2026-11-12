@@ -14,11 +14,14 @@ export async function confirmStoppedUnappliedDelete(key: string): Promise<void> 
   ));
   expect(operation).toBeDefined();
   expect(operation!.observedAcceptedAt).toBeNull();
-  await reconcileStorageOperation.call({
-    id: operation!.id, expectedUpdatedAt: operation!.updatedAt.toISOString(), originalNamespace: operation!.namespace!, outcome: "not_applied",
+  const evidence = {
+    id: operation!.id, expectedUpdatedAt: operation!.updatedAt.toISOString(), originalNamespace: operation!.namespace!, outcome: "not_applied" as const,
     providerFinalReference: "synthetic-source-delete-final-reference",
     providerEvidence: "The fictional provider confirms this exact DELETE did not apply; original bytes remain.",
     stoppedWriterEvidence: "The synthetic rejected DELETE has returned and its original provider work was confirmed stopped.",
-    confirmation: "ORIGINAL STORAGE OUTCOME CONFIRMED",
-  }, OWNER);
+    confirmation: "ORIGINAL STORAGE OUTCOME CONFIRMED" as const,
+  };
+  const security = { twoFactorRequired: false, twoFactorEnrolled: true, twoFactorVerified: true, stepUpValid: true };
+  await expect(reconcileStorageOperation.call(evidence, { ...OWNER, security: { ...security, stepUpValid: false } })).rejects.toMatchObject({ code: "step_up_required" });
+  await reconcileStorageOperation.call(evidence, { ...OWNER, security });
 }
