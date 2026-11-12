@@ -39,6 +39,7 @@ import { acceptPhysicalMailSubmission, claimPhysicalMailDispatch, MailDispatchRe
 import { physicallySettledMail } from "@/core/mail/dispatch-settlement";
 import { lockMailHolds, mailRecordIsUnheld } from "@/core/mail/record-retention";
 import mailRecordServices from "@/core/mail/record-services";
+import mailCarrierServices from "@/core/mail/carrier-services";
 import mailDispatchServices from "@/core/mail/dispatch-services";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import {
@@ -789,7 +790,8 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
           };
     dispatchId = await db().transaction(tx => claimPhysicalMailDispatch(tx, deliveryId, { purpose: queued.delivery.purpose, provider: adapter.id, sender, from: message.from }, originalPayload));
     if (!dispatchId) return { status: "missing" };
-    const result = await adapter.send({ ...outbound, deliveryId, dispatchId, ...(permission ? { permission } : {}) });
+    const carrierJournal = adapter.id === "paradise" ? (await import("./carrier-operations")).carrierMailJournal(dispatchId) : undefined;
+    const result = await adapter.send({ ...outbound, deliveryId, dispatchId, ...(permission ? { permission } : {}), ...(carrierJournal ? { carrierJournal } : {}) });
     observedReply = { providerRef: result.providerRef, acceptance: result.acceptance, submitted: adapter.delivers };
     // A grant the carrier recorded is remembered with the send's outcome, in
     // one transaction, so a later withdrawal reaches exactly this address and
@@ -804,7 +806,7 @@ export async function deliverQueuedMail(deliveryId: string): Promise<{
         submittedAt: adapter.delivers ? new Date() : null,
         lastError: adapter.delivers ? null : "The configured adapter does not deliver.",
       },
-      grant ? (tx) => rememberProviderGrant(tx, adapter.id, grant) : undefined,
+      grant && !carrierJournal ? (tx) => rememberProviderGrant(tx, adapter.id, grant) : undefined,
       { dispatchId, acceptance: result.acceptance },
     );
     return { status: recorded ? adapter.delivers ? "submitted" : "failed" : "unknown" };
@@ -1641,6 +1643,7 @@ export const recordMailProviderEvent = defineService({
 export default [
   ...mailRecordServices,
   ...mailDispatchServices,
+  ...mailCarrierServices,
   mailStatus,
   mailReadiness,
   registerMailSender,

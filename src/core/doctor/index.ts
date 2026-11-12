@@ -698,16 +698,7 @@ async function checkProviderGrants(): Promise<Check[]> {
   if (waiting === 0) return [];
   const title = "Marketing grants awaiting withdrawal";
   const detail = `${waiting} Paradise Modern marketing grant${waiting === 1 ? "" : "s"} of deleted or erased contacts ${waiting === 1 ? "has" : "have"} not been withdrawn there yet; any erasure waiting on ${waiting === 1 ? "it" : "them"} stays pending.`;
-  return [
-    env().PARADISEMODERN_API_KEY
-      ? ok("mail.providerGrants", title, `${detail} The next sweep, within ten minutes, finishes ${waiting === 1 ? "it" : "them"}.`)
-      : warn(
-          "mail.providerGrants",
-          title,
-          detail,
-          "Set PARADISEMODERN_API_KEY to the site's Paradise Modern key; the next sweep then withdraws them and completes the erasure.",
-        ),
-  ];
+  return [warn("mail.providerGrants", title, detail, "Review /admin/retention/mail/carriers. Restore the original PARADISEMODERN_API_KEY and provider account or verify its exact final withdrawal and stopped callers; configured credentials alone do not prove completion.")];
 }
 
 async function checkMalwareScanner(): Promise<Check> {

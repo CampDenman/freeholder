@@ -5906,6 +5906,72 @@ deployments are portable, testable and incapable of silently forking the truth.
   `deploy/mail-dispatch-recovery.md`. This does
   not close carrier-specific source acceptance, live sends or independent review.)*
   Unchecked: no live send against the provider.)*
+  *(Carrier HTTP source increment, 2026-11-11, in qualification:
+  `0076_mail_carrier_operations.sql` adds separate per-request intents and
+  observed outcomes on existing dispatch/grant records. Consent intents
+  retain the original address before provider I/O, independently of a later
+  lost send reply. New grants bind the original API base and keyed account
+  receipt; legacy bindings remain absent. Refused, unknown and invalid
+  withdrawal acknowledgments remain pending and cannot be erased as success.
+  `/admin/retention/mail/carriers` provides fresh-person inspection and final
+  original-provider withdrawal/stopped-caller confirmation, keeping human
+  proof separate from observed HTTP outcomes. Minimal original grant receipts
+  survive address minimization, so late acknowledgments remain recordable
+  without restoring personal data. Every HTTP admission rechecks current
+  marketing consent; one original account/address claim covers its explicit
+  sibling-grant set, preventing retries through another row. The previous
+  image's carrier read and new dispatch claims are fenced before HTTP.
+  Final 18 native controls were covered across one fixture-import correction
+  (17 plus corrected 1), including genuine stale-consent, invalid HTTP200
+  withdrawal and preview-cap regressions, holds, late replies, prior-image
+  fences and fresh human recovery. Own package and production builds passed;
+  artifact scrub passed 20,218 files /243,719,256 bytes. This is local fixture
+  evidence on main72 plus explicitly applied, unjournaled76; full migration
+  ancestry and protected qualification remain outstanding. Adjacent native
+  qualification passed 64 cases; the added human services required live SDK
+  catalog regeneration, which passed 8/8. Four owner-browser journeys passed
+  in en/es/fr/ar at 320px in both themes, with keyboard, Axe, bounds, private
+  receipt omission and shared-service audit checks. Committed-source lint and
+  typecheck passed. Two subsequent genuine hold-boundary failures were
+  repaired by rereading current direct/inherited holds under the identity
+  lock before address minimization; unknown holders stay preserved under
+  named holds. Targeted five controls passed, including unrelated/unheld
+  positive controls. Full typecheck/lint and permitted fast static contracts
+  passed (380 plus one documented exclusion). Final composed qualification
+  remains required.
+  A further actual local regression created a new remote consent only after
+  original erasure had completed; the request incorrectly stayed completed.
+  The integration repair retains first withdrawal/review facts, appends fresh
+  review receipts, records a separate recovery debt, and reopens the exact
+  original request without reconstructing an erased address. The fresh
+  contiguous 0–76 migration and two bounded recovery controls passed; full
+  composed qualification and actual provider acceptance remain open.
+  The adjacent prewithdrawn-grant ordering also reproduced a lost original
+  request link. Capturing the actual request before minimization passed its
+  bounded after control; populated75-to76 upgrade preserved six original
+  tables, and live SDK8 plus internal-boundary5 passed.
+  Clean release composition on the corrected75 foundation passed the normal
+  0–76 journal (77 entries) and all26 current native carrier/recovery/preview
+  controls in one batch. Own package/production builds and artifact scrub
+  passed (21,148 files /268,969,797 bytes). All44 source contract files passed
+  384 controls with26 declared database exclusions; full typecheck, lint,
+  license, release and plan gates passed. The current production artifact
+  passed all four en/es/fr/ar owner journeys, including a second final review
+  after address minimization, at320px in both themes with keyboard and Axe.
+  Earlier first-withdrawal timestamps/proof remained intact and the erased
+  address stayed absent. The initial extension incorrectly observed the first
+  review's persistent success notice; waiting for the actual second action
+  corrected that fixture, with no product change. Protected CI and actual
+  provider acceptance remain required.
+  Protected CI found two older flat-call spy assertions and a migration
+  inventory assumption. The two mail cases now require the exact original
+  request/scope/job and a real shared transaction/event queue; both pass.
+  The schema contract explicitly checks76's already declared breaking rename,
+  rollback reason and refusal of a compatible-risk release; all12 schema
+  controls pass. These corrections change no product, SQL or UI behavior.
+  See `deploy/mail-carrier-recovery.md` and the C3.31–C3.39
+  source/live evidence worksheet `deploy/provider-preview-acceptance.md`.
+  No live provider acceptance or independent security sign-off is supplied.)*
 - [ ] **C3.32** Add a measurement-provider category (`MEASUREMENT_PROVIDER`,
   default `none`) with Paradise Modern as its first adapter (§12, C1.18):
   the provider's scripts load, and the CSP opens its edge origin, only for a
@@ -5994,6 +6060,13 @@ deployments are portable, testable and incapable of silently forking the truth.
   coverage `tests/core/paradise-http.test.ts`; operator guide
   `deploy/paradise-modern.md`. No box is checked: no live acceptance against
   the provider has been run.)*
+  *(Lead-sink source audit, C3.34, 2026-11-11: a native mocked-provider
+  control reproduced a screening-only sealed submission being copied to a
+  subsequently enabled replacement lead account. `fromSiteForm` alone does
+  not retain the specific lead notice or original destination. The before
+  control genuinely failed; source repair and its acceptance remain open,
+  independently of the live lead-copy requirement. The mail carrier increment
+  does not supply that repair.)*
 - [ ] **C3.35** Ship a launch template and a private preview mode, so a
   planning tool or agent can turn an approved business plan into a working
   one-offer site in minutes without publishing it. A launch spec
@@ -6048,6 +6121,11 @@ deployments are portable, testable and incapable of silently forking the truth.
   `deploy/launch-template.md` ("Preview mail"); evidence
   `tests/core/preview-mail.test.ts`; changeset `preview-mail.md`. No sign-in
   link has been delivered on a hosted preview yet.)*
+  *(Preview quota source repair, 2026-11-11, in qualification: a lost-ACK
+  send in `unknown` status still consumes the preview-wide daily cap.
+  `tests/core/preview-mail-unknown-cap.test.ts` reproduced a second queued
+  message after a cap of one, then passed after the count included unknown
+  physical outcomes. Hosted sign-in delivery remains unverified.)*
 - [ ] **C3.37** Service intake and delivery: a form marked as an intake opens
   a project for the person who sent it. In the portal it reads New,
   In progress or Delivered (`enquiry`/`active`/`complete`). The owner's

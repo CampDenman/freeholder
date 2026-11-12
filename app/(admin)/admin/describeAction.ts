@@ -47,6 +47,7 @@ function humanizeAction(action: string): string {
  */
 export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "mail.reviewLegacyOwnership": "admin.activity.mailOwnershipReviewed",
+  "mail.confirmCarrierWithdrawal": "mail.carrier.activityConfirmed",
   "mail.reconcileDispatch": "mail.recovery.activityReconciled",
   "mail.retryReconciled": "mail.recovery.activityRetried",
   "forms.submit": "admin.activity.formSubmitted",

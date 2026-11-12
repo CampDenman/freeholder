@@ -8792,5 +8792,22 @@
   "privacy.retention.mediaStorageOperations": "عمليات التخزين الأصلية",
   "audit.privacy.reopenErasureJob": "أعاد فتح طلب حذف بعد ظهور دليل جديد من المصدر",
   "media.recovery.originalKey": "مفتاح الكائن الأصلي من أدلة المزوّد التي تم التحقق منها",
-  "audit.media.retireOwnedAssetsForErasure": "سحب ملفات المكتبة المملوكة لصاحب البيانات الأصلي من أجل محو تم التحقق منه"
+  "audit.media.retireOwnedAssetsForErasure": "سحب ملفات المكتبة المملوكة لصاحب البيانات الأصلي من أجل محو تم التحقق منه",
+  "mail.carrier.title": "مراجعة موافقات مزوّد الخدمة وسحبها",
+  "mail.carrier.intro": "راجع كل طلب لدى المزوّد الأصلي. أكّد السحب النهائي فقط بسجل المزوّد النهائي المطابق ودليل توقف جميع العمليات الأصلية. يبقى سجل الموافقة معلّقًا عند الرفض أو فقدان الرد.",
+  "mail.carrier.empty": "لا توجد موافقات لدى المزوّد تنتظر المراجعة.",
+  "mail.carrier.legacy": "لم يُحتفظ بحساب المزوّد الأصلي. الحساب المضبوط اليوم لا يثبت أين سُجلت هذه الموافقة.",
+  "mail.carrier.pending": "يحتاج طلب السحب الأصلي إلى مراجعة. لن يُعاد تلقائيًا.",
+  "mail.carrier.confirm": "تحققت من أن المزوّد الأصلي لا يحتفظ بموافقة تسويقية نشطة لهذا العنوان وأن جميع العمليات الأصلية قد توقفت.",
+  "mail.carrier.record": "تسجيل السحب المؤكد",
+  "mail.carrier.activityConfirmed": "تم التحقق بشكل مستقل من سحب الموافقة لدى المزوّد الأصلي",
+  "mail.carrier.kind.send": "إرسال",
+  "mail.carrier.kind.consent": "تسجيل الموافقة",
+  "mail.carrier.kind.withdraw": "سحب الموافقة",
+  "mail.carrier.state.running": "العملية لم تُحسم بعد",
+  "mail.carrier.state.confirmed": "تم رصد رد إيجابي من المزوّد",
+  "mail.carrier.state.refused": "تم رصد رفض من المزوّد",
+  "mail.carrier.state.unknown": "نتيجة المزوّد غير معروفة",
+  "mail.carrier.erasedAddress": "عنوان محذوف — راجع عملية المزوّد الأصلي",
+  "audit.mail.settleCarrierErasure": "تمت مطابقة أدلة محو المزوّد الأصلي"
 }

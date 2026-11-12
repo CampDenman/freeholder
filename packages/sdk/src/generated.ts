@@ -972,6 +972,8 @@ export const SERVICE_NAMES = [
   "loyalty.tiers",
   "mail.beginOAuth",
   "mail.completeOAuth",
+  "mail.confirmCarrierWithdrawal",
+  "mail.listCarrierGrantRecovery",
   "mail.listDispatchRecovery",
   "mail.listHeld",
   "mail.listLegacyRecords",
@@ -5497,6 +5499,14 @@ export interface ServiceCatalog {
     input: { provider: "google" | "microsoft"; state: string; code: string };
     output: { senderId: string; email: string; returnTo: string };
   };
+  "mail.confirmCarrierWithdrawal": {
+    input: { id: string; expectedRevision: number; expectedEmail: string | ""; originalResourceEvidence: string; finalProviderEvidence: string; stoppedCallerEvidence: string; providerOperationRef: string; confirmation: "ORIGINAL CARRIER WITHDRAWAL VERIFIED" };
+    output: { id: string; source: "human_provider_confirmation" };
+  };
+  "mail.listCarrierGrantRecovery": {
+    input: { afterId?: string; limit?: number };
+    output: { rows: { id: string; email: string; originalBaseUrl: string | null; originalResourceKnown: boolean; detached: boolean; revision: number; updatedAt: string; withdrawalError: string | null; operations: { id: string; kind: "send" | "consent" | "withdraw"; state: "running" | "confirmed" | "refused" | "unknown"; httpStatus?: number; providerCode?: string }[] }[]; nextCursor: string | null };
+  };
   "mail.listDispatchRecovery": {
     input: { afterId?: string; limit?: number };
     output: { rows: { deliveryId: string; recipient: string; subject: string; provider: string; providerRef: string | null; attempts: number; retryQueued: boolean; createdAt: string; legacy: boolean; originalRoute: { provider: string; purpose: "transactional" | "bulk"; from: string; senderId: string | null; connectionId: string | null; providerAccountId: string | null; host: string | null; port: number | null; tlsMode: ("implicit_tls" | "required_starttls") | null; user: string | null; providerIdentity: string | null } | null; dispatches: { id: string; attempt: number; state: "running" | "unknown" | "submitted" | "not_submitted"; providerRef: string | null; replyProviderRef: string | null; initialReviewedAt: string | null; createdAt: string; resolutionSource: ("adapter" | "human_provider_confirmation") | null }[] }[]; nextCursor: string | null };
@@ -9165,6 +9175,8 @@ export interface FreeholderApi {
   mail: {
     beginOAuth: (input: ServiceCatalog["mail.beginOAuth"]["input"]) => Promise<ServiceCatalog["mail.beginOAuth"]["output"]>;
     completeOAuth: (input: ServiceCatalog["mail.completeOAuth"]["input"]) => Promise<ServiceCatalog["mail.completeOAuth"]["output"]>;
+    confirmCarrierWithdrawal: (input: ServiceCatalog["mail.confirmCarrierWithdrawal"]["input"]) => Promise<ServiceCatalog["mail.confirmCarrierWithdrawal"]["output"]>;
+    listCarrierGrantRecovery: (input?: ServiceCatalog["mail.listCarrierGrantRecovery"]["input"]) => Promise<ServiceCatalog["mail.listCarrierGrantRecovery"]["output"]>;
     listDispatchRecovery: (input?: ServiceCatalog["mail.listDispatchRecovery"]["input"]) => Promise<ServiceCatalog["mail.listDispatchRecovery"]["output"]>;
     listHeld: (input?: ServiceCatalog["mail.listHeld"]["input"]) => Promise<ServiceCatalog["mail.listHeld"]["output"]>;
     listLegacyRecords: (input?: ServiceCatalog["mail.listLegacyRecords"]["input"]) => Promise<ServiceCatalog["mail.listLegacyRecords"]["output"]>;
