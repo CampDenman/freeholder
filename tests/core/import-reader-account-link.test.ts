@@ -7,15 +7,16 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { stopJobs } from "@/core/jobs";
 import { contacts, customerMagicLinks } from "@/core/contacts/schema";
+import { createContact, resolveContact } from "@/core/contacts/service";
 import { consumeCustomerMagicLink } from "@/core/auth/magic-links/service";
 import { hashCustomerMagicLinkToken } from "@/core/auth/two-factor-crypto";
 import { actorFromToken } from "@/core/http/actor";
 import { startImport, previewFromSource, commitImport } from "@/core/import/service";
-import { createMyDataRequest, fulfillDataRequest, downloadMyDataRequestArtifact } from "@/core/privacy/service";
+import { createDataRequest, createMyDataRequest, verifyDataRequest, fulfillDataRequest, downloadMyDataRequestArtifact } from "@/core/privacy/service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { ensureDefaults } from "@/modules/cms/service";
 import { ANONYMOUS, OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
-import { freshlyVerifiedImportOwner } from "../helpers/import-reader-review";
+import { freshlyVerifiedImportOwner, reviewOriginalImportedReader } from "../helpers/import-reader-review";
 
 const email = "fictional-historical-address@example.test";
 const privateBody = "Fictional original reader's private pending moderation body.";
@@ -28,14 +29,13 @@ describe.runIf(hasDatabase)("unreviewed source contact and later mailbox identit
     const owner = await freshlyVerifiedImportOwner();
     const run = await startImport.call({ kind: "wordpress-wxr", origin: "https://fictional-historical-source.example/" }, owner);
     await previewFromSource.call({ id: run.id, payload: source }, owner);
-    await commitImport.call({ id: run.id }, owner);
-    const [historical] = await db().select().from(contacts).where(eq(contacts.email, email));
-    expect(historical?.userId).toBeNull();
-    expect((await db().select().from(blogReaderComments))[0]?.status).toBe("pending");
+    await expect(commitImport.call({ id: run.id }, owner)).rejects.toThrow(/review/);
+    expect(await db().select().from(contacts).where(eq(contacts.email, email))).toHaveLength(0);
+    const currentPerson = (await resolveContact.call({ name: "Fictional current mailbox holder", email }, owner)).contact;
     // The fixture models fresh proof of the *current* mailbox. It does not
     // attest who held that address when the historical comment was written.
     const token = randomBytes(32).toString("base64url");
-    await db().insert(customerMagicLinks).values({ contactId: historical!.id, email, tokenHash: hashCustomerMagicLinkToken(token), expiresAt: new Date(Date.now() + 60_000) });
+    await db().insert(customerMagicLinks).values({ contactId: currentPerson.id, email, tokenHash: hashCustomerMagicLinkToken(token), expiresAt: new Date(Date.now() + 60_000) });
     const session = await consumeCustomerMagicLink.call({ token }, ANONYMOUS);
     const currentHolder = await actorFromToken(session.token);
     expect(currentHolder.kind).toBe("user");
@@ -43,5 +43,19 @@ describe.runIf(hasDatabase)("unreviewed source contact and later mailbox identit
     const result = await fulfillDataRequest.call({ id: request.id }, owner);
     const artifact = await downloadMyDataRequestArtifact.call({ id: result.artifact.id }, currentHolder);
     expect(artifact.content).not.toContain(privateBody);
+    // A real fresh owner supplies the missing identity decision. Historical
+    // source metadata never assigns its old email to this deliberately created person.
+    const original = await createContact.call({ name: "Fictional original reader, explicitly reviewed" }, owner);
+    await reviewOriginalImportedReader({ id: run.id, postId: "10", commentId: "20", contactId: original.id });
+    await commitImport.call({ id: run.id }, owner);
+    expect((await db().select().from(blogReaderComments))[0]).toMatchObject({ status: "pending", contactId: original.id, body: privateBody });
+    const laterRequest = await createMyDataRequest.call({ request: { kind: "export" } }, currentHolder);
+    const later = await fulfillDataRequest.call({ id: laterRequest.id }, owner);
+    expect((await downloadMyDataRequestArtifact.call({ id: later.artifact.id }, currentHolder)).content).not.toContain(privateBody);
+    const originalRequest = await createDataRequest.call({ contactId: original.id, request: { kind: "export" } }, owner);
+    await verifyDataRequest.call({ id: originalRequest.id, method: "Fictional original reader verified by the actual owner" }, owner);
+    const originalExport = await fulfillDataRequest.call({ id: originalRequest.id }, owner);
+    expect(JSON.stringify(originalExport.artifact.body)).toContain(privateBody);
+    await expect(downloadMyDataRequestArtifact.call({ id: originalExport.artifact.id }, currentHolder)).rejects.toMatchObject({ code: "not_found" });
   });
 });

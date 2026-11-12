@@ -5,7 +5,6 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { lockContactIdentity, lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { getContact } from "@/core/contacts/service";
-import { contacts } from "@/core/contacts/schema";
 import { importRuns } from "@/core/plugins/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { actorString, defineService, permits, ServiceError, type ServiceContext } from "@/core/service";
@@ -65,12 +64,9 @@ export const readerOwnershipReview = defineService({
     const digests = key ? raw.map(reader => key.digest("source", readerSourceIdentity(run, reader.postId, reader.commentId))) : [];
     const receipts = digests.length ? await ctx.tx.select({ id: readerOwnershipReceipts.id, digest: readerOwnershipReceipts.sourceDigest, state: readerOwnershipReceipts.state }).from(readerOwnershipReceipts).where(inArray(readerOwnershipReceipts.sourceDigest, digests)) : [];
     const byDigest = new Map(receipts.map(receipt => [receipt.digest, receipt]));
-    const addresses = [...new Set(raw.map(reader => reader.email?.trim().toLowerCase()).filter((value): value is string => Boolean(value)))];
-    const candidates = addresses.length ? await ctx.tx.select({ email: contacts.email }).from(contacts).where(inArray(contacts.email, addresses)) : [];
-    const known = new Set(candidates.map(candidate => candidate.email));
     const rows = raw.slice(0, 50).flatMap((reader, index) => {
       const receipt = byDigest.get(digests[index]!);
-      return !receipt || receipt.state === "review" || receipt.state === "unbound" && known.has(reader.email?.trim().toLowerCase() ?? "") ? [{ receiptId: receipt?.id ?? null, postId: reader.postId, commentId: reader.commentId, name: reader.name, email: reader.email, excerpt: reader.excerpt }] : [];
+      return !receipt || receipt.state === "review" || receipt.state === "unbound" && Boolean(reader.email?.trim()) ? [{ receiptId: receipt?.id ?? null, postId: reader.postId, commentId: reader.commentId, name: reader.name, email: reader.email, excerpt: reader.excerpt }] : [];
     });
     return { rows, next: raw.length > 50 ? raw[49]!.cursor : null };
   },

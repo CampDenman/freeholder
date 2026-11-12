@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // C2.29/C3.46: retain proved source ownership; never infer it from an old email.
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { contacts } from "@/core/contacts/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { actorString, ServiceError, type Actor, type Tx } from "@/core/service";
 import { readerOwnershipKey } from "./reader-ownership-key";
@@ -83,39 +82,16 @@ export async function bindOwnedReaderSources(tx: Tx, preview: Json, source: Read
   const key = await readerOwnershipKey(tx);
   const rows = entries.map(entry => ({ ...entry, sourceDigest: key.digest("source", readerSourceIdentity(source, entry.post, typeof entry.comment.id === "string" ? entry.comment.id : "")), addressDigest: email(entry.comment.email) ? key.digest("address", email(entry.comment.email)) : null }));
   if (new Set(rows.map(row => row.sourceDigest)).size !== rows.length) throw new ServiceError("validation", "The source repeats an original post/comment reader identity.");
-  const known = new Map<string, string>();
-  const addresses = [...new Set(rows.map(row => email(row.comment.email)).filter(Boolean))];
-  for (let offset = 0; offset < addresses.length; offset += BATCH) {
-    const batch = await tx.select({ id: contacts.id, email: contacts.email }).from(contacts).where(inArray(contacts.email, addresses.slice(offset, offset + BATCH))).for("key share");
-    for (const contact of batch) known.set(email(contact.email), contact.id);
-  }
   const recorded = new Map<string, typeof readerOwnershipReceipts.$inferSelect>();
   for (let offset = 0; offset < rows.length; offset += BATCH) {
     const batch = await tx.select().from(readerOwnershipReceipts).where(inArray(readerOwnershipReceipts.sourceDigest, rows.slice(offset, offset + BATCH).map(row => row.sourceDigest))).for("update");
     for (const receipt of batch) recorded.set(receipt.sourceDigest, receipt);
   }
-  const ownerIds = [...new Set([...known.values(), ...[...recorded.values()].flatMap(receipt => receipt.contactId ? [receipt.contactId] : [])])];
+  const ownerIds = [...new Set([...recorded.values()].flatMap(receipt => receipt.contactId ? [receipt.contactId] : []))];
   const retired = new Set<string>();
   for (let offset = 0; offset < ownerIds.length; offset += BATCH) {
     const requests = await tx.selectDistinct({ contactId: dataRequests.contactId }).from(dataRequests).where(and(inArray(dataRequests.contactId, ownerIds.slice(offset, offset + BATCH)), eq(dataRequests.kind, "erasure"), inArray(dataRequests.status, ["in_progress", "completed", "partially_completed"])));
     for (const request of requests) retired.add(request.contactId);
-  }
-  const checks = [...new Map(rows.filter(row => row.addressDigest).map(row => [row.addressDigest, { digest: row.addressDigest, email: email(row.comment.email), candidate: known.get(email(row.comment.email)) ?? null }])).values()];
-  const ambiguous = new Set<string>();
-  for (let offset = 0; offset < checks.length; offset += BATCH) {
-    // Return only an opaque ambiguity marker. Historical addresses never
-    // become a guessed contact binding or a list of private CRM candidates.
-    const found = await tx.execute<{ digest: string }>(sql`
-      select requested.digest from jsonb_to_recordset(${JSON.stringify(checks.slice(offset, offset + BATCH))}::jsonb)
-        requested(digest text,email text,candidate uuid)
-      where exists(select 1 from import_reader_ownership_receipts prior
-          where prior.address_digest=requested.digest
-            and (prior.state='erased' or (prior.contact_id is not null and prior.contact_id is distinct from requested.candidate)))
-        or exists(select 1 from audit_log history join contacts person on person.id::text=history.subject_id
-          where history.subject_type='contact' and history.action in ('contacts.create','contacts.resolve','contacts.update')
-            and lower(history.diff->>'email')=requested.email and person.id is distinct from requested.candidate)
-    `);
-    for (const item of found) ambiguous.add(item.digest);
   }
   for (const row of rows) {
     delete row.comment.contactId;
@@ -123,8 +99,7 @@ export async function bindOwnedReaderSources(tx: Tx, preview: Json, source: Read
     const receipt = recorded.get(row.sourceDigest);
     if (receipt?.state === "erased" || receipt?.contactId && retired.has(receipt.contactId)) throw new ReaderOwnershipErasedError();
     if (receipt?.contactId) { row.comment.contactId = receipt.contactId; continue; }
-    const candidate = known.get(email(row.comment.email));
-    if (receipt?.state === "review" || candidate || row.addressDigest && ambiguous.has(row.addressDigest)) {
+    if (receipt?.state === "review" || row.addressDigest || receipt?.addressDigest) {
       row.comment.readerOwnershipReviewRequired = true;
       if (receipt?.state === "unbound") await tx.update(readerOwnershipReceipts).set({ state: "review", updatedAt: new Date() }).where(eq(readerOwnershipReceipts.id, receipt.id));
       continue;
@@ -143,13 +118,12 @@ export async function readerOwnershipForComment(tx: Tx, source: ReaderSource, po
   const [receipt] = await tx.select().from(readerOwnershipReceipts).where(eq(readerOwnershipReceipts.sourceDigest, sourceDigest)).limit(1).for("update");
   if (!receipt) throw new ServiceError("conflict", "Stage and review the original reader source before committing this comment.");
   if (receipt.state === "erased") throw new ReaderOwnershipErasedError();
-  if (receipt.state === "review") throw new ServiceError("conflict", "An owner must review this original reader before importing their comment.");
+  if (receipt.state === "review" || receipt.state === "unbound" && receipt.addressDigest) throw new ServiceError("conflict", "An owner must review this original reader before importing their comment.");
   if (receipt.contactId && (await tx.select({ id: dataRequests.id }).from(dataRequests).where(and(eq(dataRequests.contactId, receipt.contactId), eq(dataRequests.kind, "erasure"), inArray(dataRequests.status, ["in_progress", "completed", "partially_completed"]))).limit(1)).length) throw new ReaderOwnershipErasedError();
   return receipt;
 }
 export async function acceptReaderOwnership(tx: Tx, source: ReaderSource, post: string, comment: string, contactId: string | null) {
   const receipt = await readerOwnershipForComment(tx, source, post, comment);
-  if (receipt.contactId && receipt.contactId !== contactId) throw new ServiceError("conflict", "The comment no longer matches its original reader owner.");
-  if (!receipt.contactId && contactId) await tx.update(readerOwnershipReceipts).set({ contactId, state: "bound", updatedAt: new Date() }).where(eq(readerOwnershipReceipts.id, receipt.id));
+  if (receipt.contactId !== contactId) throw new ServiceError("conflict", "The comment no longer matches its original reader owner.");
 }
 

@@ -344,16 +344,22 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([later.id]);
   });
 
-  it("creates one new person for two originally unknown readers in the same atomic source commit", async () => {
+  it("binds two originally unknown readers only after an actual owner creates and chooses their person", async () => {
+    const owner = await verifiedOwner();
     const second = `<wp:comment><wp:comment_id>21</wp:comment_id><wp:comment_author>Original reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Second original comment.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>`;
     const id = await stage(SOURCE.replace("</item>", `${second}</item>`));
+    await expect(commitImport.call({ id }, OWNER)).rejects.toThrow(/review/);
+    expect(await db().select().from(contacts).where(eq(contacts.email, EMAIL))).toHaveLength(0);
+    const original = await createContact.call({ name: "Explicitly reviewed original reader" }, owner);
+    const review = await readerOwnershipReview.call({ id }, owner);
+    expect(review.rows).toHaveLength(2);
+    for (const reader of review.rows) await resolveReaderOwnership.call({ id, receiptId: reader.receiptId, postId: reader.postId, commentId: reader.commentId, contactId: original.id, confirmation: "ASSIGN ORIGINAL READER" }, owner);
     expect((await commitImport.call({ id }, OWNER)).status).toBe("committed");
-    const readers = await db().select().from(contacts).where(eq(contacts.email, EMAIL));
-    expect(readers).toHaveLength(1);
-    expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([readers[0]!.id, readers[0]!.id]);
+    expect(await db().select().from(contacts).where(eq(contacts.email, EMAIL))).toHaveLength(0);
+    expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([original.id, original.id]);
     const receipts = await db().select().from(readerOwnershipReceipts);
     expect(receipts).toHaveLength(2);
-    expect(receipts.every(receipt => receipt.state === "bound" && receipt.contactId === readers[0]!.id)).toBe(true);
+    expect(receipts.every(receipt => receipt.state === "bound" && receipt.contactId === original.id)).toBe(true);
   });
 
   it("requires owner review for a new original identity sharing an unbound erased address without inventing its former owner", async () => {

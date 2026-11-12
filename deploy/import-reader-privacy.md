@@ -255,3 +255,23 @@ evidence under a private temporary directory, and cleans only its own copied
 fixture/config files. Broader privacy fixture reconciliation, the later mailbox
 link boundary and current-production browser qualification remain pending.
 C2.29/C3.46 and stable/security acceptance remain open.
+
+
+A separate actual current-mailbox proof reproduced private data exposure: an
+unknown historical pending comment created a CRM contact automatically, and a
+new portal account using the canonical current-email proof downloaded that
+original private body in its own export. The repair leaves every first
+email-bearing reader in review with no person, and CMS cannot create or promote
+a contact from that unverified historical email. The normal anonymous/no-email
+path remains unbound. Source acceptance cannot turn an unknown receipt into an
+owned one. Only the actual freshly verified owner assignment does so.
+
+Two exact after controls pass: source commit initially refuses without creating
+a person; the current mailbox holder's real self-export contains no original
+private body, both before and after the owner deliberately creates and chooses
+the actual original person. The original person's verified export retains the
+body, and the other account cannot download that artifact. Two independent
+original comments bind to one newly human-created person through explicit
+owner choices, without copying the historical address into that profile. These
+proofs do not weaken privacy export. Large explicit owner choice, refreshed
+whole-source regressions and current browser qualification remain pending.
