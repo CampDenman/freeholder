@@ -231,3 +231,27 @@ exact undo. The source branch now journals 78 at the reserved timestamp after al
 manually: normal global migration must supply the table and guards. Empty and
 populated normal 0–78 upgrades, current-source browser and broader adjacent
 qualification remain pending; the earlier explicit-78 run is not that proof.
+
+
+Normal migration qualification now passes on the frozen 0–77 predecessor
+`d8ce5743`. The unchanged prior runtime created a real cached source, then the
+original contact changed address and a different contact acquired its old one.
+The normal 0–78 empty apply and populated clone each recorded all 79 journal
+entries. Counts and complete row hashes of contacts, import runs, blog reader
+comments and audit history stayed identical across the upgrade. The unchanged
+prior writer was refused afterwards. The current runtime required actual fresh
+human review, retained the original source executor, and committed the chosen
+original person rather than the current address holder. This is an actual prior
+source-runtime proof, not a claim about a separately built prior image. Live SDK
+regeneration passed all eight controls; the two actual contact-FK search and
+retention inventories also passed.
+
+The reproducible command is `node scripts/qualify-import-reader-upgrade.mjs
+PREVIOUS_WORKTREE UNIQUE_DISPOSABLE_PREFIX`, with `READER_UPGRADE_ADMIN_URL` set
+privately to a local disposable Postgres administration URL. Use an unchanged
+0–77 worktree with its frozen dependencies installed. The runner verifies all
+predecessor SQL bytes, preserves existing databases, retains its fictional
+evidence under a private temporary directory, and cleans only its own copied
+fixture/config files. Broader privacy fixture reconciliation, the later mailbox
+link boundary and current-production browser qualification remain pending.
+C2.29/C3.46 and stable/security acceptance remain open.
