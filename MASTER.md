@@ -3900,8 +3900,18 @@ reading chat logs.
   outcomes can carry real pending jobs; acknowledgements preserve the hold,
   and opted-in late unheld evidence reopens only its original receipt. Actual
   acknowledged job IDs distinguish completed replays from missing history.
-  Source/native/domain qualification remains pending; no independent or stable
-  sign-off follows. The original control is preserved separately at2128e673.
+  The independent optional framework at `8cd381dc` passed full Node 22 types,
+  focused lint, metadata and all 44 source-contract files (384 unique assertions,
+  26 database skips), plus three real service/job controls and eight existing
+  privacy/recovery/cleanup-acknowledgement regressions on the ordinary published
+  0–79 schema. Registered job bodies ran with live delivery disabled; independent
+  readback confirmed retained actual acknowledgements, no pending jobs in the
+  final selective fixture and no remaining database clients. First-run sandbox
+  child-process/loopback failures and their exact successful affected-check
+  retry are preserved. No domain callback or migration is enabled in that
+  framework release. Domain integration and full C1.08 acceptance remain open;
+  no independent or stable sign-off follows. The original control is preserved
+  separately at `2128e673`; see deploy/privacy-rights.md for evidence and limits.
 
   Privacy lineage repair 2026-11-11 (C1.08/C11.10): actual merge/undo controls
   reproduced other-party snapshot disclosure, transitive retained copies and

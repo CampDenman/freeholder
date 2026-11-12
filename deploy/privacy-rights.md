@@ -372,15 +372,30 @@ Missing acknowledgement history requires recovery rather than inferred success.
 Only sources opting into selective cleanup may reopen a retained outcome for
 new domain-validated unheld evidence. The receipt retains the legal exceptions
 and becomes pending again. Other retained sources retain their existing behavior.
-This code-only draft has not yet passed source/native/domain qualification.
-The original known-empty upload control failed on unchanged current270 in10.12s;
-its source2128, observations and log are preserved. The disposable before database
+This framework is locally qualified on exact source `8cd381dc` against the
+ordinary published 0–79 schema; no domain callback is activated by this release.
+The original known-empty upload control failed on unchanged current270 in 10.12s;
+its source `2128e673`, observations and log are preserved. The disposable before database
 was subsequently reused; no populated-before database restoration is claimed.
 
-The code-only release stack enables no domain callback and adds no table or
-migration. Its optional framework and receipt transitions can qualify on the
-normal published0–79 schema independently of the unpublished financial80 and
-opaque-import domain repair. The three controls must pass on that exact release
-source/database before this stack is proposed for merging. Local v9 domain proofs
-remain evidence of those separately frozen sources, not a transferred release
-qualification or stable sign-off.
+The code-only release stack adds no table or migration. Full Node 22 typechecking,
+focused lint, metadata gates and all 44 source-contract files passed (384 unique
+assertions, 26 database skips), together with the public-playground policy. The
+first source run hit sandbox restrictions on child processes and loopback HTTP;
+its log is preserved, and the exact seven affected files passed 60 assertions
+with the required local permissions. No code or deadline changed for that retry.
+
+Three actual service controls passed on the normal 0–79 database in 4.848, 4.338
+and 4.435s: current-request job composition and actual acknowledgement, parent/job
+rollback, and selective late-work replay. Eight existing erasure, hold, missing
+or corrupt receipt recovery, caller-refusal and physical cleanup acknowledgement
+controls also passed. Registered job bodies ran with live queue delivery disabled.
+Independent readback found no remaining database clients, retained outcomes with
+two actual acknowledgements and no pending work in the final selective fixture,
+and the unchanged 80-entry published journal. Logs and readbacks are preserved as
+`/tmp/freeholder-selective-core-release8cd-*`.
+
+This qualifies the optional framework independently of the unpublished
+financial 80 and opaque-import domain repair. Local v9 domain proofs remain
+evidence of those separately frozen sources. Domain integration, full C1.08
+acceptance, hosted checks and independent review remain open.
