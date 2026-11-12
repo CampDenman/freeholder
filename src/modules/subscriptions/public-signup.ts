@@ -26,6 +26,7 @@ import { subscriptionMethodScopeMatches, subscriptionTaxDestination } from "./me
 import { publicMerchantTermsQuote, quoteOriginalMerchantTerms } from "./merchant-terms-quote";
 import { originalMerchantPlan, originalMerchantTerms } from "./merchant-terms-read";
 import { getMerchantCollectionConfiguration } from "@/modules/invoicing/merchant-collection";
+import { newProviderCalendarStart } from "./calendar";
 
 registerCheckoutRequirement("subscription", async (ctx, id) => {
   const [row] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, id.split(":")[0]!)).limit(1);
@@ -218,7 +219,7 @@ export const activatePaidSignup = defineService({
       return{activated:true};
     }
     const { periodEnd, keepAccess, record } = await import("./service");
-    const start = new Date();
+    const start = sub.merchantScopeVersion===1&&sub.billingMode==="provider"?newProviderCalendarStart(new Date()):new Date();
     const end = periodEnd(start, plan.interval, plan.intervalCount);
     await ctx.tx.update(subscriptions).set({status:"active",signupPending:false,pausedAt:null,paymentMethodId:methodId,provider,currentPeriodStart:start,currentPeriodEnd:end}).where(eq(subscriptions.id,sub.id));
     await keepAccess(ctx,{...sub,currentPeriodStart:start},plan.name,end);
@@ -233,7 +234,7 @@ async function openCardTrial(ctx: ServiceContext, sub: typeof subscriptions.$inf
   const [stored] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, method.id)).limit(1);
   if (!stored || stored.contactId !== sub.contactId || stored.provider !== method.provider || !subscriptionMethodScopeMatches(routing,stored) || (routing.providerAccountId && stored.provider !== "stripe")) throw new ServiceError("conflict", "The saved card belongs to a different membership merchant.");
   const { periodEnd, keepAccess, record } = await import("./service");
-  const start = new Date();
+  const start = sub.merchantScopeVersion===1&&sub.billingMode==="provider"?newProviderCalendarStart(new Date()):new Date();
   const end = periodEnd(start, "day", plan.trialDays);
   await ctx.tx.update(subscriptions).set({
     status: "trialing",

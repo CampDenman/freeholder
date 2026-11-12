@@ -43,7 +43,7 @@ import { productVariants, products } from "@/modules/catalog/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
 import { originalMerchantPlan, originalMerchantTerms } from "./merchant-terms-read";
 import { originalMerchantInvoiceShape } from "./merchant-terms-invoice";
-import { periodEnd } from "./calendar";
+import { newProviderCalendarStart, periodEnd } from "./calendar";
 export { periodEnd } from "./calendar";
 import merchantTermsQuoteServices from "./merchant-terms-quote";
 import merchantTermsStoreServices, { freezeOriginalMerchantTerms } from "./merchant-terms-store";
@@ -807,7 +807,7 @@ export const subscribe = defineService({
       paymentMethod = method;
     }
 
-    const now = new Date();
+    const now = input.commercialTerms&&plan.billingMode==="provider"?newProviderCalendarStart(new Date()):new Date();
     // A card-required trial without a method is not a trial yet. It waits,
     // paused, until the card exists. The trial window is counted from that
     // moment, not from the click. Manual billing cannot store a card, so it
