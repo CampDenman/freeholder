@@ -15,7 +15,7 @@ export async function resolveReaderOwnershipAction(_previous: { error?: string }
   const text = (name: string) => { const value = form.get(name); return typeof value === "string" ? value.trim() : ""; };
   const path = `/admin/imports/${encodeURIComponent(text("id"))}`;
   try {
-    await resolveReaderOwnership.call({ id: text("id"), receiptId: text("receiptId"), postId: text("postId"), commentId: text("commentId"), contactId: text("contactId"), confirmation: text("confirmation") as "ASSIGN ORIGINAL READER" }, await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value));
+    await resolveReaderOwnership.call({ id: text("id"), receiptId: text("receiptId") || null, postId: text("postId"), commentId: text("commentId"), contactId: text("contactId"), confirmation: text("confirmation") as "ASSIGN ORIGINAL READER" }, await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value));
   } catch (error) {
     if (error instanceof ServiceError && error.code === "step_up_required") redirect(`/security/verify?returnTo=${encodeURIComponent(path)}`);
     return { error: error instanceof ServiceError ? ownerFacing(error.message) : (await getT())("imports.readers.error") };

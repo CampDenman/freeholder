@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C2.29/C3.46: the same original reader cannot become a different CRM person.
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -12,9 +12,11 @@ import { db } from "@/core/db";
 import { importRuns } from "@/core/plugins/schema";
 import { mergeContacts, resolveContact, undoContactMerge, updateContact } from "@/core/contacts/service";
 import { contactMergeOperations, contacts } from "@/core/contacts/schema";
-import { commitImport, previewFromSource, publishImport, reconcileImport, rollbackImport, startImport } from "@/core/import/service";
+import { commitImport, previewFromSource, publishImport, reconcileImport, rollbackImport, stageImportSource, startImport } from "@/core/import/service";
 import { readerOwnershipReview, resolveReaderOwnership } from "@/core/import/reader-ownership-review";
-import { readerOwnershipReceipts } from "@/core/import/reader-ownership-schema";
+import { readerOwnershipKeys, readerOwnershipReceipts } from "@/core/import/reader-ownership-schema";
+import { rotateCredentials } from "@/core/connections/service";
+import { resetEnvForTests } from "@/core/env";
 import { addRetentionException, contactPrivacySources, createDataRequest, fulfillDataRequest, verifyDataRequest } from "@/core/privacy/service";
 import { ensureDefaults } from "@/modules/cms/service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
@@ -75,6 +77,7 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     });
   });
   beforeEach(async () => { await truncateSpine(); await ensureDefaults.call({}, OWNER); });
+  afterEach(() => { vi.unstubAllEnvs(); resetEnvForTests(); });
   afterAll(closeDb);
 
   it("keeps the already-recorded original reader when identical source is staged after an address change", async () => {
@@ -240,5 +243,67 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     expect((await listReaderComments.call({ pageId: comment.pageId }, ANONYMOUS)).length).toBe(1);
     expect((await rollbackImport.call({ id }, OWNER)).status).toBe("rolled_back");
     expect(await db().select().from(blogReaderComments).where(eq(blogReaderComments.id, comment.id))).toHaveLength(0);
+  });
+
+  it("lets the verified owner recover a persisted pre-receipt reader without guessing from its reused address", async () => {
+    const owner = await verifiedOwner();
+    const original = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
+    const staged = stageImportSource("wordpress-wxr", SOURCE, "https://fictional-reader-source.example");
+    // The persisted pre-78 cache shape has the original contact pointer and
+    // source executor, but no receipt, key or review flags. This is an upgrade
+    // fixture, not deletion/corruption of a receipt created by current code.
+    const cached = z.object({ pages: z.array(z.object({ readerComments: z.array(z.record(z.string(), z.unknown())) }).passthrough()) }).passthrough().parse(staged.preview);
+    cached.pages[0]!.readerComments[0]!.contactId = original.id;
+    const [legacy] = await db().insert(importRuns).values({ source: "wordpress-wxr:https://fictional-reader-source.example", kind: "wordpress-wxr", origin: "https://fictional-reader-source.example", status: "previewed", preview: cached, checkpoint: { origin: "https://fictional-reader-source.example", kind: "wordpress-wxr" }, counts: staged.counts, createdBy: "agent:original-legacy-source-executor" }).returning();
+    await updateContact.call({ id: original.id, email: "changed-reader@example.test" }, OWNER);
+    const later = (await resolveContact.call({ name: "Later email holder", email: EMAIL }, OWNER)).contact;
+    await expect(commitImport.call({ id: legacy!.id }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    const review = await readerOwnershipReview.call({ id: legacy!.id }, owner);
+    expect(review.rows).toHaveLength(1);
+    const reader = review.rows[0]!;
+    await resolveReaderOwnership.call({ id: legacy!.id, receiptId: reader.receiptId, postId: reader.postId, commentId: reader.commentId, contactId: original.id, confirmation: "ASSIGN ORIGINAL READER" }, owner);
+    expect((await commitImport.call({ id: legacy!.id }, OWNER)).status).toBe("committed");
+    const [receipt] = await db().select().from(readerOwnershipReceipts);
+    expect(receipt).toMatchObject({ firstRunId: legacy!.id, createdBy: `user:${OWNER.userId}`, contactId: original.id, state: "bound" });
+    expect((await db().select().from(importRuns).where(eq(importRuns.id, legacy!.id)))[0]?.createdBy).toBe("agent:original-legacy-source-executor");
+    expect(receipt?.contactId).not.toBe(later.id);
+    expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([original.id]);
+  });
+
+  it("rotates the sealed reader key without changing original source ownership and no longer needs the previous key", async () => {
+    const owner = await verifiedOwner(), oldKey = Buffer.alloc(32, 3).toString("hex"), newKey = Buffer.alloc(32, 4).toString("hex");
+    vi.stubEnv("CREDENTIAL_KEY", oldKey); vi.stubEnv("CREDENTIAL_KEY_PREVIOUS", ""); resetEnvForTests();
+    const original = (await resolveContact.call({ email: EMAIL }, OWNER)).contact;
+    await stage();
+    const [before] = await db().select().from(readerOwnershipKeys), receipts = await db().select().from(readerOwnershipReceipts);
+    vi.stubEnv("CREDENTIAL_KEY", newKey); vi.stubEnv("CREDENTIAL_KEY_PREVIOUS", oldKey); resetEnvForTests();
+    expect(await rotateCredentials.call({}, owner)).toEqual({ examined: 1, rotated: 1, failed: 0 });
+    expect((await db().select().from(readerOwnershipKeys))[0]?.encryptedKey).not.toBe(before?.encryptedKey);
+    vi.stubEnv("CREDENTIAL_KEY_PREVIOUS", ""); resetEnvForTests();
+    expect(await boundReader(await stage())).toBe(original.id);
+    expect(await db().select().from(readerOwnershipReceipts)).toEqual(receipts);
+  });
+
+  it("refuses an unreadable reader seal and preserves its ciphertext and original receipts for recovery", async () => {
+    const owner = await verifiedOwner();
+    await resolveContact.call({ email: EMAIL }, OWNER); await stage();
+    const receipts = await db().select().from(readerOwnershipReceipts), ciphertext = "fictional-unreadable-reader-envelope";
+    await db().update(readerOwnershipKeys).set({ encryptedKey: ciphertext });
+    await expect(stage()).rejects.toMatchObject({ code: "conflict" });
+    expect(await rotateCredentials.call({}, owner)).toEqual({ examined: 1, rotated: 0, failed: 1 });
+    expect((await db().select().from(readerOwnershipKeys))[0]?.encryptedKey).toBe(ciphertext);
+    expect(await db().select().from(readerOwnershipReceipts)).toEqual(receipts);
+  });
+
+  it("retires an originally unbound source when its verified reader is erased before comment commit", async () => {
+    const first = await stage();
+    expect((await db().select().from(readerOwnershipReceipts))[0]).toMatchObject({ contactId: null, state: "unbound" });
+    const reader = (await resolveContact.call({ email: EMAIL }, OWNER)).contact;
+    const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, OWNER);
+    await verifyDataRequest.call({ id: request.id, method: "Fictional originally unbound reader verified" }, OWNER);
+    expect((await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER)).request.status).toBe("completed");
+    await expect(stage()).rejects.toMatchObject({ code: "conflict" });
+    expect((await db().select().from(readerOwnershipReceipts))[0]).toMatchObject({ firstRunId: first, contactId: null, state: "erased", retirementRequestId: request.id, createdBy: `user:${OWNER.userId}` });
+    expect(await db().select().from(contacts).where(eq(contacts.email, EMAIL))).toHaveLength(0);
   });
 });

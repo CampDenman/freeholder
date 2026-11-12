@@ -17,7 +17,8 @@ CREATE TABLE import_reader_ownership_receipts (
  created_by text NOT NULL,
  created_by_key_id uuid,
  contact_id uuid REFERENCES contacts(id),
- state text NOT NULL CHECK (state IN ('unbound','review','bound','erased') AND ((state IN ('unbound','review'))=(contact_id IS NULL))),
+ retirement_request_id uuid REFERENCES data_requests(id),
+ state text NOT NULL CHECK (state IN ('unbound','review','bound','erased') AND (state='erased' OR ((state='bound')=(contact_id IS NOT NULL))) AND ((state='erased')=(retirement_request_id IS NOT NULL))),
  created_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -27,6 +28,8 @@ CREATE UNIQUE INDEX import_reader_source_unique ON import_reader_ownership_recei
 CREATE INDEX import_reader_contact_idx ON import_reader_ownership_receipts(contact_id);
 --> statement-breakpoint
 CREATE INDEX import_reader_address_idx ON import_reader_ownership_receipts(address_digest);
+--> statement-breakpoint
+CREATE INDEX import_reader_retirement_idx ON import_reader_ownership_receipts(retirement_request_id);
 --> statement-breakpoint
 CREATE TABLE import_reader_merge_witnesses (
  id uuid PRIMARY KEY,
@@ -55,7 +58,7 @@ BEGIN
   RAISE EXCEPTION 'Reader ownership receipts retire through erasure, never deletion' USING ERRCODE='55000';
  END IF;
  IF TG_OP='UPDATE' AND (ROW(NEW.source_digest,NEW.address_digest,NEW.key_id,NEW.created_at,NEW.first_run_id,NEW.created_by,NEW.created_by_key_id) IS DISTINCT FROM ROW(OLD.source_digest,OLD.address_digest,OLD.key_id,OLD.created_at,OLD.first_run_id,OLD.created_by,OLD.created_by_key_id)
-    OR (OLD.state='erased' AND NEW.state<>'erased')) THEN
+    OR (OLD.state='erased' AND ROW(NEW.state,NEW.contact_id,NEW.retirement_request_id) IS DISTINCT FROM ROW(OLD.state,OLD.contact_id,OLD.retirement_request_id))) THEN
   RAISE EXCEPTION 'Original reader identity and erased receipts are immutable' USING ERRCODE='55000';
  END IF;
  RETURN NEW;

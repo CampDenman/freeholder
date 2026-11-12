@@ -4,6 +4,7 @@
 import { check, index, integer, pgTable, primaryKey, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { contacts } from "@/core/contacts/schema";
+import { dataRequests } from "@/core/privacy/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 
 export const readerOwnershipKeys = pgTable("import_reader_ownership_keys", {
@@ -22,15 +23,17 @@ export const readerOwnershipReceipts = pgTable("import_reader_ownership_receipts
   createdBy: text("created_by").notNull(),
   createdByKeyId: uuid("created_by_key_id"),
   contactId: uuid("contact_id").references(() => contacts.id),
+  retirementRequestId: uuid("retirement_request_id").references(() => dataRequests.id),
   state: text("state", { enum: ["unbound", "review", "bound", "erased"] }).notNull(),
   createdAt: createdAtColumn(), updatedAt: updatedAtColumn(),
 }, table => [
   uniqueIndex("import_reader_source_unique").on(table.sourceDigest),
   index("import_reader_contact_idx").on(table.contactId),
   index("import_reader_address_idx").on(table.addressDigest),
+  index("import_reader_retirement_idx").on(table.retirementRequestId),
   check("import_reader_source_digest", sql`${table.sourceDigest} ~ '^[a-f0-9]{64}$'`),
   check("import_reader_address_digest", sql`${table.addressDigest} is null or ${table.addressDigest} ~ '^[a-f0-9]{64}$'`),
-  check("import_reader_owner_state", sql`${table.state} in ('unbound','review','bound','erased') and ((${table.state} in ('unbound','review')) = (${table.contactId} is null))`),
+  check("import_reader_owner_state", sql`${table.state} in ('unbound','review','bound','erased') and (${table.state} = 'erased' or ((${table.state} = 'bound') = (${table.contactId} is not null))) and ((${table.state} = 'erased') = (${table.retirementRequestId} is not null))`),
 ]);
 
 // These are historical subject UUIDs, deliberately without contact FKs: a

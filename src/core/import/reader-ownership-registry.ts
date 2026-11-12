@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // C2.29: shared merge/undo and privacy own the source receipt, without bodies.
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { registerContactReference } from "@/core/contacts/service";
 import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { dataRequests } from "@/core/privacy/schema";
 import { ServiceError, type Tx } from "@/core/service";
-import { markReaderOwnershipWriter } from "./reader-ownership-key";
+import { markReaderOwnershipWriter, readerOwnershipKey } from "./reader-ownership-key";
 import { readerOwnershipMergeWitnesses, readerOwnershipReceipts } from "./reader-ownership-schema";
 
 const snapshot = z.object({ witnessId: z.uuid(), phase: z.enum(["captured", "applied"]) });
@@ -59,20 +60,32 @@ registerContactReference({
 });
 
 async function ownedIds(tx: Tx, contactId: string) { return (await contactPrivacyIdentity(tx, contactId)).contactIds; }
+async function retireReaderSources(tx: Tx, contactId: string, requestId: string) {
+  const [present] = await tx.select({ id: readerOwnershipReceipts.id }).from(readerOwnershipReceipts).limit(1);
+  if (!present) return { affected: 0 };
+  const identity = await contactPrivacyIdentity(tx, contactId), key = await readerOwnershipKey(tx);
+  const addresses = identity.emails.map(address => key.digest("address", address));
+  const rows = await tx.update(readerOwnershipReceipts).set({ state: "erased", retirementRequestId: sql`coalesce(${readerOwnershipReceipts.retirementRequestId},${requestId}::uuid)`, updatedAt: new Date() }).where(or(
+    inArray(readerOwnershipReceipts.contactId, identity.contactIds),
+    // An originally unknown owner remains unknown. The privacy request
+    // retires that source by its recorded address, without inventing an owner
+    // or rebinding an already-proved different person after address reuse.
+    addresses.length ? and(isNull(readerOwnershipReceipts.contactId), inArray(readerOwnershipReceipts.state, ["unbound", "review"]), inArray(readerOwnershipReceipts.addressDigest, addresses)) : sql`false`,
+  )).returning({ id: readerOwnershipReceipts.id });
+  return { affected: rows.length };
+}
 registerContactPrivacySource({
   scope: "imports.readerOwnership",
   tables: ["import_reader_ownership_receipts", "import_reader_merge_witnesses", "import_reader_merge_items"],
   retentionScopes: ["cms.readerComments", "imports.readerSources"], eraseOrder: 11,
-  retain: async (tx, contactId) => {
+  retain: async (tx, contactId, context) => {
     // A hold preserves every original witness field. Its privacy fence still
     // prevents a later source from using the held record as fresh authority.
-    await markReaderOwnershipWriter(tx);
-    await tx.update(readerOwnershipReceipts).set({ state: "erased", updatedAt: new Date() }).where(inArray(readerOwnershipReceipts.contactId, await ownedIds(tx, contactId)));
+    await retireReaderSources(tx, contactId, context.requestId);
   },
-  exportData: async (tx, contactId) => tx.select({ id: readerOwnershipReceipts.id, sourceDigest: readerOwnershipReceipts.sourceDigest, addressDigest: readerOwnershipReceipts.addressDigest, state: readerOwnershipReceipts.state, createdAt: readerOwnershipReceipts.createdAt }).from(readerOwnershipReceipts).where(inArray(readerOwnershipReceipts.contactId, await ownedIds(tx, contactId))),
-  erase: async (tx, contactId) => {
-    await markReaderOwnershipWriter(tx);
-    const rows = await tx.update(readerOwnershipReceipts).set({ state: "erased", updatedAt: new Date() }).where(inArray(readerOwnershipReceipts.contactId, await ownedIds(tx, contactId))).returning({ id: readerOwnershipReceipts.id });
-    return { affected: rows.length };
+  exportData: async (tx, contactId) => {
+    const ids = await ownedIds(tx, contactId);
+    return tx.select({ id: readerOwnershipReceipts.id, sourceDigest: readerOwnershipReceipts.sourceDigest, addressDigest: readerOwnershipReceipts.addressDigest, state: readerOwnershipReceipts.state, retirementRequestId: readerOwnershipReceipts.retirementRequestId, createdAt: readerOwnershipReceipts.createdAt }).from(readerOwnershipReceipts).leftJoin(dataRequests, eq(dataRequests.id, readerOwnershipReceipts.retirementRequestId)).where(or(inArray(readerOwnershipReceipts.contactId, ids), inArray(dataRequests.contactId, ids)));
   },
+  erase: (tx, contactId, context) => retireReaderSources(tx, contactId, context.requestId),
 });
