@@ -14,7 +14,7 @@
 // (`imports.commitApply`). A commit interrupted halfway resumes from the
 // files already recorded.
 import { createHash } from "node:crypto";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
@@ -26,7 +26,7 @@ import {
   type Actor,
   type ServiceContext,
 } from "@/core/service";
-import { importRuns, importSourceBatches } from "@/core/plugins/schema";
+import { importRuns, importSourceBatches, importSourceGraphs, importSourceMedia } from "@/core/plugins/schema";
 import { getPinnedBytes, PinnedDownloadError } from "@/core/http/pinned-download";
 import { uploadAsset } from "@/core/media/service";
 import { importedMediaFilename } from "@/core/media/validation";
@@ -42,13 +42,17 @@ import { archivePlanSchema, archivePreviewDigest, archiveSourcePath, staticArchi
 import { archiveBodyToBlocks, type ArchiveMediaMatch } from "./archive-content";
 import { archiveRangeSource } from "./archive-source";
 import { restoreStaticArchive } from "./archive-commit";
+import { restoreArchiveGraphMedia } from "./archive-graph-batches";
+import { archiveGraphHeaderSchema } from "./source-index-contract";
+import { graphMediaPlanSchema } from "./graph-catalog";
+import type { ArchiveAsset } from "./archive";
 import { safeImportHref } from "./content-links";
 import { genericPreview, genericPlanSchema, parseGenericHtml, stageGenericPages } from "./generic-plan";
 import { approvedMediaOrigins, approvedMediaOriginsSchema, allowedMediaOrigins } from "./media-origins";
 import { parseGenericFeed } from "./generic-feed";
-import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
+import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun, sameRetainedOriginal } from "./retained-source";
 import importMediaReceiptServices, { bindImportMediaBytes, claimImportMedia } from "./media-receipts";
-import { assertImportBatchAccess, isPrivateImportBatch, callImportService, currentImportBatch, importBatchTargets, importBatchSharedMedia, lockImportBatchParent, recordImportBatchTarget, recordImportBatchMedia } from "./batch-context";
+import { assertImportBatchAccess, isPrivateImportBatch, callImportService, currentImportBatch, importBatchTargets, importBatchSharedMedia, importBatchSourceOwner, lockImportBatchParent, recordImportBatchTarget, recordImportBatchMedia } from "./batch-context";
 import graphBatchServices, { advanceGraphCommit } from "./graph-batches";
 import { advanceGraphLifecycle } from "./graph-lifecycle";
 import { importGraphVersionSchema } from "./graph-version";
@@ -508,7 +512,7 @@ const mediaToFetch = z.object({
   wpId: z.string().optional(),
 });
 
-const archiveCommitSourceSchema = z.object({ source: retainedImportSourceSchema, plan: archivePlanSchema, previewDigest: z.string().regex(/^[a-f0-9]{64}$/), completedKeys: z.array(z.string()) });
+const archiveCommitSourceSchema = z.object({ source: retainedImportSourceSchema, plan: archivePlanSchema, previewDigest: z.string().regex(/^[a-f0-9]{64}$/), completedKeys: z.array(z.string()), graph: z.object({ header: archiveGraphHeaderSchema, media: graphMediaPlanSchema.array().max(1) }).optional() });
 function genericCommitPlan(run: { origin: string | null; preview: unknown; checkpoint: unknown }) {
   const generic = genericPreview(run.preview);
   if (!generic) return null;
@@ -519,13 +523,23 @@ function genericCommitPlan(run: { origin: string | null; preview: unknown; check
   return generic;
 }
 
-function archiveCommitSource(run: { id: string; preview: unknown; checkpoint: unknown }) {
+async function archiveCommitSource(run: typeof importRuns.$inferSelect, ctx: ServiceContext) {
   const plan = staticArchivePlan(run.preview);
   if (!plan) return undefined;
   const binding = z.object({ source: retainedImportSourceSchema, previewDigest: z.string() }).safeParse(checkpointOf(run.checkpoint).archiveSource);
-  const active = retainedSourceFromRun(run);
-  if (!binding.success || !active || active.runId !== run.id || archivePreviewDigest(active) !== archivePreviewDigest(binding.data.source) || binding.data.previewDigest !== archivePreviewDigest(run.preview)) throw new ServiceError("conflict", "The archive preview no longer matches its retained private source.");
-  return { source: active, plan, previewDigest: binding.data.previewDigest, completedKeys: mediaRecordsFrom(run.checkpoint).filter(record => record.assetId).map(record => record.key) };
+  const batch = currentImportBatch(run.id);
+  const parent = await importBatchSourceOwner(ctx, run);
+  const active = parent && retainedSourceFromRun(parent);
+  if (!binding.success || !active || active.runId !== (batch?.rootId ?? run.id) || !(batch ? sameRetainedOriginal(active, binding.data.source) : archivePreviewDigest(active) === archivePreviewDigest(binding.data.source)) || binding.data.previewDigest !== archivePreviewDigest(run.preview)) throw new ServiceError("conflict", "The archive preview no longer matches its retained private source.");
+  const completedKeys = [...mediaRecordsFrom(run.checkpoint), ...await importBatchSharedMedia(ctx)].filter(record => record.assetId).map(record => record.key);
+  if (batch?.kind === "media") {
+    if (plan.media.length !== 1) throw new ServiceError("conflict", "Restore one original archive file in its bounded graph phase.");
+    const [graph] = await ctx.tx.select().from(importSourceGraphs).where(and(eq(importSourceGraphs.id, batch.graphId), eq(importSourceGraphs.runId, batch.rootId))).limit(1);
+    const rows = await ctx.tx.select({ planned: importSourceMedia.planned }).from(importSourceMedia).where(and(eq(importSourceMedia.graphId, batch.graphId), eq(importSourceMedia.key, plan.media[0]!.key)));
+    if (!graph || rows.length !== 1) throw new ServiceError("conflict", "The original archive media phase lost its reviewed graph.");
+    return { source: active, plan, previewDigest: binding.data.previewDigest, completedKeys, graph: { header: archiveGraphHeaderSchema.parse(graph.headerMetadata), media: rows.map(row => graphMediaPlanSchema.parse(row.planned)) } };
+  }
+  return { source: active, plan, previewDigest: binding.data.previewDigest, completedKeys };
 }
 
 /** The read half of a commit: what still has to be fetched. */
@@ -553,7 +567,7 @@ const commitSource = defineService({
     const wordpress = wordpressPreview(run.preview);
     const generic = genericCommitPlan(run);
     if (generic?.report.sourceWarnings.some(warning => warning.code === "discovery-only")) throw new ServiceError("validation", "This sitemap contains addresses without their page content. Read its public source URL before committing these pages.");
-    const archive = archiveCommitSource(run);
+    const archive = await archiveCommitSource(run, ctx);
     if (run.kind === "archive" && !archive) throw new ServiceError("conflict", "Upload and preview a ZIP before committing this archive import.");
     const done = new Set(
       [...mediaRecordsFrom(run.checkpoint), ...await importBatchSharedMedia(ctx)]
@@ -759,7 +773,7 @@ const commitApply = defineService({
     const archive = staticArchivePlan(before.preview);
     const generic = genericCommitPlan(before);
     const nonWordpress = archive ?? generic;
-    if (archive) archiveCommitSource(before);
+    if (archive) await archiveCommitSource(before, ctx);
     const typedContent = Boolean(wordpress || nonWordpress);
     const decisions = conflictDecisions(before.conflicts);
     const candidateSlugs = [...new Set([...staged.map(page => cmsSlug(page.slug)), ...(currentImportBatch(before.id) ? staged.flatMap(page => page.redirectFrom && page.redirectFrom.length <= 2_048 ? [page.redirectFrom] : []) : []), ...[...decisions.values()].flatMap(decision => decision.renamedSlug ? [cmsSlug(decision.renamedSlug)] : []), "blog", ""])];
@@ -849,7 +863,7 @@ const commitApply = defineService({
     // Typed bodies share media/link conversion, without inventing WordPress
     // author, taxonomy, feed, query-ID or comment records for a static export.
     const ownedRecords = mediaRecordsFrom(before.checkpoint);
-    const sharedRecords = (await importBatchSharedMedia(ctx)).filter(record => wordpress?.media.some(media => media.key === record.key));
+    const sharedRecords = (await importBatchSharedMedia(ctx)).filter(record => (nonWordpress?.media ?? wordpress?.media)?.some(media => media.key === record.key));
     for (const record of sharedRecords) {
       if (!record.assetId) throw new ServiceError("conflict", "Finish restoring the shared source media before creating page drafts.");
       const asset = z.object({ status: z.string() }).parse(await callImportService(ctx, getService("media.get"), { id: record.assetId }));
@@ -1280,12 +1294,7 @@ export const commitImport = defineOrchestratedService({
     }
     if (source.archive) {
       const archive = source.archive, completed = new Set(archive.completedKeys);
-      if (archive.plan.media.some(item => !completed.has(item.key))) await restoreStaticArchive(
-        archiveRangeSource(archive.source, index => readRetainedSourceChunk(archive.source, index)),
-        archive.plan.site.url,
-        { plan: archive.plan, previewDigest: archive.previewDigest },
-        completed,
-        async (item, bytes) => {
+      const apply = async (item: ArchiveAsset, bytes: Uint8Array<ArrayBuffer>) => {
           const claim = await claimImportMedia.call({ id: input.id, key: item.key, previewDigest: archive.previewDigest }, actor);
           if (claim.assetId) return;
           const receipt = await bindImportMediaBytes.call({ runId: input.id, key: item.key, token: claim.token, previewDigest: archive.previewDigest, digest: item.digest, bytes: bytes.byteLength }, actor);
@@ -1295,8 +1304,12 @@ export const commitImport = defineOrchestratedService({
             if (error instanceof ServiceError && ["validation", "permission", "not_found", "conflict"].includes(error.code)) await recordImportMedia.call({ id: input.id, key: item.key, previewDigest: archive.previewDigest, claimToken: claim.token, error: fetchFailure(error) }, actor);
             throw error;
           }
-        },
-      );
+      };
+      if (archive.plan.media.some(item => !completed.has(item.key))) {
+        const ranges = archiveRangeSource(archive.source, index => readRetainedSourceChunk(archive.source, index));
+        if (archive.graph) await restoreArchiveGraphMedia(ranges, archive.graph.header, archive.graph.media, completed, apply);
+        else await restoreStaticArchive(ranges, archive.plan.site.url, { plan: archive.plan, previewDigest: archive.previewDigest }, completed, apply);
+      }
     }
     for (const [index, item] of source.media.entries()) {
       if (index > 0 || genericPolicy) await pause(source.delayMs);

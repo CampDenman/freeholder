@@ -7,10 +7,12 @@ import { importSourceEntries, importSourceMedia } from "@/core/plugins/schema";
 import { ServiceError, type Tx } from "@/core/service";
 import { assertPublicHttpUrl } from "./contract";
 import { planWordpressImport, wordpressPath, WORDPRESS_MEDIA_LIMITS, type WordpressExport } from "./wordpress";
+import { archiveGraphMetadataSchema, archiveFileFactSchema } from "./archive-graph-contract";
+import { archiveGraphHeaderSchema } from "./source-index-contract";
 import { wxrEntryMetadataSchema, wxrHeaderMetadataSchema } from "./wxr-index";
 
 export const IMPORT_GRAPH_MEDIA_TOTAL_BYTES = 1024 * 1024 * 1024;
-export const graphMediaPlanSchema = z.object({ key: z.string().min(1).max(4_096), sourceUrl: z.string().max(8_192), filename: z.string().max(255), altText: z.string().max(500).optional(), caption: z.string().max(2_048).optional(), wpId: z.string().max(128).optional(), aliases: z.string().max(8_192).array().max(16), referenced: z.boolean() });
+export const graphMediaPlanSchema = z.object({ key: z.string().min(1).max(4_096), sourceUrl: z.string().max(8_192), filename: z.string().max(255), altText: z.string().max(500).optional(), caption: z.string().max(2_048).optional(), wpId: z.string().max(128).optional(), aliases: z.string().max(8_192).array().max(16), referenced: z.boolean(), archive: z.object({ file: archiveFileFactSchema, factsDigest: z.string().regex(/^[a-f0-9]{64}$/), contentDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().optional() });
 const menuSchema = z.object({ slug: z.string(), name: z.string(), items: z.array(z.object({ label: z.string(), depth: z.number(), targetWpId: z.string().optional(), href: z.string().optional(), note: z.string().optional(), fragment: z.string().optional() })).max(500) });
 export const graphCatalogSchema = z.object({
   site: z.object({ title: z.string(), url: z.string(), hosts: z.string().array(), basePath: z.string() }),
@@ -20,6 +22,28 @@ export const graphCatalogSchema = z.object({
 });
 
 export async function buildGraphCatalog(tx: Tx, graphId: string, header: unknown, origin: string) {
+  if (header && typeof header === "object" && "format" in header && header.format === "archive-zip") {
+    const head = archiveGraphHeaderSchema.parse(header), base = new URL(head.origin);
+    const rows = await tx.select({ kind: importSourceEntries.kind, metadata: importSourceEntries.metadata }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graphId)).orderBy(asc(importSourceEntries.ordinal));
+    const metadata = rows.map(row => archiveGraphMetadataSchema.parse(row.metadata));
+    if (metadata.length !== head.files) throw new ServiceError("conflict", "The original ZIP directory is not completely indexed.");
+    const references = new Map<string, string | undefined>();
+    const unresolved = new Set<string>();
+    for (const entry of metadata) for (const image of entry.images ?? []) {
+      try { const url = new URL(image.src), key = url.host.toLowerCase() + url.pathname; if (!references.has(key)) references.set(key, image.alt); } catch { if (unresolved.size < 100) unresolved.add(image.src); }
+    }
+    const media = metadata.filter(entry => entry.file.kind === "asset").map(entry => {
+      const file = entry.file, url = new URL(file.url!), key = url.host.toLowerCase() + url.pathname;
+      return graphMediaPlanSchema.parse({ key, sourceUrl: url.href, filename: file.relativePath.split("/").at(-1)!, aliases: [key], referenced: references.has(key), ...(references.get(key) ? { altText: references.get(key) } : {}), archive: { file, factsDigest: entry.factsDigest, contentDigest: entry.contentDigest! } });
+    });
+    if (media.length > 500 || media.some(item => Buffer.byteLength(JSON.stringify(item)) > 16_384)) throw new ServiceError("validation", "The complete ZIP exceeds its graph media budget.");
+    const keys = new Set(media.map(item => item.key));
+    for (const entry of metadata) for (const image of entry.images ?? []) {
+      try { const url = new URL(image.src); if (!keys.has(url.host.toLowerCase() + url.pathname) && unresolved.size < 100) unresolved.add(url.href); } catch { /* Already accounted for above. */ }
+    }
+    const catalog = graphCatalogSchema.parse({ site: { title: "", url: base.href, hosts: [base.host.toLowerCase()], basePath: base.pathname.replace(/^\/+|\/+$/g, "") }, menus: [], attachments: [], report: { entries: head.directoryEntries, expandedBytes: head.expandedBytes, root: head.root, ignored: metadata.filter(entry => entry.file.kind === "ignored").slice(0, 100).map(entry => entry.file.path), unresolvedImages: [...unresolved] } });
+    return { catalog, media, attachments: [] };
+  }
   const head = wxrHeaderMetadataSchema.parse(header);
   const rows = await tx.select({ kind: importSourceEntries.kind, metadata: importSourceEntries.metadata }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graphId)).orderBy(asc(importSourceEntries.ordinal));
   const metadata = rows.map(row => wxrEntryMetadataSchema.parse(row.metadata));
@@ -42,5 +66,5 @@ export async function graphMediaPlans(tx: Tx, graphId: string) {
 
 export async function graphAttachments(tx: Tx, graphId: string) {
   const rows = await tx.select({ metadata: importSourceEntries.metadata }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graphId)).orderBy(asc(importSourceEntries.ordinal));
-  return rows.flatMap(row => { const entry = wxrEntryMetadataSchema.parse(row.metadata); return entry.attachment ? [entry.attachment] : []; });
+  return rows.flatMap(row => { const entry = row.metadata && typeof row.metadata === "object" && "format" in row.metadata && row.metadata.format === "archive-zip" ? null : wxrEntryMetadataSchema.parse(row.metadata); return entry?.attachment ? [entry.attachment] : []; });
 }

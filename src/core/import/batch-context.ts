@@ -47,6 +47,19 @@ export async function lockImportBatchParent(ctx: ServiceContext, childId: string
   guardedContexts.add(ctx);
 }
 
+/** Original bytes remain owned by the actual parent. An inherited async scope
+ * alone is insufficient: this exact service context must have locked/validated
+ * the parent, and the child's stored operation binding must still match. */
+export async function importBatchSourceOwner(ctx: ServiceContext, run: typeof importRuns.$inferSelect): Promise<typeof importRuns.$inferSelect> {
+  if (!isPrivateImportBatch(run)) return run;
+  assertImportBatchAccess(run);
+  const context = batchForContext(ctx);
+  if (!context || context.childId !== run.id) throw new ServiceError("not_found", "No such import run.");
+  const [root] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, context.rootId)).limit(1);
+  if (!root || root.kind !== run.kind) throw new ServiceError("conflict", "The original source owner no longer matches this bounded import.");
+  return root;
+}
+
 /** Existing service permission and audit still run, with a fresh extra fence. */
 export async function callImportService<I extends z.ZodType, O>(ctx: ServiceContext, service: Service<I, O>, input: z.input<I>): Promise<O> {
   if (batchForContext(ctx)) await assertCurrentImportAuthority(ctx, service.def.name, service.def.kind, service.def.permission);
@@ -60,7 +73,10 @@ export async function importBatchTargets(ctx: ServiceContext): Promise<Array<{ w
   return rows.flatMap(row => {
     if (row.slug === null) return [];
     const metadata = row.metadata as Record<string, unknown>;
-    return [{ targetSlug: row.slug, pageId: row.pageId, ...(typeof metadata.wpId === "string" ? { wpId: metadata.wpId } : {}), ...(typeof metadata.sourcePath === "string" ? { sourcePath: metadata.sourcePath } : {}) }];
+    // Static metadata retains the literal URL pathname. The shared content
+    // link resolver uses its source path without the leading slash.
+    const sourcePath = typeof metadata.sourcePath === "string" ? metadata.format === "archive-zip" ? metadata.sourcePath.replace(/^\//, "") : metadata.sourcePath : undefined;
+    return [{ targetSlug: row.slug, pageId: row.pageId, ...(typeof metadata.wpId === "string" ? { wpId: metadata.wpId } : {}), ...(sourcePath !== undefined ? { sourcePath } : {}) }];
   });
 }
 

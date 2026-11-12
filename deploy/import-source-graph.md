@@ -312,3 +312,269 @@ The first privacy-fix gate run caught only a test catch binding typed as any.
 After annotating it unknown, the complete gate rerun passed: full types, lint,
 license, notes, plan/F-matrix, playground and 384 contracts with 26 expected
 exclusions. The corrected protected head still needs its exact CI rerun.
+
+
+## Static ZIP original-directory foundation (source only)
+
+The isolated directory adapter retains real `archive-zip` file paths, physical
+local-frame ranges, sizes, CRC values and supported media kinds. It does not
+manufacture WordPress IDs, authors, taxonomies or menus. Its directory fingerprint
+binds normalized directory facts; it does not substitute for the original private
+range reader's manifest authorization and cryptographic chunk digests.
+
+Validation caps the complete directory at 10,000 entries and 16 MB of metadata,
+retains the existing 100 MB expansion limit, checks actual local header/name
+consistency, refuses overlapping frames and preserves literal encoded paths.
+Local frames and selected payloads are read in physical source order so a hostile
+central-directory ordering cannot repeatedly download private chunks. One payload
+phase selects at most 500 distinct files within the ordinary 20 MB body budget,
+with the existing single-media 25 MB allowance. No source body is copied into the
+directory facts. The ordinary small-ZIP path retains its prior read cap; only the
+new bounded 10,000-entry adapter has its own larger fixed metadata-read allowance.
+
+All 43 pure directory/ordinary-archive controls pass in 1.71 seconds, including
+real 501-file and 10,000-file ZIPs, the first excess entry, hostile paths/flags,
+CRC damage, invalid declared UTF-8, contradictory local names, raw frame order,
+original file reads and a real bounded 500-file payload phase. Lint and targeted
+changed-module/type tests pass using the same installed locked dependencies,
+without dependency installation or artifact copying. No database was used.
+
+This is an internal primitive, not a shipped resumable ZIP pipeline. The existing
+runtime still has its 500-page small-ZIP limit. Graph catalog/phase integration,
+privacy/ownership/recovery native proofs and owner browser acceptance remain
+required. Durable crawl response/frontier schema81 has not been written or
+journalled here; its actual 79/80 predecessors must exist before a contiguous
+qualification claim. C3.47 and stable readiness remain open.
+
+
+The directory primitive also keeps ignored packaging outside the detected site
+root under its actual original path, with no invented public URL. Its updated
+real-byte fixtures pass all 44 directory/ordinary-archive controls in 1.83 seconds;
+lint and targeted changed-module types pass. This remains source-only: no graph
+runtime, schema81, provider acceptance or complete ZIP/crawl claim is added.
+
+
+The next source-only ZIP increment reuses the ordinary static HTML parser for
+bounded indexing phases, rather than converting static files into WordPress
+records. Actual 501-file input now produces a 500-file phase and a one-file
+continuation with stable real-path identities, original frame facts and page
+content digests. The returned index contains page/SEO/image metadata and no
+shadow HTML bodies; asset facts are not presented as verified asset-content
+hashes. Global slug collisions are reconstructed from original path order, so
+resumption produces the same suffixes across a phase boundary. Ignored-only
+final phases still revalidate the actual directory. Per-phase page count,
+20 MB body/read and 60-second budgets and complete-source body/metadata caps
+remain explicit. This is not yet connected to the service graph/catalog.
+
+The changed parser and actual ZIP phases plus ordinary archive/content
+regressions pass 54 pure controls in 3.00 seconds. Targeted changed-module types
+and lint pass against the existing installed dependencies. No PG, browser,
+provider request, new migration or production build was used. Runtime source
+binding, media/CMS graph integration and actual interruption/publication/rollback
+qualification still remain required; C3.47 stays open.
+
+
+A subsequent source-only phase refinement also validates and hashes actual
+media payloads, rather than deriving content hashes from directory facts.
+Content and media share the ordinary 20MB read phase, with a single media file
+up to 25MB in its own phase. A real 21MB original-file control proves the phase
+boundary, digest and absence of returned payload copies; page-body accounting
+remains separate. The updated directory/static/content batch passes 55 pure
+controls in 3.05 seconds, with targeted types and lint. These primitives still
+have no runtime source-graph integration or schema 81 acceptance.
+
+The ZIP cursor now names its actual original-file ordinal explicitly, matching
+migration 73's monotonic cursor guard. Entry metadata is capped at the existing
+16KB per-row SQL limit. The same 55 pure controls pass in 3.40 seconds; targeted
+types and lint pass. No existing migration or runtime source route is changed.
+
+A strict format-discriminated ZIP graph-row contract now retains the actual file
+frame, normalized facts digest and separate real-content digest. Static assets
+use the existing attachment row kind without WordPress IDs; ignored files retain
+facts without invented content hashes or public URLs. Runtime validation refuses
+shadow bodies, fabricated WordPress fields, inconsistent original frame/row
+bindings and mismatched file-fact digests. The real-file mapping and ordinary
+archive/content batch passes 56 pure controls in 3.35 seconds; targeted types and
+lint pass. This contract is not yet wired into the shared service graph.
+
+The original committed runtime at test-only checkpoint 7cbf44b5 has now been
+exercised through an actual 501-page ZIP upload on a cloned normal 0–78 database.
+Its bounded-start before control genuinely failed in 10.16 seconds: the service
+returned failed with its existing 500-page limit instead of reserving durable
+continuation. No parser count or synthetic source was substituted. This test-only
+checkpoint retains the old runtime route; ongoing service changes remain separate.
+Its native process exited, and the fixture database had zero nonidle backends
+before the shared lane was handed to the next qualifier. Source-only graph format
+and ordinary ZIP/WXR parser controls currently pass 60 pure cases in 4.33 seconds.
+Actual after/lifecycle, privacy/hold/namespace and owner-browser qualification
+remain required. No schema 81, provider acceptance or C3.47 closure is claimed.
+
+The exact original basic 501-ZIP start-after control now passes in 9.20 seconds
+on normal 0–78. It uses the unchanged basic source/assertions from the genuine
+before, reserves bounded continuation and retains the actual original ZIP bytes.
+The native process exited and its database had zero nonidle backends before the
+lane handoff. This proves initial reservation only: the larger multi-process
+index/media/CMS/publication/rollback control is prepared but has not run yet.
+The separate full lifecycle fixture also crosses an actual private source-chunk
+boundary; it is not presented as an executed result. No complete ZIP, crawl,
+provider or stable acceptance is claimed.
+
+A controlled-clock pure before exposed a missing budget check in direct local
+ZIP-frame validation: actual original headers could finish after the directory
+deadline without refusal. The new guard checks before and after each frame read.
+All 61 directory/static/content/WXR controls pass in 3.96 seconds, including the
+exact refusal; the clock control is not a wall-time provider benchmark. No
+budget or timeout was extended. The shared link adapter also preserves literal
+static URL facts while using the existing source-path convention for resolution;
+its real cross-batch link assertion remains in the pending full lifecycle case.
+
+
+The first full ZIP lifecycle attempt stopped at a genuine media-receipt guard
+in 17.49 seconds. Its two independent processes had accepted 500+2 real files,
+including 501 HTML pages and an actual shared image across a private source-chunk
+boundary. Original-file metadata/digests and absence of invented WordPress fields
+passed before the first image claim. The receipt guard expected child-owned raw
+bytes, while the immutable source correctly remains on the root. Publication and
+rollback had not run and are not claimed.
+
+The source repair centralizes that lookup. Only the exact service context that
+locked and validated the live parent, plus the child's stored operation binding
+and matching source kind, can resolve its actual parent. Both commit preparation
+and media receipts retain their source/preview/manifest checks against that owner.
+The asset receipt still belongs to its real child batch; neither the original
+source run ID nor its storage identity is rewritten. Full types and targeted lint
+pass. The unchanged fresh lifecycle control remains pending its next sole-PG lease.
+
+
+With the root-source repair, the fresh lifecycle reached actual image creation,
+501-page publication, cross-batch link acceptance and complete page rollback in
+49.65 seconds. Its last fixture assertion wrongly required zero raw Asset rows.
+Read-only evidence instead showed the exact original Asset already trashed,
+with every child/root kept-media and kept-page list empty. The existing shared
+rollback service deliberately uses recoverable trash. This was a fixture-policy
+error, not an observed cleanup/ordering defect; no production retention/deletion
+guard was changed. The corrected control requires the exact original Asset to
+be trashed, zero active assets, zero actual page/section usage and real public
+media delivery changing from 200 to 404 through the existing route. The earlier
+failure remains preserved; this corrected full case still needs its next run.
+
+
+The corrected original 501-page ZIP lifecycle now passes on signed source
+`2af201384b8dc40eed040da61b03034fb9bd109c`: one selected native case in
+49.93 seconds, with the basic reservation case intentionally filtered. Two
+independent processes accepted 500 then two real original files (501 HTML pages
+and one shared PNG), across actual private source-chunk boundaries. The exact
+reviewed rename, cross-batch link, shared media, explicit publication and all
+501 page reversals passed. The exact original image remained recoverably trashed
+with zero active assets and zero page/section usage; the real anonymous media
+route changed from 200 to 404. No retention or deletion guard was relaxed.
+
+The native process exited successfully and the owned disposable database had
+zero nonidle backends before the shared lane was returned. This qualification
+uses the explicitly configured local PostgreSQL profile `jit=off`, `fsync=on`;
+it is not default-JIT or actual-provider acceptance. The preserved raw-row
+expectation failure above remains a fixture-policy diagnostic. Production ZIP
+artifact/browser, cancellation/privacy/hold/namespace controls and durable live
+crawl continuation remain required. No migration 81, C3.47 completion, stable
+readiness, permanent byte erasure or deployed cutover is claimed.
+
+
+The prepared-private-child boundary before control genuinely failed on unchanged
+source `de2f214e` in 10.91 seconds. After actual 501-file ZIP indexing and accepted
+private media preview, it refused direct child access, verified an identical
+replacement upload and proved that the stored child checkpoint was unchanged.
+Resuming through the actual root then refused the historical physical descriptor
+instead of using the newly verified identical original. The process exited and
+its owned normal 0–78 database had no nonidle backends before handoff. This is a
+resume defect, not evidence of a cross-owner read or overwritten original.
+
+The source repair keeps the historical child descriptor intact and compares its
+original root, revision, byte geometry and complete chunk digests to the active
+parent's retained source only after the exact parent service context has passed
+its existing authority/lease/batch guards. Reads still use the active parent's
+verified current physical locator and its namespace/expiry checks. Ordinary
+non-graph archive binding remains exact. The native after control is not yet run.
+
+
+REST PR #688 is now actually merged through the protected queue at
+`25f307a0aedff9a59d10ac2f1994c0ed510faec6`; all 46 exact-head checks and
+merge-group run 43225912971 passed. The ZIP branch is composed on that real
+main ancestor, including already-merged lead schema79. Its import source diff
+against the previously qualified ZIP runtime adds only the merged REST
+selected-subdirectory repair before the narrow ZIP restoration repair. Both
+the ZIP owner fixture and REST/en selected-subdirectory fixture were preserved.
+
+On signed repair `9fb9ebf7`, the exact prepared-child after case passes in
+8.51 seconds. A newly created disposable database applied the complete normal
+0–79 journal (80 entries, latest timestamp 1793310000059), without separate
+unpublished SQL. The unchanged control proves direct private-child denial,
+identical verified restoration, unchanged original child checkpoint and exactly
+one accepted image through the live parent. The native process exited and its
+database had zero nonidle backends before lane handoff. Full types and targeted
+changed-file lint also pass. The local JIT/fsync profile above still applies.
+The new ZIP privacy/hold and storage-namespace controls are prepared but unrun;
+current ZIP production artifact/browser and complete crawl acceptance remain
+required. No existing migration was edited and no schema81 was added.
+
+
+Exactly three additional ZIP graph boundary cases pass in 20.00 seconds on
+`1836ea578866b2812fe5454737b9cbb70c6473fe` and the owned normal0–79 fixture.
+The two existing WXR counterparts were intentionally filtered. A real unparsed
+501-file ZIP is invalidated by actual erasure, and its in-flight index result is
+refused. A real named reader-source hold preserves the exact original through
+rollback until that hold is removed. An independent same-key copy in storage B
+authorizes no reads or writes: continuation produces zero B GET/PUT/DELETE and
+zero accepted entries, while returning to actual original storage A resumes
+500 entries. Both stores' bytes remain unchanged during the refusal.
+
+All test processes exited successfully and the fixture database had no nonidle
+backends before the next native lease. The existing local JIT/fsync profile
+applies. These are source-specific local controls, not actual-provider object
+recovery or default-JIT acceptance. Current ZIP production artifact, live SDK
+verification, four-locale owner browser, protected qualification and durable
+live crawl response/frontier integration remain required.
+
+
+The ZIP source now passes all eight live SDK controls with `UPDATE_SDK=1` under
+Node22.23.2 on normal0–79 (5.65 seconds), with no generated catalog diff. The
+direct generator's underlying Vitest command was used before replacing the known
+dependency symlink, avoiding an implicit `pnpm exec` install. Its process exited
+and the owned database had no nonidle backends. An independent frozen offline
+dependency installation then completed in 0.71 seconds.
+
+Every source gate component passes: full types (46.9 seconds), whole-repository
+lint (74.4 seconds), playground policy, licensing, release notes, plan/F-matrix
+and all 44 contract files (384 passed, 26 expected database exclusions, 31.89
+seconds). The first launch lacked the required sandbox escalation and could not
+spawn git/shell helpers or bind three loopback test servers. That diagnostic is
+preserved; only the affected licensing/notes/plan/contracts were rerun under
+normal reviewed escalation. They all pass with no code, guard or expectation
+change. All source processes are drained. ZIP production build/artifact and
+four-locale owner-browser acceptance remain pending.
+
+
+The frozen ZIP runtime at `eded51d9cf67587c0beab297dc0ba0a75d6d4940` now
+passes its own Node22.23.2 workspace package build, optimized production build
+and standard standalone scrub: 21,378 files and 291,154,724 bytes, with no source
+or environment leakage. This is a new ZIP artifact; the earlier reader, REST
+and lead artifacts were not overwritten.
+
+All four real production owner journeys pass on that unchanged artifact:
+English calibration in 48.7 seconds, followed by Spanish, French and Arabic
+(three cases in 2.3 minutes). Each actual 501-file ZIP journey reviews a final
+destination rename, accepts the first 500 pages, pauses and reloads, handles a
+failed request, restores the identical original, resumes and explicitly
+publishes, follows the real cross-batch link, then rolls back with actual public
+404 responses. The ZIP file input, keyboard path, 320px bounds, both-theme Axe
+and Arabic RTL pass. English exited and the owned database had zero nonidle
+backends before the remaining locale reset; the final runner/server also exited
+and its database had zero nonidle backends before the shared lane handoff.
+
+The browser fixture contains actual original HTML files rather than invented
+WordPress records. Its no-image variant complements the separate actual shared
+image native lifecycle and anonymous delivery 200-to-404 proof; it does not
+claim a browser image upload. The explicit local `jit=off`, `fsync=on` profile
+still applies. These results supply no actual-provider launch/recovery, default
+JIT, permanent byte erasure, source cutover, independent review or stable
+signature. Protected PR qualification and the complete live-crawl source
+adapter remain required; C3.47 and all existing checklist statuses stay open.

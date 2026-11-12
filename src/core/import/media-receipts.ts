@@ -8,8 +8,9 @@ import { importRuns } from "@/core/plugins/schema";
 import { assets } from "@/core/media/schema";
 import { defineService, permits, ServiceError, type ServiceContext } from "@/core/service";
 import { archivePreviewDigest } from "./archive-plan";
+import { retainedImportSourceSchema, retainedSourceFromRun, sameRetainedOriginal } from "./retained-source";
 import { assertNoPendingSourceUpload } from "./source-lifecycle";
-import { currentImportBatch, lockImportBatchParent, bindImportBatchMedia, recordImportBatchMedia } from "./batch-context";
+import { currentImportBatch, importBatchSourceOwner, lockImportBatchParent, bindImportBatchMedia, recordImportBatchMedia } from "./batch-context";
 import { assertCurrentImportAuthority } from "./authority";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -29,13 +30,14 @@ function requireCommit(ctx: ServiceContext): void {
   // grant or a readable claim token supplies no import mutation permission.
   if (!permits(ctx.actor, "scoped", "imports.commit", "mutation")) throw new ServiceError("permission", "This connection cannot commit imports.");
 }
-function snapshot(run: Run, witness: string): void {
+async function snapshot(ctx: ServiceContext, run: Run, witness: string): Promise<void> {
   assertNoPendingSourceUpload(run);
   if (!["previewed", "committed", "reconciled", "published"].includes(run.status) || archivePreviewDigest(run.preview) !== witness) throw new ServiceError("conflict", "The import source changed. Reload its preview before retrying.");
   const preview = object(run.preview), checkpoint = object(run.checkpoint);
   if (preview.sourceFormat === "static-archive") {
-    const bound = object(checkpoint.archiveSource), source = object(bound.source), retained = object(checkpoint.retainedSource);
-    if (bound.previewDigest !== witness || source.runId !== run.id || (run.status === "previewed" && (retained.runId !== run.id || retained.uploadId !== source.uploadId || retained.revision !== source.revision))) throw new ServiceError("conflict", "The archive preview has no matching private source.");
+    const owner = await importBatchSourceOwner(ctx, run);
+    const bound = object(checkpoint.archiveSource), source = retainedImportSourceSchema.safeParse(bound.source), retained = retainedSourceFromRun(owner);
+    if (bound.previewDigest !== witness || !source.success || source.data.runId !== owner.id || (run.status === "previewed" && (!retained || (currentImportBatch(run.id) ? !sameRetainedOriginal(retained, source.data) : retained.uploadId !== source.data.uploadId || retained.revision !== source.data.revision)))) throw new ServiceError("conflict", "The archive preview has no matching private source.");
   }
 }
 function planned(run: Run, key: string) {
@@ -61,7 +63,7 @@ export const claimImportMedia = defineService({
   output: z.object({ token: z.uuid(), assetId: z.uuid().optional(), digest: digest.optional(), bytes: z.number().int().positive().optional(), note: z.string() }),
   handler: async (input, ctx) => {
     requireCommit(ctx);
-    const run = await lockedRun(ctx, input.id); snapshot(run, input.previewDigest);
+    const run = await lockedRun(ctx, input.id); await snapshot(ctx, run, input.previewDigest);
     if (run.status !== "previewed") throw new ServiceError("conflict", "This import is already committed.");
     const item = planned(run, input.key), existing = claims(run.checkpoint), current = existing.find(claim => claim.key === input.key && claim.previewDigest === input.previewDigest);
     const accepted = records(run.checkpoint).find(entry => entry.key === input.key && entry.assetId);
@@ -80,7 +82,7 @@ export const bindImportMediaBytes = defineService({
   output: importMediaReceiptSchema,
   handler: async (input, ctx) => {
     requireCommit(ctx);
-    const run = await lockedRun(ctx, input.runId); snapshot(run, input.previewDigest); planned(run, input.key);
+    const run = await lockedRun(ctx, input.runId); await snapshot(ctx, run, input.previewDigest); planned(run, input.key);
     const all = claims(run.checkpoint), claim = all.find(entry => entry.key === input.key && entry.token === input.token && entry.previewDigest === input.previewDigest);
     if (run.status !== "previewed" || !claim || (claim.digest && claim.digest !== input.digest) || (claim.bytes !== undefined && claim.bytes !== input.bytes)) throw new ServiceError("conflict", "This import file claim changed or its source bytes differ.");
     await bindImportBatchMedia(ctx, input.key, input.digest, input.bytes);
@@ -92,7 +94,7 @@ export const bindImportMediaBytes = defineService({
 
 async function verify(ctx: ServiceContext, input: ImportMediaReceipt, checksum: string, bytes: number) {
   requireCommit(ctx);
-  const run = await lockedRun(ctx, input.runId); snapshot(run, input.previewDigest);
+  const run = await lockedRun(ctx, input.runId); await snapshot(ctx, run, input.previewDigest);
   const item = planned(run, input.key);
   if (checksum !== input.digest || bytes !== input.bytes) throw new ServiceError("conflict", "The uploaded bytes differ from their import receipt.");
   const accepted = records(run.checkpoint).find(entry => entry.key === input.key && entry.assetId);

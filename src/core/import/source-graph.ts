@@ -9,7 +9,9 @@ import { importRuns, importSourceEntries, importSourceGraphs } from "@/core/plug
 import { actorString, defineService, ServiceError } from "@/core/service";
 import { makeRetainedImportSource, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import { assertSourceStageable } from "./source-lifecycle";
-import { wxrIndexCursorSchema, wxrIndexedEntrySchema, wxrHeaderMetadataSchema } from "./wxr-index";
+import { wxrIndexCursorSchema } from "./wxr-index";
+import { archiveIndexCursorSchema } from "./archive-index";
+import { sourceGraphCursorSchema, sourceGraphEntrySchema, sourceGraphHeaderSchema } from "./source-index-contract";
 import { assertCurrentImportAuthority } from "./authority";
 import { markImportGraphWriter } from "./graph-writer";
 import { importGraphVersionSchema } from "./graph-version";
@@ -27,13 +29,13 @@ export const claimWxrGraph = defineService({
   kind: "mutation", permission: "scoped", external: false,
   auditInputFields: ["id", "uploadId", "initialize"],
   input: z.object({ id: z.uuid(), uploadId: z.uuid(), initialize: z.boolean().default(false) }),
-  output: z.object({ graphId: z.uuid(), generation: z.uuid(), planRevision: z.number().int().positive(), leaseToken: z.uuid().nullable(), cursor: wxrIndexCursorSchema, source: retainedImportSourceSchema, initialized: z.boolean() }),
+  output: z.object({ graphId: z.uuid(), generation: z.uuid(), planRevision: z.number().int().positive(), leaseToken: z.uuid().nullable(), cursor: sourceGraphCursorSchema, source: retainedImportSourceSchema, initialized: z.boolean() }),
   handler: async (input, ctx) => {
     await assertCurrentImportAuthority(ctx, "imports.previewFromUpload");
     await lockContactIdentityForRead(ctx.tx);
     await markImportGraphWriter(ctx.tx);
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
-    if (!run || !["wordpress-wxr", "wordpress-rest"].includes(run.kind ?? "")) throw new ServiceError("not_found", "No such WordPress import.");
+    if (!run || !["wordpress-wxr", "wordpress-rest", "archive"].includes(run.kind ?? "")) throw new ServiceError("not_found", "No such resumable source import.");
     const checkpoint = object(run.checkpoint), upload = uploadSchema.safeParse(checkpoint.sourceUpload);
     if (!upload.success || upload.data.uploadId !== input.uploadId || upload.data.received.length !== Math.ceil(upload.data.bytes / upload.data.chunkBytes) || upload.data.received.some((index, at) => index !== at) || Date.parse(upload.data.expiresAt) <= Date.now()) throw new ServiceError("conflict", "The complete immutable source upload is no longer available.");
     const source = makeRetainedImportSource(run.id, upload.data);
@@ -42,7 +44,7 @@ export const claimWxrGraph = defineService({
     if (!graph) {
       if (!input.initialize) throw new ServiceError("conflict", "This import has no resumable source graph.");
       assertSourceStageable(run, true);
-      const generation = randomUUID(), cursor = wxrIndexCursorSchema.parse({ nextByte: 0, ordinal: 0, bodyBytes: 0, metadataBytes: 0, header: null });
+      const generation = randomUUID(), cursor = run.kind === "archive" ? archiveIndexCursorSchema.parse({ format: "archive-zip", directoryFingerprint: null, nextByte: 0, ordinal: 0, bodyBytes: 0, metadataBytes: 0 }) : wxrIndexCursorSchema.parse({ nextByte: 0, ordinal: 0, bodyBytes: 0, metadataBytes: 0, header: null });
       [graph] = await ctx.tx.insert(importSourceGraphs).values({ runId: run.id, generation, sourceRevision: source.revision, sourceStartedAt: new Date(Date.parse(source.expiresAt) - 24 * 60 * 60 * 1000), cursor }).returning();
       if (!graph) throw new ServiceError("internal", "The import source graph could not be reserved.");
       checkpoint.retainedSource = source;
@@ -57,7 +59,7 @@ export const claimWxrGraph = defineService({
     const leaseToken = randomUUID();
     await ctx.tx.update(importSourceGraphs).set({ leaseToken, leaseActor: actorString(ctx.actor), leaseUntil: new Date(Date.now() + 120_000), updatedAt: new Date() }).where(eq(importSourceGraphs.id, graph.id));
     ctx.setSubject("import_run", run.id);
-    return { graphId: graph.id, generation: graph.generation, planRevision: graph.planRevision, leaseToken, cursor: wxrIndexCursorSchema.parse(graph.cursor), source, initialized: false };
+    return { graphId: graph.id, generation: graph.generation, planRevision: graph.planRevision, leaseToken, cursor: sourceGraphCursorSchema.parse(graph.cursor), source, initialized: false };
   },
 });
 
@@ -65,7 +67,7 @@ export const applyWxrIndex = defineService({
   name: "imports.applySourceGraphIndex", orchestratedBy: "imports.previewFromUpload",
   summary: "Atomically accept a verified source-index phase and release its exact lease.",
   kind: "mutation", permission: "scoped", external: false, auditInputFields: ["id", "graphId", "done"],
-  input: z.object({ id: z.uuid(), graphId: z.uuid(), generation: z.uuid(), leaseToken: z.uuid(), source: retainedImportSourceSchema, previous: wxrIndexCursorSchema, cursor: wxrIndexCursorSchema, entries: wxrIndexedEntrySchema.array().max(500), done: z.boolean(), headerMetadata: wxrHeaderMetadataSchema }),
+  input: z.object({ id: z.uuid(), graphId: z.uuid(), generation: z.uuid(), leaseToken: z.uuid(), source: retainedImportSourceSchema, previous: sourceGraphCursorSchema, cursor: sourceGraphCursorSchema, entries: sourceGraphEntrySchema.array().max(500), done: z.boolean(), headerMetadata: sourceGraphHeaderSchema }),
   output: reply,
   handler: async (input, ctx) => {
     await assertCurrentImportAuthority(ctx, "imports.previewFromUpload");
@@ -74,15 +76,20 @@ export const applyWxrIndex = defineService({
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     const [graph] = await ctx.tx.select().from(importSourceGraphs).where(and(eq(importSourceGraphs.id, input.graphId), eq(importSourceGraphs.runId, input.id))).limit(1).for("update");
     const retained = run && retainedSourceFromRun(run), binding = bindingSchema.safeParse(object(run?.checkpoint).sourceGraph);
-    if (!run || run.status !== "discover" || !graph || graph.state !== "indexing" || graph.generation !== input.generation || graph.leaseToken !== input.leaseToken || graph.leaseActor !== actorString(ctx.actor) || !graph.leaseUntil || graph.leaseUntil.getTime() <= Date.now() || !binding.success || binding.data.id !== graph.id || binding.data.generation !== graph.generation || retained?.uploadId !== input.source.uploadId || retained.revision !== input.source.revision || retained.expiresAt !== input.source.expiresAt || Date.parse(retained.expiresAt) <= Date.now() || graph.sourceRevision !== input.source.revision || JSON.stringify(wxrIndexCursorSchema.parse(graph.cursor)) !== JSON.stringify(input.previous)) throw new ServiceError("conflict", "This source phase lost its original source, caller or lease. Reload before retrying.");
+    if (!run || run.status !== "discover" || !graph || graph.state !== "indexing" || graph.generation !== input.generation || graph.leaseToken !== input.leaseToken || graph.leaseActor !== actorString(ctx.actor) || !graph.leaseUntil || graph.leaseUntil.getTime() <= Date.now() || !binding.success || binding.data.id !== graph.id || binding.data.generation !== graph.generation || retained?.uploadId !== input.source.uploadId || retained.revision !== input.source.revision || retained.expiresAt !== input.source.expiresAt || Date.parse(retained.expiresAt) <= Date.now() || graph.sourceRevision !== input.source.revision || JSON.stringify(sourceGraphCursorSchema.parse(graph.cursor)) !== JSON.stringify(input.previous)) throw new ServiceError("conflict", "This source phase lost its original source, caller or lease. Reload before retrying.");
     if (Buffer.byteLength(JSON.stringify(input.headerMetadata)) > 1024 * 1024 || (Object.keys(object(graph.headerMetadata)).length && archivePreviewDigest(graph.headerMetadata) !== archivePreviewDigest(input.headerMetadata))) throw new ServiceError("conflict", "The original source header metadata changed or exceeds its graph budget.");
+    if (run.kind === "archive") {
+      const origin = new URL(run.origin!); if (!origin.pathname.endsWith("/")) origin.pathname += "/";
+      if (input.headerMetadata.format !== "archive-zip" || input.previous.format !== "archive-zip" || input.cursor.format !== "archive-zip" || input.headerMetadata.origin !== origin.href || input.cursor.directoryFingerprint !== input.headerMetadata.directoryFingerprint || (input.previous.directoryFingerprint !== null && input.previous.directoryFingerprint !== input.cursor.directoryFingerprint) || (input.done !== (input.cursor.ordinal === input.headerMetadata.files))) throw new ServiceError("conflict", "The ZIP phase lost its original directory or approved site.");
+    } else if (input.headerMetadata.format !== undefined || input.previous.format !== undefined || input.cursor.format !== undefined) throw new ServiceError("conflict", "The source format changed during indexing.");
     let next = input.previous.ordinal, end = input.previous.nextByte;
     let bodyBytes = input.previous.bodyBytes, metadataBytes = input.previous.metadataBytes;
     for (const entry of input.entries) {
+      if (entry.metadata.format !== (run.kind === "archive" ? "archive-zip" : undefined) || Buffer.byteLength(JSON.stringify(entry.metadata)) > 16_384) throw new ServiceError("validation", "The original entry format or metadata exceeds its source graph contract.");
       if (entry.ordinal !== next || entry.start < end || entry.end <= entry.start || entry.end > input.source.bytes) throw new ServiceError("conflict", "The indexed source ranges are not consecutive original entries.");
       next++; end = entry.end; bodyBytes += entry.bodyBytes; metadataBytes += Buffer.byteLength(JSON.stringify(entry.metadata));
     }
-    if (input.cursor.ordinal !== next || input.cursor.bodyBytes !== bodyBytes || input.cursor.metadataBytes !== metadataBytes || input.cursor.nextByte !== (input.done ? input.source.bytes : end) || (!input.done && !input.entries.length) || (input.previous.header && JSON.stringify(input.previous.header) !== JSON.stringify(input.cursor.header))) throw new ServiceError("conflict", "The indexed source cursor does not match the bounded phase.");
+    if (input.cursor.ordinal !== next || input.cursor.bodyBytes !== bodyBytes || input.cursor.metadataBytes !== metadataBytes || input.cursor.nextByte !== (input.done ? input.source.bytes : end) || (!input.done && !input.entries.length) || (input.previous.format !== "archive-zip" && input.cursor.format !== "archive-zip" && input.previous.header && JSON.stringify(input.previous.header) !== JSON.stringify(input.cursor.header))) throw new ServiceError("conflict", "The indexed source cursor does not match the bounded phase.");
     const seen = new Set(input.entries.map(entry => entry.identity));
     if (seen.size !== input.entries.length || (seen.size && (await ctx.tx.select({ id: importSourceEntries.id }).from(importSourceEntries).where(and(eq(importSourceEntries.graphId, graph.id), inArray(importSourceEntries.sourceIdentity, [...seen]))).limit(1)).length)) throw new ServiceError("validation", "The source repeats an entity identity. Review the export before importing it.");
     const usedTargets = new Set((await ctx.tx.select({ slug: importSourceEntries.targetSlug }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graph.id))).flatMap(row => row.slug === null ? [] : [row.slug]));
@@ -100,13 +107,13 @@ export const applyWxrIndex = defineService({
     await ctx.tx.update(importSourceGraphs).set({ cursor: input.cursor, headerMetadata: input.headerMetadata, state: input.done ? "indexed" : "indexing", leaseToken: null, leaseActor: null, leaseUntil: null, updatedAt: new Date() }).where(eq(importSourceGraphs.id, graph.id));
     const counts = await ctx.tx.select({ kind: importSourceEntries.kind, total: sql<number>`count(*)::int` }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graph.id)).groupBy(importSourceEntries.kind);
     const total = (kind: string) => counts.find(row => row.kind === kind)?.total ?? 0;
-    const summary = { indexed: input.cursor.ordinal, pages: total("page"), posts: total("post"), media: total("attachment"), menus: total("menu"), skipped: total("skipped") };
+    const summary = { ...(run.kind === "archive" ? { filesNotImported: total("skipped") } : {}), indexed: input.cursor.ordinal, pages: total("page"), posts: total("post"), media: total("attachment"), menus: total("menu"), skipped: total("skipped") };
     const checkpoint = object(run.checkpoint);
-    checkpoint.readerSourceSite = canonicalReaderSite({ kind: run.kind, origin: run.origin, site: input.headerMetadata.site.url });
+    if (input.headerMetadata.format !== "archive-zip") checkpoint.readerSourceSite = canonicalReaderSite({ kind: run.kind, origin: run.origin, site: input.headerMetadata.site.url });
     // The upload reservation remains until the whole graph is accepted. The
     // retained descriptor keeps the same original objects available later.
     if (input.done) delete checkpoint.sourceUpload;
-    await ctx.tx.update(importRuns).set({ status: input.done ? "previewed" : "discover", error: null, counts: summary, checkpoint, preview: input.done ? { sourceFormat: run.kind === "wordpress-rest" ? "durable-wordpress-rest" : "durable-wxr", graphId: graph.id, generation: graph.generation, sourceRevision: graph.sourceRevision, planRevision: graph.planRevision, version: 1 } : {} }).where(eq(importRuns.id, run.id));
+    await ctx.tx.update(importRuns).set({ status: input.done ? "previewed" : "discover", error: null, counts: summary, checkpoint, preview: input.done ? { sourceFormat: run.kind === "archive" ? "durable-archive" : run.kind === "wordpress-rest" ? "durable-wordpress-rest" : "durable-wxr", graphId: graph.id, generation: graph.generation, sourceRevision: graph.sourceRevision, planRevision: graph.planRevision, version: 1 } : {} }).where(eq(importRuns.id, run.id));
     ctx.setSubject("import_run", run.id);
     return { id: run.id, status: input.done ? "previewed" : "discover", error: null, counts: summary, graph: { generation: graph.generation, sourceRevision: graph.sourceRevision, planRevision: graph.planRevision } };
   },
