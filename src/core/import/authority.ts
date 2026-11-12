@@ -11,7 +11,7 @@ import { permits, ServiceError, type Actor, type ServiceContext, type Permission
 const checked = new WeakMap<object, WeakMap<Actor, Actor>>();
 
 /** Original audit actor stays unchanged; this is an additional refusal fence. */
-async function currentAuthority(ctx: ServiceContext): Promise<Actor> {
+export async function currentImportAuthority(ctx: ServiceContext): Promise<Actor> {
   const actor = ctx.actor;
   const cached = checked.get(ctx.tx)?.get(actor);
   if (cached) return cached;
@@ -47,7 +47,7 @@ async function currentAuthority(ctx: ServiceContext): Promise<Actor> {
 
 export async function assertCurrentImportAuthority(ctx: ServiceContext, parent: string, kind: "query" | "mutation" = "mutation", permission: Permission = "scoped"): Promise<void> {
   try {
-    const current = await currentAuthority(ctx);
+    const current = await currentImportAuthority(ctx);
     if (!permits(current, permission, parent, kind)) throw new ServiceError("permission", "The original caller no longer has permission to advance this import.");
   }
   catch (error) {

@@ -92,6 +92,10 @@ function tablesReferencingContacts(): Array<{
  * an escape hatch — the assertion below fails on any *undocumented* column.
  */
 const DELIBERATE_MERGE_EXCLUSIONS: Record<string, string> = {
+  "import_reader_merge_items.before_contact_id":
+    "Normalized immutable merge witness: the original pre-merge subject must survive duplicate deletion so exact undo can restore it. Current ownership is repointed through import_reader_ownership_receipts.contact_id.",
+  "import_reader_merge_items.after_contact_id":
+    "The accepted post-merge subject is immutable comparison evidence. Repointing this witness would hide later ownership changes and make unsafe undo appear valid; the reader privacy source owns these minimal historical records.",
   "contact_merge_operations.surviving_contact_id":
     "The merge ledger is an immutable audit snapshot: rewriting who merged into whom would falsify history, and undo reads these ids as they were.",
   "contact_merge_operations.duplicate_contact_id":

@@ -17,8 +17,10 @@ import { blogPosts } from "./blog-schema";
 import { blogReaderComments as comments } from "./blog-comments-schema";
 import { isPublicPage, loadBlogSettings } from "./blog-service";
 import { markReaderOwnershipWriter } from "@/core/import/reader-ownership-key";
-import { acceptReaderOwnership, assertOriginalReaderPayload } from "@/core/import/reader-ownership";
+import { acceptReaderOwnership, assertOriginalReaderPayload, readerOwnershipForComment } from "@/core/import/reader-ownership";
 import { importRuns } from "@/core/plugins/schema";
+import { dataRequests } from "@/core/privacy/schema";
+import { withoutPrivacyHold } from "@/core/retention/holds";
 
 const state = z.enum(["pending", "approved", "spam", "trash"]);
 const privateRow = row({ id: uuid, pageId: uuid, parentId: uuid.nullable(), contactId: uuid.nullable(), authorName: z.string(), body: z.string(), status: state, source: z.string(), externalId: z.string().nullable(), createdAt: timestamp, updatedAt: timestamp });
@@ -60,7 +62,12 @@ export const listReaderComments = defineService({
   handler: async (input, ctx) => {
     const [page] = await ctx.tx.select({ id: pages.id, slug: pages.slug }).from(pages).innerJoin(blogPosts, eq(blogPosts.pageId, pages.id)).where(and(eq(pages.id, input.pageId), eq(pages.status, "published"), isNull(pages.trashedAt))).limit(1);
     if (!page || !await isPublicPage(ctx, page)) return [];
-    return ctx.tx.select({ id: comments.id, parentId: comments.parentId, authorName: comments.authorName, body: comments.body, createdAt: comments.createdAt }).from(comments).where(and(eq(comments.pageId, page.id), eq(comments.status, "approved"))).orderBy(asc(comments.createdAt), asc(comments.id)).limit(input.limit).offset((input.page - 1) * input.limit);
+    // A legal hold keeps evidence private; it does not authorize continued
+    // publication after an erasure has started or been acknowledged.
+    return ctx.tx.select({ id: comments.id, parentId: comments.parentId, authorName: comments.authorName, body: comments.body, createdAt: comments.createdAt }).from(comments).where(and(eq(comments.pageId, page.id), eq(comments.status, "approved"), sql`not exists (
+      select 1 from ${dataRequests} where ${dataRequests.contactId}=${comments.contactId}
+        and ${dataRequests.kind}='erasure' and ${dataRequests.status} in ('in_progress','completed','partially_completed')
+    )`, sql`not exists(select 1 from ${contacts} where ${contacts.id}=${comments.contactId} and ${contacts.source}='privacy-erasure')`)).orderBy(asc(comments.createdAt), asc(comments.id)).limit(input.limit).offset((input.page - 1) * input.limit);
   },
 });
 
@@ -122,7 +129,10 @@ export const importReaderComment = defineService({
     const separator = input.externalId.lastIndexOf(":"), postKey = input.externalId.slice(0, separator), commentKey = input.externalId.slice(separator + 1);
     if (!original || separator < 1 || !commentKey) throw new ServiceError("conflict", "Stage the original reader source before importing this comment.");
     assertOriginalReaderPayload(original, postKey, commentKey, input);
-    const bound = input.sourceContactId ? (await ctx.tx.select({ id: contacts.id, source: contacts.source }).from(contacts).where(eq(contacts.id, input.sourceContactId)).limit(1))[0] : undefined;
+    const ownership = await readerOwnershipForComment(ctx.tx, original, postKey, commentKey);
+    if (input.sourceContactId && ownership.contactId !== input.sourceContactId) throw new ServiceError("conflict", "This comment's supplied identity differs from its original reader owner.");
+    const boundId = ownership.contactId;
+    const bound = boundId ? (await ctx.tx.select({ id: contacts.id, source: contacts.source }).from(contacts).where(eq(contacts.id, boundId)).limit(1))[0] : undefined;
     if (bound?.source === "privacy-erasure") throw new ServiceError("conflict", "That reader was erased. Review the original source before importing comments.");
     if (input.sourceContactId && !bound) throw new ServiceError("conflict", "The imported reader's contact changed. Review the source before importing this comment.");
     const resolved = !bound && input.email ? await ctx.callAsSystem(resolveContact, { name: input.name, email: input.email, source: "wordpress-comment" }) : null;
@@ -138,6 +148,10 @@ export const importReaderComment = defineService({
 export const rollbackImportedReaderComments = defineService({
   name: "cms.rollbackImportedReaderComments", summary: "Remove only the reader comments created by one rolled-back import; unified contacts are retained.",
   kind: "mutation", permission: "scoped", writeClass: "destructive", input: z.object({ runId: uuid }), output: z.object({ removed: z.number().int() }),
-  handler: async (input, ctx) => { await markReaderOwnershipWriter(ctx.tx); return { removed: (await ctx.tx.delete(comments).where(eq(comments.source, `import:${input.runId}`)).returning({ id: comments.id })).length }; },
+  handler: async (input, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
+    await markReaderOwnershipWriter(ctx.tx);
+    return { removed: (await ctx.tx.delete(comments).where(and(eq(comments.source, `import:${input.runId}`), withoutPrivacyHold(comments.contactId, "cms.readerComments"))).returning({ id: comments.id })).length };
+  },
 });
 export default [listReaderComments, submitReaderComment, moderateReaderComment, listReaderCommentsForOwner, importReaderComment, rollbackImportedReaderComments];

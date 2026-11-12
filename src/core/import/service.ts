@@ -1212,6 +1212,7 @@ const commitApply = defineService({
       displacedRedirects,
       postSnapshots, pendingBlogPosts,
       ...(checkpointOf(before.preview).readerPrivacyVersion === 1 ? { readerPrivacyVersion: 1 } : {}),
+      ...(typeof checkpointOf(before.preview).readerSourceSite === "string" ? { readerSourceSite: checkpointOf(before.preview).readerSourceSite } : {}),
       landedPaths: landed.map(({ page, slug }) => ({ sourceUrl: page.url, path: slug, status: page.status ?? "publish", seo: page.seo ?? {} })),
       legacyAliases: [
         ...archiveAliases,
@@ -1354,6 +1355,7 @@ export const rollbackImport = defineService({
     for (const snapshot of replacedPagesFrom(before.checkpoint)) {
       await restoreReplacedPage(ctx, snapshot);
     }
+    const keptPages: string[] = [];
     for (const id of createdPageIdsFrom(before.checkpoint)) {
       try {
         await callImportService(ctx, getService("cms.publishPage"), { id, published: false });
@@ -1366,6 +1368,7 @@ export const rollbackImport = defineService({
         if (!(error instanceof ServiceError) || (error.code !== "not_found" && error.code !== "conflict")) {
           throw error;
         }
+        if (error.code === "conflict") keptPages.push(id);
       }
     }
     for (const snapshot of Array.isArray(checkpoint.postSnapshots) ? checkpoint.postSnapshots : []) {
@@ -1412,7 +1415,7 @@ export const rollbackImport = defineService({
       media: [],
       pendingBlogPosts: [],
       mediaClaims: [],
-      rolledBack: { keptMedia, fromStatus: before.status },
+      rolledBack: { keptMedia, keptPages, fromStatus: before.status },
     });
     await releaseImportSources(ctx, before, next);
     const [row] = await ctx.tx

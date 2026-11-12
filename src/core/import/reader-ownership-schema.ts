@@ -22,7 +22,7 @@ export const readerOwnershipReceipts = pgTable("import_reader_ownership_receipts
   createdBy: text("created_by").notNull(),
   createdByKeyId: uuid("created_by_key_id"),
   contactId: uuid("contact_id").references(() => contacts.id),
-  state: text("state", { enum: ["unbound", "bound", "erased"] }).notNull(),
+  state: text("state", { enum: ["unbound", "review", "bound", "erased"] }).notNull(),
   createdAt: createdAtColumn(), updatedAt: updatedAtColumn(),
 }, table => [
   uniqueIndex("import_reader_source_unique").on(table.sourceDigest),
@@ -30,7 +30,7 @@ export const readerOwnershipReceipts = pgTable("import_reader_ownership_receipts
   index("import_reader_address_idx").on(table.addressDigest),
   check("import_reader_source_digest", sql`${table.sourceDigest} ~ '^[a-f0-9]{64}$'`),
   check("import_reader_address_digest", sql`${table.addressDigest} is null or ${table.addressDigest} ~ '^[a-f0-9]{64}$'`),
-  check("import_reader_owner_state", sql`${table.state} in ('unbound','bound','erased') and ((${table.state} = 'unbound') = (${table.contactId} is null))`),
+  check("import_reader_owner_state", sql`${table.state} in ('unbound','review','bound','erased') and ((${table.state} in ('unbound','review')) = (${table.contactId} is null))`),
 ]);
 
 // These are historical subject UUIDs, deliberately without contact FKs: a

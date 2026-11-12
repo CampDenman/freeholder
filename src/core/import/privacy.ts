@@ -19,7 +19,7 @@ import { z } from "zod";
 import { assertImportBatchAccess } from "./batch-context";
 import { invalidateImportGraph } from "./graph-state";
 import { markGraphRunWriter } from "./graph-writer";
-import { bindOwnedReaderSources, type ReaderSourceContext } from "./reader-ownership";
+import { bindOwnedReaderSources, canonicalReaderSite, type ReaderSourceContext } from "./reader-ownership";
 import { markReaderOwnershipWriter } from "./reader-ownership-key";
 
 type Run = typeof importRuns.$inferSelect;
@@ -41,7 +41,9 @@ export async function bindReaderSources(tx: Tx, preview: unknown, source: Reader
   await lockContactIdentityForRead(tx);
   await markReaderOwnershipWriter(tx);
   const copy = structuredClone(object(preview));
-  return bindOwnedReaderSources(tx, copy, source, actor);
+  const hasReaders = items(copy.pages).some(page => items(page.readerComments).length > 0);
+  if (hasReaders) copy.readerSourceSite = canonicalReaderSite({ kind: source.kind, origin: source.origin, preview: copy });
+  return bindOwnedReaderSources(tx, copy, { ...source, ...(hasReaders ? { site: String(copy.readerSourceSite) } : {}) }, actor);
 }
 
 export class ReaderSourceErasureError extends ServiceError {
@@ -108,8 +110,8 @@ export function publicImportRun(run: Run): Run {
       const entry = object(row);
       if (!Array.isArray(entry[readers])) return row;
       return { ...entry, [readers]: entry[readers].map((comment: unknown) => {
-        if (!Object.hasOwn(object(comment), "contactId")) return comment;
-        const copy = { ...object(comment) }; delete copy.contactId; return copy;
+        if (!Object.hasOwn(object(comment), "contactId") && !Object.hasOwn(object(comment), "readerOwnershipReviewRequired")) return comment;
+        const copy = { ...object(comment) }; delete copy.contactId; delete copy.readerOwnershipReviewRequired; return copy;
       }) };
     }) };
   };

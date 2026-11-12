@@ -4,13 +4,16 @@ import { z } from "zod";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Card, CardBody, CardHeader, Pill } from "@/ui/primitives";
+import { Button, Card, CardBody, CardHeader, Field, Input, Pill } from "@/ui/primitives";
 import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { listImports } from "@/core/import/service";
 import { ImportStepForms } from "../ImportForms";
 import { GraphImportControls } from "../GraphImportControls";
 import { sourceGraphReview } from "@/core/import/graph-query";
+import { readerOwnershipReview } from "@/core/import/reader-ownership-review";
+import { listContacts } from "@/core/contacts/service";
+import { ReaderOwnershipForm } from "../ReaderOwnershipForm";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -20,7 +23,7 @@ export default async function ImportRunPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ after?: string; mediaAfter?: string }>;
+  searchParams: Promise<{ after?: string; mediaAfter?: string; readersAfter?: string; readerContact?: string }>;
 }) {
   const { id } = await params;
   const actor = await requireStaffActor("platform");
@@ -30,6 +33,8 @@ export default async function ImportRunPage({
   const counts = run.counts && typeof run.counts === "object" ? (run.counts as Record<string, unknown>) : {};
   const checkpoint = run.checkpoint && typeof run.checkpoint === "object" ? run.checkpoint as Record<string, unknown> : {};
   const search = await searchParams;
+  const readers = actor.kind === "user" && actor.role === "owner" && ["wordpress-wxr", "wordpress-rest"].includes(run.kind ?? "") ? await readerOwnershipReview.call({ id, after: typeof search.readersAfter === "string" && search.readersAfter.length <= 260 ? search.readersAfter : "" }, actor) : null;
+  const readerContacts = readers?.rows.length ? await listContacts.call({ search: typeof search.readerContact === "string" ? search.readerContact.slice(0, 200) : undefined, limit: 50 }, actor) : null;
   const after = z.coerce.number().int().min(-1).max(9_999).safeParse(search.after ?? -1);
   const graph = checkpoint.sourceGraph ? await sourceGraphReview.call({ id, afterOrdinal: after.success ? after.data : -1, afterMediaKey: typeof search.mediaAfter === "string" && search.mediaAfter.length <= 4_096 ? search.mediaAfter : "" }, actor) : null;
   const rollback = checkpoint.rolledBack && typeof checkpoint.rolledBack === "object" ? checkpoint.rolledBack as Record<string, unknown> : {};
@@ -81,6 +86,30 @@ export default async function ImportRunPage({
         <h1 className="mt-2 break-all text-xl font-bold tracking-tight">{run.source}</h1>
         <Pill tone="neutral">{t(`imports.status.${run.status}`)}</Pill>
       </div>
+      {run.status === "rolled_back" && Array.isArray(rollback.keptPages) && rollback.keptPages.length > 0 ? <p role="status" className="break-words text-sm text-ink-muted">{t("imports.rollbackRetainedPages")}</p> : null}
+      {readers && (readers.rows.length > 0 || readers.next) ? <Card>
+        <CardHeader title={t("imports.readers.title")} />
+        <CardBody>
+          <div className="grid min-w-0 gap-5">
+            <p className="text-sm text-ink-muted">{t("imports.readers.intro")}</p>
+            <form method="get" className="flex min-w-0 flex-wrap items-end gap-3">
+              <input type="hidden" name="readersAfter" value={search.readersAfter ?? ""} />
+              <div className="min-w-0 flex-1"><Field htmlFor="reader-contact-search" label={t("imports.readers.find")}>
+                <Input id="reader-contact-search" name="readerContact" maxLength={200} defaultValue={search.readerContact ?? ""} />
+              </Field></div>
+              <Button type="submit">{t("imports.readers.find")}</Button>
+              <Link href="/admin/contacts/new" className="text-sm text-accent underline">{t("imports.readers.create")}</Link>
+            </form>
+            <ol className="grid min-w-0 list-none gap-5 p-0">{readers.rows.map(reader => <li key={reader.receiptId} className="grid min-w-0 gap-3 rounded-md border border-rule p-3">
+              <p className="break-words font-medium">{reader.name}</p>
+              {reader.email ? <p className="min-w-0 break-all text-sm"><bdi dir="ltr">{reader.email}</bdi></p> : null}
+              <p className="break-words text-sm text-ink-muted">{reader.excerpt}</p>
+              <ReaderOwnershipForm id={id} reader={reader} contacts={(readerContacts?.rows ?? []).filter(contact => contact.source !== "privacy-erasure").map(contact => ({ id: contact.id, name: contact.name, email: contact.email }))} labels={{ person: t("imports.readers.person"), choose: t("imports.readers.choose"), confirm: t("imports.readers.confirm"), submit: t("imports.readers.submit") }} />
+            </li>)}</ol>
+            {readers.next ? <Link href={`/admin/imports/${id}?readersAfter=${encodeURIComponent(readers.next)}`} className="text-sm text-accent underline">{t("imports.readers.next")}</Link> : null}
+          </div>
+        </CardBody>
+      </Card> : null}
       <Card>
         <CardHeader title={t("imports.progress")} />
         <CardBody>

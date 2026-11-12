@@ -5,15 +5,21 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { users, totpFactors, sessions } from "@/core/auth/schema";
+import { createSession } from "@/core/auth/sessions";
+import { actorFromToken } from "@/core/http/actor";
 import { db } from "@/core/db";
 import { importRuns } from "@/core/plugins/schema";
 import { mergeContacts, resolveContact, undoContactMerge, updateContact } from "@/core/contacts/service";
 import { contactMergeOperations, contacts } from "@/core/contacts/schema";
-import { previewFromSource, startImport } from "@/core/import/service";
+import { commitImport, previewFromSource, publishImport, reconcileImport, rollbackImport, startImport } from "@/core/import/service";
+import { readerOwnershipReview, resolveReaderOwnership } from "@/core/import/reader-ownership-review";
 import { readerOwnershipReceipts } from "@/core/import/reader-ownership-schema";
 import { addRetentionException, contactPrivacySources, createDataRequest, fulfillDataRequest, verifyDataRequest } from "@/core/privacy/service";
 import { ensureDefaults } from "@/modules/cms/service";
-import { OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
+import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
+import { listReaderComments } from "@/modules/cms/blog-comments";
+import { ANONYMOUS, OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
 
 const EMAIL = "original-reader@example.test";
 const SOURCE = `<rss xmlns:wp="urn:wordpress" xmlns:content="urn:content"><channel><link>https://fictional-reader-source.example</link><item><title>Original source article</title><link>https://fictional-reader-source.example/original-article</link><wp:post_id>10</wp:post_id><wp:post_type>post</wp:post_type><wp:status>publish</wp:status><content:encoded><![CDATA[<p>Ordinary article text.</p>]]></content:encoded><wp:comment><wp:comment_id>20</wp:comment_id><wp:comment_author>Original reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Original reader's unchanged comment.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment></item></channel></rss>`;
@@ -27,6 +33,35 @@ async function boundReader(id: string) {
   const [run] = await db().select().from(importRuns).where(eq(importRuns.id, id));
   const preview = z.object({ pages: z.array(z.object({ readerComments: z.array(z.object({ contactId: z.uuid().optional() })) })) }).parse(run?.preview);
   return preview.pages[0]?.readerComments[0]?.contactId;
+}
+async function verifiedOwner() {
+  await db().insert(users).values({ id: OWNER.userId, email: "fixture-source-owner@example.test", role: "owner" });
+  await db().insert(totpFactors).values({ userId: OWNER.userId, encryptedSecret: "fixture-only-source-owner-factor" });
+  const session = await db().transaction(tx => createSession(tx, OWNER.userId, { twoFactorVerified: true }));
+  const actor = await actorFromToken(session.token);
+  if (actor.kind !== "user" || !actor.sessionId) throw new Error("The actual fixture owner session was not resolved.");
+  return actor;
+}
+async function ambiguousSource() {
+  const original = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
+  await updateContact.call({ id: original.id, email: "changed-reader@example.test" }, OWNER);
+  const later = (await resolveContact.call({ name: "Later email holder", email: EMAIL }, OWNER)).contact;
+  const id = await stage();
+  return { original, later, id };
+}
+async function publishedReader(held: boolean) {
+  const reader = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
+  const id = await stage();
+  await commitImport.call({ id }, OWNER); await reconcileImport.call({ id }, OWNER); await publishImport.call({ id }, OWNER);
+  const [comment] = await db().select().from(blogReaderComments);
+  if (!comment) throw new Error("The actual original comment was not published.");
+  if (held) {
+    const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, OWNER);
+    await verifyDataRequest.call({ id: request.id, method: "Fictional published reader verified" }, OWNER);
+    await addRetentionException.call({ dataRequestId: request.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Fictional published reader evidence" }, OWNER);
+    expect((await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER)).request.status).toBe("partially_completed");
+  }
+  return { id, comment };
 }
 
 describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)", () => {
@@ -128,5 +163,82 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     const runA = await stage(sourceA), runB = await stage(sourceB);
     expect(await boundReader(runA)).toBe(first.id);
     expect(await boundReader(runB)).toBe(second.id);
+  });
+
+  it("requires a verified human decision for unseen historical ambiguity, then commits the chosen original person", async () => {
+    const owner = await verifiedOwner();
+    const { original, later, id } = await ambiguousSource();
+    expect(await boundReader(id)).toBeUndefined();
+    expect((await db().select().from(readerOwnershipReceipts))[0]?.state).toBe("review");
+    const review = await readerOwnershipReview.call({ id }, owner);
+    expect(review.rows).toHaveLength(1);
+    expect(JSON.stringify(review)).not.toContain(original.id);
+    expect(JSON.stringify(review)).not.toContain(later.id);
+    await expect(commitImport.call({ id }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    const reader = review.rows[0]!;
+    await resolveReaderOwnership.call({ id, receiptId: reader.receiptId, postId: reader.postId, commentId: reader.commentId, contactId: original.id, confirmation: "ASSIGN ORIGINAL READER" }, owner);
+    expect((await readerOwnershipReview.call({ id }, owner)).rows).toHaveLength(0);
+    expect((await commitImport.call({ id }, OWNER)).status).toBe("committed");
+    expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([original.id]);
+  });
+
+  it("refuses agents, personal keys and stale verification without binding an ambiguous reader", async () => {
+    const owner = await verifiedOwner();
+    const { original, id } = await ambiguousSource();
+    const reader = (await readerOwnershipReview.call({ id }, owner)).rows[0]!;
+    const input = { id, receiptId: reader.receiptId, postId: reader.postId, commentId: reader.commentId, contactId: original.id, confirmation: "ASSIGN ORIGINAL READER" as const };
+    const agent = { kind: "agent" as const, keyName: "fixture-source-review-agent", scopes: ["imports.*", "contacts.get"] };
+    await expect(readerOwnershipReview.call({ id }, agent)).rejects.toMatchObject({ code: "permission" });
+    await expect(resolveReaderOwnership.call(input, agent)).rejects.toMatchObject({ code: "permission" });
+    await expect(resolveReaderOwnership.call(input, { ...owner, keyScopes: ["imports.resolveReaderOwnership"], sessionId: undefined })).rejects.toMatchObject({ code: "permission" });
+    await db().update(sessions).set({ stepUpAt: new Date("2020-01-01T00:00:00Z") }).where(eq(sessions.id, owner.sessionId!));
+    await expect(resolveReaderOwnership.call(input, owner)).rejects.toMatchObject({ code: "step_up_required" });
+    expect((await db().select().from(readerOwnershipReceipts))[0]?.state).toBe("review");
+  });
+
+  it("does not reveal CRM ownership or private review flags in an exact source-only preview", async () => {
+    const original = (await resolveContact.call({ email: EMAIL }, OWNER)).contact;
+    await updateContact.call({ id: original.id, email: "changed-reader@example.test" }, OWNER);
+    const later = (await resolveContact.call({ email: EMAIL }, OWNER)).contact;
+    const run = await startImport.call({ origin: "https://fictional-reader-source.example", kind: "wordpress-wxr" }, OWNER);
+    const visible = await previewFromSource.call({ id: run.id, payload: SOURCE }, { kind: "agent", keyName: "source-only-preview", scopes: ["imports.previewFromSource"] });
+    expect(JSON.stringify(visible)).not.toContain(original.id);
+    expect(JSON.stringify(visible)).not.toContain(later.id);
+    expect(JSON.stringify(visible)).not.toContain("readerOwnershipReviewRequired");
+    expect((await db().select().from(readerOwnershipReceipts))[0]?.state).toBe("review");
+  });
+
+  it("keeps a reviewed original reader when the different current email holder is erased before commit", async () => {
+    const owner = await verifiedOwner();
+    const { original, later, id } = await ambiguousSource();
+    const reader = (await readerOwnershipReview.call({ id }, owner)).rows[0]!;
+    await resolveReaderOwnership.call({ id, receiptId: reader.receiptId, postId: reader.postId, commentId: reader.commentId, contactId: original.id, confirmation: "ASSIGN ORIGINAL READER" }, owner);
+    const request = await createDataRequest.call({ contactId: later.id, request: { kind: "erasure" } }, OWNER);
+    await verifyDataRequest.call({ id: request.id, method: "Fictional different email holder verified" }, OWNER);
+    expect((await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER)).request.status).toBe("completed");
+    expect((await commitImport.call({ id }, OWNER)).status).toBe("committed");
+    expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([original.id]);
+  });
+
+  it("keeps a held published reader private after acknowledged erasure", async () => {
+    const { comment } = await publishedReader(true);
+    expect(await db().select().from(blogReaderComments).where(eq(blogReaderComments.id, comment.id))).toHaveLength(1);
+    expect(await listReaderComments.call({ pageId: comment.pageId }, ANONYMOUS)).toEqual([]);
+  });
+
+  it("keeps actual held comment evidence when its import is rolled back", async () => {
+    const { id, comment } = await publishedReader(true);
+    const rollback = await rollbackImport.call({ id }, OWNER);
+    expect(rollback.status).toBe("rolled_back");
+    expect(z.object({ rolledBack: z.object({ keptPages: z.array(z.uuid()) }) }).parse(rollback.checkpoint).rolledBack.keptPages).toEqual([comment.pageId]);
+    expect(await db().select().from(blogReaderComments).where(eq(blogReaderComments.id, comment.id))).toHaveLength(1);
+    expect(await listReaderComments.call({ pageId: comment.pageId }, ANONYMOUS)).toEqual([]);
+  });
+
+  it("still removes an unheld imported comment during ordinary rollback", async () => {
+    const { id, comment } = await publishedReader(false);
+    expect((await listReaderComments.call({ pageId: comment.pageId }, ANONYMOUS)).length).toBe(1);
+    expect((await rollbackImport.call({ id }, OWNER)).status).toBe("rolled_back");
+    expect(await db().select().from(blogReaderComments).where(eq(blogReaderComments.id, comment.id))).toHaveLength(0);
   });
 });
