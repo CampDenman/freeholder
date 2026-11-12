@@ -34,6 +34,7 @@ export const resolveProviderWebhookScope = defineService({
     if (candidates.length > 1) throw new ServiceError("conflict", "The authenticated subscription reference has ambiguous original platform ownership.");
     let original = candidates[0];
     let providerScheduleOperationId: string | undefined;
+    let expectedCustomer: string | undefined;
     const tagged = input.metadata.freeholder_subscription_scope_version === "1" || input.metadata.freeholder_subscription_operation_id !== undefined;
     const operationId = z.uuid().safeParse(input.metadata.freeholder_subscription_operation_id);
     const subscriptionId = z.uuid().safeParse(input.metadata.freeholder_subscription_id);
@@ -54,16 +55,34 @@ export const resolveProviderWebhookScope = defineService({
         || input.metadata.freeholder_schedule_api_version !== known.scope.providerScheduleApiVersion) throw new ServiceError("conflict", "The tagged operation does not match the original platform and charge namespace.");
       original = known;
       providerScheduleOperationId = operation.id;
+      const customer = z.string().regex(/^cus_[A-Za-z0-9]+$/).max(200).safeParse(operation.originalRequest.providerCustomerRef);
+      expectedCustomer = customer.success ? customer.data : undefined;
     }
     const scope = subscriptionMerchantScope.parse(original.scope);
     const [resource] = await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId, original.subscription.id)).limit(1);
     if (!resource) throw new ServiceError("conflict", "Restore this new agreement's original provider resource journal before applying feedback.");
+    if (!expectedCustomer) {
+      const operations = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, original.subscription.id)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
+      if (operations.length > 5000) throw new ServiceError("conflict", "The original customer lineage exceeds safe webhook recovery bounds.");
+      const customerReferences = new Set<string>();
+      for (const operation of operations) {
+        const history = Array.isArray(operation.providerObservation.history) ? operation.providerObservation.history : [];
+        const belongs = operation.originalRequest.providerSubscriptionRef === input.providerSubscriptionRef || history.some(entry => {
+          const parsed = z.record(z.string(), z.unknown()).safeParse(entry);
+          return parsed.success && parsed.data.providerSubscriptionRef === input.providerSubscriptionRef;
+        });
+        if (!belongs || !["create", "update", "resume"].includes(operation.kind)) continue;
+        const customer = z.string().regex(/^cus_[A-Za-z0-9]+$/).max(200).safeParse(operation.originalRequest.providerCustomerRef);
+        if (customer.success) customerReferences.add(customer.data);
+      }
+      if (customerReferences.size === 1) expectedCustomer = [...customerReferences][0];
+    }
     return { ...subscriptionChargeScope(scope), subscriptionId: original.subscription.id,
       providerPlatformAccountId: scope.providerPlatformAccountId, providerScheduleApiVersion: scope.providerScheduleApiVersion,
       providerSubscriptionRef: input.providerSubscriptionRef, providerScheduleOperationId,
-      // Only the matching canonical resource can supply this customer. Alternate
-      // late resources must prove their actual customer on the original scope.
-      providerCustomerRef: resource.providerSubscriptionRef === input.providerSubscriptionRef ? resource.providerCustomerRef ?? undefined : undefined };
+      // Expected customer comes from admitted immutable request lineage, never
+      // from a contradictory response or a later CRM/current-method lookup.
+      providerCustomerRef: expectedCustomer };
   },
 });
 

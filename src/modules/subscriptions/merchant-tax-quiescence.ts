@@ -55,7 +55,7 @@ export async function merchantTaxScheduleState(ctx: ServiceContext, profileId: s
       const receipt = receipts.find(row => row.providerPaymentIntentRef === observation.providerPaymentIntentRef);
       if (!receipt || receipt.providerPlatformAccountId !== observation.providerPlatformAccountId || receipt.chargeAccountId !== observation.chargeAccountId
         || receipt.providerSubscriptionRef !== observation.providerSubscriptionRef || receipt.providerInvoiceRef !== observation.providerInvoiceRef
-        || receipt.providerChargeRef !== observation.providerChargeRef || receipt.amountMinor !== observation.amountMinor || receipt.currency !== observation.currency) return { safe: false, external };
+        || (observation.providerChargeRef !== null && receipt.providerChargeRef !== observation.providerChargeRef) || receipt.amountMinor !== observation.amountMinor || receipt.currency !== observation.currency) return { safe: false, external };
     }
     for (const receipt of receipts) {
       if (!observations.some(observation => observation.providerPaymentIntentRef === receipt.providerPaymentIntentRef && observation.customerChargeVerified)) return { safe: false, external };

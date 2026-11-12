@@ -10,7 +10,8 @@ import { applyDestinationCharge, assertMerchantAttempt, assertMerchantIntent, me
 import { stripeMerchantFees } from "./stripe-merchant-fees";
 import { stripeCheckoutEvidence } from "./stripe-merchant-capture";
 import { proveStripeSubscriptionPayment } from "./stripe-subscription-origin";
-import { inspectOriginalStripeMerchantInvoices, pauseOriginalStripeMerchantSchedule, resolveOriginalStripeMerchantSchedule } from "./stripe-subscription-quiescence";
+import { collectOriginalStripeSubscriptionCash, originalSubscriptionInvoiceMetadata } from "./stripe-subscription-cash";
+import { cancelOriginalStripeMerchantSchedule, inspectOriginalStripeMerchantInvoices, pauseOriginalStripeMerchantSchedule, resolveOriginalStripeMerchantSchedule } from "./stripe-subscription-quiescence";
 import { inspectStripeMerchantPayment } from "./stripe-merchant-inspection";
 import { stripeMerchantRecovery } from "./stripe-merchant-recovery";
 import { stripeMerchantIntentRecovery } from "./stripe-merchant-intent-recovery";
@@ -499,6 +500,9 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     async pauseMerchantSchedule(request) {
       return pauseOriginalStripeMerchantSchedule(api, request, request);
     },
+    async cancelMerchantSchedule(request) {
+      return cancelOriginalStripeMerchantSchedule(api, request, request);
+    },
     async inspectMerchantScheduleInvoices(request) {
       return inspectOriginalStripeMerchantInvoices(api, request);
     },
@@ -794,6 +798,25 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       const parsed = object(payload);
       if (!parsed) throw new AdapterError("payments", "stripe", "invalid_request", "Stripe sent an invalid event.");
       let events = stripePaymentEvents(parsed);
+      const recurring = events.find((event): event is Extract<PaymentProviderEvent, { kind: "subscription_period_paid" | "subscription_period_failed" | "subscription_cancelled" }> => event.kind === "subscription_period_paid" || event.kind === "subscription_period_failed" || event.kind === "subscription_cancelled");
+      if (recurring) {
+        const source = object(object(parsed.data)?.object) ?? {};
+        const metadata = recurring.kind === "subscription_cancelled" ? object(source.metadata) ?? {} : originalSubscriptionInvoiceMetadata(source);
+        const tagged = metadata.freeholder_subscription_scope_version === "1" || metadata.freeholder_subscription_operation_id !== undefined;
+        // Resolve stored scope only AFTER exact-byte HMAC/timestamp checks and
+        // BEFORE the first financial resource read. No current-account fallback.
+        const original = await request.resolveSubscriptionScope?.({ providerSubscriptionRef: recurring.providerRef,
+          providerInvoiceRef: recurring.invoiceProviderRef, providerAccountId: recurring.providerAccountId, metadata });
+        if (tagged && !original) throw new AdapterError("payments", "stripe", "provider_failure", "Recover the original admitted merchant subscription scope before applying its tagged feedback.", true);
+        if (original) {
+          if (!request.onSubscriptionChargeObserved || original.providerSubscriptionRef !== recurring.providerRef
+            || (original.providerAccountId ?? "") !== (recurring.providerAccountId ?? "")) throw new AdapterError("payments", "stripe", "provider_failure", "The original subscription scope and committed cash phase are required before provider inspection.", true);
+          if (recurring.kind !== "subscription_cancelled") return collectOriginalStripeSubscriptionCash(api, original, recurring, request.onSubscriptionChargeObserved);
+          const actual = await api(`/v1/subscriptions/${encodeURIComponent(original.providerSubscriptionRef)}`, { method: "GET", headers: { "stripe-version": original.providerScheduleApiVersion } }, { ...original, providerApiVersion: original.providerScheduleApiVersion });
+          if (actual.id !== original.providerSubscriptionRef || actual.status !== "canceled") throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not prove cancellation of the original merchant subscription.", true);
+          return [{ ...recurring, ...original, providerApiVersion: original.providerScheduleApiVersion }];
+        }
+      }
       const setupValue = object(object(parsed.data)?.object);
       const setupPlatform = setupValue?.mode === "setup" ? text(object(setupValue.metadata)?.freeholder_platform_account_id) : undefined;
       const taggedPlatform = events.find(event => event.providerPlatformAccountId)?.providerPlatformAccountId ?? setupPlatform;

@@ -15,6 +15,22 @@ function canonical(value: unknown): unknown {
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
 const providerReference = (value: unknown): string | null => typeof value === "string" && /^sub_[A-Za-z0-9]{1,195}$/.test(value) ? value : null;
 const uuid = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+const sha256 = (value: unknown) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+
+/** A provider ACK/webhook cannot prove the original admitted caller finished.
+ * The finish phase validates its private nonce; stopped-caller review validates
+ * fresh human authority before appending these separately bound witnesses. */
+export function scheduleCallerHasStopped(operation: Operation): boolean {
+  const completionDigest = operation.originalRequest.callerCompletionDigest;
+  if (!sha256(completionDigest) || !Array.isArray(operation.providerObservation.history)) return false;
+  return operation.providerObservation.history.some(value => {
+    const entry = object(value);
+    if (entry?.operationId !== operation.id || entry.requestDigest !== operation.requestDigest) return false;
+    if (entry.source === "physical_caller_finished") return entry.completionDigest === completionDigest;
+    return entry.source === "human_stopped_caller" && typeof entry.actor === "string" && entry.actor.startsWith("user:") && uuid(entry.actor.slice(5))
+      && sha256(entry.stoppedCallerEvidenceDigest) && sha256(entry.providerFinalEvidenceDigest);
+  });
+}
 
 /** Stable input order is explicit: database/default JSON property order is irrelevant. */
 export function scheduleOperationDigest(operations: readonly Operation[]): string {
@@ -54,7 +70,7 @@ export function scheduleQuiescenceCovers(resource: Resource | undefined, operati
     || resource.stoppedProof.journalDigest !== scheduleOperationDigest(operations)
     || operations.length !== resource.operationRevision
     || [...operations].sort((left, right) => left.operationRevision - right.operationRevision).some((operation, index) => operation.operationRevision !== index + 1)
-    || operations.some(operation => operation.subscriptionId !== resource.subscriptionId || !["confirmed", "refused"].includes(operation.state))) return false;
+    || operations.some(operation => operation.subscriptionId !== resource.subscriptionId || !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation))) return false;
   const references = scheduleKnownResources(resource, operations);
   if (!references || !references.size || resource.stoppedProof.resources.length !== references.size) return false;
   const seen = new Set<string>();

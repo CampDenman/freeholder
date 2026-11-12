@@ -79,6 +79,30 @@ export async function pauseOriginalStripeMerchantSchedule(api: StripeSubscriptio
   if (actual.status !== "paused" || actual.pending_update !== null) unproven();
 }
 
+/** The shared claim has already bound this exact original resource and committed
+ * its single physical cancellation intent. Commercial drift must not prevent
+ * stopping that original resource; it remains separate reconciliation debt.
+ * This does not resolve pending invoice items or any earlier invoice/PI.
+ * https://docs.stripe.com/api/subscriptions/cancel */
+export async function cancelOriginalStripeMerchantSchedule(api: StripeSubscriptionRead, resource: OriginalStripeMerchantSchedule, input: {
+  onCancelled: (actual: { providerSubscriptionRef: string; state: "cancelled"; source: "readback" | "delete_ack" }) => Promise<void>;
+}) {
+  validate(resource);
+  const path = `/v1/subscriptions/${encodeURIComponent(resource.providerSubscriptionRef)}`;
+  const before = await api(path, protocol({ method: "GET" }), resource);
+  if (before.id !== resource.providerSubscriptionRef) unproven();
+  if (before.status === "canceled") {
+    await input.onCancelled({ providerSubscriptionRef: resource.providerSubscriptionRef, state: "cancelled", source: "readback" });
+    return;
+  }
+  // DELETE has no assumed idempotent POST replay guarantee. A lost reply must
+  // be reconciled by read-only recovery under the original physical intent.
+  const actual = await api(path, protocol({ method: "DELETE", headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ invoice_now: "false", prorate: "false" }) }), resource);
+  if (actual.id !== resource.providerSubscriptionRef || actual.status !== "canceled") unproven();
+  await input.onCancelled({ providerSubscriptionRef: resource.providerSubscriptionRef, state: "cancelled", source: "delete_ack" });
+}
+
 /** A real pause stops new invoices; every earlier invoice still needs resolution. */
 export async function inspectOriginalStripeMerchantInvoices(api: StripeSubscriptionRead, resource: OriginalStripeMerchantSchedule): Promise<{
   state: "paused" | "cancelled";

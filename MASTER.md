@@ -13563,6 +13563,23 @@ whatever is best for the people using the site.
   quotations, original payment dispatch, quiescence jobs, amendments and safe
   resumption are implemented. Historical schedules retain their existing path;
   all remaining work is required, with no new model activated or deferred.
+  Authenticated recurring webhook source now resolves the stored original scope
+  after raw signature verification and retains each positive PaymentIntent
+  through its own capture phase before reading another payment or page. A
+  missing auxiliary charge reference remains explicitly unknown and can later
+  be completed without replacing the first money; actual currency or recipient
+  disagreements remain separate observations. First-paid-before-create-ACK
+  lineage uses the admitted server-owned operation rather than a current account
+  guess. Partial invoice-line pages retain cash without inventing complete
+  period dates. Original cancellation targets the retained namespace/resource
+  without final invoicing or proration; earlier invoice/intent obligations still
+  require resolution. Quiescence coverage requires a separate bound caller
+  finish/stop witness, never just a positive provider acknowledgment. Full
+  TypeScript, focused lint and 73 bounded controls across eight source files pass.
+  These use intercepted HTTP/in-memory callbacks, not a native durability or
+  provider-account claim. Actual caller claim/finish orchestration, active stop
+  jobs, native first-paid/reopening proof, accepted terms and safe amendment/
+  resumption remain required before new provider admission opens.
   Original-order ownership repair 2026-11-11: checkout freezes each purchased
   line's seller and shipping requirement before invoice issue, and seller
   settlement reads that receipt instead of a later catalog edit. The actual

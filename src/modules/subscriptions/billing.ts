@@ -993,7 +993,7 @@ async function attachScheduledCashObservation(ctx: ServiceContext, paymentId: st
     providerRef: observed.providerPaymentIntentRef, status: "succeeded", amountMinor: observed.amountMinor, currency: observed.currency,
     providerPlatformAccountId: observed.providerPlatformAccountId, providerAccountId: observed.chargeAccountId ?? undefined,
     destinationAccountId: observed.actualDestinationAccountId ?? undefined, settlementMerchantAccountId: observed.actualSettlementMerchantAccountId ?? undefined,
-    customerChargeVerified: observed.customerChargeVerified, merchantRouteVerified: observed.merchantRouteVerified, providerChargeRef: observed.providerChargeRef,
+    customerChargeVerified: observed.customerChargeVerified, merchantRouteVerified: observed.merchantRouteVerified, providerChargeRef: observed.providerChargeRef ?? undefined,
   } });
 }
 

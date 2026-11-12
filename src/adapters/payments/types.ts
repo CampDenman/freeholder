@@ -460,6 +460,7 @@ export type PaymentProviderEvent = MerchantChargeScope & (
       subscriptionChargeObservationId?: string;
       subscriptionId?: string;
       providerScheduleOperationId?: string;
+      providerCustomerRef?: string;
       customerChargeVerified?: boolean;
       merchantRouteVerified?: boolean;
       providerChargeRef?: string;
@@ -507,6 +508,7 @@ export interface PaymentAdapter {
   createRecurringSchedule(request: RecurringScheduleRequest): Promise<RecurringScheduleResult>;
   resolveMerchantScheduleResource?(request: MerchantScheduleLocator): Promise<MerchantScheduleResource>;
   pauseMerchantSchedule?(request: MerchantScheduleResource & { idempotencyKey: string; onPaused: (actual: { providerSubscriptionRef: string; state: "paused" }) => Promise<void> }): Promise<void>;
+  cancelMerchantSchedule?(request: MerchantScheduleResource & { onCancelled: (actual: { providerSubscriptionRef: string; state: "cancelled"; source: "readback" | "delete_ack" }) => Promise<void> }): Promise<void>;
   inspectMerchantScheduleInvoices?(request: MerchantScheduleResource): Promise<MerchantScheduleInvoiceInventory>;
   updateRecurringSchedule(request: RecurringScheduleUpdateRequest): Promise<RecurringScheduleResult>;
   cancelRecurringSchedule(request: PaymentAccountScope & { providerRef: string; idempotencyKey: string }): Promise<void>;

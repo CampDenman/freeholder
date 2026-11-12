@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: actual hard pause preserves original scope and prior invoice debt.
 import { describe, expect, it, vi } from "vitest";
-import { inspectOriginalStripeMerchantInvoices, pauseOriginalStripeMerchantSchedule, readOriginalStripeMerchantSchedule, type OriginalStripeMerchantSchedule } from "@/adapters/payments/stripe-subscription-quiescence";
+import { cancelOriginalStripeMerchantSchedule, inspectOriginalStripeMerchantInvoices, pauseOriginalStripeMerchantSchedule, readOriginalStripeMerchantSchedule, type OriginalStripeMerchantSchedule } from "@/adapters/payments/stripe-subscription-quiescence";
 import type { StripeSubscriptionRead } from "@/adapters/payments/stripe-subscription-origin";
 const resource: OriginalStripeMerchantSchedule = { subscriptionId: "00000000-0000-4000-8000-000000000080", providerSubscriptionRef: "sub_original", providerCustomerRef: "cus_original",
   providerPlatformAccountId: "acct_originalPlatform", providerScheduleApiVersion: "2026-10-28.endive", destinationAccountId: "acct_originalSeller", settlementMerchantAccountId: "acct_originalSeller" };
@@ -75,5 +75,40 @@ describe("original Stripe subscription hard pause (C12.38)", () => {
     const read = api(() => paused);
     await expect(readOriginalStripeMerchantSchedule(read, { ...resource, providerScheduleApiVersion: "2026-02-25.clover" as never })).rejects.toMatchObject({ code: "provider_failure" });
     expect(read).not.toHaveBeenCalled();
+  });
+});
+
+describe("original Stripe merchant cancellation (C12.38)", () => {
+  it("stops the original resource despite later commercial drift without billing or prorating", async () => {
+    const drifted = { ...active, metadata: {}, transfer_data: { destination: "acct_changedSeller" }, on_behalf_of: "acct_changedSeller" };
+    const read = api((_path, init) => init.method === "DELETE" ? { ...drifted, status: "canceled" } : drifted);
+    const onCancelled = vi.fn().mockResolvedValue(undefined);
+    await cancelOriginalStripeMerchantSchedule(read, resource, { onCancelled });
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(read.mock.calls[1]![0]).toBe("/v1/subscriptions/sub_original");
+    expect(Object.fromEntries(read.mock.calls[1]![1].body as URLSearchParams)).toEqual({ invoice_now: "false", prorate: "false" });
+    expect(onCancelled).toHaveBeenCalledExactlyOnceWith({ providerSubscriptionRef: "sub_original", state: "cancelled", source: "delete_ack" });
+  });
+  it("observes an already canceled original through GET without another mutation", async () => {
+    const read = api(() => ({ id: "sub_original", status: "canceled" })), onCancelled = vi.fn().mockResolvedValue(undefined);
+    await cancelOriginalStripeMerchantSchedule(read, resource, { onCancelled });
+    expect(read).toHaveBeenCalledOnce();
+    expect(onCancelled).toHaveBeenCalledExactlyOnceWith({ providerSubscriptionRef: "sub_original", state: "cancelled", source: "readback" });
+  });
+  it("keeps an actual cancellation distinct when its persistence callback fails", async () => {
+    const read = api((_path, init) => init.method === "DELETE" ? { id: "sub_original", status: "canceled" } : active);
+    let positive = false;
+    await expect(cancelOriginalStripeMerchantSchedule(read, resource, { onCancelled: async () => { positive = true; throw new Error("Fictional durable phase unavailable"); } })).rejects.toThrow("Fictional durable phase unavailable");
+    expect(positive).toBe(true); expect(read).toHaveBeenCalledTimes(2);
+  });
+  it("does not acknowledge an accepted future cancellation as an actual stopped resource", async () => {
+    const read = api((_path, init) => init.method === "DELETE" ? { ...active, cancel_at_period_end: true } : active), onCancelled = vi.fn();
+    await expect(cancelOriginalStripeMerchantSchedule(read, resource, { onCancelled })).rejects.toMatchObject({ code: "provider_failure" });
+    expect(onCancelled).not.toHaveBeenCalled();
+  });
+  it("does not issue a cancellation after an original resource read fails", async () => {
+    const read = api(async () => { throw new Error("Fictional original resource unavailable"); }), onCancelled = vi.fn();
+    await expect(cancelOriginalStripeMerchantSchedule(read, resource, { onCancelled })).rejects.toThrow("Fictional original resource unavailable");
+    expect(read).toHaveBeenCalledOnce(); expect(onCancelled).not.toHaveBeenCalled();
   });
 });

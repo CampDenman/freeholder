@@ -3,20 +3,25 @@
 // C12.38: receipt coverage complements authenticated HTTP and money application.
 import { describe, expect, it } from "vitest";
 import type { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "@/modules/subscriptions/provider-schedule-schema";
-import { scheduleKnownResources, scheduleOperationDigest, scheduleQuiescenceCovers } from "@/modules/subscriptions/provider-schedule-proof";
+import { scheduleCallerHasStopped, scheduleKnownResources, scheduleOperationDigest, scheduleQuiescenceCovers } from "@/modules/subscriptions/provider-schedule-proof";
 
 type Resource = typeof subscriptionProviderScheduleResources.$inferSelect;
 type Operation = typeof subscriptionProviderScheduleOperations.$inferSelect;
 const subscriptionId = "00000000-0000-4000-8000-000000000080";
 const id = "00000000-0000-4000-8000-000000000081";
 const another = "00000000-0000-4000-8000-000000000082";
-const operation = (over: Partial<Operation> = {}): Operation => ({
+const operation = (over: Partial<Operation> = {}): Operation => {
+  const value: Operation = {
   id, subscriptionId, operationRevision: 1, kind: "pause", providerApiVersion: "2026-10-28.endive",
   originalRequest: { providerSubscriptionRef: "sub_Original", providerPlatformAccountId: "acct_Original" },
   requestDigest: "a".repeat(64), idempotencyKey: "fictional-pause-80", state: "confirmed", positiveObserved: true,
   providerObservation: { history: [{ providerSubscriptionRef: "sub_Original", state: "paused" }] },
   createdAt: new Date("2026-11-12T00:00:00Z"), finishedAt: new Date("2026-11-12T00:01:00Z"), ...over,
-});
+  };
+  return { ...value, originalRequest: { ...value.originalRequest, callerCompletionDigest: "c".repeat(64) },
+    providerObservation: { ...value.providerObservation, history: [...value.providerObservation.history as unknown[],
+      { source: "physical_caller_finished", operationId: value.id, requestDigest: value.requestDigest, completionDigest: "c".repeat(64) }] } };
+};
 const stoppedResource = (providerSubscriptionRef = "sub_Original") => ({ providerSubscriptionRef, providerState: "paused" as const, invoiceEnumerationDigest: "b".repeat(64), invoices: [] });
 function resource(operations: Operation[] = [operation()]): Resource {
   return { subscriptionId, providerSubscriptionRef: "sub_Original", providerCustomerRef: "cus_Original", operationRevision: operations.length,
@@ -36,6 +41,15 @@ describe("current original provider quiescence coverage", () => {
       const operations = [operation({ state })];
       expect(scheduleQuiescenceCovers({ ...resource(operations), updatedAt: new Date("2099-01-01") }, operations)).toBe(false);
     }
+  });
+  it("does not mistake positive provider evidence for the admitted caller finishing", () => {
+    const admitted = operation();
+    admitted.providerObservation = { history: [{ providerSubscriptionRef: "sub_Original", state: "paused", source: "authenticated_invoice_payment" }] };
+    expect(scheduleCallerHasStopped(admitted)).toBe(false);
+    expect(scheduleQuiescenceCovers(resource([admitted]), [admitted])).toBe(false);
+    admitted.providerObservation.history = [...admitted.providerObservation.history as unknown[],
+      { source: "physical_caller_finished", operationId: another, requestDigest: admitted.requestDigest, completionDigest: "c".repeat(64) }];
+    expect(scheduleCallerHasStopped(admitted)).toBe(false);
   });
   it("requires exact revisions, a complete contiguous journal and its original owner", () => {
     expect(scheduleQuiescenceCovers({ ...resource(), evidenceRevision: 1 }, [operation()])).toBe(false);
