@@ -96,7 +96,7 @@ describe.runIf(hasDatabase)("original fee malformed-success race80", { timeout: 
     const physicalKeys: string[] = [];
     let feeReads = 0;
     const fetcher: typeof fetch = async (input, init) => {
-      const path = new URL(String(input)).pathname, headers = new Headers(init?.headers);
+      const path = new URL(input instanceof Request ? input.url : input instanceof URL ? input.href : input).pathname, headers = new Headers(init?.headers);
       if (path === "/v1/account") return Response.json({ id: "acct_fixturePlatform" });
       expect(headers.get("stripe-version")).toBe("2026-02-25.clover");
       if (path === "/v1/payment_intents/pi_lineFee") {
@@ -133,14 +133,15 @@ describe.runIf(hasDatabase)("original fee malformed-success race80", { timeout: 
       throw Error(`Unexpected physical request: ${path}`);
     };
     const actual = createStripePayments({ secretKey: "sk_fee_race_fixture", webhookSecrets: ["whsec_fee_race_fixture"], apiBase: "https://stripe.example.test", fetch: fetcher });
-    fixture.stripe.inspectMerchantPayment = actual.inspectMerchantPayment;
-    fixture.stripe.refundMerchantFee = actual.refundMerchantFee;
-    fixture.stripe.recoverMerchantFeeRefund = actual.recoverMerchantFeeRefund;
+    if (!actual.inspectMerchantPayment || !actual.refundMerchantFee || !actual.recoverMerchantFeeRefund) throw Error("The real factory must expose original fee methods.");
+    fixture.stripe.inspectMerchantPayment = actual.inspectMerchantPayment.bind(actual);
+    fixture.stripe.refundMerchantFee = actual.refundMerchantFee.bind(actual);
+    fixture.stripe.recoverMerchantFeeRefund = actual.recoverMerchantFeeRefund.bind(actual);
     const pending: Promise<unknown>[] = [];
     try {
-      const first = reconcileMerchantApplicationFee.call({ paymentId: begun.payment.id }, OWNER).then(value => ({ value }), error => ({ error })); pending.push(first);
+      const first = reconcileMerchantApplicationFee.call({ paymentId: begun.payment.id }, OWNER).then(value => ({ value }), (error: unknown) => ({ error })); pending.push(first);
       await Promise.race([firstPost, first.then(() => { throw Error("First fee call ended before reaching the physical POST barrier."); })]);
-      const second = reconcileMerchantApplicationFee.call({ paymentId: begun.payment.id }, OWNER).then(value => ({ value }), error => ({ error })); pending.push(second);
+      const second = reconcileMerchantApplicationFee.call({ paymentId: begun.payment.id }, OWNER).then(value => ({ value }), (error: unknown) => ({ error })); pending.push(second);
       await Promise.race([staleRead, second.then(() => { throw Error("Second fee call ended before taking the earlier provider snapshot."); })]);
       releaseFirstPost(); await first;
       releaseStaleRead(); await second;
