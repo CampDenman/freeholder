@@ -120,6 +120,7 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "invoicing.recordOfflineRefund": "admin.activity.refundUpdated",
   "invoicing.refundInPersonPayment": "admin.activity.refundUpdated",
   "invoicing.recordProviderRefundResult": "admin.activity.refundUpdated",
+  "invoicing.recordProviderRefundCaller": "admin.activity.refundUpdated",
   "invoicing.settleRefund": "admin.activity.refundUpdated",
   "invoicing.failRefund": "admin.activity.refundUpdated",
   "invoicing.recordProviderPayout": "admin.activity.payoutRecorded",

@@ -63,3 +63,34 @@ Evidence remains in `/tmp/freeholder-legacy-refund-caller-before-native-actual.j
 `/tmp/freeholder-legacy-refund-caller-before-ledger.json`, and
 `/tmp/freeholder-legacy-refund-caller-before-drain.json`.
 The narrow protected repair and its AFTER acceptance remain open.
+
+The isolated repair source uses the existing financial state-event journal,
+with no new schema. Current creation writes a server-generated marker bound
+to the refund ID and request hash. Every hosted or POS provider call first
+consumes that authority in an atomic processing claim. Old unmarked rows
+remain unknown; current prepared return reservations keep their evidence.
+
+Actual promise completion is captured before an independent result phase;
+only then is the ledger projection attempted. Unknown throws retain their
+reservation, including already-refunded and in-use errors. A retained known
+answer can replay logical application without another provider POST. Pending
+resources retain their original reference. A later authenticated exact
+terminal failure can release a finished pending caller; it cannot stand in
+for a still-live caller. Previously succeeded refunds that later fail at a
+bank remain a separate unresolved reconciliation capability.
+
+The journal is not claimed to be database append-only. Purpose-derived HMAC
+authentication uses existing configured `CREDENTIAL_KEY`,
+`CREDENTIAL_KEY_PREVIOUS` and the already-required `SESSION_SECRET` fallback;
+there is no new launch secret, generated/default key or unkeyed historical
+fallback. Authentication proves the server receipt, not provider quiescence.
+Missing or altered authority stays review debt. Actual completed positive
+facts are retained with their captured original capability even if a journal
+row is corrupt; altered refund/payment bindings cannot receive application.
+The signed original scope contains financial IDs, money and digests, not a
+second copy of the buyer's contact or refund reason. Ordinary erasure clears
+personal invoice/payment/refund fields without deleting this journal.
+
+The repair and ten targeted native controls are source drafts awaiting their
+own exact type/lint/private/audit checks and native acceptance. No AFTER
+result or protected release is claimed here.
