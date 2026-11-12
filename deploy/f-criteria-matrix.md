@@ -2013,8 +2013,11 @@ proof also passes on fresh normal0–79 while preserving its original checkpoint
 `deploy/import-source-graph.md` records the exact sources, failed attempts and
 limits; `.changeset/durable-static-zip-source.md` supplies the feature note. ZIP
 privacy/hold/namespace controls now pass on normal0–79, including late erasure
-refusal, exact named holds and same-key replacement-store refusal. Current
-production artifact and owner-browser acceptance remain required. These additive ZIP proofs do not extend the earlier
+refusal, exact named holds and same-key replacement-store refusal. Its current
+Node22 production artifact passes the standard scrub, and all four actual
+501-file owner-browser journeys pass at 320px with keyboard, both-theme Axe,
+Arabic RTL, identical-source restoration, publication and rollback. Protected
+qualification and the complete live-crawl adapter remain required. These additive ZIP proofs do not extend the earlier
 WXR/REST browser evidence or close C3.47; durable live crawl and actual cutover
 remain required.
 

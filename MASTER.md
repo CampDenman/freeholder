@@ -6422,9 +6422,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   identical verified original restore without rewriting the original source
   witness, on a fresh normal 0–79 journal. Three ZIP privacy/hold/namespace
   controls also pass: late-result erasure refusal, named original-source holds
-  and a same-key replacement-store refusal with zero replacement I/O. Current
-  production owner-browser acceptance and protected checks remain required. Durable live crawl response/frontier storage and actual cutover
-  remain incomplete; no schema81 or C3.47 closure is claimed. Exact evidence:
+  and a same-key replacement-store refusal with zero replacement I/O. The
+  Node22 production artifact scrub and all four real 501-file owner-browser
+  journeys also pass, including identical-source restore, 320px keyboard,
+  both-theme Axe, Arabic RTL, publication and rollback. Protected checks,
+  durable live crawl response/frontier storage and actual cutover remain
+  required; no schema81 or C3.47 closure is claimed. Exact evidence:
   `deploy/import-source-graph.md`.)*
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing

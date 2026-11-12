@@ -551,3 +551,30 @@ preserved; only the affected licensing/notes/plan/contracts were rerun under
 normal reviewed escalation. They all pass with no code, guard or expectation
 change. All source processes are drained. ZIP production build/artifact and
 four-locale owner-browser acceptance remain pending.
+
+
+The frozen ZIP runtime at `eded51d9cf67587c0beab297dc0ba0a75d6d4940` now
+passes its own Node22.23.2 workspace package build, optimized production build
+and standard standalone scrub: 21,378 files and 291,154,724 bytes, with no source
+or environment leakage. This is a new ZIP artifact; the earlier reader, REST
+and lead artifacts were not overwritten.
+
+All four real production owner journeys pass on that unchanged artifact:
+English calibration in 48.7 seconds, followed by Spanish, French and Arabic
+(three cases in 2.3 minutes). Each actual 501-file ZIP journey reviews a final
+destination rename, accepts the first 500 pages, pauses and reloads, handles a
+failed request, restores the identical original, resumes and explicitly
+publishes, follows the real cross-batch link, then rolls back with actual public
+404 responses. The ZIP file input, keyboard path, 320px bounds, both-theme Axe
+and Arabic RTL pass. English exited and the owned database had zero nonidle
+backends before the remaining locale reset; the final runner/server also exited
+and its database had zero nonidle backends before the shared lane handoff.
+
+The browser fixture contains actual original HTML files rather than invented
+WordPress records. Its no-image variant complements the separate actual shared
+image native lifecycle and anonymous delivery 200-to-404 proof; it does not
+claim a browser image upload. The explicit local `jit=off`, `fsync=on` profile
+still applies. These results supply no actual-provider launch/recovery, default
+JIT, permanent byte erasure, source cutover, independent review or stable
+signature. Protected PR qualification and the complete live-crawl source
+adapter remain required; C3.47 and all existing checklist statuses stay open.
