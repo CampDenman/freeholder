@@ -44,7 +44,7 @@ import {
   sealSiteSubmission,
   UNCHECKED_REASON,
 } from "@/modules/forms/screening";
-import { createForm, submitForm } from "@/modules/forms/service";
+import { createForm, submitForm, removeForm, purgeForm, purgeExpiredForms } from "@/modules/forms/service";
 import { ANONYMOUS, closeDb, hasDatabase, OWNER, STAFF, truncateSpine } from "../helpers/spine";
 
 const NAMES = [
@@ -650,6 +650,24 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     const [reviewed] = await db().select().from(formLeadCopies); expect(reviewed!.attempts).toEqual([]); expect(reviewed!.originalBaseUrl).toBeNull(); expect(reviewed!.resourceDigest).toBeNull(); expect(reviewed!.legacyOutcome).toBe("copied");
     await expect(retryLeadCopy.call({ id: reviewed!.id, expectedRevision: reviewed!.revision, confirmation: "RETRY ORIGINAL LEAD COPY" }, HUMAN)).rejects.toMatchObject({ code: "conflict" });
     expect(calls).toHaveLength(0);
+  });
+  it("prepares settled original lead witnesses before a confirmed form purge", async () => {
+    const payload = await acceptedCopy(); reply = () => new Response('{}', { status: 400 }); await copySubmissionToLeadSink(payload);
+    const [copy] = await db().select().from(formLeadCopies);
+    const [submission] = await db().select().from(formSubmissions);
+    await removeForm.call({ id: submission!.formId }, HUMAN);
+    await purgeForm.call({ id: submission!.formId, confirmation: "PURGE" }, HUMAN);
+    const [witness] = await db().select().from(formLeadCopies).where(eq(formLeadCopies.id, copy!.id));
+    expect(witness).toMatchObject({ submissionId: null, encryptedRequest: null, providerRef: null, state: "not_copied" }); expect(witness!.attempts[0]!.observed).toBe("not_copied"); expect(calls).toHaveLength(1);
+  });
+  it("prepares unstarted original lead witnesses before the bounded trash sweep", async () => {
+    await acceptedCopy(); const [copy] = await db().select().from(formLeadCopies), [submission] = await db().select().from(formSubmissions);
+    await removeForm.call({ id: submission!.formId }, HUMAN);
+    const { forms } = await import("@/modules/forms/schema");
+    await db().update(forms).set({ trashedAt: new Date(Date.now() - 31 * 86_400_000) }).where(eq(forms.id, submission!.formId));
+    expect(await purgeExpiredForms.call({}, { kind: "system" })).toEqual({ purged: 1 });
+    expect((await db().select().from(formLeadCopies).where(eq(formLeadCopies.id, copy!.id)))[0]).toMatchObject({ submissionId: null, state: "cancelled", encryptedRequest: null });
+    await copySubmissionToLeadSink(await submittedPayload(submission!.id)); expect(calls).toHaveLength(0);
   });
   it("blocks old-image reads and forged changes to observed lead journals", async () => {
     const payload = await acceptedCopy(); reply = () => new Response('{"accepted":true,"id":79}', { status: 201 }); await copySubmissionToLeadSink(payload);

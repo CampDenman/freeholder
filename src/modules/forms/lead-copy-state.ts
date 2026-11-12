@@ -58,7 +58,7 @@ export async function claimLeadCopy(copyId: string, site: ParadiseSite) {
     const receipts = await leadCopyReceipts(tx);
     const [copy] = await tx.select().from(formLeadCopies).where(eq(formLeadCopies.id, copyId)).for("update");
     if (!copy) throw new ServiceError("conflict", "The original lead-copy witness is missing.");
-    if (["copied", "cancelled", "not_copied"].includes(copy.state) && copy.admittedAttempt <= copy.attempts.length) return null;
+    if (copy.state === "cancelled" || (["copied", "not_copied"].includes(copy.state) && copy.admittedAttempt <= copy.attempts.length)) return null;
     if (copy.kind !== "site_notice" || copy.retiredAt || !copy.encryptedRequest || !copy.submissionId || !site.apiKey || copy.originalBaseUrl !== site.baseUrl || copy.resourceDigest !== receipts.digest("provider:lead-resource", JSON.stringify([site.baseUrl, leadCredentialFingerprint(site.baseUrl, site.apiKey)]))) throw new ServiceError("conflict", "Restore the evidenced original lead account; today's replacement or a legacy destination cannot be used.");
     const [parent] = await tx.select({ id: formSubmissions.id, status: formSubmissions.status }).from(formSubmissions).where(eq(formSubmissions.id, copy.submissionId)).for("update");
     if (!parent || copy.attempts.some(attempt => effectiveLeadAttempt(attempt) !== "not_copied") || copy.admittedAttempt !== copy.attempts.length + 1 || copy.admittedAttempt > 20) throw new ServiceError("conflict", "The original lead-copy outcome needs provider and stopped-caller review before another request.");
