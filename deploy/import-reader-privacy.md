@@ -166,6 +166,9 @@ Fresh v3 source SQL and both exact after controls passed in 25.76 seconds.
 The earlier legacy after attempt exposed the local PostgreSQL distribution's
 missing LLVM JIT dependency rather than a service assertion; indexed,
 materialized source selection removed its excessive plan estimate without
-changing database/JIT settings. Migration 78 remains unjournalled. V3 still
-needs the combined regression, regenerated SDK, new production/browser proof
-and the complete contiguous migration rehearsal; v2 evidence is historical.
+changing database/JIT settings. The combined v3 reader run now passes all 18
+controls in 143.13 seconds, and live SDK regeneration passes all eight controls
+in 3.10 seconds. Migration 78 remains unjournalled. V3 still needs broad base
+regressions, new production/browser proof and the complete contiguous migration
+rehearsal; v2 browser evidence is historical. Three adjacent unknown-reader
+export/direct-commit/restaging controls are prepared, and have not yet run.
