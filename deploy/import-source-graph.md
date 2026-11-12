@@ -153,3 +153,162 @@ namespace. These are required dependencies, not optional deferrals.
 Historical reader-email ownership, complete source-specific cutover and actual
 provider/owner acceptance also remain required. Coding-agent review is not the
 independent security sign-off in C11.10.
+
+
+## Uploaded REST source qualification on reader78
+
+The uploaded REST increment now composes on qualified reader78 checkpoint
+`05337220` with the current physical source namespace and original-reader hold
+boundaries intact. Its source head before the browser fixture is `5ac57f46`.
+Full types pass. The unchanged JSON/range and REST index pure controls passed
+22 cases on the reader source integration; no parser was changed in the final
+reader rebase.
+
+A fresh normal 0–78 database then passed the actual 501-record REST source
+lifecycle in 110.12 seconds. Independent processes accepted 500 and then one
+original JSON range, using distinct worker PIDs. The normal CMS spine published
+all 501 posts with their shared author/category, reconciled their source links,
+and rolled back every imported page/post/author/category. No migration SQL was
+applied manually, no source identity was synthesized from position, and no test
+deadline, storage guard or assertion was weakened. The initial attempt on the
+older reader database stopped at the worker's deliberate requirement that a
+disposable name contain `test`; that configuration refusal is retained separately
+from the successful explicitly named fresh-database proof.
+
+The shared owner browser fixture now covers both actual WXR XML and actual REST
+JSON originals, including pause after the accepted 500-page receipt, reload,
+identical-source restore, reviewed cross-batch rename, public links, publication
+and reversal in four locales. The new REST browser cases are written and pass
+static checks; their production execution, current SDK refresh and final source
+gates remain pending. This uploaded JSON source increment does not supply live
+REST discovery or durable ZIP/crawl response/frontier storage. C3.47 and stable
+acceptance remain open.
+
+
+The frozen REST runtime source `0180cf44` now passes live SDK generation (all
+eight controls, 3.04 seconds, no catalog diff), every source gate (full types,
+lint, licensing, notes, plan, playground, 384 contracts and 26 expected DB-only
+exclusions), and Node22.23.2 production build/artifact scrub: 21,329 files and
+264,503,845 bytes with no source/environment leakage. Its production standalone
+is separate from the preserved reader78 and historical artifacts.
+
+The actual REST JSON 501-page owner journey passed in English in 1.1 minutes.
+All three remaining locale journeys initially passed their functional assertions
+in 3.0 minutes, but background reader-review queries revealed `58P01`: the local
+bundled Postgres compiler could not load `libLLVM-17.so.1`. Those logs remain
+recorded; that run is not clean default-JIT acceptance. The disposable test
+cluster was explicitly configured with `jit=off`, and the exact unchanged source
+and production artifact then passed Spanish, French and Arabic again in 2.4
+minutes with no compiler, failed-query or server-error entries in the complete
+logs. A direct post-run read confirmed `jit=off`, `fsync=on` and all 79 normal
+journal entries. No product, schema, assertion, deadline or durability setting
+was changed. PostgreSQL documents the [JIT configuration switch](https://www.postgresql.org/docs/16/jit-configuration.html);
+this is an explicit local test-environment profile, not a provider or default-JIT
+acceptance claim.
+
+All four production journeys use the real source upload, accepted 500-page
+receipt, pause, reload, identical original restore, saved review/rename,
+publication, public cross-batch link and rollback. They cover 320px, both themes,
+keyboard, Axe and Arabic RTL. Playwright, standalone servers and database clients
+drained with exit zero. Exact protected integration and broader source/provider
+acceptance remain required. This locally qualified uploaded-REST increment does
+not complete live REST discovery, durable ZIP/crawl continuation or C3.47.
+
+
+## Selected REST instance boundary
+
+Inspection after the root-site qualification found a separate subdirectory
+boundary in the existing shared start operation. A bounded actual start/crawl
+control now proves it: selecting `https://fictional-rest-instances.example/site-a/`
+saved only its host, sent the public API requests to `/wp-json/` at that host,
+and staged a different host-root article/site instead of the selected instance.
+The before failure is an exact four-field value mismatch, not a reader ownership
+failure. REST comment parsing is not implemented, so no wrong-person claim is
+made from this control.
+
+Two earlier attempts stopped in fixture setup (a standard reset hook timeout,
+then duplicate fixture plugin reviews). Their logs/source are retained separately;
+neither supplies product before evidence. The final append-only fresh-UUID
+fixture preserves existing review rows and reached the actual target assertions.
+Its runner reported 4.72 seconds, but a coordinator grant race overlapped the
+commerce repeat on another database. That overlap is explicit: this supplies a
+deterministic wrong-target observation, not quiet-lane/performance evidence.
+The frozen0180 root-site artifact facts above remain valid; the subdirectory
+repair and its affected qualification remain required before normal integration.
+
+
+The selected-instance repair now passes the unchanged four-field control in
+4.12 seconds on its separately granted lane: the new run retains `/site-a/`,
+its default public requests address that instance's API, and its staged site and
+article belong to the selected instance. Source lint and full types pass.
+Starting a new non-root REST source now retains its selected path while excluding
+query/fragment from site identity. Root-site starts retain their previous value;
+existing saved runs are preserved rather than inferred or rewritten from links.
+No parser, reader assignment, schema, deadline or fsync setting changed. The
+frozen0180 root-site artifact qualification remains separate from this narrow
+source repair; protected integration and any affected subdirectory artifact
+acceptance remain required. This does not add REST reader-comment parsing or
+close live discovery/durable ZIP/crawl/WordPress acceptance.
+
+
+## REST review on actual protected migration 78 main
+
+Reader provenance PR #687 merged normally as
+`bf131de797cb97a8b929e749d88a2176dfad3c03`. The REST-only commits now replay
+on that actual main ancestry, with product files and SQL identical to the
+previously qualified source checkpoint 6b05fdff. All prior SQL remains unchanged;
+this increment adds no migration or table. Local full types, lint, license,
+release-note, plan, playground and 384 contract gates passed again, with 26
+expected database-only exclusions. MASTER §43.1 is unchanged.
+
+The preserved 0180 root-site production artifact predates the narrow selected
+subdirectory fix. Its real root-site SDK/native/four-locale evidence above is
+retained with that scope; it is not attributed to a subdirectory artifact.
+The actual start/preview subdirectory before/after controls remain the source
+proof for that fix. A new English owner production case selects /site-a/,
+uploads 501 originals from that instance and checks the actual HTTP-created run
+retains its selected origin, then uses the existing interruption, identical-byte
+restore, publication and full rollback journey. Protected CI must build and run
+that current case before integration; no local subdirectory artifact result is
+claimed here. Other locale journeys retain their original root-site inputs.
+
+Applicable F01–F12 evidence for this partial C3.47/C3.46 repair uses existing
+migration 73 constraints and immutable source/lease/actor records, shared
+transactional CMS/media paths and rollback ownership (F01–F03); existing
+translated owner progress/review/restore controls and unchanged HTTP/MCP/SDK
+contracts (F04–F06); actual source/body/metadata bounds, duplicate/replay/source
+refusal and source privacy/hold recovery (F07–F09); owner source-file guidance,
+release notes and the real 501-source end-to-end native/browser paths (F10–F12).
+There is no new CRM FK or source body copy. Existing contact registry and erasure
+boundaries remain authoritative. REST comment parsing, full WordPress parity,
+ZIP/crawl durable continuation, actual cutover/provider acceptance, independent
+review and stable readiness remain open. This source increment does not close
+C3.47 or change the version/announcement status.
+
+
+A further actual pure before control found native JSON syntax failures quote
+original record content. The initial-preview error handler retains that message
+on the run, so raw parsing must not supply source excerpts. The controlled
+fictional input before failed in 871ms because its body appeared in the error.
+The parser now reports only the original record ordinal and a constant invalid
+UTF-8/JSON diagnostic, with no original exception cause retained. All 23
+JSON/range/REST after controls pass in 5.19 seconds; the original malformed-input
+refusals and byte/identity checks remain unchanged. This diagnostic-only repair
+changes no valid-source result, actor authority, source byte or schema. The
+current protected head still requires its complete gate rerun.
+
+
+Protected CI on REST head 4a3d701f passed all 46 checks, including the newly
+added real English subdirectory owner journey. Browser shard 2 passed 64 tests
+in 12.5 minutes and its current production artifact scrub passed: 21,325 files,
+262,314,077 bytes, no source/environment leakage. That shard ran all four REST
+locale journeys; English selected /site-a/ through the real HTTP action before
+501-record interruption, restore, publication and rollback. This supplies the
+current subdirectory artifact result previously pending; it is not the old 0180
+root artifact. The diagnostic-only privacy correction requires a new exact-head
+protected rerun despite preserving all valid-source results.
+
+The first privacy-fix gate run caught only a test catch binding typed as any.
+After annotating it unknown, the complete gate rerun passed: full types, lint,
+license, notes, plan/F-matrix, playground and 384 contracts with 26 expected
+exclusions. The corrected protected head still needs its exact CI rerun.

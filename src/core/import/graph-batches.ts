@@ -14,7 +14,7 @@ import { withinImportBatch, type ImportBatchContext } from "./batch-context";
 import { assertReaderUploadWindow, bindReaderSources, publicImportRun } from "./privacy";
 import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import { importSourceRanges } from "./source-range";
-import { wordpressExportBuilder } from "./wordpress";
+import { wordpressExportBuilder, wordpressExportFromRest } from "./wordpress";
 import { wxrEntryMetadataSchema, wxrIndexCursorSchema } from "./wxr-index";
 import { graphAttachments, graphCatalogSchema, graphMediaPlans, graphMediaPlanSchema } from "./graph-catalog";
 import { archivePreviewDigest } from "./archive-plan";
@@ -25,7 +25,7 @@ type Run = typeof importRuns.$inferSelect;
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? { ...value as Record<string, unknown> } : {};
 const contextSchema = z.object({ rootId: z.uuid(), childId: z.uuid(), graphId: z.uuid(), generation: z.uuid(), planDigest: z.string().regex(/^[a-f0-9]{64}$/), leaseToken: z.uuid(), startOrdinal: z.number().int().nonnegative(), endOrdinal: z.number().int().positive(), kind: z.enum(["content", "media", "navigation"]), operation: z.literal("imports.commit") });
 const entrySchema = z.object({ id: z.uuid(), ordinal: z.number().int().nonnegative(), startByte: z.number().int().nonnegative(), endByte: z.number().int().positive(), digest: z.string(), metadata: z.unknown(), targetSlug: z.string().nullable(), resolution: z.enum(["keep-existing", "replace", "rename"]).nullable() });
-const claimSchema = z.object({ context: contextSchema, source: retainedImportSourceSchema, origin: z.string(), header: z.object({ start: z.literal(0), end: z.number().int().positive(), digest: z.string() }), catalog: graphCatalogSchema, media: graphMediaPlanSchema.array().max(500), attachments: wxrEntryMetadataSchema.shape.attachment.unwrap().array().max(500), entries: entrySchema.array().max(500), prepared: z.boolean(), accepted: z.boolean() });
+const claimSchema = z.object({ context: contextSchema, source: retainedImportSourceSchema, sourceKind: z.enum(["wordpress-wxr", "wordpress-rest"]), origin: z.string(), header: z.object({ start: z.literal(0), end: z.number().int().positive(), digest: z.string() }), catalog: graphCatalogSchema, media: graphMediaPlanSchema.array().max(500), attachments: wxrEntryMetadataSchema.shape.attachment.unwrap().array().max(500), entries: entrySchema.array().max(500), prepared: z.boolean(), accepted: z.boolean() });
 
 const claimGraphCommit = defineService({
   name: "imports.claimGraphCommit", orchestratedBy: "imports.commit", summary: "Reserve one bounded graph batch before reading original source bytes.",
@@ -79,7 +79,7 @@ const claimGraphCommit = defineService({
     await ctx.tx.update(importSourceGraphs).set({ leaseToken, leaseActor: actorString(ctx.actor), leaseUntil: new Date(Date.now() + 120_000), updatedAt: new Date() }).where(eq(importSourceGraphs.id, graph.id));
     ctx.setSubject("import_run", root.id);
     const allMedia = await graphMediaPlans(ctx.tx, graph.id);
-    return { context: contextSchema.parse(context), source, origin: root.origin!, header: cursor.header, catalog, media: kind === "media" ? allMedia.filter(item => item.key === mediaKey) : allMedia, attachments: await graphAttachments(ctx.tx, graph.id), entries, prepared: child.status !== "discover", accepted: child.status === "committed" };
+    return { context: contextSchema.parse(context), source, sourceKind: z.enum(["wordpress-wxr", "wordpress-rest"]).parse(root.kind), origin: root.origin!, header: cursor.header, catalog, media: kind === "media" ? allMedia.filter(item => item.key === mediaKey) : allMedia, attachments: await graphAttachments(ctx.tx, graph.id), entries, prepared: child.status !== "discover", accepted: child.status === "committed" };
   },
 });
 
@@ -143,14 +143,15 @@ export async function advanceGraphCommit(id: string, observed: ImportGraphVersio
     const ranges = importSourceRanges(claim.source, index => readRetainedSourceChunk(claim.source, index));
     const header = await ranges.readRange(0, claim.header.end);
     if (createHash("sha256").update(header).digest("hex") !== claim.header.digest) throw new ServiceError("conflict", "The original source header changed.");
-    const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }), builder = wordpressExportBuilder();
-    builder.readHead(decoder.decode(header));
+    const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }), builder = wordpressExportBuilder(), records: unknown[] = [];
+    if (claim.sourceKind === "wordpress-wxr") builder.readHead(decoder.decode(header));
     for (const entry of claim.entries) {
       const bytes = await ranges.readRange(entry.startByte, entry.endByte);
       if (createHash("sha256").update(bytes).digest("hex") !== entry.digest) throw new ServiceError("conflict", "The original source entry changed.");
-      builder.readItem(decoder.decode(bytes));
+      if (claim.sourceKind === "wordpress-wxr") builder.readItem(decoder.decode(bytes));
+      else records.push(JSON.parse(decoder.decode(bytes)));
     }
-    const exported = builder.finish();
+    const exported = claim.sourceKind === "wordpress-rest" ? wordpressExportFromRest(records, claim.origin) : builder.finish();
     exported.attachments = claim.attachments;
     const staged = stageWordpressExport(exported, claim.origin), pages = staged.preview.pages as Array<Record<string, unknown>>;
     const wordpress = object(staged.preview.wordpress);

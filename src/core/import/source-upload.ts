@@ -30,10 +30,12 @@ import { putWithReceipt } from "@/core/media/write-ledger";
 import { deleteUnownedPendingObjects, reservePendingMediaObject } from "@/core/media/object-ledger";
 import { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES, importSourceObjectKeys, importSourceWrites, makeRetainedImportSource, readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceChunkKey, retainedSourceFromRun, type RetainedImportSource } from "./retained-source";
 export { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES } from "./retained-source";
-import { DEFAULT_IMPORTER_LIMITS, ImporterPhaseLimitError } from "./contract";
+import { DEFAULT_IMPORTER_LIMITS, enforceImporterLimits, ImporterPhaseLimitError } from "./contract";
 import sourceGraphServices, { claimWxrGraph, applyWxrIndex } from "./source-graph";
 import { indexWxrPhase } from "./wxr-index";
 import { ReaderOwnershipErasedError } from "./reader-ownership";
+import { indexRestPhase } from "./rest-index";
+import { readJsonSourcePhase } from "./json-source-ranges";
 import { importSourceRanges } from "./source-range";
 import { markGraphRunWriter } from "./graph-writer";
 import { importGraphVersionSchema } from "./graph-version";
@@ -45,7 +47,7 @@ import { approvedMediaOrigins, approvedMediaOriginsSchema } from "./media-origin
 import { stageImportSource, stageWordpressExport } from "./service";
 import { assertSourceStageable } from "./source-lifecycle";
 import { assertReaderUploadWindow, bindReaderSources, ReaderSourceErasureError } from "./privacy";
-import { wordpressExportBuilder } from "./wordpress";
+import { wordpressExportBuilder, wordpressExportFromRest } from "./wordpress";
 import { archivePreviewDigest, stageStaticArchive } from "./archive-plan";
 import { archiveRangeSource } from "./archive-source";
 
@@ -554,9 +556,9 @@ const releaseErasedUpload = defineService({
 });
 
 /**
- * Read the stored chunks in order. A WXR export streams through the item
- * reader; the other sources are small by nature and are read whole, within
- * the importer's byte limit.
+ * Read the stored chunks in order. WordPress sources use bounded XML/JSON
+ * record readers; archives retain their verified range manifest. Other
+ * textual sources stay within the ordinary inline import byte limit.
  */
 async function stageStoredSource(
   state: { kind: string; origin: string; keys: string[]; source: RetainedImportSource; approvedMediaOrigins: string[] },
@@ -564,6 +566,13 @@ async function stageStoredSource(
   if (state.kind === "archive") {
     const staged = await stageStaticArchive(archiveRangeSource(state.source, index => readRetainedSourceChunk(state.source, index)), state.origin);
     return { ...staged, archivePreviewDigest: archivePreviewDigest(staged.preview) };
+  }
+  if (state.kind === "wordpress-rest") {
+    const phase = await readJsonSourcePhase(importSourceRanges(state.source, index => readRetainedSourceChunk(state.source, index)));
+    if (!phase.done) throw new ImporterPhaseLimitError("pages", "This REST source needs another bounded indexing phase.");
+    const exported = wordpressExportFromRest(phase.entries.map(entry => entry.value), state.origin);
+    enforceImporterLimits({ pages: exported.items.length, bytes: exported.items.reduce((bytes, item) => bytes + Buffer.byteLength(item.body), 0), depth: 1 });
+    return stageWordpressExport(exported, state.origin);
   }
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const wxr = state.kind === "wordpress-wxr" ? wordpressExportBuilder() : undefined;
@@ -628,7 +637,8 @@ export const previewFromUpload = defineOrchestratedService({
         const claimed = await claimWxrGraph.call(input, actor);
         if (!claimed.leaseToken) throw new ServiceError("internal", "The source phase has no lease.");
         try {
-          const indexed = await indexWxrPhase(importSourceRanges(claimed.source, index => readRetainedSourceChunk(claimed.source, index)), claimed.cursor, state.origin);
+          const ranges = importSourceRanges(claimed.source, index => readRetainedSourceChunk(claimed.source, index));
+          const indexed = state.kind === "wordpress-rest" ? await indexRestPhase(ranges, claimed.cursor, state.origin) : await indexWxrPhase(ranges, claimed.cursor, state.origin);
           const accepted = await applyWxrIndex.call({ ...input, graphId: claimed.graphId, generation: claimed.generation, leaseToken: claimed.leaseToken, source: claimed.source, previous: claimed.cursor, ...indexed }, actor);
           return indexed.done ? await prepareSourceGraphPlan.call({ id: input.id, version: accepted.graph }, actor) : accepted;
         } catch (error) { await releaseIndexRead.call({ id: input.id, graphId: claimed.graphId, generation: claimed.generation, leaseToken: claimed.leaseToken }, actor).catch(() => undefined); throw error; }
@@ -637,7 +647,7 @@ export const previewFromUpload = defineOrchestratedService({
       await applyUploaded.call({ ...input, preview: staged.preview, counts: staged.counts, archivePreviewDigest: staged.archivePreviewDigest }, actor);
       return { id: input.id, status: "previewed", error: null, counts: staged.counts };
     } catch (error) {
-      if (state.kind === "wordpress-wxr" && error instanceof ImporterPhaseLimitError && ["pages", "bytes"].includes(error.limit)) {
+      if (["wordpress-wxr", "wordpress-rest"].includes(state.kind) && error instanceof ImporterPhaseLimitError && ["pages", "bytes"].includes(error.limit)) {
         const claimed = await claimWxrGraph.call({ ...input, initialize: true }, actor);
         return { id: input.id, status: "discover", error: null, counts: { indexed: 0 }, graph: { generation: claimed.generation, sourceRevision: claimed.source.revision, planRevision: claimed.planRevision } };
       }

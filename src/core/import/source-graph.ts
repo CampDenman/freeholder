@@ -33,7 +33,7 @@ export const claimWxrGraph = defineService({
     await lockContactIdentityForRead(ctx.tx);
     await markImportGraphWriter(ctx.tx);
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
-    if (!run || run.kind !== "wordpress-wxr") throw new ServiceError("not_found", "No such WordPress import.");
+    if (!run || !["wordpress-wxr", "wordpress-rest"].includes(run.kind ?? "")) throw new ServiceError("not_found", "No such WordPress import.");
     const checkpoint = object(run.checkpoint), upload = uploadSchema.safeParse(checkpoint.sourceUpload);
     if (!upload.success || upload.data.uploadId !== input.uploadId || upload.data.received.length !== Math.ceil(upload.data.bytes / upload.data.chunkBytes) || upload.data.received.some((index, at) => index !== at) || Date.parse(upload.data.expiresAt) <= Date.now()) throw new ServiceError("conflict", "The complete immutable source upload is no longer available.");
     const source = makeRetainedImportSource(run.id, upload.data);
@@ -106,7 +106,7 @@ export const applyWxrIndex = defineService({
     // The upload reservation remains until the whole graph is accepted. The
     // retained descriptor keeps the same original objects available later.
     if (input.done) delete checkpoint.sourceUpload;
-    await ctx.tx.update(importRuns).set({ status: input.done ? "previewed" : "discover", error: null, counts: summary, checkpoint, preview: input.done ? { sourceFormat: "durable-wxr", graphId: graph.id, generation: graph.generation, sourceRevision: graph.sourceRevision, planRevision: graph.planRevision, version: 1 } : {} }).where(eq(importRuns.id, run.id));
+    await ctx.tx.update(importRuns).set({ status: input.done ? "previewed" : "discover", error: null, counts: summary, checkpoint, preview: input.done ? { sourceFormat: run.kind === "wordpress-rest" ? "durable-wordpress-rest" : "durable-wxr", graphId: graph.id, generation: graph.generation, sourceRevision: graph.sourceRevision, planRevision: graph.planRevision, version: 1 } : {} }).where(eq(importRuns.id, run.id));
     ctx.setSubject("import_run", run.id);
     return { id: run.id, status: input.done ? "previewed" : "discover", error: null, counts: summary, graph: { generation: graph.generation, sourceRevision: graph.sourceRevision, planRevision: graph.planRevision } };
   },
