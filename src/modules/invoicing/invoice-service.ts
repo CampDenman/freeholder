@@ -52,11 +52,11 @@ import {
   taxLines,
 } from "./schema";
 import {
-  extendMinor,
-  subtractMinor,
   sumMinor,
 } from "./money";
 import { quoteTax } from "./tax-service";
+import {calculateInvoiceAmounts} from "./invoice-amounts";
+import {prepareMerchantInvoiceTax,freezeMerchantInvoiceTax} from "./merchant-tax-invoice";
 import { allocateSettledPayment } from "./payment-plan-ledger";
 
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
@@ -101,6 +101,7 @@ const lineInput = z.object({
   snapshot: boundedObject.default({}),
 });
 const taxChoice = z.discriminatedUnion("mode", [
+  z.object({mode:z.literal("merchant"),destination:taxAddress}),
   z.object({
     mode: z.literal("calculate"),
     origin: taxAddress,
@@ -620,7 +621,8 @@ export const createDraftInvoice = defineService({
       })),
       shippingMinor: input.shippingMinor,
     };
-    const quote =
+    const merchantTax = input.tax.mode === "merchant" ? await prepareMerchantInvoiceTax({...input,destination:input.tax.destination},ctx) : null;
+    const quote = merchantTax?.quote ?? (
       input.tax.mode === "calculate"
         ? await ctx.call(quoteTax, {
             ...taxInput,
@@ -633,10 +635,10 @@ export const createDraftInvoice = defineService({
             lines: [],
             totalTaxMinor: 0,
             includedTaxMinor: 0,
-            explanation: [input.tax.reason],
+            explanation: [input.tax.mode === "not_applicable" ? input.tax.reason : ""],
             zone: null,
-          };
-    const preDiscountQuote =
+          });
+    const preDiscountQuote = merchantTax?.preDiscountQuote ?? (
       input.tax.mode === "calculate" && quote.lines.some((line) => line.inclusive)
         ? await ctx.call(quoteTax, {
             ...taxInput,
@@ -644,48 +646,14 @@ export const createDraftInvoice = defineService({
             origin: input.tax.origin,
             destination: input.tax.destination,
           })
-        : quote;
+        : quote);
 
-    const calculatedLines = input.lines.map((line, index) => {
-      const key = itemKeys[index]!;
-      const grossSubtotal = extendMinor(line.unitAmountMinor, line.quantityMicros);
-      if (line.discountMinor > grossSubtotal) {
-        throw new ServiceError("validation", `Line ${index + 1}'s discount exceeds its extended amount.`);
-      }
-      const currentTax = quote.lines.filter((tax) => tax.itemId === key);
-      const beforeTax = preDiscountQuote.lines.filter((tax) => tax.itemId === key);
-      const includedAfter = sumMinor(currentTax.filter((tax) => tax.inclusive).map((tax) => tax.taxMinor), "Included line tax");
-      const includedBefore = sumMinor(beforeTax.filter((tax) => tax.inclusive).map((tax) => tax.taxMinor), "Included pre-discount tax");
-      const taxDiscount = subtractMinor(includedBefore, includedAfter, "Included-tax discount");
-      const subtotalMinor = subtractMinor(grossSubtotal, includedBefore, "Net line subtotal");
-      const discountMinor = subtractMinor(line.discountMinor, taxDiscount, "Net line discount");
-      const taxMinor = sumMinor(currentTax.map((tax) => tax.taxMinor), "Line tax");
-      return {
-        input: line,
-        key,
-        position: index,
-        subtotalMinor,
-        discountMinor,
-        taxMinor,
-        totalMinor: sumMinor([subtractMinor(subtotalMinor, discountMinor, "Net line"), taxMinor], "Line total"),
-      };
-    });
-    const shippingTaxes = quote.lines.filter((line) => !line.itemId);
-    const includedShippingTax = sumMinor(
-      shippingTaxes.filter((line) => line.inclusive).map((line) => line.taxMinor),
-      "Included shipping tax",
-    );
-    const netShippingMinor = subtractMinor(input.shippingMinor, includedShippingTax, "Net shipping");
-    const subtotalMinor = sumMinor(calculatedLines.map((line) => line.subtotalMinor), "Invoice subtotal");
-    const discountMinor = sumMinor(calculatedLines.map((line) => line.discountMinor), "Invoice discount");
-    const taxMinor = sumMinor(quote.lines.map((line) => line.taxMinor), "Invoice tax");
-    const totalMinor = sumMinor(
-      [subtractMinor(subtotalMinor, discountMinor, "Invoice subtotal after discount"), netShippingMinor, taxMinor],
-      "Invoice total",
-    );
+    const {calculatedLines,subtotalMinor,discountMinor,shippingMinor:netShippingMinor,taxMinor,totalMinor}=calculateInvoiceAmounts(input.lines,input.shippingMinor,quote,preDiscountQuote,itemKeys);
     const quoteDetails = quote as typeof quote & {
       registration?: { number: string | null };
       exemption?: { kind: string } | null;
+      registrationNumbers?: Array<{lineIndex:number;number:string|null}>;
+      lineExemptions?: Array<{lineIndex:number;kind:string}>;
     };
     const [invoice] = await ctx.tx
       .insert(invoices)
@@ -741,24 +709,25 @@ export const createDraftInvoice = defineService({
     const lineIdByKey = new Map(savedLines.map((line) => [itemKeys[line.position]!, line.id]));
     if (quote.lines.length) {
       await ctx.tx.insert(taxLines).values(
-        quote.lines.map((line) => ({
+        quote.lines.map((line,lineIndex) => ({
           invoiceId: invoice!.id,
           invoiceLineId: line.itemId ? lineIdByKey.get(line.itemId) : undefined,
-          kind: quoteDetails.exemption ? "exemption" as const : line.itemId ? "item" as const : "shipping" as const,
+          kind: quoteDetails.lineExemptions?.some(row=>row.lineIndex===lineIndex) || quoteDetails.exemption ? "exemption" as const : line.itemId ? "item" as const : "shipping" as const,
           rateName: line.name,
           ratePpm: line.ratePartsPerMillion,
           taxableMinor: line.taxableMinor,
           amountMinor: line.taxMinor,
           jurisdiction: line.jurisdiction,
-          registrationNumber: quoteDetails.registration?.number ?? undefined,
+          registrationNumber: quoteDetails.registrationNumbers?.find(row=>row.lineIndex===lineIndex)?.number ?? quoteDetails.registration?.number ?? undefined,
           inclusive: line.inclusive,
           compound: line.compound,
           priority: line.priority,
-          exemptionKind: quoteDetails.exemption?.kind,
+          exemptionKind: quoteDetails.lineExemptions?.find(row=>row.lineIndex===lineIndex)?.kind ?? quoteDetails.exemption?.kind,
           explanation: quote.explanation.join(" ").slice(0, 4_000),
         })),
       );
     }
+    if(merchantTax)await freezeMerchantInvoiceTax(merchantTax,invoice!,savedLines,ctx);
     await stateEvent(ctx, "invoice", invoice!.id, null, "draft", "created");
     await ctx.emitTimeline({
       contactId: input.contactId,

@@ -10,6 +10,7 @@ import {defineService,ServiceError} from "@/core/service";
 import {invoiceMerchantTaxQuotes,merchantTaxProfiles,merchantTaxProfileVersions} from "./merchant-tax-schema";
 import {merchantTaxPolicyReceipt} from "./merchant-tax-contract";
 import {assertMerchantTaxRevisionSafe} from "@/modules/subscriptions/merchant-tax-revision";
+import {previewMerchantTax} from "./merchant-tax-preview";
 export {merchantTaxPolicyReceipt} from "./merchant-tax-contract";
 
 const party=z.object({sellerUserId:z.uuid().nullable()});
@@ -71,4 +72,4 @@ export const getInvoiceSiteMerchantIdentity=defineService({
 });
 
 // Register the external-schedule guard with invoicing even if subscriptions is off.
-export default [currentMerchantTaxProfile,getInvoiceMerchantTaxReceipt,getInvoiceMerchantFreightReceipts,getInvoiceSiteMerchantIdentity,assertMerchantTaxRevisionSafe];
+export default [currentMerchantTaxProfile,getInvoiceMerchantTaxReceipt,getInvoiceMerchantFreightReceipts,getInvoiceSiteMerchantIdentity,previewMerchantTax,assertMerchantTaxRevisionSafe];
