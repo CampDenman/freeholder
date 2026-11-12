@@ -3,7 +3,7 @@
 // C12.38/C12.09: seller liabilities use the actual original invoice revenue.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {db} from "@/core/db";
-import {eq} from "drizzle-orm";
+import {eq,sql} from "drizzle-orm";
 import {users} from "@/core/auth/schema";
 import {resolveContact} from "@/core/contacts/service";
 import {ready} from "@/core/runtime";
@@ -57,6 +57,24 @@ describe.runIf(hasDatabase)("original discounted order earnings (C12.38)",()=>{
   await settlePayment.call({id:payment.id,providerRef:"synthetic-discounted-seller-bank-reference"},OWNER);
   return payment;
  }
+ async function restorePriorPolicy(invoiceId:string,feeMinor:number){
+  // Privileged fixture restoration only: represent the already-issued pre77
+  // history demonstrated by the original coupon regression. A current writer
+  // must never be able to rewrite a new immutable portion into that history.
+  // DDL and data changes share ONE disposable-test transaction; every named
+  // guard is restored before commit, including on rollback after any failure.
+  await db().transaction(async tx=>{
+   await tx.execute(sql`alter table invoice_merchant_allocation_lines disable trigger invoice_merchant_allocation_line_guard`);
+   await tx.execute(sql`alter table invoice_merchant_allocations disable trigger invoice_merchant_allocation_guard`);
+   await tx.execute(sql`alter table invoice_market_policies disable trigger invoice_merchant_allocation_policy_guard`);
+   await tx.execute(sql`delete from invoice_merchant_allocation_lines where allocation_id in(select id from invoice_merchant_allocations where invoice_id=${invoiceId})`);
+   await tx.execute(sql`delete from invoice_merchant_allocations where invoice_id=${invoiceId}`);
+   await tx.update(invoiceMarketPolicies).set({feeMinor,allocationVersion:0}).where(eq(invoiceMarketPolicies.invoiceId,invoiceId));
+   await tx.execute(sql`alter table invoice_market_policies enable trigger invoice_merchant_allocation_policy_guard`);
+   await tx.execute(sql`alter table invoice_merchant_allocations enable trigger invoice_merchant_allocation_guard`);
+   await tx.execute(sql`alter table invoice_merchant_allocation_lines enable trigger invoice_merchant_allocation_line_guard`);
+  });
+ }
  async function providerSeller(){
   await updateMembershipRules.call({payoutModel:"instant",payoutAdapter:"stripe_connect"},OWNER);
   // A prior verified payout account, without live onboarding acceptance.
@@ -78,7 +96,7 @@ describe.runIf(hasDatabase)("original discounted order earnings (C12.38)",()=>{
   const{placed,invoice}=await place();
   // Genuine prior-image terms: the old resolver froze ten percent of40.00.
   // This fixture does not claim a provider charged or accepted those terms.
-  await db().update(invoiceMarketPolicies).set({feeMinor:400}).where(eq(invoiceMarketPolicies.invoiceId,invoice.invoice.id));
+  await restorePriorPolicy(invoice.invoice.id,400);
   const payment=await pay(invoice.invoice.id);await onOrderPaid({orderId:placed.order.id});
   const before=(await sitePayouts.call({},OWNER)).payouts;
   expect(before).toMatchObject([{grossMinor:2000,feeMinor:400,netMinor:1600}]);
@@ -100,7 +118,7 @@ describe.runIf(hasDatabase)("original discounted order earnings (C12.38)",()=>{
   expect(await getInvoiceMarketPolicy.call({invoiceId:invoice.invoice.id},{kind:"system"})).toMatchObject({feeMinor:4});
  });
  it("keeps actual payment recorded but refuses an original fee allocation it cannot establish",async()=>{
-  const{placed,invoice}=await place();await db().update(invoiceMarketPolicies).set({feeMinor:123}).where(eq(invoiceMarketPolicies.invoiceId,invoice.invoice.id));
+  const{placed,invoice}=await place();await restorePriorPolicy(invoice.invoice.id,123);
   await pay(invoice.invoice.id);
   expect(await failure(onOrderPaid({orderId:placed.order.id}))).toMatchObject({code:"conflict"});
   expect((await sitePayouts.call({},OWNER)).payouts).toHaveLength(0);
@@ -108,7 +126,7 @@ describe.runIf(hasDatabase)("original discounted order earnings (C12.38)",()=>{
  });
  it.each(["new","unsent","refused","unknown","confirmed"]as const)("does not send a previously recorded overstated coupon payout to its provider (%s)",async prior=>{
   const fetcher=await providerSeller();
-  const{placed,invoice}=await place();await db().update(invoiceMarketPolicies).set({feeMinor:400}).where(eq(invoiceMarketPolicies.invoiceId,invoice.invoice.id));await pay(invoice.invoice.id);
+  const{placed,invoice}=await place();await restorePriorPolicy(invoice.invoice.id,400);await pay(invoice.invoice.id);
   // Exact prior-image row demonstrated by the original failing business case.
   const[payout]=await db().update(memberPayouts).set({grossMinor:4000,feeMinor:400,netMinor:3600,model:"instant",state:"due",releasedAt:new Date()}).where(eq(memberPayouts.orderItemId,placed.lines[0]!.id)).returning();
   if(prior!=="new")await db().insert(memberPayoutTransfers).values({payoutId:payout!.id,kind:"transfer",provider:"stripe_connect",amountMinor:3600,currency:"CAD",state:prior==="refused"?"failed":prior==="confirmed"?"settled":"pending",reference:prior==="confirmed"?"tr_OriginalConfirmed":null,attempts:prior==="unsent"?0:1,lastError:prior==="unknown"?"Outcome unknown: provider response was lost.":null,attemptStartedAt:prior==="unknown"?new Date():null});

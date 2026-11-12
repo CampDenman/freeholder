@@ -42,8 +42,26 @@ fully discounted freight and per-line fee rounding. An initial four-control
 run failed because its new site-product fixture omitted the mandatory tax
 category; supplying it preserved every original assertion and all four pass.
 
-Remaining work includes complete historical populated-before upgrade proof,
-legacy financial fixture qualification, physical shipping/tax integration,
+A real populated prior77 runtime (`ae71cb7d`) also completed checkout and bank
+settlement on official74. Its drained database was cloned, preserving the
+original, then upgraded with this exact77 SQL. All nine original financial
+table counts and SHA256 digests matched before/after (invoices, lines,
+policies, payments, refunds, orders, order items, payouts and transfers).
+Existing policies are version0 and no historical allocation was guessed.
+Live SDK generation passed8/8 against that populated upgraded clone. Local
+report: `/tmp/freeholder-allocation77-populated-upgrade.json`.
+
+All14 discounted-order/payout controls pass (160.71s), including prior frozen
+fees, confirmed/unknown original provider results, fully discounted orders
+and zero-transfer refusal. Their prior-policy fixtures explicitly restore the
+pre77 row shape (no portions, version0) inside one privileged disposable-test
+transaction, temporarily disabling only the three named new mutation guards
+and restoring them before commit. A rollback restores those DDL changes too.
+No production guard was relaxed, no assertion was removed, and this fixture
+construction is distinct from the actual populated upgrade proof above.
+
+Remaining work includes the complete contiguous populated upgrade,
+physical shipping/tax integration,
 concurrent capture, final merged-chain SDK/browser/full-suite qualification,
 original-account direct/destination portions, payment/refund/dispute recovery,
 human flows and actual provider acceptance. Original recorded provider money
