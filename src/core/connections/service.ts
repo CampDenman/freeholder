@@ -557,9 +557,12 @@ export const rotateCredentials = defineService({
       }
     }
 
+    const { rotateReaderOwnershipKey } = await import("@/core/import/reader-ownership-key");
+    const sourceKey = await rotateReaderOwnershipKey(ctx.tx);
+    rotated += sourceKey.rotated; failed += sourceKey.failed;
     ctx.setSubject("connected_account", "all");
     ctx.queueEvent("connection.rotated", { rotated, failed });
-    return { examined: rows.length, rotated, failed };
+    return { examined: rows.length + sourceKey.examined, rotated, failed };
   },
 });
 

@@ -33,6 +33,7 @@ export { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES } from "./retained-s
 import { DEFAULT_IMPORTER_LIMITS, ImporterPhaseLimitError } from "./contract";
 import sourceGraphServices, { claimWxrGraph, applyWxrIndex } from "./source-graph";
 import { indexWxrPhase } from "./wxr-index";
+import { ReaderOwnershipErasedError } from "./reader-ownership";
 import { importSourceRanges } from "./source-range";
 import { markGraphRunWriter } from "./graph-writer";
 import { importGraphVersionSchema } from "./graph-version";
@@ -522,7 +523,7 @@ const applyUploaded = defineService({
       .update(importRuns)
       .set(
         input.preview && input.counts
-          ? { status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview), counts: input.counts, error: null, checkpoint }
+          ? { status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview, run, ctx.actor), counts: input.counts, error: null, checkpoint }
           : { status: "failed", error: input.error ?? "That file could not be read.", checkpoint },
       )
       .where(eq(importRuns.id, run.id));
@@ -643,7 +644,7 @@ export const previewFromUpload = defineOrchestratedService({
       // An indexed source remains resumable on a failed read or candidate
       // apply; the ordinary preview failure path must not release its bytes.
       if (state.hasSourceGraph) throw error;
-      if (error instanceof ReaderSourceErasureError) await releaseErasedUpload.call(input, actor);
+      if (error instanceof ReaderSourceErasureError || error instanceof ReaderOwnershipErasedError) await releaseErasedUpload.call(input, actor);
       if (error instanceof ServiceError) throw error;
       const message = error instanceof Error ? error.message.slice(0, 2_000) : "That file could not be read.";
       await applyUploaded.call({ ...input, error: message }, actor);

@@ -473,6 +473,7 @@ export const previewImport = defineService({
   }),
   output: runRow,
   handler: async (input, ctx) => {
+    await lockImportBatchParent(ctx, input.id);
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
     assertSourceStageable(before);
@@ -1454,6 +1455,7 @@ export const mapImport = defineService({
   }),
   output: runRow,
   handler: async (input, ctx) => {
+    await lockImportBatchParent(ctx, input.id);
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
     assertSourceStageable(before);
@@ -1486,6 +1488,7 @@ export const reviewImportConflicts = defineService({
   }),
   output: runRow,
   handler: async (input, ctx) => {
+    await lockImportBatchParent(ctx, input.id);
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
     if (isPrivateImportBatch(before)) throw new ServiceError("not_found", "No such import run.");
@@ -1819,7 +1822,7 @@ export const previewFromSource = defineService({
       .update(importRuns)
       .set({
         status: "previewed",
-        preview: await bindReaderSources(ctx.tx, preview),
+        preview: await bindReaderSources(ctx.tx, preview, before, ctx.actor),
         counts,
         error: null,
       })
@@ -1875,7 +1878,7 @@ const applyCrawl = defineService({
     if (sourceRevision(run) !== input.revision) throw new ServiceError("conflict", "This import changed during discovery. Reload it before trying again.");
     const [result] = await ctx.tx.update(importRuns).set(input.error
       ? { status: "failed", error: input.error }
-      : { status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview!), counts: input.counts!, error: null, checkpoint: { ...checkpointOf(run.checkpoint), crawl: input.report } }
+      : { status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview!, run, ctx.actor), counts: input.counts!, error: null, checkpoint: { ...checkpointOf(run.checkpoint), crawl: input.report } }
     ).where(eq(importRuns.id, input.id)).returning();
     ctx.setSubject("import_run", run.id);
     return publicImportRun(result!);

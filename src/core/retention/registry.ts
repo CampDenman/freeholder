@@ -100,6 +100,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   media_objects:"Original object ownership survives unknown writes; guarded physical cleanup and privacy jobs remove it.",
   media_multipart_resources:"Original multipart resources survive timers; explicit original-provider retirement and subject erasure own cleanup.",
   media_object_writes: "Original physical-operation and retired-key receipts are not a TTL store. Privacy minimizes personal fields only after settled original cleanup; unresolved work keeps its erasure receipt pending.",
+  import_reader_ownership_receipts: "Minimal source ownership and erasure fences have no product TTL; reader privacy/holds govern state and normalized merge witnesses preserve exact undo.",
   mail_record_subjects: "Mail receipt ownership follows the receipt; personal fields use the three mail retention kinds.",
   contact_relationships: "Join table of two contacts; not a TTL store.",
   customer_magic_links: "Credential bearer hashes; never a product TTL.",
