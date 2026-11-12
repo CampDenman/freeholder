@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: preserve authenticated scheduled cash before applying its invoice.
+import { createHash } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { PaymentProviderEvent } from "@/adapters/payments";
@@ -8,7 +9,7 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { registerSubscriptionProviderEvidenceRetainer } from "@/modules/invoicing/merchant-provider-stage";
 import { registerSubscriptionInvoiceRouting } from "@/modules/invoicing/merchant-agreement-charge";
 import { invoices } from "@/modules/invoicing/schema";
-import { subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
+import { subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
 import { subscriptionChargeScope, subscriptionMerchantScope } from "./merchant-scope-contract";
 
 const account = z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200);
@@ -18,6 +19,8 @@ const cash = z.object({
   providerPlatformAccountId: account.optional(), providerAccountId: account.optional(),
   providerInvoiceRef: reference, providerPaymentIntentRef: reference, providerChargeRef: reference,
   amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), currency: z.string().regex(/^[A-Z]{3}$/),
+  destinationAccountId: account.optional(), settlementMerchantAccountId: account.optional(),
+  customerChargeVerified: z.boolean().default(false), merchantRouteVerified: z.boolean().default(false),
 });
 
 async function originalAgreement(ctx: ServiceContext, provider: string, providerRef: string, platform?: string, chargeAccount?: string) {
@@ -36,28 +39,37 @@ export const retainProviderCharge = defineService({
   summary: "Commit authenticated original scheduled money before ordinary invoice application.",
   kind: "mutation", permission: "system", external: false,
   auditInputFields: ["providerSubscriptionRef", "providerPaymentIntentRef"],
-  input: cash, output: z.object({ receiptId: z.uuid().nullable() }),
+  input: cash, output: z.object({ receiptId: z.uuid().nullable(), observationId: z.uuid().nullable(), matchesOriginalMoney: z.boolean() }),
   handler: async (input, ctx) => {
     const original = await originalAgreement(ctx, input.provider, input.providerSubscriptionRef, input.providerPlatformAccountId, input.providerAccountId);
-    if (!original) return { receiptId: null };
-    if (original.subscription.billingMode !== "provider" || original.subscription.currency !== input.currency) throw new ServiceError("conflict", "The observed payment differs from its original subscription currency or schedule.");
+    if (!original) return { receiptId: null, observationId: null, matchesOriginalMoney: true };
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`subscription-cash:${input.providerPlatformAccountId}:${input.providerAccountId ?? ""}:${input.providerPaymentIntentRef}`}))`);
     const facts = { subscriptionId: original.subscription.id, providerPlatformAccountId: original.scope.providerPlatformAccountId,
       chargeAccountId: original.scope.chargeAccountId, providerSubscriptionRef: input.providerSubscriptionRef, providerInvoiceRef: input.providerInvoiceRef,
       providerApiVersion: original.scope.providerScheduleApiVersion,
       providerPaymentIntentRef: input.providerPaymentIntentRef, providerChargeRef: input.providerChargeRef, amountMinor: input.amountMinor, currency: input.currency };
+    const actualRoute = { actualDestinationAccountId: input.destinationAccountId ?? null, actualSettlementMerchantAccountId: input.settlementMerchantAccountId ?? null,
+      customerChargeVerified: input.customerChargeVerified,
+      merchantRouteVerified: input.merchantRouteVerified && input.destinationAccountId === (original.scope.collectionKind === "destination" ? original.scope.recipientAccountId : undefined)
+        && input.settlementMerchantAccountId === (original.scope.collectionKind === "destination" ? original.scope.settlementMerchantAccountId : undefined) };
+    const observed = { ...facts, ...actualRoute }, observationDigest = createHash("sha256").update(JSON.stringify(observed)).digest("hex");
+    await ctx.tx.execute(sql`select set_config('freeholder.subscription_scope_v1','1',true)`);
+    await ctx.tx.insert(subscriptionProviderChargeObservations).values({ ...observed, observationDigest }).onConflictDoNothing();
+    const [observation] = await ctx.tx.select({ id: subscriptionProviderChargeObservations.id }).from(subscriptionProviderChargeObservations)
+      .where(and(eq(subscriptionProviderChargeObservations.subscriptionId, original.subscription.id), eq(subscriptionProviderChargeObservations.observationDigest, observationDigest)));
+    if (!observation) throw new ServiceError("conflict", "The authenticated original cash observation could not be retained.");
     const [existing] = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(and(
       eq(subscriptionProviderChargeReceipts.providerPlatformAccountId, original.scope.providerPlatformAccountId),
       sql`${subscriptionProviderChargeReceipts.chargeAccountId} is not distinct from ${original.scope.chargeAccountId}`,
       eq(subscriptionProviderChargeReceipts.providerPaymentIntentRef, input.providerPaymentIntentRef))).for("update");
     if (existing) {
-      if (Object.entries(facts).some(([key, value]) => existing[key as keyof typeof facts] !== value)) throw new ServiceError("conflict", "The provider contradicted original observed subscription money; preserve and reconcile its first receipt.");
-      return { receiptId: existing.id };
+      const matchesOriginalMoney = !Object.entries(facts).some(([key, value]) => existing[key as keyof typeof facts] !== value);
+      return { receiptId: existing.id, observationId: observation.id, matchesOriginalMoney };
     }
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_scope_v1','1',true)`);
-    const [receipt] = await ctx.tx.insert(subscriptionProviderChargeReceipts).values(facts).returning({ id: subscriptionProviderChargeReceipts.id });
+    const [receipt] = await ctx.tx.insert(subscriptionProviderChargeReceipts).values({ ...facts, ...actualRoute }).returning({ id: subscriptionProviderChargeReceipts.id });
     ctx.setSubject("subscription", original.subscription.id);
-    return { receiptId: receipt!.id };
+    return { receiptId: receipt!.id, observationId: observation.id, matchesOriginalMoney: true };
   },
 });
 
@@ -82,12 +94,17 @@ export const completeProviderChargeFee = defineService({
 export async function retainSubscriptionChargeEvidence(provider: string, event: PaymentProviderEvent): Promise<PaymentProviderEvent> {
   if (event.kind !== "subscription_period_paid" || !event.providerPlatformAccountId) return event;
   if (provider !== "stripe" || !event.invoiceProviderRef || !event.paymentProviderRef || !event.providerChargeRef || !event.amountMinor || !event.currency) throw new ServiceError("conflict", "The authenticated renewal lacks its original invoice, intent or charge evidence.");
-  const { receiptId } = await retainProviderCharge.call({ provider, providerSubscriptionRef: event.providerRef, providerPlatformAccountId: event.providerPlatformAccountId,
+  const { receiptId, observationId, matchesOriginalMoney } = await retainProviderCharge.call({ provider, providerSubscriptionRef: event.providerRef, providerPlatformAccountId: event.providerPlatformAccountId,
     providerAccountId: event.providerAccountId, providerInvoiceRef: event.invoiceProviderRef, providerPaymentIntentRef: event.paymentProviderRef,
-    providerChargeRef: event.providerChargeRef, amountMinor: event.amountMinor, currency: event.currency }, { kind: "system" });
+    providerChargeRef: event.providerChargeRef, amountMinor: event.amountMinor, currency: event.currency,
+    destinationAccountId: event.destinationAccountId, settlementMerchantAccountId: event.settlementMerchantAccountId,
+    customerChargeVerified: event.customerChargeVerified, merchantRouteVerified: event.merchantRouteVerified }, { kind: "system" });
   if (!receiptId) return event;
+  // The observation above is already committed. Never throw away a later
+  // authenticated contradiction by rolling it back with invoice policy.
+  if (!matchesOriginalMoney || !event.customerChargeVerified) throw new ServiceError("conflict", "The original observed renewal money is retained and needs reconciliation before invoice application.");
   if (event.observedApplicationFeeMinor !== undefined && event.applicationFeeCurrency) await completeProviderChargeFee.call({ receiptId, amountMinor: event.observedApplicationFeeMinor, currency: event.applicationFeeCurrency }, { kind: "system" });
-  return { ...event, subscriptionChargeReceiptId: receiptId };
+  return { ...event, subscriptionChargeReceiptId: receiptId, subscriptionChargeObservationId: observationId };
 }
 
 registerSubscriptionProviderEvidenceRetainer(retainSubscriptionChargeEvidence);

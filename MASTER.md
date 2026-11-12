@@ -13550,6 +13550,19 @@ whatever is best for the people using the site.
   under implementation. Sources: Stripe's [pause API](https://docs.stripe.com/api/subscriptions/pause),
   [pause lifecycle](https://docs.stripe.com/billing/subscriptions/pause) and
   [payment-collection pause](https://docs.stripe.com/billing/subscriptions/pause-payment).
+  Current unapplied lifecycle source defines original resource/physical-operation
+  and erasure-cohort journals plus append-only authenticated cash observations.
+  A later currency, route or agreement-policy disagreement is kept separately
+  from the first observed money rather than rolling that fact back. Three actual
+  adapter-factory HTTP controls, sixteen protocol controls and seven receipt
+  coverage controls pass; full TypeScript and focused lint pass. Receipt coverage
+  refuses unknown work, changed revisions, missing operation history and an
+  uncovered alternate late-positive provider resource. These are local synthetic
+  controls, not a complete lifecycle or actual provider acceptance. NEW merchant
+  provider admission is closed while accepted immutable recurring terms, period
+  quotations, original payment dispatch, quiescence jobs, amendments and safe
+  resumption are implemented. Historical schedules retain their existing path;
+  all remaining work is required, with no new model activated or deferred.
   Original-order ownership repair 2026-11-11: checkout freezes each purchased
   line's seller and shipping requirement before invoice issue, and seller
   settlement reads that receipt instead of a later catalog edit. The actual

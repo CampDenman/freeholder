@@ -17,6 +17,7 @@ export type OriginalStripeMerchantSchedule = MerchantChargeScope & {
   providerSubscriptionRef: string;
   providerCustomerRef: string;
 };
+export type OriginalStripeMerchantScheduleLocator = Omit<OriginalStripeMerchantSchedule, "providerCustomerRef">;
 const ref = (value: unknown) => text(value) ?? text(object(value)?.id);
 function unproven(): never {
   throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not prove the original merchant schedule's stopped state and invoice obligations.", true);
@@ -31,13 +32,24 @@ function original(resource: OriginalStripeMerchantSchedule, value: Record<string
     || !Object.hasOwn(value, "transfer_data") || !Object.hasOwn(value, "on_behalf_of")
     || destination !== resource.destinationAccountId || settlement !== resource.settlementMerchantAccountId) unproven();
 }
-function validate(resource: OriginalStripeMerchantSchedule): void {
+function validate(resource: OriginalStripeMerchantScheduleLocator & { providerCustomerRef?: string }): void {
   validateMerchantChargeScope(resource);
   if (!resource.providerPlatformAccountId || resource.providerScheduleApiVersion !== STRIPE_MERCHANT_SCHEDULE_API_VERSION || !/^sub_[A-Za-z0-9]{1,195}$/.test(resource.providerSubscriptionRef)
-    || !/^cus_[A-Za-z0-9]{1,195}$/.test(resource.providerCustomerRef)
-    || !/^[0-9a-f-]{36}$/i.test(resource.subscriptionId)) unproven();
+    || resource.providerCustomerRef !== undefined && !/^cus_[A-Za-z0-9]{1,195}$/.test(resource.providerCustomerRef)
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(resource.subscriptionId)) unproven();
 }
 const protocol = (init: RequestInit): RequestInit => ({ ...init, headers: { ...init.headers, "stripe-version": STRIPE_MERCHANT_SCHEDULE_API_VERSION } });
+
+/** Resolve only through the immutable original provider subscription resource. */
+export async function resolveOriginalStripeMerchantSchedule(api: StripeSubscriptionRead, locator: OriginalStripeMerchantScheduleLocator): Promise<OriginalStripeMerchantSchedule> {
+  validate(locator);
+  const value = await api(`/v1/subscriptions/${encodeURIComponent(locator.providerSubscriptionRef)}`, protocol({ method: "GET" }), locator);
+  const providerCustomerRef = ref(value.customer);
+  if (!providerCustomerRef || !/^cus_[A-Za-z0-9]{1,195}$/.test(providerCustomerRef)) unproven();
+  const resource = { ...locator, providerCustomerRef };
+  original(resource, value);
+  return resource;
+}
 
 export async function readOriginalStripeMerchantSchedule(api: StripeSubscriptionRead, resource: OriginalStripeMerchantSchedule) {
   validate(resource);

@@ -2,6 +2,10 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- C12.38: fragment for commerce-owned0080; do not apply before full composition.
 -- Existing0 is an explicit legacy epoch, not reconstructed routing evidence.
+-- Old full-row subscription readers must fail before new provider calls.
+-- This does not replace stopping/draining already admitted physical callers.
+ALTER TABLE subscriptions RENAME COLUMN provider_ref TO provider_schedule_ref_v1;
+--> statement-breakpoint
 ALTER TABLE subscriptions ADD COLUMN merchant_scope_version integer NOT NULL DEFAULT 0;
 --> statement-breakpoint
 ALTER TABLE subscriptions ALTER COLUMN merchant_scope_version SET DEFAULT 1;
@@ -65,6 +69,7 @@ CREATE TABLE subscription_provider_charge_receipts (
  provider_payment_intent_ref text NOT NULL, provider_charge_ref text NOT NULL,
  amount_minor bigint NOT NULL, currency text NOT NULL, application_fee_ref text,
  observed_application_fee_minor bigint, observed_application_fee_currency text,
+ actual_destination_account_id text, actual_settlement_merchant_account_id text, merchant_route_verified boolean NOT NULL DEFAULT false, customer_charge_verified boolean NOT NULL DEFAULT false,
  created_at timestamptz NOT NULL DEFAULT now(),
  CONSTRAINT subscription_provider_charge_receipts_api CHECK(provider_api_version='2026-10-28.endive'),
  CONSTRAINT subscription_provider_charge_receipts_money CHECK(amount_minor BETWEEN 1 AND 9007199254740991 AND currency ~ '^[A-Z]{3}$'
@@ -135,3 +140,33 @@ CREATE TRIGGER subscription_scope_legacy_merge_undo BEFORE UPDATE OF undone_at O
 
 --> statement-breakpoint
 CREATE TRIGGER subscription_scope_legacy_merge_admission BEFORE INSERT ON contact_merge_operations FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_scope_merge_fence();
+
+--> statement-breakpoint
+CREATE TABLE subscription_provider_charge_observations (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), subscription_id uuid NOT NULL REFERENCES subscription_merchant_scopes(subscription_id) ON DELETE RESTRICT,
+ provider_platform_account_id text NOT NULL, charge_account_id text, provider_api_version text NOT NULL,
+ provider_subscription_ref text NOT NULL, provider_invoice_ref text NOT NULL, provider_payment_intent_ref text NOT NULL, provider_charge_ref text NOT NULL,
+ amount_minor bigint NOT NULL, currency text NOT NULL, actual_destination_account_id text, actual_settlement_merchant_account_id text,
+ merchant_route_verified boolean NOT NULL, customer_charge_verified boolean NOT NULL, observation_digest text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT subscription_charge_observations_money CHECK(amount_minor BETWEEN 1 AND 9007199254740991 AND currency ~ '^[A-Z]{3}$'),
+ CONSTRAINT subscription_charge_observations_digest CHECK(observation_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX subscription_charge_observations_fact ON subscription_provider_charge_observations(subscription_id,observation_digest);
+--> statement-breakpoint
+CREATE INDEX subscription_charge_observations_intent ON subscription_provider_charge_observations(provider_platform_account_id,provider_payment_intent_ref);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_subscription_cash_observation() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.subscription_scope_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Authenticated original cash observations are append-only through their private writer' USING ERRCODE='23514';
+ END IF;
+ IF NOT EXISTS(SELECT 1 FROM subscription_merchant_scopes scope WHERE scope.subscription_id=NEW.subscription_id
+  AND scope.provider_platform_account_id=NEW.provider_platform_account_id AND scope.charge_account_id IS NOT DISTINCT FROM NEW.charge_account_id
+  AND scope.provider_schedule_api_version=NEW.provider_api_version) THEN
+  RAISE EXCEPTION 'Original cash observations must preserve their actual agreement namespace and protocol' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER subscription_cash_observation_original BEFORE INSERT OR UPDATE OR DELETE ON subscription_provider_charge_observations FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_cash_observation();

@@ -161,7 +161,7 @@ export const subscriptions = pgTable(
     billingMode: text("billing_mode", { enum: BILLING_MODES }).notNull(),
     /** Whose schedule this is, when billing mode is `provider`. */
     provider: text("provider"),
-    providerRef: text("provider_ref"),
+    providerRef: text("provider_schedule_ref_v1"),
     /** Stored method used by platform charges and provider schedules. */
     paymentMethodId: uuid("payment_method_id").references(
       () => paymentMethods.id,
@@ -309,6 +309,10 @@ export const subscriptionProviderChargeReceipts = pgTable("subscription_provider
   applicationFeeRef: text("application_fee_ref"),
   observedApplicationFeeMinor: bigint("observed_application_fee_minor", { mode: "number" }),
   observedApplicationFeeCurrency: text("observed_application_fee_currency"),
+  actualDestinationAccountId: text("actual_destination_account_id"),
+  actualSettlementMerchantAccountId: text("actual_settlement_merchant_account_id"),
+  merchantRouteVerified: boolean("merchant_route_verified").notNull().default(false),
+  customerChargeVerified: boolean("customer_charge_verified").notNull().default(false),
   createdAt: createdAtColumn(),
 }, t => [
   uniqueIndex("subscription_provider_charge_receipts_intent").on(t.providerPlatformAccountId, sql`coalesce(${t.chargeAccountId},'')`, t.providerPaymentIntentRef),
@@ -317,6 +321,31 @@ export const subscriptionProviderChargeReceipts = pgTable("subscription_provider
     and (${t.observedApplicationFeeMinor} is null or ${t.observedApplicationFeeMinor} between 0 and 9007199254740991)
     and (${t.observedApplicationFeeCurrency} is null or ${t.observedApplicationFeeCurrency} ~ '^[A-Z]{3}$')`),
   check("subscription_provider_charge_receipts_api", sql`${t.providerApiVersion}='2026-10-28.endive'`),
+]);
+
+/** Later authenticated contradictions are durable debt, never overwritten cash. */
+export const subscriptionProviderChargeObservations = pgTable("subscription_provider_charge_observations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  subscriptionId: uuid("subscription_id").notNull().references(() => subscriptionMerchantScopes.subscriptionId, { onDelete: "restrict" }),
+  providerPlatformAccountId: text("provider_platform_account_id").notNull(),
+  chargeAccountId: text("charge_account_id"),
+  providerApiVersion: text("provider_api_version").notNull(),
+  providerSubscriptionRef: text("provider_subscription_ref").notNull(),
+  providerInvoiceRef: text("provider_invoice_ref").notNull(),
+  providerPaymentIntentRef: text("provider_payment_intent_ref").notNull(),
+  providerChargeRef: text("provider_charge_ref").notNull(),
+  amountMinor: bigint("amount_minor", { mode: "number" }).notNull(), currency: text("currency").notNull(),
+  actualDestinationAccountId: text("actual_destination_account_id"),
+  actualSettlementMerchantAccountId: text("actual_settlement_merchant_account_id"),
+  merchantRouteVerified: boolean("merchant_route_verified").notNull(),
+  customerChargeVerified: boolean("customer_charge_verified").notNull(),
+  observationDigest: text("observation_digest").notNull(),
+  createdAt: createdAtColumn(),
+}, t => [
+  uniqueIndex("subscription_charge_observations_fact").on(t.subscriptionId, t.observationDigest),
+  index("subscription_charge_observations_intent").on(t.providerPlatformAccountId, t.providerPaymentIntentRef),
+  check("subscription_charge_observations_money", sql`${t.amountMinor} between 1 and 9007199254740991 and ${t.currency} ~ '^[A-Z]{3}$'`),
+  check("subscription_charge_observations_digest", sql`${t.observationDigest} ~ '^[a-f0-9]{64}$'`),
 ]);
 
 export const subscriptionEvents = pgTable(

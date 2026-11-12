@@ -10,6 +10,7 @@ import { applyDestinationCharge, assertMerchantAttempt, assertMerchantIntent, me
 import { stripeMerchantFees } from "./stripe-merchant-fees";
 import { stripeCheckoutEvidence } from "./stripe-merchant-capture";
 import { proveStripeSubscriptionPayment } from "./stripe-subscription-origin";
+import { inspectOriginalStripeMerchantInvoices, pauseOriginalStripeMerchantSchedule, resolveOriginalStripeMerchantSchedule } from "./stripe-subscription-quiescence";
 import { inspectStripeMerchantPayment } from "./stripe-merchant-inspection";
 import { stripeMerchantRecovery } from "./stripe-merchant-recovery";
 import { stripeMerchantIntentRecovery } from "./stripe-merchant-intent-recovery";
@@ -489,6 +490,15 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       const providerCustomerRef=text(customer.id);
       if(!providerCustomerRef || !/^cus_[A-Za-z0-9]+$/.test(providerCustomerRef) || providerCustomerRef.length>200)throw new AdapterError("payments","stripe","provider_failure","Stripe did not return the original setup customer.",true);
       return {providerCustomerRef,...(request.providerPlatformAccountId?{providerPlatformAccountId:request.providerPlatformAccountId}:{}),...(request.providerAccountId?{providerAccountId:request.providerAccountId}:{})};
+    },
+    async resolveMerchantScheduleResource(request) {
+      return resolveOriginalStripeMerchantSchedule(api, request);
+    },
+    async pauseMerchantSchedule(request) {
+      return pauseOriginalStripeMerchantSchedule(api, request, request);
+    },
+    async inspectMerchantScheduleInvoices(request) {
+      return inspectOriginalStripeMerchantInvoices(api, request);
     },
     async createMethodSetup(request) {
       if (request.providerPlatformAccountId || request.destinationAccountId) validateMerchantChargeScope(request);

@@ -19,7 +19,7 @@ import { subscriptionMethodScopeMatches } from "./merchant-scope-contract";
 import { merchantObservationRef, recordMerchantPaymentObservation } from "@/modules/invoicing/merchant-payment-observations";
 import { invoices, paymentMethods, payments } from "@/modules/invoicing/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
-import { plans, subscriptionEvents, subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
+import { plans, subscriptionEvents, subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
 import {
   applyPendingPlan,
   beginDunning,
@@ -434,6 +434,9 @@ const claimProviderSchedule = defineService({
       throw new ServiceError("conflict", "Provider billing needs a stored method with a provider customer.");
     }
     const routing = await subscriptionPaymentScope(ctx, subscription.id, true);
+    if (subscription.merchantScopeVersion === 1 && routing.providerPlatformAccountId) {
+      throw new ServiceError("conflict", "Accept the original recurring quotation and use its durable schedule journal before starting this new merchant provider schedule.");
+    }
     if (method.providerAccountId !== (routing.providerAccountId ?? "") || (routing.providerAccountId && method.provider !== "stripe")) throw new ServiceError("conflict", "Provider billing needs a saved method for the original merchant account.");
     const priced = (await ctx.callAsSystem(resolvePrice, {
       variantId: subscription.productVariantId,
@@ -977,6 +980,23 @@ export const changeMyPlan = defineOrchestratedService({
   },
 });
 
+async function attachScheduledCashObservation(ctx: ServiceContext, paymentId: string, subscriptionId: string, options: {
+  providerPlatformAccountId?: string; subscriptionChargeObservationId?: string; paymentProviderRef?: string; amountMinor: number; currency: string;
+}) {
+  if (!options.providerPlatformAccountId) return;
+  if (!options.subscriptionChargeObservationId) throw new ServiceError("conflict", "This renewal needs its retained actual charge observation before applying payment.");
+  const [observed] = await ctx.tx.select().from(subscriptionProviderChargeObservations).where(eq(subscriptionProviderChargeObservations.id, options.subscriptionChargeObservationId));
+  if (!observed || observed.subscriptionId !== subscriptionId || observed.providerPaymentIntentRef !== options.paymentProviderRef
+    || observed.providerPlatformAccountId !== options.providerPlatformAccountId || observed.amountMinor !== options.amountMinor || observed.currency !== options.currency
+    || !observed.customerChargeVerified) throw new ServiceError("conflict", "The retained cash observation does not prove this original renewal payment.");
+  await ctx.callAsSystem(recordMerchantPaymentObservation, { paymentId, providerEventRef: `subscription-cash:${observed.id}`, evidence: {
+    providerRef: observed.providerPaymentIntentRef, status: "succeeded", amountMinor: observed.amountMinor, currency: observed.currency,
+    providerPlatformAccountId: observed.providerPlatformAccountId, providerAccountId: observed.chargeAccountId ?? undefined,
+    destinationAccountId: observed.actualDestinationAccountId ?? undefined, settlementMerchantAccountId: observed.actualSettlementMerchantAccountId ?? undefined,
+    customerChargeVerified: observed.customerChargeVerified, merchantRouteVerified: observed.merchantRouteVerified, providerChargeRef: observed.providerChargeRef,
+  } });
+}
+
 async function settlePeriodInvoice(
   ctx: Parameters<typeof raiseInvoice>[0],
   subscription: typeof subscriptions.$inferSelect,
@@ -990,6 +1010,7 @@ async function settlePeriodInvoice(
     providerAccountId?: string;
     providerPlatformAccountId?: string;
     subscriptionChargeReceiptId?: string;
+    subscriptionChargeObservationId?: string;
     customerChargeVerified?: boolean;
     paymentProviderRef?: string;
     applicationFeeMinor?: number;
@@ -1035,6 +1056,7 @@ async function settlePeriodInvoice(
       const previous = await ctx.tx.select().from(payments).where(and(eq(payments.invoiceId,invoice.id),eq(payments.status,"succeeded")));
       const original = previous.find(payment => payment.providerRef === options.paymentProviderRef);
       if (!original) throw new ServiceError("conflict", "A different seller charge already paid this period. Reconcile the extra payment.");
+      await attachScheduledCashObservation(ctx, original.id, subscription.id, options);
       assertChargeEvidence(await routingForPayment(ctx,original.id), { ...options, status: "succeeded" });
     }
     return invoice.id;
@@ -1049,6 +1071,7 @@ async function settlePeriodInvoice(
     subscriptionChargeReceiptId: options.subscriptionChargeReceiptId,
   });
   const routing = await routingForPayment(ctx, payment.id);
+  await attachScheduledCashObservation(ctx, payment.id, subscription.id, options);
   assertChargeEvidence(routing, { ...options, status: "succeeded" });
   if ((routing.providerAccountId || routing.providerPlatformAccountId) && !options.paymentProviderRef) throw new ServiceError("conflict", "The seller payment needs its original provider charge reference.");
   await ctx.call(settlePayment, {
@@ -1071,6 +1094,7 @@ export const reconcileProviderPeriod = defineService({
     providerAccountId: z.string().max(200).default(""),
     providerPlatformAccountId: paymentRouting.shape.providerPlatformAccountId,
     subscriptionChargeReceiptId: z.uuid().optional(),
+    subscriptionChargeObservationId: z.uuid().optional(),
     paymentProviderRef: z.string().max(500).optional(),
     applicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
     kind: z.enum(["subscription_period_paid", "subscription_period_failed", "subscription_cancelled"]),
@@ -1150,6 +1174,7 @@ export const reconcileProviderPeriod = defineService({
       providerAccountId: routing.providerAccountId,
       providerPlatformAccountId: routing.providerPlatformAccountId,
       subscriptionChargeReceiptId: input.subscriptionChargeReceiptId,
+      subscriptionChargeObservationId: input.subscriptionChargeObservationId,
       customerChargeVerified: routing.providerPlatformAccountId ? true : undefined,
       paymentProviderRef: input.paymentProviderRef,
       applicationFeeMinor: input.applicationFeeMinor,

@@ -6,12 +6,13 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { getMerchantCollectionConfiguration } from "@/modules/invoicing/merchant-collection";
-import { subscriptionMerchantScopes, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
+import { subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
+import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { subscriptionMerchantScope, type subscriptionTaxDestination } from "./merchant-scope-contract";
 import type { SubscriptionMarketPolicy } from "./market-policy";
 
 const profileReceipt = z.object({ profileId: z.uuid(), profileVersion: z.number().int().positive(), liability: z.enum(["platform", "seller"]) });
-export const merchantSubscriptionUndo = z.object({ movedIds: z.array(z.uuid()).max(5000), originalEvidence: z.array(z.object({ kind: z.enum(["scope", "cash"]), id: z.uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) })).max(5000) });
+export const merchantSubscriptionUndo = z.object({ movedIds: z.array(z.uuid()).max(5000), originalEvidence: z.array(z.object({ kind: z.enum(["scope", "cash", "cash_observation", "schedule_resource", "schedule_operation"]), id: z.uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) })).max(5000) });
 
 /** Store bounded fingerprints rather than personal destinations in merge history. */
 export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[]) {
@@ -23,8 +24,24 @@ export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[])
     .from(subscriptionProviderChargeReceipts).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderChargeReceipts.subscriptionId))
     .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001 - rows.length);
   if (rows.length + charges.length > 5000) return { evidence: [], overflow: true };
-  const fingerprint = (row: { id: string; material: string }, kind: "scope" | "cash") => ({ kind, id: row.id, fingerprint: createHash("sha256").update(row.material).digest("hex") });
-  return { evidence: [...rows.map(row => fingerprint(row, "scope")), ...charges.map(row => fingerprint(row, "cash"))], overflow: false };
+  const fingerprint = (row: { id: string; material: string }, kind: z.infer<typeof merchantSubscriptionUndo>["originalEvidence"][number]["kind"]) => ({ kind, id: row.id, fingerprint: createHash("sha256").update(row.material).digest("hex") });
+  const evidence = [...rows.map(row => fingerprint(row, "scope")), ...charges.map(row => fingerprint(row, "cash"))];
+  const observations = await tx.select({ id: subscriptionProviderChargeObservations.id, material: sql<string>`to_jsonb(${subscriptionProviderChargeObservations})::text` })
+    .from(subscriptionProviderChargeObservations).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderChargeObservations.subscriptionId))
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderChargeObservations.id).limit(5001 - evidence.length);
+  if (observations.length + evidence.length > 5000) return { evidence: [], overflow: true };
+  evidence.push(...observations.map(row => fingerprint(row, "cash_observation")));
+  const resources = await tx.select({ id: subscriptionProviderScheduleResources.subscriptionId, material: sql<string>`(to_jsonb(${subscriptionProviderScheduleResources})-'updated_at')::text` })
+    .from(subscriptionProviderScheduleResources).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderScheduleResources.subscriptionId))
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderScheduleResources.subscriptionId).limit(5001 - evidence.length);
+  if (resources.length + evidence.length > 5000) return { evidence: [], overflow: true };
+  evidence.push(...resources.map(row => fingerprint(row, "schedule_resource")));
+  const operations = await tx.select({ id: subscriptionProviderScheduleOperations.id, material: sql<string>`to_jsonb(${subscriptionProviderScheduleOperations})::text` })
+    .from(subscriptionProviderScheduleOperations).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderScheduleOperations.subscriptionId))
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderScheduleOperations.id).limit(5001 - evidence.length);
+  if (operations.length + evidence.length > 5000) return { evidence: [], overflow: true };
+  evidence.push(...operations.map(row => fingerprint(row, "schedule_operation")));
+  return { evidence, overflow: false };
 }
 
 /** Existing agreements never call this helper or consult today's configuration. */
@@ -40,6 +57,8 @@ export async function captureOriginalMerchantScope(ctx: ServiceContext, subscrip
   // The tax query shares the stable profile row lock with semantic revisions.
   const tax = profileReceipt.parse(await ctx.callAsSystem(taxService, { sellerUserId: policy.sellerUserId }));
   if (tax.liability !== "seller") throw new ServiceError("conflict", "This seller agreement needs its deliberately declared original seller tax policy.");
+  const [erasing] = await ctx.tx.select({ id: subscriptionProviderScheduleErasures.id }).from(subscriptionProviderScheduleErasures).where(eq(subscriptionProviderScheduleErasures.profileId, tax.profileId)).limit(1);
+  if (erasing) throw new ServiceError("conflict", "The original merchant's erasure prevents accepting another external billing dependency.");
   const facts = subscriptionMerchantScope.parse({ subscriptionId: subscription.id, agreementRoutingVersion: 1,
     providerScheduleApiVersion: "2026-10-28.endive",
     collectionKind: configuration.collectionKind, providerPlatformAccountId: configuration.providerPlatformAccountId,
@@ -48,4 +67,8 @@ export async function captureOriginalMerchantScope(ctx: ServiceContext, subscrip
     taxProfileId: tax.profileId, taxProfileVersion: tax.profileVersion, taxLiability: tax.liability, taxDestination: destination });
   await ctx.tx.execute(sql`select set_config('freeholder.subscription_scope_v1','1',true)`);
   await ctx.tx.insert(subscriptionMerchantScopes).values(facts);
+  // The durable uncreated resource also fences a later manual→provider change.
+  // A mutable billingMode can never erase the history of admitted remote work.
+  await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
+  await ctx.tx.insert(subscriptionProviderScheduleResources).values({ subscriptionId: subscription.id });
 }

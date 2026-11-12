@@ -236,6 +236,19 @@ export interface RecurringScheduleRequest extends PaymentAccountScope {
   };
 }
 
+/** Only new flexible merchant agreements use the separately frozen schedule API. */
+export interface MerchantScheduleLocator extends MerchantChargeScope {
+  providerPlatformAccountId: string;
+  providerScheduleApiVersion: "2026-10-28.endive";
+  subscriptionId: string;
+  providerSubscriptionRef: string;
+}
+export interface MerchantScheduleResource extends MerchantScheduleLocator { providerCustomerRef: string; }
+export interface MerchantScheduleInvoiceInventory {
+  state: "paused" | "cancelled";
+  invoices: Array<{ providerInvoiceRef: string; state: "paid" | "void" | "draft" | "open" | "uncollectible" }>;
+}
+
 export interface RecurringScheduleResult extends PaymentAccountScope {
   applicationFeePercent?: number;
   providerRef: string;
@@ -443,6 +456,9 @@ export interface PaymentAdapter {
   revokeSavedMethod(request: SavedMethodRevocationRequest): Promise<void>;
   chargeSavedMethod(request: OffSessionChargeRequest): Promise<OffSessionChargeResult>;
   createRecurringSchedule(request: RecurringScheduleRequest): Promise<RecurringScheduleResult>;
+  resolveMerchantScheduleResource?(request: MerchantScheduleLocator): Promise<MerchantScheduleResource>;
+  pauseMerchantSchedule?(request: MerchantScheduleResource & { idempotencyKey: string; onPaused: (actual: { providerSubscriptionRef: string; state: "paused" }) => Promise<void> }): Promise<void>;
+  inspectMerchantScheduleInvoices?(request: MerchantScheduleResource): Promise<MerchantScheduleInvoiceInventory>;
   updateRecurringSchedule(request: RecurringScheduleUpdateRequest): Promise<RecurringScheduleResult>;
   cancelRecurringSchedule(request: PaymentAccountScope & { providerRef: string; idempotencyKey: string }): Promise<void>;
   verifyWebhook(request: RawProviderRequest): Promise<readonly PaymentProviderEvent[]>;
