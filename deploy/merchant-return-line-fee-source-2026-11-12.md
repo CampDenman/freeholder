@@ -54,3 +54,45 @@ return precedes the two-unit return, the latter is1, with all three totaling1.
 The fee target validates the combined original returned quantity/net/tax, not a
 fresh per-return tax quote. A current-service three-unit regression remains
 needed before claiming this rounding boundary qualified.
+
+The first unchanged AFTER on fead385f/v8 SQL1ac stopped6.464s at the existing
+SQL admission guard. The shared causal target was correctly400/fee100, but the
+old database still required gross-ratio target388. The1200 customer refund and
+issued original credit stayed recorded; fee operations/observations were zero,
+and no fee POST occurred. This is an integration blocker, not an AFTER pass.
+Logs: `/tmp/freeholder-line-fee-credit80-after-native-v8.{json,log}` and bounded
+`-ledger.json`/`-drain.json`. Neither v8 nor the confirmed112 clone is altered.
+
+The NEW owned `deploy/merchant-line-fee80.fragment.sql` is unassembled and
+unapplied. It computes the canonical target from the same original lineage,
+then replaces only the existing fee guard's target assignment and adds a
+reserved→dispatching recheck. Existing unknown, currency/capacity, immutable
+operation and physical acknowledgement checks remain byte-identical after
+normalizing those two intentional edits. The source-controlled verifier is
+`scripts/check-merchant-line-fee-guard.mjs`. It must run before assembly.
+The fragment uses no supplied scalar target, session GUC or historical rewrite.
+A fresh NEW normal-v9 migration and all native controls are still required;
+no SQL or guard qualification is claimed before those runs.
+
+```mermaid
+flowchart TD
+  R[Original return request] -->|order_id| O[Original order and invoice]
+  R -->|credit_note_id| C[Issued credit and original invoice line IDs]
+  R -->|return_id| A[Frozen return payment allocations]
+  A -->|actual allocation ID and generation key| F[Succeeded logical refund IDs]
+  F -->|immutable refund_id and payment_id| Q[Original refund request and resolved physical proof]
+  O -->|original order item snapshot or unique frozen tuple| L[Original line quantity, net, tax and commission]
+  C -->|same line IDs and original unit shares| L
+  Q -->|same original platform, charge namespace and resource| P[Original merchant charge fee capacity]
+  L -->|cumulative frozen line commission| T[Deterministic original-resource targets]
+  P --> T
+  T --> I[INSERT and pre-physical dispatch integrity checks]
+```
+
+Equal gross amounts are checked only after the graph's exact references are
+verified. Incomplete/pending/void or unrelated manual line credits are review,
+not inferred associations. Accepted historical112 and any later positive ACK
+remain recordable even when the current canonical retained target is400.
+Already-admitted calls still require real completion or verified owning-runtime
+stop; this source/SQL admission change does not pretend to stop physical I/O
+that has already crossed that boundary.

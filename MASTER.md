@@ -13755,6 +13755,13 @@ whatever is best for the people using the site.
   table hashes; the proposed exact original-line/source-bound repair remains
   unqualified. No accepted fee, refund or payout is rewritten. See
   `deploy/merchant-return-line-fee-source-2026-11-12.md`. C12.38 stays open.
+  Returned-line fee integration AFTER attempt 2026-11-12: shared causal
+  target100 was computed, but unchangedv8SQL1ac still enforced112 and refused
+  the INSERT6.464s before any fee POST. Customer refund1200 and its original
+  credit remain recorded; fee operations/observations are0, database drained.
+  A new owned guard fragment is unassembled/unapplied and needs freshnormalv9;
+  existingv8 and the actual112-history clone remain unchanged. This is not
+  a passing AFTER or full C12.38 qualification.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

@@ -54,6 +54,8 @@ export async function originalMerchantFeeTarget(ctx: ServiceContext, payment: ty
   const scopedCharges = charges.filter(row => row.route.allocationId === allocation.id);
   const resources = scopedCharges.filter(row => row.payment.status === "succeeded");
   if (!resources.some(row => row.payment.id === payment.id) || scopedCharges.some(row => row.payment.currency !== payment.currency || ["created", "processing"].includes(row.payment.status))) return null;
+  if (resources.some(row => !Number.isSafeInteger(row.route.applicationFeeMinor) || row.route.applicationFeeMinor < 0 || row.route.applicationFeeMinor > row.payment.amountMinor)
+    || resources.reduce((sum, row) => sum + BigInt(row.route.applicationFeeMinor), 0n) > BigInt(allocation.feeMinor)) return null;
   try {
     for (const row of scopedCharges) {
       await assertMerchantCreatorsQuiesced(ctx, row.payment.id);
