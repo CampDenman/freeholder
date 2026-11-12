@@ -42,10 +42,24 @@ provider work that was admitted before it.
 
 This domain draft requires the separately owned shared helper, storage admission
 change, and normalized receipt table in the unpublished migration 80. The draft
-has not yet received compiler or native qualification. Its unchanged original
-oracle and the added empty/renewal, release, checkpoint-loss, and unresolved DELETE controls are
-unrun against that integration. Existing before evidence and all earlier
-qualified ZIP and reader artifacts remain preserved.
+was composed onto signed shared checkpoint `669b7ae2` as clean source integration
+`fdd8f624`. That integration retains the complete actual migration-80 application
+source and its unchanged v7 SQL (`d060f9a8...`); the new receipt fragment has not
+yet been assembled or applied.
+
+Full Node 22 TypeScript and focused legacy/shared-helper/storage-admission lint
+passed. Nine selected service-boundary and privacy/retention source controls
+passed, with 17 native cases explicitly skipped because database variables were
+absent. Dependency reuse followed exact comparison of the lock, workspace and
+all package manifests to the qualified refund-ledger worktree. Logs are
+`/tmp/freeholder-upload-canonical80-fdd-types.log`,
+`/tmp/freeholder-upload-canonical80-fdd-lint.log` and
+`/tmp/freeholder-upload-canonical80-fdd-source-controls.log`.
+
+The unchanged original native oracle and the added empty/renewal, release,
+checkpoint-loss and unresolved DELETE controls remain unrun against the new
+receipt schema. Existing before evidence and all earlier qualified ZIP and
+reader artifacts remain preserved.
 
 The local disposable test cluster uses `jit=off` and `fsync=on`; this is not a
 default-JIT or provider deployment claim.
