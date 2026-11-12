@@ -17,6 +17,7 @@ import { leadCopy } from "./lead-sink";
 import { leadCredentialFingerprint, type LeadNotice } from "./lead-notice";
 import { formLeadCopies, formSubmissions, type LeadCopyAttempt } from "./schema";
 import type { FormField } from "./fields";
+import { reconcileLeadErasureForCopy } from "./lead-copy-privacy";
 export async function leadCopyReceipts(tx: Tx) {
   await tx.execute(sql`select set_config('freeholder.lead_copy_v1','1',true)`);
   const [key] = await tx.select({ id: mailReceiptKeys.id }).from(mailReceiptKeys).limit(1);
@@ -87,7 +88,6 @@ export async function finishLeadCopy(copyId: string, operationId: string, result
     await tx.update(formLeadCopies).set({ attempts, privacyPending, state: conflict ? "unknown" : copied ? "copied" : "not_copied", ...(result.retry && !copy.retiredAt ? { admittedAttempt: copy.admittedAttempt + 1, state: "ready" as const } : {}), ...(result.providerRef ? { providerRef: copy.retiredAt ? copy.providerRef : result.providerRef, providerRefDigest: receipts.digest("provider:lead-reference", result.providerRef) } : {}), lastError: result.observed === "unknown" ? "The original provider outcome is unknown; verify it and stop its caller before retrying." : result.observed === "not_copied" ? "The original provider refused this copy." : null, updatedAt: new Date() }).where(eq(formLeadCopies.id, copy.id));
   });
   // The physical reply is already durable even if original privacy recovery fails.
-  const { reconcileLeadErasureForCopy } = await import("./lead-copy-privacy");
   await reconcileLeadErasureForCopy(copyId);
 }
 /** Stop unstarted work before a subject is forgotten; active callers retain their evidence. */
