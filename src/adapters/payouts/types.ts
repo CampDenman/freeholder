@@ -11,6 +11,7 @@
 // providers only carry it out.
 
 import type { PaymentProviderEvent } from "../payments/types";
+import type { PublicMerchantSupport } from "@/core/commerce/merchant-identity";
 
 export type PayoutAccountStatus = "pending" | "ready" | "disabled";
 
@@ -33,6 +34,7 @@ export interface OnboardingResult {
   status: PayoutAccountStatus;
   chargesReady?: boolean;
   merchantName?: string | null;
+  merchantSupport?: PublicMerchantSupport | null;
 }
 
 export interface TransferRequest {
@@ -59,7 +61,7 @@ export type ReverseResult = { reference: string } | { unsupported: string };
 export type PayoutWebhookEvent =
   /** C12.38: exact-byte authenticated connected-account financial feedback. */
   | { kind: "payment"; event: PaymentProviderEvent; bodySha256: string; receivedAt: string }
-  | { kind: "account"; externalAccountId: string; status: PayoutAccountStatus; chargesReady?: boolean; merchantName?: string | null }
+  | { kind: "account"; externalAccountId: string; status: PayoutAccountStatus; chargesReady?: boolean; merchantName?: string | null; merchantSupport?: PublicMerchantSupport | null }
   /**
    * key is the attempt key the transfer carried, when the provider echoes it
    * back. "unclaimed": PayPal holds the money for the receiver to claim.
@@ -79,7 +81,7 @@ export interface PayoutProvider {
   onboarding: { kind: "hosted" } | { kind: "form"; fields: readonly OnboardingField[] };
   onboard(seller: SellerIdentity, input: Partial<Record<OnboardingField, string>>, urls: { returnUrl: string; refreshUrl: string }, existing?: string | null): Promise<OnboardingResult>;
   accountStatus(externalAccountId: string): Promise<PayoutAccountStatus>;
-  accountDetails?(externalAccountId: string): Promise<{ status: PayoutAccountStatus; chargesReady: boolean; merchantName: string | null }>;
+  accountDetails?(externalAccountId: string): Promise<{ status: PayoutAccountStatus; chargesReady: boolean; merchantName: string | null; merchantSupport?: PublicMerchantSupport | null }>;
   transfer(request: TransferRequest): Promise<TransferResult>;
   reverse(request: { reference: string; amountMinor: number; currency: string; idempotencyKey: string }): Promise<ReverseResult>;
   webhook(request: PayoutWebhookRequest): Promise<PayoutWebhookEvent[]>;

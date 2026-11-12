@@ -336,7 +336,8 @@ describe.runIf(hasDatabase)("catalog fulfillment", { timeout: 40_000 }, () => {
   it("reconciles normalized authenticated feedback only on the original seller account",async()=>{
     const {received,paid,payment,refund}=await providerReturn();
     const {invoiceMarketPolicies,paymentMerchantRoutes}=await import("@/modules/invoicing/schema");
-    await db().insert(invoiceMarketPolicies).values({invoiceId:paid.order.invoiceId!,model:"seller_merchant",adapter:"stripe_connect",siteFeeBps:1000,holdDays:14,feeMinor:450,sellerUserId:OWNER.userId,merchantName:"Original Seller",providerAccountId:"acct_originalseller"});
+    const merchantContact=await createContact.call({name:"Synthetic original seller"},OWNER);
+    await db().insert(invoiceMarketPolicies).values({invoiceId:paid.order.invoiceId!,model:"seller_merchant",adapter:"stripe_connect",siteFeeBps:1000,holdDays:14,feeMinor:450,sellerUserId:OWNER.userId,merchantName:"Original Seller",merchantContactId:merchantContact.id,providerAccountId:"acct_originalseller"});
     await db().insert(paymentMerchantRoutes).values({paymentId:payment.id,providerAccountId:"acct_originalseller",applicationFeeMinor:450});
     refund.mockImplementation(async request=>{
       expect(request.providerAccountId).toBe("acct_originalseller");

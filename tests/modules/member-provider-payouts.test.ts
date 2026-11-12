@@ -107,7 +107,8 @@ describe.runIf(hasDatabase)("payouts through a provider (C12.26–C12.27)", () =
     const { invoice } = await issueInvoice.call({ id: draft.invoice.id }, OWNER);
     const payment = await createPayment.call({ invoiceId: invoice.id, provider: "stripe", method: "hosted_checkout", amountMinor: 2000, idempotencyKey: "connect-financial-payment" }, OWNER);
     // Seed the internal boundary while owner activation remains unavailable.
-    await db().insert(invoiceMarketPolicies).values({ invoiceId: invoice.id, model: "seller_merchant", adapter: "stripe_connect", siteFeeBps: 1000, holdDays: 0, feeMinor: 200, sellerUserId: RAE.userId, merchantName: "Rae Studio", providerAccountId: "acct_rae" });
+    const {contact:merchantContact}=await resolveContact.call({email:"rae@example.test",name:"Rae"},OWNER);
+    await db().insert(invoiceMarketPolicies).values({ invoiceId: invoice.id, model: "seller_merchant", adapter: "stripe_connect", siteFeeBps: 1000, holdDays: 0, feeMinor: 200, sellerUserId: RAE.userId, merchantName: "Rae Studio",merchantContactId:merchantContact.id, providerAccountId: "acct_rae" });
     await db().insert(paymentMerchantRoutes).values({ paymentId: payment.id, providerAccountId: "acct_rae", applicationFeeMinor: 200 });
     await startPayment.call({ id: payment.id, providerRef: "pi_connected", providerCheckoutRef: "cs_connected" }, OWNER);
     const event = { id: "evt_connected", created: Math.floor(Date.now() / 1000), account: "acct_rae", type: "payment_intent.succeeded", data: { object: { id: "pi_connected", amount_received: 2000, currency: "cad", application_fee_amount: 200, metadata: { freeholder_invoice_id: invoice.id, freeholder_contact_id: contact.id } } } };

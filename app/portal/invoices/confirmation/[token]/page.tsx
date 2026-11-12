@@ -13,6 +13,7 @@ import { getLocale, getT } from "../../../../i18n";
 import { confirmInvoicePaymentAction } from "../../actions";
 import { PaymentButton } from "../../PaymentButton";
 import { SkipLink } from "@/ui/SkipLink";
+import { InvoiceIssuer } from "../../InvoiceIssuer";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -31,6 +32,7 @@ export default async function InvoiceConfirmation({ params, searchParams }: {
   return <main id="main" tabIndex={-1} className="mx-auto grid max-w-xl gap-5 p-6">
     <SkipLink target="main">{t("a11y.skipToContent")}</SkipLink>
     <h1 className="text-2xl font-bold">{t("customerInvoice.confirmation")}</h1>
+    <InvoiceIssuer issuer={payment} businessName={business?.name??""} locale={locale} t={t}/>
     <p className="font-mono">{formatMoney(payment.amountMinor, payment.currency, locale)}</p>
     <Callout tone={payment.status === "succeeded" ? "success" : "neutral"}>{t(pending ? "customerInvoice.pending" : payment.status === "succeeded" ? "customerInvoice.succeeded" : "customerInvoice.declined")}</Callout>
     {query.error ? <div role="alert"><Callout tone="danger">{t("customerInvoice.failed")}</Callout></div> : null}

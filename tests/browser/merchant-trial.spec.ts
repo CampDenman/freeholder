@@ -41,14 +41,15 @@ test.describe("original merchant trial cards (C12.38)", () => {
       // The site has switched back to platform collection. This existing
       // agreement must retain the original connected merchant and Stripe.
       await db().insert(memberSettings).values({id:1,marketplaceEnabled:true,payoutModel:"hold",payoutAdapter:"manual"});
-      await db().insert(memberPayoutAccounts).values({userId:sellerId,adapter:"stripe_connect",status:"ready",externalAccountId:"acct_TrialOriginal",chargesReady:true,merchantName:"Studio Rae"});
+      await db().insert(memberPayoutAccounts).values({userId:sellerId,adapter:"stripe_connect",status:"ready",externalAccountId:"acct_TrialOriginal",chargesReady:true,merchantName:"Studio Rae",merchantSupport:{email:"support@studio.example",phone:null,url:null,address:null}});
       await db().insert(products).values({id:productId,sellerUserId:sellerId,name:"Studio Rae membership",slug:"merchant-trial",kind:"digital",status:"active",visibility:"public",publishedAt:now});
       await db().insert(productVariants).values({id:variantId,productId,combinationKey:"default",sku:"merchant-trial",isDefault:true});
       const [priceList]=await db().insert(priceLists).values({name:"Merchant trial CAD",currency:"CAD",active:true}).returning();
       await db().insert(priceListEntries).values({priceListId:priceList!.id,variantId,amountMinor:1000});
       await db().insert(plans).values({id:planId,productId,name:"Studio Rae membership",interval:"month",trialDays:14,trialRequiresCard:true,billingMode:"platform",status:"active"});
       await db().insert(subscriptions).values({id:subscriptionId,contactId,planId,productVariantId:variantId,currency:"CAD",billingMode:"platform",provider:"stripe",status:"paused",signupPending:true,currentPeriodStart:now,currentPeriodEnd:new Date(now.getTime()+86_400_000)});
-      await db().insert(subscriptionMarketPolicies).values({subscriptionId,model:"seller_merchant",adapter:"stripe_connect",siteFeeBps:1000,holdDays:0,sellerUserId:sellerId,merchantName:"Studio Rae",providerAccountId:"acct_TrialOriginal"});
+      const [merchantContact]=await db().select({id:contacts.id}).from(contacts).where(eq(contacts.userId,sellerId));
+      await db().insert(subscriptionMarketPolicies).values({subscriptionId,model:"seller_merchant",adapter:"stripe_connect",siteFeeBps:1000,holdDays:0,sellerUserId:sellerId,merchantName:"Studio Rae",merchantContactId:merchantContact!.id,providerAccountId:"acct_TrialOriginal"});
       const setupAt=new Date(),savedAt=new Date(Date.now()+1);
       await db().insert(subscriptionEvents).values({subscriptionId,kind:"card_setup",detail:"cus_trial_original",at:setupAt});
       const [original]=await db().insert(paymentMethods).values({contactId,provider:"stripe",providerAccountId:"acct_TrialOriginal",providerMethodRef:"pm_trial_original",providerCustomerRef:"cus_trial_original",kind:"card",label:"Visa ending 4242",consentSource:"provider_checkout",consentedAt:savedAt,providerStatusAt:savedAt,createdAt:savedAt}).returning();

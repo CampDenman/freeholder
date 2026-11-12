@@ -99,6 +99,7 @@ async function exportMember(tx: Tx, userId: string) {
   const now = new Date();
   return {
     profile,
+    payoutAccount:await tx.select({merchantName:memberPayoutAccounts.merchantName,merchantSupport:memberPayoutAccounts.merchantSupport}).from(memberPayoutAccounts).where(eq(memberPayoutAccounts.userId,userId)),
     profileSections: await tx.select().from(memberProfileSections).where(eq(memberProfileSections.userId, userId)),
     attachments: await tx.select().from(memberAttachments).where(eq(memberAttachments.ownerId, userId)),
     posts: await tx.select().from(memberPosts).where(eq(memberPosts.authorId, userId)),

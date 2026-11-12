@@ -228,6 +228,19 @@ and account verifier; if unavailable or changed, the document remains readable
 while payment is unavailable. The portal uses bidirectional isolation and
 wraps long names. This read-model integration enables no direct collection.
 
+The public commercial-identity continuation also freezes deliberately public
+support email, phone, URL and postal address on each original seller agreement
+and invoice. The customer invoice and exact payment-return receipt expose
+`issuerName`, `issuerIsMerchant` and `issuerSupport`; private provider accounts,
+seller/contact IDs and fees remain private. The seller's payout page shows
+their current public business details and offers the existing provider refresh.
+Changing current details never rewrites an issued document. Missing historical
+support remains missing; an erased supplier displays an unavailable supplier
+identity and never adopts the platform's branding. These values come only from
+the original provider's public business-profile fields, never its private
+representative or home details. Source qualification and migration74's
+contiguous upgrade remain pending; direct collection stays unavailable.
+
 ## Returned-item refunds (C5.19/C11.10, source repair)
 
 Authenticated refund feedback must match the recorded original payment

@@ -519,6 +519,13 @@
       "when": 1793310000053,
       "tag": "0073_import_source_graph",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1793310000054,
+      "tag": "0074_merchant_commercial_identity",
+      "breakpoints": true
     }
   ]
 }

@@ -93,6 +93,8 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+  invoice_market_policies: "Immutable issued-invoice terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",
+  subscription_market_policies: "Immutable agreement terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",
   mail_record_subjects: "Mail receipt ownership follows the receipt; personal fields use the three mail retention kinds.",
   contact_relationships: "Join table of two contacts; not a TTL store.",
   customer_magic_links: "Credential bearer hashes; never a product TTL.",

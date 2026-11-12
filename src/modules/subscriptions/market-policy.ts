@@ -3,6 +3,7 @@
 // C12.38: an agreement fixes its merchant before a trial or first invoice.
 import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { invoiceMarketPolicy } from "@/modules/invoicing/market-policy";
 import { subscriptionMarketPolicies, subscriptions } from "./schema";
@@ -36,6 +37,7 @@ export const captureSubscriptionMarketPolicy = defineService({
   kind: "mutation", permission: "system", external: false,
   input: z.object({ subscriptionId: z.uuid() }), output: z.object({ captured: z.boolean() }),
   handler: async ({ subscriptionId }, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
     const [subscription] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, subscriptionId)).limit(1).for("update");
     if (!subscription) throw new ServiceError("not_found", "That subscription is not here.");
     const [existing] = await ctx.tx.select().from(subscriptionMarketPolicies).where(eq(subscriptionMarketPolicies.subscriptionId, subscriptionId));

@@ -108,7 +108,8 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     const {invoice}=await issuedInvoice(account?"cancel-merchant":"cancel-platform");
     const payment=await createPayment.call({invoiceId:invoice.id,provider:"stripe",method:"hosted_checkout",amountMinor:10000,idempotencyKey:"cancel-original-payment"},OWNER);
     if(account){
-      await db().insert(invoiceMarketPolicies).values({invoiceId:invoice.id,model:"seller_merchant",adapter:"stripe_connect",siteFeeBps:1000,holdDays:14,feeMinor:1000,sellerUserId:OWNER.userId,merchantName:"Original merchant",providerAccountId:account});
+      const merchantContact=await createContact.call({name:"Synthetic original merchant"},OWNER);
+      await db().insert(invoiceMarketPolicies).values({invoiceId:invoice.id,model:"seller_merchant",adapter:"stripe_connect",siteFeeBps:1000,holdDays:14,feeMinor:1000,sellerUserId:OWNER.userId,merchantName:"Original merchant",merchantContactId:merchantContact.id,providerAccountId:account});
       await db().insert(paymentMerchantRoutes).values({paymentId:payment.id,providerAccountId:account,applicationFeeMinor:1000});
     }
     await startPayment.call({id:payment.id,providerRef:"pi_OriginalCancelledRefund"},OWNER);
@@ -135,7 +136,8 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     const payment = await createPayment.call({ invoiceId: invoice.id, provider: "stripe", method: "hosted_checkout", amountMinor: 10_000, idempotencyKey: "seller-feedback" }, OWNER);
     // Reserve the routing fixture directly while the public seller model is
     // still unavailable; no buyer/API parameter can write these columns.
-    await db().insert(invoiceMarketPolicies).values({ invoiceId: invoice.id, model: "seller_merchant", adapter: "stripe_connect", siteFeeBps: 1000, holdDays: 14, feeMinor: 1000, sellerUserId: OWNER.userId, merchantName: "Seller Studio", providerAccountId: "acct_seller" });
+    const merchantContact=await createContact.call({name:"Synthetic original merchant"},OWNER);
+    await db().insert(invoiceMarketPolicies).values({ invoiceId: invoice.id, model: "seller_merchant", adapter: "stripe_connect", siteFeeBps: 1000, holdDays: 14, feeMinor: 1000, sellerUserId: OWNER.userId, merchantName: "Seller Studio",merchantContactId:merchantContact.id, providerAccountId: "acct_seller" });
     await db().insert(paymentMerchantRoutes).values({ paymentId: payment.id, providerAccountId: "acct_seller", applicationFeeMinor: 1000 });
     await startPayment.call({ id: payment.id, providerRef: "pi_seller", providerCheckoutRef: "cs_seller" }, OWNER);
     await expect(settlePayment.call({id:payment.id,providerRef:"pi_seller"},OWNER)).rejects.toMatchObject({code:"permission"});
