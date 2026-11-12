@@ -333,4 +333,14 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     expect((await commitImport.call({ id }, OWNER)).status).toBe("committed");
     expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([later.id]);
   });
+
+  it("creates one new person for two originally unknown readers in the same atomic source commit", async () => {
+    const second = `<wp:comment><wp:comment_id>21</wp:comment_id><wp:comment_author>Original reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Second original comment.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>`;
+    const id = await stage(SOURCE.replace("</item>", `${second}</item>`));
+    expect((await commitImport.call({ id }, OWNER)).status).toBe("committed");
+    const readers = await db().select().from(contacts).where(eq(contacts.email, EMAIL));
+    expect(readers).toHaveLength(1);
+    expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([readers[0]!.id, readers[0]!.id]);
+    expect((await db().select().from(readerOwnershipReceipts)).every(receipt => receipt.state === "bound" && receipt.contactId === readers[0]!.id)).toBe(true);
+  });
 });

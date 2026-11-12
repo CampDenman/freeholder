@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { defineService, getService, ServiceError } from "@/core/service";
+import { defineService, getService, ServiceError, type Tx } from "@/core/service";
 import { resolveContact, registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { auditLog } from "@/core/events/schema";
@@ -25,6 +25,9 @@ import { withoutPrivacyHold } from "@/core/retention/holds";
 const state = z.enum(["pending", "approved", "spam", "trash"]);
 const privateRow = row({ id: uuid, pageId: uuid, parentId: uuid.nullable(), contactId: uuid.nullable(), authorName: z.string(), body: z.string(), status: state, source: z.string(), externalId: z.string().nullable(), createdAt: timestamp, updatedAt: timestamp });
 const publicRow = z.object({ id: uuid, parentId: uuid.nullable(), authorName: z.string(), body: z.string(), createdAt: timestamp });
+// Only actual new contacts admitted by this source in this atomic mutation.
+// A later process/phase must use durable ownership or a fresh owner decision.
+const newlyImportedReaders = new WeakMap<Tx, Map<string, Set<string>>>();
 
 registerContactReference({
   table: "blog_reader_comments",
@@ -136,12 +139,20 @@ export const importReaderComment = defineService({
     if (bound?.source === "privacy-erasure") throw new ServiceError("conflict", "That reader was erased. Review the original source before importing comments.");
     if (input.sourceContactId && !bound) throw new ServiceError("conflict", "The imported reader's contact changed. Review the source before importing this comment.");
     const resolved = !bound && input.email ? await ctx.callAsSystem(resolveContact, { name: input.name, email: input.email, source: "wordpress-comment" }) : null;
+    if (resolved && !resolved.created && !newlyImportedReaders.get(ctx.tx)?.get(input.runId)?.has(resolved.contact.id)) throw new ServiceError("conflict", "This original reader was unbound when staged. The owner must review the person now using that address before importing the comment.");
     if (input.parentId) {
       const [parent] = await ctx.tx.select({ id: comments.id }).from(comments).where(and(eq(comments.id, input.parentId), eq(comments.pageId, input.pageId))).limit(1);
       if (!parent) throw new ServiceError("validation", "The imported parent comment belongs to another post.");
     }
     const [saved] = await ctx.tx.insert(comments).values({ source, externalId: input.externalId, pageId: input.pageId, parentId: input.parentId ?? null, authorName: input.name, body: input.body, status: input.status, contactId: bound?.id ?? resolved?.contact.id ?? null, ...(input.createdAt ? { createdAt: new Date(input.createdAt) } : {}) }).returning();
     await acceptReaderOwnership(ctx.tx, original, postKey, commentKey, saved!.contactId);
+    if (resolved?.created) {
+      let sources = newlyImportedReaders.get(ctx.tx);
+      if (!sources) { sources = new Map(); newlyImportedReaders.set(ctx.tx, sources); }
+      let readers = sources.get(input.runId);
+      if (!readers) { readers = new Set(); sources.set(input.runId, readers); }
+      readers.add(resolved.contact.id);
+    }
     ctx.setSubject("blog_comment", saved!.id); return saved!;
   },
 });
