@@ -13543,6 +13543,14 @@ whatever is best for the people using the site.
   pass (34 previous,18 new). Actual caller/snapshot authority, atomic core
   disposition, SQL guards, native/human flows and provider acceptance remain
   required; this optional read helper does not close a financial lifecycle.
+  Physical refund-caller before control 2026-11-12: actual current80 checkout
+  and payment capture reached a second identical refund POST while the first
+  caller stayed paused. Body/key equality passed; admission failed5.672s on
+  product0ecf99d1 plus test328fa48f/v6ea06. The simulated provider accepted
+  one refund and returned409 for the concurrent request; no duplicate money
+  effect or actual-main breach is claimed. Both callers and database work
+  drained. The unregistered core fence still requires complete integration
+  and native after proof; see `deploy/merchant-refund-source-2026-11-12.md`.
   Original fee-job runtime repair 2026-11-12: the first actual mixed-order
   capture control reached payment completion and exposed an unregistered
   invoicing.reconcileOriginalMerchantFee job on unreleased80 sourcee4500e3e.

@@ -136,3 +136,21 @@ bank-return state recovery, alternate-writer SQL guards, privacy reopening and
 periodic crash-window repair, human recovery surfaces and full native/browser
 acceptance remain active completion work. This conservative intermediate state
 is not a feature deferral or permission to activate the new model.
+
+## Actual current-source physical-refund caller before control
+
+On product0ecf99d1 plus test-only328fa48f, the normal80 v6 database (SQL SHA256
+ea06fa49df88e7e3ab396c4246a5d9d017682825f0758253024be0dbcf943fd0) completed an
+actual current seller checkout and canonical payment capture. The real Stripe
+refund factory then sent a second identical refund POST while its first HTTP
+caller remained paused. Exact body and idempotency-key equality assertions
+passed; the caller-admission assertion failed after5.672 seconds.
+
+The intercepted provider returned one successful original refund and a409
+idempotency-in-use response for the concurrent call. No second customer refund
+was invented or claimed. Both promises were released and awaited; the runner
+exited and read-only database inspection found no active test sessions. This
+proves a development-source caller fence is missing, not that Stripe would
+refund twice inside its idempotency window, and not an actual-main breach.
+The unregistered refund phase repair was not applied to this before source.
+Logs: /tmp/freeholder-refund-caller-before-v6.json and .log.
