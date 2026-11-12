@@ -18,7 +18,7 @@ type Labels = {
   reconcile: string; publish: string; rollback: string; upload: string; uploadHint: string; stage: string; uploading: string; readingSource: string; uploadFailed: string;
 };
 
-export function GraphImportControls({ id, status, version, upload, indexComplete, planFrozen, planReady, invalidated, labels }: { id: string; status: string; version: ImportGraphVersion; upload: Upload | null; indexComplete: boolean; planFrozen: boolean; planReady: boolean; invalidated: boolean; labels: Labels }) {
+export function GraphImportControls({ id, status, sourceKind, version, upload, indexComplete, planFrozen, planReady, invalidated, labels }: { id: string; status: string; sourceKind: string; version: ImportGraphVersion; upload: Upload | null; indexComplete: boolean; planFrozen: boolean; planReady: boolean; invalidated: boolean; labels: Labels }) {
   const router = useRouter(), pause = useRef(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null), [saved, setSaved] = useState(false);
   async function review(event: FormEvent<HTMLFormElement>) {
@@ -74,7 +74,7 @@ export function GraphImportControls({ id, status, version, upload, indexComplete
     {!invalidated && ["discover", "previewed"].includes(status) ? <fieldset disabled={busy} className="grid min-w-0 gap-3">
       <legend className="sr-only">{labels.upload}</legend>
       <p className="text-sm text-ink-muted">{labels.restoreHint}</p><p className="text-sm text-ink-muted">{labels.limits}</p>
-      <SourceUploadForm id={id} sourceKind="wordpress-wxr" graph={version} labels={labels} />
+      <SourceUploadForm id={id} sourceKind={sourceKind} graph={version} labels={labels} />
     </fieldset> : null}
   </div>;
 }

@@ -37,8 +37,8 @@ export const sourceGraphReview = defineService({
     const active = object(object(run.checkpoint).sourceUpload);
     const activeUpload = upload.safeParse({ uploadId: active.uploadId, chunks: active.chunks, received: Array.isArray(active.received) ? active.received.length : 0, expiresAt: active.expiresAt });
     const entries = rows.slice(0, input.limit).map(row => {
-      const metadata = object(row.metadata);
-      return { ordinal: row.ordinal, kind: row.kind, sourceUrl: typeof metadata.url === "string" ? metadata.url : null, title: typeof metadata.title === "string" ? metadata.title : null, destinationPath: row.target, sourceStatus: typeof metadata.status === "string" ? metadata.status : null, resolution: row.resolution, applied: row.pageId !== null, reason: typeof metadata.reason === "string" ? metadata.reason : null };
+      const metadata = object(row.metadata), file = metadata.format === "archive-zip" ? object(metadata.file) : {};
+      return { ordinal: row.ordinal, kind: row.kind, sourceUrl: typeof metadata.url === "string" ? metadata.url : typeof file.url === "string" ? file.url : null, title: typeof metadata.title === "string" ? metadata.title : typeof file.path === "string" ? file.path : null, destinationPath: row.target, sourceStatus: typeof metadata.status === "string" ? metadata.status : null, resolution: row.resolution, applied: row.pageId !== null, reason: typeof metadata.reason === "string" ? metadata.reason : null };
     });
     return { id: run.id, status: run.status, origin: run.origin ?? "", version: importGraphVersionSchema.parse(graph), indexComplete: graph.state === "indexed" || ["committed", "reconciled", "published"].includes(run.status), indexed: total?.indexed ?? 0, planFrozen: graph.planDigest !== null, planReady: graph.planMetadata !== null, invalidated: graph.state === "invalidated", upload: activeUpload.success ? activeUpload.data : null, counts: z.record(z.string(), z.number()).parse(run.counts), entries, nextOrdinal: rows.length > input.limit ? entries.at(-1)!.ordinal : null, media, nextMediaKey: mediaRows.length > input.limit ? media.at(-1)!.key : null };
   },

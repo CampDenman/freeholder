@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { readArchiveDirectory, readArchiveOriginalFile, readArchiveOriginalFiles } from "@/core/import/archive-directory";
+import { sourceGraphCursorSchema, sourceGraphEntrySchema } from "@/core/import/source-index-contract";
 import { archiveGraphEntry, archiveGraphEntrySchema } from "@/core/import/archive-graph-contract";
 import { indexArchivePhase } from "@/core/import/archive-index";
 import type { ArchiveSource } from "@/core/import/archive";
@@ -181,6 +182,9 @@ describe("bounded original ZIP indexing phases (C3.47)", () => {
     expect(rows[2]?.metadata).not.toHaveProperty("contentDigest");
     expect(archiveGraphEntrySchema.safeParse({ ...rows[0], metadata: { ...rows[0]!.metadata, wpId: "1001" } }).success).toBe(false);
     expect(archiveGraphEntrySchema.safeParse({ ...rows[0], metadata: { ...rows[0]!.metadata, body: "shadow source body" } }).success).toBe(false);
+    expect(sourceGraphEntrySchema.safeParse({ ...rows[0], metadata: { ...rows[0]!.metadata, body: "shadow source body" } }).success).toBe(false);
+    expect(sourceGraphCursorSchema.safeParse({ format: "archive-zip", directoryFingerprint: null, ordinal: 1, nextByte: 20, bodyBytes: 0, metadataBytes: 0 }).success).toBe(false);
+    expect(sourceGraphCursorSchema.parse({ nextByte: 0, ordinal: 0, bodyBytes: 0, metadataBytes: 0, header: null })).toEqual({ nextByte: 0, ordinal: 0, bodyBytes: 0, metadataBytes: 0, header: null });
     expect(archiveGraphEntrySchema.safeParse({ ...rows[0], start: rows[0]!.start + 1 }).success).toBe(false);
   });
 

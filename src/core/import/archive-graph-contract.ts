@@ -39,7 +39,7 @@ export const archiveGraphEntrySchema = z.object({
   bodyBytes: z.number().int().min(0).max(20 * 1024 * 1024),
 }).strict().superRefine((entry, ctx) => {
   const file = entry.metadata.file;
-  if (entry.start !== file.start || entry.end !== file.end || entry.digest !== (entry.metadata.contentDigest ?? entry.metadata.factsDigest) || entry.kind !== (file.kind === "asset" ? "attachment" : file.kind === "ignored" ? "skipped" : "page") || entry.bodyBytes !== (file.kind === "page" ? file.bytes : 0)) ctx.addIssue({ code: "custom", message: "The indexed ZIP row lost its original file binding." });
+  if (entry.identity !== createHash("sha256").update(`archive-zip\0${file.path}`).digest("hex") || entry.start !== file.start || entry.end !== file.end || entry.digest !== (entry.metadata.contentDigest ?? entry.metadata.factsDigest) || entry.kind !== (file.kind === "asset" ? "attachment" : file.kind === "ignored" ? "skipped" : "page") || entry.bodyBytes !== (file.kind === "page" ? file.bytes : 0)) ctx.addIssue({ code: "custom", message: "The indexed ZIP row lost its original file binding." });
 });
 
 /** Attachment here means an actual static asset, never an invented WP entity. */

@@ -35,6 +35,11 @@ import sourceGraphServices, { claimWxrGraph, applyWxrIndex } from "./source-grap
 import { indexWxrPhase } from "./wxr-index";
 import { ReaderOwnershipErasedError } from "./reader-ownership";
 import { indexRestPhase } from "./rest-index";
+import { archiveIndexCursorSchema, indexArchivePhase } from "./archive-index";
+import { readArchiveDirectory } from "./archive-directory";
+import { archiveGraphEntry } from "./archive-graph-contract";
+import { archiveGraphHeaderSchema } from "./source-index-contract";
+import { wxrIndexCursorSchema } from "./wxr-index";
 import { readJsonSourcePhase } from "./json-source-ranges";
 import { importSourceRanges } from "./source-range";
 import { markGraphRunWriter } from "./graph-writer";
@@ -638,7 +643,15 @@ export const previewFromUpload = defineOrchestratedService({
         if (!claimed.leaseToken) throw new ServiceError("internal", "The source phase has no lease.");
         try {
           const ranges = importSourceRanges(claimed.source, index => readRetainedSourceChunk(claimed.source, index));
-          const indexed = state.kind === "wordpress-rest" ? await indexRestPhase(ranges, claimed.cursor, state.origin) : await indexWxrPhase(ranges, claimed.cursor, state.origin);
+          const indexed = await (async () => {
+            if (state.kind !== "archive") {
+              const cursor = wxrIndexCursorSchema.parse(claimed.cursor);
+              return state.kind === "wordpress-rest" ? indexRestPhase(ranges, cursor, state.origin) : indexWxrPhase(ranges, cursor, state.origin);
+            }
+            const directory = await readArchiveDirectory(ranges, state.origin);
+            const phase = await indexArchivePhase(ranges, directory, archiveIndexCursorSchema.parse(claimed.cursor));
+            return { ...phase, entries: phase.entries.map(archiveGraphEntry), headerMetadata: archiveGraphHeaderSchema.parse({ format: "archive-zip", origin: directory.origin, root: directory.root, directoryFingerprint: directory.directoryFingerprint, files: directory.files.length, directoryEntries: directory.directoryEntries, expandedBytes: directory.expandedBytes }) };
+          })();
           const accepted = await applyWxrIndex.call({ ...input, graphId: claimed.graphId, generation: claimed.generation, leaseToken: claimed.leaseToken, source: claimed.source, previous: claimed.cursor, ...indexed }, actor);
           return indexed.done ? await prepareSourceGraphPlan.call({ id: input.id, version: accepted.graph }, actor) : accepted;
         } catch (error) { await releaseIndexRead.call({ id: input.id, graphId: claimed.graphId, generation: claimed.generation, leaseToken: claimed.leaseToken }, actor).catch(() => undefined); throw error; }
@@ -647,7 +660,7 @@ export const previewFromUpload = defineOrchestratedService({
       await applyUploaded.call({ ...input, preview: staged.preview, counts: staged.counts, archivePreviewDigest: staged.archivePreviewDigest }, actor);
       return { id: input.id, status: "previewed", error: null, counts: staged.counts };
     } catch (error) {
-      if (["wordpress-wxr", "wordpress-rest"].includes(state.kind) && error instanceof ImporterPhaseLimitError && ["pages", "bytes"].includes(error.limit)) {
+      if (["wordpress-wxr", "wordpress-rest", "archive"].includes(state.kind) && error instanceof ImporterPhaseLimitError && ["pages", "bytes", "entries"].includes(error.limit)) {
         const claimed = await claimWxrGraph.call({ ...input, initialize: true }, actor);
         return { id: input.id, status: "discover", error: null, counts: { indexed: 0 }, graph: { generation: claimed.generation, sourceRevision: claimed.source.revision, planRevision: claimed.planRevision } };
       }

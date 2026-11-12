@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { fromRandomAccessReaderPromise, RandomAccessReader, type Entry, type ZipFile } from "yauzl";
 import { parse, serialize, type DefaultTreeAdapterTypes } from "parse5";
-import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS } from "./contract";
+import { assertPublicHttpUrl, DEFAULT_IMPORTER_LIMITS, ImporterPhaseLimitError } from "./contract";
 import { parseSemanticHtml } from "./parsers";
 import { toCmsSlug, type WordpressSeo } from "./wordpress";
 import { sourceContentBody } from "./archive-content";
@@ -231,7 +231,8 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
     const paths = new Set<string>();
     let expandedBytes = 0, count = 0;
     for await (const entry of zip.eachEntry()) {
-      if (++count > ARCHIVE_LIMITS.entries || Date.now() > budget.deadline) throw new Error("The ZIP exceeds the entry or time limit.");
+      if (++count > ARCHIVE_LIMITS.entries) throw new ImporterPhaseLimitError("entries", "The ZIP exceeds the ordinary bounded directory phase.");
+      if (Date.now() > budget.deadline) throw new Error("The ZIP exceeds its read time limit.");
       regularEntry(entry);
       const path = safePath(entry.fileName);
       const folded = path.toLocaleLowerCase("en");
@@ -243,7 +244,7 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
     }
     const html = entries.filter(({ path }) => HTML.test(path));
     if (!html.length) throw new Error("The ZIP contains no static HTML pages.");
-    if (html.length > ARCHIVE_LIMITS.pages) throw new Error("This ZIP exceeds the current 500-page import batch. No pages were staged.");
+    if (html.length > ARCHIVE_LIMITS.pages) throw new ImporterPhaseLimitError("pages", "This ZIP exceeds the current 500-page import batch. No pages were staged.");
     const useful = entries.filter(({ path }) => HTML.test(path) || mediaPath(path));
     const first = useful[0]!.path.split("/")[0]!;
     const root = useful.every(({ path }) => path.includes("/") && path.startsWith(`${first}/`)) && useful.some(({ path }) => /^index\.html?$/i.test(path.slice(first.length + 1))) ? `${first}/` : "";
@@ -262,7 +263,7 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
     for (const { path, entry } of html) {
       const bytes = await readEntry(zip, entry, ARCHIVE_LIMITS.pageBytes, budget.deadline);
       bodyBytes += bytes.byteLength;
-      if (bodyBytes > ARCHIVE_LIMITS.bodyBytes) throw new Error("This ZIP exceeds the current 20 MB HTML batch. No pages were staged.");
+      if (bodyBytes > ARCHIVE_LIMITS.bodyBytes) throw new ImporterPhaseLimitError("bytes", "This ZIP exceeds the current 20 MB HTML batch. No pages were staged.");
       pages.push(parseArchiveOriginalPage(bytes, archiveUrl(path.slice(root.length), base), { base, assetByUrl, used, unresolvedImages, preserveRootTarget }));
     }
     // Every retained byte is validated and hashed before entering the manifest.

@@ -10,6 +10,7 @@ import { businessProfile } from "@/core/settings/schema";
 import { THEME_COOKIE } from "@/core/design/theme";
 import { translator } from "@/core/i18n";
 import { CSRF_COOKIE, issueCsrfToken } from "@/core/http/csrf";
+import { originalStaticZip } from "../helpers/original-static-zip";
 import { C11_BASE_URL, seedC11Owner, useOwnerSession } from "./owner-session";
 
 const ORIGIN = "https://fictionalresumptionsourcewithalonghostname.example";
@@ -21,10 +22,15 @@ const restSource = (origin = ORIGIN) => Buffer.from(JSON.stringify(Array.from({ 
   content: { rendered: `<p>Fictional saved body ${index} العربية.</p>${index === 0 ? `<p><a href="${origin.replace(/\/$/, "")}/resumed/page-500">Last saved page</a></p>` : ""}` },
 }))));
 
+const archiveSource = () => Buffer.from(originalStaticZip(Array.from({ length: 501 }, (_, index) => ({
+  path: `resumed/page-${index}.html`,
+  body: `<html><head><title>Fictional saved page ${index}</title></head><body><p>Fictional saved body ${index} العربية.</p>${index === 0 ? `<p><a href="${ORIGIN}/resumed/page-500.html">Last saved page</a></p>` : ""}</body></html>`,
+}))));
+
 test.describe("saved source owner journey (C3.47)", () => {
   test.setTimeout(180_000);
   test.afterAll(closeDb);
-  for (const kind of ["wordpress-wxr", "wordpress-rest"] as const) for (const locale of ["en", "es", "fr", "ar"] as const) {
+  for (const kind of ["wordpress-wxr", "wordpress-rest", "archive"] as const) for (const locale of ["en", "es", "fr", "ar"] as const) {
     test(`${kind} ${locale}: pause, return, restore identical bytes, publish and reverse 501 pages`, async ({ browser }) => {
       const session = await seedC11Owner("Saved source qualification");
       const selectedOrigin = kind === "wordpress-rest" && locale === "en" ? `${ORIGIN}/site-a/` : ORIGIN;
@@ -32,7 +38,7 @@ test.describe("saved source owner journey (C3.47)", () => {
       const context = await browser.newContext({ baseURL: C11_BASE_URL, viewport: { width: 320, height: 900 } });
       await useOwnerSession(context, session);
       await context.addCookies([{ name: CSRF_COOKIE, value: issueCsrfToken(), url: C11_BASE_URL }]);
-      const page = await context.newPage(), t = translator(locale), file = kind === "wordpress-rest" ? { name: "fictional-saved-original.json", mimeType: "application/json", buffer: restSource(selectedOrigin) } : { name: "fictional-saved-original.xml", mimeType: "application/xml", buffer: source() };
+      const page = await context.newPage(), t = translator(locale), file = kind === "archive" ? { name: "fictional-saved-original.zip", mimeType: "application/zip", buffer: archiveSource() } : kind === "wordpress-rest" ? { name: "fictional-saved-original.json", mimeType: "application/json", buffer: restSource(selectedOrigin) } : { name: "fictional-saved-original.xml", mimeType: "application/xml", buffer: source() };
       const press = async (name: string) => { await page.getByRole("button", { name, exact: true }).focus(); await page.keyboard.press("Enter"); };
       // A 500-page receipt takes longer than a DOM assertion. Await the real
       // bounded RPC outcome before inspecting the next control or resetting
@@ -60,6 +66,7 @@ test.describe("saved source owner journey (C3.47)", () => {
       await expect(page.getByRole("button", { name: t("imports.resume.index"), exact: true })).toBeVisible();
       await complete(t("imports.resume.index"), "previewFromUpload", "previewed");
       await expect(page.getByRole("button", { name: t("imports.resume.commit"), exact: true })).toBeVisible();
+      if (kind === "archive") await expect(page.locator("#source-file")).toHaveAttribute("accept", /\.zip/);
       await expect(page.getByRole("link", { name: t("imports.resume.next"), exact: true })).toBeVisible();
       await expect(page.locator("html")).toHaveAttribute("lang", locale);
       if (locale === "ar") await expect(page.locator("html")).toHaveAttribute("dir", "rtl");

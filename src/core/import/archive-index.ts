@@ -5,16 +5,18 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ARCHIVE_LIMITS, parseArchiveOriginalPage, type ArchiveAsset, type ArchivePage, type ArchiveSource } from "./archive";
 import { readArchiveDirectory, readArchiveOriginalFiles, type ArchiveDirectory, type ArchiveDirectoryFile } from "./archive-directory";
+import { archiveGraphEntry } from "./archive-graph-contract";
 import { bodyImageRefs, toCmsSlug } from "./wordpress";
 
 const MAX_METADATA_BYTES = 16 * 1024 * 1024;
 const sha = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 export const archiveIndexCursorSchema = z.object({
-  format: z.literal("archive-zip"), directoryFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  format: z.literal("archive-zip"), directoryFingerprint: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  nextByte: z.number().int().min(0).max(100 * 1024 * 1024),
   ordinal: z.number().int().min(0).max(10_000),
   bodyBytes: z.number().int().min(0).max(ARCHIVE_LIMITS.expandedBytes),
   metadataBytes: z.number().int().min(0).max(MAX_METADATA_BYTES),
-});
+}).refine(cursor => cursor.directoryFingerprint !== null || (cursor.ordinal === 0 && cursor.nextByte === 0 && cursor.bodyBytes === 0 && cursor.metadataBytes === 0), "An uninitialized ZIP cursor cannot claim accepted files.");
 export type ArchiveIndexCursor = z.infer<typeof archiveIndexCursorSchema>;
 export type ArchiveIndexedFile = {
   format: "archive-zip"; ordinal: number; identity: string; file: ArchiveDirectoryFile;
@@ -42,9 +44,12 @@ export async function indexArchivePhase(source: ArchiveSource, directory: Archiv
   const deadline = Date.now() + ARCHIVE_LIMITS.timeoutMs;
   const cursor = archiveIndexCursorSchema.parse(previous ?? {
     format: "archive-zip", directoryFingerprint: directory.directoryFingerprint,
-    ordinal: 0, bodyBytes: 0, metadataBytes: 0,
+    nextByte: 0, ordinal: 0, bodyBytes: 0, metadataBytes: 0,
   });
+  if (cursor.directoryFingerprint === null) cursor.directoryFingerprint = directory.directoryFingerprint;
   if (cursor.directoryFingerprint !== directory.directoryFingerprint || cursor.ordinal > directory.files.length) throw new Error("The original ZIP directory or indexing cursor changed.");
+  const acceptedEnd = cursor.ordinal === directory.files.length ? source.bytes : cursor.ordinal ? directory.files[cursor.ordinal - 1]!.end : 0;
+  if (cursor.nextByte !== acceptedEnd) throw new Error("The ZIP cursor lost its original physical file boundary.");
   const base = new URL(directory.origin), selected: ArchiveDirectoryFile[] = [];
   let phaseBytes = 0;
   for (const file of directory.files.slice(cursor.ordinal, cursor.ordinal + 500)) {
@@ -83,14 +88,19 @@ export async function indexArchivePhase(source: ArchiveSource, directory: Archiv
       const page = parseArchiveOriginalPage(bytes, file.url!, { base, assetByUrl: assets, used, unresolvedImages: new Set(), preserveRootTarget: true });
       const { body: _body, ...metadata } = page;
       entry.page = metadata;
-      const images = bodyImageRefs(page.body);
+      const images = bodyImageRefs(page.body).map(({ src }) => {
+        let alt: string | undefined;
+        try { const url = new URL(src); alt = assets.get(url.host.toLowerCase() + url.pathname)?.altText; } catch { /* Keep the original unresolved reference. */ }
+        return { src, ...(alt ? { alt } : {}) };
+      });
       if (images.length) entry.images = images;
       cursor.bodyBytes += bytes.byteLength;
     }
-    const metadataBytes = Buffer.byteLength(JSON.stringify(entry));
+    const metadataBytes = Buffer.byteLength(JSON.stringify(archiveGraphEntry(entry).metadata));
     if (metadataBytes > 16 * 1024 || cursor.metadataBytes + metadataBytes > MAX_METADATA_BYTES || cursor.bodyBytes > ARCHIVE_LIMITS.expandedBytes) throw new Error("The complete ZIP graph exceeds its original body or metadata budget.");
-    entries.push(entry); cursor.ordinal++; cursor.metadataBytes += metadataBytes;
+    entries.push(entry); cursor.ordinal++; cursor.nextByte = file.end; cursor.metadataBytes += metadataBytes;
   }
+  if (cursor.ordinal === directory.files.length) cursor.nextByte = source.bytes;
   if (Date.now() > deadline) throw new Error("The ZIP indexing phase exceeded its time budget.");
   return { cursor, entries, done: cursor.ordinal === directory.files.length };
 }

@@ -20,11 +20,11 @@ import { originalStaticZip } from "../helpers/original-static-zip";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const ORIGIN = "https://fictional-static-resumption.example/legacy/";
-async function uploadOriginal() {
+async function uploadOriginal(acrossChunks = false) {
   const image = await sharp({ create: { width: 16, height: 16, channels: 3, background: { r: 20, g: 80, b: 120 } } }).png().toBuffer();
   const files: Array<{ path: string; body: string | Uint8Array }> = Array.from({ length: 501 }, (_, index) => ({
     path: index ? `site/zip/page-${index}.html` : "site/index.html",
-    body: `<html><head><title>Fictional original ${index}</title></head><body><h1>Original static article ${index}</h1>${index === 0 ? '<p><a href="zip/page-500.html">Last original article</a></p><img class="wp-image-99" src="image.png" alt="Actual source image">' : index === 500 ? '<img src="../image.png" alt="Same actual source image">' : ""}</body></html>`,
+    body: `<html><head><title>Fictional original ${index}</title></head><body>${acrossChunks ? `<!-- ${"Fictional source padding. ".repeat(400)} -->` : ""}<h1>Original static article ${index}</h1>${index === 0 ? '<p><a href="zip/page-500.html">Last original article</a></p><img class="wp-image-99" src="image.png" alt="Actual source image">' : index === 500 ? '<img src="../image.png" alt="Same actual source image">' : ""}</body></html>`,
   }));
   files.push({ path: "site/image.png", body: image });
   const bytes = originalStaticZip(files), run = await startImport.call({ origin: ORIGIN, kind: "archive" }, OWNER);
@@ -47,7 +47,8 @@ describe.runIf(hasDatabase)("actual durable static ZIP source (C3.47)", { timeou
   });
 
   it("indexes actual ZIP files in separate processes, then publishes and reverses all 501 pages and shared media", async () => {
-    const { run, upload, firstKey } = await uploadOriginal();
+    const { run, upload, firstKey } = await uploadOriginal(true);
+    expect(upload.chunkCount).toBeGreaterThan(1);
     const staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
     expect(staged).toMatchObject({ status: "discover", error: null });
     await closeDb(); resetStorageForTests();

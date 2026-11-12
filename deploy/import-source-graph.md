@@ -408,3 +408,13 @@ before the shared lane was handed to the next qualifier. Source-only graph forma
 and ordinary ZIP/WXR parser controls currently pass 60 pure cases in 4.33 seconds.
 Actual after/lifecycle, privacy/hold/namespace and owner-browser qualification
 remain required. No schema 81, provider acceptance or C3.47 closure is claimed.
+
+The exact original basic 501-ZIP start-after control now passes in 9.20 seconds
+on normal 0–78. It uses the unchanged basic source/assertions from the genuine
+before, reserves bounded continuation and retains the actual original ZIP bytes.
+The native process exited and its database had zero nonidle backends before the
+lane handoff. This proves initial reservation only: the larger multi-process
+index/media/CMS/publication/rollback control is prepared but has not run yet.
+The separate full lifecycle fixture also crosses an actual private source-chunk
+boundary; it is not presented as an executed result. No complete ZIP, crawl,
+provider or stable acceptance is claimed.

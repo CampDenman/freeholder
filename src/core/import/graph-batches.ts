@@ -15,7 +15,9 @@ import { assertReaderUploadWindow, bindReaderSources, publicImportRun } from "./
 import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import { importSourceRanges } from "./source-range";
 import { wordpressExportBuilder, wordpressExportFromRest } from "./wordpress";
-import { wxrEntryMetadataSchema, wxrIndexCursorSchema } from "./wxr-index";
+import { sourceGraphCursorSchema, archiveGraphHeaderSchema } from "./source-index-contract";
+import { prepareArchiveGraphBatch } from "./archive-graph-batches";
+import { wxrEntryMetadataSchema } from "./wxr-index";
 import { graphAttachments, graphCatalogSchema, graphMediaPlans, graphMediaPlanSchema } from "./graph-catalog";
 import { archivePreviewDigest } from "./archive-plan";
 import { releaseCommitRead } from "./graph-read-recovery";
@@ -25,7 +27,7 @@ type Run = typeof importRuns.$inferSelect;
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? { ...value as Record<string, unknown> } : {};
 const contextSchema = z.object({ rootId: z.uuid(), childId: z.uuid(), graphId: z.uuid(), generation: z.uuid(), planDigest: z.string().regex(/^[a-f0-9]{64}$/), leaseToken: z.uuid(), startOrdinal: z.number().int().nonnegative(), endOrdinal: z.number().int().positive(), kind: z.enum(["content", "media", "navigation"]), operation: z.literal("imports.commit") });
 const entrySchema = z.object({ id: z.uuid(), ordinal: z.number().int().nonnegative(), startByte: z.number().int().nonnegative(), endByte: z.number().int().positive(), digest: z.string(), metadata: z.unknown(), targetSlug: z.string().nullable(), resolution: z.enum(["keep-existing", "replace", "rename"]).nullable() });
-const claimSchema = z.object({ context: contextSchema, source: retainedImportSourceSchema, sourceKind: z.enum(["wordpress-wxr", "wordpress-rest"]), origin: z.string(), header: z.object({ start: z.literal(0), end: z.number().int().positive(), digest: z.string() }), catalog: graphCatalogSchema, media: graphMediaPlanSchema.array().max(500), attachments: wxrEntryMetadataSchema.shape.attachment.unwrap().array().max(500), entries: entrySchema.array().max(500), prepared: z.boolean(), accepted: z.boolean() });
+const claimSchema = z.object({ context: contextSchema, source: retainedImportSourceSchema, sourceKind: z.enum(["wordpress-wxr", "wordpress-rest", "archive"]), origin: z.string(), header: z.union([archiveGraphHeaderSchema, z.object({ start: z.literal(0), end: z.number().int().positive(), digest: z.string(), format: z.never().optional() })]), catalog: graphCatalogSchema, media: graphMediaPlanSchema.array().max(500), attachments: wxrEntryMetadataSchema.shape.attachment.unwrap().array().max(500), entries: entrySchema.array().max(500), prepared: z.boolean(), accepted: z.boolean() });
 
 const claimGraphCommit = defineService({
   name: "imports.claimGraphCommit", orchestratedBy: "imports.commit", summary: "Reserve one bounded graph batch before reading original source bytes.",
@@ -42,14 +44,15 @@ const claimGraphCommit = defineService({
     if (!root || root.status !== "previewed" || !graph || graph.state !== "indexed" || !source || source.revision !== graph.sourceRevision || binding.id !== graph.id || binding.generation !== graph.generation) throw new ServiceError("conflict", "The original indexed source is no longer available for this import.");
     if (input.observed.generation !== graph.generation || input.observed.sourceRevision !== graph.sourceRevision || input.observed.planRevision !== graph.planRevision) throw new ServiceError("conflict", "This source or its reviewed plan changed. Review the current import before continuing.");
     if (graph.leaseUntil && graph.leaseUntil.getTime() > Date.now()) throw new ServiceError("conflict", "Another import phase is still running. Retry after it completes.");
-    const cursor = wxrIndexCursorSchema.parse(graph.cursor);
-    if (!cursor.header) throw new ServiceError("conflict", "The source graph has no verified original header.");
+    const cursor = sourceGraphCursorSchema.parse(graph.cursor);
+    const header = cursor.format === "archive-zip" ? archiveGraphHeaderSchema.parse(graph.headerMetadata) : cursor.header;
+    if (!header) throw new ServiceError("conflict", "The source graph has no verified original header.");
     let planDigest = graph.planDigest;
     const catalog = graph.planMetadata ? graphCatalogSchema.parse(graph.planMetadata) : null;
     if (!catalog) throw new ServiceError("validation", "The complete source has no accepted file/menu review plan. Resolve its source resource warnings before importing.");
     if (!planDigest) {
       const plan = await ctx.tx.select({ ordinal: importSourceEntries.ordinal, identity: importSourceEntries.sourceIdentity, kind: importSourceEntries.kind, digest: importSourceEntries.digest, target: importSourceEntries.targetSlug, resolution: importSourceEntries.resolution }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graph.id)).orderBy(asc(importSourceEntries.ordinal));
-      planDigest = archivePreviewDigest({ source: graph.sourceRevision, header: cursor.header.digest, parser: graph.parserVersion, entries: plan, catalog, media: await graphMediaPlans(ctx.tx, graph.id) });
+      planDigest = archivePreviewDigest({ source: graph.sourceRevision, header: "format" in header ? header.directoryFingerprint : header.digest, parser: graph.parserVersion, entries: plan, catalog, media: await graphMediaPlans(ctx.tx, graph.id) });
       await ctx.tx.update(importSourceGraphs).set({ planDigest }).where(eq(importSourceGraphs.id, graph.id));
     }
     let [batch] = await ctx.tx.select().from(importSourceBatches).where(and(eq(importSourceBatches.graphId, graph.id), eq(importSourceBatches.batchIndex, graph.batchCounter))).limit(1);
@@ -79,7 +82,7 @@ const claimGraphCommit = defineService({
     await ctx.tx.update(importSourceGraphs).set({ leaseToken, leaseActor: actorString(ctx.actor), leaseUntil: new Date(Date.now() + 120_000), updatedAt: new Date() }).where(eq(importSourceGraphs.id, graph.id));
     ctx.setSubject("import_run", root.id);
     const allMedia = await graphMediaPlans(ctx.tx, graph.id);
-    return { context: contextSchema.parse(context), source, sourceKind: z.enum(["wordpress-wxr", "wordpress-rest"]).parse(root.kind), origin: root.origin!, header: cursor.header, catalog, media: kind === "media" ? allMedia.filter(item => item.key === mediaKey) : allMedia, attachments: await graphAttachments(ctx.tx, graph.id), entries, prepared: child.status !== "discover", accepted: child.status === "committed" };
+    return { context: contextSchema.parse(context), source, sourceKind: z.enum(["wordpress-wxr", "wordpress-rest", "archive"]).parse(root.kind), origin: root.origin!, header, catalog, media: kind === "media" ? allMedia.filter(item => item.key === mediaKey) : allMedia, attachments: await graphAttachments(ctx.tx, graph.id), entries, prepared: child.status !== "discover", accepted: child.status === "committed" };
   },
 });
 
@@ -98,7 +101,8 @@ const stageGraphBatch = defineService({
     if (!root || root.status !== "previewed" || !source || source.uploadId !== input.source.uploadId || source.revision !== input.source.revision || Date.parse(source.expiresAt) <= Date.now() || !graph || graph.state !== "indexed" || graph.runId !== root.id || graph.generation !== input.context.generation || graph.leaseToken !== input.context.leaseToken || graph.leaseActor !== actorString(ctx.actor) || !graph.leaseUntil || graph.leaseUntil.getTime() <= Date.now() || !child || child.status !== "discover" || object(child.checkpoint).sourceGraphBatch === undefined) throw new ServiceError("conflict", "The bounded preview lost its original source or lease.");
     if (graph.planDigest !== input.context.planDigest || JSON.stringify(contextSchema.parse(object(child.checkpoint).sourceGraphBatch)) !== JSON.stringify(input.context)) throw new ServiceError("conflict", "The bounded preview no longer matches its original frozen plan.");
     await assertReaderUploadWindow(ctx.tx, input.preview, graph.sourceStartedAt);
-    await ctx.tx.update(importRuns).set({ status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview, root, ctx.actor), counts: input.counts }).where(eq(importRuns.id, child.id));
+    const preview = await bindReaderSources(ctx.tx, input.preview, root, ctx.actor);
+    await ctx.tx.update(importRuns).set({ status: "previewed", preview, counts: input.counts, ...(root.kind === "archive" ? { checkpoint: { ...object(child.checkpoint), archiveSource: { source: input.source, previewDigest: archivePreviewDigest(preview) } } } : {}) }).where(eq(importRuns.id, child.id));
     ctx.setSubject("import_run", root.id);
     return { ok: true as const };
   },
@@ -141,6 +145,11 @@ export async function advanceGraphCommit(id: string, observed: ImportGraphVersio
   if (!claim.prepared) {
     try {
     const ranges = importSourceRanges(claim.source, index => readRetainedSourceChunk(claim.source, index));
+    if (claim.sourceKind === "archive") {
+      const staged = await prepareArchiveGraphBatch(ranges, { ...claim, header: archiveGraphHeaderSchema.parse(claim.header) });
+      await stageGraphBatch.call({ id, childId: claim.context.childId, context: claim.context, source: claim.source, ...staged }, actor);
+    } else {
+    if ("format" in claim.header) throw new ServiceError("conflict", "The source format changed before its bounded commit.");
     const header = await ranges.readRange(0, claim.header.end);
     if (createHash("sha256").update(header).digest("hex") !== claim.header.digest) throw new ServiceError("conflict", "The original source header changed.");
     const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }), builder = wordpressExportBuilder(), records: unknown[] = [];
@@ -179,6 +188,7 @@ export async function advanceGraphCommit(id: string, observed: ImportGraphVersio
       if (typeof sourcePath === "string" && sourcePath && sourcePath !== entry.targetSlug) page.redirectFrom = sourcePath;
     }
     await stageGraphBatch.call({ id, childId: claim.context.childId, context: claim.context, source: claim.source, ...staged }, actor);
+    }
     } catch (error) { await releaseCommitRead.call({ id, graphId: claim.context.graphId, generation: claim.context.generation, leaseToken: claim.context.leaseToken }, actor).catch(() => undefined); throw error; }
   }
   if (!claim.accepted) await withinImportBatch(claim.context, () => commitImport.call({ id: claim.context.childId }, actor));
