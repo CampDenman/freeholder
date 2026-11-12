@@ -490,3 +490,15 @@ human choice, current permissions, exact original coordinates and hold/erasure
 checks. It grants no additional caller authority and changes no source identity,
 original receipt owner, private child entry rule or SQL guard. Its exact native
 after control remains pending; no completion or stable claim is added.
+
+
+The unchanged private graph-reader after case passes in9.00s on signed repair
+6f531c25, after full types and targeted lint passed. It preserves direct child
+review refusal and the original receipt ID/first-run/creator, applies the chosen
+existing person's ID only through the verified human review, keeps the private
+child's operation checkpoint unchanged, and retains the exact original comment
+body. Review alone creates no imported comment. The native process exited and
+the owned normal79 database had no nonidle backends before handoff. This is a
+shared-service graph-review repair; no API/schema/label change, fresh production
+build, new owner-browser qualification, provider acceptance or checklist closure
+is claimed by this control.
