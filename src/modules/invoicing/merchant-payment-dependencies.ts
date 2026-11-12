@@ -11,13 +11,19 @@ import { merchantRefundDependencyFingerprints } from "./merchant-refund-dependen
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { invoices, paymentDisputes, payments, refunds } from "./schema";
 
-/** NULL makes the existing parent merge explicitly non-undoable. */
-export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: readonly string[]): Promise<Map<string, string> | null> {
+/** NULL makes the existing parent merge explicitly non-undoable.
+ * The default is the buyer's complete invoice. A seller caller must derive
+ * originalPaymentIds from its actual frozen routes, never a caller's filter.
+ */
+export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: readonly string[], originalPaymentIds?: readonly string[]): Promise<Map<string, string> | null> {
   if (!invoiceIds.length) return new Map();
+  if (originalPaymentIds && originalPaymentIds.length > 5000) return null;
+  if (originalPaymentIds && !originalPaymentIds.length) return new Map();
   const owned = await tx.select({ payment: payments, orderRoute: merchantPaymentRoutes, singleRoute: merchantInvoicePaymentRoutes, agreementRoute: merchantAgreementPaymentRoutes }).from(payments)
     .leftJoin(merchantPaymentRoutes, eq(merchantPaymentRoutes.paymentId, payments.id)).leftJoin(merchantInvoicePaymentRoutes, eq(merchantInvoicePaymentRoutes.paymentId, payments.id))
     .leftJoin(merchantAgreementPaymentRoutes, eq(merchantAgreementPaymentRoutes.paymentId, payments.id))
-    .where(and(inArray(payments.invoiceId, [...invoiceIds]), or(isNotNull(merchantPaymentRoutes.paymentId), isNotNull(merchantInvoicePaymentRoutes.paymentId), isNotNull(merchantAgreementPaymentRoutes.paymentId)))).orderBy(asc(payments.id)).limit(5001);
+    .where(and(inArray(payments.invoiceId, [...invoiceIds]), originalPaymentIds ? inArray(payments.id, [...originalPaymentIds]) : undefined,
+      or(isNotNull(merchantPaymentRoutes.paymentId), isNotNull(merchantInvoicePaymentRoutes.paymentId), isNotNull(merchantAgreementPaymentRoutes.paymentId)))).orderBy(asc(payments.id)).limit(5001);
   // Ordinary legacy invoice history retains its existing undo contract.
   const scoped = owned.filter(row => row.orderRoute || row.singleRoute || row.agreementRoute);
   if (owned.length > 5000) return null;
@@ -51,7 +57,10 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
     const money = scoped.filter(row => row.payment.invoiceId === invoice.id), ids = new Set(money.map(row => row.payment.id));
     const sends = dispatches.filter(row => ids.has(row.paymentId)), sendIds = new Set(sends.map(row => row.id));
     const fees = feeOperations.filter(row => ids.has(row.paymentId)), feeIds = new Set(fees.map(row => row.id));
-    return [invoice.id, merchantTaxDigest({ invoice, money, refundChildren, requests: requests.filter(row => ids.has(row.paymentId)), dispatches: sends, bindings: bindings.filter(row => ids.has(row.paymentId)),
+    // Aggregate refunded/paid totals and the buyer's personal fields cover
+    // every merchant. They cannot become another seller's financial history.
+    const originalInvoice = originalPaymentIds ? { id: invoice.id, sourceType: invoice.sourceType, sourceId: invoice.sourceId, currency: invoice.currency } : invoice;
+    return [invoice.id, merchantTaxDigest({ invoice: originalInvoice, money, refundChildren, requests: requests.filter(row => ids.has(row.paymentId)), dispatches: sends, bindings: bindings.filter(row => ids.has(row.paymentId)),
       refusals: refusals.filter(row => sendIds.has(row.dispatchId)), finishes: finishes.filter(row => sendIds.has(row.dispatchId)), stops: stops.filter(row => sendIds.has(row.dispatchId)), acks: acks.filter(row => ids.has(row.paymentId)), terminals: terminals.filter(row => ids.has(row.paymentId)),
       observed: observed.filter(row => ids.has(row.paymentId)), fees, feeAcks: feeAcks.filter(row => feeIds.has(row.operationId)),
       customerRefunds: customerRefunds.filter(row => ids.has(row.paymentId)), disputes: disputes.filter(row => ids.has(row.paymentId)) })];

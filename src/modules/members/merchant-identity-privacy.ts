@@ -11,7 +11,7 @@ import { lockContactIdentity, lockContactIdentityForRead } from "@/core/contacts
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {ServiceError,type Tx} from "@/core/service";
 import { invoiceMarketPolicies, invoiceMerchantAllocations } from "@/modules/invoicing/schema";
-import { invoiceMerchantCollections, merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations } from "@/modules/invoicing/merchant-collection-schema";
+import { invoiceMerchantCollections, merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "@/modules/invoicing/merchant-collection-schema";
 import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "@/modules/invoicing/merchant-invoice-scope-schema";
 import { payments } from "@/modules/invoicing/schema";
 import { bookingCommercialSources, bookings } from "@/core/scheduling/schema";
@@ -106,7 +106,11 @@ async function collectionSnapshot(tx:Tx,ids:string[]){
   .from(invoiceMerchantCollections).innerJoin(invoiceMerchantAllocations,eq(invoiceMerchantAllocations.id,invoiceMerchantCollections.allocationId))
   .where(inArray(invoiceMerchantAllocations.merchantContactId,ids)).orderBy(invoiceMerchantCollections.allocationId).limit(5001);
  if(rows.length>5000)return null;
- const dependencies=await invoiceMerchantDependencyFingerprints(tx,[...new Set(rows.map(row=>row.invoiceId))]);
+ if(!rows.length)return[];
+ const routes=await tx.select({paymentId:merchantPaymentRoutes.paymentId}).from(merchantPaymentRoutes)
+  .where(inArray(merchantPaymentRoutes.allocationId,rows.map(row=>row.id))).orderBy(merchantPaymentRoutes.paymentId).limit(5001);
+ if(routes.length>5000)return null;
+ const dependencies=await invoiceMerchantDependencyFingerprints(tx,[...new Set(rows.map(row=>row.invoiceId))],routes.map(row=>row.paymentId));
  return dependencies===null?null:rows.map(({id,invoiceId,material})=>({id,fingerprint:createHash("sha256").update(JSON.stringify({material,paymentDependencies:dependencies.get(invoiceId)})).digest("hex")}));
 }
 registerContactReference({

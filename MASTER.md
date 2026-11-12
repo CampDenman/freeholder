@@ -13530,6 +13530,13 @@ whatever is best for the people using the site.
   account. Split from C12.26 on 2026-10-15. This follows Stripe's current
   [charge types](https://docs.stripe.com/connect/charges) and
   [refund/dispute documentation](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
+  Allocation-scoped merge source repair 2026-11-12: the actual mixed-seller
+  control failed because an unrelated seller's refund changed the first
+  seller's whole-invoice collection fingerprint. A new internal scope
+  derives exact payments from original allocation routes; ordinary buyer
+  invoice fingerprints retain their default behavior. Source/native
+  qualification remains pending; the own-refund assertion was not reached.
+  See `deploy/merchant-allocation-merge-scope-2026-11-12.md`.
   Seller refund merge source increment 2026-11-12: the existing parsed tax
   profile fingerprint now includes bounded original payment/cash ownership
   and all fifteen immutable refund child families. Selection follows exact
