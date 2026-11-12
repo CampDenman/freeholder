@@ -14,6 +14,24 @@ never contacts it, and choosing it for one category never turns on another.
 This page documents only the public API contract Freeholder uses and the
 settings an operator sets.
 
+The acceptance boundaries below mirror the still-open rows in MASTER.md §43;
+that checklist remains the status authority. Local intercepted HTTP, migration
+and browser fixtures establish the source behavior they exercise. They do not
+supply a named provider account, a hosted preview journey, an independent
+security review or a stable release sign-off.
+
+| Checklist | Source/evidence boundary | Actual account or hosted journey still required |
+|---|---|---|
+| C3.31 — mail | Original carrier consent/send/withdrawal intents, unknown outcomes, account binding and erasure recovery; `mail-carrier-operations`, `mail-carrier-recovery` and `mail-service` core tests. The carrier increment merged through protected PR685. | Named sending domain/account; real opt-in and delivery; original-provider withdrawal and restart/recovery evidence. |
+| C3.32 — measurement | Consent and private-route policy, hashed conversion identifiers; `measurement-provider` and `measurement-form-action` core tests. | Browser acceptance against the selected live edge, including consent refusal and private-surface exclusion. |
+| C3.33 — screening | Anonymous pre-transaction screening, sealed verdict, trap-preserving fallback; `form-screening-lead-sink` core tests. | Real allowed/blocked/unavailable responses and translated disclosure in the original provider account. |
+| C3.34 — lead copies | Original rendered notice/account/body, per-request receipts, unknown stop, human recovery, holds and erasure; `form-screening-lead-sink` core tests and `form-lead-old-image.probe.mjs`. Normal0–79 and populated78→79 proofs pass; full current native/SDK/production owner qualification is still pending. | A real lead copy and receipt, original-account refusal, uncertain/rate-limit behavior, stopped-caller recovery and original-provider erasure. |
+| C3.35 — launch/private preview | `launch-template`, `private-preview` and `private-preview-webhooks` core tests; `deploy/launch-template.md`. | A real approved plan on a hosted instance; signed preview access and unauthenticated refusal. |
+| C3.36 — preview mail | Preview recipient/campaign policy and durable cap consumption by unknown sends; `preview-mail` and `preview-mail-unknown-cap` core tests. | Actual hosted-preview sign-in delivery through a delivering adapter. |
+| C3.37 — intake/delivery | Shared-service intake, project delivery, contact permissions and private document receipt; `service-intake-delivery` core tests. | A hosted preview where the customer receives and downloads the delivered file. |
+| C3.38 — form files | Signed-in upload, sniffing, size/type checks and private owner attachment access; `tests/modules/form-file-fields.test.ts` and the intake-project-files browser journey. | A hosted upload plus wrong-type/oversize refusal and customer/owner permission checks. |
+| C3.39 — launch spec v2 | Versioned launch installation and composition of C3.35–C3.38; `launch-template` core tests and the launch-template operator guide. | The full hosted v2 sign-up, intake/upload, payment-step and customer-delivery journey from the approved plan. |
+
 | Category | Choose Paradise with | MASTER.md |
 |---|---|---|
 | Transactional / bulk mail | `MAIL_ADAPTER=paradise`, `MAIL_BULK_ADAPTER=paradise` | C3.31 |
