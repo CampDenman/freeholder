@@ -33,6 +33,9 @@ importers:
       '@freeholder/templates':
         specifier: workspace:*
         version: link:packages/templates
+      '@google-cloud/storage':
+        specifier: 7.22.0
+        version: 7.22.0
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0
