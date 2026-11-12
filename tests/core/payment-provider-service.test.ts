@@ -23,7 +23,6 @@ import {
   settlePayment,
   settleRefund,
   startPayment,
-  startRefund,
 } from "@/modules/invoicing/invoice-service";
 import * as providerService from "@/modules/invoicing/payment-provider-service";
 import {
@@ -69,6 +68,18 @@ async function issuedInvoice(key: string, amountMinor = 10_000) {
 const digest = "a".repeat(64);
 const receivedAt = "2026-08-14T12:01:00.000Z";
 
+async function pendingOriginalRefund(input: { paymentId: string; amountMinor: number; reason: string; idempotencyKey: string }, providerRef: string, providerAccountId?: string) {
+  const original = adapters.paymentAdapter("stripe");
+  const refund = vi.fn<adapters.PaymentAdapter["refund"]>().mockImplementation(async request => {
+    expect(request.providerAccountId).toBe(providerAccountId);
+    return { providerRef, status: "pending", ...(providerAccountId ? { providerAccountId } : {}) };
+  });
+  vi.spyOn(adapters, "paymentAdapter").mockReturnValue({ ...original, refund });
+  const pending = await submitProviderRefund.call(input, OWNER);
+  expect(refund).toHaveBeenCalledTimes(1);
+  return pending;
+}
+
 /**
  * Sessions on this database holding a transaction open while waiting on the
  * client. A service transaction left open across a provider await shows up
@@ -97,8 +108,7 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     };
     await deliver("evt_ExpandedPaid","checkout.session.completed",{id:"cs_OriginalExpanded",mode:"payment",payment_status:"paid",payment_intent:{id:"pi_OriginalExpanded"},amount_total:10000,currency:"cad",metadata:{freeholder_invoice_id:invoice.id}});
     expect((await db().select().from(payments).where(eq(payments.id,payment.id)))[0]).toMatchObject({status:"succeeded",providerRef:"pi_OriginalExpanded"});
-    const refund=await createRefund.call({paymentId:payment.id,amountMinor:500,reason:"Exact original expanded payment",idempotencyKey:"expanded-original-refund"},OWNER);
-    await startRefund.call({id:refund.id,providerRef:"re_OriginalExpanded"},OWNER);
+    const refund=await pendingOriginalRefund({paymentId:payment.id,amountMinor:500,reason:"Exact original expanded payment",idempotencyKey:"expanded-original-refund"},"re_OriginalExpanded");
     await deliver("evt_ExpandedRefund","refund.updated",{id:"re_OriginalExpanded",payment_intent:{id:"pi_OriginalExpanded"},amount:500,currency:"cad",status:"succeeded"});
     expect((await db().select().from(refunds).where(eq(refunds.id,refund.id)))[0]).toMatchObject({status:"succeeded",amountMinor:500});
     expect((await getInvoice.call({id:invoice.id},OWNER)).invoice.refundedMinor).toBe(500);
@@ -115,8 +125,7 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     await startPayment.call({id:payment.id,providerRef:"pi_OriginalCancelledRefund"},OWNER);
     const deliver=(events:readonly PaymentProviderEvent[])=>processPaymentProviderEvents.call({provider:"stripe",bodySha256:digest,receivedAt,events:[...events]},{kind:"system"});
     await deliver([{id:"evt_OriginalPaid",kind:"payment_succeeded",providerRef:"pi_OriginalCancelledRefund",invoiceId:invoice.id,amountMinor:10000,currency:"CAD",occurredAt:receivedAt,...(account?{providerAccountId:account,applicationFeeMinor:1000}:{})}]);
-    const refund=await createRefund.call({paymentId:payment.id,amountMinor:500,reason:"Original provider refund",idempotencyKey:"cancel-original-refund"},OWNER);
-    await startRefund.call({id:refund.id,providerRef:"re_CancelledOriginal"},OWNER);
+    const refund=await pendingOriginalRefund({paymentId:payment.id,amountMinor:500,reason:"Original provider refund",idempotencyKey:"cancel-original-refund"},"re_CancelledOriginal",account||undefined);
     const at=Math.floor(Date.parse(receivedAt)/1000);
     const raw=JSON.stringify({id:"evt_OriginalCancelled",type:"refund.updated",created:at,...(account?{account}:{}),data:{object:{id:"re_CancelledOriginal",payment_intent:{id:"pi_OriginalCancelledRefund"},amount:500,currency:"cad",status:"canceled"}}});
     const signature=createHmac("sha256","whsec_original_cancel").update(`${at}.${raw}`).digest("hex");
@@ -160,7 +169,7 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     expect((await db().select().from(paymentDisputes))[0]!.paymentId).toBe(payment.id);
     const refund = await createRefund.call({ paymentId: payment.id, amountMinor: 500, reason: "Recorded seller refund", idempotencyKey: "seller-feedback-refund" }, OWNER);
     await expect(settleRefund.call({id:refund.id,providerRef:"re_seller"},OWNER)).rejects.toMatchObject({code:"permission"});
-    await startRefund.call({ id: refund.id, providerRef: "re_seller" }, OWNER);
+    await pendingOriginalRefund({paymentId:payment.id,amountMinor:500,reason:"Recorded seller refund",idempotencyKey:"seller-feedback-refund"},"re_seller","acct_seller");
     const refunded = { id: "evt_seller_refund", kind: "refund_succeeded" as const, providerRef: "re_seller", paymentProviderRef: "pi_seller", amountMinor: 500, currency: "CAD", occurredAt: receivedAt, providerAccountId: "acct_seller" };
     expect(await failure(deliver({ ...refunded, providerAccountId: "acct_other" }))).toMatchObject({ code: "conflict" });
     expect(await failure(deliver({ ...refunded, paymentProviderRef: "pi_AnotherOriginalPayment" }))).toMatchObject({ code: "conflict" });
