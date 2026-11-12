@@ -46,3 +46,24 @@ incremental type/lint pass covered the corrected historical fixture dates.
 All processes exited zero and no database operation ran in that source
 window. Native execution and actual composed-schema qualification remain
 pending.
+
+The four unchanged AFTER controls subsequently passed on exact composed
+source `f6b5801b600a3c85971cf5f76dd4fd4eab0b9a26` and the fresh normal 0–80
+v7 schema (`d060f9a8…`, assembled by the commerce owner). Individual case
+times were 5.394, 4.811, 4.964 and 4.839 seconds. The first case proves both
+accepted 500 despite a later plan fee of 999 and identical first-invoice
+replay after a second period. The other cases cover signup once, historical
+NULL with backfill refused, and retained voided setup debt. No product, SQL
+or deadline was changed for this run. The runner exited zero; the final
+active-backend query returned `[]`.
+
+The isolated AFTER checkout explicitly reused the qualified candidate's
+dependency tree after SHA256 equality of manifest, lock and workspace files;
+the symlink resolves to the already qualified invoice-release dependencies.
+This was native integration acceptance, not a new install or build.
+Evidence: `/tmp/freeholder-subscription-setup-fee-v7-after.json`,
+`/tmp/freeholder-subscription-setup-fee-v7-after.log`, and
+`/tmp/freeholder-subscription-setup-fee-v7-after-drain.json`.
+The original unchanged-source BEFORE evidence remains separate. Protected
+release, automatic-provider acceptance and the broader accepted-terms
+lifecycle remain open.
