@@ -8,7 +8,9 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { stopJobs } from "@/core/jobs";
 import { resolveContact, updateContact } from "@/core/contacts/service";
-import { startImport, previewFromSource } from "@/core/import/service";
+import { startImport, previewFromSource, commitImport } from "@/core/import/service";
+import { contacts } from "@/core/contacts/schema";
+import { ensureDefaults } from "@/modules/cms/service";
 import { importRuns } from "@/core/plugins/schema";
 import { OWNER, closeDb, truncateSpine } from "../helpers/spine";
 import { READER_UPGRADE_EMAIL, READER_UPGRADE_SOURCE, readerTableSnapshots } from "./import-reader-data";
@@ -19,13 +21,21 @@ afterAll(async () => { await stopJobs(); await closeDb(); });
 it("uses the actual previous source writer, then refuses that writer after the normal upgrade", async () => {
   if (process.env.FREEHOLDER_READER_UPGRADE_PHASE === "before") {
     await truncateSpine();
-    const original = (await resolveContact.call({ name: "Fictional original reader", email: READER_UPGRADE_EMAIL }, OWNER)).contact;
+    const committedPrivate = process.env.FREEHOLDER_READER_UPGRADE_COMMITTED_PRIVATE === "1";
+    if (committedPrivate) await ensureDefaults.call({}, OWNER);
+    let original = committedPrivate ? undefined : (await resolveContact.call({ name: "Fictional original reader", email: READER_UPGRADE_EMAIL }, OWNER)).contact;
     const run = await startImport.call({ origin: "https://fictional-reader-upgrade.example/", kind: "wordpress-wxr" }, actor);
-    await previewFromSource.call({ id: run.id, payload: READER_UPGRADE_SOURCE }, actor);
+    await previewFromSource.call({ id: run.id, payload: committedPrivate ? READER_UPGRADE_SOURCE.replace("<wp:comment_approved>1", "<wp:comment_approved>0") : READER_UPGRADE_SOURCE }, actor);
+    if (committedPrivate) {
+      await commitImport.call({ id: run.id }, OWNER);
+      [original] = await db().select().from(contacts).where(eq(contacts.email, READER_UPGRADE_EMAIL));
+      expect(original?.source).toBe("wordpress-comment");
+    }
     const [stored] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
-    expect(JSON.stringify(stored!.preview)).toContain(original.id);
-    await updateContact.call({ id: original.id, email: "fictional-original-now-changed@example.test" }, OWNER);
-    const candidate = (await resolveContact.call({ name: "Fictional later address holder", email: READER_UPGRADE_EMAIL }, OWNER)).contact;
+    if (!original) throw new Error("The prior source did not supply its actual reader contact.");
+    if (!committedPrivate) expect(JSON.stringify(stored!.preview)).toContain(original.id);
+    if (!committedPrivate) await updateContact.call({ id: original.id, email: "fictional-original-now-changed@example.test" }, OWNER);
+    const candidate = committedPrivate ? original : (await resolveContact.call({ name: "Fictional later address holder", email: READER_UPGRADE_EMAIL }, OWNER)).contact;
     await stopJobs();
     const client = postgres(process.env.DATABASE_URL!, { max: 1 });
     try {

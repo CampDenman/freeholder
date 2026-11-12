@@ -295,3 +295,15 @@ all comments, and normalized contact merge followed by exact undo restored all
 and lint pass; current production browser qualification remains pending. An
 already-committed pre78 private-comment export boundary is being investigated
 separately and is not covered by the cached-source upgrade evidence above.
+
+
+The actual unchanged `d8ce5743` runtime also committed a pending historical
+comment before the upgrade, creating its automatic `wordpress-comment` contact.
+Normal 0–78 migration preserved that committed original. A canonical current
+mailbox login then obtained the private historical body through its self-export
+in `cms.readerComments`; the bounded current-runtime control failed in 4.11
+seconds after the prior-runtime fixture passed in 13.56 seconds. This is a real
+remaining legacy ownership defect, independent of the newly staged-source repair.
+The reproducible runner variant is `--committed-private`. Its before source and
+fictional local evidence are preserved; no historical owner was inferred from
+this mailbox proof. Current browser and stable acceptance remain open.
