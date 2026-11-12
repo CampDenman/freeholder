@@ -71,7 +71,11 @@ async function directory(source: ArchiveSource, origin: string, zip: ZipFile, de
   // adversarial directory order must not cause thousands of whole private
   // chunks to be downloaded repeatedly through the two-chunk range cache.
   rows.sort((a, b) => a.start - b.start);
-  for (const row of rows) Object.assign(row, await localFrame(source, row.entry, directoryStart));
+  for (const row of rows) {
+    if (Date.now() > deadline) throw new Error("The original ZIP directory exceeded its time budget.");
+    Object.assign(row, await localFrame(source, row.entry, directoryStart));
+    if (Date.now() > deadline) throw new Error("The original ZIP directory exceeded its time budget.");
+  }
   for (let at = 1; at < rows.length; at++) if (rows[at]!.start < rows[at - 1]!.end) throw new Error("Original ZIP file frames overlap.");
   const files = rows.filter(row => !row.path.endsWith("/"));
   const useful = files.filter(row => HTML.test(row.path) || MEDIA.test(row.path));

@@ -418,3 +418,12 @@ index/media/CMS/publication/rollback control is prepared but has not run yet.
 The separate full lifecycle fixture also crosses an actual private source-chunk
 boundary; it is not presented as an executed result. No complete ZIP, crawl,
 provider or stable acceptance is claimed.
+
+A controlled-clock pure before exposed a missing budget check in direct local
+ZIP-frame validation: actual original headers could finish after the directory
+deadline without refusal. The new guard checks before and after each frame read.
+All 61 directory/static/content/WXR controls pass in 3.96 seconds, including the
+exact refusal; the clock control is not a wall-time provider benchmark. No
+budget or timeout was extended. The shared link adapter also preserves literal
+static URL facts while using the existing source-path convention for resolution;
+its real cross-batch link assertion remains in the pending full lifecycle case.

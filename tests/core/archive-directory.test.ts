@@ -3,7 +3,7 @@
 // C3.47: actual ZIP bytes retain file identities without synthetic WP records.
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readArchiveDirectory, readArchiveOriginalFile, readArchiveOriginalFiles } from "@/core/import/archive-directory";
 import { sourceGraphCursorSchema, sourceGraphEntrySchema } from "@/core/import/source-index-contract";
 import { archiveGraphEntry, archiveGraphEntrySchema } from "@/core/import/archive-graph-contract";
@@ -73,6 +73,17 @@ describe("original static ZIP directory facts (C3.47)", () => {
     } }, "https://fictional-zip.example/");
     expect(headers).toHaveLength(37);
     expect(headers).toEqual([...headers].sort((a, b) => a - b));
+  });
+  it("checks the directory deadline while validating actual local frames", async () => {
+    let now = 1_000_000;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const bytes = largeZip(3);
+    try {
+      await expect(readArchiveDirectory({ bytes: bytes.length, async readRange(start, end) {
+        if (end - start === 30) now += 60_001;
+        return bytes.subarray(start, end);
+      } }, "https://fictional-zip.example/")).rejects.toThrow(/time budget/);
+    } finally { clock.mockRestore(); }
   });
   it("accepts the complete 10000-entry directory budget and refuses its first excess entry", async () => {
     expect((await readArchiveDirectory(bytesSource(largeZip(10_000)), "https://fictional-zip.example/")).files).toHaveLength(10_000);
