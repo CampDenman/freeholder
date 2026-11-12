@@ -56,9 +56,21 @@ and readback exited0; the actual database activity query returned no clients.
 No second run occurred after the app-server interruption. Logs are
 `/tmp/freeholder-fee-unknown80-after-native-v9.{json,log}` with independent
 `-ledger.json` and `-drain.json`.
-The later preserved-clone review must report actual returned200 as review/debt
-with no additional POST or financial-history rewrite; that check remains
-pending. Fee-caller, all bank/action states, human flows and actual provider
-acceptance remain separate requirements.
+The dedicated preserved-clone review on04d3b24f passed0.429s with the explicit
+history flag and no seed or truncate. The real factory's intercepted HTTP
+inspection retained actual returned200 against original fee500; reconciliation
+returned review with no operation, commission debt remained, and zero POSTs
+occurred. Independent original-golden preflight and postflight verified all
+eight financial-table counts/hashes, journal81 and SQL958 unchanged. The old
+false-refused100/key1/no-reference and accepted100/key2/fr_feeRace2 are intact;
+no missing original binding was fabricated from aggregate equality. Separate
+readback confirms truthful returned200 observations and no active database
+clients. Evidence is `/tmp/freeholder-fee-unknown80-history-native-v9.{json,log}`,
+its `-ledger.json`/`-drain.json`, and
+`/tmp/freeholder-fee-unknown80-history-{preflight,postflight}.json`.
+This is local source recovery and preservation of actual synthetic BEFORE
+history, not a real provider-account outcome or complete upgrade qualification.
+Fee-caller, all bank/action states, human flows and actual provider acceptance
+remain separate requirements.
 
 Primary source: [Stripe application-fee refund creation](https://docs.stripe.com/api/fee_refunds/create).

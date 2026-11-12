@@ -13791,7 +13791,10 @@ whatever is best for the people using the site.
   controls pass and drained. Byte-identical unchanged AFTER passed6.345s on
   a146/v9SQL958: one original key1/resource100/bound observation, retained
   target400 and customer refund1200 intact, with one physical POST and actual
-  database work drained. Preserved populated-history review remains pending.
+  database work drained. Dedicated populated-history review passed0.429s:
+  actual returned200 inspection stays review/commission debt, zero POSTs,
+  original eight-table golden hashes and keys/SQL unchanged, database drained.
+  No missing original resource binding is inferred or history rewritten.
   The response fault and provider edges are synthetic. See
   `deploy/merchant-fee-unreadable-success-2026-11-12.md`; C12.38 remains open.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
