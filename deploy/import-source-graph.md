@@ -457,3 +457,23 @@ guard was changed. The corrected control requires the exact original Asset to
 be trashed, zero active assets, zero actual page/section usage and real public
 media delivery changing from 200 to 404 through the existing route. The earlier
 failure remains preserved; this corrected full case still needs its next run.
+
+
+The corrected original 501-page ZIP lifecycle now passes on signed source
+`2af201384b8dc40eed040da61b03034fb9bd109c`: one selected native case in
+49.93 seconds, with the basic reservation case intentionally filtered. Two
+independent processes accepted 500 then two real original files (501 HTML pages
+and one shared PNG), across actual private source-chunk boundaries. The exact
+reviewed rename, cross-batch link, shared media, explicit publication and all
+501 page reversals passed. The exact original image remained recoverably trashed
+with zero active assets and zero page/section usage; the real anonymous media
+route changed from 200 to 404. No retention or deletion guard was relaxed.
+
+The native process exited successfully and the owned disposable database had
+zero nonidle backends before the shared lane was returned. This qualification
+uses the explicitly configured local PostgreSQL profile `jit=off`, `fsync=on`;
+it is not default-JIT or actual-provider acceptance. The preserved raw-row
+expectation failure above remains a fixture-policy diagnostic. Production ZIP
+artifact/browser, cancellation/privacy/hold/namespace controls and durable live
+crawl continuation remain required. No migration 81, C3.47 completion, stable
+readiness, permanent byte erasure or deployed cutover is claimed.
