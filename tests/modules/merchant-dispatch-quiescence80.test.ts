@@ -42,6 +42,14 @@ describe.runIf(hasDatabase)("original merchant physical caller quiescence", { ti
       }
       // A safe retry can inspect the still-unknown original operation; empty
       // inventory is unresolved, never permission to POST another creation.
+      if (url.pathname === "/v1/checkout/sessions/cs_originalPaused" && init.method === "GET") {
+        const form = new URLSearchParams(bodies[0]);
+        const metadata = Object.fromEntries([...form.entries()].filter(([key]) => /^metadata\[[^\]]+\]$/.test(key)).map(([key, value]) => [key.slice(9, -1), value]));
+        return Response.json({ id: "cs_originalPaused", mode: "payment", status: "open", payment_status: "unpaid", payment_intent: null,
+          metadata, client_reference_id: form.get("client_reference_id"), amount_total: Number(form.get("line_items[0][price_data][unit_amount]")),
+          currency: form.get("line_items[0][price_data][currency]"), created: Math.floor(Date.now() / 1000),
+          url: "https://checkout.stripe.example/cs_originalPaused", expires_at: Math.floor(Date.now() / 1000) + 3600 });
+      }
       if (url.pathname === "/v1/checkout/sessions" && init.method === "GET") return Response.json({ data: [], has_more: false });
       throw new Error(`Unexpected original provider request: ${init.method} ${url.pathname}`);
     });
@@ -86,7 +94,6 @@ describe.runIf(hasDatabase)("original merchant physical caller quiescence", { ti
     if (!("value" in completed)) throw completed.error;
     // Read-only recovery can resume the proven original checkout; it cannot
     // replay creation or infer a different resource from mutable metadata.
-    fixture.stripe.recoverMerchantPayment = async () => ({ state: "open", checkout: completed.value.checkout });
     expect((await beginPaymentCheckout.call(input, OWNER)).checkout.providerRef).toBe("cs_originalPaused");
     expect(bodies).toHaveLength(1);
   });
