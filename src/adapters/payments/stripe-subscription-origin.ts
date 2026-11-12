@@ -25,7 +25,9 @@ export async function proveStripeSubscriptionPayment(api: StripeSubscriptionRead
     || !/^in_[A-Za-z0-9]{1,196}$/.test(origin.providerInvoiceRef)
     || !/^pi_[A-Za-z0-9]{1,196}$/.test(origin.providerPaymentIntentRef)) unproven();
   const invoice = await api(`/v1/invoices/${encodeURIComponent(origin.providerInvoiceRef)}`, { method: "GET" }, scope);
-  const subscription = ref(invoice.subscription) ?? ref(object(object(invoice.parent)?.subscription_details)?.subscription);
+  const directSubscription = ref(invoice.subscription), parentSubscription = ref(object(object(invoice.parent)?.subscription_details)?.subscription);
+  if (directSubscription && parentSubscription && directSubscription !== parentSubscription) unproven();
+  const subscription = directSubscription ?? parentSubscription;
   if (invoice.id !== origin.providerInvoiceRef || subscription !== origin.providerSubscriptionRef) unproven();
   // Older authenticated invoice objects carried the payment relation directly.
   // Newer API objects require the actual InvoicePayment relation instead.

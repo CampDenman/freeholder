@@ -13509,7 +13509,7 @@ whatever is best for the people using the site.
   [refund/dispute documentation](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
   New subscription provider-origin source work verifies the authenticated
   original subscription/invoice/PaymentIntent relation on its explicit charge
-  namespace, without inventing an order payment-attempt identifier. Sixteen
+  namespace, without inventing an order payment-attempt identifier. Seventeen
   bounded read-only protocol controls pass; the helper is ready for shared
   provider observation integration. The new agreement scope, exact tax/fee
   lifecycle, complete source qualification and actual acceptance remain open.

@@ -41,6 +41,7 @@ describe("original scheduled Stripe invoice payment (C12.38)", () => {
   });
   it.each([
     { invoice: { ...invoice, id: "in_other" } },
+    { invoice: { ...invoice, subscription: "sub_original", parent: { subscription_details: { subscription: "sub_other" } } } },
     { invoice: { id: "in_original", subscription: "sub_other", payment_intent: "pi_original" } },
     { invoice: { id: "in_original", subscription: "sub_original", payment_intent: "pi_other" } },
     { pages: [{ data: [{ ...link, invoice: "in_other" }], has_more: false }] },
