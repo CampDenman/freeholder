@@ -13774,6 +13774,11 @@ whatever is best for the people using the site.
   A new owned guard fragment is unassembled/unapplied and needs freshnormalv9;
   existingv8 and the actual112-history clone remain unchanged. This is not
   a passing AFTER or full C12.38 qualification.
+  Original-line fee guard source freeze780 now passes Node22 types,
+  helper/verifier lint and exact old-guard preservation proof. The new owned
+  SQL fragment is still unassembled/unapplied; freshnormalv9 on the reconciled
+  current-main candidate and unchanged native AFTER remain required. No old
+  v8 database, accepted112 resource, or original source proof is rewritten.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

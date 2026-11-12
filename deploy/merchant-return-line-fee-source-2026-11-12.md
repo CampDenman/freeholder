@@ -96,3 +96,17 @@ remain recordable even when the current canonical retained target is400.
 Already-admitted calls still require real completion or verified owning-runtime
 stop; this source/SQL admission change does not pretend to stop physical I/O
 that has already crossed that boundary.
+
+Frozen780 source checks now pass: Node22 incremental types, changed helper/
+verifier lint, and the pure guard-preservation verifier. The existing private5,
+release-note3 and amount3 controls retain their earlier passing results. Initial
+fixture-only unsafe JSON/matcher lint diagnostics are preserved; typed proof
+rows/direct assertions corrected them, and the catalog-owned registration has
+passed its affected types/lint/private controls. The verifier reports original
+guard SHA256 `c37f58318cb5fee8997bc9c0d23864ee3aea19d2835b4262ad03a4c6fc4ca8a5`
+and full new fragment SHA256
+`4b64cd657386ef7757a8b17b8e3a500e0ab84ac74b1ef2603616c2443811310e`.
+The SQL remains unassembled and unapplied; this does not establish SQL/native
+AFTER success. Compose only the owned delta onto the separately reconciled
+current-main financial candidate, then create a NEW normal-v9 database. The
+old a67 component base and all exact prior test identities remain preserved.
