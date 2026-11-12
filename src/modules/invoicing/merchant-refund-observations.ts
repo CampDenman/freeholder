@@ -3,12 +3,14 @@
 // C12.38: actual refund facts commit before policy or invoice application.
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, ServiceError } from "@/core/service";
 import { subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
 import { routingForPayment } from "./merchant-charge";
 import { merchantCashReturnInspections, merchantRefundObservations, merchantRefundRequests } from "./merchant-refund-schema";
+import { merchantRefundObservationCaptures } from "./merchant-refund-current-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { payments } from "./schema";
 const reference = z.string().min(1).max(200), account = z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200);
@@ -25,9 +27,10 @@ const source = z.discriminatedUnion("kind", [z.object({ kind: z.literal("payment
 export const recordMerchantRefundObservation = defineService({
   name: "invoicing.recordMerchantRefundObservation", summary: "Retain authenticated refund facts against their original cash owner before applying recovery policy.",
   kind: "mutation", permission: "system", external: false, writeClass: "money",
-  input: z.object({ source, requestId: z.uuid().optional(), inspectionId: z.uuid().optional(), evidence: merchantRefundEvidence }),
-  output: z.object({ observationId: z.uuid(), bindingVerified: z.boolean() }), auditInputFields: ["source", "requestId", "inspectionId"],
-  handler: async ({ source, requestId, inspectionId, evidence }, ctx) => {
+  input: z.object({ source, requestId: z.uuid().optional(), inspectionId: z.uuid().optional(), evidence: merchantRefundEvidence,
+    captureKey: z.string().regex(/^[a-f0-9]{64}$/).optional() }),
+  output: z.object({ observationId: z.uuid(), captureId: z.uuid(), bindingVerified: z.boolean() }), auditInputFields: ["source", "requestId", "inspectionId"],
+  handler: async ({ source, requestId, inspectionId, evidence, captureKey }, ctx) => {
     const paymentId = source.kind === "payment" ? source.paymentId : null, subscriptionChargeReceiptId = source.kind === "subscription" ? source.receiptId : null;
     const [original] = requestId ? await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, requestId)) : [];
     const [inspection] = inspectionId ? await ctx.tx.select().from(merchantCashReturnInspections).where(eq(merchantCashReturnInspections.id, inspectionId)) : [];
@@ -57,9 +60,25 @@ export const recordMerchantRefundObservation = defineService({
     await ctx.tx.insert(merchantRefundObservations).values(values).onConflictDoNothing();
     const [saved] = await ctx.tx.select().from(merchantRefundObservations).where(eq(merchantRefundObservations.evidenceDigest, values.evidenceDigest));
     if (!saved || Object.entries(values).some(([key, value]) => saved[key as keyof typeof saved] !== value)) throw new ServiceError("conflict", "The actual original refund evidence needs recovery; earlier observations were preserved.");
+    // A new authenticated occurrence can repeat an earlier semantic state.
+    // Preserve that occurrence so a later requires_action cannot disappear
+    // behind an old deduplicated row after a current-read success receipt.
+    const key = captureKey ?? merchantTaxDigest({ captureId: randomUUID() });
+    await ctx.tx.insert(merchantRefundObservationCaptures).values({ observationId: saved.id, captureKey: key }).onConflictDoNothing();
+    const [existingCapture] = await ctx.tx.select().from(merchantRefundObservationCaptures).where(eq(merchantRefundObservationCaptures.captureKey, key));
+    let capture = existingCapture;
+    if (capture && capture.observationId !== saved.id) {
+      // Conflicting actual evidence still commits; it must not replace the
+      // first capture or roll back this new primary observation.
+      const conflictingKey = merchantTaxDigest({ claimedCaptureKey: key, actualEvidenceDigest: saved.evidenceDigest });
+      await ctx.tx.insert(merchantRefundObservationCaptures).values({ observationId: saved.id, captureKey: conflictingKey }).onConflictDoNothing();
+      [capture] = await ctx.tx.select().from(merchantRefundObservationCaptures).where(eq(merchantRefundObservationCaptures.captureKey, conflictingKey));
+    }
+    if (!capture || capture.observationId !== saved.id) throw new ServiceError("conflict", "Restore the exact authenticated refund capture; earlier financial observations were preserved.");
     queueOriginalMerchantRefundRepair(ctx, { kind: "refund_observation", id: saved.id });
+    queueOriginalMerchantRefundRepair(ctx, { kind: "refund_capture", id: capture.id });
     ctx.setSubject(paymentId ? "payment" : "subscription_provider_charge", paymentId ?? subscriptionChargeReceiptId!);
-    return { observationId: saved.id, bindingVerified: saved.bindingVerified };
+    return { observationId: saved.id, captureId: capture.id, bindingVerified: saved.bindingVerified };
   },
 });
 // Private registration is present; qualification still requires the complete dispatch, application guard and recovery path.

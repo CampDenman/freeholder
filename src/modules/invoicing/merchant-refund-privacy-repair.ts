@@ -16,6 +16,8 @@ export const ORIGINAL_REFUND_EVIDENCE_EVENT = "invoicing.originalRefundEvidenceR
 const factTypes = {
   request: ["merchant_refund_requests", "id"],
   refund_observation: ["merchant_refund_observations", "id"],
+  refund_capture: ["merchant_refund_observation_captures", "id"],
+  refund_current: ["merchant_refund_current_receipts", "id"],
   refund_ack: ["merchant_refund_resource_bindings", "id"],
   refund_finish: ["merchant_refund_dispatch_finishes", "dispatch_id"],
   refund_retirement: ["merchant_refund_reservation_retirements", "request_id"],
@@ -25,7 +27,7 @@ const factTypes = {
   cash_resolution: ["merchant_unapplied_charge_resolutions", "id"],
 } as const;
 export const originalRefundRepairPointer = z.object({
-  kind: z.enum(["request", "refund_observation", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_resolution"]),
+  kind: z.enum(["request", "refund_observation", "refund_capture", "refund_current", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_resolution"]),
   id: z.uuid(),
 }).strict();
 type Pointer = z.infer<typeof originalRefundRepairPointer>;
@@ -58,7 +60,11 @@ export const originalMerchantRefundRepairSource = defineService({
     const [table, column] = factTypes[pointer.kind];
     const fact = await factRow(ctx, table, column, pointer.id);
     let owner = fact;
-    if (pointer.kind === "refund_finish") {
+    if (pointer.kind === "refund_capture") {
+      owner = await factRow(ctx, "merchant_refund_observations", "id", restoredId(fact.observation_id));
+    } else if (pointer.kind === "refund_current") {
+      owner = await factRow(ctx, "merchant_refund_requests", "id", restoredId(fact.request_id));
+    } else if (pointer.kind === "refund_finish") {
       const dispatch = await factRow(ctx, "merchant_refund_dispatches", "id", pointer.id);
       owner = await factRow(ctx, "merchant_refund_requests", "id", restoredId(dispatch.request_id));
     } else if (pointer.kind === "refund_ack" || pointer.kind === "refund_retirement") {

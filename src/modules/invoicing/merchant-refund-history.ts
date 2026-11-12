@@ -11,6 +11,7 @@ import type { MerchantRefundCashOrigin } from "./merchant-refund-origin";
 import { merchantCashReturnInspections, merchantCashReturnObservations, merchantCashReturnPrimaryObservations, merchantRefundCreationRefusals, merchantRefundDispatches,
   merchantRefundDispatchFinishes, merchantRefundDispatchStops, merchantRefundObservations, merchantRefundRequests, merchantRefundReservationRetirements, merchantRefundResourceBindings, merchantRefundTerminalReceipts } from "./merchant-refund-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import { merchantRefundObservationCaptures } from "./merchant-refund-current-schema";
 const MAX = 5000;
 const sorted = (rows: readonly object[]) => rows.map(row => merchantTaxDigest(row)).toSorted();
 export async function merchantRefundCashHistory(ctx: ServiceContext, cash: MerchantRefundCashOrigin, ownInspectionId?: string): Promise<{
@@ -28,6 +29,9 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
       eq(merchantRefundObservations.paymentProviderRef, cash.providerRef)), ...(ids.length ? [inArray(merchantRefundObservations.requestId, ids)] : []),
       and(isNull(merchantRefundObservations.paymentProviderRef), cash.paymentId ? eq(merchantRefundObservations.paymentId, cash.paymentId) : eq(merchantRefundObservations.subscriptionChargeReceiptId, cash.subscriptionChargeReceiptId!))),
     ownInspectionId ? sql`${merchantRefundObservations.inspectionId} is distinct from ${ownInspectionId}::uuid` : undefined)).limit(MAX + 1);
+  const observationIds = observations.map(row => row.id);
+  const observationCaptures = observationIds.length ? await ctx.tx.select().from(merchantRefundObservationCaptures)
+    .where(inArray(merchantRefundObservationCaptures.observationId, observationIds)).limit(MAX + 1) : [];
   const dispatches = ids.length ? await ctx.tx.select().from(merchantRefundDispatches).where(inArray(merchantRefundDispatches.requestId, ids)).limit(MAX + 1) : [];
   const calls = dispatches.map(row => row.id);
   const finishes = calls.length ? await ctx.tx.select().from(merchantRefundDispatchFinishes).where(inArray(merchantRefundDispatchFinishes.dispatchId, calls)).limit(MAX + 1) : [];
@@ -55,7 +59,7 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
     .innerJoin(merchantCashReturnInspections, eq(merchantCashReturnInspections.id, merchantCashReturnPrimaryObservations.inspectionId)).where(inspectionScope).limit(MAX + 1);
   const otherReturns = await ctx.tx.select({ observation: merchantCashReturnObservations }).from(merchantCashReturnObservations)
     .innerJoin(merchantCashReturnInspections, eq(merchantCashReturnInspections.id, merchantCashReturnObservations.inspectionId)).where(inspectionScope).limit(MAX + 1);
-  const inventory = { requests, retirements, observations, dispatches, finishes, stops, refusals, terminals, bindings, paymentCash, subscriptionCash, receiptRows, aliases, fees, feeObservations, otherPrimary, otherReturns };
+  const inventory = { requests, retirements, observations, observationCaptures, dispatches, finishes, stops, refusals, terminals, bindings, paymentCash, subscriptionCash, receiptRows, aliases, fees, feeObservations, otherPrimary, otherReturns };
   const incomplete = Object.values(inventory).some(rows => rows.length > MAX);
   let creatorsQuiesced = !incomplete && dispatches.every(call => finishes.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id)
     || stops.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id && row.requestDigest === call.requestDigest));
