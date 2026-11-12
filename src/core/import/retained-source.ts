@@ -6,9 +6,10 @@ import { and, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
 import { privacyRetentionExceptions } from "@/core/privacy/schema";
+import { hasUnknownRetentionSourceHold } from "@/core/privacy/retention-snapshots";
 import { importRuns } from "@/core/plugins/schema";
 import { insideServiceTransaction } from "@/core/plugins/context";
-import { ServiceError, type ServiceContext } from "@/core/service";
+import { ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { originalStoredObject } from "@/core/media/write-ledger";
 import { registerPendingObjectOwner } from "@/core/media/object-ledger";
 
@@ -96,10 +97,14 @@ export async function readRetainedSourceChunk(input: RetainedImportSource, index
   return bytes;
 }
 
-registerPendingObjectOwner("imports/", async (key, now) => {
+registerPendingObjectOwner("imports/", async (key, now, tx?: Tx) => {
   const match = /^imports\/([a-f0-9-]{36})\/([a-f0-9-]{36})\/\d{5}\.part$/.exec(key);
   if (!match || !z.uuid().safeParse(match[1]).success || !z.uuid().safeParse(match[2]).success) return false;
-  const [run] = await db().select({ status: importRuns.status, checkpoint: importRuns.checkpoint }).from(importRuns).where(eq(importRuns.id, match[1]!)).limit(1);
+  const reader = tx ?? db();
+  // A historical missing completion receipt is unresolved review debt. Never
+  // guess that it was an empty capture or attach it to a later upload nonce.
+  if (await hasUnknownRetentionSourceHold(reader, "imports.readerSources", ["imports.readerSources", "cms.readerComments"])) return true;
+  const [run] = await reader.select({ status: importRuns.status, checkpoint: importRuns.checkpoint }).from(importRuns).where(eq(importRuns.id, match[1]!)).limit(1);
   if (!run) return false;
   // An unresolved provider request can still write after expiry. Preserve its
   // cleanup witness until that exact attempt reports an outcome; a clock or
@@ -107,7 +112,7 @@ registerPendingObjectOwner("imports/", async (key, now) => {
   if (importSourceWrites(run.checkpoint).some(write => write.uploadId === match[2] && key.endsWith(`/${String(write.index).padStart(5, "0")}.part`))) return true;
   const holds = z.object({ exceptionId: z.uuid(), requestId: z.uuid(), uploadId: z.uuid() }).array().parse(object(run.checkpoint).sourcePrivacyHolds ?? []).filter(hold => hold.uploadId === match[2]);
   if (holds.length) {
-    const [active] = await db().select({ id: privacyRetentionExceptions.id }).from(privacyRetentionExceptions).where(and(
+    const [active] = await reader.select({ id: privacyRetentionExceptions.id }).from(privacyRetentionExceptions).where(and(
       or(...holds.map(hold => and(eq(privacyRetentionExceptions.id, hold.exceptionId), eq(privacyRetentionExceptions.dataRequestId, hold.requestId)))),
       inArray(privacyRetentionExceptions.scope, ["imports.readerSources", "cms.readerComments"]),
       or(isNull(privacyRetentionExceptions.expiresAt), gt(privacyRetentionExceptions.expiresAt, now)),

@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, gt, gte, inArray, like, or, sql } from "drizzle-orm";
 import { auditLog } from "@/core/events/schema";
 import { mediaObjects } from "@/core/media/schema";
+import { mediaObjectWrites } from "@/core/media/write-schema";
 import { retainedSourceFromRun, retainedSourceChunkKey } from "./retained-source";
 import { IMPORT_SOURCE_ERASURE_JOB } from "./source-erasure";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
@@ -12,6 +13,7 @@ import { registerContactReference } from "@/core/contacts/service";
 import { importRuns } from "@/core/plugins/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { completeRetentionSourceSnapshot, retentionSourceSnapshotIsComplete } from "@/core/privacy/retention-snapshots";
 import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
 import { ServiceError, type Actor, type Tx } from "@/core/service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
@@ -206,9 +208,17 @@ const sourceHold = z.object({ exceptionId: z.uuid(), requestId: z.uuid(), upload
 
 registerContactPrivacySource({
   scope: "imports.readerSources", tables: ["import_runs"], retentionScopes: ["cms.readerComments"], eraseOrder: 10,
-  retain: async (tx, _contactId, context) => {
-    // Opaque files cannot yet attribute ignored reader metadata. Preserve
-    // only the originals present at this held request, never later uploads.
+  captureRetention: async (tx, _contactId, context) => {
+    if (!context.isNew) return;
+    // The identity lock fences future admission, but cannot undo a provider
+    // DELETE that already left the process. Resolve its original receipt first.
+    const [deleting] = await tx.select({ id: mediaObjectWrites.id }).from(mediaObjectWrites).where(and(
+      eq(mediaObjectWrites.operation, "delete"), like(mediaObjectWrites.key, "imports/%"),
+      inArray(mediaObjectWrites.state, ["unverified", "started", "unknown"]),
+    )).limit(1);
+    if (deleting) throw new ServiceError("conflict", "An original import deletion is unresolved. Review its original storage receipt before retaining these sources.");
+    // Snapshot only actual original upload nonces present in this hold TX.
+    // The normalized completion receipt also records an actually empty set.
     for await (const run of runs(tx, true)) {
       const keys = await ownedSourceKeys(tx, run);
       const uploadIds = [...new Set(keys.map(key => key.split("/")[2]))].map(id => z.uuid().parse(id));
@@ -218,6 +228,12 @@ registerContactPrivacySource({
       for (const uploadId of uploadIds) if (!holds.some(hold => hold.exceptionId === context.exceptionId && hold.uploadId === uploadId)) holds.push({ requestId: context.requestId, exceptionId: context.exceptionId, uploadId });
       await tx.update(importRuns).set({ checkpoint: { ...checkpoint, sourcePrivacyHolds: holds.map(({ exceptionId, requestId, uploadId }) => ({ exceptionId, requestId, uploadId })) } }).where(eq(importRuns.id, run.id));
     }
+    await completeRetentionSourceSnapshot(context.service, { exceptionId: context.exceptionId, requestId: context.requestId, sourceScope: "imports.readerSources", isNew: context.isNew });
+  },
+  retain: async (tx, _contactId, context) => {
+    // Fulfillment must not widen an earlier exception to later uploads.
+    // A historical missing receipt is review debt, never an empty capture.
+    if (!await retentionSourceSnapshotIsComplete(tx, context.exceptionId, "imports.readerSources")) throw new ServiceError("conflict", "Review this older hold's original uploads before fulfilling the request.");
   },
   exportData: async (tx, contactId) => {
     // A current address can retire an unbound source during erasure, but

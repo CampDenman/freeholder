@@ -1,16 +1,19 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.47/C11.10: a documented pending hold must preserve its actual opaque upload.
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { db } from "@/core/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { users, totpFactors } from "@/core/auth/schema";
 import { createSession } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { resolveContact } from "@/core/contacts/service";
-import { createDataRequest, addRetentionException } from "@/core/privacy/service";
+import { createDataRequest, addRetentionException, removeRetentionException } from "@/core/privacy/service";
 import { privacyRetentionExceptions } from "@/core/privacy/schema";
+import { privacyRetentionSourceSnapshots } from "@/core/privacy/retention-schema";
+import { mediaObjectWrites } from "@/core/media/write-schema";
+import { importRuns } from "@/core/plugins/schema";
 import { startImport, rollbackImport } from "@/core/import/service";
 import { beginSourceUpload, uploadSourceChunk } from "@/core/import/source-upload";
 import { deleteCaptureObjects } from "@/core/media/capture";
@@ -29,7 +32,7 @@ async function actualOwner() {
 }
 
 describe.runIf(hasDatabase)("original uploaded source pending retention (C3.47/C11.10)", () => {
-  beforeEach(async () => { await truncateSpine(); resetStorageForTests(); });
+  beforeEach(async () => { vi.restoreAllMocks(); await truncateSpine(); resetStorageForTests(); });
   afterAll(async () => { await stopJobs(); await closeDb(); });
   it("preserves the real original WXR bytes through rollback and shared cleanup before request verification", async () => {
     const owner = await actualOwner(), reader = (await resolveContact.call({ email: readerEmail, name: "Actual pending upload request fixture" }, owner)).contact;
@@ -46,5 +49,58 @@ describe.runIf(hasDatabase)("original uploaded source pending retention (C3.47/C
     const removed = await deleteCaptureObjects([key]);
     expect(await storage().get(key)).toEqual(bytes);
     expect(removed).toEqual({ deleted: 0 });
+  });
+  it("records an empty first capture and does not attach a renewed hold to a later upload", async () => {
+    const owner = await actualOwner(), reader = (await resolveContact.call({ email: readerEmail }, owner)).contact;
+    const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, owner);
+    const input = { dataRequestId: request.id, scope: "cms.readerComments", reason: "legal_claim" as const, legalBasis: "Synthetic empty original source capture" };
+    const hold = await addRetentionException.call(input, owner);
+    const originalReceipt = await db().select().from(privacyRetentionSourceSnapshots).where(and(eq(privacyRetentionSourceSnapshots.exceptionId, hold.id), eq(privacyRetentionSourceSnapshots.sourceScope, "imports.readerSources")));
+    expect(originalReceipt).toHaveLength(1);
+    const run = await startImport.call({ origin: "https://fictional-upload-source.example", kind: "wordpress-wxr" }, owner);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "later-reader.xml", bytes: bytes.byteLength }, owner);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, owner);
+    const key = `imports/${run.id}/${upload.uploadId}/00000.part`;
+    const renewed = await addRetentionException.call({ ...input, legalBasis: "Synthetic renewal retains its actual first empty membership" }, owner);
+    expect(renewed.id).toBe(hold.id);
+    expect(await db().select().from(privacyRetentionSourceSnapshots).where(and(eq(privacyRetentionSourceSnapshots.exceptionId, hold.id), eq(privacyRetentionSourceSnapshots.sourceScope, "imports.readerSources")))).toEqual(originalReceipt);
+    const [actualRun] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
+    expect(actualRun!.checkpoint).not.toHaveProperty("sourcePrivacyHolds");
+    await rollbackImport.call({ id: run.id }, owner);
+    expect(await deleteCaptureObjects([key])).toEqual({ deleted: 1 });
+    expect(await storage().get(key)).toBeUndefined();
+  });
+  it("releases only the actual original held upload when the real exception is removed", async () => {
+    const owner = await actualOwner(), reader = (await resolveContact.call({ email: readerEmail }, owner)).contact;
+    const run = await startImport.call({ origin: "https://fictional-upload-source.example", kind: "wordpress-wxr" }, owner);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "held-reader.xml", bytes: bytes.byteLength }, owner);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, owner);
+    const key = `imports/${run.id}/${upload.uploadId}/00000.part`;
+    const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, owner);
+    const hold = await addRetentionException.call({ dataRequestId: request.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Synthetic release of original retained upload" }, owner);
+    await rollbackImport.call({ id: run.id }, owner);
+    expect(await deleteCaptureObjects([key])).toEqual({ deleted: 0 });
+    expect(await storage().get(key)).toEqual(bytes);
+    await removeRetentionException.call({ id: hold.id }, owner);
+    expect(await db().select().from(privacyRetentionSourceSnapshots).where(eq(privacyRetentionSourceSnapshots.exceptionId, hold.id))).toEqual([]);
+    expect(await deleteCaptureObjects([key])).toEqual({ deleted: 1 });
+    expect(await storage().get(key)).toBeUndefined();
+  });
+  it("refuses a new hold after an original DELETE was admitted but its provider result is unresolved", async () => {
+    const owner = await actualOwner(), reader = (await resolveContact.call({ email: readerEmail }, owner)).contact;
+    const run = await startImport.call({ origin: "https://fictional-upload-source.example", kind: "wordpress-wxr" }, owner);
+    const upload = await beginSourceUpload.call({ id: run.id, filename: "unresolved-reader.xml", bytes: bytes.byteLength }, owner);
+    await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, owner);
+    const key = `imports/${run.id}/${upload.uploadId}/00000.part`;
+    await rollbackImport.call({ id: run.id }, owner);
+    const provider = vi.spyOn(storage(), "delete").mockRejectedValueOnce(new Error("Synthetic provider DELETE result is unknown"));
+    try { await expect(deleteCaptureObjects([key])).rejects.toThrow("Synthetic provider DELETE result is unknown"); }
+    finally { provider.mockRestore(); }
+    expect(await storage().get(key)).toEqual(bytes);
+    expect(await db().select({ state: mediaObjectWrites.state }).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.key, key), eq(mediaObjectWrites.operation, "delete")))).toEqual([{ state: "unknown" }]);
+    const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, owner);
+    await expect(addRetentionException.call({ dataRequestId: request.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Synthetic hold cannot undo an admitted DELETE" }, owner)).rejects.toThrow("An original import deletion is unresolved");
+    expect(await db().select().from(privacyRetentionExceptions).where(eq(privacyRetentionExceptions.dataRequestId, request.id))).toEqual([]);
+    expect(await db().select().from(privacyRetentionSourceSnapshots)).toEqual([]);
   });
 });
