@@ -162,6 +162,14 @@ catalog passing all8 separately (3.19s) to include its generated-registry contro
 transport proofs and local databases provide no hosting/provider-account
 acceptance. Protected CI must still qualify this corrected candidate.
 
+Protected CI on `b131a2e1` passes all32 native shards but its archive browser
+journeys expose a direct-runner module-loading regression: lazy cohort loading
+escapes the browser runner's TypeScript alias transformation during final
+cleanup. Static shared cohort imports fix that path without removing cleanup.
+The unchanged English archive upload/publish/rollback/cleanup journey passes
+in18.1s. All four late-erasure controls and SDK8 also pass together (12/12,
+39.30s). Other locale journeys remain for the next exact-head protected run.
+
 Breaking migration75 requires actual old direct
 writers to stop and drain. Readiness refusal cannot stop an already admitted
 network request. Cross-target adoption/source cleanup, live storage acceptance
