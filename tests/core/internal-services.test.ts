@@ -37,8 +37,10 @@ const INTERNAL = [
   "invoicing.processPaymentProviderEvents",
   "invoicing.reconcilePluginRefund",
   "invoicing.captureInvoiceMarketPolicy",
+  "invoicing.captureMerchantAllocations",
   "invoicing.marketPolicy",
   "members.resolveInvoiceMarketPolicy",
+  "members.resolveInvoiceMerchantLineOwners",
   "members.verifyInvoiceMerchantAccount",
   // C11.10: records a carrier's answer for a text staged by messaging.sendSms,
   // from the post-commit delivery job.
@@ -105,6 +107,7 @@ const INTERNAL = [
   "catalog.memberOrdersForContact",
   "catalog.orderForInvoice",
   "catalog.orderInvoiceRevenue",
+  "catalog.orderInvoiceLineOwners",
   "catalog.orderSellers",
   "members.recordPayouts",
   // C12.05 / C12.25: a paid invoice for a member's subscription or booked
@@ -228,6 +231,7 @@ const CALLER_AUTHORIZED_PHASES = [
   "catalog.orderInvoiceRevenue",
   "media.retireOwnedAssetsForErasure",
   "media.reserveProxyObject",
+  "catalog.orderInvoiceLineOwners",
   "subscriptions.claimTrialCardSetup",
   "subscriptions.applyTrialCardSetup",
   "subscriptions.claimTrialSetupDispatch",
@@ -252,8 +256,10 @@ const CALLER_AUTHORIZED_PHASES = [
   "invoicing.processPaymentProviderEvents",
   "invoicing.reconcilePluginRefund",
   "invoicing.captureInvoiceMarketPolicy",
+  "invoicing.captureMerchantAllocations",
   "invoicing.marketPolicy",
   "members.resolveInvoiceMarketPolicy",
+  "members.resolveInvoiceMerchantLineOwners",
   "members.verifyInvoiceMerchantAccount",
   // C1.38/C10.31: browser-only entry and owner host controls. These do not
   // belong in API-key, SDK, OpenAPI or MCP projections.

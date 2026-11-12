@@ -13483,6 +13483,19 @@ whatever is best for the people using the site.
   Historical lines without this receipt
   are not backfilled from current owners. Full merchant integration and live
   acceptance remain required; this repair does not close C12.38.
+  Invoice-portion source work 2026-11-11 is split into bounded increments:
+  freeze each original seller/site portion and exact invoice-line ownership
+  (reserved migration77); compose original-account direct/destination payment,
+  refund and dispute routing against those portions; finish the buyer/owner
+  flows and actual account acceptance. The one-invoice requirement in §44.8
+  remains unchanged. Six pure amount controls prove discounted revenue,
+  item/shipping tax, freight, zero-price handling, stable cent remainder and
+  per-line fee rounding. Four actual shared-service portion controls and the
+  four payout controls pass on official74 plus explicit77 SQL; no contiguous
+  upgrade is claimed. Evidence, the real prior seller-ownership failure and
+  remaining integration are in `deploy/merchant-invoice-portions-2026-11-11.md`.
+  No new collection model is enabled, and no part supplies stable or live
+  payment sign-off. All remaining increments are required; none is deferred.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query
