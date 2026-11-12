@@ -864,6 +864,7 @@ export const SERVICE_NAMES = [
   "invoicing.cancelPayment",
   "invoicing.cancelPaymentPlan",
   "invoicing.cancelRefund",
+  "invoicing.cartMerchantTaxBusinesses",
   "invoicing.completePaymentCheckout",
   "invoicing.configureMerchantCollection",
   "invoicing.confirmCustomerPayment",
@@ -910,6 +911,7 @@ export const SERVICE_NAMES = [
   "invoicing.merchantPaymentReview",
   "invoicing.merchantTaxZoneConfiguration",
   "invoicing.merchantTaxZones",
+  "invoicing.myMerchantTaxExemptions",
   "invoicing.purgeDemoFixture",
   "invoicing.quoteTax",
   "invoicing.receipt",
@@ -928,6 +930,10 @@ export const SERVICE_NAMES = [
   "invoicing.refundCustomerBalancePayment",
   "invoicing.refundInPersonPayment",
   "invoicing.reminders",
+  "invoicing.requestMerchantTaxExemption",
+  "invoicing.reviewMerchantPaymentCallerStopped",
+  "invoicing.reviewMerchantPaymentResourceOrigin",
+  "invoicing.reviewSiteMerchantTaxExemption",
   "invoicing.revokeSavedPaymentMethod",
   "invoicing.runSchedules",
   "invoicing.saveSiteMerchantTaxProfile",
@@ -937,6 +943,7 @@ export const SERVICE_NAMES = [
   "invoicing.setTaxRegistration",
   "invoicing.settlePayment",
   "invoicing.settleRefund",
+  "invoicing.siteMerchantTaxExemptions",
   "invoicing.siteMerchantTaxProfile",
   "invoicing.siteMerchantTaxThresholds",
   "invoicing.startPayment",
@@ -949,6 +956,7 @@ export const SERVICE_NAMES = [
   "invoicing.viewCustomerInvoice",
   "invoicing.void",
   "invoicing.voidCreditNote",
+  "invoicing.withdrawMerchantTaxExemption",
   "launch.install",
   "linkinbio.addLink",
   "linkinbio.follow",
@@ -1111,6 +1119,7 @@ export const SERVICE_NAMES = [
   "members.markShipped",
   "members.marketPolicy",
   "members.me",
+  "members.merchantTaxExemptions",
   "members.merchantTaxZoneConfiguration",
   "members.merchantTaxZones",
   "members.moveToRemote",
@@ -1155,6 +1164,7 @@ export const SERVICE_NAMES = [
   "members.resolveDispute",
   "members.resolveReport",
   "members.reviewListing",
+  "members.reviewMerchantTaxExemption",
   "members.reviews",
   "members.revokeDevice",
   "members.sale",
@@ -5092,6 +5102,10 @@ export interface ServiceCatalog {
     input: { id: string; reason: string };
     output: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "invoicing.cartMerchantTaxBusinesses": {
+    input: { cartId: string; cartToken?: string };
+    output: { sellerUserId: string | null; merchantName: string }[];
+  };
   "invoicing.completePaymentCheckout": {
     input: { paymentId: string; idempotencyKey: string };
     output: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -5266,7 +5280,7 @@ export interface ServiceCatalog {
   };
   "invoicing.merchantPaymentReview": {
     input: { paymentId: string; offset?: number };
-    output: { payment: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }; routing: { providerApiVersion?: "2026-02-25.clover" | "2026-10-28.endive"; providerAccountId?: string; providerPlatformAccountId?: string; destinationAccountId?: string; settlementMerchantAccountId?: string; merchantAllocationId?: string; invoiceScopeId?: string; agreementSubscriptionId?: string; providerSubscriptionRef?: string; providerInvoiceRef?: string; providerPaymentIntentRef?: string; providerChargeRef?: string; originalChargeReceiptId?: string; applicationFeeMinor?: number }; witness: string; observations: { id: string; providerApiVersion: string | null; providerRef: string; status: "pending" | "succeeded" | "failed"; amountMinor: number; currency: string; providerPlatformAccountId: string; chargeAccountId: string | null; recipientAccountId: string | null; settlementMerchantAccountId: string | null; applicationFeeMinor: number | null; providerChargeRef: string | null; applicationFeeRef: string | null; transferRef: string | null; applicationFeeCurrency: string | null; observedApplicationFeeMinor: number | null; observedFeeRefundedMinor: number | null; customerChargeVerified: boolean; routeVerified: boolean; settlementVerified: boolean; observedAt: string }[]; feeOperations: { id: string; amountMinor: number; currency: string; status: string; providerRef: string | null; applicationFeeRef: string; targetRetainedFeeMinor: number; observedOriginalFeeMinor: number; createdAt: string }[]; feeObservations: { id: string; operationId: string; providerRef: string; applicationFeeRef: string; amountMinor: number; currency: string; bindingVerified: boolean; observedAt: string }[]; originalRequest: { providerInvoiceRef: string; providerContactRef: string; requestDigest: string } | null; dispatches: { id: string; ordinal: number; requestDigest: string; dispatchedAt: string; refusalCode: string | null }[]; retirementAcks: { id: string; checkoutRef: string | null; paymentRef: string | null; kind: "session_expired" | "intent_canceled"; observedAt: string }[]; terminalReceipt: { checkoutRef: string | null; paymentRef: string | null; sessionStatus: ("expired" | "complete") | null; intentStatus: string | null; amountReceivedMinor: 0; observedAt: string } | null; hasMore: boolean; nextOffset: number | null } | null;
+    output: { payment: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }; routing: { providerApiVersion?: "2026-02-25.clover" | "2026-10-28.endive"; providerAccountId?: string; providerPlatformAccountId?: string; destinationAccountId?: string; settlementMerchantAccountId?: string; merchantAllocationId?: string; invoiceScopeId?: string; agreementSubscriptionId?: string; providerSubscriptionRef?: string; providerInvoiceRef?: string; providerPaymentIntentRef?: string; providerChargeRef?: string; originalChargeReceiptId?: string; applicationFeeMinor?: number }; witness: string; observations: { id: string; providerApiVersion: string | null; providerRef: string; status: "pending" | "succeeded" | "failed"; amountMinor: number; currency: string; providerPlatformAccountId: string; chargeAccountId: string | null; recipientAccountId: string | null; settlementMerchantAccountId: string | null; applicationFeeMinor: number | null; providerChargeRef: string | null; applicationFeeRef: string | null; transferRef: string | null; applicationFeeCurrency: string | null; observedApplicationFeeMinor: number | null; observedFeeRefundedMinor: number | null; customerChargeVerified: boolean; routeVerified: boolean; settlementVerified: boolean; observedAt: string }[]; feeOperations: { id: string; amountMinor: number; currency: string; status: string; providerRef: string | null; applicationFeeRef: string; targetRetainedFeeMinor: number; observedOriginalFeeMinor: number; createdAt: string }[]; feeObservations: { id: string; operationId: string; providerRef: string; applicationFeeRef: string; amountMinor: number; currency: string; bindingVerified: boolean; observedAt: string }[]; originalRequest: { providerInvoiceRef: string; providerContactRef: string; requestDigest: string } | null; dispatches: { id: string; ordinal: number; requestDigest: string; dispatchedAt: string; refusalCode: string | null; caller: { id: string; pid: number; host: string; startedAt: string; bootId: string | null; pidNamespace: string | null; startTicks: string | null }; finishedAt: string | null; stopReviewedAt: string | null; liveness: "live" | "absent" | "unobservable" }[]; resourceBindings: { id: string; dispatchId: string; resourceRef: string; resourceKind: "checkout" | "intent"; origin: "physical_ack" | "human_request_review"; observedAt: string }[]; retirementAcks: { id: string; checkoutRef: string | null; paymentRef: string | null; kind: "session_expired" | "intent_canceled"; observedAt: string }[]; terminalReceipt: { checkoutRef: string | null; paymentRef: string | null; sessionStatus: ("expired" | "complete") | null; intentStatus: string | null; amountReceivedMinor: 0; observedAt: string } | null; hasMore: boolean; nextOffset: number | null } | null;
   };
   "invoicing.merchantTaxZoneConfiguration": {
     input: { zoneId: string };
@@ -5275,6 +5289,10 @@ export interface ServiceCatalog {
   "invoicing.merchantTaxZones": {
     input: { country?: string; q?: string; offset?: number; limit?: number };
     output: { rows: { id: string; name: string; country: string }[]; nextOffset: number | null };
+  };
+  "invoicing.myMerchantTaxExemptions": {
+    input: { offset?: number; limit?: number; status?: "pending" | "valid" | "expired" | "revoked" };
+    output: { rows: { id: string; contactId: string; sellerUserId: string | null; businessName: string | null; businessActive: boolean; customerName: string | null; zoneId: string; zoneName: string; kind: "reseller" | "nonprofit" | "reverse_charge" | "diplomatic"; certificateRef: string | null; status: "pending" | "valid" | "expired" | "revoked"; validatedAt: string | null; expiresAt: string | null; createdAt: string; updatedAt: string }[]; nextOffset: number | null };
   };
   "invoicing.purgeDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
@@ -5348,6 +5366,22 @@ export interface ServiceCatalog {
     input: { invoiceId: string };
     output: { id: string; offsetDays: number; sendAt: string; sentAt: string | null; status: "scheduled" | "sent" | "skipped" | "failed"; skipReason: string | null; [key: string]: unknown }[];
   };
+  "invoicing.requestMerchantTaxExemption": {
+    input: { cartId: string; cartToken?: string; sellerUserId: string | null; destination: { country: string; region?: string; postalCode?: string; city?: string }; kind: "reseller" | "nonprofit" | "reverse_charge" | "diplomatic"; certificateRef: string };
+    output: { id: string; status: "pending" | "valid" | "expired" | "revoked" };
+  };
+  "invoicing.reviewMerchantPaymentCallerStopped": {
+    input: { dispatchId: string; expectedCallerId: string; expectedRequestDigest: string; hostingEvidence: string; confirmation: "ORIGINAL PAYMENT CALLER STOP VERIFIED" };
+    output: { reviewed: true; mechanicalCheck: "original_process_absent" | "unobservable_host_review" };
+  };
+  "invoicing.reviewMerchantPaymentResourceOrigin": {
+    input: { dispatchId: string; expectedRequestDigest: string; resourceRef: string; providerRequestReference: string; providerEvidence: string; confirmation: "ORIGINAL PROVIDER REQUEST VERIFIED" };
+    output: { reviewed: true };
+  };
+  "invoicing.reviewSiteMerchantTaxExemption": {
+    input: { id: string; expectedStatus: "pending" | "valid" | "expired" | "revoked"; decision: "valid" | "revoked"; confirmEvidence?: boolean; expiresAt?: string | null };
+    output: { id: string; status: "pending" | "valid" | "expired" | "revoked" };
+  };
   "invoicing.revokeSavedPaymentMethod": {
     input: { id: string; idempotencyKey: string };
     output: { id: string; contactId: string; provider: string; providerMethodRef: string; providerCustomerRef: string | null; kind: "card" | "wallet" | "bank_debit" | "bank_redirect" | "buy_now_pay_later" | "cash" | "bank_transfer" | "other"; label: string; brand: string | null; last4: string | null; expiryMonth: number | null; expiryYear: number | null; status: "active" | "revoked" | "expired"; consentSource: string; consentedAt: string; providerStatusAt: string; revokedAt: string | null; createdAt: string; updatedAt: string };
@@ -5383,6 +5417,10 @@ export interface ServiceCatalog {
   "invoicing.settleRefund": {
     input: { id: string; providerRef: string; processedAt?: string };
     output: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "invoicing.siteMerchantTaxExemptions": {
+    input: { offset?: number; limit?: number; status?: "pending" | "valid" | "expired" | "revoked" };
+    output: { rows: { id: string; contactId: string; sellerUserId: string | null; businessName: string | null; businessActive: boolean; customerName: string | null; zoneId: string; zoneName: string; kind: "reseller" | "nonprofit" | "reverse_charge" | "diplomatic"; certificateRef: string | null; status: "pending" | "valid" | "expired" | "revoked"; validatedAt: string | null; expiresAt: string | null; createdAt: string; updatedAt: string }[]; nextOffset: number | null };
   };
   "invoicing.siteMerchantTaxProfile": {
     input: Record<string, never>;
@@ -5431,6 +5469,10 @@ export interface ServiceCatalog {
   "invoicing.voidCreditNote": {
     input: { id: string; reason: string };
     output: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "invoicing.withdrawMerchantTaxExemption": {
+    input: { id: string };
+    output: { id: string; status: "pending" | "valid" | "expired" | "revoked" };
   };
   "launch.install": {
     input: { format: "freeholder-launch-spec"; version: 1 | 2 | 3; generator: string; business: { name: string; tagline: string; schemaType?: string; country?: string; baseCurrency?: string; timezone?: string }; brand?: { paper?: string; ink?: string; accent?: string }; status: { banner: string; summary: string; ready: string[]; planned: string[] }; home: { headline: string; promise: string; problem: string[]; steps: string[]; switchReasons?: string[]; seoDescription: string }; offer: { slug: string; name: string; summary: string; price: string; cadence: "one_time" | "monthly"; priceLabel: string; forWho: string; includes: string[]; faq?: { question: string; answer: string }[]; seoDescription: string }; intro?: { name: string; summary: string; durationMin: number }; contact: { intro: string; seoDescription: string }; about: { body: string[]; seoDescription: string }; accounts?: { enabled: boolean; members?: boolean; shop?: boolean }; intake?: { title: string; intro: string; projectTitle: string; fields: { key: string; label: string; kind: "text" | "email" | "multiline" | "select" | "file"; required?: boolean; help?: string; options?: string[]; accept?: ("audio" | "doc" | "image")[]; maxMb?: number }[] }; payments?: { mode: "test"; note: string }; assistant?: { provider: "paradise"; enabled: boolean; dailyCapUsd: number; contentMode: "sfw" }; hours?: string[] };
@@ -6080,6 +6122,10 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { userId: string; handle: string; displayName: string; bio: string; status: "active" | "pending" | "suspended"; isAdult: boolean; bioVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; links: { label: string; url: string }[]; linksVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; defaultPostVisibility: "public" | "followers" | "friends" | "subscribers" | "only_me"; isPrivate: boolean; indexable: boolean; readReceipts: boolean; showAdult: boolean; federated: boolean; fediverseAliases: string[]; movedTo: string | null; createdAt: string; [key: string]: unknown } | null;
   };
+  "members.merchantTaxExemptions": {
+    input: { offset?: number; limit?: number; status?: "pending" | "valid" | "expired" | "revoked" };
+    output: { rows: { id: string; contactId: string; sellerUserId: string | null; businessName: string | null; businessActive: boolean; customerName: string | null; zoneId: string; zoneName: string; kind: "reseller" | "nonprofit" | "reverse_charge" | "diplomatic"; certificateRef: string | null; status: "pending" | "valid" | "expired" | "revoked"; validatedAt: string | null; expiresAt: string | null; createdAt: string; updatedAt: string }[]; nextOffset: number | null };
+  };
   "members.merchantTaxZoneConfiguration": {
     input: { zoneId: string };
     output: { id: string; name: string; country: string; regions: string[]; postalPatterns: string[]; priority: number; basis: "origin" | "destination"; pricesIncludeTax: boolean; roundingScope: "line" | "invoice"; roundingMode: "half_up" | "bankers"; configurationDigest: string; activationLimitation: string | null; rates: { id: string; name: string; jurisdiction: string; ratePpm: number; compound: boolean; priority: number; appliesToShipping: boolean; categoryCode: string | null; active: boolean; effectiveFrom: string | null; effectiveTo: string | null }[] };
@@ -6255,6 +6301,10 @@ export interface ServiceCatalog {
   "members.reviewListing": {
     input: { productId: string; approve: boolean; note?: string };
     output: { ok: true };
+  };
+  "members.reviewMerchantTaxExemption": {
+    input: { id: string; expectedStatus: "pending" | "valid" | "expired" | "revoked"; decision: "valid" | "revoked"; confirmEvidence?: boolean; expiresAt?: string | null };
+    output: { id: string; status: "pending" | "valid" | "expired" | "revoked" };
   };
   "members.reviews": {
     input: { handle: string };
@@ -9182,6 +9232,7 @@ export interface FreeholderApi {
     cancelPayment: (input: ServiceCatalog["invoicing.cancelPayment"]["input"]) => Promise<ServiceCatalog["invoicing.cancelPayment"]["output"]>;
     cancelPaymentPlan: (input: ServiceCatalog["invoicing.cancelPaymentPlan"]["input"]) => Promise<ServiceCatalog["invoicing.cancelPaymentPlan"]["output"]>;
     cancelRefund: (input: ServiceCatalog["invoicing.cancelRefund"]["input"]) => Promise<ServiceCatalog["invoicing.cancelRefund"]["output"]>;
+    cartMerchantTaxBusinesses: (input: ServiceCatalog["invoicing.cartMerchantTaxBusinesses"]["input"]) => Promise<ServiceCatalog["invoicing.cartMerchantTaxBusinesses"]["output"]>;
     completePaymentCheckout: (input: ServiceCatalog["invoicing.completePaymentCheckout"]["input"]) => Promise<ServiceCatalog["invoicing.completePaymentCheckout"]["output"]>;
     configureMerchantCollection: (input: ServiceCatalog["invoicing.configureMerchantCollection"]["input"]) => Promise<ServiceCatalog["invoicing.configureMerchantCollection"]["output"]>;
     confirmCustomerPayment: (input: ServiceCatalog["invoicing.confirmCustomerPayment"]["input"]) => Promise<ServiceCatalog["invoicing.confirmCustomerPayment"]["output"]>;
@@ -9228,6 +9279,7 @@ export interface FreeholderApi {
     merchantPaymentReview: (input: ServiceCatalog["invoicing.merchantPaymentReview"]["input"]) => Promise<ServiceCatalog["invoicing.merchantPaymentReview"]["output"]>;
     merchantTaxZoneConfiguration: (input: ServiceCatalog["invoicing.merchantTaxZoneConfiguration"]["input"]) => Promise<ServiceCatalog["invoicing.merchantTaxZoneConfiguration"]["output"]>;
     merchantTaxZones: (input?: ServiceCatalog["invoicing.merchantTaxZones"]["input"]) => Promise<ServiceCatalog["invoicing.merchantTaxZones"]["output"]>;
+    myMerchantTaxExemptions: (input?: ServiceCatalog["invoicing.myMerchantTaxExemptions"]["input"]) => Promise<ServiceCatalog["invoicing.myMerchantTaxExemptions"]["output"]>;
     purgeDemoFixture: (input: ServiceCatalog["invoicing.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["invoicing.purgeDemoFixture"]["output"]>;
     quoteTax: (input: ServiceCatalog["invoicing.quoteTax"]["input"]) => Promise<ServiceCatalog["invoicing.quoteTax"]["output"]>;
     receipt: (input: ServiceCatalog["invoicing.receipt"]["input"]) => Promise<ServiceCatalog["invoicing.receipt"]["output"]>;
@@ -9246,6 +9298,10 @@ export interface FreeholderApi {
     refundCustomerBalancePayment: (input: ServiceCatalog["invoicing.refundCustomerBalancePayment"]["input"]) => Promise<ServiceCatalog["invoicing.refundCustomerBalancePayment"]["output"]>;
     refundInPersonPayment: (input: ServiceCatalog["invoicing.refundInPersonPayment"]["input"]) => Promise<ServiceCatalog["invoicing.refundInPersonPayment"]["output"]>;
     reminders: (input: ServiceCatalog["invoicing.reminders"]["input"]) => Promise<ServiceCatalog["invoicing.reminders"]["output"]>;
+    requestMerchantTaxExemption: (input: ServiceCatalog["invoicing.requestMerchantTaxExemption"]["input"]) => Promise<ServiceCatalog["invoicing.requestMerchantTaxExemption"]["output"]>;
+    reviewMerchantPaymentCallerStopped: (input: ServiceCatalog["invoicing.reviewMerchantPaymentCallerStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewMerchantPaymentCallerStopped"]["output"]>;
+    reviewMerchantPaymentResourceOrigin: (input: ServiceCatalog["invoicing.reviewMerchantPaymentResourceOrigin"]["input"]) => Promise<ServiceCatalog["invoicing.reviewMerchantPaymentResourceOrigin"]["output"]>;
+    reviewSiteMerchantTaxExemption: (input: ServiceCatalog["invoicing.reviewSiteMerchantTaxExemption"]["input"]) => Promise<ServiceCatalog["invoicing.reviewSiteMerchantTaxExemption"]["output"]>;
     revokeSavedPaymentMethod: (input: ServiceCatalog["invoicing.revokeSavedPaymentMethod"]["input"]) => Promise<ServiceCatalog["invoicing.revokeSavedPaymentMethod"]["output"]>;
     runSchedules: (input?: ServiceCatalog["invoicing.runSchedules"]["input"]) => Promise<ServiceCatalog["invoicing.runSchedules"]["output"]>;
     saveSiteMerchantTaxProfile: (input: ServiceCatalog["invoicing.saveSiteMerchantTaxProfile"]["input"]) => Promise<ServiceCatalog["invoicing.saveSiteMerchantTaxProfile"]["output"]>;
@@ -9255,6 +9311,7 @@ export interface FreeholderApi {
     setTaxRegistration: (input: ServiceCatalog["invoicing.setTaxRegistration"]["input"]) => Promise<ServiceCatalog["invoicing.setTaxRegistration"]["output"]>;
     settlePayment: (input: ServiceCatalog["invoicing.settlePayment"]["input"]) => Promise<ServiceCatalog["invoicing.settlePayment"]["output"]>;
     settleRefund: (input: ServiceCatalog["invoicing.settleRefund"]["input"]) => Promise<ServiceCatalog["invoicing.settleRefund"]["output"]>;
+    siteMerchantTaxExemptions: (input?: ServiceCatalog["invoicing.siteMerchantTaxExemptions"]["input"]) => Promise<ServiceCatalog["invoicing.siteMerchantTaxExemptions"]["output"]>;
     siteMerchantTaxProfile: (input?: ServiceCatalog["invoicing.siteMerchantTaxProfile"]["input"]) => Promise<ServiceCatalog["invoicing.siteMerchantTaxProfile"]["output"]>;
     siteMerchantTaxThresholds: (input?: ServiceCatalog["invoicing.siteMerchantTaxThresholds"]["input"]) => Promise<ServiceCatalog["invoicing.siteMerchantTaxThresholds"]["output"]>;
     startPayment: (input: ServiceCatalog["invoicing.startPayment"]["input"]) => Promise<ServiceCatalog["invoicing.startPayment"]["output"]>;
@@ -9267,6 +9324,7 @@ export interface FreeholderApi {
     viewCustomerInvoice: (input: ServiceCatalog["invoicing.viewCustomerInvoice"]["input"]) => Promise<ServiceCatalog["invoicing.viewCustomerInvoice"]["output"]>;
     void: (input: ServiceCatalog["invoicing.void"]["input"]) => Promise<ServiceCatalog["invoicing.void"]["output"]>;
     voidCreditNote: (input: ServiceCatalog["invoicing.voidCreditNote"]["input"]) => Promise<ServiceCatalog["invoicing.voidCreditNote"]["output"]>;
+    withdrawMerchantTaxExemption: (input: ServiceCatalog["invoicing.withdrawMerchantTaxExemption"]["input"]) => Promise<ServiceCatalog["invoicing.withdrawMerchantTaxExemption"]["output"]>;
   };
   launch: {
     install: (input: ServiceCatalog["launch.install"]["input"]) => Promise<ServiceCatalog["launch.install"]["output"]>;
@@ -9445,6 +9503,7 @@ export interface FreeholderApi {
     markShipped: (input: ServiceCatalog["members.markShipped"]["input"]) => Promise<ServiceCatalog["members.markShipped"]["output"]>;
     marketPolicy: (input?: ServiceCatalog["members.marketPolicy"]["input"]) => Promise<ServiceCatalog["members.marketPolicy"]["output"]>;
     me: (input?: ServiceCatalog["members.me"]["input"]) => Promise<ServiceCatalog["members.me"]["output"]>;
+    merchantTaxExemptions: (input?: ServiceCatalog["members.merchantTaxExemptions"]["input"]) => Promise<ServiceCatalog["members.merchantTaxExemptions"]["output"]>;
     merchantTaxZoneConfiguration: (input: ServiceCatalog["members.merchantTaxZoneConfiguration"]["input"]) => Promise<ServiceCatalog["members.merchantTaxZoneConfiguration"]["output"]>;
     merchantTaxZones: (input?: ServiceCatalog["members.merchantTaxZones"]["input"]) => Promise<ServiceCatalog["members.merchantTaxZones"]["output"]>;
     moveToRemote: (input: ServiceCatalog["members.moveToRemote"]["input"]) => Promise<ServiceCatalog["members.moveToRemote"]["output"]>;
@@ -9489,6 +9548,7 @@ export interface FreeholderApi {
     resolveDispute: (input: ServiceCatalog["members.resolveDispute"]["input"]) => Promise<ServiceCatalog["members.resolveDispute"]["output"]>;
     resolveReport: (input: ServiceCatalog["members.resolveReport"]["input"]) => Promise<ServiceCatalog["members.resolveReport"]["output"]>;
     reviewListing: (input: ServiceCatalog["members.reviewListing"]["input"]) => Promise<ServiceCatalog["members.reviewListing"]["output"]>;
+    reviewMerchantTaxExemption: (input: ServiceCatalog["members.reviewMerchantTaxExemption"]["input"]) => Promise<ServiceCatalog["members.reviewMerchantTaxExemption"]["output"]>;
     reviews: (input: ServiceCatalog["members.reviews"]["input"]) => Promise<ServiceCatalog["members.reviews"]["output"]>;
     revokeDevice: (input: ServiceCatalog["members.revokeDevice"]["input"]) => Promise<ServiceCatalog["members.revokeDevice"]["output"]>;
     sale: (input: ServiceCatalog["members.sale"]["input"]) => Promise<ServiceCatalog["members.sale"]["output"]>;

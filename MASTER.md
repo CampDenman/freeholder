@@ -13680,9 +13680,18 @@ whatever is best for the people using the site.
   derive the actual signed-in buyer, authorized cart business and original
   jurisdiction; approval requires verified evidence and real billing safety.
   Full types/lint and47 source controls pass, with one live-registry skip.
-  Native authorization/quote/approval/expiry, updated SDK and browser acceptance
-  remain required. This does not enable the collection model or supply actual
-  account, provider, independent review or stable acceptance.
+  Four distinct actual customer controls now pass across two v6 compositions:
+  buyer/business permissions and named-email oracle refusal, actual public
+  buyer checkout with frozen reverse-charge facts, own withdrawal and trusted
+  expiry. One fixture originally called the staff checkout service as a buyer;
+  the corrected case uses the real public checkout, without relaxing authority.
+  Four original payment-creator/recovery controls also pass in a three-control
+  batch and one focused v6 repeat after a new-trigger and private-scope
+  fixture correction. Fresh normal0–80 v6 migration and actual SDK generation
+  plus eight checks pass; no v4 or v5 qualification is silently transferred.
+  Browser, complete refund/settlement/external scheduling source and actual
+  account/provider/independent review/stable acceptance remain required. The
+  collection model remains disabled.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query

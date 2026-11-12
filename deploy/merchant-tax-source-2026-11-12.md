@@ -188,3 +188,28 @@ controls pass (one live-registry control skipped without a database). Native
 permission/quote/approval/expiry, live SDK and production browser qualification
 remain pending; this does not claim official VAT-provider validation or full
 C12.38 acceptance. No DDL or collection activation is added by these services.
+
+
+Current customer native qualification on the real assembled80 v6 database
+(SQL80 `ea06fa49...`), Node22.23.2: four distinct controls pass across two finite
+compositions. On `11442c78`, real buyer/business permission boundaries and the
+public quote-only named-email oracle refusal pass, including the actual private
+pricing grant positive. The third fixture initially called the staff/contact
+checkout service as a customer; the existing authority guard correctly refused
+it. No business guard was relaxed. On `e782fd00`, the actual public
+`catalog.shopperCheckout` and authorized `shopperOrder` prove approved
+reverse-charge checkout, original invoice legend/TaxLine preservation after
+revocation, own pending withdrawal, and trusted original-date certificate
+expiry. Remaining two controls pass in12.83 seconds; first two passed in the
+prior17.95-second batch before the fixture guard stop. These are not a repeated
+four-case suite on one head. Logs: `/tmp/freeholder-customer80-native-v6.log`
+and `/tmp/freeholder-customer2-native-v6.log`.
+
+The unchanged actual live SDK generator and eight checks pass in3.06 seconds
+on `e782fd00`; generated61insert/1delete lines add eight customer/business
+services, two human-only original-payment review services and the protected
+caller context. Private finish, original capture and erasure phases remain
+excluded. The merchant checkout review now links to `/portal/purchases/tax`
+without private cart/query credentials. All four production customer/editor
+browser journeys, actual tax-provider evidence and complete merchant finance
+acceptance remain open.

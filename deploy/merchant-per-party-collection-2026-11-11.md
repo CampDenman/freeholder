@@ -395,7 +395,35 @@ in the existing recovery review patterns; operators retain the original logs.
 
 Full 8GB TypeScript and focused lint pass. Four no-database files pass 50
 controls, including actual Linux child-process birth/exit, unknown-host handling
-and completion-cache resource filtering. Fresh normal0–80 schema and native
-controls remain pending. No v4 schema qualification transfers to its changed SQL.
-Full refund, settlement, external schedule lifecycle, browser and actual-provider
-acceptance remain open; the new marketplace collection mode remains disabled.
+and completion-cache resource filtering. The composed source also passes full
+Node22 TypeScript, focused lint and eleven no-database files with 144 controls.
+
+Fresh normal0–80 v5 migration passed, but the first native completion attempt
+correctly found a table-specific PL/pgSQL field access error (42703). The trigger
+now checks its actual table before reading the stop-only field. The old v5 DB
+and failure log are preserved. A NEW normal0–80 v6 migration passes with 81
+journal entries, maximum1793310000060 and SQL80 SHA256
+`ea06fa49df88e7e3ab396c4246a5d9d017682825f0758253024be0dbcf943fd0`.
+No partial repair was applied to the old v5 database.
+
+On actual Node22.23.2 and v6, three recovery controls pass on `e4500e3e`:
+saved-method cancellation acknowledgement survives a failed final read; a
+hosted Checkout-only acknowledgement can later bind its original PaymentIntent;
+and metadata-only zero-money evidence cannot release another attempt before
+independent original-request review. The paused original HTTP control passes
+on `11442c78`: one creation POST, live-process review refusal, actual finish and
+resource acknowledgement, and original-session GET/resume with no second POST.
+Its first final-resume fixture reused public output that deliberately omits
+private account fields; the corrected fixture reads the real first form's
+metadata/amount/currency through the actual adapter GET. This was a fixture
+correction, not a production account-guard failure. Logs are
+`/tmp/freeholder-caller80-native-v6.log` (three passes, one fixture failure) and
+`/tmp/freeholder-paused80-native-v6-final.log` (one pass,7.91 seconds).
+
+The actual live SDK generator and all eight checks pass in3.06 seconds on
+`e782fd00`, including the new owner review and customer exemption services.
+Private caller-finish, provider-capture and tax-erasure services and completion
+nonces are absent from the generated catalog. This does not qualify a populated
+upgrade, stopped-process human review, production browser or actual provider
+account. Full refund, settlement and external schedule lifecycle source remain
+open, and the new marketplace collection mode remains disabled.
