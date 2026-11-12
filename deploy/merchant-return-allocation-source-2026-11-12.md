@@ -28,6 +28,9 @@ payment allocation retain the existing path. Erased business declarations do
 not become current collection authority; financial refund provenance uses the
 retained immutable model/route rather than the new-charge authorizer.
 
+Full Node22 TypeScript, changed-file lint and the eight affected private/changelog
+controls pass on the composed return repair plus root original-merchant merge
+scope repair. Logs: `/tmp/freeholder-return-allocation80-repair-{types,lint,contracts}-v1.log`.
 At this checkpoint AFTER is unrun. No SQL or schema changes are made. Exact
 commission-by-credited-line and transfer/fee recovery remain separate required
 work; a routing repair does not qualify gross-ratio commission math. Full

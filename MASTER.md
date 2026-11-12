@@ -13600,7 +13600,8 @@ whatever is best for the people using the site.
   earlier4200 payment, genuine assertion failure5.943s on test e689/productf6
   and normal-v7 SQLd060. No refund POST occurred. Isolated source now selects
   immutable original allocation-line/payment budgets and refuses inconsistent
-  frozen plans; AFTER is unrun. Legacy C0 remains on its original path. Exact
+  frozen plans; full Node22 types/changed-file lint and eight affected private/
+  changelog controls pass. AFTER is unrun. Legacy C0 remains on its original path. Exact
   credited-line fee/reversal and complete acceptance remain required; see
   `deploy/merchant-return-allocation-source-2026-11-12.md`.
   Original fee-job runtime repair 2026-11-12: the first actual mixed-order
