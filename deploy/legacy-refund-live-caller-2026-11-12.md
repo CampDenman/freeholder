@@ -9,6 +9,13 @@ a new-key replacement while the first physical refund promise remains live,
 then drains both promises before evaluating capacity and positive-result
 application.
 
+The synthetic edge enforces original provider capacity: the first refund is
+accepted before its client acknowledgement is paused. Any later request
+exceeding the original charge receives `charge_already_refunded`; the fixture
+never invents a provider that accepts two full refunds of one charge. The
+potential loss is the first true positive after local cancellation, alongside
+an unnecessary replacement request.
+
 The source seam is a hypothesis until this fixture reaches its assertions.
 `submitProviderRefund` commits a created reservation before its provider
 await; `cancelRefund` permits created/processing reservations to be cancelled;

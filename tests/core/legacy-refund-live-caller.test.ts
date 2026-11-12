@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { eq } from "drizzle-orm";
 import * as adapters from "@/adapters/payments";
 import type { PaymentAdapter } from "@/adapters/payments/types";
+import { AdapterError } from "@/adapters/types";
 import { db } from "@/core/db";
 import { resolveContact } from "@/core/contacts/service";
 import { ready } from "@/core/runtime";
@@ -32,10 +33,17 @@ describe.runIf(hasDatabase)("legacy provider refund physical caller", () => {
     const paused = new Promise<void>(resolve => { release = resolve; });
     const entered = new Promise<void>(resolve => { enter = resolve; });
     const physical: string[] = [];
+    let providerAcceptedMinor = 0;
     const refund = vi.fn(async (request: Parameters<PaymentAdapter["refund"]>[0]) => {
       physical.push(request.idempotencyKey);
-      if (request.idempotencyKey === "legacy-live-refund-original") { enter(); await paused; }
-      return { providerRef: request.idempotencyKey === "legacy-live-refund-original" ? "re_OriginalLive" : "re_ReplacementLive", status: "succeeded" as const };
+      // The provider accepted the first refund; only its client ACK is paused.
+      // A replacement must obey the provider's original-payment capacity too.
+      if (providerAcceptedMinor + request.amountMinor > 1000) {
+        throw new AdapterError("payments", "stripe", "invalid_request", "Synthetic original charge was already refunded.", false, "charge_already_refunded");
+      }
+      providerAcceptedMinor += request.amountMinor;
+      enter(); await paused;
+      return { providerRef: "re_OriginalLive", status: "succeeded" as const };
     });
     const actual = adapters.paymentAdapter("stripe");
     vi.spyOn(adapters, "paymentAdapter").mockReturnValue({ ...actual, refund });
@@ -58,7 +66,7 @@ describe.runIf(hasDatabase)("legacy provider refund physical caller", () => {
     const first = await original;
     const [settled] = await db().select().from(payments).where(eq(payments.id, payment.id));
     const rows = await db().select().from(refunds).where(eq(refunds.paymentId, payment.id));
-    const evidence = { cancellation, replacement, physicalKeys: physical, providerAcceptedMinor: physical.length * 1000,
+    const evidence = { cancellation, replacement, physicalKeys: physical, providerAcceptedMinor,
       originalApplied: first.ok, ledgerRefundedMinor: settled?.refundedMinor,
       refunds: rows.map(row => ({ idempotencyKey: row.idempotencyKey, status: row.status, providerRef: row.providerRef })) };
     console.log("LEGACY_REFUND_CALLER_EVIDENCE", JSON.stringify(evidence));
