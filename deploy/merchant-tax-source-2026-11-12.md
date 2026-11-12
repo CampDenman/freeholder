@@ -116,3 +116,14 @@ Full types and focused lint pass. This changes the unpublished80 fragment; it
 is not applied to the qualified original v2 database or its SQL hash, and
 requires new ordinary migration/invoice qualification. Threshold reporting and
 merchant-owned customer exemption workflows remain unfinished.
+
+A new actual native control on pre-fix combined source274628f6 with ordinary
+normal0–80 SQL4e6f83a9 reproduced a threshold ownership error: the historical
+NULL-profile site registration counted CAD11.56 from a seller-owned invoice
+against the site threshold. The native assertion failed in5.20s; a separate
+read-only query confirmed the original seller receipt and issued invoice
+amount. The site-only report now excludes invoices with explicit merchant tax
+receipts; those declarations use their separate original-business reports.
+The same boundary control remains unchanged for after qualification. This is
+an unreleased80 integration failure, not evidence of an unchanged production
+breach. Before report: /tmp/freeholder-tax80-legacy-threshold-before.json.

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Owner-defined tax configuration and built-in quoting (C5.02-C5.04).
 
-import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, notExists, or, sql } from "drizzle-orm";
+import {invoiceMerchantTaxQuotes} from "./merchant-tax-schema";
 import { z } from "zod";
 import type { TaxQuoteRequest } from "@/adapters/tax";
 import { listed, uuid } from "@/core/contract";
@@ -497,6 +498,9 @@ export const listTaxThresholds = defineService({
           .where(
             and(
               eq(invoices.taxZoneId, zone.id),
+              // Explicit business profiles have their own frozen portion
+              // reports. A shared zone never makes seller revenue site sales.
+              notExists(ctx.tx.select({id:invoiceMerchantTaxQuotes.id}).from(invoiceMerchantTaxQuotes).where(eq(invoiceMerchantTaxQuotes.invoiceId,invoices.id))),
               gte(invoices.issuedAt, start),
               lte(invoices.issuedAt, input.asOf),
             ),
