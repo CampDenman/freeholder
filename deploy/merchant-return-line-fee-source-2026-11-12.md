@@ -144,3 +144,28 @@ Evidence: `/tmp/freeholder-fee-installments80-native-v2-v9.{json,log}` and
 This proves the specified original installment split, while the remaining
 partial-unit, mixed/manual, destination, caller, bank and actual acceptance
 requirements stay open. C5.19/C12.38 remain open and the model stays disabled.
+
+Current-main composed AFTER qualification: root source17d08426 at
+`/tmp/freeholder-current-financial-v9-20261112`, normal-v9 SQL SHA256
+`958226930359c22a7997aa025186f28c071b2a3ecd45cc5c34acfc43dce2c144`.
+The new ordinary0–80 migration passed5.910s with81 journal entries and actual
+model/function/guard checks. The exact a652 BEFORE fixture is byte-identical
+(SHA256 `ea799eb5ff92c104896ed8427f007c01afad154ee0938b0cea77828218948ba0`).
+Its unchanged AFTER passed6.833s. Separate readback proves one5400CAD-cent
+payment, the original1200 line credit and succeeded1200 customer refund, and
+one accepted100 fee resource with a matching bound100 observation. The actual
+SQL canonical retained target is400. The fixture asserts one customer POST and
+one fee POST. Runner exited0; a separate activity query returned no active v9
+work. Both original promises completed; the old v8 and confirmed112 clone were
+untouched.
+
+Actual AFTER logs/ledger/drain:
+`/tmp/freeholder-line-fee-credit80-after-current-native-v9.{json,log}`,
+`/tmp/freeholder-line-fee-credit80-after-current-native-v9-ledger.json`,
+`/tmp/freeholder-line-fee-credit80-after-current-native-v9-drain.json`.
+This qualifies the original direct single-seller/two-tax-line RMA scenario on
+the reconciled source. The separate populated112 review/no-history-rewrite
+fixture is still unexecuted. Partial-unit/current-service, multiple original
+fee-resource, mixed/manual ambiguity, destination/reversal, fee-caller, bank,
+human/browser and actual provider-account acceptance remain required. It does
+not close C5.19/C12.38 or activate the new merchant model.

@@ -13805,6 +13805,15 @@ whatever is best for the people using the site.
   separate database work drained. All provider edges and contrast tax are
   synthetic. This qualifies that split, with no historical money or SQL
   changes, new model activation, actual provider or full C12.38 closure.
+
+  Exact returned-line fee AFTER 2026-11-12: reconciled current-main source
+  17d08426 and freshnormalv9 SQL95822693 pass the byte-identical a652 case
+  6.833s. Independent ledger confirms1200 customer refund and original line
+  credit, one accepted100 fee/bound observation, canonical retained target400;
+  the fixture asserts one customer and one fee POST. Database work drained.
+  Actual provider edges are synthetic. Oldv8 and the actual accepted112 clone
+  stay unchanged; populated-history review and the remaining full fee/bank/
+  partial/human/provider controls still require qualification. C12.38 is open.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original
