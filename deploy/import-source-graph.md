@@ -183,3 +183,33 @@ static checks; their production execution, current SDK refresh and final source
 gates remain pending. This uploaded JSON source increment does not supply live
 REST discovery or durable ZIP/crawl response/frontier storage. C3.47 and stable
 acceptance remain open.
+
+
+The frozen REST runtime source `0180cf44` now passes live SDK generation (all
+eight controls, 3.04 seconds, no catalog diff), every source gate (full types,
+lint, licensing, notes, plan, playground, 384 contracts and 26 expected DB-only
+exclusions), and Node22.23.2 production build/artifact scrub: 21,329 files and
+264,503,845 bytes with no source/environment leakage. Its production standalone
+is separate from the preserved reader78 and historical artifacts.
+
+The actual REST JSON 501-page owner journey passed in English in 1.1 minutes.
+All three remaining locale journeys initially passed their functional assertions
+in 3.0 minutes, but background reader-review queries revealed `58P01`: the local
+bundled Postgres compiler could not load `libLLVM-17.so.1`. Those logs remain
+recorded; that run is not clean default-JIT acceptance. The disposable test
+cluster was explicitly configured with `jit=off`, and the exact unchanged source
+and production artifact then passed Spanish, French and Arabic again in 2.4
+minutes with no compiler, failed-query or server-error entries in the complete
+logs. A direct post-run read confirmed `jit=off`, `fsync=on` and all 79 normal
+journal entries. No product, schema, assertion, deadline or durability setting
+was changed. PostgreSQL documents the [JIT configuration switch](https://www.postgresql.org/docs/16/jit-configuration.html);
+this is an explicit local test-environment profile, not a provider or default-JIT
+acceptance claim.
+
+All four production journeys use the real source upload, accepted 500-page
+receipt, pause, reload, identical original restore, saved review/rename,
+publication, public cross-batch link and rollback. They cover 320px, both themes,
+keyboard, Axe and Arabic RTL. Playwright, standalone servers and database clients
+drained with exit zero. Exact protected integration and broader source/provider
+acceptance remain required. This locally qualified uploaded-REST increment does
+not complete live REST discovery, durable ZIP/crawl continuation or C3.47.
