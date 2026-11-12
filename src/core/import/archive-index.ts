@@ -11,7 +11,7 @@ const MAX_METADATA_BYTES = 16 * 1024 * 1024;
 const sha = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 export const archiveIndexCursorSchema = z.object({
   format: z.literal("archive-zip"), directoryFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-  nextFile: z.number().int().min(0).max(10_000),
+  ordinal: z.number().int().min(0).max(10_000),
   bodyBytes: z.number().int().min(0).max(ARCHIVE_LIMITS.expandedBytes),
   metadataBytes: z.number().int().min(0).max(MAX_METADATA_BYTES),
 });
@@ -42,12 +42,12 @@ export async function indexArchivePhase(source: ArchiveSource, directory: Archiv
   const deadline = Date.now() + ARCHIVE_LIMITS.timeoutMs;
   const cursor = archiveIndexCursorSchema.parse(previous ?? {
     format: "archive-zip", directoryFingerprint: directory.directoryFingerprint,
-    nextFile: 0, bodyBytes: 0, metadataBytes: 0,
+    ordinal: 0, bodyBytes: 0, metadataBytes: 0,
   });
-  if (cursor.directoryFingerprint !== directory.directoryFingerprint || cursor.nextFile > directory.files.length) throw new Error("The original ZIP directory or indexing cursor changed.");
+  if (cursor.directoryFingerprint !== directory.directoryFingerprint || cursor.ordinal > directory.files.length) throw new Error("The original ZIP directory or indexing cursor changed.");
   const base = new URL(directory.origin), selected: ArchiveDirectoryFile[] = [];
   let phaseBytes = 0;
-  for (const file of directory.files.slice(cursor.nextFile, cursor.nextFile + 500)) {
+  for (const file of directory.files.slice(cursor.ordinal, cursor.ordinal + 500)) {
     const bytes = file.kind === "ignored" ? 0 : file.bytes;
     if (phaseBytes + bytes > ARCHIVE_LIMITS.bodyBytes) {
       // The ordinary reader permits one media file up to 25MB by itself.
@@ -71,11 +71,11 @@ export async function indexArchivePhase(source: ArchiveSource, directory: Archiv
   // Reconstruct only bounded slug facts, so resuming at a phase boundary cannot
   // silently rename collisions differently from an uninterrupted parse.
   const used = new Set<string>();
-  for (const file of directory.files.slice(0, cursor.nextFile)) if (file.kind === "page") reserveSlug(originalSlug(file, base), used);
+  for (const file of directory.files.slice(0, cursor.ordinal)) if (file.kind === "page") reserveSlug(originalSlug(file, base), used);
   const entries: ArchiveIndexedFile[] = [];
   for (const file of selected) {
     if (Date.now() > deadline) throw new Error("The ZIP indexing phase exceeded its time budget.");
-    const entry: ArchiveIndexedFile = { format: "archive-zip", ordinal: cursor.nextFile,
+    const entry: ArchiveIndexedFile = { format: "archive-zip", ordinal: cursor.ordinal,
       identity: sha(`archive-zip\0${file.path}`), file, factsDigest: sha(JSON.stringify(file)) };
     if (file.kind !== "ignored") entry.contentDigest = sha(payloads.get(file.path)!);
     if (file.kind === "page") {
@@ -88,9 +88,9 @@ export async function indexArchivePhase(source: ArchiveSource, directory: Archiv
       cursor.bodyBytes += bytes.byteLength;
     }
     const metadataBytes = Buffer.byteLength(JSON.stringify(entry));
-    if (metadataBytes > 64 * 1024 || cursor.metadataBytes + metadataBytes > MAX_METADATA_BYTES || cursor.bodyBytes > ARCHIVE_LIMITS.expandedBytes) throw new Error("The complete ZIP graph exceeds its original body or metadata budget.");
-    entries.push(entry); cursor.nextFile++; cursor.metadataBytes += metadataBytes;
+    if (metadataBytes > 16 * 1024 || cursor.metadataBytes + metadataBytes > MAX_METADATA_BYTES || cursor.bodyBytes > ARCHIVE_LIMITS.expandedBytes) throw new Error("The complete ZIP graph exceeds its original body or metadata budget.");
+    entries.push(entry); cursor.ordinal++; cursor.metadataBytes += metadataBytes;
   }
   if (Date.now() > deadline) throw new Error("The ZIP indexing phase exceeded its time budget.");
-  return { cursor, entries, done: cursor.nextFile === directory.files.length };
+  return { cursor, entries, done: cursor.ordinal === directory.files.length };
 }

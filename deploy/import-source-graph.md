@@ -382,3 +382,8 @@ boundary, digest and absence of returned payload copies; page-body accounting
 remains separate. The updated directory/static/content batch passes 55 pure
 controls in 3.05 seconds, with targeted types and lint. These primitives still
 have no runtime source-graph integration or schema 81 acceptance.
+
+The ZIP cursor now names its actual original-file ordinal explicitly, matching
+migration 73's monotonic cursor guard. Entry metadata is capped at the existing
+16KB per-row SQL limit. The same 55 pure controls pass in 3.40 seconds; targeted
+types and lint pass. No existing migration or runtime source route is changed.

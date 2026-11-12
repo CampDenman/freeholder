@@ -120,7 +120,7 @@ describe("bounded original ZIP indexing phases (C3.47)", () => {
     const source = bytesSource(largeZip()), directory = await readArchiveDirectory(source, "https://fictional-zip.example/site-a/");
     const first = await indexArchivePhase(source, directory);
     expect(first.done).toBe(false); expect(first.entries).toHaveLength(500);
-    expect(first.cursor.nextFile).toBe(500);
+    expect(first.cursor.ordinal).toBe(500);
     const second = await indexArchivePhase(source, directory, first.cursor);
     expect(second.done).toBe(true); expect(second.entries).toHaveLength(1);
     expect(second.entries[0]).toMatchObject({ ordinal: 500, file: { path: "site/page-500.html" }, page: { sourcePath: "/site-a/page-500.html" } });
@@ -145,7 +145,7 @@ describe("bounded original ZIP indexing phases (C3.47)", () => {
     files.push({ path: "notes.txt", body: "Fictional original packaging" });
     const original = bytesSource(storedZip(files)), directory = await readArchiveDirectory(original, "https://fictional-zip.example/");
     const first = await indexArchivePhase(original, directory);
-    expect(first.cursor.nextFile).toBe(500);
+    expect(first.cursor.ordinal).toBe(500);
     files[500] = { path: "other.txt", body: "Fictional changed packaging" };
     await expect(indexArchivePhase(bytesSource(storedZip(files)), directory, first.cursor)).rejects.toThrow(/changed/);
     const final = await indexArchivePhase(original, directory, first.cursor);
