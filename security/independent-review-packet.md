@@ -107,6 +107,34 @@ automated alert does not establish their security. Live provider acceptance,
 cross-target object-byte recovery and actual platform launches retain their
 own open checklist items.
 
+## Original live refund callers (C5.06/C11.10, 2026-11-12)
+
+Review `invoicing/legacy-refund-dispatch.ts`, `invoice-service.ts`,
+`payment-provider-service.ts` and `pos-service.ts` together. This no-DDL repair
+authenticates server-created reservation/admission/finished facts in the existing
+money-event journal. New signatures use purpose-derived HMAC from configured
+`CREDENTIAL_KEY` or the mandatory `SESSION_SECRET`; `CREDENTIAL_KEY_PREVIOUS`
+is verification-only. The journal is not claimed database append-only. Check
+full refund/payment/request binding, configured rotation, private completion
+capability omission from audit/customer projections, and the independent
+physical-result transaction before logical application. A HMAC proves server
+evidence, never provider quiescence or noncreation.
+
+The actual unchanged-main BEFORE lost an accepted 1000 refund after cancelling
+its live caller and sending a replacement. Frozen repair `878a6e4b` passes that
+unchanged control and all 17 unique fault controls in disjoint groups of 4/6/7,
+with actual ledger and drained-backend evidence. They cover live/duplicate and
+human refusal, current prepared/historical unmarked reservations, unknown
+throws, projection/persistence failure, altered bindings/journal/restored rows,
+key rotation and authenticated terminal failure after a pending caller finished.
+See `deploy/legacy-refund-live-caller-2026-11-12.md` for exact logs and source
+provenance. Sixteen existing adjacent native regressions and the local source
+gates also passed; protected checks remain required. Older failed/cancelled
+ambiguity, process-loss recovery, later bank
+returns and recipient/fee reconciliation remain explicit unfinished scope.
+These are agent-authored proofs; Tony's review and real-provider acceptance
+remain open, and no sign-off is inferred.
+
 ## Payment-provider privacy cleanup repair (2026-11-11)
 
 Review `invoicing/provider-erasure.ts`, the existing `commerce.money` source,

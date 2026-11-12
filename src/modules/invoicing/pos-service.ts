@@ -5,7 +5,7 @@
 
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { pointOfSaleAdapter, pointOfSaleAdapters, type PointOfSaleAdapter, type PointOfSalePayment } from "@/adapters/point-of-sale";
+import { pointOfSaleAdapter, pointOfSaleAdapters, type PointOfSalePayment } from "@/adapters/point-of-sale";
 import { AdapterError } from "@/adapters/types";
 import { listed } from "@/core/contract";
 import { listLocations } from "@/core/locations/service";
@@ -28,11 +28,11 @@ import {
   assertRetryableAttempt,
   claimProviderRefund,
   providerPaymentSource,
+  persistProviderRefundCaller,
   recordProviderRefundResult,
   refundNeedsReview,
-  refundRefusalCode,
-  refundRefusalMessage,
 } from "./payment-provider-service";
+import { performLegacyRefundDispatch, type legacyRefundObservation } from "./legacy-refund-dispatch";
 import { invoices, payments, refunds } from "./schema";
 
 const id = z.string().uuid();
@@ -309,7 +309,7 @@ export const reconcileInPersonPayments = defineService({
 /**
  * C11.10: the refund reservation commits before the adapter is asked, and the
  * answer is applied in a fresh transaction. A crash in between leaves a
- * `created` refund holding the amount, which a same-key retry converges.
+ * processing debt holding the amount. A retry applies only a retained answer.
  */
 export const refundInPersonPayment = defineOrchestratedService({
   name: "invoicing.refundInPersonPayment",
@@ -332,30 +332,25 @@ export const refundInPersonPayment = defineOrchestratedService({
       throw new ServiceError("conflict", "That payment was not collected in person.");
     }
     const adapter = pointOfSaleAdapter(payment.provider === "stripe" ? "stripe" : "manual");
-    const refund = await claimProviderRefund.call({
+    const { refund, dispatch, replay, persist } = await claimProviderRefund.call({
       paymentId: payment.id,
       amountMinor: input.amountMinor,
       reason: input.reason,
       idempotencyKey: input.idempotencyKey,
       initiatedBy: by,
     }, system);
-    if (refund.status !== "created" && refund.status !== "processing") return refund;
-    assertRetryableAttempt(refund, "refund");
-    let result: Awaited<ReturnType<PointOfSaleAdapter["refund"]>>;
-    try {
-      result = await adapter.refund({
-        providerRef: payment.providerRef ?? payment.id,
-        currency: payment.currency,
-        amountMinor: input.amountMinor,
-        idempotencyKey: input.idempotencyKey,
-      });
-    } catch (error) {
-      const refused = refund.status === "created" ? refundRefusalCode(error) : null;
-      if (refused) {
-        await recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "fail", code: refused, message: refundRefusalMessage(refused, "The in-person adapter") } }, system);
+    if (!dispatch && !replay && !persist) return refund;
+    let result: z.infer<typeof legacyRefundObservation>;
+    if (persist) result = await persistProviderRefundCaller(persist, by, system);
+    else if (replay) result = replay;
+    else if (dispatch) {
+      try {
+        result = await performLegacyRefundDispatch(dispatch, () => adapter.refund(dispatch.request), () => persistProviderRefundCaller(dispatch, by, system));
+      } catch (error) {
+        return posError(error);
       }
-      return posError(error);
-    }
+    } else return refund;
+    if (result.status === "unknown" || !result.providerRef) throw new ServiceError("conflict", "Reconcile the original in-person refund result before refunding again.");
     if (result.status === "failed") {
       // Record the refusal (releasing the reservation) before reporting it.
       await recordProviderRefundResult.call({ refundId: refund.id, initiatedBy: by, outcome: { kind: "fail", code: "provider_failed", message: "The in-person adapter refused that refund." } }, system);

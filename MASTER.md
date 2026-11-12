@@ -7020,8 +7020,15 @@ owner operations, never substitute for them.
   `0043_worried_shaman.sql` through `0045_peaceful_puck.sql`; operator guide
   and full local gates; `/admin/invoices` now lists, creates, issues, voids
   and credits through these services. **F04** `/portal` customer invoice view. **F05** `invoicing.createDraft`/`issue`/`void`/`issueCreditNote`/`listPayments` at `/api/v1/invoicing.*`, MCP `invoicing_*`. **F07** `tests/core/invoicing.test.ts` covers validation and failure-mode refusal; scoped permission enforcement on the service boundary is proven for every service by `tests/core/api.test.ts` (C0.11 audit narrowing). **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/invoicing.test.ts` is the composition proof.)*
-- [x] **C5.06** Implement manual/offline, Stripe and PayPal payment adapters,
-  signed/idempotent webhooks, saved methods, disputes and refunds. *(Evidence:
+- [ ] **C5.06** Implement manual/offline, Stripe and PayPal payment adapters,
+  signed/idempotent webhooks, saved methods, disputes and refunds.
+  (Reopened 2026-11-12: actual main allowed cancellation during an accepted
+  provider refund's delayed acknowledgement, sent a replacement request, and
+  left refunded money unapplied. The isolated journal repair passes the
+  original caller control and 17 bounded prepared, pending, unknown, binding,
+  corruption and rotation controls, plus 16 existing adjacent regressions.
+  Protected checks, historical terminal recovery and real-provider acceptance
+  remain open; see `deploy/legacy-refund-live-caller-2026-11-12.md`.) *(Evidence:
   one capability-discovered adapter contract for owner-attested offline money,
   Stripe Checkout and PayPal Orders v2; exact-minor-unit conversion across
   ISO zero/two/three/four-decimal currencies; authenticated raw-byte Stripe

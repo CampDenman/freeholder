@@ -155,6 +155,7 @@ const INTERNAL = [
   "invoicing.recordProviderPaymentResult",
   "invoicing.claimProviderRefund",
   "invoicing.recordProviderRefundResult",
+  "invoicing.recordProviderRefundCaller",
   "invoicing.savedPaymentMethodSource",
   "invoicing.applySavedPaymentMethodRevocation",
   "invoicing.claimInPersonPayment",
@@ -228,6 +229,8 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "invoicing.claimProviderRefund",
+  "invoicing.recordProviderRefundCaller",
   "catalog.anonymizeSellerOrderReceipts",
   "catalog.orderInvoiceRevenue",
   "media.retireOwnedAssetsForErasure",
