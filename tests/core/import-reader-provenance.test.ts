@@ -10,7 +10,7 @@ import { createSession } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { db } from "@/core/db";
 import { importRuns } from "@/core/plugins/schema";
-import { mergeContacts, resolveContact, undoContactMerge, updateContact } from "@/core/contacts/service";
+import { createContact, mergeContacts, resolveContact, undoContactMerge, updateContact } from "@/core/contacts/service";
 import { contactMergeOperations, contacts } from "@/core/contacts/schema";
 import { commitImport, previewFromSource, publishImport, reconcileImport, rollbackImport, stageImportSource, startImport } from "@/core/import/service";
 import { readerOwnershipReview, resolveReaderOwnership } from "@/core/import/reader-ownership-review";
@@ -344,5 +344,22 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     const receipts = await db().select().from(readerOwnershipReceipts);
     expect(receipts).toHaveLength(2);
     expect(receipts.every(receipt => receipt.state === "bound" && receipt.contactId === readers[0]!.id)).toBe(true);
+  });
+
+  it("requires owner review for a new original identity sharing an unbound erased address without inventing its former owner", async () => {
+    const owner = await verifiedOwner();
+    const first = await stage(), prior = (await resolveContact.call({ email: EMAIL }, OWNER)).contact;
+    const request = await createDataRequest.call({ contactId: prior.id, request: { kind: "erasure" } }, OWNER);
+    await verifyDataRequest.call({ id: request.id, method: "Fictional unknown original verified" }, OWNER);
+    expect((await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER)).request.status).toBe("completed");
+    const id = await stage(SOURCE.replace("<wp:comment_id>20</wp:comment_id>", "<wp:comment_id>21</wp:comment_id>").replace("Original reader's unchanged comment.", "A new independently reviewed comment."));
+    await expect(commitImport.call({ id }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    const reader = (await readerOwnershipReview.call({ id }, owner)).rows[0];
+    expect(reader).toBeDefined();
+    const next = await createContact.call({ name: "Explicitly reviewed new reader", email: EMAIL }, owner);
+    await resolveReaderOwnership.call({ id, receiptId: reader!.receiptId, postId: reader!.postId, commentId: reader!.commentId, contactId: next.id, confirmation: "ASSIGN ORIGINAL READER" }, owner);
+    expect((await commitImport.call({ id }, OWNER)).status).toBe("committed");
+    expect((await db().select().from(readerOwnershipReceipts)).find(receipt => receipt.firstRunId === first)).toMatchObject({ contactId: null, state: "erased", retirementRequestId: request.id });
+    expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([next.id]);
   });
 });
