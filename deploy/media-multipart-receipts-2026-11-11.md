@@ -145,8 +145,22 @@ ListParts/NoSuchUpload semantics, declared pending/expired fixtures use guarded
 test transactions, and the UTC connection assertion includes runtime admission.
 No production admission guard or behavior assertion was removed. The typecheck
 script now uses the same 8GB heap policy as lint, including the fast-gate path.
-Adjacent raw import-source cleanup failures remain under repair; protected CI
-and the final composed candidate are not yet green.
+The adjacent raw import-source cleanup failures are repaired through captured
+original physical receipts. Their bounded regression batch passes all20 controls
+in 174.73s, with earlier archive and hold/binding controls recorded separately
+in `deploy/import-source-storage.md`.
+
+The composed candidate, rebased onto actual main `eea40ee2` after the retention
+repair merged, passes all current local fast gates: full8GB typecheck, lint,
+licensing, notes, plan, playground policy and44 contract files (384 passing
+controls plus26 explicit database exclusions). Exact corrected75 SQL also
+preserves the five populated pre75 table hashes on a second clone upgrade.
+Its Node22 production build/scrub passes (21,590 files /262,879,106 bytes).
+The four locale production-browser journeys pass again in48.8s. The selected
+SDK/Replit/durable-observation batch passes18 controls, with the full live SDK
+catalog passing all8 separately (3.19s) to include its generated-registry control. Real SDK
+transport proofs and local databases provide no hosting/provider-account
+acceptance. Protected CI must still qualify this corrected candidate.
 
 Breaking migration75 requires actual old direct
 writers to stop and drain. Readiness refusal cannot stop an already admitted
