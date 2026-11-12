@@ -5500,7 +5500,7 @@ export interface ServiceCatalog {
     output: { senderId: string; email: string; returnTo: string };
   };
   "mail.confirmCarrierWithdrawal": {
-    input: { id: string; expectedRevision: number; expectedEmail: string; originalResourceEvidence: string; finalProviderEvidence: string; stoppedCallerEvidence: string; providerOperationRef: string; confirmation: "ORIGINAL CARRIER WITHDRAWAL VERIFIED" };
+    input: { id: string; expectedRevision: number; expectedEmail: string | ""; originalResourceEvidence: string; finalProviderEvidence: string; stoppedCallerEvidence: string; providerOperationRef: string; confirmation: "ORIGINAL CARRIER WITHDRAWAL VERIFIED" };
     output: { id: string; source: "human_provider_confirmation" };
   };
   "mail.listCarrierGrantRecovery": {

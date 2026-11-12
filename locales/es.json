@@ -8807,5 +8807,7 @@
   "mail.carrier.state.running": "Proceso aún sin resolver",
   "mail.carrier.state.confirmed": "Respuesta positiva del proveedor observada",
   "mail.carrier.state.refused": "Rechazo del proveedor observado",
-  "mail.carrier.state.unknown": "Resultado del proveedor desconocido"
+  "mail.carrier.state.unknown": "Resultado del proveedor desconocido",
+  "mail.carrier.erasedAddress": "Dirección borrada: revisar la operación del proveedor original",
+  "audit.mail.settleCarrierErasure": "Se conciliaron las pruebas de borrado del proveedor original"
 }

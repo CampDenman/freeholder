@@ -5939,6 +5939,17 @@ deployments are portable, testable and incapable of silently forking the truth.
   positive controls. Full typecheck/lint and permitted fast static contracts
   passed (380 plus one documented exclusion). Final composed qualification
   remains required.
+  A further actual local regression created a new remote consent only after
+  original erasure had completed; the request incorrectly stayed completed.
+  The integration repair retains first withdrawal/review facts, appends fresh
+  review receipts, records a separate recovery debt, and reopens the exact
+  original request without reconstructing an erased address. The fresh
+  contiguous 0–76 migration and two bounded recovery controls passed; full
+  composed qualification and actual provider acceptance remain open.
+  The adjacent prewithdrawn-grant ordering also reproduced a lost original
+  request link. Capturing the actual request before minimization passed its
+  bounded after control; populated75-to76 upgrade preserved six original
+  tables, and live SDK8 plus internal-boundary5 passed.
   See `deploy/mail-carrier-recovery.md` and the C3.31–C3.39
   source/live evidence worksheet `deploy/provider-preview-acceptance.md`.
   No live provider acceptance or independent security sign-off is supplied.)*

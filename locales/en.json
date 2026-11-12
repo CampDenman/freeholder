@@ -8807,5 +8807,7 @@
   "mail.carrier.state.running": "Caller not yet settled",
   "mail.carrier.state.confirmed": "Positive provider reply observed",
   "mail.carrier.state.refused": "Provider refusal observed",
-  "mail.carrier.state.unknown": "Provider outcome unknown"
+  "mail.carrier.state.unknown": "Provider outcome unknown",
+  "mail.carrier.erasedAddress": "Erased address — review the original provider operation",
+  "audit.mail.settleCarrierErasure": "Reconciled original carrier erasure evidence"
 }

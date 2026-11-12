@@ -19,7 +19,7 @@ export default async function CarrierGrantRecoveryPage({ searchParams }: { searc
     {query.saved ? <p role="status">{t("mail.recovery.saved")}</p> : null}
     {query.error ? <p role="alert" className="text-danger">{t("mail.recovery.error")}</p> : null}
     {!fresh ? <a className="underline" href={`/security/verify?returnTo=${encodeURIComponent(PATH)}`}>{t("security.verify.title")}</a> : !current ? <p role="alert">{t("admin.retention.mail.unavailable")}</p> : current.rows.length === 0 ? <p>{t("mail.carrier.empty")}</p> : current.rows.map(record => <Card key={record.id}>
-      <div className="border-b border-rule bg-surface-muted px-4 py-3"><h2 className="break-all font-semibold">{record.email}</h2></div>
+      <div className="border-b border-rule bg-surface-muted px-4 py-3"><h2 className="break-all font-semibold">{record.email || t("mail.carrier.erasedAddress")}</h2></div>
       <CardBody>
         <p className="break-all text-sm">{record.originalBaseUrl ?? t("mail.carrier.legacy")}</p>
         <p className="break-all text-sm text-ink-muted">{record.id}</p>

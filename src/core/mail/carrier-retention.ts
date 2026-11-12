@@ -7,6 +7,7 @@ import { consentRecords, dataRequests, privacyRetentionExceptions } from "@/core
 import type { Tx } from "@/core/service";
 import { admitCarrierWrites } from "./carrier-operations";
 import { mailProviderGrants } from "./schema";
+import { carrierRecoveryCovered } from "./carrier-recovery";
 
 /** Confirm withdrawal and current holds again at the actual minimization boundary. */
 export async function minimizeCarrierGrants(tx: Tx, ids: readonly string[]): Promise<number> {
@@ -24,6 +25,7 @@ export async function minimizeCarrierGrants(tx: Tx, ids: readonly string[]): Pro
   const requests = requestIds.length ? await tx.select({ id: dataRequests.id, contactId: dataRequests.contactId }).from(dataRequests).where(inArray(dataRequests.id, requestIds)) : [];
   let minimized = 0;
   for (const row of rows) {
+    if (row.recoveryPending && !carrierRecoveryCovered(row, receipts)) continue;
     const owners = new Set([consents.find(item => item.id === row.consentRecordId)?.contactId, requests.find(item => item.id === row.erasureRequestId)?.contactId].filter((id): id is string => Boolean(id)));
     // No email/current-address inference can prove a legacy orphan is outside
     // a named hold. Known unrelated grants remain independently eligible.
