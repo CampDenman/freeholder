@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { readArchiveDirectory, readArchiveOriginalFile, readArchiveOriginalFiles } from "@/core/import/archive-directory";
+import { indexArchivePhase } from "@/core/import/archive-index";
 import type { ArchiveSource } from "@/core/import/archive";
 
 function bytesSource(bytes: Uint8Array): ArchiveSource {
@@ -110,4 +111,44 @@ describe("original static ZIP directory facts (C3.47)", () => {
     const page = damagedDirectory.files.find(file => file.kind === "page")!;
     await expect(readArchiveOriginalFile(damaged, damagedDirectory, page.path)).rejects.toThrow();
   });
+});
+
+
+describe("bounded original ZIP indexing phases (C3.47)", () => {
+  it("resumes actual 501 HTML files without shadow bodies or invented WP identities", async () => {
+    const source = bytesSource(largeZip()), directory = await readArchiveDirectory(source, "https://fictional-zip.example/site-a/");
+    const first = await indexArchivePhase(source, directory);
+    expect(first.done).toBe(false); expect(first.entries).toHaveLength(500);
+    expect(first.cursor.nextFile).toBe(500);
+    const second = await indexArchivePhase(source, directory, first.cursor);
+    expect(second.done).toBe(true); expect(second.entries).toHaveLength(1);
+    expect(second.entries[0]).toMatchObject({ ordinal: 500, file: { path: "site/page-500.html" }, page: { sourcePath: "/site-a/page-500.html" } });
+    const all = [...first.entries, ...second.entries];
+    expect(new Set(all.map(entry => entry.identity)).size).toBe(501);
+    expect(all.every(entry => entry.contentDigest?.length === 64 && !Object.hasOwn(entry.page!, "body") && !Object.hasOwn(entry, "wpId"))).toBe(true);
+    expect(await indexArchivePhase(source, directory, first.cursor)).toEqual(second);
+    await expect(indexArchivePhase(source, { ...directory, directoryFingerprint: "f".repeat(64) }, first.cursor)).rejects.toThrow(/changed/);
+  });
+  it("reconstructs global slug collisions when a phase resumes", async () => {
+    const files = Array.from({ length: 499 }, (_, index) => ({ path: `site/page-${index}.html`, body: `<h1>Fictional ${index}</h1>` }));
+    files[0] = { path: "site/index.html", body: "<h1>Fictional home</h1>" };
+    files.push({ path: "site/about.html", body: "<h1>Original first</h1>" }, { path: "site/about/index.html", body: "<h1>Original later</h1>" });
+    const source = bytesSource(storedZip(files)), directory = await readArchiveDirectory(source, "https://fictional-zip.example/");
+    const first = await indexArchivePhase(source, directory);
+    const second = await indexArchivePhase(source, directory, first.cursor);
+    expect(first.entries.at(-1)?.page?.slug).toBe("about");
+    expect(second.entries[0]?.page?.slug).toBe("about-2");
+  });
+  it("revalidates an ignored-only final phase against the original directory", async () => {
+    const files = Array.from({ length: 500 }, (_, index) => ({ path: index ? `site/page-${index}.html` : "site/index.html", body: `<h1>Fictional ${index}</h1>` }));
+    files.push({ path: "notes.txt", body: "Fictional original packaging" });
+    const original = bytesSource(storedZip(files)), directory = await readArchiveDirectory(original, "https://fictional-zip.example/");
+    const first = await indexArchivePhase(original, directory);
+    expect(first.cursor.nextFile).toBe(500);
+    files[500] = { path: "other.txt", body: "Fictional changed packaging" };
+    await expect(indexArchivePhase(bytesSource(storedZip(files)), directory, first.cursor)).rejects.toThrow(/changed/);
+    const final = await indexArchivePhase(original, directory, first.cursor);
+    expect(final).toMatchObject({ done: true, entries: [{ file: { path: "notes.txt", kind: "ignored", url: null } }] });
+  });
+
 });

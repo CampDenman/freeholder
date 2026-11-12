@@ -146,6 +146,73 @@ function archiveUrl(path: string, base: URL): string {
   return new URL(path.split("/").map((part) => encodeURIComponent(part)).join("/"), base).href;
 }
 
+/** Parse one accepted original HTML file with the ordinary static-import rules.
+ * Callers own the immutable source manifest and cross-phase slug collision plan. */
+export function parseArchiveOriginalPage(bytes: Uint8Array, url: string, context: {
+  base: URL; assetByUrl: Map<string, ArchiveAsset>; used: Set<string>;
+  unresolvedImages: Set<string>; preserveRootTarget: boolean;
+}): ArchivePage {
+  const { base, assetByUrl, used, unresolvedImages, preserveRootTarget } = context;
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  const document = parse(text), nodes = elements(document);
+  const declaredBase = nodes.find((node) => node.tagName === "base");
+  const relativeBase = attr(declaredBase, "href");
+  const documentBase = relativeBase ? new URL(relativeBase, url) : new URL(url);
+  if (documentBase.origin !== base.origin || documentBase.username || documentBase.password) throw new Error("An archive page declares a base outside the approved source origin.");
+  const meta = (name: string) => nodes.find((node) => node.tagName === "meta" && [attr(node, "name")?.toLowerCase(), attr(node, "property")?.toLowerCase()].includes(name));
+  for (const node of nodes) {
+    for (const name of node.tagName === "a" ? ["href"] : node.tagName === "img" ? ["src", "data-src", "data-lazy-src", "data-original"] : ["source", "video", "audio", "embed"].includes(node.tagName) ? ["src"] : node.tagName === "object" ? ["data"] : []) {
+      const value = attr(node, name);
+      if (!value) continue;
+      let resolved: URL;
+      try { resolved = new URL(value, documentBase); } catch { continue; }
+      if (!["http:", "https:"].includes(resolved.protocol) || resolved.username || resolved.password) continue;
+      setAttr(node, name, resolved.href);
+      if (name !== "href") {
+        const asset = resolved.origin === base.origin ? assetByUrl.get(resolved.host.toLowerCase() + resolved.pathname) : undefined;
+        if (asset) { asset.referenced = true; asset.altText ??= attr(node, "alt")?.slice(0, 500); }
+        else if (unresolvedImages.size < 100) unresolvedImages.add(resolved.href);
+      }
+    }
+    if (node.tagName === "img") {
+      // Lazy-load and responsive markup often has no usable src. Pick an
+      // actually owned archive image, never fetch an external candidate.
+      const candidates = [attr(node, "src"), attr(node, "data-src"), attr(node, "data-lazy-src"), attr(node, "data-original")];
+      for (const set of [attr(node, "srcset"), attr(node, "data-srcset")]) {
+        for (const candidate of (set ?? "").split(",")) {
+          const match = /^\s*(\S+)(?:\s+\d+(?:\.\d+)?[wx])?\s*$/.exec(candidate);
+          if (match) candidates.push(match[1]);
+        }
+      }
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+        let resolved: URL;
+        try { resolved = new URL(candidate, documentBase); } catch { continue; }
+        if (resolved.origin !== base.origin || resolved.username || resolved.password) continue;
+        const asset = assetByUrl.get(resolved.host.toLowerCase() + resolved.pathname);
+        if (!asset) continue;
+        setAttr(node, "src", resolved.href);
+        asset.referenced = true;
+        asset.altText ??= attr(node, "alt")?.slice(0, 500);
+        break;
+      }
+    }
+  }
+  const parsed = parseSemanticHtml(serialize(document), url);
+  // The shared semantic preview sanitizer drops images. Keep the inert
+  // source tree for the typed CMS converter, which owns final sanitizing.
+  const content = nodes.find((node) => node.tagName === "article") ?? nodes.find((node) => node.tagName === "main") ?? nodes.find((node) => node.tagName === "body") ?? document;
+  const sourcePath = new URL(url).pathname;
+  const relativePath = sourcePath.slice(base.pathname.length - 1);
+  let slug = toCmsSlug(relativePath.replace(/(?:^|\/)index\.html?$/i, "").replace(/\.html?$/i, ""));
+  const originalSlug = slug;
+  for (let n = 2; used.has(slug); n++) slug = `${originalSlug || "home"}-${n}`;
+  used.add(slug);
+  const robots = attr(meta("robots"), "content") ?? "";
+  const description = meta("description");
+  return { url, slug, sourcePath, title: parsed.title, body: preserveRootTarget ? sourceContentBody(content) : serialize(content), kind: "page", status: "publish", ...(sourcePath !== `/${slug}` ? { redirectFrom: sourcePath.slice(1) } : {}), seo: { title: parsed.title.slice(0, 1_000), preserveTitle: true, ...(description ? { description: (attr(description, "content") ?? "").slice(0, 1_000), preserveDescription: true } : {}), ...(parsed.canonical ? { canonical: parsed.canonical } : {}), noindex: /(?:^|[\s,])noindex(?:[\s,]|$)/i.test(robots), nofollow: /(?:^|[\s,])nofollow(?:[\s,]|$)/i.test(robots) } };
+}
+
 /**
  * Read all directory metadata before retaining any asset. Imported asset bytes
  * go only through the supplied private-storage sink, never archive filenames.
@@ -196,65 +263,7 @@ export async function readStaticArchive(source: ArchiveSource, origin: string, r
       const bytes = await readEntry(zip, entry, ARCHIVE_LIMITS.pageBytes, budget.deadline);
       bodyBytes += bytes.byteLength;
       if (bodyBytes > ARCHIVE_LIMITS.bodyBytes) throw new Error("This ZIP exceeds the current 20 MB HTML batch. No pages were staged.");
-      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-      const url = archiveUrl(path.slice(root.length), base);
-      const document = parse(text), nodes = elements(document);
-      const declaredBase = nodes.find((node) => node.tagName === "base");
-      const relativeBase = attr(declaredBase, "href");
-      const documentBase = relativeBase ? new URL(relativeBase, url) : new URL(url);
-      if (documentBase.origin !== base.origin || documentBase.username || documentBase.password) throw new Error("An archive page declares a base outside the approved source origin.");
-      const meta = (name: string) => nodes.find((node) => node.tagName === "meta" && [attr(node, "name")?.toLowerCase(), attr(node, "property")?.toLowerCase()].includes(name));
-      for (const node of nodes) {
-        for (const name of node.tagName === "a" ? ["href"] : node.tagName === "img" ? ["src", "data-src", "data-lazy-src", "data-original"] : ["source", "video", "audio", "embed"].includes(node.tagName) ? ["src"] : node.tagName === "object" ? ["data"] : []) {
-          const value = attr(node, name);
-          if (!value) continue;
-          let resolved: URL;
-          try { resolved = new URL(value, documentBase); } catch { continue; }
-          if (!["http:", "https:"].includes(resolved.protocol) || resolved.username || resolved.password) continue;
-          setAttr(node, name, resolved.href);
-          if (name !== "href") {
-            const asset = resolved.origin === base.origin ? assetByUrl.get(resolved.host.toLowerCase() + resolved.pathname) : undefined;
-            if (asset) { asset.referenced = true; asset.altText ??= attr(node, "alt")?.slice(0, 500); }
-            else if (unresolvedImages.size < 100) unresolvedImages.add(resolved.href);
-          }
-        }
-        if (node.tagName === "img") {
-          // Lazy-load and responsive markup often has no usable src. Pick an
-          // actually owned archive image, never fetch an external candidate.
-          const candidates = [attr(node, "src"), attr(node, "data-src"), attr(node, "data-lazy-src"), attr(node, "data-original")];
-          for (const set of [attr(node, "srcset"), attr(node, "data-srcset")]) {
-            for (const candidate of (set ?? "").split(",")) {
-              const match = /^\s*(\S+)(?:\s+\d+(?:\.\d+)?[wx])?\s*$/.exec(candidate);
-              if (match) candidates.push(match[1]);
-            }
-          }
-          for (const candidate of candidates) {
-            if (!candidate) continue;
-            let resolved: URL;
-            try { resolved = new URL(candidate, documentBase); } catch { continue; }
-            if (resolved.origin !== base.origin || resolved.username || resolved.password) continue;
-            const asset = assetByUrl.get(resolved.host.toLowerCase() + resolved.pathname);
-            if (!asset) continue;
-            setAttr(node, "src", resolved.href);
-            asset.referenced = true;
-            asset.altText ??= attr(node, "alt")?.slice(0, 500);
-            break;
-          }
-        }
-      }
-      const parsed = parseSemanticHtml(serialize(document), url);
-      // The shared semantic preview sanitizer drops images. Keep the inert
-      // source tree for the typed CMS converter, which owns final sanitizing.
-      const content = nodes.find((node) => node.tagName === "article") ?? nodes.find((node) => node.tagName === "main") ?? nodes.find((node) => node.tagName === "body") ?? document;
-      const sourcePath = new URL(url).pathname;
-      const relativePath = sourcePath.slice(base.pathname.length - 1);
-      let slug = toCmsSlug(relativePath.replace(/(?:^|\/)index\.html?$/i, "").replace(/\.html?$/i, ""));
-      const originalSlug = slug;
-      for (let n = 2; used.has(slug); n++) slug = `${originalSlug || "home"}-${n}`;
-      used.add(slug);
-      const robots = attr(meta("robots"), "content") ?? "";
-      const description = meta("description");
-      pages.push({ url, slug, sourcePath, title: parsed.title, body: preserveRootTarget ? sourceContentBody(content) : serialize(content), kind: "page", status: "publish", ...(sourcePath !== `/${slug}` ? { redirectFrom: sourcePath.slice(1) } : {}), seo: { title: parsed.title.slice(0, 1_000), preserveTitle: true, ...(description ? { description: (attr(description, "content") ?? "").slice(0, 1_000), preserveDescription: true } : {}), ...(parsed.canonical ? { canonical: parsed.canonical } : {}), noindex: /(?:^|[\s,])noindex(?:[\s,]|$)/i.test(robots), nofollow: /(?:^|[\s,])nofollow(?:[\s,]|$)/i.test(robots) } });
+      pages.push(parseArchiveOriginalPage(bytes, archiveUrl(path.slice(root.length), base), { base, assetByUrl, used, unresolvedImages, preserveRootTarget }));
     }
     // Every retained byte is validated and hashed before entering the manifest.
     for (const { path, entry } of assetEntries) {

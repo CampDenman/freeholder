@@ -352,3 +352,23 @@ root under its actual original path, with no invented public URL. Its updated
 real-byte fixtures pass all 44 directory/ordinary-archive controls in 1.83 seconds;
 lint and targeted changed-module types pass. This remains source-only: no graph
 runtime, schema81, provider acceptance or complete ZIP/crawl claim is added.
+
+
+The next source-only ZIP increment reuses the ordinary static HTML parser for
+bounded indexing phases, rather than converting static files into WordPress
+records. Actual 501-file input now produces a 500-file phase and a one-file
+continuation with stable real-path identities, original frame facts and page
+content digests. The returned index contains page/SEO/image metadata and no
+shadow HTML bodies; asset facts are not presented as verified asset-content
+hashes. Global slug collisions are reconstructed from original path order, so
+resumption produces the same suffixes across a phase boundary. Ignored-only
+final phases still revalidate the actual directory. Per-phase page count,
+20 MB body/read and 60-second budgets and complete-source body/metadata caps
+remain explicit. This is not yet connected to the service graph/catalog.
+
+The changed parser and actual ZIP phases plus ordinary archive/content
+regressions pass 54 pure controls in 3.00 seconds. Targeted changed-module types
+and lint pass against the existing installed dependencies. No PG, browser,
+provider request, new migration or production build was used. Runtime source
+binding, media/CMS graph integration and actual interruption/publication/rollback
+qualification still remain required; C3.47 stays open.
