@@ -58,7 +58,7 @@ describe("Stripe Connect payouts (C12.26)", () => {
     const t = Math.floor(Date.now() / 1000);
     const sig = createHmac("sha256", "whsec_x").update(`${t}.${event}`).digest("hex");
     const now = new Date().toISOString();
-    expect(await stripe.webhook({ headers: { "stripe-signature": `t=${t},v1=${sig}` }, body: body(event), receivedAt: now })).toEqual([{ kind: "account", externalAccountId: "acct_1", status: "ready", chargesReady: false, merchantName: null }]);
+    expect(await stripe.webhook({ headers: { "stripe-signature": `t=${t},v1=${sig}` }, body: body(event), receivedAt: now })).toEqual([{ kind: "account", externalAccountId: "acct_1", status: "ready", chargesReady: false, merchantName: null,merchantSupport:null }]);
     await expect(stripe.webhook({ headers: { "stripe-signature": `t=${t},v1=${"0".repeat(64)}` }, body: body(event), receivedAt: now })).rejects.toThrow(/invalid/);
     await expect(stripe.webhook({ headers: { "stripe-signature": `t=${t - 3600},v1=${sig}` }, body: body(event), receivedAt: now })).rejects.toThrow(/window/);
   });
@@ -130,13 +130,43 @@ describe("Stripe Connect payouts (C12.26)", () => {
     expect(calls[0]!.url).toBe("https://api.stripe.com/v1/accounts/acct_1");
     expect(calls[0]!.method).toBe("POST");
     expect(new URLSearchParams(calls[0]!.body).get("capabilities[card_payments][requested]")).toBe("true");
-    expect(await stripe.accountDetails!("acct_1")).toEqual({ status: "ready", chargesReady: true, merchantName: "Sam Studio" });
+    expect(await stripe.accountDetails!("acct_1")).toEqual({ status: "ready", chargesReady: true, merchantName: "Sam Studio",merchantSupport:null });
     for (const broken of [
       { ...account, payouts_enabled: false }, { ...account, charges_enabled: false },
       { ...account, capabilities: { transfers: "active", card_payments: "pending" } },
       { ...account, business_profile: {}, individual: { first_name: "Private", last_name: "Name" } },
     ]) expect(stripeMerchantDetails(broken).chargesReady).toBe(false);
     expect(stripeMerchantDetails({ ...account, business_profile: {} }).merchantName).toBeNull();
+  });
+
+  it("preserves only public merchant support details for original commercial documents (C12.38)", () => {
+    const merchantSupport={email:"support@studio.example",phone:"+1 250 555 0123",url:"https://studio.example/support",address:{line1:"10 Public Studio Lane",line2:null,city:"Victoria",state:"BC",postalCode:"V8W 1P6",country:"CA"}};
+    const details=stripeMerchantDetails({id:"acct_original",payouts_enabled:true,charges_enabled:true,capabilities:{transfers:"active",card_payments:"active"},
+      email:"private-owner@example.test",company:{name:"Private corporate name",address:{line1:"Private registered address"}},individual:{first_name:"Private",last_name:"Person",email:"private-person@example.test"},
+      business_profile:{name:"Original Studio",support_email:merchantSupport.email,support_phone:merchantSupport.phone,support_url:merchantSupport.url,support_address:{line1:"10 Public Studio Lane",line2:null,city:"Victoria",state:"BC",postal_code:"V8W 1P6",country:"CA"}},
+    });
+    expect(details).toMatchObject({merchantName:"Original Studio",merchantSupport});
+    for(const privateValue of ["private-owner","Private corporate","Private registered","Private Person","private-person"])expect(JSON.stringify(details)).not.toContain(privateValue);
+  });
+
+  it("never treats the internal erased-identity marker as a ready public merchant name",()=>{
+    expect(stripeMerchantDetails({payouts_enabled:true,charges_enabled:true,capabilities:{transfers:"active",card_payments:"active"},business_profile:{name:"[privacy-erased-merchant]",support_email:"support@studio.example"}})).toMatchObject({merchantName:null,chargesReady:false});
+  });
+
+  const credentialBearingUrl = new URL("https://example.test/help");
+  credentialBearingUrl.username = "synthetic";
+  credentialBearingUrl.password = "synthetic";
+  it.each([
+    {},{support_url:"javascript:alert(1)"},{support_url:credentialBearingUrl.href},{support_url:"file:///private/address"},
+    {support_email:"private\r\nBcc: someone@example.test"},{support_phone:"private\u0000phone"},
+    {support_address:{line1:"Public studio",city:"Victoria"}},{support_email:`${"a".repeat(260)}@example.test`},
+  ])("never fills missing or invalid public support from private representative fields: %j",businessProfile=>{
+    expect(stripeMerchantDetails({business_profile:{name:"Original studio",...businessProfile},email:"private-owner@example.test",country:"CA",company:{phone:"+12505550123",address:{line1:"Private registered address",country:"CA"}},individual:{email:"private-person@example.test",address:{line1:"Private home address",country:"CA"}}})).toMatchObject({merchantName:"Original studio",merchantSupport:null});
+  });
+  it("refuses another account's public merchant details on an original-account refresh",async()=>{
+    const {fetcher}=recorder(()=>({id:"acct_OtherMerchant",payouts_enabled:true,charges_enabled:true,capabilities:{transfers:"active",card_payments:"active"},business_profile:{name:"Other Studio",support_email:"other@studio.example"}}));
+    const stripe=createStripeConnect({secretKey:"synthetic-test-only",webhookSecrets:["synthetic-test-only"],fetch:fetcher});
+    await expect(stripe.accountDetails!("acct_OriginalMerchant")).rejects.toThrow("original connected account");
   });
 
   it("does not round a large site's fee up by a minor unit (C12.38)", () => {

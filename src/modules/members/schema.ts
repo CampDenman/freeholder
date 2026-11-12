@@ -7,6 +7,7 @@
 // someone, a member profile is something the person keeps about themselves.
 // The link to the spine is the user's own contact row (`contacts.user_id`).
 import { sql } from "drizzle-orm";
+import type { PublicMerchantSupport } from "@/core/commerce/merchant-identity";
 import { bigint, bigserial, boolean, check, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "@/core/auth/schema";
 import { products } from "@/modules/catalog/schema";
@@ -428,6 +429,7 @@ export const memberPayoutAccounts = pgTable(
     /** C12.38: transfer readiness alone cannot authorize direct charges. */
     chargesReady: boolean("charges_ready").notNull().default(false),
     merchantName: text("merchant_name"),
+    merchantSupport: jsonb("merchant_support").$type<PublicMerchantSupport>(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [check("member_payout_accounts_status_valid", sql`${t.status} in ('pending','ready','disabled')`)],

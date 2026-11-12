@@ -13,6 +13,7 @@ import { Button, Callout, Card, CardBody, CardHeader, Field, Input, Pill } from 
 import { getLocale, getT } from "../../../i18n";
 import { refreshPayoutAccountAction, savePayoutInstructionsAction, startPayoutSetupAction } from "./actions";
 import { payoutSetup } from "@/modules/members/provider-payouts";
+import {InvoiceIssuer} from "../../invoices/InvoiceIssuer";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -77,6 +78,14 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Prom
           )}
         </CardBody>
       </Card>
+      {setup.provider==="stripe_connect"?<Card>
+        <CardHeader title={t("members.payouts.businessDetails")}/>
+        <CardBody><div className="grid gap-3">
+          <p className="text-sm text-ink-muted">{t("members.payouts.businessDetailsHint")}</p>
+          {account.merchantName?<InvoiceIssuer issuer={{issuerName:account.merchantName,issuerIsMerchant:true,issuerSupport:account.merchantSupport}} businessName="" locale={locale} t={t}/>:null}
+          {!account.merchantName||!account.merchantSupport?<Callout>{t("members.payouts.businessDetailsMissing")}</Callout>:null}
+        </div></CardBody>
+      </Card>:null}
       <Card>
         <CardHeader title={t("members.payouts.earnings")} />
         <CardBody>

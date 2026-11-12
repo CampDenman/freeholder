@@ -325,6 +325,40 @@ Review token retirement, other-customer refusals, original provider capability,
 account replacement and the four-locale browser controls. This source slice
 does not enable direct collection or supply independent/provider acceptance.
 
+### Public commercial support and financial identity ownership (in progress)
+
+Review `src/core/commerce/merchant-identity.ts`, the Stripe Connect public-only
+normalizer, `members/merchant-identity-privacy.ts`, and migration74. Customer
+invoice/receipt DTOs may expose only the frozen public supplier name and support
+details, after existing ownership or exact payment-token validation. The
+provider response must name the original account; private representative/home
+fields, current defaults and current seller details must not fill missing
+historical values. An erased merchant stays visibly unavailable rather than
+being relabelled as the platform.
+
+The new private contact FK must follow real merge/undo, export, active named
+holds and erasure even after login deletion. Review the bounded SQL-row hash
+witnesses, conservative pre74 undo fence, old-writer completion fence and
+credential-only versus member-wide holds. Opaque financial routing and actor
+identities remain accounting evidence; support values must not acquire extra
+audit/recovery copies. Migration74 now follows the frozen71–73 journal chain;
+protected checks remain required. This
+section records review targets, not acceptance or independent sign-off. Local
+native/recorded-provider controls and eight four-locale browser journeys have
+passed. The final graph73 composition also passed empty0→74 and an actual
+schema71 populated→74 upgrade, with original financial rows/routing unchanged,
+no guessed support, genuine owner backfill and conservatively fenced old undo.
+The actual schema71 writer refused its next merge after upgrade. A first
+comparison harness used inconsistent Date/raw timestamp decoders; that harness
+error was classified and a new disposable database repeated the complete
+rehearsal with exact server-side JSON snapshots. Final composed SDK generation
+passed eight controls in 3.04 seconds with no artifact change. Protected CI remains open.
+An actual old-image merge interleaved after migration 74's legacy backfill and before
+trigger installation was blocked by the complete migration transaction and
+failed closed after commit, with original ownership/history unchanged. Keep
+that transactional migration boundary intact. Provider branding must also
+refuse the private erased-identity marker as a live public merchant name.
+
 The later Stripe card-setup increment resolves an unexpanded SetupIntent only
 after raw signature/account validation, on the same account. Review succeeded
 off-session status, original reference, customer/method binding and matching

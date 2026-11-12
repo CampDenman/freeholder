@@ -40,6 +40,7 @@ export default async function PrivacyRequestPage({
   }
   const [t, business] = await Promise.all([getT(), currentBusiness()]);
   const { request, exceptions, artifact } = detail;
+  const scopeLabel=(scope:string)=>scope==="members.merchantIdentity"?t("privacy.retention.merchantIdentity"):scope;
   // Translate known system receipts for display; preserve stored evidence and owner text.
   const verification = request.verificationMethod === "identity verified before erasure"
     ? t("privacy.system.identityBeforeErasure") : request.verificationMethod;
@@ -167,7 +168,7 @@ export default async function PrivacyRequestPage({
             <p className="text-sm text-ink-muted">{t("privacy.retention.hint")}</p>
             {exceptions.length ? <ul className="grid list-none gap-3 p-0">{exceptions.map((item) => (
               <li key={item.id} className="rounded-md border border-rule p-3 text-sm">
-                <div className="flex flex-wrap gap-2"><strong>{item.scope}</strong><Pill>{t(`privacy.reason.${item.reason}`)}</Pill></div>
+                <div className="flex flex-wrap gap-2"><strong>{scopeLabel(item.scope)}</strong><Pill>{t(`privacy.reason.${item.reason}`)}</Pill></div>
                 <p className="mt-1 text-ink-muted">{item.legalBasis}</p>
                 {canManage && open ? <PrivacyActionForm intent="remove-retention" hidden={{ exceptionId: item.id, requestId: request.id }} submitLabel={t("privacy.retention.remove")} pendingLabel={t("privacy.working")} variant="quiet" className="mt-3 grid gap-3" /> : null}
               </li>
@@ -176,7 +177,7 @@ export default async function PrivacyRequestPage({
               <PrivacyActionForm intent="retain" hidden={{ requestId: request.id }} submitLabel={t("privacy.retention.save")} pendingLabel={t("privacy.working")}>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label={t("privacy.retention.scope")} htmlFor="privacy-retention-scope">
-                    <Select id="privacy-retention-scope" name="scope">{contactPrivacySources().map((source) => <option key={source.scope} value={source.scope}>{source.scope}</option>)}</Select>
+                    <Select id="privacy-retention-scope" name="scope">{contactPrivacySources().map((source) => <option key={source.scope} value={source.scope}>{scopeLabel(source.scope)}</option>)}</Select>
                   </Field>
                   <Field label={t("privacy.retention.reason")} htmlFor="privacy-retention-reason">
                     <Select id="privacy-retention-reason" name="reason">{(["legal_obligation", "legal_claim", "contractual_obligation", "accounting_tax", "security_fraud"] as const).map((reason) => <option key={reason} value={reason}>{t(`privacy.reason.${reason}`)}</option>)}</Select>

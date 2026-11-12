@@ -5044,7 +5044,7 @@ export interface ServiceCatalog {
   };
   "invoicing.confirmCustomerPayment": {
     input: { token: string };
-    output: { status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number };
+    output: { status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; issuerName: string | null; issuerIsMerchant: boolean; issuerSupport: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null };
   };
   "invoicing.createCreditNote": {
     input: { invoiceId: string; idempotencyKey: string; reason: string; lines: { invoiceLineId?: string; description: string; quantityMicros: number; subtotalMinor: number; taxMinor?: number }[] };
@@ -5088,7 +5088,7 @@ export interface ServiceCatalog {
   };
   "invoicing.customerInvoice": {
     input: { id: string; token?: string };
-    output: { id: string; number: string; status: string; currency: string; issuerName: string | null; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; amountMinor: number; totalMinor: number }[]; saveMethodRequired: boolean; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable"; nextPaymentMinor: number | null; awaitingRelease: boolean };
+    output: { id: string; number: string; status: string; currency: string; issuerName: string | null; issuerIsMerchant: boolean; issuerSupport: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; amountMinor: number; totalMinor: number }[]; saveMethodRequired: boolean; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable"; nextPaymentMinor: number | null; awaitingRelease: boolean };
   };
   "invoicing.customerInvoiceLink": {
     input: { id: string };
@@ -5096,7 +5096,7 @@ export interface ServiceCatalog {
   };
   "invoicing.customerPaymentReceipt": {
     input: { token: string };
-    output: { status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number };
+    output: { status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; issuerName: string | null; issuerIsMerchant: boolean; issuerSupport: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null };
   };
   "invoicing.failPayment": {
     input: { id: string; code?: string; message: string };
@@ -6004,7 +6004,7 @@ export interface ServiceCatalog {
   };
   "members.payoutAccount": {
     input: Record<string, never>;
-    output: { adapter: string; manual: boolean; status: "none" | "pending" | "ready" | "disabled"; instructions: string | null };
+    output: { adapter: string; manual: boolean; status: "none" | "pending" | "ready" | "disabled"; instructions: string | null; merchantName: string | null; merchantSupport: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null };
   };
   "members.payoutSetup": {
     input: Record<string, never>;

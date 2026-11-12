@@ -60,7 +60,7 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     // Deliberately seed the not-yet-enabled mode to exercise its internal
     // boundaries. Owner-facing configuration still refuses seller_merchant.
     await db().update(memberSettings).set({ payoutModel: "seller_merchant", payoutAdapter: "stripe_connect" }).where(eq(memberSettings.id, 1));
-    await db().update(memberPayoutAccounts).set({ adapter: "stripe_connect", externalAccountId: "acct_original", chargesReady: true, merchantName: "Seller studio" }).where(eq(memberPayoutAccounts.userId, CUSTOMER.userId));
+    await db().update(memberPayoutAccounts).set({ adapter: "stripe_connect", externalAccountId: "acct_original", chargesReady: true, merchantName: "Seller studio",merchantSupport:{email:"support@seller.example",phone:null,url:null,address:null} }).where(eq(memberPayoutAccounts.userId, CUSTOMER.userId));
   }
 
   async function renewal(subscriptionId: string) {

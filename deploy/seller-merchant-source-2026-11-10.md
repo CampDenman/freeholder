@@ -334,3 +334,94 @@ import, erased-contact and refund PRs without a new dependency rebase. All 43
 i18n/activity/live-SDK controls, full fast gates and four owner locale journeys
 passed. The production artifact still has 20,327 files / 242,796,086 bytes with
 a clean scrub. This cleanup changes no message, outcome or authorization.
+
+Commercial support identity is the next bounded source integration. Stripe
+refresh reads only the original account's public business-profile support
+email, phone, URL and address, and rejects a response naming another account.
+It never substitutes a representative's email or home address. The seller's
+own payout view can inspect the current public details and refresh them after
+updating their Express settings. New direct agreements require public support;
+existing agreements, invoices and payment receipts keep their original copy
+when the current account or site changes. This does not activate direct
+collection or establish provider acceptance.
+
+Migration74 adds a private contact owner to those financial identity copies.
+Only the existing unique login/contact relationship supplies legacy ownership;
+it does not invent historical support details. A legacy merge without the new
+financial witness becomes non-undoable instead of guessing a before-image.
+New merge witnesses contain bounded row fingerprints, not another copy of the
+public details; changed or oversized identity sets refuse separation. The
+`members.merchantIdentity` privacy source exports and erases these copies,
+honours the existing `members` and `commerce.money` holds, and preserves the
+original opaque financial routing. The persistent contact remains authoritative
+after login deletion. The SQL completion fence refuses an older writer's
+false erasure acknowledgement. Full rollback requires the pre-upgrade database
+and object snapshot.
+
+Local qualification includes 21 provider boundary controls; 17 distinct owned
+native identity controls across the initial run and the inherited-hold follow-up;
+eight composed held-login controls; eight live SDK controls; a final run of 29
+adjacent customer/merchant cases; and the three
+interrupted billing cases rerun successfully in a quiet database slot. The
+earlier broad nine-suite attempt was interrupted and is not a wholly green
+broad integration result. Eight real Chromium journeys passed in English,
+Spanish, French and Arabic at 320px, with keyboard interaction and both-theme
+Axe scans of customer invoices, exact-token pending receipts and the seller's
+current public details. French and Arabic screenshots were inspected. The
+main71/refreshed675 composition built 20,340 files / 242,279,072 bytes with a clean
+standalone scrub. The browser development database applied the recorded
+migrations plus exact74 SQL; that is not the missing contiguous upgrade proof.
+
+One additional actual provider control reproduced a public name colliding with
+the private erased-identity marker. The normalizer and agreement/collection
+guards now refuse that reserved value as merchant authority. Its actual
+agreement refusal passes. The complete migration 74 transaction was also paused after
+legacy history backfill and before the new history trigger while the actual
+pre74 source attempted another merge. The old writer was observed blocked by
+the migration's transaction, then failed closed after commit; the original
+seller/contact and single prior merge operation remained unchanged. This
+checks the production migrator's transaction boundary alongside the earlier
+genuine legacy-upgrade/undo proof.
+
+The final composition now includes protected mail72 and frozen import-graph73,
+with the unchanged74 SQL journalled at 1793310000054 (SHA256
+`99860b9f54466cb7288f492a0a0acd937b606de5a3851db68ab6552d7b6f8305`). An empty
+database migrated 0→74 and verified the exact71–74 journal hashes. A separate
+database migrated 0→71, then actual main71/root675 source created the original
+seller agreement, invoice and a real contact merge without any future merchant
+owner witness. The complete production migrator then advanced71→74. Exact
+server-side JSON snapshots retained every original invoice, agreement, payment
+and old policy column; public support stayed null, original routing/fees stayed
+unchanged, owner pointers followed the genuine survivor, and old undo became
+non-undoable without an invented before-image. The actual schema71 merge writer
+then refused and left ownership and the single original merge unchanged.
+
+The first populated comparison failed because postgres-js decoded a cached
+timestamp as a Date before DDL and a newly described timestamp as raw text
+after DDL. This was a harness representation mismatch, not altered financial
+data. That database and evidence were preserved; a new database repeated the
+entire baseline, actual old-source fixture and full upgrade using server-side
+JSON, retaining timestamp precision. The old-source fixture passed in 8.49s and the
+post-upgrade old-writer refusal passed in 3.33s. This latter control runs after the
+contiguous upgrade; the separate earlier paused-transaction control supplies
+the concurrent migration observation.
+
+The final composite TypeScript and twelve journal/internal-service/composition
+controls passed. The verified scoped Next production typecheck configuration
+from graph73 is included without changing the full standalone TypeScript gate.
+The final full fast gates passed 42 static contract files (380 controls and one
+explicit exclusion), full lint/TypeScript, licensing, plan and release notes.
+Final live-registry SDK generation passed eight controls in 3.04 seconds with
+no generated artifact change. The first protected CI run caught missing
+explicit search/retention classifications for the two new financial contact
+FKs and a credential-shaped synthetic rejected-URL fixture. The financial
+snapshots now have documented private-search and age-purge opt-outs; actual
+merchant identity erasure/holds retain their existing source. Both exact FK
+inventory controls passed in 24.78 seconds. Constructing the negative URL with
+URL setters preserves its validation coverage without embedding a secret-like
+URI in source; all 21 provider controls passed. The owned PR history is
+squashed for rescanning, while the original source branch/head is preserved.
+Protected CI remains required. Recorded
+HTTP, database fixtures, browser
+presentation and agent review do not supply live provider acceptance,
+independent security review or stable sign-off.

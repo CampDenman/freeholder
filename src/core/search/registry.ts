@@ -69,6 +69,8 @@ export function clipSnippet(value: string | null | undefined): string | null {
  * Completeness is asserted in `tests/core/c11-14-search.test.ts`.
  */
 export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
+  invoice_market_policies: "Original merchant ownership and private financial routing; read through authorized invoice documents, never as separate search hits.",
+  subscription_market_policies: "Frozen merchant agreement identity and private routing; reached through authorized agreements.",
   mail_record_subjects: "Private ownership join; mail status uses its own scoped service and receipt identities are not searchable titles.",
   contact_relationships:
     "Join table of two contacts; find each person through the contact source.",

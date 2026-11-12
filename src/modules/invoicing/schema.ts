@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The one money spine and its tax evidence (MASTER.md §4.3, §4.12, C5.02-C5.05).
 import { sql } from "drizzle-orm";
+import type { PublicMerchantSupport } from "@/core/commerce/merchant-identity";
 import {
   bigint,
   boolean,
@@ -353,10 +354,13 @@ export const invoiceMarketPolicies = pgTable("invoice_market_policies", {
   feeMinor: amount("fee_minor"),
   sellerUserId: uuid("seller_user_id"),
   merchantName: text("merchant_name"),
+  merchantSupport: jsonb("merchant_support").$type<PublicMerchantSupport>(),
+  merchantContactId: uuid("merchant_contact_id").references(()=>contacts.id,{onDelete:"restrict"}),
   providerAccountId: text("provider_account_id"),
   createdAt: createdAtColumn(),
 }, (t) => [
   check("invoice_market_policies_model_check", sql`${t.model} in ('hold','instant','seller_merchant')`),
+  index("invoice_market_policies_merchant_contact_idx").on(t.merchantContactId),
   check("invoice_market_policies_fee_bps_check", sql`${t.siteFeeBps} between 0 and 10000`),
   check("invoice_market_policies_hold_days_check", sql`${t.holdDays} between 0 and 365`),
   check("invoice_market_policies_fee_check", sql`${t.feeMinor} >= 0`),
