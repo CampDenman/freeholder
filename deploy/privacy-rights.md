@@ -376,3 +376,11 @@ This code-only draft has not yet passed source/native/domain qualification.
 The original known-empty upload control failed on unchanged current270 in10.12s;
 its source2128, observations and log are preserved. The disposable before database
 was subsequently reused; no populated-before database restoration is claimed.
+
+The code-only release stack enables no domain callback and adds no table or
+migration. Its optional framework and receipt transitions can qualify on the
+normal published0–79 schema independently of the unpublished financial80 and
+opaque-import domain repair. The three controls must pass on that exact release
+source/database before this stack is proposed for merging. Local v9 domain proofs
+remain evidence of those separately frozen sources, not a transferred release
+qualification or stable sign-off.
