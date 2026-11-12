@@ -396,3 +396,15 @@ shadow bodies, fabricated WordPress fields, inconsistent original frame/row
 bindings and mismatched file-fact digests. The real-file mapping and ordinary
 archive/content batch passes 56 pure controls in 3.35 seconds; targeted types and
 lint pass. This contract is not yet wired into the shared service graph.
+
+The original committed runtime at test-only checkpoint 7cbf44b5 has now been
+exercised through an actual 501-page ZIP upload on a cloned normal 0–78 database.
+Its bounded-start before control genuinely failed in 10.16 seconds: the service
+returned failed with its existing 500-page limit instead of reserving durable
+continuation. No parser count or synthetic source was substituted. This test-only
+checkpoint retains the old runtime route; ongoing service changes remain separate.
+Its native process exited, and the fixture database had zero nonidle backends
+before the shared lane was handed to the next qualifier. Source-only graph format
+and ordinary ZIP/WXR parser controls currently pass 60 pure cases in 4.33 seconds.
+Actual after/lifecycle, privacy/hold/namespace and owner-browser qualification
+remain required. No schema 81, provider acceptance or C3.47 closure is claimed.
