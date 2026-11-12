@@ -13571,6 +13571,19 @@ whatever is best for the people using the site.
   registry/native after proof or activation is claimed. Unknown physical
   requests cannot be released by local cancellation or time. Full state,
   fee/reversal, privacy and human-flow integration remain required.
+  Physical refund-caller AFTER 2026-11-12: frozen5a5763c0 and freshly
+  migrated normal0–80/v7 SQLd060f9a8 passed the exact unchanged case6.255s.
+  The second invocation conflicts while the original POST is paused; only
+  one physical POST occurs. Read-only convergence proves one succeeded500CAD
+  refund, payment.refundedMinor500, one original dispatch/returned finish,
+  physical ACK and matching bound raw money observation. Fresh migration
+  verified81 journal entries/max1793310000060 and all fifteen refund tables;
+  this is not populated-upgrade or actual provider-account acceptance.
+  Prior v6ea06/0ec BEFORE5.672s and all prior evidence remain preserved.
+  Shared metadata/private phases and the source guards are now composed;
+  complete bank/action state, exact fee/reversal, return allocation, privacy,
+  human/browser and runtime-upgrade qualification remain required. The new
+  merchant model remains disabled, C12.38 open. See the same source report.
   Original fee-job runtime repair 2026-11-12: the first actual mixed-order
   capture control reached payment completion and exposed an unregistered
   invoicing.reconcileOriginalMerchantFee job on unreleased80 sourcee4500e3e.

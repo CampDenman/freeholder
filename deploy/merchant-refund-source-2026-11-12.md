@@ -217,3 +217,41 @@ unchanged. Fresh normal-v7 migration, the unchanged physical-caller AFTER case,
 merge/privacy/runtime upgrade controls, bank-return state, exact fee/reversal
 recovery, owner/buyer flows and actual provider acceptance remain required.
 The new merchant model remains disabled.
+
+
+## Actual normal-v7 migration and unchanged caller AFTER
+
+Frozen source `5a5763c0` with the exact `d060f9a8` SQL identified above passed
+the ordinary journal0–80 migration on a new disposable normal-v7 database.
+The migration completed in5.85 seconds; all81 journal entries through
+1793310000060, fifteen refund tables, seven admission/application/setup guards
+and setup-fee columns were verified. No explicit fragment application was used.
+This is fresh-schema proof; populated upgrade and old-runtime HTTP refusal
+remain separate requirements. The prior normal-v6 database was not changed.
+
+The exact unchanged physical-caller case from the genuine BEFORE then passed
+in6.255 seconds on that frozen source/v7 schema. While the first actual Stripe
+refund POST remained paused, the second invocation returned a conflict and
+no second POST occurred. Both promises were released/awaited. Because the
+fixture's finally block does not assert the first logical result, a separately
+authorized read-only inspection checked convergence: exactly one500CAD refund
+was succeeded with the actual resource reference; the original payment's
+refunded_minor was500; one immutable request and one ordinal1 dispatch existed,
+with the actual returned caller-finish receipt, physical ACK binding and one
+matching bound succeeded raw observation. No hidden first-result failure is
+being treated as success. Runner and inspection exited; database nonidle[]
+was verified before returning the shared lane.
+
+Logs: `/tmp/freeholder-collection80-normal-diagnostic-v7.log`;
+`/tmp/freeholder-refund-caller-after-v7.{json,log}` and
+`/tmp/freeholder-refund-caller-after-v7-ledger.json`,
+`/tmp/freeholder-refund-caller-after-v7-drain.json`.
+The before case remains product0ecf99d1/test328fa48f on unchanged v6ea06,
+5.672s genuine failure. This narrow comparison concerns the unreleased new80
+protocol. The separately reproduced actual-main C0 cancellation/live-refund
+issue has its own protected repair and is not closed by this new80 proof.
+
+Seller-tax merge, setup-fee and broader fee/state/return/privacy/owner/browser
+controls remain individually pending. The model is still disabled; no actual
+provider-account acceptance, final candidate sign-off or completed C12.38
+claim follows from this result.
