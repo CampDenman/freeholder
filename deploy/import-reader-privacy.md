@@ -474,3 +474,19 @@ After these fixture corrections, all required local source gates passed again:
 full types, lint, license, release-note, plan, playground and 384 contracts with
 26 expected database-only exclusions. The protected exact-head rerun remains
 pending; local fixture qualification does not substitute for protected checks.
+
+
+The actual main182 private graph-reader review before control fails in10.14s
+on test-only checkpoint50954844. It uploads and indexes a real501-item WXR,
+keeps its first original reader unbound, and correctly requires human review
+before importing the comment. The actual fresh signed-in owner can review it
+through the parent; direct child review is refused. Applying that exact human
+choice then hits schema73 SQL55000 because the shared cache projection had78
+reader admission but lacked73 graph-writer admission for its private child.
+The native process exited and its normal79 fixture had no nonidle backends.
+
+The narrow source repair adds graph-writer ABI admission after the existing
+human choice, current permissions, exact original coordinates and hold/erasure
+checks. It grants no additional caller authority and changes no source identity,
+original receipt owner, private child entry rule or SQL guard. Its exact native
+after control remains pending; no completion or stable claim is added.
