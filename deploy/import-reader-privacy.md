@@ -221,3 +221,13 @@ first source with no existing person still follows the separately bounded new
 person path; this change does not claim otherwise. The new before control failed
 on the preceding source; its after and the updated positive controls still need
 qualification with the complete migration chain.
+
+
+The refreshed 24 reader controls now pass on the actual qualified 0–77 source
+stack with explicit reserved 78, including the first-source no-owner-guess
+control and the real 1001-comment source commit followed by normalized merge and
+exact undo. The source branch now journals 78 at the reserved timestamp after all
+78 predecessor journal entries. Its fixture no longer executes migration SQL
+manually: normal global migration must supply the table and guards. Empty and
+populated normal 0–78 upgrades, current-source browser and broader adjacent
+qualification remain pending; the earlier explicit-78 run is not that proof.
