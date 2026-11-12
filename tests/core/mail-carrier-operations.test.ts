@@ -11,11 +11,14 @@ import { users } from "@/core/auth/schema";
 import { resolveContact } from "@/core/contacts/service";
 import { db } from "@/core/db";
 import { resetEnvForTests } from "@/core/env";
-import { startJobProducer, stopJobs } from "@/core/jobs";
+import { getJob, startJobProducer, stopJobs } from "@/core/jobs";
 import { mirrorMarketingWithdrawal, rememberProviderGrant, withdrawDetachedGrants } from "@/core/mail/permission";
 import { mailDispatches, mailDispatchRequests, mailProviderGrants, mailSenders } from "@/core/mail/schema";
 import { deliverQueuedMail, sendMail } from "@/core/mail/service";
 import { confirmCarrierWithdrawal } from "@/core/mail/carrier-services";
+import { reconcileMailDispatch } from "@/core/mail/dispatch-services";
+import { eraseMailRecords } from "@/core/mail/record-privacy";
+import { dataRequests } from "@/core/privacy/schema";
 import { consentRecords } from "@/core/privacy/schema";
 import { addRetentionException, createDataRequest, fulfillDataRequest, verifyDataRequest } from "@/core/privacy/service";
 import { ready } from "@/core/runtime";
@@ -203,6 +206,48 @@ describe.runIf(hasDatabase)("original carrier consent and withdrawal operations 
     expect(receipt?.carrierOperations).toMatchObject([{ kind: "consent", state: "confirmed" }]);
     expect(receipt?.carrierOperations[0]?.responseDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(sends).toBe(1);
+  });
+
+  it("reopens completed erasure when a deferred original consent is physically created afterwards", async () => {
+    const { contact } = await reader(); let remoteGranted = false, sends = 0;
+    let entered!: () => void, release!: () => void;
+    const waiting = new Promise<void>(resolve => { entered = resolve; }), held = new Promise<void>(resolve => { release = resolve; });
+    setParadiseFetchForTests(async url => {
+      if (url.endsWith("/email/consent")) {
+        entered(); await held;
+        // This is a new physical grant after erasure, not an old ACK for a
+        // grant that was already created and then withdrawn before erasure.
+        remoteGranted = true;
+        return new Response('{"id":76}', { status: 201 });
+      }
+      if (url.endsWith("/email/consent/withdraw")) { remoteGranted = false; return new Response('{"success":true}', { status: 200 }); }
+      sends++; return new Response('{"code":"EMAIL_CONSENT_REQUIRED"}', { status: 409 });
+    });
+    const queued = await campaign(contact.id), caller = deliverQueuedMail(queued.id);
+    let requestId: string | undefined;
+    try {
+      await waiting; expect(remoteGranted).toBe(false);
+      const request = await createDataRequest.call({ contactId: contact.id, request: { kind: "erasure" } }, HUMAN); requestId = request.id;
+      await verifyDataRequest.call({ id: request.id, method: "Fictional independent original subject identity verification." }, HUMAN);
+      const fulfilled = await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, HUMAN);
+      expect(fulfilled.request.status).toBe("in_progress");
+      const [grant] = await db().select().from(mailProviderGrants);
+      await confirmCarrierWithdrawal.call({ id: grant!.id, expectedRevision: grant!.revision, expectedEmail: EMAIL, originalResourceEvidence: "Fictional original provider account and exact pending consent operation identified.", finalProviderEvidence: "Fictional provider final records currently confirm no grant exists for this original request.", stoppedCallerEvidence: "Fictional provider independently reports the original caller and pending remote operation stopped.", providerOperationRef: "fictional-original-stopped-consent-76", confirmation: "ORIGINAL CARRIER WITHDRAWAL VERIFIED" }, HUMAN);
+      expect(await withdrawDetachedGrants([grant!.id])).toEqual({ removed: 1, waiting: 0 });
+      const [dispatch] = await db().select().from(mailDispatches).where(eq(mailDispatches.deliveryId, queued.id));
+      await reconcileMailDispatch.call({ deliveryId: queued.id, dispatchId: dispatch!.id, expectedAttempts: 1, expectedRecipient: EMAIL, expectedProviderRef: null, outcome: "not_submitted", providerOperationRef: "fictional-original-no-send-76", originalRouteEvidence: "Fictional original carrier account matches the frozen exact route.", finalProviderEvidence: "Fictional provider final record currently confirms no message was submitted.", stoppedCallerEvidence: "Fictional provider independently reports this exact original message caller stopped.", confirmation: "ORIGINAL PROVIDER OUTCOME VERIFIED" }, HUMAN);
+      const receipt = fulfilled.artifact.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
+      const recordJobId = receipt.outcomes.find(outcome => outcome.scope === "mail.records")!.pendingJobs![0]!;
+      const recordJob = await getJob("core.eraseMailRecords", recordJobId); expect(recordJob).toBeTruthy();
+      await eraseMailRecords(recordJob!.data);
+      expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]!.status).toBe("completed");
+      expect(remoteGranted).toBe(false);
+    } finally { release(); await caller; }
+    expect(remoteGranted).toBe(true); expect(sends).toBe(1);
+    const [grant] = await db().select().from(mailProviderGrants);
+    expect(grant).toMatchObject({ email: "", erasureRequestId: requestId });
+    expect(grant!.carrierOperations[0]).toMatchObject({ kind: "consent", state: "confirmed" });
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, requestId)))[0]!.status).toBe("in_progress");
   });
 
   it("fences the previous image's carrier read and new physical send before HTTP", async () => {
