@@ -502,3 +502,12 @@ the owned normal79 database had no nonidle backends before handoff. This is a
 shared-service graph-review repair; no API/schema/label change, fresh production
 build, new owner-browser qualification, provider acceptance or checklist closure
 is claimed by this control.
+
+
+The private graph-reader fix also passes its complete source gates on70292fa5:
+full types, whole-repository lint, licensing, release notes, plan/F-matrix,
+playground policy and44 contract files (384 passed,26 expected database
+exclusions,31.63 seconds for contracts). The independent frozen offline install
+completed in696ms. All source processes exited before protected PR publication.
+The source/schema/API/locale boundary above is unchanged; complete item, actual
+provider, cutover and stable signatures remain pending.
