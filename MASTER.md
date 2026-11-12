@@ -11427,6 +11427,54 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Verified-transfer source foundation 2026-11-12: four unregistered models
+  keep immutable source/target locators, distinct logical and physical target
+  keys, exact original receipt membership and original receipt contact subjects.
+  A pure evidence projection refuses unresolved/redacted/missing/divergent
+  byte facts and namespaces;11 controls and full source types/lint pass.
+  No82 SQL/journal, copy service, adoption, source deletion or contact/
+  retention integration is enabled. Those requirements remain open.
+  Owner-preview source increment 2026-11-12: a shared human-only query captures
+  the configured source outside its transaction and reads complete requested
+  object histories under existing object locks. It refuses unresolved facts,
+  resource mismatches, named storage holds and oversized histories. The
+  result explicitly grants no copy, adoption or deletion authority. Full
+  Node22 types/changed-source lint and51 selected controls pass; actual
+  normal79 service controls pass3/3 (4.20s/3.95s/4.35s), and actual SDK
+  generation passes8/8. Generated-file full types/whole lint and all source
+  gates pass after actual changelog regeneration repaired its sole drift
+  failure (affected3 controls pass). This does
+  not complete site inventory, provider bytes or original-domain ownership
+  and quiescence proof. See
+  `deploy/storage-transfer-preview-source-2026-11-12.md`.
+  Committed storage-observation hook 2026-11-12: domains can register a
+  named callback receiving only the original physical receipt UUID after its
+  transaction commits. Every callback runs; a dependent failure produces a
+  generic pending-recovery error and retains the original positive fact.
+  Domains must use their own original erasure membership, shared SYSTEM
+  service and durable/periodic retry instead of inheriting executor identity.
+  Four pure hook controls and one actual PostgreSQL commit-boundary control
+  pass (4.25s), with full types/lint. No new domain is registered by this
+  infrastructure increment. See
+  `deploy/storage-observation-hook-source-2026-11-12.md`.
+  Versioned transfer transport foundation 2026-11-12: the existing provider
+  factories now offer captured resource/key/revision reads and conditional
+  deletion. S3 sends the actual strong ETag in If-Match; Replit pins body
+  reads and deletion to the actual generation string. Wrong keys/resources,
+  missing revisions, conflicts and unsupported conditions refuse without an
+  unconditional fallback.21 actual-factory/adjacent controls and full source
+  types/lint pass. The copy CLI still uses only GET/create-only PUT; no
+  cleanup command, adoption service or provider acceptance is supplied.
+  See `deploy/storage-transfer-transport-source-2026-11-12.md`.
+  Physical read-key preparation 2026-11-12: the original-storage resolver
+  now returns its actual read key; retained sources, recording assembly and
+  staged-file validation use that key for provider reads while preserving
+  logical references. Current resolution still returns its original key.
+  Full Node22 types/changed-file lint pass. Actual normal79 capture assembly
+  and retained multi-megabyte WXR controls pass8.72s/6.08s;25 other controls
+  were deliberately filtered. This supplies no namespace adoption or final
+  cross-target recovery acceptance. See
+  `deploy/storage-transfer-source-2026-11-12.md`.
   Transfer read-refusal repair 2026-11-11: two adapter-boundary controls
   reproduced an occupied Replit target being overwritten and reported
   restored after its first read returned 403 or 503. The transfer now stops

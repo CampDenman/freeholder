@@ -23,6 +23,22 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+function transferBinding(kind, location) {
+  const identity = kind === "s3" ? { id: kind, endpoint: location.endpoint, bucket: location.bucket } : { id: kind, bucket: location.bucket };
+  return Object.freeze({ kind, namespace: sha256(new TextEncoder().encode(JSON.stringify(identity))), location: Object.freeze(location) });
+}
+
+function checkedRevision(revision, key, binding, kind) {
+  validateObjectKey(key);
+  if (!revision || revision.kind !== kind || revision.key !== key || revision.namespace !== binding.namespace || typeof revision.value !== "string") {
+    throw new Error("The deletion condition does not identify this exact original storage resource.");
+  }
+  if (kind === "etag" ? !/^"[\x21\x23-\x7e\x80-\xff]+"$/.test(revision.value) : !/^[1-9][0-9]{0,19}$/.test(revision.value)) {
+    throw new Error("The original storage revision is unavailable or invalid.");
+  }
+  return revision.value;
+}
+
 function validateObjectKey(key) {
   if (typeof key !== "string" || !key || key.includes("\0") || key.split("/").some((part) => part === "." || part === "..")) {
     throw new Error("S3 object keys must not contain empty keys, NUL or dot path segments.");
@@ -70,7 +86,23 @@ export function createS3Store(environment, prefix, { allowInsecureHttp = false, 
   // In particular, an unsupported condition must not trigger ten more PUTs.
   const client = new AwsClient({ accessKeyId, secretAccessKey, region, service: "s3", retries: 0 });
   const url = (key) => s3ObjectUrl(endpoint, bucket, key, style);
+  const binding = transferBinding("s3", { endpoint, bucket });
   return {
+    binding,
+    async readVersioned(key) {
+      const response = await client.fetch(url(key), { redirect: "error", headers: { "accept-encoding": "identity" } });
+      if (response.status === 404) return undefined;
+      if (!response.ok) throw new Error(`${prefix}: versioned source read failed (${response.status}).`);
+      const revision = { kind: "etag", key, namespace: binding.namespace, value: response.headers.get("etag") };
+      checkedRevision(revision, key, binding, "etag");
+      const body = new Uint8Array(await response.arrayBuffer());
+      return { body, contentType: response.headers.get("content-type") ?? "application/octet-stream", revision };
+    },
+    async deleteVersioned(key, revision) {
+      const value = checkedRevision(revision, key, binding, "etag");
+      const response = await client.fetch(url(key), { method: "DELETE", redirect: "error", headers: { "if-match": value } });
+      if (!response.ok) throw new Error(`${prefix}: conditional source deletion failed (${response.status}).`);
+    },
     async get(key) {
       const response = await client.fetch(url(key), { redirect: "error" });
       if (response.status === 404) return undefined;
@@ -109,14 +141,47 @@ export async function createReplitStore(environment, prefix) {
     // or default bucket may replace this explicit original resource.
     const { Storage } = await import("@google-cloud/storage");
     requireOriginalEndpoint();
-    const google = new Storage({ projectId: "", credentials: {
+    const google = new Storage({ projectId: "", retryOptions: { autoRetry: false }, credentials: {
       audience: "replit", subject_token_type: "access_token", type: "external_account",
       token_url: "http://127.0.0.1:1106/token", universe_domain: "googleapis.com",
       credential_source: { url: "http://127.0.0.1:1106/credential", format: { type: "json", subject_token_field_name: "access_token" } },
     } });
     return google.bucket(bucketId);
   })());
+  const binding = transferBinding("replit", { bucket: bucketId });
   return {
+    binding,
+    async readVersioned(key) {
+      validateObjectKey(key);
+      const bucket = await destination();
+      let metadata;
+      try { [metadata] = await bucket.file(key).getMetadata(); }
+      catch (error) {
+        const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
+        if (code === 404 || code === "404") return undefined;
+        throw new Error(`${prefix}: original generation read failed (${code ?? "unclassified"}).`);
+      }
+      const revision = { kind: "generation", key, namespace: binding.namespace, value: String(metadata?.generation ?? "") };
+      checkedRevision(revision, key, binding, "generation");
+      // The body belongs to this exact generation, even if the live key changes.
+      // A later body-read failure is never reinterpreted as current absence.
+      let body;
+      try { [body] = await bucket.file(key, { generation: revision.value }).download({ validation: false }); }
+      catch (error) {
+        const code = error && typeof error === "object" && "code" in error ? error.code : "unclassified";
+        throw new Error(`${prefix}: original generation body read failed (${code}).`);
+      }
+      if (!Number.isSafeInteger(Number(metadata?.size)) || Number(metadata.size) !== body.byteLength) throw new Error(`${prefix}: original generation size changed.`);
+      return { body: new Uint8Array(body), contentType: metadata.contentType ?? "application/octet-stream", revision };
+    },
+    async deleteVersioned(key, revision) {
+      const value = checkedRevision(revision, key, binding, "generation");
+      try { await (await destination()).file(key).delete({ ifGenerationMatch: value }); }
+      catch (error) {
+        const code = error && typeof error === "object" && "code" in error ? error.code : "unclassified";
+        throw new Error(`${prefix}: conditional source deletion failed (${code}).`);
+      }
+    },
     async get(key) {
       const result = await client.downloadAsBytes(key);
       if (!result.ok) {

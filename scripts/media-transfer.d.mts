@@ -5,11 +5,23 @@ export interface TransferStore {
   put(key: string, bytes: Uint8Array<ArrayBuffer>, contentType: string): Promise<void>;
 }
 
+export interface TransferRevision {
+  kind: "etag" | "generation";
+  key: string;
+  namespace: string;
+  value: string;
+}
+export interface VersionedTransferStore extends TransferStore {
+  binding: { kind: "s3" | "replit"; namespace: string; location: Readonly<Record<string,string>> };
+  readVersioned(key: string): Promise<{body:Uint8Array<ArrayBuffer>;contentType:string;revision:TransferRevision}|undefined>;
+  deleteVersioned(key: string, revision: TransferRevision): Promise<void>;
+}
+
 export function createS3Store(
   environment: Record<string, string | undefined>,
   prefix: string,
   options?: { allowInsecureHttp?: boolean; warn?: (message: string) => void },
-): TransferStore;
+): VersionedTransferStore;
 
 export interface MediaTransferManifest {
   format: "freeholder-media-manifest/v1";
@@ -18,7 +30,7 @@ export interface MediaTransferManifest {
   integrity?: { missingInventoryKeys?: string[] };
 }
 
-export function createReplitStore(environment: Record<string, string | undefined>, prefix: string): Promise<TransferStore>;
+export function createReplitStore(environment: Record<string, string | undefined>, prefix: string): Promise<VersionedTransferStore>;
 
 export function copyManifestObjects(options: {
   manifest: MediaTransferManifest;
