@@ -461,15 +461,17 @@ describe.runIf(hasDatabase)("mail services", () => {
     const job = queued?.find((item) => item.id === erased.pendingJobs![0]);
     expect(job).toBeTruthy();
 
-    // What the job does: tell the carrier, delete the row, then acknowledge.
+    // Tell the carrier, minimize the address, then acknowledge in the same TX.
     await withdrawDetachedGrants((job!.data as { grantIds: string[] }).grantIds);
     expect(bodies).toEqual([{ email: "erase-me@example.test" }]);
     const left = await db().select().from(mailProviderGrants);
     expect(left).toHaveLength(1); expect(left[0]?.email).toBe(""); expect(left[0]?.redactedAt).toBeInstanceOf(Date);
-    expect(acknowledged).toHaveBeenCalledWith(
-      { requestId, scope: PROVIDER_GRANTS_SCOPE, jobId: erased.pendingJobs![0] },
-      { kind: "system" },
-    );
+    expect(acknowledged).toHaveBeenCalledOnce();
+    const [acknowledgment, actor, shared] = acknowledged.mock.calls[0]!;
+    expect(acknowledgment).toEqual({ requestId, scope: PROVIDER_GRANTS_SCOPE, jobId: erased.pendingJobs![0] });
+    expect(actor).toMatchObject({ kind: "system" });
+    expect(shared?.tx).toBeInstanceOf(Object);
+    expect(shared?.queued).toBeInstanceOf(Array);
   });
 
   it("withdraws through Paradise credentials even after the campaign carrier changed (C3.31)", async () => {
@@ -504,10 +506,12 @@ describe.runIf(hasDatabase)("mail services", () => {
     environment({ PARADISEMODERN_API_KEY: "site-key" });
     await expect(withdrawDetachedGrants()).resolves.toEqual({ removed: 1, waiting: 0 });
     expect(bodies).toEqual([{ email: "waiting@example.test" }]);
-    expect(acknowledged).toHaveBeenCalledWith(
-      { requestId, scope: PROVIDER_GRANTS_SCOPE, jobId: erased.pendingJobs![0] },
-      { kind: "system" },
-    );
+    expect(acknowledged).toHaveBeenCalledOnce();
+    const [acknowledgment, actor, shared] = acknowledged.mock.calls[0]!;
+    expect(acknowledgment).toEqual({ requestId, scope: PROVIDER_GRANTS_SCOPE, jobId: erased.pendingJobs![0] });
+    expect(actor).toMatchObject({ kind: "system" });
+    expect(shared?.tx).toBeInstanceOf(Object);
+    expect(shared?.queued).toBeInstanceOf(Array);
   });
 
   it("touches nothing on the playground (C3.31)", async () => {

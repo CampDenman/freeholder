@@ -5963,6 +5963,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   review's persistent success notice; waiting for the actual second action
   corrected that fixture, with no product change. Protected CI and actual
   provider acceptance remain required.
+  Protected CI found two older flat-call spy assertions and a migration
+  inventory assumption. The two mail cases now require the exact original
+  request/scope/job and a real shared transaction/event queue; both pass.
+  The schema contract explicitly checks76's already declared breaking rename,
+  rollback reason and refusal of a compatible-risk release; all12 schema
+  controls pass. These corrections change no product, SQL or UI behavior.
   See `deploy/mail-carrier-recovery.md` and the C3.31–C3.39
   source/live evidence worksheet `deploy/provider-preview-acceptance.md`.
   No live provider acceptance or independent security sign-off is supplied.)*

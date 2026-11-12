@@ -108,7 +108,7 @@ describe("the acknowledgement", () => {
 });
 
 describe("the migrations already in the tree", () => {
-  it("the reviewed baseline is the acknowledged one-time N-1 break", async () => {
+  it("acknowledges the reviewed baseline and the exact original-carrier reader fence", async () => {
     const { readdirSync, readFileSync } = await import("node:fs");
     const dir = "db/migrations";
     const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
@@ -124,6 +124,15 @@ describe("the migrations already in the tree", () => {
     expect(assertSchemaRisk("breaking", [review]).ok).toBe(true);
     for (const file of files.slice(1)) {
       const later = reviewMigration(file, readFileSync(`${dir}/${file}`, "utf8"));
+      if (file === "0076_mail_carrier_operations.sql") {
+        expect(later.ok).toBe(true);
+        expect(later.acknowledged).toBe(true);
+        expect(later.breaking.map(statement => statement.id)).toEqual(["rename"]);
+        expect(later.reason).toMatch(/guarded image.*matching database\/private receipt keys for rollback/);
+        expect(assertSchemaRisk("compatible", [later]).ok).toBe(false);
+        expect(assertSchemaRisk("breaking", [later]).ok).toBe(true);
+        continue;
+      }
       expect({ file, ok: later.ok, breaking: later.breaking }).toEqual({
         file,
         ok: true,
