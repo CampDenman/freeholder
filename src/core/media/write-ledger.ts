@@ -66,7 +66,7 @@ export type TrackedPut = {
 };
 export type CapturedStorage=Awaited<ReturnType<typeof boundStorage>>;
 /** Existing stored bytes are read only through their accepted original fact. */
-export async function originalStoredObject(key:string):Promise<CapturedStorage&{receipt:{sha256:string;bytes:number}}>{
+export async function originalStoredObject(key:string):Promise<CapturedStorage&{key:string;receipt:{sha256:string;bytes:number}}>{
  const captured=await boundStorage();
  const receipt=await db().transaction(async tx=>{
   await lockContactIdentityForRead(tx);await lockObject(tx,key);
@@ -78,7 +78,7 @@ export async function originalStoredObject(key:string):Promise<CapturedStorage&{
   const original=live.at(-1)!;if(!original.sha256||original.bytes===null)throw new ServiceError("conflict","The original stored-object byte witness needs verified recovery.");
   return{sha256:original.sha256,bytes:original.bytes};
  });
- return{...captured,receipt};
+ return{...captured,key,receipt};
 }
 
 /** Caller has already authorized the ordinary upload/backfill/rescan operation.

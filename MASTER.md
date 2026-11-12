@@ -11427,6 +11427,15 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Physical read-key preparation 2026-11-12: the original-storage resolver
+  now returns its actual read key; retained sources, recording assembly and
+  staged-file validation use that key for provider reads while preserving
+  logical references. Current resolution still returns its original key.
+  Full Node22 types/changed-file lint pass. Actual normal79 capture assembly
+  and retained multi-megabyte WXR controls pass8.72s/6.08s;25 other controls
+  were deliberately filtered. This supplies no namespace adoption or final
+  cross-target recovery acceptance. See
+  `deploy/storage-transfer-source-2026-11-12.md`.
   Transfer read-refusal repair 2026-11-11: two adapter-boundary controls
   reproduced an occupied Replit target being overwritten and reported
   restored after its first read returned 403 or 503. The transfer now stops
