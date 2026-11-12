@@ -94,6 +94,23 @@ describe.runIf(hasDatabase)("legacy refund original physical dispatch", () => {
     expect(refund).not.toHaveBeenCalled();
     expect(await row(request.idempotencyKey)).toMatchObject({ status: "created", providerRef: null });
   });
+  it("does not reactivate a birth marker after restored-created state loses its admission but retains actual positive history", async () => {
+    const original = await payment("restored-created-positive");
+    const request = input(original.id, "restored-created-positive-refund");
+    const refund = edge(async () => ({ providerRef: "re_RestoredPositive", status: "succeeded" }));
+    expect(await submitProviderRefund.call(request, OWNER)).toMatchObject({ status: "succeeded" });
+    const settled = await row(request.idempotencyKey);
+    // Controlled partial-restore fault: real finished money history remains.
+    await db().update(refunds).set({ status: "created" }).where(eq(refunds.id, settled.id));
+    await db().delete(moneyStateEvents).where(and(eq(moneyStateEvents.subjectId, settled.id), eq(moneyStateEvents.toState, "processing")));
+    await expect(submitProviderRefund.call(request, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    await expect(cancelRefund.call({ id: settled.id, reason: "A restored row is not an unused provider request." }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    expect(refund).toHaveBeenCalledTimes(1);
+    const facts = await db().select().from(moneyStateEvents).where(and(eq(moneyStateEvents.subjectId, settled.id), eq(moneyStateEvents.toState, "provider_result_observed")));
+    expect(facts).toHaveLength(1);
+    expect(facts[0]?.metadata).toMatchObject({ result: { status: "succeeded", providerRef: "re_RestoredPositive" } });
+    expect((await db().select().from(payments).where(eq(payments.id, original.id)))[0]?.refundedMinor).toBe(1000);
+  });
   it.each([
     ["transport", new Error("Synthetic response lost after provider acceptance")],
     ["already", new AdapterError("payments", "stripe", "invalid_request", "Synthetic already-refunded answer", false, "charge_already_refunded")],

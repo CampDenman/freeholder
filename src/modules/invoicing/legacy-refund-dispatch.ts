@@ -105,8 +105,7 @@ function originalReservationMatches(rows: Awaited<ReturnType<typeof rawEvents>>,
 export async function refundIsProvenUnsubmitted(tx: Tx, refund: Refund): Promise<boolean> {
   if (refund.status !== "created") return false;
   const rows = await events(tx, refund.id);
-  return originalReservationMatches(rows, refund)
-    && !rows.some(row => row.toState === "processing" || record(row.metadata).protocol === version && record(row.metadata).physicalState === "admitted");
+  return rows.length === 1 && originalReservationMatches(rows, refund);
 }
 export async function admitLegacyRefundDispatch(ctx: ServiceContext, refund: Refund, request: z.infer<typeof legacyRefundRequest>, payment: { amountMinor: number; requestHash: string }): Promise<LegacyRefundDispatch> {
   if (!await refundIsProvenUnsubmitted(ctx.tx, refund)) throw new ServiceError("conflict", "This original refund may already have a physical caller. Reconcile it before refunding again.");

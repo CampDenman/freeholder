@@ -148,3 +148,11 @@ additional drafted controls alter an unsubmitted amount/currency and require
 zero provider POSTs plus retained review debt. The expanded sixteen controls
 and this hardening's source gates are pending; prior 4c/8dc proofs are not
 extended to the new source.
+
+The final unsubmitted guard accepts only the single authenticated creation
+event. Any later history keeps the birth marker consumed, even if a partial
+restore reset the row to created and lost its admission event. This does not
+change birth validation used to recover a completed result. One additional
+drafted control retains an actual positive observation and applied 1000 while
+refusing a second POST after that controlled restore fault. The seventeen
+controls and this final guard still await their own qualification.
