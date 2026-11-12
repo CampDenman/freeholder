@@ -13626,16 +13626,22 @@ whatever is best for the people using the site.
   journeys. C12.38 and all remaining acceptance requirements stay open.
   The combined candidate now passes a fresh ordinary0–80 migration (81
   entries) and six distinct native tax/ownership/invoice/export/merge controls.
-  Unheld erasure correctly refuses the missing subscription tax-erasure safety
-  service; its integration and hold-release proof remain required. A later
-  unpublished increment adds original selected-zone provenance for threshold
-  reporting, with types/lint only; it has not been applied to that candidate.
-  Per-business threshold and customer-exemption workflows remain unfinished.
+  Initial unheld erasure correctly refused a missing subscription safety
+  service. The fresh assembled80 v4 now includes its real registered checks
+  and original selected-zone provenance. Five current native controls pass:
+  unheld minimization with issued TaxLine preservation, actual hold release
+  after login deletion, legacy site threshold isolation, own-business totals
+  and currency separation. The six earlier controls ran on prior80 candidates;
+  they are not claimed as a repeated full suite on this exact source.
+  Customer-exemption workflows and full provider quiescence remain unfinished.
   Threshold report/query/editor source is now present for the original
   business portions, with separate currencies and UTC reporting windows.
   Types/lint and42 source controls pass; one live-registry check is skipped
-  without a database. Native after/new-report, SDK and browser proof remain
-  required, as do customer exemption requests and merchant approval.
+  without a database. Current native after/new-report checks and live SDK8
+  now pass, and the original ordinary-site currency control still passes.
+  Browser proof, customer exemption requests and merchant approval remain
+  required. This does not enable the collection model or supply actual account,
+  provider, independent review or stable acceptance.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query

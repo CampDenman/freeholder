@@ -140,3 +140,22 @@ without a database). Two new original-business/currency native controls and
 the unchanged legacy ownership after-control await the new assembled80 SQL;
 SDK and browser acceptance also remain open. Customer exemption request and
 merchant approval workflows are still required.
+
+Fresh assembled80 v4 qualification now includes the actual registered
+subscription safety services and selected-zone provenance. Its ordinary
+normal0–80 migration passes with81 entries and SQL SHA39735b8f7dcb3612fab5b0138ffc89153fa9e7214ecbd28dcb8cbb0f9234ab17.
+All five pending native controls pass on source751e34d3: unheld minimization
+retaining issued TaxLines (5.71s), held declaration release after login deletion
+(4.96s), the unchanged legacy threshold after-control (4.87s), own-business
+issued/draft/other-owner boundaries (5.16s), and currency isolation (10.81s).
+The ordinary site threshold currency control also passes (10.88s), preserving
+its original assertions. Actual SDK generation passes all eight controls
+(3.11s), and its generated diff contains the new public methods without the
+private erasure phases. The six earlier tax controls remain separate prior80
+evidence; no repeated full suite or provider quiescence is claimed here.
+The local disposable cluster uses the documented jit=off, fsync=on profile.
+Reports: /tmp/freeholder-tax80-native-v4-schema-five.json,
+/tmp/freeholder-tax80-legacy-existing-positive.json and
+/tmp/freeholder-merchant80-v4-live-sdk.log. All remaining source, provider,
+SDK/browser, upgrade, recovery and human acceptance requirements remain open
+where not explicitly covered above.
