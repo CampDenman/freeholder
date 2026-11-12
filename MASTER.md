@@ -11427,6 +11427,13 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Verified-transfer source foundation 2026-11-12: four unregistered models
+  keep immutable source/target locators, distinct logical and physical target
+  keys, exact original receipt membership and all original contact subjects.
+  A pure evidence projection refuses unresolved/redacted/missing/divergent
+  byte facts and namespaces;11 controls and full source types/lint pass.
+  No82 SQL/journal, transfer service, adoption, source deletion or contact/
+  retention integration is enabled. Those requirements remain open.
   Physical read-key preparation 2026-11-12: the original-storage resolver
   now returns its actual read key; retained sources, recording assembly and
   staged-file validation use that key for provider reads while preserving

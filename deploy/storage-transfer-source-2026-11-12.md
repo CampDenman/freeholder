@@ -22,3 +22,17 @@ an independent active-backend check returned no rows.
 The actual source and target adoption protocol, source-writer quiescence,
 receipt-backed cleanup, contact/retention integration, owner/API surfaces,
 contiguous migration and cross-target final-candidate journey remain required.
+
+The separate unregistered82 source foundation defines transfer plan/object,
+original-receipt membership and contact-subject models. Original namespaces
+and key digests remain distinct from target physical keys. Subject rows may
+converge during contact merge without destructive deduplication; the merge
+and privacy wiring must be completed before these models are registered.
+
+A pure original-witness projection checks the captured provider locator,
+complete source-key receipt history, settled positive byte/size/type facts,
+all subject IDs and deterministic inventory digests. It is evidence only,
+not permission or quiescence/adoption authority. All11 bounded controls pass
+in `/tmp/freeholder-transfer82-witness-after.json`, with full types and
+focused lint. No SQL82 or journal entry exists; no provider/target/source
+operation was executed. This source foundation supplies no recovery closure.
