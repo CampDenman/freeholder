@@ -13501,6 +13501,14 @@ whatever is best for the people using the site.
   schema77 qualification, with seller-as-merchant routing/tax still required.
   No new collection model is enabled, and no part supplies stable or live
   payment sign-off. All remaining increments are required; none is deferred.
+  Final source integration on the corrected75/current-main683 base composes
+  the real76 predecessor and normal journal0–77 (78 entries). All six portion
+  controls plusSDK8 pass, both original member privacy controls pass, and the
+  two native FK inventories pass. Actual prior-runtime paid-order data also
+  upgrades normally74→75→76→77 with all nine financial table hashes unchanged,
+  version0 historical policies and no invented allocations. Evidence remains
+  `deploy/merchant-invoice-portions-2026-11-11.md`; full80 routing/tax/human
+  integration and actual acceptance remain required before this item closes.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query

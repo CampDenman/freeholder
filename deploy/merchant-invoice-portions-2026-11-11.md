@@ -2,9 +2,9 @@
 # One invoice, original merchant portions — C12.26/C12.38
 
 This is an unpublished source checkpoint, not stable or live acceptance.
-Migration 77 remains outside the journal until the real75/76 predecessors are
-composed. The local rehearsal applied the official 0–74 chain and the exact 77
-SQL in a fresh disposable database; it does not prove a contiguous 77 upgrade.
+Initial rehearsals applied official0–74 plus explicit77 SQL, before the real
+75/76 predecessors were composed. Final source integration now includes a
+normal contiguous journal0–77; its additional evidence is recorded below.
 
 New member-order invoices freeze each original seller/site portion in
 `invoice_merchant_allocations` and exact invoice-line ownership in
@@ -88,8 +88,22 @@ report: `/tmp/freeholder-allocation77-final-populated-upgrade.json`. This closes
 the exact-SQL preservation gap, while leaving the complete contiguous75/76/77
 upgrade requirement open.
 
-Remaining work includes the complete contiguous populated upgrade,
-seller-as-merchant tax integration,
+Final integration starts on the corrected media75 candidate based on actual
+main `eea40ee2`, replays only the qualified carrier76 changes, then the original
+77 allocation changes. The sole private-service inventory conflict preserves
+both media phases and the catalog's original-line-owner phase. Normal journal
+0–77 applies all78 entries to a fresh disposable database. All six allocation
+controls and all eight SDK controls pass together (14/14,53.64s); both original
+member privacy/export controls pass (2/2,25.18s), and both native contact-FK
+retention/search inventories pass (2/2,29.61s).
+
+The actual unchanged prior-runtime paid-order database is also cloned and
+upgraded normally from74 through75/76/77. All nine financial table counts and
+canonical row hashes match; the original policy remains version0 and no old
+merchant portion is invented. Report:
+`/tmp/freeholder-invoice-release-populated-upgrade.json`.
+
+Remaining work includes seller-as-merchant tax integration,
 concurrent capture, final merged-chain SDK/browser/full-suite qualification,
 original-account direct/destination portions, payment/refund/dispute recovery,
 human flows and actual provider acceptance. Original recorded provider money
