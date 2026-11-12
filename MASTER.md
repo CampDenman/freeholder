@@ -13530,6 +13530,16 @@ whatever is best for the people using the site.
   account. Split from C12.26 on 2026-10-15. This follows Stripe's current
   [charge types](https://docs.stripe.com/connect/charges) and
   [refund/dispute documentation](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
+  Seller refund merge source increment 2026-11-12: the existing parsed tax
+  profile fingerprint now includes bounded original payment/cash ownership
+  and all fifteen immutable refund child families. Selection follows exact
+  original allocation, booking and agreement routes, including unapplied
+  subscription cash; another seller's payment on the same invoice is not
+  adopted. Overflow blocks undo. Full Node22 types/focused lint pass; the
+  actual mixed-invoice fixture is prepared but unrun pending fresh refund
+  schema assembly and the companion subscription-profile index. Historical
+  artifacts are unchanged and may conservatively refuse unprovable undo.
+  See `deploy/merchant-tax-refund-merge-source-2026-11-12.md`.
   Original refund source increment 2026-11-12: the optional Stripe adapter
   freezes the exact refund body, preserves a physical resource ACK before
   money parsing, and accepts an actual subscription cash receipt without

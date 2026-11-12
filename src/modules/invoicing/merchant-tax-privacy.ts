@@ -11,6 +11,12 @@ import {defineService,getService,ServiceError,type ServiceContext,type Tx} from 
 import {merchantTaxProfiles,merchantTaxProfileVersions} from "./merchant-tax-schema";
 import {taxRegistrations} from "./schema";
 import {allowMerchantTaxWrites,merchantTaxDigest} from "./merchant-tax-store";
+import {invoiceMerchantTaxQuotes} from "./merchant-tax-schema";
+import {invoiceMerchantCollections,merchantPaymentRoutes} from "./merchant-collection-schema";
+import {invoiceMerchantScopes,merchantInvoicePaymentRoutes} from "./merchant-invoice-scope-schema";
+import {merchantAgreementPaymentRoutes} from "./merchant-agreement-schema";
+import {subscriptionMerchantScopes,subscriptionProviderChargeReceipts} from "@/modules/subscriptions/schema";
+import {merchantRefundDependencyFingerprints} from "./merchant-refund-dependencies";
 
 const scope="commerce.merchantTax";
 export const MERCHANT_TAX_ERASURE_JOB="subscriptions.quiesceMerchantSchedules";
@@ -19,7 +25,36 @@ async function snapshot(tx:Tx,ids:string[]){
  const rows=await tx.select({id:merchantTaxProfiles.id,contactId:merchantTaxProfiles.contactId,
   material:sql<string>`jsonb_build_object('profile',to_jsonb(${merchantTaxProfiles}),'versions',(select encode(sha256(convert_to(coalesce(jsonb_agg(to_jsonb(v) order by v.version),'[]'::jsonb)::text,'UTF8')),'hex') from merchant_tax_profile_versions v where v.profile_id=${merchantTaxProfiles.id}),'registrations',(select encode(sha256(convert_to(coalesce(jsonb_agg(to_jsonb(r) order by r.id),'[]'::jsonb)::text,'UTF8')),'hex') from tax_registrations r where r.merchant_profile_id=${merchantTaxProfiles.id}),'exemptions',(select encode(sha256(convert_to(coalesce(jsonb_agg((to_jsonb(e)-'contact_id')||jsonb_build_object('contact_id',case when e.contact_id in (${sql.join(ids.map(id=>sql`${id}::uuid`),sql`,`)}) then 'merged-subject' else e.contact_id::text end) order by e.id),'[]'::jsonb)::text,'UTF8')),'hex') from tax_exemptions e where e.merchant_profile_id=${merchantTaxProfiles.id}))::text`,
  }).from(merchantTaxProfiles).where(inArray(merchantTaxProfiles.contactId,ids)).orderBy(merchantTaxProfiles.id).limit(5001);
- return rows.length>5000?null:rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest(material)}));
+ if(rows.length>5000)return null;
+ if(!rows.length)return[];
+ const profileIds=rows.map(row=>row.id);
+ // Anchor each charge to the original profile's allocation/single-source
+ // route. Selecting every payment on a mixed invoice would attach another
+ // seller's refund history to this subject.
+ const allocationPayments=await tx.select({id:merchantPaymentRoutes.paymentId}).from(invoiceMerchantTaxQuotes)
+  .innerJoin(invoiceMerchantCollections,and(eq(invoiceMerchantCollections.invoiceId,invoiceMerchantTaxQuotes.invoiceId),sql`${invoiceMerchantCollections.taxPolicy}->>'profileId'=${invoiceMerchantTaxQuotes.profileId}::text`))
+  .innerJoin(merchantPaymentRoutes,eq(merchantPaymentRoutes.allocationId,invoiceMerchantCollections.allocationId))
+  .where(inArray(invoiceMerchantTaxQuotes.profileId,profileIds)).limit(5001);
+ const bookingPayments=await tx.select({id:merchantInvoicePaymentRoutes.paymentId}).from(invoiceMerchantTaxQuotes)
+  .innerJoin(invoiceMerchantScopes,and(eq(invoiceMerchantScopes.invoiceId,invoiceMerchantTaxQuotes.invoiceId),sql`${invoiceMerchantScopes.taxPolicy}->>'profileId'=${invoiceMerchantTaxQuotes.profileId}::text`))
+  .innerJoin(merchantInvoicePaymentRoutes,eq(merchantInvoicePaymentRoutes.invoiceId,invoiceMerchantScopes.invoiceId))
+  .where(inArray(invoiceMerchantTaxQuotes.profileId,profileIds)).limit(5001);
+ const agreementPayments=await tx.select({id:merchantAgreementPaymentRoutes.paymentId}).from(subscriptionMerchantScopes)
+  .innerJoin(merchantAgreementPaymentRoutes,eq(merchantAgreementPaymentRoutes.subscriptionId,subscriptionMerchantScopes.subscriptionId))
+  .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).limit(5001);
+ // Unapplied authenticated subscription cash can have no local payment.
+ const originalReceipts=await tx.select({id:subscriptionProviderChargeReceipts.id}).from(subscriptionMerchantScopes)
+  .innerJoin(subscriptionProviderChargeReceipts,eq(subscriptionProviderChargeReceipts.subscriptionId,subscriptionMerchantScopes.subscriptionId))
+  .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).limit(5001);
+ if([allocationPayments,bookingPayments,agreementPayments,originalReceipts].some(found=>found.length>5000))return null;
+ const paymentIds=[...new Set([...allocationPayments,...bookingPayments,...agreementPayments].map(row=>row.id))].sort();
+ const subscriptionChargeReceiptIds=[...new Set(originalReceipts.map(row=>row.id))].sort();
+ if(paymentIds.length+subscriptionChargeReceiptIds.length>5000)return null;
+ const children=await merchantRefundDependencyFingerprints(tx,{paymentIds,subscriptionChargeReceiptIds});
+ if(children.incomplete)return null;
+ // The immutable child set belongs to this entire merge pair. Folding it
+ // inside the existing fingerprint keeps its retained JSON shape unchanged.
+ return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
 }
 registerContactReference({
  table:"merchant_tax_profiles",
