@@ -311,6 +311,18 @@ export type MerchantPaymentRecovery =
   | { state: "pending" | "paid"; checkoutRef: string; evidence: CheckoutCaptureResult }
   | { state: "not_paid"; checkoutRef: string; paymentRef?: string; sessionStatus: "expired" | "complete"; intentStatus: string | null; amountReceivedMinor: 0 };
 
+export interface MerchantIntentRecoveryRequest extends MerchantChargeScope {
+  providerPlatformAccountId: string; paymentAttemptId: string; invoiceId: string; contactId: string;
+  amountMinor: number; currency: string; createdAt: string; idempotencyKey: string; paymentRef?: string;
+  onPaymentObserved?: (evidence: CheckoutCaptureResult) => Promise<void>;
+  onRetirementAcknowledged?: (fact: { paymentRef: string; kind: "intent_canceled" }) => Promise<void>;
+}
+export type MerchantIntentRecovery =
+  | { state: "unresolved" }
+  | { state: "ambiguous"; paymentRefs: readonly string[] }
+  | { state: "pending" | "paid"; paymentRef: string; evidence: CheckoutCaptureResult }
+  | { state: "not_paid"; paymentRef: string; intentStatus: "canceled"; amountReceivedMinor: 0 };
+
 export type PaymentProviderEvent = MerchantChargeScope & (
   | {
       id: string;
@@ -407,6 +419,8 @@ export interface PaymentAdapter {
   inspectMerchantPayment?(request: MerchantPaymentInspectionRequest): Promise<CheckoutCaptureResult>;
   /** Expires only the authenticated original session; never a new charge or a manual absence claim. */
   retireMerchantPayment?(request: MerchantPaymentRecoveryRequest): Promise<MerchantPaymentRecovery>;
+  recoverMerchantIntent?(request: MerchantIntentRecoveryRequest): Promise<MerchantIntentRecovery>;
+  retireMerchantIntent?(request: MerchantIntentRecoveryRequest): Promise<MerchantIntentRecovery>;
   supportedCurrencies(): Promise<readonly string[]>;
   supportedMethods(context: {
     country: string;
