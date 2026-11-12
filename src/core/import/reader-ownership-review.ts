@@ -25,9 +25,9 @@ async function humanOwner(ctx: ServiceContext, fresh: boolean, operation = fresh
 }
 const originalReaders = (id: string) => sql`
   with sources as materialized (
-    select preview,checkpoint from import_runs where id=${id}::uuid
+    select id,preview,checkpoint from import_runs where id=${id}::uuid
     union all
-    select source.preview,source.checkpoint from import_source_graphs graph
+    select source.id,source.preview,source.checkpoint from import_source_graphs graph
       join import_source_batches batch on batch.graph_id=graph.id
       join import_runs source on source.id=batch.child_run_id where graph.run_id=${id}::uuid
   )
@@ -38,6 +38,10 @@ const originalReaders = (id: string) => sql`
   select post->>'key' as post_id,reader from sources source
     cross join lateral jsonb_array_elements(case when jsonb_typeof(source.checkpoint->'pendingBlogPosts')='array' then source.checkpoint->'pendingBlogPosts' else '[]'::jsonb end) post
     cross join lateral jsonb_array_elements(case when jsonb_typeof(post->'comments')='array' then post->'comments' else '[]'::jsonb end) reader
+  union all
+  select split_part(comment.external_id,':',1),jsonb_build_object('id',split_part(comment.external_id,':',2),'name',comment.author_name,'email',null,'body',comment.body,'contactId',comment.contact_id)
+    from sources source join blog_reader_comments comment on comment.source='import:'||source.id::text
+    where comment.external_id ~ '^[1-9][0-9]{0,127}:[1-9][0-9]{0,127}$'
   `;
 
 const reviewRow = z.object({ receiptId: z.uuid().nullable(), postId: originalId, commentId: originalId, name: z.string().max(200), email: z.string().max(320).nullable(), excerpt: z.string().max(500) });

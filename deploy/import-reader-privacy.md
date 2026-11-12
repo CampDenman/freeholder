@@ -307,3 +307,23 @@ remaining legacy ownership defect, independent of the newly staged-source repair
 The reproducible runner variant is `--committed-private`. Its before source and
 fictional local evidence are preserved; no historical owner was inferred from
 this mailbox proof. Current browser and stable acceptance remain open.
+
+
+The committed legacy after control now passes: the unchanged prior runtime
+created the real old comment in 12.86 seconds, normal 0–78 migration preserved
+all original table hashes, and the current-runtime control passed in 3.53
+seconds. An old contact pointer or canonical current-mailbox login no longer
+authorizes disclosure of an imported original; its exact source-coordinate
+receipt does. Fresh owner review reads the retained original comment by its
+actual import source and numeric post/comment identity even when the cached
+source copy was already stripped. The owner explicitly creates and chooses the
+original person. Its contact pointer is then projected into that same original;
+comment ID, body, moderation state, author name, original creation date, source
+and source executor remain intact. The verified original person's export
+contains its body, while the current mailbox holder's later export omits it and
+cannot download the original person's artifact. Active or acknowledged erasure
+refuses reassignment rather than moving held private evidence. The idempotent
+comment import path also requires its original ownership receipt before
+returning an existing original. No migration SQL or original store identity
+changed. Current whole-source and production-browser qualification is still
+pending; this local proof does not close C2.29/C3.46 or security acceptance.
