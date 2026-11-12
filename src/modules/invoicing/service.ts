@@ -19,6 +19,7 @@ import originalSubscriptionScopeServices from "@/modules/subscriptions/provider-
 import merchantTaxQuiescenceServices from "@/modules/subscriptions/merchant-tax-quiescence";
 import merchantFeeServices from "./merchant-fee-service";
 import {siteMerchantTaxServices} from "./merchant-tax-profiles";
+import {siteMerchantTaxThresholds} from "./merchant-tax-thresholds";
 import merchantSettlementServices from "./merchant-settlement";
 import advancedMoneyServices from "./advanced-money-service";
 import paymentProviderServices from "./payment-provider-service";
@@ -58,6 +59,7 @@ export default [
   ...originalSubscriptionScopeServices,
   ...merchantTaxQuiescenceServices,
   ...siteMerchantTaxServices,
+  siteMerchantTaxThresholds,
   ...merchantSettlementServices,
   ...demoServices,
   ...recurringServices,

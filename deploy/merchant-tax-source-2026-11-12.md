@@ -127,3 +127,16 @@ receipts; those declarations use their separate original-business reports.
 The same boundary control remains unchanged for after qualification. This is
 an unreleased80 integration failure, not evidence of an unchanged production
 breach. Before report: /tmp/freeholder-tax80-legacy-threshold-before.json.
+
+Per-business threshold source now reads original quote/line/freight ownership,
+never the complete mixed invoice. Authenticated members can read only their
+own profile; the scoped site query reads the explicit site profile. Reports
+keep currencies separate, exclude drafts/voids, and support UTC calendar or
+rolling windows with exact integer alert boundaries. Owner/member editors
+show the same shared-query totals and alerts in all four locales; the existing
+site-only report links to the separate business report. Full types, focused
+lint and42 source controls pass (one live-registry control explicitly skipped
+without a database). Two new original-business/currency native controls and
+the unchanged legacy ownership after-control await the new assembled80 SQL;
+SDK and browser acceptance also remain open. Customer exemption request and
+merchant approval workflows are still required.

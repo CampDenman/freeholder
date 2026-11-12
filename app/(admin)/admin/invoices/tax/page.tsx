@@ -299,6 +299,7 @@ export default async function TaxStudioPage({
       <Card>
         <CardHeader title={t("tax.thresholds")} />
         <CardBody>
+          <p className="mb-3 text-sm text-ink-muted">{t("tax.thresholds.siteOnlyHint")} <a className="underline" href="/admin/invoices/tax/business">{t("merchantTax.siteTitle")}</a></p>
           {thresholds.thresholds.length === 0 ? (
             <p className="text-sm text-ink-muted">{t("tax.thresholds.empty")}</p>
           ) : (

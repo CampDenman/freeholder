@@ -8975,5 +8975,13 @@
   "merchantTax.scheme.oss": "OSS",
   "merchantTax.nonCollectionReason": "Motif de non-perception",
   "merchantPayments.paymentReference": "Référence PaymentIntent d’origine",
-  "merchantPayments.retireIntent": "Annuler le paiement par carte d’origine non encaissé"
+  "merchantPayments.retireIntent": "Annuler le paiement par carte d’origine non encaissé",
+  "merchantTax.window.rolling_12_months": "Derniers 12 mois",
+  "merchantTax.window.calendar_year": "Année civile",
+  "merchantTax.reportWindow": "Période du rapport",
+  "merchantTax.showTotals": "Afficher les totaux",
+  "merchantTax.thresholdHint": "Ventes brutes facturées pour cette entreprise uniquement. Les remboursements ne réduisent pas ces totaux. Chaque devise est présentée séparément.",
+  "merchantTax.grossSales": "Ventes brutes facturées",
+  "merchantTax.thresholdAttention": "Vérifiez vos seuils de collecte déclarés.",
+  "tax.thresholds.siteOnlyHint": "Ce rapport couvre la configuration fiscale existante du site. Les déclarations fiscales des entreprises disposent de rapports distincts sur leur part des ventes."
 }

@@ -13631,6 +13631,11 @@ whatever is best for the people using the site.
   unpublished increment adds original selected-zone provenance for threshold
   reporting, with types/lint only; it has not been applied to that candidate.
   Per-business threshold and customer-exemption workflows remain unfinished.
+  Threshold report/query/editor source is now present for the original
+  business portions, with separate currencies and UTC reporting windows.
+  Types/lint and42 source controls pass; one live-registry check is skipped
+  without a database. Native after/new-report, SDK and browser proof remain
+  required, as do customer exemption requests and merchant approval.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query

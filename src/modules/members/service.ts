@@ -38,6 +38,7 @@ import bookingMerchantServices from "./booking-merchant";
 import bookingMerchantQuoteServices from "./booking-merchant-quote";
 import merchantServices from "./market-merchant";
 import {memberMerchantTaxServices} from "@/modules/invoicing/merchant-tax-profiles";
+import {myMerchantTaxThresholds} from "@/modules/invoicing/merchant-tax-thresholds";
 import protectionServices from "./protection";
 import reputationServices from "./reputation";
 import reportServices from "./reports";
@@ -469,6 +470,7 @@ export default [
   ...bookingMerchantQuoteServices,
   ...orderCommercialServices,
   ...memberMerchantTaxServices,
+  myMerchantTaxThresholds,
   ...graphServices,
   ...postServices,
   ...messageServices,

@@ -16,6 +16,7 @@ import {joinSite} from "@/modules/members/service";
 import {myMerchantTaxProfile,saveMyMerchantTaxProfile,merchantTaxZoneConfiguration} from "@/modules/invoicing/merchant-tax-profiles";
 import {previewMerchantTax} from "@/modules/invoicing/merchant-tax-preview";
 import {getInvoiceMerchantTaxReceipt} from "@/modules/invoicing/merchant-tax";
+import {myMerchantTaxThresholds,siteMerchantTaxThresholds} from "@/modules/invoicing/merchant-tax-thresholds";
 import {registerMerchantTaxSourceResolver,type merchantTaxSourceParty} from "@/modules/invoicing/merchant-tax-invoice";
 import {createDraftInvoice,issueInvoice} from "@/modules/invoicing/invoice-service";
 import {addTaxRate,createTaxZone,listTaxThresholds,setTaxRegistration} from "@/modules/invoicing/tax-service";
@@ -33,6 +34,7 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
  let zoneId:string,gstId:string,pstId:string,buyerId:string,sellerContact:string;
  let sourceParties:z.infer<typeof merchantTaxSourceParty>[]=[];
  const sourceId=randomUUID();
+ let sourceCurrency="CAD";
  beforeAll(async()=>{
   await ready();
   // Explicit synthetic trusted-source fixture. No handler context or actor is
@@ -42,12 +44,12 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
   registerMerchantTaxSourceResolver("manual",async input=>{
    expect(input.sourceId).toBe(sourceId);
    expect(input.contactId).toBe(buyerId);
-   expect(input.currency).toBe("CAD");
+   expect(input.currency).toBe(sourceCurrency);
    return sourceParties;
   });
  },60000);
  beforeEach(async()=>{
-  await truncateSpine();sourceParties=[];
+  await truncateSpine();sourceParties=[];sourceCurrency="CAD";
   await db().insert(users).values([{id:OWNER.userId,email:"tax-owner@example.test",role:"owner"},{id:SELLER.userId,email:"tax-first@example.test",role:"customer"},{id:OTHER.userId,email:"tax-second@example.test",role:"customer"}]);
   await updateBusiness.call({name:"Synthetic tax service proof",country:"CA",baseCurrency:"CAD",timezone:"UTC"},OWNER);
   for(const [actor,handle] of [[SELLER,"tax_first"],[OTHER,"tax_second"]] as const)await joinSite.call({handle,displayName:handle,meetsMinimumAge:true,isAdult:true},actor);
@@ -60,18 +62,18 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
  });
  afterAll(closeDb);
 
- async function declare(actor=SELLER,gst=true){
+ async function declare(actor=SELLER,gst=true,thresholdMinor=0){
   const zone=await merchantTaxZoneConfiguration.call({zoneId},actor);
   return saveMyMerchantTaxProfile.call({expectedVersion:0,idempotencyKey:randomUUID(),acceptPolicy:true,liability:"seller",origin:destination,collectionStatus:"registered",registrations:[
-   {zoneId,number:gst?"FIRST-GST":"SECOND-GST",rateIds:[gstId],configurationDigest:zone.configurationDigest,status:gst?"active":"monitoring"},
-   {zoneId,number:gst?"FIRST-PST":"SECOND-PST",rateIds:[pstId],configurationDigest:zone.configurationDigest,status:gst?"monitoring":"active"},
+   {zoneId,number:gst?"FIRST-GST":"SECOND-GST",rateIds:[gstId],configurationDigest:zone.configurationDigest,status:gst?"active":"monitoring",...(thresholdMinor?{thresholdMinor,thresholdCurrency:"CAD"}:{})},
+   {zoneId,number:gst?"FIRST-PST":"SECOND-PST",rateIds:[pstId],configurationDigest:zone.configurationDigest,status:gst?"monitoring":"active",...(thresholdMinor?{thresholdMinor,thresholdCurrency:"CAD"}:{})},
   ]},actor);
  }
  async function quote(profile:Awaited<ReturnType<typeof declare>>,contactId:string|null=buyerId){
   return previewMerchantTax.call({profileId:profile.profileId,profileVersion:profile.profileVersion,contactId,destination,currency:"CAD",items,shippingMinor:101,occurredAt},SYSTEM);
  }
  async function draft(){
-  return createDraftInvoice.call({contactId:buyerId,currency:"CAD",sourceType:"manual",sourceId,idempotencyKey:randomUUID(),shippingMinor:101,
+  return createDraftInvoice.call({contactId:buyerId,currency:sourceCurrency,sourceType:"manual",sourceId,idempotencyKey:randomUUID(),shippingMinor:101,
    lines:[{description:"Original taxable item",quantityMicros:1000000,unitAmountMinor:1000,taxCategoryCode:"standard",requiresShipping:true}],tax:{mode:"merchant",destination}},OWNER);
  }
  async function request(kind:"export"|"erasure"){
@@ -178,5 +180,33 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
   const created=await draft();await issueInvoice.call({id:created.invoice.id},OWNER);
   const report=await listTaxThresholds.call({asOf:new Date(),window:"calendar_year"},OWNER);
   expect(report.thresholds.find(row=>row.registration.id===registration.id)).toMatchObject({grossSalesMinor:0,transactions:0,state:"below"});
+ });
+ it("reports only the owner's issued gross portions, excluding drafts and another business's sales",async()=>{
+  const first=await declare(SELLER,true,1000);await declare(OTHER,false,1000);
+  sourceParties=[{sellerUserId:SELLER.userId,profileId:first.profileId,profileVersion:1,linePositions:[0],shippingMinor:101,occurredAt}];
+  const created=await draft();
+  const pending=await myMerchantTaxThresholds.call({},SELLER);
+  expect(pending.thresholds).toHaveLength(2);expect(pending.thresholds.every(row=>row.grossSalesMinor===0&&row.transactions===0)).toBe(true);
+  await issueInvoice.call({id:created.invoice.id},OWNER);
+  const own=await myMerchantTaxThresholds.call({},SELLER),other=await myMerchantTaxThresholds.call({},OTHER);
+  expect(own.thresholds.every(row=>row.zone.id===zoneId&&row.grossSalesMinor===1156&&row.transactions===1&&row.state==="reached"&&row.remainingMinor===0)).toBe(true);
+  expect(own.thresholds[0]!.totalsByCurrency).toEqual([{currency:"CAD",grossSalesMinor:1156,transactions:1}]);
+  expect(other.thresholds).toHaveLength(2);
+  expect(other.thresholds.every(row=>row.grossSalesMinor===0&&row.transactions===0&&row.state==="below")).toBe(true);
+  expect((await siteMerchantTaxThresholds.call({},OWNER)).thresholds).toEqual([]);
+  expect(await failure(myMerchantTaxThresholds.call({},ANONYMOUS))).toMatchObject({code:"permission"});
+ });
+ it("keeps another invoice currency out of the explicitly declared threshold amount",async()=>{
+  const first=await declare(SELLER,true,1000);
+  sourceParties=[{sellerUserId:SELLER.userId,profileId:first.profileId,profileVersion:1,linePositions:[0],shippingMinor:101,occurredAt}];
+  // A distinct trusted original manual source in this test is denominated in
+  // USD. Its taxes are still frozen in exact USD cents; the CAD threshold is
+  // never reached by converting or adding those cents to CAD.
+  sourceCurrency="USD";
+  const created=await draft();
+  await issueInvoice.call({id:created.invoice.id},OWNER);
+  const own=await myMerchantTaxThresholds.call({},SELLER);
+  expect(own.thresholds.every(row=>row.grossSalesMinor===0&&row.transactions===0&&row.state==="below")).toBe(true);
+  expect(own.thresholds[0]!.totalsByCurrency).toEqual([{currency:"USD",grossSalesMinor:1156,transactions:1}]);
  });
 });

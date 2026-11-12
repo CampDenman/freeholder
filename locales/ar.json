@@ -8975,5 +8975,13 @@
   "merchantTax.scheme.oss": "OSS",
   "merchantTax.nonCollectionReason": "سبب عدم التحصيل",
   "merchantPayments.paymentReference": "مرجع PaymentIntent الأصلي",
-  "merchantPayments.retireIntent": "إلغاء دفعة البطاقة الأصلية غير المحصلة"
+  "merchantPayments.retireIntent": "إلغاء دفعة البطاقة الأصلية غير المحصلة",
+  "merchantTax.window.rolling_12_months": "آخر 12 شهرًا",
+  "merchantTax.window.calendar_year": "السنة التقويمية",
+  "merchantTax.reportWindow": "فترة التقرير",
+  "merchantTax.showTotals": "عرض الإجماليات",
+  "merchantTax.thresholdHint": "إجمالي المبيعات المفوترة لهذا النشاط فقط. لا تُخصم المبالغ المستردة من هذه الإجماليات. تُعرض كل عملة على حدة.",
+  "merchantTax.grossSales": "إجمالي المبيعات المفوترة",
+  "merchantTax.thresholdAttention": "راجع حدود التحصيل التي صرّحت بها.",
+  "tax.thresholds.siteOnlyHint": "يغطي هذا التقرير الإعدادات الضريبية الحالية للموقع. لإقرارات الأنشطة الضريبية تقارير منفصلة عن حصصها من المبيعات."
 }

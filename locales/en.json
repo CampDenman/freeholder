@@ -8975,5 +8975,13 @@
   "merchantTax.scheme.oss": "OSS",
   "merchantTax.nonCollectionReason": "Reason for not collecting",
   "merchantPayments.paymentReference": "Original PaymentIntent reference",
-  "merchantPayments.retireIntent": "Cancel original unpaid card payment"
+  "merchantPayments.retireIntent": "Cancel original unpaid card payment",
+  "merchantTax.window.rolling_12_months": "Last 12 months",
+  "merchantTax.window.calendar_year": "Calendar year",
+  "merchantTax.reportWindow": "Report window",
+  "merchantTax.showTotals": "Show totals",
+  "merchantTax.thresholdHint": "Gross issued sales for this business only. Refunds do not reduce these totals. Currencies are reported separately.",
+  "merchantTax.grossSales": "Gross issued sales",
+  "merchantTax.thresholdAttention": "Review your declared collection thresholds.",
+  "tax.thresholds.siteOnlyHint": "This report covers the site's existing tax configuration. Business tax declarations have separate portion reports."
 }

@@ -8975,5 +8975,13 @@
   "merchantTax.scheme.oss": "OSS",
   "merchantTax.nonCollectionReason": "Motivo para no recaudar",
   "merchantPayments.paymentReference": "Referencia original de PaymentIntent",
-  "merchantPayments.retireIntent": "Cancelar el pago original con tarjeta sin cobrar"
+  "merchantPayments.retireIntent": "Cancelar el pago original con tarjeta sin cobrar",
+  "merchantTax.window.rolling_12_months": "Últimos 12 meses",
+  "merchantTax.window.calendar_year": "Año natural",
+  "merchantTax.reportWindow": "Período del informe",
+  "merchantTax.showTotals": "Mostrar totales",
+  "merchantTax.thresholdHint": "Ventas brutas facturadas solo por este negocio. Los reembolsos no reducen estos totales. Cada moneda se muestra por separado.",
+  "merchantTax.grossSales": "Ventas brutas facturadas",
+  "merchantTax.thresholdAttention": "Revise sus umbrales de recaudación declarados.",
+  "tax.thresholds.siteOnlyHint": "Este informe cubre la configuración fiscal existente del sitio. Las declaraciones fiscales de los negocios tienen informes separados de sus partes de las ventas."
 }

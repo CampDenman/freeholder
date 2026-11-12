@@ -32,7 +32,7 @@ const profileView=z.object({
   merchantName:z.string().nullable(),merchantSupport:publicMerchantSupport.nullable(),rulesSnapshot:z.array(merchantTaxRuleSnapshot)}).nullable(),
 });
 
-async function memberOwner(ctx:ServiceContext){
+export async function memberOwner(ctx:ServiceContext){
  if(ctx.actor.kind!=="user")throw new ServiceError("permission","Sign in as the member whose tax business this is.");
  const userId=ctx.actor.userId;
  await lockContactIdentityForRead(ctx.tx);
