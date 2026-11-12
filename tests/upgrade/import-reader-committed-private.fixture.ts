@@ -12,7 +12,7 @@ import { customerMagicLinks } from "@/core/contacts/schema";
 import { consumeCustomerMagicLink } from "@/core/auth/magic-links/service";
 import { hashCustomerMagicLinkToken } from "@/core/auth/two-factor-crypto";
 import { actorFromToken } from "@/core/http/actor";
-import { addRetentionException, createDataRequest, verifyDataRequest, createMyDataRequest, fulfillDataRequest, downloadMyDataRequestArtifact } from "@/core/privacy/service";
+import { addRetentionException, removeRetentionException, createDataRequest, verifyDataRequest, createMyDataRequest, fulfillDataRequest, downloadMyDataRequestArtifact } from "@/core/privacy/service";
 import { importRuns } from "@/core/plugins/schema";
 import { readerOwnershipReview, resolveReaderOwnership } from "@/core/import/reader-ownership-review";
 import { readerOwnershipReceipts } from "@/core/import/reader-ownership-schema";
@@ -42,10 +42,14 @@ it("does not disclose actual pre78 private imported history through only current
   const original = await createContact.call({ name: "Actual original reader chosen by the owner" }, owner);
   if (process.env.FREEHOLDER_READER_UPGRADE_HOLD_BEFORE_REVIEW === "1") {
     const erasure = await createDataRequest.call({ contactId: fixture.originalId, request: { kind: "erasure" } }, owner);
-    await addRetentionException.call({ dataRequestId: erasure.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Fictional original committed reader evidence held before verification" }, owner);
+    const hold = await addRetentionException.call({ dataRequestId: erasure.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Fictional original committed reader evidence held before verification" }, owner);
     await expect(resolveReaderOwnership.call({ id: fixture.id, receiptId: row.receiptId, postId: row.postId, commentId: row.commentId, contactId: original.id, confirmation: "ASSIGN ORIGINAL READER" }, owner)).rejects.toMatchObject({ code: "conflict" });
     expect(await db().select().from(readerOwnershipReceipts)).toHaveLength(0);
     expect((await db().select().from(blogReaderComments))[0]).toEqual(before);
+    await removeRetentionException.call({ id: hold.id }, owner);
+    await resolveReaderOwnership.call({ id: fixture.id, receiptId: row.receiptId, postId: row.postId, commentId: row.commentId, contactId: original.id, confirmation: "ASSIGN ORIGINAL READER" }, owner);
+    expect((await db().select().from(blogReaderComments))[0]).toMatchObject({ id: before!.id, source: before!.source, externalId: before!.externalId, body: before!.body, status: before!.status, authorName: before!.authorName, createdAt: before!.createdAt, contactId: original.id });
+    expect((await db().select().from(importRuns).where(eq(importRuns.id, fixture.id)))[0]?.createdBy).toBe(fixture.createdBy);
     return;
   }
   await resolveReaderOwnership.call({ id: fixture.id, receiptId: row.receiptId, postId: row.postId, commentId: row.commentId, contactId: original.id, confirmation: "ASSIGN ORIGINAL READER" }, owner);
