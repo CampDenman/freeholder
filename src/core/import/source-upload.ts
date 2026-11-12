@@ -556,9 +556,9 @@ const releaseErasedUpload = defineService({
 });
 
 /**
- * Read the stored chunks in order. A WXR export streams through the item
- * reader; the other sources are small by nature and are read whole, within
- * the importer's byte limit.
+ * Read the stored chunks in order. WordPress sources use bounded XML/JSON
+ * record readers; archives retain their verified range manifest. Other
+ * textual sources stay within the ordinary inline import byte limit.
  */
 async function stageStoredSource(
   state: { kind: string; origin: string; keys: string[]; source: RetainedImportSource; approvedMediaOrigins: string[] },
