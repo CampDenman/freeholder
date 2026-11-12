@@ -327,3 +327,16 @@ comment import path also requires its original ownership receipt before
 returning an existing original. No migration SQL or original store identity
 changed. Current whole-source and production-browser qualification is still
 pending; this local proof does not close C2.29/C3.46 or security acceptance.
+
+
+The current combined reader/mailbox qualification passed all 28 cases in 209.21
+seconds on the normal 0–78 database, with no filters or changed test deadlines.
+It includes explicit 1001-reader choices and exact merge undo, anonymous import
+without any CRM person, all held-source/retirement/rotation controls, atomic bulk
+rollback and actor denials, and the real current-mailbox self-export boundary.
+The distinct actual-prior-runtime committed-legacy proof above also passes.
+Full static gates passed types, lint, licensing, release-note, plan and playground
+checks plus 383 contract cases; the one generated CHANGELOG drift was regenerated
+and its three exact checks passed. Live SDK and contact-FK inventories must now
+be refreshed for the new bulk operation, followed by the current production
+artifact and four-locale owner browser. No stable or cutover acceptance is claimed.
