@@ -5927,9 +5927,14 @@ deployments are portable, testable and incapable of silently forking the truth.
   fences and fresh human recovery. Own package and production builds passed;
   artifact scrub passed 20,218 files /243,719,256 bytes. This is local fixture
   evidence on main72 plus explicitly applied, unjournaled76; full migration
-  ancestry, existing-mail qualification, browser checks and protected PR
-  remain outstanding. See `deploy/mail-carrier-recovery.md`. No live provider
-  acceptance or independent security sign-off is supplied.)*
+  ancestry and protected qualification remain outstanding. Adjacent native
+  qualification passed 64 cases; the added human services required live SDK
+  catalog regeneration, which passed 8/8. Four owner-browser journeys passed
+  in en/es/fr/ar at 320px in both themes, with keyboard, Axe, bounds, private
+  receipt omission and shared-service audit checks. Committed-source lint and
+  typecheck passed. See `deploy/mail-carrier-recovery.md` and the C3.31–C3.39
+  source/live evidence worksheet `deploy/provider-preview-acceptance.md`.
+  No live provider acceptance or independent security sign-off is supplied.)*
 - [ ] **C3.32** Add a measurement-provider category (`MEASUREMENT_PROVIDER`,
   default `none`) with Paradise Modern as its first adapter (§12, C1.18):
   the provider's scripts load, and the CSP opens its edge origin, only for a
