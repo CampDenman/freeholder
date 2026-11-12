@@ -341,6 +341,8 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     const readers = await db().select().from(contacts).where(eq(contacts.email, EMAIL));
     expect(readers).toHaveLength(1);
     expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([readers[0]!.id, readers[0]!.id]);
-    expect((await db().select().from(readerOwnershipReceipts)).every(receipt => receipt.state === "bound" && receipt.contactId === readers[0]!.id)).toBe(true);
+    const receipts = await db().select().from(readerOwnershipReceipts);
+    expect(receipts).toHaveLength(2);
+    expect(receipts.every(receipt => receipt.state === "bound" && receipt.contactId === readers[0]!.id)).toBe(true);
   });
 });
