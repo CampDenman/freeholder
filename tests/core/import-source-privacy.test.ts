@@ -18,6 +18,8 @@ import { createPage, ensureDefaults, publishPage } from "@/modules/cms/service";
 import { setPostMeta } from "@/modules/cms/blog-service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
+import { markReaderOwnershipWriter } from "@/core/import/reader-ownership-key";
+import { reviewOriginalImportedReader } from "../helpers/import-reader-review";
 
 const EMAIL = "cached-reader@example.test";
 const COMMENT = "Erase this reader comment and its cached copy.";
@@ -49,7 +51,17 @@ async function savedRun(id: string) { return (await db().select().from(importRun
 async function applyReaderUpgrade() {
   const migration = readFileSync("db/migrations/0069_import_reader_privacy.sql", "utf8");
   await db().transaction(async tx => {
+    await markReaderOwnershipWriter(tx);
     for (const statement of migration.split("--> statement-breakpoint")) await tx.execute(sql.raw(statement));
+  });
+}
+
+// Legacy-state fixtures use the current writer admission only for setup;
+// the separate old-writer refusal assertions below remain unmarked.
+async function writeLegacyRun(id: string, values: Partial<typeof importRuns.$inferInsert>) {
+  await db().transaction(async tx => {
+    await markReaderOwnershipWriter(tx);
+    await tx.update(importRuns).set(values).where(eq(importRuns.id, id));
   });
 }
 
@@ -58,6 +70,7 @@ async function replacement() {
   const page = await createPage.call({ slug: "erasure-source", title: "Existing article", blocks: [{ id: "heading", type: "heading", props: { text: "Existing article", level: 1 } }] }, OWNER);
   await setPostMeta.call({ pageId: page.id, isPost: true }, OWNER); await publishPage.call({ id: page.id, published: true }, OWNER);
   const run = await stage();
+  await reviewOriginalImportedReader({ id: run.id, postId: "10", commentId: "20", contactId: reader.contact.id });
   await reviewImportConflicts.call({ id: run.id, conflicts: [{ slug: "erasure-source", resolution: "replace" }] }, OWNER);
   await commitImport.call({ id: run.id }, OWNER);
   return { run, reader: reader.contact };
@@ -69,6 +82,8 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
 
   it("does not retain reader personal data in a completed import after acknowledged erasure", async () => {
     const run = await stage();
+    const originalReader = await resolveContact.call({ email: EMAIL }, OWNER);
+    await reviewOriginalImportedReader({ id: run.id, postId: "10", commentId: "20", contactId: originalReader.contact.id });
     await commitImport.call({ id: run.id }, OWNER); await reconcileImport.call({ id: run.id }, OWNER); await publishImport.call({ id: run.id }, OWNER);
     const [reader] = await db().select().from(contacts).where(eq(contacts.email, EMAIL));
     expect(reader).toBeDefined();
@@ -86,6 +101,8 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     await expect(getContact.call({ id: reader.contact.id }, actor)).rejects.toMatchObject({ code: "permission" });
     const preview = await previewFromSource.call({ id: run.id, payload: SOURCE }, actor);
     expect(JSON.stringify(preview)).not.toContain(reader.contact.id);
+    expect(JSON.stringify(preview)).not.toContain("readerOwnershipReviewRequired");
+    await reviewOriginalImportedReader({ id: run.id, postId: "10", commentId: "20", contactId: reader.contact.id });
     const listed = await listImports.call({}, { ...actor, scopes: ["imports.list"] });
     expect(JSON.stringify(listed)).not.toContain(reader.contact.id);
     expect(JSON.stringify(await savedRun(run.id))).toContain(reader.contact.id);
@@ -133,6 +150,9 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     const other = `<wp:comment><wp:comment_id>21</wp:comment_id><wp:comment_author>Other reader</wp:comment_author><wp:comment_author_email>other-reader@example.test</wp:comment_author_email><wp:comment_content>Unrelated comment remains.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>`;
     const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
     await previewFromSource.call({ id: run.id, payload: SOURCE.replace("</item>", `${other}</item>`) }, OWNER);
+    await reviewOriginalImportedReader({ id: run.id, postId: "10", commentId: "20", contactId: reader.contact.id });
+    const otherReader = await resolveContact.call({ email: "other-reader@example.test" }, OWNER);
+    await reviewOriginalImportedReader({ id: run.id, postId: "10", commentId: "21", contactId: otherReader.contact.id });
     const adapter = contactPrivacySources().find(source => source.scope === "imports.readerSources")!;
     const exported = await db().transaction(tx => adapter.exportData(tx, reader.contact.id));
     expect(JSON.stringify(exported)).toContain(COMMENT);
@@ -182,7 +202,7 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     const checkpoint = structuredClone(saved.checkpoint) as { readerPrivacyVersion?: number; pendingBlogPosts: Array<{ comments: Array<{ contactId?: string }> }> };
     delete checkpoint.readerPrivacyVersion;
     for (const post of checkpoint.pendingBlogPosts) for (const comment of post.comments) delete comment.contactId;
-    await db().update(importRuns).set({ checkpoint }).where(eq(importRuns.id, run.id));
+    await writeLegacyRun(run.id, { checkpoint });
     await updateContact.call({ id: reader.id, email: "updated-reader@example.test" }, OWNER);
     await erase(reader.id);
     expect(JSON.stringify(await savedRun(run.id))).not.toContain(COMMENT);
@@ -197,7 +217,7 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     await erase(reader.id);
     // Simulate a durable checkpoint written by an older installation, before
     // erasure knew about import caches; the erased address is no longer in CRM.
-    await db().update(importRuns).set({ checkpoint }).where(eq(importRuns.id, run.id));
+    await writeLegacyRun(run.id, { checkpoint });
     await reconcileImport.call({ id: run.id }, OWNER);
     await expect(publishImport.call({ id: run.id }, OWNER)).rejects.toThrow(/older import.*Roll it back/);
     expect(JSON.stringify((await savedRun(run.id)).checkpoint)).toContain(COMMENT);
@@ -274,7 +294,7 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     const checkpoint = structuredClone(original.checkpoint) as Record<string, unknown>;
     delete checkpoint.readerPrivacyVersion;
     await erase(reader.id);
-    await db().update(importRuns).set({ checkpoint }).where(eq(importRuns.id, run.id));
+    await writeLegacyRun(run.id, { checkpoint });
     await applyReaderUpgrade();
     const upgraded = await savedRun(run.id);
     expect(upgraded.checkpoint).toMatchObject({ readerPrivacyReviewRequired: true, pendingBlogPosts: [expect.objectContaining({ comments: [] })] });
@@ -299,7 +319,7 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
   it("prunes redundant legacy terminal caches without changing imported page or recovery metadata", async () => {
     const run = await stage();
     const original = await savedRun(run.id);
-    await db().update(importRuns).set({ status: "published", checkpoint: { pageIds: ["retained-page-pointer"], pendingBlogPosts: [{ comments: [{ body: COMMENT, email: EMAIL }] }], ownerReport: "Keep this report" } }).where(eq(importRuns.id, run.id));
+    await writeLegacyRun(run.id, { status: "published", checkpoint: { pageIds: ["retained-page-pointer"], pendingBlogPosts: [{ comments: [{ body: COMMENT, email: EMAIL }] }], ownerReport: "Keep this report" } });
     await applyReaderUpgrade();
     const upgraded = await savedRun(run.id);
     expect(upgraded.status).toBe("published");
@@ -314,7 +334,7 @@ describe.runIf(hasDatabase)("import source erasure boundaries", () => {
     const run = await stage();
     const original = await savedRun(run.id);
     const preview = structuredClone(original.preview) as Record<string, unknown>; delete preview.readerPrivacyVersion;
-    await db().update(importRuns).set({ preview }).where(eq(importRuns.id, run.id));
+    await writeLegacyRun(run.id, { preview });
     await applyReaderUpgrade();
     const upgraded = await savedRun(run.id);
     expect(JSON.stringify(upgraded)).toContain(COMMENT);

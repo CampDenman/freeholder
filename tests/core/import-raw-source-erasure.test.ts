@@ -24,10 +24,11 @@ import { previewFromSource } from "@/core/import/service";
 import { startImport } from "@/core/import/service";
 import { beginSourceUpload, uploadSourceChunk, previewFromUpload } from "@/core/import/source-upload";
 import { OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
+import { reviewOriginalImportedReader } from "../helpers/import-reader-review";
 import { confirmStoppedUnappliedDelete } from "../helpers/stopped-storage-delete";
 
 const EMAIL = "raw-erasure-reader@example.test";
-const bytes = new TextEncoder().encode(`<rss xmlns:wp="http://wordpress.org/export/1.2/"><channel><title>Fixture</title><item><title>Fixture page</title><wp:post_id>10</wp:post_id><wp:post_type>post</wp:post_type><wp:comment><wp:comment_id>20</wp:comment_id><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Private source copy.</wp:comment_content></wp:comment></item></channel></rss>`);
+const bytes = new TextEncoder().encode(`<rss xmlns:wp="http://wordpress.org/export/1.2/"><channel><title>Fixture</title><item><title>Fixture page</title><wp:post_id>10</wp:post_id><wp:post_type>post</wp:post_type><wp:comment><wp:comment_id>20</wp:comment_id><wp:comment_author>Private reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Private source copy.</wp:comment_content></wp:comment></item></channel></rss>`);
 let erasureGate: { entered: () => void; release: Promise<void> } | undefined;
 let commentGate: { entered: () => void; release: Promise<void> } | undefined;
 registerContactPrivacySource({ scope: "tests.rawSourceAfterCommentErase", tables: [], eraseOrder: 21,
@@ -195,7 +196,9 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
     const reader = await resolveContact.call({ email: EMAIL }, OWNER);
     const page = await createPage.call({ title: "Fixture", slug: "raw-audit-fixture" }, OWNER);
     const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
-    const comment = await importReaderComment.call({ runId: run.id, externalId: "20", pageId: page.id, name: "Private reader", email: EMAIL, body: "Private source copy.", status: "approved" }, OWNER);
+    await previewFromSource.call({ id: run.id, payload: new TextDecoder().decode(bytes) }, OWNER);
+    await reviewOriginalImportedReader({ id: run.id, postId: "10", commentId: "20", contactId: reader.contact.id });
+    const comment = await importReaderComment.call({ runId: run.id, externalId: "10:20", pageId: page.id, name: "Private reader", email: EMAIL, body: "Private source copy.", status: "approved" }, OWNER);
     await db().insert(auditLog).values({ actor: `user:${OWNER.userId}`, action: "cms.importReaderComment", subjectType: "blog_comment", subjectId: comment.id, diff: { runId: run.id, name: "Private reader", email: EMAIL, body: "Private source copy." } });
     const request = await createDataRequest.call({ contactId: reader.contact.id, request: { kind: "erasure" } }, OWNER);
     await verifyDataRequest.call({ id: request.id, method: "Synthetic comment audit verification" }, OWNER);
@@ -231,6 +234,7 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
     const reader = await resolveContact.call({ email: EMAIL }, OWNER);
     const page = await createPage.call({ title: "Fixture", slug: "comment-erasure-race" }, OWNER);
     const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
+    await previewFromSource.call({ id: run.id, payload: new TextDecoder().decode(bytes) }, OWNER);
     const request = await createDataRequest.call({ contactId: reader.contact.id, request: { kind: "erasure" } }, OWNER);
     await verifyDataRequest.call({ id: request.id, method: "Synthetic direct comment race" }, OWNER);
     let entered!: () => void, release!: () => void;
@@ -239,7 +243,7 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
     const erasing = fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER);
     try {
       await reached;
-      await expect(importReaderComment.call({ runId: run.id, externalId: "40", pageId: page.id, name: "Private reader", email: EMAIL, sourceContactId: reader.contact.id, body: "Private late source copy.", status: "approved" }, OWNER)).rejects.toThrow(/privacy|merge|erased/i);
+      await expect(importReaderComment.call({ runId: run.id, externalId: "10:20", pageId: page.id, name: "Private reader", email: EMAIL, sourceContactId: reader.contact.id, body: "Private source copy.", status: "approved" }, OWNER)).rejects.toThrow(/privacy|merge|erased/i);
     } finally { release(); await erasing; commentGate = undefined; }
   });
 

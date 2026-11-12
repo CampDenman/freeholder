@@ -98,7 +98,7 @@ const stageGraphBatch = defineService({
     if (!root || root.status !== "previewed" || !source || source.uploadId !== input.source.uploadId || source.revision !== input.source.revision || Date.parse(source.expiresAt) <= Date.now() || !graph || graph.state !== "indexed" || graph.runId !== root.id || graph.generation !== input.context.generation || graph.leaseToken !== input.context.leaseToken || graph.leaseActor !== actorString(ctx.actor) || !graph.leaseUntil || graph.leaseUntil.getTime() <= Date.now() || !child || child.status !== "discover" || object(child.checkpoint).sourceGraphBatch === undefined) throw new ServiceError("conflict", "The bounded preview lost its original source or lease.");
     if (graph.planDigest !== input.context.planDigest || JSON.stringify(contextSchema.parse(object(child.checkpoint).sourceGraphBatch)) !== JSON.stringify(input.context)) throw new ServiceError("conflict", "The bounded preview no longer matches its original frozen plan.");
     await assertReaderUploadWindow(ctx.tx, input.preview, graph.sourceStartedAt);
-    await ctx.tx.update(importRuns).set({ status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview), counts: input.counts }).where(eq(importRuns.id, child.id));
+    await ctx.tx.update(importRuns).set({ status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview, root, ctx.actor), counts: input.counts }).where(eq(importRuns.id, child.id));
     ctx.setSubject("import_run", root.id);
     return { ok: true as const };
   },

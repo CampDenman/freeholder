@@ -15,6 +15,10 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { actorString, defineService, ServiceError } from "@/core/service";
 import { makeTrashServices } from "@/core/trash";
+import { withoutHoldCascade } from "@/core/retention/holds";
+import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
+import { markReaderOwnershipWriter } from "@/core/import/reader-ownership-key";
+import { blogReaderComments } from "./blog-comments-schema";
 import { entityTranslations } from "@/core/i18n/schema";
 import {
   clipSnippet,
@@ -763,6 +767,8 @@ export const deleteDraftPage = defineService({
   input: z.object({ id: z.string().uuid() }),
   output: row({ id: uuid, slug: z.string() }),
   handler: async (input, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
+    await markReaderOwnershipWriter(ctx.tx);
     const [page] = await ctx.tx
       .select()
       .from(pages)
@@ -775,13 +781,16 @@ export const deleteDraftPage = defineService({
         "A published page must be taken offline before it can be removed.",
       );
     }
+    const [unheld] = await ctx.tx.select({ id: pages.id }).from(pages).where(and(eq(pages.id, page.id), withoutHoldCascade(blogReaderComments, blogReaderComments.pageId, sql`${pages.id}`, blogReaderComments.contactId, "cms.readerComments"))).limit(1);
+    if (!unheld) throw new ServiceError("conflict", "This page contains reader evidence under a retention hold. Take it offline and retain it privately.");
     await ctx.tx.delete(contentRevisions).where(
       and(
         eq(contentRevisions.subjectType, "page"),
         eq(contentRevisions.subjectId, page.id),
       ),
     );
-    await ctx.tx.delete(pages).where(eq(pages.id, page.id));
+    const [removed] = await ctx.tx.delete(pages).where(and(eq(pages.id, page.id), withoutHoldCascade(blogReaderComments, blogReaderComments.pageId, sql`${pages.id}`, blogReaderComments.contactId, "cms.readerComments"))).returning({ id: pages.id });
+    if (!removed) throw new ServiceError("conflict", "This page contains reader evidence under a retention hold. Take it offline and retain it privately.");
     ctx.setSubject("page", page.id);
     ctx.queueEvent("cms.pageDeleted", { pageId: page.id, slug: page.slug });
     return { id: page.id, slug: page.slug };
@@ -799,9 +808,9 @@ export const deleteDraftPage = defineService({
  * could not have taken it, and the restore check below refuses the
  * (normally unreachable) case where one somehow has.
  *
- * A page names no contact, so no contact-scoped retention hold can apply to
- * it and the purge carries no hold guard. Purge is the only hard delete:
- * the page plus every row that exists only for it — revisions, layouts,
+ * Reader comments can carry contact-scoped retention holds. A hold prevents
+ * cascading deletion of the page and every row that exists only for it:
+ * revisions, layouts,
  * preview links, presence, comments and translations.
  */
 const trash = makeTrashServices<typeof pages.$inferSelect>({
@@ -821,6 +830,8 @@ const trash = makeTrashServices<typeof pages.$inferSelect>({
   rowSchema: pageRow,
   subjectKind: "page",
   gone: "That page is not here.",
+  beforePurge: async tx => { await lockContactIdentityForRead(tx); await markReaderOwnershipWriter(tx); },
+  holdGuard: withoutHoldCascade(blogReaderComments, blogReaderComments.pageId, sql`${pages.id}`, blogReaderComments.contactId, "cms.readerComments"),
   purgeChildren: async (tx, ids) => {
     await tx
       .delete(contentRevisions)

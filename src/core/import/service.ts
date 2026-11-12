@@ -473,6 +473,7 @@ export const previewImport = defineService({
   }),
   output: runRow,
   handler: async (input, ctx) => {
+    await lockImportBatchParent(ctx, input.id);
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
     assertSourceStageable(before);
@@ -1211,6 +1212,7 @@ const commitApply = defineService({
       displacedRedirects,
       postSnapshots, pendingBlogPosts,
       ...(checkpointOf(before.preview).readerPrivacyVersion === 1 ? { readerPrivacyVersion: 1 } : {}),
+      ...(typeof checkpointOf(before.preview).readerSourceSite === "string" ? { readerSourceSite: checkpointOf(before.preview).readerSourceSite } : {}),
       landedPaths: landed.map(({ page, slug }) => ({ sourceUrl: page.url, path: slug, status: page.status ?? "publish", seo: page.seo ?? {} })),
       legacyAliases: [
         ...archiveAliases,
@@ -1353,6 +1355,7 @@ export const rollbackImport = defineService({
     for (const snapshot of replacedPagesFrom(before.checkpoint)) {
       await restoreReplacedPage(ctx, snapshot);
     }
+    const keptPages: string[] = [];
     for (const id of createdPageIdsFrom(before.checkpoint)) {
       try {
         await callImportService(ctx, getService("cms.publishPage"), { id, published: false });
@@ -1365,6 +1368,7 @@ export const rollbackImport = defineService({
         if (!(error instanceof ServiceError) || (error.code !== "not_found" && error.code !== "conflict")) {
           throw error;
         }
+        if (error.code === "conflict") keptPages.push(id);
       }
     }
     for (const snapshot of Array.isArray(checkpoint.postSnapshots) ? checkpoint.postSnapshots : []) {
@@ -1411,7 +1415,7 @@ export const rollbackImport = defineService({
       media: [],
       pendingBlogPosts: [],
       mediaClaims: [],
-      rolledBack: { keptMedia, fromStatus: before.status },
+      rolledBack: { keptMedia, keptPages, fromStatus: before.status },
     });
     await releaseImportSources(ctx, before, next);
     const [row] = await ctx.tx
@@ -1454,6 +1458,7 @@ export const mapImport = defineService({
   }),
   output: runRow,
   handler: async (input, ctx) => {
+    await lockImportBatchParent(ctx, input.id);
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
     assertSourceStageable(before);
@@ -1486,6 +1491,7 @@ export const reviewImportConflicts = defineService({
   }),
   output: runRow,
   handler: async (input, ctx) => {
+    await lockImportBatchParent(ctx, input.id);
     const [before] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1).for("update");
     if (!before) throw new ServiceError("not_found", "No such import run.");
     if (isPrivateImportBatch(before)) throw new ServiceError("not_found", "No such import run.");
@@ -1819,7 +1825,7 @@ export const previewFromSource = defineService({
       .update(importRuns)
       .set({
         status: "previewed",
-        preview: await bindReaderSources(ctx.tx, preview),
+        preview: await bindReaderSources(ctx.tx, preview, before, ctx.actor),
         counts,
         error: null,
       })
@@ -1875,7 +1881,7 @@ const applyCrawl = defineService({
     if (sourceRevision(run) !== input.revision) throw new ServiceError("conflict", "This import changed during discovery. Reload it before trying again.");
     const [result] = await ctx.tx.update(importRuns).set(input.error
       ? { status: "failed", error: input.error }
-      : { status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview!), counts: input.counts!, error: null, checkpoint: { ...checkpointOf(run.checkpoint), crawl: input.report } }
+      : { status: "previewed", preview: await bindReaderSources(ctx.tx, input.preview!, run, ctx.actor), counts: input.counts!, error: null, checkpoint: { ...checkpointOf(run.checkpoint), crawl: input.report } }
     ).where(eq(importRuns.id, input.id)).returning();
     ctx.setSubject("import_run", run.id);
     return publicImportRun(result!);

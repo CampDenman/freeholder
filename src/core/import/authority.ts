@@ -11,7 +11,7 @@ import { permits, ServiceError, type Actor, type ServiceContext, type Permission
 const checked = new WeakMap<object, WeakMap<Actor, Actor>>();
 
 /** Original audit actor stays unchanged; this is an additional refusal fence. */
-async function currentAuthority(ctx: ServiceContext): Promise<Actor> {
+async function loadCurrentImportAuthority(ctx: ServiceContext): Promise<Actor> {
   const actor = ctx.actor;
   const cached = checked.get(ctx.tx)?.get(actor);
   if (cached) return cached;
@@ -45,10 +45,9 @@ async function currentAuthority(ctx: ServiceContext): Promise<Actor> {
   return current;
 }
 
-export async function assertCurrentImportAuthority(ctx: ServiceContext, parent: string, kind: "query" | "mutation" = "mutation", permission: Permission = "scoped"): Promise<void> {
+export async function currentImportAuthority(ctx: ServiceContext): Promise<Actor> {
   try {
-    const current = await currentAuthority(ctx);
-    if (!permits(current, permission, parent, kind)) throw new ServiceError("permission", "The original caller no longer has permission to advance this import.");
+    return await loadCurrentImportAuthority(ctx);
   }
   catch (error) {
     // Identity/erasure callers may already hold their own rows. Never wait
@@ -57,4 +56,9 @@ export async function assertCurrentImportAuthority(ctx: ServiceContext, parent: 
     if (raw.code === "55P03" || raw.cause?.code === "55P03") throw new ServiceError("conflict", "Import authorization is changing. Retry after the current operation completes.");
     throw error;
   }
+}
+
+export async function assertCurrentImportAuthority(ctx: ServiceContext, parent: string, kind: "query" | "mutation" = "mutation", permission: Permission = "scoped"): Promise<void> {
+  const current = await currentImportAuthority(ctx);
+  if (!permits(current, permission, parent, kind)) throw new ServiceError("permission", "The original caller no longer has permission to advance this import.");
 }

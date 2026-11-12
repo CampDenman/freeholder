@@ -68,3 +68,409 @@ receipt can complete while an opaque original WXR still contains reader data.
 The retained-source cleanup follow-up must make that receipt wait for confirmed
 provider cleanup. This increment does not claim full raw-object erasure or close
 C2.29/C11.10.
+
+## Durable original-reader ownership follow-up
+
+The local follow-up reserves `0078_import_reader_ownership.sql` after the
+frozen 73–77 chain. It is intentionally not journalled while its predecessors
+remain under composition. Isolated tests explicitly apply its source SQL;
+that is not a contiguous upgrade rehearsal, deployment or completed C2.29.
+
+Three actual shared-service before controls lost a known reader or rebound
+their identical original comment to another contact after address change,
+address reuse and merge undo. All three after controls passed in 38.97 seconds.
+A second run passed real erasure/reimport fencing, a named reader hold and
+exact normalized merge/undo for 1,001 reader receipts in 17.14 seconds. The
+merge ledger holds a constant-size witness reference rather than another copy
+of those reader identities. Explicit search/retention treatment covers the
+current contact FK; historical before/after UUIDs are documented immutable
+witness exclusions, owned by the same reader privacy source.
+
+An additional real before control found two WordPress instances under one host
+colliding when post/comment IDs overlapped. It failed in 7.86 seconds. The
+current source scopes receipts to the original WXR site URL and preserves that
+context for deferred cutover. A fresh v2 proof database then passed all four
+context/owner controls in 28.81 seconds: distinct site instances, real verified
+owner selection followed by actual comment commit, denial of properly scoped
+agents/personal keys/stale verification, and source-only DTO privacy.
+
+The next real boundary failed in 7.97 seconds: resolving the receipt to A
+without projecting A into cached reader copies let the different email holder
+B's erasure remove A's pending comment. Owner resolution now updates those
+matching original-instance/post/comment pointers in the same transaction while
+preserving source bodies and original executor metadata. That exact after
+control passed in 8.48 seconds. Eleven distinct reader controls have passed
+across these staged runs; they are not a final combined v2 qualification.
+
+Previously unseen ambiguous readers remain unbound in a durable review state.
+The owner page shows at most 50 original readers, searches the existing contact
+spine, and records the explicit choice through the shared audited service.
+Erased receipts cannot be reassigned, and retained records with active or
+acknowledged erasures cannot authorize another import. Wrapped receipt keys
+stay out of subject exports and participate in credential rotation.
+
+The current revision still needs the full v2 regression and inventory run,
+live SDK generation, production build/browser qualification, complete
+contiguous upgrade and independent review. These software proofs supply no
+human security signature or actual source/provider acceptance.
+
+Two further actual failures exposed a separate hold boundary: an approved held
+comment stayed public after acknowledged erasure, and rolling its import back
+deleted the held evidence through the page cascade. The three-control before
+run failed those two assertions while ordinary unheld rollback passed, in
+19.02 seconds. Shared CMS deletion now honors dependent reader holds, and
+reader rollback deletes only unheld rows. Public comment reads veto active or
+acknowledged erasure without changing the privately held original moderation
+state. Rollback records and displays retained private pages, including graph
+child aggregation. The exact three after controls passed in 25.03 seconds;
+focused lint and full typecheck also passed.
+
+The combined v2 source run now passes all 14 reader controls in 90.28 seconds.
+Live SDK generation passed all eight controls (3.24 seconds), and the exact
+search/retention contact-FK inventory checks both passed (36.91 seconds; 27
+unrelated cases deliberately filtered). Repository-wide types and lint,
+license headers and the plan gate passed. Production build and artifact scrub
+passed on local Node 24: 20,608 files and 248,233,314 bytes, with no source or
+environment leakage. Final protected Node 22 qualification remains required.
+
+Actual production owner journeys passed for Spanish, French and Arabic in the
+first browser run (55.3 seconds). English reached its successful HTTP 200 form
+redirect, but its fixture raced reading a response body discarded on navigation.
+The fixture now checks the actual status and durable receipt; the exact English
+repeat passed in 25.5 seconds. All four locales have real keyboard assignment,
+320px layout, light/dark Axe checks, actual comment commit, original owner audit
+and private-field omission evidence. These staged proofs do not claim the
+complete legacy-source regression, 73–78 upgrade rehearsal, provider acceptance
+or independent review.
+
+The next v3 boundary uses a declared pre-receipt persistence fixture: original
+cached pointer and source executor, with no receipt, seal or review flag. Its
+before control genuinely found an empty owner-review window while cutover
+refused safely; both real owner key-rotation and unreadable-seal preservation
+controls passed in the same 18.27-second run. Legacy originals now appear as
+unsealed, and only an explicit fresh owner decision creates their first
+receipt. The old source executor stays on the source run; the new receipt
+records the actual reviewing owner. Known retired legacy readers cannot be
+reassigned to someone else through this recovery path.
+
+A second before control genuinely allowed the same originally unbound source
+after its verified reader was erased. Retirement now follows the source's
+opaque recorded address only while its owner is unknown. It leaves that
+owner null and records the responsible privacy-request context separately;
+an already-proved different owner is never matched through a reused address.
+The retirement-request reference is immutable once retired and participates
+in private subject exports. Named holds preserve the original evidence while
+retiring its authority to create another imported reader.
+
+Fresh v3 source SQL and both exact after controls passed in 25.76 seconds.
+The earlier legacy after attempt exposed the local PostgreSQL distribution's
+missing LLVM JIT dependency rather than a service assertion; indexed,
+materialized source selection removed its excessive plan estimate without
+changing database/JIT settings. The combined v3 reader run now passes all 18
+controls in 143.13 seconds, and live SDK regeneration passes all eight controls
+in 3.10 seconds. Migration 78 remains unjournalled. V3 still needs broad base
+regressions, new production/browser proof and the complete contiguous migration
+rehearsal; v2 browser evidence is historical. Three adjacent unknown-reader
+export/direct-commit/restaging controls then genuinely failed in 17.24 seconds:
+the actual completed export artifact disclosed the old name/address/body,
+direct cutover bound the later address-holder, and restaging refused without
+offering owner review. Exports now require a recorded pointer/comment
+association; conservative address matching remains for erasure. An originally
+unbound reader cannot silently resolve a later existing CRM person. The owner
+can review that reader, including after restaging. A source may reuse a new
+contact actually admitted earlier in its own atomic mutation; that transient
+proof never supplies a later phase/process with guessed ownership.
+
+All three exact after controls plus the two-comments/one-new-person positive
+passed in 23.79 seconds. The current repaired production artifact builds on
+local Node 22.23.2 with the ordinary 4 GiB application heap and passes scrub:
+20,608 files, 248,245,163 bytes, no source/environment leakage. Its four-locale
+owner browser run passes 4/4 in 50.2 seconds. English exercises unsealed legacy
+recovery and preserved original source executor; Spanish/French/Arabic exercise
+sealed ambiguity through actual HTTP staging. All four use 320px, both themes,
+Axe, keyboard assignment, actual comment commit and audit/privacy assertions.
+
+The current source still needs combined 23-reader qualification, broad existing
+source regressions and the complete contiguous migration/recovery rehearsal.
+No source-specific live cutover, provider acceptance, independent security
+review, C2.29/C3.46 closure or stable readiness is claimed.
+
+The additional retirement-address before control genuinely failed in 9.64
+seconds: a different original comment identity sharing an unbound retired
+address silently created another CRM person. The ambiguity query had excluded
+the owner-null fence. The corrected predicate retains that erased witness as
+a reason for owner review, without inventing the former owner. Its exact
+after passed in 8.39 seconds, including a verified human deliberately creating
+and selecting the new person while the old owner stays null and its original
+retirement-request witness stays unchanged. Schema 78 did not change.
+
+Reader source has subsequently rebased onto protected main `13f63be0` (PR
+#682). Additive search/retention conflicts retained both the merged private
+invoice/subscription policy entries and the reader receipt entries. The next
+proof database must apply official migrations through 74 before explicit
+unjournalled 78; the earlier 73+78 database is not a 74–78 upgrade rehearsal.
+
+
+A further first-source control reproduced an original-owner guess: with no
+previous source receipt or address history, the current email holder became the
+historical reader's bound owner. The importer now leaves that receipt in human
+review with no contact pointer. The email match is a candidate, never original
+ownership evidence. Known-owner positive fixtures now use the actual freshly
+verified owner review service before later identity/merge/erasure checks. A
+first source with no existing person still follows the separately bounded new
+person path; this change does not claim otherwise. The new before control failed
+on the preceding source; its after and the updated positive controls still need
+qualification with the complete migration chain.
+
+
+The refreshed 24 reader controls now pass on the actual qualified 0–77 source
+stack with explicit reserved 78, including the first-source no-owner-guess
+control and the real 1001-comment source commit followed by normalized merge and
+exact undo. The source branch now journals 78 at the reserved timestamp after all
+78 predecessor journal entries. Its fixture no longer executes migration SQL
+manually: normal global migration must supply the table and guards. Empty and
+populated normal 0–78 upgrades, current-source browser and broader adjacent
+qualification remain pending; the earlier explicit-78 run is not that proof.
+
+
+Normal migration qualification now passes on the frozen 0–77 predecessor
+`d8ce5743`. The unchanged prior runtime created a real cached source, then the
+original contact changed address and a different contact acquired its old one.
+The normal 0–78 empty apply and populated clone each recorded all 79 journal
+entries. Counts and complete row hashes of contacts, import runs, blog reader
+comments and audit history stayed identical across the upgrade. The unchanged
+prior writer was refused afterwards. The current runtime required actual fresh
+human review, retained the original source executor, and committed the chosen
+original person rather than the current address holder. This is an actual prior
+source-runtime proof, not a claim about a separately built prior image. Live SDK
+regeneration passed all eight controls; the two actual contact-FK search and
+retention inventories also passed.
+
+The reproducible command is `node scripts/qualify-import-reader-upgrade.mjs
+PREVIOUS_WORKTREE UNIQUE_DISPOSABLE_PREFIX`, with `READER_UPGRADE_ADMIN_URL` set
+privately to a local disposable Postgres administration URL. Use an unchanged
+0–77 worktree with its frozen dependencies installed. The runner verifies all
+predecessor SQL bytes, preserves existing databases, retains its fictional
+evidence under a private temporary directory, and cleans only its own copied
+fixture/config files. Broader privacy fixture reconciliation, the later mailbox
+link boundary and current-production browser qualification remain pending.
+C2.29/C3.46 and stable/security acceptance remain open.
+
+
+A separate actual current-mailbox proof reproduced private data exposure: an
+unknown historical pending comment created a CRM contact automatically, and a
+new portal account using the canonical current-email proof downloaded that
+original private body in its own export. The repair leaves every first
+email-bearing reader in review with no person, and CMS cannot create or promote
+a contact from that unverified historical email. The normal anonymous/no-email
+path remains unbound. Source acceptance cannot turn an unknown receipt into an
+owned one. Only the actual freshly verified owner assignment does so.
+
+Two exact after controls pass: source commit initially refuses without creating
+a person; the current mailbox holder's real self-export contains no original
+private body, both before and after the owner deliberately creates and chooses
+the actual original person. The original person's verified export retains the
+body, and the other account cannot download that artifact. Two independent
+original comments bind to one newly human-created person through explicit
+owner choices, without copying the historical address into that profile. These
+proofs do not weaken privacy export. Large explicit owner choice, refreshed
+whole-source regressions and current browser qualification remain pending.
+
+
+The owner can now select up to fifty displayed original readers for one atomic
+review action. Each row has its own empty person selector and explicit checked
+confirmation. The shared service accepts at most 500 individually specified
+original coordinates; it calls the same authorized, audited single-reader
+operation for every choice. It buffers only cache projection within that same
+transaction and writes each matching cached source once. No buffer survives a
+transaction or supplies identity to a later request.
+
+The two finite native controls passed in 11.68 seconds: a later stale original
+rolls back every earlier receipt and cache change, duplicate coordinates refuse,
+and agent, personal-key, stale-session and oversized requests refuse. The real
+1001-reader control then passed separately in 16.59 seconds: the fresh owner
+explicitly selected all originals in 500/500/1 bounded calls, the source committed
+all comments, and normalized contact merge followed by exact undo restored all
+1001 original owners. The ordinary test timeout remains unchanged. Static types
+and lint pass; current production browser qualification remains pending. An
+already-committed pre78 private-comment export boundary is being investigated
+separately and is not covered by the cached-source upgrade evidence above.
+
+
+The actual unchanged `d8ce5743` runtime also committed a pending historical
+comment before the upgrade, creating its automatic `wordpress-comment` contact.
+Normal 0–78 migration preserved that committed original. A canonical current
+mailbox login then obtained the private historical body through its self-export
+in `cms.readerComments`; the bounded current-runtime control failed in 4.11
+seconds after the prior-runtime fixture passed in 13.56 seconds. This is a real
+remaining legacy ownership defect, independent of the newly staged-source repair.
+The reproducible runner variant is `--committed-private`. Its before source and
+fictional local evidence are preserved; no historical owner was inferred from
+this mailbox proof. Current browser and stable acceptance remain open.
+
+
+The committed legacy after control now passes: the unchanged prior runtime
+created the real old comment in 12.86 seconds, normal 0–78 migration preserved
+all original table hashes, and the current-runtime control passed in 3.53
+seconds. An old contact pointer or canonical current-mailbox login no longer
+authorizes disclosure of an imported original; its exact source-coordinate
+receipt does. Fresh owner review reads the retained original comment by its
+actual import source and numeric post/comment identity even when the cached
+source copy was already stripped. The owner explicitly creates and chooses the
+original person. Its contact pointer is then projected into that same original;
+comment ID, body, moderation state, author name, original creation date, source
+and source executor remain intact. The verified original person's export
+contains its body, while the current mailbox holder's later export omits it and
+cannot download the original person's artifact. Active or acknowledged erasure
+refuses reassignment rather than moving held private evidence. The idempotent
+comment import path also requires its original ownership receipt before
+returning an existing original. No migration SQL or original store identity
+changed. Current whole-source and production-browser qualification is still
+pending; this local proof does not close C2.29/C3.46 or security acceptance.
+
+
+The current combined reader/mailbox qualification passed all 28 cases in 209.21
+seconds on the normal 0–78 database, with no filters or changed test deadlines.
+It includes explicit 1001-reader choices and exact merge undo, anonymous import
+without any CRM person, all held-source/retirement/rotation controls, atomic bulk
+rollback and actor denials, and the real current-mailbox self-export boundary.
+The distinct actual-prior-runtime committed-legacy proof above also passes.
+Full static gates passed types, lint, licensing, release-note, plan and playground
+checks plus 383 contract cases; the one generated CHANGELOG drift was regenerated
+and its three exact checks passed. Live SDK and contact-FK inventories must now
+be refreshed for the new bulk operation, followed by the current production
+artifact and four-locale owner browser. No stable or cutover acceptance is claimed.
+
+
+A separate actual-prior-runtime before control also proves a pre-verification
+legal-hold gap: the old runtime created its pending original in 14.93 seconds,
+normal migration preserved it, and the current owner assignment wrongly
+succeeded despite an active `cms.readerComments` exception on its still-open,
+unverified erasure request. The exact current before case failed in 3.79
+seconds. The runner variant `--committed-private-hold` preserves this case.
+An erasure-status check alone does not protect every active hold. The original
+metadata assertions remain unchanged and the repair must respect the canonical
+active hold scopes, including before verification. No stable closure is claimed.
+
+
+After the local disk event, SDK/inventory attempts were invalidated before any
+case executed because Postgres reported recovery mode (`57P03`). Once actual
+recovery and its checkpoint completed, live SDK regeneration passed eight
+controls in 3.59 seconds and changed only the six catalog lines for the new
+human-only batch operation. Both exact contact-FK inventories passed in 36.58
+seconds. The batch audit now stores only its import-run ID; each actual nested
+single-reader service retains its complete source-coordinate/contact-subject
+audit. The exact atomic rollback/audit control passed in 7.29 seconds: a stale
+later original leaves zero personal success audits, while two valid choices
+produce two real personal audits and an ID-only summary. The pending-hold repair
+and current production browser remain unqualified.
+
+
+Both bounded legacy after variants now pass after the canonical hold repair.
+The held prior-runtime fixture passed in 18.48 seconds and its current control
+in 3.23 seconds. An active hold before verification refuses assignment and
+preserves the entire original comment row and unknown receipt state. Removing
+the actual exception through its shared service permits explicit human review;
+its body, name, ID, moderation state, creation date, source and source executor
+remain intact. The separate unheld prior-runtime fixture passed in 32.27 seconds
+and its current control in 3.49 seconds: current-mailbox export remains private,
+the chosen original person's verified export retains its body, and the other
+account cannot download that artifact. Normal migration preserved original
+row hashes in both proofs. These cases use the real canonical hold scopes,
+not erasure status as a substitute for hold ownership. Current production build,
+four-locale browser and protected checks remain required.
+
+
+Final source checkpoint `b2885475` passed every local source gate: full types,
+lint, license, release-note, plan, playground and all 384 contract cases with
+26 expected database-only exclusions. Node 22.23.2 built its production artifact
+and scrubbed it successfully: 21,326 files, 263,692,451 bytes, with no source or
+environment leakage. The historical prechain standalone was preserved unchanged
+by a same-filesystem rename to a private local artifact directory before the
+build; that historical artifact is not presented as a qualified 0–77 image.
+
+All four current production owner browser journeys passed in 1.1 minutes:
+English, Spanish, French and Arabic at 320px, both themes, keyboard choices,
+Axe and viewport bounds. Each journey assigns two separately selected originals
+through the real owner action, proves their bound receipts and comments belong
+to the chosen original rather than the current email holder, and verifies actual
+per-reader contact/source audits plus the ID-only batch summary. The English
+case retains its declared legacy source executor. The fresh browser database
+applied all 79 normal journal entries (0–78). Playwright and its standalone
+server drained with exit zero. Logs and fictional screenshots remain in the
+local qualification outputs; no actual-provider or owner acceptance is claimed.
+
+The full 28-case reader/mailbox native result belongs to `92c70bc8`; subsequent
+minimal-audit and canonical pending-hold changes received their separate exact
+native controls, actual unchanged-prior-runtime held/unheld proofs, final full
+source gates and current artifact/browser qualification above. Migration78 SQL
+remained unchanged. Protected exact-head checks and normal queue integration
+remain required. REST/ZIP/crawl durable continuation and actual cutover, wider
+WordPress acceptance, live provider acceptance and independent human security
+review remain outside this qualified reader increment. C2.29/C3.46/C3.47 and
+stable readiness stay open until their complete acceptance requirements pass.
+
+
+## Protected migration-77 ancestry and reader-78 review
+
+On 2026-11-12 this increment was rebased onto the actual protected migration-77
+main merge `1a783186dde4df89c9e6a8eb6a5569449faab388` (PR #686), rather than
+publishing the earlier composed dependency stack. The rebased source at
+`eee9690e` has identical product files and migration bytes to qualified reader
+checkpoint `05337220`; every predecessor SQL file through 77 is also identical.
+The already qualified `b2885475` standalone remains preserved, unchanged. Its
+browser proof and the earlier native/upgrade/hold evidence above are reused
+with that explicit equivalence; they are not newly executed exact-head runs.
+Full types, lint, license, release-note, plan, playground and contract gates
+were rerun after this ancestry change: 384 passed and 26 expected exclusions.
+MASTER §43.1 is byte-for-byte unchanged from protected main.
+
+For this partial C2.29/C3.46/C3.47 repair, applicable F01–F12 evidence is:
+
+- F01–F03: normalized migration 78 constraints and ownership/merge witnesses;
+  shared transactional owner resolution, original-source authorization,
+  personal audit and contact merge/undo, including the real 1,001-reader case.
+- F04–F06: bounded original-by-original owner forms, explicit empty choices,
+  refusals/recovery and all four translated locale journeys. HTTP/MCP/SDK
+  expose the same registry and deliberately refuse nonhuman ownership
+  decisions, including otherwise scoped agents; live SDK checks passed.
+- F07–F09: current-mailbox and unchanged-prior-runtime disclosure repros,
+  canonical pending holds, sealed-key recovery, erasure/retention/export,
+  explicit contact-FK inventories and actual normal populated upgrade proofs.
+  Backups retain the normalized private ledger with the ordinary database;
+  this is not a new cross-provider restore or independent security sign-off.
+- F10–F12: owner instructions explain why historical addresses need explicit
+  review; no implicit contact creation or seeded identity guesses. Release
+  notes and this evidence record accompany the real upload/review/commit,
+  account export, merge/undo and owner-browser composition proofs.
+
+Protected exact-head CI and normal queue integration are still required.
+These criteria describe the qualified increment, not closure of the broader
+unchecked C-items or permission to announce stable readiness.
+
+
+Exact-head PR #687 CI exposed stale adjacent test prerequisites. Five media
+receipt positives needed an explicit fresh human choice for their declared
+original reader, and internal media claims needed the actual private preview
+digest rather than the public DTO that strips reader bindings. The synthetic
+claim-expiry setup now uses the current writer admission in its own transaction.
+All five original lost-reply/concurrency/actor/CRM assertions passed in 26.63
+seconds on a cloned normal 0–78 disposable database.
+
+The other exact CI failures were the same missing human prerequisites in the
+WordPress flow/raw-comment audit and two privacy positives, a fabricated first
+comment ID 0, and direct legacy-fixture writes caught by migration 78's writer
+protection. Fixtures now declare each original person through the actual fresh
+owner service, use positive original comment IDs, and mark only legacy-state
+setup/migration replay as the current writer. The deliberate prior-writer
+refusal remains unmarked. All original payload, source-coordinate, unrelated
+reader, old-image refusal, rollback, media and privacy assertions remain intact.
+These 20 exact after controls passed in 162.48 seconds, with 37 other tests
+intentionally filtered. No product source, SQL, permission, timeout or safety
+assertion changed. All three production browser CI jobs passed on the original
+PR head; exact corrected-head protected CI is still required.
+
+After these fixture corrections, all required local source gates passed again:
+full types, lint, license, release-note, plan, playground and 384 contracts with
+26 expected database-only exclusions. The protected exact-head rerun remains
+pending; local fixture qualification does not substitute for protected checks.

@@ -8,18 +8,19 @@ import { mediaObjects } from "@/core/media/schema";
 import { retainedSourceFromRun, retainedSourceChunkKey } from "./retained-source";
 import { IMPORT_SOURCE_ERASURE_JOB } from "./source-erasure";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
-import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
 import { importRuns } from "@/core/plugins/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
-import { ServiceError, type Tx } from "@/core/service";
+import { ServiceError, type Actor, type Tx } from "@/core/service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { z } from "zod";
 import { assertImportBatchAccess } from "./batch-context";
 import { invalidateImportGraph } from "./graph-state";
 import { markGraphRunWriter } from "./graph-writer";
+import { bindOwnedReaderSources, canonicalReaderSite, type ReaderSourceContext } from "./reader-ownership";
+import { markReaderOwnershipWriter } from "./reader-ownership-key";
 
 type Run = typeof importRuns.$inferSelect;
 type Json = Record<string, unknown>;
@@ -36,20 +37,13 @@ export function stripReaderCopies(preview: unknown): Json {
 }
 
 /** Bind existing readers without creating CRM contacts just to preview a file. */
-export async function bindReaderSources(tx: Tx, preview: unknown): Promise<Json> {
+export async function bindReaderSources(tx: Tx, preview: unknown, source: ReaderSourceContext, actor: Actor): Promise<Json> {
   await lockContactIdentityForRead(tx);
+  await markReaderOwnershipWriter(tx);
   const copy = structuredClone(object(preview));
-  const readers = items(copy.pages).flatMap(page => items(page.readerComments));
-  const addresses = [...new Set(readers.map(comment => email(comment.email)).filter(Boolean))];
-  const known = addresses.length ? await tx.select({ id: contacts.id, email: contacts.email }).from(contacts)
-    .where(inArray(contacts.email, addresses)).for("key share") : [];
-  const byEmail = new Map(known.map(contact => [email(contact.email), contact.id]));
-  for (const comment of readers) {
-    delete comment.contactId;
-    const id = byEmail.get(email(comment.email));
-    if (id) comment.contactId = id;
-  }
-  return copy;
+  const hasReaders = items(copy.pages).some(page => items(page.readerComments).length > 0);
+  if (hasReaders) copy.readerSourceSite = canonicalReaderSite({ kind: source.kind, origin: source.origin, preview: copy });
+  return bindOwnedReaderSources(tx, copy, { ...source, ...(hasReaders ? { site: String(copy.readerSourceSite) } : {}) }, actor);
 }
 
 export class ReaderSourceErasureError extends ServiceError {
@@ -82,7 +76,7 @@ export async function assertLegacyReaderSafety(tx: Tx, run: Run): Promise<void> 
   if (erasure) throw new ServiceError("conflict", "This older import predates reader-erasure protection. Roll it back, review the source for erased readers, and start a new import before publishing comments.");
 }
 
-async function subject(tx: Tx, contactId: string) {
+async function subject(tx: Tx, contactId: string, includeUnboundAddresses = true) {
   const identity = await contactPrivacyIdentity(tx, contactId);
   const emails = new Set(identity.emails), seen = new Set(identity.contactIds);
   const comments = await tx.select({ source: blogReaderComments.source, externalId: blogReaderComments.externalId })
@@ -90,7 +84,7 @@ async function subject(tx: Tx, contactId: string) {
   const references = new Set(comments.filter(comment => comment.externalId).map(comment => `${comment.source}:${comment.externalId}`));
   return (runId: string, key: string, comment: Json) => typeof comment.contactId === "string"
     ? seen.has(comment.contactId)
-    : emails.has(email(comment.email)) || references.has(`import:${runId}:${key}:${String(comment.id)}`);
+    : includeUnboundAddresses && emails.has(email(comment.email)) || references.has(`import:${runId}:${key}:${String(comment.id)}`);
 }
 
 type SourceEntry = { runId: string; stage: "preview" | "pending"; key: string; comment: Json };
@@ -116,8 +110,8 @@ export function publicImportRun(run: Run): Run {
       const entry = object(row);
       if (!Array.isArray(entry[readers])) return row;
       return { ...entry, [readers]: entry[readers].map((comment: unknown) => {
-        if (!Object.hasOwn(object(comment), "contactId")) return comment;
-        const copy = { ...object(comment) }; delete copy.contactId; return copy;
+        if (!Object.hasOwn(object(comment), "contactId") && !Object.hasOwn(object(comment), "readerOwnershipReviewRequired")) return comment;
+        const copy = { ...object(comment) }; delete copy.contactId; delete copy.readerOwnershipReviewRequired; return copy;
       }) };
     }) };
   };
@@ -226,7 +220,9 @@ registerContactPrivacySource({
     }
   },
   exportData: async (tx, contactId) => {
-    const matches = await subject(tx, contactId), result: SourceEntry[] = [];
+    // A current address can retire an unbound source during erasure, but
+    // cannot prove ownership of its historical name/body for disclosure.
+    const matches = await subject(tx, contactId, false), result: SourceEntry[] = [];
     for await (const run of runs(tx, false)) result.push(...sourceEntries(run).filter(entry => matches(run.id, entry.key, entry.comment)));
     return result;
   },

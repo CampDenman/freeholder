@@ -76,6 +76,7 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   media_uploads:"Private original upload reservations and ownership; accessed through their authorized upload capability.",
   media_objects:"Private physical ownership pointers; the authorized library asset is the searchable record.",
   media_multipart_resources:"Private original multipart resource identities; inspect through human storage recovery.",
+  import_reader_ownership_receipts: "Private keyed source-reader ownership proof; source digests, contact pointers and erased-reimport fences are never search hits.",
   mail_record_subjects: "Private ownership join; mail status uses its own scoped service and receipt identities are not searchable titles.",
   contact_relationships:
     "Join table of two contacts; find each person through the contact source.",
