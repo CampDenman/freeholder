@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { closeDb, db } from "@/core/db";
 import { contacts } from "@/core/contacts/schema";
 import { auditLog } from "@/core/events/schema";
+import { minimizeCarrierGrants } from "@/core/mail/carrier-retention";
 import { carrierResource } from "@/core/mail/carrier-operations";
 import { mailProviderGrants } from "@/core/mail/schema";
 import { mailReceipts } from "@/core/mail/receipts";
@@ -58,6 +59,32 @@ test.describe("original carrier withdrawal owner review (C3.31)", () => {
       expect(reviewed?.withdrawnAt).toBeInstanceOf(Date); expect(reviewed?.reviewedBy).toBe(C11_OWNER.userId); expect(reviewed?.carrierOperations).toEqual(grant.carrierOperations);
       const [audit] = await db().select().from(auditLog).where(eq(auditLog.action, "mail.confirmCarrierWithdrawal"));
       expect(audit?.actor).toBe(`user:${C11_OWNER.userId}`); expect(audit?.diff).toEqual({ id: grant.id }); expect(JSON.stringify(audit)).not.toContain(evidence); expect(JSON.stringify(audit)).not.toContain(grant.email);
+      const originalWithdrawal = reviewed!.withdrawnAt, originalReview = reviewed!.reviewDigest;
+      await db().transaction(async tx => {
+        const receipts = await mailReceipts(tx);
+        expect(await minimizeCarrierGrants(tx, [grant.id])).toBe(1);
+        await tx.update(mailProviderGrants).set({ recoveryPending: true, carrierOperations: [...grant.carrierOperations, { id: "00000000-0000-4000-8000-000000000079", kind: "consent", key: "late-consent", resourceDigest: grant.resourceDigest!, payloadDigest: receipts.digest("dispatch-payload", "Fictional later physical consent"), state: "confirmed" }] }).where(eq(mailProviderGrants.id, grant.id));
+      });
+      await page.reload();
+      await expect(page.getByRole("heading", { name: text["mail.carrier.erasedAddress"], exact: true })).toBeVisible();
+      expect(await page.content()).not.toContain(grant.email);
+      for (const theme of ["light", "dark"]) {
+        await context.addCookies([{ name: THEME_COOKIE, value: theme, url: C11_BASE_URL }]); await page.reload();
+        expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+        await page.screenshot({ path: test.info().outputPath(`${locale}-${theme}-erased-carrier-review.png`), fullPage: true });
+      }
+      await page.getByLabel(text["mail.recovery.operation"], { exact: true }).fill("fictional-new-provider-final-reference");
+      for (const key of ["originalRouteEvidence", "finalProviderEvidence", "stoppedCallerEvidence"] as const) await page.getByLabel(text[`mail.recovery.${key}`], { exact: true }).fill(evidence);
+      await page.getByLabel(text["mail.carrier.confirm"], { exact: true }).focus(); await page.keyboard.press("Space"); await page.keyboard.press("Tab");
+      // ?saved=1 belongs to the first successful review and survives reload.
+      // Wait for this second server action, rather than that earlier notice.
+      await Promise.all([page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/admin/retention/mail/carriers"), page.keyboard.press("Enter")]);
+      await expect(page.getByRole("status")).toHaveText(text["mail.recovery.saved"]);
+      const [corrected] = await db().select().from(mailProviderGrants).where(eq(mailProviderGrants.id, grant.id));
+      expect(corrected).toMatchObject({ email: "", withdrawnAt: originalWithdrawal, reviewDigest: originalReview, recoveryPending: false });
+      expect(corrected!.withdrawalReviews).toHaveLength(2);
+      expect(await page.content()).not.toContain(grant.email);
     } finally { await context.close(); }
   });
 });

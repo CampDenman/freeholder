@@ -5950,6 +5950,19 @@ deployments are portable, testable and incapable of silently forking the truth.
   request link. Capturing the actual request before minimization passed its
   bounded after control; populated75-to76 upgrade preserved six original
   tables, and live SDK8 plus internal-boundary5 passed.
+  Clean release composition on the corrected75 foundation passed the normal
+  0–76 journal (77 entries) and all26 current native carrier/recovery/preview
+  controls in one batch. Own package/production builds and artifact scrub
+  passed (21,148 files /268,969,797 bytes). All44 source contract files passed
+  384 controls with26 declared database exclusions; full typecheck, lint,
+  license, release and plan gates passed. The current production artifact
+  passed all four en/es/fr/ar owner journeys, including a second final review
+  after address minimization, at320px in both themes with keyboard and Axe.
+  Earlier first-withdrawal timestamps/proof remained intact and the erased
+  address stayed absent. The initial extension incorrectly observed the first
+  review's persistent success notice; waiting for the actual second action
+  corrected that fixture, with no product change. Protected CI and actual
+  provider acceptance remain required.
   See `deploy/mail-carrier-recovery.md` and the C3.31–C3.39
   source/live evidence worksheet `deploy/provider-preview-acceptance.md`.
   No live provider acceptance or independent security sign-off is supplied.)*
