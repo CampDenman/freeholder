@@ -14,6 +14,24 @@ never contacts it, and choosing it for one category never turns on another.
 This page documents only the public API contract Freeholder uses and the
 settings an operator sets.
 
+The acceptance boundaries below mirror the still-open rows in MASTER.md §43;
+that checklist remains the status authority. Local intercepted HTTP, migration
+and browser fixtures establish the source behavior they exercise. They do not
+supply a named provider account, a hosted preview journey, an independent
+security review or a stable release sign-off.
+
+| Checklist | Source/evidence boundary | Actual account or hosted journey still required |
+|---|---|---|
+| C3.31 — mail | Original carrier consent/send/withdrawal intents, unknown outcomes, account binding and erasure recovery; `mail-carrier-operations`, `mail-carrier-recovery` and `mail-service` core tests. The carrier increment merged through protected PR685. | Named sending domain/account; real opt-in and delivery; original-provider withdrawal and restart/recovery evidence. |
+| C3.32 — measurement | Consent and private-route policy, hashed conversion identifiers; `measurement-provider` and `measurement-form-action` core tests. | Browser acceptance against the selected live edge, including consent refusal and private-surface exclusion. |
+| C3.33 — screening | Anonymous pre-transaction screening, sealed verdict, trap-preserving fallback; `form-screening-lead-sink` core tests. | Real allowed/blocked/unavailable responses and translated disclosure in the original provider account. |
+| C3.34 — lead copies | Original rendered notice/account/body, per-request receipts, unknown stop, human recovery, holds and erasure; `form-screening-lead-sink` core tests and `form-lead-old-image.probe.mjs`. Normal0–79, populated78→79, all 46 current source controls, eight live SDK checks, Node22 production build/scrub and all four owner locales pass. Protected release qualification remains open. | A real lead copy and receipt, original-account refusal, uncertain/rate-limit behavior, stopped-caller recovery and original-provider erasure. |
+| C3.35 — launch/private preview | `launch-template`, `private-preview` and `private-preview-webhooks` core tests; `deploy/launch-template.md`. | A real approved plan on a hosted instance; signed preview access and unauthenticated refusal. |
+| C3.36 — preview mail | Preview recipient/campaign policy and durable cap consumption by unknown sends; `preview-mail` and `preview-mail-unknown-cap` core tests. | Actual hosted-preview sign-in delivery through a delivering adapter. |
+| C3.37 — intake/delivery | Shared-service intake, project delivery, contact permissions and private document receipt; `service-intake-delivery` core tests. | A hosted preview where the customer receives and downloads the delivered file. |
+| C3.38 — form files | Signed-in upload, sniffing, size/type checks and private owner attachment access; `tests/modules/form-file-fields.test.ts` and the intake-project-files browser journey. | A hosted upload plus wrong-type/oversize refusal and customer/owner permission checks. |
+| C3.39 — launch spec v2 | Versioned launch installation and composition of C3.35–C3.38; `launch-template` core tests and the launch-template operator guide. | The full hosted v2 sign-up, intake/upload, payment-step and customer-delivery journey from the approved plan. |
+
 | Category | Choose Paradise with | MASTER.md |
 |---|---|---|
 | Transactional / bulk mail | `MAIL_ADAPTER=paradise`, `MAIL_BULK_ADAPTER=paradise` | C3.31 |
@@ -224,24 +242,32 @@ LEAD_SINK_PROVIDER=paradise
 
 A switch of its own, off by default; screening never turns it on. After an
 accepted (never quarantined) submission from a site form — one that showed
-the notice below, proven by the same seal — has committed, an outbox listener
+the notice below, proven by a separate encrypted rendered-notice receipt and
+the site-form seal — has committed, an outbox listener
 copies it to `POST /api/collect/lead`. Owner entries and API or MCP
 submissions are never copied. Nor is a submission an owner later rescues
 from the spam queue: rescuing it puts the person on the contact spine but
 does not copy it to the lead sink. **What is copied:** the name, email
 and phone answers (when the form has them), the longest prose answer, every
 non-empty answer keyed by its field label, the form's slug, the absolute
-address of the page it was sent from, and Freeholder's submission id so the
+public page address (without query, fragment or private capability paths), and
+Freeholder's submission id so the
 copy points back at the original. **Why:** so an owner who keeps enquiries in
 that CRM finds them there.
 
-The submission is always kept in Freeholder first. Every failed copy is
-retried by the outbox with backoff and, after its last attempt, kept as a
-dead letter under **Jobs → Outbox** for 90 days, where the owner can replay
-it once the cause is fixed; no lead is dropped silently. Its error names the
-HTTP status and the provider's code, never the visitor's answers. While it is
-on, every form shows a notice naming the provider and listing what is
-copied, in every locale.
+The submission is always kept in Freeholder first. A durable physical-request
+witness precedes each provider call. The outbox retries transient delivery
+work and can dead-letter it under **Jobs → Outbox**, while ambiguous provider
+results block another physical POST until fresh human review proves its final
+original outcome and stopped callers. A rate-limit refusal can admit the same
+frozen request again; permanent refusals remain logged. Neither an older
+screening-only form nor today's replacement account supplies permission for a
+copy. Recovery never substitutes a current account for an original one.
+**Forms → Original lead copies** provides verified human recovery and remote
+erasure evidence, with no provider I/O in that review. See
+[Original form lead copies](form-lead-recovery.md) for the exact recovery and
+pending privacy workflow. While the category is on, every form names the
+provider and copied fields in every locale.
 
 ## Agent / model gateway
 

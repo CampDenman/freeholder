@@ -757,13 +757,16 @@ export const SERVICE_NAMES = [
   "forms.delete",
   "forms.get",
   "forms.list",
+  "forms.listLeadCopyRecovery",
   "forms.listSubmissionFiles",
   "forms.listSubmissions",
   "forms.loadDemoFixture",
   "forms.openSubmissionFile",
   "forms.purge",
+  "forms.reconcileLeadCopy",
   "forms.remove",
   "forms.restore",
+  "forms.retryLeadCopy",
   "forms.reviewSubmission",
   "forms.submissionCounts",
   "forms.submit",
@@ -4642,6 +4645,10 @@ export interface ServiceCatalog {
     input: { trashedOnly?: boolean };
     output: { id: string; slug: string; name: string; status: "active" | "closed"; destination: "contact" | "none"; fields: unknown; intake: { projectTitle: string } | null; updatedAt: string; submissions: number; [key: string]: unknown }[];
   };
+  "forms.listLeadCopyRecovery": {
+    input: { afterId?: string; limit?: number };
+    output: { rows: { id: string; submissionId: string | null; originalBaseUrl: string | null; originalResourceKnown: boolean; state: string; legacyReview: boolean; legacyReviewOutcomes: ("copied" | "not_copied")[]; revision: number; retiredAt: string | null; remoteErasedAt: string | null; privacyPending: boolean; retryAvailable: boolean; lastError: string | null; attempts: { id: string; attempt: number; observed: "running" | "unknown" | "copied" | "not_copied"; humanOutcome?: "copied" | "not_copied"; reviewOutcomes: ("copied" | "not_copied")[]; httpStatus?: number }[] }[]; nextCursor: string | null };
+  };
   "forms.listSubmissionFiles": {
     input: { submissionIds: string[]; contactId?: string };
     output: { id: string; submissionId: string; fieldKey: string; assetId: string; filename: string; mime: string; bytes: number; [key: string]: unknown }[];
@@ -4662,6 +4669,10 @@ export interface ServiceCatalog {
     input: { id: string; confirmation: "PURGE" };
     output: { id: string; [key: string]: unknown };
   };
+  "forms.reconcileLeadCopy": {
+    input: { id: string; expectedRevision: number; operationId?: string; outcome: "copied" | "not_copied"; originalResourceEvidence: string; finalProviderEvidence: string; stoppedCallerEvidence: string; providerOperationRef: string; remoteErasureEvidence?: string; confirmation: "ORIGINAL LEAD OUTCOME VERIFIED" };
+    output: { id: string; source: "human_provider_confirmation" };
+  };
   "forms.remove": {
     input: { id: string };
     output: { id: string; [key: string]: unknown };
@@ -4669,6 +4680,10 @@ export interface ServiceCatalog {
   "forms.restore": {
     input: { id: string };
     output: { id: string; slug: string; name: string; fields: unknown; submitLabel: string | null; successMessage: string | null; destination: "contact" | "none"; notify: string[]; status: "active" | "closed"; intake: { projectTitle: string } | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "forms.retryLeadCopy": {
+    input: { id: string; expectedRevision: number; confirmation: "RETRY ORIGINAL LEAD COPY" };
+    output: { id: string };
   };
   "forms.reviewSubmission": {
     input: { id: string; status: "received" | "spam" };
@@ -8951,13 +8966,16 @@ export interface FreeholderApi {
     delete: (input: ServiceCatalog["forms.delete"]["input"]) => Promise<ServiceCatalog["forms.delete"]["output"]>;
     get: (input: ServiceCatalog["forms.get"]["input"]) => Promise<ServiceCatalog["forms.get"]["output"]>;
     list: (input?: ServiceCatalog["forms.list"]["input"]) => Promise<ServiceCatalog["forms.list"]["output"]>;
+    listLeadCopyRecovery: (input?: ServiceCatalog["forms.listLeadCopyRecovery"]["input"]) => Promise<ServiceCatalog["forms.listLeadCopyRecovery"]["output"]>;
     listSubmissionFiles: (input: ServiceCatalog["forms.listSubmissionFiles"]["input"]) => Promise<ServiceCatalog["forms.listSubmissionFiles"]["output"]>;
     listSubmissions: (input: ServiceCatalog["forms.listSubmissions"]["input"]) => Promise<ServiceCatalog["forms.listSubmissions"]["output"]>;
     loadDemoFixture: (input: ServiceCatalog["forms.loadDemoFixture"]["input"]) => Promise<ServiceCatalog["forms.loadDemoFixture"]["output"]>;
     openSubmissionFile: (input: ServiceCatalog["forms.openSubmissionFile"]["input"]) => Promise<ServiceCatalog["forms.openSubmissionFile"]["output"]>;
     purge: (input: ServiceCatalog["forms.purge"]["input"]) => Promise<ServiceCatalog["forms.purge"]["output"]>;
+    reconcileLeadCopy: (input: ServiceCatalog["forms.reconcileLeadCopy"]["input"]) => Promise<ServiceCatalog["forms.reconcileLeadCopy"]["output"]>;
     remove: (input: ServiceCatalog["forms.remove"]["input"]) => Promise<ServiceCatalog["forms.remove"]["output"]>;
     restore: (input: ServiceCatalog["forms.restore"]["input"]) => Promise<ServiceCatalog["forms.restore"]["output"]>;
+    retryLeadCopy: (input: ServiceCatalog["forms.retryLeadCopy"]["input"]) => Promise<ServiceCatalog["forms.retryLeadCopy"]["output"]>;
     reviewSubmission: (input: ServiceCatalog["forms.reviewSubmission"]["input"]) => Promise<ServiceCatalog["forms.reviewSubmission"]["output"]>;
     submissionCounts: (input?: ServiceCatalog["forms.submissionCounts"]["input"]) => Promise<ServiceCatalog["forms.submissionCounts"]["output"]>;
     submit: (input: ServiceCatalog["forms.submit"]["input"]) => Promise<ServiceCatalog["forms.submit"]["output"]>;

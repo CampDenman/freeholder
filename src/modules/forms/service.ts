@@ -12,6 +12,11 @@
 // never `contacts.create`, reached through `ctx.callAsSystem` so the elevation
 // is one greppable call rather than a service that quietly trusts its caller.
 import { z } from "zod";
+import { settleFormLeadErasure } from "./lead-copy-privacy";
+import leadCopyServices from "./lead-copy-services";
+import { retireLeadCopies } from "./lead-copy-state";
+import { stageLeadCopy } from "./lead-copy-state";
+import { LEAD_NOTICE_FIELD, openLeadNotice } from "./lead-notice";
 import { createHash } from "node:crypto";
 import { clientNetwork, consumeAccepted } from "@/core/security/rate-limit";
 import { and, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
@@ -250,6 +255,11 @@ const trash = makeTrashServices({
   rowSchema: formRow,
   subjectKind: "form",
   gone: "That form is gone.",
+  preparePurge: async (tx, ids) => {
+    const submissions = await tx.select({ id: formSubmissions.id }).from(formSubmissions).where(inArray(formSubmissions.formId, ids));
+    const pending = await retireLeadCopies(tx, submissions.map(row => row.id));
+    if (pending.length) throw new ServiceError("conflict", "Resolve original lead outcomes and remote erasure before purging this form.");
+  },
   holdGuard: withoutHoldCascade(
     formSubmissions,
     formSubmissions.formId,
@@ -1013,13 +1023,18 @@ export const submitForm = defineService({
         // submission and its project commit together or not at all.
         await openIntakeProject(ctx, form, submission!.id, contactId, data);
       }
+      const fromSiteForm = openScreening(input.screening, input.slug, input.values) !== null;
+      const disclosedLead = fromSiteForm ? openLeadNotice(input.values[LEAD_NOTICE_FIELD], input.slug) : null;
+      const leadCopyId = disclosedLead ? await stageLeadCopy(ctx.tx, { submissionId: submission!.id, form: { slug: form.slug, fields }, data, sourceUrl: input.sourceUrl ?? null, notice: disclosedLead }) : undefined;
       ctx.queueEvent("forms.submitted", {
         formId: form.id,
         submissionId: submission!.id,
         contactId,
         // C3.34: only a submission sealed by a site form (which showed the
         // provider notice) may be copied to a lead sink.
-        fromSiteForm: openScreening(input.screening, input.slug, input.values) !== null,
+        fromSiteForm,
+        leadRequested: Boolean(leadCopyId),
+        ...(leadCopyId ? { leadCopyId } : {}),
       });
     }
 
@@ -1294,6 +1309,7 @@ export { HONEYPOT_FIELD, STAMP_FIELD };
 import briefingContributors from "@/modules/forms/briefing";
 
 export default [
+  ...leadCopyServices,
   ...briefingContributors,
   listForms,
   getForm,
@@ -1310,6 +1326,7 @@ export default [
   verifyDemoForms,
   submitForm,
   listSubmissions,
+  settleFormLeadErasure,
   listSubmissionFiles,
   openSubmissionFile,
   reviewSubmission,

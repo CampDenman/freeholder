@@ -7,7 +7,9 @@
 // about us?" question is a database write, not a deploy.
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -16,6 +18,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { dataRequests } from "@/core/privacy/schema";
 import { contacts } from "@/core/contacts/schema";
 import { assets } from "@/core/media/schema";
 
@@ -87,7 +90,7 @@ export const formSubmissions = pgTable(
     contactId: uuid("contact_id").references(() => contacts.id, {
       onDelete: "set null",
     }),
-    data: jsonb("data").notNull().default({}),
+    data: jsonb("submitted_data").notNull().default({}),
     sourceUrl: text("source_url"),
     /**
      * §36 wants a quarantine queue rather than a bin. A false positive that
@@ -142,3 +145,40 @@ export const formSubmissionFiles = pgTable(
     uniqueIndex("form_submission_files_field_idx").on(t.submissionId, t.fieldKey),
   ],
 );
+
+/** C3.34/C11.08: original provider intent, independent of event retries. */
+export type LeadCopyAttempt = {
+  id: string; attempt: number; observed: "running" | "unknown" | "copied" | "not_copied";
+  humanOutcome?: "copied" | "not_copied"; reviewDigest?: string;
+  reviewHistory?: Array<{ outcome: "copied" | "not_copied"; digest: string }>;
+  responseDigest?: string; providerRef?: string; httpStatus?: number;
+};
+export const formLeadCopies = pgTable("form_lead_copies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  submissionId: uuid("submission_id").references(() => formSubmissions.id, { onDelete: "set null" }),
+  kind: text("kind", { enum: ["site_notice", "legacy_review"] }).notNull(),
+  provider: text("provider").notNull().default("paradise"),
+  originalBaseUrl: text("original_base_url"),
+  resourceDigest: text("resource_digest"),
+  requestDigest: text("request_digest"),
+  noticeDigest: text("notice_digest"),
+  encryptedRequest: text("encrypted_request"),
+  state: text("state", { enum: ["ready", "running", "unknown", "copied", "not_copied", "cancelled"] }).notNull(),
+  attempts: jsonb("attempts").$type<LeadCopyAttempt[]>().notNull().default([]),
+  admittedAttempt: integer("admitted_attempt").notNull().default(1),
+  revision: integer("revision").notNull().default(0),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
+  remoteErasedAt: timestamp("remote_erased_at", { withTimezone: true }),
+  remoteErasureDigest: text("remote_erasure_digest"),
+  privacyPending: boolean("privacy_pending").notNull().default(false),
+  lastReconciledAt: timestamp("last_reconciled_at", { withTimezone: true }),
+  legacyOutcome: text("legacy_outcome", { enum: ["copied", "not_copied"] }),
+  legacyReviews: jsonb("legacy_reviews").$type<Array<{ outcome: "copied" | "not_copied"; digest: string }>>().notNull().default([]),
+  erasureRequests: jsonb("erasure_requests").$type<string[]>().notNull().default([]),
+  erasureRequestId: uuid("erasure_request_id").references(() => dataRequests.id, { onDelete: "restrict" }),
+  reviewDigest: text("review_digest"),
+  providerRef: text("provider_ref"),
+  providerRefDigest: text("provider_ref_digest"),
+  lastError: text("last_error"),
+  createdAt: createdAtColumn(), updatedAt: updatedAtColumn(),
+}, t => [uniqueIndex("form_lead_copies_submission_idx").on(t.submissionId), index("form_lead_copies_state_idx").on(t.state, t.createdAt), index("form_lead_copies_privacy_idx").on(t.lastReconciledAt.asc().nullsFirst(), t.id).where(sql`${t.privacyPending}`)]);

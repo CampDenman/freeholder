@@ -1075,7 +1075,28 @@ export const escalateSecurityUpdates = defineJob({
   },
 });
 
+/** Original lead copies remain pending until provider evidence and local minimization settle. */
+export const eraseFormLeadCopies = defineJob({
+  name: "core.eraseFormLeadCopies", summary: "Minimize original lead copies after verified provider erasure.",
+  retry: { limit: 40, delaySeconds: 60, backoff: true, maxDelaySeconds: 3_600 }, concurrency: 1,
+  handler: async (data, context) => {
+    if (!context) throw new Error("Lead-copy erasure requires a durable worker identity.");
+    await context.throwIfCancelled();
+    const { eraseFormLeadCopies: erase } = await import("@/modules/forms/lead-copy-privacy");
+    return erase(data);
+  },
+});
+
+/** Repair the crash window after a durable late lead reply, even while forms is disabled. */
+export const reconcileFormLeadErasure = defineJob({
+  name: "core.reconcileFormLeadErasure", summary: "Reconcile original lead erasure receipts against durable provider evidence.",
+  schedule: "* * * * *", concurrency: 1,
+  handler: async () => { const { reconcileFormLeadErasure: reconcile } = await import("@/modules/forms/lead-copy-privacy"); return reconcile(); },
+});
+
 export default [
+  reconcileFormLeadErasure,
+  eraseFormLeadCopies,
   sweepSessions,
   deliverSecurityNotices,
   deliverMail,

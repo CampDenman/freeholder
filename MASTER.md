@@ -5957,7 +5957,7 @@ deployments are portable, testable and incapable of silently forking the truth.
   384 controls with26 declared database exclusions; full typecheck, lint,
   license, release and plan gates passed. The current production artifact
   passed all four en/es/fr/ar owner journeys, including a second final review
-  after address minimization, at320px in both themes with keyboard and Axe.
+  after address minimization, at 320px in both themes with keyboard and Axe.
   Earlier first-withdrawal timestamps/proof remained intact and the erased
   address stayed absent. The initial extension incorrectly observed the first
   review's persistent success notice; waiting for the actual second action
@@ -6022,6 +6022,77 @@ deployments are portable, testable and incapable of silently forking the truth.
   Freeholder; the privacy notice names the provider, what is copied and why
   while it is enabled, in every locale. Open until a live lead copy against
   the provider.
+  *(Source progress 2026-11-11: actual local before controls demonstrated a
+  screening-only submission moving to a newly enabled account, duplicate copies
+  after a lost acknowledgment, private capability disclosure, omitted populated
+  historical lead debt, and a completed erasure remaining complete after a
+  contradictory late positive. Reserved migration 79 and
+  `deploy/form-lead-recovery.md` implement original rendered-notice/account/body
+  receipts, physical HTTP witnesses, unknown historical inventory without
+  guessed bindings, append-only human review, and exact-fact removal proof.
+  Original erasure cohorts and a core reconciliation job compose the shared
+  `privacy.reopenErasureJob` transition; missing original artifacts require
+  recovery rather than fabricated completion. Seven targeted after controls
+  passed, as did the real populated old-image-to-79 history control and the
+  multiple-cohort receipt control. The four shared reopening controls also
+  passed. These use fixture SQL/intercepted HTTP, not the actual provider.
+  Normal migration 79 is now composed on the qualified reader-78 source.
+  On 2026-11-12, the fresh normal 0–79 chain applied all 80 entries and ten
+  targeted native controls passed, covering lost acknowledgments, original
+  account refusal, unknown outcomes, holds, late positive replies, reopened
+  erasure, legacy review, both purge paths and guarded old-column/journal reads.
+  A populated normal 78→79 migration preserved the exact normalized contact,
+  form and answer hashes and created only unbound unknown legacy inventory.
+  The initial populated fixture failed JSON parameter serialization before
+  inserting its enquiry; its corrected fixture passed in a separate database.
+  The schema-risk contract requires the exact acknowledged rename and restore
+  reason. The unchanged qualified Node22 runtime-78 artifact subsequently
+  submitted a real enquiry to an intercepted loopback provider and read its
+  original answer through HTTP. After a full process stop/drain and normal
+  migration79, the same cold artifact refused both the old answer read and
+  valid submission with specific missing-old-column evidence, made no further
+  provider call, and preserved the exact original rows, bootstrap hash and build
+  identifier. The preserved artifact ran in place without copying or patching it.
+  All 46 current composed source controls and all eight live SDK checks now pass. The Node22
+  production build and artifact scrub pass, and the actual production owner
+  journey passes in English, Spanish, French and Arabic at 320px, in both
+  themes, including axe, keyboard recovery, private-data exclusion and the
+  shared-service audit. A first browser fixture stopped before the UI because
+  its direct source caller could not resolve a lazy-import alias; a static
+  function import passed three targeted native controls before a fresh build
+  and all four browser journeys passed. The clean replay onto actual merged
+  reader 78 preserves identical product and migration source; its ancestry
+  differences contain documentation and test corrections only. Protected
+  qualification and actual provider acceptance remain open. C3.34 remains unchecked.)*
+  *(Credential-binding follow-up, 2026-11-12: protected CodeQL identified an
+  unkeyed provider-secret fingerprint. Its replacement uses a purpose-separated
+  HMAC with independently configured private material and explicit retained
+  current/previous-key candidates, with no unkeyed or embedded-secret fallback.
+  Five targeted native controls pass, including actual local delivery through
+  wrapping-key rotation with the original resource witness unchanged and
+  replacement-provider-key refusal with zero physical attempts. Two pure
+  controls prove independent-key binding and refusal when no private key is
+  configured; full TypeScript and focused lint pass. The new protected scan and
+  refreshed production build/browser proof remain pending.)*
+  *(Receipt-integrity follow-up, 2026-11-12: one actual native before control
+  showed that a parseable original artifact with a mismatched checksum could
+  be rewritten as completed by the lead erasure worker. The source repair uses
+  the shared canonical checksum verifier and one private SYSTEM transaction
+  for original ownership, receipt, current hold/witness checks, minimization
+  and acknowledgment. Missing or corrupted receipts retain their original
+  body and durable recovery debt. Focused lint and 17 private/schema contracts
+  pass; the targeted intact/corrupt native after pair passed in 10.53 seconds,
+  preserving the corrupted original body/hash and pending source debt while
+  the intact receipt completed. Current full source gates pass: TypeScript,
+  full lint, license/release/plan/playground checks and all 384 static controls
+  (26 declared database-only cases skipped). The first aggregate found a
+  generated changelog ordering mismatch from source composition; the existing
+  generator corrected that one-line move and the full aggregate passed.
+  The first previous
+  runtime fixture stopped before its form assertions because its transport
+  readiness poll incorrectly required healthy jobs while jobs were disabled;
+  the corrected fixture records raw health responses and requires a real local
+  form/provider positive control. This is not deployment health acceptance.)*
   *(Progress 2026-10-23, C3.33 and C3.34: the categories are
   `src/adapters/form-screening/` and `src/adapters/lead-sink/` (contracts in
   `types.ts`, Paradise Modern in `paradise.ts`), chosen by
