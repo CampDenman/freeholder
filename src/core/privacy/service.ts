@@ -158,6 +158,12 @@ export interface ContactPrivacySource {
    * expand an originally empty source-generation snapshot.
    */
   captureRetention?: (tx: Tx, contactId: string, context: { requestId: string; exceptionId: string; isNew: boolean; service: ServiceContext }) => Promise<void>;
+  /** Opt in to erasing only the originals outside all current named holds.
+   * Runs once after every original hold is validated. requestId identifies
+   * the current erasure, unlike retain's originating hold request.
+   * Physical cleanup remains after commit through actual returned job IDs.
+   */
+  eraseUnheld?: (tx: Tx, contactId: string, context: { requestId: string; service: ServiceContext }) => Promise<{ affected: number; pendingJobs?: string[] }>;
   erase: (
     tx: Tx,
     contactId: string,
@@ -1521,11 +1527,15 @@ async function eraseContact(
       // Each original hold must reach opaque-source keepers. A later short
       // hold must never replace an older continuing hold for the same scope.
       for (const hold of retained) await source.retain?.(tx, request.contactId, { requestId: hold.dataRequestId, exceptionId: hold.id, service: ctx });
+      const unheld = await source.eraseUnheld?.(tx, request.contactId, { requestId: request.id, service: ctx });
+      const pendingJobs = unheld?.pendingJobs?.length ? [...new Set(z.array(z.uuid()).parse(unheld.pendingJobs))] : [];
       const exception = retained[0]!;
       if (source.scope === "contact.credentials") retainedLogin = true;
       outcomes.push({
         scope: source.scope,
         outcome: "retained",
+        ...(unheld ? { affected: unheld.affected } : {}),
+        ...(pendingJobs.length ? { pendingJobs } : {}),
         exceptionId: exception.id,
         retentionRequestId: exception.dataRequestId,
         reason: exception.reason,
@@ -1578,18 +1588,22 @@ async function eraseContact(
       occurredAt: now,
     })),
   );
-  return { contact, outcomes, pending: outcomes.some(item => item.outcome === "pending"), partiallyCompleted: exceptions.length > 0 };
+  return { contact, outcomes, pending: outcomes.some(hasPendingErasureWork), partiallyCompleted: exceptions.length > 0 };
 }
 
 const erasureReceipt = z.object({
   format: z.literal("freeholder.erasure-receipt"),
   outcomes: z.array(z.object({ scope: z.string(), outcome: z.string(),
-    pendingJobs: z.array(z.uuid()).optional() }).passthrough()),
+    pendingJobs: z.array(z.uuid()).optional(), completedJobs: z.array(z.uuid()).optional() }).passthrough()),
 }).passthrough();
+
+function hasPendingErasureWork(outcome: { outcome?: unknown; pendingJobs?: unknown }): boolean {
+  return outcome.outcome === "pending" || Array.isArray(outcome.pendingJobs) && outcome.pendingJobs.length > 0;
+}
 
 function pendingErasureReceipt(body: unknown): boolean {
   const receipt = erasureReceipt.safeParse(body);
-  return receipt.success && receipt.data.outcomes.some(item => item.outcome === "pending");
+  return receipt.success && receipt.data.outcomes.some(hasPendingErasureWork);
 }
 
 async function erasureWasApplied(tx: Tx, requestId: string): Promise<boolean> {
@@ -1634,9 +1648,15 @@ export const completeErasureJob = defineService({
     const outcome = receipt.outcomes.find(item => item.scope === input.scope);
     if (!outcome || !outcome.pendingJobs?.includes(input.jobId)) return { ok: true };
     if (request.status !== "in_progress") throw new ServiceError("conflict", "This erasure request is no longer in progress.");
+    // A selectively retained scope needs its actual acknowledgement to
+    // distinguish a completed replay from missing pending-job history.
+    if (outcome.outcome === "retained") outcome.completedJobs = [...new Set([...(outcome.completedJobs ?? []), input.jobId])];
     outcome.pendingJobs = outcome.pendingJobs.filter(id => id !== input.jobId);
-    if (!outcome.pendingJobs.length) { outcome.outcome = "erased"; delete outcome.pendingJobs; }
-    const pending = receipt.outcomes.some(item => item.outcome === "pending");
+    if (!outcome.pendingJobs.length) {
+      if (outcome.outcome !== "retained") outcome.outcome = "erased";
+      delete outcome.pendingJobs;
+    }
+    const pending = receipt.outcomes.some(hasPendingErasureWork);
     const status = pending ? "in_progress" : receipt.outcomes.some(item => item.outcome === "retained") ? "partially_completed" : "completed";
     await saveArtifact(ctx.tx, request, { ...receipt, status, generatedAt: new Date().toISOString(),
       note: pending ? "Registered provider erasure work remains pending." : "Registered erasure work completed; any documented retention exceptions remain listed." });
@@ -1662,7 +1682,8 @@ export const reopenErasureJob = defineService({
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
     const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, input.requestId)).for("update");
     if (!request || request.kind !== "erasure") throw new ServiceError("not_found", "Restore the original erasure request before reconciling its late provider evidence.");
-    if (!privacySourceRegistry.some(source => source.scope === input.scope)) throw new ServiceError("conflict", "The original erasure source is not registered.");
+    const source = privacySourceRegistry.find(source => source.scope === input.scope);
+    if (!source) throw new ServiceError("conflict", "The original erasure source is not registered.");
     const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id)).for("update");
     const parsed = erasureReceipt.safeParse(artifact?.body);
     const receipt = parsed.success ? parsed.data : null;
@@ -1675,14 +1696,20 @@ export const reopenErasureJob = defineService({
       // No fabricated replacement artifact, scope, absence proof or completion.
       return { jobId: null, recoveryRequired: true, changed };
     }
-    if (outcome.outcome === "retained") return { jobId: null, recoveryRequired: false, changed: false };
-    if (outcome.outcome !== "erased" && outcome.outcome !== "pending") throw new ServiceError("conflict", "The original erasure outcome needs recovery before it can be reopened.");
+    const retained = outcome.outcome === "retained";
+    if (retained && !source.eraseUnheld) return { jobId: null, recoveryRequired: false, changed: false };
+    if (!retained && outcome.outcome !== "erased" && outcome.outcome !== "pending") throw new ServiceError("conflict", "The original erasure outcome needs recovery before it can be reopened.");
     const idempotencyKey = `reopen-erasure:${request.id}:${input.scope}:${input.idempotencyKey}`;
     const [claim] = await ctx.tx.select({ jobId: jobIdempotencyKeys.jobId }).from(jobIdempotencyKeys).where(and(eq(jobIdempotencyKeys.jobName, input.jobName), eq(jobIdempotencyKeys.idempotencyKey, idempotencyKey))).limit(1);
     if (claim && outcome.pendingJobs?.includes(claim.jobId)) return { jobId: claim.jobId, recoveryRequired: false, changed: false };
+    if (retained && claim) {
+      if (outcome.completedJobs?.includes(claim.jobId)) return { jobId: claim.jobId, recoveryRequired: false, changed: false };
+      throw new ServiceError("conflict", "Restore the original selective-erasure job acknowledgement before replaying this source evidence.");
+    }
     const originalJobId = claim?.jobId ?? randomUUID();
     const job = await enqueueJob(ctx.tx, input.jobName, { ...input.jobData, requestId: request.id, originalJobId }, { id: originalJobId, idempotencyKey });
-    outcome.outcome = "pending"; outcome.pendingJobs = [...new Set([...(outcome.pendingJobs ?? []), job.id])];
+    if (!retained) outcome.outcome = "pending";
+    outcome.pendingJobs = [...new Set([...(outcome.pendingJobs ?? []), job.id])];
     await saveArtifact(ctx.tx, request, { ...receipt, status: "in_progress", generatedAt: new Date().toISOString(), note: "New original-source evidence reopened its erasure work; documented retention exceptions remain unchanged." });
     await ctx.tx.update(dataRequests).set({ status: "in_progress", fulfilledAt: null, resolution: "Waiting for registered source erasure jobs after new original evidence." }).where(eq(dataRequests.id, request.id));
     await ctx.emitTimeline({ contactId: request.contactId, eventType: "contact.dataRequestErasurePending", subjectType: "dataRequest", subjectId: request.id, payload: { kind: "erasure", status: "in_progress", scope: input.scope } });
