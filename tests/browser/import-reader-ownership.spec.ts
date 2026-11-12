@@ -8,6 +8,8 @@ import { z } from "zod";
 import { db, closeDb } from "@/core/db";
 import { auditLog } from "@/core/events/schema";
 import { readerOwnershipReceipts } from "@/core/import/reader-ownership-schema";
+import { stageImportSource } from "@/core/import/service";
+import { importRuns } from "@/core/plugins/schema";
 import { businessProfile } from "@/core/settings/schema";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { THEME_COOKIE } from "@/core/design/theme";
@@ -35,10 +37,19 @@ test.describe("original reader ownership review (C2.29/C3.46)", () => {
     try {
       await post("cms.ensureDefaults", {});
       const original = z.object({ id: z.uuid() }).parse(await post("contacts.create", { name: "Original fictional person", email: EMAIL }));
+      let legacy: { id: string } | undefined;
+      if (locale === "en") {
+        // Declared pre-receipt persistence fixture, with its original pointer
+        // and executor. No current receipt/key is deleted to manufacture it.
+        const staged = stageImportSource("wordpress-wxr", SOURCE, "https://fictional-reader.example");
+        const cached = z.object({ pages: z.array(z.object({ readerComments: z.array(z.record(z.string(), z.unknown())) }).passthrough()) }).passthrough().parse(staged.preview);
+        cached.pages[0]!.readerComments[0]!.contactId = original.id;
+        [legacy] = await db().insert(importRuns).values({ source: "wordpress-wxr:https://fictional-reader.example", kind: "wordpress-wxr", origin: "https://fictional-reader.example", status: "previewed", preview: cached, checkpoint: { origin: "https://fictional-reader.example", kind: "wordpress-wxr" }, counts: staged.counts, createdBy: "agent:legacy-browser-source" }).returning({ id: importRuns.id });
+      }
       await post("contacts.update", { id: original.id, email: "changed-original@example.test" });
       const later = z.object({ id: z.uuid() }).parse(await post("contacts.create", { name: "Later email holder", email: EMAIL }));
-      const run = z.object({ id: z.uuid() }).parse(await post("imports.start", { origin: "https://fictional-reader.example", kind: "wordpress-wxr" }));
-      await post("imports.previewFromSource", { id: run.id, payload: SOURCE });
+      const run = legacy ?? z.object({ id: z.uuid() }).parse(await post("imports.start", { origin: "https://fictional-reader.example", kind: "wordpress-wxr" }));
+      if (!legacy) await post("imports.previewFromSource", { id: run.id, payload: SOURCE });
       await page.goto(`/admin/imports/${run.id}`);
       await expect(page.getByRole("heading", { name: t("imports.readers.title"), exact: true })).toBeVisible();
       await expect(page.getByText(EMAIL, { exact: true })).toBeVisible();
@@ -66,6 +77,7 @@ test.describe("original reader ownership review (C2.29/C3.46)", () => {
       await expect(page.getByRole("heading", { name: t("imports.readers.title"), exact: true })).toHaveCount(0);
       const [receipt] = await db().select().from(readerOwnershipReceipts);
       expect(receipt).toMatchObject({ state: "bound", contactId: original.id }); expect(receipt?.contactId).not.toBe(later.id);
+      if (legacy) expect((await db().select().from(importRuns).where(eq(importRuns.id, run.id)))[0]?.createdBy).toBe("agent:legacy-browser-source");
       await post("imports.commit", { id: run.id });
       expect((await db().select().from(blogReaderComments)).map(comment => comment.contactId)).toEqual([original.id]);
       const [audit] = await db().select().from(auditLog).where(eq(auditLog.action, "imports.resolveReaderOwnership"));
