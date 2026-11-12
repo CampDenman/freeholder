@@ -9,7 +9,7 @@ import { privacyRetentionExceptions } from "@/core/privacy/schema";
 import { importRuns } from "@/core/plugins/schema";
 import { insideServiceTransaction } from "@/core/plugins/context";
 import { ServiceError, type ServiceContext } from "@/core/service";
-import { storage } from "@/adapters/storage";
+import { originalStoredObject } from "@/core/media/write-ledger";
 import { registerPendingObjectOwner } from "@/core/media/object-ledger";
 
 export const IMPORT_SOURCE_MAX_BYTES = 100 * 1024 * 1024;
@@ -74,7 +74,6 @@ export async function releaseImportSources(ctx: ServiceContext, run: { id: strin
 /** The descriptor comes from an authorized service; no arbitrary key is read. */
 export async function readRetainedSourceChunk(input: RetainedImportSource, index: number): Promise<Uint8Array<ArrayBuffer>> {
   if (insideServiceTransaction()) throw new ServiceError("internal", "Read source bytes outside the service transaction.");
-  if (storage().isPublic) throw new ServiceError("conflict", "Import source files require private object storage.");
   const source = retainedImportSourceSchema.parse(input);
   const key = retainedSourceChunkKey(source, index);
   if (source.chunkDigests.length !== Math.ceil(source.bytes / source.chunkBytes)) throw new ServiceError("conflict", "The source manifest has an invalid chunk count.");
@@ -89,7 +88,9 @@ export async function readRetainedSourceChunk(input: RetainedImportSource, index
     active = makeRetainedImportSource(run.id, upload.data);
   }
   if (!active || active.uploadId !== source.uploadId || active.revision !== source.revision || active.expiresAt !== source.expiresAt) throw new ServiceError("conflict", "The retained source was replaced. Reload the import before retrying.");
-  const bytes = await storage().get(key);
+  const captured = await originalStoredObject(key);
+  if (captured.store.isPublic) throw new ServiceError("conflict", "Import source files require private object storage.");
+  const bytes = await captured.store.get(key);
   const expected = Math.min(source.chunkBytes, source.bytes - index * source.chunkBytes);
   if (!bytes || bytes.byteLength !== expected || createHash("sha256").update(bytes).digest("hex") !== source.chunkDigests[index]) throw new ServiceError("conflict", "The stored source chunk is missing or differs from its verified upload. Upload the source again.");
   return bytes;

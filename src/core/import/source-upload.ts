@@ -25,7 +25,8 @@ import {
   type Actor,
 } from "@/core/service";
 import { importRuns } from "@/core/plugins/schema";
-import { storage } from "@/adapters/storage";
+import { boundStorage } from "@/adapters/storage";
+import { putWithReceipt } from "@/core/media/write-ledger";
 import { deleteUnownedPendingObjects, reservePendingMediaObject } from "@/core/media/object-ledger";
 import { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES, importSourceObjectKeys, importSourceWrites, makeRetainedImportSource, readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceChunkKey, retainedSourceFromRun, type RetainedImportSource } from "./retained-source";
 export { IMPORT_SOURCE_MAX_BYTES, IMPORT_SOURCE_CHUNK_BYTES } from "./retained-source";
@@ -67,6 +68,7 @@ const uploadRecord = z.object({
   digests: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)).default({}),
   keyPrefix: z.string(),
   createdBy: z.string(),
+  storageNamespace: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   uploaderIdentity: z.object({ kind: z.enum(["key", "user"]), id: z.uuid() }).optional(),
   expiresAt: z.string(),
 });
@@ -147,6 +149,7 @@ const beginApply = defineService({
     filename: z.string().trim().min(1).max(255),
     bytes: z.number().int().positive(),
     graph: importGraphVersionSchema.optional(),
+    storageNamespace: z.string().regex(/^[a-f0-9]{64}$/),
   }),
   output: z.object({ upload: uploadRecord, previousKeys: z.array(z.string()) }),
   handler: async (input, ctx) => {
@@ -182,6 +185,7 @@ const beginApply = defineService({
     const uploadId = randomUUID();
     const upload: UploadRecord = {
       uploadId,
+      storageNamespace: input.storageNamespace,
       filename: input.filename,
       bytes: input.bytes,
       chunkBytes: IMPORT_SOURCE_CHUNK_BYTES,
@@ -231,8 +235,9 @@ export const beginSourceUpload = defineOrchestratedService({
     maxBytes: z.number().int(),
   }),
   handler: async (input, actor) => {
-    if (storage().isPublic) throw new ServiceError("conflict", "Import source files require private object storage. Configure private storage and retry.");
-    const { upload, previousKeys } = await beginApply.call(input, actor);
+    const captured = await boundStorage();
+    if (captured.store.isPublic) throw new ServiceError("conflict", "Import source files require private object storage. Configure private storage and retry.");
+    const { upload, previousKeys } = await beginApply.call({ ...input, storageNamespace: captured.binding.namespace }, actor);
     // A replaced, unfinished upload leaves nothing behind.
     for (const key of previousKeys) await deleteUnownedPendingObjects([key]).catch(() => undefined);
     return {
@@ -252,6 +257,7 @@ const claimChunk = defineService({
   permission: "scoped",
   external: false,
   input: z.object({
+    storageNamespace: z.string().regex(/^[a-f0-9]{64}$/),
     id: z.string().uuid(),
     uploadId: z.string().uuid(),
     index: z.number().int().nonnegative(),
@@ -272,6 +278,7 @@ const claimChunk = defineService({
     if (!upload || upload.uploadId !== input.uploadId || !sameUploader(upload, ctx.actor)) {
       throw new ServiceError("not_found", "That upload is not here.");
     }
+    if (!upload.storageNamespace || upload.storageNamespace !== input.storageNamespace) throw new ServiceError("conflict", "Restore the original private storage resource, or start a new source upload for this resource.");
     assertSourceUploadStageable(run, true);
     if (Date.parse(upload.expiresAt) <= Date.now()) {
       throw new ServiceError("conflict", "That upload has expired. Start the upload again.");
@@ -300,6 +307,7 @@ const claimChunk = defineService({
     }
     const key = partKey(upload, input.index);
     const writes = importSourceWrites(run.checkpoint);
+    if (writes.some(write => write.uploadId === input.uploadId && write.index === input.index)) throw new ServiceError("conflict", "This original chunk already has an unresolved storage write. Wait for its actual outcome before retrying.");
     if (writes.length >= 100) throw new ServiceError("conflict", "This import has unresolved source writes. Wait for storage recovery before sending more chunks.");
     const attemptId = randomUUID();
     upload.digests[String(input.index)] = input.digest;
@@ -401,21 +409,22 @@ export const uploadSourceChunk = defineOrchestratedService({
   }),
   output: z.object({ received: z.number().int(), chunks: z.number().int(), complete: z.boolean() }),
   handler: async (input, actor) => {
-    if (storage().isPublic) throw new ServiceError("conflict", "Import source files require private object storage. Configure private storage and retry.");
+    const captured = await boundStorage();
+    if (captured.store.isPublic) throw new ServiceError("conflict", "Import source files require private object storage. Configure private storage and retry.");
     const bytes = new Uint8Array(input.bytes);
     const prefix =
       input.index === 0
         ? new TextDecoder("utf-8", { fatal: false }).decode(bytes.subarray(0, 4_096))
         : undefined;
     const claimed = await claimChunk.call(
-      { id: input.id, uploadId: input.uploadId, index: input.index, size: bytes.byteLength, digest: createHash("sha256").update(bytes).digest("hex"), prefixSecret: prefix },
+      { storageNamespace: captured.binding.namespace, id: input.id, uploadId: input.uploadId, index: input.index, size: bytes.byteLength, digest: createHash("sha256").update(bytes).digest("hex"), prefixSecret: prefix },
       actor,
     );
     if (claimed.alreadyReceived) return { received: claimed.received, chunks: claimed.chunks, complete: claimed.received === claimed.chunks };
     if (!claimed.attemptId) throw new ServiceError("internal", "The source write has no durable attempt.");
     let settled = false;
     try {
-      await storage().put(claimed.key, bytes, "application/octet-stream");
+      await putWithReceipt({ key: claimed.key, body: bytes, contentType: "application/octet-stream", role: "staged", requiresReservation: true }, actor, captured);
       settled = true;
     } finally {
       await rememberChunkWrite.call({ id: input.id, uploadId: input.uploadId, index: input.index, size: bytes.byteLength, attemptId: claimed.attemptId, settled }, actor);

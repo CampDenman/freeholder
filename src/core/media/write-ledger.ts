@@ -60,7 +60,7 @@ async function records(tx: Tx, key: string) {
 
 export type TrackedPut = {
   key: string; body: Uint8Array<ArrayBuffer>; contentType: string;
-  role: "original" | "variant"; uploadId?: string; ownerAssetId?: string;
+  role: "original" | "variant" | "staged"; uploadId?: string; ownerAssetId?: string;
   requiresReservation?:boolean; originalKey?:string;
 };
 export type CapturedStorage=Awaited<ReturnType<typeof boundStorage>>;
@@ -106,6 +106,7 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:C
     if(multipart.length)throw new ServiceError("conflict","The original multipart resource still owns this object key.");
     const history = await records(tx, input.key);
     if (history.some(row => row.redactedAt || unsettled.has(row.state))) throw new ServiceError("conflict", "An original storage operation is unresolved or retired. Start a new upload or review its original receipt.");
+    if (history.some(row => row.namespace !== binding.namespace)) throw new ServiceError("conflict", "Restore the exact original storage resource before writing this object key.");
     const original = history.filter(row => row.namespace === binding.namespace);
     if (original.some(row => row.operation === "delete" && row.state === "accepted")) throw new ServiceError("conflict", "This original object key was retired. Start a new upload.");
     const accepted = original.find(row => row.operation === "put" && row.state === "accepted" && !row.deletedAt);
@@ -189,7 +190,7 @@ export async function deleteWithReceipt(key: string,captured?:CapturedStorage): 
     if(multipart.length)return null;
     if (!history.length || history.some(row => unsettled.has(row.state))) return null;
     const live = history.filter(row => !row.deletedAt);
-    if (live.some(row => !row.namespace || row.namespace !== binding.namespace)) return null;
+    if (history.some(row => !row.namespace || row.namespace !== binding.namespace)) return null;
     if (object?.state === "attached" || await storageOperationsHeld(tx, history.map(row => row.contactId))) return null;
     const completed = history.find(row => row.operation === "delete" && row.state === "accepted" && row.namespace === binding.namespace);
     if (completed && !live.length) {

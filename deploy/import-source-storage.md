@@ -130,3 +130,21 @@ customers, recordings, transcripts and stored files together. A fresh isolated
 database run passed 43 source/hold/audit/provider checks across six files; all
 fast gates passed (368 contracts with one deliberate skip). These are combined
 source checks, not independent sign-off or live-provider acceptance.
+
+## Original physical storage receipts (C3.22/C2.29/C11.10)
+
+New upload reservations capture the private resource namespace before their
+first chunk. Each chunk uses the same captured adapter and namespace for its
+physical PUT receipt. A later resource switch cannot continue the reservation,
+read a coincidentally matching object, or authorize erasure of that resource.
+Raw source writes use the same guarded physical ledger as other pending media;
+cleanup removes bytes only after the original provider operation is settled.
+
+Migration 75 marks existing pending source objects as unverified. Their original
+namespace is deliberately unknown. The existing fresh-human storage recovery
+service must verify the actual original resource, exact byte count and digest,
+provider outcome and stopped-writer evidence before those bytes can be read or
+deleted. It cannot infer the original resource from current configuration.
+Unresolved logical `checkpoint.sourceWrites` continue to block source erasure;
+this receipt integration does not independently settle a lost logical metadata
+acknowledgement or prove a writer stopped.
