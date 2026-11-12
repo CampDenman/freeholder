@@ -37,4 +37,18 @@ describe("original merchant refund cash capacity", () => {
     expect(capacity([request()], [fact({ requestId: null, bindingVerified: false }), fact()])).toEqual({ refundedMinor: 400, reservedMinor: 0, availableMinor: 600, debt: [] });
   });
 
+  it("reserves nullable and customer-action refund statuses without treating them as absence", () => {
+    for (const status of [null, "requires_action"] as const) {
+      expect(capacity([request()], [fact({ status })])).toMatchObject({ refundedMinor: 0, reservedMinor: 400, availableMinor: 600, debt: ["unknown_refund"] });
+    }
+  });
+  it("keeps a later contradictory refund action or cancellation as recovery debt", () => {
+    for (const status of ["requires_action", "canceled", null] as const) {
+      expect(capacity([request()], [fact(), fact({ status })])).toMatchObject({ refundedMinor: null, availableMinor: null, debt: ["contradictory_provider_fact"] });
+    }
+  });
+  it("does not use an unbound cancellation to release original refund capacity", () => {
+    expect(capacity([request()], [fact({ status: "canceled" })])).toMatchObject({ reservedMinor: 400, debt: ["unknown_refund"] });
+    expect(capacity([request({ terminalFailureVerified: true })], [fact({ status: "canceled" })])).toMatchObject({ reservedMinor: 0, debt: [] });
+  });
 });

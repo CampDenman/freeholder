@@ -13526,6 +13526,16 @@ whatever is best for the people using the site.
   account. Split from C12.26 on 2026-10-15. This follows Stripe's current
   [charge types](https://docs.stripe.com/connect/charges) and
   [refund/dispute documentation](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
+  Original refund source increment 2026-11-12: the optional Stripe adapter
+  freezes the exact refund body, preserves a physical resource ACK before
+  money parsing, and accepts an actual subscription cash receipt without
+  inventing a local invoice/payment. Dashboard, nullable and customer-action
+  facts remain visible recovery debt. Explicit Node22 full types, changed-file
+  lint and34 no-database controls pass (12 capacity,22 intercepted-HTTP).
+  Unregistered financial drafts, atomic cash disposition, fee/recipient debt,
+  complete native/browser integration and actual provider acceptance remain
+  required; the new model stays disabled. See
+  `deploy/merchant-refund-source-2026-11-12.md`.
   Original fee-job runtime repair 2026-11-12: the first actual mixed-order
   capture control reached payment completion and exposed an unregistered
   invoicing.reconcileOriginalMerchantFee job on unreleased80 sourcee4500e3e.

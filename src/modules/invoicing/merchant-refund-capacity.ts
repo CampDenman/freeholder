@@ -14,7 +14,7 @@ export interface MerchantRefundCashFact {
   providerRef: string;
   amountMinor: number;
   currency: string;
-  status: "pending" | "succeeded" | "failed";
+  status: "pending" | "requires_action" | "succeeded" | "failed" | "canceled" | null;
   bindingVerified: boolean;
 }
 export type MerchantRefundDebt = "contradictory_provider_fact" | "unassigned_refund" | "unverified_binding" | "unfinished_creator" | "unknown_refund" | "over_refunded";
@@ -43,8 +43,8 @@ export function merchantRefundCapacity(input: {
     }
     const associations = new Set(group.map(fact => fact.requestId).filter((id): id is string => id !== null));
     if (associations.size > 1) debt.add("contradictory_provider_fact");
-    const positive = group.some(fact => fact.status === "succeeded"), pending = !positive && group.some(fact => fact.status === "pending");
-    if (positive && group.some(fact => fact.status === "failed")) debt.add("contradictory_provider_fact");
+    const positive = group.some(fact => fact.status === "succeeded"), pending = !positive && group.some(fact => fact.status === "pending" || fact.status === "requires_action" || fact.status === null);
+    if (positive && group.some(fact => fact.status === "failed" || fact.status === "canceled" || fact.status === "requires_action" || fact.status === null)) debt.add("contradictory_provider_fact");
     const associatedId = [...associations][0];
     const request = associatedId ? requests.get(associatedId) : undefined;
     if (!request && (positive || pending)) debt.add("unassigned_refund");

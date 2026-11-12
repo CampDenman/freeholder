@@ -187,11 +187,15 @@ export interface RefundResult extends MerchantChargeScope {
 /** Actual original-account refund evidence, independent of invoice application. */
 export interface MerchantRefundObservation extends PaymentAccountScope {
   providerRef: string;
-  paymentProviderRef: string;
+  paymentProviderRef: string | null;
   providerChargeRef?: string;
   amountMinor: number;
   currency: string;
   status: "pending" | "succeeded" | "failed";
+  /** Actual provider status is retained even when the logical adapter outcome is pending. */
+  providerStatus?: "pending" | "requires_action" | "succeeded" | "failed" | "canceled" | null;
+  failureReason?: string;
+  failureBalanceTransactionRef?: string;
   failureCode?: "provider_cancelled";
   transferReversalRef?: string;
   sourceTransferReversalRef?: string;
@@ -200,7 +204,9 @@ export interface MerchantRefundObservation extends PaymentAccountScope {
 export interface MerchantRefundRecoveryRequest extends MerchantChargeScope {
   providerPlatformAccountId: string;
   refundAttemptId: string;
-  paymentId: string;
+  /** Exactly one existing cash owner; scheduled money may have no local payment. */
+  paymentId?: string;
+  subscriptionChargeReceiptId?: string;
   paymentProviderRef: string;
   amountMinor: number;
   currency: string;
@@ -209,6 +215,14 @@ export interface MerchantRefundRecoveryRequest extends MerchantChargeScope {
   /** A supplied candidate must independently prove its original metadata. */
   candidateRefundRef?: string;
   onRefundObserved: (evidence: MerchantRefundObservation) => Promise<void>;
+}
+/** A separately admitted physical POST against already-retained actual cash. */
+export interface MerchantRefundCreationRequest extends MerchantRefundRecoveryRequest {
+  idempotencyKey: string;
+  /** Exact encoded body committed by the original admission phase. */
+  frozenBody: string;
+  /** This phase must commit the physical ACK before parsing/applying auxiliary facts. */
+  onRefundResourceAcknowledged: (providerRef: string) => Promise<void>;
 }
 export type MerchantRefundRecovery =
   | { state: "unresolved" }
@@ -483,6 +497,7 @@ export interface PaymentAdapter {
   retireMerchantPayment?(request: MerchantPaymentRecoveryRequest): Promise<MerchantPaymentRecovery>;
   recoverMerchantIntent?(request: MerchantIntentRecoveryRequest): Promise<MerchantIntentRecovery>;
   retireMerchantIntent?(request: MerchantIntentRecoveryRequest): Promise<MerchantIntentRecovery>;
+  createMerchantRefund?(request: MerchantRefundCreationRequest): Promise<MerchantRefundObservation>;
   recoverMerchantRefund?(request: MerchantRefundRecoveryRequest): Promise<MerchantRefundRecovery>;
   supportedCurrencies(): Promise<readonly string[]>;
   supportedMethods(context: {
