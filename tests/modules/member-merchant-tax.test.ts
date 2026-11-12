@@ -20,7 +20,8 @@ import {myMerchantTaxThresholds,siteMerchantTaxThresholds} from "@/modules/invoi
 import {registerMerchantTaxSourceResolver,type merchantTaxSourceParty} from "@/modules/invoicing/merchant-tax-invoice";
 import {createDraftInvoice,issueInvoice} from "@/modules/invoicing/invoice-service";
 import {addTaxRate,createTaxZone,listTaxThresholds,setTaxRegistration} from "@/modules/invoicing/tax-service";
-import {invoiceLines,taxLines} from "@/modules/invoicing/schema";
+import {invoiceLines,taxExemptions,taxLines} from "@/modules/invoicing/schema";
+import {allowMerchantTaxWrites} from "@/modules/invoicing/merchant-tax-store";
 import {invoiceMerchantTaxQuotes,merchantTaxProfiles,merchantTaxProfileVersions} from "@/modules/invoicing/merchant-tax-schema";
 import {ANONYMOUS,closeDb,CUSTOMER,failure,hasDatabase,OWNER,truncateSpine} from "../helpers/spine";
 import type {z} from "zod";
@@ -208,5 +209,22 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
   const own=await myMerchantTaxThresholds.call({},SELLER);
   expect(own.thresholds.every(row=>row.grossSalesMinor===0&&row.transactions===0&&row.state==="below")).toBe(true);
   expect(own.thresholds[0]!.totalsByCurrency).toEqual([{currency:"USD",grossSalesMinor:1156,transactions:1}]);
+ });
+ it("does not erase another customer's held certificate when minimizing the merchant's own declaration",async()=>{
+  const first=await declare();
+  // Declared source fixture: the public customer-request/merchant-review
+  // workflow is not claimed here. The original certificate belongs to the
+  // buyer and its actual named financial hold must survive another subject's
+  // erasure, regardless of the merchant's future collection being disabled.
+  const certificate=await db().transaction(async tx=>{
+   await allowMerchantTaxWrites(tx);
+   return(await tx.insert(taxExemptions).values({merchantProfileId:first.profileId,contactId:buyerId,zoneId,kind:"reverse_charge",certificateRef:"BUYER-OWN-HELD-CERTIFICATE",validatedAt:new Date(),status:"valid"}).returning())[0]!;
+  });
+  const buyerRequest=await createDataRequest.call({contactId:buyerId,request:{kind:"erasure"}},OWNER);
+  await verifyDataRequest.call({id:buyerRequest.id,method:"Verified buyer request with a specific financial hold"},OWNER);
+  await addRetentionException.call({dataRequestId:buyerRequest.id,scope:"commerce.money",reason:"accounting_tax",legalBasis:"Retain this buyer's original certificate for the active accounting dispute."},OWNER);
+  await fulfillDataRequest.call({id:await request("erasure"),confirmation:"ERASE"},OWNER);
+  expect((await db().select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id,first.profileId)))[0]).toMatchObject({state:"erased",contactId:null});
+  expect((await db().select().from(taxExemptions).where(eq(taxExemptions.id,certificate.id)))[0]!.certificateRef).toBe("BUYER-OWN-HELD-CERTIFICATE");
  });
 });
