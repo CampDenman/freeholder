@@ -6184,6 +6184,31 @@ deployments are portable, testable and incapable of silently forking the truth.
   query-ID/feed/archive/attachment URL accounting, original SEO metadata,
   sitemap/canonical/hreflang validation and an exportable URL/reconciliation
   report. Publishing is explicit; imported drafts remain private.
+- [ ] **C3.47** Complete the durable large-source portion of C3.22 with a
+  normalized source/entry graph, bounded resumable indexing and commit phases,
+  global source-identity/URL/media mappings and explicit total as well as
+  per-phase budgets. Preserve immutable original private source chunks and
+  verified entry offsets/digests, original actor authority with current
+  revocation/expiry checks, exact independent media/CMS grants, claim leases
+  and source generations. Interrupted/replayed/duplicate workers must not
+  duplicate records or lose rollback ownership. Privacy, holds, cancellation,
+  replacement and expiry cover every index/batch/source byte and stop an old
+  unparsed source from recreating an erased person. Prove a real source above
+  500 entries through review, interrupted resume, publication and rollback;
+  parser-only counts or a larger synchronous limit do not complete this item.
+  This splits a required delivery portion from C3.22; both remain open until
+  their complete source and acceptance criteria pass. Migration 73 follows
+  merged mail recovery 72 in the contiguous journal.
+  *(Update 2026-11-11: local WXR qualification now includes an actual 501-page
+  publication/rollback with two independent indexing processes, identical-source
+  restore after a committed batch, global media receipt recovery and nested
+  cross-batch menu publication. Local resource/authority, privacy/hold,
+  populated-upgrade and four-locale owner browser controls pass for this WXR
+  slice, including an older artifact's HTTP writer refusal. Other durable source
+  adapters, historical reader ownership, actual cutover and protected checks
+  remain required. Physical media PUT and original storage namespace
+  recovery are separate required dependencies. Source/evidence:
+  `deploy/import-source-graph.md`; no completion or release claim.)*
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

@@ -104,7 +104,7 @@ import {
   knowledgeGaps,
   type AssistantSettings,
 } from "./schema";
-import { collectDocuments } from "./corpus";
+import { collectDocuments, type CorpusDocument } from "./corpus";
 import { embedText } from "./embed";
 import {
   admitsUnknown,
@@ -1288,6 +1288,18 @@ export const deleteKnowledge = defineService({
  * as system. Full rebuild is the honest answer at this scale: tens of pages,
  * not millions of rows.
  */
+async function applyCorpusIndex(ctx: ServiceContext, docs: CorpusDocument[], pageId?: string): Promise<{ chunks: number }> {
+  const keep = new Set(docs.map(doc => `${doc.sourceType}:${doc.sourceId}:${doc.locale}`));
+  for (const doc of docs) {
+    const embedding = embedText(`${doc.title}\n${doc.body}`);
+    await ctx.tx.insert(assistantChunks).values({ sourceType: doc.sourceType, sourceId: doc.sourceId, locale: doc.locale, title: doc.title, body: doc.body, embedding }).onConflictDoUpdate({ target: [assistantChunks.sourceType, assistantChunks.sourceId, assistantChunks.locale], set: { title: doc.title, body: doc.body, embedding, updatedAt: new Date() } });
+  }
+  const existing = await ctx.tx.select({ id: assistantChunks.id, sourceType: assistantChunks.sourceType, sourceId: assistantChunks.sourceId, locale: assistantChunks.locale }).from(assistantChunks).where(pageId ? and(eq(assistantChunks.sourceId, pageId), inArray(assistantChunks.sourceType, ["page", "help"])) : undefined);
+  const gone = existing.filter(row => !keep.has(`${row.sourceType}:${row.sourceId}:${row.locale}`)).map(row => row.id);
+  if (gone.length) await ctx.tx.delete(assistantChunks).where(inArray(assistantChunks.id, gone));
+  return { chunks: docs.length };
+}
+
 export const reindex = defineService({
   name: "assistant.reindex",
   writeClass: "write",
@@ -1296,57 +1308,26 @@ export const reindex = defineService({
   permission: "scoped",
   input: z.object({}),
   output: row({ chunks: z.number().int() }),
-  handler: async (_input, ctx) => {
-    const docs = await collectDocuments(ctx.tx);
-    const keep = new Set(
-      docs.map((doc) => `${doc.sourceType}:${doc.sourceId}:${doc.locale}`),
-    );
-    for (const doc of docs) {
-      const embedding = embedText(`${doc.title}\n${doc.body}`);
-      await ctx.tx
-        .insert(assistantChunks)
-        .values({
-          sourceType: doc.sourceType,
-          sourceId: doc.sourceId,
-          locale: doc.locale,
-          title: doc.title,
-          body: doc.body,
-          embedding,
-        })
-        .onConflictDoUpdate({
-          target: [
-            assistantChunks.sourceType,
-            assistantChunks.sourceId,
-            assistantChunks.locale,
-          ],
-          set: {
-            title: doc.title,
-            body: doc.body,
-            embedding,
-            updatedAt: new Date(),
-          },
-        });
-    }
-    const existing = await ctx.tx
-      .select({
-        id: assistantChunks.id,
-        sourceType: assistantChunks.sourceType,
-        sourceId: assistantChunks.sourceId,
-        locale: assistantChunks.locale,
-      })
-      .from(assistantChunks);
-    const gone = existing
-      .filter((row) => !keep.has(`${row.sourceType}:${row.sourceId}:${row.locale}`))
-      .map((row) => row.id);
-    if (gone.length > 0) {
-      await ctx.tx.delete(assistantChunks).where(inArray(assistantChunks.id, gone));
-    }
-    return { chunks: docs.length };
+  handler: async (_input, ctx) => applyCorpusIndex(ctx, await collectDocuments(ctx.tx)),
+});
+
+export const reindexPage = defineService({
+  name: "assistant.reindexPage", summary: "Refresh one public page in the assistant index.",
+  kind: "mutation", permission: "system", external: false,
+  input: z.object({ pageId: z.uuid() }), output: row({ chunks: z.number().int() }),
+  handler: async ({ pageId }, ctx) => {
+    ctx.setSubject("page", pageId);
+    return applyCorpusIndex(ctx, await collectDocuments(ctx.tx, pageId), pageId);
   },
 });
 
-/** Publish, unpublish, catalog or location change: rebuild the index. */
-export async function onContentChanged(): Promise<void> {
+/** Page events update that page; other source types retain the full rebuild. */
+export async function onContentChanged(payload?: unknown, eventName?: string): Promise<void> {
+  if (["cms.pagePublished", "cms.pageUnpublished", "cms.pageDeleted"].includes(eventName ?? "")) {
+    const event = z.object({ pageId: z.uuid() }).parse(payload);
+    await reindexPage.call(event, { kind: "system" });
+    return;
+  }
   await reindex.call({}, { kind: "system" });
 }
 
@@ -1523,6 +1504,7 @@ export default [
   knowledgeList,
   deleteKnowledge,
   reindex,
+  reindexPage,
   knowledgeGapList,
   saveGapAsKnowledge,
   dismissGap,

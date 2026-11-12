@@ -16,6 +16,8 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  // C3.47: page events rebuild only their own public assistant document.
+  "assistant.reindexPage",
   "subscriptions.recordTrialSetupDispatch",
   "subscriptions.claimTrialSetupErasure",
   "subscriptions.finishTrialSetupErasure",
@@ -281,6 +283,19 @@ const CALLER_AUTHORIZED_PHASES = [
   "assistant.previewAccess",
   "assistant.saveCallCaption",
   "assistant.settingsSnapshot",
+  "assistant.reindexPage",
+  // C3.47: original-source graph phases are reachable only through the
+  // matching public import parent; they never become independent tools.
+  "imports.claimSourceGraph",
+  "imports.applySourceGraphIndex",
+  "imports.prepareSourceGraphPlan",
+  "imports.claimGraphCommit",
+  "imports.stageGraphBatch",
+  "imports.acceptGraphBatch",
+  "imports.releaseSourceGraphRead",
+  "imports.releaseGraphBatchRead",
+  "imports.claimSourceRebind",
+  "imports.acceptSourceRebindChunk",
   // C3.22: the halves of imports.commit around WordPress media downloads.
   "imports.commitApply",
   "imports.commitSource",

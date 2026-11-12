@@ -9,6 +9,7 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { ServiceError } from "@/core/service";
 import { ownerFacing } from "./action-helpers";
+import { importGraphVersionSchema } from "@/core/import/graph-version";
 import {
   commitImport,
   mapImport,
@@ -28,6 +29,12 @@ export interface ImportActionState {
 function text(form: FormData, key: string): string {
   const value = form.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+function observedGraph(form: FormData) {
+  const value = text(form, "graph");
+  if (!value) return undefined;
+  try { return importGraphVersionSchema.parse(JSON.parse(value)); }
+  catch { throw new ServiceError("validation", "Review the current source version before continuing."); }
 }
 
 export async function startImportAction(
@@ -88,6 +95,7 @@ export async function reviewImportConflictsAction(form: FormData): Promise<void>
   await reviewImportConflicts.call(
     {
       id,
+      graph: observedGraph(form),
       conflicts: [
         {
           slug: text(form, "slug"),

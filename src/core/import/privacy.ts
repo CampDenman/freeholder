@@ -17,6 +17,9 @@ import { contactPrivacyIdentity } from "@/core/privacy/contact-identity";
 import { ServiceError, type Tx } from "@/core/service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { z } from "zod";
+import { assertImportBatchAccess } from "./batch-context";
+import { invalidateImportGraph } from "./graph-state";
+import { markGraphRunWriter } from "./graph-writer";
 
 type Run = typeof importRuns.$inferSelect;
 type Json = Record<string, unknown>;
@@ -105,6 +108,7 @@ function sourceEntries(run: Run): SourceEntry[] {
 
 /** Import scopes may see their supplied source, not probe existing CRM IDs. */
 export function publicImportRun(run: Run): Run {
+  assertImportBatchAccess(run);
   const project = (value: unknown, collection: string, readers: string): unknown => {
     const source = object(value);
     if (!Array.isArray(source[collection])) return value;
@@ -120,11 +124,16 @@ export function publicImportRun(run: Run): Run {
   // Copy only changed reader objects; do not clone every multi-megabyte body
   // again while projecting a list of otherwise unchanged import runs.
   let checkpoint = project(run.checkpoint, "pendingBlogPosts", "comments");
-  const privateFields = ["sourcePrivacyHolds", "sourceWrites", "mediaClaims"] as const;
+  const privateFields = ["sourcePrivacyHolds", "sourceWrites", "mediaClaims", "sourceGraphRebind"] as const;
   if (privateFields.some(field => Object.hasOwn(object(checkpoint), field))) {
     const visible = { ...object(checkpoint) };
     for (const field of privateFields) delete visible[field];
     checkpoint = visible;
+  }
+  if (Object.hasOwn(object(object(checkpoint).sourceUpload), "uploaderIdentity")) {
+    const upload = { ...object(object(checkpoint).sourceUpload) };
+    delete upload.uploaderIdentity;
+    checkpoint = { ...object(checkpoint), sourceUpload: upload };
   }
   return { ...run, preview: project(run.preview, "pages", "readerComments"), checkpoint };
 }
@@ -145,6 +154,7 @@ async function* runs(tx: Tx, lock: boolean, noWait = false) {
       throw error;
     }
     if (!run) return;
+    if (lock) await markGraphRunWriter(tx, run);
     after = run.id;
     yield run;
   }
@@ -259,6 +269,7 @@ registerContactPrivacySource({
         inArray(auditLog.action, ["imports.previewFromSource", "imports.preview", "imports.applyCrawl", "imports.applyUploadedPreview", "imports.claimSourceChunk"]),
       ));
       const keys = await ownedSourceKeys(tx, run);
+      if (keys.length && object(run.checkpoint).sourceGraph && !["committed", "reconciled", "published"].includes(run.status)) await invalidateImportGraph(tx, run);
       for (let offset = 0; offset < keys.length; offset += 25) {
         if (!context.service) throw new ServiceError("internal", "Source-object erasure requires the real privacy service context.");
         const originalJobId = randomUUID();

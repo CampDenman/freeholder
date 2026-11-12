@@ -9,14 +9,18 @@ import { getT } from "../../../../i18n";
 import { requireStaffActor } from "../../guard";
 import { listImports } from "@/core/import/service";
 import { ImportStepForms } from "../ImportForms";
+import { GraphImportControls } from "../GraphImportControls";
+import { sourceGraphReview } from "@/core/import/graph-query";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 export default async function ImportRunPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ after?: string; mediaAfter?: string }>;
 }) {
   const { id } = await params;
   const actor = await requireStaffActor("platform");
@@ -25,10 +29,14 @@ export default async function ImportRunPage({
   if (!run) notFound();
   const counts = run.counts && typeof run.counts === "object" ? (run.counts as Record<string, unknown>) : {};
   const checkpoint = run.checkpoint && typeof run.checkpoint === "object" ? run.checkpoint as Record<string, unknown> : {};
+  const search = await searchParams;
+  const after = z.coerce.number().int().min(-1).max(9_999).safeParse(search.after ?? -1);
+  const graph = checkpoint.sourceGraph ? await sourceGraphReview.call({ id, afterOrdinal: after.success ? after.data : -1, afterMediaKey: typeof search.mediaAfter === "string" && search.mediaAfter.length <= 4_096 ? search.mediaAfter : "" }, actor) : null;
   const rollback = checkpoint.rolledBack && typeof checkpoint.rolledBack === "object" ? checkpoint.rolledBack as Record<string, unknown> : {};
   const reportStatus = run.status === "rolled_back" && typeof rollback.fromStatus === "string" ? rollback.fromStatus : run.status;
-  const staged = ["discover", "mapped", "previewed", "failed"].includes(reportStatus);
+  const staged = ["discover", "mapped", "previewed", "failed"].includes(reportStatus) && !(graph && typeof counts.sourcePages === "number");
   const countLabels: Array<[string, string]> = [
+    ["indexed", t("imports.resume.entries")],
     ["pages", t(staged ? "imports.count.pagesStaged" : "imports.count.pages")],
     ["crawlBlocked", t("imports.count.crawlBlocked")],
     ["crawlRequests", t("imports.count.crawlRequests")],
@@ -76,7 +84,10 @@ export default async function ImportRunPage({
       <Card>
         <CardHeader title={t("imports.progress")} />
         <CardBody>
-          <ImportStepForms
+          {graph ? <GraphImportControls id={id} status={run.status} version={graph.version} upload={graph.upload} indexComplete={graph.indexComplete} planFrozen={graph.planFrozen} planReady={graph.planReady} invalidated={graph.invalidated} labels={{
+            intro: t("imports.resume.intro"), index: t("imports.resume.index"), commit: t("imports.resume.commit"), pause: t("imports.resume.pause"), working: t("imports.resume.working"), failed: t("imports.resume.failed"), saved: t("imports.resume.saved"), restoreHint: t("imports.resume.restoreHint"), limits: t("imports.resume.limits"), reviewHint: t("imports.resume.reviewHint"),
+            review: t("imports.review"), slug: t("imports.slug"), slugHint: t("cms.field.slugHint"), keep: t("imports.keepExisting"), replace: t("imports.replace"), rename: t("imports.rename"), renamedSlug: t("imports.renamedSlug"), reconcile: t("imports.reconcile"), publish: t("imports.publish"), rollback: t("imports.rollback"), upload: t("imports.upload"), uploadHint: t("imports.uploadHint"), stage: t("imports.stage"), uploading: t("imports.uploading"), readingSource: t("imports.readingSource"), uploadFailed: t("imports.uploadFailed"),
+          }} /> : <ImportStepForms
             id={run.id}
             status={run.status}
             sourceKind={run.kind ?? "html"}
@@ -111,16 +122,40 @@ export default async function ImportRunPage({
               crawlHint: t("imports.crawlHint"),
               crawling: t("imports.crawling"),
             }}
-          />
+          />}
         </CardBody>
       </Card>
+      {graph ? <Card><CardHeader title={t("imports.resume.title")} /><CardBody>
+        <div className="grid min-w-0 gap-5">
+          <ol className="grid min-w-0 list-none gap-3 p-0">
+            {graph.entries.map(entry => <li key={entry.ordinal} className="grid min-w-0 gap-1 rounded-md border border-rule p-3 text-sm">
+              <p className="break-words font-medium">{entry.title || entry.sourceUrl || entry.kind}</p>
+              {entry.sourceUrl ? <p className="min-w-0 break-all"><span className="text-ink-muted">{t("imports.resume.source")}: </span><bdi dir="ltr">{entry.sourceUrl}</bdi></p> : null}
+              {entry.destinationPath !== null ? <p className="min-w-0 break-all"><span className="text-ink-muted">{t("imports.resume.destination")}: </span><bdi dir="ltr">/{entry.destinationPath}</bdi></p> : null}
+              {entry.resolution ? <p className="text-ink-muted">{t(entry.resolution === "keep-existing" ? "imports.keepExisting" : entry.resolution === "replace" ? "imports.replace" : "imports.rename")}</p> : null}
+            </li>)}
+          </ol>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <Link href={`/admin/imports/${id}`}>{t("imports.resume.first")}</Link>
+            {graph.nextOrdinal !== null ? <Link href={`/admin/imports/${id}?after=${graph.nextOrdinal}`}>{t("imports.resume.next")}</Link> : null}
+          </div>
+          {graph.media.length ? <div className="grid min-w-0 gap-3">
+            <h2 className="text-sm font-semibold">{t("imports.resume.media")}</h2>
+            <ul className="grid min-w-0 list-none gap-3 p-0">{graph.media.map(file => <li key={file.key} className="grid min-w-0 gap-1 rounded-md border border-rule p-3 text-sm">
+              <bdi dir="ltr" className="break-all">{file.sourceUrl}</bdi>
+              {file.error ? <p className="break-words text-danger">{t("imports.resume.failed")}</p> : null}
+            </li>)}</ul>
+            {graph.nextMediaKey !== null ? <Link href={`/admin/imports/${id}?mediaAfter=${encodeURIComponent(graph.nextMediaKey)}`} className="text-sm">{t("imports.resume.nextMedia")}</Link> : null}
+          </div> : null}
+        </div>
+      </CardBody></Card> : null}
       {shown.length > 0 || run.error ? (
         <Card>
           <CardHeader title={t("imports.report")} />
           <CardBody>
             {run.error ? (
               <p role="alert" className="text-sm font-medium text-danger">
-                {run.error}
+                {graph ? t("imports.resume.failed") : run.error}
               </p>
             ) : null}
             {shown.length > 0 ? (

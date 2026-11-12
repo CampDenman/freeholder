@@ -187,5 +187,9 @@ export {
   pluginPermissionConsents,
   pluginRetentions,
   importRuns,
+  importSourceGraphs,
+  importSourceEntries,
+  importSourceBatches,
+  importSourceMedia,
 } from "@/core/plugins/schema";
 export { retentionPolicies } from "@/core/retention/schema";

@@ -352,6 +352,7 @@ function expandSeoTemplate(value: string, title: string, siteTitle: string): str
 export const WXR_ITEM_MAX_CHARS = 32 * 1024 * 1024;
 /** The channel header (site, authors, terms) before the first item. */
 export const WXR_HEAD_MAX_CHARS = 32 * 1024 * 1024;
+export type WxrSourceRange = { start: number; end: number };
 
 /**
  * Splits a WXR stream into its channel header and one `<item>` at a time,
@@ -366,11 +367,17 @@ export class WxrStreamReader {
   private itemStart = -1;
   private headDone = false;
   private head = "";
+  private byteOffset = 0;
 
   constructor(
-    private readonly onHead: (xml: string) => void,
-    private readonly onItem: (xml: string) => void,
-  ) {}
+    private readonly onHead: (xml: string, range: WxrSourceRange) => void,
+    private readonly onItem: (xml: string, range: WxrSourceRange) => void,
+    resume: { offset?: number; headerRead?: boolean } = {},
+  ) {
+    this.byteOffset = resume.offset ?? 0;
+    this.headDone = resume.headerRead ?? false;
+    if (!Number.isSafeInteger(this.byteOffset) || this.byteOffset < 0) throw new Error("The source cursor is invalid.");
+  }
 
   push(chunk: string): void {
     this.buffer += chunk;
@@ -388,7 +395,7 @@ export class WxrStreamReader {
         if (!this.headDone) {
           this.head = this.buffer.slice(0, open);
           this.headDone = true;
-          this.onHead(this.head);
+          this.onHead(this.head, { start: this.byteOffset, end: this.byteOffset + Buffer.byteLength(this.head) });
         }
         this.discardBefore(open);
         this.itemStart = 0;
@@ -401,7 +408,8 @@ export class WxrStreamReader {
         }
         return;
       }
-      this.onItem(this.buffer.slice(0, close));
+      const item = this.buffer.slice(0, close);
+      this.onItem(item, { start: this.byteOffset, end: this.byteOffset + Buffer.byteLength(item) });
       this.discardBefore(close);
       this.itemStart = -1;
       this.scanFrom = 0;
@@ -414,12 +422,16 @@ export class WxrStreamReader {
     if (!this.headDone) {
       this.head = this.buffer;
       this.headDone = true;
-      this.onHead(this.head);
+      this.onHead(this.head, { start: this.byteOffset, end: this.byteOffset + Buffer.byteLength(this.head) });
     }
-    this.buffer = "";
+    this.discardBefore(this.buffer.length);
   }
 
   private discardBefore(index: number): void {
+    // A look-behind boundary between entries may land inside a surrogate
+    // pair. Keep that pair together so UTF-8 offsets remain original bytes.
+    if (index > 0 && index < this.buffer.length && /[\uD800-\uDBFF]/.test(this.buffer[index - 1]!) && /[\uDC00-\uDFFF]/.test(this.buffer[index]!)) index--;
+    this.byteOffset += Buffer.byteLength(this.buffer.slice(0, index));
     this.buffer = this.buffer.slice(index);
     this.scanFrom = Math.max(0, this.scanFrom - index);
   }
@@ -631,6 +643,16 @@ export function wordpressExportBuilder() {
 
   return {
     reader: () => new WxrStreamReader(head, item),
+    readHead: head,
+    readItem: item,
+    // The durable reader keeps the original XML, never a second body store.
+    // Drain each parsed entry while retaining only the channel context.
+    takeEntries: () => {
+      const result = { items: items.splice(0), attachments: attachments.splice(0), menuItems: menuItems.splice(0), skipped: { ...skipped } };
+      for (const key of Object.keys(skipped)) delete skipped[key];
+      bytes = 0;
+      return result;
+    },
     finish: (): WordpressExport => ({ site, items, attachments, authors, taxonomy, taxonomyIds, menus, menuItems, skipped }),
   };
 }
@@ -884,7 +906,13 @@ function imageRef(node: DefaultTreeAdapterTypes.Element): { src: string; wpId?: 
  * Turn an export into a staged plan: final slugs, redirects, the media to
  * fetch, menus and the report. `origin` is the run's approved origin.
  */
-export function planWordpressImport(exported: WordpressExport, origin: string): WordpressPlan {
+export function wordpressItemPlacement(item: Pick<WordpressItem, "url" | "slug" | "kind">, site: WordpressExport["site"], origin: string): { sourcePath: string | null; slug: string } {
+  const sourcePath = wordpressPath(item.url, siteHosts(origin, site), sitePath(site, origin));
+  const wpSlug = toCmsSlug(item.slug || slugFromUrl(item.url));
+  return { sourcePath, slug: sourcePath !== null ? toCmsSlug(sourcePath) : item.kind === "post" ? `blog/${(wpSlug.split("/").at(-1) ?? wpSlug) || "post"}` : wpSlug };
+}
+
+export function planWordpressImport(exported: WordpressExport, origin: string, indexedImages: ReadonlyArray<{ src: string; wpId?: string }> = [], indexedTargets: ReadonlyArray<Pick<WordpressItem, "wpId" | "title">> = []): WordpressPlan {
   const hosts = siteHosts(origin, exported.site);
   const basePath = sitePath(exported.site, origin);
   const report: WordpressPlan["report"] = {
@@ -933,6 +961,21 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
     }
     return undefined;
   };
+  const referenceImage = (ref: { src: string; wpId?: string }) => {
+    const found = findMedia(ref.src, ref.wpId);
+    if (found) { found.referenced = true; return; }
+    if (!ref.src) return;
+    let host = "";
+    try { host = new URL(ref.src, `https://${hosts[0] ?? "invalid.invalid"}/`).host.toLowerCase(); } catch { /* An invalid URL is reported below. */ }
+    const absolute = (() => { try { return new URL(ref.src, `https://${hosts[0] ?? "invalid.invalid"}/`).href; } catch { return ref.src; } })();
+    if (hosts.includes(host)) {
+      const added = addMedia(absolute);
+      if (added) added.referenced = true;
+    } else if (!report.externalImages.includes(absolute)) report.externalImages.push(absolute);
+  };
+  // These references come from the verified original entry index. They let
+  // the durable planner resolve attachments before any page batch is emitted.
+  for (const ref of indexedImages) referenceImage(ref);
 
   // Pages and posts: final slugs, unique within the import.
   const used = new Set<string>();
@@ -951,41 +994,12 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
   const authorPosts = new Map<string, number>();
 
   for (const item of exported.items) {
-    const oldPath = wordpressPath(item.url, hosts, basePath);
-    const wpSlug = toCmsSlug(item.slug || slugFromUrl(item.url));
-    const slug = unique(
-      oldPath !== null
-          ? toCmsSlug(oldPath)
-          : item.kind === "post" ? `blog/${(wpSlug.split("/").at(-1) ?? wpSlug) || "post"}` : wpSlug,
-    );
+    const { sourcePath: oldPath, slug: candidate } = wordpressItemPlacement(item, exported.site, origin);
+    const slug = unique(candidate);
     if (item.wpId) wpIdToSlug.set(item.wpId, slug);
 
     for (const ref of bodyImageRefs(item.body)) {
-      const found = findMedia(ref.src, ref.wpId);
-      if (found) {
-        found.referenced = true;
-        continue;
-      }
-      if (!ref.src) continue;
-      let host = "";
-      try {
-        host = new URL(ref.src, `https://${hosts[0] ?? "invalid.invalid"}/`).host.toLowerCase();
-      } catch {
-        /* Unparseable sources are external by definition. */
-      }
-      const absolute = (() => {
-        try {
-          return new URL(ref.src, `https://${hosts[0] ?? "invalid.invalid"}/`).href;
-        } catch {
-          return ref.src;
-        }
-      })();
-      if (hosts.includes(host)) {
-        const added = addMedia(absolute);
-        if (added) added.referenced = true;
-      } else if (!report.externalImages.includes(absolute)) {
-        report.externalImages.push(absolute);
-      }
+      referenceImage(ref);
     }
     let featuredMedia: string | undefined;
     const featured = item.featuredWpId
@@ -1093,7 +1107,7 @@ export function planWordpressImport(exported: WordpressExport, origin: string): 
       let query = "", fragment = "";
       try { if (sourceHref) { const url = new URL(sourceHref, origin); query = url.search; fragment = url.hash; } } catch { /* Invalid source address stays unresolved. */ }
       if (item.type === "post_type" && item.objectId) {
-        const target = exported.items.find(candidate => candidate.wpId === item.objectId);
+        const target = exported.items.find(candidate => candidate.wpId === item.objectId) ?? indexedTargets.find(candidate => candidate.wpId === item.objectId);
         planned.push({ label: item.label || target?.title || "", depth, targetWpId: item.objectId, note: target ? undefined : "target not in this export", ...(fragment ? { fragment } : {}) });
       } else if (item.type === "taxonomy") {
         const slug = item.objectId ? (item.object === "category" ? exported.taxonomyIds?.categories[item.objectId] : item.object === "post_tag" ? exported.taxonomyIds?.tags[item.objectId] : undefined) : undefined;

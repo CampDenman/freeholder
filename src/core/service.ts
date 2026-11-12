@@ -69,6 +69,8 @@ type ActorIdentity =
       grants: readonly ModuleGrant[];
       /** Present on actors resolved from a live browser session. */
       sessionId?: string;
+      /** Immutable server-resolved credential row, never a token or key name. */
+      keyId?: string;
       security?: {
         twoFactorRequired: boolean;
         twoFactorEnrolled: boolean;
@@ -81,7 +83,7 @@ type ActorIdentity =
        */
       keyScopes?: readonly string[];
     }
-  | { kind: "agent"; keyName: string; scopes: string[] }
+  | { kind: "agent"; keyName: string; scopes: string[]; keyId?: string }
   | { kind: "plugin"; name: string; grants: readonly ModuleGrant[] }
   | { kind: "system" }
   | { kind: "anonymous" };

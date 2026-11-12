@@ -6,6 +6,7 @@ import { useActionState, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiJson } from "../media/upload-client";
 import { Button, Field, Input, Select } from "@/ui/primitives";
+import type { ImportGraphVersion } from "@/core/import/graph-version";
 import {
   commitImportAction,
   crawlImportAction,
@@ -202,13 +203,15 @@ export function ImportStepForms({
  * and JSON route keeps. The server reads it back as a stream and stages the
  * preview; nothing is written to the site until the batch is committed.
  */
-function SourceUploadForm({
+export function SourceUploadForm({
   id,
   labels,
   sourceKind,
+  graph,
 }: {
   id: string;
   sourceKind: string;
+  graph?: ImportGraphVersion;
   labels: {
     upload: string;
     uploadHint: string;
@@ -232,7 +235,7 @@ function SourceUploadForm({
       setProgress(labels.uploading);
       const reserved = await apiJson<{ uploadId: string; chunkBytes: number; chunkCount: number }>(
         "/api/v1/imports.beginSourceUpload",
-        { method: "POST", body: JSON.stringify({ id, filename: file.name, bytes: file.size }) },
+        { method: "POST", body: JSON.stringify({ id, filename: file.name, bytes: file.size, ...(graph ? { graph } : {}) }) },
       );
       for (let index = 0; index < reserved.chunkCount; index += 1) {
         const part = file.slice(index * reserved.chunkBytes, (index + 1) * reserved.chunkBytes);
@@ -249,16 +252,19 @@ function SourceUploadForm({
         setProgress(`${labels.uploading} ${Math.round(((index + 1) / reserved.chunkCount) * 100)}%`);
       }
       setProgress(labels.readingSource);
-      const staged = await apiJson<{ status: string; error: string | null }>("/api/v1/imports.previewFromUpload", {
+      let staged = await apiJson<{ status: string; error: string | null; sourceRestored?: boolean }>("/api/v1/imports.previewFromUpload", {
         method: "POST",
         body: JSON.stringify({ id, uploadId: reserved.uploadId }),
       });
-      if (staged.status === "failed") setError(staged.error ?? labels.uploadFailed);
+      for (let verified = 1; staged.sourceRestored === false && verified < reserved.chunkCount; verified++) {
+        staged = await apiJson("/api/v1/imports.previewFromUpload", { method: "POST", body: JSON.stringify({ id, uploadId: reserved.uploadId }) });
+      }
+      if (staged.status === "failed") setError(graph ? labels.uploadFailed : staged.error ?? labels.uploadFailed);
       setProgress(null);
       router.refresh();
     } catch (failure) {
       setProgress(null);
-      setError(failure instanceof Error && failure.message ? failure.message : labels.uploadFailed);
+      setError(!graph && failure instanceof Error && failure.message ? failure.message : labels.uploadFailed);
     }
   }
 

@@ -118,18 +118,32 @@ export async function verifyApiKey(
 /**
  * Record that a key was used.
  *
- * Deliberately fire-and-forget and outside any caller transaction: this is
- * telemetry for the owner, and a failed write of it must never fail the API
- * call it describes. It is also why `last_used_at` is a timestamp rather than
- * a counter — a counter would make every request a write contention point on
- * one row.
+ * Best-effort telemetry outside the business transaction. Complete our own
+ * write before returning the authenticated actor, so a guarded operation
+ * cannot mistake that write for a concurrent authorization change. Busy rows
+ * are skipped and recent use is debounced; failures never fail authentication.
  */
-export function touchApiKey(id: string): void {
-  void db()
-    .update(apiKeys)
-    .set({ lastUsedAt: sql`now()` })
-    .where(eq(apiKeys.id, id))
-    .catch((error: unknown) => {
+const pendingTouches = new Map<string, Promise<void>>();
+export function touchApiKey(id: string): Promise<void> {
+  const active = pendingTouches.get(id);
+  if (active) return active;
+  const writing = (async () => {
+    try {
+      await db().execute(sql`
+        with candidate as (
+          select ${apiKeys.id} from ${apiKeys}
+          where ${apiKeys.id} = ${id}
+            and (${apiKeys.lastUsedAt} is null or ${apiKeys.lastUsedAt} < clock_timestamp() - interval '1 minute')
+          for update skip locked
+        )
+        update ${apiKeys} set last_used_at = clock_timestamp()
+        from candidate where ${apiKeys.id} = candidate.id
+      `);
+    } catch (error: unknown) {
       console.warn("[apikeys] could not record last use", error);
-    });
+    }
+  })();
+  pendingTouches.set(id, writing);
+  void writing.then(() => { if (pendingTouches.get(id) === writing) pendingTouches.delete(id); });
+  return writing;
 }

@@ -4,6 +4,7 @@
 import {
   check,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -125,3 +126,69 @@ export const importRuns = pgTable(
   },
   (t) => [index("import_runs_status_idx").on(t.status)],
 );
+
+/** Private, normalized progress; source bodies remain in immutable objects. */
+export const importSourceGraphs = pgTable("import_source_graphs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  runId: uuid("run_id").notNull().references(() => importRuns.id, { onDelete: "cascade" }),
+  generation: uuid("generation").notNull(),
+  sourceRevision: text("source_revision").notNull(),
+  sourceStartedAt: timestamp("source_started_at", { withTimezone: true }).notNull(),
+  planDigest: text("plan_digest"),
+  planRevision: integer("plan_revision").notNull().default(1),
+  parserVersion: integer("parser_version").notNull().default(1),
+  state: text("state", { enum: ["indexing", "indexed", "invalidated"] }).notNull().default("indexing"),
+  cursor: jsonb("cursor").notNull(),
+  headerMetadata: jsonb("header_metadata").notNull().default({}),
+  planMetadata: jsonb("plan_metadata"),
+  commitOrdinal: integer("commit_ordinal").notNull().default(0),
+  batchCounter: integer("batch_counter").notNull().default(0),
+  leaseToken: uuid("lease_token"),
+  leaseActor: text("lease_actor"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  createdAt: createdAtColumn(),
+  updatedAt: updatedAtColumn(),
+}, (t) => [uniqueIndex("import_source_graphs_run_unique").on(t.runId)]);
+
+export const importSourceEntries = pgTable("import_source_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => importSourceGraphs.id, { onDelete: "cascade" }),
+  ordinal: integer("ordinal").notNull(),
+  sourceIdentity: text("source_identity").notNull(),
+  kind: text("kind", { enum: ["page", "post", "attachment", "menu", "skipped"] }).notNull(),
+  startByte: integer("start_byte").notNull(),
+  endByte: integer("end_byte").notNull(),
+  digest: text("digest").notNull(),
+  metadata: jsonb("metadata").notNull(),
+  bodyBytes: integer("body_bytes").notNull(),
+  targetSlug: text("target_slug"),
+  targetPageId: uuid("target_page_id"),
+  resolution: text("resolution", { enum: ["keep-existing", "replace", "rename"] }),
+}, (t) => [
+  uniqueIndex("import_source_entries_ordinal_unique").on(t.graphId, t.ordinal),
+  uniqueIndex("import_source_entries_identity_unique").on(t.graphId, t.kind, t.sourceIdentity),
+  uniqueIndex("import_source_entries_target_unique").on(t.graphId, t.targetSlug),
+]);
+
+export const importSourceBatches = pgTable("import_source_batches", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => importSourceGraphs.id, { onDelete: "cascade" }),
+  batchIndex: integer("batch_index").notNull(),
+  childRunId: uuid("child_run_id").notNull().references(() => importRuns.id),
+  startOrdinal: integer("start_ordinal").notNull(),
+  endOrdinal: integer("end_ordinal").notNull(),
+  kind: text("kind", { enum: ["content", "media", "navigation"] }).notNull().default("content"),
+  mediaKey: text("media_key"),
+  createdAt: createdAtColumn(),
+}, (t) => [uniqueIndex("import_source_batches_index_unique").on(t.graphId, t.batchIndex), uniqueIndex("import_source_batches_child_unique").on(t.childRunId)]);
+
+export const importSourceMedia = pgTable("import_source_media", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => importSourceGraphs.id, { onDelete: "cascade" }),
+  key: text("key").notNull(),
+  planned: jsonb("planned").notNull(),
+  digest: text("digest"),
+  bytes: integer("bytes"),
+  assetId: uuid("asset_id"),
+  error: text("error"),
+}, (t) => [uniqueIndex("import_source_media_identity_unique").on(t.graphId, t.key)]);

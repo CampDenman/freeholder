@@ -96,18 +96,22 @@ export function assertPublicHttpUrl(value: string): URL {
   return url;
 }
 
+export class ImporterPhaseLimitError extends Error {
+  constructor(readonly limit: "pages" | "bytes" | "depth", message: string) { super(message); }
+}
+
 export function enforceImporterLimits(
   used: { pages: number; bytes: number; depth: number },
   limits: ImporterLimits = DEFAULT_IMPORTER_LIMITS,
 ): void {
   if (used.pages > limits.maxPages) {
-    throw new Error(`This import exceeded the page limit of ${limits.maxPages}.`);
+    throw new ImporterPhaseLimitError("pages", `This import exceeded the page limit of ${limits.maxPages}.`);
   }
   if (used.bytes > limits.maxBytes) {
-    throw new Error(`This import exceeded the byte limit of ${limits.maxBytes}.`);
+    throw new ImporterPhaseLimitError("bytes", `This import exceeded the byte limit of ${limits.maxBytes}.`);
   }
   if (used.depth > limits.maxDepth) {
-    throw new Error(`This import exceeded the depth limit of ${limits.maxDepth}.`);
+    throw new ImporterPhaseLimitError("depth", `This import exceeded the depth limit of ${limits.maxDepth}.`);
   }
 }
 
