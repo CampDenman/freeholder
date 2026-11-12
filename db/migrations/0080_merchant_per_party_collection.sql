@@ -2319,7 +2319,7 @@ CREATE TRIGGER media_writes_legacy_source_retention BEFORE INSERT ON media_objec
  FOR EACH ROW EXECUTE FUNCTION freeholder_guard_legacy_source_retention_delete();
 --> statement-breakpoint
 -- Source: deploy/merchant-line-fee80.fragment.sql
--- SHA256: e5b38f812a97805261790dca0e2571156516b3f409ee5af951ec884059f2580a
+-- SHA256: 9f0524b4e38033551e5b5bdd000884e7bc2b8a8edd300c4856576e561332910b
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- C5.19/C12.38: append after refund guards. No old operation is rewritten.
@@ -2353,7 +2353,11 @@ BEGIN
  prior_target:=floor(original_fee::numeric*(parent.amount_minor-parent.refunded_minor)/parent.amount_minor)::bigint;
  SELECT a.* INTO allocation FROM merchant_payment_routes r JOIN invoice_merchant_allocations a ON a.id=r.allocation_id
   WHERE r.payment_id=target_payment AND a.invoice_id=parent.invoice_id;
- IF allocation.id IS NULL THEN RETURN prior_target; END IF;
+ IF allocation.id IS NULL THEN
+  IF EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=target_payment) THEN RETURN NULL; END IF;
+  RETURN prior_target;
+ END IF;
+ IF NOT EXISTS(SELECT 1 FROM invoice_market_policies WHERE invoice_id=parent.invoice_id AND collection_version=1 AND model='seller_merchant') THEN RETURN NULL; END IF;
  SELECT * INTO collection FROM invoice_merchant_collections WHERE allocation_id=allocation.id;
  IF collection.allocation_id IS NULL OR allocation.fee_minor>9007199254740991 THEN RETURN NULL; END IF;
  IF NOT EXISTS(SELECT 1 FROM invoice_merchant_allocation_lines WHERE allocation_id=allocation.id)
@@ -2361,7 +2365,7 @@ BEGIN
    AND(l.invoice_id<>parent.invoice_id OR l.quantity_micros<=0 OR l.quantity_micros>9007199254740991 OR f.revenue_minor<>l.subtotal_minor-l.discount_minor))
   OR(SELECT sum(fee_minor) FROM invoice_merchant_allocation_lines WHERE allocation_id=allocation.id) IS DISTINCT FROM allocation.fee_minor::numeric THEN RETURN NULL; END IF;
  SELECT * INTO owner_order FROM orders WHERE invoice_id=parent.invoice_id LIMIT 1;
- IF owner_order.id IS NULL THEN RETURN NULL; END IF;
+ IF owner_order.id IS NULL OR NOT EXISTS(SELECT 1 FROM invoices WHERE id=parent.invoice_id AND source_type='order' AND source_id=owner_order.id::text) THEN RETURN NULL; END IF;
  SELECT (SELECT count(*) FROM return_requests WHERE order_id=owner_order.id)
   +(SELECT count(*) FROM invoice_lines WHERE invoice_id=parent.invoice_id)
   +(SELECT count(*) FROM refunds f JOIN payments p ON p.id=f.payment_id WHERE p.invoice_id=parent.invoice_id)
