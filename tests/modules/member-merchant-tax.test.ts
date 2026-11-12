@@ -109,7 +109,7 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
   expect(issued.invoice.status).toBe("sent");
   expect((await db().select().from(taxLines).where(eq(taxLines.invoiceId,created.invoice.id))).map(row=>({kind:row.kind,amount:row.amountMinor,number:row.registrationNumber}))).toEqual(expect.arrayContaining([{kind:"item",amount:50,number:"FIRST-GST"},{kind:"shipping",amount:5,number:"FIRST-GST"}]));
   expect(await getInvoiceMerchantTaxReceipt.call({invoiceId:created.invoice.id,sellerUserId:SELLER.userId},SYSTEM)).toMatchObject({liability:"seller",profileId:first.profileId,profileVersion:1});
-  expect(await getInvoiceMerchantTaxReceipt.call({invoiceId:created.invoice.id,sellerUserId:OTHER.userId},SYSTEM)).toBeNull();
+  expect(await failure(getInvoiceMerchantTaxReceipt.call({invoiceId:created.invoice.id,sellerUserId:OTHER.userId},SYSTEM))).toMatchObject({code:"conflict"});
   expect(await db().select().from(invoiceMerchantTaxQuotes)).toEqual([expect.objectContaining({profileId:first.profileId,occurredAt,shippingMinor:101,shippingTaxMinor:5,taxMinor:55})]);
   const [line]=await db().select().from(invoiceLines).where(eq(invoiceLines.invoiceId,created.invoice.id));
   expect(line).toMatchObject({taxMinor:50,totalMinor:1050});
