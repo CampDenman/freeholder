@@ -15,6 +15,7 @@ import { createMyDataRequest, fulfillDataRequest, downloadMyDataRequestArtifact 
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { ensureDefaults } from "@/modules/cms/service";
 import { ANONYMOUS, OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
+import { freshlyVerifiedImportOwner } from "../helpers/import-reader-review";
 
 const email = "fictional-historical-address@example.test";
 const privateBody = "Fictional original reader's private pending moderation body.";
@@ -24,9 +25,10 @@ describe.runIf(hasDatabase)("unreviewed source contact and later mailbox identit
   beforeEach(async () => { await truncateSpine(); await ensureDefaults.call({}, OWNER); });
   afterAll(async () => { await stopJobs(); await closeDb(); });
   it("does not export an unreviewed historical private comment after only current mailbox proof", async () => {
-    const run = await startImport.call({ kind: "wordpress-wxr", origin: "https://fictional-historical-source.example/" }, OWNER);
-    await previewFromSource.call({ id: run.id, payload: source }, OWNER);
-    await commitImport.call({ id: run.id }, OWNER);
+    const owner = await freshlyVerifiedImportOwner();
+    const run = await startImport.call({ kind: "wordpress-wxr", origin: "https://fictional-historical-source.example/" }, owner);
+    await previewFromSource.call({ id: run.id, payload: source }, owner);
+    await commitImport.call({ id: run.id }, owner);
     const [historical] = await db().select().from(contacts).where(eq(contacts.email, email));
     expect(historical?.userId).toBeNull();
     expect((await db().select().from(blogReaderComments))[0]?.status).toBe("pending");
@@ -38,7 +40,7 @@ describe.runIf(hasDatabase)("unreviewed source contact and later mailbox identit
     const currentHolder = await actorFromToken(session.token);
     expect(currentHolder.kind).toBe("user");
     const request = await createMyDataRequest.call({ request: { kind: "export" } }, currentHolder);
-    const result = await fulfillDataRequest.call({ id: request.id }, OWNER);
+    const result = await fulfillDataRequest.call({ id: request.id }, owner);
     const artifact = await downloadMyDataRequestArtifact.call({ id: result.artifact.id }, currentHolder);
     expect(artifact.content).not.toContain(privateBody);
   });
