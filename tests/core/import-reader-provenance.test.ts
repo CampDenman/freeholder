@@ -1,9 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C2.29/C3.46: the same original reader cannot become a different CRM person.
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { eq, sql } from "drizzle-orm";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { users, totpFactors, sessions } from "@/core/auth/schema";
 import { createSession } from "@/core/auth/sessions";
@@ -75,15 +74,6 @@ async function publishedReader(held: boolean) {
 }
 
 describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)", () => {
-  beforeAll(async () => {
-    // This isolated source proof deliberately applies reserved 78 after the
-    // branch's journalled schema. It proves this increment's behavior, not
-    // the still-required contiguous 73–78 upgrade or deployment acceptance.
-    const [current] = await db().execute<{ present: boolean }>(sql`select to_regclass('public.import_reader_ownership_receipts') is not null as present`);
-    if (!current?.present) await db().transaction(async tx => {
-      for (const statement of readFileSync("db/migrations/0078_import_reader_ownership.sql", "utf8").split("--> statement-breakpoint")) if (statement.trim()) await tx.execute(sql.raw(statement));
-    });
-  });
   beforeEach(async () => { await truncateSpine(); await ensureDefaults.call({}, OWNER); });
   afterEach(() => { vi.unstubAllEnvs(); resetEnvForTests(); });
   afterAll(closeDb);

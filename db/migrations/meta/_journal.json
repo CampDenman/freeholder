@@ -547,6 +547,13 @@
       "when": 1793310000057,
       "tag": "0077_invoice_merchant_allocations",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1793310000058,
+      "tag": "0078_import_reader_ownership",
+      "breakpoints": true
     }
   ]
 }
