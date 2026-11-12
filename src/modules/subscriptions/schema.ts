@@ -290,6 +290,7 @@ export const subscriptionMerchantScopes = pgTable("subscription_merchant_scopes"
   createdAt: createdAtColumn(),
 }, t => [
   check("subscription_merchant_scopes_version", sql`${t.agreementRoutingVersion}=1`),
+  index("subscription_merchant_scopes_tax_profile_idx").on(t.taxProfileId),
   check("subscription_merchant_scopes_schedule_api", sql`${t.providerScheduleApiVersion}='2026-10-28.endive'`),
   foreignKey({ name: "subscription_merchant_scopes_tax_version_fk", columns: [t.taxProfileId, t.taxProfileVersion], foreignColumns: [merchantTaxProfileVersions.profileId, merchantTaxProfileVersions.version] }).onDelete("restrict"),
   check("subscription_merchant_scopes_accounts", sql`${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$' and ${t.recipientAccountId} ~ '^acct_[A-Za-z0-9]+$'

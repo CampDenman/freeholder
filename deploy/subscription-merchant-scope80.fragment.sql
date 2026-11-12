@@ -33,6 +33,8 @@ CREATE TABLE subscription_merchant_scopes (
   AND ((tax_destination IS NULL AND redacted_at IS NOT NULL) OR (tax_destination IS NOT NULL AND redacted_at IS NULL AND jsonb_typeof(tax_destination)='object' AND (tax_destination->>'country') ~ '^[A-Z]{2}$'))) IS TRUE)
 );
 --> statement-breakpoint
+CREATE INDEX subscription_merchant_scopes_tax_profile_idx ON subscription_merchant_scopes(tax_profile_id);
+--> statement-breakpoint
 CREATE FUNCTION freeholder_subscription_scope_receipts() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF TG_TABLE_NAME='subscriptions' THEN
