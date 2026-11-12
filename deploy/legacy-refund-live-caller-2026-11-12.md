@@ -127,6 +127,15 @@ holder is never used as a negative absence witness.
 
 The expanded fourteen drafted native controls include the original ten plus
 two parent-field corruption cases, independent persistence failure/retry,
-and verification-only previous-key behavior. The refinement has not yet
-received its own source gates or native acceptance; the original 4c proof
-above is preserved without extension to these new fault cases.
+and verification-only previous-key behavior. On exact refinement `8dc54922`,
+Node 22 full 8GB types, focused lint and private/audit controls (12/12) passed.
+The ORIGINAL unchanged caller also passed in 4.863 seconds. Its independent
+ledger retained one admitted/finished actual success, pinned parent amount
+1000 and matching original payment hash, refund success 1000 and payment
+refunded 1000, no replacement row, and active backends `[]`. The fixture
+asserted one POST. Source and schema were unchanged for the run.
+Evidence: `/tmp/freeholder-legacy-refund-c0-refined-original-after.json`,
+`/tmp/freeholder-legacy-refund-c0-refined-original-after.log`, and
+`/tmp/freeholder-legacy-refund-c0-refined-original-after-ledger.json`.
+The original 4c proof remains separate; neither result extends acceptance to
+the fourteen new fault controls, which are still pending.
