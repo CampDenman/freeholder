@@ -2,9 +2,9 @@
 # One invoice, original merchant portions — C12.26/C12.38
 
 This is an unpublished source checkpoint, not stable or live acceptance.
-Migration77 remains outside the journal until the real75/76 predecessors are
-composed. The local rehearsal applied the official0–74 chain and the exact77
-SQL in a fresh disposable database; it does not prove a contiguous77 upgrade.
+Migration 77 remains outside the journal until the real75/76 predecessors are
+composed. The local rehearsal applied the official 0–74 chain and the exact 77
+SQL in a fresh disposable database; it does not prove a contiguous 77 upgrade.
 
 New member-order invoices freeze each original seller/site portion in
 `invoice_merchant_allocations` and exact invoice-line ownership in
@@ -24,7 +24,7 @@ and explicit search/retention classifications. Original financial facts are
 retained through personal identity erasure and named holds.
 
 The migration deliberately does not reconstruct existing portions. Prior
-policies are version0; new policies default to version1. New order policies
+policies are version 0; new policies default to version 1. New order policies
 must have complete matching portions/line ownership before issue. SQL guards
 reject historical backfill, money/routing/version edits, missing or cross-
 invoice bindings and missing contact merge witnesses. Stop old writers before
@@ -43,25 +43,44 @@ run failed because its new site-product fixture omitted the mandatory tax
 category; supplying it preserved every original assertion and all four pass.
 
 A real populated prior77 runtime (`ae71cb7d`) also completed checkout and bank
-settlement on official74. Its drained database was cloned, preserving the
-original, then upgraded with this exact77 SQL. All nine original financial
+settlement on official 74. Its drained database was cloned, preserving the
+original, then upgraded with the earlier 77 SQL. All nine original financial
 table counts and SHA256 digests matched before/after (invoices, lines,
 policies, payments, refunds, orders, order items, payouts and transfers).
-Existing policies are version0 and no historical allocation was guessed.
-Live SDK generation passed8/8 against that populated upgraded clone. Local
+Existing policies are version 0 and no historical allocation was guessed.
+Live SDK generation passed 8/8 against that populated upgraded clone. Local
 report: `/tmp/freeholder-allocation77-populated-upgrade.json`.
 
-All14 discounted-order/payout controls pass (160.71s), including prior frozen
+All 14 discounted-order/payout controls pass (160.71s), including prior frozen
 fees, confirmed/unknown original provider results, fully discounted orders
 and zero-transfer refusal. Their prior-policy fixtures explicitly restore the
-pre77 row shape (no portions, version0) inside one privileged disposable-test
+pre77 row shape (no portions, version 0) inside one privileged disposable-test
 transaction, temporarily disabling only the three named new mutation guards
 and restoring them before commit. A rollback restores those DDL changes too.
 No production guard was relaxed, no assertion was removed, and this fixture
 construction is distinct from the actual populated upgrade proof above.
 
+The composed source also passed the two original member erasure controls plus
+four portion controls. Two reset hooks initially hit PostgreSQL57014 before
+their test bodies ran; after the unrelated build/copy stage drained, those
+exact two controls passed in 19.98s with unchanged deadlines and durability.
+
+A declared pre77 merge-history fixture then exposed a gap in this unpublished
+source: undo succeeded after a new seller portion had acquired its current
+contact owner (before: 8.87s). The updated 77 SQL disables that historical undo
+without inventing old reference hashes, and fences an old writer's direct
+undo marker too. The exact after control passes, ordinary fully witnessed
+merge/undo still passes in 8.77s, and the updated schema applied to a fresh
+official 74 database. A shared physical checkout also proves actual shipping,
+item tax, shipping-tax cent rounding and fees across two sellers plus the
+site: the one CAD 45.90 invoice has original portions CAD 24.12, 6.03 and 15.75,
+and total site fees CAD 2.50. Those two new controls passed together in 14.68s. These are declared
+synthetic tax settings for the site's collection model, not live tax or
+seller-as-merchant acceptance. Final populated-chain qualification must use
+the updated historical-undo fence.
+
 Remaining work includes the complete contiguous populated upgrade,
-physical shipping/tax integration,
+seller-as-merchant tax integration,
 concurrent capture, final merged-chain SDK/browser/full-suite qualification,
 original-account direct/destination portions, payment/refund/dispute recovery,
 human flows and actual provider acceptance. Original recorded provider money
