@@ -427,3 +427,20 @@ exact refusal; the clock control is not a wall-time provider benchmark. No
 budget or timeout was extended. The shared link adapter also preserves literal
 static URL facts while using the existing source-path convention for resolution;
 its real cross-batch link assertion remains in the pending full lifecycle case.
+
+
+The first full ZIP lifecycle attempt stopped at a genuine media-receipt guard
+in 17.49 seconds. Its two independent processes had accepted 500+2 real files,
+including 501 HTML pages and an actual shared image across a private source-chunk
+boundary. Original-file metadata/digests and absence of invented WordPress fields
+passed before the first image claim. The receipt guard expected child-owned raw
+bytes, while the immutable source correctly remains on the root. Publication and
+rollback had not run and are not claimed.
+
+The source repair centralizes that lookup. Only the exact service context that
+locked and validated the live parent, plus the child's stored operation binding
+and matching source kind, can resolve its actual parent. Both commit preparation
+and media receipts retain their source/preview/manifest checks against that owner.
+The asset receipt still belongs to its real child batch; neither the original
+source run ID nor its storage identity is rewritten. Full types and targeted lint
+pass. The unchanged fresh lifecycle control remains pending its next sole-PG lease.

@@ -52,7 +52,7 @@ import { approvedMediaOrigins, approvedMediaOriginsSchema, allowedMediaOrigins }
 import { parseGenericFeed } from "./generic-feed";
 import { readRetainedSourceChunk, releaseImportSources, retainedImportSourceSchema, retainedSourceFromRun } from "./retained-source";
 import importMediaReceiptServices, { bindImportMediaBytes, claimImportMedia } from "./media-receipts";
-import { assertImportBatchAccess, isPrivateImportBatch, callImportService, currentImportBatch, importBatchTargets, importBatchSharedMedia, lockImportBatchParent, recordImportBatchTarget, recordImportBatchMedia } from "./batch-context";
+import { assertImportBatchAccess, isPrivateImportBatch, callImportService, currentImportBatch, importBatchTargets, importBatchSharedMedia, importBatchSourceOwner, lockImportBatchParent, recordImportBatchTarget, recordImportBatchMedia } from "./batch-context";
 import graphBatchServices, { advanceGraphCommit } from "./graph-batches";
 import { advanceGraphLifecycle } from "./graph-lifecycle";
 import { importGraphVersionSchema } from "./graph-version";
@@ -523,12 +523,12 @@ function genericCommitPlan(run: { origin: string | null; preview: unknown; check
   return generic;
 }
 
-async function archiveCommitSource(run: { id: string; preview: unknown; checkpoint: unknown }, ctx: ServiceContext) {
+async function archiveCommitSource(run: typeof importRuns.$inferSelect, ctx: ServiceContext) {
   const plan = staticArchivePlan(run.preview);
   if (!plan) return undefined;
   const binding = z.object({ source: retainedImportSourceSchema, previewDigest: z.string() }).safeParse(checkpointOf(run.checkpoint).archiveSource);
   const batch = currentImportBatch(run.id);
-  const [parent] = batch ? await ctx.tx.select().from(importRuns).where(eq(importRuns.id, batch.rootId)).limit(1) : [run];
+  const parent = await importBatchSourceOwner(ctx, run);
   const active = parent && retainedSourceFromRun(parent);
   if (!binding.success || !active || active.runId !== (batch?.rootId ?? run.id) || archivePreviewDigest(active) !== archivePreviewDigest(binding.data.source) || binding.data.previewDigest !== archivePreviewDigest(run.preview)) throw new ServiceError("conflict", "The archive preview no longer matches its retained private source.");
   const completedKeys = [...mediaRecordsFrom(run.checkpoint), ...await importBatchSharedMedia(ctx)].filter(record => record.assetId).map(record => record.key);

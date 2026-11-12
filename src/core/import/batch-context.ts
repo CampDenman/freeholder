@@ -47,6 +47,19 @@ export async function lockImportBatchParent(ctx: ServiceContext, childId: string
   guardedContexts.add(ctx);
 }
 
+/** Original bytes remain owned by the actual parent. An inherited async scope
+ * alone is insufficient: this exact service context must have locked/validated
+ * the parent, and the child's stored operation binding must still match. */
+export async function importBatchSourceOwner(ctx: ServiceContext, run: typeof importRuns.$inferSelect): Promise<typeof importRuns.$inferSelect> {
+  if (!isPrivateImportBatch(run)) return run;
+  assertImportBatchAccess(run);
+  const context = batchForContext(ctx);
+  if (!context || context.childId !== run.id) throw new ServiceError("not_found", "No such import run.");
+  const [root] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, context.rootId)).limit(1);
+  if (!root || root.kind !== run.kind) throw new ServiceError("conflict", "The original source owner no longer matches this bounded import.");
+  return root;
+}
+
 /** Existing service permission and audit still run, with a fresh extra fence. */
 export async function callImportService<I extends z.ZodType, O>(ctx: ServiceContext, service: Service<I, O>, input: z.input<I>): Promise<O> {
   if (batchForContext(ctx)) await assertCurrentImportAuthority(ctx, service.def.name, service.def.kind, service.def.permission);
