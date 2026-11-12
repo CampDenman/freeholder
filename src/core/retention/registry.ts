@@ -94,6 +94,7 @@ export async function purgeAgedContactRows(
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   invoice_market_policies: "Immutable issued-invoice terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",
+  invoice_merchant_allocations: "Immutable original invoice money and seller ownership; retained financial facts and contact merge use members.merchantIdentity, never an age-based purge.",
   subscription_market_policies: "Immutable agreement terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",
   media_uploads:"Original reservations survive unresolved physical work; guarded lifecycle and subject erasure own retirement.",
   media_objects:"Original object ownership survives unknown writes; guarded physical cleanup and privacy jobs remove it.",

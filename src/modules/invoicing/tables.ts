@@ -8,6 +8,8 @@ export {
   flexiblePayments,
   invoiceLines,
   invoiceMarketPolicies,
+  invoiceMerchantAllocations,
+  invoiceMerchantAllocationLines,
   invoiceSequences,
   invoices,
   lateFeeAssessments,

@@ -10,7 +10,7 @@ import {registerContactReference} from "@/core/contacts/service";
 import { lockContactIdentity, lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {ServiceError,type Tx} from "@/core/service";
-import { invoiceMarketPolicies } from "@/modules/invoicing/schema";
+import { invoiceMarketPolicies, invoiceMerchantAllocations } from "@/modules/invoicing/schema";
 import { subscriptionMarketPolicies } from "@/modules/subscriptions/schema";
 
 export async function merchantIdentityErased(tx:Tx,userId:string,contactId?:string|null):Promise<boolean>{
@@ -24,12 +24,15 @@ async function merchantForContact(tx:Tx,contactId:string):Promise<string|null>{
 }
 
 registerContactPrivacySource({
-  scope:"members.merchantIdentity",tables:["invoice_market_policies","subscription_market_policies"],
+  scope:"members.merchantIdentity",tables:["invoice_market_policies","subscription_market_policies","invoice_merchant_allocations"],
   retentionScopes:["members","commerce.money"],eraseOrder:5,
   exportData:async(tx,contactId)=>{
     const userId=await merchantForContact(tx,contactId);
     return{
       invoices:await tx.select({invoiceId:invoiceMarketPolicies.invoiceId,merchantName:invoiceMarketPolicies.merchantName,merchantSupport:invoiceMarketPolicies.merchantSupport}).from(invoiceMarketPolicies).where(or(eq(invoiceMarketPolicies.merchantContactId,contactId),userId?and(isNull(invoiceMarketPolicies.merchantContactId),eq(invoiceMarketPolicies.sellerUserId,userId)):undefined)),
+      // These are retained original financial facts; no profile, routing or
+      // unrelated buyer/contact identities are exported here.
+      portions:await tx.select({invoiceId:invoiceMerchantAllocations.invoiceId,subtotalMinor:invoiceMerchantAllocations.subtotalMinor,discountMinor:invoiceMerchantAllocations.discountMinor,shippingMinor:invoiceMerchantAllocations.shippingMinor,taxMinor:invoiceMerchantAllocations.taxMinor,totalMinor:invoiceMerchantAllocations.totalMinor,feeMinor:invoiceMerchantAllocations.feeMinor}).from(invoiceMerchantAllocations).where(or(eq(invoiceMerchantAllocations.merchantContactId,contactId),userId?and(isNull(invoiceMerchantAllocations.merchantContactId),eq(invoiceMerchantAllocations.sellerUserId,userId)):undefined)),
       agreements:await tx.select({subscriptionId:subscriptionMarketPolicies.subscriptionId,merchantName:subscriptionMarketPolicies.merchantName,merchantSupport:subscriptionMarketPolicies.merchantSupport}).from(subscriptionMarketPolicies).where(or(eq(subscriptionMarketPolicies.merchantContactId,contactId),userId?and(isNull(subscriptionMarketPolicies.merchantContactId),eq(subscriptionMarketPolicies.sellerUserId,userId)):undefined)),
     };
   },
@@ -70,4 +73,9 @@ registerIdentityReference("subscription_market_policies",
  (tx,ids)=>tx.select({id:subscriptionMarketPolicies.subscriptionId,contactId:subscriptionMarketPolicies.merchantContactId,material:sql<string>`to_jsonb(${subscriptionMarketPolicies})::text`}).from(subscriptionMarketPolicies).where(inArray(subscriptionMarketPolicies.merchantContactId,ids)).orderBy(subscriptionMarketPolicies.subscriptionId).limit(5001),
  (tx,from,to)=>tx.update(subscriptionMarketPolicies).set({merchantContactId:to}).where(eq(subscriptionMarketPolicies.merchantContactId,from)),
  (tx,ids,contactId)=>tx.update(subscriptionMarketPolicies).set({merchantContactId:contactId}).where(inArray(subscriptionMarketPolicies.subscriptionId,ids)),
+);
+registerIdentityReference("invoice_merchant_allocations",
+ (tx,ids)=>tx.select({id:invoiceMerchantAllocations.id,contactId:invoiceMerchantAllocations.merchantContactId,material:sql<string>`to_jsonb(${invoiceMerchantAllocations})::text`}).from(invoiceMerchantAllocations).where(inArray(invoiceMerchantAllocations.merchantContactId,ids)).orderBy(invoiceMerchantAllocations.id).limit(5001),
+ (tx,from,to)=>tx.update(invoiceMerchantAllocations).set({merchantContactId:to}).where(eq(invoiceMerchantAllocations.merchantContactId,from)),
+ (tx,ids,contactId)=>tx.update(invoiceMerchantAllocations).set({merchantContactId:contactId}).where(inArray(invoiceMerchantAllocations.id,ids)),
 );
