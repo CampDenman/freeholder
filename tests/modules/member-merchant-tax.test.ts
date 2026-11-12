@@ -39,7 +39,7 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
   // fabricated; the real shared draft service still proves full line coverage,
   // business ownership, accepted quote and conservation. This is not checkout
   // or actual provider acceptance.
-  registerMerchantTaxSourceResolver("merchant_tax_native",async input=>{
+  registerMerchantTaxSourceResolver("manual",async input=>{
    expect(input.sourceId).toBe(sourceId);
    expect(input.contactId).toBe(buyerId);
    expect(input.currency).toBe("CAD");
@@ -71,7 +71,7 @@ describe.runIf(hasDatabase)("original merchant tax services (C12.38)",()=>{
   return previewMerchantTax.call({profileId:profile.profileId,profileVersion:profile.profileVersion,contactId,destination,currency:"CAD",items,shippingMinor:101,occurredAt},SYSTEM);
  }
  async function draft(){
-  return createDraftInvoice.call({contactId:buyerId,currency:"CAD",sourceType:"merchant_tax_native",sourceId,idempotencyKey:randomUUID(),shippingMinor:101,
+  return createDraftInvoice.call({contactId:buyerId,currency:"CAD",sourceType:"manual",sourceId,idempotencyKey:randomUUID(),shippingMinor:101,
    lines:[{description:"Original taxable item",quantityMicros:1000000,unitAmountMinor:1000,taxCategoryCode:"standard",requiresShipping:true}],tax:{mode:"merchant",destination}},OWNER);
  }
  async function request(kind:"export"|"erasure"){
