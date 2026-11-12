@@ -60,6 +60,14 @@ BEGIN
  IF parent.id IS NULL OR parent.status<>'draft' OR parent.source_type<>'order' OR policy.allocation_version<>1 THEN
   RAISE EXCEPTION 'Capture proven merchant portions on the original draft order invoice.' USING ERRCODE='23514';
  END IF;
+ -- A merge recorded before this table existed cannot describe which side
+ -- owned later financial evidence. Keep its real current owner and refuse
+ -- separation; never manufacture a before-state hash for the old merge.
+ UPDATE contact_merge_operations m SET undoable=false,
+  undo_blockers=array_append(m.undo_blockers,'Original invoice merchant ownership was recorded after this merge; restore the pre-upgrade snapshot to separate it safely.')
+ WHERE m.undone_at IS NULL AND m.undoable
+  AND NEW.merchant_contact_id IN(m.duplicate_contact_id,m.surviving_contact_id)
+  AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(m.reference_state) entry WHERE entry->>'table'='invoice_merchant_allocations');
  RETURN NEW;
 END;
 $$;
@@ -171,3 +179,17 @@ $$;
 --> statement-breakpoint
 CREATE TRIGGER invoice_merchant_allocation_merge_guard BEFORE INSERT ON contact_merge_operations
  FOR EACH ROW EXECUTE FUNCTION guard_invoice_merchant_allocation_merge();
+--> statement-breakpoint
+CREATE FUNCTION guard_invoice_merchant_allocation_undo() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF OLD.undone_at IS NULL AND NEW.undone_at IS NOT NULL
+  AND EXISTS(SELECT 1 FROM invoice_merchant_allocations a WHERE a.merchant_contact_id IN(OLD.duplicate_contact_id,OLD.surviving_contact_id))
+  AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(OLD.reference_state) entry WHERE entry->>'table'='invoice_merchant_allocations') THEN
+  RAISE EXCEPTION 'This historical merge has no original invoice merchant ownership witness.' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER invoice_merchant_allocation_undo_guard BEFORE UPDATE OF undone_at ON contact_merge_operations
+ FOR EACH ROW EXECUTE FUNCTION guard_invoice_merchant_allocation_undo();

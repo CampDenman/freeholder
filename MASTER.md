@@ -13475,6 +13475,11 @@ whatever is best for the people using the site.
   four payout controls pass on official74 plus explicit77 SQL; no contiguous
   upgrade is claimed. Evidence, the real prior seller-ownership failure and
   remaining integration are in `deploy/merchant-invoice-portions-2026-11-11.md`.
+  New shared physical-checkout evidence conserves actual shipping/item tax,
+  shipping-tax cents and fees on one mixed invoice. Historical pre77 merge
+  undo is refused when later original financial ownership has no old witness;
+  ordinary witnessed merge/undo remains supported. This remains unpublished
+  schema77 qualification, with seller-as-merchant routing/tax still required.
   No new collection model is enabled, and no part supplies stable or live
   payment sign-off. All remaining increments are required; none is deferred.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
