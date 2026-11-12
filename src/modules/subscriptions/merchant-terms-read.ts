@@ -4,7 +4,8 @@
 import { and, desc, eq, lte } from "drizzle-orm";
 import { ServiceError, type ServiceContext } from "@/core/service";
 import { subscriptionCommercialSnapshot } from "./merchant-terms-contract";
-import { subscriptionCommercialTerms, subscriptionMarketPolicies, subscriptions } from "./schema";
+import { subscriptionCommercialTerms, subscriptionMarketPolicies } from "./schema";
+import type { subscriptions } from "./schema";
 
 type Subscription = typeof subscriptions.$inferSelect;
 
