@@ -18,17 +18,23 @@ import { ensureDefaults } from "@/modules/cms/service";
 import { blogReaderComments } from "@/modules/cms/blog-comments-schema";
 import { commitImport, listImports, rollbackImport, startImport } from "@/core/import/service";
 import { beginSourceUpload, previewFromUpload, uploadSourceChunk } from "@/core/import/source-upload";
+import { originalStaticZip } from "../helpers/original-static-zip";
 import { failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const ORIGIN = "https://fictional-graph-reader.example", EMAIL = "fictional-graph-reader@example.test";
 const receipt = z.object({ outcomes: z.array(z.object({ scope: z.string(), outcome: z.string(), pendingJobs: z.array(z.uuid()).optional() })) });
 const context = (id: string): JobExecutionContext => ({ id, name: eraseImportSourceObjects.name, attempt: 1, signal: new AbortController().signal, leaseSeconds: 300, heartbeat: async () => true, isCancelled: async () => false, throwIfCancelled: async () => {} });
-function source() {
+type SourceKind = "wordpress-wxr" | "archive";
+function source(kind: SourceKind) {
+  if (kind === "archive") return originalStaticZip(Array.from({ length: 501 }, (_, index) => ({
+    path: `site/reader/page-${index}.html`,
+    body: `<html><head><title>Fictional page ${index}</title></head><body><p>Article ${index}.</p>${index === 500 ? `<!-- Original private reader metadata ${EMAIL}. -->` : ""}</body></html>`,
+  })));
   return new TextEncoder().encode(`<rss xmlns:wp="urn:wordpress" xmlns:content="urn:content"><channel><title>Fictional reader source</title><link>${ORIGIN}</link>${Array.from({ length: 501 }, (_, i) => `<item><title>Fictional reader page ${i}</title><link>${ORIGIN}/reader/page-${i}</link><wp:post_id>${i + 1}</wp:post_id><wp:post_type>${i === 500 ? "post" : "page"}</wp:post_type><wp:status>publish</wp:status><content:encoded><![CDATA[<p>Fictional article ${i}.</p>]]></content:encoded>${i === 500 ? `<wp:comment><wp:comment_id>7001</wp:comment_id><wp:comment_author>Fictional reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Fictional private original comment.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>` : ""}</item>`).join("")}</channel></rss>`);
 }
-async function staged() {
-  const reader = await resolveContact.call({ email: EMAIL }, OWNER), run = await startImport.call({ origin: ORIGIN, kind: "wordpress-wxr" }, OWNER), bytes = source();
-  const upload = await beginSourceUpload.call({ id: run.id, filename: "fictional-reader-graph.xml", bytes: bytes.byteLength }, OWNER);
+async function staged(kind: SourceKind) {
+  const reader = await resolveContact.call({ email: EMAIL }, OWNER), run = await startImport.call({ origin: ORIGIN, kind }, OWNER), bytes = source(kind);
+  const upload = await beginSourceUpload.call({ id: run.id, filename: kind === "archive" ? "fictional-reader-graph.zip" : "fictional-reader-graph.xml", bytes: bytes.byteLength }, OWNER);
   await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
   const initial = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
   expect(await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).toMatchObject({ status: "discover", counts: { indexed: 500 } });
@@ -37,11 +43,11 @@ async function staged() {
   return { reader, run, upload, initial, request, key: `imports/${run.id}/${upload.uploadId}/00000.part` };
 }
 
-describe.runIf(hasDatabase)("durable source privacy boundaries (C3.47)", { timeout: 60_000 }, () => {
+for (const kind of ["wordpress-wxr", "archive"] as const) describe.runIf(hasDatabase)(`durable ${kind} source privacy boundaries (C3.47)`, { timeout: 60_000 }, () => {
   beforeEach(async () => { await truncateSpine(); resetStorageForTests(); await ensureDefaults.call({}, OWNER); });
   afterAll(async () => { vi.restoreAllMocks(); await stopJobs(); await closeDb(); });
   it("invalidates an unparsed original on real erasure and refuses its late reader-bearing result", async () => {
-    const original = await staged(), store = storage(), get = store.get.bind(store);
+    const original = await staged(kind), store = storage(), get = store.get.bind(store);
     let entered!: () => void, release!: () => void;
     const reached = new Promise<void>(resolve => { entered = resolve; }), pending = new Promise<void>(resolve => { release = resolve; });
     const spy = vi.spyOn(store, "get").mockImplementationOnce(async key => { const bytes = await get(key); entered(); await pending; return bytes; });
@@ -66,7 +72,7 @@ describe.runIf(hasDatabase)("durable source privacy boundaries (C3.47)", { timeo
     expect(await db().select().from(blogReaderComments)).toEqual([]);
   });
   it("keeps the exact held original after graph rollback and releases it only after the named hold is removed", async () => {
-    const original = await staged();
+    const original = await staged(kind);
     const hold = await addRetentionException.call({ dataRequestId: original.request.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Fictional retained original source evidence" }, OWNER);
     const result = await fulfillDataRequest.call({ id: original.request.id, confirmation: "ERASE" }, OWNER);
     expect(result.request.status).toBe("partially_completed");
