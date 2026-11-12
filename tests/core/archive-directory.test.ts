@@ -22,12 +22,13 @@ function crc32(bytes: Uint8Array) {
 }
 // A minimal deterministic stored ZIP fixture, with real local/central headers.
 // It exercises the installed ZIP library, rather than mocking its directory.
-function largeZip(count = 501, reverseDirectory = false) {
+function storedZip(files: Array<{ path: string; body: string }>, reverseDirectory = false) {
+  const count = files.length;
   const local: Buffer[] = [], central: Buffer[] = [];
   let offset = 0;
   for (let index = 0; index < count; index++) {
-    const name = Buffer.from(index ? `site/page-${index}.html` : "site/index.html");
-    const body = Buffer.from(`<html><body><h1>Fictional original ${index}</h1></body></html>`);
+    const name = Buffer.from(files[index]!.path);
+    const body = Buffer.from(files[index]!.body);
     const checksum = crc32(body), header = Buffer.alloc(30), record = Buffer.alloc(46);
     header.writeUInt32LE(0x04034b50); header.writeUInt16LE(20, 4); header.writeUInt16LE(0x0800, 6);
     header.writeUInt32LE(checksum, 14); header.writeUInt32LE(body.length, 18); header.writeUInt32LE(body.length, 22); header.writeUInt16LE(name.length, 26);
@@ -40,6 +41,9 @@ function largeZip(count = 501, reverseDirectory = false) {
   const table = Buffer.concat(central), end = Buffer.alloc(22);
   end.writeUInt32LE(0x06054b50); end.writeUInt16LE(count, 8); end.writeUInt16LE(count, 10); end.writeUInt32LE(table.length, 12); end.writeUInt32LE(offset, 16);
   return Buffer.concat([...local, table, end]);
+}
+function largeZip(count = 501, reverseDirectory = false) {
+  return storedZip(Array.from({ length: count }, (_, index) => ({ path: index ? `site/page-${index}.html` : "site/index.html", body: `<html><body><h1>Fictional original ${index}</h1></body></html>` })), reverseDirectory);
 }
 
 describe("original static ZIP directory facts (C3.47)", () => {
@@ -78,6 +82,14 @@ describe("original static ZIP directory facts (C3.47)", () => {
     const contradictory = largeZip(1);
     contradictory[contradictory.readUInt32LE(contradictory.length - 22 + 16) + 46] = "X".charCodeAt(0);
     await expect(readArchiveDirectory(bytesSource(contradictory), "https://fictional-zip.example/")).rejects.toThrow(/names disagree/);
+  });
+  it("keeps ignored packaging outside the detected site root as an original path without inventing a public URL", async () => {
+    const directory = await readArchiveDirectory(bytesSource(storedZip([
+      { path: "site/index.html", body: "<h1>Fictional website</h1>" },
+      { path: "README.txt", body: "Fictional export packaging, outside the site." },
+    ])), "https://fictional-zip.example/");
+    expect(directory.root).toBe("site/");
+    expect(directory.files.find(file => file.path === "README.txt")).toMatchObject({ kind: "ignored", relativePath: "README.txt", url: null });
   });
   it("keeps actual static paths, supported media and ignored files separate", async () => {
     const source = fixture("site"), directory = await readArchiveDirectory(source, "https://archive.example/legacy/");

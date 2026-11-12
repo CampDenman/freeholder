@@ -11,7 +11,7 @@ const MAX_ENTRIES = 10_000, MAX_METADATA_BYTES = 16 * 1024 * 1024;
 const HTML = /\.html?$/i;
 const MEDIA = /\.(?:avif|gif|jpe?g|png|webp|mp4|webm|mp3|wav|ogg|m4a|pdf)$/i;
 export type ArchiveDirectoryFile = {
-  format: "archive-zip"; path: string; relativePath: string; url: string;
+  format: "archive-zip"; path: string; relativePath: string; url: string | null;
   kind: "page" | "asset" | "ignored"; start: number; end: number;
   compressedBytes: number; bytes: number; crc32: number; method: number;
 };
@@ -81,11 +81,14 @@ async function directory(source: ArchiveSource, origin: string, zip: ZipFile, de
   const assets = files.filter(row => MEDIA.test(row.path));
   if (assets.length > ARCHIVE_LIMITS.mediaFiles || assets.some(row => row.entry.uncompressedSize === 0 || row.entry.uncompressedSize > ARCHIVE_LIMITS.mediaBytes)) throw new Error("The ZIP exceeds its media-file budget or contains invalid media sizes.");
   if (files.some(row => HTML.test(row.path) && row.entry.uncompressedSize > ARCHIVE_LIMITS.pageBytes)) throw new Error("An original ZIP page exceeds its page-byte budget.");
-  const originalFiles: ArchiveDirectoryFile[] = files.map(({ entry, path, start, end }) => ({
-    format: "archive-zip", path, relativePath: path.slice(root.length), url: publicUrl(path.slice(root.length), approved.href),
-    kind: HTML.test(path) ? "page" : MEDIA.test(path) ? "asset" : "ignored", start, end,
-    compressedBytes: entry.compressedSize, bytes: entry.uncompressedSize, crc32: entry.crc32 >>> 0, method: entry.compressionMethod,
-  }));
+  const originalFiles: ArchiveDirectoryFile[] = files.map(({ entry, path, start, end }) => {
+    const relativePath = root && path.startsWith(root) ? path.slice(root.length) : path;
+    const kind = HTML.test(path) ? "page" : MEDIA.test(path) ? "asset" : "ignored";
+    return {
+      format: "archive-zip", path, relativePath, url: kind === "ignored" ? null : publicUrl(relativePath, approved.href),
+      kind, start, end, compressedBytes: entry.compressedSize, bytes: entry.uncompressedSize, crc32: entry.crc32 >>> 0, method: entry.compressionMethod,
+    };
+  });
   const encoded = JSON.stringify(originalFiles);
   if (Buffer.byteLength(encoded) > MAX_METADATA_BYTES) throw new Error("The complete ZIP normalized directory exceeds its metadata budget.");
   // This fingerprint binds accepted *directory facts*, not a claim that the

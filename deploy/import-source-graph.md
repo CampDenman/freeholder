@@ -345,3 +345,10 @@ privacy/ownership/recovery native proofs and owner browser acceptance remain
 required. Durable crawl response/frontier schema81 has not been written or
 journalled here; its actual 79/80 predecessors must exist before a contiguous
 qualification claim. C3.47 and stable readiness remain open.
+
+
+The directory primitive also keeps ignored packaging outside the detected site
+root under its actual original path, with no invented public URL. Its updated
+real-byte fixtures pass all 44 directory/ordinary-archive controls in 1.83 seconds;
+lint and targeted changed-module types pass. This remains source-only: no graph
+runtime, schema81, provider acceptance or complete ZIP/crawl claim is added.
