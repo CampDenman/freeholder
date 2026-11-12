@@ -390,6 +390,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
             <p className="text-sm text-ink-muted">{t("store.checkout.merchantReviewHint")}</p>
             {commercialQuoteFailed ? <Callout tone="danger">{t("store.checkout.merchantQuoteChanged")}</Callout> : null}
             {commercialQuote ? <>
+              <a className="text-accent underline" href="/portal/purchases/tax">{t("merchantTax.exemption.title")}</a>
               <input type="hidden" name="taxQuoteDigest" value={commercialQuote.taxQuoteDigest} />
               <input type="hidden" name="commercialQuoteDigest" value={commercialQuote.commercialQuoteDigest} />
               {commercialQuote.parties.map((party, position) => <div key={position} className="grid gap-2 border-t border-rule pt-3">
