@@ -10,6 +10,7 @@ import {defineService,ServiceError} from "@/core/service";
 import {invoiceMerchantTaxQuotes,merchantTaxProfiles,merchantTaxProfileVersions} from "./merchant-tax-schema";
 import {merchantTaxPolicyReceipt} from "./merchant-tax-contract";
 import {assertMerchantTaxRevisionSafe} from "@/modules/subscriptions/merchant-tax-revision";
+import {assertMerchantTaxExemptionRevisionSafe} from "@/modules/subscriptions/merchant-tax-exemption-revision";
 import {previewMerchantTax} from "./merchant-tax-preview";
 import {completeMerchantTaxErasure} from "./merchant-tax-privacy";
 export {merchantTaxPolicyReceipt} from "./merchant-tax-contract";
@@ -82,4 +83,4 @@ export const merchantTaxBusinessIdentity=defineService({
  },
 });
 
-export default [currentMerchantTaxProfile,getInvoiceMerchantTaxReceipt,getInvoiceMerchantFreightReceipts,getInvoiceSiteMerchantIdentity,merchantTaxBusinessIdentity,previewMerchantTax,completeMerchantTaxErasure,assertMerchantTaxRevisionSafe];
+export default [currentMerchantTaxProfile,getInvoiceMerchantTaxReceipt,getInvoiceMerchantFreightReceipts,getInvoiceSiteMerchantIdentity,merchantTaxBusinessIdentity,previewMerchantTax,completeMerchantTaxErasure,assertMerchantTaxRevisionSafe,assertMerchantTaxExemptionRevisionSafe];

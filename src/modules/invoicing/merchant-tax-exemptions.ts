@@ -5,6 +5,7 @@ import {and,desc,eq,gte,inArray,isNull,lt,or,sql} from "drizzle-orm";
 import {z} from "zod";
 import {contacts} from "@/core/contacts/schema";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
+import {lockMerchantExemptionPolicy} from "@/core/commerce/merchant-exemption-lock";
 import {dataRequests} from "@/core/privacy/schema";
 import {defineService,getService,ServiceError,type ServiceContext} from "@/core/service";
 import {requireCartAccess} from "@/modules/catalog/cart-access";
@@ -88,6 +89,9 @@ export const requestMerchantTaxExemption=defineService({
   const original=await business(ctx,value.sellerUserId===null?"site":`seller:${value.sellerUserId}`);
   const rule=selectDeclaredMerchantTaxRule({origin:merchantTaxAddress.parse(original.version.origin),destination:value.destination},original.version);
   if(!rule)throw new ServiceError("conflict","No business tax jurisdiction applies to this request.");
+  // A pending request changes no effective exemption. Serialize it without
+  // requiring the customer to stop billing merely to submit their evidence.
+  await lockMerchantExemptionPolicy(ctx.tx,original.profile.id,person.id);
   await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`merchant-exemption:${original.profile.id}:${person.id}:${rule.zone.id}`}))`);
   const[existing]=await ctx.tx.select().from(taxExemptions).where(and(eq(taxExemptions.merchantProfileId,original.profile.id),eq(taxExemptions.contactId,person.id),eq(taxExemptions.zoneId,rule.zone.id),inArray(taxExemptions.status,["pending","valid"]))).orderBy(sql`case when ${taxExemptions.status}='pending' then 0 else 1 end`,desc(taxExemptions.createdAt)).limit(1).for("update");
   if(existing?.status==="pending"){if(existing.kind!==value.kind||existing.certificateRef!==value.certificateRef)throw new ServiceError("conflict","Withdraw the existing pending request before replacing its evidence.");return{id:existing.id,status:existing.status};}
@@ -104,11 +108,19 @@ export const cartMerchantTaxBusinesses=defineService({name:"invoicing.cartMercha
 export const myMerchantTaxExemptions=defineService({name:"invoicing.myMerchantTaxExemptions",summary:"Read only your own customer requests and business exemption decisions.",kind:"query",permission:"authenticated",input:page,output:listed,handler:async(value,ctx)=>list(value,ctx,{contactId:(await buyer(ctx)).id})});
 export const withdrawMerchantTaxExemption=defineService({
  name:"invoicing.withdrawMerchantTaxExemption",summary:"Withdraw your own pending exemption request without destroying retained evidence.",kind:"mutation",permission:"authenticated",input:z.object({id:z.uuid()}),output:result,auditInputFields:["id"],
- handler:async({id},ctx)=>{const person=await buyer(ctx);const[row]=await ctx.tx.select().from(taxExemptions).where(and(eq(taxExemptions.id,id),eq(taxExemptions.contactId,person.id))).limit(1).for("update");if(!row?.merchantProfileId||row.status!=="pending")throw new ServiceError("conflict","That pending customer request is not available.");await allowMerchantTaxWrites(ctx.tx);await ctx.tx.update(taxExemptions).set({status:"revoked",updatedAt:new Date()}).where(eq(taxExemptions.id,id));ctx.setSubject("taxExemption",id);return{id,status:"revoked" as const};},
+ handler:async({id},ctx)=>{
+  const person=await buyer(ctx),[original]=await ctx.tx.select().from(taxExemptions).where(and(eq(taxExemptions.id,id),eq(taxExemptions.contactId,person.id))).limit(1);
+  if(!original?.merchantProfileId)throw new ServiceError("conflict","That pending customer request is not available.");
+  await lockMerchantExemptionPolicy(ctx.tx,original.merchantProfileId,person.id);
+  const[row]=await ctx.tx.select().from(taxExemptions).where(and(eq(taxExemptions.id,id),eq(taxExemptions.contactId,person.id))).limit(1).for("update");
+  if(!row||row.merchantProfileId!==original.merchantProfileId||row.status!=="pending")throw new ServiceError("conflict","That pending customer request is not available.");
+  await allowMerchantTaxWrites(ctx.tx);await ctx.tx.update(taxExemptions).set({status:"revoked",updatedAt:new Date()}).where(eq(taxExemptions.id,id));ctx.setSubject("taxExemption",id);return{id,status:"revoked" as const};
+ },
 });
 async function review(value:z.output<typeof reviewInput>,ctx:ServiceContext,site:boolean){
  const original=await ownBusiness(ctx,site),[initial]=await ctx.tx.select().from(taxExemptions).where(and(eq(taxExemptions.id,value.id),eq(taxExemptions.merchantProfileId,original.profile.id))).limit(1);
  if(!initial)throw new ServiceError("not_found","That original customer request is not available to this business.");
+ await lockMerchantExemptionPolicy(ctx.tx,original.profile.id,initial.contactId);
  await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`merchant-exemption:${original.profile.id}:${initial.contactId}:${initial.zoneId}`}))`);
  const[row]=await ctx.tx.select().from(taxExemptions).where(and(eq(taxExemptions.id,value.id),eq(taxExemptions.merchantProfileId,original.profile.id))).limit(1).for("update");
  if(!row||row.status!==value.expectedStatus||!["pending","valid"].includes(row.status)||value.decision==="valid"&&row.status!=="pending")throw new ServiceError("conflict","That original customer request changed. Review it again.");
@@ -118,7 +130,7 @@ async function review(value:z.output<typeof reviewInput>,ctx:ServiceContext,site
  if(erasure)throw new ServiceError("conflict","The customer's privacy request prevents new exemption decisions.");
  const[customer]=await ctx.tx.select({source:contacts.source}).from(contacts).where(eq(contacts.id,row.contactId)).limit(1);
  if(!customer||customer.source==="privacy-erasure")throw new ServiceError("conflict","The original customer is not available for a new decision.");
- const safe=await ctx.callAsSystem(getService("subscriptions.assertMerchantTaxRevisionSafe"),{profileId:original.profile.id});
+ const safe=await ctx.callAsSystem(getService("subscriptions.assertMerchantTaxExemptionRevisionSafe"),{profileId:original.profile.id,contactId:row.contactId});
  if(!z.object({safe:z.literal(true)}).safeParse(safe).success)throw new ServiceError("conflict","The original billing schedules need review before this customer tax policy changes.");
  await allowMerchantTaxWrites(ctx.tx);
  if(value.decision==="valid")await ctx.tx.update(taxExemptions).set({status:"revoked",updatedAt:now}).where(and(eq(taxExemptions.merchantProfileId,original.profile.id),eq(taxExemptions.contactId,row.contactId),eq(taxExemptions.zoneId,row.zoneId),eq(taxExemptions.status,"valid")));

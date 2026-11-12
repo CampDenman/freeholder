@@ -1,9 +1,10 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: real agreement/calendar facts choose every future tax quotation.
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
+import { lockMerchantExemptionPolicy } from "@/core/commerce/merchant-exemption-lock";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { invoiceLines, invoices, paymentMethods, payments, taxExemptions } from "@/modules/invoicing/schema";
 import { merchantPaymentRecoveryDebt } from "@/modules/invoicing/merchant-payment-debt";
@@ -18,8 +19,10 @@ import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleRes
 import { subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
 
 async function exemptionFingerprint(ctx:ServiceContext,profileId:string,contactId:string){
-  const rows=await ctx.tx.select().from(taxExemptions).where(and(eq(taxExemptions.merchantProfileId,profileId),eq(taxExemptions.contactId,contactId))).orderBy(asc(taxExemptions.id)).limit(5001);
+  const rows=await ctx.tx.select().from(taxExemptions).where(and(eq(taxExemptions.merchantProfileId,profileId),eq(taxExemptions.contactId,contactId),
+    or(eq(taxExemptions.status,"valid"),isNotNull(taxExemptions.validatedAt)))).orderBy(asc(taxExemptions.id)).limit(5001);
   if(rows.length>5000)throw new ServiceError("conflict","The original exemption history exceeds the bounded horizon proof.");
+  if(rows.some(row=>row.status==="valid"&&!row.validatedAt))throw new ServiceError("conflict","Restore the actual validation evidence before quoting an effective exemption.");
   // Fingerprint the actual source; no taxpayer identifiers are copied into the plan.
   return merchantTaxDigest(rows);
 }
@@ -74,6 +77,7 @@ export const quoteMerchantProviderHorizon=defineService({
     const [resource]=await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId,parent.id)).limit(1).for("share");
     if(!terms?.taxDestination||!storedScope||!resource||policy?.model!=="seller_merchant"||!policy.sellerUserId||terms.profileId!==storedScope.taxProfileId||terms.taxLiability!==storedScope.taxLiability
       ||parent.acceptedSetupFeeMinor!==terms.snapshot.setupFeeMinor||policy.providerAccountId!==storedScope.recipientAccountId)throw new ServiceError("conflict","Restore this agreement's original accepted business, setup obligation, tax destination and schedule journal.");
+    await lockMerchantExemptionPolicy(ctx.tx,terms.profileId,parent.contactId);
     const scope=subscriptionMerchantScope.parse(storedScope);
     const [method]=parent.paymentMethodId?await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id,parent.paymentMethodId)).limit(1).for("share"):[];
     if(!method||method.provider!=="stripe"||method.status!=="active"||method.contactId!==parent.contactId||method.providerPlatformAccountId!==scope.providerPlatformAccountId
@@ -84,7 +88,7 @@ export const quoteMerchantProviderHorizon=defineService({
       ||!["confirmed","refused"].includes(operation.state)||!scheduleCallerHasStopped(operation)))throw new ServiceError("conflict","Reconcile every original physical schedule caller before quoting another remote mutation.");
     let mode:"initial"|"extension"="initial",providerScheduleRef:string|null=null,sourceOperationId:string|null=null;
     let anchor:{kind:"accepted_trial_end"|"paid_original_period_end"|"provider_phase_inventory";sourceInvoiceId:string|null;start:string};
-    let retained:ProviderPhase[]=[];
+    let retained:ProviderPhase[]=[],admittedExemptionFingerprint:string|null=null;
     if(resource.recoveryPending)throw new ServiceError("conflict","Retain and reconcile the original schedule recovery debt before quoting more periods.");
     if(resource.operationRevision===0&&resource.state==="uncreated"&&!resource.providerSubscriptionRef&&!resource.providerCustomerRef&&!parent.providerRef){
       const [cash]=await ctx.tx.select({id:subscriptionProviderChargeReceipts.id}).from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId,parent.id)).limit(1);
@@ -104,6 +108,7 @@ export const quoteMerchantProviderHorizon=defineService({
         ||inventory.data.providerApiVersion!==scope.providerScheduleApiVersion||inventory.data.status!=="active"||!inventory.data.currentPhaseStart)throw new ServiceError("conflict","Read and retain complete authenticated original phase inventory before extending this schedule.");
       const admitted=z.array(providerPhase).min(1).max(10).safeParse(last.originalRequest.phases);
       if(!admitted.success)throw new ServiceError("conflict","Restore the actual admitted phase quotation before extension.");
+      admittedExemptionFingerprint=typeof last.originalRequest.exemptionFingerprint==="string"?last.originalRequest.exemptionFingerprint:null;
       assertPhaseHorizon(admitted.data);
       retained=inventory.data.phases.filter(phase=>phase.start>=inventory.data.currentPhaseStart!).map(({providerPriceRef,...phase})=>{void providerPriceRef;return phase;});
       if(!retained.length||retained.some(phase=>!admitted.data.some(original=>original.phaseDigest===phase.phaseDigest))||retained[0]!.start!==inventory.data.currentPhaseStart)throw new ServiceError("conflict","The provider's actual current and future phases differ from their original admitted quotes.");
@@ -119,6 +124,7 @@ export const quoteMerchantProviderHorizon=defineService({
       if(!original||original.status==="void"||original.sourceType!=="subscription"||original.sourceId?.split(":")[0]!==parent.id)throw new ServiceError("conflict","Review the original setup-fee invoice instead of omitting or rebilling it.");
     }else if(mode==="initial")setup=parent.acceptedSetupFeeMinor??0;
     const dependency=await exemptionFingerprint(ctx,terms.profileId,parent.contactId),phases=[...retained];let start=exactProviderDate(anchor.start);
+    if(mode==="extension"&&admittedExemptionFingerprint!==dependency)throw new ServiceError("conflict","Stop and requote the actual retained future phases before adopting changed effective exemption evidence.");
     for(let index=0;index<input.additionalPeriods;index++){
       const setupFeeMinor=index===0?setup:0,end=periodEnd(start,terms.snapshot.interval,terms.snapshot.intervalCount);
       const items=[{id:"line:0",quantityMicros:1000000,unitAmountMinor:terms.snapshot.periodAmountMinor,discountMinor:0,category:terms.snapshot.taxCategoryCode,requiresShipping:terms.snapshot.requiresShipping},
