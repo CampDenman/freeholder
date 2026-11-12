@@ -5932,7 +5932,14 @@ deployments are portable, testable and incapable of silently forking the truth.
   catalog regeneration, which passed 8/8. Four owner-browser journeys passed
   in en/es/fr/ar at 320px in both themes, with keyboard, Axe, bounds, private
   receipt omission and shared-service audit checks. Committed-source lint and
-  typecheck passed. See `deploy/mail-carrier-recovery.md` and the C3.31–C3.39
+  typecheck passed. Two subsequent genuine hold-boundary failures were
+  repaired by rereading current direct/inherited holds under the identity
+  lock before address minimization; unknown holders stay preserved under
+  named holds. Targeted five controls passed, including unrelated/unheld
+  positive controls. Full typecheck/lint and permitted fast static contracts
+  passed (380 plus one documented exclusion). Final composed qualification
+  remains required.
+  See `deploy/mail-carrier-recovery.md` and the C3.31–C3.39
   source/live evidence worksheet `deploy/provider-preview-acceptance.md`.
   No live provider acceptance or independent security sign-off is supplied.)*
 - [ ] **C3.32** Add a measurement-provider category (`MEASUREMENT_PROVIDER`,

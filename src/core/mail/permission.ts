@@ -261,6 +261,7 @@ export async function withdrawDetachedGrants(
   if (waiting && !env().PARADISEMODERN_API_KEY) console.warn(`[mail] ${waiting} original carrier grant(s) await withdrawal. Restore the original account credentials or review their final outcomes.`);
   if (finishable.length === 0) return { removed: 0, waiting };
   const removed = await db().transaction(tx => minimizeCarrierGrants(tx, finishable.map(grant => grant.id)));
+  waiting += finishable.length - removed;
   const erasures = new Map<string, string>();
   for (const grant of finishable) {
     if (grant.erasureRequestId && grant.erasureJobId) erasures.set(grant.erasureRequestId, grant.erasureJobId);

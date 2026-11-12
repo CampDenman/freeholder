@@ -49,7 +49,11 @@ renamed so the previous withdrawal worker's initial read fails before provider
 I/O; new Paradise mail claims also require the carrier writer capability. Roll back with the matching
 pre-migration database and private configuration; do not run an old image against
 the migrated database. Retention and named privacy holds continue to govern the
-existing owning records.
+existing owning records. Address minimization rereads current direct and
+inherited holds under the contact identity lock, using retained consent or the
+original erasure request to establish ownership. A legacy orphan with unknown
+ownership stays preserved while a named hold could cover it. A retention
+runner's earlier exemption snapshot cannot authorize forgetting a later hold.
 
 Native tests use a fake HTTP carrier and a disposable PostgreSQL database. They
 cannot satisfy C3.31's actual transactional and bulk sends, independent security
