@@ -3,13 +3,13 @@
 // Raw-body payment webhook boundary. Verification precedes every database effect.
 
 import { createHash } from "node:crypto";
-import { paymentAdapter } from "@/adapters/payments";
+import { paymentAdapter, type PaymentProviderEvent } from "@/adapters/payments";
 import type { HostedPaymentProviderId } from "@/adapters/payments/providers";
 import { AdapterError } from "@/adapters/types";
 import { ServiceError } from "@/core/service";
 import { processPaymentProviderEvents, retainPaymentProviderEvidence } from "./payment-provider-service";
 import { readBoundedBytes, RequestBodyError } from "@/core/http/body";
-import { resolveSubscriptionProviderScope, type SubscriptionProviderScopeInput } from "./merchant-provider-stage";
+import { observeSubscriptionProviderCharge, resolveSubscriptionProviderScope, type SubscriptionProviderScopeInput } from "./merchant-provider-stage";
 
 const MAX_WEBHOOK_BYTES = 1_048_576;
 
@@ -23,7 +23,9 @@ export function paymentWebhookRoute(provider: HostedPaymentProviderId) {
     try {
       const body = await rawRequest(request);
       const headers = Object.fromEntries([...request.headers.entries()].map(([key, value]) => [key.toLowerCase(), value]));
-      const verificationRequest = { headers, body, receivedAt, resolveSubscriptionScope: (input: SubscriptionProviderScopeInput) => resolveSubscriptionProviderScope(provider, input) };
+      const verificationRequest = { headers, body, receivedAt,
+        resolveSubscriptionScope: (input: SubscriptionProviderScopeInput) => resolveSubscriptionProviderScope(provider, input),
+        onSubscriptionChargeObserved: (event: PaymentProviderEvent) => observeSubscriptionProviderCharge(provider, event) };
       const verified = await paymentAdapter(provider).verifyWebhook(verificationRequest);
       const events = await retainPaymentProviderEvidence(provider, verified);
       const result = await processPaymentProviderEvents.call(

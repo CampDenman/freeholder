@@ -6,6 +6,16 @@ import { ServiceError } from "@/core/service";
 
 type Retainer = (providerId: string, event: PaymentProviderEvent) => Promise<PaymentProviderEvent>;
 let subscriptionRetainer: Retainer | undefined;
+let subscriptionChargeObserver: Retainer | undefined;
+
+/** Capture-only phase: no later invoice policy or auxiliary fee work. */
+export function registerSubscriptionProviderChargeObserver(observer: Retainer): void { subscriptionChargeObserver = observer; }
+
+export async function observeSubscriptionProviderCharge(providerId: string, event: PaymentProviderEvent): Promise<PaymentProviderEvent> {
+  if (event.kind !== "subscription_period_paid" || !event.providerPlatformAccountId) return event;
+  if (!subscriptionChargeObserver) throw new ServiceError("conflict", "The original subscription cash receipt phase is unavailable; retry authenticated feedback after recovery.");
+  return subscriptionChargeObserver(providerId, event);
+}
 
 export interface SubscriptionProviderScopeInput {
   providerSubscriptionRef: string;
@@ -24,7 +34,11 @@ let subscriptionScopeResolver: ScopeResolver | undefined;
 export function registerSubscriptionProviderScopeResolver(resolver: ScopeResolver): void { subscriptionScopeResolver = resolver; }
 
 export async function resolveSubscriptionProviderScope(providerId: string, input: SubscriptionProviderScopeInput): Promise<SubscriptionProviderWebhookScope | null> {
-  if (subscriptionScopeResolver) return subscriptionScopeResolver(providerId, input);
+  if (subscriptionScopeResolver) {
+    const scope = await subscriptionScopeResolver(providerId, input);
+    if (scope && !subscriptionChargeObserver) throw new ServiceError("conflict", "The original subscription cash receipt phase is unavailable before provider inspection.");
+    return scope;
+  }
   // An admitted new schedule must never fall back to an older protocol if its
   // source integration is unavailable. Unmarked legacy feedback stays intact.
   if (input.metadata.freeholder_subscription_scope_version === "1" || input.metadata.freeholder_subscription_operation_id !== undefined) throw new ServiceError("conflict", "The original merchant subscription scope phase is unavailable; retry authenticated feedback after recovery.");
