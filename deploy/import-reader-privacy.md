@@ -340,3 +340,14 @@ checks plus 383 contract cases; the one generated CHANGELOG drift was regenerate
 and its three exact checks passed. Live SDK and contact-FK inventories must now
 be refreshed for the new bulk operation, followed by the current production
 artifact and four-locale owner browser. No stable or cutover acceptance is claimed.
+
+
+A separate actual-prior-runtime before control also proves a pre-verification
+legal-hold gap: the old runtime created its pending original in 14.93 seconds,
+normal migration preserved it, and the current owner assignment wrongly
+succeeded despite an active `cms.readerComments` exception on its still-open,
+unverified erasure request. The exact current before case failed in 3.79
+seconds. The runner variant `--committed-private-hold` preserves this case.
+An erasure-status check alone does not protect every active hold. The original
+metadata assertions remain unchanged and the repair must respect the canonical
+active hold scopes, including before verification. No stable closure is claimed.
