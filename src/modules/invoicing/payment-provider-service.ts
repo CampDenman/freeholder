@@ -851,11 +851,15 @@ export const providerPaymentSource = defineService({
   kind: "query",
   permission: "system", external: false,
   input: z.object({ paymentId: z.string().uuid() }),
-  output: z.object({ payment: paymentRow, routing: paymentRouting }),
+  output: z.object({ payment: paymentRow, routing: paymentRouting, providerRequestContactRef: z.uuid().optional(), providerRequestInvoiceRef: z.uuid().optional() }),
   handler: async (input, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");
-    return { payment, routing: await routingForPayment(ctx, payment.id) };
+    const routing = await routingForPayment(ctx, payment.id);
+    const [request] = routing.providerPlatformAccountId && ["hosted_checkout", "saved_method"].includes(payment.method)
+      ? await ctx.tx.select().from(merchantPaymentRequests).where(eq(merchantPaymentRequests.paymentId, payment.id)) : [];
+    if (routing.providerPlatformAccountId && ["hosted_checkout", "saved_method"].includes(payment.method) && !request) throw new ServiceError("conflict", "Restore this original payment request before new provider operations; today's merged customer cannot supply historical metadata.");
+    return { payment, routing, providerRequestContactRef: request?.providerContactRef, providerRequestInvoiceRef: request?.providerInvoiceRef };
   },
 });
 
