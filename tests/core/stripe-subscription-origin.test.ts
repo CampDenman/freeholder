@@ -27,6 +27,19 @@ describe("original scheduled Stripe invoice payment (C12.38)", () => {
     const direct = { providerPlatformAccountId: "acct_originalPlatform", providerAccountId: "acct_originalSeller" }, api = apiWith();
     await proveStripeSubscriptionPayment(api, direct, origin); expect(api.mock.calls.every(call => call[2] === direct)).toBe(true);
   });
+  it("uses only the frozen new-schedule version on every original origin read", async () => {
+    const api = apiWith();
+    await proveStripeSubscriptionPayment(api, scope, { ...origin, providerApiVersion: "2026-10-28.endive" });
+    expect(api).toHaveBeenCalledTimes(3);
+    for (const [, init] of api.mock.calls) expect(new Headers(init.headers).get("stripe-version")).toBe("2026-10-28.endive");
+    const legacy = apiWith(); await proveStripeSubscriptionPayment(legacy, scope, origin);
+    expect(legacy.mock.calls.every(([, init]) => init.headers === undefined)).toBe(true);
+  });
+  it("refuses an unsupported stored schedule protocol without provider I/O", async () => {
+    const api = apiWith();
+    await expect(proveStripeSubscriptionPayment(api, scope, { ...origin, providerApiVersion: "unrecognized" as never })).rejects.toThrow(/did not prove/);
+    expect(api).not.toHaveBeenCalled();
+  });
   it("accepts an authenticated older invoice's direct payment relation", async () => {
     const api = apiWith({ invoice: { id: "in_original", subscription: "sub_original", payment_intent: "pi_original" } });
     expect(await proveStripeSubscriptionPayment(api, scope, origin)).toBe(paid); expect(api).toHaveBeenCalledTimes(2);

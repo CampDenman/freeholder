@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { originalSubscriptionTaxDestination, subscriptionChargeScope, subscriptionMerchantScope, subscriptionMethodScopeMatches, type SubscriptionMerchantScope } from "@/modules/subscriptions/merchant-scope-contract";
 const original: SubscriptionMerchantScope = {
   subscriptionId: "00000000-0000-4000-8000-000000000080", agreementRoutingVersion: 1,
+  providerScheduleApiVersion: "2026-10-28.endive",
   collectionKind: "direct", providerPlatformAccountId: "acct_originalPlatform", chargeAccountId: "acct_originalSeller",
   recipientAccountId: "acct_originalSeller", settlementMerchantAccountId: "acct_originalSeller",
   taxProfileId: "f23bf6ab-5c5e-4230-aeca-eafc93700abd", taxProfileVersion: 2, taxLiability: "seller", taxDestination: { country: "CA", region: "BC", postalCode: "V0R1A0" },

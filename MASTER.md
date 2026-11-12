@@ -13509,7 +13509,7 @@ whatever is best for the people using the site.
   [refund/dispute documentation](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
   New subscription provider-origin source work verifies the authenticated
   original subscription/invoice/PaymentIntent relation on its explicit charge
-  namespace, without inventing an order payment-attempt identifier. Seventeen
+  namespace, without inventing an order payment-attempt identifier. Nineteen
   bounded read-only protocol controls pass; the helper is ready for shared
   provider observation integration. The new agreement scope, exact tax/fee
   lifecycle, complete source qualification and actual acceptance remain open.
@@ -13539,6 +13539,17 @@ whatever is best for the people using the site.
   The composed source passes full typecheck, focused lint,62 bounded
   origin/setup/scope controls and all five private-service boundary controls.
   These checks do not apply80 or prove an actual provider outcome.
+  Provider lifecycle protocol work uses Stripe's actual flexible-subscription
+  pause endpoint, with2026-10-28.endive frozen only on new scope/charge
+  receipts. Legacy operations keep their original version. Sixteen bounded
+  HTTP controls prove actual pause handling and complete prior-invoice
+  inventory, including preservation of a positive pause before later proof
+  disagreement. A pause acknowledgment alone is not full quiescence: existing
+  invoices/PaymentIntents still need durable reconciliation. Physical intent
+  journaling, tax/erasure jobs, accepted amendments and safe resumption remain
+  under implementation. Sources: Stripe's [pause API](https://docs.stripe.com/api/subscriptions/pause),
+  [pause lifecycle](https://docs.stripe.com/billing/subscriptions/pause) and
+  [payment-collection pause](https://docs.stripe.com/billing/subscriptions/pause-payment).
   Original-order ownership repair 2026-11-11: checkout freezes each purchased
   line's seller and shipping requirement before invoice issue, and seller
   settlement reads that receipt instead of a later catalog edit. The actual

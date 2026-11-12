@@ -7,6 +7,7 @@ import { validateMerchantChargeScope } from "./stripe-merchant-scope";
 import type { MerchantChargeScope, PaymentAccountScope } from "./types";
 
 export interface StripeSubscriptionPaymentOrigin {
+  providerApiVersion?: "2026-10-28.endive";
   providerSubscriptionRef: string;
   providerInvoiceRef: string;
   providerPaymentIntentRef: string;
@@ -21,10 +22,12 @@ function unproven(): never {
 export async function proveStripeSubscriptionPayment(api: StripeSubscriptionRead, scope: MerchantChargeScope, origin: StripeSubscriptionPaymentOrigin): Promise<Record<string, unknown>> {
   validateMerchantChargeScope(scope);
   if (!scope.providerPlatformAccountId
+    || origin.providerApiVersion !== undefined && origin.providerApiVersion !== "2026-10-28.endive"
     || !/^sub_[A-Za-z0-9]{1,195}$/.test(origin.providerSubscriptionRef)
     || !/^in_[A-Za-z0-9]{1,196}$/.test(origin.providerInvoiceRef)
     || !/^pi_[A-Za-z0-9]{1,196}$/.test(origin.providerPaymentIntentRef)) unproven();
-  const invoice = await api(`/v1/invoices/${encodeURIComponent(origin.providerInvoiceRef)}`, { method: "GET" }, scope);
+  const originalApi: StripeSubscriptionRead = (path, init, account) => api(path, origin.providerApiVersion ? { ...init, headers: { ...init.headers, "stripe-version": origin.providerApiVersion } } : init, account);
+  const invoice = await originalApi(`/v1/invoices/${encodeURIComponent(origin.providerInvoiceRef)}`, { method: "GET" }, scope);
   const directSubscription = ref(invoice.subscription), parentSubscription = ref(object(object(invoice.parent)?.subscription_details)?.subscription);
   if (directSubscription && parentSubscription && directSubscription !== parentSubscription) unproven();
   const subscription = directSubscription ?? parentSubscription;
@@ -41,7 +44,7 @@ export async function proveStripeSubscriptionPayment(api: StripeSubscriptionRead
     for (let page = 0; page < 20; page++) {
       const query = new URLSearchParams({ invoice: origin.providerInvoiceRef, limit: "100" });
       if (cursor) query.set("starting_after", cursor);
-      const result = await api(`/v1/invoice_payments?${query}`, { method: "GET" }, scope);
+      const result = await originalApi(`/v1/invoice_payments?${query}`, { method: "GET" }, scope);
       if (!Array.isArray(result.data) || typeof result.has_more !== "boolean") unproven();
       for (const entry of result.data) {
         const payment = object(entry), relation = object(payment?.payment);
@@ -56,7 +59,7 @@ export async function proveStripeSubscriptionPayment(api: StripeSubscriptionRead
     }
     if (!complete || found.size !== 1) unproven();
   }
-  const intent = await api(`/v1/payment_intents/${encodeURIComponent(origin.providerPaymentIntentRef)}`, { method: "GET" }, scope);
+  const intent = await originalApi(`/v1/payment_intents/${encodeURIComponent(origin.providerPaymentIntentRef)}`, { method: "GET" }, scope);
   if (intent.id !== origin.providerPaymentIntentRef) unproven();
   // A paid customer is still paid if later fee/recipient inspection disagrees.
   // Return the authenticated actual fact before any such auxiliary reads.

@@ -16,6 +16,7 @@ export const subscriptionTaxDestination = z.object({
 export const subscriptionMerchantScope = z.object({
   subscriptionId: z.uuid(),
   agreementRoutingVersion: z.literal(1),
+  providerScheduleApiVersion: z.literal("2026-10-28.endive"),
   collectionKind: z.enum(["direct", "destination"]),
   providerPlatformAccountId: account,
   chargeAccountId: account.nullable(),

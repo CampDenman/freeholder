@@ -147,6 +147,7 @@ export interface CheckoutCaptureResult extends MerchantChargeScope {
 }
 
 export interface MerchantSubscriptionChargeOrigin {
+  providerApiVersion?: "2026-10-28.endive";
   providerSubscriptionRef: string;
   providerInvoiceRef: string;
   providerPaymentIntentRef: string;

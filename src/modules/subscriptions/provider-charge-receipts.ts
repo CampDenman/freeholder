@@ -44,6 +44,7 @@ export const retainProviderCharge = defineService({
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`subscription-cash:${input.providerPlatformAccountId}:${input.providerAccountId ?? ""}:${input.providerPaymentIntentRef}`}))`);
     const facts = { subscriptionId: original.subscription.id, providerPlatformAccountId: original.scope.providerPlatformAccountId,
       chargeAccountId: original.scope.chargeAccountId, providerSubscriptionRef: input.providerSubscriptionRef, providerInvoiceRef: input.providerInvoiceRef,
+      providerApiVersion: original.scope.providerScheduleApiVersion,
       providerPaymentIntentRef: input.providerPaymentIntentRef, providerChargeRef: input.providerChargeRef, amountMinor: input.amountMinor, currency: input.currency };
     const [existing] = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(and(
       eq(subscriptionProviderChargeReceipts.providerPlatformAccountId, original.scope.providerPlatformAccountId),
@@ -106,7 +107,7 @@ registerSubscriptionInvoiceRouting(async (ctx, input) => {
   const [receipt] = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.id, input.subscriptionChargeReceiptId));
   if (!receipt || receipt.subscriptionId !== subscriptionId || receipt.currency !== invoice.currency || receipt.providerSubscriptionRef !== original.subscription.providerRef
     || receipt.providerPlatformAccountId !== original.scope.providerPlatformAccountId || receipt.chargeAccountId !== original.scope.chargeAccountId) throw new ServiceError("conflict", "This renewal receipt belongs to another original agreement or account.");
-  return { ...routing, providerOrigin: { receiptId: receipt.id, providerSubscriptionRef: receipt.providerSubscriptionRef, providerInvoiceRef: receipt.providerInvoiceRef, providerPaymentIntentRef: receipt.providerPaymentIntentRef, providerChargeRef: receipt.providerChargeRef } };
+  return { ...routing, providerOrigin: { receiptId: receipt.id, providerApiVersion: original.scope.providerScheduleApiVersion, providerSubscriptionRef: receipt.providerSubscriptionRef, providerInvoiceRef: receipt.providerInvoiceRef, providerPaymentIntentRef: receipt.providerPaymentIntentRef, providerChargeRef: receipt.providerChargeRef } };
 });
 
 export default [retainProviderCharge, completeProviderChargeFee];

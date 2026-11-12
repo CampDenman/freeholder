@@ -41,6 +41,7 @@ export async function captureOriginalMerchantScope(ctx: ServiceContext, subscrip
   const tax = profileReceipt.parse(await ctx.callAsSystem(taxService, { sellerUserId: policy.sellerUserId }));
   if (tax.liability !== "seller") throw new ServiceError("conflict", "This seller agreement needs its deliberately declared original seller tax policy.");
   const facts = subscriptionMerchantScope.parse({ subscriptionId: subscription.id, agreementRoutingVersion: 1,
+    providerScheduleApiVersion: "2026-10-28.endive",
     collectionKind: configuration.collectionKind, providerPlatformAccountId: configuration.providerPlatformAccountId,
     chargeAccountId: configuration.collectionKind === "direct" ? policy.providerAccountId : null,
     recipientAccountId: policy.providerAccountId, settlementMerchantAccountId: policy.providerAccountId,

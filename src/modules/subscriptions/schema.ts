@@ -270,6 +270,7 @@ export const subscriptionMarketPolicies = pgTable("subscription_market_policies"
 export const subscriptionMerchantScopes = pgTable("subscription_merchant_scopes", {
   subscriptionId: uuid("subscription_id").primaryKey().references(() => subscriptions.id, { onDelete: "restrict" }),
   agreementRoutingVersion: integer("agreement_routing_version").notNull().default(1),
+  providerScheduleApiVersion: text("provider_schedule_api_version").notNull().default("2026-10-28.endive"),
   collectionKind: text("collection_kind", { enum: ["direct", "destination"] }).notNull(),
   providerPlatformAccountId: text("provider_platform_account_id").notNull(),
   chargeAccountId: text("charge_account_id"),
@@ -283,6 +284,7 @@ export const subscriptionMerchantScopes = pgTable("subscription_merchant_scopes"
   createdAt: createdAtColumn(),
 }, t => [
   check("subscription_merchant_scopes_version", sql`${t.agreementRoutingVersion}=1`),
+  check("subscription_merchant_scopes_schedule_api", sql`${t.providerScheduleApiVersion}='2026-10-28.endive'`),
   foreignKey({ name: "subscription_merchant_scopes_tax_version_fk", columns: [t.taxProfileId, t.taxProfileVersion], foreignColumns: [merchantTaxProfileVersions.profileId, merchantTaxProfileVersions.version] }).onDelete("restrict"),
   check("subscription_merchant_scopes_accounts", sql`${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$' and ${t.recipientAccountId} ~ '^acct_[A-Za-z0-9]+$'
     and ${t.recipientAccountId}<>${t.providerPlatformAccountId} and ${t.settlementMerchantAccountId}=${t.recipientAccountId}
@@ -298,6 +300,7 @@ export const subscriptionProviderChargeReceipts = pgTable("subscription_provider
   providerPlatformAccountId: text("provider_platform_account_id").notNull(),
   chargeAccountId: text("charge_account_id"),
   providerSubscriptionRef: text("provider_subscription_ref").notNull(),
+  providerApiVersion: text("provider_api_version").notNull().default("2026-10-28.endive"),
   providerInvoiceRef: text("provider_invoice_ref").notNull(),
   providerPaymentIntentRef: text("provider_payment_intent_ref").notNull(),
   providerChargeRef: text("provider_charge_ref").notNull(),
@@ -313,6 +316,7 @@ export const subscriptionProviderChargeReceipts = pgTable("subscription_provider
   check("subscription_provider_charge_receipts_money", sql`${t.amountMinor} between 1 and 9007199254740991 and ${t.currency} ~ '^[A-Z]{3}$'
     and (${t.observedApplicationFeeMinor} is null or ${t.observedApplicationFeeMinor} between 0 and 9007199254740991)
     and (${t.observedApplicationFeeCurrency} is null or ${t.observedApplicationFeeCurrency} ~ '^[A-Z]{3}$')`),
+  check("subscription_provider_charge_receipts_api", sql`${t.providerApiVersion}='2026-10-28.endive'`),
 ]);
 
 export const subscriptionEvents = pgTable(

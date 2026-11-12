@@ -14,12 +14,13 @@ ALTER TABLE subscription_card_setups ADD CONSTRAINT subscription_card_setups_ori
 --> statement-breakpoint
 CREATE TABLE subscription_merchant_scopes (
  subscription_id uuid PRIMARY KEY REFERENCES subscriptions(id) ON DELETE RESTRICT,
- agreement_routing_version integer NOT NULL DEFAULT 1,
+ agreement_routing_version integer NOT NULL DEFAULT 1, provider_schedule_api_version text NOT NULL DEFAULT '2026-10-28.endive',
  collection_kind text NOT NULL, provider_platform_account_id text NOT NULL,
  charge_account_id text, recipient_account_id text NOT NULL, settlement_merchant_account_id text NOT NULL,
  tax_profile_id uuid NOT NULL REFERENCES merchant_tax_profiles(id) ON DELETE RESTRICT, tax_profile_version integer NOT NULL, tax_liability text NOT NULL,
  tax_destination jsonb, redacted_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(),
  CONSTRAINT subscription_merchant_scopes_version CHECK(agreement_routing_version=1),
+ CONSTRAINT subscription_merchant_scopes_schedule_api CHECK(provider_schedule_api_version='2026-10-28.endive'),
  CONSTRAINT subscription_merchant_scopes_tax_version_fk FOREIGN KEY(tax_profile_id,tax_profile_version) REFERENCES merchant_tax_profile_versions(profile_id,version) ON DELETE RESTRICT,
  CONSTRAINT subscription_merchant_scopes_accounts CHECK(provider_platform_account_id ~ '^acct_[A-Za-z0-9]+$' AND recipient_account_id ~ '^acct_[A-Za-z0-9]+$'
   AND recipient_account_id<>provider_platform_account_id AND settlement_merchant_account_id=recipient_account_id
@@ -60,11 +61,12 @@ CREATE TABLE subscription_provider_charge_receipts (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  subscription_id uuid NOT NULL REFERENCES subscription_merchant_scopes(subscription_id) ON DELETE RESTRICT,
  provider_platform_account_id text NOT NULL, charge_account_id text,
- provider_subscription_ref text NOT NULL, provider_invoice_ref text NOT NULL,
+ provider_subscription_ref text NOT NULL, provider_api_version text NOT NULL DEFAULT '2026-10-28.endive', provider_invoice_ref text NOT NULL,
  provider_payment_intent_ref text NOT NULL, provider_charge_ref text NOT NULL,
  amount_minor bigint NOT NULL, currency text NOT NULL, application_fee_ref text,
  observed_application_fee_minor bigint, observed_application_fee_currency text,
  created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT subscription_provider_charge_receipts_api CHECK(provider_api_version='2026-10-28.endive'),
  CONSTRAINT subscription_provider_charge_receipts_money CHECK(amount_minor BETWEEN 1 AND 9007199254740991 AND currency ~ '^[A-Z]{3}$'
   AND (observed_application_fee_minor IS NULL OR observed_application_fee_minor BETWEEN 0 AND 9007199254740991)
   AND (observed_application_fee_currency IS NULL OR observed_application_fee_currency ~ '^[A-Z]{3}$'))
@@ -87,7 +89,7 @@ BEGIN
   END IF;
  END IF;
  IF NOT EXISTS(SELECT 1 FROM subscription_merchant_scopes scope WHERE scope.subscription_id=NEW.subscription_id
-  AND scope.provider_platform_account_id=NEW.provider_platform_account_id AND scope.charge_account_id IS NOT DISTINCT FROM NEW.charge_account_id) THEN
+  AND scope.provider_platform_account_id=NEW.provider_platform_account_id AND scope.charge_account_id IS NOT DISTINCT FROM NEW.charge_account_id AND scope.provider_schedule_api_version=NEW.provider_api_version) THEN
   RAISE EXCEPTION 'Observed subscription money must retain its original agreement charge namespace' USING ERRCODE='23514';
  END IF;
  RETURN NEW;
