@@ -37,9 +37,9 @@ describe("original merchant financial debt before schedule erasure", () => {
   });
   it("retains settled original financial history without fabricating a provider subscription", async () => {
     recovery.call.mockResolvedValue({ pending: false, incomplete: false, hasHistory: true, paymentIds: [profileId] });
-    const { ctx, select } = context();
+    const { ctx } = context();
     expect(await merchantTaxScheduleState(ctx, profileId)).toEqual({ safe: true, external: true });
-    expect(select).toHaveBeenCalledTimes(1);
+    expect(recovery.call).toHaveBeenCalledWith(recovery.service, { profileId });
   });
   it("preserves the genuine zero-dependency path after the financial inventory proves empty", async () => {
     recovery.call.mockResolvedValue({ pending: false, incomplete: false, hasHistory: false, paymentIds: [] });
