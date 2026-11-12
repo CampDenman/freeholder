@@ -6,11 +6,15 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { AdapterError } from "../types";
 import { env } from "@/core/env";
 import { number, object, paymentFetch, providerJson, text } from "./http";
-import { applyDestinationCharge, assertMerchantIntent, merchantChargeScope, validateMerchantChargeScope } from "./stripe-merchant-scope";
+import { applyDestinationCharge, assertMerchantAttempt, assertMerchantIntent, merchantAttemptMetadata, merchantChargeScope, merchantIntentEvidence, validateMerchantChargeScope } from "./stripe-merchant-scope";
 import { stripeMerchantFees } from "./stripe-merchant-fees";
+import { stripeCheckoutEvidence } from "./stripe-merchant-capture";
+import { stripeMerchantRecovery } from "./stripe-merchant-recovery";
 import type {
   CheckoutCaptureResult,
+  CheckoutCaptureRequest,
   MerchantChargeScope,
+  PaymentAccountScope,
   OffSessionChargeResult,
   PaymentAdapter,
   PaymentAdapterCapabilities,
@@ -40,9 +44,9 @@ function accountHeaders(id?: string): Record<string, string> {
   return { "stripe-account": id };
 }
 
-function applicationFee(form: URLSearchParams, key: string, value: number | undefined, accountId: string | undefined, amountMinor?: number): void {
+function applicationFee(form: URLSearchParams, key: string, value: number | undefined, accountId: string | undefined, amountMinor?: number, allowEntireCharge = false): void {
   if (value === undefined || value === 0) return;
-  if (!accountId || !Number.isFinite(value) || value < 0 || (amountMinor !== undefined ? !Number.isSafeInteger(value) || value >= amountMinor : !validFeePercent(value))) throw new AdapterError("payments", "stripe", "invalid_request", "That seller application fee is outside its valid range.");
+  if (!accountId || !Number.isFinite(value) || value < 0 || (amountMinor !== undefined ? !Number.isSafeInteger(value) || (allowEntireCharge ? value > amountMinor : value >= amountMinor) : !validFeePercent(value))) throw new AdapterError("payments", "stripe", "invalid_request", "That seller application fee is outside its valid range.");
   form.set(key, String(value));
 }
 
@@ -300,11 +304,18 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
   const tolerance = options.toleranceSeconds ?? 300;
   const missing = [!secretKey ? "STRIPE_SECRET_KEY" : undefined, webhookSecrets.length === 0 ? "STRIPE_WEBHOOK_SECRET" : undefined].filter(Boolean);
 
-  async function api(path: string, init: RequestInit, providerAccountId?: string): Promise<Record<string, unknown>> {
+  async function api(path: string, init: RequestInit, original?: string | PaymentAccountScope): Promise<Record<string, unknown>> {
     if (!secretKey) throw new AdapterError("payments", "stripe", "unavailable", "Stripe is not configured.");
+    const scope = typeof original === "string" ? { providerAccountId: original } : original ?? {};
+    const scopedHeaders = accountHeaders(scope.providerAccountId);
+    if (scope.providerPlatformAccountId) {
+      accountHeaders(scope.providerPlatformAccountId);
+      const actual = await platformAccountIdentity();
+      if (actual.providerPlatformAccountId !== scope.providerPlatformAccountId) throw new AdapterError("payments", "stripe", "authentication", "Reconnect the original platform account before servicing this provider resource.");
+    }
     const response = await paymentFetch(fetcher, `${apiBase}${path}`, {
       ...init,
-      headers: { authorization: `Bearer ${secretKey}`, "stripe-version": "2026-02-25.clover", ...init.headers, ...accountHeaders(providerAccountId) },
+      headers: { authorization: `Bearer ${secretKey}`, "stripe-version": "2026-02-25.clover", ...init.headers, ...scopedHeaders },
     });
     return providerJson("stripe", response);
   }
@@ -318,14 +329,18 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
 
   async function chargeApi(path: string, init: RequestInit, scope: MerchantChargeScope): Promise<Record<string, unknown>> {
     validateMerchantChargeScope(scope);
-    if (scope.providerPlatformAccountId) {
-      const actual = await platformAccountIdentity();
-      if (actual.providerPlatformAccountId !== scope.providerPlatformAccountId) throw new AdapterError("payments", "stripe", "authentication", "Reconnect the original platform account before servicing this payment.");
-    }
-    return api(path, init, scope.providerAccountId);
+    return api(path, init, scope);
   }
 
-  async function provenSetup(value:Record<string,unknown>,account?:string):Promise<Record<string,unknown>>{
+  async function captureCheckout(request: CheckoutCaptureRequest): Promise<CheckoutCaptureResult> {
+    merchantAttemptMetadata(request, request.paymentAttemptId);
+    const merchant = Boolean(request.providerAccountId || request.destinationAccountId || request.providerPlatformAccountId);
+    const expansion = merchant ? "?expand%5B%5D=payment_intent" : "";
+    const value = await chargeApi(`/v1/checkout/sessions/${encodeURIComponent(request.checkoutRef)}${expansion}`, { method: "GET" }, request);
+    return stripeCheckoutEvidence(request, value);
+  }
+
+  async function provenSetup(value:Record<string,unknown>,account?:string | PaymentAccountScope):Promise<Record<string,unknown>>{
     const metadata=object(value.metadata);
         const unproven=()=>new AdapterError("payments","stripe","provider_failure","Stripe did not prove this saved payment method on its original account.",true);
         const setupRef=text(value.setup_intent) ?? text(object(value.setup_intent)?.id);
@@ -344,7 +359,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
           || !method || !stripeMethod(method)) throw unproven();
         return {...value,setup_intent:{...intent,payment_method:{...method,customer}}};
   }
-  async function matchingSetupObject(path:string,account:string|undefined,matches:(value:Record<string,unknown>)=>boolean){
+  async function matchingSetupObject(path:string,account:string | PaymentAccountScope | undefined,matches:(value:Record<string,unknown>)=>boolean){
     let cursor:string|undefined;
     const found:Record<string,unknown>[]=[];
     for(let page=0;page<10;page++){
@@ -374,6 +389,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     capabilities: () => ({ ...capabilities }),
     platformAccountIdentity,
     ...stripeMerchantFees(chargeApi),
+    ...stripeMerchantRecovery(chargeApi),
     async supportedCurrencies() { return []; },
     async supportedMethods(context) {
       const methods: PaymentMethodOffer[] = [{ id: "card", label: "Card or supported wallet", kind: "card", recurring: true }];
@@ -384,6 +400,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     },
     async createCheckout(invoice) {
       validateMerchantChargeScope(invoice);
+      const originalMetadata = merchantAttemptMetadata(invoice, invoice.paymentAttemptId);
       const form = new URLSearchParams({
         mode: "payment",
         client_reference_id: invoice.invoiceId,
@@ -398,6 +415,10 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         "payment_intent_data[metadata][freeholder_invoice_id]": invoice.invoiceId,
         "payment_intent_data[metadata][freeholder_contact_id]": invoice.contactId,
       });
+      for (const [key, value] of Object.entries(originalMetadata)) {
+        form.set(`metadata[${key}]`, value);
+        form.set(`payment_intent_data[metadata][${key}]`, value);
+      }
       if (invoice.providerCustomerRef) form.set("customer", invoice.providerCustomerRef);
       else form.set("customer_email", invoice.customer.email);
       if (invoice.saveMethod) {
@@ -406,7 +427,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       }
       for (const method of invoice.methodIds ?? []) form.append("payment_method_types[]", method);
       applyDestinationCharge(form, true, invoice);
-      applicationFee(form, "payment_intent_data[application_fee_amount]", invoice.applicationFeeMinor, invoice.providerAccountId ?? invoice.destinationAccountId, invoice.amountMinor);
+      applicationFee(form, "payment_intent_data[application_fee_amount]", invoice.applicationFeeMinor, invoice.providerAccountId ?? invoice.destinationAccountId, invoice.amountMinor, Boolean(invoice.providerPlatformAccountId));
       const value = await chargeApi("/v1/checkout/sessions", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": invoice.idempotencyKey },
@@ -511,34 +532,16 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       if(!event || event.kind!=="saved_method_added")throw failed();
       return {state:"complete",providerRef,event,...base};
     },
-    async captureCheckout(request): Promise<CheckoutCaptureResult> {
-      const merchant = Boolean(request.providerAccountId || request.destinationAccountId);
-      const expansion = merchant ? "?expand%5B%5D=payment_intent" : "";
-      const value = await chargeApi(`/v1/checkout/sessions/${encodeURIComponent(request.checkoutRef)}${expansion}`, { method: "GET" }, request);
-      const intent = object(value.payment_intent);
-      const providerRef = typeof value.payment_intent === "string" ? value.payment_intent : text(intent?.id) ?? request.checkoutRef;
-      const fee = intent?.application_fee_amount === null ? 0 : number(intent?.application_fee_amount);
-      if (merchant && value.payment_status === "paid" && fee === undefined) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not confirm the seller charge's application fee.");
-      if (value.payment_status === "paid" && request.providerPlatformAccountId) {
-        if (value.id !== request.checkoutRef || !intent || !text(intent.id)?.startsWith("pi_") || intent.status !== "succeeded" || intent.amount_received !== value.amount_total || intent.currency !== value.currency) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not prove the original merchant payment.", true);
-        assertMerchantIntent(request, intent);
-      }
-      return {
-        providerRef,
-        ...merchantChargeScope(request),
-        status: value.payment_status === "paid" ? "succeeded" : value.status === "expired" ? "failed" : "pending",
-        amountMinor: number(value.amount_total),
-        currency: text(value.currency)?.toUpperCase(),
-        ...(merchant && fee !== undefined ? { applicationFeeMinor: fee } : {}),
-      };
-    },
+    captureCheckout,
     async refund(request) {
       validateMerchantChargeScope(request);
+      merchantAttemptMetadata(request, request.paymentId);
       if (request.reverseTransfer && !request.destinationAccountId) throw new AdapterError("payments", "stripe", "invalid_request", "A transfer reversal needs its original destination charge.");
       if (request.destinationAccountId && request.refundApplicationFee && !request.reverseTransfer) throw new AdapterError("payments", "stripe", "invalid_request", "A destination application-fee refund also requires its original transfer reversal.");
       if (request.providerPlatformAccountId) {
         const intent = await chargeApi(`/v1/payment_intents/${encodeURIComponent(request.providerRef)}`, { method: "GET" }, request);
         if (intent.id !== request.providerRef || intent.status !== "succeeded" || intent.currency !== request.currency.toLowerCase() || (number(intent.amount_received) ?? -1) < request.amountMinor) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not identify the original refund payment.", true);
+        assertMerchantAttempt(request, request.paymentId, intent.metadata);
         assertMerchantIntent(request, intent);
       }
       const form = new URLSearchParams({ payment_intent: request.providerRef, amount: String(request.amountMinor) });
@@ -559,17 +562,18 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
       if(!/^cus_[A-Za-z0-9]+$/.test(reference) || reference.length>200)throw new AdapterError("payments","stripe","invalid_request","The original provider customer reference is invalid.");
       // Deleted Stripe customers remain retrievable. A retry confirms the
       // actual tombstone instead of treating arbitrary HTTP errors as erasure.
-      const existing=await api(`/v1/customers/${encodeURIComponent(reference)}`,{method:"GET"},request.providerAccountId);
+      const existing=await api(`/v1/customers/${encodeURIComponent(reference)}`,{method:"GET"},request);
       if(existing.id!==reference)throw new AdapterError("payments","stripe","provider_failure","Stripe did not identify the original erasure customer.",true);
       if(existing.deleted===true)return;
-      const deleted=await api(`/v1/customers/${encodeURIComponent(reference)}`,{method:"DELETE",headers:{"idempotency-key":request.idempotencyKey}},request.providerAccountId);
+      const deleted=await api(`/v1/customers/${encodeURIComponent(reference)}`,{method:"DELETE",headers:{"idempotency-key":request.idempotencyKey}},request);
       if(deleted.id!==reference || deleted.deleted!==true)throw new AdapterError("payments","stripe","provider_failure","Stripe did not acknowledge customer erasure.",true);
     },
     async revokeSavedMethod(request) {
-      await api(`/v1/payment_methods/${encodeURIComponent(request.providerRef)}/detach`, { method: "POST", headers: { "idempotency-key": request.idempotencyKey } }, request.providerAccountId);
+      await api(`/v1/payment_methods/${encodeURIComponent(request.providerRef)}/detach`, { method: "POST", headers: { "idempotency-key": request.idempotencyKey } }, request);
     },
     async chargeSavedMethod(request): Promise<OffSessionChargeResult> {
       validateMerchantChargeScope(request);
+      const originalMetadata = merchantAttemptMetadata(request, request.paymentAttemptId);
       const form = new URLSearchParams({
         amount: String(request.amountMinor),
         currency: request.currency.toLowerCase(),
@@ -580,9 +584,10 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         "metadata[freeholder_contact_id]": request.contactId,
         description: request.description.slice(0, 1000),
       });
+      for (const [key, value] of Object.entries(originalMetadata)) form.set(`metadata[${key}]`, value);
       if (request.customerRef) form.set("customer", request.customerRef);
       applyDestinationCharge(form, false, request);
-      applicationFee(form, "application_fee_amount", request.applicationFeeMinor, request.providerAccountId ?? request.destinationAccountId, request.amountMinor);
+      applicationFee(form, "application_fee_amount", request.applicationFeeMinor, request.providerAccountId ?? request.destinationAccountId, request.amountMinor, Boolean(request.providerPlatformAccountId));
       const value = await chargeApi("/v1/payment_intents", {
         method: "POST",
         headers: {
@@ -602,14 +607,18 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
             ? "pending"
             : "failed";
       const fee = value.application_fee_amount === null ? 0 : number(value.application_fee_amount);
-      if ((request.providerAccountId || request.destinationAccountId) && value.status === "succeeded" && fee === undefined) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not confirm the seller charge application fee.");
-      if (value.status === "succeeded") assertMerchantIntent(request, value);
+      if ((request.providerAccountId || request.destinationAccountId) && !request.providerPlatformAccountId && value.status === "succeeded" && fee === undefined) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not confirm the seller charge application fee.");
+      let customerChargeVerified = true;
+      if (request.providerPlatformAccountId && value.status === "succeeded") {
+        try { assertMerchantAttempt(request, request.paymentAttemptId, value.metadata); } catch { customerChargeVerified = false; }
+        if (number(value.amount_received) === undefined || !text(value.currency)) customerChargeVerified = false;
+      }
       return {
         providerRef,
-        ...merchantChargeScope(request),
-        ...((request.providerAccountId || request.destinationAccountId) && fee !== undefined ? { applicationFeeMinor: fee } : {}),
+        ...(request.providerPlatformAccountId && value.status === "succeeded" ? { ...merchantIntentEvidence(request, value), customerChargeVerified, ...(!customerChargeVerified || fee === undefined ? { merchantRouteVerified: false } : {}) } : merchantChargeScope(request)),
+        ...((request.providerAccountId || request.destinationAccountId || request.providerPlatformAccountId) && fee !== undefined ? { applicationFeeMinor: fee } : {}),
         status,
-        amountMinor: number(value.amount),
+        amountMinor: request.providerPlatformAccountId && value.status === "succeeded" ? number(value.amount_received) ?? number(value.amount) : number(value.amount),
         currency: text(value.currency)?.toUpperCase(),
         occurredAt: stripeOptionalTime(value.created),
         failureMessage: text(object(value.last_payment_error)?.message),

@@ -3,7 +3,8 @@
 
 This work extends the immutable original invoice portions from migration77.
 It is unfinished source work. The source branch starts at signed allocation
-checkpoint `a2b0d7b4`; no migration80 or journal entry is present yet. Nothing
+checkpoint `a2b0d7b4`; reserved migration80 work remains unqualified and outside
+the journal. Nothing
 here enables seller collection, closes C12.26/C12.38, or supplies a real-money,
 tax, independent-review or stable-release sign-off.
 
@@ -12,8 +13,11 @@ connected charge account, destination recipient and settlement merchant as
 separate facts. A destination charge uses the platform namespace, never a
 `Stripe-Account` header for its recipient. New routes verify the authenticated
 platform with a provider read before each operation and refuse replacement
-platform credentials. Successful hosted and saved-method collection reads the
-actual PaymentIntent route; a mismatched route remains unresolved. Historical
+platform credentials. Hosted and saved-method collection retain actual paid
+provider observations before comparing the invoice or settlement route. A
+recipient/fee mismatch remains private settlement debt; a positive Session
+without consistent original intent binding remains unapplied observed money.
+Historical
 direct requests retain their existing account-scoped contract without guessed
 platform identity.
 
@@ -27,11 +31,28 @@ commission amount, never a proportion of item tax or freight. Bounded complete
 page recovery matches the exact operation metadata. A missing lookup remains
 unresolved; it is not evidence that a timed-out operation did not happen.
 
-The bounded no-database provider run passes 87 controls across five files:
-the new original-account/fee controls and the existing customer-erasure,
-saved-method setup-evidence and setup-recovery controls. TypeScript and focused
-ESLint also pass. These are mocked provider HTTP controls, not native invoice
-journeys or actual Stripe-account acceptance.
+The first bounded no-database provider run passed 87 controls across five files.
+A later six-file run passes 104 controls, adding exact payment-attempt metadata,
+actual paid-amount disagreements and original-resource recovery. The three new
+platform-scoped erasure controls also pass alongside the 12 existing controls.
+TypeScript with an 8GB heap and focused ESLint pass. These are mocked provider
+HTTP controls, not native invoice journeys or actual Stripe-account acceptance.
+
+Recovery searches complete bounded pages on the original platform/charge
+namespace and matches immutable payment-attempt/platform metadata. Positive
+page observations commit through a callback before another page can fail. An
+empty lookup never proves absence. The original known Checkout Session can be
+expired only in Stripe's supported state; its acknowledgement commits before
+further reads. Processing asynchronous payments remain pending. Checkout-owned
+PaymentIntents use direct cancellation only for Stripe's documented
+`requires_capture` exception, retaining the actual complete Session state.
+No human negative shortcut releases an unidentified original CREATE, and no
+new charge key is authorized just because the 23-hour replay window elapsed.
+
+New customer/method resources carry original platform scope through erasure
+and revocation; old records remain explicitly NULL rather than being rebound
+to today's credentials. Provider lookup does not rewrite old contact metadata
+after a legitimate contact merge.
 
 The remaining full specification is still required: immutable per-party issue
 snapshots and route admission on one invoice; original-merchant tax and fee
@@ -48,5 +69,7 @@ Provider semantics were checked against primary documentation on 2026-11-12:
 [application-fee identity](https://docs.stripe.com/api/application_fees/object),
 [exact fee refunds](https://docs.stripe.com/api/fee_refunds/create), and
 [indirect charge refunds/disputes](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
+Recovery uses [original Session expiry](https://docs.stripe.com/api/checkout/sessions/expire)
+and the documented [Checkout intent cancellation exception](https://docs.stripe.com/api/payment_intents/cancel).
 Destination refunds and disputes debit the platform balance even with
 `on_behalf_of`; the setting changes settlement merchant, not charge namespace.

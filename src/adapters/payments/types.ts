@@ -23,12 +23,14 @@ export interface PaymentAdapterCapabilities {
 }
 
 /** Supplied by canonical ledger policy, never by a buyer's request. */
-export interface PaymentAccountScope { providerAccountId?: string }
+export interface PaymentAccountScope {
+  providerAccountId?: string;
+  /** Authenticated platform that originally created this provider resource. */
+  providerPlatformAccountId?: string;
+}
 
 /** Frozen ledger facts. A destination is never the charge object's account. */
 export interface MerchantChargeScope extends PaymentAccountScope {
-  /** Authenticated platform that originally created the charge. */
-  providerPlatformAccountId?: string;
   /** Destination charge recipient; the charge remains on the platform. */
   destinationAccountId?: string;
   /** Stripe settlement merchant, independent of the charge namespace. */
@@ -51,6 +53,8 @@ export interface PaymentMethodOffer {
 }
 
 export interface InvoiceForCharge extends MerchantChargeScope {
+  /** Canonical committed ledger attempt; required for new merchant routes. */
+  paymentAttemptId?: string;
   applicationFeeMinor?: number;
   invoiceId: string;
   invoiceNumber: string;
@@ -118,11 +122,15 @@ export interface MethodSetupRecovery extends PaymentAccountScope {
 }
 
 export interface CheckoutCaptureRequest extends MerchantChargeScope {
+  paymentAttemptId?: string;
   checkoutRef: string;
   idempotencyKey: string;
 }
 
 export interface CheckoutCaptureResult extends MerchantChargeScope {
+  customerChargeVerified?: boolean;
+  /** A paid charge remains paid while a separate settlement mismatch is reviewed. */
+  merchantRouteVerified?: boolean;
   providerChargeRef?: string;
   applicationFeeRef?: string;
   transferRef?: string;
@@ -160,6 +168,7 @@ export interface SavedMethodRevocationRequest extends PaymentAccountScope {
 }
 
 export interface OffSessionChargeRequest extends MerchantChargeScope {
+  paymentAttemptId?: string;
   applicationFeeMinor?: number;
   methodRef: string;
   customerRef?: string;
@@ -172,6 +181,8 @@ export interface OffSessionChargeRequest extends MerchantChargeScope {
 }
 
 export interface OffSessionChargeResult extends MerchantChargeScope {
+  customerChargeVerified?: boolean;
+  merchantRouteVerified?: boolean;
   providerChargeRef?: string;
   applicationFeeRef?: string;
   transferRef?: string;
@@ -249,6 +260,29 @@ export interface MerchantFeeRefundResult {
   amountMinor: number;
   currency: string;
 }
+
+export interface MerchantPaymentRecoveryRequest extends MerchantChargeScope {
+  providerPlatformAccountId: string;
+  paymentAttemptId: string;
+  invoiceId: string;
+  contactId: string;
+  amountMinor: number;
+  currency: string;
+  createdAt: string;
+  checkoutRef?: string;
+  idempotencyKey: string;
+  /** Commit each positive read before another page/provider operation can fail. */
+  onPaymentObserved?: (checkoutRef: string, evidence: CheckoutCaptureResult) => Promise<void>;
+  /** Commit the actual physical cancellation acknowledgement before further I/O. */
+  onRetirementAcknowledged?: (fact: { checkoutRef: string; paymentRef?: string; kind: "session_expired" | "intent_canceled" }) => Promise<void>;
+}
+
+export type MerchantPaymentRecovery =
+  | { state: "unresolved" }
+  | { state: "ambiguous"; checkoutRefs: readonly string[] }
+  | { state: "open"; checkout: CheckoutSession }
+  | { state: "pending" | "paid"; checkoutRef: string; evidence: CheckoutCaptureResult }
+  | { state: "not_paid"; checkoutRef: string; paymentRef?: string; sessionStatus: "expired" | "complete"; intentStatus: string | null; amountReceivedMinor: 0 };
 
 export type PaymentProviderEvent = PaymentAccountScope & (
   | {
@@ -329,6 +363,9 @@ export interface PaymentAdapter {
   refundMerchantFee?(request: MerchantFeeRefundRequest): Promise<MerchantFeeRefundResult>;
   /** A missing lookup is unresolved, never evidence that a timed-out refund did not happen. */
   recoverMerchantFeeRefund?(request: MerchantFeeRefundRequest): Promise<MerchantFeeRefundResult | null>;
+  recoverMerchantPayment?(request: MerchantPaymentRecoveryRequest): Promise<MerchantPaymentRecovery>;
+  /** Expires only the authenticated original session; never a new charge or a manual absence claim. */
+  retireMerchantPayment?(request: MerchantPaymentRecoveryRequest): Promise<MerchantPaymentRecovery>;
   supportedCurrencies(): Promise<readonly string[]>;
   supportedMethods(context: {
     country: string;

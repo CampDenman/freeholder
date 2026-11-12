@@ -5,11 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 import { createStripePayments } from "@/adapters/payments/stripe";
 import type { InvoiceForCharge, MerchantChargeScope } from "@/adapters/payments/types";
 
+const paymentAttemptId = "34cbbd41-75db-4c78-a0c5-5f2fd342d921";
+const metadata = { freeholder_payment_id: paymentAttemptId, freeholder_platform_account_id: "acct_platform" };
 const platform = { providerPlatformAccountId: "acct_platform" };
 const direct: MerchantChargeScope = { ...platform, providerAccountId: "acct_seller" };
 const destination: MerchantChargeScope = { ...platform, destinationAccountId: "acct_seller", settlementMerchantAccountId: "acct_seller" };
 const invoice: InvoiceForCharge = {
-  invoiceId: "invoice-original", invoiceNumber: "INV-1", contactId: "contact-original", currency: "CAD", amountMinor: 1200,
+  paymentAttemptId, invoiceId: "invoice-original", invoiceNumber: "INV-1", contactId: "contact-original", currency: "CAD", amountMinor: 1200,
   description: "Seller portion", customer: { email: "buyer@example.test" }, successUrl: "https://site.example.test/paid",
   cancelUrl: "https://site.example.test/invoice", idempotencyKey: "original-portion-attempt", applicationFeeMinor: 100,
 };
@@ -22,7 +24,7 @@ function provider(responses: unknown[]) {
   return { fetcher, adapter: createStripePayments({ secretKey: "sk_merchant_scope_fixture", webhookSecrets: ["whsec_merchant_scope_fixture"], apiBase: "https://stripe.example.test", fetch: fetcher }) };
 }
 function intent(scope: MerchantChargeScope) {
-  return { id: "pi_original", status: "succeeded", currency: "cad", amount_received: 1200, amount: 1200, application_fee_amount: 100,
+  return { id: "pi_original", metadata, status: "succeeded", currency: "cad", amount_received: 1200, amount: 1200, application_fee_amount: 100,
     transfer_data: scope.destinationAccountId ? { destination: scope.destinationAccountId } : null, on_behalf_of: scope.settlementMerchantAccountId ?? null };
 }
 function form(init?: RequestInit) {
@@ -51,6 +53,26 @@ describe("original direct and destination charge accounts (C12.26/C12.38)", () =
     expect(p.fetcher).toHaveBeenCalledOnce();
   });
 
+  it("requires the committed original attempt before any new merchant charge I/O", async () => {
+    const p = provider([]);
+    await expect(p.adapter.createCheckout({ ...invoice, ...destination, paymentAttemptId: undefined })).rejects.toMatchObject({ code: "invalid_request" });
+    expect(p.fetcher).not.toHaveBeenCalled();
+  });
+
+  it("preserves an exact final commission cent even when it is the whole final instalment", async () => {
+    const p = provider([{ id: "acct_platform" }, { id: "cs_original", url: "https://checkout.stripe.com/original" }]);
+    await p.adapter.createCheckout({ ...invoice, ...destination, amountMinor: 1, applicationFeeMinor: 1 });
+    expect(form(p.fetcher.mock.calls[1]![1]).get("payment_intent_data[application_fee_amount]")).toBe("1");
+  });
+
+  it.each(["session", "intent"] as const)("refuses another payment attempt's %s evidence", async kind => {
+    const replacement = { ...metadata, freeholder_payment_id: "519dc3fc-d567-4f17-b098-ff908ee22861" };
+    const p = provider([{ id: "acct_platform" }, { id: "cs_original", metadata: kind === "session" ? replacement : metadata, payment_status: "paid", currency: "cad", amount_total: 1200, payment_intent: { ...intent(destination), metadata: kind === "intent" ? replacement : metadata } }]);
+    const read = p.adapter.captureCheckout({ ...destination, paymentAttemptId, checkoutRef: "cs_original", idempotencyKey: "read-original" });
+    if (kind === "session") await expect(read).rejects.toMatchObject({ code: "provider_failure" });
+    else expect(await read).toMatchObject({ status: "succeeded", customerChargeVerified: false, merchantRouteVerified: false });
+  });
+
   it.each([
     { destinationAccountId: "acct_seller", settlementMerchantAccountId: "acct_seller" },
     { ...destination, providerAccountId: "acct_seller" },
@@ -65,8 +87,8 @@ describe("original direct and destination charge accounts (C12.26/C12.38)", () =
   });
 
   it.each([direct, destination])("reads the actual PaymentIntent route before settling: %j", async scope => {
-    const p = provider([{ id: "acct_platform" }, { id: "cs_original", payment_status: "paid", currency: "cad", amount_total: 1200, payment_intent: intent(scope) }]);
-    const result = await p.adapter.captureCheckout({ ...scope, checkoutRef: "cs_original", idempotencyKey: "read-original" });
+    const p = provider([{ id: "acct_platform" }, { id: "cs_original", metadata, payment_status: "paid", currency: "cad", amount_total: 1200, payment_intent: intent(scope) }]);
+    const result = await p.adapter.captureCheckout({ ...scope, paymentAttemptId, checkoutRef: "cs_original", idempotencyKey: "read-original" });
     expect(result).toMatchObject({ ...scope, providerRef: "pi_original", status: "succeeded", amountMinor: 1200, applicationFeeMinor: 100 });
     expect(new Headers(p.fetcher.mock.calls[1]![1]?.headers).get("stripe-account")).toBe(scope.providerAccountId ?? null);
   });
@@ -75,17 +97,31 @@ describe("original direct and destination charge accounts (C12.26/C12.38)", () =
     { transfer_data: { destination: "acct_replacement" } },
     { transfer_data: { destination: "acct_seller", amount: 1100 } },
     { on_behalf_of: "acct_replacement" },
-    { amount_received: 1199 },
-    { status: "processing" },
+    { transfer_data: null, on_behalf_of: null },
     { application_fee_amount: undefined },
-  ])("keeps incomplete or mismatched settlement evidence unresolved: %j", async change => {
-    const p = provider([{ id: "acct_platform" }, { id: "cs_original", payment_status: "paid", currency: "cad", amount_total: 1200, payment_intent: { ...intent(destination), ...change } }]);
-    await expect(p.adapter.captureCheckout({ ...destination, checkoutRef: "cs_original", idempotencyKey: "read-original" })).rejects.toMatchObject({ code: "provider_failure" });
+  ])("retains actual paid money while flagging a separate settlement disagreement: %j", async change => {
+    const p = provider([{ id: "acct_platform" }, { id: "cs_original", metadata, payment_status: "paid", currency: "cad", amount_total: 1200, payment_intent: { ...intent(destination), ...change } }]);
+    const result = await p.adapter.captureCheckout({ ...destination, paymentAttemptId, checkoutRef: "cs_original", idempotencyKey: "read-original" });
+    expect(result).toMatchObject({ status: "succeeded", amountMinor: 1200, providerRef: "pi_original", merchantRouteVerified: false });
+    if ("transfer_data" in change) expect(result.destinationAccountId).toBe(change.transfer_data?.destination);
+  });
+
+  it.each([
+    { amount_received: 1199 },
+    { amount_received: 1201 },
+  ])("retains actual paid amount disagreement for unapplied-money review: %j", async change => {
+    const p = provider([{ id: "acct_platform" }, { id: "cs_original", metadata, payment_status: "paid", currency: "cad", amount_total: 1200, payment_intent: { ...intent(destination), ...change } }]);
+    expect(await p.adapter.captureCheckout({ ...destination, paymentAttemptId, checkoutRef: "cs_original", idempotencyKey: "read-original" })).toMatchObject({ status: "succeeded", amountMinor: change.amount_received, customerChargeVerified: true, merchantRouteVerified: false });
+  });
+
+  it("keeps a positive Session with contradictory intent state as observed money awaiting original charge proof", async () => {
+    const p = provider([{ id: "acct_platform" }, { id: "cs_original", metadata, payment_status: "paid", currency: "cad", amount_total: 1200, payment_intent: { ...intent(destination), status: "processing" } }]);
+    expect(await p.adapter.captureCheckout({ ...destination, paymentAttemptId, checkoutRef: "cs_original", idempotencyKey: "read-original" })).toMatchObject({ status: "succeeded", amountMinor: 1200, customerChargeVerified: false, merchantRouteVerified: false });
   });
 
   it("refunds a destination charge on the platform and reverses its original transfer", async () => {
     const p = provider([{ id: "acct_platform" }, intent(destination), { id: "acct_platform" }, { id: "re_original", status: "succeeded", payment_intent: "pi_original", amount: 300, currency: "cad" }]);
-    const result = await p.adapter.refund({ ...destination, paymentId: "payment-original", providerRef: "pi_original", amountMinor: 300, currency: "CAD", reverseTransfer: true, idempotencyKey: "original-refund" });
+    const result = await p.adapter.refund({ ...destination, paymentId: paymentAttemptId, providerRef: "pi_original", amountMinor: 300, currency: "CAD", reverseTransfer: true, idempotencyKey: "original-refund" });
     expect(result).toMatchObject({ ...destination, status: "succeeded", providerRef: "re_original" });
     for (const [, init] of p.fetcher.mock.calls) expect(new Headers(init?.headers).has("stripe-account")).toBe(false);
     const [, init] = p.fetcher.mock.calls[3]!;
@@ -96,7 +132,7 @@ describe("original direct and destination charge accounts (C12.26/C12.38)", () =
 
   it("refuses changed destination evidence before refund dispatch", async () => {
     const p = provider([{ id: "acct_platform" }, { ...intent(destination), transfer_data: { destination: "acct_other" } }]);
-    await expect(p.adapter.refund({ ...destination, paymentId: "payment-original", providerRef: "pi_original", amountMinor: 300, currency: "CAD", reverseTransfer: true, idempotencyKey: "original-refund" })).rejects.toMatchObject({ code: "provider_failure" });
+    await expect(p.adapter.refund({ ...destination, paymentId: paymentAttemptId, providerRef: "pi_original", amountMinor: 300, currency: "CAD", reverseTransfer: true, idempotencyKey: "original-refund" })).rejects.toMatchObject({ code: "provider_failure" });
     expect(p.fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
   });
 
@@ -110,7 +146,7 @@ describe("original direct and destination charge accounts (C12.26/C12.38)", () =
 
   it.each([direct, destination])("keeps a saved-method charge on its own frozen route: %j", async scope => {
     const p = provider([{ id: "acct_platform" }, intent(scope)]);
-    const result = await p.adapter.chargeSavedMethod({ ...scope, methodRef: "pm_original", customerRef: "cus_original", invoiceId: invoice.invoiceId, contactId: invoice.contactId, currency: "CAD", amountMinor: 1200, applicationFeeMinor: 100, description: invoice.description, idempotencyKey: "original-saved-charge" });
+    const result = await p.adapter.chargeSavedMethod({ ...scope, paymentAttemptId, methodRef: "pm_original", customerRef: "cus_original", invoiceId: invoice.invoiceId, contactId: invoice.contactId, currency: "CAD", amountMinor: 1200, applicationFeeMinor: 100, description: invoice.description, idempotencyKey: "original-saved-charge" });
     expect(result).toMatchObject({ ...scope, providerRef: "pi_original", status: "succeeded", applicationFeeMinor: 100 });
     const [, init] = p.fetcher.mock.calls[1]!;
     expect(new Headers(init?.headers).get("stripe-account")).toBe(scope.providerAccountId ?? null);
@@ -120,7 +156,7 @@ describe("original direct and destination charge accounts (C12.26/C12.38)", () =
 
   it("refuses a destination proportional-fee refund without its required transfer reversal before I/O", async () => {
     const p = provider([]);
-    await expect(p.adapter.refund({ ...destination, paymentId: "payment-original", providerRef: "pi_original", amountMinor: 300, currency: "CAD", refundApplicationFee: true, idempotencyKey: "original-refund" })).rejects.toMatchObject({ code: "invalid_request" });
+    await expect(p.adapter.refund({ ...destination, paymentId: paymentAttemptId, providerRef: "pi_original", amountMinor: 300, currency: "CAD", refundApplicationFee: true, idempotencyKey: "original-refund" })).rejects.toMatchObject({ code: "invalid_request" });
     expect(p.fetcher).not.toHaveBeenCalled();
   });
 });
