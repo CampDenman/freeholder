@@ -110,3 +110,12 @@ The SQL remains unassembled and unapplied; this does not establish SQL/native
 AFTER success. Compose only the owned delta onto the separately reconciled
 current-main financial candidate, then create a NEW normal-v9 database. The
 old a67 component base and all exact prior test identities remain preserved.
+
+Pre-DDL review tightened incomplete-original handling: an absent C1 route may
+use the unchanged non-C1 target; an existing C1 route with a missing or foreign
+allocation must return unknown, never fall back. The C1 source also requires its
+original collection policy and the actual invoice's original order source ID
+matching the order's invoice reference. The catalog source and SQL guard both
+check this round trip. This small unqualified follow-up changes the new fragment
+hash; the previously recorded4b64 hash remains the exact earlier source check.
+No existing database or original financial record is changed.

@@ -15,6 +15,7 @@ export const originalMerchantReturnFeeSource = defineService({
     const [order] = await ctx.tx.select().from(orders).where(eq(orders.invoiceId, invoiceId)).limit(1);
     if (!order) return { hasOrder: false, incomplete: true, returns: [] };
     const invoice = await ctx.callAsSystem(getInvoice, { id: invoiceId });
+    if (invoice.invoice.sourceType !== "order" || invoice.invoice.sourceId !== order.id) return { hasOrder: true, incomplete: true, returns: [] };
     const requests = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.orderId, order.id)).limit(5001);
     const result: z.infer<typeof merchantReturnFeeSourceResult> = { hasOrder: true, incomplete: false, returns: [] };
     let count = requests.length + invoice.lines.length + invoice.refunds.length + invoice.creditNotes.length;
