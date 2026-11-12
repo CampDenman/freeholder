@@ -203,9 +203,11 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
         .where(eq(mediaCaptureChunks.sessionId, session.id))
     ).map((chunk) => chunk.storageKey);
     expect(chunkKeys).toHaveLength(2);
-    // Chunk rows own their keys; none is left for the orphan sweep to take.
+    // Logical chunk ownership and the physical receipt both survive until
+    // the successful assembly transaction retires each chunk pointer.
     for (const key of chunkKeys) {
-      expect(await db().select().from(mediaObjects).where(eq(mediaObjects.key, key))).toEqual([]);
+      expect(await db().select().from(mediaObjects).where(eq(mediaObjects.key, key))).toMatchObject([{key,state:"pending"}]);
+      const {pendingObjectIsOwned}=await import("@/core/media/object-ledger");expect(await pendingObjectIsOwned(key)).toBe(true);
     }
 
     const store = storage();
@@ -277,6 +279,26 @@ describe.runIf(hasDatabase)("media capture sessions", { timeout: 30_000 }, () =>
     // Without a lock both applies saw no earlier chunk, and the loser's
     // object was left in storage with nothing pointing at it.
     expect(jobs.some((job) => job.data.keys.includes(loser))).toBe(true);
+  });
+
+  it("retires only original subject-owned capture pointers before physical erasure",async()=>{
+    const {db}=await import("@/core/db"),{users}=await import("@/core/auth/schema"),{contacts}=await import("@/core/contacts/schema"),{eq}=await import("drizzle-orm");
+    const {createContact}=await import("@/core/contacts/service"),{assignRole}=await import("@/core/roles/service"),{createDataRequest,verifyDataRequest,fulfillDataRequest}=await import("@/core/privacy/service");
+    const {appendCaptureChunk}=await import("@/core/media/capture"),{mediaCaptureSessions,mediaCaptureChunks}=await import("@/core/media/schema"),{mediaObjectWrites}=await import("@/core/media/write-schema");
+    const {dataRequests}=await import("@/core/privacy/schema"),{getJob}=await import("@/core/jobs"),{eraseMediaStorageOperations,MEDIA_WRITE_ERASURE_JOB}=await import("@/core/media/write-privacy"),{eraseMultipartOperations,MULTIPART_ERASURE_JOB}=await import("@/core/media/multipart-privacy");
+    const editor={...OWNER,userId:"00000000-0000-4000-8000-000000000003",role:"editor",grants:[{module:"media",access:"manage" as const}]};
+    await db().insert(users).values([{id:OWNER.userId,email:"owner@example.test",role:"owner"},{id:editor.userId,email:"original-editor@example.test",role:"editor"}]);
+    const contact=await createContact.call({name:"Original recording editor",email:"original-editor@example.test"},OWNER);await db().update(contacts).set({userId:editor.userId}).where(eq(contacts.id,contact.id));
+    const session=await createCaptureSession.call({source:"screen"},editor);await grantCapturePermission.call({id:session.id},editor);await appendCaptureChunk.call({id:session.id,sequence:0,contentType:"video/webm",bytes:new Uint8Array([1,2,3])},editor);
+    const unrelated=await createCaptureSession.call({source:"screen"},OWNER);await grantCapturePermission.call({id:unrelated.id},OWNER);await appendCaptureChunk.call({id:unrelated.id,sequence:0,contentType:"video/webm",bytes:new Uint8Array([4,5,6])},OWNER);
+    const writes=await db().select().from(mediaObjectWrites),original=writes.find(row=>row.contactId===contact.id)!,other=writes.find(row=>row.contactId===null)!;expect(original.contactId).toBe(contact.id);
+    await assignRole.call({userId:editor.userId,roleKey:"customer"},OWNER);
+    const request=await createDataRequest.call({contactId:contact.id,request:{kind:"erasure"}},OWNER);await verifyDataRequest.call({id:request.id,method:"Synthetic former editor identity verification"},OWNER);const result=await fulfillDataRequest.call({id:request.id,confirmation:"ERASE"},OWNER);
+    expect(await db().select().from(mediaCaptureChunks).where(eq(mediaCaptureChunks.sessionId,session.id))).toHaveLength(0);expect((await db().select().from(mediaCaptureSessions).where(eq(mediaCaptureSessions.id,session.id)))[0]).toMatchObject({status:"discarded",createdBy:"erased",token:null});
+    const scopes=(result.artifact.body as {outcomes:Array<{scope:string;pendingJobs?:string[]}>}).outcomes;
+    for(const scope of scopes)for(const id of scope.pendingJobs??[]){const name=scope.scope==="media.storageOperations"?MEDIA_WRITE_ERASURE_JOB:scope.scope==="media.multipartOperations"?MULTIPART_ERASURE_JOB:null;if(!name)continue;const job=await getJob(name,id);await(name===MEDIA_WRITE_ERASURE_JOB?eraseMediaStorageOperations(job!.data):eraseMultipartOperations(job!.data));}
+    expect(await storage().get(original.key)).toBeUndefined();expect((await db().select().from(dataRequests).where(eq(dataRequests.id,request.id)))[0]?.status).toBe("completed");
+    expect(await storage().get(other.key)).toEqual(new Uint8Array([4,5,6]));expect((await db().select().from(mediaCaptureSessions).where(eq(mediaCaptureSessions.id,unrelated.id)))[0]?.status).toBe("live");expect(await db().select().from(mediaCaptureChunks).where(eq(mediaCaptureChunks.sessionId,unrelated.id))).toHaveLength(1);
   });
 
   it("does not reopen a capture confirmed while its recording was assembled", async () => {

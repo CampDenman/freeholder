@@ -31,15 +31,61 @@ Postgres only:
 - A fresh official migration chain through74 plus explicit unpublished75 SQL
   succeeded. This is not contiguous journal75 upgrade qualification.
 
+The subsequent composed increment adds immutable `media_erasure_cohorts` rows
+containing only an original request/scope and one source receipt/resource UUID.
+They precede minimization and preserve the authority needed when a late positive
+provider fact contradicts completed erasure. Original minimized identities are
+not restored from a current email or executor. A person supplies an original key
+matching its immutable digest; a fresh physical cleanup witness carries it.
+Provider facts commit before the shared `privacy.reopenErasureJob` transition;
+bounded idempotent reconciliation revisits unfinished facts after a crash.
+
+Composed local evidence, still without a journal75 claim:
+
+- Original PUT/DELETE native coverage passes all 13 controls together in 108.52s.
+  Two old race fixtures explicitly use guarded test transactions; erasure also
+  acknowledges the newly added reservation scope instead of assuming one job.
+- The late-PUT/completed-erasure before control fails against unchanged root75
+  in 8.63s. Its after control passes in 11.48s and again in the composed pair.
+  It verifies reopening the exact request/artifact, refusing a different key,
+  deleting original bytes and minimizing every resulting receipt before the
+  request completes again.
+- The minimized original multipart CREATE control passes in 10.22s: a late
+  allocation/ACK reopens original erasure, known original inventory can be
+  reviewed, and verified ABORT retirement completes its original job. The first
+  composed attempt did not enter this case because the 25s truncate statement
+  deadline fired (PostgreSQL 57014); only that affected case was repeated.
+- Live SDK generation passes all 8 controls in 3.02s and updates the two public
+  multipart recovery methods and original-key recovery input.
+- A normal production build of genuine pre75 main74 commit
+  `0ccf3b0b7654e3367e87c990ee3fa8738994824b` passes its standalone scrub:
+  20,440 files / 246,699,356 bytes, Node 24.15.0. BUILD_ID SHA256 is
+  `d50d1ef23bf32a5559790de9821c52ec3c5f56c73444f7de68f1b13beb7fb538`;
+  standalone server SHA256 is
+  `c31a4d2f7f21cd7139dcc786055d684f3aca512c56689bba1f31fce5d7221da2`.
+  The identical actual artifact has readiness 200 and a successful authenticated
+  normal HTTP upload with one synthetic S3 PUT against official 74 (1.81s).
+  Against explicit75, readiness is 503 and the same valid upload is refused,
+  with zero physical provider calls and unchanged media witnesses (3.04s).
+  Both use the documented pre-migrated runtime option; no guard or artifact is
+  patched. Servers are stopped and drained. This is a local build, not signed
+  release or provider-account acceptance.
+
+Capture followup preserves declared logical ownership beside physical receipts,
+binds stored reads/derivation to accepted original bytes, and retires only exact
+subject-owned capture and attached-asset pointers through shared erasure/purge
+composition. Social's two stored-adoption producers use the same PUT ledger.
+Both named media hold scopes propagate to the owning physical records. Focused
+capture, raster, social, published-asset erasure and hold controls are prepared
+for final native qualification; this paragraph does not claim they passed.
+
 The temporary direct-abort refusal in root75 WIP was a compatibility regression
 in an unfinished repair. Original main72 cancellation worked; it is not counted
 as a preexisting launch defect.
 
-Further qualification remains for lost-call recovery, concurrency, original
-owner versus executor, native PUT/DELETE and capture regression coverage,
-four-locale owner browser acceptance, SDK generation, actual old-artifact HTTP
-refusal and contiguous upgrade. Breaking migration75 requires actual old direct
+Further qualification remains for the final focused capture/shared-adoption
+increment, four-locale owner browser acceptance and contiguous upgrade.
+Breaking migration75 requires actual old direct
 writers to stop and drain. Readiness refusal cannot stop an already admitted
-network request. Cross-target adoption/source cleanup, completed-erasure
-reopening after a contradictory late provider fact, live storage acceptance and
-independent review remain explicit completion dependencies.
+network request. Cross-target adoption/source cleanup, live storage acceptance
+and independent review remain explicit completion dependencies.

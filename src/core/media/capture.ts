@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import encodeQR from "qr";
+import {db} from "@/core/db";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import {
   defineOrchestratedService,
@@ -16,21 +17,29 @@ import {
   type Actor,
 } from "@/core/service";
 import {defineMediaService as defineService} from "./guarded-service";
-import {putWithReceipt} from "./write-ledger";
+import {putWithReceipt,originalStoredObject} from "./write-ledger";
+import {assertOriginalUploadWritable} from "./upload-ownership";
 import { siteOrigin } from "@/core/seo/origin";
-import { storage } from "@/adapters/storage";
-import { deleteUnownedPendingObjects, reservePendingMediaObject as reserveObject } from "./object-ledger";
+import { deleteUnownedPendingObjects, reservePendingMediaObject as reserveObject,registerPendingObjectOwner } from "./object-ledger";
 import {
   CAPTURE_SOURCES,
   CAPTURE_STATUSES,
   mediaCaptureChunks,
   mediaCaptureItems,
   mediaCaptureSessions,
+  mediaObjects,
   mediaUploads,
   assets,
 } from "./schema";
 
 const CAPTURE_TTL_MS = 24 * 60 * 60 * 1000;
+// Logical chunks/items retain their physical witness until their own durable
+// transaction retires that pointer. An orphan timer is not that authority.
+registerPendingObjectOwner("capture/",async key=>{
+ const chunk=await db().select({id:mediaCaptureChunks.id}).from(mediaCaptureChunks).where(eq(mediaCaptureChunks.storageKey,key)).limit(1);if(chunk.length)return true;
+ const item=await db().select({id:mediaCaptureItems.id}).from(mediaCaptureItems).where(eq(mediaCaptureItems.stagedKey,key)).limit(1);if(item.length)return true;
+ return Boolean((await db().select({id:mediaCaptureSessions.id}).from(mediaCaptureSessions).where(eq(mediaCaptureSessions.stagedKey,key)).limit(1)).length);
+});
 const id = z.string().uuid();
 const token = z.string().trim().min(16).max(128);
 const source = z.enum(CAPTURE_SOURCES);
@@ -274,9 +283,7 @@ async function appendItem(
     checksumSha256?: string;
   },
 ) {
-  if (!input.uploadId) {
-    await reserveObject(ctx,{key:input.key,role:"original",bytes:input.bytes,contentType:input.contentType});
-  }
+  await assertCapturePhysicalOwner(ctx,input.key);
   await ctx.tx.insert(mediaCaptureItems).values({
     sessionId: existing.id,
     filename: input.filename,
@@ -299,6 +306,11 @@ async function appendItem(
     .where(eq(mediaCaptureSessions.id, existing.id))
     .returning();
   return updated!;
+}
+async function assertCapturePhysicalOwner(ctx:Pick<ServiceContext,"tx">,key:string):Promise<void>{
+ const [reservation]=await ctx.tx.select({owner:mediaObjects.ownerContactId}).from(mediaObjects).where(eq(mediaObjects.key,key)).limit(1);
+ if(!reservation)throw new ServiceError("conflict","The original capture reservation was retired; it cannot be recreated after storage work.");
+ await assertOriginalUploadWritable(ctx.tx,reservation.owner,null);
 }
 
 async function applyCaptureTarget(
@@ -1130,6 +1142,7 @@ const applyCaptureChunk = defineService({
     bytes: z.number().int(),
   }),
   handler: async (input, ctx) => {
+    await assertCapturePhysicalOwner(ctx,input.key);
     const authorized = await authorizedSession(ctx, input, "media.appendCaptureChunk");
     assertSameSession(authorized, input.sessionId);
     // The session row, not the (possibly not yet existing) chunk row, is the
@@ -1383,8 +1396,9 @@ export const assembleCapture = defineOrchestratedService({
     const parts: Uint8Array<ArrayBuffer>[] = [];
     let total = 0;
     for (const key of claimed.chunkKeys) {
-      const body = await storage().get(key);
+      const captured=await originalStoredObject(key),body = await captured.store.get(key);
       if (!body) throw new ServiceError("conflict", "A recorded chunk disappeared from storage.");
+      const{createHash}=await import("node:crypto");if(body.byteLength!==captured.receipt.bytes||createHash("sha256").update(body).digest("hex")!==captured.receipt.sha256)throw new ServiceError("conflict","An original recording chunk changed after its accepted write.");
       parts.push(body);
       total += body.byteLength;
     }

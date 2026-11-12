@@ -250,7 +250,7 @@ BEGIN
  END IF;
  IF TG_OP='DELETE' AND (
   EXISTS(SELECT 1 FROM media_object_writes WHERE key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(OLD.key,'UTF8')),'hex') AND deleted_at IS NULL)
-  OR EXISTS(SELECT 1 FROM media_multipart_resources WHERE object_key=OLD.key AND retired_at IS NULL)) THEN
+  OR EXISTS(SELECT 1 FROM media_multipart_resources WHERE key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(OLD.key,'UTF8')),'hex') AND retired_at IS NULL)) THEN
   RAISE EXCEPTION 'Original physical media ownership is still unresolved' USING ERRCODE='23514';
  END IF;
  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
@@ -282,3 +282,33 @@ UPDATE contact_merge_operations operation SET undoable=false,
   AND EXISTS(SELECT 1 FROM media_multipart_resources resource WHERE resource.contact_id=operation.surviving_contact_id))
  OR (NOT EXISTS(SELECT 1 FROM jsonb_array_elements(operation.reference_state) ref WHERE ref->>'table'='media_objects')
   AND EXISTS(SELECT 1 FROM media_objects object WHERE object.owner_contact_id=operation.surviving_contact_id)));
+--> statement-breakpoint
+-- Minimal original authority survives file/actor/contact minimization. No
+-- plaintext object key, copied contact, credential or provider payload lives here.
+CREATE TABLE media_erasure_cohorts (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), request_id uuid NOT NULL REFERENCES data_requests(id) ON DELETE RESTRICT,
+ scope text NOT NULL, object_receipt_id uuid REFERENCES media_object_writes(id) ON DELETE RESTRICT,
+ multipart_resource_id uuid REFERENCES media_multipart_resources(id) ON DELETE RESTRICT, created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT media_erasure_one_source CHECK(num_nonnulls(object_receipt_id,multipart_resource_id)=1),
+ CONSTRAINT media_erasure_scope CHECK(scope IN('media.storageOperations','media.multipartOperations'))
+);
+--> statement-breakpoint
+CREATE INDEX media_erasure_request_idx ON media_erasure_cohorts(request_id);
+--> statement-breakpoint
+CREATE UNIQUE INDEX media_erasure_object_idx ON media_erasure_cohorts(request_id,scope,object_receipt_id) WHERE object_receipt_id IS NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX media_erasure_multipart_idx ON media_erasure_cohorts(request_id,scope,multipart_resource_id) WHERE multipart_resource_id IS NOT NULL;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_erasure_cohort_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.media_writes_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Original media erasure authority is immutable and requires its guarded source' USING ERRCODE='23514';
+ END IF;
+ IF NOT EXISTS(SELECT 1 FROM data_requests WHERE id=NEW.request_id AND kind='erasure') THEN
+  RAISE EXCEPTION 'Original media erasure authority requires its original erasure request' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_erasure_cohorts_guard BEFORE INSERT OR UPDATE OR DELETE ON media_erasure_cohorts
+ FOR EACH ROW EXECUTE FUNCTION freeholder_media_erasure_cohort_guard();

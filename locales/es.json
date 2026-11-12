@@ -8790,5 +8790,7 @@
   "media.recovery.verifyOriginal": "Verificar el recurso original",
   "privacy.retention.mediaMultipartOperations": "Reservas de carga y operaciones multiparte originales",
   "privacy.retention.mediaStorageOperations": "Operaciones de almacenamiento originales",
-  "audit.privacy.reopenErasureJob": "Reabrió un borrado tras nuevas pruebas del origen"
+  "audit.privacy.reopenErasureJob": "Reabrió un borrado tras nuevas pruebas del origen",
+  "media.recovery.originalKey": "Clave original del objeto según las pruebas verificadas del proveedor",
+  "audit.media.retireOwnedAssetsForErasure": "Retirada de archivos del titular original para su supresión verificada"
 }

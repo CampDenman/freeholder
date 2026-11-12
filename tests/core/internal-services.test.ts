@@ -164,6 +164,7 @@ const INTERNAL = [
   "media.purgeExpired",
   "media.purgeExpiredClaim",
   "media.registerStoredOriginal",
+  "media.retireOwnedAssetsForErasure",
   "media.stageCompletedUpload",
   "marketplace.importProviderOrder",
   "marketplace.reconcileRefund",
@@ -224,6 +225,7 @@ const INTERNAL = [
 const CALLER_AUTHORIZED_PHASES = [
   "catalog.anonymizeSellerOrderReceipts",
   "catalog.orderInvoiceRevenue",
+  "media.retireOwnedAssetsForErasure",
   "media.reserveProxyObject",
   "subscriptions.claimTrialCardSetup",
   "subscriptions.applyTrialCardSetup",

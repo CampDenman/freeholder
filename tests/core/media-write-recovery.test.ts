@@ -16,9 +16,10 @@ import { getJob, stopJobs } from "@/core/jobs";
 import { beginUpload, abortUpload, cleanupOrphanedMedia, uploadAsset } from "@/core/media/service";
 import { mediaObjects, mediaUploads } from "@/core/media/schema";
 import { mediaObjectWrites } from "@/core/media/write-schema";
-import { observeStorageOperation, putWithReceipt, MEDIA_WRITES_SCOPE } from "@/core/media/write-ledger";
+import { observeStorageOperation, putWithReceipt, MEDIA_WRITES_SCOPE,allowMediaReceiptWrites } from "@/core/media/write-ledger";
 import { listStorageOperations, reconcileStorageOperation } from "@/core/media/write-recovery";
 import { eraseMediaStorageOperations, MEDIA_WRITE_ERASURE_JOB } from "@/core/media/write-privacy";
+import {eraseMultipartOperations,MULTIPART_ERASURE_JOB,MULTIPART_PRIVACY_SCOPE} from "@/core/media/multipart-privacy";
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { resetEnvForTests } from "@/core/env";
 import { ready } from "@/core/runtime";
@@ -57,7 +58,7 @@ describe.runIf(hasDatabase)("original media recovery (C1.12/C11.08)", () => {
   async function positivePending() {
     const store = storage(), put = store.put.bind(store), bytes = body();
     const reservation = await beginUpload.call({ filename: "private.pdf", contentType: "application/pdf", bytes: bytes.byteLength }, OWNER);
-    vi.spyOn(store, "put").mockImplementation(async (...args) => { const result = await put(...args); await db().update(mediaUploads).set({ state: "aborted" }).where(eq(mediaUploads.id, reservation.id)); return result; });
+    vi.spyOn(store, "put").mockImplementation(async (...args) => { const result = await put(...args); await db().transaction(async tx=>{await allowMediaReceiptWrites(tx);await tx.update(mediaUploads).set({ state: "aborted" }).where(eq(mediaUploads.id, reservation.id));}); return result; });
     await failure(uploadAsset.call({ ...request(bytes), uploadId: reservation.id }, OWNER));
     const [row] = await db().select().from(mediaObjectWrites);
     expect(row?.state).toBe("accepted");
@@ -168,6 +169,8 @@ describe.runIf(hasDatabase)("original media recovery (C1.12/C11.08)", () => {
     await failure(eraseMediaStorageOperations(job!.data));
     await reconcileStorageOperation.call(review((await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id, row.id)))[0]!), OWNER);
     await eraseMediaStorageOperations(job!.data);
+    const reservationScope=(result.artifact.body as {outcomes:Array<{scope:string;pendingJobs?:string[]}>}).outcomes.find(item=>item.scope===MULTIPART_PRIVACY_SCOPE);
+    for(const jobId of reservationScope?.pendingJobs??[]){const reservationJob=await getJob(MULTIPART_ERASURE_JOB,jobId);await eraseMultipartOperations(reservationJob!.data);}
     const history = await db().select().from(mediaObjectWrites);
     expect(history).toHaveLength(2);
     expect(history.every(receipt => receipt.redactedAt && receipt.contactId === null && receipt.actor === "erased" && receipt.key.startsWith("retained:"))).toBe(true);

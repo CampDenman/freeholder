@@ -8790,5 +8790,7 @@
   "media.recovery.verifyOriginal": "Verify original resource",
   "privacy.retention.mediaMultipartOperations": "Original upload reservations and multipart operations",
   "privacy.retention.mediaStorageOperations": "Original storage operations",
-  "audit.privacy.reopenErasureJob": "Reopened an erasure after new source evidence"
+  "audit.privacy.reopenErasureJob": "Reopened an erasure after new source evidence",
+  "media.recovery.originalKey": "Original object key from verified provider evidence",
+  "audit.media.retireOwnedAssetsForErasure": "Retired original subject-owned library assets for verified erasure"
 }

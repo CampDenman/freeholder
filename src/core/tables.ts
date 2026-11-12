@@ -195,3 +195,4 @@ export {
   importSourceMedia,
 } from "@/core/plugins/schema";
 export { retentionPolicies } from "@/core/retention/schema";
+export * from "./media/erasure-schema";

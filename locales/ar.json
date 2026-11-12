@@ -8790,5 +8790,7 @@
   "media.recovery.verifyOriginal": "التحقق من المورد الأصلي",
   "privacy.retention.mediaMultipartOperations": "حجوزات التحميل الأصلية والعمليات متعددة الأجزاء",
   "privacy.retention.mediaStorageOperations": "عمليات التخزين الأصلية",
-  "audit.privacy.reopenErasureJob": "أعاد فتح طلب حذف بعد ظهور دليل جديد من المصدر"
+  "audit.privacy.reopenErasureJob": "أعاد فتح طلب حذف بعد ظهور دليل جديد من المصدر",
+  "media.recovery.originalKey": "مفتاح الكائن الأصلي من أدلة المزوّد التي تم التحقق منها",
+  "audit.media.retireOwnedAssetsForErasure": "سحب ملفات المكتبة المملوكة لصاحب البيانات الأصلي من أجل محو تم التحقق منه"
 }

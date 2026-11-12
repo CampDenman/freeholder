@@ -8790,5 +8790,7 @@
   "media.recovery.verifyOriginal": "Vérifier la ressource initiale",
   "privacy.retention.mediaMultipartOperations": "Réservations de téléversement et opérations multipart initiales",
   "privacy.retention.mediaStorageOperations": "Opérations de stockage initiales",
-  "audit.privacy.reopenErasureJob": "A rouvert un effacement après de nouvelles preuves de la source"
+  "audit.privacy.reopenErasureJob": "A rouvert un effacement après de nouvelles preuves de la source",
+  "media.recovery.originalKey": "Clé initiale de l’objet issue des preuves vérifiées du fournisseur",
+  "audit.media.retireOwnedAssetsForErasure": "Retrait des médias du sujet initial pour un effacement vérifié"
 }

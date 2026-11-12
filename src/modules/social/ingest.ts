@@ -10,8 +10,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { storage } from "@/adapters/storage";
 import { storageKey } from "@/adapters/storage/types";
+import {putWithReceipt,deleteWithReceipt} from "@/core/media/write-ledger";
 import {
   socialAdapters,
   type SocialInteraction,
@@ -130,8 +130,7 @@ async function reclaimMedia(
       if (bytes.byteLength === 0) continue;
       const checksum = createHash("sha256").update(bytes).digest("hex");
       const key = storageKey(media.filename, new Date(), randomUUID());
-      const store = storage();
-      await store.put(key, bytes, media.mime);
+      await putWithReceipt({key,body:bytes,contentType:media.mime,role:"original"},{kind:"system"});
       storedKey = key;
       const asset = await registerStoredOriginal.call(
         {
@@ -154,7 +153,7 @@ async function reclaimMedia(
       storedKey = undefined;
       staged.push({ assetId: asset.id, checksumSha256: checksum });
     } catch {
-      if (storedKey) await storage().delete(storedKey).catch(() => undefined);
+      if (storedKey) await deleteWithReceipt(storedKey).catch(() => undefined);
       // A missing image must not block the caption. The package still
       // records the post; the owner can see it has no file.
     }

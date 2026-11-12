@@ -34,7 +34,7 @@ describe.runIf(hasDatabase)("original reservation privacy admission (C1.12)",()=
   const reservation=await beginUpload.call({filename:"original.pdf",contentType:"application/pdf",bytes:bytes.byteLength},UPLOADER);
   let entered!:()=>void;const scanning=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{release=resolve;});
   setMalwareScannerForTests({id:"none",scan:async()=>{entered();await gate;return{status:"clean",engine:"synthetic-paused-scanner"};}});
-  const put=vi.spyOn(storage(),"put");pending=uploadAsset.call({filename:"original.pdf",contentType:"application/pdf",bytes,uploadId:reservation.id},UPLOADER).then(()=>({accepted:true}),error=>({error}));
+  const put=vi.spyOn(storage(),"put");pending=uploadAsset.call({filename:"original.pdf",contentType:"application/pdf",bytes,uploadId:reservation.id},UPLOADER).then(()=>({accepted:true}),()=>({accepted:false}));
   await scanning;
   const request=await createDataRequest.call({contactId:contact.id,request:{kind:"erasure"}},OWNER);await verifyDataRequest.call({id:request.id,method:"Synthetic original uploader verification"},OWNER);await fulfillDataRequest.call({id:request.id,confirmation:"ERASE"},OWNER);
   expect((await db().select().from(dataRequests).where(eq(dataRequests.id,request.id)))[0]?.status).toBe("completed");

@@ -3978,6 +3978,17 @@ reading chat logs.
   `tests/core/media-multipart-adapter.test.ts` record that boundary. Migration75
   is breaking: old direct writers must actually stop and drain before upgrade;
   readiness refusal is not proof that already admitted network work stopped.
+  The composed source preserves minimal original erasure cohort IDs before
+  minimization. Contradictory late PUT and multipart CREATE facts reopen the
+  exact original request/receipt; verified original-key cleanup completes them
+  without restoring erased identity from a current executor. Original 13 native
+  PUT/DELETE controls and both late-erasure journeys pass across the documented
+  compositions. A genuine main74 production artifact is healthy and uploads on
+  official 74, then becomes unready and refuses ordinary HTTP upload with zero
+  physical writes under explicit75 (`deploy/media-multipart-receipts-2026-11-11.md`).
+  Final capture/shared-adoption, owned published-file erasure, named-hold and
+  social producer controls remain in qualification; no whole-suite or stable
+  acceptance is inferred from those source repairs.
   Contiguous upgrade/older-writer proof,
   original-byte cross-target recovery and live storage acceptance remain
   required before this item can close. C3.22/C11.08 and independent C11.10

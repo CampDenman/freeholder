@@ -9,7 +9,9 @@ import { z } from "zod";
 import { and, count, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { pendingObjectIsOwned, reservePendingMediaObject } from "./object-ledger";
-import { putWithReceipt, deleteWithReceipt, discardUnwrittenProxyReservation, discardUnwrittenObjectReservation, type TrackedPut } from "./write-ledger";
+import { putWithReceipt, deleteWithReceipt, discardUnwrittenProxyReservation, discardUnwrittenObjectReservation,originalStoredObject,objectKeyDigest,type CapturedStorage, type TrackedPut } from "./write-ledger";
+import {mediaObjectWrites} from "./write-schema";
+import {dataRequests} from "@/core/privacy/schema";
 import { listed, okResult, row, timestamp, uuid } from "@/core/contract";
 import { db, type Database } from "@/core/db";
 import {
@@ -33,7 +35,7 @@ import {defineMediaService as defineService} from "./guarded-service";
 import {allowMediaReceiptWrites} from "./write-ledger";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {originalUploadContact,assertOriginalUploadWritable} from "./upload-ownership";
-import {reserveMultipart,createOriginalMultipart,originalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart,type BoundMultipart} from "./multipart-operations";
+import {reserveMultipart,createOriginalMultipart,originalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
 import {
   storageKey,
   type MultipartPart,
@@ -253,11 +255,11 @@ const reserveProxyObject = defineService({
  handler:async(input,ctx)=>{await checkCaptureUpload(ctx.tx,ctx.actor,input.provenance);await reservePendingMediaObject(ctx,{...input,role:"original"});return{ok:true as const};},
 });
 
-async function putTrackedObject(input: TrackedPut, actor: Actor,captured?:BoundMultipart): Promise<void> {
+async function putTrackedObject(input: TrackedPut, actor: Actor,captured?:CapturedStorage): Promise<void> {
   await putWithReceipt(input, actor,captured);
 }
 
-async function putTrackedObjects(inputs: TrackedPut[], actor: Actor, ownerAssetId?: string,captured?:BoundMultipart): Promise<void> {
+async function putTrackedObjects(inputs: TrackedPut[], actor: Actor, ownerAssetId?: string,captured?:CapturedStorage): Promise<void> {
   const outcomes = await Promise.allSettled(inputs.map(input => putWithReceipt({ ...input, ownerAssetId }, actor,captured)));
   const failure = outcomes.find(result => result.status === "rejected");
   if (failure?.status === "rejected") throw failure.reason;
@@ -449,7 +451,7 @@ async function prepareDerivedObjects(
   },
   mark: WatermarkMark | undefined,
   actor: Actor,
-  captured?:BoundMultipart,
+  captured?:CapturedStorage,
 ): Promise<PreparedOriginal> {
   const scan = scanFields(input.scan);
   const trackedKeys = [input.key];
@@ -1569,13 +1571,16 @@ export const registerStoredOriginal = defineOrchestratedService({
   }),
   output: assetRow,
   handler: async (input, actor) => {
-    const head = await storage().head(input.key);
+    const captured=await originalStoredObject(input.key);
+    if(input.bytes!==captured.receipt.bytes||(input.checksumSha256&&input.checksumSha256!==captured.receipt.sha256))throw new ServiceError("conflict","The staged metadata does not match its original accepted byte witness.");
+    const head = await captured.store.head(input.key);
     if (!head) throw new ServiceError("not_found", "The staged file is gone.");
-    const prefix = await storage().readRange(input.key, 0, SIGNATURE_BYTES - 1);
+    if(head.bytes!==captured.receipt.bytes)throw new ServiceError("conflict","The original staged object has different bytes.");
+    const prefix = await captured.store.readRange(input.key, 0, SIGNATURE_BYTES - 1);
     const suffixStart = Math.max(0, input.bytes - SIGNATURE_BYTES);
     const suffix =
       suffixStart > 0
-        ? await storage().readRange(input.key, suffixStart, input.bytes - 1)
+        ? await captured.store.readRange(input.key, suffixStart, input.bytes - 1)
         : undefined;
     try {
       const validated = validateMediaFile({
@@ -1589,14 +1594,16 @@ export const registerStoredOriginal = defineOrchestratedService({
         input.filename,
         validated.mime,
         input.bytes,
+        captured.store,
       );
+      if(verified.checksumSha256!==captured.receipt.sha256)throw new ServiceError("conflict","The original staged object's SHA-256 changed.");
       const prepared = await prepareDerivedObjects(
         {
           key: input.key,
           kind: validated.kind,
           scan: verified.scan,
         },
-        await loadWatermarkMark(), actor,
+        await loadWatermarkMark(captured.store), actor,captured,
       );
       return applyStoredOriginal.call(
         {
@@ -2908,10 +2915,34 @@ async function claimPurge(
         })),
       )
       .onConflictDoNothing();
+    for(const key of untracked){
+      const history=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,objectKeyDigest(key))).limit(1);
+      if(!history.length)await tx.insert(mediaObjectWrites).values({operation:"put",key,keyDigest:objectKeyDigest(key),contentType:contentTypeForPurgeKey(key,asset),actor:"legacy-unverified",state:"unverified"});
+    }
   }
   await tx.delete(assets).where(eq(assets.id, asset.id));
   return { assetId: asset.id, keys };
 }
+
+export const retireOwnedAssetsForErasure=defineService({
+ name:"media.retireOwnedAssetsForErasure",summary:"Retire exactly an original subject's attached library assets before queued physical erasure.",kind:"mutation",permission:"system",external:false,auditInputFields:["contactId","requestId"],
+ input:z.object({contactId:uuid,requestId:uuid}),output:z.object({assetIds:z.array(uuid)}),
+ handler:async(input,ctx)=>{
+  const [request]=await ctx.tx.select().from(dataRequests).where(and(eq(dataRequests.id,input.requestId),eq(dataRequests.contactId,input.contactId),eq(dataRequests.kind,"erasure"))).limit(1);
+  if(!request||!["verified","in_progress"].includes(request.status))throw new ServiceError("conflict","Attached media retirement requires its verified original erasure request.");
+  const owned=await ctx.tx.select({id:mediaObjects.assetId}).from(mediaObjects).where(and(eq(mediaObjects.ownerContactId,input.contactId),sql`${mediaObjects.assetId} is not null`));
+  const assetIds=[...new Set(owned.flatMap(row=>row.id?[row.id]:[]))];
+  for(const id of assetIds){
+   const [asset]=await ctx.tx.select().from(assets).where(eq(assets.id,id)).limit(1).for("update");if(!asset)continue;
+   const inventory=await ctx.tx.select({owner:mediaObjects.ownerContactId}).from(mediaObjects).where(eq(mediaObjects.assetId,id));
+   if(inventory.some(row=>row.owner&&row.owner!==input.contactId))throw new ServiceError("conflict","Another original owner shares this asset's physical inventory; preserve it for independent review.");
+   const retired=await claimPurge(ctx.tx,asset);
+   await ctx.tx.update(mediaObjects).set({ownerContactId:input.contactId}).where(and(inArray(mediaObjects.key,retired.keys),sql`${mediaObjects.ownerContactId} is null`));
+   ctx.queueEvent("media.purged",{assetId:id,objects:retired.keys.length});
+  }
+  ctx.setSubject("dataRequest",input.requestId);return{assetIds};
+ },
+});
 
 async function deleteStoredKeys(keys: string[]): Promise<void> {
   for (const key of keys) {
@@ -3313,6 +3344,7 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
   orphanedObjects: number;
   prunedSessions: number;
 }> {
+  await(await import("./erasure-cohorts")).reconcileMediaErasureCohorts();
   const expired = await db()
     .select()
     .from(mediaUploads)
@@ -3381,6 +3413,7 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
 }
 
 export default [
+  retireOwnedAssetsForErasure,
   uploadAsset,
   claimProxyUpload,
   applyStoredOriginal,

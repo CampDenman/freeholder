@@ -6,12 +6,13 @@ import {Button,Callout,Field,Input} from "@/ui/primitives";
 import {reconcileMultipartAction,type MediaActionState} from "../../../media-actions";
 import type {RecoveryLabels} from "./RecoveryForm";
 export type MultipartRecoveryLabels=RecoveryLabels&{providerUploadId:string;verifyOriginal:string;cleanup:string;multipartConfirm:string};
-export function MultipartRecoveryForm({resourceId,operationId,witness,namespace,providerUploadId,sha256,bytes,labels}:{resourceId:string;operationId:string|null;witness:string;namespace:string|null;providerUploadId:string|null;sha256:string|null;bytes:number|null;labels:MultipartRecoveryLabels}){
+export function MultipartRecoveryForm({resourceId,operationId,witness,namespace,providerUploadId,sha256,bytes,labels,originalKeyRequired=false}:{resourceId:string;operationId:string|null;witness:string;namespace:string|null;providerUploadId:string|null;sha256:string|null;bytes:number|null;labels:MultipartRecoveryLabels;originalKeyRequired?:boolean}){
  const prefix=useId(),[state,action,pending]=useActionState<MediaActionState,FormData>(reconcileMultipartAction,{});
  if(state.saved)return <Callout tone="success">{labels.saved}</Callout>;
  return <form action={action} className="grid min-w-0 gap-4">
   <input type="hidden" name="resourceId" value={resourceId}/><input type="hidden" name="operationId" value={operationId??""}/><input type="hidden" name="expectedWitness" value={witness}/>
   {state.error?<Callout tone="danger">{state.error}</Callout>:null}
+  {originalKeyRequired?<Field label={labels.originalKey} htmlFor={`${prefix}-key`}><Input id={`${prefix}-key`} name="originalKey" required maxLength={2048} autoComplete="off" dir="ltr"/></Field>:null}
   <Field label={labels.namespace} htmlFor={`${prefix}-namespace`}><Input id={`${prefix}-namespace`} name="originalNamespace" defaultValue={namespace??""} required pattern="[a-f0-9]{64}" maxLength={64} autoComplete="off" dir="ltr"/></Field>
   <Field label={labels.providerUploadId} htmlFor={`${prefix}-provider`}><Input id={`${prefix}-provider`} name="providerUploadId" defaultValue={providerUploadId??""} maxLength={4096} autoComplete="off" dir="ltr"/></Field>
   <Field label={labels.sha256} htmlFor={`${prefix}-sha256`}><Input id={`${prefix}-sha256`} name="sha256" defaultValue={sha256??""} pattern="[a-f0-9]{64}" maxLength={64} autoComplete="off" dir="ltr"/></Field>

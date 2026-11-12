@@ -7,22 +7,30 @@ import { z } from "zod";
 import { boundStorage } from "@/adapters/storage";
 import { timestamp } from "@/core/contract";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
-import { actorString, defineOrchestratedService, defineService, hasModuleAccess, ServiceError, type Actor } from "@/core/service";
+import { actorString, defineOrchestratedService, hasModuleAccess, ServiceError, type Actor } from "@/core/service";
+import {defineMediaService as defineService} from "./guarded-service";
 import { mediaObjects } from "./schema";
-import { allowMediaReceiptWrites, lockObjectDigest } from "./write-ledger";
+import { allowMediaReceiptWrites, lockObjectDigest,objectKeyDigest } from "./write-ledger";
 import { mediaObjectWrites } from "./write-schema";
+import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 
 function human(actor: Actor) {
   if (actor.kind !== "user" || actor.keyScopes || !hasModuleAccess(actor, "media", "manage")) throw new ServiceError("permission", "Sign in as a person with permission to manage media recovery.");
 }
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const confirmation = z.object({ id: z.uuid(), expectedUpdatedAt: z.iso.datetime(), originalNamespace: digest,
+  originalKey:z.string().min(1).max(2048).optional(),
   outcome: z.enum(["applied", "not_applied"]), sha256: digest.optional(), bytes: z.number().int().min(0).max(5 * 1024 ** 3).optional(),
   providerFinalReference: z.string().trim().min(8).max(300),
   providerEvidence: z.string().trim().min(20).max(2_000),
   stoppedWriterEvidence: z.string().trim().min(20).max(2_000),
   confirmation: z.literal("ORIGINAL STORAGE OUTCOME CONFIRMED"),
 });
+function physicalKey(row:typeof mediaObjectWrites.$inferSelect,input:z.infer<typeof confirmation>):string{
+ const key=row.redactedAt?input.originalKey:row.key;
+ if(!key||(input.originalKey&&input.originalKey!==key)||objectKeyDigest(key)!==row.keyDigest||/[\u0000-\u001f]/.test(key))throw new ServiceError("validation","Restore the exact original object key; it must match the immutable original key digest.");
+ return key;
+}
 const publicRow = z.object({ id: z.uuid(), operation: z.enum(["put", "delete"]), key: z.string(), namespace: digest.nullable(),
   bytes: z.number().nullable(), sha256: digest.nullable(), contentType: z.string(), state: z.string(),
   observedAcceptedAt: timestamp.nullable(), createdAt: timestamp, updatedAt: timestamp });
@@ -44,7 +52,8 @@ const claimStorageRecovery = defineService({
     await lockContactIdentityForRead(ctx.tx);
     const [row] = await ctx.tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id, input.id)).limit(1).for("update");
     if (!row) throw new ServiceError("not_found", "The original storage receipt is unavailable.");
-    if (row.redactedAt || !["unverified", "started", "unknown"].includes(row.state) || row.updatedAt.toISOString() !== input.expectedUpdatedAt) throw new ServiceError("conflict", "The original operation changed. Reload it before reviewing the outcome.");
+    if (! ["unverified", "started", "unknown"].includes(row.state) || row.updatedAt.toISOString() !== input.expectedUpdatedAt) throw new ServiceError("conflict", "The original operation changed. Reload it before reviewing the outcome.");
+    physicalKey(row,input);
     if (row.namespace && row.namespace !== input.originalNamespace) throw new ServiceError("conflict", "The evidence does not identify the original storage resource.");
     if (row.observedAcceptedAt && input.outcome === "not_applied") throw new ServiceError("conflict", "The provider already acknowledged this operation. A later failure cannot erase that fact.");
     ctx.setSubject("media_storage_operation", row.id);
@@ -63,14 +72,25 @@ const applyStorageRecovery = defineService({
     if (!intent) throw new ServiceError("not_found", "The original storage receipt is unavailable.");
     await lockObjectDigest(ctx.tx, intent.keyDigest);
     const [row] = await ctx.tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id, input.id)).limit(1).for("update");
-    if (!row || row.redactedAt || !["unverified", "started", "unknown"].includes(row.state) || row.updatedAt.toISOString() !== input.expectedUpdatedAt) throw new ServiceError("conflict", "The storage operation changed during verification. Reload it before reviewing again.");
+    if (!row || !["unverified", "started", "unknown"].includes(row.state) || row.updatedAt.toISOString() !== input.expectedUpdatedAt) throw new ServiceError("conflict", "The storage operation changed during verification. Reload it before reviewing again.");
+    const key=physicalKey(row,input);
     if (row.namespace && row.namespace !== input.originalNamespace) throw new ServiceError("conflict", "This is not the original storage namespace.");
     if (row.observedAcceptedAt && input.outcome === "not_applied") throw new ServiceError("conflict", "A recorded provider acknowledgement cannot be marked unapplied.");
     const evidenceDigest = createHash("sha256").update(JSON.stringify({ ...input, actor: actorString(ctx.actor) })).digest("hex");
     const absent = row.operation === "put" ? input.outcome === "not_applied" : input.outcome === "applied";
+    if(row.redactedAt&&!absent){
+      // A fresh physical cleanup witness may restore a verified provider key;
+      // the minimized historical identity and its digest remain unchanged.
+      const [adopted]=await ctx.tx.insert(mediaObjectWrites).values({operation:"put",key,keyDigest:row.keyDigest,namespace:row.namespace,storageKind:row.storageKind,storageLocation:input.storageLocation,
+        sha256:row.sha256??input.sha256,bytes:row.bytes??input.bytes,contentType:row.contentType,actor:actorString(ctx.actor),contactId:null,state:"accepted",reviewedAt:new Date(),reviewedBy:actorString(ctx.actor),evidenceDigest}).returning();
+      const requests=await originalMediaErasureRequests(ctx.tx,[row.id]);
+      if(!requests.length)throw new ServiceError("conflict","Restore the original erasure authority before adopting its physical cleanup witness.");
+      for(const request of requests)await captureMediaErasureCohort(ctx.tx,request.requestId,request.scope as "media.storageOperations"|"media.multipartOperations",[adopted!.id]);
+      await ctx.tx.insert(mediaObjects).values({key,role:"original",state:"pending",bytes:row.bytes??input.bytes,contentType:row.contentType}).onConflictDoNothing();
+    }
     await ctx.tx.update(mediaObjectWrites).set({ state: input.outcome === "applied" ? "accepted" : "confirmed_absent",
       ...(!row.namespace ? { namespace: input.originalNamespace, storageKind: input.storageKind, storageLocation: input.storageLocation, sha256: input.sha256 ?? null, bytes: row.bytes ?? input.bytes ?? null } : {}),
-      reviewedAt: new Date(), reviewedBy: actorString(ctx.actor), evidenceDigest,
+      reviewedAt: new Date(), reviewedBy: row.redactedAt?null:actorString(ctx.actor), evidenceDigest,
       ...(absent ? { deletedAt: new Date() } : {}), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, row.id));
     if (row.operation === "delete" && absent) {
       // Only this exact provider resource was verified. Another unknown PUT
@@ -80,7 +100,7 @@ const applyStorageRecovery = defineService({
     }
     const unresolved = await ctx.tx.select({ id: mediaObjectWrites.id }).from(mediaObjectWrites)
       .where(and(eq(mediaObjectWrites.keyDigest, row.keyDigest), inArray(mediaObjectWrites.state, ["unverified", "started", "unknown"]))).limit(1);
-    if (absent && !unresolved.length) await ctx.tx.delete(mediaObjects).where(and(eq(mediaObjects.key, row.key), eq(mediaObjects.state, "pending")));
+    if (absent && !unresolved.length) await ctx.tx.delete(mediaObjects).where(and(eq(mediaObjects.key, key), eq(mediaObjects.state, "pending")));
     ctx.setSubject("media_storage_operation", row.id);
     return { ok: true as const };
   },
@@ -91,16 +111,19 @@ export const reconcileStorageOperation = defineOrchestratedService({
   handler: async (input, actor) => {
     human(actor);
     const original = await claimStorageRecovery.call(input, actor);
+    // claim's public schema intentionally omits the digest. The fresh claim
+    // already checked this supplied original key against its immutable hash.
+    const key=input.originalKey??original.key;
     const { store, binding } = await boundStorage();
     if (binding.namespace !== input.originalNamespace || (original.namespace && original.namespace !== binding.namespace)) throw new ServiceError("conflict", "Restore the exact original private storage resource before reviewing this operation.");
     const absent = original.operation === "put" ? input.outcome === "not_applied" : input.outcome === "applied";
     if (absent) {
-      if (await store.head(original.key)) throw new ServiceError("conflict", "The original object is still present. The recorded provider outcome must match it.");
+      if (await store.head(key)) throw new ServiceError("conflict", "The original object is still present. The recorded provider outcome must match it.");
     } else {
       const expected = original.sha256 ?? input.sha256;
       const expectedBytes = original.bytes ?? input.bytes;
       if (!expected || (input.sha256 && input.sha256 !== expected) || expectedBytes === undefined || (input.bytes !== undefined && input.bytes !== expectedBytes)) throw new ServiceError("validation", "Verify the exact original object's byte count and SHA-256 before recording this outcome.");
-      const stream = await store.stream(original.key);
+      const stream = await store.stream(key);
       if (!stream) throw new ServiceError("conflict", "The original object is not present.");
       const hash = createHash("sha256"); let bytes = 0;
       for await (const chunk of stream) {
@@ -110,7 +133,8 @@ export const reconcileStorageOperation = defineOrchestratedService({
       }
       if (bytes !== expectedBytes || hash.digest("hex") !== expected) throw new ServiceError("conflict", "The original object does not match this operation's exact bytes.");
     }
-    return applyStorageRecovery.call({ ...input, storageKind: binding.kind, storageLocation: { ...binding.location } }, actor);
+    const result=await applyStorageRecovery.call({ ...input, storageKind: binding.kind, storageLocation: { ...binding.location } }, actor);
+    await reconcileMediaErasureCohorts({objectReceiptId:input.id}).catch(()=>{});return result;
   },
 });
 export default [listStorageOperations, claimStorageRecovery, applyStorageRecovery, reconcileStorageOperation];

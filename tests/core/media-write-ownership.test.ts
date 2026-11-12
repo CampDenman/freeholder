@@ -14,6 +14,7 @@ import { beginUpload, cleanupOrphanedMedia, uploadAsset } from "@/core/media/ser
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { resetEnvForTests } from "@/core/env";
 import { ready } from "@/core/runtime";
+import {allowMediaReceiptWrites} from "@/core/media/write-ledger";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 describe.runIf(hasDatabase)("media provider-write ownership (C1.12/C3.22)", () => {
@@ -122,7 +123,7 @@ describe.runIf(hasDatabase)("media provider-write ownership (C1.12/C3.22)", () =
     vi.spyOn(original, "put").mockImplementation(async (key, bytes, contentType) => {
       writtenKey = key;
       const result = await put(key, bytes, contentType);
-      await db().update(mediaUploads).set({ state: "aborted" }).where(eq(mediaUploads.id, reservation.id));
+      await db().transaction(async tx=>{await allowMediaReceiptWrites(tx);await tx.update(mediaUploads).set({ state: "aborted" }).where(eq(mediaUploads.id, reservation.id));});
       return result;
     });
     await failure(uploadAsset.call({ uploadId: reservation.id, filename: "original-store.pdf", contentType: "application/pdf", bytes: body }, OWNER));
