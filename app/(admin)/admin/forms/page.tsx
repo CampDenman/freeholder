@@ -51,6 +51,8 @@ export default async function FormsPage() {
         ) : null}
       </div>
 
+      {canManage ? <a className="text-sm underline" href="/admin/forms/lead-copies">{t("forms.leads.title")}</a> : null}
+
       {forms.length === 0 ? (
         <Card>
           <p className="p-4 text-sm text-ink-muted">{t("forms.empty")}</p>

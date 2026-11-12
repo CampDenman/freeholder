@@ -6003,6 +6003,15 @@ deployments are portable, testable and incapable of silently forking the truth.
   Freeholder; the privacy notice names the provider, what is copied and why
   while it is enabled, in every locale. Open until a live lead copy against
   the provider.
+  *(Source repair in progress 2026-11-11: actual local before controls
+  demonstrated a screening-only submission moving to a newly enabled account,
+  duplicate provider copies after a lost acknowledgment, and private capability
+  disclosure through page attribution. Reserved migration 79 and
+  `deploy/form-lead-recovery.md` implement original rendered-notice/account/body
+  receipts, individual physical request witnesses, human recovery and pending
+  provider erasure. The migration is intentionally not journaled across missing
+  predecessor allocations. Local after qualification and actual provider
+  acceptance remain outstanding; C3.34 remains unchecked.)*
   *(Progress 2026-10-23, C3.33 and C3.34: the categories are
   `src/adapters/form-screening/` and `src/adapters/lead-sink/` (contracts in
   `types.ts`, Paradise Modern in `paradise.ts`), chosen by
