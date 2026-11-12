@@ -6414,6 +6414,17 @@ deployments are portable, testable and incapable of silently forking the truth.
   remain required. Physical media PUT and original storage namespace
   recovery are separate required dependencies. Source/evidence:
   `deploy/import-source-graph.md`; no completion or release claim.)*
+  *(Update 2026-11-12: uploaded REST continuation and selected WordPress instance
+  paths are protected-main changes. An additional uploaded static ZIP source
+  increment has local real 501-page independent-process indexing, shared image,
+  explicit publication and recoverable rollback proof; public image delivery
+  changes from 200 to 404. Its prepared private child also resumes after an
+  identical verified original restore without rewriting the original source
+  witness, on a fresh normal 0–79 journal. ZIP privacy/hold/namespace controls,
+  current production owner-browser acceptance and protected checks remain
+  required. Durable live crawl response/frontier storage and actual cutover
+  remain incomplete; no schema81 or C3.47 closure is claimed. Exact evidence:
+  `deploy/import-source-graph.md`.)*
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

@@ -494,3 +494,24 @@ parent's retained source only after the exact parent service context has passed
 its existing authority/lease/batch guards. Reads still use the active parent's
 verified current physical locator and its namespace/expiry checks. Ordinary
 non-graph archive binding remains exact. The native after control is not yet run.
+
+
+REST PR #688 is now actually merged through the protected queue at
+`25f307a0aedff9a59d10ac2f1994c0ed510faec6`; all 46 exact-head checks and
+merge-group run 43225912971 passed. The ZIP branch is composed on that real
+main ancestor, including already-merged lead schema79. Its import source diff
+against the previously qualified ZIP runtime adds only the merged REST
+selected-subdirectory repair before the narrow ZIP restoration repair. Both
+the ZIP owner fixture and REST/en selected-subdirectory fixture were preserved.
+
+On signed repair `9fb9ebf7`, the exact prepared-child after case passes in
+8.51 seconds. A newly created disposable database applied the complete normal
+0–79 journal (80 entries, latest timestamp 1793310000059), without separate
+unpublished SQL. The unchanged control proves direct private-child denial,
+identical verified restoration, unchanged original child checkpoint and exactly
+one accepted image through the live parent. The native process exited and its
+database had zero nonidle backends before lane handoff. Full types and targeted
+changed-file lint also pass. The local JIT/fsync profile above still applies.
+The new ZIP privacy/hold and storage-namespace controls are prepared but unrun;
+current ZIP production artifact/browser and complete crawl acceptance remain
+required. No existing migration was edited and no schema81 was added.
