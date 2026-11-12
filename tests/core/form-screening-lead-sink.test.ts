@@ -10,10 +10,12 @@
 // notice, and never drops a lead silently.
 import { eq, sql } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
-import { contactPrivacySources, addRetentionException, createDataRequest } from "@/core/privacy/service";
+import { contactPrivacySources, addRetentionException, createDataRequest, verifyDataRequest, fulfillDataRequest } from "@/core/privacy/service";
 import { listLeadCopyRecovery, reconcileLeadCopy, retryLeadCopy } from "@/modules/forms/lead-copy-services";
 import { finishLeadCopy } from "@/modules/forms/lead-copy-state";
-import { minimizeLeadCopies } from "@/modules/forms/lead-copy-privacy";
+import { dataRequests, dataRequestArtifacts } from "@/core/privacy/schema";
+import { getJob } from "@/core/jobs";
+import { eraseFormLeadCopies, minimizeLeadCopies } from "@/modules/forms/lead-copy-privacy";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -281,6 +283,13 @@ describe("lead page-address disclosure (C3.34)", () => {
   });
   it("does not copy a private appointment capability from the page path", () => {
     const copy = leadCopy({ slug: "contact", fields: FIELDS }, { id: "00000000-0000-4000-8000-000000000079", data: answers(), sourceUrl: "/portal/appointments/synthetic-private-capability/intake" });
+    expect(copy.pageUrl).toBe("http://localhost:3000/");
+  });
+});
+
+describe("built-in private attribution paths", () => {
+  it.each(["/gift/fictional-private-capability", "/capture/fictional-private-capability"])("omits the private capability in %s", path => {
+    const copy = leadCopy({ slug: "contact", fields: FIELDS }, { id: "00000000-0000-4000-8000-000000000079", data: answers(), sourceUrl: path });
     expect(copy.pageUrl).toBe("http://localhost:3000/");
   });
 });
@@ -555,6 +564,7 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     await reconcileLeadCopy.call(proof, HUMAN);
     const [reviewed] = await db().select().from(formLeadCopies); expect(reviewed!.attempts[0]!.observed).toBe("unknown"); expect(reviewed!.attempts[0]!.humanOutcome).toBe("not_copied");
     const retry = { id: reviewed!.id, expectedRevision: reviewed!.revision, confirmation: "RETRY ORIGINAL LEAD COPY" };
+    reply = () => new Response('{"accepted":true,"id":79}', { status: 201 });
     await retryLeadCopy.call(retry, HUMAN); await expect(retryLeadCopy.call(retry, HUMAN)).rejects.toMatchObject({ code: "conflict" });
     const event = (await db().select().from(outboxEvents)).find(event => event.eventName === "forms.leadCopyRequested")!;
     reply = () => new Response('{"accepted":true,"id":79}', { status: 201 });
@@ -591,6 +601,55 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     await finishLeadCopy(copy!.id, copy!.attempts[0]!.id, { observed: "copied", providerRef: "late-original-79", response: { accepted: true, id: "late-original-79" } });
     const [late] = await db().select().from(formLeadCopies); expect(late!.state).toBe("unknown"); expect(late!.attempts[0]!).toMatchObject({ observed: "copied", humanOutcome: "not_copied" });
     await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("review"); expect(calls).toHaveLength(1);
+  });
+  it("reopens completed lead erasure after a contradictory late positive reply", async () => {
+    await db().insert(users).values({ id: OWNER.userId, email: "owner@example.test", role: "owner" });
+    const payload = await acceptedCopy(); reply = () => Promise.reject(new Error("Fictional lost original lead reply"));
+    await expect(copySubmissionToLeadSink(payload)).rejects.toThrow("unknown");
+    const [submission] = await db().select().from(formSubmissions), [copy] = await db().select().from(formLeadCopies);
+    const request = await createDataRequest.call({ contactId: submission!.contactId!, request: { kind: "erasure" } }, HUMAN);
+    await verifyDataRequest.call({ id: request.id, method: "Fictional original subject identity independently verified." }, HUMAN);
+    const fulfilled = await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, HUMAN);
+    expect(fulfilled.request.status).toBe("in_progress");
+    const receipt = fulfilled.artifact.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
+    const jobId = receipt.outcomes.find(outcome => outcome.scope === "forms.leadCopies")!.pendingJobs![0]!;
+    const job = await getJob("core.eraseFormLeadCopies", jobId); expect(job).toBeTruthy();
+    const [retired] = await db().select().from(formLeadCopies);
+    await reconcileLeadCopy.call(review(retired!, "not_copied"), HUMAN);
+    await eraseFormLeadCopies(job!.data);
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]!.status).toBe("completed");
+    await finishLeadCopy(copy!.id, copy!.attempts[0]!.id, { observed: "copied", providerRef: "contradictory-late-original-79", response: { accepted: true, id: "contradictory-late-original-79" } });
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]!.status).toBe("in_progress");
+    const [artifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
+    const reopened = artifact!.body as { outcomes: Array<{ scope: string; outcome: string }> };
+    expect(reopened.outcomes.find(outcome => outcome.scope === "forms.leadCopies")!.outcome).toBe("pending");
+    const [late] = await db().select().from(formLeadCopies);
+    await reconcileLeadCopy.call({ ...review(late!, "copied"), providerOperationRef: "contradictory-late-original-79", remoteErasureEvidence: "Fictional original provider confirms final removal after the contradictory late positive." }, HUMAN);
+    const [resolved] = await db().select().from(formLeadCopies);
+    expect(resolved!.attempts[0]!.reviewHistory?.map(review => review.outcome)).toEqual(["not_copied", "copied"]);
+    const latest = (await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id)))[0]!.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
+    const repairJob = await getJob("core.eraseFormLeadCopies", latest.outcomes.find(outcome => outcome.scope === "forms.leadCopies")!.pendingJobs![0]!);
+    await eraseFormLeadCopies(repairJob!.data);
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]!.status).toBe("completed");
+    expect((await db().select().from(formLeadCopies))[0]!.encryptedRequest).toBeNull();
+  });
+  it("requires original human evidence for legacy history and never binds it to today's account", async () => {
+    await db().insert(users).values({ id: OWNER.userId, email: "owner@example.test", role: "owner" });
+    await submitCommitted({ slug: "contact", values: answers() }, ANONYMOUS);
+    const [submission] = await db().select().from(formSubmissions);
+    const [legacy] = await db().transaction(async tx => {
+      await tx.execute(sql`select set_config('freeholder.lead_copy_v1','1',true)`);
+      return tx.insert(formLeadCopies).values({ submissionId: submission!.id, kind: "legacy_review", state: "unknown" }).returning();
+    });
+    const request = await createDataRequest.call({ contactId: submission!.contactId!, request: { kind: "erasure" } }, HUMAN);
+    const source = contactPrivacySources().find(source => source.scope === "forms.leadCopies")!;
+    const pending = await db().transaction(tx => source.erase(tx, submission!.contactId!, { requestId: request.id })); expect(pending.pendingJobs).toHaveLength(1);
+    const [retired] = await db().select().from(formLeadCopies);
+    await reconcileLeadCopy.call({ id: retired!.id, expectedRevision: retired!.revision, outcome: "copied", providerOperationRef: "fictional-original-legacy-reference", originalResourceEvidence: "Fictional independent proof identifies the original historical provider account.", finalProviderEvidence: "Fictional original provider confirms the exact historical copied enquiry.", stoppedCallerEvidence: "Fictional all original callers and pending remote operations are positively stopped.", remoteErasureEvidence: "Fictional original provider confirms this exact historical copy and duplicates removed.", confirmation: "ORIGINAL LEAD OUTCOME VERIFIED" }, HUMAN);
+    expect(await db().transaction(tx => minimizeLeadCopies(tx, [legacy!.id], true))).toEqual([]);
+    const [reviewed] = await db().select().from(formLeadCopies); expect(reviewed!.attempts).toEqual([]); expect(reviewed!.originalBaseUrl).toBeNull(); expect(reviewed!.resourceDigest).toBeNull(); expect(reviewed!.legacyOutcome).toBe("copied");
+    await expect(retryLeadCopy.call({ id: reviewed!.id, expectedRevision: reviewed!.revision, confirmation: "RETRY ORIGINAL LEAD COPY" }, HUMAN)).rejects.toMatchObject({ code: "conflict" });
+    expect(calls).toHaveLength(0);
   });
   it("blocks old-image reads and forged changes to observed lead journals", async () => {
     const payload = await acceptedCopy(); reply = () => new Response('{"accepted":true,"id":79}', { status: 201 }); await copySubmissionToLeadSink(payload);

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C3.34: frozen provider request and physical caller evidence.
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { ParadiseSite } from "@/adapters/paradise/config";
 import { paradiseLeadBody } from "@/adapters/lead-sink/paradise";
 import { db } from "@/core/db";
@@ -10,7 +10,7 @@ import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { mailReceiptKeys } from "@/core/mail/schema";
 import { dataRequests, privacyRetentionExceptions } from "@/core/privacy/schema";
 import { and } from "drizzle-orm";
-import { mailReceipts } from "@/core/mail/receipts";
+import { mailReceipts, type MailReceipts } from "@/core/mail/receipts";
 import { decryptMailOutbox, encryptMailOutbox } from "@/core/mail/outbox-crypto";
 import { ServiceError, type Tx } from "@/core/service";
 import { leadCopy } from "./lead-sink";
@@ -21,7 +21,7 @@ export async function leadCopyReceipts(tx: Tx) {
   await tx.execute(sql`select set_config('freeholder.lead_copy_v1','1',true)`);
   const [key] = await tx.select({ id: mailReceiptKeys.id }).from(mailReceiptKeys).limit(1);
   if (!key) {
-    const [witness] = await tx.select({ id: formLeadCopies.id }).from(formLeadCopies).limit(1);
+    const [witness] = await tx.select({ id: formLeadCopies.id }).from(formLeadCopies).where(or(isNotNull(formLeadCopies.resourceDigest), isNotNull(formLeadCopies.requestDigest), isNotNull(formLeadCopies.noticeDigest), isNotNull(formLeadCopies.reviewDigest), isNotNull(formLeadCopies.providerRefDigest))).limit(1);
     if (witness) throw new ServiceError("conflict", "Restore the exact original receipt key before using retained lead witnesses.");
   }
   return mailReceipts(tx);
@@ -38,6 +38,19 @@ export function effectiveLeadAttempt(attempt: LeadCopyAttempt) {
     return attempt.humanOutcome;
   }
   return attempt.observed === "running" ? "unknown" as const : attempt.observed;
+}
+/** A final removal proof covers exact current facts, never just an old timestamp. */
+export function leadCopyEvidenceDigest(copy: Pick<typeof formLeadCopies.$inferSelect, "kind" | "legacyOutcome" | "attempts">, receipts: MailReceipts) {
+  return receipts.digest("provider:lead-erasure-coverage", JSON.stringify({ kind: copy.kind, legacyOutcome: copy.legacyOutcome, attempts: copy.attempts.map(({ id, attempt, observed, responseDigest, httpStatus, humanOutcome }) => ({ id, attempt, observed, responseDigest, httpStatus, humanOutcome })) }));
+}
+export function leadCopyErasureConfirmed(copy: typeof formLeadCopies.$inferSelect, receipts: MailReceipts) {
+  return Boolean(copy.remoteErasedAt && copy.remoteErasureDigest === leadCopyEvidenceDigest(copy, receipts));
+}
+export function leadCopyUnknown(copy: typeof formLeadCopies.$inferSelect) {
+  return (copy.kind === "legacy_review" && !copy.legacyOutcome) || copy.attempts.some(attempt => effectiveLeadAttempt(attempt) === "unknown");
+}
+export function leadCopyCopied(copy: typeof formLeadCopies.$inferSelect) {
+  return copy.legacyOutcome === "copied" || copy.attempts.some(attempt => effectiveLeadAttempt(attempt) === "copied");
 }
 export async function claimLeadCopy(copyId: string, site: ParadiseSite) {
   return db().transaction(async tx => {
@@ -69,9 +82,13 @@ export async function finishLeadCopy(copyId: string, operationId: string, result
       return;
     }
     const attempts = copy.attempts.map(attempt => attempt.id === operationId ? { ...attempt, observed: result.observed, ...(result.httpStatus ? { httpStatus: result.httpStatus } : {}), ...(result.response !== undefined ? { responseDigest: receipts.digest("provider:lead-reply", JSON.stringify(result.response)) } : {}) } : attempt);
-    const conflict = attempts.some(attempt => effectiveLeadAttempt(attempt) === "unknown");
-    await tx.update(formLeadCopies).set({ attempts, state: conflict ? "unknown" : result.observed, ...(result.retry && !copy.retiredAt ? { admittedAttempt: copy.admittedAttempt + 1, state: "ready" as const } : {}), ...(result.providerRef ? { providerRef: copy.retiredAt ? null : result.providerRef, providerRefDigest: receipts.digest("provider:lead-reference", result.providerRef) } : {}), lastError: result.observed === "unknown" ? "The original provider outcome is unknown; verify it and stop its caller before retrying." : result.observed === "not_copied" ? "The original provider refused this copy." : null, updatedAt: new Date() }).where(eq(formLeadCopies.id, copy.id));
+    const conflict = attempts.some(attempt => effectiveLeadAttempt(attempt) === "unknown"), copied = attempts.some(attempt => effectiveLeadAttempt(attempt) === "copied");
+    const privacyPending = Boolean(copy.retiredAt && (conflict || (copied && !leadCopyErasureConfirmed({ ...copy, attempts }, receipts))));
+    await tx.update(formLeadCopies).set({ attempts, privacyPending, state: conflict ? "unknown" : copied ? "copied" : "not_copied", ...(result.retry && !copy.retiredAt ? { admittedAttempt: copy.admittedAttempt + 1, state: "ready" as const } : {}), ...(result.providerRef ? { providerRef: copy.retiredAt ? copy.providerRef : result.providerRef, providerRefDigest: receipts.digest("provider:lead-reference", result.providerRef) } : {}), lastError: result.observed === "unknown" ? "The original provider outcome is unknown; verify it and stop its caller before retrying." : result.observed === "not_copied" ? "The original provider refused this copy." : null, updatedAt: new Date() }).where(eq(formLeadCopies.id, copy.id));
   });
+  // The physical reply is already durable even if original privacy recovery fails.
+  const { reconcileLeadErasureForCopy } = await import("./lead-copy-privacy");
+  await reconcileLeadErasureForCopy(copyId);
 }
 /** Stop unstarted work before a subject is forgotten; active callers retain their evidence. */
 export async function retireLeadCopies(tx: Tx, ids: string[], requestId?: string) {
@@ -86,9 +103,9 @@ export async function retireLeadCopies(tx: Tx, ids: string[], requestId?: string
     const [parent] = row.submissionId ? await tx.select({ contactId: formSubmissions.contactId }).from(formSubmissions).where(eq(formSubmissions.id, row.submissionId)) : [];
     const [request] = row.erasureRequestId ? await tx.select({ contactId: dataRequests.contactId }).from(dataRequests).where(eq(dataRequests.id, row.erasureRequestId)) : [];
     const owners = [parent?.contactId, request?.contactId].filter((id): id is string => Boolean(id));
-    if ((held.size && !owners.length) || owners.some(id => held.has(id))) { pending.push(row.id); continue; }
-    const unresolved = ["running", "unknown", "copied"].includes(row.state) && !row.remoteErasedAt;
-    await tx.update(formLeadCopies).set({ retiredAt: row.retiredAt ?? new Date(), ...(requestId && !row.erasureRequestId ? { erasureRequestId: requestId } : {}), providerRef: null, encryptedRequest: null, state: row.state === "ready" ? "cancelled" as const : row.state, ...(row.providerRef ? { providerRefDigest: receipts.digest("provider:lead-reference", row.providerRef) } : {}), updatedAt: new Date() }).where(eq(formLeadCopies.id, row.id));
+    const heldNow = (held.size > 0 && !owners.length) || owners.some(id => held.has(id));
+    const unresolved = heldNow || leadCopyUnknown(row) || (leadCopyCopied(row) && !leadCopyErasureConfirmed(row, receipts));
+    await tx.update(formLeadCopies).set({ retiredAt: row.retiredAt ?? new Date(), privacyPending: unresolved, ...(requestId && !row.erasureRequestId ? { erasureRequestId: requestId } : {}), ...(requestId && !row.erasureRequests.includes(requestId) ? { erasureRequests: [...row.erasureRequests, requestId] } : {}), ...(heldNow ? {} : { providerRef: null, encryptedRequest: null }), state: row.state === "ready" ? "cancelled" as const : row.state, ...(row.providerRef ? { providerRefDigest: receipts.digest("provider:lead-reference", row.providerRef) } : {}), updatedAt: new Date() }).where(eq(formLeadCopies.id, row.id));
     if (unresolved) pending.push(row.id);
   }
   return pending;
