@@ -12,7 +12,7 @@ import { importRuns } from "@/core/plugins/schema";
 import { createContact, mergeContacts, resolveContact, undoContactMerge, updateContact } from "@/core/contacts/service";
 import { contactMergeOperations, contacts } from "@/core/contacts/schema";
 import { commitImport, previewFromSource, publishImport, reconcileImport, rollbackImport, stageImportSource, startImport } from "@/core/import/service";
-import { readerOwnershipReview, resolveReaderOwnership } from "@/core/import/reader-ownership-review";
+import { readerOwnershipReview, resolveReaderOwnership, resolveReaderOwnershipBatch } from "@/core/import/reader-ownership-review";
 import { readerOwnershipKeys, readerOwnershipReceipts } from "@/core/import/reader-ownership-schema";
 import { rotateCredentials } from "@/core/connections/service";
 import { resetEnvForTests } from "@/core/env";
@@ -152,11 +152,25 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
   });
 
   it("uses a normalized merge witness for 1001 readers and restores every exact original owner", async () => {
+    const owner = await verifiedOwner();
+    const original = await createContact.call({ name: "Explicitly reviewed original reader for 1001 decisions" }, owner);
     const separate = (await resolveContact.call({ name: "Separate reader", email: "separate-reader@example.test" }, OWNER)).contact;
     const comments = Array.from({ length: 1001 }, (_, index) => `<wp:comment><wp:comment_id>${index + 1}</wp:comment_id><wp:comment_author>Original reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Fictional original reader ${index}.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>`).join("");
     const id = await stage(SOURCE.replace(/<wp:comment>[\s\S]*?<\/wp:comment>/, comments));
+    const assignments: Array<{ receiptId: string | null; postId: string; commentId: string; contactId: string }> = [];
+    let after = "";
+    for (;;) {
+      const review = await readerOwnershipReview.call({ id, after }, owner);
+      assignments.push(...review.rows.map(reader => ({ receiptId: reader.receiptId, postId: reader.postId, commentId: reader.commentId, contactId: original.id })));
+      if (!review.next) break;
+      after = review.next;
+    }
+    expect(assignments).toHaveLength(1001);
+    for (let offset = 0; offset < assignments.length; offset += 500) {
+      const selected = assignments.slice(offset, offset + 500);
+      expect(await resolveReaderOwnershipBatch.call({ id, assignments: selected, confirmation: "ASSIGN SELECTED ORIGINAL READERS" }, owner)).toEqual({ assigned: selected.length });
+    }
     await commitImport.call({ id }, OWNER);
-    const original = (await resolveContact.call({ name: "Original reader", email: EMAIL }, OWNER)).contact;
     const merged = await mergeContacts.call({ survivingId: separate.id, duplicateId: original.id }, OWNER);
     const [operation] = await db().select().from(contactMergeOperations).where(eq(contactMergeOperations.id, merged.mergeOperationId));
     const references = z.array(z.object({ table: z.string(), before: z.unknown(), after: z.unknown() })).parse(operation?.referenceState);
@@ -165,6 +179,36 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
     expect(await db().select().from(readerOwnershipReceipts).where(eq(readerOwnershipReceipts.contactId, separate.id))).toHaveLength(1001);
     await undoContactMerge.call({ operationId: merged.mergeOperationId }, OWNER);
     expect(await db().select().from(readerOwnershipReceipts).where(eq(readerOwnershipReceipts.contactId, original.id))).toHaveLength(1001);
+  });
+
+  it("rolls back all explicit reader choices when a later original is stale or repeated", async () => {
+    const owner = await verifiedOwner();
+    const second = `<wp:comment><wp:comment_id>21</wp:comment_id><wp:comment_author>Other original reader</wp:comment_author><wp:comment_author_email>other-original-reader@example.test</wp:comment_author_email><wp:comment_content>Other original body.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>`;
+    const id = await stage(SOURCE.replace("</item>", `${second}</item>`));
+    const chosen = await createContact.call({ name: "Explicitly chosen person" }, owner);
+    const review = await readerOwnershipReview.call({ id }, owner);
+    expect(review.rows).toHaveLength(2);
+    const choices = review.rows.map(reader => ({ receiptId: reader.receiptId, postId: reader.postId, commentId: reader.commentId, contactId: chosen.id }));
+    const before = await db().select().from(readerOwnershipReceipts);
+    await expect(resolveReaderOwnershipBatch.call({ id, assignments: [choices[0], { ...choices[1], receiptId: "00000000-0000-4000-8000-000000000088" }], confirmation: "ASSIGN SELECTED ORIGINAL READERS" }, owner)).rejects.toMatchObject({ code: "conflict" });
+    expect(await db().select().from(readerOwnershipReceipts)).toEqual(before);
+    expect(await boundReader(id)).toBeUndefined();
+    await expect(resolveReaderOwnershipBatch.call({ id, assignments: [choices[0], choices[0]], confirmation: "ASSIGN SELECTED ORIGINAL READERS" }, owner)).rejects.toMatchObject({ code: "validation" });
+    expect(await db().select().from(readerOwnershipReceipts)).toEqual(before);
+  });
+
+  it("refuses bulk reader decisions from agents, personal keys, stale sessions or oversized input", async () => {
+    const owner = await verifiedOwner(), id = await stage();
+    const person = await createContact.call({ name: "Explicitly chosen person" }, owner);
+    const reader = (await readerOwnershipReview.call({ id }, owner)).rows[0]!;
+    const choice = { receiptId: reader.receiptId, postId: reader.postId, commentId: reader.commentId, contactId: person.id };
+    const input = { id, assignments: [choice], confirmation: "ASSIGN SELECTED ORIGINAL READERS" as const };
+    await expect(resolveReaderOwnershipBatch.call(input, { kind: "agent", keyName: "fictional-bulk-reader-agent", scopes: ["imports.*", "contacts.get"] })).rejects.toMatchObject({ code: "permission" });
+    await expect(resolveReaderOwnershipBatch.call(input, { ...owner, keyScopes: ["imports.resolveReaderOwnershipBatch"], sessionId: undefined })).rejects.toMatchObject({ code: "permission" });
+    await expect(resolveReaderOwnershipBatch.call({ ...input, assignments: Array.from({ length: 501 }, () => choice) }, owner)).rejects.toMatchObject({ code: "validation" });
+    await db().update(sessions).set({ stepUpAt: new Date("2020-01-01T00:00:00Z") }).where(eq(sessions.id, owner.sessionId!));
+    await expect(resolveReaderOwnershipBatch.call(input, owner)).rejects.toMatchObject({ code: "step_up_required" });
+    expect((await db().select().from(readerOwnershipReceipts))[0]).toMatchObject({ contactId: null, state: "review" });
   });
 
   it("keeps different WordPress instances on one host separate when their post and comment IDs overlap", async () => {
@@ -307,7 +351,7 @@ describe.runIf(hasDatabase)("historical imported reader provenance (C2.29/C3.46)
 
   it("retires an originally unbound source when its verified reader is erased before comment commit", async () => {
     const first = await stage();
-    expect((await db().select().from(readerOwnershipReceipts))[0]).toMatchObject({ contactId: null, state: "unbound" });
+    expect((await db().select().from(readerOwnershipReceipts))[0]).toMatchObject({ contactId: null, state: "review" });
     const reader = (await resolveContact.call({ email: EMAIL }, OWNER)).contact;
     const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, OWNER);
     await verifyDataRequest.call({ id: request.id, method: "Fictional originally unbound reader verified" }, OWNER);

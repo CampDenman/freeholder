@@ -13,6 +13,7 @@ import { GraphImportControls } from "../GraphImportControls";
 import { sourceGraphReview } from "@/core/import/graph-query";
 import { readerOwnershipReview } from "@/core/import/reader-ownership-review";
 import { listContacts } from "@/core/contacts/service";
+import { ReaderOwnershipBatchForm } from "../ReaderOwnershipBatchForm";
 import { ReaderOwnershipForm } from "../ReaderOwnershipForm";
 
 export const dynamic = "force-dynamic";
@@ -100,12 +101,12 @@ export default async function ImportRunPage({
               <Button type="submit">{t("imports.readers.find")}</Button>
               <Link href="/admin/contacts/new" className="text-sm text-accent underline">{t("imports.readers.create")}</Link>
             </form>
-            <ol className="grid min-w-0 list-none gap-5 p-0">{readers.rows.map(reader => <li key={reader.receiptId ?? `${reader.postId}:${reader.commentId}`} className="grid min-w-0 gap-3 rounded-md border border-rule p-3">
+            {readers.rows.length > 1 ? <ReaderOwnershipBatchForm id={id} readers={readers.rows} contacts={(readerContacts?.rows ?? []).filter(contact => contact.source !== "privacy-erasure").map(contact => ({ id: contact.id, name: contact.name, email: contact.email }))} labels={{ person: t("imports.readers.person"), choose: t("imports.readers.choose"), confirm: t("imports.readers.confirm"), submit: t("imports.readers.bulkSubmit"), intro: t("imports.readers.bulkIntro") }} /> : <ol className="grid min-w-0 list-none gap-5 p-0">{readers.rows.map(reader => <li key={reader.receiptId ?? `${reader.postId}:${reader.commentId}`} className="grid min-w-0 gap-3 rounded-md border border-rule p-3">
               <p className="break-words font-medium">{reader.name}</p>
               {reader.email ? <p className="min-w-0 break-all text-sm"><bdi dir="ltr">{reader.email}</bdi></p> : null}
               <p className="break-words text-sm text-ink-muted">{reader.excerpt}</p>
               <ReaderOwnershipForm id={id} reader={reader} contacts={(readerContacts?.rows ?? []).filter(contact => contact.source !== "privacy-erasure").map(contact => ({ id: contact.id, name: contact.name, email: contact.email }))} labels={{ person: t("imports.readers.person"), choose: t("imports.readers.choose"), confirm: t("imports.readers.confirm"), submit: t("imports.readers.submit") }} />
-            </li>)}</ol>
+            </li>)}</ol>}
             {readers.next ? <Link href={`/admin/imports/${id}?readersAfter=${encodeURIComponent(readers.next)}`} className="text-sm text-accent underline">{t("imports.readers.next")}</Link> : null}
           </div>
         </CardBody>

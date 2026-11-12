@@ -45,32 +45,73 @@ export function assertOriginalReaderPayload(run: { preview: unknown; checkpoint:
   if (!original || original.name !== input.name || email(original.email) !== email(input.email) || original.body !== input.body) throw new ServiceError("conflict", "This comment no longer matches its staged original reader. Review the source before importing it.");
 }
 
-/** Project the proved owner into every still-cached copy of this exact source
- * identity. Privacy must not fall back to a later holder of the old address.
- * Reader bodies and the original import executor remain untouched.
- */
+const deferredProjections = new WeakMap<Tx, { site: string; owners: Map<string, string> }>();
+
+/** One atomic mutation may collect explicit choices, then rewrite each cache
+ * once. Nothing in this buffer survives or authorizes a later transaction. */
+export async function withReaderOwnerProjectionBatch<T>(tx: Tx, source: ReaderSource, work: () => Promise<T>): Promise<T> {
+  if (deferredProjections.has(tx)) throw new ServiceError("conflict", "Nested original-reader choice batches are not supported.");
+  const pending = { site: canonicalReaderSite(source), owners: new Map<string, string>() };
+  deferredProjections.set(tx, pending);
+  try {
+    const result = await work();
+    await projectReviewedReaderOwners(tx, source, pending.owners);
+    return result;
+  } finally { deferredProjections.delete(tx); }
+}
+
+/** A proved identity updates every still-cached copy of the same original.
+ * Canonicalize URL metadata, including legacy trailing slashes and host case,
+ * before comparing instances; paths keep their case and separate instances. */
+async function projectReviewedReaderOwners(tx: Tx, source: ReaderSource, owners: Map<string, string>) {
+  if (!owners.size) return;
+  const site = canonicalReaderSite(source), encoded = JSON.stringify(Object.fromEntries(owners));
+  let after: string | null = null;
+  for (;;) {
+    const candidates: Array<{ id: string; kind: string; origin: string | null; site: string | null }> = await tx.execute<{ id: string; kind: string; origin: string | null; site: string | null }>(sql`
+      select id,kind,origin,coalesce(nullif(preview->>'readerSourceSite',''),nullif(checkpoint->>'readerSourceSite',''),nullif(preview#>>'{wordpress,site,url}',''),origin) as site
+      from import_runs where kind in ('wordpress-wxr','wordpress-rest')
+        and (${after}::uuid is null or id>${after}::uuid)
+        and (jsonb_path_exists(preview,'$.pages[*].readerComments[*]') or jsonb_path_exists(checkpoint,'$.pendingBlogPosts[*].comments[*]'))
+      order by id limit 500`);
+    if (!candidates.length) break;
+    const ids = candidates.flatMap(candidate => {
+      try { return canonicalReaderSite({ ...candidate, site: candidate.site ?? undefined }) === site ? [candidate.id] : []; }
+      catch { return []; } // An unrelated malformed legacy URL is not this proved instance.
+    });
+    if (ids.length) await tx.execute(sql`with decision as (select ${encoded}::jsonb as owners)
+      update import_runs source set
+        preview=case when jsonb_typeof(source.preview->'pages')='array' then jsonb_set(source.preview,'{pages}',
+          coalesce((select jsonb_agg(case when jsonb_typeof(page->'readerComments')='array'
+            then jsonb_set(page,'{readerComments}',coalesce((select jsonb_agg(case when decision.owners ? ((page->>'wpId')||':'||(reader->>'id'))
+              then (reader-'readerOwnershipReviewRequired')||jsonb_build_object('contactId',decision.owners->>((page->>'wpId')||':'||(reader->>'id'))) else reader end order by readers.n)
+              from jsonb_array_elements(page->'readerComments') with ordinality as readers(reader,n)),'[]'::jsonb))
+            else page end order by pages.n) from jsonb_array_elements(source.preview->'pages') with ordinality as pages(page,n)),'[]'::jsonb))
+          else source.preview end,
+        checkpoint=case when jsonb_typeof(source.checkpoint->'pendingBlogPosts')='array' then jsonb_set(source.checkpoint,'{pendingBlogPosts}',
+          coalesce((select jsonb_agg(case when jsonb_typeof(post->'comments')='array'
+            then jsonb_set(post,'{comments}',coalesce((select jsonb_agg(case when decision.owners ? ((post->>'key')||':'||(reader->>'id'))
+              then (reader-'readerOwnershipReviewRequired')||jsonb_build_object('contactId',decision.owners->>((post->>'key')||':'||(reader->>'id'))) else reader end order by readers.n)
+              from jsonb_array_elements(post->'comments') with ordinality as readers(reader,n)),'[]'::jsonb))
+            else post end order by posts.n) from jsonb_array_elements(source.checkpoint->'pendingBlogPosts') with ordinality as posts(post,n)),'[]'::jsonb))
+          else source.checkpoint end,updated_at=clock_timestamp()
+      from decision where source.id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`,`)})
+        and (exists(select 1 from jsonb_array_elements(case when jsonb_typeof(source.preview->'pages')='array' then source.preview->'pages' else '[]'::jsonb end) page
+          cross join lateral jsonb_array_elements(case when jsonb_typeof(page->'readerComments')='array' then page->'readerComments' else '[]'::jsonb end) reader
+          where decision.owners ? ((page->>'wpId')||':'||(reader->>'id')))
+        or exists(select 1 from jsonb_array_elements(case when jsonb_typeof(source.checkpoint->'pendingBlogPosts')='array' then source.checkpoint->'pendingBlogPosts' else '[]'::jsonb end) post
+          cross join lateral jsonb_array_elements(case when jsonb_typeof(post->'comments')='array' then post->'comments' else '[]'::jsonb end) reader
+          where decision.owners ? ((post->>'key')||':'||(reader->>'id'))))`);
+    after = candidates.at(-1)!.id;
+    if (candidates.length < 500) break;
+  }
+}
 export async function projectReviewedReaderOwner(tx: Tx, source: ReaderSource, post: string, comment: string, contactId: string) {
-  const site = canonicalReaderSite(source);
-  await tx.execute(sql`update import_runs source set
-    preview=case when jsonb_typeof(source.preview->'pages')='array' then jsonb_set(source.preview,'{pages}',
-      coalesce((select jsonb_agg(case when page->>'wpId'=${post} and jsonb_typeof(page->'readerComments')='array'
-        then jsonb_set(page,'{readerComments}',coalesce((select jsonb_agg(case when reader->>'id'=${comment}
-          then (reader-'readerOwnershipReviewRequired')||jsonb_build_object('contactId',${contactId}::text) else reader end order by readers.n)
-          from jsonb_array_elements(page->'readerComments') with ordinality as readers(reader,n)),'[]'::jsonb))
-        else page end order by pages.n) from jsonb_array_elements(source.preview->'pages') with ordinality as pages(page,n)),'[]'::jsonb))
-      else source.preview end,
-    checkpoint=case when jsonb_typeof(source.checkpoint->'pendingBlogPosts')='array' then jsonb_set(source.checkpoint,'{pendingBlogPosts}',
-      coalesce((select jsonb_agg(case when post->>'key'=${post} and jsonb_typeof(post->'comments')='array'
-        then jsonb_set(post,'{comments}',coalesce((select jsonb_agg(case when reader->>'id'=${comment}
-          then (reader-'readerOwnershipReviewRequired')||jsonb_build_object('contactId',${contactId}::text) else reader end order by readers.n)
-          from jsonb_array_elements(post->'comments') with ordinality as readers(reader,n)),'[]'::jsonb))
-        else post end order by posts.n) from jsonb_array_elements(source.checkpoint->'pendingBlogPosts') with ordinality as posts(post,n)),'[]'::jsonb))
-      else source.checkpoint end,
-    updated_at=clock_timestamp()
-    where source.kind in ('wordpress-wxr','wordpress-rest')
-      and coalesce(nullif(source.preview->>'readerSourceSite',''),nullif(source.checkpoint->>'readerSourceSite',''),nullif(source.preview#>>'{wordpress,site,url}',''),source.origin) in (${site},${site.replace(/\/$/, "")})
-      and (jsonb_path_exists(source.preview,'$.pages[*] ? (@.wpId == $post).readerComments[*] ? (@.id == $comment)',jsonb_build_object('post',${post}::text,'comment',${comment}::text),true)
-        or jsonb_path_exists(source.checkpoint,'$.pendingBlogPosts[*] ? (@.key == $post).comments[*] ? (@.id == $comment)',jsonb_build_object('post',${post}::text,'comment',${comment}::text),true))`);
+  const key = `${post}:${comment}`, pending = deferredProjections.get(tx);
+  if (pending) {
+    if (pending.site !== canonicalReaderSite(source) || pending.owners.has(key) && pending.owners.get(key) !== contactId) throw new ServiceError("conflict", "The explicit reader choices do not identify one unchanged original source.");
+    pending.owners.set(key, contactId);
+  } else await projectReviewedReaderOwners(tx, source, new Map([[key, contactId]]));
 }
 
 /** This helper receives the already-cloned preview under the identity lock. */
