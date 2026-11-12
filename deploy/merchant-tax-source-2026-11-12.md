@@ -216,3 +216,23 @@ excluded. The merchant checkout review now links to `/portal/purchases/tax`
 without private cart/query credentials. All four production customer/editor
 browser journeys, actual tax-provider evidence and complete merchant finance
 acceptance remain open.
+
+Order creator privacy qualification: the unchanged actual checkout/verified
+seller-erasure control at `d9d5b7a2` failed in7.66 seconds on v6: the original
+tax profile became erased/contactId:null while its admitted order provider
+promise was still paused. This was unpublished80 source, not an unchanged-main
+or production incident. The finally block released and awaited that caller.
+`invoicing.merchantTaxPaymentDebt` now follows original quote and collection,
+booking or agreement profile IDs, excludes known other-seller portions, and
+preserves incomplete scope/caller/cash/fee/refund/dispute debt. Its private
+service boundary remains excluded from API/SDK/MCP. The minimal lifecycle
+consumer reads it before any zero-schedule fast path. Full Node22 types,
+focused lint and17 private/consumer/audit source controls pass.
+
+The exact unchanged case passes in8.55 seconds on `1b047da5`, same v6 SQL80
+`ea06fa49...`, preserving the original profile/contact during the actual paused
+call. Logs: `/tmp/freeholder-order-creator-privacy-before-v6.log` and
+`/tmp/freeholder-order-creator-privacy-after-v6.log`. This proves the order
+admission fence only; it does not prove erasure after debt clearance, large
+schedule worker execution, missing-inventory recovery or actual provider
+acceptance. Those remain required independently.

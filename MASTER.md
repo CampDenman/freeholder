@@ -13720,6 +13720,12 @@ whatever is best for the people using the site.
   Browser, complete refund/settlement/external scheduling source and actual
   account/provider/independent review/stable acceptance remain required. The
   collection model remains disabled.
+  Original order-payment privacy admission now has an actual before/after:
+  verified seller erasure previously minimized its profile while an admitted
+  original provider call remained paused (7.66s). A private original-profile
+  payment-debt query and minimal lifecycle guard retain that profile/contact;
+  the exact unchanged control passes in8.55s on the same v6 SQL. Debt clearance,
+  complete schedule worker/recovery and final acceptance remain open.
   Discounted-order earnings repair in qualification 2026-11-11: a real service
   journey reproduced a $40.00 listing discounted to a $20.00 paid invoice still
   promising $36.00 net to the seller. A shared original-invoice revenue query
