@@ -21,12 +21,20 @@ const application = z.object({ invoiceId: z.uuid(), paymentId: z.uuid() }).nulla
 
 /** No provider I/O; all positive money and current original receipts are checked. */
 export async function merchantTaxScheduleState(ctx: ServiceContext, profileId: string): Promise<{ safe: boolean; external: boolean }> {
+  // Original order and booking payment callers can still charge even when this
+  // merchant has never owned a provider subscription. Missing recovery source
+  // is unknown debt, not a zero-schedules proof.
+  const paymentDebtService = getService("invoicing.merchantTaxPaymentDebt");
+  if (!paymentDebtService) return { safe: false, external: true };
+  const paymentDebt = z.object({ pending: z.boolean(), hasHistory: z.boolean(), paymentIds: z.array(z.uuid()).max(5000), incomplete: z.boolean() })
+    .parse(await ctx.callAsSystem(paymentDebtService, { profileId }));
+  if (paymentDebt.pending || paymentDebt.incomplete) return { safe: false, external: true };
   const agreements = await ctx.tx.select({ subscription: subscriptions, scope: subscriptionMerchantScopes, resource: subscriptionProviderScheduleResources })
     .from(subscriptionMerchantScopes).innerJoin(subscriptions, eq(subscriptions.id, subscriptionMerchantScopes.subscriptionId))
     .leftJoin(subscriptionProviderScheduleResources, eq(subscriptionProviderScheduleResources.subscriptionId, subscriptions.id))
     .where(eq(subscriptionMerchantScopes.taxProfileId, profileId)).orderBy(subscriptions.id).limit(5001);
   if (agreements.length > 5000) return { safe: false, external: true };
-  let external = false;
+  let external = paymentDebt.hasHistory;
   for (const agreement of agreements) {
     const operations = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, agreement.subscription.id)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
     const receipts = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId, agreement.subscription.id)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001);
