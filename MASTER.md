@@ -13595,6 +13595,14 @@ whatever is best for the people using the site.
   complete bank/action state, exact fee/reversal, return allocation, privacy,
   human/browser and runtime-upgrade qualification remain required. The new
   merchant model remains disabled, C12.38 open. See the same source report.
+  Original return allocation BEFORE 2026-11-12: actual two-seller checkout
+  and RMA preparation reserved seller c2's1050CAD return against seller003's
+  earlier4200 payment, genuine assertion failure5.943s on test e689/productf6
+  and normal-v7 SQLd060. No refund POST occurred. Isolated source now selects
+  immutable original allocation-line/payment budgets and refuses inconsistent
+  frozen plans; AFTER is unrun. Legacy C0 remains on its original path. Exact
+  credited-line fee/reversal and complete acceptance remain required; see
+  `deploy/merchant-return-allocation-source-2026-11-12.md`.
   Original fee-job runtime repair 2026-11-12: the first actual mixed-order
   capture control reached payment completion and exposed an unregistered
   invoicing.reconcileOriginalMerchantFee job on unreleased80 sourcee4500e3e.

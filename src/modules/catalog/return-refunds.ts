@@ -8,6 +8,9 @@ import {paymentAdapter,isHostedPaymentProvider} from "@/adapters/payments";
 import {actorString,defineOrchestratedService,defineService,ServiceError,type ServiceContext} from "@/core/service";
 import {notifyReturnRefund} from "./return-notifications";
 import {createCreditNote,getInvoice,issueCreditNote,reserveRefundBatch,settleRefund} from "@/modules/invoicing/invoice-service";
+import {merchantRefundBasis} from "@/modules/invoicing/merchant-refund-basis";
+import {orderCommercialPolicies} from "./order-commercial-schema";
+import {getInvoiceMarketPolicy} from "@/modules/invoicing/market-policy";
 import {providerPaymentSource,submitProviderRefund} from "@/modules/invoicing/payment-provider-service";
 import {refundCustomerBalancePayment} from "@/modules/invoicing/advanced-money-service";
 import {QUANTITY_SCALE,sumMinor} from "@/modules/invoicing/money";
@@ -116,21 +119,41 @@ async function freeze(ctx:ServiceContext,input:z.infer<typeof operation>,lockFor
  const allocations=await ctx.tx.select().from(returnRefundAllocations).where(eq(returnRefundAllocations.returnId,request.id));
  let credit=request.creditNoteId ? invoice.creditNotes.find(note=>note.id===request.creditNoteId) : undefined;
  if(request.creditNoteId && (!credit || credit.status==="void")) throw new ServiceError("conflict","Reconcile this return's original credit before refunding it.");
- const calculated=credit ? undefined : await returnCredit(ctx,request,invoice);
+ const [terms]=await ctx.tx.select({model:orderCommercialPolicies.model}).from(orderCommercialPolicies).where(eq(orderCommercialPolicies.orderId,order.id));
+ const policy=await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:invoice.invoice.id});
+ const currentMerchant=policy?.collectionVersion===1||terms?.model==="seller_merchant";
+ const calculated=credit&&!currentMerchant ? undefined : await returnCredit(ctx,request,invoice);
+ const basis=calculated ? await ctx.callAsSystem(merchantRefundBasis,{invoiceId:invoice.invoice.id,invoiceLineIds:calculated.creditLines.map(line=>line.invoiceLineId)}) : null;
+ if(currentMerchant&&!basis) throw new ServiceError("conflict","Restore this order's original merchant collection policy before preparing its return.");
  const amountMinor=credit?.totalMinor ?? calculated!.amountMinor;
+ const merchantBudgets=new Map<string,number>();
+ const paymentOwners=new Map(basis?.payments.map(row=>[row.paymentId,row.allocationId]));
+ if(basis){
+  if(!calculated||calculated.amountMinor!==amountMinor) throw new ServiceError("conflict","The original returned lines and their frozen credit no longer agree.");
+  for(const line of calculated.creditLines){
+   const original=basis.lines.find(row=>row.invoiceLineId===line.invoiceLineId);
+   if(!original) throw new ServiceError("conflict","Restore each returned line's original merchant allocation.");
+   const gross=sumMinor([line.subtotalMinor,line.taxMinor],"Original returned line amount");
+   if(gross>0) merchantBudgets.set(original.allocationId,sumMinor([merchantBudgets.get(original.allocationId)??0,gross],"Original merchant return budget"));
+  }
+ }
  if(!allocations.length){
   let proposed:Array<{paymentId:string,amountMinor:number}>;
   if(credit) proposed=legacyPlan(request,invoice,amountMinor);
   else {
    proposed=[];let remaining=amountMinor;
+   const remainingMerchant=new Map(merchantBudgets);
    const captured=invoice.payments.filter(payment=>payment.status==="succeeded").sort((a,b)=>a.createdAt.getTime()-b.createdAt.getTime() || a.id.localeCompare(b.id));
    const frozen=captured.length ? await ctx.tx.select().from(returnRefundAllocations).where(inArray(returnRefundAllocations.paymentId,captured.map(payment=>payment.id))) : [];
    for(const payment of captured){
+    const allocationId=paymentOwners.get(payment.id);
+    const permitted=basis ? allocationId ? remainingMerchant.get(allocationId)??0 : 0 : remaining;
+    if(permitted===0) continue;
     const owed=sumMinor(frozen.filter(part=>part.paymentId===payment.id).map(part=>Math.max(0,part.amountMinor-total(assigned(invoice,{id:part.returnId},part),row=>reserved(row.status)))),"Owed original return portions");
     const available=payment.amountMinor-total(invoice.refunds,row=>row.paymentId===payment.id && reserved(row.status))-owed;
     if(available<0) throw new ServiceError("conflict","Reconcile the original refund balance before preparing this return.");
-    const amount=Math.min(remaining,available);
-    if(amount>0){proposed.push({paymentId:payment.id,amountMinor:amount});remaining-=amount;}
+    const amount=Math.min(remaining,available,permitted);
+    if(amount>0){proposed.push({paymentId:payment.id,amountMinor:amount});remaining-=amount;if(basis&&allocationId) remainingMerchant.set(allocationId,permitted-amount);}
    }
    if(remaining) throw new ServiceError("conflict","The original payments cannot cover this whole return.");
   }
@@ -139,6 +162,15 @@ async function freeze(ctx:ServiceContext,input:z.infer<typeof operation>,lockFor
    const [created]=await ctx.tx.insert(returnRefundAllocations).values({returnId:request.id,paymentId:part.paymentId,amountMinor:part.amountMinor,currency:invoice.invoice.currency,provider:source.payment.provider,providerAccountId:source.providerAccountId,applicationFeeMinor:source.applicationFeeMinor}).returning();
    allocations.push(created!);
   }
+ }
+ if(basis){
+  const recorded=new Map<string,number>();
+  for(const part of allocations){
+   const allocationId=paymentOwners.get(part.paymentId);
+   if(!allocationId||!merchantBudgets.has(allocationId)) throw new ServiceError("conflict","This frozen return names another merchant's payment. Reconcile its original plan before any provider work.");
+   recorded.set(allocationId,sumMinor([recorded.get(allocationId)??0,part.amountMinor],"Frozen merchant return budget"));
+  }
+  if(recorded.size!==merchantBudgets.size||[...merchantBudgets].some(([allocationId,amount])=>recorded.get(allocationId)!==amount)) throw new ServiceError("conflict","The frozen return payment portions do not match their original seller lines.");
  }
  if(sumMinor(allocations.map(part=>part.amountMinor),"Frozen return allocation")!==amountMinor) throw new ServiceError("conflict","The frozen return allocations do not match its whole credit.");
  const requests=[];
