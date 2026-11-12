@@ -90,7 +90,7 @@ export interface CheckoutSession extends MerchantChargeScope {
  * instead. Providers that cannot do it leave the method off the adapter, and
  * the plan stays unavailable rather than starting an unverified trial.
  */
-export interface MethodSetupRequest extends PaymentAccountScope {
+export interface MethodSetupRequest extends MerchantChargeScope {
   /** Durable first-request witness, copied to provider metadata. */
   setupAttemptId?: string;
   currency: string;
@@ -413,7 +413,7 @@ export interface PaymentAdapter {
    * a charge. Callers must check before offering a zero-fee card trial.
    */
   /** Create the customer separately so its actual reference commits before Checkout I/O. */
-  createSetupCustomer?(request: MethodSetupRequest): Promise<{ providerCustomerRef: string; providerAccountId?: string }>;
+  createSetupCustomer?(request: MethodSetupRequest): Promise<PaymentAccountScope & { providerCustomerRef: string }>;
   createMethodSetup?(request: MethodSetupRequest): Promise<MethodSetupSession>;
   recoverMethodSetup?(request: MethodSetupRequest & { createdAt: string; providerRef?: string; verifyCustomerCreation?: boolean }): Promise<MethodSetupRecovery>;
   captureCheckout(request: CheckoutCaptureRequest): Promise<CheckoutCaptureResult>;

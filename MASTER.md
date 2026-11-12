@@ -13513,6 +13513,14 @@ whatever is best for the people using the site.
   bounded read-only protocol controls pass; the helper is ready for shared
   provider observation integration. The new agreement scope, exact tax/fee
   lifecycle, complete source qualification and actual acceptance remain open.
+  New-agreement setup source progress preserves the verified original platform
+  through customer creation, hosted setup and read-only recovery. Destination
+  SetupIntents stay on that platform and prove their actual settlement merchant;
+  the recipient is never substituted as the customer namespace. Six new mocked
+  HTTP controls and 28 existing setup controls pass. Legacy requests retain
+  their account scope. This adapter increment enables no new agreement model;
+  frozen agreement capture, durable renewal receipts, tax/fee reconciliation,
+  privacy integration and actual provider acceptance remain required.
   Original-order ownership repair 2026-11-11: checkout freezes each purchased
   line's seller and shipping requirement before invoice issue, and seller
   settlement reads that receipt instead of a later catalog edit. The actual
