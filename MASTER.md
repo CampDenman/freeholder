@@ -13551,6 +13551,12 @@ whatever is best for the people using the site.
   effect or actual-main breach is claimed. Both callers and database work
   drained. The unregistered core fence still requires complete integration
   and native after proof; see `deploy/merchant-refund-source-2026-11-12.md`.
+  Shared refund-fence isolated wiring 2026-11-12: common reservation capture
+  and cancel/fail/start/settle checks now bind one physical original request
+  in the isolated repair. Explicit Node22 types/lint pass; no normal80 SQL,
+  registry/native after proof or activation is claimed. Unknown physical
+  requests cannot be released by local cancellation or time. Full state,
+  fee/reversal, privacy and human-flow integration remain required.
   Original fee-job runtime repair 2026-11-12: the first actual mixed-order
   capture control reached payment completion and exposed an unregistered
   invoicing.reconcileOriginalMerchantFee job on unreleased80 sourcee4500e3e.

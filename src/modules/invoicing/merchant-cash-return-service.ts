@@ -131,6 +131,15 @@ async function currentReturnProof(ctx: ServiceContext, inspection: typeof mercha
     || history.incomplete || history.feeDebt || history.digest !== inspection.sourceHistoryDigest || !observation || observation.sequence !== latestSequence) return null;
   const evidence = merchantReturnedCashEvidenceSchema.safeParse(observation.evidence);
   if (!evidence.success) return null;
+  const unresolvedRefund = history.refundRequests.some(request => {
+    if (!request.dispatched) return !request.retired;
+    if (request.definitelyRefused) return false;
+    if (request.resourceRefs.length !== 1) return true;
+    const actual = evidence.data.refunds.find(row => row.providerRef === request.resourceRefs[0]);
+    return !actual || actual.paymentProviderRef !== cash.providerRef || actual.amountMinor !== request.amountMinor || actual.currency !== request.currency
+      || !["succeeded", "failed", "canceled"].includes(actual.status ?? "unknown");
+  });
+  if (unresolvedRefund) return null;
   const proof = merchantReturnedCashProof({ original: { ...cash, paymentProviderRef: cash.providerRef }, evidence: evidence.data, creatorsQuiesced: history.creatorsQuiesced, inventoryStable: true });
   return proof.settled ? { cash, own, observation } : null;
 }

@@ -50,6 +50,13 @@ export const merchantRefundRequests = pgTable("merchant_refund_requests", {
   check("merchant_refund_requests_original", sql`${table.originalPaymentRef} ~ '^pi_[A-Za-z0-9_]+$' and ${table.requestDigest} ~ '^[a-f0-9]{64}$' and jsonb_typeof(${table.originalRequest})='object'`),
 ]);
 
+/** Before physical admission, an exact reservation can be retired under its cash lock. */
+export const merchantRefundReservationRetirements = pgTable("merchant_refund_reservation_retirements", {
+  requestId: uuid("request_id").primaryKey().references(() => merchantRefundRequests.id, { onDelete: "restrict" }),
+  requestDigest: text("request_digest").notNull(), reason: text("reason", { enum: ["cancelled_before_dispatch"] }).notNull(),
+  initiatedBy: text("initiated_by").notNull(), createdAt: createdAtColumn(),
+}, table => [check("merchant_refund_reservation_retirements_reason", sql`${table.reason}='cancelled_before_dispatch' and ${table.requestDigest} ~ '^[a-f0-9]{64}$'`)]);
+
 export const merchantRefundDispatches = pgTable("merchant_refund_dispatches", {
   id: uuid("id").primaryKey().defaultRandom(),
   requestId: uuid("request_id").notNull().references(() => merchantRefundRequests.id, { onDelete: "restrict" }),

@@ -107,12 +107,13 @@ qualify before returning an applied/returned disposition to a real lifecycle.
 
 ## Unregistered shared-core phase checkpoint
 
-Eleven separate core source files now define the original cash owner, common
+At isolated checkpoint014c6939, eleven separate core source files defined the original cash owner, common
 refund-reservation capture, one physical refund caller/ACK/finish, return
 inspection admission, primary/state capture, actual read completion and versioned
 cash disposition. Full explicit Node22 TypeScript and changed-file lint pass.
-These definitions are not registered, called by the existing refund core, or
-included in the assembled80 SQL. They supply no native qualification.
+At that checkpoint they were not registered, called by the refund core, or
+included in the assembled80 SQL. They supplied no native qualification.
+The later isolated prototype wiring below supersedes the uncalled status only.
 
 Return and payment application share the original platform/charge-namespace/PI
 advisory lock. Existing reservations without a captured original request are not
@@ -154,3 +155,31 @@ proves a development-source caller fence is missing, not that Stripe would
 refund twice inside its idempotency window, and not an actual-main breach.
 The unregistered refund phase repair was not applied to this before source.
 Logs: /tmp/freeholder-refund-caller-before-v6.json and .log.
+
+
+## Isolated shared-refund fence wiring
+
+The isolated repair now captures every newly inserted merchant refund in the
+shared createRefund transaction, including prepared return batches. It delegates
+the existing authorized submitProviderRefund action to one immutable physical
+POST and independent ACK/money/finish phases. The common cancel/fail/start/settle
+mutations check original admission and evidence; cancelling a local row cannot
+free a physically admitted unknown request. An unadmitted reservation can be
+retired under the same cash lock. A retry uses the captured original provider
+key/body and never creates a replacement merely because a time window elapsed.
+New physical keys are generated once for new captured operations, independently
+of their caller's logical idempotency key; no existing operation is rekeyed.
+
+Each admitted refund must resolve to its actual strongly bound resource or
+verified terminal proof before a full cash-return lifecycle can close. A complete
+charge-refunded projection alone does not settle an unidentified original
+request. Generic error strings and empty lookups are not no-effect proof.
+
+Full explicit Node22 types and focused lint pass for the isolated wiring. The
+first attempt stopped at a mechanical inline-comment syntax error, corrected
+without changing business behavior or assertions; the bounded retry passes.
+The52 edge/proof controls passed before that correction and were not repeated.
+No refund native after-control, normal SQL80 addition, table/registry metadata,
+provider acceptance or enabled-model claim is supplied by this checkpoint.
+Requires_action/bank-return state transitions, fees/reversals, privacy repair,
+all ordinary and prepared-refund flows and human surfaces remain completion work.

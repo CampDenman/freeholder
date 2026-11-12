@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C5.06: provider orchestration and authenticated event convergence.
 
+import { submitOriginalMerchantRefund } from "./merchant-refund-execution";
 import { and, desc, getTableColumns, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, paymentAdapters } from "@/adapters/payments";
@@ -1070,9 +1071,9 @@ export const submitProviderRefund = defineOrchestratedService({
     const { payment, routing } = await providerPaymentSource.call({ paymentId: input.paymentId }, system);
     if (!payment.providerRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment does not have a refundable hosted-provider settlement.");
     if (!paymentAdapter(payment.provider).capabilities().refunds) throw new ServiceError("conflict", `${payment.provider} refunds are not implemented by this adapter.`);
-    // The reservation commits before the provider is asked. A crash after the
-    // provider accepted leaves this `created` refund holding the amount, and a
-    // same-key retry reuses it rather than reserving (or refunding) twice.
+    if (routing.providerPlatformAccountId) return submitOriginalMerchantRefund(input, caller);
+    // The existing historical provider route retains its original contract.
+    // New merchant requests use their captured body and one physical caller.
     const refund = await claimProviderRefund.call({ ...input, initiatedBy: by }, system);
     if (refund.status !== "created") return refund;
     assertRetryableAttempt(refund, "refund");

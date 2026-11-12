@@ -27,7 +27,7 @@ export async function captureOriginalMerchantRefund(ctx: ServiceContext, payment
   const id = randomUUID(), originalRequest: MerchantRefundProviderArguments = {
     refundAttemptId: id, paymentId: payment.id, providerRef: cash.providerRef, providerPlatformAccountId: cash.providerPlatformAccountId,
     ...(cash.chargeAccountId ? { providerAccountId: cash.chargeAccountId } : {}), providerApiVersion: cash.providerApiVersion,
-    currency: cash.currency, amountMinor: refund.amountMinor, idempotencyKey: refund.idempotencyKey, reverseTransfer: false, refundApplicationFee: false,
+    currency: cash.currency, amountMinor: refund.amountMinor, idempotencyKey: `freeholder-merchant-refund:${id}`, reverseTransfer: false, refundApplicationFee: false,
     frozenBody: stripeMerchantRefundBody({ refundAttemptId: id, paymentId: payment.id, paymentProviderRef: cash.providerRef,
       amountMinor: refund.amountMinor, providerPlatformAccountId: cash.providerPlatformAccountId }),
   };
@@ -37,5 +37,5 @@ export async function captureOriginalMerchantRefund(ctx: ServiceContext, payment
     originalPaymentRef: cash.providerRef, originalCashAmountMinor: cash.amountMinor, amountMinor: refund.amountMinor, currency: cash.currency,
     idempotencyKey: refund.idempotencyKey, reasonDigest: merchantTaxDigest(refund.reason), originalRequest, requestDigest: merchantTaxDigest(originalRequest) });
 }
-// Deliberately not called by createRefund until the schema/dispatch/control
-// integration lands together; no existing reservation is silently backfilled.
+// The isolated shared-core hook is pending fresh-schema/native qualification;
+// no existing reservation is silently backfilled.

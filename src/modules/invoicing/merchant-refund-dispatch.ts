@@ -5,10 +5,11 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
+import { startRefund } from "./invoice-service";
 import { merchantPhysicalCaller } from "./merchant-physical-caller";
 import { lockMerchantRefundCash } from "./merchant-refund-origin";
 import { merchantRefundCapacity } from "./merchant-refund-capacity";
-import { merchantRefundCreationRefusals, merchantRefundDispatches, merchantRefundDispatchFinishes, merchantRefundDispatchStops, merchantRefundObservations, merchantRefundRequests, merchantRefundResourceBindings, merchantRefundTerminalReceipts } from "./merchant-refund-schema";
+import { merchantRefundCreationRefusals, merchantRefundDispatches, merchantRefundDispatchFinishes, merchantRefundDispatchStops, merchantRefundObservations, merchantRefundRequests, merchantRefundReservationRetirements, merchantRefundResourceBindings, merchantRefundTerminalReceipts } from "./merchant-refund-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 interface LocalFinish { requestId: string; nonce: string; outcome: "returned" | "threw"; providerRef: string | null }
@@ -29,19 +30,26 @@ export const claimMerchantRefundDispatch = defineService({
   handler: async ({ requestId }, ctx) => {
     const [snapshot] = await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, requestId));
     if (!snapshot) throw new ServiceError("conflict", "Restore this original refund request before any physical provider work.");
+    if (snapshot.refundId) await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`refund:${snapshot.refundId}`}))`);
     await lockMerchantRefundCash(ctx, { ...snapshot, providerRef: snapshot.originalPaymentRef });
     const [original] = await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, requestId)).for("update");
     if (!original || merchantTaxDigest(original.originalRequest) !== original.requestDigest) throw new ServiceError("conflict", "The actual original refund arguments need recovery.");
+    const [retired] = await ctx.tx.select().from(merchantRefundReservationRetirements).where(eq(merchantRefundReservationRetirements.requestId, requestId));
+    if (retired) throw new ServiceError("conflict", "This exact original reservation was retired before dispatch and cannot authorize a provider request.");
     const previous = await ctx.tx.select({ id: merchantRefundDispatches.id }).from(merchantRefundDispatches).where(eq(merchantRefundDispatches.requestId, requestId)).limit(1);
     if (previous.length) throw new ServiceError("conflict", "Reconcile the original refund by GET; another creation is never admitted for this request.");
     const requests = await ctx.tx.select().from(merchantRefundRequests).where(and(eq(merchantRefundRequests.providerPlatformAccountId, original.providerPlatformAccountId),
       sql`${merchantRefundRequests.chargeAccountId} is not distinct from ${original.chargeAccountId}`, eq(merchantRefundRequests.originalPaymentRef, original.originalPaymentRef))).limit(5001);
-    const observations = await ctx.tx.select().from(merchantRefundObservations).where(and(eq(merchantRefundObservations.providerPlatformAccountId, original.providerPlatformAccountId),
-      sql`${merchantRefundObservations.chargeAccountId} is not distinct from ${original.chargeAccountId}`, or(eq(merchantRefundObservations.paymentProviderRef, original.originalPaymentRef),
-        and(isNull(merchantRefundObservations.paymentProviderRef), original.paymentId ? eq(merchantRefundObservations.paymentId, original.paymentId)
-          : eq(merchantRefundObservations.subscriptionChargeReceiptId, original.subscriptionChargeReceiptId!))))).limit(5001);
-    if (requests.length > 5000 || observations.length > 5000 || observations.some(row => !row.paymentProviderRef) || requests.some(row => row.originalCashAmountMinor !== original.originalCashAmountMinor || row.currency !== original.currency)) throw new ServiceError("conflict", "Reconcile the complete original refund inventory before dispatch; no truncated inventory proves available cash.");
     const ids = requests.map(row => row.id);
+    const observations = await ctx.tx.select().from(merchantRefundObservations).where(or(
+      and(eq(merchantRefundObservations.providerPlatformAccountId, original.providerPlatformAccountId), sql`${merchantRefundObservations.chargeAccountId} is not distinct from ${original.chargeAccountId}`,
+        eq(merchantRefundObservations.paymentProviderRef, original.originalPaymentRef)),
+      inArray(merchantRefundObservations.requestId, ids), and(isNull(merchantRefundObservations.paymentProviderRef), original.paymentId ? eq(merchantRefundObservations.paymentId, original.paymentId)
+        : eq(merchantRefundObservations.subscriptionChargeReceiptId, original.subscriptionChargeReceiptId!)))).limit(5001);
+    if (requests.length > 5000 || observations.length > 5000 || observations.some(row => row.paymentProviderRef !== original.originalPaymentRef
+      || row.providerPlatformAccountId !== original.providerPlatformAccountId || row.chargeAccountId !== original.chargeAccountId || row.providerApiVersion !== original.providerApiVersion)
+      || requests.some(row => row.originalCashAmountMinor !== original.originalCashAmountMinor || row.currency !== original.currency)) throw new ServiceError("conflict", "Reconcile the complete original refund inventory before dispatch; no truncated or contradictory inventory proves available cash.");
+    const retirements = await ctx.tx.select().from(merchantRefundReservationRetirements).where(inArray(merchantRefundReservationRetirements.requestId, ids)).limit(5001);
     const dispatches = await ctx.tx.select({ dispatch: merchantRefundDispatches, finish: merchantRefundDispatchFinishes, stop: merchantRefundDispatchStops, refusal: merchantRefundCreationRefusals })
       .from(merchantRefundDispatches).leftJoin(merchantRefundDispatchFinishes, eq(merchantRefundDispatchFinishes.dispatchId, merchantRefundDispatches.id))
       .leftJoin(merchantRefundDispatchStops, eq(merchantRefundDispatchStops.dispatchId, merchantRefundDispatches.id))
@@ -49,7 +57,7 @@ export const claimMerchantRefundDispatch = defineService({
     const terminal = await ctx.tx.select({ receipt: merchantRefundTerminalReceipts, fact: merchantRefundObservations }).from(merchantRefundTerminalReceipts)
       .innerJoin(merchantRefundObservations, eq(merchantRefundObservations.id, merchantRefundTerminalReceipts.observationId)).where(inArray(merchantRefundTerminalReceipts.requestId, ids)).limit(5001);
     const bindings = await ctx.tx.select().from(merchantRefundResourceBindings).where(inArray(merchantRefundResourceBindings.requestId, ids)).limit(5001);
-    if (dispatches.length > 5000 || terminal.length > 5000 || bindings.length > 5000) throw new ServiceError("conflict", "The original caller/refund history requires a complete recovery review.");
+    if (retirements.length > 5000 || dispatches.length > 5000 || terminal.length > 5000 || bindings.length > 5000) throw new ServiceError("conflict", "The original caller/refund history requires a complete recovery review.");
     const capacity = merchantRefundCapacity({ originalCashMinor: original.originalCashAmountMinor, currency: original.currency,
       reservations: requests.map(request => {
         const calls = dispatches.filter(row => row.dispatch.requestId === request.id);
@@ -61,13 +69,14 @@ export const claimMerchantRefundDispatch = defineService({
           && row.fact.chargeAccountId === request.chargeAccountId && row.fact.providerApiVersion === request.providerApiVersion
           && row.fact.paymentProviderRef === request.originalPaymentRef && row.fact.amountMinor === request.amountMinor && row.fact.currency === request.currency);
         return { id: request.id, amountMinor: request.amountMinor, dispatched: calls.length > 0, creatorsQuiesced,
-          terminalFailureVerified: creatorsQuiesced && (failed || calls.length > 0 && calls.every(row => row.refusal)) };
+          terminalFailureVerified: creatorsQuiesced && (calls.length === 0 && retirements.some(row => row.requestId === request.id && row.requestDigest === request.requestDigest) || failed) };
       }), observations });
     if (capacity.availableMinor === null || capacity.availableMinor < 0 || capacity.debt.length) throw new ServiceError("conflict", "Actual unknown, unapplied or contradictory refund money must be reconciled before another dispatch.");
     const completionNonce = randomBytes(32).toString("base64url");
     await ctx.tx.execute(sql`select set_config('freeholder.merchant_refund_v1','1',true)`);
     const [dispatch] = await ctx.tx.insert(merchantRefundDispatches).values({ requestId, ordinal: 1, requestDigest: original.requestDigest,
       caller: merchantPhysicalCaller(), completionNonceHash: hash(completionNonce) }).returning();
+    if (original.refundId) await ctx.callAsSystem(startRefund, { id: original.refundId });
     ctx.setSubject(original.paymentId ? "payment" : "subscription_provider_charge", original.paymentId ?? original.subscriptionChargeReceiptId!);
     return { dispatchId: dispatch!.id, completionNonce };
   },

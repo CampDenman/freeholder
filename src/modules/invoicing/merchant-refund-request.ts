@@ -70,7 +70,7 @@ export const claimMerchantRefundRequest = defineService({
       ...(cash.subscriptionOrigin ? { subscriptionOrigin: cash.subscriptionOrigin } : {}), providerRef: cash.providerRef,
       providerPlatformAccountId: cash.providerPlatformAccountId, ...(cash.chargeAccountId ? { providerAccountId: cash.chargeAccountId } : {}),
       providerApiVersion: cash.providerApiVersion, currency: cash.currency, amountMinor: value.amountMinor,
-      idempotencyKey: value.idempotencyKey, frozenBody, reverseTransfer: false, refundApplicationFee: false });
+      idempotencyKey: `freeholder-merchant-refund:${id}`, frozenBody, reverseTransfer: false, refundApplicationFee: false });
     const [saved] = await ctx.tx.insert(merchantRefundRequests).values({ id, purpose, refundId: null,
       paymentId: cash.paymentId, originalObservationId: cash.originalObservationId, subscriptionChargeReceiptId: cash.subscriptionChargeReceiptId,
       subscriptionChargeObservationId: cash.subscriptionChargeObservationId, providerPlatformAccountId: cash.providerPlatformAccountId,

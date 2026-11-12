@@ -4,6 +4,8 @@
 
 import { createHash } from "node:crypto";
 import { captureInvoiceMarketPolicy, getInvoiceMarketPolicy } from "./market-policy";
+import { captureOriginalMerchantRefund } from "./merchant-refund-capture";
+import { assertOriginalMerchantRefundResult, assertOriginalMerchantRefundStart, retireOriginalMerchantRefund } from "./merchant-refund-core-guards";
 import { queueMerchantFeeReconciliation } from "./merchant-fee-service";
 import { reserveMerchantCharge } from "./merchant-charge";
 import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
@@ -1230,6 +1232,7 @@ export const createRefund = defineService({
       amountMinor: input.amountMinor,
       reason: input.reason,
     }).returning();
+    await captureOriginalMerchantRefund(ctx, payment, created!);
     await stateEvent(ctx, "refund", created!.id, null, "created", input.reason);
     ctx.queueEvent("refund.created", { refundId: created!.id, paymentId: payment.id, invoiceId: payment.invoiceId });
     ctx.setSubject("refund", created!.id);
@@ -1271,8 +1274,17 @@ export const startRefund = defineService({
     await lock(ctx.tx, "refund", input.id);
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
     if (!refund) throw new ServiceError("not_found", "That refund is not here.");
-    if (refund.status === "processing") return refund;
+    if (refund.status === "processing") {
+      if (!input.providerRef || refund.providerRef === input.providerRef) return refund;
+      const originalMerchant = await assertOriginalMerchantRefundStart(ctx, refund, input.providerRef);
+      if (!originalMerchant) return refund; // Preserve existing historical behavior.
+      if (refund.providerRef) throw new ServiceError("conflict", "This original refund already has a different physical provider reference.");
+      const [bound] = await ctx.tx.update(refunds).set({ providerRef: input.providerRef }).where(eq(refunds.id, refund.id)).returning();
+      ctx.setSubject("refund", refund.id);
+      return bound!;
+    }
     if (refund.status !== "created") throw new ServiceError("conflict", "Only a created refund can start processing.");
+    await assertOriginalMerchantRefundStart(ctx, refund, input.providerRef);
     const [updated] = await ctx.tx.update(refunds).set({ status: "processing", providerRef: input.providerRef }).where(eq(refunds.id, refund.id)).returning();
     await stateEvent(ctx, "refund", refund.id, "created", "processing");
     ctx.queueEvent("refund.processing", { refundId: refund.id, paymentId: refund.paymentId });
@@ -1294,6 +1306,7 @@ export const failRefund = defineService({
     if (!refund) throw new ServiceError("not_found", "That refund is not here.");
     if (refund.status === "failed") return refund;
     if (!inArrayValue(refund.status, ["created", "processing"])) throw new ServiceError("conflict", "A terminal refund cannot fail again.");
+    await assertOriginalMerchantRefundResult(ctx, refund, "failed");
     const [updated] = await ctx.tx.update(refunds).set({ status: "failed", failureCode: input.code, failureMessage: input.message, failedAt: new Date() }).where(eq(refunds.id, refund.id)).returning();
     await stateEvent(ctx, "refund", refund.id, refund.status, "failed", input.code);
     ctx.queueEvent("refund.failed", { refundId: refund.id, paymentId: refund.paymentId, code: input.code });
@@ -1318,6 +1331,7 @@ export const cancelRefund = defineService({
     if (!inArrayValue(refund.status, ["created", "processing"])) {
       throw new ServiceError("conflict", "A terminal refund cannot be cancelled.");
     }
+    await retireOriginalMerchantRefund(ctx, refund);
     const [updated] = await ctx.tx
       .update(refunds)
       .set({ status: "cancelled", failureCode: null, failureMessage: null })
@@ -1356,6 +1370,7 @@ export const settleRefund = defineService({
       ctx.tx.select().from(invoices).where(eq(invoices.id, refund.invoiceId)).limit(1),
     ]);
     if (!payment || !invoice) throw new ServiceError("not_found", "That refund's payment or invoice is not here.");
+    await assertOriginalMerchantRefundResult(ctx, refund, "succeeded", input.providerRef);
     const paymentRefunded = sumMinor([payment.refundedMinor, refund.amountMinor], "Payment refunded balance");
     const invoiceRefunded = sumMinor([invoice.refundedMinor, refund.amountMinor], "Invoice refunded balance");
     if (paymentRefunded > payment.amountMinor || invoiceRefunded > invoice.paidMinor) throw new ServiceError("conflict", "Settling this refund would exceed the paid balance.");
