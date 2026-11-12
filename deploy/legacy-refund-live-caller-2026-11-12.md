@@ -115,3 +115,18 @@ Evidence: `/tmp/freeholder-legacy-refund-c0-original-after.json`,
 The ten broader controls, full protected checks and provider acceptance
 remain open. This is a coding-agent proof, not an independent human security
 sign-off.
+
+A separate source refinement additionally pins the original parent payment
+amount and request hash, chooses only `CREDENTIAL_KEY ?? SESSION_SECRET` for
+new signatures (the previous key is verification-only), and allows a private
+retry to persist the completed server-held answer after its independent
+transaction fails. That retry cannot start another POST or accept different
+original request arguments. Process loss still leaves the durable admission
+as unknown debt and requires genuine original-provider recovery; the memory
+holder is never used as a negative absence witness.
+
+The expanded fourteen drafted native controls include the original ten plus
+two parent-field corruption cases, independent persistence failure/retry,
+and verification-only previous-key behavior. The refinement has not yet
+received its own source gates or native acceptance; the original 4c proof
+above is preserved without extension to these new fault cases.

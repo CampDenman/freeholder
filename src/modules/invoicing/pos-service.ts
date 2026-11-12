@@ -28,11 +28,11 @@ import {
   assertRetryableAttempt,
   claimProviderRefund,
   providerPaymentSource,
-  recordProviderRefundCaller,
+  persistProviderRefundCaller,
   recordProviderRefundResult,
   refundNeedsReview,
 } from "./payment-provider-service";
-import { forgetCompletedLegacyRefund, performLegacyRefundDispatch, type legacyRefundObservation } from "./legacy-refund-dispatch";
+import { performLegacyRefundDispatch, type legacyRefundObservation } from "./legacy-refund-dispatch";
 import { invoices, payments, refunds } from "./schema";
 
 const id = z.string().uuid();
@@ -332,23 +332,20 @@ export const refundInPersonPayment = defineOrchestratedService({
       throw new ServiceError("conflict", "That payment was not collected in person.");
     }
     const adapter = pointOfSaleAdapter(payment.provider === "stripe" ? "stripe" : "manual");
-    const { refund, dispatch, replay } = await claimProviderRefund.call({
+    const { refund, dispatch, replay, persist } = await claimProviderRefund.call({
       paymentId: payment.id,
       amountMinor: input.amountMinor,
       reason: input.reason,
       idempotencyKey: input.idempotencyKey,
       initiatedBy: by,
     }, system);
-    if (!dispatch && !replay) return refund;
+    if (!dispatch && !replay && !persist) return refund;
     let result: z.infer<typeof legacyRefundObservation>;
-    if (replay) result = replay;
+    if (persist) result = await persistProviderRefundCaller(persist, by, system);
+    else if (replay) result = replay;
     else if (dispatch) {
       try {
-        result = await performLegacyRefundDispatch(dispatch, () => adapter.refund(dispatch.request), async () => {
-          const retained = await recordProviderRefundCaller.call({ dispatchId: dispatch.dispatchId, completionNonce: dispatch.completionNonce, initiatedBy: by }, system);
-          forgetCompletedLegacyRefund(dispatch.dispatchId);
-          if (retained.recoveryRequired) throw new ServiceError("conflict", "The actual in-person refund answer is retained and needs original-evidence recovery before application.");
-        });
+        result = await performLegacyRefundDispatch(dispatch, () => adapter.refund(dispatch.request), () => persistProviderRefundCaller(dispatch, by, system));
       } catch (error) {
         return posError(error);
       }

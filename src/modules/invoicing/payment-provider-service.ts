@@ -16,7 +16,7 @@ import {lockContactIdentity} from "@/core/contacts/identity-lock";
 import { contacts } from "@/core/contacts/schema";
 import { env } from "@/core/env";
 import { listed, row, timestamp, uuid } from "@/core/contract";
-import { actorString, defineOrchestratedService, defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
+import { actorString, defineOrchestratedService, defineService, ServiceError, type Actor, type ServiceContext, type Tx } from "@/core/service";
 import {
   adapterStatus,
   checkoutSession,
@@ -42,7 +42,7 @@ import {
 } from "./invoice-service";
 import { observeProviderPayout } from "./advanced-money-service";
 import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment, verifiedCheckoutSession } from "./merchant-charge";
-import { admitLegacyRefundDispatch, forgetCompletedLegacyRefund, legacyRefundDispatch, legacyRefundFinishedResult, legacyRefundObservation,
+import { admitLegacyRefundDispatch, completedLegacyRefundFor, forgetCompletedLegacyRefund, legacyRefundDispatch, legacyRefundFinishedResult, legacyRefundObservation,
   performLegacyRefundDispatch, retainLegacyRefundCaller, retainLegacyRefundTerminal } from "./legacy-refund-dispatch";
 import {
   invoices,
@@ -778,27 +778,39 @@ export const claimProviderRefund = defineService({
   input: z.object({ paymentId: z.string().uuid(), amountMinor: positiveMinor, reason: z.string().trim().min(3).max(1_000), idempotencyKey, initiatedBy }),
   external: false,
   auditInputFields: ["paymentId", "amountMinor", "initiatedBy"],
-  output: z.object({ refund: refundRow, dispatch: legacyRefundDispatch.nullable(), replay: legacyRefundObservation.nullable() }),
+  output: z.object({ refund: refundRow, dispatch: legacyRefundDispatch.nullable(), replay: legacyRefundObservation.nullable(), persist: legacyRefundDispatch.nullable() }),
   handler: async ({ initiatedBy: _initiatedBy, ...input }, ctx) => {
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`refund-idempotency:${input.idempotencyKey}`}))`);
     const source = await ctx.callAsSystem(providerPaymentSource, { paymentId: input.paymentId });
-    const [existing] = await ctx.tx.select().from(refunds).where(and(eq(refunds.provider, source.payment.provider), eq(refunds.idempotencyKey, input.idempotencyKey)));
+    const originals = await ctx.tx.select().from(refunds).where(and(eq(refunds.paymentId, input.paymentId), eq(refunds.idempotencyKey, input.idempotencyKey))).limit(2);
+    if (originals.length > 1) throw new ServiceError("conflict", "The original refund key has conflicting provider records. Reconcile them before proceeding.");
+    const existing = originals[0];
     // Existing rows take the refund lock before the payment lock, matching
     // settlement. A fresh row is still invisible to other transactions.
     if (existing) await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`refund:${existing.id}`}))`);
+    if (existing) {
+      const persist = completedLegacyRefundFor(existing);
+      if (persist) {
+        if (persist.request.paymentId !== input.paymentId || persist.request.amountMinor !== input.amountMinor || persist.request.reason !== input.reason
+          || persist.request.idempotencyKey !== input.idempotencyKey) throw new ServiceError("conflict", "This refund key already belongs to a different original request.");
+        return { refund: existing, dispatch: null, replay: null, persist };
+      }
+      if (existing.provider !== source.payment.provider) throw new ServiceError("conflict", "The original payment provider changed. Restore its original refund evidence before proceeding.");
+    }
     const refund = await ctx.call(createRefund, input);
-    if (["succeeded", "failed", "cancelled"].includes(refund.status)) return { refund, dispatch: null, replay: null };
+    if (["succeeded", "failed", "cancelled"].includes(refund.status)) return { refund, dispatch: null, replay: null, persist: null };
     if (refund.status === "processing") {
       const replay = await legacyRefundFinishedResult(ctx.tx, refund);
-      if (replay && replay.status !== "unknown" && replay.providerRef) return { refund, dispatch: null, replay };
+      if (replay && replay.status !== "unknown" && replay.providerRef) return { refund, dispatch: null, replay, persist: null };
     }
     if (refund.status !== "created") throw new ServiceError("conflict", "The original refund is already admitted. Reconcile its actual result instead of sending another provider request.");
     const dispatch = await admitLegacyRefundDispatch(ctx, refund, { paymentId: source.payment.id, providerRef: source.payment.providerRef ?? source.payment.id,
       currency: source.payment.currency, amountMinor: refund.amountMinor, reason: refund.reason ?? input.reason, idempotencyKey: refund.idempotencyKey,
       providerAccountId: source.routing.providerAccountId,
-      refundApplicationFee: Boolean(source.routing.providerAccountId && source.routing.applicationFeeMinor && source.routing.applicationFeeMinor > 0) });
+      refundApplicationFee: Boolean(source.routing.providerAccountId && source.routing.applicationFeeMinor && source.routing.applicationFeeMinor > 0) },
+    { amountMinor: source.payment.amountMinor, requestHash: source.payment.requestHash });
     const [claimed] = await ctx.tx.select().from(refunds).where(eq(refunds.id, refund.id));
-    return { refund: claimed!, dispatch, replay: null };
+    return { refund: claimed!, dispatch, replay: null, persist: null };
   },
 });
 
@@ -807,9 +819,18 @@ export const recordProviderRefundCaller = defineService({
   kind: "mutation", permission: "system", external: false,
   auditInputFields: ["dispatchId", "initiatedBy"],
   input: z.object({ dispatchId: z.uuid(), completionNonce: z.uuid(), initiatedBy }),
-  output: z.object({ recoveryRequired: z.boolean() }),
+  output: z.object({ recoveryRequired: z.boolean(), result: legacyRefundObservation }),
   handler: (input, ctx) => retainLegacyRefundCaller(ctx, input),
 });
+
+/** Retry only the independently failed persistence of an actually completed
+ * server-held caller. This function never starts provider work. */
+export async function persistProviderRefundCaller(dispatch: { dispatchId: string; completionNonce: string }, by: string, system: Actor) {
+  const retained = await recordProviderRefundCaller.call({ dispatchId: dispatch.dispatchId, completionNonce: dispatch.completionNonce, initiatedBy: by }, system);
+  forgetCompletedLegacyRefund(dispatch.dispatchId);
+  if (retained.recoveryRequired) throw new ServiceError("conflict", "The actual provider answer is retained, but its original refund evidence needs recovery before application.");
+  return retained.result;
+}
 
 export const recordProviderRefundResult = defineService({
   name: "invoicing.recordProviderRefundResult",
@@ -948,17 +969,14 @@ export const submitProviderRefund = defineOrchestratedService({
     // Admission commits before the provider is asked. A crash leaves
     // processing debt; a retry can apply a retained answer, never resend POST.
     const claimed = await claimProviderRefund.call({ ...input, initiatedBy: by }, system);
-    const { refund, dispatch, replay } = claimed;
-    if (!dispatch && !replay) return refund;
+    const { refund, dispatch, replay, persist } = claimed;
+    if (!dispatch && !replay && !persist) return refund;
     let result: z.infer<typeof legacyRefundObservation>;
-    if (replay) result = replay;
+    if (persist) result = await persistProviderRefundCaller(persist, by, system);
+    else if (replay) result = replay;
     else if (dispatch) {
       try {
-        result = await performLegacyRefundDispatch(dispatch, () => paymentAdapter(payment.provider).refund(dispatch.request), async () => {
-          const retained = await recordProviderRefundCaller.call({ dispatchId: dispatch.dispatchId, completionNonce: dispatch.completionNonce, initiatedBy: by }, system);
-          forgetCompletedLegacyRefund(dispatch.dispatchId);
-          if (retained.recoveryRequired) throw new ServiceError("conflict", "The actual provider answer is retained, but its original refund evidence needs recovery before application.");
-        });
+        result = await performLegacyRefundDispatch(dispatch, () => paymentAdapter(payment.provider).refund(dispatch.request), () => persistProviderRefundCaller(dispatch, by, system));
       } catch (error) {
         // A thrown answer, including already-refunded/in-use errors, cannot
         // prove that this original physical request never moved money.

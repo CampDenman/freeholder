@@ -133,6 +133,48 @@ describe.runIf(hasDatabase)("legacy refund original physical dispatch", () => {
     expect(refund).toHaveBeenCalledTimes(1);
     expect((await db().select().from(payments).where(eq(payments.id, original.id)))[0]?.refundedMinor).toBe(0);
   });
+  it.each(["amount", "requestHash"] as const)("retains a true positive without applying it to an altered parent %s", async field => {
+    const original = await payment(`parent-${field}`);
+    const request = input(original.id, `parent-${field}-refund`);
+    const refund = edge(async () => {
+      await db().update(payments).set(field === "amount" ? { amountMinor: 1500 } : { requestHash: "f".repeat(64) }).where(eq(payments.id, original.id));
+      return { providerRef: "re_OriginalParentFact", status: "succeeded" };
+    });
+    await expect(submitProviderRefund.call(request, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    const pending = await row(request.idempotencyKey);
+    expect(pending).toMatchObject({ status: "processing", providerRef: null });
+    const facts = await db().select().from(moneyStateEvents).where(and(eq(moneyStateEvents.subjectId, pending.id), eq(moneyStateEvents.toState, "provider_result_observed")));
+    expect(facts).toHaveLength(1);
+    expect(facts[0]?.metadata).toMatchObject({ recoveryRequired: true, original: { paymentAmountMinor: 1000, paymentRequestHash: original.requestHash },
+      result: { status: "succeeded", providerRef: "re_OriginalParentFact" } });
+    expect(refund).toHaveBeenCalledTimes(1);
+    expect((await db().select().from(payments).where(eq(payments.id, original.id)))[0]?.refundedMinor).toBe(0);
+  });
+  it("flushes a completed server-held answer after its independent persistence phase fails, without another POST", async () => {
+    const original = await payment("caller-persist-recovery");
+    const request = input(original.id, "caller-persist-recovery-refund");
+    const refund = edge(async () => ({ providerRef: "re_CallerPersistRecovery", status: "succeeded" }));
+    const persistence = vi.spyOn(recordProviderRefundCaller.def, "handler").mockRejectedValueOnce(new ServiceError("conflict", "Synthetic receipt persistence unavailable."));
+    await expect(submitProviderRefund.call(request, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    expect(await row(request.idempotencyKey)).toMatchObject({ status: "processing", providerRef: null });
+    await expect(submitProviderRefund.call({ ...request, amountMinor: 500 }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    persistence.mockRestore();
+    expect(await submitProviderRefund.call(request, OWNER)).toMatchObject({ status: "succeeded", providerRef: "re_CallerPersistRecovery" });
+    expect(refund).toHaveBeenCalledTimes(1);
+    const pending = await row(request.idempotencyKey);
+    expect(await db().select().from(moneyStateEvents).where(and(eq(moneyStateEvents.subjectId, pending.id), eq(moneyStateEvents.toState, "provider_result_observed")))).toHaveLength(1);
+  });
+  it("uses the mandatory current session key for new signatures when only a previous wrapping key is configured", async () => {
+    const configured = environment.env();
+    const keys = vi.spyOn(environment, "env").mockReturnValue({ ...configured, CREDENTIAL_KEY: undefined, CREDENTIAL_KEY_PREVIOUS: "22".repeat(32) });
+    const original = await payment("previous-verification-only");
+    const request = input(original.id, "previous-verification-only-refund");
+    await reserveRefundBatch.call({ refunds: [request] }, { kind: "system" });
+    keys.mockReturnValue({ ...configured, CREDENTIAL_KEY: undefined, CREDENTIAL_KEY_PREVIOUS: undefined });
+    const refund = edge(async () => ({ providerRef: "re_CurrentSessionKey", status: "succeeded" }));
+    expect(await submitProviderRefund.call(request, OWNER)).toMatchObject({ status: "succeeded", providerRef: "re_CurrentSessionKey" });
+    expect(refund).toHaveBeenCalledTimes(1);
+  });
   it("verifies pending original receipts across configured wrapping-key rotation without rebinding them", async () => {
     const original = await payment("journal-rotation");
     const request = input(original.id, "journal-rotation-refund");

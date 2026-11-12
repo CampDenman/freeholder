@@ -30,7 +30,8 @@ function unsigned(metadata: Record<string, unknown>) {
   return body;
 }
 function sign(metadata: Record<string, unknown>) {
-  const key = journalKeys()[0];
+  const configured = env();
+  const key = configured.CREDENTIAL_KEY ?? configured.SESSION_SECRET;
   if (!key) throw new ServiceError("conflict", "Configure the original refund evidence key before dispatch.");
   const body = unsigned(metadata);
   const purposeKey = createHmac("sha256", key).update("freeholder/legacy-refund-journal/signing-key/v1").digest();
@@ -44,7 +45,8 @@ function authentic(metadata: Record<string, unknown>) {
 }
 export const legacyRefundRequest = z.object({ paymentId: z.uuid(), providerRef: z.string().min(1).max(500), currency: z.string(),
   amountMinor: z.number().int().positive(), reason: z.string(), idempotencyKey: z.string(), providerAccountId: z.string().optional(), refundApplicationFee: z.boolean().optional() });
-export const legacyRefundDispatch = z.object({ refundId: z.uuid(), invoiceId: z.uuid(), dispatchId: z.uuid(), completionNonce: z.uuid(), requestHash: z.string(),
+export const legacyRefundDispatch = z.object({ refundId: z.uuid(), invoiceId: z.uuid(), paymentAmountMinor: z.number().int().positive(), paymentRequestHash: z.string(),
+  dispatchId: z.uuid(), completionNonce: z.uuid(), requestHash: z.string(),
   requestDigest: z.string(), provider: z.string(), request: legacyRefundRequest });
 export type LegacyRefundDispatch = z.infer<typeof legacyRefundDispatch>;
 export const legacyRefundObservation = z.object({ status: z.enum(["succeeded", "pending", "failed", "unknown"]), providerRef: z.string().trim().min(1).max(500).optional(),
@@ -56,6 +58,7 @@ type Completed = { dispatch: LegacyRefundDispatch; result: ObservedResult };
 const completed = new Map<string, Completed>();
 function originalReceipt(dispatch: LegacyRefundDispatch) {
   return { refundId: dispatch.refundId, invoiceId: dispatch.invoiceId, paymentId: dispatch.request.paymentId, provider: dispatch.provider,
+    paymentAmountMinor: dispatch.paymentAmountMinor, paymentRequestHash: dispatch.paymentRequestHash,
     providerPaymentRef: dispatch.request.providerRef, providerAccountId: dispatch.request.providerAccountId ?? null,
     amountMinor: dispatch.request.amountMinor, currency: dispatch.request.currency, idempotencyKey: dispatch.request.idempotencyKey,
     refundApplicationFee: dispatch.request.refundApplicationFee ?? false };
@@ -66,10 +69,12 @@ function originalRefundMatches(original: Record<string, unknown>, refund: Refund
 }
 async function originalPaymentMatches(tx: Tx, original: Record<string, unknown>) {
   if (typeof original.paymentId !== "string") return false;
-  const [parent] = await tx.select({ invoiceId: payments.invoiceId, provider: payments.provider, providerRef: payments.providerRef,
+  const [parent] = await tx.select({ invoiceId: payments.invoiceId, provider: payments.provider, providerRef: payments.providerRef, status: payments.status,
+    amountMinor: payments.amountMinor, requestHash: payments.requestHash,
     currency: payments.currency, providerAccountId: paymentMerchantRoutes.providerAccountId, applicationFeeMinor: paymentMerchantRoutes.applicationFeeMinor })
     .from(payments).leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, payments.id)).where(eq(payments.id, original.paymentId));
-  return Boolean(parent && parent.invoiceId === original.invoiceId && parent.provider === original.provider && (parent.providerRef ?? original.paymentId) === original.providerPaymentRef
+  return Boolean(parent && parent.status === "succeeded" && parent.amountMinor === original.paymentAmountMinor && parent.requestHash === original.paymentRequestHash
+    && parent.invoiceId === original.invoiceId && parent.provider === original.provider && (parent.providerRef ?? original.paymentId) === original.providerPaymentRef
     && parent.currency === original.currency && (parent.providerAccountId ?? null) === original.providerAccountId
     && Boolean(parent.providerAccountId && parent.applicationFeeMinor && parent.applicationFeeMinor > 0) === original.refundApplicationFee);
 }
@@ -101,10 +106,11 @@ export async function refundIsProvenUnsubmitted(tx: Tx, refund: Refund): Promise
   return originalReservationMatches(rows, refund)
     && !rows.some(row => row.toState === "processing" || record(row.metadata).protocol === version && record(row.metadata).physicalState === "admitted");
 }
-export async function admitLegacyRefundDispatch(ctx: ServiceContext, refund: Refund, request: z.infer<typeof legacyRefundRequest>): Promise<LegacyRefundDispatch> {
+export async function admitLegacyRefundDispatch(ctx: ServiceContext, refund: Refund, request: z.infer<typeof legacyRefundRequest>, payment: { amountMinor: number; requestHash: string }): Promise<LegacyRefundDispatch> {
   if (!await refundIsProvenUnsubmitted(ctx.tx, refund)) throw new ServiceError("conflict", "This original refund may already have a physical caller. Reconcile it before refunding again.");
   const actual = legacyRefundRequest.parse(request);
-  const dispatch = legacyRefundDispatch.parse({ refundId: refund.id, invoiceId: refund.invoiceId, dispatchId: randomUUID(), completionNonce: randomUUID(), requestHash: refund.requestHash,
+  const dispatch = legacyRefundDispatch.parse({ refundId: refund.id, invoiceId: refund.invoiceId, paymentAmountMinor: payment.amountMinor, paymentRequestHash: payment.requestHash,
+    dispatchId: randomUUID(), completionNonce: randomUUID(), requestHash: refund.requestHash,
     requestDigest: digest(canonical(actual)), provider: refund.provider, request: actual });
   await ctx.tx.update(refunds).set({ status: "processing" }).where(eq(refunds.id, refund.id));
   await ctx.tx.insert(moneyStateEvents).values({ subjectType: "refund", subjectId: refund.id, fromState: "created", toState: "processing", actor: actorString(ctx.actor),
@@ -138,7 +144,12 @@ function admissionMatches(metadata: Record<string, unknown>, dispatch: LegacyRef
     && metadata.dispatchId === dispatch.dispatchId && metadata.requestHash === dispatch.requestHash && metadata.requestDigest === dispatch.requestDigest
     && metadata.completionNonceHash === digest(dispatch.completionNonce) && canonical(metadata.original) === canonical(originalReceipt(dispatch));
 }
-export async function retainLegacyRefundCaller(ctx: ServiceContext, input: { dispatchId: string; completionNonce: string }): Promise<{ recoveryRequired: boolean }> {
+export function completedLegacyRefundFor(refund: Pick<Refund, "id">): LegacyRefundDispatch | null {
+  const matches = [...completed.values()].filter(holder => holder.dispatch.refundId === refund.id);
+  if (matches.length > 1) throw new ServiceError("conflict", "The original refund has conflicting retained caller evidence; reconcile it before application.");
+  return matches[0] ? structuredClone(matches[0].dispatch) : null;
+}
+export async function retainLegacyRefundCaller(ctx: ServiceContext, input: { dispatchId: string; completionNonce: string }): Promise<{ recoveryRequired: boolean; result: ObservedResult }> {
   const holder = completed.get(input.dispatchId);
   if (!holder || holder.dispatch.completionNonce !== input.completionNonce) throw new ServiceError("permission", "Only the completed original physical caller can record its result.");
   const { dispatch, result } = holder;
@@ -150,7 +161,7 @@ export async function retainLegacyRefundCaller(ctx: ServiceContext, input: { dis
       metadata: sign({ protocol: version, physicalState: "finished", dispatchId: dispatch.dispatchId, refundId: dispatch.refundId,
         requestHash: dispatch.requestHash, requestDigest: dispatch.requestDigest, original: originalReceipt(dispatch), result, recoveryRequired: true }) });
     ctx.setSubject("refund", dispatch.refundId);
-    return { recoveryRequired: true };
+    return { recoveryRequired: true, result };
   }
   const rows = await rawEvents(ctx.tx, refund.id);
   const admissions = rows.filter(row => admissionMatches(record(row.metadata), dispatch));
@@ -173,7 +184,7 @@ export async function retainLegacyRefundCaller(ctx: ServiceContext, input: { dis
   }
   if (bindingsMatch && result.providerRef && !refund.providerRef) await ctx.tx.update(refunds).set({ providerRef: result.providerRef }).where(eq(refunds.id, refund.id));
   ctx.setSubject("refund", refund.id);
-  return { recoveryRequired };
+  return { recoveryRequired, result };
 }
 export function forgetCompletedLegacyRefund(dispatchId: string) { completed.delete(dispatchId); }
 
