@@ -142,3 +142,30 @@ repeat passed in 25.5 seconds. All four locales have real keyboard assignment,
 and private-field omission evidence. These staged proofs do not claim the
 complete legacy-source regression, 73–78 upgrade rehearsal, provider acceptance
 or independent review.
+
+The next v3 boundary uses a declared pre-receipt persistence fixture: original
+cached pointer and source executor, with no receipt, seal or review flag. Its
+before control genuinely found an empty owner-review window while cutover
+refused safely; both real owner key-rotation and unreadable-seal preservation
+controls passed in the same 18.27-second run. Legacy originals now appear as
+unsealed, and only an explicit fresh owner decision creates their first
+receipt. The old source executor stays on the source run; the new receipt
+records the actual reviewing owner. Known retired legacy readers cannot be
+reassigned to someone else through this recovery path.
+
+A second before control genuinely allowed the same originally unbound source
+after its verified reader was erased. Retirement now follows the source's
+opaque recorded address only while its owner is unknown. It leaves that
+owner null and records the responsible privacy-request context separately;
+an already-proved different owner is never matched through a reused address.
+The retirement-request reference is immutable once retired and participates
+in private subject exports. Named holds preserve the original evidence while
+retiring its authority to create another imported reader.
+
+Fresh v3 source SQL and both exact after controls passed in 25.76 seconds.
+The earlier legacy after attempt exposed the local PostgreSQL distribution's
+missing LLVM JIT dependency rather than a service assertion; indexed,
+materialized source selection removed its excessive plan estimate without
+changing database/JIT settings. Migration 78 remains unjournalled. V3 still
+needs the combined regression, regenerated SDK, new production/browser proof
+and the complete contiguous migration rehearsal; v2 evidence is historical.

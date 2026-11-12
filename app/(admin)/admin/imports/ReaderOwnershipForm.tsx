@@ -7,15 +7,15 @@ import { resolveReaderOwnershipAction } from "../../reader-ownership-actions";
 
 export function ReaderOwnershipForm({ id, reader, contacts, labels }: {
   id: string;
-  reader: { receiptId: string; postId: string; commentId: string };
+  reader: { receiptId: string | null; postId: string; commentId: string };
   contacts: Array<{ id: string; name: string; email: string | null }>;
   labels: { person: string; choose: string; confirm: string; submit: string };
 }) {
   const [state, action, pending] = useActionState(resolveReaderOwnershipAction, {});
-  const selectId = `reader-person-${reader.receiptId}`;
+  const selectId = `reader-person-${reader.receiptId ?? `${reader.postId}-${reader.commentId}`}`;
   return <form action={action} className="grid min-w-0 gap-3">
     <input type="hidden" name="id" value={id} />
-    <input type="hidden" name="receiptId" value={reader.receiptId} />
+    <input type="hidden" name="receiptId" value={reader.receiptId ?? ""} />
     <input type="hidden" name="postId" value={reader.postId} />
     <input type="hidden" name="commentId" value={reader.commentId} />
     {state.error ? <p role="alert" className="break-words text-sm text-danger">{state.error}</p> : null}

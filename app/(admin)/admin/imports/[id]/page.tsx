@@ -100,7 +100,7 @@ export default async function ImportRunPage({
               <Button type="submit">{t("imports.readers.find")}</Button>
               <Link href="/admin/contacts/new" className="text-sm text-accent underline">{t("imports.readers.create")}</Link>
             </form>
-            <ol className="grid min-w-0 list-none gap-5 p-0">{readers.rows.map(reader => <li key={reader.receiptId} className="grid min-w-0 gap-3 rounded-md border border-rule p-3">
+            <ol className="grid min-w-0 list-none gap-5 p-0">{readers.rows.map(reader => <li key={reader.receiptId ?? `${reader.postId}:${reader.commentId}`} className="grid min-w-0 gap-3 rounded-md border border-rule p-3">
               <p className="break-words font-medium">{reader.name}</p>
               {reader.email ? <p className="min-w-0 break-all text-sm"><bdi dir="ltr">{reader.email}</bdi></p> : null}
               <p className="break-words text-sm text-ink-muted">{reader.excerpt}</p>
