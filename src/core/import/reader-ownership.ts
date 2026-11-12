@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C2.29/C3.46: retain proved source ownership; never infer it from an old email.
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { withoutPrivacyHold } from "@/core/retention/holds";
 import { importRuns } from "@/core/plugins/schema";
 import { dataRequests } from "@/core/privacy/schema";
 import { actorString, ServiceError, type Actor, type Tx } from "@/core/service";
@@ -46,6 +47,17 @@ export function assertOriginalReaderPayload(run: { preview: unknown; checkpoint:
   if (!original || original.name !== input.name || email(original.email) !== email(input.email) || original.body !== input.body) throw new ServiceError("conflict", "This comment no longer matches its staged original reader. Review the source before importing it.");
 }
 
+/** A documented hold protects its original even before erasure verification. */
+export async function readerOriginalsHeld(tx: Tx, contactIds: string[]) {
+  if (!contactIds.length) return false;
+  const [result] = await tx.execute<{ held: boolean }>(sql`select exists(
+    select 1 from unnest(array[${sql.join(contactIds.map(id => sql`${id}::uuid`), sql`,`)}]) subject(contact_id)
+    where not ${withoutPrivacyHold(sql`subject.contact_id`, "cms.readerComments")}
+      or not ${withoutPrivacyHold(sql`subject.contact_id`, "imports.readerSources")}
+  ) as held`);
+  return result?.held === true;
+}
+
 const deferredProjections = new WeakMap<Tx, { site: string; owners: Map<string, string> }>();
 
 /** One atomic mutation may collect explicit choices, then rewrite each cache
@@ -85,12 +97,15 @@ async function projectReviewedReaderOwners(tx: Tx, source: ReaderSource, owners:
       // A retained original is evidence for its actual erasure request, never
       // authority to move that evidence to a newly selected person.
       const [blocked] = await tx.execute<{ blocked: boolean }>(sql`select exists(
-        select 1 from blog_reader_comments comment join data_requests request on request.contact_id=comment.contact_id
+        select 1 from blog_reader_comments comment
         where comment.source in (${sql.join(ids.map(id => sql`'import:'||${id}::text`), sql`,`)})
           and ${encoded}::jsonb ? comment.external_id
-          and request.kind='erasure' and request.status in ('in_progress','completed','partially_completed')
+          and (exists(select 1 from data_requests request where request.contact_id=comment.contact_id
+            and request.kind='erasure' and request.status in ('in_progress','completed','partially_completed'))
+            or not ${withoutPrivacyHold(sql`comment.contact_id`, "cms.readerComments")}
+            or not ${withoutPrivacyHold(sql`comment.contact_id`, "imports.readerSources")})
       ) as blocked`);
-      if (blocked?.blocked) throw new ServiceError("conflict", "A retained original reader is covered by an active or acknowledged erasure and cannot be reassigned.");
+      if (blocked?.blocked) throw new ServiceError("conflict", "A retained original reader is covered by an erasure or legal hold and cannot be reassigned.");
       await tx.execute(sql`update blog_reader_comments comment set contact_id=(decision.owners->>comment.external_id)::uuid,updated_at=clock_timestamp()
         from (select ${encoded}::jsonb as owners) decision
         where comment.source in (${sql.join(ids.map(id => sql`'import:'||${id}::text`), sql`,`)})

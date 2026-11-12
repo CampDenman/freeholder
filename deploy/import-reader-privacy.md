@@ -364,3 +364,18 @@ audit. The exact atomic rollback/audit control passed in 7.29 seconds: a stale
 later original leaves zero personal success audits, while two valid choices
 produce two real personal audits and an ID-only summary. The pending-hold repair
 and current production browser remain unqualified.
+
+
+Both bounded legacy after variants now pass after the canonical hold repair.
+The held prior-runtime fixture passed in 18.48 seconds and its current control
+in 3.23 seconds. An active hold before verification refuses assignment and
+preserves the entire original comment row and unknown receipt state. Removing
+the actual exception through its shared service permits explicit human review;
+its body, name, ID, moderation state, creation date, source and source executor
+remain intact. The separate unheld prior-runtime fixture passed in 32.27 seconds
+and its current control in 3.49 seconds: current-mailbox export remains private,
+the chosen original person's verified export retains its body, and the other
+account cannot download that artifact. Normal migration preserved original
+row hashes in both proofs. These cases use the real canonical hold scopes,
+not erasure status as a substitute for hold ownership. Current production build,
+four-locale browser and protected checks remain required.

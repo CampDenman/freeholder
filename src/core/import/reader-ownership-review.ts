@@ -10,7 +10,7 @@ import { dataRequests } from "@/core/privacy/schema";
 import { actorString, defineService, permits, ServiceError, type ServiceContext } from "@/core/service";
 import { currentImportAuthority } from "./authority";
 import { isPrivateImportBatch } from "./batch-context";
-import { lockReaderOwnershipBindings, projectReviewedReaderOwner, readerSourceIdentity, withReaderOwnerProjectionBatch } from "./reader-ownership";
+import { lockReaderOwnershipBindings, projectReviewedReaderOwner, readerOriginalsHeld, readerSourceIdentity, withReaderOwnerProjectionBatch } from "./reader-ownership";
 import { readerOwnershipKey } from "./reader-ownership-key";
 import { readerOwnershipKeys, readerOwnershipReceipts } from "./reader-ownership-schema";
 
@@ -96,8 +96,9 @@ export const resolveReaderOwnership = defineService({
     let [receipt] = await ctx.tx.select().from(readerOwnershipReceipts).where(eq(readerOwnershipReceipts.sourceDigest, sourceDigest)).limit(1).for("update");
     if (input.receiptId && receipt?.id !== input.receiptId || !input.receiptId && receipt?.state === "unbound") throw new ServiceError("conflict", "This review no longer matches the original source reader.");
     if (receipt?.state === "erased" || receipt?.contactId && receipt.contactId !== input.contactId) throw new ServiceError("conflict", "An erased or already-owned original reader cannot be reassigned.");
+    const cachedOwners = [...new Set(originals.flatMap(({ reader }) => z.uuid().safeParse(reader.contactId).success ? [String(reader.contactId)] : []))];
+    if (await readerOriginalsHeld(ctx.tx, cachedOwners)) throw new ServiceError("conflict", "This retained original reader has an active legal hold and cannot be reassigned.");
     if (!receipt) {
-      const cachedOwners = [...new Set(originals.flatMap(({ reader }) => z.uuid().safeParse(reader.contactId).success ? [String(reader.contactId)] : []))];
       const [retired] = cachedOwners.length ? await ctx.tx.select({ id: dataRequests.id }).from(dataRequests).where(and(inArray(dataRequests.contactId, cachedOwners), eq(dataRequests.kind, "erasure"), inArray(dataRequests.status, ["in_progress", "completed", "partially_completed"]))).limit(1) : [];
       if (retired) throw new ServiceError("conflict", "This retained legacy reader is covered by an active or acknowledged erasure and cannot authorize another import.");
     }
