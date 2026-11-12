@@ -15,6 +15,7 @@ import { cancelOriginalStripeMerchantSchedule, inspectOriginalStripeMerchantInvo
 import { inspectStripeMerchantPayment } from "./stripe-merchant-inspection";
 import { stripeMerchantRecovery } from "./stripe-merchant-recovery";
 import { stripeMerchantIntentRecovery } from "./stripe-merchant-intent-recovery";
+import { stripeReturnedCash } from "./stripe-returned-cash";
 import { stripeMerchantRefundRecovery } from "./stripe-merchant-refund-recovery";
 import type {
   CheckoutCaptureResult,
@@ -428,6 +429,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     ...stripeMerchantRecovery(chargeApi),
     ...stripeMerchantIntentRecovery(chargeApi),
     ...stripeMerchantRefundRecovery(chargeApi),
+    ...stripeReturnedCash(chargeApi),
     inspectMerchantPayment: request => inspectStripeMerchantPayment(request, (path, scope) => api(path, { method: "GET" }, scope)),
     async supportedCurrencies() { return []; },
     async supportedMethods(context) {

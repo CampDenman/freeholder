@@ -72,3 +72,35 @@ Primary references checked2026-11-12:
 [Stripe Refund object](https://docs.stripe.com/api/refunds/object),
 [Stripe refund behavior](https://docs.stripe.com/refunds), and
 [Stripe refund creation](https://docs.stripe.com/api/refunds/create).
+
+## Read-only returned-cash evidence increment
+
+A separate optional original-account inspection now records the actual primary
+PaymentIntent before any charge/fee/transfer read, and each actual refund before
+the next refund page or fee/transfer/dispute read. It never POSTs or infers a
+zero refund from a missing record. Complete current refund/dispute inventory is
+explicit; omitted fee/transfer fields remain unknown, distinct from a real
+provider null. Application fees and transfers are read on the original platform,
+while direct charge/refund/dispute objects stay in their connected namespace.
+Every request retains the frozen protocol version.
+
+The pure return predicate requires the original terminal PaymentIntent with
+zero capturable remainder, actual captured/refunded charge amount, successful
+original refund resources totaling exactly the original cash, the entire actual
+application fee returned, the entire actual destination transfer reversed, and
+no unresolved actual dispute. Fee/transfer returns are checked in their own
+observed currencies without inventing an FX conversion. It also requires
+separate truthful caller-finish and unchanged-inventory predicates; the pure
+function cannot establish either itself.
+
+Explicit Node22 full TypeScript and focused lint pass, with52 controls across
+four no-database files: the prior34 plus10 return-proof and8 real-factory GET
+controls. The only source-gate correction was replacing two lint-forbidden
+import() type annotations with an ordinary type import. This supplies no native
+cash disposition, provider-account acceptance or privacy-completion claim.
+
+The private draft application/return phases remain unregistered. Their actual
+cash lock, admitted-writer snapshot, inspection-owned observations, versioned
+return resolution, late contradictory facts, fee/reversal caller completion,
+SQL alternate-writer guards and full source/native/UI integration must still
+qualify before returning an applied/returned disposition to a real lifecycle.

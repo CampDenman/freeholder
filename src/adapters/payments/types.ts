@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Provider-neutral payment boundary (MASTER.md §12, C5.01).
 
+import type { MerchantReturnedCashEvidence } from "./merchant-returned-cash-types";
 import type { AdapterStatus, RawProviderRequest } from "../types";
 
 export interface PaymentAdapterCapabilities {
@@ -215,6 +216,13 @@ export interface MerchantRefundRecoveryRequest extends MerchantChargeScope {
   /** A supplied candidate must independently prove its original metadata. */
   candidateRefundRef?: string;
   onRefundObserved: (evidence: MerchantRefundObservation) => Promise<void>;
+}
+/** Read-only actual return evidence; independent caller/inventory proof is required. */
+export interface MerchantReturnedCashInspectionRequest extends PaymentAccountScope {
+  providerPlatformAccountId: string; paymentProviderRef: string;
+  onOriginalCashObserved: (evidence: CheckoutCaptureResult) => Promise<void>;
+  onRefundObserved: (evidence: MerchantRefundObservation) => Promise<void>;
+  onReturnStateObserved: (evidence: MerchantReturnedCashEvidence) => Promise<void>;
 }
 /** A separately admitted physical POST against already-retained actual cash. */
 export interface MerchantRefundCreationRequest extends MerchantRefundRecoveryRequest {
@@ -497,6 +505,7 @@ export interface PaymentAdapter {
   retireMerchantPayment?(request: MerchantPaymentRecoveryRequest): Promise<MerchantPaymentRecovery>;
   recoverMerchantIntent?(request: MerchantIntentRecoveryRequest): Promise<MerchantIntentRecovery>;
   retireMerchantIntent?(request: MerchantIntentRecoveryRequest): Promise<MerchantIntentRecovery>;
+  inspectMerchantReturnedCash?(request: MerchantReturnedCashInspectionRequest): Promise<MerchantReturnedCashEvidence>;
   createMerchantRefund?(request: MerchantRefundCreationRequest): Promise<MerchantRefundObservation>;
   recoverMerchantRefund?(request: MerchantRefundRecoveryRequest): Promise<MerchantRefundRecovery>;
   supportedCurrencies(): Promise<readonly string[]>;

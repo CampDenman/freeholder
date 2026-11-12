@@ -13536,6 +13536,13 @@ whatever is best for the people using the site.
   complete native/browser integration and actual provider acceptance remain
   required; the new model stays disabled. See
   `deploy/merchant-refund-source-2026-11-12.md`.
+  Original returned-cash read boundary 2026-11-12: authenticated primary
+  money/refund observations precede auxiliary reads. Closure math checks actual
+  original refund inventory, full fee/transfer return, terminal zero-capturable
+  PI and dispute coverage. Full Node22 types/lint and52 no-database controls
+  pass (34 previous,18 new). Actual caller/snapshot authority, atomic core
+  disposition, SQL guards, native/human flows and provider acceptance remain
+  required; this optional read helper does not close a financial lifecycle.
   Original fee-job runtime repair 2026-11-12: the first actual mixed-order
   capture control reached payment completion and exposed an unregistered
   invoicing.reconcileOriginalMerchantFee job on unreleased80 sourcee4500e3e.
