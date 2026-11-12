@@ -9049,5 +9049,12 @@
   "audit.invoicing.recordedOriginalProviderCash": "Recorded original provider cash",
   "audit.invoicing.recordedOriginalCashReturnEvidence": "Recorded original cash return evidence",
   "audit.invoicing.finishedOriginalCashReturnReview": "Recorded completion of a cash return review",
-  "audit.invoicing.confirmedOriginalCashReturn": "Confirmed the complete return of original cash"
+  "audit.invoicing.confirmedOriginalCashReturn": "Confirmed the complete return of original cash",
+  "memberships.reviewCommercial": "Review membership and tax",
+  "memberships.commercialReviewHint": "Enter your billing location, then review the business, tax and membership terms. Update the review after changing your location or payment method.",
+  "memberships.reviewingCommercial": "Preparing your review…",
+  "memberships.chooseMethodNext": "Choose payment after review",
+  "memberships.initialQuotedTotal": "Payable before starting: {total} (includes {tax} tax).",
+  "memberships.firstPaidEstimate": "First paid period at today’s tax rates: {total} (includes {tax} tax).",
+  "memberships.acceptCommercial": "I agree to the named business, current tax quote, and this membership’s price, renewal and cancellation terms."
 }

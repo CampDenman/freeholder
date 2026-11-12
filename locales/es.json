@@ -9049,5 +9049,12 @@
   "audit.invoicing.recordedOriginalProviderCash": "Fondos originales del proveedor registrados",
   "audit.invoicing.recordedOriginalCashReturnEvidence": "Pruebas de devolución de fondos originales registradas",
   "audit.invoicing.finishedOriginalCashReturnReview": "Finalización de la revisión de devolución registrada",
-  "audit.invoicing.confirmedOriginalCashReturn": "Devolución íntegra de los fondos originales confirmada"
+  "audit.invoicing.confirmedOriginalCashReturn": "Devolución íntegra de los fondos originales confirmada",
+  "memberships.reviewCommercial": "Revisar membresía e impuestos",
+  "memberships.commercialReviewHint": "Introduce tu ubicación de facturación y revisa el negocio, los impuestos y las condiciones. Actualiza la revisión si cambias tu ubicación o método de pago.",
+  "memberships.reviewingCommercial": "Preparando tu revisión…",
+  "memberships.chooseMethodNext": "Elegir el pago después de revisar",
+  "memberships.initialQuotedTotal": "Importe antes de empezar: {total} (incluye {tax} de impuestos).",
+  "memberships.firstPaidEstimate": "Primer período de pago con los impuestos actuales: {total} (incluye {tax} de impuestos).",
+  "memberships.acceptCommercial": "Acepto el negocio indicado, los impuestos actuales y las condiciones de precio, renovación y cancelación de esta membresía."
 }

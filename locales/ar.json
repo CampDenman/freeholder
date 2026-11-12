@@ -9049,5 +9049,12 @@
   "audit.invoicing.recordedOriginalProviderCash": "سُجّلت الأموال الأصلية لدى المزوّد",
   "audit.invoicing.recordedOriginalCashReturnEvidence": "سُجّلت أدلة إعادة الأموال الأصلية",
   "audit.invoicing.finishedOriginalCashReturnReview": "سُجّل اكتمال مراجعة إعادة الأموال",
-  "audit.invoicing.confirmedOriginalCashReturn": "تأكدت إعادة الأموال الأصلية كاملة"
+  "audit.invoicing.confirmedOriginalCashReturn": "تأكدت إعادة الأموال الأصلية كاملة",
+  "memberships.reviewCommercial": "مراجعة العضوية والضريبة",
+  "memberships.commercialReviewHint": "أدخل موقع الفوترة ثم راجع النشاط التجاري والضريبة وشروط العضوية. حدّث المراجعة بعد تغيير الموقع أو طريقة الدفع.",
+  "memberships.reviewingCommercial": "جارٍ إعداد المراجعة…",
+  "memberships.chooseMethodNext": "اختيار الدفع بعد المراجعة",
+  "memberships.initialQuotedTotal": "المبلغ المطلوب قبل البدء: {total} (يشمل ضريبة قدرها {tax}).",
+  "memberships.firstPaidEstimate": "أول فترة مدفوعة وفق معدلات الضريبة الحالية: {total} (يشمل ضريبة قدرها {tax}).",
+  "memberships.acceptCommercial": "أوافق على النشاط التجاري المذكور وعرض الضريبة الحالي وشروط سعر هذه العضوية وتجديدها وإلغائها."
 }

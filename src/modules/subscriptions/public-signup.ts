@@ -35,7 +35,7 @@ registerCheckoutEligibility("subscription", async (ctx, id) => {
   const [row] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, id.split(":")[0]!)).limit(1);
   return !!row && !(row.signupPending && !!row.cancelledAt);
 });
-const planView = z.object({ id: z.uuid(), name: z.string(), description: z.string().nullable(), currency: z.string(), amountMinor: z.number().int(), setupFeeMinor: z.number().int(), interval: z.enum(["day","week","month","year"]), intervalCount:z.number().int(), trialDays:z.number().int(), trialRequiresCard:z.boolean(), billingMode:z.enum(["manual","platform","provider"]), cancelBehaviour:z.enum(["immediate","period_end"]), termsHash:z.string(), available:z.boolean() });
+const planView = z.object({ id: z.uuid(), name: z.string(), description: z.string().nullable(), currency: z.string(), amountMinor: z.number().int(), setupFeeMinor: z.number().int(), interval: z.enum(["day","week","month","year"]), intervalCount:z.number().int(), trialDays:z.number().int(), trialRequiresCard:z.boolean(), billingMode:z.enum(["manual","platform","provider"]), cancelBehaviour:z.enum(["immediate","period_end"]), termsHash:z.string(), available:z.boolean(), merchantTermsRequired:z.boolean() });
 
 function needsCardTrial(plan: { trialDays: number; trialRequiresCard: boolean }) {
   return plan.trialDays > 0 && plan.trialRequiresCard;
@@ -76,7 +76,7 @@ export const publicMembershipPlans = defineService({
         throw error;
       });
       const collectionProvider = plan.billingMode === "manual" ? null : policy?.model === "seller_merchant" ? "stripe" : paymentAdapter().id;
-      result.push({...promise,termsHash:createHash("sha256").update(JSON.stringify({...promise,variant,updatedAt:plan.updatedAt,policy,collectionProvider})).digest("hex"),available:!policyUnavailable && membershipAvailable(plan, sellerReady, policy?.model === "seller_merchant")});
+      result.push({...promise,termsHash:createHash("sha256").update(JSON.stringify({...promise,variant,updatedAt:plan.updatedAt,policy,collectionProvider})).digest("hex"),available:!policyUnavailable && membershipAvailable(plan, sellerReady, policy?.model === "seller_merchant"),merchantTermsRequired:policy?.model === "seller_merchant"});
     }
     return result;
   },
@@ -85,9 +85,10 @@ export const myMembership = defineService({
   name:"subscriptions.mine",summary:"Your membership and first-payment status.",kind:"query",permission:"authenticated",input:z.object({id:z.uuid()}),output:z.object({name:z.string(),pending:z.boolean(),invoiceId:z.uuid().nullable(),cancelAtPeriodEnd:z.boolean(),cardSetup:z.boolean()}),
   handler:async(input,ctx)=>{
     const contact=await contactForActor(ctx);
-    const [row]=await ctx.tx.select({name:plans.name,pending:subscriptions.signupPending,invoiceId:subscriptions.signupInvoiceId,cancelAtPeriodEnd:subscriptions.cancelAtPeriodEnd,status:subscriptions.status,cancelledAt:subscriptions.cancelledAt,paymentMethodId:subscriptions.paymentMethodId,trialDays:plans.trialDays,trialRequiresCard:plans.trialRequiresCard}).from(subscriptions).innerJoin(plans,eq(plans.id,subscriptions.planId)).where(and(eq(subscriptions.id,input.id),eq(subscriptions.contactId,contact.id))).limit(1);
+    const [row]=await ctx.tx.select({subscription:subscriptions,plan:plans}).from(subscriptions).innerJoin(plans,eq(plans.id,subscriptions.planId)).where(and(eq(subscriptions.id,input.id),eq(subscriptions.contactId,contact.id))).limit(1);
     if(!row)throw new ServiceError("not_found","That membership is unavailable.");
-    return {name:row.name,pending:row.pending,invoiceId:row.invoiceId,cancelAtPeriodEnd:row.cancelAtPeriodEnd,cardSetup:row.pending&&row.invoiceId===null&&row.status==="paused"&&row.cancelledAt===null&&row.paymentMethodId===null&&needsCardTrial(row)};
+    const plan=await originalMerchantPlan(ctx,row.subscription,row.plan),own=row.subscription;
+    return {name:plan.name,pending:own.signupPending,invoiceId:own.signupInvoiceId,cancelAtPeriodEnd:own.cancelAtPeriodEnd,cardSetup:own.signupPending&&own.signupInvoiceId===null&&own.status==="paused"&&own.cancelledAt===null&&own.paymentMethodId===null&&needsCardTrial(plan)};
   },
 });
 export const myMembershipPaymentMethods = defineService({
@@ -125,7 +126,8 @@ export const myMembershipPaymentMethods = defineService({
   },
 });
 // A customer quote omits original platform, recipient, profile and contact IDs.
-const membershipCommercialQuote = publicMerchantTermsQuote;
+const membershipCommercialQuote = publicMerchantTermsQuote.unwrap().extend({publicTermsHash:z.string().regex(/^[a-f0-9]{64}$/)}).nullable();
+export type MembershipCommercialQuote = NonNullable<z.infer<typeof membershipCommercialQuote>>;
 export const quoteMembershipTerms = defineService({
   name: "subscriptions.quoteMembership", summary: "Review your chosen merchant membership's original price, tax and billing promises before accepting.",
   kind: "query", permission: "authenticated",
@@ -143,7 +145,7 @@ export const quoteMembershipTerms = defineService({
     const paymentMethodId = needsCardTrial(plan) && plan.setupFeeMinor > 0 ? undefined : input.paymentMethodId;
     const quoted = await ctx.callAsSystem(quoteOriginalMerchantTerms, { planId: plan.id, contactId: contact.id, currency: plan.currency,
       taxDestination: input.taxDestination, paymentMethodId, deferFirstPayment: true, locale: input.locale });
-    return membershipCommercialQuote.parse(quoted);
+    return quoted?membershipCommercialQuote.parse({...quoted,publicTermsHash:plan.termsHash}):null;
   },
 });
 export const joinMembership = defineService({

@@ -18,6 +18,7 @@ import { storefront } from "@/modules/members/listings";
 import { reviewsFor } from "@/modules/members/reputation";
 import { profileSections } from "@/modules/members/profile";
 import { formatMoney } from "@/core/i18n";
+import { localizeCustomerHref } from "@/core/i18n/customer";
 import { currentBusiness } from "@/core/settings/read";
 import { myMembership } from "@/modules/members/service";
 import { Button, Callout, Field, Pill, Select } from "@/ui/primitives";
@@ -141,7 +142,7 @@ export default async function MemberProfile({
       {!r.self && !r.blocked && !offers.subscribed && offers.plans.length ? (
         <section className="grid gap-3" aria-labelledby="subscribe">
           <h2 id="subscribe" className="text-xl font-semibold">{t("members.plans.subscribeTitle", { name: profile.displayName })}</h2>
-          {(offers.plans as { id: string; name: string; description: string | null; currency: string; amountMinor: number; setupFeeMinor: number; interval: string; intervalCount: number; trialDays: number; trialRequiresCard: boolean; billingMode: string; termsHash: string; available: boolean }[]).map((plan) => {
+          {(offers.plans as { id: string; name: string; description: string | null; currency: string; amountMinor: number; setupFeeMinor: number; interval: string; intervalCount: number; trialDays: number; trialRequiresCard: boolean; billingMode: string; termsHash: string; available: boolean; merchantTermsRequired: boolean }[]).map((plan) => {
             const needsCard = plan.available && plan.trialDays > 0 && plan.trialRequiresCard && methods.length === 0;
             return (
             <div key={plan.id} className="grid gap-2 rounded-lg border border-rule bg-surface p-4">
@@ -152,6 +153,8 @@ export default async function MemberProfile({
               {plan.trialDays > 0 ? <p>{t("memberships.trial", { days: plan.trialDays })}</p> : null}
               {!plan.available ? <p className="text-sm text-ink-muted">{t("memberships.unavailable")}</p> : actor.kind !== "user" ? (
                 <a className="underline" href={`/portal/login?returnTo=${encodeURIComponent(`/@${profile.handle}`)}`}>{t("memberships.signIn")}</a>
+              ) : plan.merchantTermsRequired ? (
+                <a className="underline" href={business?localizeCustomerHref(`/memberships/review?plan=${plan.id}`,locale,business):`/memberships/review?plan=${plan.id}`}>{t("memberships.reviewCommercial")}</a>
               ) : needsCard ? (
                 <form action={joinMembershipAction} className="grid gap-2">
                   <p>{t("memberships.cardNeeded")}</p>

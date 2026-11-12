@@ -9049,5 +9049,12 @@
   "audit.invoicing.recordedOriginalProviderCash": "Fonds du paiement d’origine enregistrés",
   "audit.invoicing.recordedOriginalCashReturnEvidence": "Preuves de restitution des fonds d’origine enregistrées",
   "audit.invoicing.finishedOriginalCashReturnReview": "Fin de l’examen de restitution enregistrée",
-  "audit.invoicing.confirmedOriginalCashReturn": "Restitution complète des fonds d’origine confirmée"
+  "audit.invoicing.confirmedOriginalCashReturn": "Restitution complète des fonds d’origine confirmée",
+  "memberships.reviewCommercial": "Vérifier l’abonnement et les taxes",
+  "memberships.commercialReviewHint": "Indiquez votre lieu de facturation, puis vérifiez l’entreprise, les taxes et les conditions. Actualisez la vérification si vous changez de lieu ou de moyen de paiement.",
+  "memberships.reviewingCommercial": "Préparation de la vérification…",
+  "memberships.chooseMethodNext": "Choisir le paiement après vérification",
+  "memberships.initialQuotedTotal": "À payer avant de commencer : {total} (dont {tax} de taxes).",
+  "memberships.firstPaidEstimate": "Première période payante aux taux actuels : {total} (dont {tax} de taxes).",
+  "memberships.acceptCommercial": "J’accepte l’entreprise indiquée, les taxes actuelles et les conditions de prix, de renouvellement et d’annulation de cet abonnement."
 }

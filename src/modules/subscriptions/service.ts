@@ -1621,7 +1621,7 @@ export const getSubscription = defineService({
       // Staff can see it. A self-service read cannot.
       detail: !staff && event.kind === "card_setup" ? null : event.detail,
     }));
-    return { subscription, plan: plan ?? null, history };
+    return { subscription, plan: plan?await originalMerchantPlan(ctx,subscription,plan):null, history };
   },
 });
 
