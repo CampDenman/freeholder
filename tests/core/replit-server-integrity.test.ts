@@ -5,6 +5,7 @@ import type { Storage as GoogleStorage } from "@google-cloud/storage";
 import { createRequire } from "node:module";
 import { Writable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { errorResponse } from "@/core/http/respond";
 import { createReplitStorage } from "@/adapters/storage/replit";
 vi.mock("@/core/media/storage-quota", () => ({ storageNamespace: () => "synthetic-original-namespace" }));
 const require = createRequire(import.meta.url);
@@ -29,7 +30,7 @@ function transport(mode: "matching" | "replacement" | "read-error" | "upload-err
       } }));
     };
     Object.defineProperty(file, "delete", { value: async () => { state.deletes++; throw new Error("Autonomous deletion is forbidden"); } });
-    Object.defineProperty(file, "download", { value: async () => { state.reads++; if (mode === "read-error") throw new Error("synthetic readback unavailable"); return [state.bytes]; } });
+    Object.defineProperty(file, "download", { value: async () => { state.reads++; if (mode === "read-error") throw new Error("synthetic-private-provider-transport-detail"); return [state.bytes]; } });
     vi.spyOn(bucket, "file").mockReturnValue(file);
     return bucket;
   });
@@ -50,7 +51,11 @@ describe("Replit server integrity and positive observations (C1.12/C11.08)", () 
   });
   it("retains positive acknowledgment when readback fails without deleting anything", async () => {
     const state = transport("read-error"), accepted = vi.fn(async () => {});
-    await expect(adapter().put("synthetic-target", bytes, "application/octet-stream", { onAccepted: accepted })).rejects.toThrow(/readback/);
+    const error: unknown = await adapter().put("synthetic-target", bytes, "application/octet-stream", { onAccepted: accepted }).then(() => null, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error); expect((error as Error).message).toBe("storage: original Replit readback failed"); expect((error as Error).cause).toBeUndefined();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {}), response = errorResponse(error, { kind: "anonymous" });
+    expect(response.status).toBe(500); expect(await response.json()).toEqual({ error: { code: "internal", message: "Something went wrong." } });
+    expect(log.mock.calls.flat().map(String).join(" ")).not.toContain("synthetic-private-provider-transport-detail");
     expect(accepted).toHaveBeenCalledTimes(1); expect(state.deletes).toBe(0); expect(state.uploads).toBe(1);
   });
   it("does not replay or delete after an uncertain upload and invents no positive ACK", async () => {

@@ -134,7 +134,9 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
       }
       await observation?.onAccepted?.();
       requireOriginalEndpoint();
-      const [actual] = await file.download({ validation: false });
+      let actual: Buffer;
+      try { [actual] = await file.download({ validation: false }); }
+      catch { throw new Error("storage: original Replit readback failed"); }
       if (actual.length !== body.byteLength || createHash("sha256").update(actual).digest("hex") !== createHash("sha256").update(body).digest("hex")) throw new Error("storage: original Replit upload failed full-byte verification");
       return { key, bytes: body.byteLength, contentType };
     },
