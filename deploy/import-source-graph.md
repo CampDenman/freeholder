@@ -533,3 +533,21 @@ applies. These are source-specific local controls, not actual-provider object
 recovery or default-JIT acceptance. Current ZIP production artifact, live SDK
 verification, four-locale owner browser, protected qualification and durable
 live crawl response/frontier integration remain required.
+
+
+The ZIP source now passes all eight live SDK controls with `UPDATE_SDK=1` under
+Node22.23.2 on normal0–79 (5.65 seconds), with no generated catalog diff. The
+direct generator's underlying Vitest command was used before replacing the known
+dependency symlink, avoiding an implicit `pnpm exec` install. Its process exited
+and the owned database had no nonidle backends. An independent frozen offline
+dependency installation then completed in 0.71 seconds.
+
+Every source gate component passes: full types (46.9 seconds), whole-repository
+lint (74.4 seconds), playground policy, licensing, release notes, plan/F-matrix
+and all 44 contract files (384 passed, 26 expected database exclusions, 31.89
+seconds). The first launch lacked the required sandbox escalation and could not
+spawn git/shell helpers or bind three loopback test servers. That diagnostic is
+preserved; only the affected licensing/notes/plan/contracts were rerun under
+normal reviewed escalation. They all pass with no code, guard or expectation
+change. All source processes are drained. ZIP production build/artifact and
+four-locale owner-browser acceptance remain pending.
