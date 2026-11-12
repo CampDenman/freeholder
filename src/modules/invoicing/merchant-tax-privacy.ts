@@ -4,8 +4,8 @@
 import {and,eq,gt,inArray,isNull,or,sql} from "drizzle-orm";
 import {z} from "zod";
 import {registerContactReference} from "@/core/contacts/service";
-import {registerContactPrivacySource} from "@/core/privacy/service";
-import {dataRequests,privacyRetentionExceptions} from "@/core/privacy/schema";
+import {completeErasureJob,erasureArtifactIsIntact,reopenErasureJob,registerContactPrivacySource} from "@/core/privacy/service";
+import {dataRequestArtifacts,dataRequests,privacyRetentionExceptions} from "@/core/privacy/schema";
 import {lockContactIdentity} from "@/core/contacts/identity-lock";
 import {defineService,getService,ServiceError,type ServiceContext,type Tx} from "@/core/service";
 import {merchantTaxProfiles,merchantTaxProfileVersions} from "./merchant-tax-schema";
@@ -13,6 +13,7 @@ import {taxExemptions,taxRegistrations} from "./schema";
 import {allowMerchantTaxWrites,merchantTaxDigest} from "./merchant-tax-store";
 
 const scope="commerce.merchantTax";
+export const MERCHANT_TAX_ERASURE_JOB="subscriptions.quiesceMerchantSchedules";
 const witness=z.object({id:z.uuid(),contactId:z.uuid().nullable(),fingerprint:z.string().regex(/^[a-f0-9]{64}$/)});
 async function snapshot(tx:Tx,ids:string[]){
  const rows=await tx.select({id:merchantTaxProfiles.id,contactId:merchantTaxProfiles.contactId,
@@ -51,17 +52,33 @@ async function minimize(tx:Tx,profileId:string){
 }
 export const completeMerchantTaxErasure=defineService({
  name:"invoicing.completeMerchantTaxErasure",summary:"Minimize the original merchant tax declaration after actual billing schedules are quiescent.",kind:"mutation",permission:"system",external:false,
- input:z.object({profileId:z.uuid(),requestId:z.uuid()}),output:z.object({affected:z.number().int().nonnegative(),pendingJobs:z.array(z.string())}),
- handler:async({profileId,requestId},ctx)=>{
+ input:z.object({profileId:z.uuid(),requestId:z.uuid(),jobId:z.uuid()}),output:z.object({affected:z.number().int().nonnegative(),pendingJobs:z.array(z.uuid()),settled:z.boolean(),recoveryRequired:z.boolean()}),
+ auditInputFields:["profileId","requestId","jobId"],
+ handler:async({profileId,requestId,jobId},ctx)=>{
   await lockContactIdentity(ctx.tx);
+  await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${requestId}`}))`);
   const[request]=await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id,requestId)).limit(1).for("update");
   const[profile]=await ctx.tx.select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id,profileId)).limit(1);
   if(!request||request.kind!=="erasure"||!profile||!request.verifiedAt||!["in_progress","completed","partially_completed"].includes(request.status)||profile.state!=="erased"&&profile.contactId!==request.contactId)throw new ServiceError("permission","That original tax business is not owned by this applied verified erasure request.");
-  if(profile.state==="erased")return{affected:0,pendingJobs:[]};
+  const[artifact]=await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,requestId)).limit(1).for("update");
+  const receipt=z.object({format:z.literal("freeholder.erasure-receipt"),outcomes:z.array(z.object({scope:z.string(),outcome:z.string(),pendingJobs:z.array(z.uuid()).optional()}).passthrough())}).passthrough().safeParse(artifact?.body);
+  const outcome=receipt.success?receipt.data.outcomes.find(item=>item.scope===scope):undefined;
+  if(!erasureArtifactIsIntact(artifact)||!receipt.success||!outcome){
+   // The actual running task remains debt. On a bad artifact the shared
+   // reopen operation commits recovery state without inventing another task.
+   await ctx.callAsSystem(reopenErasureJob,{requestId,scope,jobName:MERCHANT_TAX_ERASURE_JOB,jobData:{profileId},idempotencyKey:`merchant-tax-artifact:${jobId}`});
+   return{affected:0,pendingJobs:[jobId],settled:false,recoveryRequired:true};
+  }
+  if(outcome.outcome==="erased"&&profile.state==="erased")return{affected:0,pendingJobs:[],settled:true,recoveryRequired:false};
+  if(outcome.outcome!=="pending"||!outcome.pendingJobs?.includes(jobId))return{affected:0,pendingJobs:[jobId],settled:false,recoveryRequired:true};
   const[hold]=await ctx.tx.select({id:privacyRetentionExceptions.id}).from(privacyRetentionExceptions).innerJoin(dataRequests,eq(dataRequests.id,privacyRetentionExceptions.dataRequestId)).where(and(eq(dataRequests.contactId,request.contactId),eq(privacyRetentionExceptions.scope,scope),or(isNull(privacyRetentionExceptions.expiresAt),gt(privacyRetentionExceptions.expiresAt,new Date())))).limit(1);
-  if(hold)throw new ServiceError("conflict","The original tax business has an active retention exception.");
+  if(hold)return{affected:0,pendingJobs:[jobId],settled:false,recoveryRequired:false};
   const pendingJobs=await prepareExternalErasure(profileId,requestId,ctx);
-  return{affected:pendingJobs.length?0:await minimize(ctx.tx,profileId),pendingJobs};
+  if(pendingJobs.length)return{affected:0,pendingJobs,settled:false,recoveryRequired:false};
+  const affected=await minimize(ctx.tx,profileId);
+  await ctx.callAsSystem(completeErasureJob,{requestId,scope,jobId});
+  ctx.setSubject("dataRequest",requestId);
+  return{affected,pendingJobs:[],settled:true,recoveryRequired:false};
  },
 });
 registerContactPrivacySource({

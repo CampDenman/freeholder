@@ -86,3 +86,10 @@ private pricing grants and role names without grants. A person's verified own
 email still uses its original self path. The actual restricted-agent/customer
 exemption native journey remains part of assembled80 qualification. This is
 unreleased source review, not a claim of a reproduced main/production breach.
+
+The private tax-erasure completion phase now accepts the actual pending job ID,
+checks the shared canonical artifact checksum and exact scope membership,
+rechecks holds and provider quiescence, then minimizes the profile and settles
+that job in the same transaction. A corrupt artifact commits shared recovery
+state before the worker reports failure. Full types and focused lint pass;
+intact/corrupt/hold/provider native controls remain open on assembled80.
