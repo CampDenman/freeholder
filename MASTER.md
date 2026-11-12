@@ -13521,6 +13521,24 @@ whatever is best for the people using the site.
   their account scope. This adapter increment enables no new agreement model;
   frozen agreement capture, durable renewal receipts, tax/fee reconciliation,
   privacy integration and actual provider acceptance remain required.
+  Disabled agreement source foundation in progress: new seller agreements use
+  explicit routing epoch1 and freeze platform, charge namespace, recipient,
+  settlement merchant and the deliberately declared tax profile UUID/version
+  with the buyer's tax destination. Existing epoch0 rows and unknown platform
+  identities are not backfilled. Positive automatic renewal money has a
+  separate committed original invoice/subscription/intent receipt before
+  invoice application; missing fee facts can be completed without replacing
+  observed cash. Parent subscription ownership covers bounded child evidence
+  in merge undo, customer export and guarded destination minimization. A local
+  cancellation cannot prove an external schedule stopped: new external
+  dependencies currently refuse tax revision and erasure completion pending
+  original provider quiescence. This is unapplied80 source work, with no new
+  model activated. Full native/upgrade/browser qualification, exact taxed
+  scheduled billing, explicit amendments, provider quiescence/recovery and
+  actual acceptance remain required; none is deferred.
+  The composed source passes full typecheck, focused lint,62 bounded
+  origin/setup/scope controls and all five private-service boundary controls.
+  These checks do not apply80 or prove an actual provider outcome.
   Original-order ownership repair 2026-11-11: checkout freezes each purchased
   line's seller and shipping requirement before invoice issue, and seller
   settlement reads that receipt instead of a later catalog edit. The actual

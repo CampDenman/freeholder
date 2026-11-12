@@ -15,6 +15,7 @@ import paymentProviderServices from "./payment-provider-service";
 import posServices from "./pos-service";
 import taxServices from "./tax-service";
 import customerServices from "./customer-service";
+import { assertMerchantTaxRevisionSafe } from "@/modules/subscriptions/merchant-tax-revision";
 
 export { quoteTax } from "./tax-service";
 
@@ -32,6 +33,8 @@ import "./reporting";
 import "./funnel";
 
 export default [
+  // External schedules remain dependencies even when subscriptions is disabled.
+  assertMerchantTaxRevisionSafe,
   ...marketPolicyServices,
   ...merchantAllocationServices,
   ...merchantCollectionServices,

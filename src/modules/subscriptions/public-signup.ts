@@ -21,6 +21,8 @@ import {AdapterError} from "@/adapters/types";
 import {claimTrialSetupDispatch,recordTrialSetupDispatch} from "./setup-dispatch";
 import {lockContactIdentity} from "@/core/contacts/identity-lock";
 import {claimSetup,originalSetupRequest,setupRequest} from "./card-setup";
+import { originalProviderPlatform } from "@/modules/invoicing/provider-platform-scope";
+import { subscriptionTaxDestination } from "./merchant-scope-contract";
 
 registerCheckoutRequirement("subscription", async (ctx, id) => {
   const [row] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, id.split(":")[0]!)).limit(1);
@@ -110,7 +112,7 @@ export const myMembershipPaymentMethods = defineService({
 export const joinMembership = defineService({
   name:"subscriptions.join",summary:"Join a public plan as yourself; paid access waits for the first invoice to settle.",kind:"mutation",permission:"authenticated",writeClass:"money",
   rateLimit: { limit: 10, windowSeconds: 60, subject: (_input, actor) => actorString(actor), message: "Please wait before trying another membership signup." },
-  input:z.object({planId:z.uuid(),termsHash:z.string().regex(/^[a-f0-9]{64}$/),requestKey:z.uuid(),acceptedTerms:z.literal(true),paymentMethodId:z.uuid().optional()}),output:z.object({id:z.uuid(),invoiceId:z.uuid().nullable(),pending:z.boolean(),cardSetup:z.boolean()}),
+  input:z.object({planId:z.uuid(),termsHash:z.string().regex(/^[a-f0-9]{64}$/),requestKey:z.uuid(),acceptedTerms:z.literal(true),paymentMethodId:z.uuid().optional(),taxDestination:subscriptionTaxDestination.optional()}),output:z.object({id:z.uuid(),invoiceId:z.uuid().nullable(),pending:z.boolean(),cardSetup:z.boolean()}),
   handler:async(input,ctx)=>{
     const contact=await contactForActor(ctx);
     if(!contact.email)throw new ServiceError("conflict","Verify your email before joining.");
@@ -135,7 +137,7 @@ export const joinMembership = defineService({
       if(!method||method.contactId!==contact.id||method.status!=="active"||method.provider!==provider||method.providerAccountId!==(policy?.providerAccountId??"")||method.consentSource!=="provider_checkout")throw new ServiceError("conflict","That saved card cannot be used for this membership.");
     }
     const paymentMethodId=needsCardTrial(plan)&&plan.setupFeeMinor>0?undefined:input.paymentMethodId;
-    const created=await ctx.callAsSystem(subscribe,{contactId:contact.id,planId:plan.id,currency:plan.currency,paymentMethodId,deferFirstPayment:true});
+    const created=await ctx.callAsSystem(subscribe,{contactId:contact.id,planId:plan.id,currency:plan.currency,paymentMethodId,deferFirstPayment:true,taxDestination:input.taxDestination});
     await ctx.tx.update(subscriptions).set({publicRequestKey:input.requestKey,publicTermsHash:input.termsHash}).where(eq(subscriptions.id,created.subscription.id));
     ctx.setSubject("subscription",created.subscription.id);
     return{id:created.subscription.id,invoiceId:created.invoiceId,pending:created.subscription.signupPending,cardSetup:created.subscription.signupPending&&created.invoiceId===null};
@@ -235,8 +237,8 @@ export const claimTrialCardSetup = defineService({
     const caps = adapter.capabilities();
     const billable = adapter.status.available && caps.savedMethods && (!routing.providerAccountId || caps.sellerMerchantCharges) && typeof adapter.createMethodSetup === "function" && (plan.billingMode === "provider" ? caps.subscriptions : caps.offSessionCharges);
     if (!billable) throw new ServiceError("conflict", "Saving a card is not available for this membership.");
-    const [known] = await ctx.tx.select({ providerCustomerRef: paymentProviderCustomers.providerCustomerRef }).from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, contact.id), eq(paymentProviderCustomers.provider, adapter.id),eq(paymentProviderCustomers.providerAccountId,routing.providerAccountId??""))).orderBy(desc(paymentProviderCustomers.createdAt)).limit(1);
-    const claimed=await claimSetup(ctx,{subscriptionId:sub.id,contactId:contact.id,provider:adapter.id,providerAccountId:routing.providerAccountId,customer:{email:contact.email,name:contact.name},providerCustomerRef:known?.providerCustomerRef,currency:sub.currency,successUrl:instanceUrl(`/memberships/trial-return?subscription=${sub.id}`),cancelUrl:instanceUrl("/memberships?setup=cancelled")});
+    const [known] = await ctx.tx.select({ providerCustomerRef: paymentProviderCustomers.providerCustomerRef }).from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, contact.id), eq(paymentProviderCustomers.provider, adapter.id),eq(paymentProviderCustomers.providerAccountId,routing.providerAccountId??""),originalProviderPlatform(paymentProviderCustomers.providerPlatformAccountId,routing.providerPlatformAccountId))).orderBy(desc(paymentProviderCustomers.createdAt)).limit(1);
+    const claimed=await claimSetup(ctx,{subscriptionId:sub.id,contactId:contact.id,provider:adapter.id,providerAccountId:routing.providerAccountId,providerPlatformAccountId:routing.providerPlatformAccountId,destinationAccountId:routing.destinationAccountId,settlementMerchantAccountId:routing.settlementMerchantAccountId,customer:{email:contact.email,name:contact.name},providerCustomerRef:known?.providerCustomerRef,currency:sub.currency,successUrl:instanceUrl(`/memberships/trial-return?subscription=${sub.id}`),cancelUrl:instanceUrl("/memberships?setup=cancelled")});
     if(!sub.provider)await ctx.tx.update(subscriptions).set({provider:adapter.id}).where(eq(subscriptions.id,sub.id));
     ctx.setSubject("subscription",sub.id);
     return {attemptId:claimed.attempt.id,provider:adapter.id,request:claimed.request,customerRef:claimed.attempt.providerCustomerRef,createdAt:claimed.attempt.createdAt.toISOString(),providerRef:claimed.attempt.providerCheckoutRef,recover:claimed.recover,url:claimed.url};
@@ -251,7 +253,7 @@ export const applyTrialCardSetup = defineService({
   permission: "authenticated",
   external: false,
   writeClass: "money",
-  input: z.object({ stage:z.enum(["customer","session","expired"]).default("session"),attemptId:z.uuid(),providerRef:z.string().min(1).max(500).optional(),expiresAt:z.iso.datetime().optional(),subscriptionId: z.uuid(), provider: z.string().trim().min(1).max(100), providerAccountId: paymentRouting.shape.providerAccountId, providerCustomerRef: z.string().trim().min(1).max(500).optional(), url: z.string().url().optional() }),
+  input: z.object({ stage:z.enum(["customer","session","expired"]).default("session"),attemptId:z.uuid(),providerRef:z.string().min(1).max(500).optional(),expiresAt:z.iso.datetime().optional(),subscriptionId: z.uuid(), provider: z.string().trim().min(1).max(100), providerAccountId: paymentRouting.shape.providerAccountId, providerPlatformAccountId: paymentRouting.shape.providerPlatformAccountId, providerCustomerRef: z.string().trim().min(1).max(500).optional(), url: z.string().url().optional() }),
   output: z.object({ url: z.string().url().nullable() }),
   handler: async (input, ctx) => {
     await lockContactIdentity(ctx.tx);
@@ -259,14 +261,14 @@ export const applyTrialCardSetup = defineService({
     const [sub] = await ctx.tx.select().from(subscriptions).where(and(eq(subscriptions.id, input.subscriptionId), eq(subscriptions.contactId, contact.id))).limit(1).for("update");
     if (!sub || sub.cancelledAt || sub.status !== "paused" || !sub.signupPending) throw new ServiceError("conflict", "This trial is not waiting for a card.");
     const routing = await subscriptionPaymentScope(ctx, sub.id);
-    assertProviderAccount(routing, input);
+    assertProviderAccount({providerAccountId:routing.providerAccountId,providerPlatformAccountId:routing.providerPlatformAccountId}, input);
     if(sub.provider && sub.provider!==input.provider) throw new ServiceError("conflict","This card setup belongs to a different membership provider.");
     if (routing.providerAccountId && input.provider !== "stripe") throw new ServiceError("conflict", "This trial needs its original Stripe merchant account.");
     const [attempt]=await ctx.tx.select().from(subscriptionCardSetups).where(and(eq(subscriptionCardSetups.id,input.attemptId),eq(subscriptionCardSetups.subscriptionId,sub.id))).for("update");
     if(!attempt)throw new ServiceError("conflict","This card setup is no longer available.");
     if(attempt.erasureRequestId)throw new ServiceError("conflict","This original card setup is awaiting privacy cleanup.");
     const original=originalSetupRequest(attempt);
-    if(attempt.provider!==input.provider || attempt.providerAccountId!==(input.providerAccountId??""))throw new ServiceError("conflict","The provider response belongs to another setup account.");
+    if(attempt.provider!==input.provider || attempt.providerAccountId!==(input.providerAccountId??"") || attempt.providerPlatformAccountId!==(input.providerPlatformAccountId??null))throw new ServiceError("conflict","The provider response belongs to another setup account.");
     if(input.stage==="expired"){
       if(attempt.confirmedAt)throw new ServiceError("conflict","This setup already confirmed its saved card.");
       if(input.stage==="expired" && (!input.providerRef || (attempt.providerCheckoutRef && attempt.providerCheckoutRef!==input.providerRef) || !input.providerCustomerRef || (attempt.providerCustomerRef && attempt.providerCustomerRef!==input.providerCustomerRef)))throw new ServiceError("conflict","The closed session does not match this setup.");
@@ -316,12 +318,12 @@ export const beginTrialCardSetup = defineOrchestratedService({
           const recovered=await adapter.recoverMethodSetup({...claimed.request,providerCustomerRef:customerRef??undefined,providerRef:claimed.providerRef??undefined,createdAt:claimed.createdAt});
           if(recovered.state==="unresolved" || recovered.state==="customer_only")throw new ServiceError("conflict","The original setup outcome is unresolved. Confirm its actual provider outcome before retrying.");
           if(recovered.state==="expired"){
-            await applyTrialCardSetup.call({stage:recovered.state,attemptId:claimed.attemptId,providerRef:recovered.providerRef,providerAccountId:recovered.providerAccountId,subscriptionId:claimed.request.subscriptionId,provider:claimed.provider,providerCustomerRef:recovered.providerCustomerRef},actor);
+            await applyTrialCardSetup.call({stage:recovered.state,attemptId:claimed.attemptId,providerRef:recovered.providerRef,providerAccountId:recovered.providerAccountId,providerPlatformAccountId:recovered.providerPlatformAccountId,subscriptionId:claimed.request.subscriptionId,provider:claimed.provider,providerCustomerRef:recovered.providerCustomerRef},actor);
             continue;
           }
           if(!recovered.providerCustomerRef)throw new ServiceError("conflict","The provider did not reconcile the setup customer.");
           customerRef=recovered.providerCustomerRef;
-          await applyTrialCardSetup.call({stage:"customer",attemptId:claimed.attemptId,providerAccountId:recovered.providerAccountId,subscriptionId:claimed.request.subscriptionId,provider:claimed.provider,providerCustomerRef:customerRef},actor);
+          await applyTrialCardSetup.call({stage:"customer",attemptId:claimed.attemptId,providerAccountId:recovered.providerAccountId,providerPlatformAccountId:recovered.providerPlatformAccountId,subscriptionId:claimed.request.subscriptionId,provider:claimed.provider,providerCustomerRef:customerRef},actor);
           if(recovered.state==="complete"){
             if(!recovered.event || recovered.event.kind!=="saved_method_added" || recovered.event.setup?.attemptId!==claimed.attemptId)throw new ServiceError("conflict","The provider did not prove this original saved-card setup.");
             const {processPaymentProviderEvents}=await import("@/modules/invoicing/payment-provider-service");
@@ -330,7 +332,7 @@ export const beginTrialCardSetup = defineOrchestratedService({
           }
           if(recovered.state==="open"){
             if(!recovered.providerRef || !recovered.url)throw new ServiceError("conflict","The provider did not return its original session.");
-            const applied=await applyTrialCardSetup.call({stage:"session",attemptId:claimed.attemptId,providerRef:recovered.providerRef,expiresAt:recovered.expiresAt,providerAccountId:recovered.providerAccountId,subscriptionId:claimed.request.subscriptionId,provider:claimed.provider,providerCustomerRef:customerRef,url:recovered.url},actor);
+            const applied=await applyTrialCardSetup.call({stage:"session",attemptId:claimed.attemptId,providerRef:recovered.providerRef,expiresAt:recovered.expiresAt,providerAccountId:recovered.providerAccountId,providerPlatformAccountId:recovered.providerPlatformAccountId,subscriptionId:claimed.request.subscriptionId,provider:claimed.provider,providerCustomerRef:customerRef,url:recovered.url},actor);
             if(!applied.url)throw new ServiceError("conflict","The original setup session is unavailable.");
             return {url:applied.url};
           }
@@ -344,12 +346,12 @@ export const beginTrialCardSetup = defineOrchestratedService({
               await recordTrialSetupDispatch.call({dispatchId:dispatch.dispatchId,outcome:"unknown",errorCode:error instanceof AdapterError?error.code:"provider_failure"},{kind:"system"});
               throw error;
             }
-            const recorded=await recordTrialSetupDispatch.call({dispatchId:dispatch.dispatchId,outcome:"succeeded",providerAccountId:customer.providerAccountId,providerCustomerRef:customer.providerCustomerRef},{kind:"system"});
+            const recorded=await recordTrialSetupDispatch.call({dispatchId:dispatch.dispatchId,outcome:"succeeded",providerAccountId:customer.providerAccountId,providerPlatformAccountId:customer.providerPlatformAccountId,providerCustomerRef:customer.providerCustomerRef},{kind:"system"});
             if(!recorded.accepted || recorded.erasing)throw new ServiceError("conflict","The actual provider outcome was recorded; this setup needs reconciliation or privacy cleanup.");
             customerRef=customer.providerCustomerRef;
           }else customerRef=dispatch.customerRef;
           if(!customerRef)throw new ServiceError("conflict","The original setup customer is unavailable.");
-          await applyTrialCardSetup.call({stage:"customer",attemptId:claimed.attemptId,providerAccountId:dispatch.request.providerAccountId,subscriptionId:claimed.request.subscriptionId,provider:claimed.provider,providerCustomerRef:customerRef},actor);
+          await applyTrialCardSetup.call({stage:"customer",attemptId:claimed.attemptId,providerAccountId:dispatch.request.providerAccountId,providerPlatformAccountId:dispatch.request.providerPlatformAccountId,subscriptionId:claimed.request.subscriptionId,provider:claimed.provider,providerCustomerRef:customerRef},actor);
         }
         const dispatch=await claimTrialSetupDispatch.call({attemptId:claimed.attemptId,kind:"session"},actor);
         if(!dispatch.dispatchId)throw new ServiceError("conflict","The original setup session is unavailable.");
@@ -358,10 +360,10 @@ export const beginTrialCardSetup = defineOrchestratedService({
           await recordTrialSetupDispatch.call({dispatchId:dispatch.dispatchId,outcome:"unknown",errorCode:error instanceof AdapterError?error.code:"provider_failure"},{kind:"system"});
           throw error;
         }
-        const recorded=await recordTrialSetupDispatch.call({dispatchId:dispatch.dispatchId,outcome:"succeeded",providerAccountId:created.providerAccountId,providerRef:created.providerRef,providerCustomerRef:created.providerCustomerRef},{kind:"system"});
+        const recorded=await recordTrialSetupDispatch.call({dispatchId:dispatch.dispatchId,outcome:"succeeded",providerAccountId:created.providerAccountId,providerPlatformAccountId:created.providerPlatformAccountId,providerRef:created.providerRef,providerCustomerRef:created.providerCustomerRef},{kind:"system"});
         if(!recorded.accepted || recorded.erasing)throw new ServiceError("conflict","The actual provider outcome was recorded; this setup needs reconciliation or privacy cleanup.");
         if (!created.providerCustomerRef) throw new ServiceError("conflict", "The payment provider did not return a customer reference for this card.");
-        const applied=await applyTrialCardSetup.call({stage:"session",attemptId:claimed.attemptId,providerRef:created.providerRef,expiresAt:created.expiresAt,providerAccountId:created.providerAccountId,subscriptionId:claimed.request.subscriptionId,provider:claimed.provider,providerCustomerRef:created.providerCustomerRef,url:created.url},actor);
+        const applied=await applyTrialCardSetup.call({stage:"session",attemptId:claimed.attemptId,providerRef:created.providerRef,expiresAt:created.expiresAt,providerAccountId:created.providerAccountId,providerPlatformAccountId:created.providerPlatformAccountId,subscriptionId:claimed.request.subscriptionId,provider:claimed.provider,providerCustomerRef:created.providerCustomerRef,url:created.url},actor);
         if(!applied.url)throw new ServiceError("conflict","The setup session is not available.");
         return {url:applied.url};
       } catch (error) {

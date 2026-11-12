@@ -46,6 +46,9 @@ import { createDraftInvoice, issueInvoice } from "@/modules/invoicing/invoice-se
 import { paymentMethods } from "@/modules/invoicing/schema";
 import { invoices } from "@/modules/invoicing/schema";
 import marketPolicyServices, { captureSubscriptionMarketPolicy, getSubscriptionMarketPolicy } from "./market-policy";
+import { subscriptionPaymentScope } from "./market-policy";
+import { subscriptionMethodScopeMatches, subscriptionTaxDestination } from "./merchant-scope-contract";
+import { merchantSubscriptionUndo, subscriptionOriginalEvidence } from "./merchant-scope";
 import {
   BILLING_MODES,
   CANCEL_BEHAVIOURS,
@@ -59,6 +62,8 @@ import {
   dunningPolicies,
   plans,
   subscriptionEvents,
+  subscriptionMerchantScopes,
+  subscriptionProviderChargeReceipts,
   subscriptions,
 } from "./schema";
 
@@ -711,6 +716,7 @@ export const subscribe = defineService({
     /** Required for platform and provider billing. */
     paymentMethodId: uuidSchema.optional(),
     deferFirstPayment: z.boolean().default(false),
+    taxDestination: subscriptionTaxDestination.optional(),
   }),
   output: row({
     subscription: subscriptionRow,
@@ -816,13 +822,13 @@ export const subscribe = defineService({
       })
       .returning();
 
-    await ctx.callAsSystem(captureSubscriptionMarketPolicy, { subscriptionId: created!.id });
+    await ctx.callAsSystem(captureSubscriptionMarketPolicy, { subscriptionId: created!.id, taxDestination: input.taxDestination });
     const merchant = await ctx.callAsSystem(getSubscriptionMarketPolicy, { subscriptionId: created!.id });
     if (merchant?.model === "seller_merchant" && plan.billingMode !== "manual" && created!.provider !== "stripe") {
       await ctx.tx.update(subscriptions).set({provider:"stripe"}).where(eq(subscriptions.id,created!.id));
       created!.provider = "stripe";
     }
-    if (paymentMethod && paymentMethod.providerAccountId !== (merchant?.providerAccountId ?? "")) throw new ServiceError("conflict", "The saved method belongs to a different merchant account.");
+    if (paymentMethod && !subscriptionMethodScopeMatches(await subscriptionPaymentScope(ctx, created!.id), paymentMethod)) throw new ServiceError("conflict", "The saved method belongs to a different original platform or charge account.");
     await record(ctx, created!.id, "created");
     if (!pending) await record(ctx, created!.id, trialing ? "trialing" : "activated");
 
@@ -1652,17 +1658,26 @@ registerContactReference({
       .set({ contactId: survivingId })
       .where(eq(subscriptions.contactId, duplicateId));
   },
-  captureForUndo: async (tx, duplicateId) => {
+  captureForUndo: async (tx, duplicateId, survivingId) => {
     // Exactly recoverable: a subscription moves wholesale and nothing is
     // combined, so the rows that moved are the rows that move back.
     const moved = await tx
       .select({ id: subscriptions.id })
       .from(subscriptions)
-      .where(eq(subscriptions.contactId, duplicateId));
-    return { state: moved.map((each) => each.id), undoable: true };
+      .where(eq(subscriptions.contactId, duplicateId)).orderBy(subscriptions.id).limit(5001);
+    const original = await subscriptionOriginalEvidence(tx, [duplicateId, survivingId]);
+    if (moved.length > 5000 || original.overflow) return { state: [], undoable: false, blocker: "Original subscription evidence exceeds the safe merge undo limit." };
+    const movedIds = moved.map(each => each.id);
+    return { state: original.evidence.length ? { movedIds, originalEvidence: original.evidence } : movedIds, undoable: true };
   },
-  restoreAfterUndo: async (tx, before, _after, duplicateId) => {
-    const ids = (Array.isArray(before) ? before : []).filter(
+  restoreAfterUndo: async (tx, before, after, duplicateId, survivingId) => {
+    const original = await subscriptionOriginalEvidence(tx, [duplicateId, survivingId]);
+    const modern = !Array.isArray(before) ? merchantSubscriptionUndo.parse(before) : null;
+    if (modern) {
+      const expected = merchantSubscriptionUndo.parse(after);
+      if (original.overflow || JSON.stringify(original.evidence) !== JSON.stringify(expected.originalEvidence)) throw new ServiceError("conflict", "Original subscription scope or observed money changed after the merge. Reconcile it before separating ownership.");
+    } else if (original.overflow || original.evidence.length) throw new ServiceError("conflict", "This historical merge did not record the new original subscription evidence. Restore the pre-upgrade snapshot to separate it safely.");
+    const ids = (modern?.movedIds ?? (Array.isArray(before) ? before : [])).filter(
       (each): each is string => typeof each === "string",
     );
     if (ids.length === 0) return;
@@ -1678,9 +1693,10 @@ registerContactReference({
 // invoice's problem rather than this table's.
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
-  tables: ["subscriptions", "subscription_events"],
-  exportData: async (tx: Tx, contactId: string) =>
-    tx
+  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts"],
+  retentionScopes: ["commerce.money"],
+  exportData: async (tx: Tx, contactId: string) => {
+    const rows = await tx
       .select({
         id: subscriptions.id,
         planId: subscriptions.planId,
@@ -1690,10 +1706,29 @@ registerContactPrivacySource({
         currentPeriodEnd: subscriptions.currentPeriodEnd,
         cancelledAt: subscriptions.cancelledAt,
         endedAt: subscriptions.endedAt,
+        originalTaxDestination: subscriptionMerchantScopes.taxDestination,
       })
       .from(subscriptions)
-      .where(eq(subscriptions.contactId, contactId)),
+      .leftJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptions.id))
+      .where(eq(subscriptions.contactId, contactId));
+    const charges = await tx.select({ id: subscriptionProviderChargeReceipts.id, subscriptionId: subscriptionProviderChargeReceipts.subscriptionId,
+      amountMinor: subscriptionProviderChargeReceipts.amountMinor, currency: subscriptionProviderChargeReceipts.currency, observedAt: subscriptionProviderChargeReceipts.createdAt })
+      .from(subscriptionProviderChargeReceipts).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderChargeReceipts.subscriptionId))
+      .where(eq(subscriptions.contactId, contactId));
+    const byAgreement = new Map<string, typeof charges>();
+    for (const charge of charges) {
+      const group = byAgreement.get(charge.subscriptionId) ?? []; group.push(charge); byAgreement.set(charge.subscriptionId, group);
+    }
+    return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [] }));
+  },
   erase: async (tx: Tx, contactId: string) => {
+    // Local status cannot prove an external provider schedule has stopped.
+    // Keep this source pending until its original remote dependencies can be
+    // reconciled; never acknowledge erasure from cancelAtPeriodEnd alone.
+    const external = await tx.select({ id: subscriptions.id }).from(subscriptionMerchantScopes)
+      .innerJoin(subscriptions, eq(subscriptions.id, subscriptionMerchantScopes.subscriptionId))
+      .where(and(eq(subscriptions.contactId, contactId), eq(subscriptions.billingMode, "provider"))).limit(1);
+    if (external.length) throw new ServiceError("conflict", "Reconcile and stop the original external subscription schedules before completing this agreement's erasure.");
     // Ended rather than deleted, and the grants dropped. A business must still
     // be able to say how many subscriptions it had last March, and the money
     // is the invoice's record rather than this table's — but somebody who
@@ -1703,6 +1738,11 @@ registerContactPrivacySource({
       .set({ grants: {}, cancelAtPeriodEnd: true })
       .where(eq(subscriptions.contactId, contactId))
       .returning({ id: subscriptions.id });
+    if (cleared.length) {
+      await tx.execute(sql`select set_config('freeholder.subscription_scope_v1','1',true)`);
+      await tx.update(subscriptionMerchantScopes).set({ taxDestination: null, redactedAt: new Date() })
+        .where(and(inArray(subscriptionMerchantScopes.subscriptionId, cleared.map(row => row.id)), sql`${subscriptionMerchantScopes.redactedAt} is null`));
+    }
     return { affected: cleared.length };
   },
 });
@@ -1740,6 +1780,7 @@ import publicMembershipServices, { activatePaidSignup } from "./public-signup";
 import setupErasureServices from "./setup-erasure";
 import setupDispatchServices from "./setup-dispatch";
 import setupReconciliationServices from "./setup-reconciliation";
+import providerChargeReceiptServices from "./provider-charge-receipts";
 
 export default [
   ...marketPolicyServices,
@@ -1747,6 +1788,7 @@ export default [
   ...setupErasureServices,
   ...setupDispatchServices,
   ...setupReconciliationServices,
+  ...providerChargeReceiptServices,
   savePlan,
   listPlans,
   listOfferedPlans,
