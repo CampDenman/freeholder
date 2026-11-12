@@ -13601,7 +13601,12 @@ whatever is best for the people using the site.
   child/caller evidence also participates in financial debt. This draft has
   now passes full Node22 types/changed-file lint and37 source controls with
   one declared DB skip. Native/completed-cohort/outbox failure controls remain
-  unrun; clean e2c4/v7 source remains separate. No new schema, negative provider proof,
+  pending except the actual corrupt-artifact/raw-positive case: it passed
+  6.138s on d156/v7d060. Read-only ledger proves the500CAD raw/logical refund
+  and payment balance survived while three repair events remain durably pending
+  and the corrupt artifact/checksum stayed unchanged. This is already-pending-
+  cohort failure isolation, not completed-cohort or full financial closure.
+  No new schema, negative provider proof,
   model activation or completion claim. See
   `deploy/merchant-refund-erasure-outbox-source-2026-11-12.md`.
   Original return allocation BEFORE 2026-11-12: actual two-seller checkout
