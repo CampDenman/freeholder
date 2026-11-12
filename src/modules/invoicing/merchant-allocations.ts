@@ -37,7 +37,7 @@ export const captureInvoiceMerchantAllocations = defineService({
     if (byLine.size !== owners.length || owners.length !== lines.length || lines.some(line => !byLine.has(line.id))) throw new ServiceError("conflict", "Each original invoice line needs exactly one merchant owner.");
     const parts = allocateMerchantAmounts(invoice, lines.map(line => ({ ...line, ...byLine.get(line.id)! })), policy.siteFeeBps);
     if (parts.reduce((sum, part) => sum + BigInt(part.feeMinor), 0n) !== BigInt(policy.feeMinor)) throw new ServiceError("conflict", "The original invoice application fee and seller portions differ.");
-    if (policy.model === "seller_merchant" && (parts.length !== 1 || parts[0]!.sellerUserId !== policy.sellerUserId)) throw new ServiceError("conflict", "The original direct merchant does not own this invoice's portions.");
+    if (policy.model === "seller_merchant" && policy.collectionVersion === 0 && (parts.length !== 1 || parts[0]!.sellerUserId !== policy.sellerUserId)) throw new ServiceError("conflict", "The original direct merchant does not own this invoice's portions.");
     for (const { lineIds, ...part } of parts) {
       const originalOwners = lineIds.map(id => byLine.get(id)!);
       const merchantContactId = originalOwners[0]!.merchantContactId;

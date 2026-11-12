@@ -8855,5 +8855,12 @@
   "forms.leads.finalProviderEvidence": "Preuves du résultat final chez le fournisseur initial",
   "forms.leads.title": "Copies originales des demandes",
   "forms.leads.originalResourceEvidence": "Preuves identifiant le compte du fournisseur initial",
-  "forms.leads.error": "Les preuves n’ont pas pu être enregistrées. Vérifiez votre identité puis le reçu actuel."
+  "forms.leads.error": "Les preuves n’ont pas pu être enregistrées. Vérifiez votre identité puis le reçu actuel.",
+  "customerInvoice.continueInvoice": "Continuer à payer cette facture",
+  "store.checkout.billingTaxHint": "Indiquez votre lieu de facturation afin que chaque commerçant puisse calculer les taxes de votre achat.",
+  "admin.activity.merchantCollectionChanged": "Les paramètres d’encaissement des commerçants ont été modifiés",
+  "customerInvoice.remainingInvoice": "Reste à payer sur cette facture : {amount}",
+  "customerInvoice.merchants": "Commerçants de cette facture",
+  "store.checkout.billingTaxLegend": "Lieu de facturation pour les taxes",
+  "customerInvoice.merchantPartsHint": "Il s’agit d’une seule facture. Le paiement de chaque commerçant est autorisé séparément et les montants déjà payés restent enregistrés."
 }

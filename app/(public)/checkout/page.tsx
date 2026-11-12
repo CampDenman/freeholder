@@ -37,6 +37,7 @@ import { composeDocumentTitle } from "@/core/seo/meta";
 import { currentBusiness } from "@/core/settings/read";
 import { getModuleConfig } from "@/core/settings/service";
 import { catalogSettingsSchema, checkoutTermsHash } from "@/modules/catalog/checkout-policy";
+import { merchantCheckoutRequirements } from "@/modules/invoicing/merchant-collection";
 import { CHECKOUT_RETURN_KEY, fieldsFromQuery, type CheckoutField } from "@/modules/catalog/checkout-fields";
 import { decodeFormReturn, FORM_RETURN_COOKIE, returnedValues } from "@/core/http/public-form-return";
 import { getLocale, getT } from "../../i18n";
@@ -94,6 +95,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
   const formatMinor = (minor: number, currency: string) =>
     formatMoney(minor, currency, locale);
   const needsShipping = cart.lines.some((line) => line.requiresShipping);
+  const { buyerTaxDestinationRequired: needsMerchantTaxDestination } = await merchantCheckoutRequirements.call({}, { kind: "anonymous" });
 
   let email = "";
   let name = "";
@@ -109,9 +111,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
   const error = typeof query.error === "string" ? query.error : undefined;
   // A refused submission comes back with what the shopper typed and the
   // fields the refusal was about (src/modules/catalog/checkout-fields.ts).
-  const returned = (error
-    ? returnedValues(decodeFormReturn(cookieJar.get(FORM_RETURN_COOKIE)?.value), CHECKOUT_RETURN_KEY)
-    : undefined) ?? {};
+  const returned = returnedValues(decodeFormReturn(cookieJar.get(FORM_RETURN_COOKIE)?.value), CHECKOUT_RETURN_KEY) ?? {};
   const invalid = new Set<CheckoutField>(error ? fieldsFromQuery(query.fields) : []);
   const fieldState = (field: CheckoutField, id: string) =>
     invalid.has(field) ? { "aria-invalid": true as const, "aria-describedby": `${id}-error` } : {};
@@ -132,7 +132,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
       })
     : null;
 
-  const adapter = paymentAdapter();
+  const adapter = paymentAdapter(needsMerchantTaxDestination ? "stripe" : undefined);
   const paymentMode = !adapter.status.available || adapter.id === "none"
     ? ("unavailable" as const)
     : adapter.id === "manual"
@@ -197,6 +197,28 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
             </label>
           </fieldset>
 
+          {needsMerchantTaxDestination ? <fieldset className="grid gap-3">
+            <legend className="text-sm font-semibold text-ink">{t("store.checkout.billingTaxLegend")}</legend>
+            <p className="text-sm text-ink-muted">{t("store.checkout.billingTaxHint")}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm text-ink-muted">{t("store.checkout.country")}
+                <input id="checkout-billing-country" name="billingCountry" autoComplete="billing country" minLength={2} maxLength={2} pattern="[A-Za-z]{2}" required defaultValue={valueOf("billingCountry")} className={inputClass} {...fieldState("billingCountry", "checkout-billing-country")} />
+                {fieldError("billingCountry", "checkout-billing-country")}
+              </label>
+              <label className="grid gap-1 text-sm text-ink-muted">{t("store.checkout.region")}
+                <input id="checkout-billing-region" name="billingRegion" autoComplete="billing address-level1" maxLength={100} defaultValue={valueOf("billingRegion")} className={inputClass} {...fieldState("billingRegion", "checkout-billing-region")} />
+                {fieldError("billingRegion", "checkout-billing-region")}
+              </label>
+              <label className="grid gap-1 text-sm text-ink-muted">{t("store.checkout.postalCode")}
+                <input id="checkout-billing-postal" name="billingPostalCode" autoComplete="billing postal-code" maxLength={30} defaultValue={valueOf("billingPostalCode")} className={inputClass} {...fieldState("billingPostalCode", "checkout-billing-postal")} />
+                {fieldError("billingPostalCode", "checkout-billing-postal")}
+              </label>
+              <label className="grid gap-1 text-sm text-ink-muted">{t("store.checkout.city")}
+                <input id="checkout-billing-city" name="billingCity" autoComplete="billing address-level2" maxLength={200} defaultValue={valueOf("billingCity")} className={inputClass} {...fieldState("billingCity", "checkout-billing-city")} />
+                {fieldError("billingCity", "checkout-billing-city")}
+              </label>
+            </div>
+          </fieldset> : null}
           {needsShipping ? (
             <fieldset className="grid gap-3">
               <legend className="text-sm font-semibold text-ink">

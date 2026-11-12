@@ -8855,5 +8855,12 @@
   "forms.leads.finalProviderEvidence": "دليل النتيجة النهائية لدى المزود الأصلي",
   "forms.leads.title": "نسخ الاستفسارات الأصلية",
   "forms.leads.originalResourceEvidence": "دليل يحدد حساب المزود الأصلي",
-  "forms.leads.error": "تعذر تسجيل الدليل. تحقق من هويتك وراجع الإيصال الحالي مجدداً."
+  "forms.leads.error": "تعذر تسجيل الدليل. تحقق من هويتك وراجع الإيصال الحالي مجدداً.",
+  "customerInvoice.continueInvoice": "متابعة دفع هذه الفاتورة",
+  "store.checkout.billingTaxHint": "أدخل موقع الفوترة ليتمكن كل تاجر من حساب ضرائب مشترياتك.",
+  "admin.activity.merchantCollectionChanged": "تم تغيير إعدادات تحصيل مدفوعات التجار",
+  "customerInvoice.remainingInvoice": "المتبقي في هذه الفاتورة: {amount}",
+  "customerInvoice.merchants": "التجار في هذه الفاتورة",
+  "store.checkout.billingTaxLegend": "موقع الفوترة لحساب الضرائب",
+  "customerInvoice.merchantPartsHint": "هذه فاتورة واحدة. يتم تفويض دفعة كل تاجر على حدة، وتبقى المبالغ المدفوعة مسجلة."
 }

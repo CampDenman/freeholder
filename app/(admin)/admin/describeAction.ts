@@ -188,6 +188,12 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "invoicing.issueCreditNote": "admin.activity.creditNoteIssued",
   "invoicing.reconcilePluginRefund": "admin.activity.creditNoteIssued",
   "invoicing.captureInvoiceMarketPolicy": "admin.activity.paymentOptionsChanged",
+  "invoicing.configureMerchantCollection": "admin.activity.merchantCollectionChanged",
+  "invoicing.applyMerchantCollectionConfiguration": "admin.activity.merchantCollectionChanged",
+  "invoicing.recordMerchantPaymentObservation": "admin.activity.paymentUpdated",
+  "invoicing.retainMerchantProviderEvent": "admin.activity.paymentUpdated",
+  "invoicing.inspectMerchantPayment": "admin.activity.paymentUpdated",
+  "invoicing.recordCustomerPaymentObservation": "admin.activity.paymentUpdated",
   "invoicing.voidCreditNote": "admin.activity.creditNoteVoided",
   "marketplace.reconcileRefund": "admin.activity.creditNoteIssued",
   "invoicing.createDepositAndBalance": "admin.activity.invoiceDrafted",
@@ -334,6 +340,7 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
  * still shows, so a new business event is never hidden by omission.
  */
 export const OWNER_HIDDEN_ACTIONS: ReadonlySet<string> = new Set([
+  "invoicing.captureMerchantCollections",
   "contacts.resolve",
   "analytics.track",
   "analytics.identify",

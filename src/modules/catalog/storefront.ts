@@ -323,6 +323,12 @@ export const shopperCheckout = defineService({
     email: z.string().trim().email().toLowerCase().max(320),
     name: z.string().trim().min(1).max(200).optional(),
     shippingAddress: checkoutAddress.optional(),
+    taxDestination: z.object({
+      country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/),
+      region: z.string().trim().toUpperCase().max(100).optional(),
+      postalCode: z.string().trim().toUpperCase().max(30).optional(),
+      city: z.string().trim().max(200).optional(),
+    }).optional(),
     shippingMethodId: id.optional(),
     couponCode: z
       .string()
@@ -437,6 +443,7 @@ export const shopperCheckout = defineService({
       ...(input.termsVersion ? { termsVersion: input.termsVersion } : {}),
       ...(input.termsHash ? { termsHash: input.termsHash } : {}),
       ...(input.shippingAddress ? { shippingAddress: input.shippingAddress } : {}),
+      ...(input.taxDestination ? { taxDestination: input.taxDestination } : {}),
       ...(input.shippingMethodId ? { shippingMethodId: input.shippingMethodId } : {}),
       ...(input.couponCode ? { couponCode: input.couponCode } : {}),
     });

@@ -18,7 +18,13 @@ import { plans, subscriptions } from "@/modules/subscriptions/schema";
 import { getSubscriptionMarketPolicy, registerSubscriptionMarketResolver, registerSubscriptionPlanMarketResolver, registerSubscriptionMerchantVerifier, subscriptionMarketPolicy, type SubscriptionMarketPolicy } from "@/modules/subscriptions/market-policy";
 import { sellerForInvoice } from "./member-subscriptions";
 import { marketRules } from "./payouts";
+import { registerMerchantCheckoutRequirement } from "@/modules/invoicing/merchant-collection";
 import { memberPayoutAccounts, memberProfiles, memberSettings } from "./schema";
+
+registerMerchantCheckoutRequirement(async ctx => {
+  const rules = await marketRules(ctx);
+  return rules.enabled && rules.model === "seller_merchant";
+});
 
 async function policyForSellers(sellerIds: string[], containsSiteItems: boolean, ctx: ServiceContext): Promise<SubscriptionMarketPolicy> {
   await lockContactIdentityForRead(ctx.tx);
@@ -76,7 +82,7 @@ export const resolveInvoiceMarketPolicy = defineService({
       if (!policy && !seller) return null;
       if (!policy || policy.sellerUserId !== seller) throw new ServiceError("conflict", "The agreement's original seller needs reconciliation before billing.");
       const erased=policy.sellerUserId&&await merchantIdentityErased(ctx.tx,policy.sellerUserId,policy.merchantContactId);
-      return { ...policy,...(erased?{merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}:{}), feeMinor: marketFeeMinor(invoice.totalMinor - invoice.taxMinor, policy.siteFeeBps) };
+      return { ...policy,collectionVersion:0,...(erased?{merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}:{}), feeMinor: marketFeeMinor(invoice.totalMinor - invoice.taxMinor, policy.siteFeeBps) };
     }
     const rules = await marketRules(ctx);
     let sellerIds: string[];
@@ -100,7 +106,7 @@ export const resolveInvoiceMarketPolicy = defineService({
       feeMinor = marketFeeMinor(invoice.totalMinor - invoice.taxMinor, rules.siteFeeBps);
     }
     if (sellerIds.length === 0) return null;
-    return { ...await policyForSellers(sellerIds, containsSiteItems, ctx), feeMinor };
+    return { ...await policyForSellers(sellerIds, containsSiteItems, ctx), collectionVersion:0, feeMinor };
   },
 });
 

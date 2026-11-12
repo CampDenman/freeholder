@@ -93,6 +93,13 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+  merchant_collection_configuration: "Current verified payment configuration has no natural-person identity; explicit owner configuration replaces it.",
+  invoice_merchant_collections: "Original invoice routes and tax receipts are retained money facts; personal commercial copies minimize through members.merchantIdentity and inherit named holds.",
+  merchant_payment_routes: "Immutable original merchant money binding, retained with its payment rather than age-purged.",
+  merchant_agreement_payment_routes: "Immutable original agreement payment money and namespace; retained with its actual provider evidence.",
+  merchant_payment_observations: "Append-only actual provider financial evidence, retained with original money and never deleted by an age sweep.",
+  merchant_payment_event_receipts: "Private immutable authenticated financial facts, including unmatched provider attempts; retained for reconciliation and never included in content search.",
+  merchant_fee_refunds: "Original commission refund money and unknown provider outcomes require explicit reconciliation, never timed deletion.",
   invoice_market_policies: "Immutable issued-invoice terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",
   invoice_merchant_allocations: "Immutable original invoice money and seller ownership; retained financial facts and contact merge use members.merchantIdentity, never an age-based purge.",
   subscription_market_policies: "Immutable agreement terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",

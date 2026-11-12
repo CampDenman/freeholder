@@ -7,7 +7,7 @@ import { paymentAdapter } from "@/adapters/payments";
 import type { HostedPaymentProviderId } from "@/adapters/payments/providers";
 import { AdapterError } from "@/adapters/types";
 import { ServiceError } from "@/core/service";
-import { processPaymentProviderEvents } from "./payment-provider-service";
+import { processPaymentProviderEvents, retainPaymentProviderEvidence } from "./payment-provider-service";
 import { readBoundedBytes, RequestBodyError } from "@/core/http/body";
 
 const MAX_WEBHOOK_BYTES = 1_048_576;
@@ -23,6 +23,7 @@ export function paymentWebhookRoute(provider: HostedPaymentProviderId) {
       const body = await rawRequest(request);
       const headers = Object.fromEntries([...request.headers.entries()].map(([key, value]) => [key.toLowerCase(), value]));
       const events = await paymentAdapter(provider).verifyWebhook({ headers, body, receivedAt });
+      await retainPaymentProviderEvidence(provider, events);
       const result = await processPaymentProviderEvents.call(
         {
           provider,

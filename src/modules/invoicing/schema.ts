@@ -348,6 +348,8 @@ export const taxLines = pgTable(
 export const invoiceMarketPolicies = pgTable("invoice_market_policies", {
   invoiceId: uuid("invoice_id").primaryKey().references(() => invoices.id, { onDelete: "cascade" }),
   allocationVersion: integer("allocation_version").notNull().default(1),
+  /** Zero preserves historical single-merchant routing; one freezes per-party collection. */
+  collectionVersion: integer("collection_version").notNull().default(0),
   model: text("model", { enum: ["hold", "instant", "seller_merchant"] }).notNull(),
   adapter: text("adapter").notNull(),
   siteFeeBps: integer("site_fee_bps").notNull(),
@@ -361,12 +363,16 @@ export const invoiceMarketPolicies = pgTable("invoice_market_policies", {
   createdAt: createdAtColumn(),
 }, (t) => [
   check("invoice_market_policies_allocation_version", sql`${t.allocationVersion} in (0,1)`),
+  check("invoice_market_policies_collection_version", sql`${t.collectionVersion} in (0,1)`),
   check("invoice_market_policies_model_check", sql`${t.model} in ('hold','instant','seller_merchant')`),
   index("invoice_market_policies_merchant_contact_idx").on(t.merchantContactId),
   check("invoice_market_policies_fee_bps_check", sql`${t.siteFeeBps} between 0 and 10000`),
   check("invoice_market_policies_hold_days_check", sql`${t.holdDays} between 0 and 365`),
   check("invoice_market_policies_fee_check", sql`${t.feeMinor} >= 0`),
-  check("invoice_market_policies_merchant_check", sql`${t.model} <> 'seller_merchant' or (${t.adapter} = 'stripe_connect' and ${t.sellerUserId} is not null and ${t.merchantName} is not null and ${t.providerAccountId} is not null)`),
+  check("invoice_market_policies_merchant_check", sql`${t.model} <> 'seller_merchant' or (${t.adapter} = 'stripe_connect' and (
+    (${t.collectionVersion} = 0 and ${t.sellerUserId} is not null and ${t.merchantName} is not null and ${t.providerAccountId} is not null)
+    or (${t.collectionVersion} = 1 and ${t.sellerUserId} is null and ${t.merchantName} is null and ${t.merchantSupport} is null and ${t.merchantContactId} is null and ${t.providerAccountId} is null)
+  ))`),
 ]);
 
 /** C12.38: original portions of ONE invoice, including its site's own lines.
@@ -465,13 +471,16 @@ export const paymentProviderCustomers = pgTable(
     provider: text("provider").notNull(),
     /** Empty means the platform; seller routing is frozen by core. */
     providerAccountId: text("provider_account_id").notNull().default(""),
+    /** NULL preserves original history; it never means today's platform. */
+    providerPlatformAccountId: text("provider_platform_account_id"),
     providerCustomerRef: text("provider_customer_ref").notNull(),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     index("payment_provider_customers_contact_idx").on(t.contactId, t.provider),
-    uniqueIndex("payment_provider_customers_ref_idx").on(t.provider, t.providerAccountId, t.providerCustomerRef),
+    uniqueIndex("payment_provider_customers_ref_idx").on(t.provider, sql`coalesce(${t.providerPlatformAccountId}, '')`, t.providerAccountId, t.providerCustomerRef),
+    check("payment_provider_customers_platform_valid", sql`${t.providerPlatformAccountId} is null or ${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$'`),
     index("payment_provider_customers_contact_created_idx").on(t.contactId, t.createdAt),
     check("payment_provider_customers_provider_valid", sql`length(trim(${t.provider})) between 1 and 100`),
     check("payment_provider_customers_ref_valid", sql`length(trim(${t.providerCustomerRef})) between 1 and 500`),
@@ -486,6 +495,8 @@ export const paymentMethods = pgTable(
     provider: text("provider").notNull(),
     /** Empty means the platform; seller routing is frozen by core. */
     providerAccountId: text("provider_account_id").notNull().default(""),
+    /** Original platform scope for new methods; no historical backfill. */
+    providerPlatformAccountId: text("provider_platform_account_id"),
     providerMethodRef: text("provider_method_ref").notNull(),
     providerCustomerRef: text("provider_customer_ref"),
     kind: text("kind", { enum: ["card", "wallet", "bank_debit", "bank_redirect", "buy_now_pay_later", "cash", "bank_transfer", "other"] }).notNull(),
@@ -503,9 +514,10 @@ export const paymentMethods = pgTable(
     updatedAt: updatedAtColumn(),
   },
   (t) => [
-    uniqueIndex("payment_methods_provider_ref_idx").on(t.provider, t.providerAccountId, t.providerMethodRef),
+    uniqueIndex("payment_methods_provider_ref_idx").on(t.provider, sql`coalesce(${t.providerPlatformAccountId}, '')`, t.providerAccountId, t.providerMethodRef),
     index("payment_methods_contact_status_idx").on(t.contactId, t.status, t.createdAt),
-    index("payment_methods_customer_ref_idx").on(t.provider, t.providerAccountId, t.providerCustomerRef),
+    index("payment_methods_customer_ref_idx").on(t.provider, t.providerPlatformAccountId, t.providerAccountId, t.providerCustomerRef),
+    check("payment_methods_platform_valid", sql`${t.providerPlatformAccountId} is null or ${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$'`),
     check("payment_methods_provider_valid", sql`length(trim(${t.provider})) between 1 and 100`),
     check("payment_methods_ref_valid", sql`length(trim(${t.providerMethodRef})) between 1 and 500`),
     check("payment_methods_label_valid", sql`length(trim(${t.label})) between 1 and 200`),

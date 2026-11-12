@@ -8,7 +8,7 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { invoiceMarketPolicy } from "@/modules/invoicing/market-policy";
 import { subscriptionMarketPolicies, subscriptions } from "./schema";
 
-export const subscriptionMarketPolicy = invoiceMarketPolicy.omit({ feeMinor: true });
+export const subscriptionMarketPolicy = invoiceMarketPolicy.omit({ feeMinor: true, collectionVersion: true });
 export type SubscriptionMarketPolicy = z.infer<typeof subscriptionMarketPolicy>;
 type Resolver = (subscriptionId: string, ctx: ServiceContext) => Promise<SubscriptionMarketPolicy | null>;
 let resolver: Resolver | undefined;

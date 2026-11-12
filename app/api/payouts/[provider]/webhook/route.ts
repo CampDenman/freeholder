@@ -4,6 +4,7 @@
 import { readBoundedBytes, RequestBodyError } from "@/core/http/body";
 import { AdapterError } from "@/adapters/types";
 import { payoutProvider } from "@/adapters/payouts";
+import { retainPaymentProviderEvidence } from "@/modules/invoicing/payment-provider-service";
 import { applyPayoutWebhook } from "@/modules/members/provider-payouts";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
   }
   // Events for transfers that are not this site's (a shared provider
   // account) are acknowledged and ignored, so the provider keeps the endpoint.
+  for (const event of events) if (event.kind === "payment") await retainPaymentProviderEvidence("stripe", [event.event]);
   await applyPayoutWebhook.call({ provider: provider.id, events }, { kind: "system" });
   return new Response(null, { status: 200 });
 }

@@ -922,6 +922,8 @@ const paymentInput = z.object({
   method: z.string().trim().min(1).max(100),
   amountMinor: positiveMinor,
   idempotencyKey,
+  merchantAllocationId: z.uuid().optional(),
+  subscriptionChargeReceiptId: z.uuid().optional(),
   metadata: boundedObject.default({}),
 });
 
@@ -933,6 +935,7 @@ export const createPayment = defineService({
   input: paymentInput,
   output: paymentRow,
   handler: async (input, ctx) => {
+    if (input.subscriptionChargeReceiptId && (ctx.actor.kind !== "system" || input.method !== "provider_schedule")) throw new ServiceError("permission", "Only authenticated provider reconciliation can apply an original subscription charge receipt.");
     const hash = requestHash(input);
     await lock(ctx.tx, "payment-idempotency", `${input.provider}:${input.idempotencyKey}`);
     const [duplicate] = await ctx.tx
@@ -970,7 +973,18 @@ export const createPayment = defineService({
         metadata: input.metadata,
       })
       .returning();
-    if (routing.providerAccountId) await ctx.tx.insert(paymentMerchantRoutes).values({ paymentId: created!.id, ...routing });
+    if (routing.merchantAllocationId) {
+      const { merchantPaymentRoutes } = await import("./merchant-collection-schema");
+      await ctx.tx.insert(merchantPaymentRoutes).values({ paymentId: created!.id, allocationId: routing.merchantAllocationId, applicationFeeMinor: routing.applicationFeeMinor });
+    } else if ("agreementSubscriptionId" in routing && routing.agreementSubscriptionId) {
+      const { merchantAgreementPaymentRoutes } = await import("./merchant-agreement-schema");
+      await ctx.tx.insert(merchantAgreementPaymentRoutes).values({ paymentId: created!.id, subscriptionId: routing.agreementSubscriptionId, agreementRoutingVersion: 1,
+        collectionKind: routing.destinationAccountId ? "destination" : "direct", providerPlatformAccountId: routing.providerPlatformAccountId!,
+        chargeAccountId: routing.providerAccountId || null, recipientAccountId: routing.destinationAccountId ?? routing.providerAccountId,
+        settlementMerchantAccountId: routing.settlementMerchantAccountId ?? routing.providerAccountId,
+        applicationFeeMinor: routing.applicationFeeMinor, originKind: input.method === "provider_schedule" ? "provider_schedule" : "attempt",
+        providerSubscriptionRef: routing.providerSubscriptionRef, providerInvoiceRef: routing.providerInvoiceRef, providerPaymentIntentRef: routing.providerPaymentIntentRef, providerChargeRef: routing.providerChargeRef, originalChargeReceiptId: routing.originalChargeReceiptId });
+    } else if (routing.providerAccountId) await ctx.tx.insert(paymentMerchantRoutes).values({ paymentId: created!.id, providerAccountId: routing.providerAccountId, applicationFeeMinor: routing.applicationFeeMinor });
     await stateEvent(ctx, "payment", created!.id, null, "created");
     ctx.queueEvent("payment.created", { paymentId: created!.id, invoiceId: invoice.id, contactId: invoice.contactId });
     ctx.setSubject("payment", created!.id);

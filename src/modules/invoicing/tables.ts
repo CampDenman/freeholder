@@ -35,3 +35,11 @@ export {
   taxZones,
 } from "./schema";
 export { invoiceSchedules, invoiceReminders } from "./recurring-schema";
+export { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
+export {
+  merchantCollectionConfiguration,
+  invoiceMerchantCollections,
+  merchantPaymentRoutes,
+  merchantPaymentObservations, merchantPaymentEventReceipts,
+  merchantFeeRefunds,
+} from "./merchant-collection-schema";

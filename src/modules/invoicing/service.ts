@@ -5,6 +5,8 @@
 import invoiceServices from "./invoice-service";
 import marketPolicyServices from "./market-policy";
 import merchantAllocationServices from "./merchant-allocations";
+import merchantCollectionServices from "./merchant-collection";
+import merchantPaymentObservationServices from "./merchant-payment-observations";
 import merchantSettlementServices from "./merchant-settlement";
 import advancedMoneyServices from "./advanced-money-service";
 import paymentProviderServices from "./payment-provider-service";
@@ -30,6 +32,8 @@ import "./funnel";
 export default [
   ...marketPolicyServices,
   ...merchantAllocationServices,
+  ...merchantCollectionServices,
+  ...merchantPaymentObservationServices,
   ...merchantSettlementServices,
   ...demoServices,
   ...recurringServices,

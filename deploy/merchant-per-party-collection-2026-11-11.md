@@ -96,3 +96,24 @@ Destination refunds and disputes debit the platform balance even with
 
 Charge inspection also follows the official [PaymentIntent](https://docs.stripe.com/api/payment_intents/object),
 [Charge](https://docs.stripe.com/api/charges/object), and [Transfer](https://docs.stripe.com/api/transfers/object) object contracts.
+
+## Collection source integration checkpoint — not enabled or qualified
+
+The isolated collection source now has draft per-party issue receipts, original
+order and new-agreement payment routes, platform-owned customer/method keys,
+canonical invoice due limits, public per-party invoice projections, independent
+authenticated money receipts and actual charge inspection. New positive money
+blocks another attempt until reconciled; payment application and seller
+settlement remain separate. Ten pure cumulative fee-target controls and the
+existing ten collection amount controls pass. The four-file source contract
+run passed 32 controls. Full TypeScript and focused lint pass at this checkpoint.
+
+Migration80 is deliberately unjournalled and has never been applied. It still
+requires the independently owned tax, subscription and runtime ABI fragments,
+full new booking/service source snapshots and routes, native source controls,
+fee-operation dispatch/recovery, all partial/unknown refund and dispute flows,
+per-party member settlement, original-customer late-erasure qualification,
+owner recovery interfaces, four-locale browser and live SDK/API/MCP permission
+qualification. The provider model registry still excludes seller_merchant.
+This checkpoint must not be described as activation, stable completion,
+provider-account acceptance or an independently reviewed security sign-off.

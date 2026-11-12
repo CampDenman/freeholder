@@ -54,7 +54,7 @@ function serviceCode(error: unknown): string {
 }
 
 /** What the shopper typed that is worth giving back: never tokens or keys. */
-const KEPT_FIELDS = ["email", "name", "street1", "city", "region", "postalCode", "country", "shippingMethodId", "couponCode"];
+const KEPT_FIELDS = ["email", "name", "street1", "city", "region", "postalCode", "country", "shippingMethodId", "couponCode", "billingCountry", "billingRegion", "billingPostalCode", "billingCity"];
 
 /**
  * Hand the shopper's answers back to their own browser for the next render
@@ -94,6 +94,14 @@ export async function shopperCheckoutAction(form: FormData): Promise<void> {
   };
   const anyAddressField = country || Object.values(addressFields).some(Boolean);
   if (anyAddressField && !/^[A-Z]{2}$/.test(country)) await refuse(path, form, "address", ["country"]);
+  const billingCountry = text(form, "billingCountry").toUpperCase();
+  const taxDestination = {
+    country: billingCountry,
+    region: text(form, "billingRegion").toUpperCase() || undefined,
+    postalCode: text(form, "billingPostalCode").toUpperCase() || undefined,
+    city: text(form, "billingCity") || undefined,
+  };
+  if ((billingCountry || taxDestination.region || taxDestination.postalCode || taxDestination.city) && !/^[A-Z]{2}$/.test(billingCountry)) await refuse(path, form, "address", ["billingCountry"]);
 
   let outcome: Awaited<ReturnType<typeof shopperCheckout.call>>;
   try {
@@ -109,6 +117,7 @@ export async function shopperCheckoutAction(form: FormData): Promise<void> {
         cartToken: credential.token,
         email: text(form, "email"),
         name: text(form, "name") || undefined,
+        ...(billingCountry ? { taxDestination } : {}),
         // An address is sent only when the shopper started one; the service
         // decides whether the cart needs it, not the form.
         ...(country
@@ -145,8 +154,11 @@ export async function shopperCheckoutAction(form: FormData): Promise<void> {
   // outside the try — swallowing NEXT_REDIRECT would turn every success
   // into ?error=failed.
   if (outcome!.status === "verification_sent") {
-    // Nothing was refused, so no answers are kept for the next render.
-    (await cookies()).delete(FORM_RETURN_COOKIE);
+    // Keep only the same bounded, short-lived browser answers while this
+    // shopper completes email proof. No address is sent through the URL.
+    const values = Object.fromEntries(KEPT_FIELDS.map(field => [field, text(form, field)]));
+    const kept = encodeFormReturn(CHECKOUT_RETURN_KEY, values);
+    if (kept) (await cookies()).set(FORM_RETURN_COOKIE, kept, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: FORM_RETURN_MAX_AGE });
     redirect(`${path}?sent=1`);
   }
   // Placed. The cart is converted; drop the device credential and any

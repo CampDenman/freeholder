@@ -8,8 +8,10 @@ import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { invoiceMarketPolicies, invoices } from "./schema";
 import { captureInvoiceMerchantAllocations } from "./merchant-allocations";
+import { captureMerchantCollections, verifyNextMerchantCollection } from "./merchant-collection";
 
 export const invoiceMarketPolicy = z.object({
+  collectionVersion: z.number().int().min(0).max(1).default(0),
   model: z.enum(["hold", "instant", "seller_merchant"]),
   adapter: z.string().min(1).max(100),
   siteFeeBps: z.number().int().min(0).max(10_000),
@@ -35,6 +37,8 @@ let verifyMerchant: ((invoiceId: string, ctx: ServiceContext) => Promise<void>) 
 export function registerInvoiceMarketResolver(next: Resolver): void { resolver = next; }
 export function registerInvoiceMerchantVerifier(next: (invoiceId: string, ctx: ServiceContext) => Promise<void>): void { verifyMerchant = next; }
 export async function verifyInvoiceMerchant(invoiceId: string, ctx: ServiceContext): Promise<void> {
+  const [policy] = await ctx.tx.select({ version: invoiceMarketPolicies.collectionVersion }).from(invoiceMarketPolicies).where(eq(invoiceMarketPolicies.invoiceId, invoiceId));
+  if (policy?.version === 1) return verifyNextMerchantCollection(ctx, invoiceId);
   if (!verifyMerchant) throw new ServiceError("conflict", "Direct seller payments are unavailable in this build.");
   await verifyMerchant(invoiceId, ctx);
 }
@@ -52,11 +56,15 @@ export const captureInvoiceMarketPolicy = defineService({
     const supplied = await resolver?.(invoiceId, ctx);
     if (!supplied) return { captured: false };
     const policy = invoiceMarketPolicy.parse(supplied);
-    if (policy.model === "seller_merchant" && (policy.adapter !== "stripe_connect" || !policy.sellerUserId || !policy.merchantName || !policy.providerAccountId || policy.feeMinor >= invoice.totalMinor && invoice.totalMinor > 0)) {
+    if (policy.model === "seller_merchant" && (policy.adapter !== "stripe_connect"
+      || (policy.collectionVersion === 0 && (!policy.sellerUserId || !policy.merchantName || !policy.providerAccountId))
+      || (policy.collectionVersion === 1 && (invoice.sourceType !== "order" || policy.sellerUserId !== null || policy.merchantName !== null || policy.merchantSupport !== null || policy.merchantContactId !== null || policy.providerAccountId !== null))
+      || policy.feeMinor >= invoice.totalMinor && invoice.totalMinor > 0)) {
       throw new ServiceError("conflict", "This seller invoice needs a verified merchant account and a valid application fee.");
     }
     await ctx.tx.insert(invoiceMarketPolicies).values({ invoiceId, ...policy });
     await ctx.callAsSystem(captureInvoiceMerchantAllocations, { invoiceId });
+    if (policy.collectionVersion === 1) await ctx.callAsSystem(captureMerchantCollections, { invoiceId });
     ctx.setSubject("invoice", invoiceId);
     return { captured: true };
   },

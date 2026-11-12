@@ -16,6 +16,10 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "invoicing.applyMerchantCollectionConfiguration",
+  "invoicing.captureMerchantCollections",
+  "invoicing.recordMerchantPaymentObservation",
+  "invoicing.retainMerchantProviderEvent",
   "catalog.anonymizeSellerOrderReceipts",
   // C3.47: page events rebuild only their own public assistant document.
   "assistant.reindexPage",
@@ -228,6 +232,11 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "invoicing.applyMerchantCollectionConfiguration",
+  "invoicing.captureMerchantCollections",
+  "invoicing.recordMerchantPaymentObservation",
+  "invoicing.retainMerchantProviderEvent",
+  "invoicing.recordCustomerPaymentObservation",
   "catalog.anonymizeSellerOrderReceipts",
   "catalog.orderInvoiceRevenue",
   "media.retireOwnedAssetsForErasure",

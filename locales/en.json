@@ -8855,5 +8855,12 @@
   "forms.leads.finalProviderEvidence": "Evidence of the final original-provider outcome",
   "forms.leads.title": "Original lead copies",
   "forms.leads.originalResourceEvidence": "Evidence identifying the original provider account",
-  "forms.leads.error": "The evidence could not be recorded. Verify your identity and review the current receipt again."
+  "forms.leads.error": "The evidence could not be recorded. Verify your identity and review the current receipt again.",
+  "customerInvoice.continueInvoice": "Continue paying this invoice",
+  "store.checkout.billingTaxHint": "Enter your billing location so each merchant can calculate tax for your purchase.",
+  "admin.activity.merchantCollectionChanged": "Merchant collection settings were changed",
+  "customerInvoice.remainingInvoice": "Remaining on this invoice: {amount}",
+  "customerInvoice.merchants": "Merchants on this invoice",
+  "store.checkout.billingTaxLegend": "Billing location for tax",
+  "customerInvoice.merchantPartsHint": "This is one invoice. Each merchant’s payment is authorized separately, and amounts already paid stay recorded."
 }

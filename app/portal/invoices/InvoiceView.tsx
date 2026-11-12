@@ -21,7 +21,7 @@ export function InvoiceView({ invoice, token, t, locale, timezone, businessName,
       <SkipLink target="main">{t("a11y.skipToContent")}</SkipLink>
       <main id="main" tabIndex={-1} className="grid gap-6">
         <header className="grid gap-2">
-          <InvoiceIssuer issuer={invoice} businessName={businessName} locale={locale} t={t}/>
+          {invoice.merchants.length ? <p className="text-sm text-ink-muted">{t("customerInvoice.merchants")}</p> : <InvoiceIssuer issuer={invoice} businessName={businessName} locale={locale} t={t}/>}
           <h1 className="text-2xl font-bold">{t("customerInvoice.title", { number: invoice.number })}</h1>
           <div><Pill tone={invoice.status === "paid" ? "success" : "neutral"}>{t(`invoices.status.${invoice.status}`)}</Pill></div>
           {due ? <p className="text-sm text-ink-muted">{t("customerInvoice.due", { date: due })}</p> : null}
@@ -29,10 +29,21 @@ export function InvoiceView({ invoice, token, t, locale, timezone, businessName,
         {error ? <div role="alert"><Callout tone="danger">{t("customerInvoice.failed")}</Callout></div> : null}
         {checkout === "cancelled" ? <Callout tone="warning">{t("customerInvoice.cancelled")}</Callout> : null}
         {checkout === "offline" && invoice.canPay ? <Callout tone="neutral">{t("customerInvoice.offlineInstructions")}</Callout> : null}
+        {invoice.merchants.length ? <section className="grid gap-4" aria-label={t("customerInvoice.merchants")}>
+          <p className="text-sm text-ink-muted">{t("customerInvoice.merchantPartsHint")}</p>
+          {invoice.merchants.map(merchant => <Card key={merchant.allocationId}><CardBody>
+            <InvoiceIssuer issuer={{issuerIsMerchant:true,issuerName:merchant.merchantName,issuerSupport:merchant.merchantSupport}} businessName={businessName} locale={locale} t={t}/>
+            <dl className="mt-3 grid gap-2">
+              {([["invoices.subtotal",merchant.subtotalMinor],["invoices.discount",merchant.discountMinor],["invoices.shippingAmount",merchant.shippingMinor],["invoices.taxAmount",merchant.taxMinor],["invoices.total",merchant.totalMinor],["invoices.paid",merchant.paidMinor],["invoices.refunded",merchant.refundedMinor]] as const).map(([label,amount])=><div key={label} className="flex justify-between gap-4"><dt>{t(label)}</dt><dd className="font-mono">{money(amount)}</dd></div>)}
+            </dl>
+          </CardBody></Card>)}
+        </section> : null}
         <Card><CardBody>
           <ul className="grid list-none gap-4 p-0">
             {invoice.lines.map((line) => <li key={line.id} className="flex flex-wrap justify-between gap-2 border-b border-rule pb-3">
-              <span>{line.description} <span className="text-ink-muted">({new Intl.NumberFormat(locale).format(line.quantityMicros / 1_000_000)})</span></span>
+              <span>{line.description} <span className="text-ink-muted">({new Intl.NumberFormat(locale).format(line.quantityMicros / 1_000_000)})</span>
+                {invoice.merchants.length ? <small className="block text-ink-muted"><bdi>{invoice.merchants.find(merchant=>merchant.lineIds.includes(line.id))?.merchantName??t("customerInvoice.merchantUnavailable")}</bdi></small> : null}
+              </span>
               <span className="font-mono">{money(line.amountMinor)}</span>
             </li>)}
           </ul>

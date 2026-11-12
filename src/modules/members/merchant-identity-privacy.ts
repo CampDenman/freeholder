@@ -11,6 +11,7 @@ import { lockContactIdentity, lockContactIdentityForRead } from "@/core/contacts
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {ServiceError,type Tx} from "@/core/service";
 import { invoiceMarketPolicies, invoiceMerchantAllocations } from "@/modules/invoicing/schema";
+import { invoiceMerchantCollections } from "@/modules/invoicing/merchant-collection-schema";
 import { subscriptionMarketPolicies } from "@/modules/subscriptions/schema";
 
 export async function merchantIdentityErased(tx:Tx,userId:string,contactId?:string|null):Promise<boolean>{
@@ -24,7 +25,7 @@ async function merchantForContact(tx:Tx,contactId:string):Promise<string|null>{
 }
 
 registerContactPrivacySource({
-  scope:"members.merchantIdentity",tables:["invoice_market_policies","subscription_market_policies","invoice_merchant_allocations"],
+  scope:"members.merchantIdentity",tables:["invoice_market_policies","subscription_market_policies","invoice_merchant_allocations","invoice_merchant_collections"],
   retentionScopes:["members","commerce.money"],eraseOrder:5,
   exportData:async(tx,contactId)=>{
     const userId=await merchantForContact(tx,contactId);
@@ -33,6 +34,9 @@ registerContactPrivacySource({
       // These are retained original financial facts; no profile, routing or
       // unrelated buyer/contact identities are exported here.
       portions:await tx.select({invoiceId:invoiceMerchantAllocations.invoiceId,subtotalMinor:invoiceMerchantAllocations.subtotalMinor,discountMinor:invoiceMerchantAllocations.discountMinor,shippingMinor:invoiceMerchantAllocations.shippingMinor,taxMinor:invoiceMerchantAllocations.taxMinor,totalMinor:invoiceMerchantAllocations.totalMinor,feeMinor:invoiceMerchantAllocations.feeMinor}).from(invoiceMerchantAllocations).where(or(eq(invoiceMerchantAllocations.merchantContactId,contactId),userId?and(isNull(invoiceMerchantAllocations.merchantContactId),eq(invoiceMerchantAllocations.sellerUserId,userId)):undefined)),
+      merchantCollections:await tx.select({invoiceId:invoiceMerchantCollections.invoiceId,merchantName:invoiceMerchantCollections.merchantName,merchantSupport:invoiceMerchantCollections.merchantSupport,taxPolicy:invoiceMerchantCollections.taxPolicy})
+        .from(invoiceMerchantCollections).innerJoin(invoiceMerchantAllocations,eq(invoiceMerchantAllocations.id,invoiceMerchantCollections.allocationId))
+        .where(or(eq(invoiceMerchantAllocations.merchantContactId,contactId),userId?and(isNull(invoiceMerchantAllocations.merchantContactId),eq(invoiceMerchantAllocations.sellerUserId,userId)):undefined)),
       agreements:await tx.select({subscriptionId:subscriptionMarketPolicies.subscriptionId,merchantName:subscriptionMarketPolicies.merchantName,merchantSupport:subscriptionMarketPolicies.merchantSupport}).from(subscriptionMarketPolicies).where(or(eq(subscriptionMarketPolicies.merchantContactId,contactId),userId?and(isNull(subscriptionMarketPolicies.merchantContactId),eq(subscriptionMarketPolicies.sellerUserId,userId)):undefined)),
     };
   },
@@ -43,7 +47,9 @@ registerContactPrivacySource({
     // removes commercial personal copies, never rewrites verified money.
     const invoices=await tx.update(invoiceMarketPolicies).set({merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}).where(or(eq(invoiceMarketPolicies.merchantContactId,contactId),userId?and(isNull(invoiceMarketPolicies.merchantContactId),eq(invoiceMarketPolicies.sellerUserId,userId)):undefined)).returning({id:invoiceMarketPolicies.invoiceId});
     const agreements=await tx.update(subscriptionMarketPolicies).set({merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}).where(or(eq(subscriptionMarketPolicies.merchantContactId,contactId),userId?and(isNull(subscriptionMarketPolicies.merchantContactId),eq(subscriptionMarketPolicies.sellerUserId,userId)):undefined)).returning({id:subscriptionMarketPolicies.subscriptionId});
-    return{affected:invoices.length+agreements.length};
+    const collectionRows=await tx.update(invoiceMerchantCollections).set({merchantName:ERASED_MERCHANT_NAME,merchantSupport:null}).where(inArray(invoiceMerchantCollections.allocationId,
+      tx.select({id:invoiceMerchantAllocations.id}).from(invoiceMerchantAllocations).where(or(eq(invoiceMerchantAllocations.merchantContactId,contactId),userId?and(isNull(invoiceMerchantAllocations.merchantContactId),eq(invoiceMerchantAllocations.sellerUserId,userId)):undefined)))).returning({id:invoiceMerchantCollections.allocationId});
+    return{affected:invoices.length+agreements.length+collectionRows.length};
   },
 });
 
@@ -79,3 +85,22 @@ registerIdentityReference("invoice_merchant_allocations",
  (tx,from,to)=>tx.update(invoiceMerchantAllocations).set({merchantContactId:to}).where(eq(invoiceMerchantAllocations.merchantContactId,from)),
  (tx,ids,contactId)=>tx.update(invoiceMerchantAllocations).set({merchantContactId:contactId}).where(inArray(invoiceMerchantAllocations.id,ids)),
 );
+
+// Collection copies inherit the allocation's existing contact pointer. A
+// separate bounded child witness protects undo without a duplicate identity
+// column or a second repoint of that original allocation.
+const collectionWitness=z.array(z.object({id:z.uuid(),fingerprint:z.string().regex(/^[0-9a-f]{64}$/)})).max(5000);
+async function collectionSnapshot(tx:Tx,ids:string[]){
+ const rows=await tx.select({id:invoiceMerchantCollections.allocationId,material:sql<string>`to_jsonb(${invoiceMerchantCollections})::text`})
+  .from(invoiceMerchantCollections).innerJoin(invoiceMerchantAllocations,eq(invoiceMerchantAllocations.id,invoiceMerchantCollections.allocationId))
+  .where(inArray(invoiceMerchantAllocations.merchantContactId,ids)).orderBy(invoiceMerchantCollections.allocationId).limit(5001);
+ return rows.length>5000?null:rows.map(({id,material})=>({id,fingerprint:createHash("sha256").update(material).digest("hex")}));
+}
+registerContactReference({
+ table:"invoice_merchant_collections",columns:[],repoint:async()=>undefined,
+ captureForUndo:async(tx,from,to)=>{const state=await collectionSnapshot(tx,[from,to]);return{state:state??[],undoable:state!==null,...(state===null?{blocker:"Merchant collection evidence exceeds the safe undo limit."}:{})};},
+ restoreAfterUndo:async(tx,_before,after,from,to)=>{
+  const expected=collectionWitness.parse(after),current=await collectionSnapshot(tx,[from,to]);
+  if(current===null||JSON.stringify(current)!==JSON.stringify(expected))throw new ServiceError("conflict","Original merchant collection evidence changed after the contact merge.");
+ },
+});
