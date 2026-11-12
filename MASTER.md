@@ -13599,8 +13599,9 @@ whatever is best for the people using the site.
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original
   child/caller evidence also participates in financial debt. This draft has
-  not yet passed types/lint/native or completed-cohort/outbox failure controls;
-  frozen f6/v7 source remains separate. No new schema, negative provider proof,
+  now passes full Node22 types/changed-file lint and37 source controls with
+  one declared DB skip. Native/completed-cohort/outbox failure controls remain
+  unrun; clean e2c4/v7 source remains separate. No new schema, negative provider proof,
   model activation or completion claim. See
   `deploy/merchant-refund-erasure-outbox-source-2026-11-12.md`.
   Original return allocation BEFORE 2026-11-12: actual two-seller checkout
