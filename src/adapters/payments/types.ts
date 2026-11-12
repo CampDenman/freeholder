@@ -244,6 +244,21 @@ export interface MerchantScheduleLocator extends MerchantChargeScope {
   providerSubscriptionRef: string;
 }
 export interface MerchantScheduleResource extends MerchantScheduleLocator { providerCustomerRef: string; }
+export interface MerchantScheduleWebhookScope extends MerchantScheduleLocator {
+  providerScheduleOperationId?: string;
+  providerCustomerRef?: string;
+}
+/** Payment-specific committed source lookup; invoked only after raw HMAC verification. */
+export interface PaymentWebhookRequest extends RawProviderRequest {
+  /** Commit each authenticated original PI before any later page or fee read. */
+  onSubscriptionChargeObserved?: (event: PaymentProviderEvent) => Promise<PaymentProviderEvent>;
+  resolveSubscriptionScope?: (input: {
+    providerSubscriptionRef: string;
+    providerInvoiceRef?: string;
+    providerAccountId?: string;
+    metadata: Record<string, unknown>;
+  }) => Promise<MerchantScheduleWebhookScope | null>;
+}
 export interface MerchantScheduleInvoiceInventory {
   state: "paused" | "cancelled";
   invoices: Array<{ providerInvoiceRef: string; state: "paid" | "void" | "draft" | "open" | "uncollectible" }>;
@@ -412,6 +427,8 @@ export type PaymentProviderEvent = MerchantChargeScope & (
       applicationFeeMinor?: number;
       subscriptionChargeReceiptId?: string;
       subscriptionChargeObservationId?: string;
+      subscriptionId?: string;
+      providerScheduleOperationId?: string;
       customerChargeVerified?: boolean;
       merchantRouteVerified?: boolean;
       providerChargeRef?: string;
@@ -461,5 +478,5 @@ export interface PaymentAdapter {
   inspectMerchantScheduleInvoices?(request: MerchantScheduleResource): Promise<MerchantScheduleInvoiceInventory>;
   updateRecurringSchedule(request: RecurringScheduleUpdateRequest): Promise<RecurringScheduleResult>;
   cancelRecurringSchedule(request: PaymentAccountScope & { providerRef: string; idempotencyKey: string }): Promise<void>;
-  verifyWebhook(request: RawProviderRequest): Promise<readonly PaymentProviderEvent[]>;
+  verifyWebhook(request: PaymentWebhookRequest): Promise<readonly PaymentProviderEvent[]>;
 }

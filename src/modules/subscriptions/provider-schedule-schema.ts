@@ -70,13 +70,13 @@ export const subscriptionProviderScheduleErasures = pgTable("subscription_provid
   jobId: uuid("job_id").notNull(),
   jobKey: text("job_key").notNull(),
   jobIds: jsonb("job_ids").$type<string[]>().notNull(),
-  state: text("state", { enum: ["pending", "completed"] }).notNull().default("pending"),
+  state: text("state", { enum: ["pending", "verified", "completed"] }).notNull().default("pending"),
   createdAt: createdAtColumn(), completedAt: timestamp("completed_at", { withTimezone: true }),
 }, t => [
   uniqueIndex("subscription_schedule_erasures_original").on(t.profileId, t.requestId, sql`coalesce(${t.subscriptionId}::text,'')`),
   index("subscription_schedule_erasures_profile").on(t.profileId),
   index("subscription_schedule_erasures_request").on(t.requestId),
-  check("subscription_schedule_erasures_state", sql`${t.state} in ('pending','completed')`),
+  check("subscription_schedule_erasures_state", sql`${t.state} in ('pending','verified','completed')`),
   check("subscription_schedule_erasures_scope", sql`(${t.privacyScope}='commerce.merchantTax' and ${t.subscriptionId} is null) or (${t.privacyScope}='subscriptions.agreements' and ${t.subscriptionId} is not null)`),
   check("subscription_schedule_erasures_complete", sql`${t.state}<>'completed' or ${t.completedAt} is not null`),
 ]);

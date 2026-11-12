@@ -6,7 +6,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { PaymentProviderEvent } from "@/adapters/payments";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
-import { registerSubscriptionProviderEvidenceRetainer } from "@/modules/invoicing/merchant-provider-stage";
+import { registerSubscriptionProviderChargeObserver, registerSubscriptionProviderEvidenceRetainer } from "@/modules/invoicing/merchant-provider-stage";
 import { registerSubscriptionInvoiceRouting } from "@/modules/invoicing/merchant-agreement-charge";
 import { invoices } from "@/modules/invoicing/schema";
 import { subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
@@ -90,23 +90,32 @@ export const completeProviderChargeFee = defineService({
   },
 });
 
-/** Called outside ordinary application: each .call commits its own short phase. */
-export async function retainSubscriptionChargeEvidence(provider: string, event: PaymentProviderEvent): Promise<PaymentProviderEvent> {
-  if (event.kind !== "subscription_period_paid" || !event.providerPlatformAccountId) return event;
+/** Capture only: a later policy or fee failure cannot stop the next paid fact. */
+async function captureSubscriptionCharge(provider: string, event: PaymentProviderEvent): Promise<{ event: PaymentProviderEvent; applicationAllowed: boolean }> {
+  if (event.kind !== "subscription_period_paid" || !event.providerPlatformAccountId) return { event, applicationAllowed: true };
   if (provider !== "stripe" || !event.invoiceProviderRef || !event.paymentProviderRef || !event.providerChargeRef || !event.amountMinor || !event.currency) throw new ServiceError("conflict", "The authenticated renewal lacks its original invoice, intent or charge evidence.");
   const { receiptId, observationId, matchesOriginalMoney } = await retainProviderCharge.call({ provider, providerSubscriptionRef: event.providerRef, providerPlatformAccountId: event.providerPlatformAccountId,
     providerAccountId: event.providerAccountId, providerInvoiceRef: event.invoiceProviderRef, providerPaymentIntentRef: event.paymentProviderRef,
     providerChargeRef: event.providerChargeRef, amountMinor: event.amountMinor, currency: event.currency,
     destinationAccountId: event.destinationAccountId, settlementMerchantAccountId: event.settlementMerchantAccountId,
     customerChargeVerified: event.customerChargeVerified, merchantRouteVerified: event.merchantRouteVerified }, { kind: "system" });
-  if (!receiptId) return event;
-  // The observation above is already committed. Never throw away a later
-  // authenticated contradiction by rolling it back with invoice policy.
-  if (!matchesOriginalMoney || !event.customerChargeVerified) throw new ServiceError("conflict", "The original observed renewal money is retained and needs reconciliation before invoice application.");
-  if (event.observedApplicationFeeMinor !== undefined && event.applicationFeeCurrency) await completeProviderChargeFee.call({ receiptId, amountMinor: event.observedApplicationFeeMinor, currency: event.applicationFeeCurrency }, { kind: "system" });
-  return { ...event, subscriptionChargeReceiptId: receiptId, subscriptionChargeObservationId: observationId };
+  if (!receiptId) return { event, applicationAllowed: true };
+  return { event: { ...event, subscriptionChargeReceiptId: receiptId, subscriptionChargeObservationId: observationId }, applicationAllowed: matchesOriginalMoney && event.customerChargeVerified === true };
 }
 
+/** Called outside ordinary application: each .call commits its own short phase. */
+export async function retainSubscriptionChargeEvidence(provider: string, event: PaymentProviderEvent): Promise<PaymentProviderEvent> {
+  const captured = await captureSubscriptionCharge(provider, event);
+  const prepared = captured.event;
+  if (prepared.kind !== "subscription_period_paid" || !prepared.subscriptionChargeReceiptId) return prepared;
+  // The observation above is already committed. Never throw away a later
+  // authenticated contradiction by rolling it back with invoice policy.
+  if (!captured.applicationAllowed) throw new ServiceError("conflict", "The original observed renewal money is retained and needs reconciliation before invoice application.");
+  if (prepared.observedApplicationFeeMinor !== undefined && prepared.applicationFeeCurrency) await completeProviderChargeFee.call({ receiptId: prepared.subscriptionChargeReceiptId, amountMinor: prepared.observedApplicationFeeMinor, currency: prepared.applicationFeeCurrency }, { kind: "system" });
+  return prepared;
+}
+
+registerSubscriptionProviderChargeObserver(async (provider, event) => (await captureSubscriptionCharge(provider, event)).event);
 registerSubscriptionProviderEvidenceRetainer(retainSubscriptionChargeEvidence);
 registerSubscriptionInvoiceRouting(async (ctx, input) => {
   const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId));

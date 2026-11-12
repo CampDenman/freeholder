@@ -36,7 +36,7 @@ CREATE TABLE subscription_provider_schedule_erasures (
  privacy_scope text NOT NULL, request_id uuid NOT NULL REFERENCES data_requests(id) ON DELETE RESTRICT,
  original_job_id uuid NOT NULL, job_id uuid NOT NULL, job_key text NOT NULL, job_ids jsonb NOT NULL, state text NOT NULL DEFAULT 'pending',
  created_at timestamptz NOT NULL DEFAULT now(), completed_at timestamptz,
- CONSTRAINT subscription_schedule_erasures_state CHECK(state IN('pending','completed')),
+ CONSTRAINT subscription_schedule_erasures_state CHECK(state IN('pending','verified','completed')),
  CONSTRAINT subscription_schedule_erasures_scope CHECK((privacy_scope='commerce.merchantTax' AND subscription_id IS NULL) OR(privacy_scope='subscriptions.agreements' AND subscription_id IS NOT NULL)),
  CONSTRAINT subscription_schedule_erasures_complete CHECK(state<>'completed' OR completed_at IS NOT NULL)
 );
