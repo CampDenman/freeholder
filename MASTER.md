@@ -14609,6 +14609,15 @@ whatever is best for the people using the site.
   NULL-payment, foreign/legacy corruption, combined source qualification and
   independent acceptance remain required. See
   `deploy/original-feedback-owner-source-2026-11-13.md`.
+  Subscription undo identity correction (2026-11-13, C1.08/C12.38): an
+  isolated SOURCE ONLY parser repair preserves exact original feedback
+  `namespaceDigest:feedbackUUID` identities for `refund_financial`, alongside
+  compatible historical UUID financial entries. Other evidence kinds remain
+  strict UUID; table identity remains folded into the existing complete-array
+  fingerprints.29 strict parser cases and an actual receipt-only financial
+  snapshot assertion are PREPARED/UNRUN. No financial history, SQL or cash
+  namespace changes; global merge/undo/native qualification remains open. See
+  `deploy/subscription-financial-undo-ids81-source-20261113.md`.
   Actual full-cash component qualification 2026-11-13 (C12.38/C5.19):
   all four unchanged controls pass on d8a92d54/SQL0cff+438, with independent
   money/receipt/13-table digests/all82journal/profile/drain checks before each

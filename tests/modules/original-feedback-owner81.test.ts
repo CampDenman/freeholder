@@ -22,6 +22,7 @@ import { originalMerchantRefundRepairSource, ORIGINAL_REFUND_EVIDENCE_EVENT } fr
 import { paymentWebhookRoute } from "@/modules/invoicing/payment-webhook-route";
 import { invoices, payments, refunds } from "@/modules/invoicing/schema";
 import { subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
+import { merchantSubscriptionUndo, subscriptionOriginalEvidence } from "@/modules/subscriptions/merchant-scope";
 import { partialCashFixture } from "../helpers/original-cash-partial";
 import { seedActualProviderSubscription80 } from "../helpers/merchant-subscription80";
 import { closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
@@ -119,5 +120,18 @@ describe.runIf(hasDatabase)("actual original raw feedback privacy owner81",{time
     expect((await originalMerchantRefundRepairSource.call({kind:"legacy_bank_feedback",id:raw.id},{kind:"system"})).profileId).toBe(subscriptionSource.fixture.profiles[0]!.profileId);
     expect(await db().select().from(payments)).toHaveLength(0);expect(await db().select().from(refunds)).toHaveLength(0);expect(await db().select().from(originalCashRecoveries)).toHaveLength(0);
     expect(await db().select().from(subscriptionProviderChargeReceipts)).toEqual(receipts);
+    // Exercise the actual shared subscription snapshot consumed by merge undo,
+    // using this real signed receipt-only financial child before any owner/GET.
+    const financial = await db().transaction(tx => merchantRefundDependencyFingerprints(tx, { paymentIds: [], subscriptionChargeReceiptIds: [receipt.id] }));
+    expect(financial.incomplete).toBe(false);
+    const child = financial.entries.find(entry => entry.table === "original_cash_feedback" && entry.id.endsWith(`:${raw.id}`));
+    if (!child) throw new Error("The actual original receipt feedback lost its namespace identity.");
+    const actualBuyerId = subscriptionSource.fixture.buyer.id, actualSubscriptionId = subscriptionSource.accepted.subscription.id;
+    const original = await db().transaction(tx => subscriptionOriginalEvidence(tx, [actualBuyerId]));
+    expect(original.overflow).toBe(false);
+    const snapshot = merchantSubscriptionUndo.parse({ movedIds: [actualSubscriptionId], originalEvidence: original.evidence });
+    expect(snapshot.originalEvidence).toEqual(original.evidence);
+    expect(snapshot.originalEvidence).toContainEqual({ kind: "refund_financial", id: child.id,
+      fingerprint: createHash("sha256").update(JSON.stringify([child.table, child.fingerprint])).digest("hex") });
   });
 });
