@@ -21,6 +21,27 @@ export async function crawlErasureScopeAvailable(tx: ScopeReader): Promise<boole
   return Boolean(row?.available);
 }
 
+/** Capability is checked before a worker can admit physical cleanup. A
+ * missing historical guard is recovery debt, never permission to emulate it.
+ */
+export async function crawlErasureGuardsAvailable(tx: ScopeReader): Promise<boolean> {
+  const [row] = await tx.execute<{ available: boolean }>(sql`
+    select count(*)=4
+      and to_regprocedure('public.freeholder_crawl_erasure_scope_complete(uuid)') is not null
+      and to_regprocedure('public.freeholder_crawl_projection_retired(uuid,uuid)') is not null as available
+    from (values
+      ('public.import_crawl_erasure_scopes','import_crawl_erasure_scopes_capture','public.freeholder_guard_crawl_erasure_capture()'),
+      ('public.import_crawl_erasure_sources','import_crawl_erasure_sources_capture','public.freeholder_guard_crawl_erasure_capture()'),
+      ('public.import_crawl_erasure_scopes','import_crawl_erasure_scopes_complete','public.freeholder_require_crawl_erasure_scope_complete()'),
+      ('public.data_requests','data_requests_crawl_erasure_completion','public.freeholder_require_crawl_erasure_completion()')
+    ) required(table_name,trigger_name,function_name)
+    join pg_trigger guard on guard.tgrelid=to_regclass(required.table_name)
+      and guard.tgname=required.trigger_name and guard.tgfoid=to_regprocedure(required.function_name)
+    where not guard.tgisinternal and guard.tgenabled in ('O','A')
+  `);
+  return Boolean(row?.available);
+}
+
 async function existingScope(tx: ScopeReader, requestId: string): Promise<CrawlErasureScope | null> {
   const [header] = await tx.select().from(importCrawlErasureScopes).where(eq(importCrawlErasureScopes.requestId, requestId)).limit(1);
   if (!header) return null;
@@ -77,5 +98,6 @@ export async function hasOriginalCrawlRecoveryEvidence(tx: ScopeReader, requestI
 
 export async function originalCrawlScopeIsComplete(tx: ScopeReader, requestId: string): Promise<boolean> {
   if (!await crawlErasureScopeAvailable(tx)) return false;
-  return Boolean(await existingScope(tx, requestId));
+  const [row] = await tx.execute<{ complete: boolean }>(sql`select freeholder_crawl_erasure_scope_complete(${requestId}::uuid) as complete`);
+  return Boolean(row?.complete);
 }

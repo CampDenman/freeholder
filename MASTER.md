@@ -6519,6 +6519,15 @@ deployments are portable, testable and incapable of silently forking the truth.
   Independent TCP/runner/client drain and the ordinary80 journal are unchanged.
   This is not historical-completion reconstruction or production-artifact
   acceptance; the untouched false-completed golden still needs reviewed recovery.
+  Historical review on a NEW copy of the untouched c623 golden genuinely
+  fails3.23s: valid original artifact/audit/retired cohorts reopen only their
+  known2 jobs and in_progress status, but recoveryRequired is0 while complete
+  capture tables are absent. No migration/reset ran; readiness/schema/journal
+  stamps and golden hashes remain unchanged. Final ACK-refusal was not reached.
+  A disabled source-only correction now flags missing capture/guard recovery
+  and blocks worker physical admission when required guards are unavailable.
+  Source qualification and a NEW golden-derived AFTER remain pending; the
+  populated work BEFORE and golden remain preserved. No old scope is inferred.
   No ordinary81, above500-entry or privacy-completion claim is made; this item
   remains open. See `deploy/import-http-graph-source-2026-11-12.md`.
   Original-hold snapshot source increment 2026-11-12: an actual new HTTP-crawl

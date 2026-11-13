@@ -40,7 +40,7 @@ async function historySchemaStamp(): Promise<string> {
 
 describe.runIf(hasDatabase)("actual historical HTTP receipt recovery review", () => {
   beforeAll(async () => {
-    if (new URL(process.env.DATABASE_URL!).pathname !== `/${workDatabase}`) throw new Error("Only the explicitly NEW review work clone is allowed; never the golden clone.");
+    if (![workDatabase, "freeholder_crawl81_index_leak_review_after_test_20261112"].includes(new URL(process.env.DATABASE_URL!).pathname.slice(1))) throw new Error("Only the explicitly NEW review work clone is allowed; never the golden clone.");
     const beforeReady = await historySchemaStamp();
     await ready();
     const afterReady = await historySchemaStamp();

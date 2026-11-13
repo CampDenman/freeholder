@@ -20,7 +20,7 @@ import { deleteWithReceipt, discardUnwrittenObjectReservation } from "@/core/med
 import { boundStorage } from "@/adapters/storage";
 import { importCrawlRequests, importCrawlResponseErasures, importCrawlResponses, importCrawlSources } from "./crawl-schema";
 import { markImportCrawlWriter } from "./crawl-writer";
-import { captureCrawlErasureScope, hasAppliedCrawlRetirementEvidence, hasOriginalCrawlRecoveryEvidence, originalCrawlScopeIsComplete } from "./crawl-erasure-scope";
+import { captureCrawlErasureScope, crawlErasureGuardsAvailable, hasAppliedCrawlRetirementEvidence, hasOriginalCrawlRecoveryEvidence, originalCrawlScopeIsComplete } from "./crawl-erasure-scope";
 import { minimizeCrawlInputProjections, minimizeCrawlRootInput } from "./crawl-projection-privacy";
 import { registerImportOriginalCollector, type ImportOriginalCaptureContext, type ImportOriginalMember } from "./source-retention";
 
@@ -249,6 +249,7 @@ export const confirmCrawlOriginalErasure = defineService({
 /** Called by a durable registered worker, outside any provider-holding TX. */
 export async function eraseCrawlOriginals(data: Record<string, unknown>): Promise<{ erased: number }> {
   const input = erasureInput.extend({ originalJobId: z.uuid() }).parse(data);
+  if (!await crawlErasureGuardsAvailable(db())) throw new ServiceError("conflict", "The original HTTP erasure needs reviewed guarded-schema recovery before further physical cleanup or acknowledgement.");
   const { keys } = await claimCrawlOriginalErasure.call(input, { kind: "system" });
   const captured = await boundStorage();
   if (captured.store.isPublic) throw new ServiceError("conflict", "Original HTTP erasure needs the exact original private resource.");
@@ -296,11 +297,15 @@ export const reconcileCrawlOriginalObservation = defineService({
       group by cohort.id,cohort.request_id,original.id order by cohort.id limit 500
     `);
     let recoveryRequired = 0;
+    const guardsAvailable = await crawlErasureGuardsAvailable(ctx.tx);
+    const completeScopes = new Map<string, boolean>();
     for (const row of selection) {
       if (!await hasAppliedCrawlRetirementEvidence(ctx.tx, row.request_id)) { recoveryRequired++; continue; }
+      if (!completeScopes.has(row.request_id)) completeScopes.set(row.request_id, await originalCrawlScopeIsComplete(ctx.tx, row.request_id));
+      const missingOriginalWitness = !guardsAvailable || !completeScopes.get(row.request_id);
       const evidence = createHash("sha256").update(row.evidence).digest("hex");
       const reopened = await ctx.call(reopenErasureJob, { requestId: row.request_id, scope: CRAWL_ERASURE_SCOPE, jobName: CRAWL_ERASURE_JOB, jobData: { responseIds: [row.response_id] }, idempotencyKey: `crawl-projection-v1:${row.response_id}:${evidence}` });
-      if (reopened.recoveryRequired) recoveryRequired++;
+      if (missingOriginalWitness || reopened.recoveryRequired) recoveryRequired++;
     }
     const next = selection.length === 500 ? selection.at(-1)!.id : null;
     if (next) await ctx.queueJob(CRAWL_RECONCILIATION_JOB, { after: next, ...(input.receiptId ? { receiptId: input.receiptId } : {}) });

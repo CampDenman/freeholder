@@ -389,3 +389,43 @@ Its separately prepared historical recovery review remains unrun, as do the
 held/late/expiry matrix and full above500-entry owner acceptance. Old native
 application-source refusal supplies no new production-artifact, ordinary81,
 provider or stable sign-off. C3.47 remains open.
+
+## Historical missing-capture reporting boundary and disabled correction
+
+An actual NEW history work clone matched the immutable c623/v6 golden on19
+table count/hashes and full schema/journal before review. No migration or reset
+ran: the dedicated runner asserts resolved globalSetup=[] before test start,
+requires its exact explicit work database and refuses .env fallback. Read-only
+stamps immediately before/after real ready() matched.
+
+Frozen f13/789 (product-identical to e5) then genuinely failed3.23s at the
+explicit-recovery assertion. The valid original checksummed artifact and actual
+fulfillment audit allowed reopening ONLY the original2 retired response cohorts
+and real durable jobs; the actual request became in_progress and the later
+actual zero-response generation was untouched. However, the source reported
+recoveryRequired=0 despite absent complete-capture tables. The final worker/ACK
+refusal assertion was not reached. The original old index marker remains.
+
+Independent readback confirms golden19 hashes/schema/journal unchanged, work
+schema/journal unchanged, original retired PUT2/DELETE2 unchanged, reservations0
+and every runner/client drained. The populated work BEFORE is preserved without
+reuse or reset. Deleted original private bytes were never restored or claimed
+preserved. Reports: `/tmp/freeholder-crawl81-history-review-work-clone-20261112.json`,
+`/tmp/freeholder-crawl-history-ready-schema-preflight-20261112.json` and
+`/tmp/freeholder-crawl-history-review-work-{native-one.log,classification-20261112.json}`.
+
+The subsequent disabled SOURCE-ONLY correction reports explicit recovery when
+complete original scope or required capture/projection guards are unavailable.
+Reopening still uses only actual applied/retired cohorts and a valid artifact;
+no header is fabricated and no later generation is admitted. Workers refuse
+physical cleanup before admission if guarded schema is missing, rather than
+trying deletion and failing at metadata minimization. Scope completeness uses
+the same normalized SQL predicate without materializing entire cohorts for a
+boolean check, and reconciliation caches that result per original request.
+
+Only the exact new AFTER work-database name is added to the test safety
+allowlist; its domain assertions/deadlines remain unchanged. Source checks and
+a NEW copy from untouched golden are required before an AFTER claim. Existing
+work BEFORE and golden cannot be migrated, reset or reused for that AFTER.
+The required normal81/runtime/UI/holds/late/expiry/second-process and provider
+acceptance remain open; source SQL881a/4669 is unchanged and81 unregistered.

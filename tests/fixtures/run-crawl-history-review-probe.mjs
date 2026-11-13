@@ -2,7 +2,7 @@
 import {existsSync} from 'node:fs';
 import {createVitest} from 'vitest/node';
 const database=process.env.TEST_DATABASE_URL;
-if(!database||new URL(database).hostname!=='127.0.0.1'||new URL(database).pathname!=='/freeholder_crawl81_index_leak_review_work_test_20261112')throw new Error('Only the explicitly NEW disposable work clone is allowed.');
+if(!database||new URL(database).hostname!=='127.0.0.1'||!['/freeholder_crawl81_index_leak_review_work_test_20261112','/freeholder_crawl81_index_leak_review_after_test_20261112'].includes(new URL(database).pathname))throw new Error('Only the explicitly NEW disposable work clone is allowed.');
 if(existsSync('.env'))throw new Error('Historical review refuses environment-file fallback; use its explicit work-clone URL.');
 // Match the normal Vitest launcher environment, without starting its tests.
 process.env.TEST='true';process.env.VITEST='true';process.env.NODE_ENV??='test';
