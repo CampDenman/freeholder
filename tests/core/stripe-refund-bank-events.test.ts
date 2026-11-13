@@ -25,7 +25,7 @@ describe("signed original bank refund feedback", () => {
           failure_balance_transaction: status === "failed" ? "txn_bankReturned" : null } } };
       const body = Buffer.from(JSON.stringify(payload));
       const signature = createHmac("sha256", secret).update(`${now}.`).update(body).digest("hex");
-      const [event] = await adapter.verifyWebhook!({ body, headers: { "stripe-signature": `t=${now},v1=${signature}` }, receivedAt: new Date(now * 1000).toISOString() });
+      const [event] = await adapter.verifyWebhook({ body, headers: { "stripe-signature": `t=${now},v1=${signature}` }, receivedAt: new Date(now * 1000).toISOString() });
       expect(event).toMatchObject({ id: payload.id, providerRef: "pyr_bankOriginal", providerStatus: status,
         providerPlatformAccountId: "acct_originalPlatform", providerAccountId: "acct_originalSeller", observedProviderApiVersion: "2026-10-28.endive",
         observedPaymentIntentRef: status === null ? null : "pi_original", providerChargeRef: "ch_original", amountMinor: 1000, currency: "CAD" });
@@ -39,7 +39,7 @@ describe("signed original bank refund feedback", () => {
     const fetcher = vi.fn<typeof fetch>();
     const adapter = createStripePayments({ secretKey: "sk_bank_event_fixture", webhookSecrets: ["whsec_bank_event_fixture"], fetch: fetcher });
     const now = Math.floor(Date.now() / 1000);
-    await expect(adapter.verifyWebhook!({ body: Buffer.from("{}"), headers: { "stripe-signature": `t=${now},v1=${"0".repeat(64)}` }, receivedAt: new Date(now * 1000).toISOString() }))
+    await expect(adapter.verifyWebhook({ body: Buffer.from("{}"), headers: { "stripe-signature": `t=${now},v1=${"0".repeat(64)}` }, receivedAt: new Date(now * 1000).toISOString() }))
       .rejects.toMatchObject({ code: "authentication" });
     expect(fetcher).not.toHaveBeenCalled();
   });

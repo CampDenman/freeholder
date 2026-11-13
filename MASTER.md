@@ -13884,9 +13884,11 @@ whatever is best for the people using the site.
   receipts, nullable/action/failure-balance facts and current cash projections.
   Issued return credits remain unchanged; exact original RMA parts reopen and
   outstanding refund promises keep financial review debt. Masked owner/buyer
-  status and the scoped original-resource recovery path are drafted. No source
-  check, SQL application, native, browser or provider acceptance has run for
-  this checkpoint. Its separate owned fragment is unassembled; assembled80
+  status and the scoped original-resource recovery path are drafted. Full
+  Node22 types, changed-file lint and63 DB-free controls pass; initial import
+  and fixture type-only lint diagnostics were corrected and preserved. No SQL
+  application, actual financial native, browser or provider acceptance has run.
+  Its separate owned fragment is unassembled; assembled80
   SQL958 and all preserved databases/clones are unchanged. Generic/manual
   causal discharge and legacy bank recovery remain unfinished work. This does
   not activate the new model or close C12.38. See

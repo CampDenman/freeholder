@@ -1,9 +1,10 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # Original bank refund current-state draft
 
-This checkpoint is **unqualified source**, based on isolated CURRENT0fbe.
-No compiler, test, migration, provider account or browser acceptance has run
-for this draft. The assembled0080 file remains byte-identical SQL958; the
+This checkpoint is a **source-qualified draft**, based on isolated CURRENT0fbe.
+Full Node22 types, changed-source lint and the finite63 DB-free controls pass.
+No migration, actual financial database, provider account or browser acceptance
+has run for this draft. The assembled0080 file remains byte-identical SQL958; the
 owned `merchant-refund-current-state80.fragment.sql` is unassembled and must
 only enter a separately reviewed, freshly migrated unpublished80 candidate.
 All existing v9 databases and populated-before clones remain untouched.
@@ -80,10 +81,27 @@ same scoped/step-up shared service for another exact-resource read. Stripe
 bank-detail instructions remain in its own customer email/provider flow; the
 application never fabricates a hosted action URL or asks for bank details.
 
-Draft controls cover current-state transitions, semantic-repeat invalidation,
-stale/unfinished proof, nullable fields, foreign original scope/money, capacity
-projection and actual factory/HMAC normalization. They have **not run**. The
-next finite request is Node22 types, changed-source lint and these affected
-DB-free controls. SQL syntax/model parity, fresh ordinary migration and actual
-state-transition/two-resource/caller/stale-read/credit/privacy/native tests follow only after
-source qualification and separately granted database windows.
+Source qualification on eba4be21 plus two mechanical corrections passed:
+
+- Twelve tracked dependency manifests match the qualified current-financial-v9
+  donor byte-for-byte; only its existing dependency tree is linked, no install.
+- The first full Node22 8GB typecheck reported one incorrect app import alias.
+  The real relative import correction passed the renewed full/incremental
+  typecheck. First log: `/tmp/freeholder-bank-current80-types-v1.log`; passing
+  log: `/tmp/freeholder-bank-current80-types-v2.log`.
+- Changed-file lint examined46 TS/TSX files. Its only diagnostics were two
+  redundant non-null assertions in the new HMAC fixture. Removing them passed
+  the affected single-file lint; unchanged clean files were not repeated.
+  Logs: `/tmp/freeholder-bank-current80-lint-v1.log` and `-lint-v2.log`.
+- Exactly five core files passed63 tests with0 failures/skips: private registry5,
+  capacity14, current proof19, actual refund adapter23 and signed bank events2.
+  Evidence: `/tmp/freeholder-bank-current80-five-controls-v1.json` and `.log`.
+  All runners exited and no database environment/client was used.
+
+These controls cover source authority, current-state decisions, repeated/stale
+proof, nullable fields, original scope/money, capacity and actual factory/HMAC
+normalization. They do not prove SQL behavior or actual bank recovery. SQL
+syntax/model parity, fresh ordinary migration and actual state-transition,
+two-resource, caller, stale-read, credit, privacy, legacy and provider acceptance
+remain required under separately granted database windows. The changeset has
+not been folded into final generated release notes or a current-main union.
