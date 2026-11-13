@@ -15791,3 +15791,9 @@ acceptance. Real query/consumer integration, complete positive provider/partial
 batch/calendar/disposition/recovery/UI/privacy and actual account/security
 acceptance remain REQUIRED, with no new deferral or C/stable closure. See
 deploy/controlled-cash-inspection-producer82-20261113.md.
+
+Parent qualification repair2026-11-13: full TypeScript passed56.115s at007315b9.
+Focused lint stopped on a native-test callback declaration whose generic call
+parameter was unknown. The control now derives its callback input from the real
+service Zod schema. No handler/oracle/lint policy changes; failed v22 remains
+preserved and renewed143/source/native acceptance remains pending.

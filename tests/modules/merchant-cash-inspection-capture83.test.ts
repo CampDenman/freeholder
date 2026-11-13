@@ -24,7 +24,7 @@ describe.runIf(hasDatabase)("actual original inspection callback capture ownersh
  it("authenticates the actual held callback but retains a later same-state occurrence separately without adopting it as that read",async()=>{
   const f=fixture=await partialCashFixture({unapplied:true});f.dashboardRefund(1);
   const claim=await prepareMerchantCashReturnInspection.call({source:f.source},system),inspect=f.base.stripe.inspectMerchantReturnedCash?.bind(f.base.stripe);if(!inspect)throw Error("The real Stripe GET adapter is required.");
-  let callback:Parameters<typeof recordMerchantRefundObservation.call>[0]|undefined;
+  let callback:z.input<typeof recordMerchantRefundObservation.def.input>|undefined;
   await performMerchantCashReturnInspection(claim,()=>inspect({providerPlatformAccountId:claim.providerPlatformAccountId,providerApiVersion:claim.providerApiVersion,...(claim.providerAccountId?{providerAccountId:claim.providerAccountId}:{}),paymentProviderRef:claim.paymentProviderRef,
    onOriginalCashObserved:async evidence=>{await recordCashReturnPrimaryObservation.call({...claim,evidence:merchantPaymentEvidence.extend({amountMinor:z.number().int().nonnegative(),currency:z.string().regex(/^[A-Z]{3}$/)}).parse(evidence)},system);},
    onRefundObserved:async evidence=>{callback={source:f.source,inspectionId:claim.inspectionId,inspectionCompletionNonce:claim.completionNonce,evidence:{...evidence,providerApiVersion:evidence.providerApiVersion??null,status:evidence.providerStatus??null}};await recordMerchantRefundObservation.call(callback,system);},
