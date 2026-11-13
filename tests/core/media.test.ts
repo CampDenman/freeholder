@@ -1263,11 +1263,15 @@ describe.runIf(hasDatabase)("the asset library", () => {
         STAFF,
       );
       expect(reservation.strategy).toBe("direct_multipart");
-      const signed = await signUploadParts.call(
+      // The fixture already exposes a provider-held part. Preserve all
+      // assembly/receipt/idempotency oracles below while refusing NEW browser
+      // PUT authority until the durable original per-part protocol exists.
+      const signing = await failure(signUploadParts.call(
         { id: reservation.id, partNumbers: [1] },
         STAFF,
-      );
-      expect(signed.parts[0]?.url).toContain("X-Amz-Signature");
+      ));
+      expect(signing.code).toBe("conflict");
+      expect(signing.message).toContain("upload recovery is fully supported");
       await expect(
         uploadStatus.call({ id: reservation.id }, STAFF),
       ).resolves.toMatchObject({ partCount: 1, partSize: 8 * 1024 * 1024 });
