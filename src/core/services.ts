@@ -20,6 +20,7 @@ import "@/core/mail/privacy";
 import "@/core/mail/ownership";
 import "@/core/media/write-ownership";
 import "@/core/media/multipart-ownership";
+import "@/core/media/transfer-ownership";
 import "@/core/media/multipart-privacy";
 import "@/core/media/write-privacy";
 import agentServices from "@/core/agents/service";
@@ -65,6 +66,8 @@ import mailServices from "@/core/mail/service";
 import mailOAuthServices from "@/core/mail/oauth";
 import mediaServices from "@/core/media/service";
 import mediaRecoveryServices from "@/core/media/write-recovery";
+import mediaTransferErasureServices from "@/core/media/transfer-erasure";
+import mediaTransferServices from "@/core/media/transfer-service";
 import mediaTransferPreviewServices from "@/core/media/transfer-preview";
 import multipartRecoveryServices from "@/core/media/multipart-recovery";
 import notificationServices from "@/core/notifications/service";
@@ -192,6 +195,8 @@ const services: Service[] = [
   ...mediaServices,
   ...mediaRecoveryServices,
   ...mediaTransferPreviewServices,
+  ...mediaTransferServices,
+  ...mediaTransferErasureServices,
   ...multipartRecoveryServices,
   ...notificationServices,
   ...schedulingServices,

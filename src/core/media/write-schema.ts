@@ -22,6 +22,8 @@ export const mediaObjectWrites = pgTable("media_object_writes", {
   actor: text("actor").notNull(),
   contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "restrict" }),
   state: text("state", { enum: MEDIA_WRITE_STATES }).notNull(),
+  writerRuntimeId: uuid("writer_runtime_id"),
+  writerFinishedAt: timestamp("writer_finished_at", { withTimezone: true }),
   observedAcceptedAt: timestamp("observed_accepted_at", { withTimezone: true }),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   reviewedBy: text("reviewed_by"),

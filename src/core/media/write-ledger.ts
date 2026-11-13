@@ -10,6 +10,7 @@ import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { dataRequests, privacyRetentionExceptions } from "@/core/privacy/schema";
 import { actorString, ServiceError, type Actor, type Tx } from "@/core/service";
 import { assets, mediaObjects, mediaUploads } from "./schema";
+import {mediaWriterRuntimeId} from "./physical-caller-runtime";
 import { mediaObjectWrites } from "./write-schema";
 import { pendingObjectIsOwned } from "./object-ledger";
 import {mediaMultipartResources} from "./multipart-schema";
@@ -26,6 +27,7 @@ async function lockObject(tx: Tx, key: string) {
   await lockObjectDigest(tx, objectKeyDigest(key));
 }
 export async function lockObjectDigest(tx: Tx, digest: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock_shared(1691709,82)`);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`media-object-write:${digest}`}))`);
 }
 export function objectKeyDigest(key: string): string {
@@ -70,6 +72,8 @@ export type CapturedStorage=Awaited<ReturnType<typeof boundStorage>>;
 /** Existing stored bytes are read only through their accepted original fact. */
 export async function originalStoredObject(key:string):Promise<CapturedStorage&{key:string;receipt:{sha256:string;bytes:number}}>{
  const captured=await boundStorage();
+ const adopted=await(await import("./transfer-resolver")).adoptedPhysicalObject(key);
+ if(adopted)return{store:await(await import("./transfer-storage")).configuredPhysicalStorage(adopted.binding),...adopted};
  const receipt=await db().transaction(async tx=>{
   await lockContactIdentityForRead(tx);await lockObject(tx,key);
   const[object]=await tx.select().from(mediaObjects).where(eq(mediaObjects.key,key)).limit(1);
@@ -129,7 +133,7 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:C
     await assertOriginalUploadWritable(tx,contactId,originalActor);
     const id = randomUUID();
     await tx.insert(mediaObjectWrites).values({ id, operation: "put", key: input.key, keyDigest: objectKeyDigest(input.key), namespace: binding.namespace, storageKind: binding.kind,
-      storageLocation: binding.location, sha256, bytes: body.byteLength, contentType: input.contentType, actor: actorString(actor), contactId, state: "started" });
+      storageLocation: binding.location, sha256, bytes: body.byteLength, contentType: input.contentType, actor: actorString(actor), contactId, state: "started",writerRuntimeId:mediaWriterRuntimeId });
     await tx.insert(mediaObjects).values({ key: input.key, contentType: input.contentType, role: input.role, bytes: body.byteLength, uploadId: input.uploadId,ownerContactId:contactId, state: "pending" })
       .onConflictDoUpdate({ target: mediaObjects.key, set: { contentType: input.contentType, role: input.role, bytes: body.byteLength, updatedAt: new Date() } });
     return { reused: false as const, id };
@@ -162,7 +166,7 @@ export async function observeStorageOperation(id: string, accepted: boolean, set
     if (!accepted && row.state === "accepted") return;
     const contradiction = accepted && row.state === "confirmed_absent";
     await tx.update(mediaObjectWrites).set({ state: contradiction || !settled ? "unknown" : accepted ? "accepted" : "unknown",
-      ...(accepted&&!row.observedAcceptedAt ? { observedAcceptedAt: new Date() } : {}), ...(contradiction ? { deletedAt: null } : {}), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, id));
+      ...(accepted&&!row.observedAcceptedAt ? { observedAcceptedAt: new Date() } : {}), ...(settled&&accepted&&row.writerRuntimeId&&!row.writerFinishedAt?{writerFinishedAt:new Date()}:{}), ...(contradiction ? { deletedAt: null } : {}), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, id));
     if (contradiction && !row.redactedAt) {
       // A late positive fact supersedes a human's absence assertion. Restore
       // the pending pointer as well as the receipt so sweepers cannot lose it.
@@ -185,6 +189,8 @@ export async function storageOperationsHeld(tx: Tx, owners: Array<string | null>
  * The durable delete attempt fences a concurrent/future PUT for this key.
  */
 export async function deleteWithReceipt(key: string,captured?:CapturedStorage): Promise<boolean> {
+  const transferred=await(await import("./transfer-erasure")).deleteTransferredLineage(key);
+  if(transferred!==undefined)return transferred;
   if (await pendingObjectIsOwned(key)) return false;
   const { store, binding } = captured??await boundStorage();
   const claim = await db().transaction(async tx => {
@@ -207,7 +213,7 @@ export async function deleteWithReceipt(key: string,captured?:CapturedStorage): 
     }
     const id = randomUUID(), original = history.filter(row => row.operation === "put" && row.state === "accepted" && !row.deletedAt).at(-1) ?? history.at(-1);
     await tx.insert(mediaObjectWrites).values({ id, operation: "delete", key, keyDigest: objectKeyDigest(key), namespace: binding.namespace, storageKind: binding.kind, storageLocation: binding.location,
-      sha256: original?.sha256 ?? null, bytes: original?.bytes ?? null, contentType: original?.contentType ?? "application/octet-stream", actor: "system:media-cleanup", contactId: original?.contactId ?? null, state: "started" });
+      sha256: original?.sha256 ?? null, bytes: original?.bytes ?? null, contentType: original?.contentType ?? "application/octet-stream", actor: "system:media-cleanup", contactId: original?.contactId ?? null, state: "started",writerRuntimeId:mediaWriterRuntimeId });
     for(const request of await originalMediaErasureRequests(tx,history.map(row=>row.id)))await captureMediaErasureCohort(tx,request.requestId,request.scope as "media.storageOperations"|"media.multipartOperations",[id]);
     return { done: false as const, id };
   });
@@ -222,7 +228,7 @@ export async function deleteWithReceipt(key: string,captured?:CapturedStorage): 
     await db().transaction(async tx => {
       await allowMediaReceiptWrites(tx);
       await lockObject(tx, key);
-      await tx.update(mediaObjectWrites).set({ state: "accepted", observedAcceptedAt: new Date(), deletedAt: new Date(), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, claim.id));
+      await tx.update(mediaObjectWrites).set({ state: "accepted", observedAcceptedAt: new Date(), writerFinishedAt:new Date(), deletedAt: new Date(), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, claim.id));
       await tx.update(mediaObjectWrites).set({ deletedAt: new Date(), updatedAt: new Date() }).where(and(eq(mediaObjectWrites.keyDigest, objectKeyDigest(key)), eq(mediaObjectWrites.namespace, binding.namespace), isNull(mediaObjectWrites.deletedAt)));
       await tx.delete(mediaObjects).where(and(eq(mediaObjects.key, key), eq(mediaObjects.state, "pending")));
     });

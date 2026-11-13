@@ -207,3 +207,6 @@ export { importCrawlErasureScopes, importCrawlErasureSources } from "@/core/impo
 
 // C1.08/C3.47: exact original uploaded-source erasure membership, never a TTL store.
 export { importSourceErasureScopes, importSourceErasureMembers, importSourceErasureObjects } from "@/core/import/source-erasure-schema";
+
+// C1.12/C11.08: enabled only by the assembled verified-transfer capability.
+export {mediaStorageTransferPlans,mediaStorageTransferObjects,mediaStorageTransferReceipts,mediaStorageTransferSubjects,mediaStorageTransferCalls,mediaStorageWriterDrains} from "./media/transfer-schema";

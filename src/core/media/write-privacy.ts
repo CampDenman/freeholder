@@ -25,6 +25,7 @@ export async function minimizeMediaStorageOperations(tx: Tx, ids: string[]): Pro
     .orderBy(asc(mediaObjectWrites.id)).for("update");
   for (const row of rows) {
     if (await storageOperationsHeld(tx, [row.contactId])) continue;
+    if(await(await import("./transfer-lineage")).transferLineagePending(tx,row.id))continue;
     if (!row.deletedAt || !["accepted", "confirmed_absent"].includes(row.state)) continue;
     const unresolved = await tx.select({ id: mediaObjectWrites.id }).from(mediaObjectWrites)
       .where(and(eq(mediaObjectWrites.keyDigest, row.keyDigest), inArray(mediaObjectWrites.state, ["unverified", "started", "unknown"]))).limit(1);

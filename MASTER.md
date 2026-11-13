@@ -11768,6 +11768,16 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Durable lifecycle implementation checkpoint 2026-11-13: isolated source
+  adds complete first-plan receipt/subject capture, new actual writer birth/
+  finish facts without historical backfill, exact physical caller receipts,
+  configured private copy/SHA/revision proofs, atomic adoption, conditional
+  source retirement and all-copy erasure infrastructure. It is incomplete and
+  unqualified: transfer-specific privacy/retention and durable late recovery,
+  human recovery, owner UI/locales, jobs, final SQL guards/assembly and all
+  execution/acceptance gates remain required. The owned82 SQL tail is UNAPPLIED;
+  no journal entry, provider operation or qualification ran. See
+  `deploy/verified-media-transfer-lifecycle-2026-11-13.md`. No item closes.
   Verified-transfer source foundation 2026-11-12: four unregistered models
   keep immutable source/target locators, distinct logical and physical target
   keys, exact original receipt membership and original receipt contact subjects.
