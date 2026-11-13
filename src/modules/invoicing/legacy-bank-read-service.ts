@@ -25,10 +25,14 @@ const processState = globalThis as typeof globalThis & { [slot]?: Map<string, Lo
 const localReads = processState[slot] ??= new Map<string, LocalRead>();
 
 async function schemaReady(ctx: ServiceContext) {
-  const [result] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=3 as ready from pg_trigger where not tgisinternal
+  const [result] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=7 as ready from pg_trigger where not tgisinternal
     and (tgrelid,tgname) in ((to_regclass('public.legacy_bank_reads'),'legacy_bank_reads_guard'),
       (to_regclass('public.legacy_bank_read_facts'),'legacy_bank_read_facts_guard'),
-      (to_regclass('public.legacy_bank_read_finishes'),'legacy_bank_read_finishes_guard')) and tgenabled in ('O','A')`);
+      (to_regclass('public.legacy_bank_read_finishes'),'legacy_bank_read_finishes_guard'),
+      (to_regclass('public.legacy_bank_current_receipts'),'legacy_bank_current_receipts_guard'),
+      (to_regclass('public.refunds'),'legacy_bank_refund_capacity_guard'),
+      (to_regclass('public.refunds'),'legacy_bank_current_projection'),
+      (to_regclass('public.refunds'),'legacy_bank_current_balances')) and tgenabled in ('O','A')`);
   if (result?.ready !== true) throw new ServiceError("conflict", "Install the complete guarded legacy bank-read schema before inspecting original money.");
 }
 async function allowWrites(ctx: ServiceContext) {

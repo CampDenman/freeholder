@@ -89,3 +89,50 @@ BEGIN
 END $$;
 --> statement-breakpoint
 CREATE TRIGGER legacy_bank_refund_capacity_guard BEFORE INSERT ON refunds FOR EACH ROW EXECUTE FUNCTION freeholder_guard_legacy_bank_refund_capacity();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_legacy_bank_projection() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE current_state record; projected text;
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM legacy_bank_reads WHERE refund_id=OLD.id) THEN
+  IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+ END IF;
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Retain original legacy bank resource history' USING ERRCODE='23514'; END IF;
+ IF NEW.id IS DISTINCT FROM OLD.id OR NEW.payment_id IS DISTINCT FROM OLD.payment_id OR NEW.invoice_id IS DISTINCT FROM OLD.invoice_id
+  OR NEW.provider IS DISTINCT FROM OLD.provider OR NEW.provider_ref IS DISTINCT FROM OLD.provider_ref
+  OR NEW.amount_minor IS DISTINCT FROM OLD.amount_minor OR NEW.currency IS DISTINCT FROM OLD.currency
+  OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key OR NEW.request_hash IS DISTINCT FROM OLD.request_hash THEN
+  RAISE EXCEPTION 'Original legacy bank resource identity and money are immutable' USING ERRCODE='23514';
+ END IF;
+ IF NEW.status IS NOT DISTINCT FROM OLD.status THEN RETURN NEW; END IF;
+ SELECT * INTO current_state FROM freeholder_legacy_bank_current(OLD.id);
+ IF current_state.receipt_id IS NULL OR current_state.status IS NULL THEN
+  RAISE EXCEPTION 'A legacy bank transition requires its fresh exact finished current receipt' USING ERRCODE='23514';
+ END IF;
+ projected:=CASE WHEN current_state.status='succeeded' THEN 'succeeded' WHEN current_state.status IN('failed','canceled') THEN 'failed' ELSE 'processing' END;
+ IF NEW.status IS DISTINCT FROM projected THEN
+  RAISE EXCEPTION 'An old result or later event cannot bypass current legacy bank proof' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER legacy_bank_current_projection BEFORE UPDATE OR DELETE ON refunds FOR EACH ROW EXECUTE FUNCTION freeholder_guard_legacy_bank_projection();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_legacy_bank_balances() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE payment payments; invoice invoices; returned numeric; invoice_returned numeric;
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM legacy_bank_reads WHERE refund_id=NEW.id) THEN RETURN NULL; END IF;
+ SELECT * INTO payment FROM payments WHERE id=NEW.payment_id;
+ SELECT * INTO invoice FROM invoices WHERE id=NEW.invoice_id;
+ SELECT coalesce(sum(amount_minor) FILTER(WHERE status='succeeded'),0) INTO returned FROM refunds WHERE payment_id=NEW.payment_id;
+ SELECT coalesce(sum(refunded_minor),0) INTO invoice_returned FROM payments WHERE invoice_id=NEW.invoice_id;
+ IF payment.id IS NULL OR invoice.id IS NULL OR returned IS DISTINCT FROM payment.refunded_minor OR invoice_returned IS DISTINCT FROM invoice.refunded_minor
+  OR returned<0 OR returned>payment.amount_minor OR invoice_returned<0 OR invoice_returned>invoice.paid_minor
+  OR EXISTS(SELECT 1 FROM refunds r WHERE r.payment_id=payment.id AND r.currency<>payment.currency)
+  OR EXISTS(SELECT 1 FROM payments p WHERE p.invoice_id=invoice.id AND p.currency<>invoice.currency) THEN
+  RAISE EXCEPTION 'Original legacy bank projection and existing invoice/payment cash must commit together' USING ERRCODE='23514';
+ END IF;
+ RETURN NULL;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER legacy_bank_current_balances AFTER UPDATE ON refunds DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+ WHEN(OLD.status IS DISTINCT FROM NEW.status) EXECUTE FUNCTION freeholder_guard_legacy_bank_balances();

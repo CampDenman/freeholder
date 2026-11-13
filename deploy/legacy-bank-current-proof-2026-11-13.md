@@ -49,6 +49,15 @@ from bypassing this debt. Existing actual finished callers can still retain
 and apply their original answers. This slice supplies no causal replacement
 permission and never adopts a new request as the old resource.
 
+A legacy status-transition integrity guard also requires that same fresh exact
+current receipt once an actual legacy read exists. A replay of the original
+positive create answer cannot restore cash after a newer action/pending read.
+A deferred balance guard requires the existing payment and invoice returned
+cash to commit consistently with all represented original refund rows. The
+native action-state path drafts an actual old-key replay refusal with cash and
+physical POST count unchanged. Read admission requires all seven relevant read,
+current-receipt, capacity, projection and balance guards to be enabled.
+
 The fourth child has private search/no-TTL decisions, original-owner repair
 pointers and a bounded original-refund child witness. The three root-owned
 central financial composition files are unchanged in this slice. Root must add
@@ -57,7 +66,7 @@ central dependency fingerprint before combined financial acceptance.
 
 `deploy/legacy-bank-current80.fragment.sql` is a separate UNASSEMBLED,
 UNAPPLIED suffix after complete root3a. SHA-256:
-`b456d9da3894b0642a80f5d93865ee745c8258337da5e9c8fb2f6faaaf2f1535`.
+`9b7aee63da72f637127ae0fe58f8be8008becbcb55afbb78944f7e527e89c9bd`.
 The root ordinary80 SQL stays byte-identical at
 `3a6862457f9342fe7ad109bc83c7a270ef5ac535a9b1639a459c23bc8a9c997f`.
 The suffix requires a newly assembled full candidate, new hash and newly named

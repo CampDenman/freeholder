@@ -91,6 +91,10 @@ describe.runIf(hasDatabase)("authentic legacy bank current money80", { timeout: 
     expect(await actual.reconcile()).toMatchObject({ status: null, applied: false, requiresReview: true }); await actual.balances(400);
     for (const status of ["requires_action", "pending", "failed", "canceled"] as const) {
       actual.setStatus(status); expect(await actual.reconcile()).toMatchObject({ status, applied: true, requiresReview: true }); await actual.balances(0);
+      if (status === "requires_action") {
+        await expect(submitProviderRefund.call({ paymentId: actual.payment.id, amountMinor: 400, reason: "Actual original legacy bank current refund", idempotencyKey: "legacy-current-original-key" }, OWNER)).rejects.toThrow();
+        await actual.balances(0); expect(actual.posts).toHaveLength(1);
+      }
     }
     expect(await failure(submitProviderRefund.call({ paymentId: actual.payment.id, amountMinor: 20, reason: "Do not bypass an owed original bank refund", idempotencyKey: "legacy-current-unrelated-new-key" }, OWNER))).toMatchObject({ code: "conflict" });
     expect(await failure(submitProviderRefund.call({ paymentId: actual.payment.id, amountMinor: 20, reason: "Original unsubmitted legacy reservation", idempotencyKey: "legacy-current-existing-unsubmitted" }, OWNER))).toMatchObject({ code: "conflict" });

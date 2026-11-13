@@ -14067,7 +14067,9 @@ whatever is best for the people using the site.
   immutable original-resource revisions and real returned-caller proof. It
   retains nullable raw bank states, reuses the shared original invoice/payment
   cash projection, and keeps new or older unsubmitted refund keys blocked by
-  unresolved legacy bank debt. Original create metadata remains null; no
+  unresolved legacy bank debt. Current-state and deferred-balance guards also
+  refuse an old positive-result replay after a newer bank reclassification.
+  Original create metadata remains null; no
   merchant request is manufactured. Root3a SQL and all five prior lifecycle
   fixtures are unchanged; a separate unapplied suffix needs a new combined
   candidate/hash/database. Eighteen pure controls and three actual-service
