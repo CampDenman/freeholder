@@ -38,7 +38,7 @@ async function originalBuyerPaymentsAreSafe(ctx: ServiceContext, contactId: stri
   if (originalIds.some(id => !ids.has(id))) return false;
   const debt = getService("invoicing.merchantPaymentRecoveryDebt");
   if (current.length && !debt) return false;
-  for (const paymentId of current) if (z.object({ pending: z.boolean() }).passthrough().parse(await ctx.callAsSystem(debt!, { paymentId })).pending) return false;
+  for (const paymentId of current) if (z.object({ pending: z.boolean() }).passthrough().parse(await ctx.callAsSystem(debt, { paymentId })).pending) return false;
   return true;
 }
 
