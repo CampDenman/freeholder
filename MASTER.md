@@ -3898,8 +3898,8 @@ reading chat logs.
   The original full-erasure oracle and populated database are preserved. A
   private completion guard now checks the original queued task and verified
   pending receipt under privacy/run locks, retaining explicit recovery while
-  an unaccepted normalized graph remains. Source/native qualification of this
-  containment is pending; evidence: `deploy/import-wxr-index-privacy-2026-11-13.md`. Full guarded index minimization and recovery of
+  an unaccepted normalized graph remains. Source typecheck, whole lint and 384 static controls pass (26 declared
+  database skips); native qualification of this containment is pending. Evidence: `deploy/import-wxr-index-privacy-2026-11-13.md`. Full guarded index minimization and recovery of
   historical completed receipts remain required; this does not close C1.08.
 
 

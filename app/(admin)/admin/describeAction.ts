@@ -340,6 +340,7 @@ export const OWNER_HIDDEN_ACTIONS: ReadonlySet<string> = new Set([
   "analytics.identify",
   "analytics.recordExperimentConversion",
   "assistant.reindexPage",
+  "imports.completeOriginalSourceErasure",
   "imports.claimSourceGraph",
   "imports.applySourceGraphIndex",
   "imports.prepareSourceGraphPlan",

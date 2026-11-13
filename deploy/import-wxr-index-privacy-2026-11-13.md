@@ -37,7 +37,16 @@ The candidate has a separate 501-entry containment oracle: raw bytes must be
 absent while the same task remains pending, fulfilment time stays NULL,
 resolution names index recovery, and private metadata is still acknowledged
 as present. The original full-erasure oracle is preserved unchanged on the
-before branch for the future guarded minimization proof. Source and native
-qualification of containment are pending. Full normalized minimization,
+before branch for the future guarded minimization proof. Full normalized minimization,
 accepted/held negative controls and historical completed-receipt recovery
 remain required before stable readiness.
+
+
+Source qualification passed: Node22 typecheck, whole-repository ESLint, all
+44 static contract files (384 passed, 26 declared database skips), license,
+release-note and plan gates. The explicit system/private service inventories
+and owner feed decision include the new private phase. Agent coding review
+identified a completed selective-task retry regression; it was corrected to
+require that exact job ID in the retained scope's completedJobs witness.
+Native containment and existing raw-source positive verification are pending.
+These checks do not supply C11.10 independent review.
