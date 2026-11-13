@@ -2,18 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C1.08: stop actual primary schedules before their linked subscriptions.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, type MerchantPhaseScheduleStopped } from "@/adapters/payments";
 import { lockContactIdentity, lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import type { JobExecutionContext } from "@/core/jobs";
-import { dataRequestArtifacts, dataRequests, privacyRetentionExceptions } from "@/core/privacy/schema";
-import { erasureArtifactIsIntact } from "@/core/privacy/service";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { merchantPhysicalCaller } from "@/modules/invoicing/merchant-physical-caller";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
-import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
-import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
 import { originalPhaseResources, closedOriginalPhaseSchedules, phaseOperationCallerFinished } from "./provider-phase-resources";
 import { flushMerchantProviderPhaseFinishes } from "./provider-phase-dispatch";
 import { flushMerchantPhaseProductFinishes } from "./provider-phase-products";
@@ -23,12 +19,13 @@ import { scheduleCallerHasStopped } from "./provider-schedule-proof";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
 import { subscriptionChargeScope, subscriptionMerchantScope } from "./merchant-scope-contract";
-import { subscriptionMerchantScopes, subscriptions } from "./schema";
+import { subscriptions } from "./schema";
+import { originalScheduleTask, originalQuiescenceMembers, originalQuiescenceAction } from "./provider-quiescence-authority";
 
 const hash = (nonce: string) => createHash("sha256").update(nonce).digest("hex");
 const reference = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[A-Za-z0-9]{1,195}$`));
-const task = z.object({ profileId: z.uuid(), requestId: z.uuid(), cohortId: z.uuid(), originalJobId: z.uuid() });
-const target = task.extend({ subscriptionId: z.uuid(), providerScheduleRef: reference("sub_sched") });
+const task = originalScheduleTask;
+const target = z.intersection(task, z.object({ subscriptionId: z.uuid(), providerScheduleRef: reference("sub_sched") }));
 export const phaseScheduleStopRequest = z.object({ subscriptionId: z.uuid(), providerScheduleRef: reference("sub_sched"), providerPlatformAccountId: reference("acct"),
   providerAccountId: reference("acct").optional(), destinationAccountId: reference("acct").optional(), settlementMerchantAccountId: reference("acct").optional(),
   providerCustomerRef: reference("cus"), providerScheduleApiVersion: z.literal("2026-10-28.endive"), originalFirstPhaseStart: z.iso.datetime().optional() });
@@ -43,23 +40,13 @@ type Local = { subscriptionId: string; providerScheduleRef: string; nonce: strin
 const slot = Symbol.for("freeholder.subscription.phase-stop-callers.v1");
 const state = globalThis as typeof globalThis & { [slot]?: Map<string, Local> };
 const callers = state[slot] ??= new Map<string, Local>();
-const receipt = z.object({ outcomes: z.array(z.object({ scope: z.string(), outcome: z.string(), pendingJobs: z.array(z.uuid()).optional() }).passthrough()) }).passthrough();
-
-async function originalTaskMembers(ctx: ServiceContext, input: z.infer<typeof task>, lock = false) {
-  const { request: original, cohort } = await originalScheduleCohortAuthority(ctx.tx, input, lock);
-  const scopes = await ctx.tx.select().from(subscriptionMerchantScopes).where(cohort.subscriptionId
-    ? and(eq(subscriptionMerchantScopes.subscriptionId, cohort.subscriptionId), eq(subscriptionMerchantScopes.taxProfileId, input.profileId))
-    : eq(subscriptionMerchantScopes.taxProfileId, input.profileId)).orderBy(subscriptionMerchantScopes.subscriptionId).limit(5001);
-  if (scopes.length > 5000 || !await merchantScheduleCohortInventoryCovers(ctx.tx, cohort, new Set(scopes.map(scope => scope.subscriptionId)))) throw new ServiceError("conflict", "Restore every originally admitted agreement before stopping its schedules.");
-  return { original, cohort, scopes };
-}
 export const merchantPhaseScheduleTargets = defineService({
   name: "subscriptions.merchantPhaseScheduleTargets", summary: "Read the actual primary schedule IDs retained by this exact original erasure task.",
   kind: "query", permission: "system", external: false, input: task,
   output: z.array(z.object({ subscriptionId: z.uuid(), providerScheduleRefs: z.array(reference("sub_sched")).max(5000), recoveryRequired: z.boolean(),
     recoveryOperationIds: z.array(z.uuid()).max(5000), resources: z.array(z.object({ providerScheduleRef: reference("sub_sched"), providerSubscriptionRefs: z.array(reference("sub")).max(5000), providerScheduleOperationId: z.uuid().nullable() })).max(5000) })).max(5000),
   handler: async (input, ctx) => {
-    await lockContactIdentityForRead(ctx.tx); const { scopes } = await originalTaskMembers(ctx, input);
+    await lockContactIdentityForRead(ctx.tx); const { scopes } = await originalQuiescenceMembers(ctx, input);
     const result = [];
     for (const scope of scopes) {
       const operations = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, scope.subscriptionId)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
@@ -74,30 +61,16 @@ export const merchantPhaseScheduleTargets = defineService({
     return result;
   },
 });
-export async function originalScheduleErasureAction(ctx: ServiceContext, input: z.infer<typeof task> & { subscriptionId: string }) {
-  await lockContactIdentity(ctx.tx); await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
-  const { original, cohort, scopes } = await originalTaskMembers(ctx, input, true), scope = scopes.find(row => row.subscriptionId === input.subscriptionId);
-  if (!scope) throw new ServiceError("permission", "This original erasure task does not own that agreement.");
-  const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, input.requestId)).limit(1).for("update");
-  const parsed = receipt.safeParse(artifact?.body), outcome = parsed.success ? parsed.data.outcomes.find(value => value.scope === cohort.privacyScope) : undefined;
-  if (!erasureArtifactIsIntact(artifact) || original.status !== "in_progress" || outcome?.outcome !== "pending" || !outcome.pendingJobs?.includes(input.originalJobId)) return null;
-  const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, input.subscriptionId)).limit(1).for("update");
-  const [resource] = await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId, input.subscriptionId)).limit(1).for("update");
-  if (!parent || !resource || parent.merchantScopeVersion !== 1) throw new ServiceError("conflict", "Restore the original parent and resource before cancellation.");
-  const [hold] = await ctx.tx.select({ id: privacyRetentionExceptions.id }).from(privacyRetentionExceptions).innerJoin(dataRequests, eq(dataRequests.id, privacyRetentionExceptions.dataRequestId)).where(and(
-    inArray(dataRequests.contactId, [original.contactId, parent.contactId]), inArray(privacyRetentionExceptions.scope, ["commerce.merchantTax", "subscriptions.agreements", "privacy.records"]),
-    sql`(${privacyRetentionExceptions.expiresAt} is null or ${privacyRetentionExceptions.expiresAt}>clock_timestamp())`)).limit(1);
-  if (hold) return null;
-  const operations = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, parent.id)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
-  return { parent, resource, scope, operations };
+export async function originalScheduleErasureAction(ctx: ServiceContext, input: z.infer<typeof target>) {
+  return originalQuiescenceAction(ctx, input, input.subscriptionId);
 }
 export const claimMerchantPhaseScheduleStop = defineService({
   name: "subscriptions.claimMerchantPhaseScheduleStop", summary: "Commit one original primary-schedule cancellation under the actual pending erasure and current holds.",
-  kind: "mutation", permission: "system", external: false, input: target, output: claim, auditInputFields: ["cohortId", "subscriptionId", "providerScheduleRef"],
+  kind: "mutation", permission: "system", external: false, input: target, output: claim, auditInputFields: ["subscriptionId", "providerScheduleRef"],
   handler: async (input, ctx) => {
     const authority = await originalScheduleErasureAction(ctx, input);
     if (!authority) return { mode: "blocked" as const };
-    const { parent, resource, scope, operations } = authority;
+    const { parent, resource, scope, operations, taskReceipt } = authority;
     const known = originalPhaseResources(operations), phase = known?.get(input.providerScheduleRef);
     if (!known || !phase || !phase.creationOperationIds.size || operations.length > 5000 || operations.length !== resource.operationRevision || operations.some((operation, index) => operation.operationRevision !== index + 1 || !scheduleCallerHasStopped(operation))) return { mode: "recover" as const };
     const previous = operations.filter(operation => operation.kind === "cancel" && operation.originalRequest.resourceKind === "phase_schedule_stop" && operation.originalRequest.providerScheduleRef === input.providerScheduleRef);
@@ -111,7 +84,7 @@ export const claimMerchantPhaseScheduleStop = defineService({
       providerScheduleRef: input.providerScheduleRef, providerCustomerRef: resource.providerCustomerRef, providerScheduleApiVersion: frozen.providerScheduleApiVersion,
       ...(phase.firstPhaseStart ? { originalFirstPhaseStart: phase.firstPhaseStart } : {}) });
     const originalRequest = { ...providerRequest, resourceKind: "phase_schedule_stop", method: "POST", path: `/v1/subscription_schedules/${input.providerScheduleRef}/cancel`,
-      body: { invoice_now: "false", prorate: "false" }, requestId: input.requestId, cohortId: input.cohortId, caller: merchantPhysicalCaller(), callerCompletionDigest: hash(nonce) };
+      body: { invoice_now: "false", prorate: "false" }, ...taskReceipt, caller: merchantPhysicalCaller(), callerCompletionDigest: hash(nonce) };
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
     await ctx.tx.update(subscriptionProviderScheduleResources).set({ operationRevision: resource.operationRevision + 1, state: "quiescing", recoveryPending: true, stoppedProof: null, updatedAt: new Date() }).where(eq(subscriptionProviderScheduleResources.subscriptionId, parent.id));
     await ctx.tx.insert(subscriptionProviderScheduleOperations).values({ id: operationId, subscriptionId: parent.id, operationRevision: resource.operationRevision + 1, kind: "cancel",
@@ -186,7 +159,8 @@ export const finishMerchantPhaseScheduleStop = defineService({
     ctx.setSubject("subscription", local.subscriptionId); return { finished: true as const };
   },
 });
-export async function stopMerchantPhaseSchedules(input: z.infer<typeof task>, context?: JobExecutionContext): Promise<void> {
+export async function stopMerchantPhaseSchedules(value: z.input<typeof task>, context?: JobExecutionContext): Promise<void> {
+  const input = task.parse(value);
   for (const [operationId, local] of callers) if (local.outcome) { await finishMerchantPhaseScheduleStop.call({ operationId, completionNonce: local.nonce }, { kind: "system" }); callers.delete(operationId); }
   const pending = await merchantPhaseScheduleTargets.call(input, { kind: "system" });
   for (const target of pending) { await flushMerchantProviderPhaseFinishes(target.subscriptionId); await flushMerchantPhaseProductFinishes(target.subscriptionId); await flushMerchantPhaseProductReads(target.subscriptionId); await flushMerchantScheduleReads(target.subscriptionId); }

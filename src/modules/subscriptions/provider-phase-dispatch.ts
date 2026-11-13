@@ -14,6 +14,8 @@ import { originalProductAdmission } from "./provider-phase-products";
 import { verifiedOriginalPhaseProduct } from "./provider-phase-product-proof";
 import { flushMerchantPhaseProductFinishes } from "./provider-phase-products";
 import { flushMerchantPhaseProductReads } from "./provider-phase-product-recovery";
+import { admitProviderGeneration, operationProviderGeneration, retainGenerationAcknowledgment, retainGenerationInventory, generationInventoryMatches, generationMaterial } from "./provider-generations";
+import type { subscriptionProviderGenerations } from "./provider-generation-schema";
 import { providerPhase, providerPhaseInventory, originalPhaseCustomerMatches } from "./provider-phase-contract";
 import { subscriptionChargeScope } from "./merchant-scope-contract";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
@@ -40,10 +42,10 @@ const slot = Symbol.for("freeholder.subscription.phase-schedule-callers.v1");
 const state = globalThis as typeof globalThis & { [slot]?: Map<string, Local> };
 const callers = state[slot] ??= new Map<string, Local>();
 const historySchema = z.array(z.record(z.string(), z.unknown())).max(5000);
-const readRevision = (owned: { resource: typeof subscriptionProviderScheduleResources.$inferSelect; operation: typeof subscriptionProviderScheduleOperations.$inferSelect }) =>
+const readRevision = (owned: { resource: typeof subscriptionProviderScheduleResources.$inferSelect; operation: typeof subscriptionProviderScheduleOperations.$inferSelect; generation?: typeof subscriptionProviderGenerations.$inferSelect | null }) =>
   merchantTaxDigest([owned.resource.subscriptionId, owned.resource.operationRevision, owned.resource.evidenceRevision, owned.resource.state,
     owned.resource.providerSubscriptionRef, owned.resource.providerCustomerRef, owned.resource.recoveryPending, owned.resource.stoppedProof,
-    owned.operation.requestDigest, owned.operation.state, owned.operation.positiveObserved, owned.operation.providerObservation]);
+    owned.operation.requestDigest, owned.operation.state, owned.operation.positiveObserved, owned.operation.providerObservation, generationMaterial(owned.generation)]);
 
 /** Every old positive cash fact is applied with current financial closure or
  * actually returned through the shared original-cash proof. Neither an empty
@@ -89,6 +91,8 @@ export const claimMerchantProviderPhases = defineService({
     const products = operations.filter(operation => operation.kind === "create_product").map(verifiedOriginalPhaseProduct);
     if (products.length !== 1 || !products[0]) throw new ServiceError("conflict", "Prepare and independently verify the one original auxiliary product before admitting billing work.");
     const operationId = randomUUID(), nonce = randomBytes(32).toString("base64url");
+    const generation = await admitProviderGeneration(ctx, { subscriptionId: parent.id, termsId: horizon.termsId, operationId, providerCustomerRef: horizon.providerCustomerRef,
+      ...(horizon.mode === "extension" && horizon.providerScheduleRef ? { providerScheduleRef: horizon.providerScheduleRef } : {}), resource, operations });
     const base = { ...subscriptionChargeScope(horizon.originalScope), providerPlatformAccountId: horizon.originalScope.providerPlatformAccountId,
       providerScheduleApiVersion: horizon.originalScope.providerScheduleApiVersion, subscriptionId: parent.id, operationId, idempotencyKey: `phase-schedule:${operationId}`,
       providerCustomerRef: horizon.providerCustomerRef, providerMethodRef: horizon.providerMethodRef, providerProductRef: products[0], phases: horizon.phases };
@@ -103,7 +107,7 @@ export const claimMerchantProviderPhases = defineService({
     const preliminary = dispatchRequest.parse({ ...base, requestDigest: merchantTaxDigest(base), ...(prior ? { providerScheduleRef: prior.providerScheduleRef, previous: prior } : {}) });
     const physical = { method: "POST", path: prior ? `/v1/subscription_schedules/${prior.providerScheduleRef}` : "/v1/subscription_schedules",
       body: Object.fromEntries(stripeMerchantPhaseBody(preliminary, !!prior)) };
-    const originalRequest = { ...base, ...(prior ? { providerScheduleRef: prior.providerScheduleRef, previous: prior } : {}), resourceKind: "phase_schedule", physical,
+    const originalRequest = { ...base, generationId: generation.id, ...(prior ? { providerScheduleRef: prior.providerScheduleRef, previous: prior } : {}), resourceKind: "phase_schedule", physical,
       horizonDigest: horizon.horizonDigest, exemptionFingerprint: horizon.exemptionFingerprint, anchor: horizon.anchor,
       caller: merchantPhysicalCaller(), callerCompletionDigest: hash(nonce) };
     const requestDigest = merchantTaxDigest(originalRequest), providerRequest = dispatchRequest.parse({ ...preliminary, requestDigest });
@@ -128,7 +132,8 @@ async function ownedCaller(ctx: ServiceContext, operationId: string, nonce: stri
   if (!parent || !resource || !operation || operation.subscriptionId !== local.subscriptionId || !["create", "update"].includes(operation.kind)
     || operation.originalRequest.resourceKind !== "phase_schedule" || merchantTaxDigest(operation.originalRequest) !== operation.requestDigest
     || operation.originalRequest.callerCompletionDigest !== hash(nonce) || z.object({ id: z.uuid() }).parse(operation.originalRequest.caller).id !== merchantPhysicalCaller().id) throw new ServiceError("permission", "Restore the exact original schedule intent and actual caller before retaining its outcome.");
-  return { local, parent, resource, operation };
+  const generation = await operationProviderGeneration(ctx, operation);
+  return { local, parent, resource, operation, generation };
 }
 async function retainAcknowledgments(ctx: ServiceContext, owned: Awaited<ReturnType<typeof ownedCaller>>) {
   const { local, operation } = owned; let { resource } = owned;
@@ -141,6 +146,7 @@ async function retainAcknowledgments(ctx: ServiceContext, owned: Awaited<ReturnT
       providerScheduleRef: actual.providerScheduleRef, ...(actual.providerSubscriptionRef ? { providerSubscriptionRef: actual.providerSubscriptionRef } : {}), actual }];
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
     await ctx.tx.update(subscriptionProviderScheduleOperations).set({ positiveObserved: true, state: "unknown", providerObservation: { ...operation.providerObservation, history } }).where(eq(subscriptionProviderScheduleOperations.id, operation.id));
+    await retainGenerationAcknowledgment(ctx, operation, actual);
     resource = { ...resource, providerSubscriptionRef: resource.providerSubscriptionRef ?? actual.providerSubscriptionRef ?? null, evidenceRevision: resource.evidenceRevision + 1 };
     await ctx.tx.update(subscriptionProviderScheduleResources).set({ providerSubscriptionRef: resource.providerSubscriptionRef, state: "unknown", stoppedProof: null,
       recoveryPending: true, evidenceRevision: resource.evidenceRevision, updatedAt: new Date() }).where(eq(subscriptionProviderScheduleResources.subscriptionId, resource.subscriptionId));
@@ -164,15 +170,15 @@ export const finishMerchantProviderPhase = defineService({
     let owned = await ownedCaller(ctx, operationId, completionNonce);
     if (!owned.local.outcome) throw new ServiceError("permission", "The actual original schedule promise has not finished.");
     await retainAcknowledgments(ctx, owned); owned = await ownedCaller(ctx, operationId, completionNonce);
-    const { local, operation, resource, parent } = owned, history = historySchema.parse(operation.providerObservation.history ?? []);
+    const { local, operation, resource, parent, generation } = owned, history = historySchema.parse(operation.providerObservation.history ?? []);
     if (history.some(entry => entry.source === "physical_caller_finished" && entry.operationId === operationId && entry.requestDigest === operation.requestDigest && entry.completionDigest === hash(completionNonce))) return { finished: true as const, verified: operation.state === "confirmed" };
-    const actual = providerPhaseInventory.safeParse(local.result);
+    const actual = providerPhaseInventory.safeParse(local.result ? { version: 1, ...local.result } : undefined);
     const schedules = new Set(local.positives.map(value => value.providerScheduleRef));
     const linked = new Set(local.positives.map(value => value.providerSubscriptionRef).filter((value): value is string => !!value));
     const verified = local.readRevision === readRevision(owned) && local.outcome === "returned" && actual.success && schedules.size === 1 && schedules.has(actual.data.providerScheduleRef)
       && actual.data.operationId === operation.id && actual.data.requestDigest === operation.requestDigest
       && linked.size <= 1 && (!linked.size || linked.has(actual.data.providerSubscriptionRef ?? ""))
-      && (!resource.providerSubscriptionRef || actual.data.providerSubscriptionRef === resource.providerSubscriptionRef)
+      && (generation ? await generationInventoryMatches(ctx, generation, actual.data) : !resource.providerSubscriptionRef || actual.data.providerSubscriptionRef === resource.providerSubscriptionRef)
       && originalPhaseCustomerMatches(actual.data, operation.originalRequest.providerCustomerRef);
     const observation = { ...operation.providerObservation, ...(verified && actual.success ? { phaseInventory: actual.data } : {}),
       history: [...history, ...(local.outcome === "returned" && actual.success ? [{ source: verified ? "phase_schedule_read_verified" : "phase_schedule_read_stale", operationId, requestDigest: operation.requestDigest,
@@ -183,7 +189,8 @@ export const finishMerchantProviderPhase = defineService({
     const linkedRef = resource.providerSubscriptionRef ?? (verified && actual.success ? actual.data.providerSubscriptionRef : null);
     await ctx.tx.update(subscriptionProviderScheduleResources).set({ providerSubscriptionRef: linkedRef, state: verified ? "active" : "unknown", recoveryPending: !verified,
       stoppedProof: null, evidenceRevision: resource.evidenceRevision + 1, updatedAt: new Date() }).where(eq(subscriptionProviderScheduleResources.subscriptionId, resource.subscriptionId));
-    if (verified && linkedRef && !parent.providerRef && parent.merchantScopeVersion === 1 && parent.provider === "stripe") await ctx.tx.update(subscriptions).set({ providerRef: linkedRef }).where(eq(subscriptions.id, parent.id));
+    if (verified && actual.success && generation) await retainGenerationInventory(ctx, operation, actual.data);
+    if (verified && linkedRef && !generation && !parent.providerRef && parent.merchantScopeVersion === 1 && parent.provider === "stripe") await ctx.tx.update(subscriptions).set({ providerRef: linkedRef }).where(eq(subscriptions.id, parent.id));
     await enqueueMerchantScheduleErasureRepair(ctx.tx, { subscriptionId: operation.subscriptionId, evidenceDigest: merchantTaxDigest({ operationId, finished: true, verified }) });
     ctx.setSubject("subscription", operation.subscriptionId);
     return { finished: true as const, verified };

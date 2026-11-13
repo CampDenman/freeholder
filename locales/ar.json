@@ -9077,5 +9077,18 @@
   "refundStatus.promiseFulfilled": "تم الوفاء بالمبلغ المسترد الأصلي من خلال البديل الذي تم التحقق منه.",
   "refundStatus.review": "يلزم مراجعة سجل الاسترداد قبل إرسال مبلغ آخر.",
   "refundStatus.replaceConfirmation": "أؤكد استبدال المبلغ المسترد الأصلي البالغ {amount} بعد التحقق من حالته المصرفية الحالية.",
-  "refundStatus.replace": "استبدال المبلغ المسترد الأصلي البالغ {amount}"
+  "refundStatus.replace": "استبدال المبلغ المسترد الأصلي البالغ {amount}",
+  "subscriptions.amendment.title": "تغيير الفترة القادمة",
+  "subscriptions.amendment.intro": "راجع سعر الفترة القادمة والضرائب قبل الموافقة. تحتفظ الفترة المدفوعة بشروطها الأصلية.",
+  "subscriptions.amendment.pending_stop": "ينتظر التغيير المقبول إلى {name} إيقاف الفوترة الأصلية. يسري من {date}.",
+  "subscriptions.amendment.activated": "تم قبول التغيير إلى {name} من {date}. يتغير الوصول بعد سداد فاتورة الفترة المحددة بالكامل.",
+  "subscriptions.amendment.recovery": "لا تزال بيانات الفوترة الأصلية بحاجة إلى تسوية. تبقى الشروط المقبولة محفوظة؛ ويجب إكمال الاسترداد قبل بدء فوترة جديدة.",
+  "subscriptions.amendment.retry": "استئناف الاسترداد الأصلي",
+  "subscriptions.amendment.saved": "تم حفظ التغيير المقبول.",
+  "subscriptions.amendment.failed": "تغير العرض أو سجل الفوترة. راجع العرض الحالي قبل المحاولة مجددًا.",
+  "subscriptions.amendment.effective": "يسري من {date}",
+  "subscriptions.amendment.confirm": "أوافق على هذا السعر المستقبلي والجدول والوجهة الضريبية وإشعار التاجر المحددة.",
+  "subscriptions.amendment.accept": "قبول التغيير المستقبلي",
+  "subscriptions.merchantAmendmentNotice": "يستبدل هذا التعديل الفترات المستقبلية فقط. تبقى الشروط والفواتير السابقة دون تغيير. لا تُستأنف الفوترة إلا بعد تسوية التزامات المزوّد والالتزامات المالية الأصلية؛ ولا تمنح الخطة الجديدة الوصول إلا بعد سداد فاتورة الفترة المحددة بالكامل.",
+  "admin.activity.subscriptionAmendmentAccepted": "وافق على تعديل مستقبلي للاشتراك"
 }

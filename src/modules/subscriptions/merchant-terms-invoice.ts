@@ -7,6 +7,7 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { invoiceLines, invoices } from "@/modules/invoicing/schema";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { merchantTaxSourceParty, merchantTaxSourceRequest, registerMerchantTaxSourceResolver } from "@/modules/invoicing/merchant-tax-invoice";
+import { admittedProviderPeriod } from "./provider-periods";
 import { periodEnd } from "./calendar";
 import { originalMerchantTerms } from "./merchant-terms-read";
 import { subscriptionMarketPolicies, subscriptions } from "./schema";
@@ -16,6 +17,7 @@ type Subscription = typeof subscriptions.$inferSelect;
 export async function originalMerchantInvoiceShape(ctx: ServiceContext, subscription: Subscription, start: Date, end: Date) {
   const terms = await originalMerchantTerms(ctx, subscription, start);
   if (!terms) return null;
+  const phase = subscription.billingMode === "provider" ? await admittedProviderPeriod(ctx, subscription, terms.id, start, end) : null;
   const sourceId = `${subscription.id}:${start.toISOString()}`;
   const [existing] = await ctx.tx.select().from(invoices).where(and(eq(invoices.sourceType, "subscription"), eq(invoices.sourceId, sourceId))).limit(1);
   if (existing) {
@@ -26,7 +28,7 @@ export async function originalMerchantInvoiceShape(ctx: ServiceContext, subscrip
         return proof.subscriptionTermsId !== terms.id || proof.subscriptionPeriodStart !== start.toISOString()
           || proof.subscriptionPeriodEnd !== end.toISOString() || !["period", "setup"].includes(String(proof.subscriptionComponent));
       })) throw new ServiceError("conflict", "Restore the original frozen period invoice and its accepted commercial lineage before replay.");
-    return { terms, sourceId, existingInvoiceId: existing.id, periodAmountMinor: 0, setupFeeMinor: 0 };
+    return { terms, phase, sourceId, existingInvoiceId: existing.id, periodAmountMinor: 0, setupFeeMinor: 0 };
   }
   const first = start.getTime() === subscription.currentPeriodStart.getTime();
   const next = start.getTime() === subscription.currentPeriodEnd.getTime();
@@ -45,7 +47,8 @@ export async function originalMerchantInvoiceShape(ctx: ServiceContext, subscrip
     }
     setupFeeMinor = original.sourceId === sourceId ? setupFeeMinor : 0;
   }
-  return { terms, sourceId, existingInvoiceId: null, periodAmountMinor: awaitingCard ? 0 : terms.snapshot.periodAmountMinor, setupFeeMinor };
+  if (phase && (phase.periodAmountMinor !== terms.snapshot.periodAmountMinor || phase.setupFeeMinor > 0 && subscription.setupFeeInvoiceId && setupFeeMinor === 0)) throw new ServiceError("conflict", "The admitted original phase duplicates or changes the accepted period/setup obligation.");
+  return { terms, phase, sourceId, existingInvoiceId: null, periodAmountMinor: phase?.periodAmountMinor ?? (awaitingCard ? 0 : terms.snapshot.periodAmountMinor), setupFeeMinor: phase?.setupFeeMinor ?? setupFeeMinor };
 }
 
 export const resolveOriginalMerchantInvoice = defineService({
@@ -77,7 +80,7 @@ export const resolveOriginalMerchantInvoice = defineService({
     if (policy?.model !== "seller_merchant" || !policy.sellerUserId) throw new ServiceError("conflict", "Restore the original agreement's seller identity before quoting tax.");
     return [{ sellerUserId: policy.sellerUserId, profileId: terms.profileId, profileVersion: terms.profileVersion,
       linePositions: components.map((_, index) => index), shippingMinor: 0, occurredAt: start,
-      ...(terms.revision === 1 && start.getTime() === terms.effectivePeriodStart.getTime() ? { expectedQuoteDigest: terms.initialTaxQuote.quoteDigest } : {}) }];
+      ...(shape.phase ? { expectedQuoteDigest: shape.phase.taxQuoteDigest } : terms.revision === 1 && start.getTime() === terms.effectivePeriodStart.getTime() ? { expectedQuoteDigest: terms.initialTaxQuote.quoteDigest } : {}) }];
   },
 });
 

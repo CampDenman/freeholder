@@ -51,7 +51,7 @@ import merchantTermsStoreServices, { freezeOriginalMerchantTerms } from "./merch
 import { paymentAdapter } from "@/adapters/payments";
 import { createDraftInvoice, issueInvoice } from "@/modules/invoicing/invoice-service";
 import { paymentMethods } from "@/modules/invoicing/schema";
-import { invoices } from "@/modules/invoicing/schema";
+import { invoices, invoiceLines } from "@/modules/invoicing/schema";
 import marketPolicyServices, { captureSubscriptionMarketPolicy, getSubscriptionMarketPolicy } from "./market-policy";
 import { subscriptionPaymentScope } from "./market-policy";
 import { subscriptionMethodScopeMatches, subscriptionTaxDestination } from "./merchant-scope-contract";
@@ -298,11 +298,31 @@ export async function applyPendingPlan(
   // The new plan is priced by its own product's variant. Keeping the old
   // variant would bill the old price at every renewal after the switch. A
   // plan with nothing on sale is not switched to; the change stays pending.
-  const productVariantId = await planVariant(ctx, nextPlan.productId);
+  const [amendment] = subscription.merchantScopeVersion === 1 ? await ctx.tx.select({ amendment: subscriptionCommercialAmendments, terms: subscriptionCommercialTerms }).from(subscriptionCommercialAmendments)
+    .innerJoin(subscriptionCommercialTerms, eq(subscriptionCommercialTerms.id, subscriptionCommercialAmendments.termsId)).where(and(
+      eq(subscriptionCommercialAmendments.subscriptionId, subscription.id), eq(subscriptionCommercialAmendments.planId, nextPlan.id), eq(subscriptionCommercialAmendments.state, "activated"),
+      eq(subscriptionCommercialTerms.effectivePeriodStart, subscription.currentPeriodEnd))).limit(1) : [];
+  if (subscription.merchantScopeVersion === 1 && !amendment) return subscription;
+  if (amendment) {
+    if (subscription.currentPeriodEnd.getTime() > Date.now()) return subscription;
+    // Acceptance authorizes billing; only the canonical paid period authorizes
+    // a different entitlement. Neither a pending invoice nor partial cash does.
+    const sourceId = `${subscription.id}:${subscription.currentPeriodEnd.toISOString()}`;
+    const [paid] = await ctx.tx.select().from(invoices).where(and(eq(invoices.sourceType, "subscription"), eq(invoices.sourceId, sourceId))).limit(1);
+    if (!paid || paid.contactId !== subscription.contactId || paid.currency !== subscription.currency || !paid.issuedAt
+      || paid.status !== "paid" || paid.paidMinor !== paid.totalMinor) return subscription;
+    const end = periodEnd(subscription.currentPeriodEnd, amendment.terms.snapshot.interval, amendment.terms.snapshot.intervalCount);
+    const lines = await ctx.tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, paid.id)).orderBy(invoiceLines.position).limit(3);
+    if (!lines.length || lines.length > 2 || lines.some(line => line.snapshot.subscriptionTermsId !== amendment.terms.id
+      || line.snapshot.subscriptionPeriodStart !== subscription.currentPeriodEnd.toISOString() || line.snapshot.subscriptionPeriodEnd !== end.toISOString()
+      || !["period", "setup"].includes(String(line.snapshot.subscriptionComponent)))) throw new ServiceError("conflict", "The paid amendment invoice does not contain this exact accepted future period.");
+  }
+  const productVariantId = amendment ? amendment.terms.snapshot.productVariantId : await planVariant(ctx, nextPlan.productId);
+  const billingMode = amendment ? amendment.terms.snapshot.billingMode : nextPlan.billingMode;
   if (!productVariantId) return subscription;
   await ctx.tx
     .update(subscriptions)
-    .set({ planId: nextPlan.id, pendingPlanId: null, billingMode: nextPlan.billingMode, productVariantId })
+    .set({ planId: nextPlan.id, pendingPlanId: null, billingMode, productVariantId })
     .where(eq(subscriptions.id, subscription.id));
   await ctx.tx.insert(subscriptionEvents).values({
     subscriptionId: subscription.id,
@@ -315,7 +335,7 @@ export async function applyPendingPlan(
     ...subscription,
     planId: nextPlan.id,
     pendingPlanId: null,
-    billingMode: nextPlan.billingMode,
+    billingMode,
     productVariantId,
   };
 }
@@ -664,7 +684,7 @@ export async function raiseInvoice(
       unitAmountMinor: options.amountMinor,
       ...(accepted ? { taxCategoryCode: accepted.snapshot.taxCategoryCode, requiresShipping: accepted.snapshot.requiresShipping,
         snapshot: { subscriptionTermsId: accepted.id, subscriptionPeriodStart: options.periodStart.toISOString(),
-          subscriptionPeriodEnd: options.periodEnd.toISOString(), subscriptionComponent: "period" } } : {}),
+          subscriptionPeriodEnd: options.periodEnd.toISOString(), subscriptionComponent: "period", ...(merchantShape?.phase ? { subscriptionPhaseDigest: merchantShape.phase.phaseDigest } : {}) } } : {}),
     },
   ];
   // Charged once, on the first invoice only, because that is what a setup fee
@@ -678,7 +698,7 @@ export async function raiseInvoice(
       unitAmountMinor: setupFeeMinor,
       ...(accepted ? { taxCategoryCode: accepted.snapshot.taxCategoryCode, requiresShipping: accepted.snapshot.requiresShipping,
         snapshot: { subscriptionTermsId: accepted.id, subscriptionPeriodStart: options.periodStart.toISOString(),
-          subscriptionPeriodEnd: options.periodEnd.toISOString(), subscriptionComponent: "setup" } } : {}),
+          subscriptionPeriodEnd: options.periodEnd.toISOString(), subscriptionComponent: "setup", ...(merchantShape?.phase ? { subscriptionPhaseDigest: merchantShape.phase.phaseDigest } : {}) } } : {}),
     });
   }
 
@@ -1030,6 +1050,11 @@ export const renewDue = defineService({
         periodStart: start,
         periodEnd: end,
       });
+      if (subscription.merchantScopeVersion === 1 && subscription.pendingPlanId) {
+        const applied = await applyPendingPlan(ctx, subscription);
+        if (applied.pendingPlanId) continue; // The invoice exists, but no unpaid amendment grants access.
+        Object.assign(subscription, applied);
+      }
       await ctx.tx
         .update(subscriptions)
         .set({
@@ -1519,6 +1544,30 @@ export const advanceDunning = defineService({
   },
 });
 
+export const completePaidCommercialAmendment = defineService({
+  name: "subscriptions.completePaidAmendment", summary: "Apply only the exact fully paid accepted next-period amendment.",
+  kind: "mutation", permission: "system", external: false, input: z.object({ invoiceId: uuidSchema }), output: z.object({ applied: z.boolean() }),
+  handler: async ({ invoiceId }, ctx) => {
+    const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+    const id = z.uuid().safeParse(invoice?.sourceId?.split(":")[0]);
+    if (!invoice || invoice.sourceType !== "subscription" || !id.success || invoice.status !== "paid" || invoice.paidMinor !== invoice.totalMinor) return { applied: false };
+    const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, id.data)).limit(1).for("update");
+    if (!parent || parent.merchantScopeVersion !== 1 || !parent.pendingPlanId || parent.signupPending || parent.cancelAtPeriodEnd || parent.cancelledAt
+      || !["active", "trialing", "past_due"].includes(parent.status) || parent.currentPeriodEnd.getTime() > Date.now()
+      || invoice.sourceId !== `${parent.id}:${parent.currentPeriodEnd.toISOString()}`) return { applied: false };
+    const current = await applyPendingPlan(ctx, parent);
+    if (current.pendingPlanId) return { applied: false };
+    const [offer] = await ctx.tx.select().from(plans).where(eq(plans.id, current.planId)).limit(1);
+    if (!offer) throw new ServiceError("conflict", "Restore the paid amendment's original plan before advancing access.");
+    const plan = await originalMerchantPlan(ctx, current, offer, parent.currentPeriodEnd);
+    const start = parent.currentPeriodEnd, end = periodEnd(start, plan.interval, plan.intervalCount);
+    await ctx.tx.update(subscriptions).set({ status: "active", currentPeriodStart: start, currentPeriodEnd: end, trialEndsAt: null }).where(eq(subscriptions.id, parent.id));
+    await record(ctx, parent.id, "renewed", { invoiceId });
+    await keepAccess(ctx, { ...current, currentPeriodStart: start, currentPeriodEnd: end }, plan.name, end, "active");
+    ctx.setSubject("subscription", parent.id); return { applied: true };
+  },
+});
+
 export async function onInvoicePaid(
   payload: unknown,
   _eventName?: string,
@@ -1531,6 +1580,7 @@ export async function onInvoicePaid(
   await recoverDunning.call({ invoiceId }, { kind: "system" });
   await activatePaidSignup.call({ invoiceId }, { kind: "system" });
   await completePaidPlanChange.call({ invoiceId }, { kind: "system" });
+  await completePaidCommercialAmendment.call({ invoiceId }, { kind: "system" });
 }
 
 /* -------------------------------------------------------------- reading */
@@ -1733,7 +1783,7 @@ registerContactReference({
 // invoice's problem rather than this table's.
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
-  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms"],
+  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines"],
   retentionScopes: ["commerce.money"],
   exportData: async (tx: Tx, contactId: string) => {
     const rows = await tx
@@ -1765,7 +1815,15 @@ registerContactPrivacySource({
       snapshot: subscriptionCommercialTerms.snapshot, taxDestination: subscriptionCommercialTerms.taxDestination, acceptedAt: subscriptionCommercialTerms.acceptedAt,
       effectivePeriodStart: subscriptionCommercialTerms.effectivePeriodStart, noticeSnapshot: subscriptionCommercialTerms.noticeSnapshot })
       .from(subscriptionCommercialTerms).where(inArray(subscriptionCommercialTerms.subscriptionId, rows.map(row => row.id))).orderBy(subscriptionCommercialTerms.revision) : [];
-    return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [], acceptedCommercialTerms: accepted.filter(value => value.subscriptionId === row.id) }));
+    const amendments = rows.length ? await tx.select({ subscriptionId: subscriptionCommercialAmendments.subscriptionId, termsId: subscriptionCommercialAmendments.termsId,
+      planId: subscriptionCommercialAmendments.planId, acceptedBy: subscriptionCommercialAmendments.acceptedBy, state: subscriptionCommercialAmendments.state, createdAt: subscriptionCommercialAmendments.createdAt })
+      .from(subscriptionCommercialAmendments).where(inArray(subscriptionCommercialAmendments.subscriptionId, rows.map(row => row.id))) : [];
+    const periodInvoices = rows.length ? await tx.select({ subscriptionId: subscriptionProviderInvoiceObservations.subscriptionId, currency: subscriptionProviderInvoiceObservations.currency,
+      totalMinor: subscriptionProviderInvoiceObservations.totalMinor, paidMinor: subscriptionProviderInvoiceObservations.paidMinor, remainingMinor: subscriptionProviderInvoiceObservations.remainingMinor,
+      verified: subscriptionProviderInvoiceObservations.verified, createdAt: subscriptionProviderInvoiceObservations.createdAt })
+      .from(subscriptionProviderInvoiceObservations).where(inArray(subscriptionProviderInvoiceObservations.subscriptionId, rows.map(row => row.id))) : [];
+    return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [], acceptedCommercialTerms: accepted.filter(value => value.subscriptionId === row.id),
+      acceptedAmendments: amendments.filter(value => value.subscriptionId === row.id), observedPeriodInvoices: periodInvoices.filter(value => value.subscriptionId === row.id) }));
   },
   erase: async (tx: Tx, contactId: string, context) => {
     if (!context.service) throw new ServiceError("conflict", "Original agreement erasure requires its actual shared privacy context.");
@@ -1813,8 +1871,12 @@ import setupErasureServices from "./setup-erasure";
 import setupDispatchServices from "./setup-dispatch";
 import setupReconciliationServices from "./setup-reconciliation";
 import providerChargeReceiptServices from "./provider-charge-receipts";
+import commercialAmendmentServices from "./commercial-amendments";
+import { subscriptionProviderInvoiceObservations } from "./provider-period-schema";
+import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
 
 export default [
+  completePaidCommercialAmendment,
   ...marketPolicyServices,
   ...merchantTermsQuoteServices,
   ...merchantTermsStoreServices,
@@ -1823,6 +1885,7 @@ export default [
   ...setupDispatchServices,
   ...setupReconciliationServices,
   ...providerChargeReceiptServices,
+  ...commercialAmendmentServices,
   savePlan,
   listPlans,
   listOfferedPlans,

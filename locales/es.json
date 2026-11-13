@@ -9077,5 +9077,18 @@
   "refundStatus.promiseFulfilled": "El reembolso original se completó mediante su sustitución verificada.",
   "refundStatus.review": "Hay que revisar el historial del reembolso antes de enviar otro.",
   "refundStatus.replaceConfirmation": "Confirmo la sustitución del reembolso original de {amount} tras comprobar su estado bancario actual.",
-  "refundStatus.replace": "Sustituir el reembolso original de {amount}"
+  "refundStatus.replace": "Sustituir el reembolso original de {amount}",
+  "subscriptions.amendment.title": "Cambiar el próximo período",
+  "subscriptions.amendment.intro": "Revise el precio y los impuestos del próximo período antes de aceptar. El período ya pagado conserva sus condiciones originales.",
+  "subscriptions.amendment.pending_stop": "El cambio aceptado a {name} espera a que se detenga la facturación original. Entrará en vigor desde {date}.",
+  "subscriptions.amendment.activated": "El cambio a {name} está aceptado desde {date}. El acceso cambia cuando la factura exacta del período se paga por completo.",
+  "subscriptions.amendment.recovery": "Los datos de facturación originales aún requieren conciliación. Las condiciones aceptadas se conservan; la recuperación debe terminar antes de iniciar nueva facturación.",
+  "subscriptions.amendment.retry": "Reanudar la recuperación original",
+  "subscriptions.amendment.saved": "Su cambio aceptado se ha guardado.",
+  "subscriptions.amendment.failed": "La oferta o el historial de facturación ha cambiado. Revise la oferta actual antes de volver a intentarlo.",
+  "subscriptions.amendment.effective": "En vigor desde {date}",
+  "subscriptions.amendment.confirm": "Acepto este precio futuro, calendario, destino fiscal y aviso del comerciante exactos.",
+  "subscriptions.amendment.accept": "Aceptar cambio futuro",
+  "subscriptions.merchantAmendmentNotice": "Esta modificación sustituye solo períodos futuros. Las condiciones y facturas anteriores no cambian. La facturación se reanuda solo cuando se resuelven las obligaciones originales del proveedor y financieras; el nuevo plan da acceso solo cuando su factura exacta del período está totalmente pagada.",
+  "admin.activity.subscriptionAmendmentAccepted": "Aceptó una modificación futura de la suscripción"
 }

@@ -16,6 +16,8 @@ import { createPayment, failPayment, settlePayment, startPayment } from "@/modul
 import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment } from "@/modules/invoicing/merchant-charge";
 import { getSubscriptionPaymentScope, subscriptionPaymentScope } from "./market-policy";
 import { subscriptionMethodScopeMatches } from "./merchant-scope-contract";
+import { subscriptionProviderInvoiceObservations } from "./provider-period-schema";
+import { proveMerchantProviderPeriod, assertCanonicalProviderPeriod } from "./provider-periods";
 import { originalMerchantPlan, originalMerchantTerms } from "./merchant-terms-read";
 import { merchantObservationRef, recordMerchantPaymentObservation } from "@/modules/invoicing/merchant-payment-observations";
 import { invoices, paymentMethods, payments } from "@/modules/invoicing/schema";
@@ -23,6 +25,7 @@ import { resolvePrice } from "@/modules/catalog/pricing";
 import { plans, subscriptionEvents, subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
 import {
   applyPendingPlan,
+  completePaidCommercialAmendment,
   beginDunning,
   cancelMySubscription,
   cancelSubscription,
@@ -91,8 +94,8 @@ const claimCharge = defineService({
       .limit(1)
       .for("update");
     if (!subscription) throw new ServiceError("not_found", "There is no such subscription.");
-    const current = mayChargePlatform(subscription) ? await applyPendingPlan(ctx, subscription) : subscription;
-    if (!mayChargePlatform(current)) {
+    const current = mayChargePlatform(subscription) && subscription.merchantScopeVersion !== 1 ? await applyPendingPlan(ctx, subscription) : subscription;
+    if (!mayChargePlatform(current) || current.merchantScopeVersion === 1 && current.currentPeriodEnd.getTime() > Date.now()) {
       return {
         skip: true,
         subscriptionId: current.id,
@@ -147,6 +150,7 @@ const claimCharge = defineService({
     }
     const amountMinor = invoice.totalMinor - invoice.paidMinor;
     if (amountMinor <= 0) {
+      if (current.merchantScopeVersion === 1 && current.pendingPlanId) await ctx.callAsSystem(completePaidCommercialAmendment, { invoiceId });
       return {
         skip: true,
         subscriptionId: current.id,
@@ -225,7 +229,7 @@ const applyCharge = defineService({
   }),
   output: row({ advanced: z.boolean() }),
   handler: async (input, ctx) => {
-    const [subscription] = await ctx.tx
+    let [subscription] = await ctx.tx
       .select()
       .from(subscriptions)
       .where(eq(subscriptions.id, input.subscriptionId))
@@ -241,8 +245,8 @@ const applyCharge = defineService({
       await ctx.call(startPayment, { id: payment.id, providerRef: input.providerRef });
       return { advanced: false };
     }
-    const [currentPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
-    const plan = currentPlan ? await originalMerchantPlan(ctx, subscription, currentPlan, subscription.currentPeriodEnd) : undefined;
+    let [currentPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
+    let plan = currentPlan ? await originalMerchantPlan(ctx, subscription, currentPlan, subscription.currentPeriodEnd) : undefined;
     if (input.status === "succeeded") {
       await ctx.call(settlePayment, {
         id: input.paymentId,
@@ -253,6 +257,10 @@ const applyCharge = defineService({
       // money still belongs in the ledger, but it cannot restart membership
       // access or extend a cancelled renewal promise.
       if (!mayChargePlatform(subscription)) return { advanced: false };
+      subscription = await applyPendingPlan(ctx, subscription);
+      [currentPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
+      plan = currentPlan ? await originalMerchantPlan(ctx, subscription, currentPlan, subscription.currentPeriodEnd) : undefined;
+      if (subscription.merchantScopeVersion === 1 && subscription.pendingPlanId) return { advanced: false };
       const now = new Date();
       if (subscription.currentPeriodEnd > now) {
         if (subscription.status === "trialing") {
@@ -1015,11 +1023,16 @@ async function settlePeriodInvoice(
     providerPlatformAccountId?: string;
     subscriptionChargeReceiptId?: string;
     subscriptionChargeObservationId?: string;
+    subscriptionInvoiceObservationId?: string;
     customerChargeVerified?: boolean;
     paymentProviderRef?: string;
     applicationFeeMinor?: number;
   },
 ): Promise<string | null> {
+  if (options.providerPlatformAccountId && !options.subscriptionInvoiceObservationId) throw new ServiceError("conflict", "Retain this original period's actual invoice lineage before balance application.");
+  const periodProof = options.providerPlatformAccountId ? await ctx.callAsSystem(proveMerchantProviderPeriod, {
+    observationId: options.subscriptionInvoiceObservationId!, receiptId: options.subscriptionChargeReceiptId, subscriptionId: subscription.id,
+    periodStart: options.periodStart.toISOString(), periodEnd: options.periodEnd.toISOString() }) : null;
   const sourceId = `${subscription.id}:${options.periodStart.toISOString()}`;
   const [existing] = await ctx.tx
     .select()
@@ -1027,7 +1040,7 @@ async function settlePeriodInvoice(
     .where(and(eq(invoices.sourceType, "subscription"), eq(invoices.sourceId, sourceId)))
     .limit(1);
   let invoice = existing ?? null;
-  if (!invoice) {
+  if (!invoice && !options.providerPlatformAccountId) {
     const [open] = await ctx.tx
       .select()
       .from(invoices)
@@ -1053,25 +1066,29 @@ async function settlePeriodInvoice(
     invoice = raised ?? null;
   }
   if (!invoice) return null;
+  if (periodProof) await assertCanonicalProviderPeriod(ctx, invoice.id, periodProof.phase);
   if (options.currency !== invoice.currency) throw new ServiceError("conflict", "The provider payment currency does not match the membership invoice.");
-  const outstanding = invoice.totalMinor - invoice.paidMinor;
-  if (outstanding <= 0) {
-    if (options.providerAccountId || options.providerPlatformAccountId) {
-      const previous = await ctx.tx.select().from(payments).where(and(eq(payments.invoiceId,invoice.id),eq(payments.status,"succeeded")));
-      const original = previous.find(payment => payment.providerRef === options.paymentProviderRef);
-      if (!original) throw new ServiceError("conflict", "A different seller charge already paid this period. Reconcile the extra payment.");
-      await attachScheduledCashObservation(ctx, original.id, subscription.id, options);
-      assertChargeEvidence(await routingForPayment(ctx,original.id), { ...options, status: "succeeded" });
+  if (options.providerPlatformAccountId && options.paymentProviderRef) {
+    const [applied] = await ctx.tx.select().from(payments).where(and(eq(payments.invoiceId, invoice.id), eq(payments.status, "succeeded"), eq(payments.providerRef, options.paymentProviderRef))).limit(1);
+    if (applied) {
+      if (applied.amountMinor !== options.amountMinor || applied.currency !== options.currency) throw new ServiceError("conflict", "The original provider payment reference already has different canonical money.");
+      await attachScheduledCashObservation(ctx, applied.id, subscription.id, options);
+      assertChargeEvidence(await routingForPayment(ctx, applied.id), { ...options, status: "succeeded" }); return invoice.id;
     }
+  }
+  const outstanding = invoice.totalMinor - invoice.paidMinor;
+  if (periodProof && invoice.totalMinor === 0 && options.amountMinor === 0) return invoice.id;
+  if (outstanding <= 0) {
+    if (options.providerAccountId || options.providerPlatformAccountId) throw new ServiceError("conflict", "A different original charge already paid this period. Reconcile the extra money.");
     return invoice.id;
   }
-  if (options.amountMinor !== outstanding) throw new ServiceError("conflict", "The provider payment amount does not match the membership invoice balance.");
+  if (options.amountMinor <= 0 || options.amountMinor > outstanding || !options.providerPlatformAccountId && options.amountMinor !== outstanding) throw new ServiceError("conflict", "The provider payment amount does not match this original invoice's remaining balance.");
   const payment = await ctx.call(createPayment, {
     invoiceId: invoice.id,
     provider: options.provider,
     method: "provider_schedule",
-    amountMinor: outstanding,
-    idempotencyKey: `subscription-provider:${subscription.id}:${invoice.id}`,
+    amountMinor: options.amountMinor,
+    idempotencyKey: options.providerPlatformAccountId ? `subscription-provider:${subscription.id}:${invoice.id}:${options.subscriptionChargeReceiptId}` : `subscription-provider:${subscription.id}:${invoice.id}`,
     subscriptionChargeReceiptId: options.subscriptionChargeReceiptId,
   });
   const routing = await routingForPayment(ctx, payment.id);
@@ -1099,6 +1116,7 @@ export const reconcileProviderPeriod = defineService({
     providerPlatformAccountId: paymentRouting.shape.providerPlatformAccountId,
     subscriptionChargeReceiptId: z.uuid().optional(),
     subscriptionChargeObservationId: z.uuid().optional(),
+    subscriptionInvoiceObservationId: z.uuid().optional(),
     paymentProviderRef: z.string().max(500).optional(),
     applicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
     kind: z.enum(["subscription_period_paid", "subscription_period_failed", "subscription_cancelled"]),
@@ -1109,12 +1127,15 @@ export const reconcileProviderPeriod = defineService({
   }),
   output: row({ applied: z.boolean() }),
   handler: async (input, ctx) => {
+    const [cashSource] = input.providerPlatformAccountId && input.subscriptionChargeReceiptId ? await ctx.tx.select({ subscriptionId: subscriptionProviderChargeReceipts.subscriptionId }).from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.id, input.subscriptionChargeReceiptId)).limit(1) : [];
+    const [invoiceSource] = input.providerPlatformAccountId && input.subscriptionInvoiceObservationId ? await ctx.tx.select({ subscriptionId: subscriptionProviderInvoiceObservations.subscriptionId }).from(subscriptionProviderInvoiceObservations).where(eq(subscriptionProviderInvoiceObservations.id, input.subscriptionInvoiceObservationId)).limit(1) : [];
+    const originalSubscriptionId = cashSource?.subscriptionId ?? invoiceSource?.subscriptionId;
     const candidates = await ctx.tx
       .select({ subscription: subscriptions, scope: subscriptionMerchantScopes, policy: subscriptionMarketPolicies })
       .from(subscriptions)
       .leftJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptions.id))
       .leftJoin(subscriptionMarketPolicies, eq(subscriptionMarketPolicies.subscriptionId, subscriptions.id))
-      .where(and(eq(subscriptions.provider, input.provider), eq(subscriptions.providerRef, input.providerRef)))
+      .where(and(eq(subscriptions.provider, input.provider), originalSubscriptionId ? eq(subscriptions.id, originalSubscriptionId) : eq(subscriptions.providerRef, input.providerRef)))
       .limit(100).for("update", { of: subscriptions });
     if (!candidates.length) return { applied: false };
     const matching = candidates.filter(row => input.providerPlatformAccountId
@@ -1145,11 +1166,12 @@ export const reconcileProviderPeriod = defineService({
     }
     if (input.amountMinor === undefined || !input.currency) throw new ServiceError("validation", "A membership payment needs provider amount and currency evidence.");
     if (routing.providerPlatformAccountId) {
-      if (!input.subscriptionChargeReceiptId) throw new ServiceError("conflict", "Retain this automatic renewal's original charge before applying its invoice.");
-      const [receipt] = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.id, input.subscriptionChargeReceiptId));
-      if (!receipt || receipt.subscriptionId !== found.id || receipt.providerSubscriptionRef !== input.providerRef || receipt.providerPaymentIntentRef !== input.paymentProviderRef
+      if (!input.subscriptionInvoiceObservationId) throw new ServiceError("conflict", "Retain complete admitted invoice/price lineage before applying this original provider period.");
+      if (input.amountMinor > 0 && !input.subscriptionChargeReceiptId) throw new ServiceError("conflict", "Retain this automatic renewal's original charge before applying its invoice.");
+      const [receipt] = input.subscriptionChargeReceiptId ? await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.id, input.subscriptionChargeReceiptId)) : [];
+      if (input.amountMinor > 0 && (!receipt || receipt.subscriptionId !== found.id || receipt.providerSubscriptionRef !== input.providerRef || receipt.providerPaymentIntentRef !== input.paymentProviderRef
         || receipt.amountMinor !== input.amountMinor || receipt.currency !== input.currency || receipt.providerPlatformAccountId !== routing.providerPlatformAccountId
-        || receipt.chargeAccountId !== (routing.providerAccountId ?? null)) throw new ServiceError("conflict", "This scheduled payment differs from its committed original charge receipt.");
+        || receipt.chargeAccountId !== (routing.providerAccountId ?? null))) throw new ServiceError("conflict", "This scheduled payment differs from its committed original charge receipt.");
     }
     const now = new Date();
     const start = input.periodStart ? new Date(input.periodStart) : subscription.currentPeriodStart;
@@ -1160,9 +1182,10 @@ export const reconcileProviderPeriod = defineService({
     if (renewing) {
       subscription = await applyPendingPlan(ctx, subscription);
       [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
+      if (plan) plan = await originalMerchantPlan(ctx, subscription, plan, start);
     }
     if (routing.providerAccountId || routing.providerPlatformAccountId) {
-      if (input.provider !== "stripe" || !input.paymentProviderRef || (!routing.providerPlatformAccountId && input.applicationFeeMinor === undefined) || !input.periodStart || !input.periodEnd) throw new ServiceError("conflict", "The provider must prove this seller period's actual charge and dates; legacy fees retain their original evidence contract.");
+      if (input.provider !== "stripe" || input.amountMinor > 0 && !input.paymentProviderRef || (!routing.providerPlatformAccountId && input.applicationFeeMinor === undefined) || !input.periodStart || !input.periodEnd) throw new ServiceError("conflict", "The provider must prove this seller period's actual charge and dates; legacy fees retain their original evidence contract.");
       const expectedStart = end > subscription.currentPeriodEnd && subscription.currentPeriodEnd <= now ? subscription.currentPeriodEnd : subscription.currentPeriodStart;
       const expectedEnd = expectedStart === subscription.currentPeriodEnd ? periodEnd(expectedStart, plan?.interval ?? "month", plan?.intervalCount ?? 1) : subscription.currentPeriodEnd;
       if (Math.floor(start.getTime()/1000) !== Math.floor(expectedStart.getTime()/1000) || Math.floor(end.getTime()/1000) !== Math.floor(expectedEnd.getTime()/1000)) throw new ServiceError("conflict", "The seller payment dates do not match the original membership period.");
@@ -1170,23 +1193,32 @@ export const reconcileProviderPeriod = defineService({
     const invoiceId = await settlePeriodInvoice(ctx, subscription, {
       amountMinor: input.amountMinor,
       currency: input.currency,
-      periodStart: renewing ? subscription.currentPeriodEnd : subscription.currentPeriodStart,
-      periodEnd: renewing
-        ? periodEnd(subscription.currentPeriodEnd, plan?.interval ?? "month", plan?.intervalCount ?? 1)
-        : subscription.currentPeriodEnd,
+      periodStart: routing.providerPlatformAccountId ? start : renewing ? subscription.currentPeriodEnd : subscription.currentPeriodStart,
+      periodEnd: routing.providerPlatformAccountId ? end : renewing ? periodEnd(subscription.currentPeriodEnd, plan?.interval ?? "month", plan?.intervalCount ?? 1) : subscription.currentPeriodEnd,
       provider: input.provider,
       providerRef: input.providerRef,
       providerAccountId: routing.providerAccountId,
       providerPlatformAccountId: routing.providerPlatformAccountId,
       subscriptionChargeReceiptId: input.subscriptionChargeReceiptId,
       subscriptionChargeObservationId: input.subscriptionChargeObservationId,
+      subscriptionInvoiceObservationId: input.subscriptionInvoiceObservationId,
       customerChargeVerified: routing.providerPlatformAccountId ? true : undefined,
       paymentProviderRef: input.paymentProviderRef,
       applicationFeeMinor: input.applicationFeeMinor,
     });
     if (routing.providerPlatformAccountId && !invoiceId) throw new ServiceError("conflict", "The original paid renewal is retained; reconcile its pinned invoice before advancing access.");
+    if (routing.providerPlatformAccountId && invoiceId) {
+      const [paid] = await ctx.tx.select({ status: invoices.status, paidMinor: invoices.paidMinor, totalMinor: invoices.totalMinor }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+      if (!paid || paid.status !== "paid" || paid.paidMinor !== paid.totalMinor) return { applied: true }; // Partial actual cash grants no next-period access.
+    }
     if (subscription.status === "cancelled" || subscription.status === "expired") {
       return { applied: Boolean(invoiceId) };
+    }
+    if (renewing) {
+      subscription = await applyPendingPlan(ctx, subscription);
+      [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
+      if (plan) plan = await originalMerchantPlan(ctx, subscription, plan, start);
+      if (subscription.merchantScopeVersion === 1 && subscription.pendingPlanId) return { applied: true };
     }
     if (!renewing) {
       if (subscription.status === "trialing") {

@@ -9077,5 +9077,18 @@
   "refundStatus.promiseFulfilled": "This original refund was fulfilled by its verified replacement.",
   "refundStatus.review": "The refund history needs review before another return can be sent.",
   "refundStatus.replaceConfirmation": "I confirm a replacement of the original {amount} refund after checking its current bank status.",
-  "refundStatus.replace": "Replace original {amount} refund"
+  "refundStatus.replace": "Replace original {amount} refund",
+  "subscriptions.amendment.title": "Change the next period",
+  "subscriptions.amendment.intro": "Review the merchant’s next-period price and tax before accepting. Your current paid period keeps its original terms.",
+  "subscriptions.amendment.pending_stop": "The accepted change to {name} is waiting for the original billing work to stop. It takes effect from {date}.",
+  "subscriptions.amendment.activated": "The change to {name} is accepted from {date}. Access changes after the exact period invoice is fully paid.",
+  "subscriptions.amendment.recovery": "Original billing facts still need reconciliation. Accepted terms remain recorded; recovery must finish before new billing can start.",
+  "subscriptions.amendment.retry": "Resume original recovery",
+  "subscriptions.amendment.saved": "Your accepted change has been saved.",
+  "subscriptions.amendment.failed": "The offer or billing history changed. Review the current offer before trying again.",
+  "subscriptions.amendment.effective": "Effective from {date}",
+  "subscriptions.amendment.confirm": "I accept this exact future price, calendar, tax destination and merchant notice.",
+  "subscriptions.amendment.accept": "Accept future change",
+  "subscriptions.merchantAmendmentNotice": "This amendment replaces only future periods. Previous accepted terms and invoices stay unchanged. Billing resumes only after original provider and financial obligations are resolved; the new plan grants access only after its exact period invoice is fully paid.",
+  "admin.activity.subscriptionAmendmentAccepted": "Accepted a future subscription amendment"
 }

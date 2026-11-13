@@ -14188,6 +14188,21 @@ whatever is best for the people using the site.
   unchanged BEFORE golden/current schema/journal with drained clients. Exact
   recovery-native and complete phase/amendment/cash acceptance remain required;
   see `deploy/subscription-trial-tax-calendar-2026-11-13.md`. C12.38 stays open.
+  Accepted amendment and future-invoice source checkpoint (2026-11-13,
+  C12.38/C9.38): explicit owner/customer consent preserves earlier terms and
+  invoices, a retained amendment job stops old resources before a distinct
+  provider generation, and normalized actual invoice/price lines bind the
+  admitted phase to canonical net/setup, dated tax and the existing shared fee
+  receipt before cash applies. Positive cash remains committed before later
+  auxiliary failure; zero invoices invent no cash/payment. Amended access waits
+  for the exact fully paid invoice. Localized owner/customer review/recovery,
+  bounded buyer/merchant merge fingerprints and privacy export accompany the
+  source. All new controls, types/lint, native SQL and browser qualification are
+  UNRUN. The owned unapplied SQL suffix follows the earlier stop/recovery tails;
+  root owns new assembly/hash/database. Late-boundary re-consent/recovery and
+  broader business/provider acceptance remain required; this checkpoint closes
+  no C-item and does not activate collection. See
+  `deploy/subscription-commercial-amendments80-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the
