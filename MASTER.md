@@ -15116,6 +15116,12 @@ whatever is best for the people using the site.
   published0–79 identities are unchanged. This remains unapplied source; parent
   reader composition, final82 assembly and fresh migration/parity/native gates
   are pending, and positive provider collection remains mechanically closed.
+  Parent reader compiler repair 2026-11-13 (C12.38): first compilation
+  after f7 consumer integration stops at11 possibly-undefined parent/terms
+  diagnostics. The existing unconditional refusal now uses an explicit
+  never-returning function declaration so compiler control flow recognizes
+  the unchanged throwing branch. No non-null assertion or guard removal is
+  used; renewed full source qualification is pending.
   Controlled provider source renewal 2026-11-13 (C12.38): at2ecffdbc full
   types pass in62.647seconds; the broader source cohort passes298 actual
   assertions with44 explicit database skips across46 complete files. Whole

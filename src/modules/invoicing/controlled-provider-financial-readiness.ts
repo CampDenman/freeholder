@@ -14,7 +14,7 @@ import { prorationFinancialWitness } from "./proration-financial-witness";
 import { controlledFinancialEntries } from "./controlled-provider-financial-witness";
 import { creditNoteDisposition } from "./credit-disposition";
 
-const refuse=():never=>{throw new ServiceError("conflict","Restore this exact original agreement's complete accepted parent, cash/principal, refund/dispute, credit, commission and authentic controlled caller history before new provider admission.");};
+function refuse():never{throw new ServiceError("conflict","Restore this exact original agreement's complete accepted parent, cash/principal, refund/dispute, credit, commission and authentic controlled caller history before new provider admission.");}
 const uuidList=(ids:readonly string[])=>ids.length?sql.join(ids.map(id=>sql`${id}::uuid`),sql`,`):sql`null::uuid`;
 async function parentFinancialGraph(ctx:ServiceContext,subscriptionId:string){
  const proration=await prorationFinancialWitness(ctx.tx,{kind:"subscription",ids:[subscriptionId]});
