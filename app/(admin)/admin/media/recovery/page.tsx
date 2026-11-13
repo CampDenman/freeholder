@@ -16,7 +16,7 @@ export default async function StorageRecoveryPage() {
   const [t, { rows }, multipart] = await Promise.all([getT(), listStorageOperations.call({}, actor),listMultipartOperations.call({},actor)]);
   const labels: RecoveryLabels = { namespace: t("media.recovery.namespace"), originalKey:t("media.recovery.originalKey"),sha256: t("media.recovery.sha256"), bytes: t("media.recovery.bytes"), outcome: t("media.recovery.outcome"),
     applied: t("media.recovery.applied"), notApplied: t("media.recovery.notApplied"), reference: t("media.recovery.reference"), evidence: t("media.recovery.evidence"),
-    stopped: t("media.recovery.stopped"), confirm: t("media.recovery.confirm"), submit: t("media.recovery.submit"), saved: t("media.recovery.saved") };
+    stopDrainId:t("media.recovery.stopDrainId"),stopDrainHint:t("media.recovery.stopDrainHint"),stopped: t("media.recovery.stopped"), confirm: t("media.recovery.confirm"), submit: t("media.recovery.submit"), saved: t("media.recovery.saved") };
   const multipartLabels:MultipartRecoveryLabels={...labels,providerUploadId:t("media.recovery.providerUploadId"),verifyOriginal:t("media.recovery.verifyOriginal"),cleanup:t("media.recovery.cleanup"),multipartConfirm:t("media.recovery.multipartConfirm")};
   const needsStepUp = actor.kind === "user" && actor.security !== undefined && !actor.security.stepUpValid;
   return <div className="grid min-w-0 gap-6">

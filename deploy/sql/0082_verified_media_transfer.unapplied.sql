@@ -724,6 +724,33 @@ ALTER TABLE media_storage_provider_inventories ADD CONSTRAINT media_storage_prov
 --> statement-breakpoint
 CREATE UNIQUE INDEX media_storage_provider_inventory_original_idx ON media_storage_provider_inventories(anchor_call_id,proof_call_id,purpose) WHERE plan_id IS NULL;
 --> statement-breakpoint
+-- Independent stop is not a caller return or proof of remote non-application.
+-- Only fresh affirmative original nonce/body/inventory review consumes it.
+CREATE FUNCTION freeholder_media_original_executor_stopped(original_call uuid, original_drain uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_storage_transfer_calls caller JOIN media_storage_writer_drains drain ON drain.id=original_drain AND drain.namespace=caller.namespace
+  WHERE caller.id=original_call AND caller.object_id IS NULL AND caller.multipart_operation_id IS NULL AND caller.object_receipt_id IS NOT NULL AND caller.kind='ordinary_put'
+   AND drain.state IN ('verified','released') AND drain.verified_at IS NOT NULL AND drain.verified_at>=drain.created_at AND caller.created_at<=drain.created_at
+   AND (drain.state='verified' AND drain.released_at IS NULL OR drain.state='released' AND drain.released_at>=drain.verified_at)
+   AND drain.stop_proof_digest ~ '^[a-f0-9]{64}$' AND drain.source_revision ~ '^[a-f0-9]{40}$'
+   AND caller.runtime_identity->>'kind'='linux' AND caller.runtime_identity->>'instance'=caller.runtime_id::text
+   AND caller.runtime_identity->>'boot' ~ '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$'
+   AND caller.runtime_identity->>'pid' ~ '^[1-9][0-9]*$' AND caller.runtime_identity->>'startTicks' ~ '^[0-9]+$'
+   AND drain.executor_identity='linux-systemd:'||(caller.runtime_identity->>'boot')
+   AND drain.original_processes->>'format'='freeholder.media-writer-drain/v1' AND drain.original_processes->>'boot'=caller.runtime_identity->>'boot'
+   AND drain.original_processes->>'unit'='freeholder.service' AND drain.original_processes->>'invocation' ~ '^[a-f0-9]{32}$'
+   AND drain.original_processes->>'group' ~ '^/[A-Za-z0-9_./-]+$' AND position('..' in drain.original_processes->>'group')=0
+   AND jsonb_typeof(drain.original_processes->'processes')='array'
+   AND jsonb_array_length(drain.original_processes->'processes') BETWEEN 1 AND 4096
+   AND (SELECT count(*) FROM jsonb_array_elements(drain.original_processes->'processes'))=(SELECT count(DISTINCT process->>'pid') FROM jsonb_array_elements(drain.original_processes->'processes') process)
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(drain.original_processes->'processes') process WHERE coalesce(process->>'pid','') !~ '^[1-9][0-9]*$' OR coalesce(process->>'startTicks','') !~ '^[0-9]+$')
+   AND EXISTS(SELECT 1 FROM jsonb_array_elements(drain.original_processes->'processes') process WHERE process->>'pid'=caller.runtime_identity->>'pid' AND process->>'startTicks'=caller.runtime_identity->>'startTicks')
+   AND (SELECT count(*) FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND request.descriptor->>'kind'='object.put')=1
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND request.descriptor->>'kind'='object.put' AND request.created_at<=drain.created_at AND request.descriptor->'createOnly'='true'::jsonb AND request.descriptor->>'key'=caller.physical_key AND request.descriptor->>'sha256' ~ '^[a-f0-9]{64}$' AND request.descriptor->>'bytes' ~ '^[0-9]+$')
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND (request.created_at>drain.verified_at OR request.runtime_identity IS DISTINCT FROM caller.runtime_identity OR request.descriptor_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(request.descriptor) OR request.descriptor->'binding'->>'namespace' IS DISTINCT FROM caller.namespace OR request.descriptor->>'kind' IN ('object.delete','multipart.create','multipart.complete','multipart.abort')))
+ )
+$$;
+--> statement-breakpoint
 CREATE FUNCTION freeholder_media_original_inventory_evidence_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE header media_storage_provider_inventories; receipt media_object_writes; original media_storage_transfer_calls; proof media_storage_transfer_calls; caller media_storage_transfer_calls; page media_storage_provider_inventory_pages;
 BEGIN
@@ -749,8 +776,11 @@ BEGIN
   SELECT * INTO receipt FROM media_object_writes WHERE id=NEW.object_receipt_id;
   SELECT * INTO original FROM media_storage_transfer_calls WHERE id=NEW.anchor_call_id;
   SELECT * INTO proof FROM media_storage_transfer_calls WHERE id=NEW.proof_call_id;
-  IF NEW.multipart_operation_id IS NOT NULL OR NEW.object_id IS NOT NULL OR receipt.id IS NULL OR receipt.operation_kind<>'put' OR receipt.redacted_at IS NOT NULL OR receipt.deleted_at IS NOT NULL OR receipt.writer_finished_at IS NULL OR NEW.side<>'source' OR NEW.purpose NOT IN ('recovery','retirement') OR coalesce(NEW.original_witness,'') !~ '^[a-f0-9]{64}$' OR NEW.namespace IS DISTINCT FROM receipt.storage_namespace OR NEW.binding->>'namespace' IS DISTINCT FROM receipt.storage_namespace OR NEW.binding->>'kind' IS DISTINCT FROM receipt.storage_kind OR NEW.binding->'location' IS DISTINCT FROM receipt.storage_location THEN RAISE EXCEPTION 'Ordinary inventory must capture its exact intact original receipt/resource; multipart retirement remains unavailable' USING ERRCODE='23514'; END IF;
-  IF original.id IS NULL OR original.object_receipt_id IS DISTINCT FROM receipt.id OR original.kind<>'ordinary_put' OR original.returned_at IS NULL OR original.runtime_id IS DISTINCT FROM receipt.writer_runtime_id OR original.namespace IS DISTINCT FROM NEW.namespace OR original.physical_key IS DISTINCT FROM receipt.object_key OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=original.id) OR EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=original.id AND returned_at IS NULL) THEN RAISE EXCEPTION 'All original originating callers and requests must actually finish before portable recovery inventory' USING ERRCODE='23514'; END IF;
+  IF NEW.multipart_operation_id IS NOT NULL OR NEW.object_id IS NOT NULL OR receipt.id IS NULL OR receipt.operation_kind<>'put' OR receipt.redacted_at IS NOT NULL OR receipt.deleted_at IS NOT NULL OR (receipt.writer_finished_at IS NULL AND (NEW.purpose<>'recovery' OR NOT EXISTS(SELECT 1 FROM media_storage_writer_drains stop WHERE freeholder_media_original_executor_stopped(NEW.anchor_call_id,stop.id)))) OR NEW.side<>'source' OR NEW.purpose NOT IN ('recovery','retirement') OR coalesce(NEW.original_witness,'') !~ '^[a-f0-9]{64}$' OR NEW.namespace IS DISTINCT FROM receipt.storage_namespace OR NEW.binding->>'namespace' IS DISTINCT FROM receipt.storage_namespace OR NEW.binding->>'kind' IS DISTINCT FROM receipt.storage_kind OR NEW.binding->'location' IS DISTINCT FROM receipt.storage_location THEN RAISE EXCEPTION 'Ordinary inventory must capture its exact intact original receipt/resource; multipart retirement remains unavailable' USING ERRCODE='23514'; END IF;
+  IF original.id IS NULL OR original.object_receipt_id IS DISTINCT FROM receipt.id OR original.kind<>'ordinary_put' OR original.runtime_id IS DISTINCT FROM receipt.writer_runtime_id OR original.namespace IS DISTINCT FROM NEW.namespace OR original.physical_key IS DISTINCT FROM receipt.object_key OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=original.id) THEN RAISE EXCEPTION 'Keep the exact original originating caller and request birth' USING ERRCODE='23514'; END IF;
+  IF original.returned_at IS NULL OR EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=original.id AND returned_at IS NULL) THEN
+   IF NEW.purpose<>'recovery' OR NOT EXISTS(SELECT 1 FROM media_storage_writer_drains stop WHERE freeholder_media_original_executor_stopped(original.id,stop.id)) THEN RAISE EXCEPTION 'Actual original finishes or exact independent executor stop plus affirmative applied proof are required; stop never proves absence' USING ERRCODE='23514'; END IF;
+  END IF;
   IF proof.id IS NULL OR proof.object_receipt_id IS DISTINCT FROM receipt.id OR proof.kind<>'ordinary_recovery_read' OR proof.state<>'returned' OR proof.returned_at IS NULL OR proof.namespace IS DISTINCT FROM NEW.namespace OR proof.physical_key IS DISTINCT FROM receipt.object_key THEN RAISE EXCEPTION 'Fresh original provider proof must finish in the exact original resource' USING ERRCODE='23514'; END IF;
   IF NEW.purpose='recovery' THEN
    IF proof.result_revision IS NULL OR proof.result_request_proof IS NULL OR proof.result_absent IS NOT NULL OR proof.result_sha256 IS DISTINCT FROM receipt.sha256 OR proof.result_bytes IS DISTINCT FROM receipt.bytes OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=original.id AND request.descriptor->>'kind'='object.put' AND request.id::text=proof.result_request_proof->>'id' AND request.token_digest=proof.result_request_proof->>'tokenDigest') THEN RAISE EXCEPTION 'Fresh full-byte provider proof must name this exact original physical request nonce' USING ERRCODE='23514'; END IF;
@@ -821,7 +851,12 @@ BEGIN
  SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=NEW.call_id;
  SELECT * INTO proof FROM media_storage_transfer_calls WHERE id=NEW.read_call_id;
  SELECT * INTO inventory FROM media_storage_provider_inventories WHERE id=NEW.inventory_id;
- IF NEW.multipart_operation_id IS NOT NULL OR caller.id IS NULL OR caller.kind<>'ordinary_put' OR caller.object_receipt_id IS DISTINCT FROM NEW.object_receipt_id OR caller.returned_at IS NULL OR caller.result_digest IS NULL OR NEW.stop_drain_id IS NOT NULL OR NEW.permits_retry OR NEW.outcome<>'applied' OR EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=caller.id AND returned_at IS NULL) THEN RAISE EXCEPTION 'This portable review can close only an actually finished original PUT; crash/absence/multipart review remains unavailable' USING ERRCODE='23514'; END IF;
+ IF NEW.multipart_operation_id IS NOT NULL OR caller.id IS NULL OR caller.kind<>'ordinary_put' OR caller.object_receipt_id IS DISTINCT FROM NEW.object_receipt_id OR NEW.permits_retry OR NEW.outcome<>'applied' THEN RAISE EXCEPTION 'Original review closes only affirmative exact applied PUT proof, never absence/retry/multipart' USING ERRCODE='23514'; END IF;
+ IF NEW.stop_drain_id IS NULL THEN
+  IF caller.returned_at IS NULL OR caller.result_digest IS NULL OR EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=caller.id AND returned_at IS NULL) THEN RAISE EXCEPTION 'Portable review requires all actual original finishes' USING ERRCODE='23514'; END IF;
+ ELSE
+  IF NOT freeholder_media_original_executor_stopped(caller.id,NEW.stop_drain_id) THEN RAISE EXCEPTION 'The retained exact original executor stop does not cover this caller and every physical admission' USING ERRCODE='23514'; END IF;
+ END IF;
  IF proof.id IS NULL OR proof.object_receipt_id IS DISTINCT FROM NEW.object_receipt_id OR proof.kind<>'ordinary_recovery_read' OR proof.state<>'returned' OR proof.returned_at IS NULL OR proof.result_request_proof IS NULL OR inventory.id IS NULL OR inventory.object_receipt_id IS DISTINCT FROM NEW.object_receipt_id OR inventory.anchor_call_id IS DISTINCT FROM caller.id OR inventory.proof_call_id IS DISTINCT FROM proof.id OR inventory.state<>'complete' OR inventory.purpose<>'recovery' THEN RAISE EXCEPTION 'The original review must retain the exact actual nonce-bound read and complete immutable inventory' USING ERRCODE='23514'; END IF;
  RETURN NEW;
 END $$;

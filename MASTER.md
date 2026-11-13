@@ -4083,6 +4083,15 @@ reading chat logs.
   recovery distinct. Six native controls are prepared/unrun; no production
   incident, capability publication or C completion is claimed. See
   `deploy/media-original-namespace-fence-source-2026-11-13.md`.
+  Stopped original PUT source slice2026-11-13: the existing person-only
+  recovery flow accepts an optional exact independently verified executor stop
+  ID, requires fresh original nonce/body and complete agreeing inventory for
+  affirmative applied recovery, and preserves NULL actual returns/finishes.
+  Four-locale UI guidance and14 pure controls are prepared/unrun. Linux is an
+  optional actual executor path; portable actual finishes need no Linux proof.
+  Stopped-caller absence/retirement, other executor adapters, final SDK
+  regeneration and all native/provider qualification remain open. See
+  `deploy/media-original-stopped-put-source-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;

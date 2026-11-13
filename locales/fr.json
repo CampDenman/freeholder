@@ -8790,6 +8790,8 @@
   "media.recovery.notApplied": "Le fournisseur garantit que cette opération n’a pas été exécutée",
   "media.recovery.reference": "Référence du résultat final du fournisseur",
   "media.recovery.evidence": "Comment le fournisseur d’origine a-t-il confirmé ce résultat précis ?",
+  "media.recovery.stopDrainId": "Identifiant du reçu d’arrêt vérifié de l’exécuteur (facultatif)",
+  "media.recovery.stopDrainHint": "Laissez vide si les fins réelles des appels sont conservées. Pour un processus Linux interrompu, utilisez uniquement le reçu exact d’arrêt vérifié indépendamment sur l’hôte d’origine. Une déclaration écrite ou une réponse 404 ne prouve ni l’arrêt ni l’effacement ; la récupération des octets appliqués laisse le nettoyage physique en attente.",
   "media.recovery.stopped": "Comment avez-vous prouvé l’arrêt de tous les processus d’écriture d’origine ?",
   "media.recovery.confirm": "J’ai vérifié la ressource d’origine, le résultat final du fournisseur et l’arrêt des processus d’écriture.",
   "media.recovery.submit": "Enregistrer le résultat vérifié",
