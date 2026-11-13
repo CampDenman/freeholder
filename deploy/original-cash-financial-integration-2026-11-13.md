@@ -42,3 +42,32 @@ receipt-only subscription and mixed-seller isolation, retained authorization
 and closure changes, overflow/corruption refusal, the original cash native
 controls, populated upgrades/rollback, SDK/browser/customer journeys, actual
 provider acceptance and independent review. No checklist item is closed.
+
+## Initial combined preparation checks
+
+Source b8e7394a passes an ordinary0–81 migration on a NEW named disposable
+database in6.255seconds, with all82 actual source hashes/timestamps, all four
+new cash tables, UTC/fsync-on/jit-off/no-recovery profile and drained clients.
+This is ordinary migration evidence only; complete model/guard parity,
+populated upgrade and business acceptance remain open. SQL80/0cff and81/438
+are unchanged. No existing database was migrated or reset.
+
+The receipt-only buyer export is additionally wired through actual subject
+subscriptions and their real charge receipts, including sources with no invoice
+or payment. All five arrays share the complete parent export bound.
+
+After that source correction (afd6ab91), actual unchanged SDK transport/catalog
+controls pass8/8 with no skips in7.098seconds, regenerating the typed registry
+and exposing the real crawl/recovery operations. Clients drain. The initial
+generation wrapper stopped before Vitest because pnpm attempted automatic
+dependency synchronization and refused its module purge without a TTY; that
+runner-only failure is retained. The successful run invokes the unchanged real
+SDK catalog test directly with UPDATE_SDK=1 through existing verified
+Node22/Vitest, with no dependency install or purge. This does not qualify an
+incoming TCP/HTTP/MCP business journey; the prepared transport controls remain
+UNRUN. Full combined source checks are next.
+
+A newly identified raw-feedback privacy pointer can still lack a typed owner
+when unassigned cash has no local refund; a separate repair is in progress.
+Primary facts already commit before outbox repair. This remaining gap is not
+waived by the successful catalog or migration checks.
