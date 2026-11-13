@@ -661,7 +661,7 @@ describe.runIf(hasDatabase)("subscription billing", () => {
     expect(row?.pendingPlanId).toBe(to.id);
   });
 
-  it("raises a proration invoice when the unused fraction costs more", async () => {
+  it("raises the owner's proration invoice and preserves original access through partial payment until fully paid", async () => {
     const member = await person("prorate");
     const from = await plan({ proration: "create_prorations" }, 1_000);
     const to = await plan({ name: "Plus" }, 10_000);
@@ -674,7 +674,16 @@ describe.runIf(hasDatabase)("subscription billing", () => {
       .select()
       .from(subscriptions)
       .where(eq(subscriptions.id, started.subscription.id));
-    expect(row?.planId).toBe(to.id);
+    expect(row?.planId).toBe(from.id); expect(changed.awaitingPayment).toBe(true);
+    const [owed] = await db().select().from(invoices).where(eq(invoices.id, changed.invoiceId!));
+    if (!owed || owed.totalMinor <= 1) throw new Error("The actual original proration invoice has no positive balance.");
+    const first = await createPayment.call({ invoiceId: owed.id, provider: "manual", method: "card", amountMinor: 1, idempotencyKey: "owner-partial-proration" }, OWNER);
+    await settlePayment.call({ id: first.id, providerRef: "owner-partial-proration" }, OWNER);
+    expect((await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id)))[0]?.planId).toBe(from.id);
+    const remaining = await createPayment.call({ invoiceId: owed.id, provider: "manual", method: "card", amountMinor: owed.totalMinor - 1, idempotencyKey: "owner-final-proration" }, OWNER);
+    await settlePayment.call({ id: remaining.id, providerRef: "owner-final-proration" }, OWNER);
+    const [paid] = await db().select().from(subscriptions).where(eq(subscriptions.id, started.subscription.id));
+    expect(paid?.planId).toBe(to.id); expect(paid?.currentPeriodStart).toEqual(started.subscription.currentPeriodStart); expect(paid?.currentPeriodEnd).toEqual(started.subscription.currentPeriodEnd);
   });
 
   it("refuses platform enroll without a stored method", async () => {
