@@ -21,6 +21,7 @@ import { agreementFeePaymentDebt, agreementFeeProfileDebt } from "./agreement-fe
 import { commercialPrincipalState } from "./commercial-attestations";
 import { controlledCashFinancialHistory, controlledFinancialWitness } from "./controlled-provider-financial-witness";
 import { controlledProviderCoverage } from "@/modules/subscriptions/controlled-provider-coverage";
+import { controlledCollectionCoverage } from "@/modules/subscriptions/controlled-provider-collection-coverage";
 import { commercialPaymentAttestations } from "./commercial-attestation-schema";
 
 const reason = z.enum(["original_scope", "unknown_payment", "unapplied_money", "provider_settlement", "commission", "refund", "dispute"]);
@@ -154,7 +155,12 @@ export const merchantTaxPaymentDebt = defineService({
     let controlledPending = controlled.incomplete;
     for (const subscriptionId of [...new Set(controlled.history.resources.map(row => row.subscriptionId))]) {
       try {
-        const coverage = await controlledProviderCoverage(ctx.tx, { subscriptionId });
+        const targets=controlled.targets?.quotes.filter(row=>row.subscriptionId===subscriptionId);
+        const targetCoverage=targets?.length?await controlledCollectionCoverage(ctx.tx,{subscriptionId}):null;
+        // Zero transport closure cannot discharge an accepted canonical target.
+        // Its genuine positive-target closure/unwind remains separately required.
+        controlledPending ||= Boolean(targetCoverage?.witness.collections.length);
+        const coverage = targetCoverage?.transport ?? await controlledProviderCoverage(ctx.tx, { subscriptionId });
         controlledPending ||= coverage.unfinishedCalls.length > 0 || coverage.rawCashReviewFactIds.length > 0
           || coverage.witness.resources.some(resource => !coverage.witness.closures.some(closure => closure.id === resource.id));
       } catch (error) {

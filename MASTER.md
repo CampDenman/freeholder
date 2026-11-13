@@ -15193,6 +15193,20 @@ whatever is best for the people using the site.
   parent immediately after resource, before payments/invoice/notes, preserving
   resource→parent→sorted payment→invoice→note→cash. This is source only;
   qualification and the full positive lifecycle remain required.
+  Controlled15 parent consumer source checkpoint 2026-11-13 (C9.33/C9.38/
+  C12.38/C1.08): exact actual invoice/payment/receipt/frozen-profile FKs now
+  discover the six target families, including unaccepted cashless normal periods,
+  alongside the original9 under one5000/table+UUID+full-row-SHA budget. Buyer and
+  merchant projections remain explicit and separate. Extended readiness proves
+  coverage with debt retained; a separate private exact current target authority
+  checks actual principal, source credit/fee, consent, trial/calendar and genuine
+  original caller/read inventory. Observation-only GET does not authorize money.
+  Twenty-one new pure/adapter cases, existing14 adapter oracles and existing15
+  member identity controls plus two exact foreign/ambiguous-target cases are
+  PREPARED/UNRUN. No SQL/model/journal, CPU/PG or provider qualification occurred.
+  Ordinary collection prelocking, positive raw intent/invoice debt classification,
+  canonical public producer/effect and full positive closure/recovery remain
+  required with no deferral; see deploy/controlled-target-financial82-source-20261113.md.
   Controlled canonical collection contract/runtime checkpoint (2026-11-13,
   C9.33/C9.38/C12.38/C1.08): a new six-family source boundary distinguishes
   actual ordinary periods from explicit prorations and preserves original

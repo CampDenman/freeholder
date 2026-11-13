@@ -21,6 +21,13 @@ function reader(source:ControlledFinancialHistory,inspect?:(query:string,params:
  const proxy=drizzle(async(query,params)=>{
   inspect?.(query,params);
   if(query.includes("from merchant_agreement_payment_routes route join payments p"))return{rows:[{subscriptionId:id(10),receiptId:null}]};
+  if(query.includes('from "subscription_controlled_quotes"')){
+   expect(query).toContain('"subscription_commercial_terms"."subscription_id" = "subscription_controlled_resources"."subscription_id"');
+   expect(query).not.toMatch(/email|current_account/);return{rows:[]};
+  }
+  if(query.includes('from "subscription_controlled_collections"')){
+   expect(query).toContain('"subscription_controlled_collections"."invoice_id"');expect(params).toContain(id(70));return{rows:[]};
+  }
   if(query.includes('from "subscription_controlled_resources"'))return{rows:source.resources.map(row=>[row.id,row.subscriptionId,row.termsId,row.profileId,row.profileVersion,row.fingerprint])};
   if(query.includes('from "subscription_controlled_operations"'))return{rows:source.operations.map(row=>[row.id,row.resourceId,row.kind,row.fingerprint])};
   if(query.includes('from "subscription_controlled_calls"'))return{rows:source.calls.map(row=>[row.id,row.operationId,row.fingerprint])};
@@ -61,12 +68,19 @@ describe("controlled parent original financial integration",()=>{
   const queries:string[]=[];
   const result=await controlledFinancialWitness(reader(history(),(query,params)=>{
    queries.push(query);expect(query).toContain("sha256");expect(params).toContain(5001);
-   if(query.includes('from "subscription_controlled_resources"')){
+   if(query.includes('from "subscription_controlled_quotes"')){
+   expect(query).toContain('"subscription_commercial_terms"."subscription_id" = "subscription_controlled_resources"."subscription_id"');
+   expect(query).not.toMatch(/email|current_account/);return{rows:[]};
+  }
+  if(query.includes('from "subscription_controlled_collections"')){
+   expect(query).toContain('"subscription_controlled_collections"."invoice_id"');expect(params).toContain(id(70));return{rows:[]};
+  }
+  if(query.includes('from "subscription_controlled_resources"')){
     expect(query).toContain('"subscription_commercial_terms"."profile_id"');expect(params).toContain(id(30));
     expect(query).not.toContain("contact_id");expect(query).not.toContain("amount_minor");
    }
   }),{profileIds:[id(30)]});
-  expect(result.incomplete).toBe(false);expect(result.entries).toHaveLength(12);expect(queries).toHaveLength(9);
+  expect(result.incomplete).toBe(false);expect(result.entries).toHaveLength(12);expect(queries).toHaveLength(10);
  });
  it("discovers invoice history through actual event/target and original PI parents before a payment route exists",async()=>{
   let selected=false;

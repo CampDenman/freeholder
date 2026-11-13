@@ -6,19 +6,23 @@ import type { Tx } from "@/core/service";
 import { ServiceError } from "@/core/service";
 import { controlledProviderWitnesses, exportControlledProviderHistory } from "@/modules/subscriptions/controlled-provider-witnesses";
 import { readControlledReceiptNamespace } from "@/modules/subscriptions/controlled-provider-cash-namespace";
+import { controlledCollectionCoverage } from "@/modules/subscriptions/controlled-provider-collection-coverage";
+import { exportControlledTargetFinancialHistory } from "./controlled-target-financial-export";
+import { controlledTargetTables, controlledTargetFinancialWitness, controlledTargetEntries, controlledTargetAncestryComplete, type ControlledTargetHistory } from "./controlled-target-financial-witness";
 import { controlledProviderCoverage } from "@/modules/subscriptions/controlled-provider-coverage";
 import { merchantTaxDigest } from "./merchant-tax-store";
 
-export const controlledFinancialTables = {
+export const controlledTransportTables = {
  resources: "subscription_controlled_resources", operations: "subscription_controlled_operations", calls: "subscription_controlled_calls",
  facts: "subscription_controlled_facts", finishes: "subscription_controlled_finishes", stops: "subscription_controlled_stops",
  verifications: "subscription_controlled_verifications", chargeOrigins: "subscription_controlled_charge_origins", closures: "subscription_controlled_closures",
 } as const;
 export type ControlledFinancialHistory = Awaited<ReturnType<typeof controlledProviderWitnesses>>;
 export type ControlledFinancialEntry = { table: string; id: string; fingerprint: string };
-const families = Object.keys(controlledFinancialTables) as Array<keyof typeof controlledFinancialTables>;
+export const controlledFinancialTables = { ...controlledTransportTables, ...controlledTargetTables };
+const families = Object.keys(controlledTransportTables) as Array<keyof typeof controlledTransportTables>;
 export function controlledFinancialEntries(history: ControlledFinancialHistory): ControlledFinancialEntry[] {
- return families.flatMap(family => history[family].map(row => ({ table: controlledFinancialTables[family], id: row.id, fingerprint: row.fingerprint })))
+ return families.flatMap(family => history[family].map(row => ({ table: controlledTransportTables[family], id: row.id, fingerprint: row.fingerprint })))
   .sort((a,b) => a.table.localeCompare(b.table) || a.id.localeCompare(b.id));
 }
 /** FK closure is checked independently of opaque hashes. Authentication of
@@ -45,7 +49,7 @@ export async function controlledFinancialWitness(tx: Tx, scope: ControlledFinanc
  const input = { subscriptionIds:[...new Set(scope.subscriptionIds??[])].sort(), receiptIds:[...new Set(scope.receiptIds??[])].sort(),
   paymentIds:[...new Set(scope.paymentIds??[])].sort(), invoiceIds:[...new Set(scope.invoiceIds??[])].sort(), profileIds:[...new Set(scope.profileIds??[])].sort() };
  const empty = await controlledProviderWitnesses(tx,{});
- const failed = () => ({ version:1 as const, history:empty, entries:[] as ControlledFinancialEntry[], receiptIds:[] as string[], incomplete:true });
+ const failed = () => ({ version:1 as const, history:empty, entries:[] as ControlledFinancialEntry[], receiptIds:[] as string[], targets:undefined as ControlledTargetHistory|undefined, incomplete:true });
  if(Object.values(input).some(ids=>ids.length>5000)) return failed();
  const links = input.paymentIds.length || input.invoiceIds.length ? await tx.execute<{subscriptionId:string|null;receiptId:string|null}>(sql`
   select route.subscription_id::text as "subscriptionId",route.original_charge_receipt_id::text as "receiptId"
@@ -58,6 +62,10 @@ export async function controlledFinancialWitness(tx: Tx, scope: ControlledFinanc
   union select e.subscription_id::text,null::text from subscription_events e where e.invoice_id in (${list(input.invoiceIds)})
   union select p.subscription_id::text,null::text from subscription_prorations p join invoices i on i.id=p.debit_invoice_id
    where i.id in (${list(input.invoiceIds)}) and i.source_type='subscription' and i.source_id=p.subscription_id::text||':proration:'||p.id::text
+  union select resource.subscription_id::text,null::text from subscription_controlled_collections target
+   join subscription_controlled_quotes quote on quote.id=target.quote_id join subscription_controlled_resources resource on resource.id=quote.resource_id
+   left join payments p on p.invoice_id=target.invoice_id
+   where target.invoice_id in (${list(input.invoiceIds)}) or p.id in (${list(input.paymentIds)})
   limit 5001`) : [];
  if(links.length>5000) return failed();
  input.subscriptionIds=[...new Set([...input.subscriptionIds,...links.flatMap(row=>row.subscriptionId?[row.subscriptionId]:[])])].sort();
@@ -75,19 +83,35 @@ export async function controlledFinancialWitness(tx: Tx, scope: ControlledFinanc
   // equal UUIDs across physical tables into one row.
   Object.assign(history,{[family]:[...rows.values()].sort((a,b)=>a.id.localeCompare(b.id))});
  }
- const entries=controlledFinancialEntries(history);
- if(groups.some(group=>group.incomplete)||entries.length>5000||!controlledFinancialAncestryComplete(history))return failed();
- if(input.profileIds.length&&!input.subscriptionIds.length&&!input.receiptIds.length&&history.resources.some(row=>!input.profileIds.includes(row.profileId)))return failed();
- return{version:1 as const,history,entries,receiptIds:input.receiptIds,incomplete:false};
+ const targets=await controlledTargetFinancialWitness(tx,{...scope,receiptIds:input.receiptIds},history);
+ // A target-profile quote may belong to an older frozen resource profile.
+ // Include only that real resource's ancestry, never all sibling resources.
+ for(const quote of targets.quotes)if(!history.resources.some(row=>row.id===quote.resourceId)){
+  const ancestors=await controlledProviderWitnesses(tx,{subscriptionIds:[quote.subscriptionId]});if(ancestors.incomplete)return failed();
+  const root=ancestors.resources.filter(row=>row.id===quote.resourceId),operationIds=new Set(ancestors.operations.filter(row=>row.resourceId===quote.resourceId).map(row=>row.id));
+  const callIds=new Set(ancestors.calls.filter(row=>operationIds.has(row.operationId)).map(row=>row.id));
+  const selected={resources:root,operations:ancestors.operations.filter(row=>operationIds.has(row.id)),calls:ancestors.calls.filter(row=>callIds.has(row.id)),facts:ancestors.facts.filter(row=>callIds.has(row.callId)),
+   finishes:ancestors.finishes.filter(row=>callIds.has(row.id)),stops:ancestors.stops.filter(row=>callIds.has(row.id)),verifications:ancestors.verifications.filter(row=>operationIds.has(row.id)),
+   chargeOrigins:ancestors.chargeOrigins.filter(row=>row.resourceId===quote.resourceId),closures:ancestors.closures.filter(row=>row.id===quote.resourceId)};
+  for(const family of families)Object.assign(history,{[family]:[...history[family],...selected[family]].sort((a,b)=>a.id.localeCompare(b.id))});
+ }
+ const targetEntries=controlledTargetEntries(targets),entries=[...controlledFinancialEntries(history),...targetEntries].sort((a,b)=>a.table.localeCompare(b.table)||a.id.localeCompare(b.id));
+ if(groups.some(group=>group.incomplete)||entries.length>5000||!controlledFinancialAncestryComplete(history)||!controlledTargetAncestryComplete(targets,history))return failed();
+ if(input.profileIds.length&&!input.subscriptionIds.length&&!input.receiptIds.length&&history.resources.some(row=>!input.profileIds.includes(row.profileId)&&!targets.quotes.some(quote=>quote.resourceId===row.id&&input.profileIds.includes(quote.profileId))))return failed();
+ return{version:1 as const,history,entries,receiptIds:input.receiptIds,incomplete:false,...(targetEntries.length?{targets}:{})};
 }
 /** Authentication/debt is separate from a privacy fingerprint. Missing exact
  * controlled bridge must remain applies=true debt, never a legacy fallback. */
-const primaryControlledKinds=new Set(["bootstrap","discover_bootstrap","pause_drafts","read_bootstrap","list_invoices","create_schedule","read_calendar","update_calendar","read_invoice","finalize_invoice","pay_invoice","cancel_calendar","void_invoice","delete_draft"]);
+const primaryControlledKinds=new Set(["read_customer_financials","create_draft","add_invoice_component","read_manifest","bootstrap","discover_bootstrap","pause_drafts","read_bootstrap","list_invoices","create_schedule","read_calendar","update_calendar","read_invoice","finalize_invoice","pay_invoice","cancel_calendar","void_invoice","delete_draft"]);
 export async function controlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[] = []){
- const witness=await controlledFinancialWitness(tx,{receiptIds,subscriptionIds});
+ let witness=await controlledFinancialWitness(tx,{receiptIds,subscriptionIds});
+ const actualSubscriptions=[...new Set(witness.history.resources.map(row=>row.subscriptionId))];
+ if(witness.targets&&actualSubscriptions.some(id=>!subscriptionIds.includes(id)))witness=await controlledFinancialWitness(tx,{receiptIds,subscriptionIds:actualSubscriptions});
  const namespaces=[];for(const id of [...new Set(receiptIds)].sort())namespaces.push({receiptId:id,...await readControlledReceiptNamespace(tx,id)});
+ const targetCoverage=[];
+ if(witness.targets)for(const id of [...new Set(witness.targets.quotes.map(row=>row.subscriptionId))].sort())targetCoverage.push(await controlledCollectionCoverage(tx,{subscriptionId:id}));
  const coverage=[];for(const id of [...new Set(witness.history.resources.map(row=>row.subscriptionId))].sort())coverage.push(await controlledProviderCoverage(tx,{subscriptionId:id}));
- return{...witness,namespaces,coverage,incomplete:witness.incomplete||namespaces.some(row=>row.applies&&(!row.verified||row.rawCashReview))
+ return{...witness,namespaces,coverage,...(targetCoverage.length?{targetCoverage}:{}),incomplete:witness.incomplete||namespaces.some(row=>row.applies&&(!row.verified||row.rawCashReview))
    ||coverage.some(row=>row.rawCashReviewFactIds.length>0),
   principalCallerDebt:namespaces.some(row=>row.applies&&row.principalCallerDebt)||coverage.some(row=>row.unfinishedCalls.some(call=>primaryControlledKinds.has(call.kind))),
   financialCallerDebt:namespaces.some(row=>row.applies&&row.financialCallerDebt)||coverage.some(row=>row.unfinishedCalls.length>0)};
@@ -102,7 +126,8 @@ export async function exportControlledFinancialHistory(tx:Tx,scope:ControlledFin
    ${scope.profileIds?.length?sql`,r.observed_application_fee_minor::float8 as "observedApplicationFeeMinor",r.observed_application_fee_currency as "observedApplicationFeeCurrency"`:sql``}
   from subscription_provider_charge_receipts r where r.id in (${list(receiptIds)}) order by r.id limit 5001`):[];
  if(receipts.length!==receiptIds.length||selected.entries.length+receipts.length>5000)throw new ServiceError("conflict","Restore the complete actual controlled canonical cash identity before export.");
+ const targetExport=selected.targets?await exportControlledTargetFinancialHistory(tx,selected.targets,Boolean(scope.profileIds?.length)):null;
  const after=await controlledFinancialWitness(tx,scope);
  if(after.incomplete||merchantTaxDigest(after)!==merchantTaxDigest(selected))throw new ServiceError("conflict","The original controlled financial history changed during export.");
- return{selected,exported:{...exportControlledProviderHistory(selected.history),originalCashReceipts:receipts}};
+ return{selected,exported:{...exportControlledProviderHistory(selected.history),originalCashReceipts:receipts,...(targetExport?{originalTargets:targetExport}:{})}};
 }

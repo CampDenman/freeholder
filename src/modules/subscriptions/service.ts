@@ -39,7 +39,9 @@ import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { prepareBuyerAgreementErasure, minimizeBuyerAgreements } from "./buyer-agreement-erasure";
 import { syncSubscriptionAccess } from "@/core/entitlements/service";
-import { controlledProviderWitnesses,exportControlledProviderHistory } from "./controlled-provider-witnesses";
+import { exportControlledProviderHistory } from "./controlled-provider-witnesses";
+import { exportControlledTargetFinancialHistory } from "@/modules/invoicing/controlled-target-financial-export";
+import { controlledFinancialWitness } from "@/modules/invoicing/controlled-provider-financial-witness";
 import { subscriptionProrationCardWitnesses, exportProrationCardHistory } from "./proration-card-witnesses";
 import prorationCardServices from "./proration-card-service";
 import grossProrationQuotes from "./proration-quote";
@@ -1748,7 +1750,7 @@ registerContactReference({
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
   tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines", "subscription_provider_read_tickets", "subscription_provider_read_finishes", "subscription_provider_read_stops",
-    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses", "subscription_proration_cash_confirmations", "subscription_proration_credit_confirmations", "subscription_proration_payment_protocols", "subscription_proration_card_mandates", "subscription_proration_card_attempts", "subscription_proration_card_jobs", "subscription_proration_card_reads", "subscription_proration_card_read_finishes", "subscription_proration_card_read_stops","subscription_controlled_resources", "subscription_controlled_operations", "subscription_controlled_calls", "subscription_controlled_facts", "subscription_controlled_finishes", "subscription_controlled_stops", "subscription_controlled_verifications", "subscription_controlled_charge_origins", "subscription_controlled_closures"],
+    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses", "subscription_proration_cash_confirmations", "subscription_proration_credit_confirmations", "subscription_proration_payment_protocols", "subscription_proration_card_mandates", "subscription_proration_card_attempts", "subscription_proration_card_jobs", "subscription_proration_card_reads", "subscription_proration_card_read_finishes", "subscription_proration_card_read_stops","subscription_controlled_resources", "subscription_controlled_operations", "subscription_controlled_calls", "subscription_controlled_facts", "subscription_controlled_finishes", "subscription_controlled_stops", "subscription_controlled_verifications", "subscription_controlled_charge_origins", "subscription_controlled_closures", "subscription_controlled_quotes", "subscription_controlled_collections", "subscription_controlled_components", "subscription_controlled_invoice_bindings", "subscription_controlled_item_receipts", "subscription_controlled_invoice_proofs"],
   retentionScopes: ["commerce.money"],
   exportData: async (tx: Tx, contactId: string) => {
     const rows = await tx
@@ -1816,16 +1818,22 @@ registerContactPrivacySource({
     if (cardWitness.incomplete) throw new ServiceError("conflict", "Restore the complete original stored-method/reader inventory before export.");
     const cardHistory = exportProrationCardHistory(cardWitness);
     const cardCount = Object.values(cardHistory).reduce((total, family) => total + family.length, 0);
-    const controlled=await controlledProviderWitnesses(tx,{subscriptionIds:rows.map(row=>row.id)});
+    const controlled=await controlledFinancialWitness(tx,{subscriptionIds:rows.map(row=>row.id)});
     if(controlled.incomplete)throw new ServiceError("conflict","Restore every original controlled calendar/caller/fact, including resources without an invoice or cash receipt, before export.");
-    const controlledHistory=exportControlledProviderHistory(controlled),controlledCount=Object.values(controlledHistory).reduce((total,family)=>total+family.length,0);
+    const controlledHistory=exportControlledProviderHistory(controlled.history),controlledCount=controlled.entries.length;
+    const targetHistory=controlled.targets?await exportControlledTargetFinancialHistory(tx,controlled.targets):null;
     const controlledFor=(subscriptionId:string)=>{
       const resources=controlledHistory.resources.filter(row=>row.subscriptionId===subscriptionId),resourceIds=new Set(resources.map(row=>row.resourceId));
       const operations=controlledHistory.operations.filter(row=>resourceIds.has(row.resourceId)),operationIds=new Set(operations.map(row=>row.operationId));
       const calls=controlledHistory.calls.filter(row=>operationIds.has(row.operationId)),callIds=new Set(calls.map(row=>row.callId));
+      const quotes=targetHistory?.quotes.filter(row=>row.subscriptionId===subscriptionId)??[],quoteIds=new Set(quotes.map(row=>row.quoteId));
+      const collections=targetHistory?.collections.filter(row=>quoteIds.has(row.quoteId))??[],collectionIds=new Set(collections.map(row=>row.collectionId));
+      const components=targetHistory?.components.filter(row=>collectionIds.has(row.collectionId))??[],componentIds=new Set(components.map(row=>row.componentId));
       return{resources,operations,calls,facts:controlledHistory.facts.filter(row=>callIds.has(row.callId)),actualFinishes:controlledHistory.actualFinishes.filter(row=>callIds.has(row.callId)),
         independentStops:controlledHistory.independentStops.filter(row=>callIds.has(row.callId)),verifications:controlledHistory.verifications.filter(row=>operationIds.has(row.operationId)),
-        originalChargeLinks:controlledHistory.originalChargeLinks.filter(row=>resourceIds.has(row.resourceId)),actualClosures:controlledHistory.actualClosures.filter(row=>resourceIds.has(row.resourceId))};
+        originalChargeLinks:controlledHistory.originalChargeLinks.filter(row=>resourceIds.has(row.resourceId)),actualClosures:controlledHistory.actualClosures.filter(row=>resourceIds.has(row.resourceId)),
+        ...(quotes.length?{originalTargets:{quotes,collections,components,invoiceBindings:targetHistory?.invoiceBindings.filter(row=>collectionIds.has(row.collectionId))??[],
+          itemReceipts:targetHistory?.itemReceipts.filter(row=>componentIds.has(row.componentId))??[],invoiceProofs:targetHistory?.invoiceProofs.filter(row=>collectionIds.has(row.collectionId))??[]}}:{})};
     };
     const originalCash = await originalCashRecoveryFinancialWitness(tx, [], charges.map(row => row.id));
     const aggregate = rows.length + charges.length + accepted.length + amendments.length + resumptions.length + periodInvoices.length + readerTickets.length + readerStops.length
