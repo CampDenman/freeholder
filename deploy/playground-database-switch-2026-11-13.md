@@ -78,3 +78,17 @@ Evidence:
 This is fixture lifecycle evidence. It does not supply an independent security
 review, deployed platform acceptance or a stable-release signature. Qualification
 of the original full separation/reset journeys remains separately recorded.
+
+
+The ordinary separation/reset fixture now uses per-run nonce database names,
+refuses an existing target, and drops only databases actually created by that
+run. The reset simulation drains the producer and existing reconcile promise
+before directly closing/dropping its disposable database, matching process
+shutdown. The deterministic probe oracle remains unchanged. Incremental types
+and both fixture/config lint passed. The two existing native journeys then
+passed separately without retry: separation12.708s and reset35.636s, preserving
+the original180-second deadlines. Independent post-run inspection confirms the
+original80-entry harness journal and zero sessions on the harness, separation
+prefix and all preserved probe pairs. Intermediate business assertions come
+from the actual tests; no external intermediate snapshot is claimed. The
+application product files and migrations are unchanged by this fixture fix.
