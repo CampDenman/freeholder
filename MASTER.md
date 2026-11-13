@@ -14248,8 +14248,17 @@ whatever is best for the people using the site.
   jsonb_build_object key had no inferable type even with WHERE false. That exact
   whitelisted key now has an explicit text cast; no identities, membership or
   money policy changed. Failed V5 and its independent journal/profile/drain
-  proof are preserved. Fresh V6 and the unchanged native receipt assertions
-  remain required before acceptance.
+  proof are preserved. Fresh V6 normally applied all83 entries in6.998s.
+  The unchanged actual NULL-payment receipt journey then passed in10.078s,
+  including genuine charge-only feedback, original privacy/export/undo
+  footprints and retained cash with zero canonical payments/invoices/refunds.
+  Independent read-only proof verified receipt1, authenticated feedback, all83
+  journal hashes, UTC/fsync/jit profile and zero clients. The two complete
+  affected witness suites also passed12 actual controls with no skips.
+  Evidence: /tmp/freeholder-current-full82-feedback-receipt-native-v2-20261113
+  (-result.json and -ledger-v2.json),
+  /tmp/freeholder-financial-json-key-source-v1-20261113-result.json.
+  This component proof supplies no provider-account or stable acceptance.
   Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
   parity stopped at the first genuine model/source mismatch in the named
   nonnegative invoice amount CHECK after125 complete models. The unchanged
