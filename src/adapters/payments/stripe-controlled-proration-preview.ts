@@ -13,8 +13,8 @@ function unproven():never{throw new AdapterError("payments","stripe","provider_f
 function seconds(value:string):number{const n=Date.parse(value);if(!Number.isSafeInteger(n)||n<0||n%1000!==0||new Date(n).toISOString()!==value)unproven();return n/1000;}
 function timestamp(value:unknown):string{const n=number(value);if(n===undefined||!Number.isSafeInteger(n)||n<0||n>8640000000000)unproven();return new Date(n*1000).toISOString();}
 function signed(value:unknown):number{const n=number(value);if(n===undefined||!Number.isSafeInteger(n))unproven();return n;}
-export function stripeControlledProrationPreview(api:Api){return{
- async previewMerchantControlledProration(request:MerchantControlledProrationPreviewRequest):Promise<MerchantControlledProrationPreview>{
+export function stripeControlledProrationPreview(api:Api){
+ async function preview(request:MerchantControlledProrationPreviewRequest,behavior:"create_prorations"|"none"):Promise<MerchantControlledProrationPreview>{
   validateMerchantChargeScope(request);
   if(request.providerApiVersion!=="2026-10-28.endive"||!request.providerPlatformAccountId||!/^sub_[A-Za-z0-9_]+$/.test(request.providerSubscriptionRef)
    ||request.originalComponents.length!==1||!/^prod_[A-Za-z0-9_]+$/.test(request.target.providerProductRef)
@@ -27,9 +27,12 @@ export function stripeControlledProrationPreview(api:Api){return{
   await request.onObserved({kind:"subscription_read",raw:current});
   assertControlledCurrent(request,current);
   const itemIds=new Set(request.originalComponents.map(row=>row.subscriptionItemRef));
-  const form=new URLSearchParams({customer:request.providerCustomerRef,subscription:request.providerSubscriptionRef,currency:request.currency.toLowerCase(),preview_mode:"next",
-   "automatic_tax[enabled]":"false","subscription_details[proration_behavior]":"create_prorations","subscription_details[proration_date]":String(seconds(request.prorationAt)),
+  const form=new URLSearchParams({customer:request.providerCustomerRef,subscription:request.providerSubscriptionRef,currency:request.currency.toLowerCase(),preview_mode:"next",discounts:"",
+   "automatic_tax[enabled]":"false","subscription_details[proration_behavior]":behavior,
    "subscription_details[billing_cycle_anchor][type]":"unchanged"});
+  // The actual no-proration update preview is a separate bank operation.
+  // Stripe explicitly forbids proration_date with proration_behavior=none.
+  if(behavior==="create_prorations")form.set("subscription_details[proration_date]",String(seconds(request.prorationAt)));
   for(const[index,expected]of request.originalComponents.entries()){
    const prefix=`subscription_details[items][${index}]`;
    const values:{[key:string]:string}={id:expected.subscriptionItemRef,quantity:"1","price_data[currency]":request.currency.toLowerCase(),
@@ -80,7 +83,9 @@ export function stripeControlledProrationPreview(api:Api){return{
   if(actualLines.filter(row=>row.component==="merchant_declared_tax_collection").length!==(taxComponent?1:0)
    ||actualLines.reduce((sum,row)=>sum+BigInt(row.amountMinor),0n)!==BigInt(signed(actual.subtotal)))unproven();
   return{providerPreviewRef:previewRef,providerSubscriptionRef:request.providerSubscriptionRef,providerCustomerRef:request.providerCustomerRef,currency:request.currency,
-   subtotalMinor:signed(actual.subtotal),totalMinor:signed(actual.total),amountDueMinor:signed(actual.amount_due),prorationAt:request.prorationAt,requestedAnchor:"unchanged",originalAnchor:request.originalAnchor,
+   subtotalMinor:signed(actual.subtotal),totalMinor:signed(actual.total),amountDueMinor:signed(actual.amount_due),prorationAt:request.prorationAt,requestedAnchor:"unchanged",requestedProrationBehavior:behavior,actualInvoicePeriodStart:timestamp(actual.period_start),actualInvoicePeriodEnd:timestamp(actual.period_end),originalAnchor:request.originalAnchor,
    trialPolicy:"preserve_original_end",originalTrialEnd:request.acceptedTrialEnd,actualLines,actualRaw:actual,suppliesPaidAuthority:false,sealedTaxIncluded:!!taxComponent};
  }
-};}
+ return{previewMerchantControlledProration:(request:MerchantControlledProrationPreviewRequest)=>preview(request,"create_prorations"),
+  previewMerchantControlledCalendarUpdate:(request:MerchantControlledProrationPreviewRequest)=>preview(request,"none")};
+}

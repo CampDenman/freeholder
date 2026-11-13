@@ -13,7 +13,7 @@ import { subscriptionControlledResources,subscriptionControlledOperations,subscr
 import { controlledProviderJournal } from "./controlled-provider-proof";
 import { controlledFinancialReadiness,controlledWorkNeedsParentReadiness } from "./controlled-provider-readiness";
 import { requireControlledProviderSchema } from "./controlled-provider-source";
-const kind=z.enum(["bootstrap","discover_bootstrap","read_bootstrap","pause_drafts","read_invoice","list_invoices","read_calendar","cancel_calendar","create_product","read_product"]);
+const kind=z.enum(["bootstrap","discover_bootstrap","read_bootstrap","pause_drafts","read_invoice","read_customer_financials","list_invoices","read_calendar","cancel_calendar","create_product","read_product"]);
 const input=z.object({resourceId:z.uuid(),kind,providerInvoiceRef:z.string().regex(/^in_[A-Za-z0-9_]+$/).max(200).optional()}).strict();
 const ref=(value:unknown)=>typeof value==="string"?value:value&&typeof value==="object"&&"id"in value&&typeof value.id==="string"?value.id:undefined;
 export const planControlledProviderOperation=defineService({name:"subscriptions.planControlledProviderOperation",summary:"Freeze a next exact zero-only preparation or independent financial read from genuine original resource facts before its actual caller is admitted.",

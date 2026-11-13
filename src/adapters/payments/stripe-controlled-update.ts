@@ -19,10 +19,11 @@ export function stripeControlledUpdates(api:Api){return{
   await request.onObserved({kind:"subscription_read",raw:current});assertControlledCurrent(request,current);
   const item=request.originalComponents[0]!;
   const form=new URLSearchParams({"proration_behavior":"none","pause_collection[behavior]":"keep_as_draft","payment_behavior":"default_incomplete","billing_cycle_anchor[type]":"unchanged",
-   "automatic_tax[enabled]":"false","items[0][id]":item.subscriptionItemRef,"items[0][quantity]":"1","items[0][price_data][currency]":request.currency.toLowerCase(),
+   "automatic_tax[enabled]":"false",discounts:"","items[0][id]":item.subscriptionItemRef,"items[0][quantity]":"1","items[0][price_data][currency]":request.currency.toLowerCase(),
    "items[0][price_data][product]":request.target.providerProductRef,"items[0][price_data][unit_amount]":String(request.target.principalMinor),"items[0][price_data][tax_behavior]":"exclusive",
    "items[0][price_data][recurring][interval]":request.target.interval,"items[0][price_data][recurring][interval_count]":String(request.target.intervalCount),
    "metadata[freeholder_controlled_transport]":"draft_calendar","metadata[freeholder_controlled_price_epoch_id]":request.collectionId,
+   "metadata[freeholder_controlled_update_operation_id]":request.operationId,"metadata[freeholder_controlled_update_request_digest]":request.requestDigest,
    "metadata[freeholder_controlled_collection_policy]":"canonical_gross_target_locked_credit_no_wallet","metadata[freeholder_controlled_accepted_quote_digest]":request.acceptedQuoteDigest});
   if(request.acceptedTrialEnd!==null){const trial=Date.parse(request.acceptedTrialEnd);if(!Number.isSafeInteger(trial)||trial%1000!==0)unproven();if(trial>Date.now())form.set("trial_end",String(trial/1000));}
   const raw=await api(`/v1/subscriptions/${encodeURIComponent(request.providerSubscriptionRef)}`,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded","idempotency-key":request.idempotencyKey},body:form},request);

@@ -15184,6 +15184,32 @@ whatever is best for the people using the site.
   authentic late/partial recovery still REQUIRE implementation and qualification.
   No requirement is deferred. See
   `deploy/subscription-controlled-provider80-source-20261113.md`.
+  Controlled canonical collection contract/runtime checkpoint (2026-11-13,
+  C9.33/C9.38/C12.38/C1.08): a new six-family source boundary distinguishes
+  actual ordinary periods from explicit prorations and preserves original
+  physical creators separately from observing calls/facts. Concrete adapters
+  create/reuse a nonautomatic target draft, attach exact NET, fixed dated
+  merchant-declared tax and locked canonical negative amount items, verify
+  complete manifests/customer balances, set exact fees, finalize without
+  automatic collection and explicitly pay the original saved method. Positive
+  PI facts are retained before later price/manifest/application failures. Bank
+  ACKs/paid flags/zero due never manufacture canonical cash or access.
+  Historical quotedParentRevision remains evidence; acceptance must separately
+  record acceptedCurrentParentRevision after complete fresh current safety and
+  exactly unchanged economics/source IDs/epochs/profile/dated tax/currency/fee/
+  calendar/trial/method/namespace/API/disposition checks. Own unaccepted quotes
+  remain in full physical witnesses and reserve no principal; admitted readers
+  are never excluded. Relevant changed economics require fresh explicit consent.
+  A separate required target money-authority query and expanded protocol remain
+  mechanically unavailable until their genuine parent consumers are integrated
+  and qualified. Coverage readiness alone never declares money quiesced.
+  Seven actual mocked-HTTP controls are PREPARED/UNRUN; the owned additive SQL
+  tail is UNAPPLIED and source-only. Public canonical period/proration quote and
+  acceptance factories, original binding/item/proof retention commands, final
+  canonical receipt/payment/effect, six-family parent/privacy consumers, genuine
+  positive-target closure/late-partial recovery and provider acceptance remain
+  REQUIRED implementation and qualification, with no deferral or feature/stable
+  closure. See deploy/subscription-controlled-collection82-source-20261113.md.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

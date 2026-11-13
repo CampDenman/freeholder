@@ -9,6 +9,7 @@ import { controlledOperationRequest,planControlledProviderOperation,controlledPr
 import { retainControlledProviderResource,assertControlledProviderPreparationReady } from "./controlled-provider-source";
 import { withControlledProviderCall } from "./controlled-provider-runtime";
 import { retainControlledProviderVerification } from "./controlled-provider-verification";
+import { controlledCalendarPayload,controlledCollectionPayload } from "./controlled-provider-adapter-contract";
 import { createMerchantPhaseProduct } from "./provider-phase-products";
 const original=z.object({bootstrapOperationId:z.uuid(),bootstrapRequestDigest:z.string().regex(/^[a-f0-9]{64}$/),providerSubscriptionRef:z.string().regex(/^sub_[A-Za-z0-9_]+$/).max(200)});
 const product=z.object({name:z.string().min(1).max(500),component:z.literal("merchant_declared_tax_collection")});
@@ -20,10 +21,28 @@ export async function executeControlledOperation(operationId:string,caller:Actor
  const payload=z.record(z.string(),z.unknown()).parse(operation.originalRequest.payload),base={...scope,operationId:operation.id,requestDigest:operation.requestDigest,idempotencyKey:operation.idempotencyKey};
  const result=await withControlledProviderCall(operation.id,caller,async onObserved=>{
   switch(operation.kind){
+   case"preview_proration":if(!adapter.previewMerchantControlledProration)break;return adapter.previewMerchantControlledProration({...base,...controlledCalendarPayload.parse(payload),onObserved});
+   case"preview_update":if(!adapter.previewMerchantControlledCalendarUpdate)break;return adapter.previewMerchantControlledCalendarUpdate({...base,...controlledCalendarPayload.parse(payload),onObserved});
+   case"update_calendar":if(!adapter.updateMerchantControlledCalendar)break;return adapter.updateMerchantControlledCalendar({...base,...controlledCalendarPayload.extend({acceptedQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/),collectionId:z.uuid()}).parse(payload),onObserved});
+   case"create_draft":case"add_invoice_component":case"read_manifest":case"set_invoice_fee":case"finalize_invoice":case"pay_invoice":{
+    const frozen=controlledCollectionPayload.parse(payload),origin=frozen.invoiceOrigin;
+    if((origin.creatorOperationId===null||origin.creatorRequestDigest===null)&&(operation.kind!=="create_draft"||origin.kind!=="created_draft"||origin.creatorOperationId!==null||origin.creatorRequestDigest!==null))throw new ServiceError("conflict","Only the exact new draft creator may bind its own immutable request digest at dispatch.");
+    const request={...base,...frozen,invoiceOrigin:{...origin,creatorOperationId:origin.creatorOperationId??operation.id,creatorRequestDigest:origin.creatorRequestDigest??operation.requestDigest},
+     calendar:{...base,...frozen.calendar,onObserved},onObserved};
+    if(operation.kind==="create_draft"&&adapter.prepareMerchantControlledDraft)return adapter.prepareMerchantControlledDraft({...request,mode:z.enum(["create","existing_generated"]).parse(frozen.mode)});
+    const providerInvoiceRef=z.string().regex(/^in_[A-Za-z0-9_]+$/).max(200).parse(frozen.providerInvoiceRef),bound={...request,providerInvoiceRef};
+    if(operation.kind==="add_invoice_component"&&adapter.addMerchantControlledComponent)return adapter.addMerchantControlledComponent({...bound,componentId:z.uuid().parse(frozen.componentId)});
+    if(operation.kind==="read_manifest"&&adapter.inspectMerchantControlledInvoiceManifest)return adapter.inspectMerchantControlledInvoiceManifest(bound);
+    if(operation.kind==="set_invoice_fee"&&adapter.setMerchantControlledInvoiceFee)return adapter.setMerchantControlledInvoiceFee(bound);
+    if(operation.kind==="finalize_invoice"&&adapter.finalizeMerchantControlledInvoice)return adapter.finalizeMerchantControlledInvoice(bound);
+    if(operation.kind==="pay_invoice"&&adapter.payMerchantControlledInvoice)return adapter.payMerchantControlledInvoice(bound);
+    break;
+   }
    case"bootstrap":if(!adapter.createMerchantControlledBootstrap)break;return adapter.createMerchantControlledBootstrap({...base,onObserved});
    case"discover_bootstrap":if(!adapter.discoverMerchantControlledBootstrap)break;return adapter.discoverMerchantControlledBootstrap({...scope,...z.object({bootstrapOperationId:z.uuid(),bootstrapRequestDigest:z.string().regex(/^[a-f0-9]{64}$/)}).parse(payload),onObserved});
    case"read_bootstrap":if(!adapter.inspectMerchantControlledBootstrap)break;return adapter.inspectMerchantControlledBootstrap({...scope,...original.parse(payload),onObserved});
    case"pause_drafts":if(!adapter.pauseMerchantControlledBootstrap)break;return adapter.pauseMerchantControlledBootstrap({...base,...original.parse(payload),onObserved});
+   case"read_customer_financials":if(!adapter.inspectMerchantControlledCustomerFinancials)break;return adapter.inspectMerchantControlledCustomerFinancials({...scope,...original.parse(payload),onObserved});
    case"read_calendar":if(!adapter.inspectMerchantControlledCalendar)break;return adapter.inspectMerchantControlledCalendar({...scope,...original.parse(payload),onObserved});
    case"cancel_calendar":if(!adapter.cancelMerchantControlledCalendar)break;return adapter.cancelMerchantControlledCalendar({...base,...original.parse(payload),onObserved});
    case"list_invoices":if(!adapter.listMerchantControlledInvoices)break;return adapter.listMerchantControlledInvoices({...scope,...original.parse(payload),onObserved});
@@ -38,7 +57,7 @@ export async function executeControlledOperation(operationId:string,caller:Actor
  if(merchantTaxDigest(saved.result)!==merchantTaxDigest(actual))throw new ServiceError("conflict","Preserve the first actual returned bank result; a successor result cannot replace it.");
  return saved.result;
 }
-async function stage(resourceId:string,kind:"bootstrap"|"discover_bootstrap"|"read_bootstrap"|"pause_drafts"|"create_product"|"read_product"|"read_calendar"|"cancel_calendar"|"list_invoices",actor:Actor){
+async function stage(resourceId:string,kind:"bootstrap"|"discover_bootstrap"|"read_bootstrap"|"pause_drafts"|"create_product"|"read_product"|"read_calendar"|"read_customer_financials"|"cancel_calendar"|"list_invoices",actor:Actor){
  const planned=await planControlledProviderOperation.call({resourceId,kind},{kind:"system",request:actor.request});return executeControlledOperation(planned.operationId,actor);
 }
 export const prepareControlledProviderCalendar=defineOrchestratedService({name:"subscriptions.prepareControlledProviderCalendar",summary:"Prepare only the accepted original zero-NET transport and prove draft collection pause; no positive phase, paid access or remote financial stop is implied.",
@@ -92,7 +111,8 @@ export const recoverControlledProviderOperation=defineOrchestratedService({name:
   if(operation.kind==="read_invoice"){
    const payload=original.extend({providerInvoiceRef:z.string().regex(/^in_[A-Za-z0-9_]+$/).max(200)}).parse(operation.originalRequest.payload);
    const planned=await planControlledProviderOperation.call({resourceId:operation.resourceId,kind:"read_invoice",providerInvoiceRef:payload.providerInvoiceRef},{kind:"system",request:actor.request});await executeControlledOperation(planned.operationId,actor);
-  }else if(["read_calendar","cancel_calendar","list_invoices"].includes(operation.kind))await stage(operation.resourceId,"read_calendar",actor);
+  }else if(operation.kind==="read_customer_financials")await stage(operation.resourceId,"read_customer_financials",actor);
+  else if(["read_calendar","cancel_calendar","list_invoices"].includes(operation.kind))await stage(operation.resourceId,"read_calendar",actor);
   else if(["bootstrap","discover_bootstrap","read_bootstrap","pause_drafts"].includes(operation.kind))await recoverControlledProviderCalendar.call({resourceId:operation.resourceId},actor);
   else throw new ServiceError("conflict","This exact original product/quote/collection operation still requires its dedicated authentic recovery path. Keep its caller, facts and money; no replacement POST or invented finish is allowed.");
   return{observed:true as const};

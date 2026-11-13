@@ -19,7 +19,7 @@ export interface MerchantControlledSubscriptionScope extends MerchantChargeScope
   acceptedTrialEnd: string | null;
 }
 export interface MerchantControlledObservation {
-  kind: "bootstrap_subscription" | "pause_subscription" | "subscription_read" | "invoice_read" | "proration_preview" | "intent_read" | "cash_observed" | "invoice_payments_read" | "invoice_lines_read" | "price_read" | "product_created" | "product_read" | "subscription_list_read" | "calendar_updated" | "calendar_canceled" | "invoice_list_read";
+  kind: "bootstrap_subscription" | "pause_subscription" | "subscription_read" | "invoice_read" | "proration_preview" | "intent_read" | "cash_observed" | "invoice_payments_read" | "invoice_lines_read" | "price_read" | "product_created" | "product_read" | "subscription_list_read" | "calendar_updated" | "calendar_canceled" | "invoice_list_read" | "customer_financial_read" | "customer_credit_notes_read" | "controlled_draft_created" | "controlled_item_created" | "controlled_invoice_updated" | "controlled_invoice_finalized" | "controlled_invoice_paid";
   raw: Record<string, unknown>;
 }
 export interface MerchantControlledObserver {
@@ -96,6 +96,8 @@ export interface MerchantControlledProrationPreview {
   amountDueMinor: number;
   prorationAt: string;
   requestedAnchor: "unchanged";
+  requestedProrationBehavior:"create_prorations"|"none";
+  actualInvoicePeriodStart:string;actualInvoicePeriodEnd:string;
   originalAnchor: string;
   trialPolicy: "preserve_original_end";
   originalTrialEnd: string | null;
@@ -147,4 +149,14 @@ export type MerchantControlledCalendarCancelRequest = MerchantControlledSubscrip
 export interface MerchantControlledInvoiceListInventory {
  providerSubscriptionRef:string;providerInvoiceRefs:string[];actualInvoices:Array<Record<string,unknown>>;
  complete:true;suppliesPaidAuthority:false;financiallyQuiesced:false;
+}
+
+/** Complete actual bank inventory, not fungible credit or principal authority.
+ * Unknown/nonzero balances and old issued promises require their own authentic
+ * source disposition before an isolated canonical target may be collected. */
+export interface MerchantControlledCustomerFinancialInventory {
+ providerCustomerRef:string;currency:string;completeCreditNotes:true;
+ customer:Record<string,unknown>;creditNotes:Array<Record<string,unknown>>;
+ balanceState:"known_zero"|"review";issuedCreditNoteRefs:string[];
+ inventoryDigest:string;suppliesPaidAuthority:false;
 }

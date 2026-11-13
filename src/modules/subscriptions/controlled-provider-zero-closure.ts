@@ -18,7 +18,7 @@ export const closeControlledZeroProviderResource=defineService({name:"invoicing.
   if(!resource)throw new ServiceError("not_found","There is no such original controlled provider resource.");
   const history=await controlledProviderJournal(ctx.tx,resource.id);
   if(history.closures.length)return{closed:true as const};
-  const proof=controlledZeroTransportProof(history,resource.originalScope.currency);
+  const proof=controlledZeroTransportProof(history,resource.originalScope.currency,resource.originalScope.providerCustomerRef);
   if(!proof)throw new ServiceError("conflict","Cancel and independently enumerate every original zero-only invoice/payment. Retain any unknown caller, positive money, open draft or changed balance for authentic financial recovery; it cannot be erased by a zero transport closure.");
   if(history.count>=5000)throw new ServiceError("conflict","Restore the complete bounded original financial inventory before retaining its closure.");
   await ctx.tx.execute(sql`select set_config('freeholder.controlled_provider_v1','1',true)`);

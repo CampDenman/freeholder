@@ -4,8 +4,10 @@
 
 import type { MerchantCashAuxiliaryRequest, MerchantCashAuxiliaryEvidence } from "./merchant-cash-auxiliary-types";
 import type { MerchantControlledBootstrapRequest, MerchantControlledSubscriptionPauseRequest, MerchantControlledSubscriptionReadRequest,
-  MerchantControlledSubscriptionAcknowledgment, MerchantControlledBootstrapInventory, MerchantControlledProrationPreviewRequest, MerchantControlledProrationPreview, MerchantControlledInvoiceReadRequest, MerchantControlledInvoiceInventory, MerchantControlledProductRequest, MerchantControlledProductReadRequest, MerchantControlledBootstrapDiscoveryRequest, MerchantControlledCalendarUpdateRequest, MerchantControlledCalendarInventory, MerchantControlledCalendarCancelRequest, MerchantControlledInvoiceListInventory } from "./merchant-controlled-subscription-types";
+  MerchantControlledSubscriptionAcknowledgment, MerchantControlledBootstrapInventory, MerchantControlledProrationPreviewRequest, MerchantControlledProrationPreview, MerchantControlledInvoiceReadRequest, MerchantControlledInvoiceInventory, MerchantControlledProductRequest, MerchantControlledProductReadRequest, MerchantControlledBootstrapDiscoveryRequest, MerchantControlledCalendarUpdateRequest, MerchantControlledCalendarInventory, MerchantControlledCalendarCancelRequest, MerchantControlledInvoiceListInventory, MerchantControlledCustomerFinancialInventory } from "./merchant-controlled-subscription-types";
 export * from "./merchant-controlled-subscription-types";
+import type { MerchantControlledDraftRequest,MerchantControlledDraftAcknowledgment,MerchantControlledInvoiceComponentRequest,MerchantControlledItemAcknowledgment,MerchantControlledInvoiceActionRequest,MerchantControlledInvoiceActionAcknowledgment,MerchantControlledInvoiceManifestProof } from "./merchant-controlled-collection-types";
+export * from "./merchant-controlled-collection-types";
 import type { MerchantReturnedCashEvidence } from "./merchant-returned-cash-types";
 import type { AdapterStatus, RawProviderRequest } from "../types";
 
@@ -697,6 +699,13 @@ export interface PaymentAdapter {
   stopMerchantScheduleInvoice?(request: MerchantScheduleInvoiceActionRequest): Promise<void>;
   inspectMerchantScheduleInvoiceStop?(request: MerchantScheduleInvoiceActionRequest): Promise<void>;
   /** NEW original phase protocol; optional until its durable admission is enabled. */
+  prepareMerchantControlledDraft?(request:MerchantControlledDraftRequest):Promise<MerchantControlledDraftAcknowledgment>;
+  addMerchantControlledComponent?(request:MerchantControlledInvoiceComponentRequest):Promise<MerchantControlledItemAcknowledgment>;
+  setMerchantControlledInvoiceFee?(request:MerchantControlledInvoiceActionRequest):Promise<MerchantControlledInvoiceActionAcknowledgment>;
+  inspectMerchantControlledInvoiceManifest?(request:MerchantControlledInvoiceActionRequest):Promise<MerchantControlledInvoiceManifestProof>;
+  finalizeMerchantControlledInvoice?(request:MerchantControlledInvoiceActionRequest):Promise<MerchantControlledInvoiceActionAcknowledgment>;
+  payMerchantControlledInvoice?(request:MerchantControlledInvoiceActionRequest):Promise<MerchantControlledInvoiceActionAcknowledgment>;
+  inspectMerchantControlledCustomerFinancials?(request:MerchantControlledSubscriptionReadRequest):Promise<MerchantControlledCustomerFinancialInventory>;
   inspectMerchantControlledCalendar?(request:MerchantControlledSubscriptionReadRequest):Promise<MerchantControlledCalendarInventory>;
   cancelMerchantControlledCalendar?(request:MerchantControlledCalendarCancelRequest):Promise<{providerSubscriptionRef:string;requiresIndependentRead:true}>;
   listMerchantControlledInvoices?(request:MerchantControlledSubscriptionReadRequest):Promise<MerchantControlledInvoiceListInventory>;
@@ -705,6 +714,7 @@ export interface PaymentAdapter {
   createMerchantControlledTaxProduct?(request: MerchantControlledProductRequest): Promise<{createdProductRef:string}>;
   inspectMerchantControlledTaxProduct?(request: MerchantControlledProductReadRequest): Promise<{createdProductRef:string;component:"merchant_declared_tax_collection";taxAuthority:"canonical_merchant_tax_ledger"}>;
   inspectMerchantControlledInvoice?(request: MerchantControlledInvoiceReadRequest): Promise<MerchantControlledInvoiceInventory>;
+  previewMerchantControlledCalendarUpdate?(request:MerchantControlledProrationPreviewRequest):Promise<MerchantControlledProrationPreview>;
   previewMerchantControlledProration?(request: MerchantControlledProrationPreviewRequest): Promise<MerchantControlledProrationPreview>;
   createMerchantControlledBootstrap?(request: MerchantControlledBootstrapRequest): Promise<MerchantControlledSubscriptionAcknowledgment>;
   pauseMerchantControlledBootstrap?(request: MerchantControlledSubscriptionPauseRequest): Promise<MerchantControlledSubscriptionAcknowledgment>;

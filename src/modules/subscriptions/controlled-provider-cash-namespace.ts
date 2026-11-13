@@ -9,7 +9,7 @@ import { subscriptionProviderChargeReceipts } from "./schema";
 import { subscriptionControlledChargeOrigins,subscriptionControlledResources,subscriptionControlledFacts,subscriptionControlledCalls,subscriptionControlledOperations } from "./controlled-provider-schema";
 import { controlledCashEvidence,readOriginalControlledChargeAuthority } from "./controlled-provider-cash-origin";
 import { controlledProviderJournal } from "./controlled-provider-proof";
-const primaryKinds=new Set(["bootstrap","discover_bootstrap","pause_drafts","read_bootstrap","list_invoices","create_schedule","read_calendar","update_calendar","read_invoice","finalize_invoice","pay_invoice","cancel_calendar","void_invoice","delete_draft"]);
+const primaryKinds=new Set(["bootstrap","discover_bootstrap","pause_drafts","read_bootstrap","read_customer_financials","list_invoices","create_schedule","read_calendar","update_calendar","read_invoice","finalize_invoice","pay_invoice","cancel_calendar","void_invoice","delete_draft"]);
 /** verified is ancestry, never paid/refunded/settled authority. The parent must
  * still prove actual principal/route/refunds/disputes/current bank inventory.
  * A missing bridge for an exact controlled namespace cannot fall through as
