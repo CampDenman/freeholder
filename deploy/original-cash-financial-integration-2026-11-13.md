@@ -136,3 +136,15 @@ model-expression changes require renewed checks. Main PR #697 is merged at
 bedafa0a after required PR and merge-group CI; no deployment, version or social
 post followed. The future combined candidate must synchronize that main before
 its protected PR.
+
+The source-only mapping review also found two order declaration differences:
+its owner model omitted the existing SQL requirement for a seller contact or
+a retained erasure timestamp, and its quote-digest model used a redundant null
+OR branch rather than the frozen nullable regex CHECK. The models now follow
+the unchanged SQL. A null digest remains accepted by ordinary CHECK semantics;
+no data or migration changed. Logical model labels for intentionally unnamed
+SQL CHECKs, including combined inline amount checks, will be mapped explicitly
+to their exact frozen source expressions. Every installed-source constraint
+still requires independent validated expression/count checks, and named SQL
+and original22 exact-name assertions stay strict. No live-generated names or
+missing constraints may be invented to obtain a pass.
