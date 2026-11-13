@@ -20,8 +20,8 @@ are never used as caller completion.
 The orchestrator reads the exact original refund, then uses the bounded
 primary-first original cash collector. Each callback enters the actual process
 holder before its short transaction. Sequential facts retain exact refund,
-primary cash, every inventory refund (including unassigned resources), and any
-complete aggregate inventory. Today's authenticated read platform/protocol are
+primary cash, every inventory refund (including unassigned resources), and each
+partial or complete aggregate inventory snapshot. Today's authenticated read platform/protocol are
 stored separately while original create metadata stays null. A later page
 failure cannot discard already committed facts. The real wrapper's `finally`
 records returned/threw only after it settles. A failed finish commit keeps its
@@ -58,3 +58,12 @@ create a credit. Current-state revision proof, legacy bank projection, safe
 causal replacement, old-reader stop/recovery, final financial privacy composition,
 UI/API/SDK, populated upgrades and actual provider acceptance remain required.
 All launch and stable sign-offs remain open.
+
+Read-only collector inspection caught a drafted fixture count mismatch before
+any compiler or native execution of this slice: the real bounded collector
+calls its inventory callback for the initial charge snapshot, each refund and
+each completeness change. The corrected native oracle expects nine retained
+facts on the two-resource complete path and seven on the later-page failure,
+including all three explicitly incomplete aggregate snapshots. Production
+source, SQL and the qualified adapter15 controls are unchanged by this fixture
+correction; no product defect or native failure is claimed.
