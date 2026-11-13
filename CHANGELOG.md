@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Source checkpoint adds the shared original-receipt bank inspection flow, retaining admission, callbacks and genuine completion while keeping review evidence separate from permission to apply money. Full lifecycle integration and qualification remain pending.
+
 - Internal recovery source identifies only the authenticated entries belonging to one genuinely returned inspection; every event stays in the full financial history and working recovery qualification remains pending.
 
 - Internal recovery source now distinguishes an inspection’s authenticated refund callbacks from later raw events without discarding either occurrence; qualification remains pending.

@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { eq,sql } from "drizzle-orm";
 import { z } from "zod";
-import { defineService,ServiceError,type ServiceContext } from "@/core/service";
+import { defineService,ServiceError } from "@/core/service";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { moduleSettings } from "@/core/settings/schema";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
@@ -15,18 +15,10 @@ import { controlledCollectionState } from "./controlled-provider-collection-stat
 import { controlledCalendarSource } from "./controlled-provider-calendar-source";
 import { controlledCollectionPayload,controlledCalendarPayload } from "./controlled-provider-adapter-contract";
 import { controlledTargetFinancialAuthority } from "./controlled-provider-target-authority";
+import { requireControlledCollectionSchema } from "./controlled-provider-collection-schema-guard";
 import { controlledCollectionReadiness } from "./controlled-provider-readiness";
 const kind=z.enum(["update_calendar","create_draft","add_invoice_component","read_manifest","set_invoice_fee","finalize_invoice","pay_invoice"]);
-export async function requireControlledCollectionSchema(ctx:ServiceContext){
- const[ready]=await ctx.tx.execute<{ready:boolean}>(sql`select count(*)=12 as ready from pg_trigger where not tgisinternal and tgenabled in('O','A') and(tgrelid,tgname) in
-  ((to_regclass('subscription_controlled_quotes'),'subscription_controlled_quotes_guard'),(to_regclass('subscription_controlled_quotes'),'subscription_controlled_quotes_complete'),
-   (to_regclass('subscription_controlled_collections'),'subscription_controlled_collections_guard'),(to_regclass('subscription_controlled_collections'),'subscription_controlled_collections_complete'),
-   (to_regclass('subscription_controlled_components'),'subscription_controlled_components_guard'),(to_regclass('subscription_controlled_components'),'subscription_controlled_components_complete'),
-   (to_regclass('subscription_controlled_invoice_bindings'),'subscription_controlled_invoice_bindings_guard'),(to_regclass('subscription_controlled_invoice_bindings'),'subscription_controlled_invoice_bindings_complete'),
-   (to_regclass('subscription_controlled_item_receipts'),'subscription_controlled_item_receipts_guard'),(to_regclass('subscription_controlled_item_receipts'),'subscription_controlled_item_receipts_complete'),
-   (to_regclass('subscription_controlled_invoice_proofs'),'subscription_controlled_invoice_proofs_guard'),(to_regclass('subscription_controlled_invoice_proofs'),'subscription_controlled_invoice_proofs_complete'))`);
- if(!ready?.ready)throw new ServiceError("conflict","Install every guarded exact controlled quote/target/component/creator/item/read family before positive collection work.");
-}
+export { requireControlledCollectionSchema } from "./controlled-provider-collection-schema-guard";
 export const planControlledCollectionOperation=defineService({name:"subscriptions.planControlledCollectionOperation",summary:"Freeze one exact next original canonical target request from actual immutable accepted rows, retaining all older callers and source revisions before physical SDK admission.",
  kind:"mutation",permission:"system",external:false,writeClass:"money",input:z.object({collectionId:z.uuid(),kind,componentId:z.uuid().optional()}).strict(),output:z.object({operationId:z.uuid()}),handler:async(input,ctx)=>{
   await lockContactIdentityForRead(ctx.tx);await requireControlledCollectionSchema(ctx);

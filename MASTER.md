@@ -15771,3 +15771,16 @@ UNRUN; no registered authority, new model, SQL or activation. The genuine
 observational parent query/producer/context and all prospective application,
 canonical effects and acceptance remain REQUIRED. See
 deploy/controlled-cash-inspection-ancestry82-20261113.md.
+
+Source producer checkpoint 2026-11-13 (C12.38/C1.08/C11.10): a shared audited
+controlled-receipt orchestrator now commits its actual original inspection
+before GET, retains nonce-authenticated callbacks and genuine wrapper finish,
+and reports actual bank state without money authority. A distinct current-bank
+reader uses genuine parent observational coverage/causal history and shared
+neutral facts; legacy financial defaults and revision remain strict/unchanged.
+Missing parent query refuses before SDK work. Five controls plus one actual
+SQL lock-identity/lifetime control are PREPARED/UNRUN, not positive payment
+acceptance. Real query/consumer integration, complete positive provider/partial
+batch/calendar/disposition/recovery/UI/privacy and actual account/security
+acceptance remain REQUIRED, with no new deferral or C/stable closure. See
+deploy/controlled-cash-inspection-producer82-20261113.md.
