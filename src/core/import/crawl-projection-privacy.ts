@@ -28,6 +28,7 @@ export async function assertCrawlMediaMinimizable(tx: Tx, responseIds: string[])
       join import_source_graphs graph on graph.id=binding.graph_id
       join import_source_media media on media.graph_id=graph.id
       where response.id in (${sql.join(responseIds.map(id => sql`${id}::uuid`), sql`,`)})
+        and not freeholder_crawl_source_held(binding.source_id,binding.source_generation)
         and (media.source_key_digest is null or graph.plan_digest is not null
           or graph.lease_token is not null or media.asset_id is not null
           or media.digest is not null or media.bytes is not null
