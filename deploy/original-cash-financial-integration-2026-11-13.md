@@ -79,3 +79,32 @@ The candidate increases native shards to40 while retaining every test, the
 Protected requirements remain the existing DCO and aggregate checks; no remote
 protection was changed. The same partition/topology assertions must pass before
 qualification. This is CI capacity work, not product performance acceptance.
+
+## Four actual full-cash controls
+
+All four unchanged full-cash native bodies pass on exact d8a92d54 with the
+unchanged0cff/438 schema. Runner seconds: full12.582, unapplied10.861,
+lost accepted fee11.616, paused recipient10.793. The aggregate evidence is
+`/tmp/freeholder-current-cash81-four-actual-qualified-summary-20261113.json`.
+Each native JSON and independent ledger is retained under
+`/tmp/freeholder-current-cash81-{full,unapplied,lostfee,paused}-native-v1-20261113`.
+The real service/auxiliary factory paths use explicitly synthetic provider
+edges; no real account was queried. Every case has a separate read-only proof
+of actual balances, owner/operation/fact/closure rows,13 table counts/full row
+digests, all82 migration hashes, UTC/fsync-on/jit-off/no-recovery and no clients.
+Only after that proof was the owned passing dataset reused; the last paused
+dataset remains. Native timeouts, assertions and provider call-count oracles
+are unchanged. These fixtures have no RMA credits; partial-return and actual
+NULL-payment subscription acceptance remain open.
+
+The source qualification independently found missing audit labels, a strict
+private inventory omission, old exact webhook DTO expectations, CI capacity
+overrun, schema-fence acknowledgement drift, and an actual reader import cycle.
+Failures and classifications remain preserved. Before final cycle/owner
+renewal,182 nonempty source files retain1199 passing assertions and283 explicit
+skips, with the original reader-stop collector explicitly pending. The new
+owner resolver has10 passing pure controls; its three new natives remain
+UNRUN. The original reader collector still fails one layer later after the
+first cycle correction; a second ordinary-state/root-collector split is now
+integrated and awaits unchanged-control verification. Complete candidate
+qualification is not claimed.
