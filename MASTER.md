@@ -15085,6 +15085,12 @@ whatever is best for the people using the site.
   Root media/storage corrections and full renewed qualification remain required;
   no schema, SQL, activation, item or stable gate changes. See
   `deploy/commercial-lint82-source-20261113.md`.
+  Controlled source type repair 2026-11-13 (C12.38): the first compiler
+  run after this checkpoint stops at two broad database-row/literal-protocol
+  scope mismatches. Admission now validates the real retained scope through
+  the existing exact schema before constructing the provider request; invalid
+  legacy/API epochs refuse explicitly. No cast invents a current protocol.
+  Renewed source and actual provider acceptance remain open.
   Controlled provider transport source checkpoint (2026-11-13, same items):
   actual zero-NET bootstrap, independent pause readback, original-resource
   discovery, exact calendar cancellation/readback and complete invoice/payment

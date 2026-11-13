@@ -7,7 +7,7 @@ import { z } from "zod";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { paymentMethods } from "@/modules/invoicing/schema";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
-import { subscriptionChargeScope, subscriptionMethodScopeMatches } from "./merchant-scope-contract";
+import { subscriptionChargeScope, subscriptionMerchantScope, subscriptionMethodScopeMatches } from "./merchant-scope-contract";
 import { subscriptionMerchantScopes } from "./schema";
 import { controlledFinancialReadiness } from "./controlled-provider-readiness";
 import { originalProductAdmission } from "./provider-phase-products";
@@ -34,12 +34,13 @@ export async function initialControlledProviderSource(ctx:ServiceContext,subscri
  const[resource]=await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId,parent.id)).limit(1).for("update");
  const operations=await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId,parent.id)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
  const[scope]=await ctx.tx.select().from(subscriptionMerchantScopes).where(eq(subscriptionMerchantScopes.subscriptionId,parent.id)).limit(1);
+ const parsedScope=subscriptionMerchantScope.safeParse(scope);
  const[method]=parent.paymentMethodId?await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id,parent.paymentMethodId)).limit(1).for("share"):[];
  const providerProductRef=operations.length?verifiedOriginalPhaseProduct(operations[operations.length-1]!):null;
- if(!resource||!scope||operations.length>5000||!verifiedPreparatoryPhaseProducts(resource,operations)||!providerProductRef
+ if(!resource||!scope||!parsedScope.success||operations.length>5000||!verifiedPreparatoryPhaseProducts(resource,operations)||!providerProductRef
   ||!method||method.status!=="active"||method.provider!=="stripe"||method.contactId!==parent.contactId||!method.providerCustomerRef
-  ||!subscriptionMethodScopeMatches(subscriptionChargeScope(scope),method))throw new ServiceError("conflict","Restore the actual original uncreated calendar, verified product and active original-account method before controlled preparation.");
- const originalScope:MerchantControlledSubscriptionScope={...subscriptionChargeScope(scope),providerApiVersion:"2026-10-28.endive",providerPlatformAccountId:scope.providerPlatformAccountId,
+  ||!subscriptionMethodScopeMatches(subscriptionChargeScope(parsedScope.data),method))throw new ServiceError("conflict","Restore the actual original uncreated calendar, verified product and active original-account method before controlled preparation.");
+ const originalScope:MerchantControlledSubscriptionScope={...subscriptionChargeScope(parsedScope.data),providerApiVersion:"2026-10-28.endive",providerPlatformAccountId:scope.providerPlatformAccountId,
   subscriptionId:parent.id,termsId:terms.id,generation:1,providerCustomerRef:method.providerCustomerRef,providerMethodRef:method.providerMethodRef,providerProductRef,currency:parent.currency,
   interval:terms.snapshot.interval,intervalCount:terms.snapshot.intervalCount,acceptedPeriodEnd:parent.currentPeriodEnd.toISOString(),acceptedTrialEnd:parent.trialEndsAt?.toISOString()??null};
  return{parent,terms,scope,method,resource,operations,originalScope,sourceRevision:merchantTaxDigest({parent,terms,scope,method,resource,operations,originalScope,financialReadiness})};
