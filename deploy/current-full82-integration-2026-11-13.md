@@ -123,3 +123,35 @@ history. No type assertion supplies missing authority. Renewed qualification
 and final82 assembly remain pending. Positive controlled collection stays
 mechanically unavailable while its required lifecycle and parent consumers
 are being implemented.
+
+## Signed first-scope integration and protected main
+
+HTTP repair698 and audit minimization699 have both merged through the normal
+protected queue. Latest verified main isfe2645dc849be0aeda0a6e61dcbca85875281bed;
+699 merged18:23:19 UTC after44 PR checks and43 merge-group successes with zero
+scoped open scanning alerts. No deployment or stable release advanced.
+
+The preceding financial baseline3980898e passes313 actual tests across48
+complete files, with47 explicit database skips. This composes complete core/
+private-boundary proof34, the full corrected merchant driver15, and the
+remaining45 files264. The relation-tokenizer failure from v7 remains preserved;
+its exact eight physical-table whitelist is unchanged. Metadata passes, and
+full types/affected lint pass before this test-only driver correction.
+
+Signed first-scope3a96e711 is now integrated. Owned and assembled82 are identical
+115604bytes / SHA256
+`a09295aa47f831c87323e8cc034fcfedeb4f356de0ad98db369d61daaaa03a8c`.
+The journal still has83 entries; prior0–81 identities, SQL80/1c2e and81/438 are
+unchanged. No0–82 database has ever been created or migrated by this work.
+The16 owned models and three altered reservation-bearing models require fresh
+source qualification, and full old/new cohort parity is additionally included,
+for142 runtime-model targets. The media request capability stays unpublished.
+
+Its first compile stops at two omitted multipart projection fields. The source
+now selects the actual immutable reservation UUID and the stored original
+artifact SHA before membership/integrity checks. It does not synthesize birth
+or hash the current body as purported historical authority. Renewed full source
+gates, a new ordinary database, strict final-source/model/catalog parity and
+actual financial/native execution remain open. Standalone media retirement,
+crash/multipart recovery, initialization/cutover and controlled positive NET/
+gross collection are still required implementation work.
