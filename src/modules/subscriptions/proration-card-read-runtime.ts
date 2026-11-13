@@ -85,11 +85,11 @@ async function actualHolder(ctx: ServiceContext, readId: string, nonce: string) 
   return { local, ticket, proof, source };
 }
 export const admitProrationPaymentReadCallback = defineService({ name: "subscriptions.admitProrationPaymentReadCallback", summary: "Refuse a stopped, substituted or unowned original bank reader before its callback can enter shared money services.",
-  kind: "query", permission: "system", external: false, input: holderInput, output: z.object({ admitted: z.literal(true) }),
+  kind: "query", permission: "system", external: false, auditInputFields: ["readId"], input: holderInput, output: z.object({ admitted: z.literal(true) }),
   handler: async (input, ctx) => { await actualHolder(ctx, input.readId, input.nonce); return { admitted: true as const }; } });
 export const retainProrationPaymentReadObservation = defineService({ name: "subscriptions.retainProrationPaymentReadObservation", summary: "Retain actual original reader facts under the same owner lock as its stop fence.",
   kind: "mutation", permission: "system", external: false, writeClass: "money",
-  input: holderInput.extend({ observation: z.object({ paymentId: z.uuid(), providerEventRef: z.string().min(1).max(500), evidence: merchantPaymentEvidence }) }), output: z.object({ retained: z.literal(true) }),
+  auditInputFields: ["readId"], input: holderInput.extend({ observation: z.object({ paymentId: z.uuid(), providerEventRef: z.string().min(1).max(500), evidence: merchantPaymentEvidence }) }), output: z.object({ retained: z.literal(true) }),
   handler: async (input, ctx) => {
     const { ticket } = await actualHolder(ctx, input.readId, input.nonce);
     if (ticket.paymentId !== input.observation.paymentId) throw new ServiceError("permission", "The actual original read cannot submit another payment's bank observation.");
@@ -99,7 +99,7 @@ export const retainProrationPaymentReadObservation = defineService({ name: "subs
 });
 export const retainProrationPaymentReadRetirement = defineService({ name: "subscriptions.retainProrationPaymentReadRetirement", summary: "Retain the original actual cancellation acknowledgement under the same owner lock as its runtime-stop fence.",
   kind: "mutation", permission: "system", external: false, writeClass: "money",
-  input: holderInput.extend({ retirement: z.object({ paymentId: z.uuid(), checkoutRef: z.string().regex(/^cs_[A-Za-z0-9_]+$/).max(200).optional(), paymentRef: z.string().regex(/^pi_[A-Za-z0-9_]+$/).max(200).optional(), kind: z.enum(["session_expired", "intent_canceled"]) }) }),
+  auditInputFields: ["readId"], input: holderInput.extend({ retirement: z.object({ paymentId: z.uuid(), checkoutRef: z.string().regex(/^cs_[A-Za-z0-9_]+$/).max(200).optional(), paymentRef: z.string().regex(/^pi_[A-Za-z0-9_]+$/).max(200).optional(), kind: z.enum(["session_expired", "intent_canceled"]) }) }),
   output: z.object({ retained: z.literal(true) }),
   handler: async (input, ctx) => {
     const { ticket } = await actualHolder(ctx, input.readId, input.nonce);
@@ -111,7 +111,7 @@ export const retainProrationPaymentReadRetirement = defineService({ name: "subsc
   },
 });
 export const finishProrationPaymentRead = defineService({ name: "subscriptions.finishProrationPaymentRead", summary: "Retain only the actual original process's returned/thrown bank caller, never an invented finish or another reader's result.",
-  kind: "mutation", permission: "system", external: false, writeClass: "money", input: holderInput, output: z.object({ finished: z.literal(true) }),
+  kind: "mutation", permission: "system", external: false, writeClass: "money", auditInputFields: ["readId"], input: holderInput, output: z.object({ finished: z.literal(true) }),
   handler: async (input, ctx) => {
     const { local, ticket, proof } = await actualHolder(ctx, input.readId, input.nonce);
     if (!local.completed || !local.actualResult) throw new ServiceError("permission", "The actual physical bank call has not completed in its original process.");

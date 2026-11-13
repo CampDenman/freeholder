@@ -66,7 +66,7 @@ export const claimControlledProviderCall=defineService({name:"subscriptions.clai
   return{callId,nonce,operationId:source.operation.id};
  }});
 export const retainControlledProviderFact=defineService({name:"subscriptions.retainControlledProviderFact",summary:"Retain the original actual SDK observation before interpretation or auxiliary failures, under its independent stop fence.",
- kind:"mutation",permission:"system",external:false,writeClass:"money",input:holder.extend({ordinal:z.number().int().min(1).max(5000)}),output:z.object({retained:z.literal(true)}),
+ kind:"mutation",permission:"system",external:false,writeClass:"money",auditInputFields:["callId","ordinal"],input:holder.extend({ordinal:z.number().int().min(1).max(5000)}),output:z.object({retained:z.literal(true)}),
  handler:async(input,ctx)=>{
   const source=await actualHolder(ctx,input),actual=source.local.facts.get(input.ordinal);
   if(!actual||Buffer.byteLength(JSON.stringify(actual.actual))>256000)throw new ServiceError("conflict","Retain this actual original observation's complete bounded evidence; a replacement caller cannot invent or truncate it.");
@@ -80,7 +80,7 @@ export const retainControlledProviderFact=defineService({name:"subscriptions.ret
   return{retained:true as const};
  }});
 export const retainControlledProviderCashFact=defineService({name:"subscriptions.retainControlledProviderCashFact",summary:"First-capture actual controlled principal through the shared canonical receipt after its signed/raw original occurrence committed independently.",
- kind:"mutation",permission:"system",external:false,writeClass:"money",input:holder.extend({ordinal:z.number().int().min(1).max(5000)}),output:z.object({receiptId:z.uuid()}),
+ kind:"mutation",permission:"system",external:false,writeClass:"money",auditInputFields:["callId","ordinal"],input:holder.extend({ordinal:z.number().int().min(1).max(5000)}),output:z.object({receiptId:z.uuid()}),
  handler:async(input,ctx)=>{
   const source=await actualHolder(ctx,input),local=source.local.facts.get(input.ordinal);
   if(!local||local.actual.kind!=="cash_observed")throw new ServiceError("permission","Only the actual original SDK's retained positive occurrence can request this canonical receipt.");
@@ -92,7 +92,7 @@ export const retainControlledProviderCashFact=defineService({name:"subscriptions
   return{receiptId:retained.receiptId};
  }});
 export const finishControlledProviderCall=defineService({name:"subscriptions.finishControlledProviderCall",summary:"Retain only this actual original SDK invocation's returned/thrown result; runtime stop and bank outcome stay separate.",
- kind:"mutation",permission:"system",external:false,writeClass:"money",input:holder,output:z.object({finished:z.literal(true)}),handler:async(input,ctx)=>{
+ kind:"mutation",permission:"system",external:false,writeClass:"money",auditInputFields:["callId"],input:holder,output:z.object({finished:z.literal(true)}),handler:async(input,ctx)=>{
   const source=await actualHolder(ctx,input);
   if(!source.local.completed||!source.local.actualResult)throw new ServiceError("permission","The actual physical SDK call has not completed in its original process.");
   for(const[ordinal,actual]of source.local.facts){const[stored]=await ctx.tx.select().from(subscriptionControlledFacts).where(eq(subscriptionControlledFacts.id,actual.id)).limit(1);
