@@ -102,6 +102,7 @@ import designServices from "@/core/design/service";
 import pluginServices from "@/core/plugins/service";
 import importServices from "@/core/import/service";
 import importSourceUploadServices from "@/core/import/source-upload";
+import {completeOriginalSourceErasure,prepareOriginalSourceErasure} from "@/core/import/source-erasure";
 import readerOwnershipServices from "@/core/import/reader-ownership-review";
 import portabilityServices from "@/core/portability/service";
 import provenanceServices from "@/core/provenance/service";
@@ -202,6 +203,8 @@ const services: Service[] = [
   ...importServices,
   ...readerOwnershipServices,
   ...importSourceUploadServices,
+  completeOriginalSourceErasure,
+  prepareOriginalSourceErasure,
   ...portabilityServices,
   ...provenanceServices,
   ...updateSeamServices,

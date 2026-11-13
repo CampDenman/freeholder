@@ -6569,6 +6569,17 @@ deployments are portable, testable and incapable of silently forking the truth.
   required; no schema81 or C3.47 closure is claimed. Exact evidence:
   `deploy/import-source-graph.md`.)*
 
+  Uploaded-input privacy source checkpoint (2026-11-13, C1.08/C3.47/C11.14):
+  unpublished81 now drafts exact initial uploaded-source scope/membership,
+  guarded unaccepted index minimization and atomic original-task completion
+  alongside the HTTP originals repair. The real `f1b5d6a3` WXR oracle is
+  unchanged. This source is unqualified/unapplied: current80 composition,
+  new ordinary81 migration/model/guard proof, unchanged AFTER and retained/
+  accepted/later-generation controls remain required. Historical missing
+  captures remain explicit recovery. See
+  `deploy/import-upload-index-erasure-source-2026-11-13.md`.
+
+
   Above500 actual HTTP lifecycle qualification at a9946538: real owned TCP
   REST responses yielded501 entries/exact bindings and one shared copied PNG.
   Fulltypes/fixturelint and incrementaltypes pass; the first native passed

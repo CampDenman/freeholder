@@ -6,7 +6,8 @@ import { and, asc, eq, gt, gte, inArray, like, or, sql } from "drizzle-orm";
 import { auditLog } from "@/core/events/schema";
 import { mediaObjects } from "@/core/media/schema";
 import { mediaObjectWrites } from "@/core/media/write-schema";
-import { retainedSourceFromRun, retainedSourceChunkKey } from "./retained-source";
+import { importSourceObjectKeys, retainedSourceFromRun, retainedSourceChunkKey } from "./retained-source";
+import { captureOriginalSourceErasureScope } from "./source-erasure-scope";
 import { IMPORT_SOURCE_ERASURE_JOB } from "./source-erasure";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { registerContactReference } from "@/core/contacts/service";
@@ -207,7 +208,7 @@ async function ownedSourceKeys(tx: Tx, run: Run): Promise<string[]> {
   const objects = await tx.select({ key: mediaObjects.key }).from(mediaObjects).where(like(mediaObjects.key, `imports/${run.id}/%`));
   const reserved = z.object({ uploadId: z.uuid(), chunks: z.number().int().positive().max(25) }).safeParse(checkpoint.sourceUpload);
   const retained = retainedSourceFromRun(run);
-  return [...new Set([...objects.map(item => item.key), ...(reserved.success ? Array.from({ length: reserved.data.chunks }, (_, index) => `imports/${run.id}/${reserved.data.uploadId}/${String(index).padStart(5, "0")}.part`) : []), ...(retained ? retained.chunkDigests.map((_, index) => retainedSourceChunkKey(retained, index)) : [])])];
+  return [...new Set([...importSourceObjectKeys(run), ...objects.map(item => item.key), ...(reserved.success ? Array.from({ length: reserved.data.chunks }, (_, index) => `imports/${run.id}/${reserved.data.uploadId}/${String(index).padStart(5, "0")}.part`) : []), ...(retained ? retained.chunkDigests.map((_, index) => retainedSourceChunkKey(retained, index)) : [])])];
 }
 const sourceHold = z.object({ exceptionId: z.uuid(), requestId: z.uuid(), uploadId: z.uuid() });
 
@@ -219,6 +220,7 @@ const sourceHold = z.object({ exceptionId: z.uuid(), requestId: z.uuid(), upload
  */
 async function eraseUnheldOriginals(tx: Tx, context: { requestId: string; service: ServiceContext }): Promise<{ affected: number; pendingJobs: string[] }> {
   if (context.service.tx !== tx) throw new ServiceError("internal", "Original source cleanup requires the actual privacy transaction.");
+  await captureOriginalSourceErasureScope(context.service,context.requestId);
   const pendingJobs: string[] = [];
   for await (const run of runs(tx, true)) {
     const unheld: string[] = [], generations = new Map<string, boolean>();
@@ -291,6 +293,8 @@ registerContactPrivacySource({
     return result;
   },
   erase: async (tx, contactId, context) => {
+    if (!context.service) throw new ServiceError("internal","Uploaded-source erasure requires its actual privacy service context.");
+    await captureOriginalSourceErasureScope(context.service,context.requestId);
     const matches = await subject(tx, contactId);
     let affected = 0;
     const pendingJobs: string[] = [];

@@ -595,7 +595,7 @@ ALTER TABLE import_source_media ADD COLUMN source_key_digest text CHECK (source_
 --> statement-breakpoint
 CREATE FUNCTION freeholder_guard_crawl_media_key_capture() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
- IF EXISTS(SELECT 1 FROM import_crawl_graphs binding WHERE binding.graph_id=NEW.graph_id)
+ IF EXISTS(SELECT 1 FROM import_source_graphs graph WHERE graph.id=NEW.graph_id)
    AND (NEW.source_key_digest IS DISTINCT FROM encode(sha256(convert_to(NEW.key,'UTF8')),'hex')
      OR NEW.key LIKE 'redacted:%') THEN
   RAISE EXCEPTION 'The original HTTP media URL needs its actual first capture digest' USING ERRCODE='23514';
@@ -687,3 +687,292 @@ BEGIN
 END $$;
 --> statement-breakpoint
 CREATE CONSTRAINT TRIGGER data_requests_crawl_erasure_completion AFTER UPDATE ON data_requests DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_require_crawl_erasure_completion();
+
+-- C1.08/C3.47: uploaded originals need their own first-fulfilment scope.
+-- The HTTP collector and physical response identity remain separate.
+CREATE TABLE import_source_erasure_scopes (
+ request_id uuid PRIMARY KEY REFERENCES data_requests(id) ON DELETE RESTRICT,
+ capture_version integer NOT NULL DEFAULT 1 CHECK(capture_version=1),
+ source_count integer NOT NULL CHECK(source_count BETWEEN 0 AND 10000),
+ object_count integer NOT NULL CHECK(object_count BETWEEN 0 AND 250000),
+ captured_at timestamptz NOT NULL DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE import_source_erasure_members (
+ request_id uuid NOT NULL REFERENCES import_source_erasure_scopes(request_id) ON DELETE RESTRICT,
+ run_id uuid NOT NULL REFERENCES import_runs(id) ON DELETE RESTRICT,
+ upload_id uuid NOT NULL, chunk_count integer NOT NULL CHECK(chunk_count BETWEEN 1 AND 25),
+ graph_id uuid REFERENCES import_source_graphs(id) ON DELETE RESTRICT,
+ graph_generation uuid, source_revision text CHECK(source_revision IS NULL OR source_revision ~ '^[a-f0-9]{64}$'),
+ CONSTRAINT import_source_erasure_members_pk PRIMARY KEY(request_id,run_id,upload_id),
+ CONSTRAINT import_source_erasure_members_graph_witness CHECK((graph_id IS NULL)=(graph_generation IS NULL) AND (graph_id IS NULL)=(source_revision IS NULL))
+);
+--> statement-breakpoint
+CREATE INDEX import_source_erasure_members_graph_idx ON import_source_erasure_members(graph_id,request_id);
+--> statement-breakpoint
+CREATE TABLE import_source_erasure_objects (
+ request_id uuid NOT NULL, run_id uuid NOT NULL, upload_id uuid NOT NULL,
+ chunk_index integer NOT NULL CHECK(chunk_index BETWEEN 0 AND 24),
+ key_digest text NOT NULL CHECK(key_digest ~ '^[a-f0-9]{64}$'),
+ CONSTRAINT import_source_erasure_objects_pk PRIMARY KEY(request_id,run_id,upload_id,chunk_index),
+ CONSTRAINT import_source_erasure_objects_member_fk FOREIGN KEY(request_id,run_id,upload_id)
+  REFERENCES import_source_erasure_members(request_id,run_id,upload_id) ON DELETE RESTRICT,
+ CONSTRAINT import_source_erasure_objects_key_binding CHECK(key_digest=encode(sha256(convert_to('imports/'||run_id::text||'/'||upload_id::text||'/'||lpad(chunk_index::text,5,'0')||'.part','UTF8')),'hex'))
+);
+--> statement-breakpoint
+CREATE INDEX import_source_erasure_objects_digest_idx ON import_source_erasure_objects(key_digest,request_id);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_source_erasure_expected_objects() RETURNS TABLE(run_id uuid,upload_id uuid,chunk_index integer) LANGUAGE sql STABLE AS $$
+ WITH expected AS (
+ SELECT split_part(key,'/',2)::uuid run_id,split_part(key,'/',3)::uuid upload_id,split_part(split_part(key,'/',4),'.',1)::integer chunk_index
+ FROM media_objects WHERE key ~ '^imports/[a-f0-9-]{36}/[a-f0-9-]{36}/[0-9]{5}\.part$'
+ UNION
+ SELECT root.id,(root.checkpoint->'retainedSource'->>'uploadId')::uuid,part.index
+ FROM import_runs root CROSS JOIN LATERAL generate_series(0,CASE WHEN jsonb_typeof(root.checkpoint->'retainedSource'->'chunkDigests')='array' THEN jsonb_array_length(root.checkpoint->'retainedSource'->'chunkDigests')-1 ELSE -1 END) part(index)
+ WHERE root.checkpoint->'retainedSource'->>'uploadId' ~ '^[a-f0-9-]{36}$'
+ UNION
+ SELECT root.id,(root.checkpoint->'sourceUpload'->>'uploadId')::uuid,part.index
+ FROM import_runs root CROSS JOIN LATERAL generate_series(0,CASE
+  WHEN root.checkpoint->'sourceUpload'->>'bytes' ~ '^[0-9]{1,9}$' AND root.checkpoint->'sourceUpload'->>'chunkBytes' ~ '^[0-9]{1,9}$'
+  THEN ceil((root.checkpoint->'sourceUpload'->>'bytes')::numeric/nullif((root.checkpoint->'sourceUpload'->>'chunkBytes')::numeric,0))::integer-1 ELSE -1 END) part(index)
+ WHERE root.checkpoint->'sourceUpload'->>'uploadId' ~ '^[a-f0-9-]{36}$')
+ SELECT DISTINCT expected.run_id,expected.upload_id,expected.chunk_index FROM expected
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_source_erasure_capture() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Original uploaded-source membership cannot be rewritten or removed' USING ERRCODE='55000'; END IF;
+ IF current_setting('freeholder.import_source_erasure_request',true) IS DISTINCT FROM NEW.request_id::text
+  OR NOT EXISTS(SELECT 1 FROM data_requests request WHERE request.id=NEW.request_id AND request.kind='erasure' AND request.status='verified')
+  OR EXISTS(SELECT 1 FROM data_request_artifacts WHERE data_request_id=NEW.request_id)
+  OR EXISTS(SELECT 1 FROM audit_log WHERE action='contacts.fulfillDataRequest' AND subject_type='dataRequest' AND subject_id=NEW.request_id::text) THEN
+  RAISE EXCEPTION 'Original uploaded-source scope needs its actual first verified fulfilment transaction' USING ERRCODE='55000';
+ END IF;
+ IF TG_TABLE_NAME='import_source_erasure_members' THEN
+ IF NEW.graph_id IS NOT NULL AND NOT EXISTS(
+  SELECT 1 FROM import_source_graphs graph JOIN import_runs root ON root.id=graph.run_id
+  WHERE graph.id=NEW.graph_id AND graph.run_id=NEW.run_id AND graph.generation=NEW.graph_generation AND graph.source_revision=NEW.source_revision
+   AND root.checkpoint->'retainedSource'->>'uploadId'=NEW.upload_id::text
+   AND root.checkpoint->'retainedSource'->>'revision'=NEW.source_revision
+   AND NOT EXISTS(SELECT 1 FROM import_crawl_graphs http WHERE http.graph_id=graph.id)) THEN
+  RAISE EXCEPTION 'Original uploaded graph must match its actual upload, revision and generation' USING ERRCODE='55000';
+ END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER import_source_erasure_scopes_capture BEFORE INSERT OR UPDATE OR DELETE ON import_source_erasure_scopes FOR EACH ROW EXECUTE FUNCTION freeholder_guard_source_erasure_capture();
+--> statement-breakpoint
+CREATE TRIGGER import_source_erasure_members_capture BEFORE INSERT OR UPDATE OR DELETE ON import_source_erasure_members FOR EACH ROW EXECUTE FUNCTION freeholder_guard_source_erasure_capture();
+--> statement-breakpoint
+CREATE TRIGGER import_source_erasure_objects_capture BEFORE INSERT OR UPDATE OR DELETE ON import_source_erasure_objects FOR EACH ROW EXECUTE FUNCTION freeholder_guard_source_erasure_capture();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_source_erasure_scope_complete(original_request uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM import_source_erasure_scopes header WHERE header.request_id=original_request AND header.capture_version=1
+  AND header.source_count=(SELECT count(*) FROM import_source_erasure_members member WHERE member.request_id=header.request_id)
+  AND header.object_count=(SELECT count(*) FROM import_source_erasure_objects original WHERE original.request_id=header.request_id)
+  AND NOT EXISTS(SELECT 1 FROM import_source_erasure_members member WHERE member.request_id=header.request_id
+   AND member.chunk_count<>(SELECT count(*) FROM import_source_erasure_objects original
+    WHERE original.request_id=member.request_id AND original.run_id=member.run_id AND original.upload_id=member.upload_id)))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_require_source_erasure_capture() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NOT freeholder_source_erasure_scope_complete(NEW.request_id)
+  OR EXISTS(SELECT run_id,upload_id,chunk_index FROM freeholder_source_erasure_expected_objects()
+   EXCEPT SELECT run_id,upload_id,chunk_index FROM import_source_erasure_objects WHERE request_id=NEW.request_id)
+  OR EXISTS(SELECT run_id,upload_id,chunk_index FROM import_source_erasure_objects WHERE request_id=NEW.request_id
+   EXCEPT SELECT run_id,upload_id,chunk_index FROM freeholder_source_erasure_expected_objects()) THEN
+  RAISE EXCEPTION 'Original uploaded scope must include exactly its actual original objects, including known empty' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER import_source_erasure_scopes_complete AFTER INSERT ON import_source_erasure_scopes DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_require_source_erasure_capture();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_source_upload_held(original_run uuid,original_upload uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM privacy_retention_exceptions hold
+  LEFT JOIN privacy_retention_source_snapshots snapshot ON snapshot.exception_id=hold.id AND snapshot.source_scope='imports.readerSources'
+  WHERE hold.scope IN ('imports.readerSources','cms.readerComments') AND (hold.expires_at IS NULL OR hold.expires_at>clock_timestamp())
+  AND (snapshot.exception_id IS NULL OR snapshot.capture_version<>1 OR snapshot.member_count<>(SELECT count(*) FROM privacy_retention_source_members m WHERE m.exception_id=hold.id AND m.source_scope='imports.readerSources')
+   OR EXISTS(SELECT 1 FROM privacy_retention_source_members member WHERE member.exception_id=hold.id AND member.source_scope='imports.readerSources' AND member.source_id=original_run AND member.generation=original_upload)))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_source_graph_projection_retired(original_graph uuid,original_request uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM import_source_erasure_members member JOIN import_source_graphs graph ON graph.id=member.graph_id JOIN import_runs root ON root.id=member.run_id
+  WHERE member.request_id=original_request AND member.graph_id=original_graph AND graph.run_id=member.run_id AND graph.generation=member.graph_generation AND graph.source_revision=member.source_revision
+   AND root.checkpoint->'retainedSource'->>'uploadId'=member.upload_id::text AND root.checkpoint->'retainedSource'->>'revision'=member.source_revision
+   AND freeholder_source_erasure_scope_complete(member.request_id) AND graph.state='invalidated' AND graph.plan_digest IS NULL AND graph.lease_token IS NULL
+   AND NOT freeholder_source_upload_held(member.run_id,member.upload_id)
+   AND NOT EXISTS(SELECT 1 FROM import_source_batches batch WHERE batch.graph_id=graph.id)
+   AND NOT EXISTS(SELECT 1 FROM import_source_entries entry WHERE entry.graph_id=graph.id AND entry.target_page_id IS NOT NULL)
+   AND NOT EXISTS(SELECT 1 FROM import_source_media media WHERE media.graph_id=graph.id AND (media.asset_id IS NOT NULL OR media.digest IS NOT NULL OR media.bytes IS NOT NULL OR media.source_key_digest IS NULL))
+   AND NOT EXISTS(SELECT 1 FROM import_source_erasure_objects original WHERE original.request_id=member.request_id AND original.run_id=member.run_id AND original.upload_id=member.upload_id
+    AND (EXISTS(SELECT 1 FROM media_objects reservation WHERE encode(sha256(convert_to(reservation.key,'UTF8')),'hex')=original.key_digest)
+      OR EXISTS(SELECT 1 FROM media_object_writes physical WHERE physical.key_digest=original.key_digest AND (physical.state IN ('unverified','started','unknown') OR physical.operation_kind='put' AND physical.deleted_at IS NULL)))))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_refuse_erased_source_graph_admission() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF EXISTS(SELECT 1 FROM import_source_erasure_members original JOIN import_runs root ON root.id=original.run_id
+  WHERE original.run_id=NEW.run_id AND root.checkpoint->'sourceUpload'->>'uploadId'=original.upload_id::text
+   AND NOT freeholder_source_upload_held(original.run_id,original.upload_id)) THEN
+  RAISE EXCEPTION 'This original upload entered erasure and cannot create another private index' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER import_source_graphs_erasure_admission BEFORE INSERT ON import_source_graphs FOR EACH ROW EXECUTE FUNCTION freeholder_refuse_erased_source_graph_admission();
+
+--> statement-breakpoint
+CREATE FUNCTION freeholder_source_task_objects_retired(original_request uuid,original_keys jsonb) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT freeholder_source_erasure_scope_complete(original_request) AND jsonb_typeof(original_keys)='array' AND jsonb_array_length(original_keys)>0
+  AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(original_keys) requested(key)
+   WHERE NOT EXISTS(SELECT 1 FROM import_source_erasure_objects original WHERE original.request_id=original_request
+     AND original.key_digest=encode(sha256(convert_to(requested.key,'UTF8')),'hex')
+     AND requested.key='imports/'||original.run_id::text||'/'||original.upload_id::text||'/'||lpad(original.chunk_index::text,5,'0')||'.part'
+     AND NOT freeholder_source_upload_held(original.run_id,original.upload_id))
+    OR EXISTS(SELECT 1 FROM media_objects reservation WHERE reservation.key=requested.key)
+    OR EXISTS(SELECT 1 FROM media_object_writes physical WHERE physical.key_digest=encode(sha256(convert_to(requested.key,'UTF8')),'hex')
+       AND (physical.state IN ('unverified','started','unknown') OR physical.operation_kind='put' AND physical.deleted_at IS NULL)))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_source_upload_exactly_held(original_run uuid,original_upload uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM privacy_retention_source_members member
+  JOIN privacy_retention_source_snapshots snapshot ON snapshot.exception_id=member.exception_id AND snapshot.source_scope=member.source_scope
+  JOIN privacy_retention_exceptions hold ON hold.id=member.exception_id
+  WHERE member.source_scope='imports.readerSources' AND member.source_id=original_run AND member.generation=original_upload
+    AND hold.scope IN ('imports.readerSources','cms.readerComments') AND (hold.expires_at IS NULL OR hold.expires_at>clock_timestamp())
+    AND snapshot.capture_version=1 AND snapshot.member_count=(SELECT count(*) FROM privacy_retention_source_members counted WHERE counted.exception_id=snapshot.exception_id AND counted.source_scope=snapshot.source_scope))
+$$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_guard_import_entry_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE minimize boolean; uploaded boolean;
+BEGIN
+ minimize:=current_setting('freeholder.import_crawl_projection_redaction',true)='v1'
+  AND NEW.metadata='{"format":"http-originals","redacted":true}'::jsonb
+  AND EXISTS(SELECT 1 FROM import_crawl_entry_originals witness JOIN import_crawl_graphs binding ON binding.graph_id=witness.graph_id
+    WHERE witness.entry_id=OLD.id AND witness.graph_id=OLD.graph_id AND freeholder_crawl_projection_retired(binding.source_id,witness.response_id));
+ uploaded:=current_setting('freeholder.import_source_projection_redaction',true) IS NOT NULL
+   AND NEW.metadata='{"format":"uploaded-originals","redacted":true}'::jsonb
+   AND NEW.target_slug IS NULL AND OLD.target_page_id IS NULL AND NEW.target_page_id IS NULL
+   AND freeholder_source_graph_projection_retired(OLD.graph_id,nullif(current_setting('freeholder.import_source_projection_redaction',true),'')::uuid);
+ minimize:=coalesce(minimize,false) OR coalesce(uploaded,false);
+ IF NEW.graph_id IS DISTINCT FROM OLD.graph_id OR NEW.ordinal IS DISTINCT FROM OLD.ordinal
+    OR NEW.source_identity IS DISTINCT FROM OLD.source_identity OR NEW.kind IS DISTINCT FROM OLD.kind
+    OR NEW.start_byte IS DISTINCT FROM OLD.start_byte OR NEW.end_byte IS DISTINCT FROM OLD.end_byte
+    OR NEW.digest IS DISTINCT FROM OLD.digest OR NEW.body_bytes IS DISTINCT FROM OLD.body_bytes
+    OR (NEW.metadata IS DISTINCT FROM OLD.metadata AND NOT coalesce(minimize,false)) THEN
+  RAISE EXCEPTION 'The original indexed entry identity is immutable' USING ERRCODE='23514';
+ END IF;
+ IF (NEW.target_slug IS DISTINCT FROM OLD.target_slug OR NEW.resolution IS DISTINCT FROM OLD.resolution)
+    AND EXISTS(SELECT 1 FROM import_source_graphs WHERE id=OLD.graph_id AND plan_digest IS NOT NULL)
+    AND NOT (coalesce(minimize,false) AND OLD.target_page_id IS NULL AND NEW.target_page_id IS NULL
+      AND NEW.target_slug IS NULL AND NEW.resolution IS NOT DISTINCT FROM OLD.resolution) THEN
+  RAISE EXCEPTION 'The accepted import plan is frozen' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_guard_import_graph_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE minimize boolean; uploaded boolean;
+BEGIN
+ minimize:=current_setting('freeholder.import_crawl_projection_redaction',true)='v1'
+  AND NEW.state='invalidated' AND NEW.header_metadata='{"format":"http-originals","redacted":true}'::jsonb
+  AND NEW.plan_metadata='{"redacted":true}'::jsonb
+  AND EXISTS(SELECT 1 FROM import_crawl_graphs binding WHERE binding.graph_id=OLD.id AND freeholder_crawl_projection_retired(binding.source_id,null::uuid));
+ uploaded:=current_setting('freeholder.import_source_projection_redaction',true) IS NOT NULL
+   AND NEW.state='invalidated' AND NEW.header_metadata='{"format":"uploaded-originals","redacted":true}'::jsonb
+   AND NEW.plan_metadata='{"redacted":true}'::jsonb AND NEW.cursor IS NOT DISTINCT FROM OLD.cursor
+   AND freeholder_source_graph_projection_retired(OLD.id,nullif(current_setting('freeholder.import_source_projection_redaction',true),'')::uuid);
+ minimize:=coalesce(minimize,false) OR coalesce(uploaded,false);
+ IF NEW.run_id IS DISTINCT FROM OLD.run_id OR NEW.generation IS DISTINCT FROM OLD.generation
+    OR NEW.source_revision IS DISTINCT FROM OLD.source_revision OR NEW.parser_version IS DISTINCT FROM OLD.parser_version
+    OR NEW.source_started_at IS DISTINCT FROM OLD.source_started_at OR NEW.created_at IS DISTINCT FROM OLD.created_at
+    OR (OLD.header_metadata<>'{}'::jsonb AND NEW.header_metadata IS DISTINCT FROM OLD.header_metadata AND NOT coalesce(minimize,false))
+    OR (OLD.plan_metadata IS NOT NULL AND NEW.plan_metadata IS DISTINCT FROM OLD.plan_metadata AND NOT coalesce(minimize,false))
+    OR (OLD.plan_digest IS NOT NULL AND (NEW.plan_digest IS DISTINCT FROM OLD.plan_digest OR NEW.plan_revision IS DISTINCT FROM OLD.plan_revision)) THEN
+  RAISE EXCEPTION 'The original source graph identity is immutable' USING ERRCODE='23514';
+ END IF;
+ IF (NEW.cursor->>'ordinal')::integer<(OLD.cursor->>'ordinal')::integer
+    OR NEW.commit_ordinal<OLD.commit_ordinal OR NEW.batch_counter<OLD.batch_counter
+    OR (OLD.state='invalidated' AND NEW.state<>'invalidated') OR (OLD.state='indexed' AND NEW.state='indexing') THEN
+  RAISE EXCEPTION 'An accepted source graph cannot move backwards' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_guard_import_media_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE minimize boolean; uploaded boolean;
+BEGIN
+ minimize:=current_setting('freeholder.import_crawl_projection_redaction',true)='v1'
+  AND NEW.planned='{"redacted":true}'::jsonb
+  AND freeholder_crawl_media_projection_retired(OLD.id);
+ uploaded:=current_setting('freeholder.import_source_projection_redaction',true) IS NOT NULL
+   AND NEW.planned='{"redacted":true}'::jsonb AND NEW.error IS NULL
+   AND freeholder_source_graph_projection_retired(OLD.graph_id,nullif(current_setting('freeholder.import_source_projection_redaction',true),'')::uuid);
+ minimize:=coalesce(minimize,false) OR coalesce(uploaded,false);
+ IF NEW.id IS DISTINCT FROM OLD.id OR NEW.graph_id IS DISTINCT FROM OLD.graph_id
+    OR NEW.source_key_digest IS DISTINCT FROM OLD.source_key_digest
+    OR (NEW.key IS DISTINCT FROM OLD.key AND NOT coalesce(minimize,false))
+    OR (NEW.planned IS DISTINCT FROM OLD.planned AND NOT coalesce(minimize,false))
+    OR (OLD.digest IS NOT NULL AND (NEW.digest IS DISTINCT FROM OLD.digest OR NEW.bytes IS DISTINCT FROM OLD.bytes))
+    OR (OLD.asset_id IS NOT NULL AND NEW.asset_id IS DISTINCT FROM OLD.asset_id) THEN
+  RAISE EXCEPTION 'The original shared media identity and accepted receipt are immutable' USING ERRCODE='23514';
+ END IF;
+ IF NEW.key IS DISTINCT FROM OLD.key AND NOT (
+   OLD.source_key_digest=encode(sha256(convert_to(OLD.key,'UTF8')),'hex') AND NEW.key='redacted:'||OLD.id::text AND NEW.error IS NULL
+   AND OLD.asset_id IS NULL AND NEW.asset_id IS NULL AND OLD.digest IS NULL AND NEW.digest IS NULL AND OLD.bytes IS NULL AND NEW.bytes IS NULL
+   AND (freeholder_crawl_media_projection_retired(OLD.id) OR coalesce(uploaded,false))
+ ) THEN
+  RAISE EXCEPTION 'Accepted or unresolved original HTTP file identity needs reviewed recovery before erasure' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_require_source_erasure_completion() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE artifact jsonb; outcome text; original record; keys jsonb; retained boolean;
+BEGIN
+ IF NEW.kind<>'erasure' OR NEW.status NOT IN ('completed','partially_completed')
+   OR (NEW.status IS NOT DISTINCT FROM OLD.status AND NEW.fulfilled_at IS NOT DISTINCT FROM OLD.fulfilled_at) THEN RETURN NEW; END IF;
+ IF NOT freeholder_source_erasure_scope_complete(NEW.id) THEN
+  RAISE EXCEPTION 'Uploaded-source completion needs its actual initial complete scope, including known empty' USING ERRCODE='55000';
+ END IF;
+ SELECT body INTO artifact FROM data_request_artifacts WHERE data_request_id=NEW.id;
+ IF artifact->>'format' IS DISTINCT FROM 'freeholder.erasure-receipt' OR jsonb_typeof(artifact->'outcomes') IS DISTINCT FROM 'array' THEN
+  RAISE EXCEPTION 'Uploaded-source completion needs its valid original receipt' USING ERRCODE='55000';
+ END IF;
+ SELECT value->>'outcome' INTO outcome FROM jsonb_array_elements(artifact->'outcomes') WHERE value->>'scope'='imports.readerSources' LIMIT 1;
+ IF outcome IS NULL OR outcome NOT IN ('erased','retained') THEN
+  RAISE EXCEPTION 'Uploaded-source work remains pending or missing' USING ERRCODE='55000';
+ END IF;
+ FOR original IN SELECT * FROM import_source_erasure_members WHERE request_id=NEW.id LOOP
+  retained:=outcome='retained' AND NEW.status='partially_completed' AND freeholder_source_upload_exactly_held(original.run_id,original.upload_id);
+  IF retained THEN CONTINUE; END IF;
+  SELECT jsonb_agg('imports/'||run_id::text||'/'||upload_id::text||'/'||lpad(chunk_index::text,5,'0')||'.part' ORDER BY chunk_index) INTO keys
+   FROM import_source_erasure_objects WHERE request_id=NEW.id AND run_id=original.run_id AND upload_id=original.upload_id;
+  IF NOT freeholder_source_task_objects_retired(NEW.id,keys) THEN
+   RAISE EXCEPTION 'Original uploaded bytes, ownership or physical facts still await retirement' USING ERRCODE='55000';
+  END IF;
+  IF original.graph_id IS NOT NULL AND (
+     NOT freeholder_source_graph_projection_retired(original.graph_id,NEW.id)
+     OR EXISTS(SELECT 1 FROM import_source_graphs graph WHERE graph.id=original.graph_id
+       AND (graph.header_metadata IS DISTINCT FROM '{"format":"uploaded-originals","redacted":true}'::jsonb OR graph.plan_metadata IS DISTINCT FROM '{"redacted":true}'::jsonb))
+     OR EXISTS(SELECT 1 FROM import_source_entries entry WHERE entry.graph_id=original.graph_id
+       AND (entry.metadata IS DISTINCT FROM '{"format":"uploaded-originals","redacted":true}'::jsonb OR entry.target_slug IS NOT NULL))
+     OR EXISTS(SELECT 1 FROM import_source_media media WHERE media.graph_id=original.graph_id
+       AND (media.planned IS DISTINCT FROM '{"redacted":true}'::jsonb OR media.key IS DISTINCT FROM 'redacted:'||media.id::text OR media.error IS NOT NULL))
+     OR EXISTS(SELECT 1 FROM import_runs root WHERE root.id=original.run_id
+       AND (root.origin IS NOT NULL OR root.preview IS DISTINCT FROM '{"sourceFormat":"redacted-uploaded-input"}'::jsonb
+         OR root.checkpoint ?| ARRAY['readerSourceSite','origin','report','source','pendingBlogPosts']))) THEN
+   RAISE EXCEPTION 'Private uploaded index projections still require original-scope minimization' USING ERRCODE='55000';
+  END IF;
+  IF original.graph_id IS NULL AND EXISTS(SELECT 1 FROM import_source_graphs graph JOIN import_runs root ON root.id=graph.run_id
+    WHERE graph.run_id=original.run_id AND (root.checkpoint->'retainedSource'->>'uploadId' IS NULL OR root.checkpoint->'retainedSource'->>'uploadId'=original.upload_id::text)) THEN
+   RAISE EXCEPTION 'A missing original graph witness needs review, not adoption of a current graph' USING ERRCODE='55000';
+  END IF;
+ END LOOP;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER data_requests_uploaded_source_erasure_completion AFTER UPDATE ON data_requests DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_require_source_erasure_completion();
