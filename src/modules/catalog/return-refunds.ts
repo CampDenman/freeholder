@@ -334,7 +334,7 @@ export const reconcileReturnBankRefundState=defineService({
     await ctx.tx.update(returnRequests).set({status:"received",updatedAt:sql`now()`}).where(eq(returnRequests.id,request.id));
     await ctx.emitTimeline({contactId:request.contactId,eventType:"return.refundNeedsAttention",subjectType:"return",subjectId:request.id,
      payload:{orderId:order.id,creditNoteId:credit.id,refundId:input.refundId,amountMinor:credit.totalMinor,currency:invoice.invoice.currency}});
-    await notifyCommerceContact(ctx,request.contactId,"return.refundNeedsAttention",`return-bank-review:${request.id}:${actual.receiptId ?? input.refundId}`);
+    await notifyCommerceContact(ctx,request.contactId,"return.refund_needs_attention",`return-bank-review:${request.id}:${actual.receiptId ?? input.refundId}`);
     ctx.queueEvent("catalog.returnRefundNeedsAttention",{returnId:request.id,creditNoteId:credit.id,refundId:input.refundId});changed++;
    }
   }

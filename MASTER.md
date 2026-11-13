@@ -13943,6 +13943,17 @@ whatever is best for the people using the site.
   strengthened caller natives remain unrun. No schema, historical money,
   oracle or model activation changed; final combined/legacy/provider acceptance
   remains open.
+  First RMA-credit bank native on e007/2a191/e783 failed6.617s at a genuine
+  notification-topic validation refusal. Actual4200 success then bank action
+  leaves4200 paid/0 current refunded, processing refund, same issued4200
+  credit and original part, but the bank listener's transaction rolls back
+  and the return stays refunded. Its actual outbox error remains pending;
+  terminal failure/replacement is unrun. A separate23-table UTC golden-equal
+  template clone preserves that BEFORE state (0.145s, journal81/e783, clients
+  drained). Source now changes only the notification topic and matching eight
+  locale keys to valid lowercase, retaining timeline/event names, old money,
+  schema and original oracle. Source qualification and unchanged AFTER are
+  pending; full financial/legacy/provider acceptance remains open.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

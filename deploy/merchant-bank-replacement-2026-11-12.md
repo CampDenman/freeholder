@@ -126,3 +126,29 @@ and `-v2-ledger.json`; the latter uses exclusive creation. BEFORE files and the
 this two-resource proof are component runs on their exact source checkpoints;
 the RMA-credit, stale-read and strengthened unfinished-caller natives are still
 unexecuted, and final combined-source/legacy/provider acceptance remains open.
+
+The first RMA-credit native then failed genuinely6.617s on e007/product2a191,
+unchanged test48cf8407 and V11/e783. The actual original4200 refund succeeded,
+then its requires_action observation/current receipt and cash projection
+committed: original4200 paid, current0 refunded and refund4200 processing.
+The original issued4200 credit and exact frozen return part remained intact.
+The return incorrectly stayed refunded because its post-commit bank-state
+listener rolled back at `notifications.create`: topic
+`return.refundNeedsAttention` violates the lowercase topic contract. The real
+bank-state outbox remains pending with that error and attempt1. Terminal
+failure and replacement were not reached; no RMA reuse proof is claimed.
+
+The failed state is preserved in separate template-only
+`freeholder_bank_rma80_populated_before_v11_test_20261112`, which passed0.145s
+with23 UTC count/SHA equalities across source-before, clone and source-after,
+including credit, return/part/original lines, outbox and the prior15 financial
+tables. Exclusive report/start flags refuse overwrite. Journal81/max60/e783
+and both clients/backend sets were unchanged/empty. Evidence is
+`/tmp/freeholder-bank-current80-rma-native-v1.{json,log}`,
+`-v1-ledger.json`, `-v1-outbox.json` and
+`/tmp/freeholder-bank-rma80-populated-clone-v11.json`.
+
+The narrow source repair uses notification topic `return.refund_needs_attention`
+and renames only its two translation keys in each of the four locales. Actual
+timeline/emitted event names, money, SQL and the original oracle remain
+unchanged. Source qualification and unchanged RMA AFTER remain pending.
