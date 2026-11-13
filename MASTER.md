@@ -1127,6 +1127,22 @@ up gated by a boolean somebody forgot to check.
   that invoice is paid in full (a `provider` schedule prorates at the provider).
   A change deferred to period end bills the new plan's own variant from the
   first renewal after it.
+- **Controlled seller-merchant provider collection preserves the canonical
+  invoice and dated merchant-tax arithmetic.** Its explicit consent distinguishes
+  the actual native provider proration preview from collection: under a proven
+  `keep_as_draft` pause, the price/calendar update suppresses autonomous
+  proration, one exact canonical gross target receives only its locked original
+  credit, and residual credit stays in the canonical ledger. Existing provider
+  customer balances or unrelated credit notes cannot silently fund that target.
+  The recurring provider item represents NET only; every transition/renewal draft
+  needs its exact fixed per-invoice canonical merchant-declared tax component,
+  credit disposition and fee before any finalize/pay admission. This is not
+  Stripe Tax evidence or a new rounding-adjustment policy. Birth-safe zero-only
+  preparation uses `default_incomplete`, no application access and no rewrite of
+  an accepted trial/paid calendar, followed by actual pause and independent
+  readback before positive work. Draft pause remains an ACTIVE calendar, never
+  cancellation or complete financial-stop proof. Source implementation and
+  enabled-provider acceptance remain governed by C12.38/C11.05 below.
 - **Dunning is a policy with a schedule**, not a single failed charge: retries
   at stated offsets, a grace period during which access continues, notices on
   the channels the contact consented to (§4.14), and a final action the owner
@@ -14354,6 +14370,32 @@ whatever is best for the people using the site.
   zero-bootstrap/pause-readback/exact draft-fee/finalize/pay lifecycle still
   require implementation and qualification. See
   `deploy/subscription-proration-card80-source-20261113.md`.
+  Controlled provider transport source checkpoint (2026-11-13, same items):
+  actual zero-NET bootstrap, independent pause readback, original-resource
+  discovery, exact calendar cancellation/readback and complete invoice/payment
+  enumeration now have their own immutable real caller/fact lineage. Actual
+  positive bank facts commit before canonical receipt bridging or later failure;
+  the additive child binds the SAME canonical receipt to its exact controlled
+  resource/operation/call/fact, preserving all older phase/generation owners.
+  An independently reviewed actual runtime stop never invents an SDK finish.
+  Actual canceled zero-only preparation can close only with complete terminal
+  zero-invoice/payment/balance proof; paid access and positive-money closure are
+  separate. Owner recovery, HTTP/MCP, four locales, private subject export and
+  bounded merge history use shared services. Nine families carry full physical
+  SQL-row witnesses and authentic signed/raw coverage under a combined5000 bound.
+  The parent readiness query must be genuinely registered and complete before
+  creation; coverage readiness never erases actual caller/raw-cash debt. Its
+  optional exclusion is only the exact same latest planned operation with zero
+  actual children. Five signed-proof controls, three actual HTTP-adapter controls
+  and five actual shared-service native journeys are PREPARED/UNRUN. The new
+  owned SQL tail is UNAPPLIED; no compiler/lint/test/database/provider operation
+  ran in this source lane and no feature, acceptance or stable gate closes.
+  Actual preview/update adapters exist but their admitted explicit quote/consent,
+  canonical target binding, balance/credit-note isolation, fixed tax/fee draft
+  construction, finalize/pay, positive financial-stop/feedback integration and
+  authentic late/partial recovery still REQUIRE implementation and qualification.
+  No requirement is deferred. See
+  `deploy/subscription-controlled-provider80-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

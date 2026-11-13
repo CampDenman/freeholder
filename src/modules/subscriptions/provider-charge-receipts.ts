@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: preserve authenticated scheduled cash before applying its invoice.
+import { controlledCashOrigin, controlledCashEvidence, originalControlledChargeAuthority, retainControlledChargeOrigin } from "./controlled-provider-cash-origin";
 import { retainGenerationCashLink } from "./provider-generations";
 import { createHash } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -28,11 +29,15 @@ const cash = z.object({
   amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), currency: z.string().regex(/^[A-Z]{3}$/),
   destinationAccountId: account.optional(), settlementMerchantAccountId: account.optional(),
   customerChargeVerified: z.boolean().default(false), merchantRouteVerified: z.boolean().default(false),
-  subscriptionId: z.uuid().optional(), providerScheduleOperationId: z.uuid().optional(), providerCustomerRef: reference.optional(),
+  controlledOrigin: controlledCashOrigin.optional(), subscriptionId: z.uuid().optional(), providerScheduleOperationId: z.uuid().optional(), providerCustomerRef: reference.optional(),
 });
 export const subscriptionScheduleCashObservation = cash;
 
 async function originalAgreement(ctx: ServiceContext, provider: string, providerRef: string, platform?: string, chargeAccount?: string, lineage?: z.infer<typeof cash>) {
+  if (lineage?.controlledOrigin) {
+    if (lineage.providerScheduleOperationId) throw new ServiceError("conflict", "One actual controlled receipt cannot borrow a legacy phase operation's origin.");
+    return originalControlledChargeAuthority(ctx, controlledCashEvidence.parse(JSON.parse(JSON.stringify(lineage))), lineage.controlledOrigin);
+  }
   const rows = await ctx.tx.select({ subscription: subscriptions, scope: subscriptionMerchantScopes })
     .from(subscriptions).innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptions.id))
     .where(and(eq(subscriptions.provider, provider), eq(subscriptions.providerRef, providerRef))).limit(100);
@@ -119,11 +124,13 @@ export const retainProviderCharge = defineService({
         && (!existing.providerChargeRef || !input.providerChargeRef || existing.providerChargeRef === input.providerChargeRef);
       if (matchesOriginalMoney && !existing.providerChargeRef && input.providerChargeRef) await ctx.tx.update(subscriptionProviderChargeReceipts).set({ providerChargeRef: input.providerChargeRef }).where(eq(subscriptionProviderChargeReceipts.id, existing.id));
       if (original.operation) await retainGenerationCashLink(ctx, original.operation, input);
+      if ("controlledOrigin" in original && matchesOriginalMoney) await retainControlledChargeOrigin(ctx, existing.id, original);
       return { receiptId: existing.id, observationId: observation.id, matchesOriginalMoney };
     }
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_scope_v1','1',true)`);
     const [receipt] = await ctx.tx.insert(subscriptionProviderChargeReceipts).values({ ...facts, ...actualRoute }).returning({ id: subscriptionProviderChargeReceipts.id });
     if (original.operation) await retainGenerationCashLink(ctx, original.operation, input);
+    if ("controlledOrigin" in original) await retainControlledChargeOrigin(ctx, receipt!.id, original);
     ctx.setSubject("subscription", original.subscription.id);
     return { receiptId: receipt!.id, observationId: observation.id, matchesOriginalMoney: true };
   },
