@@ -69,7 +69,7 @@ describe.runIf(hasDatabase)("actual original zero controlled transport lifecycle
  });
  it("retains a genuine committed positive intent before cash_observed failure, blocks new preparation, then recovers that same money without rewriting the old finish",async()=>{
   const initial=await original(),prepared=await prepareControlledProviderCalendar.call({subscriptionId:initial.subscriptionId},OWNER);initial.remote.externallyPayUnexpectedInvoice();
-  const inspect=initial.remote.provider.inspectMerchantControlledInvoice;if(!inspect)throw Error("The actual Stripe inventory adapter is required");let interrupt=true;
+  const inspect=initial.remote.provider.inspectMerchantControlledInvoice?.bind(initial.remote.provider);if(!inspect)throw Error("The actual Stripe inventory adapter is required");let interrupt=true;
   initial.remote.provider.inspectMerchantControlledInvoice=async request=>inspect({...request,onObserved:async actual=>{
    await request.onObserved(actual);if(interrupt&&actual.kind==="intent_read"&&typeof actual.raw.amount_received==="number"&&actual.raw.amount_received>0)throw Error("Actual retained intent committed; process interrupts before cash_observed");
   }});
