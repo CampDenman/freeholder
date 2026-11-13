@@ -7,7 +7,7 @@ import { originalRefundCurrentReadVerdict, type OriginalRefundCurrentFact } from
 const original = { providerPlatformAccountId: "acct_originalPlatform", chargeAccountId: "acct_originalSeller",
   providerApiVersion: "2026-02-25.clover", providerRef: "re_original", paymentProviderRef: "pi_original", amountMinor: 1000, currency: "CAD" };
 const proof = { original, preparedRevision: "complete-original-history", currentPriorRevision: "complete-original-history",
-  incomplete: false, creatorsQuiesced: true, readReturned: true, exactCallerFinished: true };
+  incomplete: false, creatorsQuiesced: true, readReturned: true, exactCallerFinished: true, resourceHistoryConsistent: true };
 const current = (status: OriginalRefundCurrentFact["status"]): OriginalRefundCurrentFact => ({ ...original, status, bindingVerified: true, failureBalanceTransactionRef: null });
 
 describe("exact original bank-refund current-read proof", () => {
@@ -43,5 +43,9 @@ describe("exact original bank-refund current-read proof", () => {
   });
   it("cannot close a truncated restored evidence inventory", () => {
     expect(originalRefundCurrentReadVerdict({ ...proof, incomplete: true, actual: current("succeeded") })).toMatchObject({ state: "review", reason: "incomplete" });
+  });
+  it("cannot erase a conflicting money fact or a second logical owner's alias with a later successful GET", () => {
+    expect(originalRefundCurrentReadVerdict({ ...proof, resourceHistoryConsistent: false, actual: current("succeeded") }))
+      .toEqual({ state: "review", reason: "conflicting_history" });
   });
 });

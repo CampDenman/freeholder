@@ -49,8 +49,9 @@ export const claimMerchantRefundDispatch = defineService({
     const observations = await ctx.tx.select().from(merchantRefundObservations).where(or(
       and(eq(merchantRefundObservations.providerPlatformAccountId, original.providerPlatformAccountId), sql`${merchantRefundObservations.chargeAccountId} is not distinct from ${original.chargeAccountId}`,
         eq(merchantRefundObservations.paymentProviderRef, original.originalPaymentRef)),
-      inArray(merchantRefundObservations.requestId, ids), and(isNull(merchantRefundObservations.paymentProviderRef), original.paymentId ? eq(merchantRefundObservations.paymentId, original.paymentId)
-        : eq(merchantRefundObservations.subscriptionChargeReceiptId, original.subscriptionChargeReceiptId!)))).limit(5001);
+      inArray(merchantRefundObservations.requestId, ids), inArray(merchantRefundObservations.claimedRequestId, ids),
+      original.paymentId ? eq(merchantRefundObservations.paymentId, original.paymentId)
+        : eq(merchantRefundObservations.subscriptionChargeReceiptId, original.subscriptionChargeReceiptId!))).limit(5001);
     const current = await originalMerchantRefundCurrentStates(ctx, ids);
     if (requests.length > 5000 || observations.length > 5000 || observations.some(row => (row.paymentProviderRef !== original.originalPaymentRef
       || row.providerPlatformAccountId !== original.providerPlatformAccountId || row.chargeAccountId !== original.chargeAccountId || row.providerApiVersion !== original.providerApiVersion)
@@ -78,7 +79,10 @@ export const claimMerchantRefundDispatch = defineService({
           && row.fact.paymentProviderRef === request.originalPaymentRef && row.fact.amountMinor === request.amountMinor && row.fact.currency === request.currency);
         return { id: request.id, amountMinor: request.amountMinor, dispatched: calls.length > 0, creatorsQuiesced,
           terminalFailureVerified: creatorsQuiesced && (calls.length === 0 && retirements.some(row => row.requestId === request.id && row.requestDigest === request.requestDigest) || failed) };
-      }), observations, currentStates: current.states, unresolvedCurrentRequests: current.unresolvedRequestIds });
+      }), observations: observations.map(row => {
+        const proof = current.states.filter(state => refundObservationHasCurrentBinding(row, state));
+        return proof.length === 1 ? { ...row, requestId: proof[0]!.requestId, bindingVerified: true } : row;
+      }), currentStates: current.states, unresolvedCurrentRequests: current.unresolvedRequestIds });
     if (capacity.availableMinor === null || capacity.availableMinor < 0 || capacity.debt.length) throw new ServiceError("conflict", "Actual unknown, unapplied or contradictory refund money must be reconciled before another dispatch.");
     const completionNonce = randomBytes(32).toString("base64url");
     await ctx.tx.execute(sql`select set_config('freeholder.merchant_refund_v1','1',true)`);

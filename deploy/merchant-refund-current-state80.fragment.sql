@@ -85,67 +85,52 @@ END $$;
 -- receipt INSERT guards independently verify those IDs and the original caller.
 CREATE FUNCTION freeholder_refund_current_revision(target_request uuid, exclude_observation uuid DEFAULT NULL, exclude_capture uuid DEFAULT NULL)
 RETURNS TABLE(revision text,incomplete boolean,observation_ids jsonb) LANGUAGE sql STABLE AS $$
- WITH original AS (
-  SELECT * FROM merchant_refund_requests WHERE id=target_request
+ WITH original AS (SELECT * FROM merchant_refund_requests WHERE id=target_request),
+ resources AS (
+  SELECT provider_ref FROM merchant_refund_resource_bindings WHERE request_id=target_request
  ), requests AS (
-  SELECT r.* FROM merchant_refund_requests r,original p
-  WHERE r.provider_platform_account_id=p.provider_platform_account_id AND r.charge_account_id IS NOT DISTINCT FROM p.charge_account_id
-   AND r.original_payment_ref=p.original_payment_ref LIMIT 5001
+  SELECT r.* FROM merchant_refund_requests r,original p WHERE r.id=p.id OR (
+   r.provider_platform_account_id=p.provider_platform_account_id AND r.charge_account_id IS NOT DISTINCT FROM p.charge_account_id
+   AND EXISTS(SELECT 1 FROM merchant_refund_resource_bindings b WHERE b.request_id=r.id AND b.provider_ref IN(SELECT provider_ref FROM resources))) LIMIT 5001
  ), source_receipts AS (
-  SELECT r.* FROM subscription_provider_charge_receipts r,original p
-  WHERE r.provider_platform_account_id=p.provider_platform_account_id AND r.charge_account_id IS NOT DISTINCT FROM p.charge_account_id
-   AND r.provider_payment_intent_ref=p.original_payment_ref LIMIT 5001
+  SELECT r.* FROM subscription_provider_charge_receipts r,original p WHERE r.id=p.subscription_charge_receipt_id
+   OR EXISTS(SELECT 1 FROM merchant_agreement_payment_routes a WHERE a.payment_id=p.payment_id AND a.original_charge_receipt_id=r.id) LIMIT 5001
  ), aliases AS (
   SELECT a.* FROM merchant_agreement_payment_routes a WHERE a.original_charge_receipt_id IN(SELECT id FROM source_receipts) LIMIT 5001
- ), payment_cash AS (
-  SELECT c.* FROM merchant_payment_observations c,original p
-  WHERE c.provider_platform_account_id=p.provider_platform_account_id AND c.charge_account_id IS NOT DISTINCT FROM p.charge_account_id
-   AND c.provider_ref=p.original_payment_ref LIMIT 5001
  ), payment_ids AS (
-  SELECT payment_id AS id FROM payment_cash UNION SELECT payment_id FROM aliases UNION SELECT payment_id FROM original WHERE payment_id IS NOT NULL
+  SELECT payment_id AS id FROM original WHERE payment_id IS NOT NULL UNION SELECT payment_id FROM aliases
  ), observations AS (
-  SELECT o.* FROM merchant_refund_observations o,original p
-  WHERE (o.provider_platform_account_id=p.provider_platform_account_id AND o.charge_account_id IS NOT DISTINCT FROM p.charge_account_id AND o.payment_provider_ref=p.original_payment_ref)
-   OR o.request_id IN(SELECT id FROM requests)
-   OR o.payment_provider_ref IS NULL AND (o.payment_id IN(SELECT id FROM payment_ids) OR o.subscription_charge_receipt_id IN(SELECT id FROM source_receipts)) LIMIT 5001
+  SELECT o.* FROM merchant_refund_observations o,original p WHERE o.provider_ref IN(SELECT provider_ref FROM resources)
+   AND(o.request_id IN(SELECT id FROM requests) OR o.claimed_request_id=target_request
+    OR(o.provider_platform_account_id=p.provider_platform_account_id AND o.charge_account_id IS NOT DISTINCT FROM p.charge_account_id)) LIMIT 5001
  ), captures AS (
   SELECT c.* FROM merchant_refund_observation_captures c WHERE c.observation_id IN(SELECT id FROM observations) LIMIT 5001
  ), dispatches AS (
   SELECT d.* FROM merchant_refund_dispatches d WHERE d.request_id IN(SELECT id FROM requests) LIMIT 5001
- ), fees AS (
-  SELECT f.* FROM merchant_fee_refunds f WHERE f.payment_id IN(SELECT id FROM payment_ids) OR f.original_charge_receipt_id IN(SELECT id FROM source_receipts) LIMIT 5001
- ), inspections AS (
-  SELECT i.* FROM merchant_cash_return_inspections i,original p
-  WHERE i.provider_platform_account_id=p.provider_platform_account_id AND i.charge_account_id IS NOT DISTINCT FROM p.charge_account_id
-   AND i.original_payment_ref=p.original_payment_ref LIMIT 5001
- ), resolutions AS (
-  SELECT r.* FROM merchant_unapplied_charge_resolutions r,original p
-  WHERE r.provider_platform_account_id=p.provider_platform_account_id AND r.charge_account_id IS NOT DISTINCT FROM p.charge_account_id
-   AND r.original_payment_ref=p.original_payment_ref LIMIT 5001
+ ), payment_dispatches AS (
+  SELECT d.* FROM merchant_payment_dispatches d WHERE d.payment_id IN(SELECT id FROM payment_ids) LIMIT 5001
  ), facts AS (
   SELECT 'request' AS domain,r.id::text AS identity,to_jsonb(r) AS body FROM requests r
   UNION ALL SELECT 'observation',o.id::text,to_jsonb(o) FROM observations o WHERE o.id IS DISTINCT FROM exclude_observation
   UNION ALL SELECT 'capture',c.id::text,to_jsonb(c) FROM captures c WHERE c.id IS DISTINCT FROM exclude_capture
   UNION ALL SELECT 'dispatch',d.id::text,to_jsonb(d) FROM dispatches d
   UNION ALL SELECT 'finish',f.dispatch_id::text,to_jsonb(f) FROM merchant_refund_dispatch_finishes f WHERE f.dispatch_id IN(SELECT id FROM dispatches)
-  UNION ALL SELECT 'stop',s.dispatch_id::text,to_jsonb(s) FROM merchant_refund_dispatch_stops s WHERE s.dispatch_id IN(SELECT id FROM dispatches)
-  UNION ALL SELECT 'refusal',r.dispatch_id::text,to_jsonb(r) FROM merchant_refund_creation_refusals r WHERE r.dispatch_id IN(SELECT id FROM dispatches)
+  UNION ALL SELECT 'stop',f.dispatch_id::text,to_jsonb(f) FROM merchant_refund_dispatch_stops f WHERE f.dispatch_id IN(SELECT id FROM dispatches)
+  UNION ALL SELECT 'refusal',f.dispatch_id::text,to_jsonb(f) FROM merchant_refund_creation_refusals f WHERE f.dispatch_id IN(SELECT id FROM dispatches)
   UNION ALL SELECT 'retirement',r.request_id::text,to_jsonb(r) FROM merchant_refund_reservation_retirements r WHERE r.request_id IN(SELECT id FROM requests)
   UNION ALL SELECT 'terminal',t.request_id::text,to_jsonb(t) FROM merchant_refund_terminal_receipts t WHERE t.request_id IN(SELECT id FROM requests)
   UNION ALL SELECT 'binding',b.id::text,to_jsonb(b) FROM merchant_refund_resource_bindings b WHERE b.request_id IN(SELECT id FROM requests)
-  UNION ALL SELECT 'payment_cash',c.id::text,to_jsonb(c) FROM payment_cash c
-  UNION ALL SELECT 'receipt',r.id::text,to_jsonb(r) FROM source_receipts r
-  UNION ALL SELECT 'subscription_cash',c.id::text,to_jsonb(c) FROM subscription_provider_charge_observations c,original p
-   WHERE c.provider_platform_account_id=p.provider_platform_account_id AND c.charge_account_id IS NOT DISTINCT FROM p.charge_account_id AND c.provider_payment_intent_ref=p.original_payment_ref
+  UNION ALL SELECT 'original_payment_cash',o.id::text,to_jsonb(o) FROM merchant_payment_observations o,original p WHERE o.id=p.original_observation_id
+  UNION ALL SELECT 'original_subscription_cash',o.id::text,to_jsonb(o) FROM subscription_provider_charge_observations o,original p WHERE o.id=p.subscription_charge_observation_id
+  UNION ALL SELECT 'original_receipt',r.id::text,jsonb_build_object('id',r.id,'subscription_id',r.subscription_id,
+   'provider_platform_account_id',r.provider_platform_account_id,'charge_account_id',r.charge_account_id,
+   'provider_subscription_ref',r.provider_subscription_ref,'provider_invoice_ref',r.provider_invoice_ref,
+   'provider_payment_intent_ref',r.provider_payment_intent_ref,'provider_charge_ref',r.provider_charge_ref,
+   'amount_minor',r.amount_minor,'currency',r.currency,'provider_api_version',r.provider_api_version) FROM source_receipts r
   UNION ALL SELECT 'alias',a.payment_id::text,to_jsonb(a) FROM aliases a
-  UNION ALL SELECT 'fee',f.id::text,to_jsonb(f) FROM fees f
-  UNION ALL SELECT 'fee_observation',o.id::text,to_jsonb(o) FROM merchant_fee_observations o WHERE o.operation_id IN(SELECT id FROM fees)
-  UNION ALL SELECT 'inspection',i.id::text,to_jsonb(i) FROM inspections i
-  UNION ALL SELECT 'inspection_finish',f.inspection_id::text,to_jsonb(f) FROM merchant_cash_return_inspection_finishes f WHERE f.inspection_id IN(SELECT id FROM inspections)
-  UNION ALL SELECT 'primary',o.id::text,to_jsonb(o) FROM merchant_cash_return_primary_observations o WHERE o.inspection_id IN(SELECT id FROM inspections)
-  UNION ALL SELECT 'cash_state',o.id::text,to_jsonb(o) FROM merchant_cash_return_observations o WHERE o.inspection_id IN(SELECT id FROM inspections)
-  UNION ALL SELECT 'resolution',r.id::text,to_jsonb(r) FROM resolutions r
-  UNION ALL SELECT 'resolution_refund',r.resolution_id::text||':'||r.observation_id::text,to_jsonb(r) FROM merchant_unapplied_charge_resolution_refunds r WHERE r.resolution_id IN(SELECT id FROM resolutions)
+  UNION ALL SELECT 'payment_dispatch',d.id::text,to_jsonb(d) FROM payment_dispatches d
+  UNION ALL SELECT 'payment_finish',f.dispatch_id::text,to_jsonb(f) FROM merchant_payment_dispatch_finishes f WHERE f.dispatch_id IN(SELECT id FROM payment_dispatches)
+  UNION ALL SELECT 'payment_stop',f.dispatch_id::text,to_jsonb(f) FROM merchant_payment_dispatch_stops f WHERE f.dispatch_id IN(SELECT id FROM payment_dispatches)
  ), bounded AS (SELECT * FROM facts LIMIT 5001)
  SELECT encode(sha256(convert_to(coalesce(string_agg(domain||':'||identity||':'||body::text,E'\n' ORDER BY domain,identity),''),'UTF8')),'hex'),
   count(*)>5000 OR NOT EXISTS(SELECT 1 FROM original),
@@ -155,20 +140,37 @@ $$;
 --> statement-breakpoint
 CREATE FUNCTION freeholder_refund_current_creators_quiesced(target_request uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
  WITH original AS (SELECT * FROM merchant_refund_requests WHERE id=target_request),
- requests AS (SELECT r.* FROM merchant_refund_requests r,original p WHERE r.provider_platform_account_id=p.provider_platform_account_id
-  AND r.charge_account_id IS NOT DISTINCT FROM p.charge_account_id AND r.original_payment_ref=p.original_payment_ref),
+ resources AS(SELECT provider_ref FROM merchant_refund_resource_bindings WHERE request_id=target_request),
+ requests AS(SELECT r.* FROM merchant_refund_requests r,original p WHERE r.id=p.id OR (
+  r.provider_platform_account_id=p.provider_platform_account_id AND r.charge_account_id IS NOT DISTINCT FROM p.charge_account_id
+  AND EXISTS(SELECT 1 FROM merchant_refund_resource_bindings b WHERE b.request_id=r.id AND b.provider_ref IN(SELECT provider_ref FROM resources)))),
  payment_ids AS (
-  SELECT payment_id AS id FROM requests WHERE payment_id IS NOT NULL
-  UNION SELECT a.payment_id FROM merchant_agreement_payment_routes a JOIN subscription_provider_charge_receipts r ON r.id=a.original_charge_receipt_id,original p
-   WHERE r.provider_platform_account_id=p.provider_platform_account_id AND r.charge_account_id IS NOT DISTINCT FROM p.charge_account_id AND r.provider_payment_intent_ref=p.original_payment_ref
+  SELECT payment_id AS id FROM original WHERE payment_id IS NOT NULL
+  UNION SELECT a.payment_id FROM merchant_agreement_payment_routes a WHERE a.original_charge_receipt_id IN(
+   SELECT r.id FROM subscription_provider_charge_receipts r,original p WHERE r.id=p.subscription_charge_receipt_id
+    OR EXISTS(SELECT 1 FROM merchant_agreement_payment_routes own WHERE own.payment_id=p.payment_id AND own.original_charge_receipt_id=r.id))
  )
  SELECT EXISTS(SELECT 1 FROM original)
  AND NOT EXISTS(SELECT 1 FROM merchant_refund_dispatches d WHERE d.request_id IN(SELECT id FROM requests)
   AND NOT EXISTS(SELECT 1 FROM merchant_refund_dispatch_finishes f WHERE f.dispatch_id=d.id AND f.caller_instance_id=(d.caller->>'id')::uuid)
-  AND NOT EXISTS(SELECT 1 FROM merchant_refund_dispatch_stops s WHERE s.dispatch_id=d.id AND s.caller_instance_id=(d.caller->>'id')::uuid AND s.request_digest=d.request_digest))
+  AND NOT EXISTS(SELECT 1 FROM merchant_refund_dispatch_stops f WHERE f.dispatch_id=d.id AND f.caller_instance_id=(d.caller->>'id')::uuid AND f.request_digest=d.request_digest))
  AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatches d WHERE d.payment_id IN(SELECT id FROM payment_ids)
   AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_finishes f WHERE f.dispatch_id=d.id AND f.caller_instance_id=(d.caller->>'id')::uuid)
-  AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_stops s WHERE s.dispatch_id=d.id AND s.caller_instance_id=(d.caller->>'id')::uuid AND s.request_digest=d.request_digest))
+  AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_stops f WHERE f.dispatch_id=d.id AND f.caller_instance_id=(d.caller->>'id')::uuid AND f.request_digest=d.request_digest))
+$$;
+--> statement-breakpoint
+-- An alias cannot apply one physical resource to two logical refunds. A
+-- later GET also cannot erase contradictory immutable amount/currency facts.
+CREATE FUNCTION freeholder_refund_current_resource_safe(target_request uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ WITH original AS(SELECT * FROM merchant_refund_requests WHERE id=target_request),
+ resource AS(SELECT min(provider_ref) AS ref,count(DISTINCT provider_ref) AS count FROM merchant_refund_resource_bindings WHERE request_id=target_request)
+ SELECT EXISTS(SELECT 1 FROM original) AND (SELECT count=1 FROM resource)
+ AND NOT EXISTS(SELECT 1 FROM merchant_refund_resource_bindings b JOIN merchant_refund_requests r ON r.id=b.request_id,original p,resource x
+  WHERE b.provider_ref=x.ref AND r.id<>p.id AND r.provider_platform_account_id=p.provider_platform_account_id
+   AND r.charge_account_id IS NOT DISTINCT FROM p.charge_account_id)
+ AND NOT EXISTS(SELECT 1 FROM merchant_refund_observations o,original p,resource x WHERE o.provider_ref=x.ref
+  AND o.provider_platform_account_id=p.provider_platform_account_id AND o.charge_account_id IS NOT DISTINCT FROM p.charge_account_id
+  AND(o.amount_minor<>p.amount_minor OR o.currency<>p.currency OR(o.payment_provider_ref IS NOT NULL AND o.payment_provider_ref<>p.original_payment_ref)))
 $$;
 --> statement-breakpoint
 CREATE FUNCTION freeholder_refund_capture_lock() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -210,7 +212,7 @@ BEGIN
    OR EXISTS(SELECT 1 FROM merchant_refund_resource_bindings b WHERE b.request_id=original.id AND b.provider_ref<>binding.provider_ref)
    OR current_revision.incomplete OR NEW.source_revision IS DISTINCT FROM current_revision.revision
    OR NEW.source_observation_ids IS DISTINCT FROM current_revision.observation_ids
-   OR NOT freeholder_refund_current_creators_quiesced(original.id)
+   OR NOT freeholder_refund_current_creators_quiesced(original.id) OR NOT freeholder_refund_current_resource_safe(original.id)
    OR jsonb_typeof(NEW.caller)<>'object' OR NOT(NEW.caller ?& ARRAY['id','pid','host','startedAt','bootId','pidNamespace','startTicks']) THEN
    RAISE EXCEPTION 'A current read needs complete unchanged original cash, one bound resource and finished creators' USING ERRCODE='23514';
   END IF;
@@ -243,7 +245,7 @@ BEGIN
   OR fact.provider_platform_account_id IS DISTINCT FROM original.provider_platform_account_id OR fact.charge_account_id IS DISTINCT FROM original.charge_account_id
   OR fact.provider_api_version IS DISTINCT FROM original.provider_api_version OR fact.payment_provider_ref IS DISTINCT FROM original.original_payment_ref
   OR fact.amount_minor IS DISTINCT FROM original.amount_minor OR fact.currency IS DISTINCT FROM original.currency
-  OR NOT freeholder_refund_current_creators_quiesced(original.id) THEN
+  OR NOT freeholder_refund_current_creators_quiesced(original.id) OR NOT freeholder_refund_current_resource_safe(original.id) THEN
   RAISE EXCEPTION 'Current state needs the actual finished exact-original resource read, not historic success' USING ERRCODE='23514';
  END IF;
  ignored_observation:=CASE WHEN source_read.source_observation_ids ? fact.id::text THEN NULL ELSE fact.id END;
@@ -271,7 +273,7 @@ BEGIN
  receipt_id:=NULL; status:=NULL; observation_id:=NULL;
  has_receipts:=EXISTS(SELECT 1 FROM merchant_refund_current_receipts c WHERE c.request_id=target_request);
  SELECT * INTO original FROM merchant_refund_requests WHERE id=target_request;
- IF original.id IS NULL OR NOT has_receipts OR NOT freeholder_refund_current_creators_quiesced(target_request) THEN RETURN NEXT; RETURN; END IF;
+ IF original.id IS NULL OR NOT has_receipts OR NOT freeholder_refund_current_creators_quiesced(target_request) OR NOT freeholder_refund_current_resource_safe(target_request) THEN RETURN NEXT; RETURN; END IF;
  SELECT * INTO current_revision FROM freeholder_refund_current_revision(target_request);
  IF current_revision.incomplete THEN RETURN NEXT; RETURN; END IF;
  FOR candidate IN

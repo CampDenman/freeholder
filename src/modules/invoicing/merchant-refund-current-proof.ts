@@ -12,7 +12,7 @@ export interface OriginalRefundCurrentFact extends Omit<OriginalRefundReadIdenti
   failureBalanceTransactionRef: string | null; bindingVerified: boolean;
 }
 export type OriginalRefundReadVerdict =
-  | { state: "review"; reason: "incomplete" | "unfinished_creator" | "unfinished_read" | "stale_evidence" | "foreign_resource" }
+  | { state: "review"; reason: "incomplete" | "unfinished_creator" | "unfinished_read" | "stale_evidence" | "foreign_resource" | "conflicting_history" }
   | { state: "verified"; status: OriginalRefundCurrentStatus; terminal: boolean; failureBalanceTransactionRef: string | null };
 
 /** The service and SQL separately derive these witnesses from original rows.
@@ -22,12 +22,13 @@ export type OriginalRefundReadVerdict =
 export function originalRefundCurrentReadVerdict(input: {
   original: OriginalRefundReadIdentity; actual: OriginalRefundCurrentFact;
   preparedRevision: string; currentPriorRevision: string; incomplete: boolean;
-  creatorsQuiesced: boolean; readReturned: boolean; exactCallerFinished: boolean;
+  creatorsQuiesced: boolean; readReturned: boolean; exactCallerFinished: boolean; resourceHistoryConsistent: boolean;
 }): OriginalRefundReadVerdict {
   if (input.incomplete) return { state: "review", reason: "incomplete" };
   if (!input.creatorsQuiesced) return { state: "review", reason: "unfinished_creator" };
   if (!input.readReturned || !input.exactCallerFinished) return { state: "review", reason: "unfinished_read" };
   if (input.preparedRevision !== input.currentPriorRevision) return { state: "review", reason: "stale_evidence" };
+  if (!input.resourceHistoryConsistent) return { state: "review", reason: "conflicting_history" };
   const { original, actual } = input;
   if (!actual.bindingVerified || Object.entries(original).some(([key, value]) => actual[key as keyof OriginalRefundReadIdentity] !== value)) {
     return { state: "review", reason: "foreign_resource" };

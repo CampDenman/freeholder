@@ -46,5 +46,9 @@ export function refundObservationHasCurrentBinding(observation: typeof merchantR
   return observation.providerRef === state.providerRef && observation.providerPlatformAccountId === state.providerPlatformAccountId
     && observation.chargeAccountId === state.chargeAccountId && (observation.paymentProviderRef === null || observation.paymentProviderRef === state.originalPaymentRef)
     && observation.amountMinor === state.amountMinor && observation.currency === state.currency
-    && (observation.requestId === null || observation.requestId === state.requestId);
+    && (observation.requestId === null || observation.requestId === state.requestId
+      // Older inventory readers copied a claimed source into this FK even
+      // when unverified. The unique current ACK/read can resolve that claim
+      // in a derived view; the original row/FK is never rewritten.
+      || !observation.bindingVerified && observation.claimedRequestId === observation.requestId);
 }

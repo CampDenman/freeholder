@@ -46,6 +46,10 @@ async function creatorsQuiesced(ctx: ServiceContext, requestId: string) {
   const [result] = await ctx.tx.execute<{ safe: boolean }>(sql`select freeholder_refund_current_creators_quiesced(${requestId}::uuid) as safe`);
   return result?.safe === true;
 }
+async function resourceHistoryConsistent(ctx: ServiceContext, requestId: string) {
+  const [result] = await ctx.tx.execute<{ safe: boolean }>(sql`select freeholder_refund_current_resource_safe(${requestId}::uuid) as safe`);
+  return result?.safe === true;
+}
 async function readForCaller(ctx: ServiceContext, readId: string, completionNonce: string) {
   const [read] = await ctx.tx.select().from(merchantRefundStateReads).where(eq(merchantRefundStateReads.id, readId));
   const caller = merchantPhysicalCaller();
@@ -60,6 +64,7 @@ export const prepareMerchantRefundCurrentRead = defineService({
   handler: async ({ requestId }, ctx) => {
     const request = await original(ctx, requestId), baseline = await revision(ctx, requestId);
     if (!await creatorsQuiesced(ctx, requestId)) throw new ServiceError("conflict", "Finish or verify the original physical money callers before proving current refund state.");
+    if (!await resourceHistoryConsistent(ctx, requestId)) throw new ServiceError("conflict", "Restore this original refund's contradictory resource aliases or immutable money facts; a new read cannot discard them.");
     const bindings = await ctx.tx.select().from(merchantRefundResourceBindings).where(eq(merchantRefundResourceBindings.requestId, requestId)).limit(5001);
     const refs = new Set(bindings.map(row => row.providerRef));
     if (bindings.length > 5000 || refs.size !== 1) throw new ServiceError("conflict", "Restore one actual original resource ACK or verified request-log binding; metadata cannot choose a refund.");
@@ -120,7 +125,8 @@ export const completeMerchantRefundCurrentRead = defineService({
     const verdict = originalRefundCurrentReadVerdict({ original: { providerPlatformAccountId: request.providerPlatformAccountId, chargeAccountId: request.chargeAccountId,
       providerApiVersion: request.providerApiVersion, providerRef: binding.providerRef, paymentProviderRef: request.originalPaymentRef, amountMinor: request.amountMinor, currency: request.currency },
       actual: fact, preparedRevision: read.sourceRevision, currentPriorRevision: prior.digest, incomplete: false,
-      creatorsQuiesced: await creatorsQuiesced(ctx, request.id), readReturned: finish.outcome === "returned", exactCallerFinished: finish.callerInstanceId === read.caller.id });
+      creatorsQuiesced: await creatorsQuiesced(ctx, request.id), readReturned: finish.outcome === "returned", exactCallerFinished: finish.callerInstanceId === read.caller.id,
+      resourceHistoryConsistent: await resourceHistoryConsistent(ctx, request.id) });
     if (verdict.state !== "verified") throw new ServiceError("conflict", "The complete original bank state is stale, unfinished or unbound; retain all facts and inspect it again.");
     const resolved = await revision(ctx, request.id);
     await allowOriginalMerchantRefundWrites(ctx.tx);

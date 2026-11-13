@@ -5,13 +5,13 @@ import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-rep
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { randomUUID } from "node:crypto";
 import { STRIPE_REFUND_REFERENCE } from "@/adapters/payments/stripe-refund-reference";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { enqueueJob } from "@/core/jobs";
 import { z } from "zod";
 import { defineService, ServiceError } from "@/core/service";
 import { subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
 import { routingForPayment } from "./merchant-charge";
-import { merchantCashReturnInspections, merchantRefundObservations, merchantRefundRequests } from "./merchant-refund-schema";
+import { merchantCashReturnInspections, merchantRefundObservations, merchantRefundRequests, merchantRefundResourceBindings } from "./merchant-refund-schema";
 import { merchantRefundObservationCaptures } from "./merchant-refund-current-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { payments } from "./schema";
@@ -47,7 +47,12 @@ export const recordMerchantRefundObservation = defineService({
     }
     // Missing intent, nullable linkage/status and contradictory routing never
     // roll back actual authenticated refund money. They remain recovery debt.
-    const bound = originalOwner ? original : undefined;
+    const [resource] = originalOwner && original.providerPlatformAccountId === evidence.providerPlatformAccountId
+      && original.chargeAccountId === (evidence.providerAccountId ?? null) ? await ctx.tx.select({ id: merchantRefundResourceBindings.id })
+        .from(merchantRefundResourceBindings).where(and(eq(merchantRefundResourceBindings.requestId, original.id), eq(merchantRefundResourceBindings.providerRef, evidence.providerRef))).limit(1) : [];
+    // A list/metadata candidate retains a claimed source, not a proven request
+    // owner. The independent original ACK/request-log binding owns that FK.
+    const bound = resource && originalOwner ? original : undefined;
     const bindingVerified = Boolean(bound && evidence.bindingVerified && bound.providerPlatformAccountId === evidence.providerPlatformAccountId
       && bound.chargeAccountId === (evidence.providerAccountId ?? null) && bound.providerApiVersion === evidence.providerApiVersion
       && bound.originalPaymentRef === evidence.paymentProviderRef && bound.amountMinor === evidence.amountMinor && bound.currency === evidence.currency);

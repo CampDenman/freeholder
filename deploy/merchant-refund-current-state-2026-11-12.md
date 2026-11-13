@@ -27,12 +27,26 @@ The draft adds four append-only tables: observation capture occurrences,
 original-resource read admissions, physical read finishes and current-state
 receipts. Repeated semantic observations remain deduplicated, while a later
 authenticated occurrence still invalidates an earlier receipt. A fresh read
-freezes the complete bounded original financial revision before GET; its own
+freezes the complete bounded original request/resource revision before GET; its own
 fact/capture alone is excluded when comparing that earlier revision. Other
-concurrent evidence, truncated restoration or an unfinished original money
+concurrent evidence for that resource, truncated restoration or an unfinished original money
 creator refuses closure. Actual current-read completion uses a private nonce,
 exact process birth and server-held completed promise; elapsed time supplies
 no negative proof. Failed finish persistence can retry without a provider POST.
+
+Source review corrected an overbroad first draft before any runner started:
+hashing all refunds/fees on the same charge would make sequential GETs for two
+different resources invalidate each other forever. Freshness now includes all
+original bound resources, their raw captures/aliases and relevant original
+creator proofs. Aggregate cash, unrelated refunds, fees and return inventory
+remain independently conserved under the original cash lock. An unverified
+list/metadata candidate retains `claimedRequestId`; only the exact original
+ACK/request-log namespace binding supplies an actual request FK. Historical
+claim rows stay unchanged, and actual foreign/secondary money remains visible
+to aggregate cash capacity/debt. Multiple physical resources bound to the same
+original request or another logical owner's alias refuse current closure;
+a fresh GET also cannot erase contradictory immutable amount/currency facts.
+Two-resource sequential convergence still needs an actual SQL/native control.
 
 Signed refund events preserve nullable intent/status/protocol and actual
 failure-balance facts. Matching uses original resource binding or original cash
@@ -71,5 +85,5 @@ stale/unfinished proof, nullable fields, foreign original scope/money, capacity
 projection and actual factory/HMAC normalization. They have **not run**. The
 next finite request is Node22 types, changed-source lint and these affected
 DB-free controls. SQL syntax/model parity, fresh ordinary migration and actual
-state-transition/caller/stale-read/credit/privacy/native tests follow only after
+state-transition/two-resource/caller/stale-read/credit/privacy/native tests follow only after
 source qualification and separately granted database windows.

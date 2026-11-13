@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: complete original-cash inventory, never a truncated absence claim.
-import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { ServiceError, type ServiceContext } from "@/core/service";
 import { subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
@@ -26,8 +26,8 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
   const retirements = ids.length ? await ctx.tx.select().from(merchantRefundReservationRetirements).where(inArray(merchantRefundReservationRetirements.requestId, ids)).limit(MAX + 1) : [];
   const observations = await ctx.tx.select().from(merchantRefundObservations).where(and(
     or(and(eq(merchantRefundObservations.providerPlatformAccountId, cash.providerPlatformAccountId), sql`${merchantRefundObservations.chargeAccountId} is not distinct from ${cash.chargeAccountId}`,
-      eq(merchantRefundObservations.paymentProviderRef, cash.providerRef)), ...(ids.length ? [inArray(merchantRefundObservations.requestId, ids)] : []),
-      and(isNull(merchantRefundObservations.paymentProviderRef), cash.paymentId ? eq(merchantRefundObservations.paymentId, cash.paymentId) : eq(merchantRefundObservations.subscriptionChargeReceiptId, cash.subscriptionChargeReceiptId!))),
+      eq(merchantRefundObservations.paymentProviderRef, cash.providerRef)), ...(ids.length ? [inArray(merchantRefundObservations.requestId, ids),inArray(merchantRefundObservations.claimedRequestId, ids)] : []),
+      cash.paymentId ? eq(merchantRefundObservations.paymentId, cash.paymentId) : eq(merchantRefundObservations.subscriptionChargeReceiptId, cash.subscriptionChargeReceiptId!)),
     ownInspectionId ? sql`${merchantRefundObservations.inspectionId} is distinct from ${ownInspectionId}::uuid` : undefined)).limit(MAX + 1);
   const observationIds = observations.map(row => row.id);
   const observationCaptures = observationIds.length ? await ctx.tx.select().from(merchantRefundObservationCaptures)
