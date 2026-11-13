@@ -69,7 +69,9 @@ describe("authentic legacy bank current proof", () => {
     expect(legacyBankCurrentVerdict(input)).toMatchObject({ state: "review", reason: "contradictory_original_cash_total" });
   });
   it("requires the primary cash callback and complete inventory to name the same actual charge", () => {
-    const { input } = actual(); (input.facts[1]!.evidence.actual as { providerChargeRef: string }).providerChargeRef = "ch_foreign";
+    const { input } = actual(), primary = input.facts[1]?.evidence;
+    if (!primary || !("actual" in primary)) throw new Error("The primary cash fixture must contain its actual response.");
+    primary.actual.providerChargeRef = "ch_foreign";
     expect(legacyBankCurrentVerdict(input)).toMatchObject({ state: "review", reason: "incomplete_original_cash" });
   });
 });
