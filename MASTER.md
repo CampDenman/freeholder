@@ -4712,6 +4712,19 @@ project without silent telemetry, and ready to carry money.
   inside the seed scope runs outside it; fails without the change),
   `tests/core/audit-labels.test.ts` (hidden-row break, "+" at the limit).
 
+  Fixture target-switch proof 2026-11-13: an actual resident producer poll
+  reopened the old cached database target while the test helper awaited pool
+  close. A deterministic CREATE-only nonce probe on0e/888 failed15.289s at
+  runtime namespace selection; direct physical production contained zero
+  visitor graffiti. The helper now stops the producer, joins reconciliation
+  and closes before synchronously changing env/cache. The byte-identical
+  probe first passes12.747s on new targets; independent post-cleanup11-table
+  hashes/full journals/schema prove both BEFORE targets unchanged and all
+  clients drained. This qualifies fixture lifecycle, not a production leak
+  claim, independent review or stable sign-off. Exact evidence and limits:
+  `deploy/playground-database-switch-2026-11-13.md`.
+
+
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable
   recovery codes, passwordless passkey sign-in with a separate once-only
