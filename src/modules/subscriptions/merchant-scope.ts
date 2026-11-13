@@ -11,6 +11,7 @@ import { subscriptionCommercialTerms, subscriptionMerchantScopes, subscriptionPr
 import { invoices, payments } from "@/modules/invoicing/schema";
 import { invoiceMerchantDependencyFingerprints } from "@/modules/invoicing/merchant-payment-dependencies";
 import { merchantRefundDependencyFingerprints } from "@/modules/invoicing/merchant-refund-dependencies";
+import { prorationFinancialWitness } from "@/modules/invoicing/proration-financial-witness";
 import { subscriptionCommercialResumptions } from "./commercial-resumption-schema";
 import { subscriptionProviderReadWitnesses } from "./provider-read-witness";
 import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
@@ -29,70 +30,75 @@ export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[])
     .from(subscriptionMerchantScopes).innerJoin(subscriptions, eq(subscriptions.id, subscriptionMerchantScopes.subscriptionId))
     .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionMerchantScopes.subscriptionId).limit(5001);
   if (rows.length > 5000) return { evidence: [], overflow: true };
+  const readParents = await tx.select({ id: subscriptions.id }).from(subscriptions).where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptions.id).limit(5001);
+  if (readParents.length > 5000) return { evidence: [], overflow: true };
+  // Actual subscription parents retain uncharged trial/credit promises too.
+  // No invented payment or invoice may stand in for those accepted children.
+  const prorationFinancial = await prorationFinancialWitness(tx, { kind: "subscription", ids: readParents.map(row => row.id) });
+  const prorationCount = prorationFinancial.entries.length;
+  if (prorationFinancial.incomplete || rows.length + prorationCount > 5000 || prorationCount > 0 && !rows.length) return { evidence: [], overflow: true };
   const charges = await tx.select({ id: subscriptionProviderChargeReceipts.id, material: sql<string>`to_jsonb(${subscriptionProviderChargeReceipts})::text` })
     .from(subscriptionProviderChargeReceipts).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderChargeReceipts.subscriptionId))
-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001 - rows.length);
-  if (rows.length + charges.length > 5000) return { evidence: [], overflow: true };
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001 - rows.length - prorationCount);
+  if (rows.length + charges.length + prorationCount > 5000) return { evidence: [], overflow: true };
   const fingerprint = (row: { id: string; material: string }, kind: z.infer<typeof merchantSubscriptionUndo>["originalEvidence"][number]["kind"]) => ({ kind, id: row.id, fingerprint: createHash("sha256").update(row.material).digest("hex") });
-  const evidence = [...rows.map(row => fingerprint(row, "scope")), ...charges.map(row => fingerprint(row, "cash"))];
+  const evidence = [...rows.map(row => fingerprint(prorationCount ? { ...row, material: JSON.stringify({ scope: row.material, prorationFinancial }) } : row, "scope")), ...charges.map(row => fingerprint(row, "cash"))];
   const observations = await tx.select({ id: subscriptionProviderChargeObservations.id, material: sql<string>`to_jsonb(${subscriptionProviderChargeObservations})::text` })
     .from(subscriptionProviderChargeObservations).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderChargeObservations.subscriptionId))
-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderChargeObservations.id).limit(5001 - evidence.length);
-  if (observations.length + evidence.length > 5000) return { evidence: [], overflow: true };
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderChargeObservations.id).limit(5001 - evidence.length - prorationCount);
+  if (observations.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...observations.map(row => fingerprint(row, "cash_observation")));
   const resources = await tx.select({ id: subscriptionProviderScheduleResources.subscriptionId, material: sql<string>`(to_jsonb(${subscriptionProviderScheduleResources})-'updated_at')::text` })
     .from(subscriptionProviderScheduleResources).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderScheduleResources.subscriptionId))
-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderScheduleResources.subscriptionId).limit(5001 - evidence.length);
-  if (resources.length + evidence.length > 5000) return { evidence: [], overflow: true };
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderScheduleResources.subscriptionId).limit(5001 - evidence.length - prorationCount);
+  if (resources.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...resources.map(row => fingerprint(row, "schedule_resource")));
   const operations = await tx.select({ id: subscriptionProviderScheduleOperations.id, material: sql<string>`to_jsonb(${subscriptionProviderScheduleOperations})::text` })
     .from(subscriptionProviderScheduleOperations).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderScheduleOperations.subscriptionId))
-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderScheduleOperations.id).limit(5001 - evidence.length);
-  if (operations.length + evidence.length > 5000) return { evidence: [], overflow: true };
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderScheduleOperations.id).limit(5001 - evidence.length - prorationCount);
+  if (operations.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...operations.map(row => fingerprint(row, "schedule_operation")));
   const setupFees = await tx.select({ id: subscriptions.id,
     material: sql<string>`jsonb_build_object('acceptedSetupFeeMinor',${subscriptions.acceptedSetupFeeMinor},'setupFeeInvoiceId',${subscriptions.setupFeeInvoiceId})::text` })
     .from(subscriptions).where(and(inArray(subscriptions.contactId, contactIds), isNotNull(subscriptions.acceptedSetupFeeMinor)))
-    .orderBy(subscriptions.id).limit(5001 - evidence.length);
-  if (setupFees.length + evidence.length > 5000) return { evidence: [], overflow: true };
+    .orderBy(subscriptions.id).limit(5001 - evidence.length - prorationCount);
+  if (setupFees.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...setupFees.map(row => fingerprint(row, "setup_fee")));
   const terms = await tx.select({ id: subscriptionCommercialTerms.id, material: sql<string>`to_jsonb(${subscriptionCommercialTerms})::text` })
     .from(subscriptionCommercialTerms).innerJoin(subscriptions, eq(subscriptions.id, subscriptionCommercialTerms.subscriptionId))
-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialTerms.id).limit(5001 - evidence.length);
-  if (terms.length + evidence.length > 5000) return { evidence: [], overflow: true };
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialTerms.id).limit(5001 - evidence.length - prorationCount);
+  if (terms.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...terms.map(row => fingerprint(row, "commercial_terms")));
   const commercial_amendment = await tx.select({ id: subscriptionCommercialAmendments.termsId, material: sql<string>`to_jsonb(${subscriptionCommercialAmendments})::text` })
     .from(subscriptionCommercialAmendments).innerJoin(subscriptions, eq(subscriptions.id, subscriptionCommercialAmendments.subscriptionId))
-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialAmendments.termsId).limit(5001 - evidence.length);
-  if (commercial_amendment.length + evidence.length > 5000) return { evidence: [], overflow: true };
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialAmendments.termsId).limit(5001 - evidence.length - prorationCount);
+  if (commercial_amendment.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...commercial_amendment.map(row => fingerprint(row, "commercial_amendment")));
   const resumptions = await tx.select({ id: subscriptionCommercialResumptions.termsId, material: sql<string>`to_jsonb(${subscriptionCommercialResumptions})::text` })
     .from(subscriptionCommercialResumptions).innerJoin(subscriptions, eq(subscriptions.id, subscriptionCommercialResumptions.subscriptionId))
-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialResumptions.termsId).limit(5001 - evidence.length);
-  if (resumptions.length + evidence.length > 5000) return { evidence: [], overflow: true };
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialResumptions.termsId).limit(5001 - evidence.length - prorationCount);
+  if (resumptions.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...resumptions.map(row => fingerprint(row, "commercial_resumption")));
-  const readParents = await tx.select({ id: subscriptions.id }).from(subscriptions).where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptions.id).limit(5001);
-  if (readParents.length > 5000) return { evidence: [], overflow: true };
   const reads = await subscriptionProviderReadWitnesses(tx, readParents.map(row => row.id));
-  if (reads.incomplete || reads.tickets.length + reads.finishes.length + reads.stops.length + evidence.length > 5000) return { evidence: [], overflow: true };
+  if (reads.incomplete || reads.tickets.length + reads.finishes.length + reads.stops.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...reads.tickets.map(row => ({ kind: "provider_read_ticket" as const, id: row.id, fingerprint: row.fingerprint })),
     ...reads.finishes.map(row => ({ kind: "provider_read_finish" as const, id: row.id, fingerprint: row.fingerprint })),
     ...reads.stops.map(row => ({ kind: "provider_read_stop" as const, id: row.id, fingerprint: row.fingerprint })));
   const provider_generation = await tx.select({ id: subscriptionProviderGenerations.id, material: sql<string>`to_jsonb(${subscriptionProviderGenerations})::text` })
     .from(subscriptionProviderGenerations).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderGenerations.subscriptionId))
-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderGenerations.id).limit(5001 - evidence.length);
-  if (provider_generation.length + evidence.length > 5000) return { evidence: [], overflow: true };
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderGenerations.id).limit(5001 - evidence.length - prorationCount);
+  if (provider_generation.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...provider_generation.map(row => fingerprint(row, "provider_generation")));
   const provider_invoice = await tx.select({ id: subscriptionProviderInvoiceObservations.id, material: sql<string>`to_jsonb(${subscriptionProviderInvoiceObservations})::text` })
     .from(subscriptionProviderInvoiceObservations).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderInvoiceObservations.subscriptionId))
-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderInvoiceObservations.id).limit(5001 - evidence.length);
-  if (provider_invoice.length + evidence.length > 5000) return { evidence: [], overflow: true };
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderInvoiceObservations.id).limit(5001 - evidence.length - prorationCount);
+  if (provider_invoice.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...provider_invoice.map(row => fingerprint(row, "provider_invoice")));
   const providerInvoiceLines = await tx.select({ id: subscriptionProviderInvoiceLines.id, material: sql<string>`to_jsonb(${subscriptionProviderInvoiceLines})::text` })
     .from(subscriptionProviderInvoiceLines).innerJoin(subscriptionProviderInvoiceObservations, eq(subscriptionProviderInvoiceObservations.id, subscriptionProviderInvoiceLines.observationId))
     .innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderInvoiceObservations.subscriptionId))
-    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderInvoiceLines.id).limit(5001 - evidence.length);
-  if (providerInvoiceLines.length + evidence.length > 5000) return { evidence: [], overflow: true };
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderInvoiceLines.id).limit(5001 - evidence.length - prorationCount);
+  if (providerInvoiceLines.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...providerInvoiceLines.map(row => fingerprint(row, "provider_invoice_line")));
   const periodInvoices = await tx.select({ id: invoices.id }).from(invoices).innerJoin(subscriptions,
     sql`${invoices.sourceType}='subscription' and split_part(${invoices.sourceId},':',1)=${subscriptions.id}::text`)
@@ -101,11 +107,13 @@ export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[])
   const invoiceIds = periodInvoices.map(row => row.id), paymentIds = invoiceIds.length
     ? await tx.select({ id: payments.id }).from(payments).where(inArray(payments.invoiceId, invoiceIds)).orderBy(payments.id).limit(5001) : [];
   if (paymentIds.length > 5000) return { evidence: [], overflow: true };
-  const financial = await invoiceMerchantDependencyFingerprints(tx, invoiceIds);
-  if (!financial || financial.size + evidence.length > 5000) return { evidence: [], overflow: true };
-  for (const [id, value] of [...financial.entries()].sort(([left], [right]) => left.localeCompare(right))) evidence.push({ kind: "invoice_financial", id, fingerprint: value });
   const returned = await merchantRefundDependencyFingerprints(tx, { paymentIds: paymentIds.map(row => row.id), subscriptionChargeReceiptIds: charges.map(row => row.id) });
-  if (returned.incomplete || returned.entries.length + evidence.length > 5000) return { evidence: [], overflow: true };
+  if (returned.incomplete || returned.entries.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
+  // Reserve complete already selected child contexts before the invoice
+  // reader expands its own money rows; a small digest is not a row count.
+  const financial = await invoiceMerchantDependencyFingerprints(tx, invoiceIds, undefined, evidence.length + prorationCount + returned.entries.length);
+  if (!financial || financial.size + returned.entries.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
+  for (const [id, value] of [...financial.entries()].sort(([left], [right]) => left.localeCompare(right))) evidence.push({ kind: "invoice_financial", id, fingerprint: value });
   for (const entry of returned.entries) evidence.push({ kind: "refund_financial", id: entry.id,
     fingerprint: createHash("sha256").update(JSON.stringify([entry.table, entry.fingerprint])).digest("hex") });
   return { evidence, overflow: false };

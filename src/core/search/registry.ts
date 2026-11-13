@@ -69,6 +69,8 @@ export function clipSnippet(value: string | null | undefined): string | null {
  * Completeness is asserted in `tests/core/c11-14-search.test.ts`.
  */
 export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
+  storage_quota_state: "Private namespace capacity and original inventory accounting; authorized storage operations only, never content search.",
+  storage_quota_objects: "Private original object locator, quota reservation and settlement tokens; exact storage/privacy recovery only.",
   original_cash_recoveries: "Private exact original financial source; authorized shared recovery and financial export only.",
   original_cash_recovery_operations: "Private frozen money requests and physical caller capabilities are excluded from content search.",
   original_cash_recovery_facts: "Private raw financial facts and hashed hosting reviews have no public search projection.",

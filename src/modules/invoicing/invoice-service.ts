@@ -17,6 +17,7 @@ import { queueMerchantFeeReconciliation } from "./merchant-fee-service";
 import { reserveMerchantCharge } from "./merchant-charge";
 import { commercialPaymentRecorded, commercialRefundRecorded } from "./commercial-attestations";
 import { exportProrationMoney } from "./proration-money-export";
+import { exportProrationCardHistory, subscriptionProrationCardWitnesses } from "@/modules/subscriptions/proration-card-witnesses";
 import { assertFinancialExportBound } from "./financial-export-bound";
 import { invoiceCreditApplications, invoiceCreditReservations } from "./credit-application-schema";
 import { isHostedPaymentProvider } from "@/adapters/payments/providers";
@@ -314,16 +315,20 @@ registerContactPrivacySource({
   scope: "commerce.money",
   retentionScopes: ["subscriptions.agreements"],
   tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods", "merchant_payment_requests", "merchant_payment_dispatches", "merchant_payment_creation_refusals", "merchant_payment_retirement_acks", "merchant_payment_terminal_receipts", "merchant_payment_observations", "merchant_fee_refunds", "merchant_fee_observations",
-    "commercial_payment_attestations", "commercial_refund_attestations", "commercial_fee_attestations", "invoice_credit_funding", "invoice_credit_reservations", "invoice_credit_applications", "invoice_credit_releases", "agreement_fee_duties", "agreement_fee_credit_assignments", "agreement_fee_cash_assignments", "agreement_fee_eligibility", "agreement_fee_remittances"],
+    "commercial_payment_attestations", "commercial_refund_attestations", "commercial_fee_attestations", "invoice_credit_funding", "invoice_credit_reservations", "invoice_credit_applications", "invoice_credit_releases", "agreement_fee_duties", "agreement_fee_credit_assignments", "agreement_fee_cash_assignments", "agreement_fee_eligibility", "agreement_fee_remittances",
+    "subscription_proration_payment_protocols", "subscription_proration_card_mandates", "subscription_proration_card_attempts", "subscription_proration_card_jobs", "subscription_proration_card_reads", "subscription_proration_card_read_finishes", "subscription_proration_card_read_stops"],
   exportData: async (tx, contactId) => {
     const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId)).orderBy(invoices.id).limit(5001);
     const ids = owned.map((row) => row.id);
     assertFinancialExportBound({ invoices: owned });
     const bundles = await Promise.all(ids.map((id) => invoiceBundle(tx, id)));
+    const card = await subscriptionProrationCardWitnesses(tx, ids);
+    if (card.incomplete) throw new ServiceError("conflict", "Restore the complete bounded original payment-caller history before issuing the subject archive.");
     const families = {
       merchantRecovery: await exportMerchantRecoveryHistory(tx, ids),
       originalCreditAndExternalMoney: await exportProrationMoney(tx, ids),
       originalCommissionAssignments: await exportAgreementFeeHistory(tx, ids),
+      originalPaymentCallers: exportProrationCardHistory(card),
       taxExemptions: await tx.select().from(taxExemptions).where(eq(taxExemptions.contactId, contactId)),
       paymentProviderCustomers: await tx.select().from(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, contactId)),
       paymentMethods: await tx.select().from(paymentMethods).where(eq(paymentMethods.contactId, contactId)),

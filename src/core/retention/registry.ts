@@ -93,6 +93,8 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+  storage_quota_state: "Namespace capacity remains coupled to actual original storage inventory and cannot expire by age.",
+  storage_quota_objects: "Original resource quota reservations and settlement debt follow exact physical/privacy recovery; no TTL can erase unresolved accounting.",
   original_cash_recoveries: "Original financial cash-return owner and source observation; immutable financial proof, no age purge.",
   original_cash_recovery_operations: "Original admitted refund/fee/recipient read and write caller proof; no clock can erase its recovery debt.",
   original_cash_recovery_facts: "Private minimal authenticated financial callbacks, actual finishes and hosting reviews remain with original money.",

@@ -25,6 +25,8 @@ import {subscriptionProviderInvoiceObservations,subscriptionProviderInvoiceLines
 import {merchantRefundDependencyFingerprints} from "./merchant-refund-dependencies";
 import {originalCashRecoveryFinancialWitness} from "./original-cash-recovery-store";
 import {exportOriginalCashHistory} from "./original-cash-invoice-history";
+import {prorationFinancialWitness} from "./proration-financial-witness";
+import {exportProrationMerchantHistory} from "./proration-merchant-export";
 
 const scope="commerce.merchantTax";
 export const MERCHANT_TAX_ERASURE_JOB="subscriptions.quiesceMerchantSchedules";
@@ -63,6 +65,8 @@ async function snapshot(tx:Tx,ids:string[]){
  if(rows.length>5000)return null;
  if(!rows.length)return[];
  const profileIds=rows.map(row=>row.id);
+ const prorationFinancial=await prorationFinancialWitness(tx,{kind:"merchant_profile",ids:profileIds});
+ if(prorationFinancial.incomplete)return null;
  // Accepted terms belong to their frozen profile, including when no charge
  // exists yet. Hash in PostgreSQL so private accepted destinations and notices
  // never enter the merge witness or an unnecessarily large application result.
@@ -107,7 +111,7 @@ async function snapshot(tx:Tx,ids:string[]){
  }).from(subscriptionProviderInvoiceLines).innerJoin(subscriptionProviderInvoiceObservations,eq(subscriptionProviderInvoiceObservations.id,subscriptionProviderInvoiceLines.observationId))
   .innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptionProviderInvoiceObservations.subscriptionId))
   .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).orderBy(subscriptionMerchantScopes.taxProfileId,subscriptionProviderInvoiceLines.id).limit(5001);
- const originalHistoryCount=rows.length+acceptedTerms.length+providerScopes.length+providerOperations.length+providerResources.length+amendments.length+resumptions.length+generations.length+periodInvoices.length+periodLines.length;
+ const originalHistoryCount=rows.length+acceptedTerms.length+providerScopes.length+providerOperations.length+providerResources.length+amendments.length+resumptions.length+generations.length+periodInvoices.length+periodLines.length+prorationFinancial.entries.length;
  if(originalHistoryCount>5000)return null;
  const originalReaders=await subscriptionProviderReadWitnesses(tx,providerScopes.map(row=>row.id));
  const readerCount=originalReaders.tickets.length+originalReaders.finishes.length+originalReaders.stops.length;
@@ -122,7 +126,7 @@ async function snapshot(tx:Tx,ids:string[]){
  if(children.incomplete||originalHistoryCount+readerCount+children.entries.length>5000)return null;
  // The immutable child set belongs to this entire merge pair. Folding it
  // inside the existing fingerprint keeps its retained JSON shape unchanged.
- return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,providerScopes,providerOperations,providerResources,amendments,resumptions,generations,periodInvoices,periodLines,...(readerCount?{originalReaders}:{}),cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
+ return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,providerScopes,providerOperations,providerResources,amendments,resumptions,generations,periodInvoices,periodLines,...(readerCount?{originalReaders}:{}),...(prorationFinancial.entries.length?{prorationFinancial}:{}),cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
 }
 registerContactReference({
  table:"merchant_tax_profiles",
@@ -196,8 +200,11 @@ registerContactPrivacySource({
   const cash=await originalCashRecoveryFinancialWitness(tx,owners.paymentIds,owners.subscriptionChargeReceiptIds);
   const versions=ids.length?await tx.select().from(merchantTaxProfileVersions).where(inArray(merchantTaxProfileVersions.profileId,ids)).limit(5001):[];
   const registrations=ids.length?await tx.select().from(taxRegistrations).where(inArray(taxRegistrations.merchantProfileId,ids)).limit(5001):[];
-  if(profiles.length+versions.length+registrations.length+Object.values(cash).reduce((sum,rows)=>sum+rows.length,0)>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant financial export.");
-  return{profiles,versions,registrations,originalCash:exportOriginalCashHistory(cash)};
+  const existingRows=profiles.length+versions.length+registrations.length+Object.values(cash).reduce((sum,rows)=>sum+rows.length,0);
+  if(existingRows>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant financial export.");
+  const originalCommercialHistory=await exportProrationMerchantHistory(tx,ids,{existingRows});
+  if(existingRows+originalCommercialHistory.entries.length>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant financial export.");
+  return{profiles,versions,registrations,originalCash:exportOriginalCashHistory(cash),...(originalCommercialHistory.entries.length?{originalCommercialHistory}:{})};
  },
  erase:async(tx,contactId,context)=>{
   const profiles=await tx.select({id:merchantTaxProfiles.id}).from(merchantTaxProfiles).where(eq(merchantTaxProfiles.contactId,contactId));

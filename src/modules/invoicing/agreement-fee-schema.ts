@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C9.33: bounded original commission assignments, not general bookkeeping.
 import { sql } from "drizzle-orm";
-import { bigint, check, foreignKey, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { bigint, check, foreignKey, index, integer, jsonb, pgTable, text, timestamp, unique, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createdAtColumn } from "@/core/db/columns";
 import { invoices, payments } from "./schema";
 import { merchantTaxProfiles, merchantTaxProfileVersions } from "./merchant-tax-schema";
@@ -17,7 +17,7 @@ export const agreementFeeDuties = pgTable("agreement_fee_duties", {
   cashPrincipalMinor: bigint("cash_principal_minor", { mode: "number" }).notNull(), cashFeeTargetMinor: bigint("cash_fee_target_minor", { mode: "number" }).notNull(),
   expectedReceivableMinor: bigint("expected_receivable_minor", { mode: "number" }).notNull(), acceptedQuoteDigest: text("accepted_quote_digest").notNull(),
   originalOwnerDigest: text("original_owner_digest").notNull(), createdAt: createdAtColumn(),
-}, t => [uniqueIndex("agreement_fee_duties_acceptance").on(t.acceptanceId), index("agreement_fee_duties_merchant").on(t.merchantProfileId),
+}, t => [unique("agreement_fee_duties_acceptance_id_key").on(t.acceptanceId), index("agreement_fee_duties_merchant").on(t.merchantProfileId),
   foreignKey({ name: "agreement_fee_duties_profile_version", columns: [t.merchantProfileId, t.profileVersion], foreignColumns: [merchantTaxProfileVersions.profileId, merchantTaxProfileVersions.version] }).onDelete("restrict"),
   check("agreement_fee_duties_amounts", sql`${t.totalMinor} between 1 and 9007199254740991 and ${t.targetFeeMinor} between 0 and ${t.totalMinor} and ${t.creditedMinor} between 0 and ${t.totalMinor} and ${t.carriedFeeMinor} between 0 and ${t.creditedMinor} and ${t.cashPrincipalMinor}=${t.totalMinor}-${t.creditedMinor} and ${t.cashFeeTargetMinor}=least(${t.cashPrincipalMinor},greatest(0,${t.targetFeeMinor}-${t.carriedFeeMinor})) and ${t.expectedReceivableMinor}=greatest(0,${t.targetFeeMinor}-${t.carriedFeeMinor}-${t.cashFeeTargetMinor})`),
   check("agreement_fee_duties_owner", sql`${t.currency} ~ '^[A-Z]{3}$' and ${t.profileVersion}>0 and ${t.acceptedQuoteDigest} ~ '^[a-f0-9]{64}$' and ${t.originalOwnerDigest} ~ '^[a-f0-9]{64}$'`)]);
@@ -42,7 +42,7 @@ export const agreementFeeRemittances = pgTable("agreement_fee_remittances", {
   direction: text("direction", { enum: ["remitted", "returned"] }).notNull(), originalRemittanceId: uuid("original_remittance_id").references((): AnyPgColumn => agreementFeeRemittances.id, { onDelete: "restrict" }),
   amountMinor: bigint("amount_minor", { mode: "number" }).notNull(), currency: text("currency").notNull(),
   recordedBy: text("recorded_by").notNull(), evidenceDigest: text("evidence_digest").notNull(), requestDigest: text("request_digest").notNull(), idempotencyKey: text("idempotency_key").notNull(), createdAt: createdAtColumn(),
-}, t => [index("agreement_fee_remittances_invoice").on(t.invoiceId), uniqueIndex("agreement_fee_remittances_key").on(t.idempotencyKey),
+}, t => [index("agreement_fee_remittances_invoice").on(t.invoiceId), unique("agreement_fee_remittances_idempotency_key_key").on(t.idempotencyKey),
   check("agreement_fee_remittances_amounts", sql`${t.amountMinor} between 1 and 9007199254740991 and ${t.currency} ~ '^[A-Z]{3}$'`),
   check("agreement_fee_remittances_original", sql`(${t.direction}='remitted' and ${t.originalRemittanceId} is null) or (${t.direction}='returned' and ${t.originalRemittanceId} is not null)`),
   check("agreement_fee_remittances_evidence", sql`${t.recordedBy} ~ '^(user:|agent:|plugin:|system$)' and ${t.evidenceDigest} ~ '^[a-f0-9]{64}$' and ${t.requestDigest} ~ '^[a-f0-9]{64}$'`)]);
