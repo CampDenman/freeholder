@@ -38,6 +38,7 @@ import {
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { prepareBuyerAgreementErasure, minimizeBuyerAgreements } from "./buyer-agreement-erasure";
+import { buyerAcceptedProration } from "./proration-buyer-export";
 import { syncSubscriptionAccess } from "@/core/entitlements/service";
 import { controlledProviderWitnesses,exportControlledProviderHistory } from "./controlled-provider-witnesses";
 import { subscriptionProrationCardWitnesses, exportProrationCardHistory } from "./proration-card-witnesses";
@@ -1795,12 +1796,16 @@ registerContactPrivacySource({
       .where(inArray(subscriptionProviderReadTickets.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
     const readerStops = rows.length ? await tx.select({ subscriptionId: subscriptionProviderReadStops.subscriptionId, readId: subscriptionProviderReadStops.readId, reviewedAt: subscriptionProviderReadStops.createdAt })
       .from(subscriptionProviderReadStops).where(inArray(subscriptionProviderReadStops.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
-    const prorations = rows.length ? await tx.select({ id: subscriptionProrations.id, subscriptionId: subscriptionProrations.subscriptionId, snapshot: subscriptionProrations.snapshot,
+    const prorations = rows.length ? await tx.select({ id: subscriptionProrations.id, subscriptionId: subscriptionProrations.subscriptionId,
+      planId:subscriptionProrations.planId,previousTermsId:subscriptionProrations.previousTermsId,termsId:subscriptionProrations.termsId,snapshot: subscriptionProrations.snapshot,
       taxDestination: subscriptionProrations.taxDestination, noticeSnapshot: subscriptionProrations.noticeSnapshot, effectiveAt: subscriptionProrations.effectiveAt,
       originalPeriodStart: subscriptionProrations.originalPeriodStart, originalPeriodEnd: subscriptionProrations.originalPeriodEnd, originalTrialEndsAt: subscriptionProrations.originalTrialEndsAt,
+      proposedPeriodStart:subscriptionProrations.proposedPeriodStart,proposedPeriodEnd:subscriptionProrations.proposedPeriodEnd,
+      originalInvoiceId:subscriptionProrations.originalInvoiceId,originalInvoiceLineId:subscriptionProrations.originalInvoiceLineId,
+      targetInvoice:{id:invoices.id,currency:invoices.currency,totalMinor:invoices.totalMinor,paidMinor:invoices.paidMinor,creditedMinor:invoices.creditedMinor,refundedMinor:invoices.refundedMinor},
       debitInvoiceId: subscriptionProrations.debitInvoiceId, creditNoteId: subscriptionProrations.creditNoteId, debitNetMinor: subscriptionProrations.debitNetMinor, debitTaxMinor: subscriptionProrations.debitTaxMinor,
-      creditNetMinor: subscriptionProrations.creditNetMinor, creditTaxMinor: subscriptionProrations.creditTaxMinor, state: subscriptionProrations.state, appliedAt: subscriptionProrations.appliedAt, createdAt: subscriptionProrations.createdAt })
-      .from(subscriptionProrations).where(inArray(subscriptionProrations.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
+      creditNetMinor: subscriptionProrations.creditNetMinor, creditTaxMinor: subscriptionProrations.creditTaxMinor, state: subscriptionProrations.state, appliedAt: subscriptionProrations.appliedAt,cancelledAt:subscriptionProrations.cancelledAt, createdAt: subscriptionProrations.createdAt })
+      .from(subscriptionProrations).leftJoin(invoices,eq(invoices.id,subscriptionProrations.debitInvoiceId)).where(inArray(subscriptionProrations.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
     const prorationIds = prorations.map(row => row.id);
     const prorationPrincipal = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationPrincipal.prorationId, sourcePaymentId: subscriptionProrationPrincipal.sourcePaymentId,
       sourceApplicationId: subscriptionProrationPrincipal.sourceApplicationId, amountMinor: subscriptionProrationPrincipal.amountMinor }).from(subscriptionProrationPrincipal).where(inArray(subscriptionProrationPrincipal.prorationId, prorationIds)).limit(5001) : [];
@@ -1829,7 +1834,7 @@ registerContactPrivacySource({
     };
     const originalCash = await originalCashRecoveryFinancialWitness(tx, [], charges.map(row => row.id));
     const aggregate = rows.length + charges.length + accepted.length + amendments.length + resumptions.length + periodInvoices.length + readerTickets.length + readerStops.length
-      + controlledCount + cardCount + prorations.length + prorationPrincipal.length + prorationCredits.length + cashBoundary.length + creditBoundary.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length;
+      + controlledCount + cardCount + prorations.length + prorations.filter(row=>row.targetInvoice!==null).length + prorationPrincipal.length + prorationCredits.length + cashBoundary.length + creditBoundary.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length;
     if (aggregate > 5000) throw new ServiceError("conflict", "Restore a bounded complete original subscription subject export; receipt-only cash and its authentic children cannot be truncated.");
     const cashHistory = exportOriginalCashHistory(originalCash);
     const cashFor = (subscriptionId: string) => {
@@ -1841,7 +1846,7 @@ registerContactPrivacySource({
     return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [], acceptedCommercialTerms: accepted.filter(value => value.subscriptionId === row.id),
       acceptedAmendments: amendments.filter(value => value.subscriptionId === row.id), acceptedCalendarResumptions: resumptions.filter(value => value.subscriptionId === row.id), observedPeriodInvoices: periodInvoices.filter(value => value.subscriptionId === row.id),
       providerReaderHistory: readerTickets.filter(value => value.subscriptionId === row.id), providerReaderRuntimeStops: readerStops.filter(value => value.subscriptionId === row.id),
-      originalReceiptCashHistory: cashFor(row.id), originalControlledProviderHistory:controlledFor(row.id), acceptedGrossProrations: prorations.filter(value => value.subscriptionId === row.id).map(value => ({ ...value,
+      originalReceiptCashHistory: cashFor(row.id), originalControlledProviderHistory:controlledFor(row.id), acceptedGrossProrations: prorations.filter(value => value.subscriptionId === row.id).map(value => ({ ...buyerAcceptedProration(value,value.targetInvoice),
         originalPrincipal: prorationPrincipal.filter(principal => principal.prorationId === value.id), acceptedCreditUse: prorationCredits.filter(credit => credit.prorationId === value.id),
         originalCardPaymentHistory: Object.fromEntries(Object.entries(cardHistory).map(([key, family]) => [key, family.filter(entry => entry.invoiceId === value.debitInvoiceId)])),
         actualCashRetention: cashBoundary.filter(receipt => receipt.prorationId === value.id), actualCreditRetention: creditBoundary.filter(receipt => receipt.prorationId === value.id) })) }));
