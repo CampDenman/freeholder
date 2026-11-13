@@ -118,3 +118,20 @@ drained. These snapshots must not be reset or migrated in place. Native JSON,
 logs, independent ledgers and clone proofs remain under
 `/tmp/freeholder-current-buyer-recovery885-*`. No retry or repair pass is claimed
 here; the source repairs and unchanged AFTER controls remain required.
+
+## Actual live-registry SDK generation
+
+At `2d948ae7`, actual `sdk:generate` ran the live registry control and all eight
+SDK tests passed in3.26s on V10. The generated18-line delta adds the two real
+external quote services, `subscriptions.quoteMembership` and
+`subscriptions.quoteNewAgreement`, and their accepted-term input/output shapes.
+Full incremental Node22 types passed after generation. The repository deliberately
+ignores this generated file in ESLint; that command's ignored-file warning is
+not an additional lint pass. A fresh non-UPDATE process then passed all eight
+SDK tests in3.24s, checking the new exported service/pageable catalogs against
+the actual registry and refusing drift. This is not sixteen unique controls.
+Both runs independently drained database clients and preserved the81-entry
+journal/SQL881a. Logs and drain readbacks are
+`/tmp/freeholder-current-terms80-sdk-*20261112.*`. This closes only this SDK
+generation seam, not browser, new provider creation or complete financial
+acceptance. The two demonstrated recovery findings above remain open.

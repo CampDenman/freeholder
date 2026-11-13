@@ -13878,6 +13878,11 @@ whatever is best for the people using the site.
   drained clients. No actual provider-account failure or repaired AFTER pass is
   claimed. Source repairs and unchanged controls remain required; the earlier
   four targeted passes do not establish complete privacy acceptance.
+  Actual live-registry SDK generation passed8/8, produced the two external
+  quote services and typed accepted terms, and passed fresh-process8/8 drift
+  verification after incremental types. Both runs drained clients and preserved
+  journal81/SQL881a. Generated-file lint is deliberately ignored by repository
+  policy, not extra coverage. The two demonstrated recovery findings remain open.
   Current-main financial composition 2026-11-12: exact `73e145af` merges protected
   main `bad846e4` (#694) and both fee repairs while preserving SQL958, all published
   migrations and helper `46a6ec02`. Full source gates passed at `5f53daf5` (384 assertions,
