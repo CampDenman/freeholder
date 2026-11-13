@@ -14252,8 +14252,30 @@ whatever is best for the people using the site.
   Minimal read-only diagnosis proved the distinct actual GET/auxiliary UUID and
   resource-reference hashes. The oracle now follows that exact inspection
   ancestry and additionally requires the original failed POST facts unchanged;
-  no runtime money rule changed. Failed V3 is preserved. A fresh database and
-  actual corrected-case/unassigned-case runs remain required.
+  no runtime money rule changed. The corrected lost-response case passed in
+ 15.486s on fresh V4 with independent two-generation totals/journal/profile/drain
+  proof. Failed V3 is preserved. The separate unassigned case failed its raw-path
+  assertion because its PI-bearing callback was correctly managed; V4 is also
+  preserved. The genuine charge-only repair below remains source/native work.
+  Historical import fixture preparation2026-11-13: normal CI reached the
+  populated migration73 control, whose isolated rollback setup now encounters
+  three real migration81 foreign keys. Its setup explicitly proves those future
+  child scopes empty, removes only the three named edges within that transaction
+  and verifies all installed definitions return after rollback. Original preview,
+  checkpoint and old-writer refusal assertions remain unchanged. No shipped
+  migration, constraint or guard is removed. The actual corrected fixture passed
+  in6.373s on V5; independent before/after proof restored all four guard function
+  hashes and all three validated FK definitions, with empty import/financial
+  rows, exact83-entry journal/profile and no clients. This is not a complete
+  populated-site update/rollback qualification.
+  Real SQL typing correction2026-11-13: the renewed NULL-payment receipt
+  control retained its actual paid cash and original feedback, then stopped
+  with PostgreSQL42P18 in the agreement-fee financial witness. A parameterized
+  jsonb_build_object key had no inferable type even with WHERE false. That exact
+  whitelisted key now has an explicit text cast; no identities, membership or
+  money policy changed. Failed V5 and its independent journal/profile/drain
+  proof are preserved. Fresh V6 and the unchanged native receipt assertions
+  remain required before acceptance.
   Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
   parity stopped at the first genuine model/source mismatch in the named
   nonnegative invoice amount CHECK after125 complete models. The unchanged
