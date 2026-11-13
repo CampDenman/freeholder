@@ -11848,6 +11848,13 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  First fresh ordinary83 migration stopped before business/native operations
+  at PostgreSQL42601 in the owned82 inventory guard. The failed V1 database
+  stays preserved. Source-only correction parenthesizes all8 scalar CASE
+  expressions on6 owned82 lines without changing comparisons or branches;
+  no parse/migration/native pass is claimed. Root must use a genuinely new
+  database for renewed qualification. See
+  `deploy/media-original-first-capture-source-2026-11-13.md`.
   Original first-capture/minimization source continuation 2026-11-13 prepares
   a sealed16th media scope model, NULL-preserving original reservation birth,
   exact queued worker tuple/immutable first membership and retirement-gated
