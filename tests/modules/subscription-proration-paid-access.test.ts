@@ -21,7 +21,7 @@ describe.runIf(hasDatabase)("owner proration paid-access boundary through the or
   afterAll(async () => { await stopJobs(); await closeDb(); });
   async function offer(name: string, amountMinor: number) {
     const [product] = await db().insert(products).values({ name, slug: `paid-proration-${name.toLowerCase()}`, kind: "digital", status: "active", publishedAt: new Date() }).returning();
-    const [variant] = await db().insert(productVariants).values({ productId: product!.id, combinationKey: "default", sku: `paid-proration-${name}`, isDefault: true }).returning();
+    const [variant] = await db().insert(productVariants).values({ productId: product!.id, combinationKey: "default", sku: `paid-proration-${name.toLowerCase()}`, isDefault: true }).returning();
     const [list] = await db().insert(priceLists).values({ name: `Paid proration ${name}`, currency: "CAD", active: true }).returning();
     await db().insert(priceListEntries).values({ priceListId: list!.id, variantId: variant!.id, amountMinor });
     return savePlan.call({ productId: product!.id, name, interval: "month", billingMode: "manual", proration: "create_prorations", status: "active" }, OWNER);
