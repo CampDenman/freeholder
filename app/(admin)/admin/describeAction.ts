@@ -423,6 +423,7 @@ export const OWNER_HIDDEN_ACTIONS: ReadonlySet<string> = new Set([
   "assistant.reindexPage",
   "imports.completeOriginalSourceErasure",
   "imports.prepareOriginalSourceErasure",
+  "imports.reconcileOriginalSourceErasure",
   "imports.recordCrawlWrapperFinish",
   "imports.claimCrawlOriginalErasure",
   "imports.confirmCrawlOriginalErasure",

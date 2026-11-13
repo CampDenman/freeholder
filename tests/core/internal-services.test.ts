@@ -19,6 +19,7 @@ const INTERNAL = [
   // C1.08/C3.47: guarded original-source cleanup and saved HTTP runtime.
   "imports.completeOriginalSourceErasure",
   "imports.prepareOriginalSourceErasure",
+  "imports.reconcileOriginalSourceErasure",
   "imports.recordCrawlWrapperFinish",
   "imports.claimCrawlOriginalErasure",
   "imports.confirmCrawlOriginalErasure",
@@ -350,6 +351,7 @@ const CALLER_AUTHORIZED_PHASES = [
   // C1.08/C3.47: private original-source and bounded public-advance phases.
   "imports.completeOriginalSourceErasure",
   "imports.prepareOriginalSourceErasure",
+  "imports.reconcileOriginalSourceErasure",
   "imports.recordCrawlWrapperFinish",
   "imports.claimCrawlOriginalErasure",
   "imports.confirmCrawlOriginalErasure",

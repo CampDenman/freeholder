@@ -437,6 +437,19 @@ export const eraseImportSourceObjects = defineJob({
   },
 });
 
+/** Periodic fallback also covers old images that missed physical callbacks. */
+export const reconcileImportSourceErasure = defineJob({
+  name: "core.reconcileImportSourceErasure",
+  summary: "Reopen retained uploaded erasure tasks that lack their original initial scope.",
+  schedule: "*/5 * * * *", concurrency: 1,
+  handler: async (data, context) => {
+    if (!context) throw new Error("Import-source reconciliation requires a durable worker identity.");
+    await context.throwIfCancelled();
+    const { reconcileOriginalSourceErasure } = await import("@/core/import/source-erasure-history");
+    return reconcileOriginalSourceErasure.call(data, { kind: "system" });
+  },
+});
+
 /** Mail receipts stay pending until ownership and physical-send evidence settle. */
 export const eraseMailRecords = defineJob({
   name: "core.eraseMailRecords",
@@ -1097,6 +1110,7 @@ export const reconcileFormLeadErasure = defineJob({
 
 export default [
   ...crawlJobs,
+  reconcileImportSourceErasure,
   reconcileFormLeadErasure,
   eraseFormLeadCopies,
   sweepSessions,

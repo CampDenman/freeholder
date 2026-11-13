@@ -10,15 +10,14 @@ import { dataRequests, dataRequestArtifacts, privacyRetentionExceptions } from "
 import { boundStorage } from "@/adapters/storage";
 import { deleteWithReceipt, discardUnwrittenObjectReservation } from "@/core/media/write-ledger";
 import { pendingObjectIsOwned } from "@/core/media/object-ledger";
-import { originalSourceErasureScopeAvailable } from "./source-erasure-scope";
+import { originalSourceErasureScopeAvailable, originalSourceErasureScopeComplete } from "./source-erasure-scope";
+import { reconcileOriginalSourceErasure } from "./source-erasure-history";
+import { IMPORT_SOURCE_ERASURE_JOB, IMPORT_SOURCE_ERASURE_SCOPE, originalSourceErasurePayload } from "./source-erasure-contract";
 import { assertOriginalUploadMinimizable, minimizeOriginalUploadProjections } from "./source-projection-privacy";
 import { completeErasureJob, erasureArtifactIsIntact } from "@/core/privacy/service";
+export { IMPORT_SOURCE_ERASURE_JOB, IMPORT_SOURCE_ERASURE_SCOPE } from "./source-erasure-contract";
 
-export const IMPORT_SOURCE_ERASURE_JOB = "core.eraseImportSourceObjects";
-export const IMPORT_SOURCE_ERASURE_SCOPE = "imports.readerSources";
-const payload = z.object({ requestId: z.uuid(), originalJobId: z.uuid(),
-  keys: z.array(z.string().regex(/^imports\/[a-f0-9-]{36}\/[a-f0-9-]{36}\/\d{5}\.part$/)).min(1).max(25),
-});
+const payload = originalSourceErasurePayload;
 const receipt = z.object({ format: z.literal("freeholder.erasure-receipt"), outcomes: z.array(z.object({
   scope: z.string(), outcome: z.string(), pendingJobs: z.array(z.uuid()).optional(), completedJobs: z.array(z.uuid()).optional(),
 }).passthrough()) }).passthrough();
@@ -42,8 +41,14 @@ export const completeOriginalSourceErasure = defineService({
     if (!request || request.kind !== "erasure" || !request.verifiedAt || !outcome || !erasureArtifactIsIntact(artifact)) throw new ServiceError("conflict", "Restore the original verified source erasure receipt before completion.");
     ctx.setSubject("dataRequest", request.id);
     if (!outcome.pendingJobs?.includes(input.originalJobId)) {
-      if (outcome.outcome === "erased" && !outcome.pendingJobs?.length
-        || outcome.outcome === "retained" && outcome.completedJobs?.includes(input.originalJobId)) return { completed: true };
+      if (outcome.outcome === "erased" && !outcome.pendingJobs?.length) {
+        if (!await originalSourceErasureScopeComplete(ctx.tx, request.id)) {
+          await ctx.call(reconcileOriginalSourceErasure, { originalJobId: input.originalJobId });
+          return { completed: false };
+        }
+        return { completed: true };
+      }
+      if (outcome.outcome === "retained" && outcome.completedJobs?.includes(input.originalJobId)) return { completed: true };
       throw new ServiceError("conflict", "This task is absent from its original pending source receipt.");
     }
     if (request.status !== "in_progress") throw new ServiceError("conflict", "The original source erasure is no longer in progress.");
@@ -99,7 +104,11 @@ export const prepareOriginalSourceErasure = defineService({
     if(!job||!request||request.kind!=="erasure"||!request.verifiedAt||!erasureArtifactIsIntact(artifact)||!own) throw new ServiceError("conflict","Restore the exact original uploaded-source task and verified receipt before cleanup.");
     ctx.setSubject("dataRequest",request.id);
     if(!own.pendingJobs?.includes(input.originalJobId)) {
-      if(own.outcome==="erased"&&!own.pendingJobs?.length||own.outcome==="retained"&&own.completedJobs?.includes(input.originalJobId)) return {ready:false};
+      if(own.outcome==="erased"&&!own.pendingJobs?.length) {
+        if(!await originalSourceErasureScopeComplete(ctx.tx,request.id)) await ctx.call(reconcileOriginalSourceErasure,{originalJobId:input.originalJobId});
+        return {ready:false};
+      }
+      if(own.outcome==="retained"&&own.completedJobs?.includes(input.originalJobId)) return {ready:false};
       throw new ServiceError("conflict","This task is absent from its original pending uploaded-source receipt.");
     }
     if(request.status!=="in_progress") throw new ServiceError("conflict","This uploaded-source erasure is no longer pending.");

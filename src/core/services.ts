@@ -103,6 +103,7 @@ import pluginServices from "@/core/plugins/service";
 import importServices from "@/core/import/service";
 import importSourceUploadServices from "@/core/import/source-upload";
 import {completeOriginalSourceErasure,prepareOriginalSourceErasure} from "@/core/import/source-erasure";
+import { reconcileOriginalSourceErasure, registerOriginalSourceErasureRecovery } from "@/core/import/source-erasure-history";
 import { advanceCrawl } from "@/core/import/crawl-advance";
 import crawlCaptureServices from "@/core/import/crawl-capture";
 import crawlIndexServices from "@/core/import/crawl-graph-index";
@@ -215,6 +216,7 @@ const services: Service[] = [
   ...importSourceUploadServices,
   completeOriginalSourceErasure,
   prepareOriginalSourceErasure,
+  reconcileOriginalSourceErasure,
   advanceCrawl,
   cancelCrawl,
   retireExpiredCrawls,
@@ -234,6 +236,7 @@ const services: Service[] = [
 
 // Register original ownership before a real hold can seal its one joint receipt.
 registerCrawlPrivacy();
+registerOriginalSourceErasureRecovery();
 
 export default services;
 

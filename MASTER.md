@@ -6458,6 +6458,14 @@ deployments are portable, testable and incapable of silently forking the truth.
   a NEW normal database and unchanged AFTER. The failed database is preserved
   untouched with minimal readonly digests, no deleted-byte recovery claim.
   See `deploy/import-upload-index-erasure-source-2026-11-13.md`.
+  Historical uploaded-source follow-up2026-11-13: source-only private
+  reconciliation reopens a retained original task's verified intact completed
+  receipt when its initial capture is missing. It preserves exact task keys
+  and truthful recovery without adopting current graphs, backfilling capture
+  or bypassing physical admission. Periodic/committed-observation entry points
+  and a NEW actual old79->81 populated fixture are prepared, not run. SQL955
+  remains unchanged; qualification and actual upgrade acceptance remain open.
+  See `deploy/import-uploaded-history-recovery-2026-11-13.md`.
   Canonical original-retention draft 2026-11-12: a second actual control on
   protected main reproduced the same pre-verification hold gap for uploaded
   WXR bytes. New unpublished80 capture receipts and immutable source/generation
