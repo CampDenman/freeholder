@@ -11,6 +11,7 @@ import { merchantPaymentRecoveryDebt } from "@/modules/invoicing/merchant-paymen
 import { merchantTaxPreviewOutput, previewMerchantTax } from "@/modules/invoicing/merchant-tax-preview";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { periodEnd } from "./calendar";
+import { verifiedPreparatoryPhaseProducts } from "./provider-phase-product-proof";
 import { subscriptionMerchantScope } from "./merchant-scope-contract";
 import { originalMerchantTerms } from "./merchant-terms-read";
 import { assertPhaseHorizon, exactProviderDate, freezeProviderPhase, originalPhaseFee, providerPhase, providerPhaseInventory, type ProviderPhase } from "./provider-phase-contract";
@@ -90,7 +91,7 @@ export const quoteMerchantProviderHorizon=defineService({
     let anchor:{kind:"accepted_trial_end"|"paid_original_period_end"|"provider_phase_inventory";sourceInvoiceId:string|null;start:string};
     let retained:ProviderPhase[]=[],admittedExemptionFingerprint:string|null=null;
     if(resource.recoveryPending)throw new ServiceError("conflict","Retain and reconcile the original schedule recovery debt before quoting more periods.");
-    if(resource.operationRevision===0&&resource.state==="uncreated"&&!resource.providerSubscriptionRef&&!resource.providerCustomerRef&&!parent.providerRef){
+    if((resource.operationRevision===0||verifiedPreparatoryPhaseProducts(resource,operations))&&resource.state==="uncreated"&&!resource.providerSubscriptionRef&&!resource.providerCustomerRef&&!parent.providerRef){
       const [cash]=await ctx.tx.select({id:subscriptionProviderChargeReceipts.id}).from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId,parent.id)).limit(1);
       if(cash)throw new ServiceError("conflict","Original scheduled cash survived without its creation history. Recover that resource instead of treating this as a new schedule.");
       const proved=await proveOriginalPeriod(ctx,parent,terms);

@@ -358,6 +358,12 @@ export interface MerchantPhaseScheduleReadRequest extends MerchantPhaseScheduleS
   providerMethodRef: string; providerProductRef: string; phases: MerchantProviderPhase[];
 }
 
+export interface MerchantPhaseProductRequest extends Omit<MerchantPhaseScheduleScope, "providerCustomerRef"> {
+  operationId: string; name: string; idempotencyKey: string;
+  onProductAcknowledged: (actual: { providerProductRef: string }) => Promise<void>;
+}
+export interface MerchantPhaseProductReadRequest extends Omit<MerchantPhaseProductRequest, "idempotencyKey" | "onProductAcknowledged"> { providerProductRef: string; }
+
 export interface MerchantPhaseScheduleStopRequest extends MerchantPhaseScheduleScope {
   providerScheduleRef: string;
   onStopped: (actual: { providerScheduleRef: string; providerSubscriptionRefs: string[]; linkedInventoryComplete: boolean; state: "canceled" | "completed" | "released"; source: "readback" | "cancel_ack" }) => Promise<void>;
@@ -586,6 +592,8 @@ export interface PaymentAdapter {
   cancelMerchantSchedule?(request: MerchantScheduleLocator & { providerCustomerRef?: string; onCancelled: (actual: { providerSubscriptionRef: string; state: "cancelled"; source: "readback" | "delete_ack" }) => Promise<void> }): Promise<void>;
   inspectMerchantScheduleInvoices?(request: MerchantScheduleResource): Promise<MerchantScheduleInvoiceInventory>;
   /** NEW original phase protocol; optional until its durable admission is enabled. */
+  createMerchantPhaseProduct?(request: MerchantPhaseProductRequest): Promise<{ providerProductRef: string }>;
+  inspectMerchantPhaseProduct?(request: MerchantPhaseProductReadRequest): Promise<{ providerProductRef: string }>;
   createMerchantPhaseSchedule?(request: MerchantPhaseScheduleRequest): Promise<MerchantPhaseScheduleInventory>;
   updateMerchantPhaseSchedule?(request: MerchantPhaseScheduleUpdateRequest): Promise<MerchantPhaseScheduleInventory>;
   inspectMerchantPhaseSchedule?(request: MerchantPhaseScheduleReadRequest): Promise<MerchantPhaseScheduleInventory>;

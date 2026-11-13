@@ -10,6 +10,7 @@ import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agr
 import { subscriptionProviderScheduleOperations } from "./provider-schedule-schema";
 import type { subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { scheduleQuiescenceCovers } from "./provider-schedule-proof";
+import { verifiedPreparatoryPhaseProducts } from "./provider-phase-product-proof";
 import { subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts } from "./schema";
 import type { subscriptionMerchantScopes, subscriptions } from "./schema";
 const application = z.object({ invoiceId: z.uuid(), paymentId: z.uuid() }).nullable();
@@ -37,7 +38,7 @@ export async function merchantAgreementScheduleState(ctx:ServiceContext,agreemen
     const neverAdmitted = agreement.resource.state === "uncreated" && agreement.resource.operationRevision === 0
       && !agreement.resource.providerSubscriptionRef && !agreement.resource.providerCustomerRef && !agreement.subscription.providerRef
       && !operations.length && !receipts.length && !observations.length;
-    if (neverAdmitted) return { safe: true, external };
+    if (neverAdmitted || !agreement.subscription.providerRef && !receipts.length && !observations.length && verifiedPreparatoryPhaseProducts(agreement.resource, operations)) return { safe: true, external };
     external = true;
     if (!scheduleQuiescenceCovers(agreement.resource, operations)) return { safe: false, external };
     for (const resource of agreement.resource.stoppedProof!.resources) for (const invoice of resource.invoices) {

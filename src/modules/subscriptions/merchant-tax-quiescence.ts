@@ -21,6 +21,7 @@ import { claimMerchantScheduleCancellation, flushMerchantScheduleCallerFinishes,
 import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
 import buyerErasureServices, { completeBuyerAgreementErasure } from "./buyer-agreement-erasure";
 import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
+import phaseProductServices from "./provider-phase-products";
 
 const JOB = "subscriptions.quiesceMerchantSchedules";
 const jobInput = z.object({ profileId: z.uuid(), requestId: z.uuid(), originalJobId: z.uuid(), cohortId: z.uuid() });
@@ -204,4 +205,4 @@ export const quiesceMerchantSchedules = defineJob({
   },
 });
 registerJob(quiesceMerchantSchedules);
-export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices];
+export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices, ...phaseProductServices];
