@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // C12.38: ordinary complete parent graph; no collector, service registration or bank I/O.
 import { eq,inArray,or,sql } from "drizzle-orm";
-import { ServiceError,type ServiceContext } from "@/core/service";
+import { ServiceError,type ServiceContext,type Tx } from "@/core/service";
 import { subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
 import { invoices,payments,creditNotes } from "./schema";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
@@ -10,36 +10,37 @@ import { prorationFinancialWitness } from "./proration-financial-witness";
 import { controlledFinancialWitness } from "./controlled-provider-financial-witness";
 function refuse():never{throw new ServiceError("conflict","Restore the complete exact original parent financial graph before another controlled operation.");}
 const uuidList=(ids:readonly string[])=>ids.length?sql.join(ids.map(id=>sql`${id}::uuid`),sql`,`):sql`null::uuid`;
-export async function parentFinancialGraph(ctx:ServiceContext,subscriptionId:string){
- const proration=await prorationFinancialWitness(ctx.tx,{kind:"subscription",ids:[subscriptionId]});
+export async function parentFinancialGraph(ctx:ServiceContext,subscriptionId:string){return parentFinancialGraphForTx(ctx.tx,subscriptionId);}
+export async function parentFinancialGraphForTx(tx:Tx,subscriptionId:string){
+ const proration=await prorationFinancialWitness(tx,{kind:"subscription",ids:[subscriptionId]});
  if(proration.incomplete)refuse();
  const sourcePaymentIds=[...new Set(proration.entries.flatMap(row=>row.parents.sourcePaymentId?[row.parents.sourcePaymentId]:[]))];
- const references=await ctx.tx.execute<{id:string}>(sql`
+ const references=await tx.execute<{id:string}>(sql`
   select e.invoice_id::text as id from subscription_events e where e.subscription_id=${subscriptionId}::uuid and e.invoice_id is not null
   union select p.debit_invoice_id::text from subscription_prorations p where p.subscription_id=${subscriptionId}::uuid and p.debit_invoice_id is not null
   union select p.invoice_id::text from merchant_agreement_payment_routes r join payments p on p.id=r.payment_id where r.subscription_id=${subscriptionId}::uuid order by 1 limit 5001`);
  if(references.length>5000)refuse();
- const controlled=await controlledFinancialWitness(ctx.tx,{subscriptionIds:[subscriptionId]});
+ const controlled=await controlledFinancialWitness(tx,{subscriptionIds:[subscriptionId]});
  if(controlled.incomplete)refuse();
  const invoiceIds=[...new Set([...references.map(row=>row.id),...(controlled.targets?.collections.flatMap(row=>row.invoiceId?[row.invoiceId]:[])??[])])].sort();
  if(invoiceIds.length>5000)refuse();
- const money=invoiceIds.length||sourcePaymentIds.length?await ctx.tx.select().from(payments)
+ const money=invoiceIds.length||sourcePaymentIds.length?await tx.select().from(payments)
   .where(or(...(invoiceIds.length?[inArray(payments.invoiceId,invoiceIds)]:[]),...(sourcePaymentIds.length?[inArray(payments.id,sourcePaymentIds)]:[]))).orderBy(payments.id).limit(5001):[];
  const exactInvoiceIds=[...new Set([...invoiceIds,...money.map(row=>row.invoiceId)])];
- const receipts=await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId,subscriptionId)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001);
- const aliases=receipts.length||money.length?await ctx.tx.select().from(merchantAgreementPaymentRoutes)
+ const receipts=await tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId,subscriptionId)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001);
+ const aliases=receipts.length||money.length?await tx.select().from(merchantAgreementPaymentRoutes)
   .where(or(...(receipts.length?[inArray(merchantAgreementPaymentRoutes.originalChargeReceiptId,receipts.map(row=>row.id))]:[]),...(money.length?[inArray(merchantAgreementPaymentRoutes.paymentId,money.map(row=>row.id))]:[]))).orderBy(merchantAgreementPaymentRoutes.paymentId).limit(5001):[];
  const ancestorReceiptIds=[...new Set(aliases.flatMap(row=>row.originalChargeReceiptId&&!receipts.some(receipt=>receipt.id===row.originalChargeReceiptId)?[row.originalChargeReceiptId]:[]))];
  if(ancestorReceiptIds.length){
-  const ancestors=await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(inArray(subscriptionProviderChargeReceipts.id,ancestorReceiptIds)).limit(5001);
+  const ancestors=await tx.select().from(subscriptionProviderChargeReceipts).where(inArray(subscriptionProviderChargeReceipts.id,ancestorReceiptIds)).limit(5001);
   if(ancestors.length!==ancestorReceiptIds.length)refuse();receipts.push(...ancestors);receipts.sort((a,b)=>a.id.localeCompare(b.id));
  }
  const originalNoteIds=[...new Set(proration.entries.flatMap(row=>row.parents.creditNoteId?[row.parents.creditNoteId]:[]))];
- const notes=invoiceIds.length||originalNoteIds.length?await ctx.tx.select().from(creditNotes)
+ const notes=invoiceIds.length||originalNoteIds.length?await tx.select().from(creditNotes)
   .where(or(...(invoiceIds.length?[inArray(creditNotes.invoiceId,invoiceIds)]:[]),...(originalNoteIds.length?[inArray(creditNotes.id,originalNoteIds)]:[]))).orderBy(creditNotes.id).limit(5001):[];
- const fullInvoices=exactInvoiceIds.length?await ctx.tx.select().from(invoices).where(inArray(invoices.id,exactInvoiceIds)).orderBy(invoices.id).limit(5001):[];
+ const fullInvoices=exactInvoiceIds.length?await tx.select().from(invoices).where(inArray(invoices.id,exactInvoiceIds)).orderBy(invoices.id).limit(5001):[];
  if([money,receipts,aliases,notes,fullInvoices].some(rows=>rows.length>5000)||fullInvoices.length!==exactInvoiceIds.length||sourcePaymentIds.some(id=>!money.some(row=>row.id===id)))refuse();
- const physical=await ctx.tx.execute<{table:string;id:string;fingerprint:string}>(sql`
+ const physical=await tx.execute<{table:string;id:string;fingerprint:string}>(sql`
   select 'subscriptions' as table,s.id::text as id,encode(sha256(convert_to(to_jsonb(s)::text,'UTF8')),'hex') as fingerprint from subscriptions s where s.id=${subscriptionId}::uuid
   union all select 'subscription_commercial_terms',t.id::text,encode(sha256(convert_to(to_jsonb(t)::text,'UTF8')),'hex') from subscription_commercial_terms t where t.subscription_id=${subscriptionId}::uuid
   union all select 'subscription_merchant_scopes',s.subscription_id::text,encode(sha256(convert_to(to_jsonb(s)::text,'UTF8')),'hex') from subscription_merchant_scopes s where s.subscription_id=${subscriptionId}::uuid
@@ -83,7 +84,7 @@ export async function parentFinancialGraph(ctx:ServiceContext,subscriptionId:str
   union all select 'invoice_credit_reservations',s.id::text,encode(sha256(convert_to(to_jsonb(s)::text,'UTF8')),'hex') from invoice_credit_reservations s join invoice_credit_applications app on app.reservation_id=s.id where app.invoice_id in (${uuidList(invoiceIds)})
   union all select 'invoice_credit_funding',s.id::text,encode(sha256(convert_to(to_jsonb(s)::text,'UTF8')),'hex') from invoice_credit_funding s where exists(select 1 from invoice_credit_reservations r join invoice_credit_applications app on app.reservation_id=r.id where r.funding_id=s.id and app.invoice_id in (${uuidList(invoiceIds)}))
   order by 1,2 limit 5001`);
- const children=await merchantRefundDependencyFingerprints(ctx.tx,{paymentIds:money.map(row=>row.id),subscriptionChargeReceiptIds:receipts.map(row=>row.id)});
+ const children=await merchantRefundDependencyFingerprints(tx,{paymentIds:money.map(row=>row.id),subscriptionChargeReceiptIds:receipts.map(row=>row.id)});
  if(physical.length>5000||children.incomplete||proration.incomplete)refuse();
  return{invoiceIds,money,receipts,aliases,notes,fullInvoices,physical,children,proration,controlled};
 }

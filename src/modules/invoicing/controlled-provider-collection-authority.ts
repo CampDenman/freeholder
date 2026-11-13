@@ -21,6 +21,7 @@ import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { parentFinancialGraph,lockControlledParentMoney } from "./controlled-provider-financial-parent";
 import { CONTROLLED_FINANCIAL_PROTOCOL,requireControlledFinancialProtocol } from "./controlled-provider-financial-protocol";
+import { controlledTargetRawClassification } from "./controlled-target-raw-classification";
 import { controlledPeriodAdmission } from "./controlled-target-financial-policy";
 function refuse():never{throw new ServiceError("conflict","Recover this exact accepted target's actual original principal, bank callers, tax/credit/fee disposition and current accepted calendar before another collection. Coverage or an equal amount cannot authorize its money.");}
 const sha=z.string().regex(/^[a-f0-9]{64}$/);
@@ -54,6 +55,7 @@ export const controlledProviderCollectionAuthority=defineService({
   }
   const observing=input.kind==="read_manifest",currentProofs:unknown[]=[];
   if(!observing){
+   const raw=await controlledTargetRawClassification(ctx.tx,parent.id,coverage,graph);if(raw.unresolvedFactIds.length)refuse();currentProofs.push({rawClassificationRevision:raw.revision});
    const[enabled]=await ctx.tx.select({enabled:moduleSettings.enabled}).from(moduleSettings).where(eq(moduleSettings.module,"subscriptions")).limit(1);
    const[method]=parent.paymentMethodId?await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id,parent.paymentMethodId)).limit(1):[];
    const[profile]=await ctx.tx.select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id,quote.profileId)).limit(1);
@@ -61,7 +63,7 @@ export const controlledProviderCollectionAuthority=defineService({
     ||!canonical.currentCollectible||canonical.invoice.paidMinor!==0||canonical.invoice.refundedMinor!==0||!method||method.status!=="active"||method.provider!=="stripe"||method.contactId!==parent.contactId
     ||method.providerCustomerRef!==resource.originalScope.providerCustomerRef||method.providerMethodRef!==resource.originalScope.providerMethodRef
     ||method.providerPlatformAccountId!==resource.originalScope.providerPlatformAccountId||method.providerAccountId!==(resource.originalScope.providerAccountId??"")
-    ||!profile||profile.state!=="active"||profile.currentVersion!==quote.profileVersion||!profile.contactId||coverage.transport.rawCashReviewFactIds.length)refuse();
+    ||!profile||profile.state!=="active"||profile.currentVersion!==quote.profileVersion||!profile.contactId)refuse();
    const[privateState]=await ctx.tx.execute<{ready:boolean}>(sql`select not exists(select 1 from contacts p where p.id in(${parent.contactId}::uuid,${profile.contactId}::uuid) and p.source='privacy-erasure')
     and not exists(select 1 from data_requests r where r.contact_id in(${parent.contactId}::uuid,${profile.contactId}::uuid) and r.kind='erasure' and r.verified_at is not null and r.status in('verified','in_progress','completed','partially_completed'))
     and not exists(select 1 from privacy_retention_exceptions h join data_requests r on r.id=h.data_request_id where r.contact_id in(${parent.contactId}::uuid,${profile.contactId}::uuid)
@@ -88,7 +90,7 @@ export const controlledProviderCollectionAuthority=defineService({
     if(actualDebt.pending&&(!creditSources.length||actualDebt.reasons.some(reason=>reason!=="commission")))refuse();
     if(payment.status==="succeeded"){
      const actual=principal.parse(await ctx.callAsSystem(principalReader,{paymentId:payment.id}));currentProofs.push(actual);
-     if(!actual.principalSafe||actual.witness.paymentId!==payment.id||payment.refundedMinor!==0||actual.financialDebtPending&&!actualDebt.pending)refuse();
+     if(!actual.principalSafe||actual.witness.paymentId!==payment.id||creditSources.length>0&&payment.refundedMinor!==0||actual.financialDebtPending&&!actualDebt.pending)refuse();
      for(const funding of creditSources){
       const fee=await originalCreditFeeAllocation(ctx,payment.id,funding.sourceApplicationId,0);currentProofs.push({fundingId:funding.id,fee});
       if(fee.collectionState==="review"||fee.unexpectedFee||!review.feeReview||review.feeReview.originalSourceDebt&&!review.requiresMerchantReview)refuse();

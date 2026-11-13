@@ -35,7 +35,7 @@ describe("controlled accepted target financial boundaries",()=>{
   let reads=0;
   const tx=drizzle(async query=>{reads++;expect(query).toContain("count(*)=24");expect(query).toContain("t.tgenabled in('O','A')");
    expect(query).toContain("subscription_controlled_quotes_complete");expect(query).toContain("subscription_controlled_invoice_proofs_complete");
-   expect(query).toContain("targetFinancialRevision");expect(query).toContain("freeholder_controlled_target_operation_admissible");
+   expect(query).toContain("targetFinancialRevision");expect(query).toContain("priceEpochCollectionId");expect(query).toContain("proposedPeriodStart");expect(query).toContain("freeholder_controlled_target_operation_admissible");
    return{rows:[{ready}]};}) as unknown as Tx;
   await expect(requireControlledFinancialProtocol(tx)).rejects.toMatchObject({code:"conflict"});expect(reads).toBe(1);
  });

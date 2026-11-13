@@ -6,6 +6,7 @@ import type { Tx } from "@/core/service";
 import { ServiceError } from "@/core/service";
 import { controlledProviderWitnesses, exportControlledProviderHistory } from "@/modules/subscriptions/controlled-provider-witnesses";
 import { readControlledReceiptNamespace } from "@/modules/subscriptions/controlled-provider-cash-namespace";
+import { controlledTargetRawClassification } from "./controlled-target-raw-classification";
 import { controlledCollectionCoverage } from "@/modules/subscriptions/controlled-provider-collection-coverage";
 import { exportControlledTargetFinancialHistory } from "./controlled-target-financial-export";
 import { controlledTargetTables, controlledTargetFinancialWitness, controlledTargetEntries, controlledTargetAncestryComplete, type ControlledTargetHistory } from "./controlled-target-financial-witness";
@@ -111,8 +112,20 @@ export async function controlledCashFinancialHistory(tx:Tx,receiptIds:readonly s
  const targetCoverage=[];
  if(witness.targets)for(const id of [...new Set(witness.targets.quotes.map(row=>row.subscriptionId))].sort())targetCoverage.push(await controlledCollectionCoverage(tx,{subscriptionId:id}));
  const coverage=[];for(const id of [...new Set(witness.history.resources.map(row=>row.subscriptionId))].sort())coverage.push(await controlledProviderCoverage(tx,{subscriptionId:id}));
- return{...witness,namespaces,coverage,...(targetCoverage.length?{targetCoverage}:{}),incomplete:witness.incomplete||namespaces.some(row=>row.applies&&(!row.verified||row.rawCashReview))
-   ||coverage.some(row=>row.rawCashReviewFactIds.length>0),
+ const rawClassifications=[];
+ for(const actual of targetCoverage){const subscriptions=[...new Set(actual.witness.quotes.map(row=>row.subscriptionId))];if(subscriptions.length!==1)throw new ServiceError("conflict","Restore the exact controlled target subscription before classifying its raw facts.");
+  rawClassifications.push(await controlledTargetRawClassification(tx,subscriptions[0]!,actual));
+ }
+ const resolvedFacts=new Set(rawClassifications.flatMap(actual=>actual.resolutions.map(row=>row.factId)));
+ const unresolvedRawFacts=[...coverage.flatMap(actual=>actual.rawCashReviewFactIds.filter(id=>!resolvedFacts.has(id))),...rawClassifications.flatMap(actual=>actual.unresolvedFactIds)];
+ const resourceResolved=(resourceId:string|null)=>resourceId!==null&&targetCoverage.some(actual=>actual.transport.resourceIds.includes(resourceId))
+  &&coverage.every(actual=>actual.rawFinancialFacts.filter(fact=>actual.witness.operations.some(operation=>operation.id===fact.operationId&&operation.resourceId===resourceId)).every(fact=>resolvedFacts.has(fact.factId)));
+ const entries=new Map(witness.entries.map(row=>[`${row.table}:${row.id}`,row]));
+ for(const actual of rawClassifications)for(const entry of actual.evidenceEntries){const key=`${entry.table}:${entry.id}`,prior=entries.get(key);if(prior&&prior.fingerprint!==entry.fingerprint)throw new ServiceError("conflict","The actual controlled parent changed during raw financial classification.");entries.set(key,entry);}
+ const classifiedEntries=[...entries.values()].sort((a,b)=>a.table.localeCompare(b.table)||a.id.localeCompare(b.id));
+
+ return{...witness,entries:classifiedEntries,namespaces,coverage,...(targetCoverage.length?{targetCoverage,rawClassifications}:{}),incomplete:witness.incomplete||classifiedEntries.length>5000||namespaces.some(row=>row.applies&&(!row.verified||row.rawCashReview&&!resourceResolved(row.resourceId)))
+   ||unresolvedRawFacts.length>0,
   principalCallerDebt:namespaces.some(row=>row.applies&&row.principalCallerDebt)||coverage.some(row=>row.unfinishedCalls.some(call=>primaryControlledKinds.has(call.kind))),
   financialCallerDebt:namespaces.some(row=>row.applies&&row.financialCallerDebt)||coverage.some(row=>row.unfinishedCalls.length>0)};
 }

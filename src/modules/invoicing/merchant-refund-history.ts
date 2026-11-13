@@ -94,5 +94,5 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
       definitelyRefused: false, // Generic codes/empty lookups do not prove no effect.
     };
   });
-  return { refundRequests, inventoryCount, principalCreatorsQuiesced, digest: merchantTaxDigest({ ...Object.fromEntries(Object.entries(inventory).map(([key, rows]) => [key, sorted(rows)])), ...(controlled.entries.length || controlled.namespaces.some(row => row.applies) ? { controlledCoverage: controlled.coverage.map(row => row.revision), controlledNamespaces: controlled.namespaces, ...(controlled.targetCoverage ? { controlledTargetCoverage: controlled.targetCoverage.map(row => row.revision) } : {}) } : {}) }), incomplete, creatorsQuiesced, feeDebt };
+  return { refundRequests, inventoryCount, principalCreatorsQuiesced, digest: merchantTaxDigest({ ...Object.fromEntries(Object.entries(inventory).map(([key, rows]) => [key, sorted(rows)])), ...(controlled.entries.length || controlled.namespaces.some(row => row.applies) ? { controlledCoverage: controlled.coverage.map(row => row.revision), controlledNamespaces: controlled.namespaces, ...(controlled.targetCoverage ? { controlledTargetCoverage: controlled.targetCoverage.map(row => row.revision),controlledRawResolution:controlled.rawClassifications?.map(row=>row.revision) } : {}) } : {}) }), incomplete, creatorsQuiesced, feeDebt };
 }

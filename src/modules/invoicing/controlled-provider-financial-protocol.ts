@@ -8,7 +8,9 @@ export async function requireControlledFinancialProtocol(tx:Tx){
   and to_regprocedure('freeholder_controlled_target_operation_admissible(uuid)') is not null
   and position('controlled_net_gross.v1' in pg_get_functiondef(to_regprocedure('freeholder_controlled_target_operation_admissible(uuid)')))>0
   and position('freeholder_controlled_target_operation_admissible' in pg_get_functiondef(to_regprocedure('freeholder_controlled_operation_admissible(uuid)')))>0
-  and position('targetFinancialRevision' in pg_get_functiondef(to_regprocedure('freeholder_controlled_target_operation_admissible(uuid)')))>0 as ready
+  and position('targetFinancialRevision' in pg_get_functiondef(to_regprocedure('freeholder_controlled_target_operation_admissible(uuid)')))>0
+  and position('priceEpochCollectionId' in pg_get_functiondef(to_regprocedure('freeholder_controlled_target_operation_admissible(uuid)')))>0
+  and position('proposedPeriodStart' in pg_get_functiondef(to_regprocedure('freeholder_controlled_target_operation_admissible(uuid)')))>0 as ready
   from pg_trigger t where not t.tgisinternal and t.tgenabled in('O','A') and(t.tgrelid,t.tgname) in(
    (to_regclass('subscription_controlled_resources'),'subscription_controlled_resources_guard'),(to_regclass('subscription_controlled_operations'),'subscription_controlled_operations_guard'),
    (to_regclass('subscription_controlled_calls'),'subscription_controlled_calls_guard'),(to_regclass('subscription_controlled_facts'),'subscription_controlled_facts_guard'),

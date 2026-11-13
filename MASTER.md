@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Source-only controlled raw target checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): the isolated future fifteen-family consumer now
+keeps authenticated coverage unchanged while deriving exact original bank
+obligation/canonical-cash ownership from authentic creator/observer, current
+complete inventory and same-receipt original lineage. Customer-wallet and
+issued-note contradictions, incomplete inventories and every unfinished caller
+remain review; later zero is not disposition. Known gross cash identity after a
+real refund does not waive refund, principal, credit or commission debt. All22
+new prepared controls are UNRUN. The six target models remain excluded from
+current142 qualification; public/cashless acceptance, application-only money
+authority, terminal/alternative receipts, native/provider acceptance and full
+qualification remain required. No SQL/model/journal, deployment or stable
+state changed. See
+`deploy/controlled-target-raw-classification82-source-20261113.md`.
+
 This section replaces the former `ROADMAP.md` and `PROJECT_BACKLOG.json`. It is
 the execution view over §§1–42 and is the only list from which product work is
 selected. Git history and changesets explain what happened; this section says
