@@ -11,7 +11,7 @@ import { subscriptions } from "./schema";
 import { subscriptionControlledResources } from "./controlled-provider-schema";
 import { subscriptionControlledCollections,subscriptionControlledQuotes,subscriptionControlledInvoiceBindings,subscriptionControlledItemReceipts,subscriptionControlledInvoiceProofs } from "./controlled-provider-collection-schema";
 import { controlledCollectionState } from "./controlled-provider-collection-state";
-import { requireControlledCollectionSchema } from "./controlled-provider-collection-plan";
+import { requireControlledCollectionSchema } from "./controlled-provider-collection-schema-guard";
 import { assertControlledInvoiceOrigin,assertControlledComponentLine } from "./controlled-provider-collection-origin";
 const reference=z.string().regex(/^in_[A-Za-z0-9_]{1,196}$/);
 function refuse():never{throw new ServiceError("conflict","Retain the exact authentic original creator and observed invoice/item/read. A missing or mismatched bank fact cannot be replaced by an amount match, new POST, invented finish or reconstructed receipt.");}
