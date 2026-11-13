@@ -56,7 +56,7 @@ describe("original Stripe phase adapter (inactive C12.38)", () => {
   it("retains a physical schedule ACK before readback failure without another POST", async () => {
     const onResourceAcknowledged = vi.fn().mockResolvedValue(undefined);
     const { provider, fetcher } = edge((_path, init) => { if (init.method === "POST") return actual(); throw new Error("Synthetic original read unavailable"); });
-    await expect(provider.createMerchantPhaseSchedule!({ ...request, onResourceAcknowledged })).rejects.toThrow("Synthetic original read unavailable");
+    await expect(provider.createMerchantPhaseSchedule!({ ...request, onResourceAcknowledged })).rejects.toMatchObject({ code: "provider_failure", message: "The payment provider could not be reached." });
     expect(onResourceAcknowledged).toHaveBeenCalledExactlyOnceWith({ providerScheduleRef: "sub_sched_original", providerSubscriptionRef: null, providerCustomerRef: "cus_original" });
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
