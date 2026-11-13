@@ -18,6 +18,7 @@ import {reconcileCommittedStorageObservation} from "./observation-hooks";
 
 import {originalTransferReservation} from "./transfer-original-revision";
 import {transferCallRetryPermitted} from "./transfer-reviewed-call";
+import {assertTransferNamespaceMutation} from "./transfer-namespace-control";
 import {reserveTransferQuota} from "./transfer-quota";
 
 type Kind=typeof STORAGE_TRANSFER_CALL_KINDS[number];
@@ -35,6 +36,7 @@ export async function admitTransferCall(tx:Tx,input:TransferCallAdmission,actor:
  if(plan.state==="complete"&&!privacy)transferConflict("This original transfer is complete. No new physical work was admitted.");
  const target=["target_probe","target_put","target_verify","target_current","privacy_read","privacy_delete","privacy_absence","target_inventory","target_erasure_inventory"].includes(input.kind);
  const binding=target?plan.originalTarget:plan.originalSource;let key=target?object.targetKey:object.key;
+ if(["target_put","source_delete","privacy_delete","privacy_source_delete"].includes(input.kind))await assertTransferNamespaceMutation(tx,object.id,binding.namespace,input.kind);
  if(input.physicalKey){if(!privacy||objectKeyDigest(input.physicalKey)!==(target?object.targetKeyDigest:object.keyDigest))transferConflict("The private cleanup witness does not identify this exact original physical key.");key=input.physicalKey;}
  if(input.kind==="target_put"){
   if(!["planned","copying"].includes(plan.state)||!["planned","copying"].includes(object.state))transferConflict();

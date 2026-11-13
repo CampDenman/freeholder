@@ -1014,6 +1014,23 @@ CREATE TRIGGER media_multipart_original_reservation BEFORE INSERT OR UPDATE ON m
 -- A shared full-writer tag is necessary, never sufficient, for mutation.
 -- Parent checks are deferred only so the exact real transfer caller can be
 -- inserted in the SAME admission transaction, not inferred from an equal key.
+-- Mutation belongs to the current controlling plan, not merely any genuine
+-- historical transfer ancestry. Additional executor recovery association and
+-- release remain explicit protocol work; no new drain is silently adopted.
+CREATE FUNCTION freeholder_media_transfer_namespace_control(original_object uuid, original_namespace text, original_kind text) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_storage_transfer_objects object JOIN media_storage_transfer_plans plan ON plan.id=object.plan_id
+  WHERE object.id=original_object AND plan.source_namespace<>plan.target_namespace
+   AND ((original_kind='target_put' AND original_namespace=plan.target_namespace AND plan.state IN ('planned','copying') AND object.state IN ('planned','copying'))
+    OR (original_kind='source_delete' AND original_namespace=plan.source_namespace AND plan.state IN ('adopted','cleanup_pending') AND object.state IN ('adopted','cleanup_pending'))
+    OR (original_kind='privacy_delete' AND original_namespace=plan.target_namespace)
+    OR (original_kind='privacy_source_delete' AND original_namespace=plan.source_namespace))
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans other WHERE other.id<>plan.id AND other.source_namespace=original_namespace AND other.state NOT IN ('complete','cancelled'))
+   AND NOT EXISTS(SELECT 1 FROM media_storage_writer_drains drain WHERE drain.namespace=original_namespace AND drain.state<>'released' AND NOT coalesce(
+    original_kind IN ('source_delete','privacy_source_delete') AND plan.source_namespace=original_namespace AND plan.source_drain_id=drain.id AND drain.state='verified' AND drain.verified_at IS NOT NULL AND drain.verified_at<=plan.created_at AND drain.stop_proof_digest IS NOT NULL AND drain.stop_proof_digest=plan.source_stop_evidence_digest,false))
+ )
+$$;
+--> statement-breakpoint
 CREATE FUNCTION freeholder_media_original_parent_namespace_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  PERFORM pg_advisory_xact_lock_shared(1691709,82);
@@ -1021,7 +1038,7 @@ BEGIN
   OR EXISTS(SELECT 1 FROM media_storage_transfer_plans WHERE source_namespace=NEW.storage_namespace AND state<>'cancelled') THEN
   IF NOT EXISTS(
    SELECT 1 FROM media_storage_transfer_calls caller JOIN media_storage_transfer_objects object ON object.id=caller.object_id JOIN media_storage_transfer_plans plan ON plan.id=object.plan_id
-   WHERE caller.physical_receipt_id=NEW.id AND caller.created_at=NEW.created_at AND caller.created_at=transaction_timestamp() AND caller.state='admitted' AND caller.returned_at IS NULL
+   WHERE freeholder_media_transfer_namespace_control(object.id,caller.namespace,caller.kind) AND caller.physical_receipt_id=NEW.id AND caller.created_at=NEW.created_at AND caller.created_at=transaction_timestamp() AND caller.state='admitted' AND caller.returned_at IS NULL
     AND caller.object_receipt_id IS NULL AND caller.multipart_operation_id IS NULL AND caller.namespace=NEW.storage_namespace AND caller.physical_key=NEW.object_key AND NEW.sha256=object.sha256 AND NEW.bytes=object.bytes AND NEW.content_type=object.content_type
     AND ((NEW.operation_kind='put' AND caller.kind='target_put' AND object.target_receipt_id=NEW.id AND plan.target_namespace=NEW.storage_namespace AND object.target_key_digest=NEW.key_digest AND object.target_object_key=NEW.object_key)
      OR (NEW.operation_kind='delete' AND caller.kind IN ('source_delete','privacy_source_delete') AND plan.source_namespace=NEW.storage_namespace AND object.key_digest=NEW.key_digest AND object.object_key=NEW.object_key AND EXISTS(SELECT 1 FROM media_storage_transfer_receipts member JOIN media_object_writes original ON original.id=member.receipt_id WHERE member.object_id=object.id AND original.original_reservation_id=NEW.original_reservation_id AND original.provider_revision_digest=freeholder_media_transfer_fact_digest(caller.expected_revision)))
@@ -1045,10 +1062,12 @@ BEGIN
  END IF;
  IF caller.id IS NULL THEN RAISE EXCEPTION 'An actual physical mutation needs its exact original caller' USING ERRCODE='23514'; END IF;
  PERFORM pg_advisory_xact_lock_shared(1691709,82);
- IF mutating AND (
-  EXISTS(SELECT 1 FROM media_storage_writer_drains WHERE namespace=caller.namespace AND state<>'released')
-  OR EXISTS(SELECT 1 FROM media_storage_transfer_plans WHERE source_namespace=caller.namespace AND state<>'cancelled')) THEN
-  IF caller.object_id IS NULL OR NOT EXISTS(
+ IF mutating THEN
+  IF caller.object_id IS NULL THEN
+   IF EXISTS(SELECT 1 FROM media_storage_writer_drains WHERE namespace=caller.namespace AND state<>'released') OR EXISTS(SELECT 1 FROM media_storage_transfer_plans WHERE source_namespace=caller.namespace AND state<>'cancelled') THEN RAISE EXCEPTION 'Ordinary mutation remains fenced independently of writer flags' USING ERRCODE='23514'; END IF;
+  ELSE
+   IF NOT freeholder_media_transfer_namespace_control(caller.object_id,caller.namespace,caller.kind) THEN RAISE EXCEPTION 'This genuine transfer does not control the current namespace claim/drain or mutation phase' USING ERRCODE='23514'; END IF;
+   IF NOT EXISTS(
    SELECT 1 FROM media_object_writes physical JOIN media_storage_transfer_objects object ON object.id=caller.object_id JOIN media_storage_transfer_plans plan ON plan.id=object.plan_id
    WHERE physical.id=caller.physical_receipt_id AND physical.created_at=caller.created_at AND caller.state='admitted' AND caller.returned_at IS NULL
     AND physical.storage_namespace=caller.namespace AND physical.object_key=caller.physical_key AND caller.object_receipt_id IS NULL AND caller.multipart_operation_id IS NULL AND physical.sha256=object.sha256 AND physical.bytes=object.bytes AND physical.content_type=object.content_type
@@ -1056,8 +1075,9 @@ BEGIN
      OR (physical.operation_kind='delete' AND caller.kind IN ('source_delete','privacy_source_delete') AND plan.source_namespace=caller.namespace AND object.key_digest=physical.key_digest AND object.object_key=physical.object_key AND EXISTS(SELECT 1 FROM media_storage_transfer_receipts member JOIN media_object_writes original ON original.id=member.receipt_id WHERE member.object_id=object.id AND original.original_reservation_id=physical.original_reservation_id AND original.provider_revision_digest=freeholder_media_transfer_fact_digest(caller.expected_revision)))
      OR (physical.operation_kind='delete' AND caller.kind='privacy_delete' AND plan.target_namespace=caller.namespace AND object.target_key_digest=physical.key_digest AND object.target_object_key=physical.object_key AND EXISTS(SELECT 1 FROM media_object_writes target WHERE target.id=object.target_receipt_id AND target.original_reservation_id=physical.original_reservation_id AND target.provider_revision_digest=freeholder_media_transfer_fact_digest(caller.expected_revision)))))
   THEN RAISE EXCEPTION 'Ordinary logical/physical mutations and mismatched transfer children remain fenced; GET and flags do not grant dispatch' USING ERRCODE='23514'; END IF;
-  IF TG_TABLE_NAME='media_storage_transfer_requests' THEN
-   IF NEW.descriptor->>'kind' NOT IN ('object.put','object.delete') THEN RAISE EXCEPTION 'A transfer parent cannot authorize another physical mutation kind' USING ERRCODE='23514'; END IF;
+   IF TG_TABLE_NAME='media_storage_transfer_requests' THEN
+    IF NEW.descriptor->>'kind' NOT IN ('object.put','object.delete') THEN RAISE EXCEPTION 'A transfer parent cannot authorize another physical mutation kind' USING ERRCODE='23514'; END IF;
+   END IF;
   END IF;
  END IF;
  RETURN NEW;

@@ -4092,6 +4092,13 @@ reading chat logs.
   Stopped-caller absence/retirement, other executor adapters, final SDK
   regeneration and all native/provider qualification remain open. See
   `deploy/media-original-stopped-put-source-2026-11-13.md`.
+  Current-controller correction source2026-11-13: genuine old transfer ancestry
+  cannot cross another live source claim or an unrelated/later executor drain.
+  Shared logical/physical admission and SQL independently require exact current
+  plan/phase/original stop digest. Twelve pure and two native controls are
+  prepared/unrun. Additional crashed-executor association/release and browser
+  multipart part issuance remain required; capability is still unpublished.
+  See `deploy/media-transfer-controller-fence-source-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;
