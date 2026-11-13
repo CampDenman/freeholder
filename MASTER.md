@@ -4070,6 +4070,12 @@ reading chat logs.
   failed/unattempted admission recovery, multipart, quota initialization,
   cutover, translated recovery and actual acceptance remain required. See
   `deploy/media-original-retirement-source-2026-11-13.md`. No C row closes.
+  Source-only continuation: a genuine finished unattempted preflight can admit
+  a separately born caller; unknown or acknowledged physical DELETEs cannot be
+  replayed. The exact original family retains prior returns and first digests.
+  Thirteen additional pure cases and one added native leaf remain unrun; no
+  request capability or completion status advances. See
+  `deploy/media-original-delete-continuation-source-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;

@@ -11,7 +11,7 @@ import type {Tx} from "@/core/service";
 import {mediaObjects} from "./schema";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartResources} from "./multipart-schema";
-import {mediaStorageTransferRequests} from "./transfer-request-schema";
+import {mediaStorageTransferRequestObservations,mediaStorageTransferRequests} from "./transfer-request-schema";
 import {mediaStorageProviderInventories} from "./transfer-inventory-schema";
 import {mediaStorageTransferCalls as calls,mediaStorageTransferObjects as copies,mediaStorageTransferReceipts as members} from "./transfer-schema";
 import {allowMediaReceiptWrites,lockObjectDigest,objectKeyDigest,storageOperationsHeld} from "./write-ledger";
@@ -21,18 +21,32 @@ import {originalInventoryLifecycle as inventory} from "./original-provider-inven
 import {admitOriginalMediaCaller,retainOriginalMediaCallerReturn,type OriginalMediaCallerReturn} from "./provider-callers";
 import {actualStorageCallerRuntimeIdentity,mediaWriterRuntimeId} from "./physical-caller-runtime";
 import {transferConflict,transferDigest} from "./transfer-proof";
-import {transferRequestsDrained,withTransferRequestScope} from "./transfer-requests";
+import {TransferRequestNotAttemptedError,transferRequestsDrained,withTransferRequestScope} from "./transfer-requests";
 import {configuredOriginalRequestStore} from "./transfer-storage";
 import {requireOriginalProviderRequestResult} from "./provider-request-proof";
 import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 import {releaseRetiredOriginalQuota} from "./original-recovery-quota";
+import {originalDeleteContinuation,type EarlierOriginalDelete} from "./original-delete-continuation";
 const SYSTEM={kind:"system"}as const;
 type Claim={originalId:string;deleteId:string;originalCallId:string;key:string;reservationId:string};
+async function earlierDeletes(tx:Tx,history:readonly(typeof mediaObjectWrites.$inferSelect)[],exceptId?:string){
+ const result:Array<EarlierOriginalDelete&{objectReceiptId:string|null}>=[];
+ for(const deletion of history.filter(row=>row.operation==="delete"&&row.id!==exceptId)){
+  const actual=await tx.select().from(calls).where(and(eq(calls.objectReceiptId,deletion.id),eq(calls.kind,"ordinary_delete"))).limit(2);
+  const call=actual[0];if(actual.length!==1||!call||!deletion.writerFinishedAt)transferConflict("Keep the exact prior caller finish; no later invocation can invent it.");
+  const physical=await tx.select().from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.callId,call.id));
+  const facts=physical.length?await tx.select().from(mediaStorageTransferRequestObservations).where(inArray(mediaStorageTransferRequestObservations.requestId,physical.map(row=>row.id))):[];
+  result.push({...call,requests:physical,facts:facts.map(row=>({requestId:row.requestId,stage:row.facts.stage}))});
+ }
+ return result;
+}
 async function locked(tx:Tx,claim:Claim){
  const original=await inventory.captureFinishedPut(tx,claim.originalId),{receipt,caller}=original;
  if(receipt.originalReservationId!==claim.reservationId||receipt.key!==claim.key||caller.id!==claim.originalCallId||receipt.state!=="accepted"||!receipt.providerRevision||transferDigest(receipt.providerRevision)!==receipt.providerRevisionDigest)transferConflict("Only the intact accepted original generation with its actual provider revision can be retired.");
  const history=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,receipt.keyDigest)).orderBy(asc(mediaObjectWrites.id)).limit(1001).for("update");
- if(history.length>1000||history.some(row=>row.originalReservationId!==claim.reservationId||row.namespace!==receipt.namespace||row.redactedAt||row.id!==claim.originalId&&row.id!==claim.deleteId)||!history.some(row=>row.id===claim.deleteId&&row.operation==="delete"))transferConflict("Conflicting or legacy original history remains debt; equal keys do not authorize another generation.");
+ if(history.length>1000||history.some(row=>row.originalReservationId!==claim.reservationId||row.namespace!==receipt.namespace||row.redactedAt||row.id!==claim.originalId&&row.operation!=="delete")||!history.some(row=>row.id===claim.deleteId&&row.operation==="delete"))transferConflict("Conflicting or legacy original history remains debt; equal keys do not authorize another generation.");
+ const prior=await earlierDeletes(tx,history,claim.deleteId);
+ originalDeleteContinuation(prior);
  const pointer=await tx.select().from(mediaObjects).where(eq(mediaObjects.key,receipt.key)).limit(1);
  if(pointer[0]&&(pointer[0].reservationId!==claim.reservationId||pointer[0].state==="attached")||await pendingObjectIsOwned(receipt.key,new Date(),tx)||await storageOperationsHeld(tx,history.map(row=>row.contactId)))transferConflict("A live owner or named hold preserves this original resource and its receipt.");
  if((await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(or(eq(mediaMultipartResources.originalReservationId,claim.reservationId),eq(mediaMultipartResources.keyDigest,receipt.keyDigest))).limit(1)).length)transferConflict("Original multipart session retirement needs its own complete protocol.");
@@ -63,6 +77,8 @@ export async function assertOrdinaryRetirementRequest(tx:Tx,call:typeof calls.$i
  }
  if(!verified)transferConflict("Fresh nonce-bound original bytes and both complete original version/session inventories must precede the actual DELETE request.");
  if((await tx.select({id:mediaStorageTransferRequests.id}).from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.callId,call.id)).limit(1)).length)transferConflict("An actual original conditional DELETE admission cannot be repeated or hidden behind a new physical nonce.");
+ const family=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.originalReservationId,deletion.originalReservationId));
+ if(originalDeleteContinuation(await earlierDeletes(tx,family,deletion.id))!=="new_caller")transferConflict("An acknowledged original physical DELETE permits fresh verification only.");
 }
 async function capture(key:string,expectedBinding?:StorageBinding){
  const token=randomUUID()+randomUUID(),runtimeIdentity=await actualStorageCallerRuntimeIdentity();
@@ -78,11 +94,10 @@ async function capture(key:string,expectedBinding?:StorageBinding){
   const original=await inventory.captureFinishedPut(tx,receipt.id);
   if(expectedBinding&&transferDigest(expectedBinding)!==transferDigest(original.binding))transferConflict("The captured cleanup resource differs from the exact original private provider binding.");
   if(receipt.state!=="accepted"||!receipt.providerRevision||transferDigest(receipt.providerRevision)!==receipt.providerRevisionDigest||original.caller.state!=="returned"||!await transferRequestsDrained(tx,[original.caller.id]))transferConflict("Recover the original finished PUT and its exact first revision before retiring it.");
-  const prior=history.filter(row=>row.operation==="delete");if(prior.length>1)transferConflict("Multiple original retirement intents need exact recovery.");
-  const deletion=prior[0];
-  if(deletion){
-   const priorCalls=await tx.select().from(calls).where(and(eq(calls.objectReceiptId,deletion.id),eq(calls.kind,"ordinary_delete"))).limit(2);
-   if(priorCalls.length!==1||priorCalls[0]?.state!=="returned"||!priorCalls[0].returnedAt||!deletion.writerFinishedAt||!await transferRequestsDrained(tx,[priorCalls[0].id]))transferConflict("The actual earlier retirement caller has not finished; a fresh invocation must not restart it.");
+  const prior=await earlierDeletes(tx,history),continuation=originalDeleteContinuation(prior);
+  if(continuation==="verification_only"){
+   const actual=prior.find(row=>row.observedAcceptedAt);const deletion=history.find(row=>row.id===actual?.objectReceiptId);
+   if(!actual||!deletion)transferConflict("The exact acknowledged original retirement receipt is missing.");
    const claim={originalId:receipt.id,deleteId:deletion.id,originalCallId:original.caller.id,key,reservationId:receipt.originalReservationId};await locked(tx,claim);
    return{done:false as const,claim,original,deleteCall:null};
   }
@@ -148,14 +163,14 @@ export async function retireOriginalMediaObject(key:string,expectedBinding?:Stor
    const current=await locked(tx,claim);
    const proof=await tx.execute<{proven:boolean}>(sql`select freeholder_media_ordinary_retirement_proven(${claim.reservationId}::uuid) as proven`);if(proof[0]?.proven!==true||complete.state!=="complete")transferConflict("The complete original physical retirement proof is not intact.");
    await releaseRetiredOriginalQuota(tx,current.caller,current.receipt.bytes!);
-   const now=new Date(),[deletion]=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,claim.deleteId)).limit(1);
-   await tx.update(mediaObjectWrites).set({state:deletion?.observedAcceptedAt?"accepted":"confirmed_absent",deletedAt:now,evidenceDigest:transferDigest({originalWitness:current.witness,absenceCallId:absence.id,inventoryId:complete.id}),updatedAt:now}).where(eq(mediaObjectWrites.id,claim.deleteId));
+   const now=new Date(),deletions=await tx.select().from(mediaObjectWrites).where(and(eq(mediaObjectWrites.originalReservationId,claim.reservationId),eq(mediaObjectWrites.operation,"delete")));
+   for(const deletion of deletions)await tx.update(mediaObjectWrites).set({state:deletion.observedAcceptedAt?"accepted":"confirmed_absent",deletedAt:now,evidenceDigest:deletion.evidenceDigest??transferDigest({originalWitness:current.witness,absenceCallId:absence.id,inventoryId:complete.id}),updatedAt:now}).where(eq(mediaObjectWrites.id,deletion.id));
    await tx.update(mediaObjectWrites).set({deletedAt:now,updatedAt:now}).where(eq(mediaObjectWrites.id,claim.originalId));
    await tx.delete(mediaObjects).where(and(eq(mediaObjects.reservationId,claim.reservationId),eq(mediaObjects.state,"pending")));
   });
   await reconcileMediaErasureCohorts({objectReceiptId:claim.originalId});return true;
  }catch(error){
-  if(deleteCall&&!deleteReturned)await retainOriginalMediaCallerReturn(deleteCall.id,deleteCall.token,deleteAttempted?{failed:true}:{notAttempted:true}).catch(()=>{});
+  if(deleteCall&&!deleteReturned)await retainOriginalMediaCallerReturn(deleteCall.id,deleteCall.token,deleteAttempted&&!(error instanceof TransferRequestNotAttemptedError&&error.logicalCallId===deleteCall.id)?{failed:true}:{notAttempted:true}).catch(()=>{});
   // Actual request facts/first return remain committed even if applying the
   // later inventory, hold or quota phase fails. Never erase them to retry I/O.
   throw error;

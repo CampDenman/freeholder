@@ -1004,7 +1004,7 @@ CREATE FUNCTION freeholder_media_ordinary_retirement_proven(reservation uuid) RE
  ), callers AS (
   SELECT * FROM media_storage_transfer_calls WHERE object_receipt_id IN (SELECT id FROM family) OR physical_receipt_id IN (SELECT id FROM family)
  )
- SELECT reservation IS NOT NULL AND (SELECT count(*) FROM original)=1 AND (SELECT count(*) FROM family)=2
+ SELECT reservation IS NOT NULL AND (SELECT count(*) FROM original)=1 AND (SELECT count(*) FROM family)>=2
  AND NOT EXISTS(SELECT 1 FROM family WHERE writer_runtime_id IS NULL OR writer_finished_at IS NULL OR storage_namespace IS NULL)
  AND NOT EXISTS(SELECT 1 FROM original WHERE state<>'accepted' OR provider_revision_digest IS NULL OR sha256 IS NULL OR bytes IS NULL OR storage_kind NOT IN ('s3','replit'))
  AND NOT EXISTS(SELECT 1 FROM family item JOIN original ON true WHERE ROW(item.key_digest,item.storage_namespace,item.sha256,item.bytes,item.content_type) IS DISTINCT FROM ROW(original.key_digest,original.storage_namespace,original.sha256,original.bytes,original.content_type))
@@ -1017,8 +1017,17 @@ CREATE FUNCTION freeholder_media_ordinary_retirement_proven(reservation uuid) RE
  AND NOT EXISTS(SELECT 1 FROM callers WHERE state IN ('admitted','unknown') OR returned_at IS NULL)
  AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN callers ON callers.id=request.call_id WHERE request.state IN ('admitted','unknown') OR request.returned_at IS NULL)
  AND EXISTS(SELECT 1 FROM original JOIN callers writer ON writer.object_receipt_id=original.id AND writer.kind='ordinary_put' WHERE writer.returned_at IS NOT NULL AND writer.state='returned' AND writer.observed_accepted_at IS NOT NULL AND EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=writer.id))
- AND EXISTS(SELECT 1 FROM family deletion JOIN callers actual ON actual.object_receipt_id=deletion.id AND actual.kind='ordinary_delete' JOIN original ON true WHERE deletion.operation_kind='delete' AND actual.state='returned' AND actual.returned_at IS NOT NULL AND (actual.redacted_at IS NOT NULL OR freeholder_media_transfer_fact_digest(actual.expected_revision)=original.provider_revision_digest)
-  AND (NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=actual.id) OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=actual.id AND request.descriptor->>'kind'='object.delete' AND request.returned_at IS NOT NULL AND fact.facts->>'stage'='accepted')))
+ AND NOT EXISTS(SELECT 1 FROM family deletion JOIN original ON true WHERE deletion.operation_kind='delete' AND NOT EXISTS(
+  SELECT 1 FROM callers actual WHERE actual.object_receipt_id=deletion.id AND actual.kind='ordinary_delete' AND actual.state='returned' AND actual.returned_at IS NOT NULL
+   AND (actual.redacted_at IS NOT NULL OR freeholder_media_transfer_fact_digest(actual.expected_revision)=original.provider_revision_digest)
+   AND (
+    actual.result_digest=freeholder_media_transfer_fact_digest(jsonb_build_object('notAttempted',true)) AND actual.observed_accepted_at IS NULL
+     AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=actual.id AND (NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='not_attempted') OR EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'<>'not_attempted')))
+    OR actual.result_digest=freeholder_media_transfer_fact_digest(jsonb_build_object('accepted',true)) AND actual.observed_accepted_at IS NOT NULL
+     AND (SELECT count(*) FROM media_storage_transfer_requests WHERE call_id=actual.id)=1
+     AND EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=actual.id AND request.descriptor->>'kind'='object.delete' AND request.returned_at IS NOT NULL AND fact.facts->>'stage'='accepted')
+   )))
+ AND (SELECT count(*) FROM media_storage_transfer_requests request JOIN callers caller ON caller.id=request.call_id WHERE caller.kind='ordinary_delete' AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='accepted'))<=1
  AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN callers caller ON caller.id=request.call_id WHERE request.descriptor->>'kind' IN ('object.put','object.delete','multipart.create','multipart.complete','multipart.abort') AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage' IN ('accepted','not_attempted')))
  AND EXISTS(SELECT 1 FROM original JOIN callers writer ON writer.object_receipt_id=original.id AND writer.kind='ordinary_put'
   JOIN media_storage_provider_inventories inventory ON inventory.object_receipt_id=original.id AND inventory.anchor_call_id=writer.id
@@ -1041,7 +1050,10 @@ BEGIN
   OR EXISTS(SELECT 1 FROM media_objects WHERE key=original.object_key AND (reservation_id IS DISTINCT FROM original.original_reservation_id OR state='attached'))
   OR EXISTS(SELECT 1 FROM media_storage_transfer_receipts WHERE receipt_id IN (original.id,deletion.id))
   OR EXISTS(SELECT 1 FROM media_storage_transfer_objects WHERE original.key_digest IN (key_digest,target_key_digest))
-  OR EXISTS(SELECT 1 FROM media_object_writes WHERE key_digest=original.key_digest AND id NOT IN (original.id,deletion.id))
+  OR EXISTS(SELECT 1 FROM media_object_writes WHERE key_digest=original.key_digest AND id NOT IN (original.id,deletion.id) AND (original_reservation_id IS DISTINCT FROM original.original_reservation_id OR operation_kind<>'delete'))
+  OR EXISTS(SELECT 1 FROM media_object_writes earlier WHERE earlier.original_reservation_id=original.original_reservation_id AND earlier.operation_kind='delete' AND earlier.id<>deletion.id AND (earlier.writer_finished_at IS NULL OR NOT EXISTS(
+   SELECT 1 FROM media_storage_transfer_calls prior WHERE prior.object_receipt_id=earlier.id AND prior.kind='ordinary_delete' AND prior.state='returned' AND prior.returned_at IS NOT NULL AND prior.observed_accepted_at IS NULL AND prior.result_digest=freeholder_media_transfer_fact_digest(jsonb_build_object('notAttempted',true))
+    AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=prior.id AND (request.state<>'returned' OR request.returned_at IS NULL OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='not_attempted') OR EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'<>'not_attempted'))))))
   OR EXISTS(SELECT 1 FROM privacy_retention_exceptions hold JOIN data_requests request ON request.id=hold.data_request_id WHERE hold.scope IN ('media.storageOperations','media.multipartOperations','media.storageTransfers','members') AND (hold.expires_at IS NULL OR hold.expires_at>clock_timestamp()) AND (original.contact_id IS NULL OR original.contact_id=request.contact_id OR deletion.contact_id IS NULL OR deletion.contact_id=request.contact_id))
   OR NOT EXISTS(SELECT 1 FROM media_storage_provider_inventories inventory JOIN media_storage_transfer_calls proof ON proof.id=inventory.proof_call_id JOIN media_storage_transfer_calls writer ON writer.id=inventory.anchor_call_id WHERE inventory.object_receipt_id=original.id AND inventory.plan_id IS NULL AND inventory.purpose='recovery' AND inventory.state='complete' AND inventory.created_at>=deletion.created_at AND inventory.first_digest=inventory.confirmed_digest AND inventory.completed_at IS NOT NULL AND writer.object_receipt_id=original.id AND writer.kind='ordinary_put' AND writer.state='returned' AND writer.returned_at IS NOT NULL AND proof.object_receipt_id=original.id AND proof.kind='ordinary_recovery_read' AND proof.state='returned' AND proof.returned_at IS NOT NULL AND proof.created_at>=deletion.created_at AND proof.result_revision=original.provider_revision AND proof.result_sha256=original.sha256 AND proof.result_bytes=original.bytes AND EXISTS(SELECT 1 FROM media_storage_transfer_requests write WHERE write.call_id=writer.id AND write.descriptor->>'kind'='object.put' AND write.id::text=proof.result_request_proof->>'id' AND write.token_digest=proof.result_request_proof->>'tokenDigest'))
  THEN RAISE EXCEPTION 'Original conditional DELETE needs a fresh exact nonce-bound complete proof, no holds/other lineage and no earlier physical dispatch' USING ERRCODE='23514'; END IF;
@@ -1061,8 +1073,8 @@ END $$;
 CREATE TRIGGER media_ordinary_retirement BEFORE UPDATE ON media_object_writes FOR EACH ROW EXECUTE FUNCTION freeholder_media_ordinary_retirement_guard();
 --> statement-breakpoint
 -- Minimal locator authority requires real original finishes and a complete
--- actual all-copy physical proof. Standalone retirement producers are not
--- invented here; until present they remain pending rather than using404/TTL.
+-- actual all-copy physical proof. The standalone producer requires its own
+-- complete proof; unknown/crashed/multipart debt never closes through404/TTL.
 CREATE FUNCTION freeholder_media_original_reservation_retired(reservation uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
  WITH RECURSIVE original_writes AS (
   SELECT * FROM media_object_writes WHERE original_reservation_id=reservation
