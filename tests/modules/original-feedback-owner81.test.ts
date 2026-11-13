@@ -12,6 +12,8 @@ import { outboxEvents } from "@/core/events/schema";
 import { stopJobs, reconcileJobDeploymentAdmission } from "@/core/jobs";
 import { ready } from "@/core/runtime";
 import { merchantPaymentObservations } from "@/modules/invoicing/merchant-collection-schema";
+import { invoiceMerchantDependencyFingerprints, exportMerchantRecoveryHistory } from "@/modules/invoicing/merchant-payment-dependencies";
+import { merchantRefundDependencyFingerprints } from "@/modules/invoicing/merchant-refund-dependencies";
 import { legacyBankFeedback } from "@/modules/invoicing/legacy-bank-feedback-schema";
 import { retainLegacyBankFeedback } from "@/modules/invoicing/legacy-bank-feedback-service";
 import { originalBankFeedbackOwner } from "@/modules/invoicing/original-cash-feedback-owner";
@@ -28,7 +30,11 @@ const phaseSchema=z.object({start_date:z.number(),end_date:z.number(),metadata:z
 async function signedRawRefund(input:{ref:string;intent:string;charge:string;amount:number;currency:string}) {
   const secret="whsec_feedback_owner_fixture_only",timestamp=Math.floor(Date.now()/1000),receivedAt=new Date(timestamp*1000).toISOString();
   const body=Buffer.from(JSON.stringify({id:`evt_Owner${randomUUID()}`,type:"refund.updated",api_version:"2026-10-28.endive",created:timestamp,data:{object:{id:input.ref,payment_intent:input.intent,charge:input.charge,amount:input.amount,currency:input.currency.toLowerCase(),status:"succeeded"}}}));
-  const signature=createHmac("sha256",secret).update(`${timestamp}.`).update(body).digest("hex"),adapter=createStripePayments({secretKey:"sk_feedback_owner_fixture_only",webhookSecrets:[secret]});
+  const signature=createHmac("sha256",secret).update(`${timestamp}.`).update(body).digest("hex"),adapter=createStripePayments({secretKey:"sk_feedback_owner_fixture_only",webhookSecrets:[secret],fetch:async(input,init={})=>{
+    const url=new URL(typeof input==="string"?input:input instanceof URL?input.href:input.url);
+    if(url.href==="https://api.stripe.com/v1/account"&&(init.method??"GET")==="GET")return Response.json({id:"acct_fixturePlatform"});
+    throw new Error(`Unexpected feedback-verifier transport ${init.method??"GET"} ${url.origin}${url.pathname}`);
+  }});
   const events=await adapter.verifyWebhook({body,receivedAt,headers:{"stripe-signature":`t=${timestamp},v1=${signature}`}});expect(events).toHaveLength(1);
   if(!events[0])throw new Error("Actual verified original feedback was not decoded.");
   return retainLegacyBankFeedback.call({provider:"stripe",event:{...events[0]},rawBodySha256:createHash("sha256").update(body).digest("hex"),receivedAt},{kind:"system"});
@@ -40,11 +46,24 @@ describe.runIf(hasDatabase)("actual original raw feedback privacy owner81",{time
   afterEach(async()=>{vi.useRealTimers();paymentSource?.release.resolve();paymentSource?.base.cleanup();subscriptionSource?.fixture.cleanup();paymentSource=undefined;subscriptionSource=undefined;vi.restoreAllMocks();await stopJobs();await reconcileJobDeploymentAdmission();await closeDb();});afterAll(closeDb);
   it("repairs a real unassigned positive payment callback before any cash owner/GET without creating a refund",async()=>{
     paymentSource=await partialCashFixture({unapplied:true});const external=paymentSource.dashboardRefund(paymentSource.amount/3);
+    const invoiceId=paymentSource.invoiceId,paymentId=paymentSource.paymentId;
+    const beforeFingerprint=await db().transaction(tx=>invoiceMerchantDependencyFingerprints(tx,[invoiceId]));
+    expect(beforeFingerprint?.get(invoiceId)).toBeTruthy();
     await paymentSource.signedDashboard(external);
     const rows=await db().select().from(legacyBankFeedback);expect(rows).toHaveLength(1);const raw=rows[0]!;
     const beforePayment=await db().select().from(payments),beforeRefunds=await db().select().from(refunds);
     await expect(db().transaction(tx=>originalBankFeedbackOwner(tx,{...raw,authentication:"0".repeat(64)}))).rejects.toMatchObject({code:"conflict"});
     const owner=await db().transaction(tx=>originalBankFeedbackOwner(tx,raw));expect(owner).toMatchObject({kind:"payment",paymentId:paymentSource.paymentId,subscriptionChargeReceiptId:null});
+    const financial=await db().transaction(tx=>merchantRefundDependencyFingerprints(tx,{paymentIds:[paymentId],subscriptionChargeReceiptIds:[]}));
+    expect(financial.incomplete).toBe(false);
+    expect(financial.entries.some(entry=>entry.table==="original_cash_feedback"&&entry.id.endsWith(`:${raw.id}`))).toBe(true);
+    const afterFingerprint=await db().transaction(tx=>invoiceMerchantDependencyFingerprints(tx,[invoiceId]));
+    expect(afterFingerprint?.get(invoiceId)).toBeTruthy();
+    expect(afterFingerprint?.get(invoiceId)).not.toBe(beforeFingerprint?.get(invoiceId));
+    const exported=await db().transaction(tx=>exportMerchantRecoveryHistory(tx,[invoiceId]));
+    const cashExport=z.object({originalCash:z.object({feedback:z.array(z.object({namespace:z.object({paymentId:z.uuid().nullable()}),feedback:z.object({id:z.uuid()})}))})}).parse(exported);
+    expect(cashExport.originalCash.feedback.some(entry=>entry.namespace.paymentId===paymentId&&entry.feedback.id===raw.id)).toBe(true);
+    expect(JSON.stringify(exported)).not.toContain(raw.authentication);
     const repaired=await originalMerchantRefundRepairSource.call({kind:"legacy_bank_feedback",id:raw.id},{kind:"system"});expect(repaired.profileId).toBe(paymentSource.base.profiles[0]!.profileId);
     expect((await db().select().from(outboxEvents).where(eq(outboxEvents.eventName,ORIGINAL_REFUND_EVIDENCE_EVENT))).some(event=>{const parsed=z.object({id:z.uuid()}).safeParse(event.payload);return parsed.success&&parsed.data.id===raw.id;})).toBe(true);
     expect(await db().select().from(originalCashRecoveries)).toHaveLength(0);expect(await db().select().from(originalCashRecoveryOperations)).toHaveLength(0);
