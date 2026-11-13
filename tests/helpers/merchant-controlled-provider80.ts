@@ -4,13 +4,13 @@
 import { expect,vi } from "vitest";
 import { createStripePayments } from "@/adapters/payments/stripe";
 export function controlledProviderEdge80(options:{loseBootstrapReply?:boolean}={}){
- let subscription:Record<string,unknown>|undefined,price:Record<string,unknown>|undefined,bootstrapPosts=0,pausePosts=0,cancelCalls=0,discoveryGets=0,lost=false,unexpectedPaid=false;
+ let subscription:Record<string,unknown>|undefined,price:Record<string,unknown>|undefined,bootstrapPosts=0,pausePosts=0,cancelCalls=0,discoveryGets=0,lost=false,unexpectedPaid=false,unexpectedPending=false;
  const forms:URLSearchParams[]=[];
  const metadata=(form:URLSearchParams)=>Object.fromEntries([...form].filter(([key])=>key.startsWith("metadata[")).map(([key,value])=>[key.slice(9,-1),value]));
  const invoice=()=>{if(!subscription)throw Error("Create the real fictional controlled resource first");return{id:"in_actualControlledZero",object:"invoice",subscription:subscription.id,customer:subscription.customer,
   parent:{type:"subscription_details",subscription_details:{subscription:subscription.id,metadata:subscription.metadata}},currency:"cad",status:"paid",total:0,subtotal:0,amount_paid:0,amount_due:0,amount_remaining:0,
   auto_advance:false,starting_balance:0,ending_balance:0,post_payment_credit_notes_amount:0,pre_payment_credit_notes_amount:0};};
- const unexpectedInvoice=()=>({...invoice(),id:"in_actualControlledUnexpected",total:500,subtotal:500,amount_paid:500,amount_due:500,amount_remaining:0});
+ const unexpectedInvoice=()=>({...invoice(),id:"in_actualControlledUnexpected",status:unexpectedPaid?"paid":"open",total:500,subtotal:500,amount_paid:unexpectedPaid?500:0,amount_due:500,amount_remaining:unexpectedPaid?0:500});
  const fetcher=vi.fn<typeof fetch>(async(input,init={})=>{
   const url=new URL(typeof input==="string"?input:input instanceof URL?input.href:input.url),headers=new Headers(init.headers);
   expect(url.origin).toBe("https://stripe.example.test");expect(headers.has("stripe-account")).toBe(false);
@@ -36,16 +36,16 @@ export function controlledProviderEdge80(options:{loseBootstrapReply?:boolean}={
    else expect(init.method).toBe("GET");
    return Response.json(subscription);
   }
-  if(url.pathname==="/v1/invoices"&&init.method==="GET")return Response.json({data:unexpectedPaid?[invoice(),unexpectedInvoice()]:[invoice()],has_more:false});
-  if(url.pathname==="/v1/invoices/in_actualControlledUnexpected"&&init.method==="GET"&&unexpectedPaid)return Response.json(unexpectedInvoice());
+  if(url.pathname==="/v1/invoices"&&init.method==="GET")return Response.json({data:unexpectedPaid||unexpectedPending?[invoice(),unexpectedInvoice()]:[invoice()],has_more:false});
+  if(url.pathname==="/v1/invoices/in_actualControlledUnexpected"&&init.method==="GET"&&(unexpectedPaid||unexpectedPending))return Response.json(unexpectedInvoice());
   if(url.pathname==="/v1/invoices/in_actualControlledZero"&&init.method==="GET")return Response.json(invoice());
-  if(url.pathname==="/v1/invoice_payments"&&init.method==="GET")return Response.json({data:url.searchParams.get("invoice")==="in_actualControlledUnexpected"&&unexpectedPaid?[{id:"inpay_actualControlledUnexpected",invoice:"in_actualControlledUnexpected",status:"paid",currency:"cad",amount_requested:500,amount_paid:500,payment:{type:"payment_intent",payment_intent:"pi_actualControlledUnexpected"}}]:[],has_more:false});
-  if(url.pathname==="/v1/payment_intents/pi_actualControlledUnexpected"&&init.method==="GET"&&unexpectedPaid&&subscription)return Response.json({id:"pi_actualControlledUnexpected",status:"succeeded",customer:subscription.customer,amount:500,amount_received:500,amount_capturable:0,currency:"cad",latest_charge:"ch_actualControlledUnexpected",transfer_data:subscription.transfer_data,on_behalf_of:subscription.on_behalf_of});
-  if(url.pathname==="/v1/invoices/in_actualControlledUnexpected/lines"&&init.method==="GET"&&unexpectedPaid)return Response.json({has_more:false,data:[{id:"il_actualControlledUnexpected",amount:500,currency:"cad",quantity:1,pricing:{type:"price_details",price_details:{price:"price_actualControlledUnexpected",product:price?.product}},period:{start:1,end:2}}]});
-  if(url.pathname==="/v1/prices/price_actualControlledUnexpected"&&init.method==="GET"&&price&&unexpectedPaid)return Response.json({...price,id:"price_actualControlledUnexpected",unit_amount:500,unit_amount_decimal:"500"});
+  if(url.pathname==="/v1/invoice_payments"&&init.method==="GET")return Response.json({data:url.searchParams.get("invoice")==="in_actualControlledUnexpected"&&(unexpectedPaid||unexpectedPending)?[{id:"inpay_actualControlledUnexpected",invoice:"in_actualControlledUnexpected",status:unexpectedPaid?"paid":"open",currency:"cad",amount_requested:500,amount_paid:unexpectedPaid?500:0,payment:{type:"payment_intent",payment_intent:"pi_actualControlledUnexpected"}}]:[],has_more:false});
+  if(url.pathname==="/v1/payment_intents/pi_actualControlledUnexpected"&&init.method==="GET"&&(unexpectedPaid||unexpectedPending)&&subscription)return Response.json({id:"pi_actualControlledUnexpected",status:unexpectedPaid?"succeeded":"processing",customer:subscription.customer,amount:500,amount_received:unexpectedPaid?500:0,amount_capturable:0,currency:"cad",latest_charge:"ch_actualControlledUnexpected",transfer_data:subscription.transfer_data,on_behalf_of:subscription.on_behalf_of});
+  if(url.pathname==="/v1/invoices/in_actualControlledUnexpected/lines"&&init.method==="GET"&&(unexpectedPaid||unexpectedPending))return Response.json({has_more:false,data:[{id:"il_actualControlledUnexpected",amount:500,currency:"cad",quantity:1,pricing:{type:"price_details",price_details:{price:"price_actualControlledUnexpected",product:price?.product}},period:{start:1,end:2}}]});
+  if(url.pathname==="/v1/prices/price_actualControlledUnexpected"&&init.method==="GET"&&price&&(unexpectedPaid||unexpectedPending))return Response.json({...price,id:"price_actualControlledUnexpected",unit_amount:500,unit_amount_decimal:"500"});
   if(url.pathname==="/v1/invoices/in_actualControlledZero/lines"&&init.method==="GET")return Response.json({has_more:false,data:[{id:"il_actualControlledZero",amount:0,currency:"cad",quantity:1,pricing:{type:"price_details",price_details:{price:"price_actualControlledZero",product:price?.product}},period:{start:1,end:2}}]});
   if(url.pathname==="/v1/prices/price_actualControlledZero"&&init.method==="GET"&&price)return Response.json(price);
   throw Error(`Unexpected fictional controlled provider request: ${init.method} ${url.pathname}`);
  });
- return{provider:createStripePayments({secretKey:"sk_actual_controlled_fixture",apiBase:"https://stripe.example.test",fetch:fetcher}),forms,externallyPayUnexpectedInvoice:()=>{if(!subscription)throw Error("An actual original controlled resource must exist first");unexpectedPaid=true;subscription={...subscription,latest_invoice:"in_actualControlledUnexpected"};},bootstrapPosts:()=>bootstrapPosts,pausePosts:()=>pausePosts,cancelCalls:()=>cancelCalls,discoveryGets:()=>discoveryGets};
+ return{provider:createStripePayments({secretKey:"sk_actual_controlled_fixture",apiBase:"https://stripe.example.test",fetch:fetcher}),forms,externallyPayUnexpectedInvoice:()=>{if(!subscription)throw Error("An actual original controlled resource must exist first");unexpectedPaid=true;unexpectedPending=false;subscription={...subscription,latest_invoice:"in_actualControlledUnexpected"};},externallyAddUnpaidUnexpectedInvoice:()=>{if(!subscription)throw Error("Create the actual original controlled resource before its external bank obligation");unexpectedPending=true;subscription={...subscription,latest_invoice:"in_actualControlledUnexpected"};},bootstrapPosts:()=>bootstrapPosts,pausePosts:()=>pausePosts,cancelCalls:()=>cancelCalls,discoveryGets:()=>discoveryGets};
 }

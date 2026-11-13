@@ -8,6 +8,7 @@ import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { subscriptionProviderChargeReceipts } from "./schema";
 import { subscriptionControlledChargeOrigins,subscriptionControlledResources,subscriptionControlledFacts,subscriptionControlledCalls,subscriptionControlledOperations } from "./controlled-provider-schema";
 import { controlledCashEvidence,readOriginalControlledChargeAuthority } from "./controlled-provider-cash-origin";
+import { controlledRawFinancialReview } from "./controlled-provider-raw-financial-review";
 import { controlledProviderJournal } from "./controlled-provider-proof";
 const primaryKinds=new Set(["bootstrap","discover_bootstrap","pause_drafts","read_bootstrap","read_customer_financials","list_invoices","create_schedule","read_calendar","update_calendar","read_invoice","finalize_invoice","pay_invoice","cancel_calendar","void_invoice","delete_draft"]);
 /** verified is ancestry, never paid/refunded/settled authority. The parent must
@@ -48,8 +49,10 @@ export async function readControlledReceiptNamespace(tx:Tx,receiptId:string){
  const verified=authority.controlledOrigin.operationId===origin.operationId&&authority.controlledOrigin.originalEvidenceDigest===origin.originalEvidenceDigest
   &&cash.providerSubscriptionRef===receipt.providerSubscriptionRef&&cash.providerInvoiceRef===receipt.providerInvoiceRef&&cash.providerPaymentIntentRef===receipt.providerPaymentIntentRef
   &&cash.amountMinor===receipt.amountMinor&&cash.currency===receipt.currency&&(!receipt.providerChargeRef||!cash.providerChargeRef||receipt.providerChargeRef===cash.providerChargeRef);
+ const originalResource=candidates.find(row=>row.resource.id===origin.resourceId)?.resource;
+ if(!originalResource)throw new ServiceError("conflict","Restore the actual original controlled resource before classifying its retained raw financial facts.");
  const primaryDebt=history.calls.some(call=>history.unfinished.includes(call.id)&&history.operations.some(operation=>operation.id===call.operationId&&primaryKinds.has(operation.kind)));
- let rawCashReview=false;
+ let rawCashReview=controlledRawFinancialReview(originalResource,history).factIds.length>0;
  for(const occurrence of history.facts){
   if(occurrence.actual.kind!=="cash_observed")continue;
   const actual=controlledCashEvidence.safeParse(occurrence.actual.raw.cash);
