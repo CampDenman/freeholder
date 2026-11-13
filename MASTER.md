@@ -14205,6 +14205,14 @@ whatever is best for the people using the site.
   ancestry and additionally requires the original failed POST facts unchanged;
   no runtime money rule changed. Failed V3 is preserved. A fresh database and
   actual corrected-case/unassigned-case runs remain required.
+  Historical import fixture preparation2026-11-13: normal CI reached the
+  populated migration73 control, whose isolated rollback setup now encounters
+  three real migration81 foreign keys. Its setup explicitly proves those future
+  child scopes empty, removes only the three named edges within that transaction
+  and verifies all installed definitions return after rollback. Original preview,
+  checkpoint and old-writer refusal assertions remain unchanged. No shipped
+  migration, constraint or guard is removed; the actual corrected fixture run
+  remains pending.
   Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
   parity stopped at the first genuine model/source mismatch in the named
   nonnegative invoice amount CHECK after125 complete models. The unchanged

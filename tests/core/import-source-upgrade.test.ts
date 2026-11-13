@@ -12,8 +12,17 @@ const migration = readFileSync("db/migrations/0073_import_source_graph.sql", "ut
 describe.runIf(hasDatabase)("populated source graph upgrade (C3.47)", () => {
   beforeEach(truncateSpine); afterAll(closeDb);
   it("preserves ordinary previews and source manifests without inventing graphs, then fences both old root and child writers", async () => {
+    // Migration81 adds these three foreign keys to the migration73 tables.
+    // Remove only those empty future edges inside the rollback fixture; keep
+    // their tables and prove every installed definition is restored afterwards.
+    const newerForeignKeys = sql`select conname,pg_get_constraintdef(oid) definition from pg_constraint
+      where conname in ('import_crawl_graphs_graph_id_fkey','import_crawl_entry_originals_entry_id_fkey','import_source_erasure_members_graph_id_fkey') order by conname`;
+    const installedForeignKeys = Array.from(await db().execute(newerForeignKeys));
+    expect(installedForeignKeys).toHaveLength(3);
     const rollback = new Error("Rollback the isolated populated schema72 fixture");
     await expect(db().transaction(async tx => {
+      for (const table of ["import_crawl_graphs", "import_crawl_entry_originals", "import_source_erasure_members"]) expect(await tx.execute(sql.raw(`select 1 from ${table} limit 1`))).toHaveLength(0);
+      await tx.execute(sql.raw("alter table import_crawl_graphs drop constraint import_crawl_graphs_graph_id_fkey; alter table import_crawl_entry_originals drop constraint import_crawl_entry_originals_entry_id_fkey; alter table import_source_erasure_members drop constraint import_source_erasure_members_graph_id_fkey;"));
       await tx.execute(sql.raw("drop function freeholder_guard_import_graph_writer() cascade; drop function freeholder_guard_import_graph_identity() cascade; drop function freeholder_guard_import_entry_identity() cascade; drop function freeholder_guard_import_media_identity() cascade; drop table import_source_media,import_source_batches,import_source_entries,import_source_graphs;"));
       const root = randomUUID(), ordinary = randomUUID(), child = randomUUID(), graph = randomUUID();
       const preview = { pages: [{ slug: "original-owner-preview", title: "Original source title", blocks: [{ type: "text", text: "Unchanged original source body" }] }] };
@@ -35,5 +44,6 @@ describe.runIf(hasDatabase)("populated source graph upgrade (C3.47)", () => {
       expect(await tx.execute(sql`select preview,checkpoint from import_runs where id=${root}`)).toEqual([{ preview, checkpoint }]);
       throw rollback;
     })).rejects.toBe(rollback);
+    expect(Array.from(await db().execute(newerForeignKeys))).toEqual(installedForeignKeys);
   });
 });
