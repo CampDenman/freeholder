@@ -52,7 +52,10 @@ describe.runIf(optedIn)("actual old79 uploaded false-completion recovery (C1.08/
     const session = await db().transaction(tx=>createSession(tx,fixture.ownerId,{twoFactorVerified:true}));
     const owner = await actorFromToken(session.token);
     const later = await startImport.call({kind:"wordpress-wxr",origin:"https://fictional-later-history.example"},owner);
-    const bytes = new TextEncoder().encode('<rss xmlns:wp="urn:wordpress" xmlns:content="urn:content"><channel><link>https://fictional-later-history.example</link><item><title>later-history-reader@example.test</title><link>https://fictional-later-history.example/article</link><wp:post_id>1</wp:post_id><wp:post_type>post</wp:post_type><wp:status>publish</wp:status><content:encoded><![CDATA[<p>Actual later private input.</p>]]></content:encoded></item></channel></rss>');
+    // A finite <=500 preview deliberately has no normalized graph. Exercise
+    // an actual independent large-source graph and its retained original bytes.
+    const xml = `<rss xmlns:wp="urn:wordpress" xmlns:content="urn:content"><channel><link>https://fictional-later-history.example</link>${Array.from({length:501},(_,index)=>`<item><title>${index===0?"later-history-reader@example.test":`Actual later article ${index}`}</title><link>https://fictional-later-history.example/article-${index}</link><wp:post_id>${index+1}</wp:post_id><wp:post_type>post</wp:post_type><wp:status>publish</wp:status><content:encoded><![CDATA[<p>Actual later private input ${index}.</p>]]></content:encoded></item>`).join("")}</channel></rss>`;
+    const bytes = new TextEncoder().encode(xml);
     const upload = await beginSourceUpload.call({id:later.id,filename:"later-reviewed.xml",bytes:bytes.byteLength},owner);
     await uploadSourceChunk.call({id:later.id,uploadId:upload.uploadId,index:0,bytes},owner);
     let laterPreview=await previewFromUpload.call({id:later.id,uploadId:upload.uploadId},owner);
@@ -61,6 +64,7 @@ describe.runIf(optedIn)("actual old79 uploaded false-completion recovery (C1.08/
     const [laterGraph] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.runId,later.id));
     if(!laterGraph)throw new Error("The actual later reviewed graph is missing.");
     const laterBefore = await preserved(later.id,laterGraph.id), laterKey=`imports/${later.id}/${upload.uploadId}/00000.part`;
+    expect(laterBefore.entries).toHaveLength(501); expect(JSON.stringify(laterBefore.entries)).toContain("later-history-reader@example.test");
     const laterBytes = await storage().get(laterKey); expect(laterBytes).toBeDefined();
     const physicalBefore = await db().execute(sql`select id,operation_kind,state,deleted_at from media_object_writes order by id`);
     const deletion = vi.spyOn(storage(),"delete");
