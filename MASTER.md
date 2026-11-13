@@ -5181,8 +5181,11 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   an explicit null result instead of replacing it with an acknowledgement.
   Draft/absent page reads therefore keep the generated SDK's nullable contract.
   The acknowledgement remains for omitted bodies. Six focused service-route
-  controls cover JSON primitives and presenter behavior; main-based
-  qualification remains pending in `deploy/http-null-results-2026-11-13.md`.
+  controls cover JSON primitives and presenter behavior. Main-based full types,
+  whole lint, 44 complete source contract files and playground policy pass;
+  96 actual HTTP/API/MCP/contract/SDK checks then pass on NEW ordinary0–79
+  with all80 hashes/profile/drain verified. Evidence and limits are in
+  `deploy/http-null-results-2026-11-13.md`; protected CI remains required.
   This repair does not close import, provider, security or stable acceptance.
 - [x] **C3.04** Make MCP discovery actor-aware—including actor kind, service
   opt-out and approval annotations—so listed tools are genuinely callable.

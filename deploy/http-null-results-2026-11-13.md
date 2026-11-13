@@ -23,8 +23,8 @@ HTTP test source at that failure are identical to protected main bedafa0a.
 In the corrected integration candidate, all 28 HTTP controls pass, and the
 unchanged incoming journey passes its null, publication and rollback checks
 before a separate audit-selection assertion stops the test. This does not
-qualify the complete import journey. Main-based qualification of this narrow
-repair is recorded below when completed. It supplies no stable release,
+qualify the complete import journey. Main-based qualification below covers this
+narrow repair. It supplies no stable release,
 provider-account acceptance, security review or owner completion signature.
 
 ## Main-based source qualification
@@ -37,4 +37,19 @@ or pending. License, release-note and plan gates pass. The unchanged generated
 changelog equality test first required refreshing `CHANGELOG.md` from the new
 changeset; its failed attempt is preserved, and the six unfinished complete
 files then pass without repeating the 38 already qualified. The package stays
-at 0.2.0-beta.6. Database qualification of this exact candidate remains pending.
+at 0.2.0-beta.6. Its database qualification is recorded below.
+
+## Main-based database qualification
+
+At f245080ba0f9d980ce8bd941b07491c140a20dfa, a NEW isolated database applies
+ordinary migrations 0–79 in 5.327 seconds. All 80 installed timestamps/hashes
+match source. Five affected complete test files then pass sequentially: HTTP
+28, API 22, MCP 37, contract projections 1 and SDK 8, totaling 96 actual passes.
+SDK generation remains unchanged. Each file receives an independent read-only
+money/audit row-digest, journal and profile inspection before the next file.
+All inspections confirm UTC, fsync on, jit off, no recovery and zero remaining
+database clients. Every earlier failed component database stays preserved.
+
+The main-based source and native proofs qualify this narrow response repair.
+Protected PR and merge-queue CI remain required. No deployment or stable gate
+has advanced.
