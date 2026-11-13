@@ -113,17 +113,17 @@ describe.runIf(hasDatabase)("actual original gross proration, attested cash and 
     const funding = await db().select().from(invoiceCreditFunding), reservations = await db().select().from(invoiceCreditReservations), applications = await db().select().from(invoiceCreditApplications);
     expect(funding).toHaveLength(1); expect(reservations).toHaveLength(1); expect(applications).toHaveLength(1);
     expect(funding[0]).toMatchObject({ amountMinor: 2100, feeObligationMinor: 200, feeProvenCollectedMinor: 0, feeCollectionState: "owed" });
-    expect(applications[0]).toMatchObject({ invoiceId: invoice!.id, feeObligationMinor: 200, feeProvenCollectedMinor: 0 });
+    expect(applications[0]).toMatchObject({ invoiceId: invoice.id, feeObligationMinor: 200, feeProvenCollectedMinor: 0 });
     const beforeAccess = await access(input.id);
-    const partial = await recordOfflinePayment.call({ invoiceId: invoice!.id, method: "bank_transfer", amountMinor: 1, reference: "fictional-gross-partial",
+    const partial = await recordOfflinePayment.call({ invoiceId: invoice.id, method: "bank_transfer", amountMinor: 1, reference: "fictional-gross-partial",
       evidence: "Synthetic partial external principal attestation", idempotencyKey: "gross-partial" }, OWNER);
-    expect(await completePaidGrossProration.call({ invoiceId: invoice!.id }, { kind: "system" })).toEqual({ applied: false, reviewRequired: false });
+    expect(await completePaidGrossProration.call({ invoiceId: invoice.id }, { kind: "system" })).toEqual({ applied: false, reviewRequired: false });
     expect((await parent(input.id)).planId).toBe(old.plan.id); expect(await access(input.id)).toEqual(beforeAccess);
     expect(partial.amountMinor).toBe(1);
     const partialCustomerReview = await getCustomerInvoice.call({ id: invoice.id, token: invoiceAccessToken(invoice) }, ANONYMOUS);
     expect(partialCustomerReview).toMatchObject({ totalMinor: 5250, paidMinor: 1, creditedMinor: 2100 });
     expect(invoiceOutstanding(partialCustomerReview)).toBe(3149);
-    await recordOfflinePayment.call({ invoiceId: invoice!.id, method: "bank_transfer", amountMinor: 3149, reference: "fictional-gross-final",
+    await recordOfflinePayment.call({ invoiceId: invoice.id, method: "bank_transfer", amountMinor: 3149, reference: "fictional-gross-final",
       evidence: "Synthetic remaining external principal attestation", idempotencyKey: "gross-final" }, OWNER);
     expect((await parent(input.id)).planId).toBe(old.plan.id);
     expect(await effect(accepted.prorationId)).toEqual({ applied: true, reviewRequired: false });

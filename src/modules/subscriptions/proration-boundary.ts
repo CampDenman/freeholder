@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { ServiceError, type ServiceContext } from "@/core/service";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { invoices } from "@/modules/invoicing/schema";
-import { subscriptionProrations } from "./proration-schema";
+import type { subscriptionProrations } from "./proration-schema";
 import { subscriptionProrationCashConfirmations, subscriptionProrationCreditConfirmations } from "./proration-boundary-schema";
 export async function requireProrationBoundarySchema(ctx: ServiceContext) {
   const [ready] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=8 as ready from pg_trigger where not tgisinternal and tgenabled in('O','A') and(tgrelid,tgname) in

@@ -298,7 +298,7 @@ async function status(ctx: ServiceContext, id: string) {
   const activeSnapshot = accepted?.state === "applied" && accepted.planId === parent.planId ? accepted.snapshot : original?.snapshot;
   const [invoice] = accepted?.debitInvoiceId ? await ctx.tx.select().from(invoices).where(eq(invoices.id, accepted.debitInvoiceId)).limit(1) : [];
   const [cardMandate] = accepted ? await ctx.tx.select({ id: subscriptionProrationCardMandates.prorationId }).from(subscriptionProrationCardMandates).where(eq(subscriptionProrationCardMandates.prorationId, accepted.id)).limit(1) : [];
-  const paidInTime = accepted && (await prorationBoundaryFunded(ctx, accepted)).onTime && invoice?.status === "paid" && invoiceSettled(invoice) && invoice.refundedMinor === 0 && invoice.paidAt && invoice.paidAt <= accepted!.effectiveAt;
+  const paidInTime = accepted && (await prorationBoundaryFunded(ctx, accepted)).onTime && invoice?.status === "paid" && invoiceSettled(invoice) && invoice.refundedMinor === 0 && invoice.paidAt && invoice.paidAt <= accepted.effectiveAt;
   return { commercial, prorating: activeSnapshot?.proration === "create_prorations", billingMode: parent.billingMode,
     accepted: accepted ? { ...view(accepted), originalCardMandate: !!cardMandate, currency: accepted.snapshot.currency, debitMinor: accepted.debitNetMinor + accepted.debitTaxMinor,
       creditMinor: accepted.creditNetMinor + accepted.creditTaxMinor, remainingMinor: invoice ? Math.max(0, invoice.totalMinor - invoice.paidMinor - invoice.creditedMinor) : null,
