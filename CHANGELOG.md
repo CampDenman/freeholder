@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Allow contact merge and undo to proceed when an exact, locked check proves both contacts have no storage-transfer ownership rows. Preserve the complete transfer capability and original lineage guards whenever transfer ownership exists.
+
 - Align the original applied-credit migration with the existing invoice amount and consideration checks. Keep credited principal nonnegative within the named amount check, and bound cash plus applied credit by the invoice total without treating noncash credit as refundable cash.
 
 - An image held because the abuse-imagery check could not run, for example because of a timeout or because it was too large, is no longer treated as evidence. The owner can rescan or delete it like any other held file. Only an actual match is placed under legal hold, including files held earlier under the old tagging. Every upload of a matched image is linked to its own uploader. Matches are recorded for the legal report even when the members module is off, and an upload is refused if its match could not be recorded.
