@@ -16164,3 +16164,34 @@ requires an empty fifth dependency array and adds one strict nine-empty-family/
 unknown-parent control. Root's v6 first failure is preserved; the corrected15
 controls are UNRUN. No product behavior or database changed. See
 `deploy/member-controlled-financial-driver82-source-20261113.md`.
+Source contract checkpoint 2026-11-13 (C12.38/C1.08): the ordinary controlled
+cash observational source reader binds an actual accepted target/receipt and
+original creator/caller/fact plus every retained observation/raw occurrence.
+Source identity supplies no observation/application/principal/access authority.
+Seven controls are PREPARED/UNRUN. Genuine parent coverage/caller/privacy
+observation authority, actual GET producer and explicit own-read causal history
+comparison remain REQUIRED implementation, followed by genuine finished bank
+proof and canonical batch application/effects. No private service is registered,
+financial default relaxed, SQL assembled or C-item/stable closure claimed. See
+deploy/controlled-cash-observation-source82-20261113.md.
+
+Source callback checkpoint 2026-11-13 (C12.38/C1.08/C11.10): new optional
+private original-holder validation authenticates each actual inspection refund
+capture with its original admission/caller and occurrence UUID/time. Late or
+foreign callbacks retain raw money independently and cannot be adopted as that
+read by a semantic FK. Legacy defaults remain intact. Six pure and one actual
+shared-service/HTTP controls are PREPARED/UNRUN; no schema/SQL or financial
+permission changes. This grants no recovery/money authority. Genuine positive
+observational context, causal comparison, bank proof and full acceptance remain
+REQUIRED; no C/stable closure. See
+deploy/original-cash-inspection-capture83-source-20261113.md.
+
+Source ancestry checkpoint 2026-11-13 (C12.38/C1.08/C11.10): a new ordinary
+reader proves only an exact receipt-owned genuinely returned inspection and its
+authenticated original callback entries. Its historical causal selector never
+contains stop receipts or unrelated repeated captures; full current financial
+coverage retains every own row/caller/fact. Six strict controls are PREPARED/
+UNRUN; no registered authority, new model, SQL or activation. The genuine
+observational parent query/producer/context and all prospective application,
+canonical effects and acceptance remain REQUIRED. See
+deploy/controlled-cash-inspection-ancestry82-20261113.md.

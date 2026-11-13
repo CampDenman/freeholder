@@ -349,6 +349,13 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Internal recovery source identifies only the authenticated entries belonging to one genuinely returned inspection; every event stays in the full financial history and working recovery qualification remains pending.
+
+- Internal recovery source now distinguishes an inspection’s authenticated refund callbacks from later raw events without discarding either occurrence; qualification remains pending.
+
+- Internal source checkpoint binds a controlled cash observation to the original receipt and actual creator/caller/facts; genuine recovery admission and payment qualification remain required.
+
+- Source-only cash inspection repair counts admitted readers before their first callback and separates genuine current bank evidence from returned-money disposition. Existing recovery acceptance remains open.
 - Source checkpoint: an independent reviewed stop can close an original bank-inspection caller only after actual process absence, preserving its NULL finish and requiring a new genuine bank read. Migration, private financial/privacy integration and qualification remain pending.
 
 - An image held because the abuse-imagery check could not run, for example because of a timeout or because it was too large, is no longer treated as evidence. The owner can rescan or delete it like any other held file. Only an actual match is placed under legal hold, including files held earlier under the old tagging. Every upload of a matched image is linked to its own uploader. Matches are recorded for the legal report even when the members module is off, and an upload is refused if its match could not be recorded.
