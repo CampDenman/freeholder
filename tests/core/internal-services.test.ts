@@ -85,7 +85,6 @@ const INTERNAL = [
   "invoicing.prepareLegacyBankRead",
   "invoicing.recordLegacyBankReadFact",
   "invoicing.finishLegacyBankRead",
-  "invoicing.inspectLegacyBankRefund",
   "invoicing.prepareMerchantRefundCurrentRead",
   "invoicing.recordMerchantRefundCurrentObservation",
   "invoicing.finishMerchantRefundCurrentRead",
