@@ -9,7 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import * as paymentAdapters from "@/adapters/payments";
 import { createStripePayments } from "@/adapters/payments/stripe";
 import { db } from "@/core/db";
-import { stopJobs } from "@/core/jobs";
+import { reconcileJobDeploymentAdmission, stopJobs } from "@/core/jobs";
 import { ready } from "@/core/runtime";
 import { setModuleEnabled } from "@/core/settings/service";
 import { cartItems, productVariants } from "@/modules/catalog/schema";
@@ -75,7 +75,7 @@ describe.runIf(hasDatabase)("actual original merchant phase producer (C12.38)", 
   let fixture: Awaited<ReturnType<typeof seedMerchantCheckout80>> | undefined;
   beforeAll(ready, 60000); beforeEach(truncateSpine);
   afterEach(() => { fixture?.cleanup(); fixture = undefined; vi.restoreAllMocks(); });
-  afterAll(async () => { await stopJobs(); await closeDb(); });
+  afterAll(async () => { await stopJobs(); await reconcileJobDeploymentAdmission(); await closeDb(); });
   it("confirms the actual not-started phase producer from its real adapter DTO and retained original caller", async () => {
     fixture = await seedMerchantCheckout80("destination", 1);
     const { provider, productPosts, schedulePosts } = edge(); vi.spyOn(paymentAdapters, "paymentAdapter").mockReturnValue(provider);
