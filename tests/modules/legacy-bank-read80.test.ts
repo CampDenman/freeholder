@@ -38,8 +38,8 @@ describe.runIf(hasDatabase)("authentic legacy bank read lifecycle80", { timeout:
       paths.push(`${init.method} ${url.pathname}`); expect(new Headers(init.headers).get("stripe-account")).toBeNull();
       if (url.pathname === "/v1/account") return Response.json({ id: "acct_ReadPlatformOnly" });
       if (url.pathname === "/v1/refunds" && init.method === "POST") {
-        if (typeof init.body !== "string") throw new Error("The actual refund POST must use a serialized form body.");
-        const body = new URLSearchParams(init.body); expect(body.get("payment_intent")).toBe(original.payment_intent);
+        const body = init.body instanceof URLSearchParams ? init.body : typeof init.body === "string" ? new URLSearchParams(init.body) : undefined;
+        if (!body) throw new Error("The actual refund POST must carry a form body."); expect(body.get("payment_intent")).toBe(original.payment_intent);
         expect(body.get("amount")).toBe("1000"); expect(body.has("metadata[freeholder_refund_attempt_id]")).toBe(false);
         posts.push(new Headers(init.headers).get("idempotency-key")!); return Response.json({ ...original, status: "succeeded" });
       }
