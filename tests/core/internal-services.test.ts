@@ -194,7 +194,6 @@ const INTERNAL = [
   "invoicing.recordCashReturnPrimaryObservation",
   "invoicing.recordCashReturnObservation",
   "invoicing.assertMerchantCashInspectionInvocation",
-  "invoicing.cashInspectionRecoveryPlan",
   "invoicing.finishMerchantCashReturnInspection",
   "invoicing.finalizeUnappliedCashReturn",
   "invoicing.subscriptionChargeDisposition",

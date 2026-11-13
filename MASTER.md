@@ -14294,6 +14294,13 @@ whatever is best for the people using the site.
   observational context, causal comparison, bank proof and full acceptance remain
   REQUIRED; no C/stable closure. See
   deploy/original-cash-inspection-capture83-source-20261113.md.
+  Independent-stop inventory correction2026-11-13: v24 full types and
+  affected lint passed, then the explicit service-boundary test found the new
+  recovery plan listed as BOTH system-only and caller-authorized private. Its
+  real permission is scoped/person-only with external:false. The mistaken
+  system-list entry is removed, retaining the explicit caller-authorized
+  private entry and every permission/HTTP/MCP assertion. No product permission
+  changes. Failed v24 is preserved; complete renewed contracts remain pending.
   Independent-stop helper validation2026-11-13: the precise callback input
   exposes the adapter-level optional platform-account field. The test now
   parses the actual callback through the real shared service input schema,
