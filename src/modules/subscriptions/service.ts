@@ -53,7 +53,7 @@ import merchantTermsStoreServices, { freezeOriginalMerchantTerms } from "./merch
 import { paymentAdapter } from "@/adapters/payments";
 import { createDraftInvoice, issueInvoice } from "@/modules/invoicing/invoice-service";
 import { paymentMethods } from "@/modules/invoicing/schema";
-import { invoices, invoiceLines } from "@/modules/invoicing/schema";
+import { invoices } from "@/modules/invoicing/schema";
 import marketPolicyServices, { captureSubscriptionMarketPolicy, getSubscriptionMarketPolicy } from "./market-policy";
 import { subscriptionPaymentScope } from "./market-policy";
 import { subscriptionMethodScopeMatches, subscriptionTaxDestination } from "./merchant-scope-contract";

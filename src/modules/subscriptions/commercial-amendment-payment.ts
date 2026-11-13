@@ -4,12 +4,12 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { ServiceError, type ServiceContext } from "@/core/service";
-import { invoiceLines, invoices } from "@/modules/invoicing/schema";
+import { invoiceLines, type invoices } from "@/modules/invoicing/schema";
 import { getInvoiceMarketPolicy } from "@/modules/invoicing/market-policy";
 import { invoiceMerchantTaxQuoteLines, invoiceMerchantTaxQuotes } from "@/modules/invoicing/merchant-tax-schema";
 import { admittedProviderPeriod, assertCanonicalProviderPeriod } from "./provider-periods";
 import { periodEnd } from "./calendar";
-import { subscriptionCommercialTerms, subscriptionMarketPolicies, subscriptions } from "./schema";
+import { subscriptionMarketPolicies, type subscriptionCommercialTerms, type subscriptions } from "./schema";
 
 export async function assertPaidAmendmentInvoice(ctx: ServiceContext, parent: typeof subscriptions.$inferSelect,
   accepted: typeof subscriptionCommercialTerms.$inferSelect, invoice: typeof invoices.$inferSelect) {
