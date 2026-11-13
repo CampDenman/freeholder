@@ -143,6 +143,8 @@ describe.runIf(hasDatabase)("authentic legacy bank read lifecycle80", { timeout:
     const second = await mergeContacts.call({ survivingId: alias.id, duplicateId: own.buyer.id }, OWNER);
     const [canonicalInvoice] = await db().select().from(invoices).where(eq(invoices.id, own.invoice.id));
     const [canonicalContact] = await db().select().from(contacts).where(eq(contacts.id, alias.id));
+    expect(canonicalInvoice).toMatchObject({ id: own.invoice.id, contactId: alias.id });
+    expect(canonicalContact).toMatchObject({ id: alias.id });
     vi.spyOn(adapters, "paymentAdapter").mockReturnValue(own.factory);
     const ownRead = await inspectLegacyBankRefund.call({ refundId: own.refund.id }, OWNER);
     expect(ownRead).toMatchObject({ originalBindingVerified: true, cashInventoryComplete: true, factCount: 9, requiresReview: true });
