@@ -23,7 +23,7 @@ import { subscriptions } from "./schema";
 import { scheduleCallerHasStopped } from "./provider-schedule-proof";
 import { verifiedOriginalPhaseProduct } from "./provider-phase-product-proof";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
-import productRecoveryServices, { flushMerchantPhaseProductReads } from "./provider-phase-product-recovery";
+import { flushMerchantPhaseProductReads } from "./provider-phase-product-recovery";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const account = z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200);
@@ -182,4 +182,4 @@ export const createMerchantPhaseProduct = defineOrchestratedService({
     finally { await finishMerchantPhaseProduct.call({ operationId: claimed.operationId, completionNonce: local.nonce }, { kind: "system" }); callers.delete(claimed.operationId); }
   },
 });
-export default [claimMerchantPhaseProduct, observeMerchantPhaseProduct, finishMerchantPhaseProduct, createMerchantPhaseProduct, quoteMerchantProviderHorizon, ...productRecoveryServices];
+export default [claimMerchantPhaseProduct, observeMerchantPhaseProduct, finishMerchantPhaseProduct, createMerchantPhaseProduct];

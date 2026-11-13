@@ -40,7 +40,7 @@ import merchantPaymentDebtServices from "./merchant-payment-debt";
 import merchantSubscriptionApplicationServices from "./merchant-subscription-application";
 import originalSubscriptionCashServices from "@/modules/subscriptions/provider-charge-services";
 import originalSubscriptionScopeServices from "@/modules/subscriptions/provider-webhook-scope";
-import merchantTaxQuiescenceServices from "@/modules/subscriptions/merchant-tax-quiescence";
+import merchantTaxQuiescenceServices from "@/modules/subscriptions/merchant-tax-quiescence-services";
 import merchantFeeServices from "./merchant-fee-service";
 import {siteMerchantTaxServices} from "./merchant-tax-profiles";
 import {siteMerchantTaxThresholds} from "./merchant-tax-thresholds";

@@ -8,7 +8,7 @@ import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { lockMerchantExemptionPolicy } from "@/core/commerce/merchant-exemption-lock";
 import { defineService, ServiceError } from "@/core/service";
 import { merchantTaxProfiles } from "@/modules/invoicing/merchant-tax-schema";
-import { merchantAgreementScheduleState } from "./merchant-tax-quiescence";
+import { merchantAgreementScheduleState } from "./merchant-agreement-schedule-state";
 import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
 import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { subscriptionMerchantScopes, subscriptions } from "./schema";
