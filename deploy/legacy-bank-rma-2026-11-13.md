@@ -157,3 +157,25 @@ feedback plus its original admission namespace in the complete5000-child bound.
 Empty new child arrays preserve previous financial fingerprints. This supplies
 the missing source hook for the prepared feedback-only merge-undo control; it
 is not native or final-candidate proof. All new qualification remains pending.
+
+
+## Bounded source qualification after integration
+
+Product source d2d9e6b4 passes full Node22 types53.832s, whole-project
+lint109.922s and75 nonempty test files:650 actual passing assertions,
+50 explicit database skips and no failed, pending or empty bail placeholders.
+License,635-note changelog and plan373/323/50 checks pass. The first type gate
+found two unvalidated unknown metadata reads in the new native fixture; typed
+UUID parsing and record narrowing repaired those without changing its success
+oracle. The first lint gate found an unknown scoped error throw after raw
+retention. The actual Error is now preserved; a non-Error thrown value is
+wrapped with its cause, so even a falsy thrown value cannot silently disappear.
+Each failing run was stopped/drained, with its diagnostics preserved before
+renewal. The first two runs did not reach source tests.
+
+Evidence is /tmp/freeholder-rma-feedback-v3-source-result-20261113.json and
+its decoded-source-summary file. Exact twelve dependency descriptor equality
+allowed reuse of the prior install; no dependency installation ran. All five
+new RMA native cases remain unrun, and17bf remains unapplied. A prepared V20
+ordinary-migration inspector is not execution or schema proof. Populated
+upgrades and complete provider/UI/SDK/final-candidate acceptance remain open.
