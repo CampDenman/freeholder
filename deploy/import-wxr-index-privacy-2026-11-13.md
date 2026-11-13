@@ -48,5 +48,28 @@ release-note and plan gates. The explicit system/private service inventories
 and owner feed decision include the new private phase. Agent coding review
 identified a completed selective-task retry regression; it was corrected to
 require that exact job ID in the retained scope's completedJobs witness.
-Native containment and existing raw-source positive verification are pending.
+Native verification at source `951212de` passed without retry:
+
+- The new 501-entry containment case passed in 5.403s. Independent readback
+  confirmed the same original task remains pending, request in_progress,
+  fulfilled_at NULL, explicit recovery resolution, invalidated graph with
+  the private entry/plan still acknowledged, accepted PUT/DELETE and actual
+  chunk absence. The new phase's audit contains only request/task identifiers.
+- The unchanged existing outage, physical removal and replay positive passed
+  in 6.676s on a separate initially empty database. Independent readback
+  confirmed completed/erased, zero pending tasks, physical chunk absence and
+  both original-task completion/replay audit entries.
+- The other 14 existing raw-source erasure controls passed (61.844s summed
+  case time), excluding the positive already run. Coverage includes explicit
+  holds, storage switches, unresolved writes, reserved chunks, audit copies
+  and import/erasure races. Final independent readback confirmed the last
+  generic-source case remains pending with its original private chunk intact.
+
+All three databases retain the original full 80-entry schema journal and
+have no remaining client sessions. The new database's ordinary 0–79
+migration passed in 5.371s with fsync on, jit off and no recovery. The actual
+failing source/golden databases were not migrated, reset or reused. A
+standalone inspector syntax error was corrected before it connected; no
+native test was rerun as a result. Private metadata minimization remains
+unfinished: this is a completion containment proof, not a full-erasure pass.
 These checks do not supply C11.10 independent review.

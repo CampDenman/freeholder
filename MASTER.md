@@ -3899,7 +3899,10 @@ reading chat logs.
   private completion guard now checks the original queued task and verified
   pending receipt under privacy/run locks, retaining explicit recovery while
   an unaccepted normalized graph remains. Source typecheck, whole lint and 384 static controls pass (26 declared
-  database skips); native qualification of this containment is pending. Evidence: `deploy/import-wxr-index-privacy-2026-11-13.md`. Full guarded index minimization and recovery of
+  database skips). The actual 501-entry pending containment passes (5.403s),
+  unchanged outage/removal/replay positive passes (6.676s), and the other 14
+  raw-source controls pass without retry; independent physical/receipt/journal
+  readback and closed database sessions are recorded. Evidence: `deploy/import-wxr-index-privacy-2026-11-13.md`. Full guarded index minimization and recovery of
   historical completed receipts remain required; this does not close C1.08.
 
 

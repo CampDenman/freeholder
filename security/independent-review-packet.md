@@ -1070,7 +1070,8 @@ The 2026-11-13 actual protected-main `81271622` control found a completed
 reader erasure after physical source-chunk retirement while private data
 remained in an unaccepted normalized entry and media plan. The original
 full-erasure oracle and populated failure are preserved; the candidate's
-separate containment oracle requires explicit pending recovery. See
+separate containment oracle requires explicit pending recovery and passed
+at `951212de`, alongside all 15 existing raw-source erasure controls. See
 `deploy/import-wxr-index-privacy-2026-11-13.md` for facts and limits. The
 no-DDL completion guard does not erase immutable index rows or repair old
 completed receipts. Full guarded minimization and historical recovery remain
