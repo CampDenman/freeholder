@@ -13926,6 +13926,14 @@ whatever is best for the people using the site.
   credit and does not prove RMA reuse. Four other bank natives, legacy recovery,
   final source union, SDK/browser/provider and full financial acceptance remain
   open; this does not activate the model or close C12.38.
+  Separate legacy-bank exact-read adapter foundation is source-only: it reads
+  an actual historical refund/payment/account without creating a merchant
+  request or refund attempt. Its freshly authenticated platform and explicit
+  read protocol are distinct from unknown original-create metadata, which
+  remains null. The callback retains nullable or contradictory raw response
+  facts before terminal policy. No durable legacy receipt, caller-stop review,
+  money projection, causal replacement, UI or public recovery service is claimed
+  by this unqualified adapter stage; actual legacy recovery remains required.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

@@ -17,6 +17,7 @@ import { stripeMerchantRecovery } from "./stripe-merchant-recovery";
 import { stripeMerchantIntentRecovery } from "./stripe-merchant-intent-recovery";
 import { stripeReturnedCash } from "./stripe-returned-cash";
 import { stripeMerchantRefundRecovery } from "./stripe-merchant-refund-recovery";
+import { stripeLegacyBankRead } from "./stripe-legacy-bank-read";
 import type {
   CheckoutCaptureResult,
   CheckoutCaptureRequest,
@@ -438,6 +439,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     ...stripeMerchantRecovery(chargeApi),
     ...stripeMerchantIntentRecovery(chargeApi),
     ...stripeMerchantRefundRecovery(chargeApi),
+    ...stripeLegacyBankRead(api),
     ...stripeReturnedCash(chargeApi),
     inspectMerchantPayment: request => inspectStripeMerchantPayment(request, (path, scope) => api(path, { method: "GET" }, scope)),
     async supportedCurrencies() { return []; },

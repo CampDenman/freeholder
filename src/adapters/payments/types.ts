@@ -237,6 +237,34 @@ export type MerchantRefundRecovery =
   | { state: "ambiguous"; refundRefs: readonly string[] }
   | { state: "observed"; evidence: MerchantRefundObservation };
 
+/** A fresh inspection of a historical refund is not its original create
+ * request. Unknown create metadata is never backfilled from today's key. */
+export interface LegacyBankRefundReadEvidence {
+  requestedRefundRef: string;
+  observedRefundRef: string | null;
+  observedPaymentRef: string | null;
+  observedChargeRef: string | null;
+  amountMinor: number | null;
+  currency: string | null;
+  rawProviderStatus: string | null;
+  failureReason: string | null;
+  failureBalanceTransactionRef: string | null;
+  readProtocolVersion: "2026-02-25.clover";
+  readProviderPlatformAccountId: string;
+  chargeAccountId: string | null;
+  originalCreateProtocolVersion: null;
+  originalCreatePlatformAccountId: null;
+  originalBindingVerified: boolean;
+}
+export interface LegacyBankRefundReadRequest {
+  originalRefundRef: string;
+  originalPaymentRef: string;
+  amountMinor: number;
+  currency: string;
+  originalChargeAccountId: string | null;
+  onRefundObserved: (evidence: LegacyBankRefundReadEvidence) => Promise<void>;
+}
+
 export interface SavedMethodRevocationRequest extends PaymentAccountScope {
   providerRef: string;
   idempotencyKey: string;
@@ -515,6 +543,8 @@ export interface PaymentAdapter {
   inspectMerchantReturnedCash?(request: MerchantReturnedCashInspectionRequest): Promise<MerchantReturnedCashEvidence>;
   createMerchantRefund?(request: MerchantRefundCreationRequest): Promise<MerchantRefundObservation>;
   recoverMerchantRefund?(request: MerchantRefundRecoveryRequest): Promise<MerchantRefundRecovery>;
+  /** Exact-resource GET only; creates no merchant request, payment or refund. */
+  inspectLegacyBankRefund?(request: LegacyBankRefundReadRequest): Promise<LegacyBankRefundReadEvidence>;
   supportedCurrencies(): Promise<readonly string[]>;
   supportedMethods(context: {
     country: string;
