@@ -11,10 +11,10 @@ import { stripeMerchantFees } from "./stripe-merchant-fees";
 import { stripeCheckoutEvidence } from "./stripe-merchant-capture";
 import { proveStripeSubscriptionPayment } from "./stripe-subscription-origin";
 import { collectOriginalStripeSubscriptionCash, originalSubscriptionInvoiceMetadata } from "./stripe-subscription-cash";
-import { cancelOriginalStripeMerchantSchedule, inspectOriginalStripeMerchantInvoices, pauseOriginalStripeMerchantSchedule, resolveOriginalStripeMerchantSchedule } from "./stripe-subscription-quiescence";
+import { cancelOriginalStripeMerchantSchedule, inspectOriginalStripeMerchantCancellation, inspectOriginalStripeMerchantInvoices, pauseOriginalStripeMerchantSchedule, resolveOriginalStripeMerchantSchedule, stopOriginalStripeMerchantInvoice } from "./stripe-subscription-quiescence";
 import { inspectStripeMerchantPayment } from "./stripe-merchant-inspection";
 import { createOriginalStripePhaseProduct, inspectOriginalStripePhaseProduct } from "./stripe-subscription-phase-product";
-import { cancelOriginalStripePhaseSchedule, inspectOriginalStripePhaseSchedule, mutateOriginalStripePhaseSchedule } from "./stripe-subscription-phases";
+import { cancelOriginalStripePhaseSchedule, inspectOriginalStripePhaseScheduleStop, inspectOriginalStripePhaseSchedule, mutateOriginalStripePhaseSchedule } from "./stripe-subscription-phases";
 import { stripeMerchantRecovery } from "./stripe-merchant-recovery";
 import { stripeMerchantIntentRecovery } from "./stripe-merchant-intent-recovery";
 import { stripeReturnedCash } from "./stripe-returned-cash";
@@ -711,6 +711,18 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     },
     async inspectMerchantPhaseProduct(request) {
       return inspectOriginalStripePhaseProduct(api, request);
+    },
+    async stopMerchantScheduleInvoice(request) {
+      return stopOriginalStripeMerchantInvoice(api, request);
+    },
+    async inspectMerchantScheduleInvoiceStop(request) {
+      return stopOriginalStripeMerchantInvoice(api, request, true);
+    },
+    async inspectMerchantPhaseScheduleStop(request) {
+      return inspectOriginalStripePhaseScheduleStop(api, request);
+    },
+    async inspectMerchantScheduleCancellation(request) {
+      return inspectOriginalStripeMerchantCancellation(api, request, request);
     },
     async cancelMerchantPhaseSchedule(request) {
       return cancelOriginalStripePhaseSchedule(api, request);

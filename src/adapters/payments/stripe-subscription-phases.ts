@@ -75,6 +75,7 @@ export async function inspectOriginalStripePhaseSchedule(api: StripeSubscription
   if (!/^sub_sched_[A-Za-z0-9]{1,195}$/.test(request.providerScheduleRef)) unproven();
   const actual = await api(`/v1/subscription_schedules/${encodeURIComponent(request.providerScheduleRef)}`, protocol({ method: "GET" }), { ...request, providerApiVersion: request.providerScheduleApiVersion });
   const identity = acknowledged(actual);
+  if (identity && identity.providerScheduleRef === request.providerScheduleRef) await request.onResourceAcknowledged?.(identity);
   if (!identity || identity.providerScheduleRef !== request.providerScheduleRef || identity.providerCustomerRef !== request.providerCustomerRef
     || identity.providerSubscriptionRef === undefined || actual.object !== "subscription_schedule"
     || object(actual.billing_mode)?.type !== "flexible" || actual.end_behavior !== "cancel" || !matchesMetadata(actual.metadata, metadata(request))
@@ -171,7 +172,10 @@ export async function mutateOriginalStripePhaseSchedule(api: StripeSubscriptionR
   // disagrees. That separate positive fact must not vanish with validation.
   await request.onResourceAcknowledged(identity);
   if (request.providerScheduleRef && identity.providerScheduleRef !== request.providerScheduleRef) unproven();
-  return inspectOriginalStripePhaseSchedule(api, { ...request, providerScheduleRef: identity.providerScheduleRef });
+  return inspectOriginalStripePhaseSchedule(api, { ...request, providerScheduleRef: identity.providerScheduleRef, onResourceAcknowledged: async readIdentity => {
+    if (readIdentity.providerScheduleRef !== identity.providerScheduleRef || readIdentity.providerSubscriptionRef !== identity.providerSubscriptionRef
+      || readIdentity.providerCustomerRef !== identity.providerCustomerRef) await request.onResourceAcknowledged(readIdentity);
+  } });
 }
 
 /** Positive provider cancellation before the originally admitted first phase,
@@ -189,7 +193,7 @@ function neverStartedProof(value: Record<string, unknown>, request: MerchantPhas
 /** A stopped schedule is not yet a customer-erasure receipt: every linked
  * subscription and its original invoices/PI history still needs stop proof.
  * No current phase/price drift is allowed to prevent stopping the original ID. */
-export async function cancelOriginalStripePhaseSchedule(api: StripeSubscriptionRead, request: MerchantPhaseScheduleStopRequest): Promise<void> {
+export async function cancelOriginalStripePhaseSchedule(api: StripeSubscriptionRead, request: MerchantPhaseScheduleStopRequest, readOnly = false): Promise<void> {
   validateMerchantChargeScope(request);
   if (!request.providerPlatformAccountId || request.providerScheduleApiVersion !== STRIPE_MERCHANT_SCHEDULE_API_VERSION
     || request.providerApiVersion !== undefined && request.providerApiVersion !== request.providerScheduleApiVersion
@@ -210,9 +214,10 @@ export async function cancelOriginalStripePhaseSchedule(api: StripeSubscriptionR
   if (["canceled", "completed", "released"].includes(String(before.status))) {
     await request.onStopped({ providerScheduleRef: request.providerScheduleRef, providerSubscriptionRefs: [...linked].sort(), linkedInventoryComplete,
       state: before.status as "canceled" | "completed" | "released", source: "readback", neverStartedProof: neverStartedProof(before, request) });
+    if (ref(before.customer) !== request.providerCustomerRef || !linkedInventoryComplete) unproven();
     return;
   }
-  if (!["not_started", "active"].includes(String(before.status))) unproven();
+  if (readOnly || !["not_started", "active"].includes(String(before.status))) unproven();
   const actual = await api(`${path}/cancel`, protocol({ method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ invoice_now: "false", prorate: "false" }) }), { ...request, providerApiVersion: request.providerScheduleApiVersion });
   if (actual.id !== request.providerScheduleRef || actual.status !== "canceled") unproven();
@@ -220,5 +225,10 @@ export async function cancelOriginalStripePhaseSchedule(api: StripeSubscriptionR
   // primary terminal ACK is committed once even if related inventory is bad.
   collect(actual);
   await request.onStopped({ providerScheduleRef: request.providerScheduleRef, providerSubscriptionRefs: [...linked].sort(), linkedInventoryComplete, state: "canceled", source: "cancel_ack", neverStartedProof: neverStartedProof(actual, request) });
-  if (!linkedInventoryComplete) unproven();
+  if (ref(actual.customer) !== request.providerCustomerRef || !linkedInventoryComplete) unproven();
+}
+
+/** Recovery has its own admitted GET; an active result never enters cancel. */
+export async function inspectOriginalStripePhaseScheduleStop(api: StripeSubscriptionRead, request: MerchantPhaseScheduleStopRequest): Promise<void> {
+  return cancelOriginalStripePhaseSchedule(api, request, true);
 }

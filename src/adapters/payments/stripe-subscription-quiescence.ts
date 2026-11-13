@@ -4,7 +4,7 @@
 import { AdapterError } from "../types";
 import { number, object, text } from "./http";
 import { validateMerchantChargeScope } from "./stripe-merchant-scope";
-import type { MerchantChargeScope, MerchantScheduleInvoiceInventory, MerchantScheduleResource } from "./types";
+import type { MerchantChargeScope, MerchantScheduleInvoiceActionRequest, MerchantScheduleInvoiceInventory, MerchantScheduleResource } from "./types";
 import type { StripeSubscriptionRead } from "./stripe-subscription-origin";
 
 // Only newly created flexible schedules use this explicit protocol contract.
@@ -89,7 +89,7 @@ export async function pauseOriginalStripeMerchantSchedule(api: StripeSubscriptio
  * https://docs.stripe.com/api/subscriptions/cancel */
 export async function cancelOriginalStripeMerchantSchedule(api: StripeSubscriptionRead, resource: OriginalStripeMerchantScheduleLocator & { providerCustomerRef?: string }, input: {
   onCancelled: (actual: { providerSubscriptionRef: string; state: "cancelled"; source: "readback" | "delete_ack" }) => Promise<void>;
-}) {
+}, readOnly = false) {
   validate(resource);
   const path = `/v1/subscriptions/${encodeURIComponent(resource.providerSubscriptionRef)}`;
   const before = await api(path, protocol({ method: "GET" }), resource);
@@ -98,6 +98,7 @@ export async function cancelOriginalStripeMerchantSchedule(api: StripeSubscripti
     await input.onCancelled({ providerSubscriptionRef: resource.providerSubscriptionRef, state: "cancelled", source: "readback" });
     return;
   }
+  if (readOnly) unproven();
   // DELETE has no assumed idempotent POST replay guarantee. A lost reply must
   // be reconciled by read-only recovery under the original physical intent.
   const actual = await api(path, protocol({ method: "DELETE", headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -156,17 +157,7 @@ async function inspectOriginalInvoiceObligations(api: StripeSubscriptionRead, re
         || amount === undefined || !Number.isSafeInteger(amount) || amount < received || !currency || !/^[A-Z]{3}$/.test(currency) || typeof intent.status !== "string") unproven();
       // Retain positive actual money before later invoice amount, route, fee or
       // other-page checks. The callback is a real separately committed phase.
-      if (received > 0) {
-        if (!resource.onPaidIntentObserved) unproven();
-        const destinationAccountId = ref(object(intent.transfer_data)?.destination), settlementMerchantAccountId = ref(intent.on_behalf_of), rawCharge = ref(intent.latest_charge), providerChargeRef = rawCharge && /^ch_[A-Za-z0-9]{1,196}$/.test(rawCharge) ? rawCharge : undefined;
-        await resource.onPaidIntentObserved({ subscriptionId: resource.subscriptionId, providerSubscriptionRef: resource.providerSubscriptionRef,
-          providerPlatformAccountId: resource.providerPlatformAccountId, ...(resource.providerAccountId ? { providerAccountId: resource.providerAccountId } : {}),
-          providerInvoiceRef: invoiceId, providerPaymentIntentRef: intentId, providerCustomerRef: customer,
-          ...(resource.providerScheduleOperationId ? { providerScheduleOperationId: resource.providerScheduleOperationId } : {}),
-          amountMinor: received, currency, ...(providerChargeRef ? { providerChargeRef } : {}),
-          ...(destinationAccountId ? { destinationAccountId } : {}), ...(settlementMerchantAccountId ? { settlementMerchantAccountId } : {}),
-          customerChargeVerified: intent.status === "succeeded", merchantRouteVerified: destinationAccountId === resource.destinationAccountId && settlementMerchantAccountId === resource.settlementMerchantAccountId });
-      }
+      await retainOriginalInvoiceIntentCash(resource, invoiceId, intentId, intent);
       if (!["paid", "canceled", "open"].includes(String(relation.status)) || relation.currency !== intent.currency
         || !Number.isSafeInteger(relation.amount_requested) || relation.amount_requested !== amount || !Number.isSafeInteger(relation.amount_paid)
         || relation.amount_paid !== received) unproven();
@@ -183,4 +174,73 @@ async function inspectOriginalInvoiceObligations(api: StripeSubscriptionRead, re
   const periodStart = new Date(start! * 1000); if (!Number.isFinite(periodStart.getTime())) unproven();
   return { providerInvoiceRef: invoiceId, state: invoice.status as MerchantScheduleInvoiceInventory["invoices"][number]["state"], currency,
     totalMinor: total!, paidMinor: paid!, remainingMinor: remaining!, periodStart: periodStart.toISOString(), complete: true, paymentIntents: obligations };
+}
+
+/** This wrapper can only GET, including when the subscription is still active. */
+export async function inspectOriginalStripeMerchantCancellation(api: StripeSubscriptionRead, resource: OriginalStripeMerchantScheduleLocator & { providerCustomerRef?: string }, input: {
+  onCancelled: (actual: { providerSubscriptionRef: string; state: "cancelled"; source: "readback" }) => Promise<void>;
+}) {
+  return cancelOriginalStripeMerchantSchedule(api, resource, { onCancelled: async actual => {
+    if (actual.source !== "readback") unproven();
+    await input.onCancelled({ ...actual, source: "readback" });
+  } }, true);
+}
+
+/** Exact original invoice/PI stop. The shared phase commits the physical intent
+ * before entry. Recovery passes readOnly=true, which cannot enter a mutation.
+ * Subscription drafts are intentionally refused: Stripe only deletes one-off
+ * drafts (https://docs.stripe.com/api/invoices/delete). */
+export async function stopOriginalStripeMerchantInvoice(api: StripeSubscriptionRead, request: MerchantScheduleInvoiceActionRequest, readOnly = false): Promise<void> {
+  const subscription = await readOriginalStripeMerchantSchedule(api, request);
+  if (!["paused", "canceled"].includes(String(subscription.status)) || subscription.pending_update !== null
+    || !/^in_[A-Za-z0-9]{1,195}$/.test(request.providerInvoiceRef)) unproven();
+  const path = `/v1/invoices/${encodeURIComponent(request.providerInvoiceRef)}`;
+  const invoice = await api(path, protocol({ method: "GET" }), request);
+  const direct = ref(invoice.subscription), parent = ref(object(object(invoice.parent)?.subscription_details)?.subscription);
+  if (invoice.id !== request.providerInvoiceRef || ref(invoice.customer) !== request.providerCustomerRef || direct && parent && direct !== parent
+    || (direct ?? parent) !== request.providerSubscriptionRef || !["paid", "void", "draft", "open", "uncollectible"].includes(String(invoice.status))) unproven();
+  const inventory = await inspectOriginalInvoiceObligations(api, request, invoice, request.providerInvoiceRef);
+  if (request.action === "cancel_intent") {
+    const intentId = request.providerPaymentIntentRef;
+    const intent = inventory.paymentIntents.find(value => value.providerPaymentIntentRef === intentId);
+    if (!intentId || !/^pi_[A-Za-z0-9]{1,195}$/.test(intentId) || !intent || intent.receivedMinor !== 0) unproven();
+    if (intent.state === "canceled") {
+      await request.onAcknowledged({ action: "cancel_intent", providerInvoiceRef: request.providerInvoiceRef, providerPaymentIntentRef: intentId, state: "canceled" });
+      return;
+    }
+    if (readOnly || !["requires_payment_method", "requires_confirmation", "requires_action", "requires_capture"].includes(intent.state)) unproven();
+    const actual = await api(`/v1/payment_intents/${encodeURIComponent(intentId)}/cancel`, protocol({ method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams() }), request);
+    if (actual.id === intentId && actual.status === "canceled") await request.onAcknowledged({ action: "cancel_intent", providerInvoiceRef: request.providerInvoiceRef, providerPaymentIntentRef: intentId, state: "canceled" });
+    await retainOriginalInvoiceIntentCash(request, request.providerInvoiceRef, intentId, actual);
+    if (actual.id !== intentId || ref(actual.customer) !== request.providerCustomerRef || actual.status !== "canceled" || actual.amount_received !== 0 || actual.amount_capturable !== 0
+      || actual.amount !== intent.amountMinor || text(actual.currency)?.toUpperCase() !== intent.currency) unproven();
+    return;
+  }
+  if (request.action !== "void_invoice" || request.providerPaymentIntentRef !== undefined || inventory.paidMinor !== 0
+    || inventory.paymentIntents.some(intent => intent.receivedMinor !== 0 || intent.state !== "canceled")) unproven();
+  if (inventory.state === "void") { await request.onAcknowledged({ action: "void_invoice", providerInvoiceRef: request.providerInvoiceRef, state: "void" }); return; }
+  if (readOnly || !["open", "uncollectible"].includes(inventory.state)) unproven();
+  const actual = await api(`${path}/void`, protocol({ method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams() }), request);
+  if (actual.id === request.providerInvoiceRef && actual.status === "void") await request.onAcknowledged({ action: "void_invoice", providerInvoiceRef: request.providerInvoiceRef, state: "void" });
+  const actualDirect = ref(actual.subscription), actualParent = ref(object(object(actual.parent)?.subscription_details)?.subscription);
+  if (actual.id !== request.providerInvoiceRef || ref(actual.customer) !== request.providerCustomerRef || actual.status !== "void"
+    || actualDirect && actualParent && actualDirect !== actualParent || (actualDirect ?? actualParent) !== request.providerSubscriptionRef) unproven();
+  const stopped = await inspectOriginalInvoiceObligations(api, request, actual, request.providerInvoiceRef);
+  if (stopped.paidMinor !== 0 || stopped.remainingMinor !== 0 || stopped.paymentIntents.some(intent => intent.receivedMinor !== 0 || intent.state !== "canceled")) unproven();
+}
+
+/** Preserve actual positive money before any later inventory or action check. */
+async function retainOriginalInvoiceIntentCash(resource: MerchantScheduleResource, invoiceId: string, intentId: string, intent: Record<string, unknown>) {
+  const received = number(intent.amount_received), currency = text(intent.currency)?.toUpperCase(), customer = ref(intent.customer);
+  if (intent.id !== intentId || customer !== resource.providerCustomerRef || received === undefined || !Number.isSafeInteger(received) || received < 0 || !currency || !/^[A-Z]{3}$/.test(currency)) unproven();
+  if (received === 0) return;
+  if (!resource.onPaidIntentObserved) unproven();
+  const destinationAccountId = ref(object(intent.transfer_data)?.destination), settlementMerchantAccountId = ref(intent.on_behalf_of), rawCharge = ref(intent.latest_charge), providerChargeRef = rawCharge && /^ch_[A-Za-z0-9]{1,196}$/.test(rawCharge) ? rawCharge : undefined;
+  await resource.onPaidIntentObserved({ subscriptionId: resource.subscriptionId, providerSubscriptionRef: resource.providerSubscriptionRef,
+    providerPlatformAccountId: resource.providerPlatformAccountId, ...(resource.providerAccountId ? { providerAccountId: resource.providerAccountId } : {}),
+    providerInvoiceRef: invoiceId, providerPaymentIntentRef: intentId, providerCustomerRef: customer,
+    ...(resource.providerScheduleOperationId ? { providerScheduleOperationId: resource.providerScheduleOperationId } : {}),
+    amountMinor: received, currency, ...(providerChargeRef ? { providerChargeRef } : {}),
+    ...(destinationAccountId ? { destinationAccountId } : {}), ...(settlementMerchantAccountId ? { settlementMerchantAccountId } : {}),
+    customerChargeVerified: intent.status === "succeeded", merchantRouteVerified: destinationAccountId === resource.destinationAccountId && settlementMerchantAccountId === resource.settlementMerchantAccountId });
 }

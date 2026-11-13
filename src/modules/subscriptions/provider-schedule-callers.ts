@@ -16,6 +16,7 @@ import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleRes
 import { subscriptionMerchantScopes, subscriptions } from "./schema";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
 import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
+import { phaseOperationCallerFinished } from "./provider-phase-resources";
 import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
 
 const nonceDigest = (nonce: string) => createHash("sha256").update(nonce).digest("hex");
@@ -36,7 +37,7 @@ export const merchantScheduleCancellationTargets = defineService({
   name: "subscriptions.merchantScheduleCancellationTargets", summary: "Read only the retained original resources owned by this actual merchant erasure task.",
   kind: "query", permission: "system", external: false, input: originalJob,
   output: z.array(z.object({ subscriptionId: z.uuid(), request: stopRequest, providerSubscriptionRefs: z.array(z.string()),
-    cancellationOperations: z.array(z.object({ providerSubscriptionRef: z.string(), operationId: z.uuid() })) })).max(5000),
+    recoveryOperationIds: z.array(z.uuid()).max(5000), cancellationOperations: z.array(z.object({ providerSubscriptionRef: z.string(), operationId: z.uuid() })) })).max(5000),
   handler: async (input, ctx) => {
     await lockContactIdentityForRead(ctx.tx);
     const { cohort } = await originalScheduleCohortAuthority(ctx.tx, input);
@@ -60,7 +61,9 @@ export const merchantScheduleCancellationTargets = defineService({
       targets.push({ subscriptionId: row.subscriptionId, request: { ...subscriptionChargeScope(original), providerPlatformAccountId: original.providerPlatformAccountId, subscriptionId: row.subscriptionId,
         providerSubscriptionRef: resource.providerSubscriptionRef ?? [...references][0] ?? "", providerScheduleApiVersion: original.providerScheduleApiVersion,
         ...(customers.length === 1 ? { providerCustomerRef: customers[0] } : {}) }, providerSubscriptionRefs: [...references].sort(),
-        cancellationOperations: operations.filter(operation => operation.kind === "cancel" && typeof operation.originalRequest.providerSubscriptionRef === "string")
+        recoveryOperationIds: operations.filter(operation => operation.state !== "confirmed" && phaseOperationCallerFinished(operation)
+          && (operation.originalRequest.resourceKind === "invoice_stop" || operation.kind === "cancel" && operation.originalRequest.method === "DELETE")).map(operation => operation.id),
+        cancellationOperations: operations.filter(operation => operation.kind === "cancel" && operation.originalRequest.method === "DELETE" && typeof operation.originalRequest.providerSubscriptionRef === "string")
           .map(operation => ({ providerSubscriptionRef: operation.originalRequest.providerSubscriptionRef as string, operationId: operation.id })) });
     }
     return targets;
@@ -107,7 +110,7 @@ export const claimMerchantScheduleCancellation = defineService({
       || operations.some((operation, index) => operation.operationRevision !== index + 1)
       || !known?.has(input.providerSubscriptionRef)) throw new ServiceError("conflict", "The requested remote resource is not proved by the complete original operation history.");
     if (operations.some(operation => !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation)
-      || operation.kind === "cancel" && operation.originalRequest.providerSubscriptionRef === input.providerSubscriptionRef)) return { mode: "recover" as const };
+      || operation.kind === "cancel" && operation.originalRequest.method === "DELETE" && operation.originalRequest.providerSubscriptionRef === input.providerSubscriptionRef)) return { mode: "recover" as const };
     const frozen = subscriptionMerchantScope.parse(scope), operationId = randomUUID(), nonce = randomBytes(32).toString("base64url");
     const providerRequest = { ...subscriptionChargeScope(frozen), providerPlatformAccountId: frozen.providerPlatformAccountId, subscriptionId: parent.id, providerSubscriptionRef: input.providerSubscriptionRef,
       providerScheduleApiVersion: frozen.providerScheduleApiVersion, ...(resource.providerCustomerRef ? { providerCustomerRef: resource.providerCustomerRef } : {}) };
@@ -165,6 +168,8 @@ export const observeMerchantScheduleCancellation = defineService({
   input: z.object({ operationId: z.uuid(), providerSubscriptionRef: z.string().regex(/^sub_[A-Za-z0-9]{1,195}$/), source: z.enum(["delete_ack", "readback"]) }),
   output: z.object({ recorded: z.literal(true) }),
   handler: async (input, ctx) => {
+    const actualCaller = localCallers.get(input.operationId);
+    if (!actualCaller?.invoked || actualCaller.positive?.providerSubscriptionRef !== input.providerSubscriptionRef || actualCaller.positive.source !== input.source) throw new ServiceError("permission", "Only the actual admitted cancellation callback may retain this ACK; recovery needs a separate GET ticket.");
     await lockContactIdentityForRead(ctx.tx);
     const [reference] = await ctx.tx.select({ subscriptionId: subscriptionProviderScheduleOperations.subscriptionId }).from(subscriptionProviderScheduleOperations)
       .where(eq(subscriptionProviderScheduleOperations.id, input.operationId)).limit(1);

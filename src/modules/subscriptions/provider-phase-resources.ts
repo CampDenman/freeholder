@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: actual primary schedules and linked subscriptions are separate facts.
+import { verifiedScheduleRead } from "./provider-schedule-read-proof";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import type { PhaseScheduleStopProof, subscriptionProviderScheduleOperations } from "./provider-schedule-schema";
 type Operation = typeof subscriptionProviderScheduleOperations.$inferSelect;
@@ -71,12 +72,13 @@ export function closedOriginalPhaseSchedules(operations: readonly Operation[]): 
       const creator = operations.find(operation => operation.id === id); if (!creator || !phaseOperationCallerFinished(creator)) return null;
     }
     const stop = [...operations].reverse().find(operation => operation.originalRequest.resourceKind === "phase_schedule_stop" && operation.originalRequest.providerScheduleRef === resource.providerScheduleRef);
-    if (!stop || stop.kind !== "cancel" || stop.state !== "confirmed" || !phaseOperationCallerFinished(stop, true) || !Array.isArray(stop.providerObservation.history)) return null;
+    if (!stop || stop.kind !== "cancel" || stop.state !== "confirmed" || !phaseOperationCallerFinished(stop) || !Array.isArray(stop.providerObservation.history)) return null;
     const entries = stop.providerObservation.history.map(object).filter(entry => entry?.source === "phase_schedule_stop_ack" && entry.operationId === stop.id && entry.requestDigest === stop.requestDigest);
     const entry = entries.at(-1), actual = object(entry?.actual);
     if (!entry || !actual || actual.providerScheduleRef !== resource.providerScheduleRef || actual.linkedInventoryComplete !== true || !["canceled", "completed", "released"].includes(String(actual.state))
       || !Array.isArray(actual.providerSubscriptionRefs) || actual.providerSubscriptionRefs.some(value => !subscription(value))
       || merchantTaxDigest(actual) !== entry.actualDigest || new Set(actual.providerSubscriptionRefs).size !== actual.providerSubscriptionRefs.length) return null;
+    if (!phaseOperationCallerFinished(stop, true) && !verifiedScheduleRead(stop, entry.readId, entry.actualDigest)) return null;
     const actualRefs = actual.providerSubscriptionRefs.filter(subscription), refs = [...resource.providerSubscriptionRefs].sort();
     if (actualRefs.some(ref => !resource.providerSubscriptionRefs.has(ref))) return null;
     const never = object(actual.neverStartedProof);
