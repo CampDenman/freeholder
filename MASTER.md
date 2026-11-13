@@ -6461,6 +6461,53 @@ deployments are portable, testable and incapable of silently forking the truth.
   journal entries remain byte-identical; unpublished80 stays1ac4652c.
   This new current-main composition has not yet passed source/native/SDK
   qualification and supplies no provider or stable sign-off.
+  HTTP graph source draft 2026-11-12: distinct saved response objects now have
+  normalized graph and entry bindings, short original-authorized index
+  claim/apply phases, exact credential-ID leases and bounded request/entry/
+  physical-byte counters. The shared reader-source hold collector gathers
+  legacy nonce and crawl generations before one canonical completion receipt;
+  no second writable hold authority remains in81. Empty actual HTML responses
+  retain their original manifest membership without invented positive ranges.
+  The unregistered, unjournalled48964767 source now composes full CURRENT46
+  with published0–79/journal and80SQL958 unchanged. FullNode22 types/focused
+  lint and110 pure controls pass; six database cases are explicitly skipped.
+  The revised81 schema/runtime remains unqualified; its general-writer hold
+  fence still needs a distinct actual capture witness. Global catalog/commit,
+  selective crawl erasure, late facts and full source acceptance remain open.
+  See `deploy/import-http-graph-source-2026-11-12.md`.
+  Revised be979/c70 draft qualification: a NEW current-v9 database applied
+  real normal0–80/958 then explicit unjournalled81; six read-only model cases
+  passed591ms with journal81/max60 unchanged. Actual missing-collector hold
+  refusal passed11.40s, and actual TCP response→normalized graph indexing
+  passed9.02s. Independent server/PG drain passed. This remains disabled source
+  work: no normal81, full catalog/commit/privacy lifecycle or hosted acceptance
+  is supplied by these finite controls; C3.47 remains open.
+  Next HTTP source increment: normalized response-bounded commit now reuses
+  actual CMS/media child receipts and root publication/rollback, with stable
+  credential leases and selective original cleanup. New81 SQLc623 adds the
+  deferred entry-witness and held-URL/physical-retirement fences. This revision
+  is unapplied and unqualified; c70/v5 and earlier evidence remain preserved.
+  Actual commit/zero-response hold oracles are prepared only. Full privacy,
+  old-runtime compatibility, recovery and above500-entry lifecycle still govern
+  this unchecked item; no new deferral or completion claim is introduced.
+  Indexed-input boundary 2026-11-12: an unchanged e498/c623 oracle genuinely
+  failed8.94s after physical PUT/DELETE retirement and a false completed erasure
+  receipt: the normalized entry still held its synthetic title/SEO marker.
+  An actual populated clone preserves matching19-table hashes, journal and full
+  schema; deleted physical bytes were not restored. A new disabled source-only
+  draft adds exact original erasure-capture completion, including true empty,
+  and guarded projection minimization before acknowledgement. Missing old
+  membership remains recovery debt; no later generation is adopted. Frozen2f601
+  fullNode22 types, seven-file lint and108 pure controls pass (22 native/model
+  skips). Full current80 composition, NEW eight-model SQL/native, old-runtime
+  and recovery qualification remain pending.
+  A new isolated source composition now replays only the47 owned Crawl paths
+  onto exactcurrent81e buyer-terms80; all ordinary0–80/journal files and881aSQL
+  remain byte-identical. Explicit81 stays466931a7, unregistered and unapplied.
+  This composed candidate still requires source, NEW eight-model SQL and actual
+  indexed-input qualification; preserved v6/c623 and its clone are untouched.
+  No ordinary81, above500-entry or privacy-completion claim is made; this item
+  remains open. See `deploy/import-http-graph-source-2026-11-12.md`.
   Original-hold snapshot source increment 2026-11-12: an actual new HTTP-crawl
   control recorded a pending reader hold but cleanup deleted its private
   original because membership was only captured at fulfillment. A separate

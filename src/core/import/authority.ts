@@ -62,3 +62,11 @@ export async function assertCurrentImportAuthority(ctx: ServiceContext, parent: 
   const current = await currentImportAuthority(ctx);
   if (!permits(current, permission, parent, kind)) throw new ServiceError("permission", "The original caller no longer has permission to advance this import.");
 }
+
+/** Durable private phases bind a credential ID, independently of audit names. */
+export async function importLeaseOwner(ctx: ServiceContext): Promise<string> {
+  const actor = await currentImportAuthority(ctx);
+  if ((actor.kind === "user" || actor.kind === "agent") && actor.keyId) return `key:${actor.keyId}`;
+  if (actor.kind === "user") return `user:${actor.userId}`;
+  throw new ServiceError("permission", "The original import phase needs its current authenticated caller.");
+}

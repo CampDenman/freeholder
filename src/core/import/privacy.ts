@@ -21,6 +21,8 @@ import { z } from "zod";
 import { assertImportBatchAccess } from "./batch-context";
 import { invalidateImportGraph } from "./graph-state";
 import { markGraphRunWriter } from "./graph-writer";
+import { markImportCrawlWriter } from "./crawl-writer";
+import { collectAdditionalImportOriginals } from "./source-retention";
 import { bindOwnedReaderSources, canonicalReaderSite, type ReaderSourceContext } from "./reader-ownership";
 import { markReaderOwnershipWriter } from "./reader-ownership-key";
 
@@ -150,7 +152,10 @@ async function* runs(tx: Tx, lock: boolean, noWait = false) {
       throw error;
     }
     if (!run) return;
-    if (lock) await markGraphRunWriter(tx, run);
+    if (lock) {
+      await markGraphRunWriter(tx, run);
+      if (object(run.checkpoint).sourceCrawl) await markImportCrawlWriter(tx);
+    }
     after = run.id;
     yield run;
   }
@@ -267,6 +272,9 @@ registerContactPrivacySource({
       }
       await tx.update(importRuns).set({ checkpoint: { ...checkpoint, sourcePrivacyHolds: holds.map(({ exceptionId, requestId, uploadId }) => ({ exceptionId, requestId, uploadId })) } }).where(eq(importRuns.id, run.id));
     }
+    // Enabled HTTP originals participate before this one canonical seal. An
+    // empty legacy set must not seal first and later adopt other generations.
+    members.push(...await collectAdditionalImportOriginals(tx, context));
     await completeRetentionSourceSnapshot(context.service, { exceptionId: context.exceptionId, requestId: context.requestId, sourceScope: "imports.readerSources", isNew: context.isNew, members });
   },
   retain: async (tx, _contactId, context) => {

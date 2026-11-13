@@ -12,7 +12,7 @@ import { IMPORT_GRAPH_LIMITS, wxrEntryMetadataSchema, wxrHeaderMetadataSchema, w
 const sha = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const identity = z.object({ id: z.number().int().positive(), type: z.string().optional() });
 
-export async function indexRestPhase(source: ImportSourceRanges, previous: WxrIndexCursor | undefined, origin: string): Promise<{ cursor: WxrIndexCursor; entries: WxrIndexedEntry[]; done: boolean; headerMetadata: z.infer<typeof wxrHeaderMetadataSchema> }> {
+export async function indexRestPhase(source: ImportSourceRanges, previous: WxrIndexCursor | undefined, origin: string, expectedType?: "page" | "post"): Promise<{ cursor: WxrIndexCursor; entries: WxrIndexedEntry[]; done: boolean; headerMetadata: z.infer<typeof wxrHeaderMetadataSchema> }> {
   const cursor = wxrIndexCursorSchema.parse(previous ?? { nextByte: 0, ordinal: 0, bodyBytes: 0, metadataBytes: 0, header: null });
   if (cursor.nextByte > 0 && !cursor.header) throw new Error("The original REST source header is missing.");
   const phase = await readJsonSourcePhase(source, { nextByte: cursor.nextByte, ordinal: cursor.ordinal });
@@ -25,6 +25,7 @@ export async function indexRestPhase(source: ImportSourceRanges, previous: WxrIn
   let bodyBytes = 0, done = phase.done;
   for (const entry of phase.entries) {
     const record = identity.parse(entry.value);
+    if (expectedType && record.type !== expectedType) throw new Error("The original REST record type contradicts its captured collection endpoint.");
     const exported = wordpressExportFromRest([entry.value], origin), page = exported.items[0];
     const kind = page?.kind ?? "skipped";
     const placement = page ? wordpressItemPlacement(page, exported.site, origin) : undefined;

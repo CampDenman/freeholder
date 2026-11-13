@@ -551,7 +551,7 @@ const commitSource = defineService({
   permission: "scoped",
   external: false,
   input: z.object({ id: z.string().uuid() }),
-  output: z.object({ media: z.array(mediaToFetch), delayMs: z.number().int().nonnegative(), previewDigest: z.string(), archive: archiveCommitSourceSchema.optional(), generic: genericPlanSchema.optional(), sourceGraph: z.boolean().default(false), completed: runRow.optional() }),
+  output: z.object({ media: z.array(mediaToFetch), delayMs: z.number().int().nonnegative(), previewDigest: z.string(), archive: archiveCommitSourceSchema.optional(), generic: genericPlanSchema.optional(), sourceGraph: z.boolean().default(false), httpSourceGraph: z.boolean().default(false), completed: runRow.optional() }),
   handler: async (input, ctx) => {
     await lockImportBatchParent(ctx, input.id);
     const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, input.id)).limit(1);
@@ -559,7 +559,7 @@ const commitSource = defineService({
     assertImportBatchAccess(run);
     const previewDigest = archivePreviewDigest(run.preview);
     if (["committed", "reconciled", "published"].includes(run.status)) return { media: [], delayMs: 0, previewDigest, completed: run };
-    if (checkpointOf(run.checkpoint).sourceGraph) return { media: [], delayMs: 0, previewDigest, sourceGraph: true };
+    if (checkpointOf(run.checkpoint).sourceGraph) return { media: [], delayMs: 0, previewDigest, sourceGraph: true, httpSourceGraph: Boolean(checkpointOf(run.checkpoint).sourceCrawl) };
     assertNoPendingSourceUpload(run);
     if (run.status !== "previewed") {
       throw new ServiceError("conflict", "Preview the import before committing it.");
@@ -1277,6 +1277,10 @@ export const commitImport = defineOrchestratedService({
     if (source.completed) return publicImportRun(source.completed);
     if (source.sourceGraph) {
       if (!input.graph) throw new ServiceError("conflict", "This import uses resumable source phases. Review it in a current client before committing.");
+      if (source.httpSourceGraph) {
+        const { advanceCrawlGraphCommit } = await import("./crawl-graph-batches");
+        return advanceCrawlGraphCommit(input.id, input.graph, actor);
+      }
       return advanceGraphCommit(input.id, input.graph, actor);
     }
     if (input.graph) throw new ServiceError("conflict", "This import no longer matches the requested source graph.");
