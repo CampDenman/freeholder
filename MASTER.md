@@ -3920,8 +3920,9 @@ reading chat logs.
   case timings and minimal independent proofs are in
   `deploy/import-upload-index-erasure-source-2026-11-13.md` and
   `deploy/import-uploaded-history-recovery-2026-11-13.md`. Four stronger WXR/ZIP
-  rollback cases, public lifecycle, live API/MCP/SDK/browser/provider and wider
-  privacy/restore acceptance remain open; no account or stable sign-off follows.
+  rollback cases, remaining public authority/cancellation/recovery, live
+  API/MCP/SDK/browser/provider and wider privacy/restore acceptance remain open;
+  no account or stable sign-off follows.
 
 
   Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
@@ -6492,12 +6493,23 @@ deployments are portable, testable and incapable of silently forking the truth.
   Evidence and preserved failures:
   `deploy/import-upload-index-erasure-source-2026-11-13.md` and
   `deploy/import-uploaded-history-recovery-2026-11-13.md`.
-  All four stronger WXR/ZIP rollback/privacy cases, public small REST and actual
-  TCP501/two-index-process lifecycle, live API/MCP/SDK, four-locale production
+  Public-path finite follow-up on d25/955: small REST shared-service lifecycle
+  passes6.842s with mocked download bytes, real owner/storage and preserved
+  draft/date/byline/publication/owned rollback. Real TCP501 lifecycle passes
+  52.825s, original180s/children60s unchanged:8 captured originals, distinct
+  actual child PIDs/fresh sessions0->500->501, zero refetch and all82 hashes
+  unchanged with resolved childglobalSetup[]/no reset/migrate/seed. Actual
+  shared PNG GET1/no outbound credentials, accepted500-child fresh-owner resume,
+  501draft->published->rollback/defaultCMSexact/assetusage0/media200->404 pass.
+  Independent501 witnesses/batches500+1+media/17table-schema digests/exact
+  original-namespace PUT+raw hashes/child exit/PG[] are saved. Private original
+  bytes remain retained; this is a lifecycle, not an erasure/account proof.
+  All four stronger WXR/ZIP rollback/privacy cases, seven other small REST
+  authority/cancellation/recovery cases, live API/MCP/SDK, four-locale production
   browser, broader old-image/recovery and owner/provider/security/stable gates
-  remain required. Public fixtures have bounded advance/progress and dynamic
-  all-journal hashes; they remain unrun. Mocked small REST does not prove live
-  HTTP routing. Later financial/source composition needs fresh qualification.
+  remain required. Mocked small REST does not prove live HTTP routing; real TCP
+  public-source fetching does not prove incoming API/MCP/SDK. Later financial/
+  source composition needs fresh qualification.
   Canonical original-retention draft 2026-11-12: a second actual control on
   protected main reproduced the same pre-verification hold gap for uploaded
   WXR bytes. New unpublished80 capture receipts and immutable source/generation
@@ -12395,9 +12407,12 @@ schema they inherit reads as a designed thing rather than an excavation.
   remains explicit pending review; no new scope, original key or current graph
   is inferred. These local private-store fixtures preserve actual task/receipt
   identity and accepted physical facts with minimal independent hashes/counts.
-  They do not qualify the four remaining WXR/ZIP rollback cases, full public
-  lifecycle, live transports/browser, other record families, restore/recovery
-  breadth or provider accounts. C11.14 stays open. See
+  Subsequent small mocked-REST lifecycle6.842s and actual TCP501/two-process
+  lifecycle52.825s pass with exact default-CMS/owned rollback, source receipts,
+  byte hashes, full journal and closed clients. They do not qualify the four
+  remaining WXR/ZIP privacy rollback cases, seven other public recovery/authority
+  cases, live API/MCP/SDK/browser, other record families, restore/recovery breadth
+  or provider accounts. C11.14 stays open. See
   `deploy/import-upload-index-erasure-source-2026-11-13.md` and
   `deploy/import-uploaded-history-recovery-2026-11-13.md`.
   *(Reopened 2026-11-11 by actual unchanged-main controls: an exact

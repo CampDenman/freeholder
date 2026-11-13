@@ -103,12 +103,57 @@ bail artifact was counted as an executed test. Records include
 `/tmp/freeholder-uploaded-history-586-actual-evidence-20261113.json` and
 `/tmp/freeholder-uploaded-history-later78af-qualifier-20261113-result.json`.
 
-Remaining native proof includes all four stronger WXR/ZIP rollback/privacy
-cases; the public shared-service REST lifecycle; and the actual TCP501 lifecycle
-with two independent index processes, fresh-owner accepted500-child resume,
-shared PNG, publication/rollback and original default CMS preservation. The small
-REST fixture mocks only the download boundary and cannot prove actual HTTP
-routing. The501 fixture uses real TCP originals/media but still calls shared
-services directly. Live API/MCP/SDK parity, four-locale production browser,
-old-image/recovery breadth, owner/provider accounts, independent security review
-and final stable sign-off remain required. No C-item is closed by these results.
+Two additional public-path native targets now pass on exact d25/955; their
+transport scopes are distinct:
+
+- Small REST shared-service lifecycle:6.842s (10.578s runner), original30s/
+  bail1/retry0. A real fresh owner and actual services/storage stage one post,
+  preserve draft/byline/taxonomy/date2024-04-02T09:00Z, publish and perform owned
+  rollback. Independent root/child/source rollback, one entry+witness/content
+  batch, three default CMS pages/imported0/authors0/terms0/assets0, audit actors,
+  accepted PUT3/381 bytes,17 table/schema digests and all82 identities pass.
+  Download bytes are MOCKED; no live HTTP/API/MCP/SDK claim follows. Retired
+  private originals remain stored, so this is not an erasure proof.
+- Actual TCP501/two-index-process lifecycle:52.825s (56.148s runner), unchanged
+  original180s/children60s/bail1/retry0. Actual robots plus paginated REST yield
+  eight original responses. Real independent PIDs646591 and646697, distinct
+  fresh sessions and four total owner sessions prove0→500 then500→501/catalog.
+  Both child results record transportCalls0 and unchanged full journal. The
+  resolved globalSetup=[] guard ran before child start; no reset/migration/seed
+  or original HTTP refetch occurred. Child result directories remain preserved.
+- The actual shared PNG was fetched once, with no outbound cookie/authorization.
+  An accepted500-page child resumed under a fresh owner session and committed
+  one final page; replay was idempotent. Native501-draft→501-published→owned
+  rollback, exact original default CMS snapshot, asset usage0 and in-process
+  media-route200→404 assertions passed. This uses real outbound TCP and shared
+  services; incoming HTTP API/MCP/SDK and browser acceptance are not implied.
+- Independent final readback: root plus three children/source rolled back;
+  graph invalidated/commitOrdinal501,501 entries and original witnesses, one
+  media batch plus content500+1; default CMS pages3/imported0/asset1 trashed.
+  All eight private originals'171035 bytes match file hashes/sizes and exact
+  namespace-bound accepted PUT receipts. PNG102 bytes match asset checksum and
+  accepted PUT;11 accepted PUTs include derivatives. Private originals remain
+  retained/retired. Seventeen table/schema digests, all82 source/journal hashes,
+  UTC/fsync on/jit off/read-only profile, exited child PIDs and PG[] are saved.
+
+Public proof records:
+
+- `/tmp/freeholder-full81-public-rest-small-v1-955-20261113-verified-proof.json`.
+- `/tmp/freeholder-full81-public501-two-process-v1-955-20261113-verified-proof.json`.
+- `/tmp/freeholder-full81-public501-two-process-v1-955-20261113-raw-original-receipt-bindings.json`.
+- Child directories `/tmp/freeholder-crawl-index-process-maDA8X` and
+  `/tmp/freeholder-crawl-index-process-vXgbds` retain actual results/logs.
+
+All four stronger WXR/ZIP rollback/privacy cases remain unrun. Their current81
+first cases require a completed request plus full500-entry minimization after
+rollback, with immutable IDs/ranges/digests and accepted PUT/DELETE evidence.
+Published79 containment kept such requests pending; no old assertion is relaxed
+or schema-skipped. The held/release cases retain exact raw bytes under the named
+hold and allow deletion only after its removal; they do not themselves assert a
+post-release index ACK or whole-request completion.
+
+Seven other small REST authority/cancellation/recovery cases remain unselected.
+Live API/MCP/SDK parity, four-locale production browser, broader old-image and
+record/recovery coverage, final combined-source qualification, owner/provider
+accounts, independent security review and stable sign-off remain required.
+No C-item is closed by these finite results.

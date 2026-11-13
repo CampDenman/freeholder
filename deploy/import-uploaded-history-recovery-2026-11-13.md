@@ -118,10 +118,14 @@ These source skips were not counted as native upgrade evidence.
 
 Current admitted-content and later-generation boundaries also passed on eadc;
 see `deploy/import-upload-index-erasure-source-2026-11-13.md`. Still required are
-all four stronger WXR/ZIP rollback/privacy cases, public small REST and real
-TCP501/two-process publication/rollback, live API/MCP/SDK parity, four-locale
-production browser, broader old-image/recovery/record coverage, owner/provider
-accounts, independent review and final sign-off. The periodic scheduler and
+all four stronger WXR/ZIP rollback/privacy cases, seven other small REST
+permission/cancellation/recovery cases, live API/MCP/SDK parity, four-locale
+production browser, broader old-image/recovery/record coverage, final combined
+source qualification, owner/provider accounts, independent review and final
+sign-off. The one small mocked-download lifecycle now passes6.842s and the real
+TCP501/two-independent-index-process lifecycle passes52.825s on d25/955; both
+have minimal independent final-state/journal/drain evidence in the linked source
+privacy document. Neither claims incoming API/MCP/SDK/account acceptance. The periodic scheduler and
 receipt callback are registered; this fixture specifically exercises duplicate
 prepare/shared reopening/idempotent retry, not every crash or scheduler journey.
 No C-item or stable/account acceptance is closed by this finite result.
