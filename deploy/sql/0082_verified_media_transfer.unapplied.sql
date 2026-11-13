@@ -782,3 +782,25 @@ END $$;
 CREATE TRIGGER media_original_review_context BEFORE INSERT ON media_storage_transfer_reviews FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_review_context_guard();
 -- Known-finished applied PUT review is prepared. Crash/stop, retirement,
 -- multipart/ordinary privacy closure remain incomplete; capability UNPUBLISHED.
+
+--> statement-breakpoint
+CREATE UNIQUE INDEX media_storage_original_quota_token_idx ON media_storage_transfer_calls(namespace,quota_token) WHERE quota_token IS NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX storage_quota_original_pending_idx ON storage_quota_objects(namespace,pending_token) WHERE pending_token IS NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX storage_quota_original_settled_idx ON storage_quota_objects(namespace,last_settled_token) WHERE last_settled_token IS NOT NULL;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_original_quota_origin_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.pending_token IS NOT NULL AND NOT EXISTS(
+  SELECT 1 FROM media_storage_transfer_calls caller JOIN media_object_writes original ON original.id=coalesce(caller.physical_receipt_id,caller.object_receipt_id)
+  WHERE caller.quota_token=NEW.pending_token AND caller.namespace=NEW.namespace AND caller.kind IN ('ordinary_put','target_put') AND original.storage_namespace=NEW.namespace AND original.bytes<=NEW.bytes
+   AND encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(NEW.object_key,'UTF8')),'hex')=original.key_digest
+ ) THEN RAISE EXCEPTION 'Quota reservation belongs to its exact immutable original caller token/resource; equal current keys cannot rebind it' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER media_original_quota_origin AFTER INSERT OR UPDATE ON storage_quota_objects DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_quota_origin_guard();
+-- Actual late facts commit independently. Exact-token charge restoration or
+-- namespace admission refusal preserves capacity debt without rebinding any
+-- different current quota row. Physical retirement capability stays unpublished.

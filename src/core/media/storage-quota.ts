@@ -26,6 +26,7 @@ export function postgresStorageQuota(namespace: string, maxBytes: number): Stora
         // provider call occurs while this row lock or transaction is open.
         const state = await tx.execute<{ max_bytes: string }>(sql`SELECT max_bytes::text FROM storage_quota_state WHERE namespace=${namespace} FOR UPDATE`);
         if (!state[0] || Number(state[0].max_bytes) !== maxBytes) throw new StorageQuotaError("storage_quota_inventory_required");
+        await (await import("./original-quota-evidence")).assertOriginalQuotaCoverage(tx,namespace,token);
         const object = await tx.execute<{ bytes: string; pending_token: string | null }>(sql`SELECT bytes::text,pending_token FROM storage_quota_objects WHERE namespace=${namespace} AND object_key=${key}`);
         if (object[0]?.pending_token) throw new StorageQuotaError("storage_quota_object_unresolved");
         const before = Number(object[0]?.bytes ?? 0), held = Math.max(before, bytes);

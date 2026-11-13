@@ -27,7 +27,7 @@ export interface TransferCallAdmission {planId:string;objectId:string;kind:Kind;
 export async function admitTransferCall(tx:Tx,input:TransferCallAdmission,actor:Actor){
  const{plan,objects}=await lockedTransfer(tx,input.planId),object=objects.find(row=>row.id===input.objectId);
  if(!object)transferConflict();
- const id=randomUUID();let physicalReceiptId:string|undefined;
+ const id=randomUUID();let physicalReceiptId:string|undefined,quotaToken:string|null=null;
  const privacy=input.kind.startsWith("privacy_")||input.kind==="target_erasure_inventory"||input.kind==="source_erasure_inventory";
  await assertTransferOwners(tx,privacy||plan.adoptedAt?[object]:objects,privacy);
  await assertTransferCallDrain(tx,[object.id]);
@@ -40,7 +40,7 @@ export async function admitTransferCall(tx:Tx,input:TransferCallAdmission,actor:
   const previous=await tx.select().from(mediaStorageTransferCalls).where(and(eq(mediaStorageTransferCalls.objectId,object.id),eq(mediaStorageTransferCalls.kind,"target_put")));
   const reviews=await tx.select().from(mediaStorageTransferReviews).where(eq(mediaStorageTransferReviews.objectId,object.id));
   if(previous.some(call=>!transferCallRetryPermitted(call,reviews))||(!previous.length&&object.targetReceiptId))transferConflict("The exact original target PUT was already admitted; reconcile it instead of sending another.");
-  await reserveTransferQuota(tx,binding.namespace,key,object.bytes,id);
+  quotaToken=await reserveTransferQuota(tx,binding.namespace,key,object.bytes,id);
   const owners=await tx.select().from(mediaStorageTransferSubjects).where(eq(mediaStorageTransferSubjects.objectId,object.id));
   const[receipt]=await tx.insert(mediaObjectWrites).values({operation:"put",key,keyDigest:object.targetKeyDigest,namespace:binding.namespace,storageKind:binding.kind,storageLocation:binding.location,sha256:object.sha256,bytes:object.bytes,contentType:object.contentType,actor:actorString(actor),contactId:owners[0]?.contactId??null,state:"started",writerRuntimeId:mediaWriterRuntimeId,writerProtocol:binding.kind==="replit"?"nonresumable-put-v1":"single-put-v1"}).returning();
   physicalReceiptId=receipt!.id;
@@ -68,7 +68,7 @@ export async function admitTransferCall(tx:Tx,input:TransferCallAdmission,actor:
   const[receipt]=await tx.insert(mediaObjectWrites).values({operation:"delete",key,keyDigest:target?object.targetKeyDigest:object.keyDigest,namespace:binding.namespace,storageKind:binding.kind,storageLocation:binding.location,sha256:object.sha256,bytes:object.bytes,contentType:object.contentType,actor:actorString(actor),contactId:owners[0]?.contactId??null,state:"started",writerRuntimeId:mediaWriterRuntimeId}).returning();physicalReceiptId=receipt!.id;
  }
  const requestDigest=transferDigest({planId:plan.id,objectId:object.id,kind:input.kind,binding,key,expectedRevision:input.expectedRevision??null,sha256:object.sha256,bytes:object.bytes,runtimeIdentity:input.runtimeIdentity});
- await tx.insert(mediaStorageTransferCalls).values({id,objectId:object.id,kind:input.kind,namespace:binding.namespace,physicalKey:key,requestDigest,callerTokenDigest:transferDigest(input.token),physicalReceiptId,runtimeId:transferRuntimeId,runtimeIdentity:input.runtimeIdentity,expectedRevision:input.expectedRevision});
+ await tx.insert(mediaStorageTransferCalls).values({id,objectId:object.id,kind:input.kind,namespace:binding.namespace,physicalKey:key,requestDigest,callerTokenDigest:transferDigest(input.token),physicalReceiptId,quotaToken,runtimeId:transferRuntimeId,runtimeIdentity:input.runtimeIdentity,expectedRevision:input.expectedRevision});
  return{id,requestDigest,binding,key,receiptId:object.targetReceiptId};
 }
 export interface ActualTransferReturn {inventoryDigest?:string;inventoryCount?:number;configurationDigest?:string;notAttempted?:true;accepted?:boolean;absent?:boolean;revision?:StorageTransferRevision;sha256?:string;bytes?:number}

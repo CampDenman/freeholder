@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-import { bigint, check, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, check, pgTable, primaryKey, text, timestamp, uniqueIndex,uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const storageQuotaState = pgTable("storage_quota_state", {
@@ -21,6 +21,8 @@ export const storageQuotaObjects = pgTable("storage_quota_objects", {
   lastSettledToken:uuid("last_settled_token"),
 }, t => [
   primaryKey({ columns: [t.namespace, t.objectKey] }),
+  uniqueIndex("storage_quota_original_pending_idx").on(t.namespace,t.pendingToken).where(sql`${t.pendingToken} is not null`),
+  uniqueIndex("storage_quota_original_settled_idx").on(t.namespace,t.lastSettledToken).where(sql`${t.lastSettledToken} is not null`),
   check("storage_quota_objects_object_key_check", sql`length(${t.objectKey}) BETWEEN 1 AND 2048`),
   check("storage_quota_objects_bytes_check", sql`${t.bytes} >= 0 AND ${t.bytes} <= 9007199254740991`),
 ]);

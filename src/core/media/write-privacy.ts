@@ -1,9 +1,10 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import {ORIGINAL_PROVIDER_EVIDENCE_TABLES,exportOriginalProviderEvidence,originalProviderParentsForContact,originalProviderEvidencePending} from "./original-provider-privacy";
 import {hasDurableOriginalMediaCallerProof} from "./retirement-authority";
 // C1.12/C11.08: erasure cannot outrun unresolved original storage operations.
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
 import { lockContactIdentity } from "@/core/contacts/identity-lock";
@@ -11,7 +12,7 @@ import { enqueueJob } from "@/core/jobs";
 import { completeErasureJob, registerContactPrivacySource } from "@/core/privacy/service";
 import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
 import type { Tx } from "@/core/service";
-import { allowMediaReceiptWrites, deleteWithReceipt, MEDIA_WRITES_SCOPE, storageOperationsHeld } from "./write-ledger";
+import { allowMediaReceiptWrites, deleteWithReceipt, MEDIA_WRITES_SCOPE, objectKeyDigest,storageOperationsHeld } from "./write-ledger";
 import { mediaObjectWrites } from "./write-schema";
 import {captureMediaErasureCohort,objectCohortIds} from "./erasure-cohorts";
 import {mediaErasureCohorts} from "./erasure-schema";
@@ -39,8 +40,8 @@ export async function minimizeMediaStorageOperations(tx: Tx, ids: string[]): Pro
   return affected;
 }
 registerContactPrivacySource({
-  scope: MEDIA_WRITES_SCOPE, tables: ["media_object_writes","media_erasure_cohorts"], retentionScopes: ["members","media.multipartOperations"], eraseOrder: 20,
-  exportData: async (tx, contactId) => ({operations:await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.contactId, contactId)).orderBy(asc(mediaObjectWrites.id)),cohorts:await tx.select({cohort:mediaErasureCohorts}).from(mediaErasureCohorts).innerJoin(dataRequests,eq(dataRequests.id,mediaErasureCohorts.requestId)).where(eq(dataRequests.contactId,contactId))}),
+  scope: MEDIA_WRITES_SCOPE, tables: ["media_object_writes","media_erasure_cohorts",...ORIGINAL_PROVIDER_EVIDENCE_TABLES], retentionScopes: ["members","media.multipartOperations"], eraseOrder: 20,
+  exportData: async (tx, contactId) => ({providerEvidence:await exportOriginalProviderEvidence(tx,await originalProviderParentsForContact(tx,contactId)),operations:await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.contactId, contactId)).orderBy(asc(mediaObjectWrites.id)),cohorts:await tx.select({cohort:mediaErasureCohorts}).from(mediaErasureCohorts).innerJoin(dataRequests,eq(dataRequests.id,mediaErasureCohorts.requestId)).where(eq(dataRequests.contactId,contactId))}),
   erase: async (tx, contactId, context) => {
     const rows = await tx.select({ id: mediaObjectWrites.id }).from(mediaObjectWrites)
       .where(and(eq(mediaObjectWrites.contactId, contactId), isNull(mediaObjectWrites.redactedAt))).orderBy(asc(mediaObjectWrites.id));
@@ -80,21 +81,18 @@ export async function eraseMediaStorageOperations(data: Record<string, unknown>)
   });
   if (!captured) return { erased: 0 };
   const keys = [...new Set(captured.filter(row => !row.redactedAt && !row.deletedAt).map(row => row.key))];
+  await db().transaction(async tx=>{await lockContactIdentity(tx);const allowed=[...new Set([...input.ids,...await objectCohortIds(tx,input.requestId,MEDIA_WRITES_SCOPE)])];for(const key of keys){const foreign=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.keyDigest,objectKeyDigest(key)),notInArray(mediaObjectWrites.id,allowed))).limit(1);if(foreign.length)throw new Error("A different original receipt shares this key outside the captured erasure scope. Preserve both generations for recovery.");}});
   for (const key of keys) await deleteWithReceipt(key);
   const result = await db().transaction(async tx => {
     await lockContactIdentity(tx);
-    // Include the DELETE receipts produced for these exact original keys.
-    // They carry the same owner, so cleanup must not leave a fresh personal
-    // copy immediately after minimizing the captured PUT receipts.
-    const contacts = [...new Set(captured.flatMap(row => row.contactId ? [row.contactId] : []))];
+    // Exact late DELETE/copy descendants are attached to the original cohort
+    // at their authentic admission. Current contacts/equal keys add no scope.
     const cohortIds=await objectCohortIds(tx,input.requestId,MEDIA_WRITES_SCOPE);
-    const related = await tx.select({ id: mediaObjectWrites.id }).from(mediaObjectWrites).where(and(
-      inArray(mediaObjectWrites.keyDigest, [...new Set(captured.map(row => row.keyDigest))]),
-      or(inArray(mediaObjectWrites.id, [...input.ids,...cohortIds]), contacts.length ? inArray(mediaObjectWrites.contactId, contacts) : undefined)));
+    const related = await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,[...new Set([...input.ids,...cohortIds])]));
     const erased = await minimizeMediaStorageOperations(tx, related.map(row => row.id));
     const pending = await tx.select({ id: mediaObjectWrites.id }).from(mediaObjectWrites)
       .where(and(inArray(mediaObjectWrites.id, related.map(row => row.id)),or(isNull(mediaObjectWrites.redactedAt),inArray(mediaObjectWrites.state,["unverified","started","unknown"])))).limit(1);
-    return { erased, pending: pending.length > 0 };
+    return { erased, pending: pending.length > 0||await originalProviderEvidencePending(tx,{receiptIds:related.map(row=>row.id)}) };
   });
   if (result.pending) throw new Error("Original storage ownership, a named hold or unresolved provider work keeps this erasure pending.");
   await completeErasureJob.call({ requestId: input.requestId, scope: MEDIA_WRITES_SCOPE, jobId: input.originalJobId }, { kind: "system" });

@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C1.08: late physical facts reopen their original erasure, not a new owner.
+import {originalProviderEvidencePending,originalProviderEvidenceVersion} from "./original-provider-privacy";
 import {and,asc,eq,inArray,or,isNotNull,isNull,gt} from "drizzle-orm";
 import {db} from "@/core/db";
 import {dataRequests} from "@/core/privacy/schema";
@@ -40,7 +41,7 @@ export async function reconcileMediaErasureCohorts(target?:{objectReceiptId?:str
   // worker's clock. Chunked cohorts keep the original bounded job contracts.
   const originalOperations=operations.filter(operation=>{const resource=resources.find(row=>row.id===operation.resourceId);return !resource?.redactedAt||operation.createdAt<=resource.redactedAt;});
   const version=[...writes.map(row=>`${row.id}:${row.observedAcceptedAt?.toISOString()??""}`),...originalOperations.map(row=>`${row.id}:${row.providerAcceptedAt?.toISOString()??""}`)].sort().join("|");
-  const {createHash}=await import("node:crypto");const evidence=createHash("sha256").update(version).digest("hex");
+  const {createHash}=await import("node:crypto");const providerVersion=await db().transaction(tx=>originalProviderEvidenceVersion(tx,{receiptIds:ids,resourceIds}));const hash=createHash("sha256").update(version);if(providerVersion)hash.update(providerVersion);const evidence=hash.digest("hex");
   const sample=rows[0]!;
   const total=Math.max(ids.length,resourceIds.length);
   for(let offset=0;offset<total;offset+=500){
@@ -63,5 +64,7 @@ export async function mediaCohortPending(tx:Tx,requestId:string,scope:string):Pr
   .leftJoin(mediaObjectWrites,eq(mediaObjectWrites.id,mediaErasureCohorts.objectReceiptId))
   .leftJoin(mediaMultipartResources,eq(mediaMultipartResources.id,mediaErasureCohorts.multipartResourceId))
   .where(and(eq(mediaErasureCohorts.requestId,requestId),eq(mediaErasureCohorts.scope,scope),or(and(isNotNull(mediaObjectWrites.id),or(isNull(mediaObjectWrites.redactedAt),inArray(mediaObjectWrites.state,["unverified","started","unknown"]))),and(isNotNull(mediaMultipartResources.id),or(isNull(mediaMultipartResources.redactedAt),isNull(mediaMultipartResources.retiredAt),inArray(mediaMultipartResources.state,["unverified","creating","open","completing","aborting","unknown"])))))).limit(1);
- return Boolean(pending.length);
+ if(pending.length)return true;
+ const original=await tx.select().from(mediaErasureCohorts).where(and(eq(mediaErasureCohorts.requestId,requestId),eq(mediaErasureCohorts.scope,scope)));
+ return originalProviderEvidencePending(tx,{receiptIds:original.flatMap(row=>row.objectReceiptId?[row.objectReceiptId]:[]),resourceIds:original.flatMap(row=>row.multipartResourceId?[row.multipartResourceId]:[])});
 }

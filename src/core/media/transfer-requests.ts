@@ -118,7 +118,7 @@ async function finish(scope:Scope,id:string,token:string,failed:boolean){
 async function reconcileRetainedRequestFacts(scope:Scope):Promise<void>{
  const ids=[...scope.receiptIds],multipartIds=[...scope.multipartOperationIds];scope.receiptIds.clear();scope.multipartOperationIds.clear();const failures:unknown[]=[];
  for(const id of multipartIds){try{await reconcileMediaErasureCohorts({multipartOperationId:id});}catch(error){failures.push(error);}}
- for(const id of ids){try{await reconcileMediaErasureCohorts({objectReceiptId:id});}catch(error){failures.push(error);}try{await reconcileCommittedStorageObservation(id);}catch(error){failures.push(error);}}
+ for(const id of ids){try{if(!await(await import("./original-quota-evidence")).reconcileActualOriginalQuota(id))failures.push(new Error("The actual original physical facts are retained; conflicting quota provenance freezes this namespace until exact recovery."));}catch(error){failures.push(error);}try{await reconcileMediaErasureCohorts({objectReceiptId:id});}catch(error){failures.push(error);}try{await reconcileCommittedStorageObservation(id);}catch(error){failures.push(error);}}
  if(failures.length)throw new AggregateError(failures,"The original provider facts and finish are retained; dependent erasure recovery remains pending.");
 }
 export const observeTransferRequest:TransferRequestObserver=async(descriptor,operation)=>{
