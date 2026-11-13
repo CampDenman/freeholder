@@ -1,150 +1,127 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
-# Historical uploaded erasure: source-only recovery
+# Historical uploaded erasure: populated upgrade and recovery evidence
 
-C1.08/C3.47/C11.14 remain open. Frozen acbb/SQL955 passed fresh ordinary0–81,
-22-model/guard checks, the unchanged original501-WXR full-erasure AFTER, the
-unchanged b716 URL-key AFTER and the held-upload boundary. Those finite proofs
-do not cover an older79 receipt that already claimed completion while retaining
-private normalized input. This historical-recovery source passed the bounded
-NoDB checks below on586e644d. The first synthetic controller subsequently reproduced the exact old79 bug
-and passed ordinary80/81 upgrade, then stopped on a later-upload fixture setup
-error before historical recovery was exercised. Its new corrected fixture is
-NoDB-qualified; current historical recovery remains unproven. No provider
-acceptance follows from this work. SQL81 remains byte-identical955a04d2; SQL80 remains3a686245.
+C1.08/C3.47/C11.14 remain open. Frozen b0e668ab/SQL80=3a686245/SQL81=955a04d2
+supplies one actual synthetic published79→ordinary81 recovery proof. It repairs
+an old false-completed status truthfully; it does not infer missing initial
+membership or claim that the unknown historical graph was safely erased.
+MASTER.md §43 remains the status authority. Public lifecycle, complete record
+coverage, transport/browser/provider and stable acceptance remain open.
 
-A retained self-bound `core.eraseImportSourceObjects` task identifies its exact
-request and original chunk keys. Reconciliation requires the verified original
-request, applied fulfillment audit and intact receipt before shared job
-reopening. It never selects a current graph, reconstructs an original source
-set, inserts a capture, backfills a digest or treats missing bytes as erasure.
-Invalid task/applied/receipt evidence stays explicit recovery, with no fabricated
-replacement artifact or key set.
+A retained self-bound `core.eraseImportSourceObjects` task identifies the exact
+request and original chunk keys. Private SYSTEM
+`imports.reconcileOriginalSourceErasure` requires the verified original request,
+applied fulfillment audit and intact receipt before shared
+`privacy.reopenErasureJob`. Invalid evidence remains explicit recovery, with no
+fabricated replacement artifact, keys or original graph set. It does not select
+current graph membership or insert/backfill initial capture. Original-task
+idempotency and exclusion of its generated retry tasks prevent a retry chain.
+Bounded100-row durable continuation, committed physical-observation callbacks
+and a five-minute registered worker are prepared entry points. All use the same
+services, permission/audit boundary and identity→privacy→receipt lock order;
+provider I/O remains outside the mutation transaction.
 
-`imports.reconcileOriginalSourceErasure` is a private SYSTEM service. It uses
-`privacy.reopenErasureJob` in the same service transaction, copies keys only from
-the retained original task, preserves verification and existing retention
-outcomes, and sets a truthful pending recovery status. The idempotency key binds
-the original task; reconciliation-created retry tasks are excluded from future
-original-task selection. A replay cannot grow a retry chain. Each bounded100-row
-page admits its continuation durably. Physical-observation callbacks and a
-five-minute registered worker provide normal and missed-callback entry points.
-All locks follow identity, privacy request, then receipt order. No provider I/O
-runs in the reconciliation transaction.
+Duplicate prepare/ACK now enter this service when an erased old receipt lacks
+complete original membership. The old task replay can return without additional
+I/O, but the original request becomes pending recovery with a real durable task.
+That new task still fails complete-initial-scope admission before physical
+cleanup or ACK. Missing membership is never adopted from a current graph or
+inferred from raw absence. Reviewing that unknown historical state remains
+required before any eventual cleanup/completion.
 
-Duplicate prepare and ACK paths now enter this service when an erased legacy
-receipt lacks complete initial membership. The old task can finish its replay,
-but its request no longer falsely remains complete. The new pending recovery
-task still fails the ordinary complete-initial-scope admission before physical
-I/O or ACK. Current initial membership is never adopted. Historical missing
-capture therefore requires reviewed recovery; this change does not invent a
-repair that can safely erase that unknown graph.
+The first actual controller used only NEW
+`freeholder_uploaded_history_upgrade_v1_test_20261113`. It pinned actual old
+sourcef1b5d6a3 and unchanged original oracle blob4a470c34. The operational copy
+required exactly one failure at the final private-marker assertion (line88),
+plus independent verified completed/erased status, retained exact task,
+private501 index and accepted PUT/DELETE/raw ENOENT, before ordinary80/81.
+All82 migration identities and empty new initial-capture tables passed.
 
-A new opt-in populated upgrade fixture is prepared:
+Its new current fixture then failed at setup: a one-item later upload correctly
+used finite preview below the500-item limit, so it had no normalized graph.
+Failure occurred before old-task replay. Read-only evidence showed zero
+reconcile/reopen actions or claims, intact original task/receipt, capture0 and
+private old index retained. The ordinary finite later preview legitimately
+added its own PUT/DELETE. This was a fixture error, not an exercised product
+recovery failure. That v1 DB is preserved untouched; no reset/retry was used.
 
-1. `tests/fixtures/run-uploaded-history-upgrade.mjs` demands an explicitly NEW,
-   absent test database and fresh private filesystem. It pins the actual old
-   source to f1b5d6a3 and unchanged oracle blob4a470c34, checks all published0–79
-   identities, and uses the ordinary0–79 migrator.
-2. The unchanged old-runtime f1 runs once at its original60s/bail1/retry0. The
-   controller requires the genuine false-completed result: completed/erased,
-   verified original task retained,501 indexed entries/private marker and
-   accepted PUT/DELETE with physically absent original bytes. A different
-   failure stops before upgrade. Only synthetic IDs, counts and digests are
-   saved; no full-row export or cloned database is made.
-3. The ordinary current migrator appends exact80/81 to that owned populated
-   database and checks all82 journal identities. New initial-capture tables
-   must remain empty. No standalone SQL fragment, dropped guard or reset is used.
-4. `tests/core/import-uploaded-history-upgrade.test.ts` has an explicit fixture
-   gate and no truncate. It creates a real later reviewed upload through actual
-   owner services, replays the retained original task, proves shared reopening
-   and idempotent replay, and proves the new recovery worker refuses before any
-   physical deletion. Original and later graph/input snapshots remain exact;
-   all initial-scope tables remain empty. Original task identity, verification,
-   intact artifacts and keys are preserved. Old deleted bytes are never claimed
-   recoverable.
+Test-only78af9d91 changed the later input to an actual501-item WXR and explicitly
+required its501-entry graph/private marker. Every original-marker, exact-task,
+verification, recovery, idempotency, no-adoption, snapshot/bytes and no-DELETE
+assertion remained. Product/controller source, SQL955, all82 journal identities
+and original f1/b716/847 oracles were byte-preserved. Frozen docs-only b0e668ab
+contains that corrected fixture.
 
-The fixture requires a later explicit native lane grant, exact qualified current
-HEAD, `FREEHOLDER_HISTORY_BEFORE_SOURCE` pointing at the pinned old worktree,
-`FREEHOLDER_HISTORY_UPGRADE_DATABASE` matching
-`freeholder_uploaded_history_upgrade_v1_test_20261113` (or a new numbered name),
-`FREEHOLDER_HISTORY_OUTPUT` naming a fresh `/tmp` directory, and
-`FREEHOLDER_HISTORY_EXPECTED_HEAD` naming the qualified current commit. It never
-opens any prior failure/golden database. The first unexpected failure preserves
-its new database, filesystem and logs and stops the pipeline.
+The second controller used only NEW
+`freeholder_uploaded_history_upgrade_v2_test_20261113` and a fresh private
+filesystem. Its stricter operational copy SHA is
+`fa83cb7693d9fbb95dfd1a48b41c7a2a2ae325f3367f3d7b0f59948808a3c100`.
+The qualified source controller remains unchanged SHA
+`b2e0737d65aea03ab7189963145b1817a5cda081f8adb24be3a529da6169c2c2`;
+the recorded operational diff adds only source/import anchoring and stronger
+old-failure/state gates. No prior failure/golden DB was accessed, copied or
+exported. No guard was dropped, no SQL fragment was applied and no fixture data
+was reset to simulate history.
 
-Four meaningful task-evidence/source controls passed in
-`tests/core/import-uploaded-history-contract.test.ts`. They cover exact retained
-identity/keys, different request/task refusals, malformed/empty/excessive keys,
-and the shared idempotent recovery path without current graph or capture writes.
-They are not database or upgrade acceptance evidence.
+Actual v2 sequence and result:
 
-Outstanding proof includes source qualification of this change, the actual new
-populated fixture, current-flow regression after callback registration, admitted
-content and later-generation boundaries, public HTTP and independent-process501
-lifecycle, old-image recovery, owner/provider acceptance and independent review.
-MASTER.md §43 is the only status authority; no item is checked by this source.
+1. Ordinary0–79 on the new DB, then the unchanged old f1. Its sole expected
+   final-marker failure occurred in5.981s; the exact final source line and
+   independent completed/raw-deleted/private501 state matched before upgrade.
+2. Authorized ordinary80/81 appended in place to THIS owned populated DB.
+   All82 hashes/timestamps matched. Initial scope/member/object tables remained
+   empty; old media `source_key_digest` remained NULL.
+3. A real fresh owner session created a separate actual501-entry later upload
+   through shared services. The retained old task replay reopened its original
+   verified intact receipt into in-progress/unfulfilled/pending1 recovery.
+   Old task digest and exact keys were preserved; one new self-bound task and
+   one original-bound idempotency claim were created through shared services.
+4. Repeated reconciliation returned changed=false/reopened0; the artifact was
+   unchanged. The real new recovery task refused missing initial membership
+   before any physical DELETE. All initial captures remained0; neither old nor
+   later graph acquired retirement authority. No namespace/current graph was
+   adopted and no original key digest was backfilled.
+5. Native original and later graph/input snapshots compared exactly before/
+   after. Old private501 entry/media-plan text remains for reviewed recovery.
+   The later501 graph/private marker and146000 original bytes remained exact;
+   independent SHA matched its live accepted PUT. Total PUT2/DELETE1 retained
+   only the old baseline DELETE, with original raw ENOENT and no extra DELETE.
 
+The current recovery case passed1.024s, its process9.543s, and the full controller
+26.222s. Independent readback confirmed intact artifact, original task digest,
+exact keys on both self-bound tasks, one claim and prepare/reconcile/shared-
+reopen audit counts1 each. Fifteen table and schema digests, all82 source/journal
+identities, UTC/fsync on/jit off/enforced-readonly profile and empty client
+readback were saved. A first read-only collector used unsupported `ends_with`;
+its error/script were preserved and a separately named portable `right` collector
+completed without native retry or product/database changes. No full-row export
+or cloned database was made, and deleted bytes are not claimed recoverable.
 
-Source qualification on586e644d (2026-11-13):
+Local evidence:
 
-- All12 dependency descriptors matched the qualified acbb donor before reuse;
-  no install was performed. Database environment and fixture opt-in flags were
-  absent, and both `.env`/`.env.local` were absent.
-- Node22 full nonincremental types passed with an8GB cap in56.947s. Whole-tree
-  lint passed in107.832s. No source correction or excluded path was needed.
-- All44 required contract files completed with actual assertions:384 passed,
-  26 explicit database skips, no pending/failed assertions and no empty files.
-- Six focused files completed: four new historical task/source assertions plus
-  five fixed digest/source assertions passed; nine native/upgrade cases were
-  explicitly gated off. The populated old79 fixture was not executed.
-- Canonical generation produced637 notes for unchanged0.2.0-beta.6. License
-  headers(2914 sources/8 manifests/8 license texts), changelog and plan gates
-  passed. The plan remains373 IDs:323 checked/50 open.
-- Owned compiler/lint/test runners exited and drained. This final evidence and
-  generated-note commit changes no validated product, test, controller or SQL
-  source. The original f1, b716 and three ownership-oracle files and all82
-  migration identities remain byte-preserved.
+- `/tmp/freeholder-uploaded-history-upgrade-v1-20261113/readonly-classification.json`.
+- `/tmp/freeholder-uploaded-history-upgrade-v2-20261113/execution.json`.
+- `/tmp/freeholder-uploaded-history-upgrade-v2-20261113/verified-proof.json`.
+- `/tmp/freeholder-uploaded-history-upgrade-v2-20261113/independent-proof.json`.
+- `/tmp/freeholder-uploaded-history-upgrade-v2-20261113/independent-drain.json`.
+- The operational copy/diff are
+  `/tmp/freeholder-uploaded-history-upgrade-v2-operational-20261113.mjs` and
+  `/tmp/freeholder-uploaded-history-upgrade-v2-operational-20261113.diff`.
 
-Durable reports:
-`/tmp/freeholder-uploaded-history-586-qualifier-20261113-result.json`,
-`/tmp/freeholder-uploaded-history-586-contracts-20261113-result.json`, and
-`/tmp/freeholder-uploaded-history-586-actual-evidence-20261113.json`.
-The actual fresh populated upgrade and current-flow callbacks still require a
-separate native lane grant. No stable or launch sign-off follows from this pass.
+Qualification preceding this run: all12 dependency descriptors matched with no
+install;586e Node22 full types56.947s/whole lint107.832s; all44 contract files384
+pass/26 explicit database skips; nine focused assertions pass/nine native or
+upgrade skips. The test-only correction passed types65.232s, changed lint6.475s,
+four recovery pures2.719s and one explicit upgrade skip. Canonical637 notes,
+licensing2914+8+8, changelog and plan373/323/50 passed. All owned runners drained.
+These source skips were not counted as native upgrade evidence.
 
-
-First populated controller and test-only correction (2026-11-13):
-
-- NEW `freeholder_uploaded_history_upgrade_v1_test_20261113` alone was created.
-  The stricter operational controller required exactly the unchanged f1 final
-  marker assertion at source line88 to fail, plus independently verified
-  completed/erased/intact original task, private501 index, accepted physical
-  deletion and raw ENOENT, before ordinary80/81. All82 journal identities and
-  initial-capture tables remaining empty passed. No prior failure/golden DB
-  was opened, cloned, exported or altered.
-- Current-stage execution stopped at new fixture line62 before old-task replay:
-  the later upload had one item and correctly used the ordinary finite preview
-  path below the500-item limit, so it had no normalized graph. Independent
-  read-only counters show zero reopening/reconciliation actions or claims,
-  intact original task/receipt, capture0 and original private index retained.
-  The failed v1 DB remains untouched. This is a fixture setup failure; it does
-  not qualify or disprove the unexecuted historical reconciliation behavior.
-- Test-only78af9d91 generates an actual501-item later WXR and requires its501
-  entries/private marker before proceeding. All existing original-marker,
-  exact task/verification, recovery, idempotency, no-adoption, snapshot/bytes
-  and no-DELETE assertions remain. Product code, source controller, SQL955,
-  full journal and original f1/b716/847 oracle files are byte-preserved.
-- All12 dependency descriptors matched before reuse. Node22 incremental types
-  passed65.232s (8GB), changed-fixture lint6.475s, four recovery pure assertions
-  passed2.719s and one actual upgrade case was explicitly gated off. No44-file
-  or whole-lint repeat was needed. Canonical637 notes, licensing2914+8+8,
-  changelog and plan373/323/50 gates passed; all runners drained.
-- A different NEWv2 synthetic controller DB and fresh private filesystem are
-  required for the next separately granted run. The operational copy retains
-  the stronger exact-final-marker gate; the qualified source controller is
-  preserved. Never replay, reset or finish the failed v1 fixture in place.
-
-Correction evidence:
-`/tmp/freeholder-uploaded-history-later78af-qualifier-20261113-result.json`,
-`/tmp/freeholder-uploaded-history-later78af-qualifier-20261113-test-evidence.json`,
-and `/tmp/freeholder-uploaded-history-upgrade-v1-20261113/readonly-classification.json`.
+Current admitted-content and later-generation boundaries also passed on eadc;
+see `deploy/import-upload-index-erasure-source-2026-11-13.md`. Still required are
+all four stronger WXR/ZIP rollback/privacy cases, public small REST and real
+TCP501/two-process publication/rollback, live API/MCP/SDK parity, four-locale
+production browser, broader old-image/recovery/record coverage, owner/provider
+accounts, independent review and final sign-off. The periodic scheduler and
+receipt callback are registered; this fixture specifically exercises duplicate
+prepare/shared reopening/idempotent retry, not every crash or scheduler journey.
+No C-item or stable/account acceptance is closed by this finite result.

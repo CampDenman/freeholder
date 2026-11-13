@@ -3902,8 +3902,26 @@ reading chat logs.
   database skips). The actual 501-entry pending containment passes (5.403s),
   unchanged outage/removal/replay positive passes (6.676s), and the other 14
   raw-source controls pass without retry; independent physical/receipt/journal
-  readback and closed database sessions are recorded. Evidence: `deploy/import-wxr-index-privacy-2026-11-13.md`. Full guarded index minimization and recovery of
-  historical completed receipts remain required; this does not close C1.08.
+  readback and closed database sessions are recorded. Evidence:
+  `deploy/import-wxr-index-privacy-2026-11-13.md`. Those ordinary79 results
+  establish containment; the newer81 proofs below do not close C1.08.
+
+  Full81 finite privacy proof2026-11-13 (80=3a686245/81=955a04d2): NEW ordinary
+  schema matches all82 identities/22 models and enabled guards. The unchanged
+  original501-WXR full-erasure and URL-only media-key AFTER controls pass;
+  exact original scope, accepted same-namespace physical receipts/raw absence
+  and private-projection minimization are independently read back. Actual held,
+  accepted500-CMS-child and later501-generation boundaries pass with exact
+  native before/after ownership, canonical membership or bytes preserved as
+  appropriate. Historical NEWv2 actual old79->ordinary81 proof reopens the
+  retained verified/intact false-completed task truthfully into pending recovery,
+  idempotently, with capture0/no backfill/no later-graph adoption/no extra DELETE.
+  Unknown historical private index remains for reviewed recovery. Source/SQL,
+  case timings and minimal independent proofs are in
+  `deploy/import-upload-index-erasure-source-2026-11-13.md` and
+  `deploy/import-uploaded-history-recovery-2026-11-13.md`. Four stronger WXR/ZIP
+  rollback cases, public lifecycle, live API/MCP/SDK/browser/provider and wider
+  privacy/restore acceptance remain open; no account or stable sign-off follows.
 
 
   Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
@@ -6449,32 +6467,37 @@ deployments are portable, testable and incapable of silently forking the truth.
   This splits a required delivery portion from C3.22; both remain open until
   their complete source and acceptance criteria pass. Migration 73 follows
   merged mail recovery 72 in the contiguous journal.
-  Actual full81 source5c8/SQL8c proof2026-11-13: a NEW ordinary0–81
-  database matched all82 migration identities and22 source models; enabled
-  guards and readonly capabilities passed. The unchanged501-WXR full-erasure
-  AFTER then failed: original membership's plain key digest was incorrectly
-  joined to domain-separated media receipts. Four uploaded-only joins now
-  derive the exact ledger digest; new SQL955a04d2 remains unqualified and needs
-  a NEW normal database and unchanged AFTER. The failed database is preserved
-  untouched with minimal readonly digests, no deleted-byte recovery claim.
-  See `deploy/import-upload-index-erasure-source-2026-11-13.md`.
-  Historical uploaded-source follow-up2026-11-13: source-only private
-  reconciliation reopens a retained original task's verified intact completed
-  receipt when its initial capture is missing. It preserves exact task keys
-  and truthful recovery without adopting current graphs, backfilling capture
-  or bypassing physical admission. Periodic/committed-observation entry points
-  and a NEW actual old79->81 populated fixture are prepared. Source586e passes
-  full Node22 types, whole lint,384 contracts and9 focused assertions;26 contract
-  and9 focused native/upgrade skips are explicit. SQL955 remains unchanged;
-  the actual populated upgrade/current-flow acceptance have not run.
-  See `deploy/import-uploaded-history-recovery-2026-11-13.md`.
-  Historical synthetic v1 then reproduced the exact old79 final-marker bug
-  and passed ordinary80/81, but its new one-item later-upload fixture stopped
-  before reconciliation because finite previews intentionally have no graph.
-  V1 is preserved; task/receipt/capture0 and zero reopen writes were inspected.
-  Test-only78af uses an actual501-item later graph, keeps every original oracle,
-  and passes types/changed lint/four pures/metadata. NEWv2 historical native
-  execution remains required; no product recovery result is claimed yet.
+  Finite full81 proof2026-11-13: frozen acbb/eadc/b0e source on
+  SQL80=3a686245/81=955a04d2 passed NEW ordinary0–81/all82 identities,
+  22-model/guard/capability proof and unchanged original501-WXR full-erasure
+  AFTER6.568s plus original URL-only media-key AFTER6.312s. Actual held-upload
+  boundary5.826s, accepted500-CMS-child refusal19.209s and later501-generation
+  boundary6.511s pass, with independently read exact scope/namespace/physical
+  facts and native before/after ownership or retained bytes. The prior8c
+  domain-digest failure remains preserved; the corrected955 used a NEW DB.
+  Historical NEWv1 reproduced the exact old79 final-marker bug and ordinary81,
+  then stopped before recovery because its one-item later fixture correctly
+  used finite preview. V1 remains untouched. Test-only78af builds an actual501
+  later graph without relaxing old-marker/recovery/idempotency/no-DELETE checks.
+  NEW historicalv2 then passes actual old79->ordinary81 and real shared-service
+  reopening: controller26.222s/current recovery case1.024s. Verified intact
+  request becomes pending recovery, original task/keys remain exact, one durable
+  claim is replay-idempotent, all initial captures stay0/old key digestNULL,
+  old/later graphs gain no retirement authority, later501 bytes are unchanged
+  and no extra DELETE occurs. Historical unknown membership is not fabricated.
+  Source586e passed full types/whole lint/384 contracts+nine focused assertions;
+  test-only78af passed types/changed lint/four pures. Explicit native skips are
+  not acceptance evidence. All finite probes saved minimal hashes/counts and
+  actual empty-client readback; no old failure/golden DB was cloned or exported.
+  Evidence and preserved failures:
+  `deploy/import-upload-index-erasure-source-2026-11-13.md` and
+  `deploy/import-uploaded-history-recovery-2026-11-13.md`.
+  All four stronger WXR/ZIP rollback/privacy cases, public small REST and actual
+  TCP501/two-index-process lifecycle, live API/MCP/SDK, four-locale production
+  browser, broader old-image/recovery and owner/provider/security/stable gates
+  remain required. Public fixtures have bounded advance/progress and dynamic
+  all-journal hashes; they remain unrun. Mocked small REST does not prove live
+  HTTP routing. Later financial/source composition needs fresh qualification.
   Canonical original-retention draft 2026-11-12: a second actual control on
   protected main reproduced the same pre-verification hold gap for uploaded
   WXR bytes. New unpublished80 capture receipts and immutable source/generation
@@ -12365,6 +12388,18 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
+  Finite imported-input privacy follow-up2026-11-13: the exact3a/955 candidate
+  supplies ordinary82-journal/22-model and shared-source registration proof,
+  unchanged WXR/media-key minimization, held/accepted/later ownership boundaries
+  and actual populated old79->81 truthful historical recovery. Missing capture
+  remains explicit pending review; no new scope, original key or current graph
+  is inferred. These local private-store fixtures preserve actual task/receipt
+  identity and accepted physical facts with minimal independent hashes/counts.
+  They do not qualify the four remaining WXR/ZIP rollback cases, full public
+  lifecycle, live transports/browser, other record families, restore/recovery
+  breadth or provider accounts. C11.14 stays open. See
+  `deploy/import-upload-index-erasure-source-2026-11-13.md` and
+  `deploy/import-uploaded-history-recovery-2026-11-13.md`.
   *(Reopened 2026-11-11 by actual unchanged-main controls: an exact
   `forms.delete` API key permanently removed held submissions, the same route
   removed already-trashed held evidence, and tracked-demo cleanup cascaded over
