@@ -174,6 +174,18 @@ export async function mutateOriginalStripePhaseSchedule(api: StripeSubscriptionR
   return inspectOriginalStripePhaseSchedule(api, { ...request, providerScheduleRef: identity.providerScheduleRef });
 }
 
+/** Positive provider cancellation before the originally admitted first phase,
+ * not a local clock, may prove this future schedule never linked a chargeable
+ * subscription. Terminal null linkage alone is deliberately insufficient. */
+function neverStartedProof(value: Record<string, unknown>, request: MerchantPhaseScheduleStopRequest) {
+  const canceledAt = number(value.canceled_at), createdAt = number(value.created), phases = Array.isArray(value.phases) ? value.phases.map(object) : [];
+  if (!request.originalFirstPhaseStart || ref(value.customer) !== request.providerCustomerRef || value.status !== "canceled" || value.subscription !== null || value.released_subscription !== null
+    || canceledAt === undefined || createdAt === undefined || !Number.isSafeInteger(canceledAt) || !Number.isSafeInteger(createdAt) || createdAt < 0 || canceledAt < createdAt || !phases.length || phases.some(phase => !phase || !Number.isSafeInteger(phase.start_date))
+    || Math.min(...phases.map(phase => Number(phase!.start_date))) !== timestamp(request.originalFirstPhaseStart)
+    || canceledAt >= timestamp(request.originalFirstPhaseStart)) return null;
+  return { originalFirstPhaseStart: request.originalFirstPhaseStart, providerCreatedAt: new Date(createdAt * 1000).toISOString(), providerCanceledAt: new Date(canceledAt * 1000).toISOString() };
+}
+
 /** A stopped schedule is not yet a customer-erasure receipt: every linked
  * subscription and its original invoices/PI history still needs stop proof.
  * No current phase/price drift is allowed to prevent stopping the original ID. */
@@ -197,7 +209,7 @@ export async function cancelOriginalStripePhaseSchedule(api: StripeSubscriptionR
   collect(before);
   if (["canceled", "completed", "released"].includes(String(before.status))) {
     await request.onStopped({ providerScheduleRef: request.providerScheduleRef, providerSubscriptionRefs: [...linked].sort(), linkedInventoryComplete,
-      state: before.status as "canceled" | "completed" | "released", source: "readback" });
+      state: before.status as "canceled" | "completed" | "released", source: "readback", neverStartedProof: neverStartedProof(before, request) });
     return;
   }
   if (!["not_started", "active"].includes(String(before.status))) unproven();
@@ -207,6 +219,6 @@ export async function cancelOriginalStripePhaseSchedule(api: StripeSubscriptionR
   // Parse only actual related refs, preserving uncertainty explicitly. The
   // primary terminal ACK is committed once even if related inventory is bad.
   collect(actual);
-  await request.onStopped({ providerScheduleRef: request.providerScheduleRef, providerSubscriptionRefs: [...linked].sort(), linkedInventoryComplete, state: "canceled", source: "cancel_ack" });
+  await request.onStopped({ providerScheduleRef: request.providerScheduleRef, providerSubscriptionRefs: [...linked].sort(), linkedInventoryComplete, state: "canceled", source: "cancel_ack", neverStartedProof: neverStartedProof(actual, request) });
   if (!linkedInventoryComplete) unproven();
 }

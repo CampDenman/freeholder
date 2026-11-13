@@ -48,7 +48,7 @@ const readRevision = (owned: { resource: typeof subscriptionProviderScheduleReso
 /** Every old positive cash fact is applied with current financial closure or
  * actually returned through the shared original-cash proof. Neither an empty
  * current invoice list nor a local schedule flag discharges money history. */
-async function assertOriginalPhaseFinancials(ctx: ServiceContext, subscriptionId: string) {
+export async function assertOriginalPhaseFinancials(ctx: ServiceContext, subscriptionId: string) {
   const receipts = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId, subscriptionId)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001);
   const observations = await ctx.tx.select().from(subscriptionProviderChargeObservations).where(eq(subscriptionProviderChargeObservations.subscriptionId, subscriptionId)).orderBy(subscriptionProviderChargeObservations.id).limit(5001);
   const routes = await ctx.tx.select().from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.subscriptionId, subscriptionId)).orderBy(merchantAgreementPaymentRoutes.paymentId).limit(5001);

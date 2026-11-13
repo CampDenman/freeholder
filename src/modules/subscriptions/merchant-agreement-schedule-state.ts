@@ -13,7 +13,6 @@ import { scheduleQuiescenceCovers } from "./provider-schedule-proof";
 import { verifiedPreparatoryPhaseProducts } from "./provider-phase-product-proof";
 import { subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts } from "./schema";
 import type { subscriptionMerchantScopes, subscriptions } from "./schema";
-const application = z.object({ invoiceId: z.uuid(), paymentId: z.uuid() }).nullable();
 
 /** Shared exact-agreement proof; callers decide which original buyers belong
  * to their operation. No provider I/O or local-status shortcut is introduced. */
@@ -53,7 +52,8 @@ export async function merchantAgreementScheduleState(ctx:ServiceContext,agreemen
       if (!quote || !quote.evidenceDigest || !lines.length || lines.some(line => line.quoteId !== quote.id)) return { safe: false, external };
     }
     const coverage = agreement.resource.stoppedProof!.resources.flatMap(resource => resource.invoices.flatMap(invoice => invoice.paid.map(paid => ({ ...paid, providerSubscriptionRef: resource.providerSubscriptionRef, providerInvoiceRef: invoice.providerInvoiceRef }))));
-    if (coverage.length !== receipts.length) return { safe: false, external };
+    const returnedCoverage = agreement.resource.stoppedProof!.resources.flatMap(resource => resource.invoices.flatMap(invoice => (invoice.returnedUnapplied ?? []).map(returned => ({ ...returned, providerSubscriptionRef: resource.providerSubscriptionRef, providerInvoiceRef: invoice.providerInvoiceRef }))));
+    if (coverage.length + returnedCoverage.length !== receipts.length) return { safe: false, external };
     for (const observation of observations) {
       const receipt = receipts.find(row => row.providerPaymentIntentRef === observation.providerPaymentIntentRef);
       if (!receipt || receipt.providerPlatformAccountId !== observation.providerPlatformAccountId || receipt.chargeAccountId !== observation.chargeAccountId
@@ -62,14 +62,20 @@ export async function merchantAgreementScheduleState(ctx:ServiceContext,agreemen
     }
     for (const receipt of receipts) {
       if (!observations.some(observation => observation.providerPaymentIntentRef === receipt.providerPaymentIntentRef && observation.customerChargeVerified)) return { safe: false, external };
-      const covered = coverage.find(row => row.receiptId === receipt.id);
-      if (!covered || covered.providerSubscriptionRef !== receipt.providerSubscriptionRef || covered.providerInvoiceRef !== receipt.providerInvoiceRef || covered.providerPaymentIntentRef !== receipt.providerPaymentIntentRef) return { safe: false, external };
-      const prove = getService("invoicing.subscriptionChargeApplication"), debt = getService("invoicing.merchantPaymentRecoveryDebt");
-      if (!prove || !debt) return { safe: false, external };
-      const applied = application.parse(await ctx.callAsSystem(prove, { receiptId: receipt.id }));
-      if (!applied || applied.invoiceId !== covered.invoiceId || applied.paymentId !== covered.paymentId) return { safe: false, external };
-      const financial = z.object({ pending: z.boolean() }).passthrough().parse(await ctx.callAsSystem(debt, { paymentId: applied.paymentId }));
-      if (financial.pending) return { safe: false, external };
+      const covered = coverage.find(row => row.receiptId === receipt.id), returned = returnedCoverage.find(row => row.receiptId === receipt.id);
+      const binding = covered ?? returned;
+      if (!binding || covered && returned || binding.providerSubscriptionRef !== receipt.providerSubscriptionRef || binding.providerInvoiceRef !== receipt.providerInvoiceRef || binding.providerPaymentIntentRef !== receipt.providerPaymentIntentRef) return { safe: false, external };
+      const disposition = getService("invoicing.subscriptionChargeDisposition"), debt = getService("invoicing.merchantPaymentRecoveryDebt");
+      if (!disposition) return { safe: false, external };
+      const result = z.discriminatedUnion("kind", [z.object({ kind: z.literal("applied"), invoiceId: z.uuid(), paymentId: z.uuid() }),
+        z.object({ kind: z.literal("returned_unapplied"), returnReceiptId: z.uuid() })]).nullable().parse(await ctx.callAsSystem(disposition, { receiptId: receipt.id }));
+      if (!result) return { safe: false, external };
+      if (returned) {
+        if (result.kind !== "returned_unapplied" || result.returnReceiptId !== returned.returnReceiptId) return { safe: false, external };
+      } else {
+        if (!covered || result.kind !== "applied" || result.invoiceId !== covered.invoiceId || result.paymentId !== covered.paymentId || !debt) return { safe: false, external };
+        if (z.object({ pending: z.boolean() }).passthrough().parse(await ctx.callAsSystem(debt, { paymentId: result.paymentId })).pending) return { safe: false, external };
+      }
     }
   return {safe:true,external};
 }

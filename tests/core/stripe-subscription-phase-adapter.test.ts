@@ -88,12 +88,12 @@ describe("original Stripe phase adapter (inactive C12.38)", () => {
     await provider.cancelMerchantPhaseSchedule!({ ...request, providerScheduleRef: "sub_sched_original", onStopped });
     const posts = fetcher.mock.calls.filter(([, init]) => init?.method === "POST"); expect(posts).toHaveLength(1);
     expect(Object.fromEntries(posts[0]![1]!.body as URLSearchParams)).toEqual({ invoice_now: "false", prorate: "false" });
-    expect(onStopped).toHaveBeenCalledExactlyOnceWith({ providerScheduleRef: "sub_sched_original", providerSubscriptionRefs: [], linkedInventoryComplete: true, state: "canceled", source: "cancel_ack" });
+    expect(onStopped).toHaveBeenCalledExactlyOnceWith({ providerScheduleRef: "sub_sched_original", providerSubscriptionRefs: [], linkedInventoryComplete: true, state: "canceled", source: "cancel_ack", neverStartedProof: null });
   });
   it("preserves the original linked subscription across a canceled schedule's null current reference", async () => {
     const onStopped = vi.fn().mockResolvedValue(undefined);
     const { provider } = edge((_path, init) => init.method === "POST" ? { ...actual(), status: "canceled" } : { ...actual(), status: "active", subscription: "sub_original" });
     await provider.cancelMerchantPhaseSchedule!({ ...request, providerScheduleRef: "sub_sched_original", onStopped });
-    expect(onStopped).toHaveBeenCalledExactlyOnceWith({ providerScheduleRef: "sub_sched_original", providerSubscriptionRefs: ["sub_original"], linkedInventoryComplete: true, state: "canceled", source: "cancel_ack" });
+    expect(onStopped).toHaveBeenCalledExactlyOnceWith({ providerScheduleRef: "sub_sched_original", providerSubscriptionRefs: ["sub_original"], linkedInventoryComplete: true, state: "canceled", source: "cancel_ack", neverStartedProof: null });
   });
 });
