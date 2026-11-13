@@ -6449,6 +6449,15 @@ deployments are portable, testable and incapable of silently forking the truth.
   This splits a required delivery portion from C3.22; both remain open until
   their complete source and acceptance criteria pass. Migration 73 follows
   merged mail recovery 72 in the contiguous journal.
+  Actual full81 source5c8/SQL8c proof2026-11-13: a NEW ordinary0–81
+  database matched all82 migration identities and22 source models; enabled
+  guards and readonly capabilities passed. The unchanged501-WXR full-erasure
+  AFTER then failed: original membership's plain key digest was incorrectly
+  joined to domain-separated media receipts. Four uploaded-only joins now
+  derive the exact ledger digest; new SQL955a04d2 remains unqualified and needs
+  a NEW normal database and unchanged AFTER. The failed database is preserved
+  untouched with minimal readonly digests, no deleted-byte recovery claim.
+  See `deploy/import-upload-index-erasure-source-2026-11-13.md`.
   Canonical original-retention draft 2026-11-12: a second actual control on
   protected main reproduced the same pre-verification hold gap for uploaded
   WXR bytes. New unpublished80 capture receipts and immutable source/generation

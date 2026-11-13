@@ -823,16 +823,18 @@ CREATE FUNCTION freeholder_source_graph_projection_retired(original_graph uuid,o
    AND NOT EXISTS(SELECT 1 FROM import_source_batches batch WHERE batch.graph_id=graph.id)
    AND NOT EXISTS(SELECT 1 FROM import_source_entries entry WHERE entry.graph_id=graph.id AND entry.target_page_id IS NOT NULL)
    AND NOT EXISTS(SELECT 1 FROM import_source_media media WHERE media.graph_id=graph.id AND (media.asset_id IS NOT NULL OR media.digest IS NOT NULL OR media.bytes IS NOT NULL OR media.source_key_digest IS NULL))
+   -- Original membership keeps plain SHA256(key). Physical facts use the
+   -- media ledger domain plus a NUL byte and the exact captured chunk key.
    -- An indexed uploaded graph must have actual accepted original PUTs, each
    -- with matching accepted DELETE evidence and a durable retirement mark.
    AND NOT EXISTS(SELECT 1 FROM import_source_erasure_objects original WHERE original.request_id=member.request_id AND original.run_id=member.run_id AND original.upload_id=member.upload_id
-    AND NOT EXISTS(SELECT 1 FROM media_object_writes original_put WHERE original_put.key_digest=original.key_digest
+    AND NOT EXISTS(SELECT 1 FROM media_object_writes original_put WHERE original_put.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to('imports/'||original.run_id::text||'/'||original.upload_id::text||'/'||lpad(original.chunk_index::text,5,'0')||'.part','UTF8')),'hex')
       AND original_put.operation_kind='put' AND original_put.state='accepted' AND original_put.deleted_at IS NOT NULL
-      AND EXISTS(SELECT 1 FROM media_object_writes deletion WHERE deletion.key_digest=original.key_digest
+      AND EXISTS(SELECT 1 FROM media_object_writes deletion WHERE deletion.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to('imports/'||original.run_id::text||'/'||original.upload_id::text||'/'||lpad(original.chunk_index::text,5,'0')||'.part','UTF8')),'hex')
         AND deletion.storage_namespace=original_put.storage_namespace AND deletion.operation_kind='delete' AND deletion.state='accepted')))
    AND NOT EXISTS(SELECT 1 FROM import_source_erasure_objects original WHERE original.request_id=member.request_id AND original.run_id=member.run_id AND original.upload_id=member.upload_id
     AND (EXISTS(SELECT 1 FROM media_objects reservation WHERE encode(sha256(convert_to(reservation.key,'UTF8')),'hex')=original.key_digest)
-      OR EXISTS(SELECT 1 FROM media_object_writes physical WHERE physical.key_digest=original.key_digest AND (physical.state IN ('unverified','started','unknown') OR physical.operation_kind='put' AND physical.deleted_at IS NULL)))))
+      OR EXISTS(SELECT 1 FROM media_object_writes physical WHERE physical.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to('imports/'||original.run_id::text||'/'||original.upload_id::text||'/'||lpad(original.chunk_index::text,5,'0')||'.part','UTF8')),'hex') AND (physical.state IN ('unverified','started','unknown') OR physical.operation_kind='put' AND physical.deleted_at IS NULL)))))
 $$;
 --> statement-breakpoint
 CREATE FUNCTION freeholder_refuse_erased_source_graph_admission() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -856,7 +858,7 @@ CREATE FUNCTION freeholder_source_task_objects_retired(original_request uuid,ori
      AND requested.key='imports/'||original.run_id::text||'/'||original.upload_id::text||'/'||lpad(original.chunk_index::text,5,'0')||'.part'
      AND NOT freeholder_source_upload_held(original.run_id,original.upload_id))
     OR EXISTS(SELECT 1 FROM media_objects reservation WHERE reservation.key=requested.key)
-    OR EXISTS(SELECT 1 FROM media_object_writes physical WHERE physical.key_digest=encode(sha256(convert_to(requested.key,'UTF8')),'hex')
+    OR EXISTS(SELECT 1 FROM media_object_writes physical WHERE physical.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(requested.key,'UTF8')),'hex')
        AND (physical.state IN ('unverified','started','unknown') OR physical.operation_kind='put' AND physical.deleted_at IS NULL)))
 $$;
 --> statement-breakpoint
