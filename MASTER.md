@@ -3920,7 +3920,11 @@ reading chat logs.
   case timings and minimal independent proofs are in
   `deploy/import-upload-index-erasure-source-2026-11-13.md` and
   `deploy/import-uploaded-history-recovery-2026-11-13.md`. Four stronger WXR/ZIP
-  rollback cases, remaining public authority/cancellation/recovery, live
+  rollback cases now pass on ce/955: both late-reader controls complete and
+  minimize500 entries; both named-hold controls protect and then delete raw
+  originals. Held final receipts remain retained/partial with500 unminimized
+  entries/one marker and no task after release; same-request resume and its
+  final index/receipt completion remain open. Remaining public authority/cancellation/recovery, live
   API/MCP/SDK/browser/provider and wider privacy/restore acceptance remain open;
   no account or stable sign-off follows.
 
@@ -6504,8 +6508,14 @@ deployments are portable, testable and incapable of silently forking the truth.
   Independent501 witnesses/batches500+1+media/17table-schema digests/exact
   original-namespace PUT+raw hashes/child exit/PG[] are saved. Private original
   bytes remain retained; this is a lifecycle, not an erasure/account proof.
-  All four stronger WXR/ZIP rollback/privacy cases, seven other small REST
-  authority/cancellation/recovery cases, live API/MCP/SDK, four-locale production
+  All four stronger WXR/ZIP rollback/privacy cases now pass, unchanged60s/
+  bail1/retry0, on ce/955: WXR late-reader6.939s/held7.356s and ZIP late-reader
+  7.574s/held7.366s. Both late-reader outcomes complete with500 minimized
+  entries/marker0/exact capture/task/physical retirement. Both hold cases
+  protect raw originals until named hold removal, then delete them; their
+  actual retained partial receipts and500 unminimized entries/marker1/tasks0
+  do not prove post-release completion. Same-request resume, seven other small
+  REST authority/cancellation/recovery cases, live API/MCP/SDK, four-locale production
   browser, broader old-image/recovery and owner/provider/security/stable gates
   remain required. Mocked small REST does not prove live HTTP routing; real TCP
   public-source fetching does not prove incoming API/MCP/SDK. Later financial/
@@ -6678,8 +6688,10 @@ deployments are portable, testable and incapable of silently forking the truth.
   A further source-only predicate binds actual accepted PUT/DELETE retirement
   to the immutable first graph/chunk capture after rollback releases the mutable
   descriptor; later aliases/writers/holds/accepted ownership still refuse.
-  Strengthened real-session WXR/ZIP resumption controls remain unrun. This
-  changes unpublished81 and requires a NEW database for qualification.
+  This historical source checkpoint changed unpublished81 and required a
+  NEW database. Subsequent exact955 ordinary-schema and four unchanged
+  real-session WXR/ZIP controls are recorded above; held post-release index/
+  receipt completion remains open.
 
 
 
@@ -12409,8 +12421,11 @@ schema they inherit reads as a designed thing rather than an excavation.
   identity and accepted physical facts with minimal independent hashes/counts.
   Subsequent small mocked-REST lifecycle6.842s and actual TCP501/two-process
   lifecycle52.825s pass with exact default-CMS/owned rollback, source receipts,
-  byte hashes, full journal and closed clients. They do not qualify the four
-  remaining WXR/ZIP privacy rollback cases, seven other public recovery/authority
+  byte hashes, full journal and closed clients. Four subsequent unchanged
+  WXR/ZIP privacy rollback controls pass; both late-reader cases complete with
+  500 minimized entries, while both held/release cases end raw-deleted but with
+  retained partial receipts/500 unminimized entries/one private marker/no task.
+  Their same-request resume/final completion, seven other public recovery/authority
   cases, live API/MCP/SDK/browser, other record families, restore/recovery breadth
   or provider accounts. C11.14 stays open. See
   `deploy/import-upload-index-erasure-source-2026-11-13.md` and

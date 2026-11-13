@@ -144,13 +144,51 @@ Public proof records:
 - Child directories `/tmp/freeholder-crawl-index-process-maDA8X` and
   `/tmp/freeholder-crawl-index-process-vXgbds` retain actual results/logs.
 
-All four stronger WXR/ZIP rollback/privacy cases remain unrun. Their current81
-first cases require a completed request plus full500-entry minimization after
-rollback, with immutable IDs/ranges/digests and accepted PUT/DELETE evidence.
-Published79 containment kept such requests pending; no old assertion is relaxed
-or schema-skipped. The held/release cases retain exact raw bytes under the named
-hold and allow deletion only after its removal; they do not themselves assert a
-post-release index ACK or whole-request completion.
+The four stronger WXR/ZIP rollback/privacy cases now pass on exact ce876afe/
+b99dfd3b/955. Each selected exactly one actual case, with its original60s deadline,
+bail1/retry0 and a fresh private filesystem. Existing assertions were unchanged:
+
+| Source | Late reader and rollback | Named hold, rollback and release |
+| --- | --- | --- |
+| WXR |6.939s case/8.733s runner |7.356s case/9.137s runner |
+| ZIP |7.574s case/9.387s runner |7.366s case/9.184s runner |
+
+Both late-reader cases refuse the actual in-flight reader-bearing result and
+preserve original entry IDs, ranges and digests. After owned rollback, the real
+original task completes erasure: all500 entries minimized, private marker0,
+verified/fulfilled completed request and intact erased receipt/pending0. Readback
+proves exact initial run/upload/graph-generation/revision/one-chunk capture,
+plain key digest, exact current task and retired projection predicate. Accepted
+PUT+DELETE share the original namespace/digest; WXR143854bytes and ZIP108396bytes
+are gone from private storage. All82 journal hashes and read-only UTC/fsync on/
+jit off profiles match; every case drains clients before another owned reset.
+
+Both held cases prove that the exact named hold retains the original through
+rollback, generic cleanup refuses it, and deletion succeeds only after that
+specific hold is removed. Their final actual state is narrower: holds0/raw
+ENOENT with accepted same-namespace PUT+DELETE, but all500 index entries remain
+unminimized with one private marker row. The original intact receipt remains
+partially completed/retained/pending0 and has no current erasure task. The
+captured graph is eligible for retirement; eligibility is not minimization or
+ACK. These tests make no post-release completion assertion. Same-request resume
+and the final retained index/receipt lifecycle remain open.
+
+Aggregate evidence is
+`/tmp/freeholder-strong-wxrzip-four-actual-verified-summary-20261113.json`
+(SHA256c316cd05b5b3e854b1a25ec62b91d7682bc12f2671ea1406ec1e50955c0b910d).
+Per-case files are `freeholder-strong-wxr-unparsed-v2`, `wxr-held-v1`,
+`archive-unparsed-v1` and `archive-held-v1`, each ending
+`-955-20261113-verified-proof.json` under `/tmp`.
+
+Two operational diagnostics are preserved without native retries. An initial
+anchored reporter-name pattern selected zero tests: Vitest5.0.5 matches suite
+and title separated by ` > `, while its JSON reporter uses a space. No pass was
+credited; all17 prior lifecycle table digests/82 journal entries remained exact.
+The first read-only collector incorrectly required one source task globally;
+pgboss retains three older-request tasks outside truncateSpine. Independent
+classification found exactly one current-request task. An authorized new-named
+collector filtered that exact request and passed without rerunning the native
+case. Product/tests/SQL and all original oracles were unchanged.
 
 Seven other small REST authority/cancellation/recovery cases remain unselected.
 Live API/MCP/SDK parity, four-locale production browser, broader old-image and
