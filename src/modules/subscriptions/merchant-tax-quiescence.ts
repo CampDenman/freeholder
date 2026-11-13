@@ -12,7 +12,7 @@ import { defineService, getService, ServiceError, type ServiceContext } from "@/
 import { merchantTaxProfiles } from "@/modules/invoicing/merchant-tax-schema";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { paymentAdapter } from "@/adapters/payments";
-import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
+import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources, type ScheduleStopProof } from "./provider-schedule-schema";
 import { scheduleCallerHasStopped, scheduleKnownResources, scheduleOperationDigest } from "./provider-schedule-proof";
 import { subscriptionMerchantScopes, subscriptions, subscriptionProviderChargeReceipts } from "./schema";
 import scheduleCallerServices from "./provider-schedule-callers";
@@ -146,13 +146,13 @@ export const retainMerchantScheduleInventory = defineService({
     const disposition = z.discriminatedUnion("kind", [z.object({ kind: z.literal("applied"), invoiceId: z.uuid(), paymentId: z.uuid() }),
       z.object({ kind: z.literal("returned_unapplied"), returnReceiptId: z.uuid() })]).nullable();
     const covered = new Set<string>();
-    const resources: NonNullable<typeof resource.stoppedProof>["resources"] = [];
+    const resources: ScheduleStopProof["resources"] = [];
     for (const actual of input.resources) {
-      const frozenInvoices: NonNullable<typeof resource.stoppedProof>["resources"][number]["invoices"] = [];
+      const frozenInvoices: ScheduleStopProof["resources"][number]["invoices"] = [];
       for (const invoice of actual.invoices) {
         if (!invoice.complete || !["paid", "void"].includes(invoice.state) || invoice.currency !== parent.currency || invoice.remainingMinor !== 0
           || invoice.state === "paid" && invoice.paidMinor !== invoice.totalMinor) return { quiesced: false };
-        const paid: NonNullable<typeof resource.stoppedProof>["resources"][number]["invoices"][number]["paid"] = [];
+        const paid: ScheduleStopProof["resources"][number]["invoices"][number]["paid"] = [];
         const returnedUnapplied: Array<{ providerPaymentIntentRef: string; receiptId: string; returnReceiptId: string }> = [];
         const cancelledIntentRefs: string[] = [], seen = new Set<string>();
         for (const intent of invoice.paymentIntents) {

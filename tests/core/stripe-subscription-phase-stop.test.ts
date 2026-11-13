@@ -55,6 +55,9 @@ describe("original primary schedule cancellation evidence", () => {
     const { provider, posts, fetcher } = edge({ terminal: true }), onStopped = vi.fn().mockResolvedValue(undefined);
     await provider.cancelMerchantPhaseSchedule!({ ...request, onStopped });
     expect(posts()).toBe(0); expect(fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
-    expect(onStopped).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ source: "readback", neverStartedProof: expect.objectContaining({ providerCanceledAt: new Date(canceled * 1000).toISOString() }) }));
+    expect(onStopped).toHaveBeenCalledOnce();
+    const observed: unknown = onStopped.mock.calls[0]?.[0];
+    expect(observed).toMatchObject({ source: "readback" });
+    expect(observed).toHaveProperty("neverStartedProof.providerCanceledAt", new Date(canceled * 1000).toISOString());
   });
 });
