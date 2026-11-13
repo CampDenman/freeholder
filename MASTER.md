@@ -14216,6 +14216,20 @@ whatever is best for the people using the site.
   no item and adds no deferral. Root owns the new suffix assembly/hash/database
   and central merchant witness integration. See
   `deploy/subscription-amendment-late-reconsent80-source-20261113.md`.
+  Original reader runtime recovery source checkpoint (2026-11-13,
+  C12.38/C1.08/C9.38): NEW schedule/product GET admissions retain their actual
+  process birth and signed immutable ticket; actual nonce-owned finishes use
+  the original process key. A separately signed, freshly verified human runtime
+  stop review refuses live processes and preserves historical sparse birth
+  provenance. Only then may a fresh GET proceed; stopped-reader callbacks and
+  invented finishes refuse. Owner UI and shared HTTP/MCP services, exact SQL
+  receipt/projection guards, privacy/export and bounded buyer witnesses are
+  source-only. Root must integrate the additive merchant witnesses and assemble
+  a new SQL hash/database. Sixteen pure controls and one actual stopped-child
+  native control are UNRUN, as are types/lint/SQL/browser qualification. Actual
+  provider/hosting acceptance and full §4.15/C9.33 proration remain required;
+  no C-item or stable gate closes. See
+  `deploy/subscription-provider-reader-recovery80-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

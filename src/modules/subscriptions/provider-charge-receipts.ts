@@ -32,6 +32,7 @@ const cash = z.object({
   customerChargeVerified: z.boolean().default(false), merchantRouteVerified: z.boolean().default(false),
   subscriptionId: z.uuid().optional(), providerScheduleOperationId: z.uuid().optional(), providerCustomerRef: reference.optional(),
 });
+export const subscriptionScheduleCashObservation = cash;
 
 async function originalAgreement(ctx: ServiceContext, provider: string, providerRef: string, platform?: string, chargeAccount?: string, lineage?: z.infer<typeof cash>) {
   const rows = await ctx.tx.select({ subscription: subscriptions, scope: subscriptionMerchantScopes })
