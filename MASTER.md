@@ -13956,9 +13956,17 @@ whatever is best for the people using the site.
   with independent UTC ledger and empty client inventory. Exact original
   create-platform/protocol fields remainNULL; no merchant request is invented.
   New source composition with948c4544 and4064c081/4e5d05d7 adds stop/current
-  tails after complete3a; unpublished80 SHAc1893b08 is UNQUALIFIED/unapplied.
+  tails after complete3a. Source4e9 passed64 actual files/556 assertions with
+  35 explicit DB skips, types/lint/license/notes/plan; no pending bail rows count.
+  Actual V14 SQL42601 in the legacy guard is preserved; parenthesized CASE
+  correctioncd3 yields unpublished80 SHAc1893b08. NEW V15 normal0–80 passed
+  5.969s/81 journal entries/twelve named models/46 tables/five extra guards.
   Root witnesses include exact current-receipt children and bounded counts.
-  Current cash/native regressions, recovery, amendments/future invoice lineage,
+  All five unchanged merchant-bank regressions (35.437s) and four authentic
+  legacy-current cases (24.282s) pass individually with independent per-case
+  UTC money/receipt/journal ledgers and empty client inventories. Current-only
+  receipt changes refuse unsafe merge undo; old create metadata staysNULL.
+  Recovery, actual schedule producer/stop, amendments/future invoice lineage,
   upgrade/SDK/browser/provider acceptance remain required; model admission is
   still closed. Exact limits:
   `deploy/current-commercial80-source-2026-11-13.md`.

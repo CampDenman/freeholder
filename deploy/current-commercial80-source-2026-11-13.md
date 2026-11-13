@@ -65,7 +65,7 @@ this checkpoint. No enabled-model, independent C11.10 or final C11.17 sign-off
 is claimed.
 
 
-## Next source composition: original schedule stop and legacy current proof
+## Current source composition: original schedule stop and legacy current proof
 
 The separate source slices948c4544 and4064c081/4e5d05d7 are composed on03f71deb.
 Root ownership fingerprints now include the fourth legacy current-receipt
@@ -73,16 +73,49 @@ child through exact original refund/read IDs, including the combined5,000-row
 bound. An empty current-child set preserves the existing fingerprint. A new
 actual-service control prepares and finishes the real read before merging,
 then adds only its authentic current receipt and checks refusal of undo with
-canonical invoice/contact ownership unchanged; it has not run.
+canonical invoice/contact ownership unchanged; it passed in5.790s.
 
 The assembler appends the two owned stop/current tails after the complete3a
 prefix. New unpublished80 SHA-256 is
 `c1893b0844f49a139832dee8ba614cdfb4a828713f23e88fb5c6ab669d3c702d`.
-No prior published migration or journal entry changes. This new composition
-is unqualified and has not been applied to a database. It requires a NEW
-named normal0–80 database, actual model/guard parity, regression of all five
-bank projections after their shared-helper extraction, and the new current
-proof and schedule-stop controls. Durable next recovery, amendments, future
-invoice lineage, SDK/browser/upgrade and actual provider acceptance remain
-required. Old V12/V13 and all populated/golden databases are preserved. No
-model admission, stable release or C-item closure is supplied by this slice.
+No prior published migration or journal entry changes. Source4e9ea2d7 passed
+full types, whole-tree lint plus precisely corrected affected files, all44
+static and20 affected files:556 actual passing assertions,35 declared DB
+skips (including nine explicitly unrun native cases), zero pending results.
+License/notes/plan passed; canonical changelog contains630 notes. The initial
+fixture union type, four typed-lint diagnostics and scoped-human inventory
+expectation were corrected without changing permissions or provider behavior.
+A sandbox-only git subprocess failure was resolved by running the remaining
+checks with subprocess access; completed files were retained rather than
+counting bail placeholders or rerunning passed files.
+
+The first fresh V14 normal migration genuinely failed SQL42601 in the new
+legacy-current guard. Parenthesizing its CASE expression fixed parsing without
+changing the comparison. V14 remains preserved and drained. At correction
+cd3ed4d0, NEW V15 normal0–80 passed in5.969s with81 entries, twelve actual named
+model definitions, all46 required tables and the five additional guards,
+including deferred balance integrity. The complete3a byte prefix and all
+published0–79/journal entries remain unchanged.
+
+On exact cd3ed4d0/c189, each of these nine cases ran once with its original
+60s deadline/bail1/retry0, followed by an independent UTC ledger and empty
+client inventory before the next case reset its owned fixture:
+
+- All five unchanged merchant-bank regressions passed (35.437s total):
+  unrelated versus causal original chain, two independent resources, stale
+  successful GET, paused physical creator, and the same issued RMA credit.
+  Final paid4200 and refunded800/600/0/400/4200 agree across invoice, payment
+  and successful refunds; the RMA retains its one issued4200 credit.
+- All four authentic legacy-current cases passed (24.282s total): nullable,
+  pending/action/failure/canceled/restored states with six current receipts;
+  stale success after newer signed facts; unknown original physical creator;
+  and current-receipt-only merge-undo refusal after an already finished read.
+  Original create-platform/protocol remainNULL, no merchant request is
+  invented, and final paid1000/refunded400/0/400/400 agree. Actual returned
+  read/fact counts and all81 actual journal hashes match independently.
+
+Durable next recovery, actual schedule producer/stop cash-fault controls,
+amendments, future invoice lineage, SDK/browser/populated upgrade and actual
+provider acceptance remain required. Old V12/V13/V14 and all populated/golden
+databases are preserved. No model admission, stable release or C-item closure
+is supplied by these bounded source/migration/native proofs.
