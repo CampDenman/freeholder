@@ -14351,8 +14351,20 @@ whatever is best for the people using the site.
   assembled SQL80 body now use prior_schedule. Every original ownership
   exclusion stays intact; the entire old397928-byte prefix and0–79/81/82 are
   unchanged. Failed V7 and all independently verified journal/profile/drain
-  evidence remain preserved. Fresh migration, strict parity and the unchanged
-  business journey remain required.
+  evidence remain preserved. NEW V8 normally applied all83 entries in6.829s;
+  strict read-only v17 passed all142 models,282 guards and227 installed
+  function bodies in11.400s/3357 queries, with the parser and all prior model
+  controls unchanged. The unchanged positive-intent interruption/recovery
+  journey passed10.832s: the original positive fact and thrown finish stay
+  byte-identical, genuine recovery retains one original cash receipt and no
+  canonical invoice/payment. The separate unpaid nonzero invoice/processing
+  intent control passed9.929s with zero cash receipts/invoices/payments and
+  unchanged accepted subscription. Independent component SHA/count, all83
+  journal/profile and drained-client proofs passed before either reset.
+  Evidence: /tmp/freeholder-current-full82-parity142-v17-{result,drain}-20261113.json;
+  /tmp/freeholder-current-full82-controlled-raw-{positive,unpaid}-native-v3-20261113
+  (-result.json and -ledger-v3.json). These are synthetic-provider component
+  checks, not full positive collection, provider-account or stable acceptance.
   Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
   parity stopped at the first genuine model/source mismatch in the named
   nonnegative invoice amount CHECK after125 complete models. The unchanged
@@ -15803,6 +15815,20 @@ whatever is best for the people using the site.
   controlled observation/application and source-money transition fencing remain
   REQUIRED implementation/qualification. No later read invents an old finish.
   See deploy/original-cash-inspection-current83-source-20261113.md.
+  Independent original-inspection stop SOURCE checkpoint (2026-11-13,
+  C12.38/C1.08/C11.10): one proposed model143 retains a signed exact-admission
+  stop separately from genuine bank-wrapper completion. Fresh human review
+  requires the actual original boot/PID/start-tick process to be mechanically
+  absent; cross-host/unobservable text alone refuses. Old rows and NULL finishes
+  remain immutable; late callbacks/finishes refuse, raw ingress stays retained,
+  and only a NEW genuine finished GET supplies bank evidence. Eight pure and
+  one real-child/shared-service/HTTP controls are PREPARED/UNRUN. Owned SQL is
+  UNAPPLIED; parent financial/privacy/export composition, normal migration and
+  qualification remain required, as do external stopped-runtime proof, shared
+  recovery UI and genuine controlled prospective observation/application.
+  No current or future financial capability is declared qualified or deferred;
+  C12.38/C1.08/stable stay open. See
+  deploy/original-cash-inspection-stop83-source-20261113.md.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;
