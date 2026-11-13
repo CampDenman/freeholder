@@ -199,3 +199,58 @@ A finite shared legacy fix adds a typed `LegacyBankProofPendingError` after the 
 No new provider fact, resource reference, admission, finish, context, replacement key, credit, SQL exception or current receipt is invented. The SQL17bf guards and all three parent-owned financial witness files are unchanged. Both original native files/helpers, all five RMA bodies, the cartless owner control and older causal recovery oracles remain unchanged. Four new pure controls classify exact typed child/ref correlation and reject generic conflicts/provider errors/lookalikes, wrong children/resources, absent ACKs and nonprocessing rows; they do not claim to prove bank state.
 
 Source `2dfdd25b` passes full Node22 types54.342s, focused four-file lint7.226s and14 nonempty collected files:104 actual passing assertions (including the four new typed correlation/refusal controls),25 explicit database skips and zero failed/pending/empty placeholders. License2903source files/8manifests/8license texts,636-note generated changelog at unchanged beta version and plan373/323/50 pass. All12 dependency descriptors matched before reuse; no install ran. Exact execution and decoded assertions are `/tmp/freeholder-legacy-proof-continuation-v1-source-20261113-result.json` and `...-decoded.json`; all processes drained. Actual native AFTER, combined migration/transport/provider qualification remain **UNRUN** pending the parent's lane grant. Any actual AFTER must use a fresh database, never reset/migrate V21 or another failure/golden. The original issued credit, primary positive facts/cash and fresh bank-proof refusal remain acceptance requirements. No C-item, model activation, stable announcement, independent review or owner signature follows from this source checkpoint.
+
+
+## Actual recovery controls and genuine replacement BEFORE/AFTER
+
+Five distinct controls now have passing actual database runs and independent
+read-only financial/journal/client-drain ledgers. Their source heads are
+recorded separately in /tmp/freeholder-rma-five-actual-qualified-summary-20261113.json;
+this is component evidence, not a final combined-candidate run.
+
+The feedback-only ownership control uses the qualified cartless setup on
+3a54a269/V21: two real issued/paid2000 invoices and original1000 refunds,
+actual foreign-feedback undo followed by owned-feedback refusal, preserved
+canonical ownership/cash, two authenticated raw receipts and zero bank reads.
+Its runner passes9.785s. The other four checkout/RMA/credit bodies remain
+byte-identical to their original source.
+
+The unchanged full RMA lifecycle then genuinely fails on V21: an actual
+successful causal child finish/ACK is retained, but original creator settlement
+reaches the fresh-bank-proof SQL guard before any child GET. The issued1000
+credit and exact original part remain; paid2000/refunded1000, three1000refunds,
+16reads/144facts/16finishes/current receipts and six raw callbacks are retained.
+V21 is preserved, never reset or migrated after this failure.
+
+The shared2dfdd25b repair retains a typed exact-child continuation only after
+correlating the actual authenticated finished creator result and committed ACK.
+The replacement engine can then reach its existing fresh family GET loop.
+Public original-creator settlement still refuses, unrelated errors propagate,
+and no SQL guard, credit or original oracle is weakened. Its source gates pass
+full types54.342s, affected lint7.226s and14 nonempty files/104 actual assertions
+with25 explicit database skips, plus license/636-note/plan checks.
+
+Fresh V22 has unchanged17bf ordinary0–80/all81 hashes and14 named model parity.
+The UNCHANGED full RMA oracle passes with assertion duration20.337s and
+runner23.483s on5cfa206c. Independent proof confirms paid2000/refunded2000,
+failed original parent, equal unrelated success and exact successful causal
+child; original issued credit/line/part, one signed original lineage,
+28 real returned reads/276 facts/current receipts and no merchant request.
+The return closes once and retry adds no POST.
+
+The remaining three actual controls also pass on5cfa206c/V22, each inspected
+before the next owned fixture reset: later workflow failure keeps primary cash
+and the same issued credit before successful retry (runner10.278s); accepted
+paused original creator retains real feedback then its actual ACK/finish before
+fresh bank application (9.420s); contradictory authenticated1001 bank facts
+remain while canonical1000 cash/credit are preserved and public return review
+is required (8.947s). The last retains the original stored refunded workflow;
+its shared read projection truthfully reports review. No fabricated read,
+finish, credit, canonical payment or principal is inserted.
+
+All ledgers prove exact81-entry source hashes, UTC/read-only inspection,
+fsync-on/jit-off and empty clients. Inspector-only column/cause extraction
+corrections were read-only and did not rerun any native. V20 cart-precondition
+failure and V21 genuine failure remain preserved. New partial, receipt-only
+cash/fee/recipient, populated-upgrade, transport/UI, actual-provider and final
+release acceptance remain open; no C-item or stable sign-off follows.
