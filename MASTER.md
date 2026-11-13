@@ -15493,6 +15493,13 @@ whatever is best for the people using the site.
   controlled observation/application and source-money transition fencing remain
   REQUIRED implementation/qualification. No later read invents an old finish.
   See deploy/original-cash-inspection-current83-source-20261113.md.
+  Current cash-reader source qualification2026-11-13: full TypeScript passes
+  at4cc200a9. Whole-repository lint stops only at two new issues: schema imports
+  used solely as types and an unbound actual Stripe inspection method in the
+  native helper. The source now uses type-only imports and binds that genuine
+  method to its original adapter. No lint rule, runtime policy or financial
+  oracle is relaxed. Failed v17 logs remain preserved; renewed focused lint,
+  all complete affected contracts and actual reader journeys are still required.
   Independent original-inspection stop SOURCE checkpoint (2026-11-13,
   C12.38/C1.08/C11.10): one proposed model143 retains a signed exact-admission
   stop separately from genuine bank-wrapper completion. Fresh human review
