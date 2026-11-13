@@ -14,7 +14,7 @@ import { originalProductAdmission } from "./provider-phase-products";
 import { verifiedOriginalPhaseProduct } from "./provider-phase-product-proof";
 import { flushMerchantPhaseProductFinishes } from "./provider-phase-products";
 import { flushMerchantPhaseProductReads } from "./provider-phase-product-recovery";
-import { providerPhase, providerPhaseInventory } from "./provider-phase-contract";
+import { providerPhase, providerPhaseInventory, originalPhaseCustomerMatches } from "./provider-phase-contract";
 import { subscriptionChargeScope } from "./merchant-scope-contract";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
@@ -173,7 +173,7 @@ export const finishMerchantProviderPhase = defineService({
       && actual.data.operationId === operation.id && actual.data.requestDigest === operation.requestDigest
       && linked.size <= 1 && (!linked.size || linked.has(actual.data.providerSubscriptionRef ?? ""))
       && (!resource.providerSubscriptionRef || actual.data.providerSubscriptionRef === resource.providerSubscriptionRef)
-      && actual.data.providerCustomerRef === operation.originalRequest.providerCustomerRef;
+      && originalPhaseCustomerMatches(actual.data, operation.originalRequest.providerCustomerRef);
     const observation = { ...operation.providerObservation, ...(verified && actual.success ? { phaseInventory: actual.data } : {}),
       history: [...history, ...(local.outcome === "returned" && actual.success ? [{ source: verified ? "phase_schedule_read_verified" : "phase_schedule_read_stale", operationId, requestDigest: operation.requestDigest,
         providerScheduleRef: actual.data.providerScheduleRef, providerSubscriptionRef: actual.data.providerSubscriptionRef, inventoryDigest: merchantTaxDigest(actual.data), inventory: actual.data }] : []), {

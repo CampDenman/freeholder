@@ -25,7 +25,11 @@ GET; a late positive cash or other observation makes that read stale. Actual
 returned caller completion is a separate nonce-bound fact. Failed fact commits
 remain cached for a no-POST flush. A linked subscription is set only when the
 actual returned inventory supplies one; it is never fabricated to satisfy an
-active-resource shape. Five prepared declared inventory controls are unrun.
+active-resource shape. Six prepared declared inventory controls are unrun, including exact original
+customer binding. The returned inventory schema now requires its actual customer
+ID, matching the already-existing adapter result; a different valid customer
+cannot satisfy the original request. This narrow correction follows the first
+composed root typecheck finding; no binding check was weakened.
 
 The existing original80 operation/resource tables and create/update kinds are
 reused; the assembled80 SQL and separate auxiliary fragment are unchanged.
@@ -33,7 +37,7 @@ Private services are resident with the existing quiescence exports and carry
 existing four-locale recovery activity labels. No public provider-admission
 hook is enabled and horizon `admissionReady` remains false.
 
-Full types, changed-path lint, five declared inventory controls and affected
+Full types, changed-path lint, six declared inventory controls and affected
 private/audit/protocol checks remain pending. Actual service producer,
 ACK-before-price-failure, paused duplicate, late-positive/stale-read and failed
 finish persistence controls need a fresh assembled schema and separate native
