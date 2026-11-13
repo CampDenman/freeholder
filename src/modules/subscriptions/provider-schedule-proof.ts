@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: a quiescence receipt covers exact durable facts, never a local status.
 import { createHash } from "node:crypto";
+import { originalPhaseResources, closedOriginalPhaseSchedules } from "./provider-phase-resources";
 import type { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 
 type Resource = typeof subscriptionProviderScheduleResources.$inferSelect;
@@ -43,6 +44,9 @@ export function scheduleOperationDigest(operations: readonly Operation[]): strin
 /** An alternate late-positive create remains a real original remote resource. */
 export function scheduleKnownResources(resource: Resource, operations: readonly Operation[]): Set<string> | null {
   const references = new Set<string>();
+  const phases = originalPhaseResources(operations);
+  if (!phases) return null;
+  for (const phase of phases.values()) for (const linked of phase.providerSubscriptionRefs) references.add(linked);
   if (resource.providerSubscriptionRef) references.add(resource.providerSubscriptionRef);
   for (const operation of operations) {
     const target = providerReference(operation.originalRequest.providerSubscriptionRef);
@@ -55,7 +59,7 @@ export function scheduleKnownResources(resource: Resource, operations: readonly 
       const actual = providerReference(observation?.providerSubscriptionRef);
       if (actual) { references.add(actual); actualCreate = true; }
     }
-    if (operation.kind === "create" && operation.positiveObserved && !actualCreate) return null;
+    if (operation.kind === "create" && operation.originalRequest.resourceKind !== "phase_schedule" && operation.positiveObserved && !actualCreate) return null;
   }
   return references;
 }
@@ -63,7 +67,7 @@ export function scheduleKnownResources(resource: Resource, operations: readonly 
 /** Cash application and fee-debt checks are additional required query phases. */
 export function scheduleQuiescenceCovers(resource: Resource | undefined, operations: readonly Operation[]): boolean {
   if (!resource || resource.state !== "quiesced" || resource.recoveryPending || !resource.stoppedProof
-    || !resource.providerSubscriptionRef || !resource.providerCustomerRef
+    || !resource.providerCustomerRef || !resource.providerSubscriptionRef && !resource.stoppedProof.phaseSchedules?.length
     || resource.operationRevision < 1
     || resource.stoppedProof.operationRevision !== resource.operationRevision
     || resource.stoppedProof.evidenceRevision !== resource.evidenceRevision
@@ -71,8 +75,13 @@ export function scheduleQuiescenceCovers(resource: Resource | undefined, operati
     || operations.length !== resource.operationRevision
     || [...operations].sort((left, right) => left.operationRevision - right.operationRevision).some((operation, index) => operation.operationRevision !== index + 1)
     || operations.some(operation => operation.subscriptionId !== resource.subscriptionId || !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation))) return false;
+  const phases = originalPhaseResources(operations); if (!phases) return false;
+  if (phases.size) {
+    const closed = closedOriginalPhaseSchedules(operations);
+    if (!closed || closed.length !== phases.size || digest(closed) !== digest(resource.stoppedProof.phaseSchedules)) return false;
+  } else if (resource.stoppedProof.phaseSchedules?.length) return false;
   const references = scheduleKnownResources(resource, operations);
-  if (!references || !references.size || resource.stoppedProof.resources.length !== references.size) return false;
+  if (!references || !references.size && !phases.size || resource.stoppedProof.resources.length !== references.size) return false;
   const seen = new Set<string>();
   for (const actual of resource.stoppedProof.resources) {
     if (!references.has(actual.providerSubscriptionRef) || seen.has(actual.providerSubscriptionRef)
@@ -83,11 +92,12 @@ export function scheduleQuiescenceCovers(resource: Resource | undefined, operati
       if (!/^in_[A-Za-z0-9]{1,196}$/.test(invoice.providerInvoiceRef) || invoiceRefs.has(invoice.providerInvoiceRef)
         || !["paid", "void"].includes(invoice.state)) return false;
       invoiceRefs.add(invoice.providerInvoiceRef);
-      const intentRefs = [...invoice.cancelledIntentRefs, ...invoice.paid.map(payment => payment.providerPaymentIntentRef)];
+      const intentRefs = [...invoice.cancelledIntentRefs, ...invoice.paid.map(payment => payment.providerPaymentIntentRef), ...(invoice.returnedUnapplied ?? []).map(payment => payment.providerPaymentIntentRef)];
       if (new Set(intentRefs).size !== intentRefs.length || intentRefs.some(ref => !/^pi_[A-Za-z0-9]{1,196}$/.test(ref))
         || invoice.paid.some(payment => !uuid(payment.receiptId) || !uuid(payment.paymentId) || !uuid(payment.invoiceId))
+        || (invoice.returnedUnapplied ?? []).some(payment => !uuid(payment.receiptId) || !uuid(payment.returnReceiptId))
         || invoice.zeroTotalInvoiceId !== undefined && !uuid(invoice.zeroTotalInvoiceId)
-        || invoice.state === "paid" && invoice.paid.length === 0 && !invoice.zeroTotalInvoiceId) return false;
+        || invoice.state === "paid" && invoice.paid.length === 0 && !invoice.returnedUnapplied?.length && !invoice.zeroTotalInvoiceId) return false;
     }
   }
   return true;

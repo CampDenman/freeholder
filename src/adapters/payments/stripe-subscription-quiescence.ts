@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: actual provider pause and original invoice obligations, never local time.
 import { AdapterError } from "../types";
-import { object, text } from "./http";
+import { number, object, text } from "./http";
 import { validateMerchantChargeScope } from "./stripe-merchant-scope";
-import type { MerchantChargeScope } from "./types";
+import type { MerchantChargeScope, MerchantScheduleInvoiceInventory, MerchantScheduleResource } from "./types";
 import type { StripeSubscriptionRead } from "./stripe-subscription-origin";
 
 // Only newly created flexible schedules use this explicit protocol contract.
@@ -16,6 +16,7 @@ export type OriginalStripeMerchantSchedule = MerchantChargeScope & {
   subscriptionId: string;
   providerSubscriptionRef: string;
   providerCustomerRef: string;
+  providerScheduleRefs?: string[];
 };
 export type OriginalStripeMerchantScheduleLocator = Omit<OriginalStripeMerchantSchedule, "providerCustomerRef">;
 const ref = (value: unknown) => text(value) ?? text(object(value)?.id);
@@ -28,7 +29,7 @@ function original(resource: OriginalStripeMerchantSchedule, value: Record<string
   const settlement = ref(value.on_behalf_of);
   if (value.id !== resource.providerSubscriptionRef || ref(value.customer) !== resource.providerCustomerRef
     || metadata?.freeholder_subscription_id !== resource.subscriptionId || metadata?.freeholder_platform_account_id !== resource.providerPlatformAccountId
-    || object(value.billing_mode)?.type !== "flexible" || value.schedule !== null || value.collection_method !== "charge_automatically"
+    || object(value.billing_mode)?.type !== "flexible" || value.schedule !== null && !resource.providerScheduleRefs?.includes(ref(value.schedule) ?? "") || value.collection_method !== "charge_automatically"
     || !Object.hasOwn(value, "transfer_data") || !Object.hasOwn(value, "on_behalf_of")
     || destination !== resource.destinationAccountId || settlement !== resource.settlementMerchantAccountId) unproven();
 }
@@ -36,6 +37,8 @@ function validate(resource: OriginalStripeMerchantScheduleLocator & { providerCu
   validateMerchantChargeScope(resource);
   if (!resource.providerPlatformAccountId || resource.providerScheduleApiVersion !== STRIPE_MERCHANT_SCHEDULE_API_VERSION || !/^sub_[A-Za-z0-9]{1,195}$/.test(resource.providerSubscriptionRef)
     || resource.providerCustomerRef !== undefined && !/^cus_[A-Za-z0-9]{1,195}$/.test(resource.providerCustomerRef)
+    || "providerScheduleRefs" in resource && resource.providerScheduleRefs !== undefined && (!Array.isArray(resource.providerScheduleRefs)
+      || resource.providerScheduleRefs.length > 5000 || resource.providerScheduleRefs.some(value => typeof value !== "string" || !/^sub_sched_[A-Za-z0-9]{1,195}$/.test(value)))
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(resource.subscriptionId)) unproven();
 }
 const protocol = (init: RequestInit): RequestInit => ({ ...init, headers: { ...init.headers, "stripe-version": STRIPE_MERCHANT_SCHEDULE_API_VERSION } });
@@ -104,32 +107,80 @@ export async function cancelOriginalStripeMerchantSchedule(api: StripeSubscripti
 }
 
 /** A real pause stops new invoices; every earlier invoice still needs resolution. */
-export async function inspectOriginalStripeMerchantInvoices(api: StripeSubscriptionRead, resource: OriginalStripeMerchantSchedule): Promise<{
-  state: "paused" | "cancelled";
-  invoices: Array<{ providerInvoiceRef: string; state: "paid" | "void" | "draft" | "open" | "uncollectible" }>;
-}> {
+export async function inspectOriginalStripeMerchantInvoices(api: StripeSubscriptionRead, resource: MerchantScheduleResource): Promise<MerchantScheduleInvoiceInventory> {
   const schedule = await readOriginalStripeMerchantSchedule(api, resource);
   if (!["paused", "canceled"].includes(String(schedule.status)) || schedule.pending_update !== null) unproven();
-  const invoices: Array<{ providerInvoiceRef: string; state: "paid" | "void" | "draft" | "open" | "uncollectible" }> = [];
+  const invoices: MerchantScheduleInvoiceInventory["invoices"] = [];
   const seen = new Set<string>(), cursors = new Set<string>();
   let cursor: string | undefined;
   for (let page = 0; page < 20; page++) {
     const query = new URLSearchParams({ subscription: resource.providerSubscriptionRef, limit: "100" });
     if (cursor) query.set("starting_after", cursor);
     const response = await api(`/v1/invoices?${query}`, protocol({ method: "GET" }), resource);
-    if (!Array.isArray(response.data) || typeof response.has_more !== "boolean") unproven();
+    if (!Array.isArray(response.data)) unproven();
     for (const entry of response.data) {
       const invoice = object(entry), id = ref(invoice);
       const direct = ref(invoice?.subscription), parent = ref(object(object(invoice?.parent)?.subscription_details)?.subscription);
       if (!invoice || !id || !/^in_[A-Za-z0-9]{1,196}$/.test(id) || seen.has(id) || (direct && parent && direct !== parent)
         || (direct ?? parent) !== resource.providerSubscriptionRef || ref(invoice.customer) !== resource.providerCustomerRef
         || !["paid", "void", "draft", "open", "uncollectible"].includes(String(invoice.status))) unproven();
-      seen.add(id); invoices.push({ providerInvoiceRef: id, state: invoice.status as typeof invoices[number]["state"] });
+      seen.add(id); invoices.push(await inspectOriginalInvoiceObligations(api, resource, invoice, id));
     }
+    if (typeof response.has_more !== "boolean") unproven();
     if (!response.has_more) return { state: schedule.status === "paused" ? "paused" : "cancelled", invoices };
     const next = ref(response.data.at(-1));
     if (!next || cursors.has(next)) unproven();
     cursors.add(next); cursor = next;
   }
   return unproven();
+}
+
+/** A summary's includable payments can be partial. Enumerate the actual
+ * InvoicePayment relation and every PI on the original namespace instead.
+ * https://docs.stripe.com/api/invoice-payment/list */
+async function inspectOriginalInvoiceObligations(api: StripeSubscriptionRead, resource: MerchantScheduleResource, invoice: Record<string, unknown>, invoiceId: string): Promise<MerchantScheduleInvoiceInventory["invoices"][number]> {
+  const obligations: MerchantScheduleInvoiceInventory["invoices"][number]["paymentIntents"] = [];
+  const seen = new Set<string>(), intents = new Set<string>(), cursors = new Set<string>(); let cursor: string | undefined, complete = false;
+  for (let page = 0; page < 20; page++) {
+    const query = new URLSearchParams({ invoice: invoiceId, limit: "100" }); if (cursor) query.set("starting_after", cursor);
+    const result = await api(`/v1/invoice_payments?${query}`, protocol({ method: "GET" }), resource);
+    if (!Array.isArray(result.data)) unproven();
+    for (const value of result.data) {
+      const relation = object(value), key = ref(relation), payment = object(relation?.payment), intentId = ref(payment?.payment_intent);
+      if (!relation || !key || !/^inpay_[A-Za-z0-9]{1,194}$/.test(key) || seen.has(key) || ref(relation.invoice) !== invoiceId
+        || payment?.type !== "payment_intent" || !intentId || !/^pi_[A-Za-z0-9]{1,196}$/.test(intentId) || intents.has(intentId)) unproven();
+      seen.add(key); intents.add(intentId);
+      const intent = await api(`/v1/payment_intents/${encodeURIComponent(intentId)}`, protocol({ method: "GET" }), resource);
+      const received = number(intent.amount_received), amount = number(intent.amount), currency = text(intent.currency)?.toUpperCase(), customer = ref(intent.customer);
+      if (intent.id !== intentId || customer !== resource.providerCustomerRef || received === undefined || !Number.isSafeInteger(received) || received < 0
+        || amount === undefined || !Number.isSafeInteger(amount) || amount < received || !currency || !/^[A-Z]{3}$/.test(currency) || typeof intent.status !== "string") unproven();
+      // Retain positive actual money before later invoice amount, route, fee or
+      // other-page checks. The callback is a real separately committed phase.
+      if (received > 0) {
+        if (!resource.onPaidIntentObserved) unproven();
+        const destinationAccountId = ref(object(intent.transfer_data)?.destination), settlementMerchantAccountId = ref(intent.on_behalf_of), rawCharge = ref(intent.latest_charge), providerChargeRef = rawCharge && /^ch_[A-Za-z0-9]{1,196}$/.test(rawCharge) ? rawCharge : undefined;
+        await resource.onPaidIntentObserved({ subscriptionId: resource.subscriptionId, providerSubscriptionRef: resource.providerSubscriptionRef,
+          providerPlatformAccountId: resource.providerPlatformAccountId, ...(resource.providerAccountId ? { providerAccountId: resource.providerAccountId } : {}),
+          providerInvoiceRef: invoiceId, providerPaymentIntentRef: intentId, providerCustomerRef: customer,
+          ...(resource.providerScheduleOperationId ? { providerScheduleOperationId: resource.providerScheduleOperationId } : {}),
+          amountMinor: received, currency, ...(providerChargeRef ? { providerChargeRef } : {}),
+          ...(destinationAccountId ? { destinationAccountId } : {}), ...(settlementMerchantAccountId ? { settlementMerchantAccountId } : {}),
+          customerChargeVerified: intent.status === "succeeded", merchantRouteVerified: destinationAccountId === resource.destinationAccountId && settlementMerchantAccountId === resource.settlementMerchantAccountId });
+      }
+      if (!["paid", "canceled", "open"].includes(String(relation.status)) || relation.currency !== intent.currency
+        || !Number.isSafeInteger(relation.amount_requested) || relation.amount_requested !== amount || !Number.isSafeInteger(relation.amount_paid)
+        || relation.amount_paid !== received) unproven();
+      obligations.push({ providerPaymentIntentRef: intentId, state: intent.status, amountMinor: amount, receivedMinor: received, currency });
+    }
+    if (typeof result.has_more !== "boolean") unproven();
+    if (!result.has_more) { complete = true; break; }
+    const next = ref(result.data.at(-1)); if (!next || cursors.has(next)) unproven(); cursors.add(next); cursor = next;
+  }
+  const currency = text(invoice.currency)?.toUpperCase(), total = number(invoice.total), paid = number(invoice.amount_paid), remaining = number(invoice.amount_remaining), start = number(invoice.period_start);
+  if (!complete || !currency || !/^[A-Z]{3}$/.test(currency) || [total, paid, remaining, start].some(value => value === undefined || !Number.isSafeInteger(value) || value < 0)
+    || (invoice.status === "void" ? remaining !== 0 || paid! > total! : BigInt(total!) !== BigInt(paid!) + BigInt(remaining!)) || obligations.some(value => value.currency !== currency)
+    || obligations.reduce((sum, value) => sum + BigInt(value.receivedMinor), 0n) !== BigInt(paid!)) unproven();
+  const periodStart = new Date(start! * 1000); if (!Number.isFinite(periodStart.getTime())) unproven();
+  return { providerInvoiceRef: invoiceId, state: invoice.status as MerchantScheduleInvoiceInventory["invoices"][number]["state"], currency,
+    totalMinor: total!, paidMinor: paid!, remainingMinor: remaining!, periodStart: periodStart.toISOString(), complete: true, paymentIntents: obligations };
 }

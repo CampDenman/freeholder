@@ -337,7 +337,18 @@ export interface MerchantScheduleLocator extends MerchantChargeScope {
   subscriptionId: string;
   providerSubscriptionRef: string;
 }
-export interface MerchantScheduleResource extends MerchantScheduleLocator { providerCustomerRef: string; }
+export interface MerchantScheduleCashObservation extends MerchantChargeScope {
+  providerSubscriptionRef: string; providerInvoiceRef: string; providerPaymentIntentRef: string; providerCustomerRef: string; providerChargeRef?: string;
+  subscriptionId: string; providerScheduleOperationId?: string; amountMinor: number; currency: string; customerChargeVerified: boolean; merchantRouteVerified: boolean;
+}
+export interface MerchantScheduleResource extends MerchantScheduleLocator {
+  providerCustomerRef: string;
+  /** Actual primary IDs from this agreement's original phase journal. */
+  providerScheduleRefs?: string[];
+  providerScheduleOperationId?: string;
+  /** Commit each actual positive PI before reading another page or obligation. */
+  onPaidIntentObserved?: (actual: MerchantScheduleCashObservation) => Promise<void>;
+}
 export interface MerchantScheduleWebhookScope extends MerchantScheduleLocator {
   providerScheduleOperationId?: string;
   providerCustomerRef?: string;
@@ -405,14 +416,23 @@ export interface MerchantPhaseProductRequest extends Omit<MerchantPhaseScheduleS
 }
 export interface MerchantPhaseProductReadRequest extends Omit<MerchantPhaseProductRequest, "idempotencyKey" | "onProductAcknowledged"> { providerProductRef: string; }
 
+export interface MerchantPhaseScheduleNeverStartedProof { originalFirstPhaseStart: string; providerCreatedAt: string; providerCanceledAt: string; }
+export interface MerchantPhaseScheduleStopped {
+  providerScheduleRef: string; providerSubscriptionRefs: string[]; linkedInventoryComplete: boolean;
+  state: "canceled" | "completed" | "released"; source: "readback" | "cancel_ack";
+  neverStartedProof: MerchantPhaseScheduleNeverStartedProof | null;
+}
 export interface MerchantPhaseScheduleStopRequest extends MerchantPhaseScheduleScope {
   providerScheduleRef: string;
-  onStopped: (actual: { providerScheduleRef: string; providerSubscriptionRefs: string[]; linkedInventoryComplete: boolean; state: "canceled" | "completed" | "released"; source: "readback" | "cancel_ack" }) => Promise<void>;
+  originalFirstPhaseStart?: string;
+  onStopped: (actual: MerchantPhaseScheduleStopped) => Promise<void>;
 }
 
 export interface MerchantScheduleInvoiceInventory {
   state: "paused" | "cancelled";
-  invoices: Array<{ providerInvoiceRef: string; state: "paid" | "void" | "draft" | "open" | "uncollectible" }>;
+  invoices: Array<{ providerInvoiceRef: string; state: "paid" | "void" | "draft" | "open" | "uncollectible";
+    currency: string; totalMinor: number; paidMinor: number; remainingMinor: number; periodStart: string; complete: true;
+    paymentIntents: Array<{ providerPaymentIntentRef: string; state: string; amountMinor: number; receivedMinor: number; currency: string }> }>;
 }
 
 export interface RecurringScheduleResult extends PaymentAccountScope {

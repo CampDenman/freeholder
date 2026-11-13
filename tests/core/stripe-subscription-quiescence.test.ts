@@ -9,7 +9,8 @@ const resource: OriginalStripeMerchantSchedule = { subscriptionId: "00000000-000
 const active = { id: "sub_original", customer: "cus_original", billing_mode: { type: "flexible" }, schedule: null, collection_method: "charge_automatically", status: "active", pending_update: null,
   metadata: { freeholder_subscription_id: resource.subscriptionId, freeholder_platform_account_id: resource.providerPlatformAccountId }, transfer_data: { destination: "acct_originalSeller" }, on_behalf_of: "acct_originalSeller" };
 const paused = { ...active, status: "paused" };
-const invoice = (id: string, state = "void") => ({ id, subscription: "sub_original", customer: "cus_original", status: state });
+const invoice = (id: string, state = "void") => ({ id, subscription: "sub_original", customer: "cus_original", status: state,
+  currency: "cad", total: 100, amount_paid: state === "paid" ? 100 : 0, amount_remaining: state === "open" ? 100 : 0, period_start: 1767225600 });
 function api(respond: (path: string, init: RequestInit) => Record<string, unknown> | Promise<Record<string, unknown>>) {
   return vi.fn<StripeSubscriptionRead>().mockImplementation(async (path, init, scope) => {
     expect(scope).toMatchObject({ providerPlatformAccountId: "acct_originalPlatform", destinationAccountId: "acct_originalSeller" });
@@ -57,8 +58,19 @@ describe("original Stripe subscription hard pause (C12.38)", () => {
     expect(read).toHaveBeenCalledOnce();
   });
   it("retains every prior invoice obligation across complete pages without closing or charging any", async () => {
-    const read = api((path) => path.startsWith("/v1/subscriptions/") ? paused : path.includes("starting_after") ? { data: [invoice("in_paid", "paid")], has_more: false } : { data: [invoice("in_open", "open"), invoice("in_void")], has_more: true });
-    expect(await inspectOriginalStripeMerchantInvoices(read, resource)).toEqual({ state: "paused", invoices: [{ providerInvoiceRef: "in_open", state: "open" }, { providerInvoiceRef: "in_void", state: "void" }, { providerInvoiceRef: "in_paid", state: "paid" }] });
+    const observed = vi.fn().mockResolvedValue(undefined);
+    const read = api(path => {
+      const url = new URL(path, "https://stripe.example.test");
+      if (url.pathname.startsWith("/v1/subscriptions/")) return paused;
+      if (url.pathname === "/v1/invoice_payments") return { data: url.searchParams.get("invoice") === "in_paid" ? [{ id: "inpay_original", invoice: "in_paid", currency: "cad", amount_paid: 100, amount_requested: 100,
+        status: "paid", payment: { type: "payment_intent", payment_intent: "pi_original" } }] : [], has_more: false };
+      if (url.pathname === "/v1/payment_intents/pi_original") return { id: "pi_original", customer: "cus_original", currency: "cad", amount: 100, amount_received: 100, status: "succeeded", latest_charge: "ch_original", transfer_data: { destination: "acct_originalSeller" }, on_behalf_of: "acct_originalSeller" };
+      return url.searchParams.has("starting_after") ? { data: [invoice("in_paid", "paid")], has_more: false } : { data: [invoice("in_open", "open"), invoice("in_void")], has_more: true };
+    });
+    const result = await inspectOriginalStripeMerchantInvoices(read, { ...resource, onPaidIntentObserved: observed });
+    expect(result).toMatchObject({ state: "paused", invoices: [{ providerInvoiceRef: "in_open", state: "open", complete: true }, { providerInvoiceRef: "in_void", state: "void", complete: true },
+      { providerInvoiceRef: "in_paid", state: "paid", paidMinor: 100, paymentIntents: [{ providerPaymentIntentRef: "pi_original", state: "succeeded", receivedMinor: 100 }] }] });
+    expect(observed).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ providerPaymentIntentRef: "pi_original", amountMinor: 100, currency: "CAD", customerChargeVerified: true }));
     expect(read.mock.calls.every(([, init]) => init.method === "GET")).toBe(true);
     expect(read.mock.calls[1]![0]).not.toContain("status=");
   });
@@ -67,9 +79,9 @@ describe("original Stripe subscription hard pause (C12.38)", () => {
     await expect(inspectOriginalStripeMerchantInvoices(read, resource)).rejects.toMatchObject({ code: "provider_failure" });
   });
   it("bounds looping provider pages instead of declaring no outstanding invoices", async () => {
-    const read = api(path => path.startsWith("/v1/subscriptions/") ? paused : { data: [invoice("in_loop")], has_more: true });
+    const read = api(path => path.startsWith("/v1/subscriptions/") ? paused : path.startsWith("/v1/invoice_payments?") ? { data: [], has_more: false } : { data: [invoice("in_loop")], has_more: true });
     await expect(inspectOriginalStripeMerchantInvoices(read, resource)).rejects.toMatchObject({ code: "provider_failure" });
-    expect(read).toHaveBeenCalledTimes(3);
+    expect(read).toHaveBeenCalledTimes(4);
   });
   it("refuses a different stored protocol version before any provider read", async () => {
     const read = api(() => paused);

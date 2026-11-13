@@ -6,15 +6,15 @@ import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { defineJob, enqueueJob, registerJob } from "@/core/jobs";
-import { completeErasureJob } from "@/core/privacy/service";
-import { dataRequests } from "@/core/privacy/schema";
+import { completeErasureJob, erasureArtifactIsIntact } from "@/core/privacy/service";
+import { dataRequests, dataRequestArtifacts } from "@/core/privacy/schema";
 import { defineService, getService, ServiceError, type ServiceContext } from "@/core/service";
 import { merchantTaxProfiles } from "@/modules/invoicing/merchant-tax-schema";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { paymentAdapter } from "@/adapters/payments";
 import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { scheduleCallerHasStopped, scheduleKnownResources, scheduleOperationDigest } from "./provider-schedule-proof";
-import { subscriptionMerchantScopes, subscriptions } from "./schema";
+import { subscriptionMerchantScopes, subscriptions, subscriptionProviderChargeReceipts } from "./schema";
 import scheduleCallerServices from "./provider-schedule-callers";
 import scheduleErasureServices from "./provider-schedule-erasure";
 import { claimMerchantScheduleCancellation, flushMerchantScheduleCallerFinishes, merchantScheduleCancellationTargets, observeMerchantScheduleCancellation, performMerchantScheduleCancellation, retainMerchantScheduleCancellation } from "./provider-schedule-callers";
@@ -22,7 +22,11 @@ import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohor
 import buyerErasureServices, { completeBuyerAgreementErasure } from "./buyer-agreement-erasure";
 import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
 import phaseProductServices from "./provider-phase-products";
-import phaseDispatchServices from "./provider-phase-dispatch";
+import phaseDispatchServices, { assertOriginalPhaseFinancials } from "./provider-phase-dispatch";
+import phaseStopServices, { stopMerchantPhaseSchedules, merchantPhaseScheduleTargets } from "./provider-phase-stop";
+import { closedOriginalPhaseSchedules, originalPhaseResources } from "./provider-phase-resources";
+import { retainProviderCharge } from "./provider-charge-receipts";
+import { invoices } from "@/modules/invoicing/schema";
 
 const JOB = "subscriptions.quiesceMerchantSchedules";
 const jobInput = z.object({ profileId: z.uuid(), requestId: z.uuid(), originalJobId: z.uuid(), cohortId: z.uuid() });
@@ -92,7 +96,12 @@ export const prepareMerchantTaxErasure = defineService({
 });
 
 const stoppedInventory = z.object({ subscriptionId: z.uuid(), resources: z.array(z.object({ providerSubscriptionRef: z.string(),
-  state: z.enum(["paused", "cancelled"]), invoices: z.array(z.object({ providerInvoiceRef: z.string(), state: z.enum(["paid", "void", "draft", "open", "uncollectible"]) })).max(2000) })).max(5000) });
+  state: z.enum(["paused", "cancelled"]), invoices: z.array(z.object({ providerInvoiceRef: z.string(), state: z.enum(["paid", "void", "draft", "open", "uncollectible"]),
+    currency: z.string().regex(/^[A-Z]{3}$/), totalMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), paidMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    remainingMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), periodStart: z.iso.datetime(), complete: z.literal(true),
+    paymentIntents: z.array(z.object({ providerPaymentIntentRef: z.string().regex(/^pi_[A-Za-z0-9]{1,196}$/), state: z.string(), amountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+      receivedMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), currency: z.string().regex(/^[A-Z]{3}$/) })).max(2000),
+  })).max(2000) })).max(5000) });
 export const retainMerchantScheduleInventory = defineService({
   name: "subscriptions.retainMerchantScheduleInventory", summary: "Retain authenticated original stopped-resource inventory without inventing resolution of earlier invoices.",
   kind: "mutation", permission: "system", external: false, auditInputFields: ["cohortId", "subscriptionId"],
@@ -100,8 +109,12 @@ export const retainMerchantScheduleInventory = defineService({
   handler: async (input, ctx) => {
     await lockContactIdentity(ctx.tx);
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
-    const { cohort } = await originalScheduleCohortAuthority(ctx.tx, input, true);
+    const { cohort, request: originalErasure } = await originalScheduleCohortAuthority(ctx.tx, input, true);
     if (cohort.subscriptionId !== null && cohort.subscriptionId !== input.subscriptionId) throw new ServiceError("permission", "This inventory belongs to another original buyer agreement.");
+    const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, input.requestId)).limit(1).for("update");
+    const receipt = z.object({ outcomes: z.array(z.object({ scope: z.string(), pendingJobs: z.array(z.uuid()).optional() }).passthrough()) }).passthrough().safeParse(artifact?.body);
+    if (originalErasure.status !== "in_progress" || !erasureArtifactIsIntact(artifact) || !receipt.success
+      || !receipt.data.outcomes.some(outcome => outcome.scope === cohort.privacyScope && outcome.pendingJobs?.includes(input.originalJobId))) return { quiesced: false };
     const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, input.subscriptionId)).limit(1).for("update");
     const [scope] = await ctx.tx.select().from(subscriptionMerchantScopes).where(eq(subscriptionMerchantScopes.subscriptionId, input.subscriptionId)).limit(1);
     const [resource] = await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId, input.subscriptionId)).limit(1).for("update");
@@ -123,13 +136,59 @@ export const retainMerchantScheduleInventory = defineService({
         updatedOperations = updatedOperations.map(operation => operation.id === original.id ? { ...operation, providerObservation: observation } : operation);
       }
     }
-    // Earlier invoices require their own actual PI/cash/application/financial
-    // evidence. This first boundary can settle only a genuinely empty inventory.
-    if (input.resources.some(value => value.invoices.length) || operations.length !== resource.operationRevision
-      || updatedOperations.some((operation, index) => operation.operationRevision !== index + 1 || !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation))) return { quiesced: false };
+    if (operations.length !== resource.operationRevision || updatedOperations.some((operation, index) => operation.operationRevision !== index + 1
+      || !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation))) return { quiesced: false };
+    const phaseResources = originalPhaseResources(updatedOperations), phaseSchedules = closedOriginalPhaseSchedules(updatedOperations);
+    if (!phaseResources || !known.size && !phaseResources.size || phaseResources.size && (!phaseSchedules || phaseSchedules.length !== phaseResources.size)) return { quiesced: false };
+    const actualReceipts = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId, parent.id)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001);
+    if (actualReceipts.length > 5000) return { quiesced: false };
+    const dispositionService = getService("invoicing.subscriptionChargeDisposition");
+    const disposition = z.discriminatedUnion("kind", [z.object({ kind: z.literal("applied"), invoiceId: z.uuid(), paymentId: z.uuid() }),
+      z.object({ kind: z.literal("returned_unapplied"), returnReceiptId: z.uuid() })]).nullable();
+    const covered = new Set<string>();
+    const resources: NonNullable<typeof resource.stoppedProof>["resources"] = [];
+    for (const actual of input.resources) {
+      const frozenInvoices: NonNullable<typeof resource.stoppedProof>["resources"][number]["invoices"] = [];
+      for (const invoice of actual.invoices) {
+        if (!invoice.complete || !["paid", "void"].includes(invoice.state) || invoice.currency !== parent.currency || invoice.remainingMinor !== 0
+          || invoice.state === "paid" && invoice.paidMinor !== invoice.totalMinor) return { quiesced: false };
+        const paid: NonNullable<typeof resource.stoppedProof>["resources"][number]["invoices"][number]["paid"] = [];
+        const returnedUnapplied: Array<{ providerPaymentIntentRef: string; receiptId: string; returnReceiptId: string }> = [];
+        const cancelledIntentRefs: string[] = [], seen = new Set<string>();
+        for (const intent of invoice.paymentIntents) {
+          if (seen.has(intent.providerPaymentIntentRef) || intent.currency !== parent.currency) return { quiesced: false }; seen.add(intent.providerPaymentIntentRef);
+          if (intent.state === "canceled" && intent.receivedMinor === 0) { cancelledIntentRefs.push(intent.providerPaymentIntentRef); continue; }
+          if (intent.state !== "succeeded" || intent.receivedMinor <= 0 || intent.amountMinor !== intent.receivedMinor || !dispositionService) return { quiesced: false };
+          const receipt = actualReceipts.find(row => row.providerPaymentIntentRef === intent.providerPaymentIntentRef && row.providerSubscriptionRef === actual.providerSubscriptionRef
+            && row.providerInvoiceRef === invoice.providerInvoiceRef && row.providerPlatformAccountId === scope.providerPlatformAccountId && row.chargeAccountId === scope.chargeAccountId
+            && row.amountMinor === intent.receivedMinor && row.currency === intent.currency);
+          if (!receipt || covered.has(receipt.id)) return { quiesced: false };
+          const resolved = disposition.parse(await ctx.callAsSystem(dispositionService, { receiptId: receipt.id })); if (!resolved) return { quiesced: false };
+          covered.add(receipt.id);
+          if (resolved.kind === "applied") paid.push({ providerPaymentIntentRef: intent.providerPaymentIntentRef, receiptId: receipt.id, paymentId: resolved.paymentId, invoiceId: resolved.invoiceId });
+          else returnedUnapplied.push({ providerPaymentIntentRef: intent.providerPaymentIntentRef, receiptId: receipt.id, returnReceiptId: resolved.returnReceiptId });
+        }
+        let zeroTotalInvoiceId: string | undefined;
+        if (invoice.state === "paid" && invoice.totalMinor === 0 && invoice.paidMinor === 0 && invoice.paymentIntents.every(intent => intent.state === "canceled" && intent.receivedMinor === 0)) {
+          if (phaseResources.size && !updatedOperations.some(operation => {
+            const phases = z.array(z.object({ start: z.iso.datetime(), totalMinor: z.number().int().nonnegative() }).passthrough()).safeParse(operation.originalRequest.phases);
+            return operation.originalRequest.resourceKind === "phase_schedule" && phases.success && phases.data.some(phase => phase.start === invoice.periodStart && phase.totalMinor === 0);
+          })) return { quiesced: false };
+          const [zero] = await ctx.tx.select().from(invoices).where(and(eq(invoices.sourceType, "subscription"), eq(invoices.sourceId, `${parent.id}:${invoice.periodStart}`))).limit(1);
+          if (!zero || zero.currency !== parent.currency || zero.totalMinor !== 0 || zero.paidMinor !== 0 || zero.status !== "paid") return { quiesced: false };
+          zeroTotalInvoiceId = zero.id;
+        }
+        if (invoice.state === "paid" && !paid.length && !returnedUnapplied.length && !zeroTotalInvoiceId) return { quiesced: false };
+        frozenInvoices.push({ providerInvoiceRef: invoice.providerInvoiceRef, state: invoice.state as "paid" | "void", cancelledIntentRefs, paid,
+          ...(returnedUnapplied.length ? { returnedUnapplied } : {}), ...(zeroTotalInvoiceId ? { zeroTotalInvoiceId } : {}) });
+      }
+      resources.push({ providerSubscriptionRef: actual.providerSubscriptionRef, providerState: actual.state, invoiceEnumerationDigest: merchantTaxDigest(actual.invoices), invoices: frozenInvoices });
+    }
+    if (covered.size !== actualReceipts.length) return { quiesced: false };
+    try { await assertOriginalPhaseFinancials(ctx, parent.id); }
+    catch (error) { if (error instanceof ServiceError && error.code === "conflict") return { quiesced: false }; throw error; }
     const proof = { operationRevision: resource.operationRevision, evidenceRevision: resource.evidenceRevision,
-      journalDigest: scheduleOperationDigest(updatedOperations), resources: input.resources.map(actual => ({ providerSubscriptionRef: actual.providerSubscriptionRef,
-        providerState: actual.state, invoiceEnumerationDigest: merchantTaxDigest(actual.invoices), invoices: [] })) };
+      journalDigest: scheduleOperationDigest(updatedOperations), resources, ...(phaseSchedules?.length ? { phaseSchedules } : {}) };
     await ctx.tx.update(subscriptionProviderScheduleResources).set({ state: "quiesced", stoppedProof: proof, recoveryPending: false, updatedAt: new Date() })
       .where(eq(subscriptionProviderScheduleResources.subscriptionId, resource.subscriptionId));
     ctx.setSubject("subscription", parent.id);
@@ -173,6 +232,8 @@ export const quiesceMerchantSchedules = defineJob({
     const input = jobInput.parse(data);
     if (context && context.id !== input.originalJobId) throw new ServiceError("conflict", "The running job does not match its durable original task payload.");
     await context?.throwIfCancelled();
+    await stopMerchantPhaseSchedules(input, context);
+    const phaseTargets = await merchantPhaseScheduleTargets.call(input, { kind: "system" });
     const targets = await merchantScheduleCancellationTargets.call(input, { kind: "system" });
     const adapter = paymentAdapter("stripe");
     for (const target of targets) {
@@ -186,13 +247,21 @@ export const quiesceMerchantSchedules = defineJob({
             onCancelled: actual => retainMerchantScheduleCancellation(claim, actual).then(() => undefined) }));
         }
       }
-      if (!target.providerSubscriptionRefs.length) continue;
+      if (!target.providerSubscriptionRefs.length) {
+        await retainMerchantScheduleInventory.call({ ...input, subscriptionId: target.subscriptionId, resources: [] }, { kind: "system" });
+        continue;
+      }
       const current = (await merchantScheduleCancellationTargets.call(input, { kind: "system" })).find(value => value.subscriptionId === target.subscriptionId);
       if (!current?.request.providerCustomerRef || !adapter.inspectMerchantScheduleInvoices) continue;
       const resources = [];
       for (const providerSubscriptionRef of current.providerSubscriptionRefs) {
         await context?.throwIfCancelled();
-        const actual = await adapter.inspectMerchantScheduleInvoices({ ...current.request, providerCustomerRef: current.request.providerCustomerRef, providerSubscriptionRef });
+        const actual = await adapter.inspectMerchantScheduleInvoices({ ...current.request, providerCustomerRef: current.request.providerCustomerRef, providerSubscriptionRef, providerScheduleRefs: phaseTargets.find(target => target.subscriptionId === current.subscriptionId)?.providerScheduleRefs,
+          providerScheduleOperationId: phaseTargets.find(target => target.subscriptionId === current.subscriptionId)?.resources.find(resource => resource.providerSubscriptionRefs.includes(providerSubscriptionRef))?.providerScheduleOperationId ?? undefined,
+          onPaidIntentObserved: async actual => {
+            const retained = await retainProviderCharge.call({ provider: "stripe", ...actual }, { kind: "system" });
+            if (!retained.receiptId || !retained.observationId) throw new ServiceError("conflict", "Restore the original agreement and cash observation before reading further provider obligations.");
+          } });
         const cancellation = [...current.cancellationOperations].reverse().find(value => value.providerSubscriptionRef === providerSubscriptionRef);
         if (cancellation && actual.state === "cancelled") await observeMerchantScheduleCancellation.call({ operationId: cancellation.operationId, providerSubscriptionRef, source: "readback" }, { kind: "system" });
         resources.push({ providerSubscriptionRef, state: actual.state, invoices: actual.invoices });
@@ -206,4 +275,4 @@ export const quiesceMerchantSchedules = defineJob({
   },
 });
 registerJob(quiesceMerchantSchedules);
-export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices, ...phaseProductServices, ...phaseDispatchServices];
+export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices, ...phaseProductServices, ...phaseDispatchServices, ...phaseStopServices];

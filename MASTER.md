@@ -14209,6 +14209,17 @@ whatever is best for the people using the site.
   fault/recovery, schedule-only cancellation, complete invoice/fee quiescence
   and explicit amendments remain required; see
   `deploy/subscription-phase-dispatch80-source-20261113.md`.
+  Original phase quiescence source checkpoint (2026-11-13, C12.38/C1.08):
+  four private phases now bind primary cancellation to the original pending
+  cohort/receipt and actual returned caller, then preserve every known linked
+  subscription. Nonempty invoice-payment/PI enumeration retains positive cash
+  before later failure and uses shared applied-or-returned cash and payment
+  debt proof. A null linked subscription requires explicit provider pre-start
+  cancellation evidence. An owned additive80 tail follows full3a; assembled
+  SQL and goldens remain unchanged. This source and19 prepared controls are
+  unqualified; fresh schema/native, uncertain-response recovery, PI/invoice
+  closure callers, amendments and future invoice lineage remain required.
+  See `deploy/subscription-phase-stop80-source-20261113.md`; no item closes.
   Provider lifecycle protocol work uses Stripe's actual flexible-subscription
   pause endpoint, with2026-10-28.endive frozen only on new scope/charge
   receipts. Legacy operations keep their original version. Sixteen bounded

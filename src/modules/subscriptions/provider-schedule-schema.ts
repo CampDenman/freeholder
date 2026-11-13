@@ -8,14 +8,21 @@ import { dataRequests } from "@/core/privacy/schema";
 import { merchantTaxProfiles } from "@/modules/invoicing/merchant-tax-schema";
 import { subscriptionMerchantScopes } from "./schema";
 
+export type PhaseScheduleStopProof = {
+  providerScheduleRef: string; stopOperationId: string; stopEvidenceDigest: string;
+  linkedSubscriptionRefs: string[]; state: "canceled" | "completed" | "released";
+  neverStartedProof: { originalFirstPhaseStart: string; providerCreatedAt: string; providerCanceledAt: string } | null;
+};
 export type ScheduleStopProof = {
   operationRevision: number;
   evidenceRevision: number;
   journalDigest: string;
+  phaseSchedules?: PhaseScheduleStopProof[];
   resources: Array<{ providerSubscriptionRef: string; providerState: "paused" | "cancelled"; invoiceEnumerationDigest: string;
     invoices: Array<{ providerInvoiceRef: string; state: "void" | "paid";
       cancelledIntentRefs: string[];
       paid: Array<{ providerPaymentIntentRef: string; receiptId: string; paymentId: string; invoiceId: string }>;
+      returnedUnapplied?: Array<{ providerPaymentIntentRef: string; receiptId: string; returnReceiptId: string }>;
       zeroTotalInvoiceId?: string }> }>;
 };
 export const subscriptionProviderScheduleResources = pgTable("subscription_provider_schedule_resources", {
@@ -31,7 +38,7 @@ export const subscriptionProviderScheduleResources = pgTable("subscription_provi
 }, t => [
   check("subscription_schedule_resource_revision", sql`${t.operationRevision}>=0 and ${t.evidenceRevision}>=0`),
   check("subscription_schedule_resource_state", sql`${t.state} in ('uncreated','active','quiescing','quiesced','unknown')`),
-  check("subscription_schedule_resource_stop", sql`${t.state}<>'quiesced' or (${t.stoppedProof} is not null and ${t.providerSubscriptionRef} is not null and ${t.providerCustomerRef} is not null and ${t.recoveryPending}=false)`),
+  check("subscription_schedule_resource_stop", sql`${t.state}<>'quiesced' or (${t.stoppedProof} is not null and (${t.providerSubscriptionRef} is not null or freeholder_phase_schedule_stop_covers(${t.subscriptionId},${t.stoppedProof})) and ${t.providerCustomerRef} is not null and ${t.recoveryPending}=false)`),
 ]);
 
 /** One durable intent per physical mutation; unknown never authorizes another POST. */
