@@ -46,3 +46,34 @@ convergence, late positives, stale reads, caller barriers and populated history.
 Historical legacy bank recovery is also required and remains unfinished; no
 new platform, request, invoice or causal history is backfilled for old refunds.
 No browser, SDK, provider-account, stable or full-spec acceptance is claimed.
+
+The first generic native case subsequently passed **8.118s** on exact
+`a6c3dd47`, test-file SHA256
+`43f549716e919731d6ecd4771f0b8fdbde472c9916e6a9d9835b4043f6fe1a45`,
+against the existing disposable V11 ordinary-migration database and unchanged
+SQL e783. It used the real current checkout, shared refund/current-read and
+human replacement services, actual Stripe factory, intercepted HTTP and actual
+HMAC verification/committed event intake. The original 400 refund changed from
+success to bank failure; an unrelated 400 refund did not fulfill that original
+promise. One explicitly authorized 400 replacement did. Replay caused no new
+POST; the test asserted three distinct physical keys and customer `canPay=false`.
+This generic case had no credit note; it supplies no RMA credit-reuse proof.
+
+Independent SQL readback confirms original 4200 paid, current 800 refunded,
+one failed 400 plus two succeeded 400 refunds, three ordinal-one finished
+original callers/resources, one exact original-to-child causal journal and
+retained original success/failure/failure-balance observations. Journal entries
+remain 81 with e783. A bare inspection client inherited America/Vancouver and
+returned no valid current receipt because timestamp serialization changed the
+revision. The same read-only client in UTC, as required by core
+`SESSION_SETTINGS` and §4.9, found the exact original FAILED and replacement
+SUCCEEDED current receipts with matching revisions. The unrelated ACK-only
+refund correctly has no current-read receipt. Neither inspection wrote stored
+facts; all clients closed and final independent target backends were empty.
+No eight-table golden hash was taken for this case.
+
+Evidence: `/tmp/freeholder-bank-current80-generic-native-v1.{json,log}`,
+`-v1-ledger.json` and `-v1-receipts.json`. The other four bank-native controls
+remain unexecuted. The paused-caller fixture is being strengthened separately
+to commit the real ACK and raw positive first, then hold only the actual
+physical caller's promise before its finish receipt.

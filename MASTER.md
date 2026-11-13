@@ -13914,6 +13914,18 @@ whatever is best for the people using the site.
   `deploy/merchant-bank-replacement-2026-11-12.md`. This does
   not activate the new model or close C12.38. See
   `deploy/merchant-refund-current-state-2026-11-12.md`.
+  First generic bank-replacement native on a6c3dd47/V11 e783 subsequently
+  passes 8.118s: original400 bank failure, independent unrelated400 and one
+  explicitly causal400 replacement; replay creates no additional refund and
+  the buyer cannot pay again. Independent ledger verifies4200 paid/800 current
+  returned, three finished original resources, one causal journal and retained
+  failure-balance history. UTC inspection matches the actual application's
+  mandatory session configuration and confirms original FAILED/child SUCCEEDED
+  receipts; bare Vancouver inspection is preserved separately, with no stored
+  writes or golden-hash claim. All clients drained. This case has no issued
+  credit and does not prove RMA reuse. Four other bank natives, legacy recovery,
+  final source union, SDK/browser/provider and full financial acceptance remain
+  open; this does not activate the model or close C12.38.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original
