@@ -11,10 +11,12 @@ const groups = {
   subscription_prorations: "proration", subscription_proration_principal: "proration", subscription_proration_credit_uses: "proration",
   agreement_fee_duties: "fee", agreement_fee_credit_assignments: "fee", agreement_fee_cash_assignments: "fee", agreement_fee_eligibility: "fee", agreement_fee_remittances: "fee",
   subscription_proration_cash_confirmations: "boundary", subscription_proration_credit_confirmations: "boundary",
+  subscription_proration_payment_protocols: "card", subscription_proration_card_mandates: "card", subscription_proration_card_attempts: "card",
+  subscription_proration_card_jobs: "card", subscription_proration_card_reads: "card", subscription_proration_card_read_finishes: "card", subscription_proration_card_read_stops: "card",
 } as const;
 export type ProrationFinancialTable = keyof typeof groups;
 const parentNames = ["invoiceId", "sourceInvoiceId", "targetInvoiceId", "subscriptionId", "profileId", "prorationId", "sourceProrationId", "targetProrationId",
-  "paymentId", "sourcePaymentId", "refundId", "creditNoteId", "creditNoteLineId", "fundingId", "reservationId", "applicationId", "sourceApplicationId", "originalRemittanceId", "providerObservationId", "externalAttestationId"] as const;
+  "paymentId", "sourcePaymentId", "refundId", "creditNoteId", "creditNoteLineId", "fundingId", "reservationId", "applicationId", "sourceApplicationId", "originalRemittanceId", "providerObservationId", "externalAttestationId", "readId", "jobId", "paymentMethodId"] as const;
 export type ProrationFinancialParents = Partial<Record<typeof parentNames[number], string | null>>;
 export interface ProrationFinancialEntry { family: typeof groups[ProrationFinancialTable]; table: ProrationFinancialTable; id: string; fingerprint: string; parents: ProrationFinancialParents }
 export interface ProrationFinancialWitness { version: 1; entries: ProrationFinancialEntry[]; incomplete: boolean }
@@ -23,8 +25,8 @@ const col = (alias: string, name: string) => sql`${sql.identifier(alias)}.${sql.
 const oneOf = (column: SQL, ids: Iterable<string>) => { const values = [...ids]; return values.length ? sql`${column} in (${sql.join(values.map(id => sql`${id}::uuid`), sql`,`)})` : sql`false`; };
 const source = (alias: string) => sql`${col(alias, "subscription_id")}::text||':proration:'||${col(alias, "id")}::text`;
 
-/** Ordinary read-only adapter. The four existing witness helpers remain
- * unchanged. Their seventeen families are selected here through exact parent
+/** Ordinary read-only adapter. Existing witness helpers remain unchanged.
+ * The original seventeen and seven card families follow exact parent
  * FKs so a merchant need not adopt every party on a mixed source invoice.
  * No service registry, provider call, actor clone, amount or current account
  * supplies ownership. Root must check incomplete and add its cohort bound. */
@@ -190,6 +192,56 @@ export async function prorationFinancialWitness(tx: Tx, scope: ProrationFinancia
     oneOf(col("r", "proration_id"), pids), key === "payment_id" ? sql`owner.debit_invoice_id=r.invoice_id and consideration.invoice_id=r.invoice_id
       and ((r.external_attestation_id is null and observation.payment_id=r.payment_id) or (r.provider_observation_id is null and external_receipt.payment_id=r.payment_id and external_receipt.invoice_id=r.invoice_id and external_receipt.merchant_profile_id=owner.profile_id))`
       : sql`owner.debit_invoice_id=r.invoice_id and consideration.invoice_id=r.invoice_id`);
+  // Select card history from actual accepted targets, including hosted reads
+  // with no stored-method mandate/attempt. A seller never inherits every
+  // payment merely because an original source invoice contains their party.
+  const cardScope = (invoice: SQL) => scope.kind === "invoice" ? sql`(${oneOf(col("owner", "id"), pids)} or ${oneOf(invoice, ids)})` : oneOf(col("owner", "id"), pids);
+  const targetMatches = sql`owner.id is not null and owner.debit_invoice_id=target_invoice.id and target_invoice.source_type='subscription'
+    and target_invoice.source_id=${source("owner")}`;
+  await read("subscription_proration_payment_protocols", col("r", "payment_id"),
+    sql`jsonb_build_object('paymentId',r.payment_id,'invoiceId',r.invoice_id,'prorationId',r.proration_id,'subscriptionId',owner.subscription_id,'profileId',owner.profile_id)`,
+    sql`subscription_proration_payment_protocols r left join subscription_prorations owner on owner.id=r.proration_id
+      left join invoices target_invoice on target_invoice.id=r.invoice_id left join payments cash on cash.id=r.payment_id
+      left join merchant_payment_requests request on request.payment_id=r.payment_id`, cardScope(col("r", "invoice_id")),
+    sql`${targetMatches} and cash.invoice_id=r.invoice_id and request.provider_invoice_ref=r.invoice_id`);
+  await read("subscription_proration_card_mandates", col("r", "proration_id"),
+    sql`jsonb_build_object('prorationId',r.proration_id,'invoiceId',r.invoice_id,'subscriptionId',owner.subscription_id,'profileId',owner.profile_id,'paymentMethodId',r.payment_method_id)`,
+    sql`subscription_proration_card_mandates r left join subscription_prorations owner on owner.id=r.proration_id
+      left join invoices target_invoice on target_invoice.id=r.invoice_id`, cardScope(col("r", "invoice_id")),
+    sql`${targetMatches} and r.accepted_quote_digest=owner.accepted_quote_digest and r.method->>'id'=r.payment_method_id::text`);
+  await read("subscription_proration_card_attempts", col("r", "payment_id"),
+    sql`jsonb_build_object('paymentId',r.payment_id,'invoiceId',r.invoice_id,'prorationId',r.proration_id,'subscriptionId',owner.subscription_id,'profileId',owner.profile_id,'paymentMethodId',mandate.payment_method_id)`,
+    sql`subscription_proration_card_attempts r left join subscription_prorations owner on owner.id=r.proration_id
+      left join invoices target_invoice on target_invoice.id=r.invoice_id left join payments cash on cash.id=r.payment_id
+      left join subscription_proration_card_mandates mandate on mandate.proration_id=r.proration_id
+      left join subscription_proration_payment_protocols protocol on protocol.payment_id=r.payment_id`, cardScope(col("r", "invoice_id")),
+    sql`${targetMatches} and cash.invoice_id=r.invoice_id and mandate.invoice_id=r.invoice_id and protocol.invoice_id=r.invoice_id and protocol.proration_id=r.proration_id
+      and r.provider_request->>'paymentAttemptId'=r.payment_id::text and r.provider_request->>'invoiceId'=r.invoice_id::text`);
+  await read("subscription_proration_card_jobs", col("r", "job_id"),
+    sql`jsonb_build_object('jobId',r.job_id,'prorationId',r.proration_id,'invoiceId',mandate.invoice_id,'subscriptionId',owner.subscription_id,'profileId',owner.profile_id)`,
+    sql`subscription_proration_card_jobs r left join subscription_proration_card_mandates mandate on mandate.proration_id=r.proration_id
+      left join subscription_prorations owner on owner.id=r.proration_id left join invoices target_invoice on target_invoice.id=mandate.invoice_id`, cardScope(col("mandate", "invoice_id")),
+    sql`${targetMatches} and r.original_task->>'prorationId'=r.proration_id::text and r.original_task->>'originalJobId'=r.job_id::text
+      and r.original_task->>'acceptedQuoteDigest'=mandate.accepted_quote_digest`);
+  // The protocol is mandatory original creation evidence for either saved or
+  // hosted recovery. Current method/contact/account values cannot replace it.
+  const readJoins = sql`left join payments cash on cash.id=original_read.payment_id left join invoices target_invoice on target_invoice.id=cash.invoice_id
+    left join subscription_prorations owner on owner.debit_invoice_id=target_invoice.id
+    left join subscription_proration_payment_protocols protocol on protocol.payment_id=cash.id`;
+  const readMatches = sql`${targetMatches} and protocol.invoice_id=target_invoice.id and protocol.proration_id=owner.id
+    and original_read.admission->'payload'->>'readId'=original_read.id::text
+    and original_read.admission->'payload'->>'paymentId'=cash.id::text and original_read.admission->'payload'->>'prorationId'=owner.id::text`;
+  await read("subscription_proration_card_reads", col("r", "id"),
+    sql`jsonb_build_object('readId',r.id,'paymentId',r.payment_id,'invoiceId',cash.invoice_id,'prorationId',owner.id,'subscriptionId',owner.subscription_id,'profileId',owner.profile_id)`,
+    sql`subscription_proration_card_reads r left join subscription_proration_card_reads original_read on original_read.id=r.id ${readJoins}`,
+    cardScope(col("cash", "invoice_id")), readMatches);
+  for (const [table, opposite] of [["subscription_proration_card_read_finishes", "subscription_proration_card_read_stops"],
+    ["subscription_proration_card_read_stops", "subscription_proration_card_read_finishes"]] as const) await read(table, col("r", "read_id"),
+    sql`jsonb_build_object('readId',r.read_id,'paymentId',original_read.payment_id,'invoiceId',cash.invoice_id,'prorationId',owner.id,'subscriptionId',owner.subscription_id,'profileId',owner.profile_id)`,
+    sql`${sql.identifier(table)} r left join subscription_proration_card_reads original_read on original_read.id=r.read_id ${readJoins}`,
+    cardScope(col("cash", "invoice_id")), sql`${readMatches} and r.proof->'payload'->>'readId'=original_read.id::text
+      and r.proof->'payload'->>'paymentId'=cash.id::text and r.proof->'payload'->>'prorationId'=owner.id::text
+      and not exists(select 1 from ${sql.identifier(opposite)} other_receipt where other_receipt.read_id=r.read_id)`);
   if (invalid || !bounded()) return failed();
   for (const entry of entries.values()) {
     for (const name of ["prorationId", "sourceProrationId", "targetProrationId"] as const) { const originalId = entry.parents[name];if (originalId && !prorations.has(originalId)) return failed(); }
@@ -198,6 +250,19 @@ export async function prorationFinancialWitness(tx: Tx, scope: ProrationFinancia
     if (entry.parents.originalRemittanceId) {
       const original = entries.get(`${entry.table}:${entry.parents.originalRemittanceId}`);
       if (!original || original.parents.invoiceId !== entry.parents.invoiceId || original.parents.paymentId !== entry.parents.paymentId || original.parents.profileId !== entry.parents.profileId) return failed();
+    }
+    if (entry.family === "card") {
+      if (!entry.parents.prorationId || !entry.parents.invoiceId) return failed();
+      if (entry.table === "subscription_proration_card_mandates" && ![...entries.values()].some(child => child.table === "subscription_proration_card_jobs" && child.parents.prorationId === entry.parents.prorationId)) return failed();
+      if (entry.table === "subscription_proration_card_jobs" || entry.table === "subscription_proration_card_attempts") {
+        if (!entries.has(`subscription_proration_card_mandates:${entry.parents.prorationId}`)) return failed();
+      }
+      if (["subscription_proration_card_attempts", "subscription_proration_card_reads", "subscription_proration_card_read_finishes", "subscription_proration_card_read_stops"].includes(entry.table)) {
+        if (!entry.parents.paymentId || !entries.has(`subscription_proration_payment_protocols:${entry.parents.paymentId}`)) return failed();
+      }
+      if (entry.table === "subscription_proration_card_read_finishes" || entry.table === "subscription_proration_card_read_stops") {
+        if (!entry.parents.readId || !entries.has(`subscription_proration_card_reads:${entry.parents.readId}`)) return failed();
+      }
     }
   }
   return { version: 1, entries: [...entries.values()].sort((left, right) => left.table.localeCompare(right.table) || left.id.localeCompare(right.id)), incomplete: false };

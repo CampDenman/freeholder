@@ -14951,6 +14951,28 @@ whatever is best for the people using the site.
   zero-bootstrap/pause-readback/exact draft-fee/finalize/pay lifecycle still
   require implementation and qualification. See
   `deploy/subscription-proration-card80-source-20261113.md`.
+  Card financial-reader composition (same date/items): the ordinary internal
+  SOURCE ONLY adapter additionally retains the seven original card families,
+  with exact accepted invoice/proration/profile and actual protocol/mandate/
+  payment/job/read ancestry. Hosted reads do not need a stored-method attempt;
+  finish and independent stop remain distinct. All24 families share one5000
+  bound and full PostgreSQL row hashes; no private bank/caller bodies enter
+  the UUID parent projection. Seven synthetic read-driver controls are
+  PREPARED/UNRUN. Root central composition and full qualification remain open;
+  no SQL, activation, item or stable gate changes. See
+  `deploy/proration-card-financial-witness81-source-20261113.md`.
+  Merchant financial-export composition (same date/items): an ordinary
+  SOURCE ONLY helper exports the24 adapter-owned families through exact
+  frozen-profile/table/UUID parents and explicit scalar whitelists. It retains
+  the merchant's own principal/credit/commission/remittance amounts and actual
+  identities/times while excluding private buyer destinations, actor/evidence,
+  bank/caller/credential/hosting/task bodies. Full internal row hashes and a
+  complete final witness reread remain required; all selected families and
+  the caller's existing history share one5000 bound. Seven prepared read-driver
+  controls are UNRUN; no compiler, lint, database, native or provider ran.
+  Root central authorization/composition and full qualification remain open;
+  no SQL, activation, item or stable gate changes. See
+  `deploy/proration-merchant-export81-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the
