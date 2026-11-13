@@ -3574,7 +3574,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-13 checkpoint. Protected main remains fe2645dc; draft PR701 still reviews older5b504abb/27c0eda4 and CI is not green. Current integration4be0b712 passed full types, affected lint,355 actual controls in59 complete files and license/notes/plan (64 native cases explicitly skipped there). NEW V8 normally applied all83 migrations; strict v17 passed142 models,282 guards and227 function bodies. Three actual cash-inspection journeys and all four original cash-return/feedback regressions passed individually with independent financial/journal/profile/drain proof. NULL-payment receipt feedback and controlled raw-positive/unpaid journeys also passed after documented SQL fixes. Historical empty-media/import/SDK proofs stay preserved. Media retirement/crash/multipart/quota/cutover and positive controlled collection remain implementation work; a separate existing-session browser signing containment patch is in preparation. Current-source green CI, provider/platform acceptance, final object-byte recovery, Tony’s C11.10 report and exact C11.17 signature remain absent. No live item closes from this checkpoint. |
+| Latest launch audit | 2026-11-13 checkpoint. Protected main remains fe2645dc; narrow signing containment PR702/2242f190 is in protected review after three actual local journeys and source gates passed. Broader draft PR701 still reviews older5b504abb/27c0eda4 and its CI is not green. Current application source dcd1ea1e passed full types, affected lint,368 actual controls in61 complete files and license/notes/plan (101 native cases explicitly skipped there); SQL-only correction11010537 preserves that application source and passes exact output/metadata gates. NEW V10 applied all83 migrations and strict v19 passed142 models/282 guards/227 function bodies. Actual offline and gross-proration journeys now pass with independent financial/journal/profile/drain proof; the three current-reader and four original cash-return journeys also passed individually on prior V8. Failed datasets are preserved. Media retirement/crash/multipart/quota/cutover and positive controlled collection remain implementation work. Current-source green CI, provider/platform acceptance, final byte recovery, Tony’s C11.10 report and exact C11.17 signature remain absent. No live item closes from this checkpoint. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -14326,8 +14326,25 @@ whatever is best for the people using the site.
   applied_reservation/eligible_payment names; all financial conditions remain
   unchanged. Failed V9 is preserved with independent table/journal/profile/
   client-drain proof. No first payment/attestation was partially committed.
-  Fresh V10, strict installed-body parity and unchanged offline/gross business
-  controls remain required. All142 models and0–79/81/82 stay unchanged.
+  Fresh V10 normally applied all83 entries in6.773s. Strict read-only v19
+  passed all142 models,282 guards and227 exact installed function bodies in
+  11.432s/3357 queries, with unchanged parser and full prior controls. The
+  unchanged actual offline journey passed10.429s: partial1 then final4724,
+  exact4725 paid invoice, preserved access until paid, two owner-attested
+  payment receipts, real canonical refund of4724 and separate original fee
+  remittance/return. The unchanged gross-proration journey passed53.559s:
+  exact5250 debit, original2100 credit and3150 new cash (1 then3149), original
+  calendar/terms unchanged and paid access only after full actual consideration.
+  Three attested payments and the credit funding/reservation/application remain
+  intact. Independent minimal financial/table SHA, all83 journal/profile and
+  zero-client proofs passed before each reset. Evidence under /tmp: freeholder-
+  current-full82-parity142-v19-{result,drain}-20261113.json and freeholder-current-
+  full82-financial-{offline,gross}-native-v2-20261113 (-result.json and
+  -ledger-v2.json). No production TypeScript changed after the368-case source
+  qualification; exact generated-output and license/notes/plan checks passed
+  again for the SQL-only correction. These are owner-attested external-money
+  component controls, not independent bank/provider or stable acceptance.
+  All142 models and0–79/81/82 stay unchanged.
   Related external-money alias audit2026-11-13: source review found the same
   trigger OLD collision in all three owned guard_commercial_attestation bodies
   (commercial attestation, agreement fee and gross proration). Signed af8c4b77
