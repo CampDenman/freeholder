@@ -1,9 +1,9 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # Durable part-signing authority containment — C1.12/C11.08
 
-This is a source-only conservative restriction on protected-main basefe2645dc.
-No compiler, lint, test, database, provider/account or deployment operation was
-run for this checkpoint. It is independent of the unqualified media82 stack,
+The implementation was frozen source-only at3e722c90 on protected-main
+basefe2645dc. Actual component qualification is recorded below; no real
+provider/account or deployment operation was performed. It is independent of the unqualified media82 stack,
 adds no schema/migration/model/public signature and publishes no capability.
 It does not claim an observed production incident or read any account default.
 
@@ -33,7 +33,7 @@ no PUT, ABORT or DELETE, and creates no new signed URL. The recovery screen
 explains the restriction for open sessions in English, French, Spanish and
 Arabic. It does not advise expiring or deleting the evidence to retry.
 
-Two actual shared-service/TCP negative controls are prepared/unrun in
+Two actual shared-service/TCP negative controls are implemented in
 `media-part-signing-authority-lifecycle.test.ts`. The real private S3 adapter
 performs CREATE against a fictional loopback HTTP provider, so its session and
 first receipt are authentic. For created and already-uploading metadata states,
@@ -61,5 +61,37 @@ that bytes or admitted writers are gone. No such rollout/stop/provider proof
 is claimed here.
 
 Full per-part/session provenance, recovery and physical erasure remain required
-before stable. Source qualification, protected review/CI, actual native signing
-controls and real provider/platform acceptance remain open.
+before stable. The passing component qualification below does not supply
+protected green CI, full-protocol or real provider/platform acceptance.
+
+## Actual component qualification at3e722c90
+
+The exact signed implementation passes full TypeScript46.183s, all affected
+TypeScript lint6.673s and the repository license/notes/plan gates. Existing
+isolated dependency bytes were reused only after all12 workspace/lock
+descriptors matched (the donor’s build8GB script is the sole semantic script
+difference); no dependency install or owner configuration was used.
+
+A fresh database applied all80 published migrations normally in5.315s. Every
+journal identity/hash equals the existing frozen published baseline. The new
+part authority remains absent. Each actual case ran in its own process, with
+an independent read-only proof before the next reset:
+
+| Actual journey | Seconds | Result |
+| --- | ---: | --- |
+| Open created session refuses signing | 10.528 | Real S3 signer0; original rows/session unchanged |
+| Existing uploading session refuses signing | 7.523 | Real S3 signer0; original rows/session unchanged |
+| Existing private-S3 completion/validation/idempotency | 7.976 | Original completion assertions pass; one asset attached to the same completed upload |
+
+The first two use an actual loopback TCP fictional provider and configured S3
+adapter; the older completion case keeps its existing fictional HTTP edge.
+None supplies real provider-account acceptance. All three independent proofs
+retain minimal table counts/full-row hashes, no financial rows, all80 journal
+hashes, UTC/read-only/fsync/jit profile and no open database clients. Frozen
+local evidence prefixes are /tmp/freeholder-part-signing79-source-v1-20261113,
+/tmp/freeholder-part-signing79-normal-v1-{manifest,result}-20261113.json and
+/tmp/freeholder-part-signing79-{created,uploading,assembly}-native-v1-20261113
+(-result.json and -ledger.json). The original BEFORE blob and single signing
+expectation diff remain preserved. Protected review/green CI, old-runtime and
+issued-URL retirement, complete per-part support, real provider/platform
+acceptance and stable sign-off remain open.

@@ -3987,10 +3987,17 @@ reading chat logs.
   signer handoff require a dedicated unpublished durable-part capability;
   generic storage/request flags cannot mint new browser PUT URLs. Existing
   sessions/receipts stay intact, with four-locale recovery guidance. Two actual
-  shared-service/TCP signer-not-called controls are prepared/unrun. The old
+  shared-service/TCP signer-not-called controls passed individually at3e722c90
+  (created10.528s, uploading7.523s), with the real signer never called and
+  original session/rows unchanged. Full types46.183s, affected lint6.673s and
+  license/notes/plan passed. A fresh database normally applied all80 unchanged
+  published migrations in5.315s. The existing assembly/validation/receipt/
+  idempotency control also passed7.976s. Independent table hashes, completed
+  asset ancestry, all80 journal hashes, PostgreSQL profile and drained clients
+  passed after each case. These are fictional-provider component checks. The old
   assembly fixture changes only its newly forbidden signing expectation and
   retains all assembly/receipt/idempotency assertions. Full per-part recovery,
-  old-runtime/issued-URL retirement, source/native/provider acceptance and this
+  old-runtime/issued-URL retirement, full-protocol/provider acceptance and this
   C item remain open. See `deploy/media-part-signing-containment-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
