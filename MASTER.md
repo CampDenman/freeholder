@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Canonical controlled receipt-batch writer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): an isolated UNREGISTERED ordinary writer preserves
+exact actual receipt/origin/FK identities, full-batch no-write authority checks,
+resource→parent→canonical lock order and the same shared create/observation/
+settle transaction. Partial/tiny amounts preserve unpaid remainder; duplicates,
+foreign/reserved ownership and overage refuse without clipping. Seventeen
+prepared pure plan controls are UNRUN. Genuine producer/inspection/context,
+authority registration, alternate-writer guards and actual native rollback,
+partial/no-effect/refusal/default-path controls remain required before this
+path can work or qualify. The future six models remain excluded from current142;
+no SQL/model/journal, existing default, deployment or stable state changed. See
+`deploy/controlled-receipt-batch-writer82-source-20261113.md`.
+
 Prospective controlled cash parent checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): an isolated ordinary evidence reader now checks
 actual retained receipt/origin, resource→parent→canonical locks, exact cash
