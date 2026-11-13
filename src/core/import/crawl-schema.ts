@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.47: actual HTTP frontier and private original response ownership.
-// Source-only schema81 model; not registered for runtime before its migration.
+// Private runtime models require their matching guarded migration81 schema.
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { dataRequests } from "@/core/privacy/schema";

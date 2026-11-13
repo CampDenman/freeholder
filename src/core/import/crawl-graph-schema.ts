@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.47: graph ranges remain bound to distinct actual HTTP responses.
-// These source81 models remain unregistered until complete qualification.
+// Private graph bindings require their matching guarded migration81 schema.
 import { foreignKey, index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAtColumn } from "@/core/db/columns";
 import { importSourceEntries, importSourceGraphs } from "@/core/plugins/schema";

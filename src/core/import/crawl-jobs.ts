@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// C3.47: bounded durable cleanup/reconciliation; source-only, unregistered.
+// C3.47: registered bounded cleanup/reconciliation of actual HTTP originals.
 import { defineJob } from "@/core/jobs";
 import { CRAWL_ERASURE_JOB, CRAWL_RECONCILIATION_JOB, eraseCrawlOriginals, reconcileCrawlOriginalObservation } from "./crawl-privacy";
 import { retireExpiredCrawls } from "./crawl-retirement";

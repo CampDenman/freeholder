@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// Source-only: no public/runtime registration before full qualification.
+// The private phases are registered with the bounded public crawl operation.
 // C3.47: save the complete file review in its own original-policy read phase.
 import { createHash, randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";

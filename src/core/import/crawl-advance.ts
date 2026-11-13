@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.47: one bounded private capture/discovery phase over actual HTTP originals.
-// Source-only: not registered until privacy, recovery and the normal81 migration.
+// Runtime registration requires the matching guarded migration81 schema.
 import { z } from "zod";
 import { boundStorage } from "@/adapters/storage";
 import { putWithReceipt } from "@/core/media/write-ledger";

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.47: short claim/apply transactions bind entries to actual HTTP responses.
-// Source-only: no service registration or ordinary migration81 is enabled here.
+// Private index phases require the matching guarded migration81 schema.
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
