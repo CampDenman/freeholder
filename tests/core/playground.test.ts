@@ -644,8 +644,10 @@ async function dropDatabase(name: string): Promise<void> {
 
 /** Point the runtime's lazy database singleton at another database. */
 async function pointAt(url: string): Promise<void> {
-  process.env.DATABASE_URL = url;
+  await stopJobs();
+  await reconcileJobDeploymentAdmission();
   await closeDb();
+  process.env.DATABASE_URL = url;
   resetEnvForTests();
 }
 
