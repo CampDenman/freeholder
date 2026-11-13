@@ -22,6 +22,7 @@ import { subscriptions } from "./schema";
 import { scheduleCallerHasStopped } from "./provider-schedule-proof";
 import { verifiedOriginalPhaseProduct } from "./provider-phase-product-proof";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
+import productRecoveryServices, { flushMerchantPhaseProductReads } from "./provider-phase-product-recovery";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const account = z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200);
@@ -158,6 +159,7 @@ export const createMerchantPhaseProduct = defineOrchestratedService({
   kind: "mutation", permission: "system", external: false, writeClass: "money", input: z.object({ subscriptionId: z.uuid() }), output: z.object({ providerProductRef: productRef }),
   handler: async ({ subscriptionId }) => {
     await flushMerchantPhaseProductFinishes(subscriptionId);
+    await flushMerchantPhaseProductReads(subscriptionId);
     const claimed = await claimMerchantPhaseProduct.call({ subscriptionId }, { kind: "system" });
     if (claimed.mode === "known") return { providerProductRef: claimed.providerProductRef };
     const local = callers.get(claimed.operationId);
@@ -177,4 +179,4 @@ export const createMerchantPhaseProduct = defineOrchestratedService({
     finally { await finishMerchantPhaseProduct.call({ operationId: claimed.operationId, completionNonce: local.nonce }, { kind: "system" }); callers.delete(claimed.operationId); }
   },
 });
-export default [claimMerchantPhaseProduct, observeMerchantPhaseProduct, finishMerchantPhaseProduct, createMerchantPhaseProduct, quoteMerchantProviderHorizon];
+export default [claimMerchantPhaseProduct, observeMerchantPhaseProduct, finishMerchantPhaseProduct, createMerchantPhaseProduct, quoteMerchantProviderHorizon, ...productRecoveryServices];

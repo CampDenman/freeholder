@@ -25,6 +25,22 @@ export function verifiedOriginalPhaseProduct(operation: Operation): string | nul
     && entry.requestDigest === operation.requestDigest && entry.providerProductRef === proof.data.providerProductRef)) return null;
   return proof.data.providerProductRef;
 }
+/** A read may recover one retained original ACK only after the original
+ * creating caller has really finished. A GET cannot establish that fact. */
+export function recoverableOriginalPhaseProduct(operation: Operation): string | null {
+  const physical = z.object({ method: z.literal("POST"), path: z.literal("/v1/products"), body: z.record(z.string(), z.string()) }).safeParse(operation.originalRequest.physical);
+  const parsed = z.array(z.record(z.string(), z.unknown())).max(5000).safeParse(operation.providerObservation.history);
+  if (operation.kind !== "create_product" || !["unknown", "confirmed"].includes(operation.state) || !operation.positiveObserved || !scheduleCallerHasStopped(operation)
+    || merchantTaxDigest(operation.originalRequest) !== operation.requestDigest || operation.originalRequest.resourceKind !== "phase_product" || !physical.success
+    || physical.data.body["metadata[freeholder_subscription_id]"] !== operation.subscriptionId || physical.data.body["metadata[freeholder_phase_product_operation_id]"] !== operation.id || !parsed.success) return null;
+  if (parsed.data.some(entry => entry.providerSubscriptionRef !== undefined || entry.providerScheduleRef !== undefined)) return null;
+  const acknowledgments = parsed.data.filter(entry => entry.source === "phase_product_ack");
+  const ref = acknowledgments[0]?.providerProductRef;
+  if (typeof ref !== "string" || !/^prod_[A-Za-z0-9]{1,195}$/.test(ref) || acknowledgments.some(entry => entry.operationId !== operation.id
+    || entry.requestDigest !== operation.requestDigest || entry.providerProductRef !== ref)) return null;
+  return ref;
+}
+
 /** Requires the complete contiguous journal, real original endpoint, actual
  * finished caller and independently verified product. Unknown is never empty. */
 export function verifiedPreparatoryPhaseProducts(resource: typeof subscriptionProviderScheduleResources.$inferSelect,
