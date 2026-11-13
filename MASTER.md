@@ -14480,8 +14480,10 @@ whatever is best for the people using the site.
   creator result into a typed exact-child bank-proof continuation, preserving
   public refusal and reaching existing fresh whole-family reads before guarded
   cash/return closure. SQL17bf/all original native oracles remain unchanged;
-  four pure continuation refusals are prepared. New qualification is UNRUN,
-  and no C-item/stable completion follows.
+  four pure continuation refusals pass within104 actual NoDB assertions,
+  14nonempty files and25explicitDBskips. Fulltypes/focusedlint/metadata pass
+  and processes drain. Actual AFTER remains UNRUN pending freshV22; no
+  C-item/stable completion follows.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original
