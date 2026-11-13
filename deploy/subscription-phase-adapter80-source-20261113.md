@@ -46,3 +46,17 @@ not embed its own full request digest: the pure body builder lets the real
 claim freeze/hash the exact physical form after that UUID exists, avoiding a
 circular hash. The separately returned inventory digest remains bound to the
 server's retained admission, never accepted as a provider metadata assertion.
+
+Qualification: a08a5a2e passed full Node22 types (8GB) and all four changed TS
+files' lint. The nine real-factory, injected-HTTP controls passed as2+1+6
+without repeating passed cases. Two new fixture errors are preserved: expecting
+a raw network exception rather than paymentFetch's sanitized provider_failure,
+and returning a schedule object at an auxiliary price endpoint. Test-only
+be3c7653/f231bba7 corrected those fixtures; each changed-file lint passed.
+Logs and exact JSON assertion reports have prefixes
+`/tmp/freeholder-phase-adaptera08-`,
+`/tmp/freeholder-phase-adapter-corrected-` and
+`/tmp/freeholder-phase-adapter-aux-route-`. No DB, schema, provider or active
+admission path was exercised. Actual auxiliary-product authority, physical
+caller persistence, future invoice freezing and paid/returned resolution
+remain required in the next concrete source increment.
