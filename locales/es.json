@@ -6107,6 +6107,8 @@
   "subscriptions.changePlan.choose": "Pasar a otro plan",
   "subscriptions.changePlan.pending": "Cambia a {plan} al final del periodo",
   "subscriptions.changed": "Plan actualizado.",
+  "subscriptions.awaitingPayment": "El cambio de plan espera el pago completo. El periodo ya pagado no cambia.",
+  "subscriptions.prorationInvoice": "Ver la factura del cambio de plan",
   "subscriptions.confirmCancel": "Sí, cancelar esta suscripción.",
   "subscriptions.dunning.accessUntil": "Acceso hasta {date}",
   "subscriptions.dunning.action.cancel": "Cancelarla de inmediato",

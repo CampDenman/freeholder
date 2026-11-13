@@ -4983,6 +4983,8 @@
   "subscriptions.changePlan.choose": "انتقل إلى خطة أخرى",
   "subscriptions.changePlan.pending": "تتغير إلى {plan} عند نهاية الفترة",
   "subscriptions.changed": "حُدّثت الخطة.",
+  "subscriptions.awaitingPayment": "ينتظر تغيير الخطة سداد الفاتورة بالكامل. وتبقى الفترة المدفوعة كما هي.",
+  "subscriptions.prorationInvoice": "عرض فاتورة تغيير الخطة",
   "subscriptions.confirmCancel": "نعم، إلغِ هذه العضوية.",
   "subscriptions.dunning.accessUntil": "وصول حتى {date}",
   "subscriptions.dunning.action.cancel": "إلغاؤها فورًا",

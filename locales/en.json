@@ -6107,6 +6107,8 @@
   "subscriptions.changePlan.choose": "Move to another plan",
   "subscriptions.changePlan.pending": "Changes to {plan} at period end",
   "subscriptions.changed": "Plan updated.",
+  "subscriptions.awaitingPayment": "The plan change is waiting for full payment. The current paid period is unchanged.",
+  "subscriptions.prorationInvoice": "View the plan-change invoice",
   "subscriptions.confirmCancel": "Yes, cancel this membership.",
   "subscriptions.dunning.accessUntil": "Access until {date}",
   "subscriptions.dunning.action.cancel": "Cancel it immediately",
