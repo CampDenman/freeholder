@@ -6614,6 +6614,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   Candidate81 SHA5c96bd06… and normal journal81 remain unapplied and the whole
   composed source remains unqualified; no database, transport or stable proof
   is inferred from this source assembly.
+  A further source-only predicate binds actual accepted PUT/DELETE retirement
+  to the immutable first graph/chunk capture after rollback releases the mutable
+  descriptor; later aliases/writers/holds/accepted ownership still refuse.
+  Strengthened real-session WXR/ZIP resumption controls remain unrun. This
+  changes unpublished81 and requires a NEW database for qualification.
+
 
 
 

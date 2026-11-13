@@ -811,12 +811,25 @@ $$;
 CREATE FUNCTION freeholder_source_graph_projection_retired(original_graph uuid,original_request uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
  SELECT EXISTS(SELECT 1 FROM import_source_erasure_members member JOIN import_source_graphs graph ON graph.id=member.graph_id JOIN import_runs root ON root.id=member.run_id
   WHERE member.request_id=original_request AND member.graph_id=original_graph AND graph.run_id=member.run_id AND graph.generation=member.graph_generation AND graph.source_revision=member.source_revision
-   AND root.checkpoint->'retainedSource'->>'uploadId'=member.upload_id::text AND root.checkpoint->'retainedSource'->>'revision'=member.source_revision
+   -- The immutable first capture owns this graph even after rollback releases
+   -- its mutable descriptor. A positive later alias/writer refuses reduction;
+   -- neither rollback status nor descriptor absence is erasure authority.
+   AND NOT EXISTS(SELECT 1 FROM (VALUES(root.checkpoint->'retainedSource'),(root.checkpoint->'sourceUpload')) current_alias(descriptor)
+     WHERE descriptor IS NOT NULL AND (jsonb_typeof(descriptor) IS DISTINCT FROM 'object' OR descriptor->>'uploadId' IS DISTINCT FROM member.upload_id::text))
+   AND root.checkpoint->'sourceGraphRebind' IS NULL
+   AND (root.checkpoint->'sourceWrites' IS NULL OR root.checkpoint->'sourceWrites'='[]'::jsonb)
    AND freeholder_source_erasure_scope_complete(member.request_id) AND graph.state='invalidated' AND graph.plan_digest IS NULL AND graph.lease_token IS NULL
    AND NOT freeholder_source_upload_held(member.run_id,member.upload_id)
    AND NOT EXISTS(SELECT 1 FROM import_source_batches batch WHERE batch.graph_id=graph.id)
    AND NOT EXISTS(SELECT 1 FROM import_source_entries entry WHERE entry.graph_id=graph.id AND entry.target_page_id IS NOT NULL)
    AND NOT EXISTS(SELECT 1 FROM import_source_media media WHERE media.graph_id=graph.id AND (media.asset_id IS NOT NULL OR media.digest IS NOT NULL OR media.bytes IS NOT NULL OR media.source_key_digest IS NULL))
+   -- An indexed uploaded graph must have actual accepted original PUTs, each
+   -- with matching accepted DELETE evidence and a durable retirement mark.
+   AND NOT EXISTS(SELECT 1 FROM import_source_erasure_objects original WHERE original.request_id=member.request_id AND original.run_id=member.run_id AND original.upload_id=member.upload_id
+    AND NOT EXISTS(SELECT 1 FROM media_object_writes original_put WHERE original_put.key_digest=original.key_digest
+      AND original_put.operation_kind='put' AND original_put.state='accepted' AND original_put.deleted_at IS NOT NULL
+      AND EXISTS(SELECT 1 FROM media_object_writes deletion WHERE deletion.key_digest=original.key_digest
+        AND deletion.storage_namespace=original_put.storage_namespace AND deletion.operation_kind='delete' AND deletion.state='accepted')))
    AND NOT EXISTS(SELECT 1 FROM import_source_erasure_objects original WHERE original.request_id=member.request_id AND original.run_id=member.run_id AND original.upload_id=member.upload_id
     AND (EXISTS(SELECT 1 FROM media_objects reservation WHERE encode(sha256(convert_to(reservation.key,'UTF8')),'hex')=original.key_digest)
       OR EXISTS(SELECT 1 FROM media_object_writes physical WHERE physical.key_digest=original.key_digest AND (physical.state IN ('unverified','started','unknown') OR physical.operation_kind='put' AND physical.deleted_at IS NULL)))))

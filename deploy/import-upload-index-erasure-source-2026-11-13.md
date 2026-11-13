@@ -99,3 +99,22 @@ The four locale conflicts were adjacent additions: structural three-way merge
 preserved all current financial and import strings, with zero value conflicts.
 This supersedes the provisional881a composition above. The combined source
 still has no compiler or native qualification and no database has been changed.
+
+A further source-only refinement supports the actual first-captured-then-rollback
+case without treating rollback as proof. The immutable first graph ID/generation/
+revision and chunk set remain authority after the mutable raw descriptor is
+released. Positive later upload aliases, rebinds, unresolved source writers,
+canonical holds and accepted ownership still refuse minimization. Each indexed
+original chunk additionally requires an actual accepted PUT with retirement mark
+and a matching accepted DELETE in that original storage namespace; all unknown
+or live physical facts still refuse. This does not backfill historical scope.
+
+The existing WXR and ZIP resumption-privacy cases now place their synthetic
+private address in the first 500 actually indexed titles, assert exact initial
+captured graph membership, preserve IDs/ranges/digests through reduction, and
+require private metadata absence plus completed receipt only after the actual
+original accepted PUT/DELETE facts. They use a real fresh owner session. These
+stronger normal81 controls are unrun; ordinary79 containment remains pending as
+proved by root's separate release branch. No new81 failure or AFTER pass is claimed.
+
+Current unpublished81 source SHA after this refinement: `8c65864ecf4c0234257fad94fcb35d0c072a9a02f0354b42a683850868cc4934`.
