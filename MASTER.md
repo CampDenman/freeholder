@@ -6501,11 +6501,16 @@ deployments are portable, testable and incapable of silently forking the truth.
   fullNode22 types, seven-file lint and108 pure controls pass (22 native/model
   skips). Full current80 composition, NEW eight-model SQL/native, old-runtime
   and recovery qualification remain pending.
-  A new isolated source composition now replays only the47 owned Crawl paths
-  onto exactcurrent81e buyer-terms80; all ordinary0–80/journal files and881aSQL
-  remain byte-identical. Explicit81 stays466931a7, unregistered and unapplied.
-  This composed candidate still requires source, NEW eight-model SQL and actual
-  indexed-input qualification; preserved v6/c623 and its clone are untouched.
+  Exacte5dfa782 now composes only the47 owned Crawl paths on current81e/
+  buyer-terms881a, preserving its full ordinary0–80 prefix. FullNode22 types,
+  40-file lint and108 pures pass (22 native/model skips). A NEW normal0–80/881a
+  plus explicit unjournalled81/466931a7 diagnostic and8 read-only models pass;
+  the unchanged278e indexed oracle passes12.00s with exact1-source/2-response
+  completion, zero marker/projection copies and actual PUT2/DELETE2 retirement.
+  Independent TCP/runner/client drain passes. Queue delivery remains disabled;
+  registered bodies used actual durable payloads. Old-runtime/held/late/recovery/
+  expiry and full501 acceptance remain required. Preserved v6/c623 and its
+  actual false-completed clone are untouched;81 remains unregistered.
   No ordinary81, above500-entry or privacy-completion claim is made; this item
   remains open. See `deploy/import-http-graph-source-2026-11-12.md`.
   Original-hold snapshot source increment 2026-11-12: an actual new HTTP-crawl

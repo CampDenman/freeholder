@@ -305,3 +305,44 @@ model column/type/nullability/default cases, schema/trigger verification and
 independent client drain. The unchanged278e indexed-input oracle follows only
 under a separate native grant. Existing v6/c623 and its actual false-completed
 clone remain untouched; no ordinary81, cutover or stable claim follows.
+
+## Current881a indexed-input repair qualification
+
+Exact e5dfa782 passed full composed Node22 types8GB, all40 owned changed-TS
+lint files and108 affected pure controls9.15s, with22 explicit native/model
+skips. All source runners exited and independent process inspection was empty.
+
+A NEW v7 database applied the actual normal0–80/881a prefix, followed by
+explicit UNJOURNALLED81/466931a7. Eight read-only Drizzle model cases passed
+590ms, all four new capture/completion guards were present and the journal
+stayed81 entries/max1793310000060. Separate final profile/journal inspection
+closed its connection before an admin check found no remaining clients.
+
+The original278e indexed-input oracle is byte-identical and now passes12.00s
+on this exact composed product/schema. Independent inspection found actual
+v1 completion with1 original source-generation and2 response members, exact
+counts and complete=true; zero marker/unminimized entry rows; fixed redacted
+header/catalog stubs; null root origin and original source URLs;2 minimized
+responses; zero reservations; and2 accepted retired PUTs plus2 accepted retired
+DELETEs. The request is completed/raw scope erased/pending0 after actual input
+projection retirement. The TCP server refused its final connection and every
+runner/PostgreSQL client drained.
+
+Workers remained disabled: three actual durable jobs still have queue state
+created while their registered bodies were invoked with real recorded payloads.
+This proves the body/receipt lifecycle, not automatic queue delivery. An initial
+read-only inspection used the wrong queue relation and stopped; its source is
+preserved. Correcting only that lookup to pgboss.job completed the read-only
+facts/drain check without a native rerun or data change.
+
+Evidence: `/tmp/freeholder-crawle5dfa-{types,lint,source-controls}.log`;
+`/tmp/freeholder-crawl81-current-terms-syntax-v7-20261112.json`;
+`/tmp/freeholder-crawl81-current-terms-eight-model-parity-v7.log`;
+`/tmp/freeholder-crawl81-current-terms-v7-drain-20261112.json`; and
+`/tmp/freeholder-crawl81-index-payload-after-v7-{native-one.log,classification.json}`.
+The disposable profile is explicitly jitoff/fsyncon/recoveryfalse.
+
+The genuine c623/v6 BEFORE and its populated19-table/schema-matching clone
+remain unchanged. Held/late-positive/old-runtime/empty/recovery/expiry boundaries,
+above500-entry shared-media lifecycle, owner UI/SDK and normal81 qualification
+remain required. No C3.47, provider, cutover or stable sign-off is supplied.
