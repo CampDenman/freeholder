@@ -13948,10 +13948,19 @@ whatever is best for the people using the site.
   Full types, whole-tree lint with three precise corrected diagnostics, all44
   static plus13 affected source files (498 pass/26 explicit DB skips), license,
   notes and plan gates pass. Newunpublished80 SHA3a686245 preserves the entire
-  e783 prefix and all published migration/journal entries. It has NOT been
-  applied to a database. Actual ten-model normal migration, combined native,
+  e783 prefix and all published migration/journal entries. A NEW V12 normal
+  0–80 migration passed6.158s with81 journal entries,11 actual model definitions
+  and45 required tables/guards. The V12 fixture-only form-body failure remains
+  preserved. After the precise mock/producer teardown fix03f71deb, a NEW V13
+  passed all five actual legacy read lifecycle controls (29.571s total), each
+  with independent UTC ledger and empty client inventory. Exact original
+  create-platform/protocol fields remainNULL; no merchant request is invented.
+  New source composition with948c4544 and4064c081/4e5d05d7 adds stop/current
+  tails after complete3a; unpublished80 SHA1e7fc9e0 is UNQUALIFIED/unapplied.
+  Root witnesses include exact current-receipt children and bounded counts.
+  Current cash/native regressions, recovery, amendments/future invoice lineage,
   upgrade/SDK/browser/provider acceptance remain required; model admission is
-  still closed. Newer stop/projection slices are excluded. Exact limits:
+  still closed. Exact limits:
   `deploy/current-commercial80-source-2026-11-13.md`.
   Original bank-refund current-state isolated draft 2026-11-12: source now
   retains repeated capture occurrences, exact original-resource read/finish

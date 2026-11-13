@@ -12,8 +12,9 @@ Unpublished schema80 is now SHA-256
 `3a6862457f9342fe7ad109bc83c7a270ef5ac535a9b1639a459c23bc8a9c997f`.
 It preserves the entire prior e783 bank schema byte prefix, then appends the
 owned auxiliary-kind and legacy-read fragments. Published0–79 and their
-journal entries are unchanged. No database has yet been migrated to this hash;
-a NEW named normal0–80 database and actual ten-model parity remain required.
+journal entries are unchanged. A NEW named normal0–80 database passed in6.158s with all81 journal
+entries, eleven actual model definitions (ten new plus the modified provider
+operation kind),45 required tables/guards and a drained client inventory.
 Prior V10/V11 proofs and all populated/golden databases stay untouched.
 
 The new financial witness composition follows actual refund→payment→invoice
@@ -22,7 +23,16 @@ Foreign invoice reads stay outside that subject's witness. Seller profile
 witnesses also include actual frozen scopes and provider operation/resource
 children before a charge exists. A prepared fifth native control checks
 foreign-versus-owned legacy read changes and canonical invoice/contact rows.
-Those new lifecycle native controls have not run.
+At source03f71deb, all five actual legacy lifecycle controls passed individually
+on the NEW V13 database:6.338/5.447/5.535/5.820/6.433s (29.571s total).
+They prove paused actual-wrapper completion, later-page fact retention,
+fabricated-finish refusal, no-I/O finish recovery and exact own-versus-foreign
+merge-undo ownership. Independent UTC ledgers and empty client inventories
+were checked after every case. The V12 fixture-only POST-body failure remains
+preserved; the mock now accepts actual URLSearchParams or serialized form
+input and teardown drains producers before closing the pool. Original
+create-platform/protocol fields remainNULL and no merchant request is invented.
+These are read-lifecycle proofs, not current-cash or provider acceptance.
 
 Source qualification completed at product checkpoints2b44d3d8/0ce0bb53 with
 metadata/test-only followups through27de23fc:
@@ -53,3 +63,26 @@ provider qualification. The newer legacy current-state/projection and
 schedule-only stop/amendment source slices are separate and not covered by
 this checkpoint. No enabled-model, independent C11.10 or final C11.17 sign-off
 is claimed.
+
+
+## Next source composition: original schedule stop and legacy current proof
+
+The separate source slices948c4544 and4064c081/4e5d05d7 are composed on03f71deb.
+Root ownership fingerprints now include the fourth legacy current-receipt
+child through exact original refund/read IDs, including the combined5,000-row
+bound. An empty current-child set preserves the existing fingerprint. A new
+actual-service control prepares and finishes the real read before merging,
+then adds only its authentic current receipt and checks refusal of undo with
+canonical invoice/contact ownership unchanged; it has not run.
+
+The assembler appends the two owned stop/current tails after the complete3a
+prefix. New unpublished80 SHA-256 is
+`1e7fc9e0223b5b24facdf18dbf3bd3fdb9d6a5c892f5138cf22d117e78d64547`.
+No prior published migration or journal entry changes. This new composition
+is unqualified and has not been applied to a database. It requires a NEW
+named normal0–80 database, actual model/guard parity, regression of all five
+bank projections after their shared-helper extraction, and the new current
+proof and schedule-stop controls. Durable next recovery, amendments, future
+invoice lineage, SDK/browser/upgrade and actual provider acceptance remain
+required. Old V12/V13 and all populated/golden databases are preserved. No
+model admission, stable release or C-item closure is supplied by this slice.

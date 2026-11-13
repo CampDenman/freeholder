@@ -9,13 +9,18 @@ import { createStripePayments } from "@/adapters/payments/stripe";
 import { db } from "@/core/db";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
-import { resolveContact } from "@/core/contacts/service";
+import { createContact, mergeContacts, resolveContact, undoContactMerge } from "@/core/contacts/service";
 import { ready } from "@/core/runtime";
+import { reconcileJobDeploymentAdmission, stopJobs } from "@/core/jobs";
 import { createDraftInvoice, createPayment, createRefund, issueInvoice, settlePayment } from "@/modules/invoicing/invoice-service";
 import { submitProviderRefund, processPaymentProviderEvents, retainPaymentProviderEvidence } from "@/modules/invoicing/payment-provider-service";
 import { getCustomerInvoice } from "@/modules/invoicing/customer-service";
 import { invoiceRefundStates } from "@/modules/invoicing/merchant-refund-bank-state-service";
 import { reconcileLegacyBankRefund } from "@/modules/invoicing/legacy-bank-current-service";
+import { inspectLegacyBankRefund } from "@/modules/invoicing/legacy-bank-read-service";
+import { completeLegacyBankCurrentRead } from "@/modules/invoicing/legacy-bank-current-state";
+import { invoiceMerchantDependencyFingerprints } from "@/modules/invoicing/merchant-payment-dependencies";
+import { merchantRefundDependencyFingerprints } from "@/modules/invoicing/merchant-refund-dependencies";
 import { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBankCurrentReceipts } from "@/modules/invoicing/legacy-bank-read-schema";
 import { merchantRefundRequests } from "@/modules/invoicing/merchant-refund-schema";
 import { invoices, payments, refunds } from "@/modules/invoicing/schema";
@@ -25,7 +30,7 @@ const signal = () => { let resolve!: () => void; const promise = new Promise<voi
 const secret = "whsec_legacy_current_native_fixture_only";
 
 describe.runIf(hasDatabase)("authentic legacy bank current money80", { timeout: 60000 }, () => {
-  beforeAll(ready, 60000); beforeEach(truncateSpine); afterEach(() => vi.restoreAllMocks()); afterAll(closeDb);
+  beforeAll(ready, 60000); beforeEach(truncateSpine); afterEach(() => vi.restoreAllMocks()); afterAll(async () => { await stopJobs(); await reconcileJobDeploymentAdmission(); await closeDb(); });
   async function setup(pausePost = false) {
     const buyer = (await resolveContact.call({ email: "fictional-legacy-current@example.test" }, OWNER)).contact;
     const actor = { ...CUSTOMER, userId: randomUUID() };
@@ -45,7 +50,9 @@ describe.runIf(hasDatabase)("authentic legacy bank current money80", { timeout: 
       paths.push(`${init.method} ${url.pathname}`); expect(new Headers(init.headers).get("stripe-account")).toBeNull();
       if (url.pathname === "/v1/account") return Response.json({ id: "acct_CurrentLegacyReadOnly" });
       if (url.pathname === "/v1/refunds" && init.method === "POST") {
-        const form = new URLSearchParams(String(init.body)); expect(form.get("payment_intent")).toBe("pi_OriginalLegacyCurrent"); expect(form.get("amount")).toBe("400");
+        const form = init.body instanceof URLSearchParams ? init.body : typeof init.body === "string" ? new URLSearchParams(init.body) : undefined;
+        if (!form) throw new Error("The actual refund POST must carry a form body.");
+        expect(form.get("payment_intent")).toBe("pi_OriginalLegacyCurrent"); expect(form.get("amount")).toBe("400");
         posts.push(new Headers(init.headers).get("idempotency-key")!); const actual = resource(); entered.resolve(); if (pausePost) await release.promise;
         return Response.json(actual);
       }
@@ -80,7 +87,7 @@ describe.runIf(hasDatabase)("authentic legacy bank current money80", { timeout: 
       const events = await retainPaymentProviderEvidence("stripe", parsed);
       await processPaymentProviderEvents.call({ provider: "stripe", events, receivedAt, bodySha256: createHash("sha256").update(body).digest("hex") }, { kind: "system" });
     }
-    return { payment, invoice, refund, factory, pending, release, paths, posts, reconcile, balances, signedStatus,
+    return { buyer, payment, invoice, refund, factory, pending, release, paths, posts, reconcile, balances, signedStatus,
       setStatus: (value: BankStatus) => { status = value; }, pauseNextRead: () => { pauseRead = true; return { entered: readEntered, release: readRelease }; } };
   }
 
@@ -135,5 +142,38 @@ describe.runIf(hasDatabase)("authentic legacy bank current money80", { timeout: 
       actual.release.resolve(); expect(await actual.pending).toHaveProperty("value");
       expect(await actual.reconcile()).toMatchObject({ status: "succeeded", applied: true }); await actual.balances(400); expect(actual.posts).toHaveLength(1);
     } finally { actual.release.resolve(); await actual.pending; }
+  });
+
+  it("refuses undo when only its owned current receipt arrives after an already finished read", async () => {
+    const actual = await setup();
+    const read = await inspectLegacyBankRefund.call({ refundId: actual.refund.id }, OWNER);
+    expect((await db().select().from(legacyBankReadFinishes))[0]).toMatchObject({ readId: read.readId, outcome: "returned" });
+    expect(await db().select().from(legacyBankCurrentReceipts)).toHaveLength(0);
+    const alias = await createContact.call({ name: "Original legacy current buyer alias", email: "fictional-legacy-current-alias@example.test" }, OWNER);
+    const merge = await mergeContacts.call({ survivingId: alias.id, duplicateId: actual.buyer.id }, OWNER);
+    const [canonicalInvoice] = await db().select().from(invoices).where(eq(invoices.id, actual.invoice.id));
+    const [canonicalContact] = await db().select().from(contacts).where(eq(contacts.id, alias.id));
+    const before = await db().transaction(async tx => ({
+      invoice: await invoiceMerchantDependencyFingerprints(tx, [actual.invoice.id]),
+      refund: await merchantRefundDependencyFingerprints(tx, { paymentIds: [actual.payment.id], subscriptionChargeReceiptIds: [] }),
+    }));
+    const paths = actual.paths.length;
+    const receipt = await completeLegacyBankCurrentRead.call({ readId: read.readId }, { kind: "system" });
+    expect(receipt).toMatchObject({ status: "succeeded", requiresReview: false });
+    expect(actual.paths).toHaveLength(paths);
+    const after = await db().transaction(async tx => ({
+      invoice: await invoiceMerchantDependencyFingerprints(tx, [actual.invoice.id]),
+      refund: await merchantRefundDependencyFingerprints(tx, { paymentIds: [actual.payment.id], subscriptionChargeReceiptIds: [] }),
+    }));
+    expect(before.invoice?.has(actual.invoice.id)).toBe(true);
+    expect(after.invoice?.get(actual.invoice.id)).not.toBe(before.invoice?.get(actual.invoice.id));
+    expect(after.refund.incomplete).toBe(false);
+    const current = after.refund.entries.filter(entry => entry.table === "legacy_bank_current_receipts");
+    expect(current).toHaveLength(1); expect(current[0]?.id).toBe(receipt.receiptId);
+    expect(after.refund.entries.filter(entry => entry.table !== "legacy_bank_current_receipts")).toEqual(before.refund.entries);
+    expect(await failure(undoContactMerge.call({ operationId: merge.mergeOperationId }, OWNER))).toMatchObject({ code: "conflict" });
+    expect((await db().select().from(invoices).where(eq(invoices.id, actual.invoice.id)))[0]).toEqual(canonicalInvoice);
+    expect((await db().select().from(contacts).where(eq(contacts.id, alias.id)))[0]).toEqual(canonicalContact);
+    await actual.balances(400); expect(actual.posts).toHaveLength(1);
   });
 });
