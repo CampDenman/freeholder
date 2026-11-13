@@ -16,6 +16,7 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { recordMerchantPaymentObservation } from "./merchant-payment-observations";
 import { payments,invoices } from "./schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import { readControlledCashApplicationBank } from "./controlled-cash-application-bank";
 const inputSchema=z.object({collectionId:z.uuid(),receiptIds:z.array(z.uuid()).min(1).max(5000),requiredProtocol:z.literal(CONTROLLED_COLLECTION_PROTOCOL)}).strict();
 const authorityResult=z.object({allowed:z.literal(true),revision:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 const paymentResult=z.object({id:z.uuid(),invoiceId:z.uuid(),provider:z.literal("stripe"),method:z.literal("provider_schedule"),amountMinor:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),currency:z.string(),status:z.enum(["created","processing","succeeded"]),providerRef:z.string().nullable()});
@@ -78,6 +79,7 @@ export async function applyControlledReceiptBatch(ctx:ServiceContext,value:z.inp
   // the next actual current revision before its FIRST write; never pretend a
   // bank-proof revision remained unchanged across our own canonical writes.
   const first=authorityResult.parse(await ctx.callAsSystem(authority,{collectionId:input.collectionId,receiptId:item.receiptId,requiredProtocol:CONTROLLED_COLLECTION_PROTOCOL}));
+  const bank=await readControlledCashApplicationBank(ctx,{collectionId:input.collectionId,receiptId:item.receiptId});
   const current=authorityResult.parse(await ctx.callAsSystem(authority,{collectionId:input.collectionId,receiptId:item.receiptId,requiredProtocol:CONTROLLED_COLLECTION_PROTOCOL}));if(current.revision!==first.revision)refuse();
   if(result.length===plan.applied.length&&current.revision!==preflight.find(row=>row.receiptId===item.receiptId)?.revision)refuse();
   await ctx.tx.execute(sql`select set_config('freeholder.controlled_cash_application_v1',${JSON.stringify({collectionId:input.collectionId,receiptId:item.receiptId,revision:current.revision})},true)`);
@@ -87,11 +89,10 @@ export async function applyControlledReceiptBatch(ctx:ServiceContext,value:z.inp
   const[route]=await ctx.tx.select().from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.paymentId,created.id)).limit(1);
   if(!route||route.originalChargeReceiptId!==item.receiptId||route.subscriptionId!==source.parent.id||route.providerInvoiceRef!==source.binding.providerInvoiceRef)refuse();
   const evidence=observed.get(item.receiptId);if(!evidence)refuse();
-  await ctx.callAsSystem(recordMerchantPaymentObservation,{paymentId:created.id,providerEventRef:`subscription-cash:${evidence.id}`,evidence:{providerApiVersion:"2026-10-28.endive",
-   providerRef:evidence.providerPaymentIntentRef,status:"succeeded",amountMinor:evidence.amountMinor,currency:evidence.currency,providerPlatformAccountId:evidence.providerPlatformAccountId,
-   providerAccountId:evidence.chargeAccountId??undefined,destinationAccountId:evidence.actualDestinationAccountId??undefined,settlementMerchantAccountId:evidence.actualSettlementMerchantAccountId??undefined,
-   customerChargeVerified:evidence.customerChargeVerified,merchantRouteVerified:evidence.merchantRouteVerified,providerChargeRef:evidence.providerChargeRef??undefined}});
-  const settled=paymentResult.parse(await ctx.callAsSystem(settle,{id:created.id,providerRef:evidence.providerPaymentIntentRef,processedAt:evidence.createdAt}));
+  if(bank.receiptId!==item.receiptId||bank.paymentEvidence.providerRef!==evidence.providerPaymentIntentRef||bank.paymentEvidence.providerChargeRef!==evidence.providerChargeRef
+   ||bank.paymentEvidence.amountMinor!==evidence.amountMinor||bank.paymentEvidence.currency!==evidence.currency)refuse();
+  await ctx.callAsSystem(recordMerchantPaymentObservation,{paymentId:created.id,providerEventRef:`controlled-cash-bank:${bank.observationId}:${item.receiptId}`,evidence:bank.paymentEvidence});
+  const settled=paymentResult.parse(await ctx.callAsSystem(settle,{id:created.id,providerRef:evidence.providerPaymentIntentRef,processedAt:bank.processedAt}));
   if(settled.id!==created.id||settled.status!=="succeeded"||settled.providerRef!==evidence.providerPaymentIntentRef||settled.amountMinor!==item.amountMinor||settled.currency!==item.currency)refuse();
   result.push({receiptId:item.receiptId,paymentId:settled.id});
  }

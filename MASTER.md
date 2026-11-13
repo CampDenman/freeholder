@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled current-bank consumer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): the isolated future writer now consumes genuine
+ec57 latest receipt-owned finished inspection plus authenticated original
+controlled capture and actual canonical fee allocation. Unknown/returned/
+disputed/foreign/FX fee or recipient facts refuse; neutral primary flags alone
+never become settlement proof. All28 new pure cases are prepared and UNRUN.
+Root0e9d/af8 and the3f raw-resolution digest are preserved. No authority or
+writer is registered: genuine full15 observational admission/context, batch
+proof, same-transaction delta, callback guards and actual native controls are
+still required. The six future models stay excluded from current142; no new
+SQL assembly/model/journal, deployment or stable state changed. See
+`deploy/controlled-cash-inspection-consumer82-source-20261113.md`.
+
 Canonical controlled receipt-batch writer source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): an isolated UNREGISTERED ordinary writer preserves
 exact actual receipt/origin/FK identities, full-batch no-write authority checks,
