@@ -109,11 +109,13 @@ for (const kind of ["wordpress-wxr", "archive"] as const) describe.runIf(hasData
       await db().update(dataRequestArtifacts).set({ body: { ...retainedArtifact!.body as Record<string,unknown>, note: "Changed after the original immutable checksum" } }).where(eq(dataRequestArtifacts.id,retainedArtifact!.id));
       expect(erasureArtifactIsIntact((await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.id,retainedArtifact!.id)))[0])).toBe(false);
     }
+    const artifactBeforeAttempt = (await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,first.id)))[0];
     const next = await createDataRequest.call({ contactId: target.id,request: { kind: "erasure" } },owner);
     await verifyDataRequest.call({ id:next.id,method:"Actual separate request identity verification" },owner);
     await expect(fulfillDataRequest.call({ id:next.id,confirmation:"ERASE" },owner)).rejects.toMatchObject({ code:"conflict" });
     expect(await captured(next.id)).toEqual({ header:[],members:[],objects:[] });
     expect(await captured(first.id)).toEqual(firstCapture);
+    expect((await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,first.id)))[0]).toEqual(artifactBeforeAttempt);
     expect(await db().select().from(importSourceEntries).where(eq(importSourceEntries.graphId,original.graph.id))).toEqual(originalBefore);
     expect(await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.key,original.key))).toEqual(originalWrites);
     expect(await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,next.id))).toEqual([]);
