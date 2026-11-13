@@ -9,7 +9,7 @@ import { storage, resetStorageForTests } from "@/adapters/storage";
 import { resolveContact } from "@/core/contacts/service";
 import { contacts } from "@/core/contacts/schema";
 import { createDataRequest, verifyDataRequest, fulfillDataRequest, addRetentionException, removeRetentionException } from "@/core/privacy/service";
-import { dataRequests } from "@/core/privacy/schema";
+import { dataRequests, dataRequestArtifacts } from "@/core/privacy/schema";
 import { deleteUnownedPendingObjects } from "@/core/media/object-ledger";
 import { importSourceEntries, importSourceGraphs } from "@/core/plugins/schema";
 import { getJob, stopJobs, type JobExecutionContext } from "@/core/jobs";
@@ -28,9 +28,9 @@ type SourceKind = "wordpress-wxr" | "archive";
 function source(kind: SourceKind) {
   if (kind === "archive") return originalStaticZip(Array.from({ length: 501 }, (_, index) => ({
     path: `site/reader/page-${index}.html`,
-    body: `<html><head><title>Fictional page ${index}</title></head><body><p>Article ${index}.</p>${index === 500 ? `<!-- Original private reader metadata ${EMAIL}. -->` : ""}</body></html>`,
+    body: `<html><head><title>${index === 0 ? EMAIL : `Fictional page ${index}`}</title></head><body><p>Article ${index}.</p>${index === 500 ? `<!-- Original private reader metadata ${EMAIL}. -->` : ""}</body></html>`,
   })));
-  return new TextEncoder().encode(`<rss xmlns:wp="urn:wordpress" xmlns:content="urn:content"><channel><title>Fictional reader source</title><link>${ORIGIN}</link>${Array.from({ length: 501 }, (_, i) => `<item><title>Fictional reader page ${i}</title><link>${ORIGIN}/reader/page-${i}</link><wp:post_id>${i + 1}</wp:post_id><wp:post_type>${i === 500 ? "post" : "page"}</wp:post_type><wp:status>publish</wp:status><content:encoded><![CDATA[<p>Fictional article ${i}.</p>]]></content:encoded>${i === 500 ? `<wp:comment><wp:comment_id>7001</wp:comment_id><wp:comment_author>Fictional reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Fictional private original comment.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>` : ""}</item>`).join("")}</channel></rss>`);
+  return new TextEncoder().encode(`<rss xmlns:wp="urn:wordpress" xmlns:content="urn:content"><channel><title>Fictional reader source</title><link>${ORIGIN}</link>${Array.from({ length: 501 }, (_, i) => `<item><title>${i === 0 ? EMAIL : `Fictional reader page ${i}`}</title><link>${ORIGIN}/reader/page-${i}</link><wp:post_id>${i + 1}</wp:post_id><wp:post_type>${i === 500 ? "post" : "page"}</wp:post_type><wp:status>publish</wp:status><content:encoded><![CDATA[<p>Fictional article ${i}.</p>]]></content:encoded>${i === 500 ? `<wp:comment><wp:comment_id>7001</wp:comment_id><wp:comment_author>Fictional reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Fictional private original comment.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment>` : ""}</item>`).join("")}</channel></rss>`);
 }
 async function staged(kind: SourceKind) {
   const reader = await resolveContact.call({ email: EMAIL }, OWNER), run = await startImport.call({ origin: ORIGIN, kind }, OWNER), bytes = source(kind);
@@ -57,7 +57,9 @@ for (const kind of ["wordpress-wxr", "archive"] as const) describe.runIf(hasData
     finally { release(); spy.mockRestore(); }
     expect(await indexing).toMatchObject({ code: "conflict" });
     expect((await db().select().from(importSourceGraphs))[0]).toMatchObject({ state: "invalidated", leaseToken: null });
-    expect(await db().select().from(importSourceEntries)).toHaveLength(500);
+    const privateIndex = await db().select().from(importSourceEntries);
+    expect(privateIndex).toHaveLength(500);
+    expect(JSON.stringify(privateIndex)).toContain(EMAIL);
     expect(await failure(commitImport.call({ id: original.run.id, graph: original.initial.graph }, OWNER))).toMatchObject({ code: "conflict" });
     expect(await db().select().from(blogReaderComments)).toEqual([]);
     expect((await db().select().from(contacts).where(eq(contacts.id, original.reader.contact.id)))[0]!.email).toBeNull();
@@ -66,9 +68,17 @@ for (const kind of ["wordpress-wxr", "archive"] as const) describe.runIf(hasData
     const job = await getJob(eraseImportSourceObjects.name, source.pendingJobs![0]!);
     await expect(eraseImportSourceObjects.handler(job!.data, context(job!.id))).rejects.toThrow(/ownership|unresolved/);
     expect(await rollbackImport.call({ id: original.run.id, graph: original.initial.graph }, OWNER)).toMatchObject({ status: "rolled_back" });
-    await eraseImportSourceObjects.handler(job!.data, context(job!.id));
+    // Rollback stops publication; it does not erase immutable private index
+    // rows. The raw bytes can retire while their exact receipt stays pending.
+    await expect(eraseImportSourceObjects.handler(job!.data, context(job!.id))).rejects.toThrow(/private normalized import index/);
     expect(await storage().get(original.key)).toBeUndefined();
-    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, original.request.id)))[0]!.status).toBe("completed");
+    const [pendingRequest] = await db().select().from(dataRequests).where(eq(dataRequests.id, original.request.id));
+    expect(pendingRequest).toMatchObject({ status: "in_progress", fulfilledAt: null });
+    expect(pendingRequest!.resolution).toContain("private normalized import index");
+    const [current] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, original.request.id));
+    expect(receipt.parse(current?.body).outcomes.find(item => item.scope === "imports.readerSources"))
+      .toMatchObject({ outcome: "pending", pendingJobs: [job!.id] });
+    expect(JSON.stringify(await db().select().from(importSourceEntries))).toContain(EMAIL);
     expect(await db().select().from(blogReaderComments)).toEqual([]);
   });
   it("keeps the exact held original after graph rollback and releases it only after the named hold is removed", async () => {

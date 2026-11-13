@@ -73,3 +73,16 @@ standalone inspector syntax error was corrected before it connected; no
 native test was rerun as a result. Private metadata minimization remains
 unfinished: this is a completion containment proof, not a full-erasure pass.
 These checks do not supply C11.10 independent review.
+
+
+The first protected CI head `ea222dfc` failed two resumption privacy cases
+(WXR and ZIP) in shard15; 207 cases in that shard passed. Those older cases
+expected completion after rollback even though 500 unaccepted normalized
+entries remained. The guard correctly refused. The cases now place the
+actual private marker in an indexed early title and explicitly require raw
+chunk absence, retained marker, unchanged pending job, NULL fulfilment time
+and recovery after rollback. No product guard, assertion timeout or physical
+proof was relaxed. Agent coding review agreed that rollback is not index
+minimization. The changed fixture passes incremental typecheck and lint;
+its four native cases are pending. This is a deliberate stronger privacy
+contract, not a claim of full minimization.
