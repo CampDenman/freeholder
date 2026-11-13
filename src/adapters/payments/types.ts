@@ -312,6 +312,63 @@ export interface PaymentWebhookRequest extends RawProviderRequest {
     metadata: Record<string, unknown>;
   }) => Promise<MerchantScheduleWebhookScope | null>;
 }
+/** A fully accepted, dated original period; adapters verify the actual price
+ * and calendar rather than accepting provider metadata as monetary proof. */
+export interface MerchantProviderPhase {
+  termsId: string; profileId: string; profileVersion: number;
+  start: string; end: string; taxOccurredAt: string;
+  currency: string; interval: "day" | "week" | "month" | "year"; intervalCount: number;
+  periodAmountMinor: number; setupFeeMinor: number; taxMinor: number; totalMinor: number;
+  applicationFeeMinor: number; siteFeeBps: number; taxQuoteDigest: string; phaseDigest: string;
+}
+export interface MerchantPhaseScheduleScope extends MerchantChargeScope {
+  providerPlatformAccountId: string;
+  providerScheduleApiVersion: "2026-10-28.endive";
+  subscriptionId: string;
+  providerCustomerRef: string;
+}
+export interface MerchantPhaseScheduleAcknowledgment {
+  providerScheduleRef: string;
+  /** A not_started schedule really may have no underlying subscription yet. */
+  providerSubscriptionRef?: string | null;
+  providerCustomerRef?: string | null;
+}
+export interface MerchantPhaseScheduleInventory extends MerchantPhaseScheduleAcknowledgment {
+  providerSubscriptionRef: string | null; providerCustomerRef: string;
+  operationId: string; requestDigest: string;
+  providerPlatformAccountId: string; chargeAccountId: string | null;
+  recipientAccountId: string; settlementMerchantAccountId: string;
+  providerApiVersion: "2026-10-28.endive";
+  status: "active" | "not_started" | "completed" | "canceled" | "released";
+  endBehavior: "cancel"; complete: true; currentPhaseStart: string | null;
+  phases: Array<MerchantProviderPhase & { providerPriceRef: string }>;
+}
+export interface MerchantPhaseScheduleRequest extends MerchantPhaseScheduleScope {
+  operationId: string; requestDigest: string; idempotencyKey: string;
+  providerMethodRef: string; providerProductRef: string;
+  phases: MerchantProviderPhase[];
+  /** The original caller commits this physical ACK before any auxiliary GET. */
+  onResourceAcknowledged: (actual: MerchantPhaseScheduleAcknowledgment) => Promise<void>;
+}
+export interface MerchantPhaseScheduleUpdateRequest extends MerchantPhaseScheduleRequest {
+  providerScheduleRef: string; previous: MerchantPhaseScheduleReadRequest;
+}
+export interface MerchantPhaseScheduleReadRequest extends MerchantPhaseScheduleScope {
+  operationId: string; requestDigest: string; providerScheduleRef: string;
+  providerMethodRef: string; providerProductRef: string; phases: MerchantProviderPhase[];
+}
+
+export interface MerchantPhaseProductRequest extends Omit<MerchantPhaseScheduleScope, "providerCustomerRef"> {
+  operationId: string; name: string; idempotencyKey: string;
+  onProductAcknowledged: (actual: { providerProductRef: string }) => Promise<void>;
+}
+export interface MerchantPhaseProductReadRequest extends Omit<MerchantPhaseProductRequest, "idempotencyKey" | "onProductAcknowledged"> { providerProductRef: string; }
+
+export interface MerchantPhaseScheduleStopRequest extends MerchantPhaseScheduleScope {
+  providerScheduleRef: string;
+  onStopped: (actual: { providerScheduleRef: string; providerSubscriptionRefs: string[]; linkedInventoryComplete: boolean; state: "canceled" | "completed" | "released"; source: "readback" | "cancel_ack" }) => Promise<void>;
+}
+
 export interface MerchantScheduleInvoiceInventory {
   state: "paused" | "cancelled";
   invoices: Array<{ providerInvoiceRef: string; state: "paid" | "void" | "draft" | "open" | "uncollectible" }>;
@@ -541,6 +598,13 @@ export interface PaymentAdapter {
   pauseMerchantSchedule?(request: MerchantScheduleResource & { idempotencyKey: string; onPaused: (actual: { providerSubscriptionRef: string; state: "paused" }) => Promise<void> }): Promise<void>;
   cancelMerchantSchedule?(request: MerchantScheduleLocator & { providerCustomerRef?: string; onCancelled: (actual: { providerSubscriptionRef: string; state: "cancelled"; source: "readback" | "delete_ack" }) => Promise<void> }): Promise<void>;
   inspectMerchantScheduleInvoices?(request: MerchantScheduleResource): Promise<MerchantScheduleInvoiceInventory>;
+  /** NEW original phase protocol; optional until its durable admission is enabled. */
+  createMerchantPhaseProduct?(request: MerchantPhaseProductRequest): Promise<{ providerProductRef: string }>;
+  inspectMerchantPhaseProduct?(request: MerchantPhaseProductReadRequest): Promise<{ providerProductRef: string }>;
+  createMerchantPhaseSchedule?(request: MerchantPhaseScheduleRequest): Promise<MerchantPhaseScheduleInventory>;
+  updateMerchantPhaseSchedule?(request: MerchantPhaseScheduleUpdateRequest): Promise<MerchantPhaseScheduleInventory>;
+  inspectMerchantPhaseSchedule?(request: MerchantPhaseScheduleReadRequest): Promise<MerchantPhaseScheduleInventory>;
+  cancelMerchantPhaseSchedule?(request: MerchantPhaseScheduleStopRequest): Promise<void>;
   updateRecurringSchedule(request: RecurringScheduleUpdateRequest): Promise<RecurringScheduleResult>;
   cancelRecurringSchedule(request: PaymentAccountScope & { providerRef: string; idempotencyKey: string }): Promise<void>;
   verifyWebhook(request: PaymentWebhookRequest): Promise<readonly PaymentProviderEvent[]>;
