@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: nullable raw facts remain distinct from absent provider effects.
 import { z } from "zod";
+import { STRIPE_REFUND_REFERENCE } from "@/adapters/payments/stripe-refund-reference";
 const ref = (prefix: string) => z.string().regex(new RegExp(`^${prefix}_[A-Za-z0-9_]+$`)).max(200);
 const minor = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), currency = z.string().regex(/^[A-Z]{3}$/);
 export const merchantReturnedCashEvidenceSchema = z.object({
@@ -9,7 +10,7 @@ export const merchantReturnedCashEvidenceSchema = z.object({
   paymentProviderRef: ref("pi"), providerChargeRef: ref("ch"), amountMinor: minor, currency, paymentIntentStatus: z.string().min(1).max(100), amountCapturableMinor: minor.nullable(),
   chargePaymentProviderRef: ref("pi").nullable(), chargeAmountMinor: minor.nullable(), chargeCurrency: currency.nullable(),
   paid: z.boolean().nullable(), captured: z.boolean().nullable(), refunded: z.boolean().nullable(), amountRefundedMinor: minor.nullable(), refundsComplete: z.boolean(),
-  refunds: z.array(z.object({ providerRef: ref("re"), paymentProviderRef: ref("pi").nullable(), chargeRef: ref("ch").nullable(), amountMinor: minor.nullable(), currency: currency.nullable(),
+  refunds: z.array(z.object({ providerRef: z.string().regex(STRIPE_REFUND_REFERENCE).max(200), paymentProviderRef: ref("pi").nullable(), chargeRef: ref("ch").nullable(), amountMinor: minor.nullable(), currency: currency.nullable(),
     status: z.enum(["pending", "requires_action", "succeeded", "failed", "canceled"]).nullable() }).strict()).max(1000),
   feeFieldObserved: z.boolean(), fee: z.object({ providerRef: ref("fee"), originatingChargeRef: ref("ch").nullable(), accountId: ref("acct").nullable(),
     amountMinor: minor.nullable(), refundedMinor: minor.nullable(), currency: currency.nullable() }).strict().nullable(),

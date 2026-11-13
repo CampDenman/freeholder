@@ -3,6 +3,9 @@
 // One registry export for the convergent money module (C5.02-C5.05).
 
 import legacyBankFeedbackServices from "./legacy-bank-feedback-service";
+import originalCashRecoveryPhases from "./original-cash-recovery-service";
+import originalCashRecoveryServices from "./original-cash-recovery";
+import originalCashRecoveryRead from "./original-cash-recovery-read";
 import legacyBankReplacementServices from "./legacy-bank-replacement-service";
 import legacyBankReaderRecoveryServices from "./legacy-bank-reader-recovery";
 import legacyBankCurrentServices from "./legacy-bank-current-service";
@@ -62,6 +65,9 @@ import "./reporting";
 import "./funnel";
 
 export default [
+  ...originalCashRecoveryPhases,
+  ...originalCashRecoveryServices,
+  ...originalCashRecoveryRead,
   ...legacyBankReadServices,
   ...legacyBankCurrentServices,
   ...legacyBankReaderRecoveryServices,

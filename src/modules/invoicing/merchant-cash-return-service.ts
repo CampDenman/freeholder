@@ -189,6 +189,19 @@ export async function originalCashReturnedDisposition(ctx: ServiceContext, recei
   }
   return null;
 }
+/** Exact source receipt and observation, including an unapplied alternate PI
+ * of an existing payment. Never infer a canonical payment from equal money. */
+export async function verifiedOriginalCashReturnReceipt(ctx: ServiceContext, returnReceiptId: string, source: z.infer<typeof merchantRefundSource>) {
+  const cash = await originalMerchantRefundCash(ctx, source);
+  await lockMerchantRefundCash(ctx, cash);
+  const [resolution] = await ctx.tx.select().from(merchantUnappliedChargeResolutions).where(eq(merchantUnappliedChargeResolutions.id, returnReceiptId));
+  if (!resolution || resolution.paymentId !== cash.paymentId || resolution.originalObservationId !== cash.originalObservationId
+    || resolution.subscriptionChargeReceiptId !== cash.subscriptionChargeReceiptId || resolution.subscriptionChargeObservationId !== cash.subscriptionChargeObservationId
+    || resolution.originalPaymentRef !== cash.providerRef || resolution.providerPlatformAccountId !== cash.providerPlatformAccountId
+    || resolution.chargeAccountId !== cash.chargeAccountId) return false;
+  const current = await currentReturnProof(ctx, await originalInspection(ctx, resolution.inspectionId), resolution.returnObservationId);
+  return current !== null && current.own.digest === resolution.ownEvidenceDigest;
+}
 // Privately registered source prototype; still requires complete financial dispatch, alternate-writer SQL, privacy,
 // live native races and UI/API/MCP qualification are integrated on fresh80.
 

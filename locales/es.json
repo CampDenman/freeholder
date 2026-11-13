@@ -9091,5 +9091,22 @@
   "catalog.returns.replaceBankRefunds": "Reemplazar reembolsos originales fallidos",
   "catalog.saved.recoverReturnBankRefunds": "Reembolsos bancarios comprobados. La devolución queda abierta hasta confirmar cada parte.",
   "catalog.saved.replaceReturnBankRefunds": "Reembolsos fallidos comprobados y reemplazos autorizados enviados.",
-  "catalog.customerReturns.bankReviewHelp": "Su pago original sigue pagado y su abono se conserva. Estamos comprobando el reembolso con el banco. No vuelva a pagar."
+  "catalog.customerReturns.bankReviewHelp": "Su pago original sigue pagado y su abono se conserva. Estamos comprobando el reembolso con el banco. No vuelva a pagar.",
+  "cashRecovery.title": "Recuperación del dinero original",
+  "cashRecovery.back": "Volver a facturas",
+  "cashRecovery.help": "Revise el dinero original conservado y devuélvalo solo a quien lo pagó. Se conservan la factura, el pago y el abono existentes. Consulte al banco antes de otra acción.",
+  "cashRecovery.empty": "No hay dinero conservado pendiente de recuperación.",
+  "cashRecovery.pending": "La devolución original sigue pendiente.",
+  "cashRecovery.closed": "Se confirmó la devolución completa del dinero original.",
+  "cashRecovery.inspect": "Consultar recursos bancarios originales",
+  "cashRecovery.confirmReturn": "Autorizo devolver solo este dinero original, la comisión del sitio y la transferencia a su destinatario original.",
+  "cashRecovery.return": "Devolver dinero original",
+  "cashRecovery.error": "Esta acción necesita revisión. Los datos bancarios anteriores se conservan. Revise los recursos originales y los procesos pendientes.",
+  "cashRecovery.saved": "La acción de recuperación terminó. Consulte el resultado actual abajo.",
+  "cashRecovery.caller": "Proceso original: {host}, proceso {pid}",
+  "cashRecovery.live": "El proceso original sigue activo. Finalícelo o deténgalo antes de revisar el alojamiento.",
+  "cashRecovery.evidence": "Pruebas de detención en el alojamiento",
+  "cashRecovery.confirmStop": "Verifiqué que la operación original exacta se detuvo en su alojamiento.",
+  "cashRecovery.reviewStop": "Registrar revisión del alojamiento",
+  "cashRecovery.oldFeeHelp": "Este registro antiguo de comisión no conserva el inicio del proceso original. Verifique que esa operación exacta se detuvo antes de registrar una nueva revisión. Esto no crea una finalización histórica ni prueba un resultado bancario."
 }

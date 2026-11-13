@@ -12,9 +12,10 @@ import { merchantCashReturnInspections, merchantCashReturnObservations, merchant
   merchantRefundDispatchFinishes, merchantRefundDispatchStops, merchantRefundObservations, merchantRefundRequests, merchantRefundReservationRetirements, merchantRefundResourceBindings, merchantRefundTerminalReceipts } from "./merchant-refund-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { merchantRefundObservationCaptures } from "./merchant-refund-current-schema";
+import { originalCashCallersFinished, originalCashHistoricalFeesQuiesced, originalCashRecoveryCashWitness } from "./original-cash-recovery-store";
 const MAX = 5000;
 const sorted = (rows: readonly object[]) => rows.map(row => merchantTaxDigest(row)).toSorted();
-export async function merchantRefundCashHistory(ctx: ServiceContext, cash: MerchantRefundCashOrigin, ownInspectionId?: string): Promise<{
+export async function merchantRefundCashHistory(ctx: ServiceContext, cash: MerchantRefundCashOrigin, ownInspectionId?: string, excludeRecoveryOperationId?: string): Promise<{
   digest: string; incomplete: boolean; creatorsQuiesced: boolean; feeDebt: boolean;
   refundRequests: Array<{ id: string; amountMinor: number; currency: string; dispatched: boolean; retired: boolean; resourceRefs: string[]; definitelyRefused: boolean }>;
 }> {
@@ -59,7 +60,9 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
     .innerJoin(merchantCashReturnInspections, eq(merchantCashReturnInspections.id, merchantCashReturnPrimaryObservations.inspectionId)).where(inspectionScope).limit(MAX + 1);
   const otherReturns = await ctx.tx.select({ observation: merchantCashReturnObservations }).from(merchantCashReturnObservations)
     .innerJoin(merchantCashReturnInspections, eq(merchantCashReturnInspections.id, merchantCashReturnObservations.inspectionId)).where(inspectionScope).limit(MAX + 1);
-  const inventory = { requests, retirements, observations, observationCaptures, dispatches, finishes, stops, refusals, terminals, bindings, paymentCash, subscriptionCash, receiptRows, aliases, fees, feeObservations, otherPrimary, otherReturns };
+  const recovery = await originalCashRecoveryCashWitness(ctx.tx, cash, excludeRecoveryOperationId);
+  const inventory = { requests, retirements, observations, observationCaptures, dispatches, finishes, stops, refusals, terminals, bindings, paymentCash, subscriptionCash, receiptRows, aliases, fees, feeObservations, otherPrimary, otherReturns,
+    recoveryOwners: recovery.owners, recoveryOperations: recovery.operations, recoveryFacts: recovery.facts };
   const incomplete = Object.values(inventory).some(rows => rows.length > MAX);
   let creatorsQuiesced = !incomplete && dispatches.every(call => finishes.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id)
     || stops.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id && row.requestDigest === call.requestDigest));
@@ -70,7 +73,11 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
   // An accepted old projection alone does not prove its physical caller ended.
   // The common fee/reversal caller protocol must supply that separate proof;
   // until composed, any recorded fee operation keeps this return unresolved.
-  const feeDebt = fees.length > 0;
+  creatorsQuiesced &&= originalCashCallersFinished(recovery);
+  // Old fee journals did not retain a physical process birth/finish. A new
+  // explicit hosting review can cover that exact existing operation now;
+  // it never fabricates an old caller or changes its accepted cash.
+  const feeDebt = !await originalCashHistoricalFeesQuiesced(ctx.tx, cash, fees);
   const refundRequests = requests.map(request => {
     const calls = dispatches.filter(row => row.requestId === request.id), known = bindings.filter(row => row.requestId === request.id), acks = known.filter(row => row.origin === "physical_ack");
     return { id: request.id, amountMinor: request.amountMinor, currency: request.currency, dispatched: calls.length > 0,

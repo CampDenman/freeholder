@@ -69,6 +69,10 @@ export function clipSnippet(value: string | null | undefined): string | null {
  * Completeness is asserted in `tests/core/c11-14-search.test.ts`.
  */
 export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
+  original_cash_recoveries: "Private exact original financial source; authorized shared recovery and financial export only.",
+  original_cash_recovery_operations: "Private frozen money requests and physical caller capabilities are excluded from content search.",
+  original_cash_recovery_facts: "Private raw financial facts and hashed hosting reviews have no public search projection.",
+  original_cash_recovery_closures: "Private current cash-return receipts are shown only through original authorized financial services.",
   merchant_payment_dispatch_finishes: "Immutable actual original caller completion; money outcome remains independent and is reconciled through the original invoice.",
   merchant_payment_dispatch_stops: "Exact original hosting stop reviews; private operational proof cannot be an age sweep or contact search.",
   merchant_payment_resource_bindings: "Original physical acknowledgements or explicit provider request-log review, retained with the existing invoice owner. Not a second contact identity.",

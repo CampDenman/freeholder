@@ -14113,6 +14113,24 @@ whatever is best for the people using the site.
   integrated financial witnesses, UI/API/SDK journeys, actual acceptance and
   independent review remain required. No stable or model activation sign-off
   is supplied. See `deploy/legacy-bank-rma-2026-11-13.md`.
+  Full-original-cash return source checkpoint 2026-11-13 (C12.38/C1.08): a
+  separate UNQUALIFIED bounded increment supplies four immutable authenticated
+  original-owner/physical-operation/raw-fact/full-closure models. Human-confirmed
+  shared recovery can drive receipt-owned unapplied customer cash, original fee
+  refund and destination recipient reversal without inventing a canonical
+  payment, logical refund, old process birth or creator finish. Actual GETs and
+  POSTs have separate caller proof; unknown outcomes keep their original keys.
+  Owner recovery, four locales, privacy outbox pointers and bounded four-array
+  financial witnesses are present. Root central merge/export/bounds integration
+  remains required.19 pure/seven adapter/13 contract/four native controls are
+  prepared, UNRUN; no CPU qualification, migration, database or provider request
+  ran. The separate suffix is unassembled/unapplied; prior SQL/evidence is
+  unchanged. Exact cumulative partial recipient/fee targets and unassigned
+  partial-return remainder composition remain required source work immediately
+  after this finite checkpoint, with no new deferral or blanket destination-debt
+  waiver. Receipt-only subscription native, combined source/SDK/browser/provider
+  acceptance, independent review and stable sign-off remain open. See
+  `deploy/original-cash-return-source-2026-11-13.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

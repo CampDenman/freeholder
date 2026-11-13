@@ -9091,5 +9091,22 @@
   "catalog.returns.replaceBankRefunds": "Remplacer les remboursements d’origine échoués",
   "catalog.saved.recoverReturnBankRefunds": "Remboursements bancaires vérifiés. Le retour reste ouvert jusqu’à la confirmation de chaque part.",
   "catalog.saved.replaceReturnBankRefunds": "Remboursements échoués vérifiés et remplacements autorisés envoyés.",
-  "catalog.customerReturns.bankReviewHelp": "Votre paiement d’origine reste réglé et votre avoir est conservé. Nous vérifions le remboursement auprès de la banque. Ne payez pas à nouveau."
+  "catalog.customerReturns.bankReviewHelp": "Votre paiement d’origine reste réglé et votre avoir est conservé. Nous vérifions le remboursement auprès de la banque. Ne payez pas à nouveau.",
+  "cashRecovery.title": "Récupération des fonds d’origine",
+  "cashRecovery.back": "Retour aux factures",
+  "cashRecovery.help": "Examinez les fonds d’origine conservés et remboursez uniquement leur payeur initial. La facture, le paiement et l’avoir existants sont conservés. Vérifiez auprès de la banque avant une autre action.",
+  "cashRecovery.empty": "Aucun fonds conservé ne nécessite de récupération.",
+  "cashRecovery.pending": "Le remboursement d’origine reste en attente.",
+  "cashRecovery.closed": "Le remboursement intégral des fonds d’origine est confirmé.",
+  "cashRecovery.inspect": "Vérifier les opérations bancaires d’origine",
+  "cashRecovery.confirmReturn": "J’autorise uniquement le remboursement de ces fonds d’origine, des frais du site et du virement au destinataire initial.",
+  "cashRecovery.return": "Rembourser les fonds d’origine",
+  "cashRecovery.error": "Cette action nécessite une vérification. Les faits bancaires antérieurs restent conservés. Vérifiez les opérations d’origine et les processus inachevés.",
+  "cashRecovery.saved": "L’action de récupération est terminée. Consultez le résultat actuel ci-dessous.",
+  "cashRecovery.caller": "Processus d’origine : {host}, processus {pid}",
+  "cashRecovery.live": "Le processus d’origine fonctionne encore. Terminez-le ou arrêtez-le avant la vérification de l’hébergement.",
+  "cashRecovery.evidence": "Preuves de l’arrêt sur l’hébergement",
+  "cashRecovery.confirmStop": "J’ai vérifié que cette opération d’origine précise est arrêtée sur son hébergement.",
+  "cashRecovery.reviewStop": "Enregistrer la vérification de l’hébergement",
+  "cashRecovery.oldFeeHelp": "Cet ancien journal de frais ne conserve pas le démarrage du processus d’origine. Vérifiez l’arrêt de cette opération précise avant d’enregistrer une nouvelle vérification. Cela ne crée pas de fin historique et ne prouve aucun résultat bancaire."
 }

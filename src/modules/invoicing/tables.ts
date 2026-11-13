@@ -57,3 +57,4 @@ export { merchantRefundObservationCaptures, merchantRefundStateReads, merchantRe
 export { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBankCurrentReceipts, legacyBankReadStops } from "./legacy-bank-read-schema";
 
 export { legacyBankFeedback } from "./legacy-bank-feedback-schema";
+export { originalCashRecoveries, originalCashRecoveryOperations, originalCashRecoveryFacts, originalCashRecoveryClosures } from "./original-cash-recovery-schema";

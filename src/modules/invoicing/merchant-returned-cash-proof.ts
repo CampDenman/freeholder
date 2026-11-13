@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: fully returned unapplied cash is independent of invoice/payment fiction.
 import type { MerchantReturnedCashScope, MerchantReturnedCashEvidence } from "@/adapters/payments/merchant-returned-cash-types";
+import { STRIPE_REFUND_REFERENCE } from "@/adapters/payments/stripe-refund-reference";
 export type { MerchantReturnedCashScope, MerchantReturnedCashEvidence } from "@/adapters/payments/merchant-returned-cash-types";
 export type MerchantReturnedCashDebt = "original_cash" | "customer_refund" | "commission" | "recipient" | "dispute" | "unfinished_creator" | "changed_inventory";
 const currency = (value: unknown): value is string => typeof value === "string" && /^[A-Z]{3}$/.test(value);
@@ -29,7 +30,7 @@ export function merchantReturnedCashProof(input: { original: MerchantReturnedCas
   let returned = 0n;
   if (!evidence.refundsComplete || evidence.refunded !== true || evidence.amountRefundedMinor !== original.amountMinor) debt.add("customer_refund");
   for (const refund of evidence.refunds) {
-    if (!reference(refund.providerRef, "re") || refs.has(refund.providerRef) || refund.paymentProviderRef !== original.paymentProviderRef
+    if (!STRIPE_REFUND_REFERENCE.test(refund.providerRef) || refund.providerRef.length > 200 || refs.has(refund.providerRef) || refund.paymentProviderRef !== original.paymentProviderRef
       || refund.chargeRef !== evidence.providerChargeRef || !minor(refund.amountMinor) || refund.amountMinor <= 0 || refund.currency !== original.currency) {
       debt.add("customer_refund"); continue;
     }
