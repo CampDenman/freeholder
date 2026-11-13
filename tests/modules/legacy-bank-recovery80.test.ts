@@ -123,7 +123,7 @@ describe.runIf(hasDatabase)("authentic legacy bank recovery80", { timeout: 60000
   });
   it.runIf(process.platform === "linux")("reviews only an actually stopped original reader, preserves its two committed facts without a forged finish, and starts a fresh actual read", async () => {
     const actual = await legacyRecoveryFixture(), require = createRequire(import.meta.url);
-    const loader = require.resolve("tsx/esm", { paths: [dirname(require.resolve("vite/package.json"))] });
+    const loader = require.resolve("tsx", { paths: [dirname(require.resolve("vite/package.json"))] });
     const childEnv: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: "test", STRIPE_SECRET_KEY: "sk_legacy_interrupted_reader_fixture_only", STRIPE_WEBHOOK_SECRET: "whsec_legacy_interrupted_reader_fixture_only" };
     delete childEnv.FREEHOLDER_JOBS; delete childEnv.NEXT_PHASE;
     const child = spawn(process.execPath, ["--import", pathToFileURL(loader).href, fileURLToPath(new URL("../fixtures/legacy-bank-interrupted-reader.ts", import.meta.url)), actual.original.id, actual.original.providerRef!, actual.paymentRef],
@@ -136,7 +136,7 @@ describe.runIf(hasDatabase)("authentic legacy bank recovery80", { timeout: 60000
     try {
       const ticket = await new Promise<{ readId: string }>((resolve, reject) => {
         const timeout = setTimeout(() => reject(Error("The actual child reader did not reach its retained callback barrier.")), 30000);
-        child.once("message", message => { clearTimeout(timeout); const parsed = z.object({ readId: z.uuid() }).safeParse(message); if (parsed.success) resolve(parsed.data); else reject(Error(`Actual child reader failed before barrier: ${diagnostics}`)); });
+        child.once("message", message => { clearTimeout(timeout); const parsed = z.object({ readId: z.uuid() }).safeParse(message); if (parsed.success) resolve(parsed.data); else { const reported = z.object({ error: z.string().max(4000) }).safeParse(message); reject(Error(`Actual child reader failed before barrier: ${reported.success ? reported.data.error : diagnostics}`)); } });
         child.once("error", error => { clearTimeout(timeout); reject(error); });
         child.once("exit", code => { clearTimeout(timeout); reject(Error(`Actual child reader exited ${code} before barrier: ${diagnostics}`)); });
       });
