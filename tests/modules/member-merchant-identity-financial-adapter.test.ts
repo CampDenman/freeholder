@@ -6,10 +6,12 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContactReference } from "@/core/contacts/service";
 import type { Tx } from "@/core/service";
+import { subscriptionCommercialTerms } from "@/modules/subscriptions/schema";
+import { controlledFinancialWitness, type ControlledFinancialEntry } from "@/modules/invoicing/controlled-provider-financial-witness";
 import type { ProrationFinancialParents, ProrationFinancialTable } from "@/modules/invoicing/proration-financial-witness";
 
 const seams = vi.hoisted(() => ({ references: new Map<string, ContactReference>(), dependencies: vi.fn<(
-  tx: Tx, invoiceIds: readonly string[], paymentIds?: readonly string[], additionalWitnessCount?: number,
+  tx: Tx, invoiceIds: readonly string[], paymentIds?: readonly string[], additionalWitnessCount?: number, additionalControlledEntries?: readonly ControlledFinancialEntry[],
 ) => Promise<Map<string, string> | null>>() }));
 vi.mock("@/core/contacts/service", () => ({ registerContactReference: (reference: ContactReference) => seams.references.set(reference.table, reference) }));
 vi.mock("@/core/privacy/service", () => ({ registerContactPrivacySource: vi.fn() }));
@@ -30,20 +32,36 @@ const policy = () => ({ id: id(10), contactId: id(90), material: "original-priva
 type Owner = Pick<ReturnType<typeof collection>, "id" | "invoiceId" | "profileId" | "sellerUserId"> & { collectionInvoiceId: string };
 type Route = { paymentId: string; allocationId: string; invoiceId: string; paymentInvoiceId: string; sellerUserId: string; collectionInvoiceId: string; profileId: string };
 type Source = { paymentId: string; invoiceId: string; sourceType: string; sourceId: string; subscriptionId: string; sellerUserId: string };
-type Data = { collections?: ReturnType<typeof collection>[]; policies?: ReturnType<typeof policy>[]; routes?: { paymentId: string }[]; owners?: Owner[]; routeFacts?: Route[]; sourceFacts?: Source[]; financial?: Inventory };
+type Data = { collections?: ReturnType<typeof collection>[]; policies?: ReturnType<typeof policy>[]; routes?: { paymentId: string; allocationId: string }[]; owners?: Owner[]; routeFacts?: Route[]; sourceFacts?: Source[]; financial?: Inventory };
 function reader(data: Data, inspect?: (table: string, query: string, params: unknown[]) => void) {
   const dialect = new PgDialect(), selects: string[] = [], financialReads: string[] = [];
   const tx = {
     select: (fields: Record<string, unknown>) => {
-      let table = "", parameters: unknown[] = [];
+      let table = "", predicate = "", parameters: unknown[] = [];
+      const joins: Array<{ table: string; predicate: string }> = [];
       const chain = {
         from: (source: Parameters<typeof getTableName>[0]) => { table = getTableName(source);selects.push(table);return chain; },
-        innerJoin: () => chain,
+        innerJoin: (source: Parameters<typeof getTableName>[0], statement: SQL) => { joins.push({ table: getTableName(source), predicate: dialect.sqlToQuery(statement).sql });return chain; },
         leftJoin: () => chain,
-        where: (statement: SQL) => { const compiled = dialect.sqlToQuery(statement);parameters = compiled.params;inspect?.(table, compiled.sql, compiled.params);return chain; },
+        where: (statement: SQL) => { const compiled = dialect.sqlToQuery(statement);parameters = compiled.params;predicate = compiled.sql;inspect?.(table, compiled.sql, compiled.params);return chain; },
         orderBy: () => chain,
         limit: async (count: number) => {
           expect(count).toBe(5001);
+          if (table === "subscription_controlled_resources") {
+            // The only controlled SELECT reached by an empty history is the
+            // exact subscription root. No invented child/account/profile read.
+            expect(Object.keys(fields).sort()).toEqual(["id", "subscriptionId", "termsId", "profileId", "profileVersion", "fingerprint"].sort());
+            expect(joins).toHaveLength(1);expect(joins[0]!.table).toBe("subscription_commercial_terms");
+            expect(joins[0]!.predicate).toContain('"subscription_commercial_terms"."id" = "subscription_controlled_resources"."terms_id"');
+            expect(fields.profileId).toBe(subscriptionCommercialTerms.profileId);expect(fields.profileVersion).toBe(subscriptionCommercialTerms.profileVersion);
+            expect(predicate).toContain('"subscription_controlled_resources"."subscription_id" in');expect(parameters).toHaveLength(1);
+            expect((data.policies ?? []).map(row => row.id)).toContain(parameters[0]);
+            expect(parameters).not.toContain(id(90));expect(parameters).not.toContain(id(91));expect(parameters).not.toContain(id(20));
+            expect(predicate).not.toMatch(/contact_id|profile_id|provider_account|current_version|amount_minor|email/);
+            const fingerprint = dialect.sqlToQuery(fields.fingerprint as SQL).sql;
+            expect(fingerprint).toContain('sha256(convert_to(to_jsonb("subscription_controlled_resources")::text');
+            return [];
+          }
           if (table === "invoice_merchant_collections") {
             const profile = fields.profileId;
             expect(profile).toBeDefined();
@@ -53,7 +71,12 @@ function reader(data: Data, inspect?: (table: string, query: string, params: unk
           }
           if (table === "invoice_merchant_allocations") return (data.owners ?? (data.collections ?? []).map(source => ({ ...source, collectionInvoiceId: source.invoiceId }))).filter(owner => parameters.includes(owner.invoiceId));
           if (table === "subscription_market_policies") return data.policies ?? [];
-          if (table === "merchant_payment_routes") return fields.allocationId ? (data.routeFacts ?? []).filter(route => parameters.includes(route.paymentId)) : data.routes ?? [];
+          if (table === "merchant_payment_routes") {
+            if (fields.allocationId) return (data.routeFacts ?? []).filter(route => parameters.includes(route.paymentId));
+            expect(predicate).toContain('"merchant_payment_routes"."allocation_id"');
+            const routes = (data.routes ?? []).filter(route => parameters.includes(route.allocationId));
+            return fields.id ? routes.map(route => ({ id: route.paymentId })) : routes.map(route => ({ paymentId: route.paymentId }));
+          }
           if (table === "payments") return (data.sourceFacts ?? []).filter(original => parameters.includes(original.paymentId));
           throw new Error(`Unexpected identity parent table ${table}. No current profile/account lookup is allowed.`);
         },
@@ -62,6 +85,22 @@ function reader(data: Data, inspect?: (table: string, query: string, params: unk
     },
     execute: async (statement: SQL) => {
       const { sql: query, params } = dialect.sqlToQuery(statement), table = query.match(/\bvalid\s+from\s+"?([a-z_]+)"? r\b/)?.[1] as ProrationFinancialTable | undefined;
+      if (!table && query.includes('from merchant_agreement_payment_routes route join payments p on p.id=route.payment_id')) {
+        // Existing order fixtures have no agreement/controlled aliases. Check
+        // the real bounded original-PI/FK selector before returning that fact.
+        expect(query.trimEnd()).toMatch(/limit 5001$/);expect(params.length).toBeGreaterThan(0);
+        expect([...query.matchAll(/\b(?:from|join)\s+([a-z_]+)/gi)].map(match => match[1])).toEqual([
+          "merchant_agreement_payment_routes", "payments", "subscription_provider_charge_receipts", "merchant_payment_observations", "payments", "subscription_events", "subscription_prorations", "invoices",
+        ]);
+        expect(params.every(value => (data.routes ?? []).some(route => route.paymentId === value))).toBe(true);
+        expect(query).toContain('observed.provider_platform_account_id=cash.provider_platform_account_id');
+        expect(query).toContain('observed.charge_account_id is not distinct from cash.charge_account_id');
+        expect(query).toContain('observed.provider_ref=cash.provider_payment_intent_ref');
+        expect(query).toContain('union select e.subscription_id::text,null::text from subscription_events e where e.invoice_id in');
+        expect(query).toContain('i.id=p.debit_invoice_id');expect(query).toContain("i.source_id=p.subscription_id::text||':proration:'||p.id::text");
+        expect(query).not.toMatch(/amount_minor|current_account|email|split_part/);
+        inspect?.("controlled_original_parent_links", query, params);return [];
+      }
       if (!table) throw new Error("Original financial table identity was lost.");
       expect(query).toContain("sha256(convert_to(to_jsonb(r)::text");expect(params).toContain(5001);
       financialReads.push(table);inspect?.(table, query, params);return data.financial?.[table] ?? [];
@@ -81,7 +120,16 @@ describe("exact original merchant identity financial snapshots", () => {
     const source = { collections: [collection()], policies: [policy()] }, mock = reader(source);
     expect(await capture("invoice_merchant_collections", mock.tx)).toEqual({ undoable: true, state: [{ id: id(40), fingerprint: hash(JSON.stringify({ material: collection().material })) }] });
     expect(await capture("subscription_market_policies", mock.tx)).toEqual({ undoable: true, state: [{ id: id(10), contactId: id(90), fingerprint: hash(policy().material) }] });
-    expect(seams.dependencies).toHaveBeenCalledWith(mock.tx, [id(30)], [], 1);
+    expect(seams.dependencies).toHaveBeenCalledWith(mock.tx, [id(30)], [], 1, []);
+  });
+  it("returns all nine empty controlled families only after the exact frozen subscription/terms selector and refuses unknown parent tables", async () => {
+    const mock = reader({ policies: [policy()] });
+    expect(await controlledFinancialWitness(mock.tx, { subscriptionIds: [id(10)] })).toMatchObject({ incomplete: false, entries: [], history: {
+      resources: [], operations: [], calls: [], facts: [], finishes: [], stops: [], verifications: [], chargeOrigins: [], closures: [], incomplete: false,
+    } });
+    expect(mock.selects).toEqual(["subscription_controlled_resources"]);
+    await expect(controlledFinancialWitness(reader({ policies: [policy()] }).tx, { subscriptionIds: [id(999)] })).rejects.toThrow();
+    await expect(mock.tx.select().from(subscriptionCommercialTerms).where(subscriptionCommercialTerms.id.getSQL()).limit(5001)).rejects.toThrow("Unexpected identity parent table subscription_commercial_terms");
   });
   it("uses the actual frozen taxPolicy profile even with no profile contact and an empty payment filter", async () => {
     const financial: Inventory = { subscription_prorations: [accepted()] }, mock = reader({ collections: [collection()], financial }, (table, query, params) => {
@@ -89,8 +137,8 @@ describe("exact original merchant identity financial snapshots", () => {
     });
     const first = await capture("invoice_merchant_collections", mock.tx);
     expect(first.undoable).toBe(true);expect(first.state).not.toEqual((await capture("invoice_merchant_collections", reader({ collections: [collection()] }).tx)).state);
-    expect(mock.selects).toEqual(["invoice_merchant_collections", "invoice_merchant_allocations", "merchant_payment_routes"]);
-    expect(seams.dependencies.mock.calls[0]).toEqual([mock.tx, [id(30)], [], 2]);
+    expect(mock.selects).toEqual(["invoice_merchant_collections", "invoice_merchant_allocations", "merchant_payment_routes", "merchant_payment_routes"]);
+    expect(seams.dependencies.mock.calls[0]).toEqual([mock.tx, [id(30)], [], 2, []]);
     expect(JSON.stringify(first.state)).not.toContain("original-private");expect(JSON.stringify(first.state)).not.toContain("prorationFinancial");
   });
   it.each(["subscription_prorations", "commercial_payment_attestations", "commercial_fee_attestations", "subscription_proration_card_reads"] as const)("refuses collection undo after a changed full %s row", async table => {
@@ -109,12 +157,12 @@ describe("exact original merchant identity financial snapshots", () => {
     const after = await capture("subscription_market_policies", mock.tx);expect(after.undoable).toBe(true);
     financial.subscription_prorations![0]!.fingerprint = "b".repeat(64);
     await expect(reference("subscription_market_policies").restoreAfterUndo(mock.tx, [], after.state, id(90), id(91))).rejects.toMatchObject({ code: "conflict" });
-    expect(seams.dependencies).not.toHaveBeenCalled();expect(mock.selects.every(table => table === "subscription_market_policies")).toBe(true);
+    expect(seams.dependencies).not.toHaveBeenCalled();expect(mock.selects).toEqual(["subscription_market_policies", "subscription_controlled_resources", "subscription_market_policies", "subscription_controlled_resources"]);
   });
   it("retains existing routed-payment filters and adds only the distinct real external witness count", async () => {
-    const mock = reader({ collections: [collection(), { ...collection(41), invoiceId: id(31) }], routes: [{ paymentId: id(60) }], financial: { subscription_prorations: [accepted()] } });
+    const mock = reader({ collections: [collection(), { ...collection(41), invoiceId: id(31) }], routes: [{ paymentId: id(60), allocationId: id(40) }], financial: { subscription_prorations: [accepted()] } });
     expect((await capture("invoice_merchant_collections", mock.tx)).undoable).toBe(true);
-    expect(seams.dependencies).toHaveBeenCalledWith(mock.tx, [id(30), id(31)], [id(60)], 3);
+    expect(seams.dependencies).toHaveBeenCalledWith(mock.tx, [id(30), id(31)], [id(60)], 3, []);
     seams.dependencies.mockResolvedValue(null);
     expect(await capture("invoice_merchant_collections", mock.tx)).toMatchObject({ undoable: false, state: [] });
   });
@@ -123,10 +171,10 @@ describe("exact original merchant identity financial snapshots", () => {
       subscription_proration_payment_protocols: [row(60, card)], subscription_proration_card_reads: [row(80, { ...card, readId: id(80) })],
       subscription_proration_card_read_finishes: [row(80, { ...card, readId: id(80) })] };
     const mock = reader({ collections: [collection()], financial }), first = await capture("invoice_merchant_collections", mock.tx);
-    expect(first.undoable).toBe(true);expect(seams.dependencies).toHaveBeenLastCalledWith(mock.tx, [id(30)], [], 6);
+    expect(first.undoable).toBe(true);expect(seams.dependencies).toHaveBeenLastCalledWith(mock.tx, [id(30)], [], 6, []);
     financial.subscription_proration_card_read_finishes![0]!.fingerprint = "b".repeat(64);
     const second = await capture("invoice_merchant_collections", mock.tx);expect(second.undoable).toBe(true);expect(second.state).not.toEqual(first.state);
-    expect(seams.dependencies).toHaveBeenLastCalledWith(mock.tx, [id(30)], [], 6);
+    expect(seams.dependencies).toHaveBeenLastCalledWith(mock.tx, [id(30)], [], 6, []);
   });
   it("excludes unrelated same-profile histories outside the collection's actual invoice/source subgraph", async () => {
     const unrelated = row(2, { prorationId: id(2), subscriptionId: id(11), sourceInvoiceId: null, targetInvoiceId: id(31), creditNoteId: null });
@@ -134,7 +182,7 @@ describe("exact original merchant identity financial snapshots", () => {
     const first = await capture("invoice_merchant_collections", mock.tx);expect(first.undoable).toBe(true);
     unrelated.fingerprint = "b".repeat(64);
     expect((await capture("invoice_merchant_collections", mock.tx)).state).toEqual(first.state);
-    expect(seams.dependencies).toHaveBeenLastCalledWith(mock.tx, [id(30)], [], 2);
+    expect(seams.dependencies).toHaveBeenLastCalledWith(mock.tx, [id(30)], [], 2, []);
     const onlyUnrelated = reader({ collections: [collection()], financial: { subscription_prorations: [unrelated] } });
     expect((await capture("invoice_merchant_collections", onlyUnrelated.tx)).state).toEqual([{ id: id(40), fingerprint: hash(JSON.stringify({ material: collection().material })) }]);
   });
@@ -147,10 +195,10 @@ describe("exact original merchant identity financial snapshots", () => {
     const foreignCash = row(61, { paymentId: id(61), invoiceId: id(30) });
     const financial: Inventory = { commercial_payment_attestations: [cash(), foreignCash] };
     const routeFacts = [owner, foreign].map((value, index) => ({ paymentId: id(60 + index), allocationId: value.id, invoiceId: id(30), paymentInvoiceId: id(30), sellerUserId: value.sellerUserId, collectionInvoiceId: id(30), profileId: id(20) }));
-    const exact = reader({ collections: [owner], owners, routes: [{ paymentId: id(60) }], routeFacts, financial });
+    const exact = reader({ collections: [owner], owners, routes: [{ paymentId: id(60), allocationId: id(40) }], routeFacts, financial });
     const first = await capture("invoice_merchant_collections", exact.tx);expect(first.undoable).toBe(true);
     foreignCash.fingerprint = "b".repeat(64);expect((await capture("invoice_merchant_collections", exact.tx)).state).toEqual(first.state);
-    expect(seams.dependencies).toHaveBeenLastCalledWith(exact.tx, [id(30)], [id(60)], 2);
+    expect(seams.dependencies).toHaveBeenLastCalledWith(exact.tx, [id(30)], [id(60)], 2, []);
     routeFacts[0]!.paymentInvoiceId = id(999);
     expect(await capture("invoice_merchant_collections", exact.tx)).toMatchObject({ undoable: false, state: [] });
   });
@@ -164,7 +212,7 @@ describe("exact original merchant identity financial snapshots", () => {
     };
     const routeFacts = [{ paymentId: id(62), allocationId: id(42), invoiceId: id(31), paymentInvoiceId: id(31), sellerUserId: id(110), collectionInvoiceId: id(31), profileId: id(20) }];
     const mock = reader({ collections: [collection()], routeFacts, financial }), first = await capture("invoice_merchant_collections", mock.tx);
-    expect(first.undoable).toBe(true);expect(seams.dependencies).toHaveBeenLastCalledWith(mock.tx, [id(30)], [], 7);
+    expect(first.undoable).toBe(true);expect(seams.dependencies).toHaveBeenLastCalledWith(mock.tx, [id(30)], [], 7, []);
     financial.commercial_payment_attestations![0]!.fingerprint = "b".repeat(64);
     await expect(reference("invoice_merchant_collections").restoreAfterUndo(mock.tx, [], first.state, id(90), id(91))).rejects.toMatchObject({ code: "conflict" });
     routeFacts[0]!.sellerUserId = id(111);
