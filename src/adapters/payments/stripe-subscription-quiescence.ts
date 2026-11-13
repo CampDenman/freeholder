@@ -216,6 +216,31 @@ export async function stopOriginalStripeMerchantInvoice(api: StripeSubscriptionR
       || actual.amount !== intent.amountMinor || text(actual.currency)?.toUpperCase() !== intent.currency) unproven();
     return;
   }
+  if (request.action === "finalize_draft") {
+    // Finalization is a distinct original operation, never deletion. Suppress
+    // collection explicitly, and bind the actual draft's sole immutable price
+    // to the actual admitted phase before creating a finalized invoice.
+    const phase = request.admittedPhase, lines = object(invoice.lines);
+    if (!phase || phase.start !== inventory.periodStart || phase.totalMinor !== inventory.totalMinor || phase.currency !== inventory.currency
+      || request.providerPaymentIntentRef !== undefined || inventory.paidMinor !== 0 || inventory.paymentIntents.some(intent => intent.receivedMinor !== 0 || intent.state !== "canceled")) unproven();
+    if (["open", "paid", "void"].includes(inventory.state) && invoice.auto_advance === false) {
+      await request.onAcknowledged({ action: "finalize_draft", providerInvoiceRef: request.providerInvoiceRef, state: inventory.state as "open" | "paid" | "void", autoAdvance: false }); return;
+    }
+    if (readOnly || inventory.state !== "draft" || !lines || lines.has_more !== false || !Array.isArray(lines.data) || lines.data.length !== 1) unproven();
+    const line = object(lines.data[0]), pricing = object(object(line?.pricing)?.price_details), details = object(object(line?.parent)?.subscription_item_details), interval = object(line?.period);
+    if (!line || ref(pricing?.price ?? line.price) !== phase.providerPriceRef || line.quantity !== 1 || line.amount !== phase.totalMinor || text(line.currency)?.toUpperCase() !== phase.currency
+      || details?.proration === true || interval?.start !== Date.parse(phase.start) / 1000 || interval.end !== Date.parse(phase.end) / 1000) unproven();
+    const actual = await api(`${path}/finalize`, protocol({ method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ auto_advance: "false" }) }), request);
+    if (actual.id === request.providerInvoiceRef && ["open", "paid"].includes(String(actual.status)) && actual.auto_advance === false) await request.onAcknowledged({ action: "finalize_draft", providerInvoiceRef: request.providerInvoiceRef, state: actual.status as "open" | "paid", autoAdvance: false });
+    // Fresh complete payment enumeration retains any contradictory actual cash
+    // before rejecting automatic collection or changed money/lineage.
+    const completed = await inspectOriginalInvoiceObligations(api, request, actual, request.providerInvoiceRef);
+    const actualDirect = ref(actual.subscription), actualParent = ref(object(object(actual.parent)?.subscription_details)?.subscription);
+    if (actual.id !== request.providerInvoiceRef || ref(actual.customer) !== request.providerCustomerRef || actualDirect && actualParent && actualDirect !== actualParent
+      || (actualDirect ?? actualParent) !== request.providerSubscriptionRef || actual.auto_advance !== false || !["open", "paid"].includes(completed.state)
+      || completed.totalMinor !== phase.totalMinor || completed.currency !== phase.currency || completed.periodStart !== phase.start || completed.paidMinor !== 0) unproven();
+    return;
+  }
   if (request.action !== "void_invoice" || request.providerPaymentIntentRef !== undefined || inventory.paidMinor !== 0
     || inventory.paymentIntents.some(intent => intent.receivedMinor !== 0 || intent.state !== "canceled")) unproven();
   if (inventory.state === "void") { await request.onAcknowledged({ action: "void_invoice", providerInvoiceRef: request.providerInvoiceRef, state: "void" }); return; }

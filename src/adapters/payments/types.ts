@@ -431,9 +431,11 @@ export interface MerchantPhaseScheduleStopRequest extends MerchantPhaseScheduleS
 
 export type MerchantScheduleInvoiceActionAcknowledgment =
   | { action: "cancel_intent"; providerInvoiceRef: string; providerPaymentIntentRef: string; state: "canceled" }
-  | { action: "void_invoice"; providerInvoiceRef: string; state: "void" };
+  | { action: "void_invoice"; providerInvoiceRef: string; state: "void" }
+  | { action: "finalize_draft"; providerInvoiceRef: string; state: "open" | "paid" | "void"; autoAdvance: false };
 export interface MerchantScheduleInvoiceActionRequest extends MerchantScheduleResource {
-  providerInvoiceRef: string; action: "cancel_intent" | "void_invoice"; providerPaymentIntentRef?: string;
+  providerInvoiceRef: string; action: "cancel_intent" | "void_invoice" | "finalize_draft"; providerPaymentIntentRef?: string;
+  admittedPhase?: MerchantProviderPhase & { providerPriceRef: string };
   onAcknowledged: (actual: MerchantScheduleInvoiceActionAcknowledgment) => Promise<void>;
 }
 
