@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Internal source checkpoint binds a controlled cash observation to the original receipt and actual creator/caller/facts; genuine recovery admission and payment qualification remain required.
+
 - Source-only cash inspection repair counts admitted readers before their first callback and separates genuine current bank evidence from returned-money disposition. Existing recovery acceptance remains open.
 - Source checkpoint: an independent reviewed stop can close an original bank-inspection caller only after actual process absence, preserving its NULL finish and requiring a new genuine bank read. Migration, private financial/privacy integration and qualification remain pending.
 

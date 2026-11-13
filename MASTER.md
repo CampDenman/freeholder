@@ -15739,3 +15739,14 @@ member key can never exceed that member's permissions.
 
 Opt-in ActivityPub federation lets members follow and be followed across the
 fediverse and take their audience elsewhere.
+
+Source contract checkpoint 2026-11-13 (C12.38/C1.08): the ordinary controlled
+cash observational source reader binds an actual accepted target/receipt and
+original creator/caller/fact plus every retained observation/raw occurrence.
+Source identity supplies no observation/application/principal/access authority.
+Seven controls are PREPARED/UNRUN. Genuine parent coverage/caller/privacy
+observation authority, actual GET producer and explicit own-read causal history
+comparison remain REQUIRED implementation, followed by genuine finished bank
+proof and canonical batch application/effects. No private service is registered,
+financial default relaxed, SQL assembled or C-item/stable closure claimed. See
+deploy/controlled-cash-observation-source82-20261113.md.
