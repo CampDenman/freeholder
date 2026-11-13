@@ -13,6 +13,7 @@ import { invoiceMerchantDependencyFingerprints } from "@/modules/invoicing/merch
 import { merchantRefundDependencyFingerprints } from "@/modules/invoicing/merchant-refund-dependencies";
 import { prorationFinancialWitness } from "@/modules/invoicing/proration-financial-witness";
 import { subscriptionCommercialResumptions } from "./commercial-resumption-schema";
+import { controlledFinancialEntries } from "@/modules/invoicing/controlled-provider-financial-witness";
 import { controlledProviderWitnesses } from "./controlled-provider-witnesses";
 import { subscriptionProviderReadWitnesses } from "./provider-read-witness";
 import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
@@ -83,8 +84,10 @@ export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[])
   const controlled=await controlledProviderWitnesses(tx,{subscriptionIds:readParents.map(row=>row.id)});
   const controlledFamilies=[controlled.resources,controlled.operations,controlled.calls,controlled.facts,controlled.finishes,controlled.stops,controlled.verifications,controlled.chargeOrigins,controlled.closures];
   if(controlled.incomplete||controlledFamilies.reduce((total,rows)=>total+rows.length,evidence.length+prorationCount)>5000)return{evidence:[],overflow:true};
-  for(const[family,rows]of controlledFamilies.entries())for(const row of rows)evidence.push({kind:"controlled_financial",id:row.id,
-    fingerprint:createHash("sha256").update(JSON.stringify([family,row.fingerprint])).digest("hex")});
+  const controlledEntries=controlledFinancialEntries(controlled);
+  const controlledKeys=new Set(controlledEntries.map(entry=>`${entry.table}:${entry.id}`));
+  for(const row of controlledEntries)evidence.push({kind:"controlled_financial",id:row.id,
+    fingerprint:createHash("sha256").update(JSON.stringify([row.table,row.fingerprint])).digest("hex")});
   const reads = await subscriptionProviderReadWitnesses(tx, readParents.map(row => row.id));
   if (reads.incomplete || reads.tickets.length + reads.finishes.length + reads.stops.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...reads.tickets.map(row => ({ kind: "provider_read_ticket" as const, id: row.id, fingerprint: row.fingerprint })),
@@ -113,11 +116,12 @@ export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[])
   const invoiceIds = periodInvoices.map(row => row.id), paymentIds = invoiceIds.length
     ? await tx.select({ id: payments.id }).from(payments).where(inArray(payments.invoiceId, invoiceIds)).orderBy(payments.id).limit(5001) : [];
   if (paymentIds.length > 5000) return { evidence: [], overflow: true };
-  const returned = await merchantRefundDependencyFingerprints(tx, { paymentIds: paymentIds.map(row => row.id), subscriptionChargeReceiptIds: charges.map(row => row.id) });
+  const allReturned = await merchantRefundDependencyFingerprints(tx, { paymentIds: paymentIds.map(row => row.id), subscriptionChargeReceiptIds: charges.map(row => row.id) });
+  const returned = { ...allReturned, entries: allReturned.entries.filter(entry => !controlledKeys.has(`${entry.table}:${entry.id}`)) };
   if (returned.incomplete || returned.entries.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   // Reserve complete already selected child contexts before the invoice
   // reader expands its own money rows; a small digest is not a row count.
-  const financial = await invoiceMerchantDependencyFingerprints(tx, invoiceIds, undefined, evidence.length + prorationCount + returned.entries.length);
+  const financial = await invoiceMerchantDependencyFingerprints(tx, invoiceIds, undefined, evidence.length + prorationCount + returned.entries.length, controlledEntries);
   if (!financial || financial.size + returned.entries.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   for (const [id, value] of [...financial.entries()].sort(([left], [right]) => left.localeCompare(right))) evidence.push({ kind: "invoice_financial", id, fingerprint: value });
   for (const entry of returned.entries) evidence.push({ kind: "refund_financial", id: entry.id,

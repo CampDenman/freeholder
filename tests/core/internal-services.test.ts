@@ -16,6 +16,8 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  // C12.38: authenticated parent coverage; internal queries do not admit positive collection.
+  "invoicing.controlledProviderFinancialReadiness",
   // C1.08/C12.38: reviewed credit/card and controlled-provider phases.
   "invoicing.applyInvoiceCredit",
   "invoicing.commercialPrincipalState",
@@ -429,6 +431,8 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // C12.38: authenticated parent coverage; internal queries do not admit positive collection.
+  "invoicing.controlledProviderFinancialReadiness",
   // C1.08/C12.38: reviewed credit/card and controlled-provider phases.
   "invoicing.applyInvoiceCredit",
   "invoicing.commercialPrincipalState",

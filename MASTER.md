@@ -15675,3 +15675,13 @@ member key can never exceed that member's permissions.
 
 Opt-in ActivityPub federation lets members follow and be followed across the
 fediverse and take their audience elsewhere.
+
+Source continuation 2026-11-13 (C12.38/C9.33/C9.38/C1.08): isolated parent
+controlled-provider financial integration registers the private authenticated
+readiness query and connects the frozen nine caller/raw/origin/closure families
+to existing original refund/principal/debt, exact invoice/profile/seller-policy
+history and bounded safe exports. All five cash and24 proration families and
+NULL-payment canonical identities remain. Prepared adapter/native controls are
+UNRUN; no CPU, database, provider or schema operation ran. Full evidence and
+remaining protocol/qualification limits are in
+`deploy/controlled-parent-financial82-source-20261113.md`; all live gates stay open.
