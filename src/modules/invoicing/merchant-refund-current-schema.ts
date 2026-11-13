@@ -40,7 +40,7 @@ export const merchantRefundStateReadFinishes = pgTable("merchant_refund_state_re
   callerInstanceId: uuid("caller_instance_id").notNull(), outcome: text("outcome", { enum: ["returned", "threw"] }).notNull(),
   captureId: uuid("capture_id").references(() => merchantRefundObservationCaptures.id, { onDelete: "restrict" }),
   createdAt: createdAtColumn(),
-}, table => [check("merchant_refund_state_read_finishes_outcome", sql`${table.outcome} in ('returned','threw') and (${table.outcome}<>'returned' or ${table.captureId} is not null)`)]);
+}, table => [check("merchant_refund_state_read_finishes_outcome", sql`${table.outcome} in ('returned','threw')`)]);
 
 export const merchantRefundCurrentReceipts = pgTable("merchant_refund_current_receipts", {
   id: uuid("id").primaryKey().defaultRandom(),

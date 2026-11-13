@@ -21,6 +21,7 @@ import { invoicePaymentDueAmount } from "./invoice-payment-due";
 import { publicInvoiceMerchant, publicInvoiceMerchants, publicPaymentMerchant } from "./merchant-collection-public";
 import { merchantObservationRef, merchantPaymentEvidence, recordMerchantPaymentObservation } from "./merchant-payment-observations";
 import { originalProviderPlatform } from "./provider-platform-scope";
+import { invoiceRefundStateRows, publicRefundState } from "./merchant-refund-bank-state-service";
 import { createPayment, failPayment, markInvoiceViewed, settlePayment, startPayment } from "./invoice-service";
 import { invoiceLines, invoices, payments, paymentProviderCustomers } from "./schema";
 import { customerInvoicePath, invoiceAccessToken, paymentReturnToken, validInvoiceToken, validPaymentReturnToken } from "./customer-tokens";
@@ -85,6 +86,7 @@ const customerInvoice = z.object({
   canPay: z.boolean(), paymentMode: z.enum(["hosted", "manual", "unavailable"]),
   nextPaymentMinor: z.number().int().nullable(),
   awaitingRelease: z.boolean(),
+  refunds: z.array(publicRefundState),
 });
 
 export const getCustomerInvoice = defineService({
@@ -117,6 +119,7 @@ export const getCustomerInvoice = defineService({
       dueAt: invoice.dueAt, memo: invoice.memo, requiredTaxLegend: invoice.requiredTaxLegend, lines, canPay: nextPaymentMinor !== null,
       saveMethodRequired: await requiresSavedMethod(ctx, invoice),
       nextPaymentMinor, awaitingRelease: payable(invoice) && nextPaymentMinor === null,
+      refunds: (await invoiceRefundStateRows(ctx, invoice.id)).map(refund => publicRefundState.parse(refund)),
       paymentMode: !merchantAvailable || !adapter.status.available || adapter.id === "none" ? "unavailable" as const :
         adapter.id === "manual" ? "manual" as const : "hosted" as const };
   },

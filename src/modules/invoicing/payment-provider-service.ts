@@ -3,6 +3,7 @@
 // C5.06: provider orchestration and authenticated event convergence.
 
 import { submitOriginalMerchantRefund } from "./merchant-refund-execution";
+import { originalRefundProviderEvent, originalMerchantRefundEventRetained, retainOriginalMerchantRefundEvent } from "./merchant-refund-provider-events";
 import { and, desc, getTableColumns, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, paymentAdapters } from "@/adapters/payments";
@@ -109,19 +110,9 @@ const paymentEvent = z.object({
   savedMethod: methodEvidence.optional(),
   applicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
 });
-const refundEvent = z.object({
-  providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
-  providerPlatformAccountId: paymentRouting.shape.providerPlatformAccountId,
+const refundEvent = originalRefundProviderEvent.extend({
   destinationAccountId: paymentRouting.shape.destinationAccountId,
   settlementMerchantAccountId: paymentRouting.shape.settlementMerchantAccountId,
-  id: z.string().trim().min(1).max(500),
-  kind: z.enum(["refund_processing", "refund_succeeded", "refund_failed"]),
-  providerRef: z.string().trim().min(1).max(500),
-  paymentProviderRef: z.string().trim().min(1).max(500),
-  failureCode: z.literal("provider_cancelled").optional(),
-  amountMinor: positiveMinor.optional(),
-  currency: currency.optional(),
-  occurredAt: z.string().datetime(),
 });
 const disputeEvent = z.object({
   providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
@@ -386,6 +377,9 @@ async function processPaymentEvent(providerId: string, event: z.infer<typeof pay
 }
 
 async function processRefundEvent(providerId: string, event: z.infer<typeof refundEvent>, ctx: ServiceContext): Promise<string> {
+  const retained = await ctx.callAsSystem(originalMerchantRefundEventRetained, { provider: providerId, event });
+  if (retained.managed) return "refund_current_state_pending";
+  if (!event.paymentProviderRef) throw new ServiceError("conflict", "Restore this authenticated legacy refund's original payment linkage before applying it.");
   const rows = await ctx.tx
     .select({...getTableColumns(refunds), parentProviderRef: payments.providerRef})
     .from(refunds)
@@ -593,6 +587,9 @@ export async function retainPaymentProviderEvidence(providerId: z.infer<typeof p
   for (const original of events) {
     try {
       const event = await retainSubscriptionProviderEvidence(providerId, original);
+      if (["refund_processing", "refund_succeeded", "refund_failed"].includes(event.kind)) {
+        await retainOriginalMerchantRefundEvent.call({ provider: providerId, event: originalRefundProviderEvent.parse(event) }, { kind: "system" });
+      }
       if (event.providerPlatformAccountId && ["payment_processing", "payment_succeeded", "payment_failed", "payment_cancelled"].includes(event.kind)) {
         await retainMerchantProviderEvent.call({ provider: providerId, event: paymentEvent.parse(event) }, { kind: "system" });
       }

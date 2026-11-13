@@ -4,6 +4,7 @@
 import { AdapterError } from "../types";
 import { number, object, text } from "./http";
 import { stripeMerchantRefundBody } from "./stripe-merchant-refund-body";
+import { STRIPE_REFUND_REFERENCE } from "./stripe-refund-reference";
 import { validateMerchantChargeScope } from "./stripe-merchant-scope";
 import type { MerchantChargeScope, MerchantRefundCreationRequest, MerchantRefundObservation, MerchantRefundRecovery, MerchantRefundRecoveryRequest } from "./types";
 
@@ -11,7 +12,7 @@ type Api = (path: string, init: RequestInit, scope: MerchantChargeScope) => Prom
 const unresolved = () => new AdapterError("payments", "stripe", "provider_failure", "The original refund needs authenticated original-account reconciliation.", true);
 const reference = (value: unknown, prefix: "re" | "pi" | "ch") => {
   const id = text(value) ?? text(object(value)?.id);
-  if (!id || id.length > 200 || !new RegExp(`^${prefix}_[A-Za-z0-9_]+$`).test(id)) throw unresolved();
+  if (!id || id.length > 200 || !(prefix === "re" ? STRIPE_REFUND_REFERENCE : new RegExp(`^${prefix}_[A-Za-z0-9_]+$`)).test(id)) throw unresolved();
   return id;
 };
 const auxiliaryReference = (value: unknown, prefix: "ch" | "trr" | "txn") => {

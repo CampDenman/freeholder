@@ -16,7 +16,7 @@ import {notifyCommerceContact} from "./return-notifications";
 import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import refundServices from "./return-refunds";
 import {returnDetail,returnRequestRow} from "./return-contract";
-export {refundReturn,submitReturnProviderRefund,prepareReturnRefund,getReturnRefundPlan,claimReturnProviderRefund,reconcileReturnProviderRefunds,onReturnRefundSucceeded} from "./return-refunds";
+export {refundReturn,submitReturnProviderRefund,prepareReturnRefund,getReturnRefundPlan,claimReturnProviderRefund,reconcileReturnProviderRefunds,onReturnRefundSucceeded,onReturnBankRefundStateChanged} from "./return-refunds";
 import {
   FULFILLMENT_KINDS,
   FULFILLMENT_STATUSES,

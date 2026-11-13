@@ -37,7 +37,7 @@ describe("exact original bank-refund current-read proof", () => {
   it.each([{ readReturned: false }, { exactCallerFinished: false }])("does not turn a retained positive fact into completed read proof: %j", missing => {
     expect(originalRefundCurrentReadVerdict({ ...proof, ...missing, actual: current("succeeded") })).toMatchObject({ state: "review", reason: "unfinished_read" });
   });
-  it.each([{ providerPlatformAccountId: "acct_foreign" }, { chargeAccountId: null }, { providerApiVersion: "2026-10-28.endive" },
+  it.each([{ providerPlatformAccountId: "acct_foreign" }, { chargeAccountId: null }, { providerApiVersion: "2026-10-28.endive" }, { providerApiVersion: null },
     { providerRef: "re_other" }, { paymentProviderRef: null }, { amountMinor: 1001 }, { currency: "USD" }, { bindingVerified: false }])("refuses different original money or scope: %j", change => {
     expect(originalRefundCurrentReadVerdict({ ...proof, actual: { ...current("succeeded"), ...change } })).toMatchObject({ state: "review", reason: "foreign_resource" });
   });

@@ -13879,6 +13879,18 @@ whatever is best for the people using the site.
   The new collection model stays disabled; full financial/browser/provider/
   recovery acceptance and C12.38 remain open. Exact scope and preserved evidence
   are in `deploy/current-financial-source-2026-11-12.md`.
+  Original bank-refund current-state isolated draft 2026-11-12: source now
+  retains repeated capture occurrences, exact original-resource read/finish
+  receipts, nullable/action/failure-balance facts and current cash projections.
+  Issued return credits remain unchanged; exact original RMA parts reopen and
+  outstanding refund promises keep financial review debt. Masked owner/buyer
+  status and the scoped original-resource recovery path are drafted. No source
+  check, SQL application, native, browser or provider acceptance has run for
+  this checkpoint. Its separate owned fragment is unassembled; assembled80
+  SQL958 and all preserved databases/clones are unchanged. Generic/manual
+  causal discharge and legacy bank recovery remain unfinished work. This does
+  not activate the new model or close C12.38. See
+  `deploy/merchant-refund-current-state-2026-11-12.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

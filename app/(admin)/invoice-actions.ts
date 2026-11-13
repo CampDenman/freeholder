@@ -14,6 +14,7 @@ import { actorFromToken } from "@/core/http/actor";
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { ServiceError } from "@/core/service";
 import { sendInvoice } from "@/modules/invoicing/customer-service";
+import { reconcileMerchantRefundCurrentState } from "@/modules/invoicing/merchant-refund-current-service";
 import {
   createCreditNote,
   createDraftInvoice,
@@ -123,7 +124,10 @@ export async function invoiceAction(form: FormData): Promise<void> {
   let destination = invoiceId ? `/admin/invoices/${invoiceId}` : "/admin/invoices/new";
   try {
     const actor = await currentActor();
-    if (intent === "create") {
+    if (intent === "reconcileRefundState") {
+      await reconcileMerchantRefundCurrentState.call({ requestId: field(form, "requestId") }, actor);
+      destination = `/admin/invoices/${invoiceId}?saved=refundState`;
+    } else if (intent === "create") {
       const currency = field(form, "currency").toUpperCase();
       const lines = [0, 1, 2, 3, 4]
         .map((index) => ({

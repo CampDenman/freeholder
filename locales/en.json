@@ -9056,5 +9056,22 @@
   "memberships.chooseMethodNext": "Choose payment after review",
   "memberships.initialQuotedTotal": "Payable before starting: {total} (includes {tax} tax).",
   "memberships.firstPaidEstimate": "First paid period at today’s tax rates: {total} (includes {tax} tax).",
-  "memberships.acceptCommercial": "I agree to the named business, current tax quote, and this membership’s price, renewal and cancellation terms."
+  "memberships.acceptCommercial": "I agree to the named business, current tax quote, and this membership’s price, renewal and cancellation terms.",
+  "audit.invoicing.preparedRefundStatusRead": "Prepared a refund status check",
+  "audit.invoicing.recordedCurrentRefundResponse": "Recorded a current refund response",
+  "audit.invoicing.finishedRefundStatusRead": "Finished a refund status check",
+  "audit.invoicing.confirmedCurrentRefundState": "Confirmed a refund’s current status",
+  "refundStatus.title": "Refunds",
+  "refundStatus.originalPayment": "Refund updates do not change what you originally paid.",
+  "refundStatus.pending": "Processing",
+  "refundStatus.requires_action": "Bank details needed",
+  "refundStatus.succeeded": "Confirmed",
+  "refundStatus.failed": "Unsuccessful",
+  "refundStatus.canceled": "Cancelled",
+  "refundStatus.unknown": "Needs verification",
+  "refundStatus.actionHint": "Check the refund email from Stripe for instructions about bank details. If no email arrived, contact the business.",
+  "refundStatus.stillOwed": "This refund is still owed or needs review. Do not pay the invoice again to receive it.",
+  "refundStatus.check": "Check original {amount} refund",
+  "catalog.notifications.return.refundNeedsAttention.title": "Your refund needs attention",
+  "catalog.notifications.return.refundNeedsAttention.body": "Your original return credit remains in place while the business checks your bank refund."
 }

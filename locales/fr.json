@@ -9056,5 +9056,22 @@
   "memberships.chooseMethodNext": "Choisir le paiement après vérification",
   "memberships.initialQuotedTotal": "À payer avant de commencer : {total} (dont {tax} de taxes).",
   "memberships.firstPaidEstimate": "Première période payante aux taux actuels : {total} (dont {tax} de taxes).",
-  "memberships.acceptCommercial": "J’accepte l’entreprise indiquée, les taxes actuelles et les conditions de prix, de renouvellement et d’annulation de cet abonnement."
+  "memberships.acceptCommercial": "J’accepte l’entreprise indiquée, les taxes actuelles et les conditions de prix, de renouvellement et d’annulation de cet abonnement.",
+  "audit.invoicing.preparedRefundStatusRead": "Vérification de l’état du remboursement préparée",
+  "audit.invoicing.recordedCurrentRefundResponse": "Réponse actuelle du remboursement enregistrée",
+  "audit.invoicing.finishedRefundStatusRead": "Vérification de l’état du remboursement terminée",
+  "audit.invoicing.confirmedCurrentRefundState": "État actuel du remboursement confirmé",
+  "refundStatus.title": "Remboursements",
+  "refundStatus.originalPayment": "Les mises à jour des remboursements ne changent pas le montant payé initialement.",
+  "refundStatus.pending": "En cours",
+  "refundStatus.requires_action": "Coordonnées bancaires requises",
+  "refundStatus.succeeded": "Confirmé",
+  "refundStatus.failed": "Non abouti",
+  "refundStatus.canceled": "Annulé",
+  "refundStatus.unknown": "Vérification requise",
+  "refundStatus.actionHint": "Consultez le courriel de Stripe concernant le remboursement pour les instructions bancaires. Si vous ne l’avez pas reçu, contactez l’entreprise.",
+  "refundStatus.stillOwed": "Ce remboursement reste dû ou doit être vérifié. Ne payez pas de nouveau la facture pour le recevoir.",
+  "refundStatus.check": "Vérifier le remboursement initial de {amount}",
+  "catalog.notifications.return.refundNeedsAttention.title": "Votre remboursement demande une intervention",
+  "catalog.notifications.return.refundNeedsAttention.body": "Votre avoir initial est conservé pendant que l’entreprise vérifie le remboursement bancaire."
 }

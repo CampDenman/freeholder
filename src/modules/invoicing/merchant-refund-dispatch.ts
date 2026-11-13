@@ -11,6 +11,8 @@ import { startRefund } from "./invoice-service";
 import { merchantPhysicalCaller } from "./merchant-physical-caller";
 import { lockMerchantRefundCash } from "./merchant-refund-origin";
 import { merchantRefundCapacity } from "./merchant-refund-capacity";
+import { originalMerchantRefundCurrentStates, refundObservationHasCurrentBinding } from "./merchant-refund-current-state";
+import { STRIPE_REFUND_REFERENCE } from "@/adapters/payments/stripe-refund-reference";
 import { merchantRefundCreationRefusals, merchantRefundDispatches, merchantRefundDispatchFinishes, merchantRefundDispatchStops, merchantRefundObservations, merchantRefundRequests, merchantRefundReservationRetirements, merchantRefundResourceBindings, merchantRefundTerminalReceipts } from "./merchant-refund-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -49,8 +51,10 @@ export const claimMerchantRefundDispatch = defineService({
         eq(merchantRefundObservations.paymentProviderRef, original.originalPaymentRef)),
       inArray(merchantRefundObservations.requestId, ids), and(isNull(merchantRefundObservations.paymentProviderRef), original.paymentId ? eq(merchantRefundObservations.paymentId, original.paymentId)
         : eq(merchantRefundObservations.subscriptionChargeReceiptId, original.subscriptionChargeReceiptId!)))).limit(5001);
-    if (requests.length > 5000 || observations.length > 5000 || observations.some(row => row.paymentProviderRef !== original.originalPaymentRef
+    const current = await originalMerchantRefundCurrentStates(ctx, ids);
+    if (requests.length > 5000 || observations.length > 5000 || observations.some(row => (row.paymentProviderRef !== original.originalPaymentRef
       || row.providerPlatformAccountId !== original.providerPlatformAccountId || row.chargeAccountId !== original.chargeAccountId || row.providerApiVersion !== original.providerApiVersion)
+      && !current.states.some(state => refundObservationHasCurrentBinding(row, state)))
       || requests.some(row => row.originalCashAmountMinor !== original.originalCashAmountMinor || row.currency !== original.currency)) throw new ServiceError("conflict", "Reconcile the complete original refund inventory before dispatch; no truncated or contradictory inventory proves available cash.");
     const retirements = await ctx.tx.select().from(merchantRefundReservationRetirements).where(inArray(merchantRefundReservationRetirements.requestId, ids)).limit(5001);
     const dispatches = await ctx.tx.select({ dispatch: merchantRefundDispatches, finish: merchantRefundDispatchFinishes, stop: merchantRefundDispatchStops, refusal: merchantRefundCreationRefusals })
@@ -67,13 +71,14 @@ export const claimMerchantRefundDispatch = defineService({
         const creatorsQuiesced = calls.every(row => row.finish || row.stop);
         const witnesses = bindings.filter(row => row.requestId === request.id), acks = witnesses.filter(row => row.origin === "physical_ack");
         const resources = new Set((acks.length ? acks : witnesses).map(row => row.providerRef));
-        const failed = resources.size === 1 && terminal.some(row => row.receipt.requestId === request.id && row.fact.requestId === request.id && resources.has(row.fact.providerRef)
+        const currentState = current.states.find(state => state.requestId === request.id);
+        const failed = currentState ? currentState.status === "failed" || currentState.status === "canceled" : resources.size === 1 && terminal.some(row => row.receipt.requestId === request.id && row.fact.requestId === request.id && resources.has(row.fact.providerRef)
           && row.fact.bindingVerified && (row.fact.status === "failed" || row.fact.status === "canceled") && row.fact.providerPlatformAccountId === request.providerPlatformAccountId
           && row.fact.chargeAccountId === request.chargeAccountId && row.fact.providerApiVersion === request.providerApiVersion
           && row.fact.paymentProviderRef === request.originalPaymentRef && row.fact.amountMinor === request.amountMinor && row.fact.currency === request.currency);
         return { id: request.id, amountMinor: request.amountMinor, dispatched: calls.length > 0, creatorsQuiesced,
           terminalFailureVerified: creatorsQuiesced && (calls.length === 0 && retirements.some(row => row.requestId === request.id && row.requestDigest === request.requestDigest) || failed) };
-      }), observations });
+      }), observations, currentStates: current.states, unresolvedCurrentRequests: current.unresolvedRequestIds });
     if (capacity.availableMinor === null || capacity.availableMinor < 0 || capacity.debt.length) throw new ServiceError("conflict", "Actual unknown, unapplied or contradictory refund money must be reconciled before another dispatch.");
     const completionNonce = randomBytes(32).toString("base64url");
     await ctx.tx.execute(sql`select set_config('freeholder.merchant_refund_v1','1',true)`);
@@ -88,7 +93,7 @@ export const claimMerchantRefundDispatch = defineService({
 export const recordMerchantRefundResourceAcknowledgement = defineService({
   name: "invoicing.recordMerchantRefundResourceAcknowledgement", summary: "Retain the actual refund resource returned by this exact admitted physical caller.",
   kind: "mutation", permission: "system", external: false, writeClass: "money", auditInputFields: ["dispatchId", "providerRef"],
-  input: z.object({ dispatchId: z.uuid(), completionNonce: z.string().regex(/^[A-Za-z0-9_-]{43}$/), providerRef: z.string().regex(/^re_[A-Za-z0-9_]+$/).max(200) }),
+  input: z.object({ dispatchId: z.uuid(), completionNonce: z.string().regex(/^[A-Za-z0-9_-]{43}$/), providerRef: z.string().regex(STRIPE_REFUND_REFERENCE).max(200) }),
   output: z.object({ retained: z.literal(true) }),
   handler: async ({ dispatchId, completionNonce, providerRef }, ctx) => {
     const [dispatch] = await ctx.tx.select().from(merchantRefundDispatches).where(eq(merchantRefundDispatches.id, dispatchId)).for("update");
@@ -131,7 +136,7 @@ export async function performMerchantRefundDispatch<T>(dispatch: { dispatchId: s
   try { result = await work(); outcome = "returned"; return result; }
   finally {
     const candidate = result && typeof result === "object" && "providerRef" in result ? result.providerRef : undefined;
-    const providerRef = typeof candidate === "string" && candidate.length <= 200 && /^re_[A-Za-z0-9_]+$/.test(candidate) ? candidate : null;
+    const providerRef = typeof candidate === "string" && candidate.length <= 200 && STRIPE_REFUND_REFERENCE.test(candidate) ? candidate : null;
     finished.set(dispatch.dispatchId, { requestId, nonce: dispatch.completionNonce, outcome, providerRef });
     await finishMerchantRefundDispatch.call(dispatch, { kind: "system" });
     finished.delete(dispatch.dispatchId);

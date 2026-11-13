@@ -4,7 +4,9 @@
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { STRIPE_REFUND_REFERENCE } from "@/adapters/payments/stripe-refund-reference";
+import { eq, sql } from "drizzle-orm";
+import { enqueueJob } from "@/core/jobs";
 import { z } from "zod";
 import { defineService, ServiceError } from "@/core/service";
 import { subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
@@ -15,8 +17,8 @@ import { merchantTaxDigest } from "./merchant-tax-store";
 import { payments } from "./schema";
 const reference = z.string().min(1).max(200), account = z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200);
 export const merchantRefundEvidence = z.object({
-  providerRef: reference.regex(/^re_[A-Za-z0-9_]+$/), paymentProviderRef: reference.regex(/^pi_[A-Za-z0-9_]+$/).nullable(),
-  providerPlatformAccountId: account, providerAccountId: account.optional(), providerApiVersion: z.enum(["2026-02-25.clover", "2026-10-28.endive"]),
+  providerRef: reference.regex(STRIPE_REFUND_REFERENCE), paymentProviderRef: reference.regex(/^pi_[A-Za-z0-9_]+$/).nullable(),
+  providerPlatformAccountId: account, providerAccountId: account.optional(), providerApiVersion: z.string().min(1).max(100).nullable(),
   amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), currency: z.string().regex(/^[A-Z]{3}$/),
   status: z.enum(["pending", "requires_action", "succeeded", "failed", "canceled"]).nullable(), bindingVerified: z.boolean(),
   providerChargeRef: reference.optional(), transferReversalRef: reference.optional(), sourceTransferReversalRef: reference.optional(),
@@ -77,6 +79,14 @@ export const recordMerchantRefundObservation = defineService({
     if (!capture || capture.observationId !== saved.id) throw new ServiceError("conflict", "Restore the exact authenticated refund capture; earlier financial observations were preserved.");
     queueOriginalMerchantRefundRepair(ctx, { kind: "refund_observation", id: saved.id });
     queueOriginalMerchantRefundRepair(ctx, { kind: "refund_capture", id: capture.id });
+    if (bound) {
+      const [ownRead] = await ctx.tx.execute<{ own: boolean }>(sql`select exists(select 1 from merchant_refund_state_reads r
+        where r.request_id=${bound.id}::uuid and encode(sha256(convert_to('refund-state-read:'||r.id::text,'UTF8')),'hex')=${capture.captureKey}) as own`);
+      // Feedback and inspection captures need an actual original-resource job.
+      // Its own exact-read capture does not recursively schedule another GET.
+      if (ownRead?.own !== true) await enqueueJob(ctx.tx, "invoicing.reconcileOriginalRefundCurrentState", { requestId: bound.id },
+        { idempotencyKey: `original-refund-current:${capture.id}`, startAfter: 5 });
+    }
     ctx.setSubject(paymentId ? "payment" : "subscription_provider_charge", paymentId ?? subscriptionChargeReceiptId!);
     return { observationId: saved.id, captureId: capture.id, bindingVerified: saved.bindingVerified };
   },

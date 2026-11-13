@@ -7,8 +7,8 @@ export interface OriginalRefundReadIdentity {
   providerApiVersion: string; providerRef: string; paymentProviderRef: string;
   amountMinor: number; currency: string;
 }
-export interface OriginalRefundCurrentFact extends Omit<OriginalRefundReadIdentity, "paymentProviderRef"> {
-  paymentProviderRef: string | null; status: OriginalRefundCurrentStatus;
+export interface OriginalRefundCurrentFact extends Omit<OriginalRefundReadIdentity, "paymentProviderRef" | "providerApiVersion"> {
+  paymentProviderRef: string | null; providerApiVersion: string | null; status: OriginalRefundCurrentStatus;
   failureBalanceTransactionRef: string | null; bindingVerified: boolean;
 }
 export type OriginalRefundReadVerdict =
