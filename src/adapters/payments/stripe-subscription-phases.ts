@@ -18,7 +18,7 @@ function timestamp(value: string): number {
   return milliseconds / 1000;
 }
 const protocol = (init: RequestInit): RequestInit => ({ ...init, headers: { ...init.headers, "stripe-version": STRIPE_MERCHANT_SCHEDULE_API_VERSION } });
-function validate(request: MerchantPhaseScheduleReadRequest | MerchantPhaseScheduleRequest) {
+function validate(request: MerchantPhaseScheduleReadRequest | Omit<MerchantPhaseScheduleRequest, "onResourceAcknowledged">) {
   validateMerchantChargeScope(request);
   if (!request.providerPlatformAccountId || request.providerScheduleApiVersion !== STRIPE_MERCHANT_SCHEDULE_API_VERSION
     || request.providerApiVersion !== undefined && request.providerApiVersion !== request.providerScheduleApiVersion
@@ -38,16 +38,16 @@ function validate(request: MerchantPhaseScheduleReadRequest | MerchantPhaseSched
       || index > 0 && (request.phases[index - 1]!.end !== phase.start || phase.setupFeeMinor !== 0)) unproven();
   }
 }
-function metadata(request: MerchantPhaseScheduleReadRequest | MerchantPhaseScheduleRequest): Record<string, string> {
+function metadata(request: MerchantPhaseScheduleReadRequest | Omit<MerchantPhaseScheduleRequest, "onResourceAcknowledged">): Record<string, string> {
   return { freeholder_subscription_scope_version: "1", freeholder_subscription_id: request.subscriptionId,
     freeholder_subscription_operation_id: request.operationId, freeholder_platform_account_id: request.providerPlatformAccountId,
-    freeholder_schedule_api_version: request.providerScheduleApiVersion, freeholder_schedule_request_digest: request.requestDigest };
+    freeholder_schedule_api_version: request.providerScheduleApiVersion };
 }
 function matchesMetadata(actual: unknown, expected: Record<string, string>) {
   const values = object(actual);
   return Object.entries(expected).every(([key, value]) => values?.[key] === value);
 }
-function phaseMetadata(request: MerchantPhaseScheduleReadRequest | MerchantPhaseScheduleRequest, phase: MerchantProviderPhase) {
+function phaseMetadata(request: MerchantPhaseScheduleReadRequest | Omit<MerchantPhaseScheduleRequest, "onResourceAcknowledged">, phase: MerchantProviderPhase) {
   return { ...metadata(request), freeholder_phase_digest: phase.phaseDigest, freeholder_phase_tax_quote_digest: phase.taxQuoteDigest,
     freeholder_subscription_terms_id: phase.termsId, freeholder_phase_start: phase.start, freeholder_phase_end: phase.end };
 }
@@ -118,7 +118,10 @@ export async function inspectOriginalStripePhaseSchedule(api: StripeSubscription
     endBehavior: "cancel", complete: true, currentPhaseStart: currentPhaseStart === undefined ? null : new Date(currentPhaseStart * 1000).toISOString(), phases };
 }
 
-function formFor(request: MerchantPhaseScheduleRequest, updating: boolean) {
+/** Pure canonical body builder: a real claim can freeze these exact fields
+ * before I/O without callbacks or a self-referential digest in metadata. */
+export function stripeMerchantPhaseBody(request: Omit<MerchantPhaseScheduleRequest, "onResourceAcknowledged">, updating: boolean) {
+  validate(request);
   const form = new URLSearchParams({ end_behavior: "cancel", "default_settings[collection_method]": "charge_automatically",
     "default_settings[default_payment_method]": request.providerMethodRef, "default_settings[automatic_tax][enabled]": "false" });
   if (updating) form.set("proration_behavior", "none");
@@ -161,7 +164,7 @@ export async function mutateOriginalStripePhaseSchedule(api: StripeSubscriptionR
     if (!["active", "not_started"].includes(prior.status)) unproven();
   }
   const path = request.providerScheduleRef ? `/v1/subscription_schedules/${encodeURIComponent(request.providerScheduleRef)}` : "/v1/subscription_schedules";
-  const value = await api(path, protocol({ method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": request.idempotencyKey }, body: formFor(request, !!request.providerScheduleRef) }), { ...request, providerApiVersion: request.providerScheduleApiVersion });
+  const value = await api(path, protocol({ method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": request.idempotencyKey }, body: stripeMerchantPhaseBody(request, !!request.providerScheduleRef) }), { ...request, providerApiVersion: request.providerScheduleApiVersion });
   const identity = acknowledged(value);
   if (!identity) unproven();
   // Commit actual resource identity even if its scope/phase readback later

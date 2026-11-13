@@ -11,7 +11,7 @@ const request: MerchantPhaseScheduleRequest = { subscriptionId: "00000000-0000-4
   providerPlatformAccountId: "acct_originalPlatform", destinationAccountId: "acct_originalSeller", settlementMerchantAccountId: "acct_originalSeller", providerScheduleApiVersion: "2026-10-28.endive",
   providerCustomerRef: "cus_original", providerMethodRef: "pm_original", providerProductRef: "prod_original", idempotencyKey: "original-phase-operation", phases: [phase], onResourceAcknowledged: async () => {} };
 function metadata(input = request) { return { freeholder_subscription_scope_version: "1", freeholder_subscription_id: input.subscriptionId,
-  freeholder_subscription_operation_id: input.operationId, freeholder_platform_account_id: input.providerPlatformAccountId, freeholder_schedule_api_version: input.providerScheduleApiVersion, freeholder_schedule_request_digest: input.requestDigest }; }
+  freeholder_subscription_operation_id: input.operationId, freeholder_platform_account_id: input.providerPlatformAccountId, freeholder_schedule_api_version: input.providerScheduleApiVersion }; }
 function actual(input = request) {
   const route = { transfer_data: input.destinationAccountId ? { destination: input.destinationAccountId } : null, on_behalf_of: input.settlementMerchantAccountId ?? null };
   return { id: "sub_sched_original", object: "subscription_schedule", customer: "cus_original", subscription: null, released_subscription: null,

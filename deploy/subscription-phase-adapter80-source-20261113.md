@@ -40,3 +40,9 @@ The new helpers alone do not provide those capabilities. Any model/fragment
 extension must compose against the current ordinary80 prefix into a NEW hash
 and NEW database; existing V10/V11 evidence remains immutable. Amendments and
 provider creation stay disabled until the complete protocol is qualified.
+
+The provider metadata binds the pre-existing committed operation UUID. It does
+not embed its own full request digest: the pure body builder lets the real
+claim freeze/hash the exact physical form after that UUID exists, avoiding a
+circular hash. The separately returned inventory digest remains bound to the
+server's retained admission, never accepted as a provider metadata assertion.
