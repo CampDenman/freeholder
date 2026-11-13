@@ -4934,7 +4934,7 @@ END $$;
 CREATE CONSTRAINT TRIGGER invoice_credit_application_projection AFTER INSERT ON invoice_credit_applications DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_credit_application_projection();
 --> statement-breakpoint
 -- Source: deploy/subscription-gross-proration80.fragment.sql
--- SHA256: 1e3d836819143f0f939b5dc119ab806e584447e27e955707d9d08274b6330b33
+-- SHA256: 16313012c670721e1e0519c039a5e7754a2d59f82058e0bbacc2b10acbd3b8c4
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- C9.33/C9.38/C12.38: OWNED UNAPPLIED continuation AFTER bf4a36c9 credit tail
@@ -5233,7 +5233,7 @@ BEGIN
    AND s.amount_minor=NEW.amount_minor AND s.fee_obligation_minor=NEW.fee_obligation_minor AND s.fee_proven_collected_minor=NEW.fee_proven_collected_minor AND s.fee_collection_state=NEW.fee_collection_state AND s.fee_evidence_digest=NEW.fee_evidence_digest AND s.fee_unexpected=NEW.fee_unexpected) THEN
    RAISE EXCEPTION 'The issued credit must reproduce its exact accepted principal/fee source receipt' USING ERRCODE='23514';END IF;
   IF NEW.fee_collection_state IN('recorded_remitted','verified_collected','not_due') AND NOT freeholder_credit_fee_is_collected(payment.id,NEW.fee_collection_state)
-   OR NEW.fee_proven_collected_minor<>CASE WHEN NEW.fee_collection_state IN('recorded_remitted','verified_collected') THEN NEW.fee_obligation_minor ELSE 0 END THEN
+   OR NEW.fee_proven_collected_minor<>(CASE WHEN NEW.fee_collection_state IN('recorded_remitted','verified_collected') THEN NEW.fee_obligation_minor ELSE 0 END) THEN
    RAISE EXCEPTION 'An expected carried fee is not a collected commission; preserve owed or review until actual original proof exists' USING ERRCODE='23514';END IF;
  ELSIF TG_TABLE_NAME='invoice_credit_reservations' THEN
   SELECT * INTO funding FROM invoice_credit_funding WHERE id=NEW.funding_id;

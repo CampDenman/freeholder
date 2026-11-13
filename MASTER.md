@@ -15121,6 +15121,12 @@ whatever is best for the people using the site.
   stored original artifact SHA before integrity validation. No value or
   historical birth is invented from the current key/body. Renewed source and
   actual native acceptance remain pending.
+  Actual draft CI migration failure 2026-11-13 (C12.38): all test shards
+  stop before product tests at PostgreSQL42601 in freeholder_credit_fee_receipt.
+  The original CASE expression in its IF condition is now parenthesized; fee
+  predicates and arithmetic are unchanged. Reassembled80 retains the entire
+  qualified0cff prefix; fresh local ordinary migration is still required. The
+  actual CI error log is preserved; this is no native-product acceptance.
   Combined83 source assembly 2026-11-13 (C1.12/C11.08/C12.38): signed
   first-scope checkpoint3a96 supplies SQL82/a092 (115604bytes), including16
   owned media models and NULL-preserving original reservation identity. The
