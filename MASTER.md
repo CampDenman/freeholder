@@ -5177,6 +5177,19 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `tests/core/sdk.test.ts`; schema conversion in
   `tests/core/sdk-schema.test.ts`; regenerate with `pnpm sdk:generate`.
   Changeset `typed-sdk.md`. PR #291, `99c1a7a`. **F04** N/A — generated SDK, not a screen. **F05** this item *is* `@freeholder/sdk` generated from that OpenAPI; no extra routes. **F07** `tests/core/sdk.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/sdk.test.ts` is the composition proof.)
+  HTTP parity repair, 2026-11-13 (C3.03/C3.22/C3.47): the shared route preserves
+  an explicit null result instead of replacing it with an acknowledgement.
+  Draft/absent page reads therefore keep the generated SDK's nullable contract.
+  The acknowledgement remains for omitted bodies. Six focused service-route
+  controls cover JSON primitives and presenter behavior. Main-based full types,
+  whole lint, 44 complete source contract files and playground policy pass;
+  96 actual HTTP/API/MCP/contract/SDK checks then pass on NEW ordinary0–79
+  with all80 hashes/profile/drain verified. Evidence and limits are in
+  `deploy/http-null-results-2026-11-13.md`; protected CI remains required.
+  The hidden-location browser fixture now expects the declared null absence;
+  its full Chromium journey passes against the checked CI build, preserving
+  address privacy and unrelated POS/social access. Updated-head CI stays open.
+  This repair does not close import, provider, security or stable acceptance.
 - [x] **C3.04** Make MCP discovery actor-aware—including actor kind, service
   opt-out and approval annotations—so listed tools are genuinely callable.
   (`ServiceDef.mcpExclude`; `hiddenFromMcp`; tool `annotations.actorKind` and
