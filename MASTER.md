@@ -14294,6 +14294,13 @@ whatever is best for the people using the site.
   observational context, causal comparison, bank proof and full acceptance remain
   REQUIRED; no C/stable closure. See
   deploy/original-cash-inspection-capture83-source-20261113.md.
+  Independent-stop initial source qualification2026-11-13: full TypeScript
+  passed56.115s at007315b9. Focused lint stopped on one native-test callback
+  declaration: the generic call parameter is unknown, so its union with
+  undefined was redundant. The helper now derives its callback input from the
+  actual service Zod schema. No handler, test oracle or lint rule is relaxed;
+  the failed v22 log is preserved. Renewed source and all143-model/native
+  acceptance remain pending.
   Independent-stop parent composition2026-11-13 (C12.38/C1.08/C11.14): signed
   current-family5ed83538 and leaf-only callback97c11c76 are integrated without
   future six collection models. The exact4283-byte owned stop tail is copied to
