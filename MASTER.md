@@ -13942,6 +13942,17 @@ whatever is best for the people using the site.
   The new collection model stays disabled; full financial/browser/provider/
   recovery acceptance and C12.38 remain open. Exact scope and preserved evidence
   are in `deploy/current-financial-source-2026-11-12.md`.
+  Combined current financial source checkpoint 2026-11-13 (C1.08/C12.38):
+  current buyer/customer fixes, bank recovery, accepted terms, auxiliary/phase
+  callers, legacy read journals and the dated-trial repair are composed.
+  Full types, whole-tree lint with three precise corrected diagnostics, all44
+  static plus13 affected source files (498 pass/26 explicit DB skips), license,
+  notes and plan gates pass. Newunpublished80 SHA3a686245 preserves the entire
+  e783 prefix and all published migration/journal entries. It has NOT been
+  applied to a database. Actual ten-model normal migration, combined native,
+  upgrade/SDK/browser/provider acceptance remain required; model admission is
+  still closed. Newer stop/projection slices are excluded. Exact limits:
+  `deploy/current-commercial80-source-2026-11-13.md`.
   Original bank-refund current-state isolated draft 2026-11-12: source now
   retains repeated capture occurrences, exact original-resource read/finish
   receipts, nullable/action/failure-balance facts and current cash projections.
