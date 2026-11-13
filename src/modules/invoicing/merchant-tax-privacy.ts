@@ -17,6 +17,7 @@ import {invoiceMerchantScopes,merchantInvoicePaymentRoutes} from "./merchant-inv
 import {merchantAgreementPaymentRoutes} from "./merchant-agreement-schema";
 import {subscriptionCommercialTerms,subscriptionMerchantScopes,subscriptionProviderChargeReceipts} from "@/modules/subscriptions/schema";
 import {subscriptionProviderScheduleOperations,subscriptionProviderScheduleResources} from "@/modules/subscriptions/provider-schedule-schema";
+import {subscriptionCommercialResumptions} from "@/modules/subscriptions/commercial-resumption-schema";
 import {subscriptionCommercialAmendments} from "@/modules/subscriptions/commercial-amendment-schema";
 import {subscriptionProviderGenerations} from "@/modules/subscriptions/provider-generation-schema";
 import {subscriptionProviderInvoiceObservations,subscriptionProviderInvoiceLines} from "@/modules/subscriptions/provider-period-schema";
@@ -63,6 +64,10 @@ async function snapshot(tx:Tx,ids:string[]){
   fingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionCommercialAmendments})::text,'UTF8')),'hex')`,
  }).from(subscriptionCommercialAmendments).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptionCommercialAmendments.subscriptionId))
   .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).orderBy(subscriptionMerchantScopes.taxProfileId,subscriptionCommercialAmendments.termsId).limit(5001);
+ const resumptions=await tx.select({id:subscriptionCommercialResumptions.termsId,profileId:subscriptionMerchantScopes.taxProfileId,
+  fingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionCommercialResumptions})::text,'UTF8')),'hex')`,
+ }).from(subscriptionCommercialResumptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptionCommercialResumptions.subscriptionId))
+  .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).orderBy(subscriptionMerchantScopes.taxProfileId,subscriptionCommercialResumptions.termsId).limit(5001);
  const generations=await tx.select({id:subscriptionProviderGenerations.id,profileId:subscriptionMerchantScopes.taxProfileId,
   fingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionProviderGenerations})::text,'UTF8')),'hex')`,
  }).from(subscriptionProviderGenerations).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptionProviderGenerations.subscriptionId))
@@ -76,7 +81,7 @@ async function snapshot(tx:Tx,ids:string[]){
  }).from(subscriptionProviderInvoiceLines).innerJoin(subscriptionProviderInvoiceObservations,eq(subscriptionProviderInvoiceObservations.id,subscriptionProviderInvoiceLines.observationId))
   .innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptionProviderInvoiceObservations.subscriptionId))
   .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).orderBy(subscriptionMerchantScopes.taxProfileId,subscriptionProviderInvoiceLines.id).limit(5001);
- if(rows.length+acceptedTerms.length+providerScopes.length+providerOperations.length+providerResources.length+amendments.length+generations.length+periodInvoices.length+periodLines.length>5000)return null;
+ if(rows.length+acceptedTerms.length+providerScopes.length+providerOperations.length+providerResources.length+amendments.length+resumptions.length+generations.length+periodInvoices.length+periodLines.length>5000)return null;
  // Anchor each charge to the original profile's allocation/single-source
  // route. Selecting every payment on a mixed invoice would attach another
  // seller's refund history to this subject.
@@ -103,7 +108,7 @@ async function snapshot(tx:Tx,ids:string[]){
  if(children.incomplete)return null;
  // The immutable child set belongs to this entire merge pair. Folding it
  // inside the existing fingerprint keeps its retained JSON shape unchanged.
- return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,providerScopes,providerOperations,providerResources,amendments,generations,periodInvoices,periodLines,cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
+ return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,providerScopes,providerOperations,providerResources,amendments,resumptions,generations,periodInvoices,periodLines,cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
 }
 registerContactReference({
  table:"merchant_tax_profiles",

@@ -25,6 +25,8 @@ const fragments = [
   "deploy/subscription-phase-recovery80.fragment.sql",
   "deploy/legacy-bank-recovery80.fragment.sql",
   "deploy/legacy-bank-rma80.fragment.sql",
+  "deploy/subscription-commercial-amendments80.fragment.sql",
+  "deploy/subscription-amendment-late-reconsent80.fragment.sql",
 ];
 const header = `-- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0

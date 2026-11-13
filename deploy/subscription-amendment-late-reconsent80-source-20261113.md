@@ -92,3 +92,20 @@ native/PG, generator, install, browser, build or provider I/O ran. All 20 new
 controls, the frozen checkpoint's existing controls, raw SQL/schema guards,
 types/lint, contract consumers and browser/accessibility qualification remain
 open. This document supplies no passing AFTER evidence.
+
+
+## Root combined source assembly
+
+Local integration0ad36cdd combines frozen c5bd1d46 (including2589b9e5) with
+qualified recovery3513fb24 and RMA feedback245e2146. Adjacent locale additions
+retain both feature sets in all four locales with no duplicate keys. The
+separately preserved root merchant witness patch now includes resumption
+receipts, alongside amendments, provider generations and invoice/line evidence,
+through exact original profile ownership and complete aggregate bounds.
+
+The root assembler appends the frozen amendment and late-consent suffixes after
+complete RMA17bf. New unpublished80 SHA-256 is
+06cefc6632fcceb1b51e32b66a739a9113d9cc5f9ff02d0462ee74fe4571034f.
+No existing database is migrated, and no compiler/native result is credited to
+this assembly yet. Authentic lost-reader recovery, full proration and final
+commercial acceptance remain required; no checklist or stable sign-off.
