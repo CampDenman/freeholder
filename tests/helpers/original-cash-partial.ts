@@ -101,12 +101,13 @@ export async function partialCashFixture(options: { unapplied?: boolean; unreada
     const resource:MerchantRefundObservation={providerRef:`re_Dashboard${nonce}_${customerResources.length+1}`,paymentProviderRef:intent,providerChargeRef:charge,providerPlatformAccountId:"acct_fixturePlatform",providerApiVersion:"2026-02-25.clover",amountMinor,currency,status:"succeeded",providerStatus:"succeeded",bindingVerified:false};
     customerResources.push(resource);customerReturned+=amountMinor;return resource;
   }
-  async function signedDashboard(resource:MerchantRefundObservation) {
+  async function signedDashboard(resource:MerchantRefundObservation,options:{chargeOnly?:boolean}={}) {
     const timestamp=Math.floor(Date.now()/1000),receivedAt=new Date(timestamp*1000).toISOString();
-    const body=Buffer.from(JSON.stringify({id:`evt_Cash${randomUUID()}`,type:"refund.updated",api_version:"2026-02-25.clover",created:timestamp,data:{object:{id:resource.providerRef,payment_intent:intent,charge,amount:resource.amountMinor,currency:currency.toLowerCase(),status:resource.providerStatus}}}));
+    const body=Buffer.from(JSON.stringify({id:`evt_Cash${randomUUID()}`,type:"refund.updated",api_version:"2026-02-25.clover",created:timestamp,data:{object:{id:resource.providerRef,payment_intent:options.chargeOnly?null:intent,charge,amount:resource.amountMinor,currency:currency.toLowerCase(),status:resource.providerStatus}}}));
     const signature=createHmac("sha256",secret).update(`${timestamp}.`).update(body).digest("hex");
     const events=await actual.verifyWebhook({body,headers:{"stripe-signature":`t=${timestamp},v1=${signature}`},receivedAt});
     await retainPaymentProviderEvidence("stripe",events,{rawBodySha256:createHash("sha256").update(body).digest("hex"),receivedAt});
+    return events;
   }
   return { base,source,posts,entered,release,amount,paymentId:begun.payment.id,invoiceId:placed.order.invoiceId!,returnOne,dashboardRefund,signedDashboard,
     run:()=>returnOriginalCash.call({source,confirmation:ORIGINAL_CASH_RETURN_CONFIRMATION},OWNER),

@@ -14164,6 +14164,18 @@ whatever is best for the people using the site.
   no observed current-writer fee disclosure or qualification is claimed. See
   deploy/subscription-proration-buyer-export82-source-20261113.md. All native
   privacy, financial and stable acceptance requirements remain open.
+  Charge-only original feedback source checkpoint 2026-11-13 (C12.38/C1.08):
+  the failing unassigned fixture had supplied a PI-bearing callback, correctly
+  retained by the managed path. Its corrected signed charge-only form now
+  discovers real positive observation/receipt charge ancestry before a first
+  cash owner. Exact original platform/account and genuine receipt aliases are
+  required; ambiguous owners or a contradictory present PI cannot be replaced
+  by an amount match. Namespace bodies/composite feedback IDs and original bank
+  signatures remain unchanged. Twelve pure/adapter cases plus corrected/new
+  native path and actual NULL-payment receipt assertions are PREPARED/UNRUN;
+  the failed V4 evidence is preserved. No CPU/PG/SQL or qualification claim;
+  see deploy/charge-only-original-feedback82-source-20261113.md. All existing
+  financial, privacy, provider and stable acceptance requirements remain open.
   Commercial assembly checkpoint 2026-11-13 (C12.38): SQL80/cf1e now
   appends the six attestation/credit/gross/fee/boundary/card tails while
   preserving the entire qualified397928-byte0cff prefix and unchanged81.

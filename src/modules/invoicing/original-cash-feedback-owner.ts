@@ -15,6 +15,7 @@ import { originalCashRecoveries, originalCashRecoveryFacts } from "./original-ca
 import { recoveryOwnerBody, recoveryFactBody } from "./original-cash-recovery-store";
 import { cashNamespaceKey, verifyOriginalCashRecovery } from "./original-cash-recovery-proof";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import { originalChargeFeedbackAncestry } from "./original-cash-charge-ancestry";
 import { moneyStateEvents, payments, refunds } from "./schema";
 
 export interface OriginalFeedbackOwnerCandidate {
@@ -119,6 +120,11 @@ export async function originalBankFeedbackOwner(tx: Tx, raw: typeof legacyBankFe
       || owner.paymentId !== owner.owner.cash.paymentId || owner.subscriptionChargeReceiptId !== owner.owner.cash.subscriptionChargeReceiptId) throw unresolved();
     scopes.push({ paymentId:owner.paymentId,receiptId:owner.subscriptionChargeReceiptId,platform:owner.owner.cash.providerPlatformAccountId,account:owner.owner.cash.chargeAccountId,intent:owner.owner.cash.providerRef });
   }
+  // Only an absent PI permits direct charge ancestry. A contradictory present
+  // PI still needs its genuine original refund resource binding; the charge
+  // cannot silently replace it. Missing observed platform remains debt.
+  const chargeAncestry=await originalChargeFeedbackAncestry(tx,evidence);
+  if(chargeAncestry){bounded(chargeAncestry.identities);candidates.push(...chargeAncestry.candidates);}
   const intentRefs = [...new Set([...(evidence.observedPaymentRef ? [evidence.observedPaymentRef] : []),...scopes.map(scope=>scope.intent)])];
   const positive = intentRefs.length ? bounded(await tx.select().from(merchantPaymentObservations).where(and(eq(merchantPaymentObservations.status,"succeeded"),sql`${merchantPaymentObservations.amountMinor}>0`,
     inArray(merchantPaymentObservations.providerRef,intentRefs),sql`${merchantPaymentObservations.chargeAccountId} is not distinct from ${evidence.observedChargeAccountId}`,
@@ -136,14 +142,14 @@ export async function originalBankFeedbackOwner(tx: Tx, raw: typeof legacyBankFe
     candidates.push({paymentId:null,subscriptionChargeReceiptId:cash.id,platform:cash.providerPlatformAccountId,account:cash.chargeAccountId,paymentRef:cash.providerPaymentIntentRef,
       kind:"charge_receipt",id:cash.id,fingerprint:merchantTaxDigest(cash)});
   }
-  const receiptIds = receipts.map(receipt=>receipt.id), paymentIds = positive.map(cash=>cash.paymentId);
+  const receiptIds = [...new Set([...receipts.map(receipt=>receipt.id),...(chargeAncestry?.candidates.flatMap(cash=>cash.subscriptionChargeReceiptId?[cash.subscriptionChargeReceiptId]:[])??[])])], paymentIds = [...new Set([...positive.map(cash=>cash.paymentId),...(chargeAncestry?.candidates.flatMap(cash=>cash.paymentId?[cash.paymentId]:[])??[])])];
   const relatedLegacy = paymentIds.length ? bounded(await tx.select().from(refunds).where(and(eq(refunds.provider,"stripe"),inArray(refunds.paymentId,[...new Set(paymentIds)])))
     .orderBy(asc(refunds.id)).limit(5001)) : [];
   await addLegacyOwners(relatedLegacy);
   const routes = receiptIds.length || paymentIds.length ? bounded(await tx.select().from(merchantAgreementPaymentRoutes).where(or(
     receiptIds.length ? inArray(merchantAgreementPaymentRoutes.originalChargeReceiptId,receiptIds) : undefined,
     paymentIds.length ? inArray(merchantAgreementPaymentRoutes.paymentId,paymentIds) : undefined)).orderBy(asc(merchantAgreementPaymentRoutes.paymentId)).limit(5001)) : [];
-  const aliases: OriginalFeedbackReceiptAlias[] = [];
+  const aliases: OriginalFeedbackReceiptAlias[] = [...(chargeAncestry?.aliases??[])];
   for (const route of routes) {
     const receipt = receipts.find(cash=>cash.id===route.originalChargeReceiptId);
     if (!receipt) continue;
