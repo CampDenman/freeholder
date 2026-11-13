@@ -14908,6 +14908,17 @@ whatever is best for the people using the site.
   central merchant composition and all combined qualification remain required;
   no SQL, historical evidence, C-item or stable gate changes. See
   `deploy/proration-financial-export81-source-20261113.md`.
+  Additive financial-reader adapter (same date/items): an ordinary internal
+  SOURCE ONLY adapter selects all17 proration/attestation/credit/commission/
+  boundary families through exact invoice, subscription or frozen-profile
+  parents before payment routing. It retains cashless/trial promises and
+  bounded source/target/inherited credit ancestry with full PostgreSQL row
+  hashes; missing, foreign or contradictory lineage refuses a partial witness.
+  Root's three central readers and existing five cash arrays are unchanged
+  and require explicit composition. Ten synthetic read-driver controls are
+  PREPARED/UNRUN; no compiler, lint, database, native or provider ran. No SQL,
+  activation, item or stable gate changes. See
+  `deploy/proration-financial-witness81-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the
