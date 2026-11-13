@@ -34,8 +34,16 @@ export async function controlledCanonicalTarget(tx:Tx,invoiceId:string){
   ||applications.length!==reservations.length||funding.length!==fundingIds.length||notes.length!==noteIds.length
   ||reservations.some(row=>row.targetSourceId!==invoice.sourceId)||notes.some(row=>row.status!=="issued"||row.currency!==invoice.currency)
   ||reservations.reduce((n,row)=>n+BigInt(row.amountMinor),0n)!==BigInt(invoice.creditedMinor))throw new ServiceError("conflict","Retain the entire exact target-owned issued credit/application, line and dated-tax lineage; no released promise or truncated inventory can fund collection.");
- const immutableInvoice={id:invoice.id,contactId:invoice.contactId,sourceType:invoice.sourceType,sourceId:invoice.sourceId,currency:invoice.currency,requestHash:invoice.requestHash,
+ const immutableInvoice={id:invoice.id,ownerSubscriptionId:invoice.sourceId.split(":")[0],sourceType:invoice.sourceType,sourceId:invoice.sourceId,currency:invoice.currency,requestHash:invoice.requestHash,
   subtotalMinor:invoice.subtotalMinor,discountMinor:invoice.discountMinor,shippingMinor:invoice.shippingMinor,taxMinor:invoice.taxMinor,totalMinor:invoice.totalMinor,issuedAt:invoice.issuedAt};
- const digest=merchantTaxDigest({invoice:immutableInvoice,lines,taxes,taxLines,applications,reservations,funding,notes,marketPolicy,feeDuty:feeDuty??null,feeCreditAssignments});
+ // Contact aliases/current status/timestamps remain in full current physical
+ // coverage, but are not accepted commercial identity. contacts.merge may
+ // repoint both actual owners without rewriting the original source promise.
+ const immutablePolicy={invoiceId:marketPolicy.invoiceId,allocationVersion:marketPolicy.allocationVersion,collectionVersion:marketPolicy.collectionVersion,model:marketPolicy.model,
+  adapter:marketPolicy.adapter,siteFeeBps:marketPolicy.siteFeeBps,holdDays:marketPolicy.holdDays,feeMinor:marketPolicy.feeMinor,sellerUserId:marketPolicy.sellerUserId,
+  merchantName:marketPolicy.merchantName,merchantSupport:marketPolicy.merchantSupport,providerAccountId:marketPolicy.providerAccountId};
+ const immutableNotes=notes.map(note=>({id:note.id,invoiceId:note.invoiceId,number:note.number,sequenceKey:note.sequenceKey,idempotencyKey:note.idempotencyKey,requestHash:note.requestHash,
+  currency:note.currency,reason:note.reason,subtotalMinor:note.subtotalMinor,taxMinor:note.taxMinor,totalMinor:note.totalMinor,issuedAt:note.issuedAt}));
+ const digest=merchantTaxDigest({invoice:immutableInvoice,lines,taxes,taxLines,applications,reservations,funding,notes:immutableNotes,marketPolicy:immutablePolicy,feeDuty:feeDuty??null,feeCreditAssignments});
  return{invoice,lines,taxes,taxLines,applications,reservations,funding,notes,releases,currentCollectible:!["draft","void","refunded"].includes(invoice.status)&&releases.length===0,marketPolicy,feeDuty:feeDuty??null,feeCreditAssignments,count,digest};
 }
