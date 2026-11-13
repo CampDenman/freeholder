@@ -41,18 +41,8 @@ import {
   subscribe,
 } from "./service";
 
-export function proratedDifference(
-  oldMinor: number,
-  newMinor: number,
-  periodStart: Date,
-  periodEndAt: Date,
-  at: Date,
-): number {
-  const total = periodEndAt.getTime() - periodStart.getTime();
-  const remaining = Math.max(0, periodEndAt.getTime() - at.getTime());
-  if (total <= 0) return 0;
-  return Math.round((newMinor * remaining) / total) - Math.round((oldMinor * remaining) / total);
-}
+import { proratedDifference } from "./proration-amounts";
+export { proratedDifference } from "./proration-amounts";
 
 function mayChargePlatform(subscription: typeof subscriptions.$inferSelect): boolean {
   return subscription.billingMode === "platform"
@@ -756,11 +746,11 @@ const applyPlanChange = defineService({
         periodEnd: subscription.currentPeriodEnd,
       });
     }
-    // The plan bills the difference now. A customer's own switch is recorded
+    // The plan bills the difference now. Every actor's switch is recorded
     // as waiting on that invoice and granted by `completePaidPlanChange` once
     // it settles; until then they keep the plan they have paid for. A provider
     // schedule bills its own proration, so that lane is not held here.
-    if (input.settleBeforeGrant && invoiceId && subscription.billingMode !== "provider") {
+    if (invoiceId && subscription.billingMode !== "provider") {
       await ctx.tx.insert(subscriptionEvents).values({
         subscriptionId: subscription.id,
         kind: "plan_change_pending",
@@ -859,7 +849,7 @@ export const completePaidPlanChange = defineService({
       .limit(1);
     if (!pending?.fromPlanId || !pending.toPlanId || !pending.detail) return { switched: false };
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
-    if (!invoice || invoice.status !== "paid" || invoice.paidMinor < invoice.totalMinor) return { switched: false };
+    if (!invoice || !invoice.issuedAt || invoice.status !== "paid" || invoice.paidMinor !== invoice.totalMinor || invoice.refundedMinor !== 0) return { switched: false };
     const [subscription] = await ctx.tx
       .select()
       .from(subscriptions)
@@ -868,6 +858,7 @@ export const completePaidPlanChange = defineService({
       .for("update");
     if (
       !subscription ||
+      invoice.contactId !== subscription.contactId || invoice.currency !== subscription.currency || invoice.sourceType !== "subscription" || invoice.sourceId?.split(":")[0] !== subscription.id ||
       subscription.planId !== pending.fromPlanId ||
       (subscription.status !== "active" && subscription.status !== "trialing")
     ) {
