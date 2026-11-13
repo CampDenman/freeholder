@@ -185,6 +185,36 @@ describe("serviceRoute()", () => {
     seen = undefined;
   });
 
+  it.each([null, false, 0, ""])('preserves the service JSON result %j', async (value) => {
+    const service = defineService({
+      name: `http.primitive${String(value).length}${typeof value}`,
+      summary: "Returns a legitimate JSON primitive.",
+      kind: "query",
+      permission: "public",
+      input: z.object({}),
+      handler: async () => value,
+    });
+    const response = await serviceRoute(service)(request());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(value);
+  });
+
+  it("preserves an explicit null supplied by the presenter", async () => {
+    const response = await serviceRoute(echo, {
+      present: () => ({ body: null }),
+    })(request("https://example.test/api/echo?name=Ada&count=1"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toBeNull();
+  });
+
+  it("keeps the acknowledgement for a presenter that omits its body", async () => {
+    const response = await serviceRoute(echo, {
+      present: () => ({ headers: { "x-result": "received" } }),
+    })(request("https://example.test/api/echo?name=Ada&count=1"));
+    expect(response.headers.get("x-result")).toBe("received");
+    expect(await response.json()).toEqual({ ok: true });
+  });
+
   it("reads a JSON body on POST", async () => {
     const response = await serviceRoute(echo)(
       request("https://example.test/api/echo", {
