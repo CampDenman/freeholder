@@ -15115,6 +15115,12 @@ whatever is best for the people using the site.
   Root media/storage corrections and full renewed qualification remain required;
   no schema, SQL, activation, item or stable gate changes. See
   `deploy/commercial-lint82-source-20261113.md`.
+  First-scope compiler repair 2026-11-13 (C1.12/C11.08): first renewed
+  compilation stops at two omitted query projection fields. Multipart erasure
+  now selects the real reservation UUID before membership checks and the
+  stored original artifact SHA before integrity validation. No value or
+  historical birth is invented from the current key/body. Renewed source and
+  actual native acceptance remain pending.
   Combined83 source assembly 2026-11-13 (C1.12/C11.08/C12.38): signed
   first-scope checkpoint3a96 supplies SQL82/a092 (115604bytes), including16
   owned media models and NULL-preserving original reservation identity. The

@@ -95,7 +95,7 @@ registerContactPrivacySource({
   const first=await captureFirstOriginalMediaScope(tx,context.requestId,contactId,MULTIPART_PRIVACY_SCOPE),before={resourceIds:first.membership.resources.map(row=>row.id),uploadIds:first.membership.uploads.map(row=>row.id),keyDigests:[...new Set([...first.membership.reservations.map(row=>row.keyDigest),...first.membership.legacyReservations.map(row=>row.keyDigest)])]};
   const attached=await tx.select({id:mediaObjects.assetId}).from(mediaObjects).where(and(eq(mediaObjects.ownerContactId,contactId),sql`${mediaObjects.assetId} is not null`)).limit(1);
   if(attached.length){if(!context.service)throw new Error("Attached media erasure requires its real parent service context.");const{retireOwnedAssetsForErasure}=await import("./service");await context.service.callAsSystem(retireOwnedAssetsForErasure,{contactId,requestId:context.requestId});}
-  const objects=await tx.select({key:mediaObjects.key,uploadId:mediaObjects.uploadId}).from(mediaObjects).where(eq(mediaObjects.ownerContactId,contactId));
+  const objects=await tx.select({key:mediaObjects.key,uploadId:mediaObjects.uploadId,reservationId:mediaObjects.reservationId}).from(mediaObjects).where(eq(mediaObjects.ownerContactId,contactId));
   const physicalIds=first.membership.receipts.map(row=>row.id),physical=physicalIds.length?await tx.select({id:mediaObjectWrites.id,key:mediaObjectWrites.key,actor:mediaObjectWrites.actor}).from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,physicalIds)):[];
   // Raw capture claims reserve and write under one immutable caller identity.
   // A later executor of a logical media upload supplies no ownership proof.
@@ -116,7 +116,7 @@ export async function eraseMultipartOperations(data:Record<string,unknown>):Prom
  const input=payload.parse(data);
  const captured=await db().transaction(async tx=>{
   await lockContactIdentity(tx);
-  const[request]=await tx.select().from(dataRequests).where(eq(dataRequests.id,input.requestId)).limit(1),[artifact]=await tx.select({body:dataRequestArtifacts.body}).from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,input.requestId)).limit(1);
+  const[request]=await tx.select().from(dataRequests).where(eq(dataRequests.id,input.requestId)).limit(1),[artifact]=await tx.select({body:dataRequestArtifacts.body,sha256:dataRequestArtifacts.sha256}).from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,input.requestId)).limit(1);
   const original=receipt.safeParse(artifact?.body),outcome=original.success?original.data.outcomes.find(row=>row.scope===MULTIPART_PRIVACY_SCOPE):null;
   if(!request||!artifact||!erasureArtifactIsIntact(artifact)||!original.success||!outcome)throw new Error("The original upload erasure receipt is missing. Restore its exact backup.");
   if(outcome.outcome!=="pending"||!outcome.pendingJobs?.includes(input.originalJobId))return null;
