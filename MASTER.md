@@ -3891,6 +3891,69 @@ reading chat logs.
   `tests/core/merge-completeness.test.ts`; changeset
   `contact-privacy-rights.md`; operator guide `deploy/privacy-rights.md` **F04** `/admin/contacts/privacy` access/export/erasure. **F05** `contacts.createDataRequest`/`fulfillDataRequest`/`recordConsent` and `privacy.getMyProfile`/`createMyDataRequest`/`downloadMyDataRequestArtifact` at `/api/v1/contacts.*` and `/api/v1/privacy.*`; MCP `privacy_*`/`contacts_*`. **F07** `tests/core/contact-privacy-rights.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/privacy-rights.md`. **F12** `tests/core/contact-privacy-rights.test.ts` is the composition proof.)
 
+  Published-main WXR containment in progress (2026-11-13, C1.08/C3.47/C11.14):
+  an actual 501-entry unaccepted WXR control on protected main `81271622`
+  deleted the original private chunk but falsely completed its erasure receipt
+  with private text still present in one normalized entry and one media plan.
+  The original full-erasure oracle and populated database are preserved. A
+  private completion guard now checks the original queued task and verified
+  pending receipt under privacy/run locks, retaining explicit recovery while
+  an unaccepted normalized graph remains. Source typecheck, whole lint and 384 static controls pass (26 declared
+  database skips). The actual 501-entry pending containment passes (5.403s),
+  unchanged outage/removal/replay positive passes (6.676s), and the other 14
+  raw-source controls pass without retry; independent physical/receipt/journal
+  readback and closed database sessions are recorded. Evidence:
+  `deploy/import-wxr-index-privacy-2026-11-13.md`. Those ordinary79 results
+  establish containment; the newer81 proofs below do not close C1.08.
+
+  Full81 finite privacy proof2026-11-13 (80=3a686245/81=955a04d2): NEW ordinary
+  schema matches all82 identities/22 models and enabled guards. The unchanged
+  original501-WXR full-erasure and URL-only media-key AFTER controls pass;
+  exact original scope, accepted same-namespace physical receipts/raw absence
+  and private-projection minimization are independently read back. Actual held,
+  accepted500-CMS-child and later501-generation boundaries pass with exact
+  native before/after ownership, canonical membership or bytes preserved as
+  appropriate. Historical NEWv2 actual old79->ordinary81 proof reopens the
+  retained verified/intact false-completed task truthfully into pending recovery,
+  idempotently, with capture0/no backfill/no later-graph adoption/no extra DELETE.
+  Unknown historical private index remains for reviewed recovery. Source/SQL,
+  case timings and minimal independent proofs are in
+  `deploy/import-upload-index-erasure-source-2026-11-13.md` and
+  `deploy/import-uploaded-history-recovery-2026-11-13.md`. Four stronger WXR/ZIP
+  rollback cases now pass on ce/955: both late-reader controls complete and
+  minimize500 entries; both named-hold controls protect and then delete raw
+  originals. Held final receipts remain retained/partial with500 unminimized
+  entries/one marker and no task after release. Those old partial receipts
+  remain terminal; the actual new-request evidence below finishes cleanup
+  while preserving them. Remaining public authority/cancellation/recovery, live
+  API/MCP/SDK/browser/provider and wider privacy/restore acceptance remain open;
+  no account or stable sign-off follows.
+
+
+  Released-hold NEW-request repair source2026-11-13 (C1.08/C3.47/C11.14):
+  the documented new verified request failed before job assertions on actual
+  WXR3a35/955 because rollback removed the mutable upload descriptor. Its
+  failure database and unchanged positive oracle remain preserved. A narrow
+  source repair admits only a complete original capture with an intact retained
+  same-contact receipt, exact graph/generation/revision/chunk membership and
+  positive same-namespace physical retirement, with no live hold/writer/rebind
+  or accepted ownership. The new capture/tasks preserve the old receipt and
+  scope. Four prepared native other-subject/corrupted-receipt refusals accompany
+  the unchanged WXR/ZIP positive controls. Full Node22 types, corrected lint,
+  registry/composition/participation contracts and68 unique NoDB assertions
+  pass (138 explicit DB skips); note regeneration and metadata pass. Actual
+  NEW ordinary0–81/438 schema passes all82hashes/22models/28guards. Both
+  unchanged87 positives pass (WXR10.323s/ZIP8.655s), independently proving
+  original500minimized, oldpartial/intactretainedreceipt unchanged, new exact
+  capture/job/completedreceipt, later501+bytes unchanged and no second DELETE;
+  UTC/fsyncON/jitOFF/journal/PGclient drain pass after each. Four prepared
+  other-subject/corrupted-receipt negatives now also pass individually for
+  WXR/ZIP (7.383/7.505/7.326/7.083s), preserving exact oldartifact/capture,
+  private500 and newcapture/task/artifact0 with independent full82/profile/
+  drain after each. Final combined/API/MCP/SDK/browser/provider acceptance
+  remains UNRUN; no C-item/stable completion claim follows. See
+  `deploy/import-held-original-new-request-2026-11-13.md`.
+
   Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
   documented an empty original hold, uploaded a later unheld WXR generation,
   verified and fulfilled the real erasure. The request falsely reached
@@ -6434,6 +6497,54 @@ deployments are portable, testable and incapable of silently forking the truth.
   This splits a required delivery portion from C3.22; both remain open until
   their complete source and acceptance criteria pass. Migration 73 follows
   merged mail recovery 72 in the contiguous journal.
+  Finite full81 proof2026-11-13: frozen acbb/eadc/b0e source on
+  SQL80=3a686245/81=955a04d2 passed NEW ordinary0–81/all82 identities,
+  22-model/guard/capability proof and unchanged original501-WXR full-erasure
+  AFTER6.568s plus original URL-only media-key AFTER6.312s. Actual held-upload
+  boundary5.826s, accepted500-CMS-child refusal19.209s and later501-generation
+  boundary6.511s pass, with independently read exact scope/namespace/physical
+  facts and native before/after ownership or retained bytes. The prior8c
+  domain-digest failure remains preserved; the corrected955 used a NEW DB.
+  Historical NEWv1 reproduced the exact old79 final-marker bug and ordinary81,
+  then stopped before recovery because its one-item later fixture correctly
+  used finite preview. V1 remains untouched. Test-only78af builds an actual501
+  later graph without relaxing old-marker/recovery/idempotency/no-DELETE checks.
+  NEW historicalv2 then passes actual old79->ordinary81 and real shared-service
+  reopening: controller26.222s/current recovery case1.024s. Verified intact
+  request becomes pending recovery, original task/keys remain exact, one durable
+  claim is replay-idempotent, all initial captures stay0/old key digestNULL,
+  old/later graphs gain no retirement authority, later501 bytes are unchanged
+  and no extra DELETE occurs. Historical unknown membership is not fabricated.
+  Source586e passed full types/whole lint/384 contracts+nine focused assertions;
+  test-only78af passed types/changed lint/four pures. Explicit native skips are
+  not acceptance evidence. All finite probes saved minimal hashes/counts and
+  actual empty-client readback; no old failure/golden DB was cloned or exported.
+  Evidence and preserved failures:
+  `deploy/import-upload-index-erasure-source-2026-11-13.md` and
+  `deploy/import-uploaded-history-recovery-2026-11-13.md`.
+  Public-path finite follow-up on d25/955: small REST shared-service lifecycle
+  passes6.842s with mocked download bytes, real owner/storage and preserved
+  draft/date/byline/publication/owned rollback. Real TCP501 lifecycle passes
+  52.825s, original180s/children60s unchanged:8 captured originals, distinct
+  actual child PIDs/fresh sessions0->500->501, zero refetch and all82 hashes
+  unchanged with resolved childglobalSetup[]/no reset/migrate/seed. Actual
+  shared PNG GET1/no outbound credentials, accepted500-child fresh-owner resume,
+  501draft->published->rollback/defaultCMSexact/assetusage0/media200->404 pass.
+  Independent501 witnesses/batches500+1+media/17table-schema digests/exact
+  original-namespace PUT+raw hashes/child exit/PG[] are saved. Private original
+  bytes remain retained; this is a lifecycle, not an erasure/account proof.
+  All four stronger WXR/ZIP rollback/privacy cases now pass, unchanged60s/
+  bail1/retry0, on ce/955: WXR late-reader6.939s/held7.356s and ZIP late-reader
+  7.574s/held7.366s. Both late-reader outcomes complete with500 minimized
+  entries/marker0/exact capture/task/physical retirement. Both hold cases
+  protect raw originals until named hold removal, then delete them; their
+  actual retained partial receipts and500 unminimized entries/marker1/tasks0
+  do not prove post-release completion. Same-request resume, seven other small
+  REST authority/cancellation/recovery cases, live API/MCP/SDK, four-locale production
+  browser, broader old-image/recovery and owner/provider/security/stable gates
+  remain required. Mocked small REST does not prove live HTTP routing; real TCP
+  public-source fetching does not prove incoming API/MCP/SDK. Later financial/
+  source composition needs fresh qualification.
   Canonical original-retention draft 2026-11-12: a second actual control on
   protected main reproduced the same pre-verification hold gap for uploaded
   WXR bytes. New unpublished80 capture receipts and immutable source/generation
@@ -6471,6 +6582,75 @@ deployments are portable, testable and incapable of silently forking the truth.
   journal entries remain byte-identical; unpublished80 stays1ac4652c.
   This new current-main composition has not yet passed source/native/SDK
   qualification and supplies no provider or stable sign-off.
+  HTTP graph source draft 2026-11-12: distinct saved response objects now have
+  normalized graph and entry bindings, short original-authorized index
+  claim/apply phases, exact credential-ID leases and bounded request/entry/
+  physical-byte counters. The shared reader-source hold collector gathers
+  legacy nonce and crawl generations before one canonical completion receipt;
+  no second writable hold authority remains in81. Empty actual HTML responses
+  retain their original manifest membership without invented positive ranges.
+  The unregistered, unjournalled48964767 source now composes full CURRENT46
+  with published0–79/journal and80SQL958 unchanged. FullNode22 types/focused
+  lint and110 pure controls pass; six database cases are explicitly skipped.
+  The revised81 schema/runtime remains unqualified; its general-writer hold
+  fence still needs a distinct actual capture witness. Global catalog/commit,
+  selective crawl erasure, late facts and full source acceptance remain open.
+  See `deploy/import-http-graph-source-2026-11-12.md`.
+  Revised be979/c70 draft qualification: a NEW current-v9 database applied
+  real normal0–80/958 then explicit unjournalled81; six read-only model cases
+  passed591ms with journal81/max60 unchanged. Actual missing-collector hold
+  refusal passed11.40s, and actual TCP response→normalized graph indexing
+  passed9.02s. Independent server/PG drain passed. This remains disabled source
+  work: no normal81, full catalog/commit/privacy lifecycle or hosted acceptance
+  is supplied by these finite controls; C3.47 remains open.
+  Next HTTP source increment: normalized response-bounded commit now reuses
+  actual CMS/media child receipts and root publication/rollback, with stable
+  credential leases and selective original cleanup. New81 SQLc623 adds the
+  deferred entry-witness and held-URL/physical-retirement fences. This revision
+  is unapplied and unqualified; c70/v5 and earlier evidence remain preserved.
+  Actual commit/zero-response hold oracles are prepared only. Full privacy,
+  old-runtime compatibility, recovery and above500-entry lifecycle still govern
+  this unchecked item; no new deferral or completion claim is introduced.
+  Indexed-input boundary 2026-11-12: an unchanged e498/c623 oracle genuinely
+  failed8.94s after physical PUT/DELETE retirement and a false completed erasure
+  receipt: the normalized entry still held its synthetic title/SEO marker.
+  An actual populated clone preserves matching19-table hashes, journal and full
+  schema; deleted physical bytes were not restored. A new disabled source-only
+  draft adds exact original erasure-capture completion, including true empty,
+  and guarded projection minimization before acknowledgement. Missing old
+  membership remains recovery debt; no later generation is adopted. Frozen2f601
+  fullNode22 types, seven-file lint and108 pure controls pass (22 native/model
+  skips). Full current80 composition, NEW eight-model SQL/native, old-runtime
+  and recovery qualification remain pending.
+  Exacte5dfa782 now composes only the47 owned Crawl paths on current81e/
+  buyer-terms881a, preserving its full ordinary0–80 prefix. FullNode22 types,
+  40-file lint and108 pures pass (22 native/model skips). A NEW normal0–80/881a
+  plus explicit unjournalled81/466931a7 diagnostic and8 read-only models pass;
+  the unchanged278e indexed oracle passes12.00s with exact1-source/2-response
+  completion, zero marker/projection copies and actual PUT2/DELETE2 retirement.
+  Independent TCP/runner/client drain passes. Queue delivery remains disabled;
+  registered bodies used actual durable payloads. Old-runtime/held/late/recovery/
+  expiry and full501 acceptance remain required. Preserved v6/c623 and its
+  actual false-completed clone are untouched;81 remains unregistered.
+  Actual old847 native application-source refusal now passes on new v7: real
+  e498 TCP setup12.53s, populated missing-capture refusal6.52s with unchanged
+  bytes/rows and no intervening reset, then true-empty refusal8.21s. Current
+  callback789/e5 reuses that actual verified empty request without reset and
+  passes7.74s with real first immutable0/0 capture and intact completed receipt.
+  Independent TCP/runner/client drain and the ordinary80 journal are unchanged.
+  This is not historical-completion reconstruction or production-artifact
+  acceptance; the untouched false-completed golden still needs reviewed recovery.
+  Historical review on a NEW copy of the untouched c623 golden genuinely
+  fails3.23s: valid original artifact/audit/retired cohorts reopen only their
+  known2 jobs and in_progress status, but recoveryRequired is0 while complete
+  capture tables are absent. No migration/reset ran; readiness/schema/journal
+  stamps and golden hashes remain unchanged. Final ACK-refusal was not reached.
+  A disabled source-only correction now flags missing capture/guard recovery
+  and blocks worker physical admission when required guards are unavailable.
+  Source qualification and a NEW golden-derived AFTER remain pending; the
+  populated work BEFORE and golden remain preserved. No old scope is inferred.
+  No ordinary81, above500-entry or privacy-completion claim is made; this item
+  remains open. See `deploy/import-http-graph-source-2026-11-12.md`.
   Original-hold snapshot source increment 2026-11-12: an actual new HTTP-crawl
   control recorded a pending reader hold but cleanup deleted its private
   original because membership was only captured at fulfillment. A separate
@@ -6509,6 +6689,84 @@ deployments are portable, testable and incapable of silently forking the truth.
   durable live crawl response/frontier storage and actual cutover remain
   required; no schema81 or C3.47 closure is claimed. Exact evidence:
   `deploy/import-source-graph.md`.)*
+
+  Uploaded-input privacy source checkpoint (2026-11-13, C1.08/C3.47/C11.14):
+  unpublished81 now drafts exact initial uploaded-source scope/membership,
+  guarded unaccepted index minimization and atomic original-task completion
+  alongside the HTTP originals repair. The real `f1b5d6a3` WXR oracle is
+  unchanged. This source is unqualified/unapplied: current80 composition,
+  new ordinary81 migration/model/guard proof, unchanged AFTER and retained/
+  accepted/later-generation controls remain required. Historical missing
+  captures remain explicit recovery. See
+  `deploy/import-upload-index-erasure-source-2026-11-13.md`.
+  The isolated full runtime candidate now composes that checkpoint with the
+  eight-model saved-HTTP runtime and four-locale owner controls, registers the
+  three uploaded witnesses and private inventories, and drafts normal journal81.
+  SQL80 is still the provisional881a predecessor; the candidate is unqualified
+  and unapplied until the complete current80 predecessor is supplied and a NEW
+  ordinary0–81 database proves it. No stable or transport acceptance is claimed.
+  The subsequent source merge includes the full current80 `22d24c39` predecessor
+  (assembled80 SHA3a686245…) with all predecessor files/journal entries preserved.
+  Candidate81 SHA5c96bd06… and normal journal81 remain unapplied and the whole
+  composed source remains unqualified; no database, transport or stable proof
+  is inferred from this source assembly.
+  A further source-only predicate binds actual accepted PUT/DELETE retirement
+  to the immutable first graph/chunk capture after rollback releases the mutable
+  descriptor; later aliases/writers/holds/accepted ownership still refuse.
+  This historical source checkpoint changed unpublished81 and required a
+  NEW database. Subsequent exact955 ordinary-schema and four unchanged
+  real-session WXR/ZIP controls are recorded above; held post-release index/
+  receipt completion remains open.
+
+
+
+
+
+  Above500 actual HTTP lifecycle qualification at a9946538: real owned TCP
+  REST responses yielded501 entries/exact bindings and one shared copied PNG.
+  Fulltypes/fixturelint and incrementaltypes pass; the first native passed
+  46.613s within its initial180s limit, with actual pacing/budgets unchanged.
+  Real media/500-page/1-page children resume across fresh owner sessions,
+  explicitly publish501 pages and roll back all imported ownership while
+  preserving the three actual CMS defaults. The exact shared asset moves to
+  recoverable trash/usage0/public404. Independent topology/byte/TCP/client
+  readbacks pass with journal81 unchanged. Eight originals are retired and
+  hash-present with cleanup durably queued(workers off), not physically erased.
+  This is private shared-service qualification on ordinary80/881a plus explicit
+  unjournalled81/4669; no second-process or production owner-UI proof is claimed.
+  Normal81/runtime/public continuation, preserved-history recovery and full
+  cancellation/expiry/erasure acceptance remain required; C3.47 stays open.
+  See deploy/import-http501-lifecycle-2026-11-12.md.
+
+  A further C3.47 actual-native boundary at b716e252 genuinely retained a
+  private image URL in an unaccepted media key after completed reader erasure.
+  The populated failure is preserved. A new unjournalled81 source repair keeps
+  the original row/digest witness and permits opaque key minimization only for
+  the exact unheld, physically retired original scope with no admitted plan,
+  batch, asset or file receipt. Accepted or unresolved work requires recovery;
+  a flag alone cannot establish erasure. New-database/nine-model/native
+  qualification remains required; no checklist closure is claimed. Evidence:
+  `deploy/import-http-media-key-erasure-2026-11-12.md`.
+
+  C3.47 runtime activation is now a separate source checkpoint: shared public
+  bounded start/advance/progress/cancel, eight-model privacy/job inventories,
+  four-locale owner controls, exact settled-original response recovery and an
+  explicitly distinct new source review. Actual wrapper completion has its own
+  immutable capability-bound fact; clocks and GETs do not establish it. The
+  source is unqualified and81 remains unjournalled pending full latest80
+  composition, new-schema/model checks, actual public transport/two-process
+  continuation and production browser/recovery acceptance. No checkbox closes.
+  `deploy/import-http-runtime-activation-source-2026-11-12.md` records the scope.
+
+  Combined current80/import81 source qualification (2026-11-13, C1.08/C3.47):
+  full Node22 types and whole-lint coverage pass after the preserved narrow
+  financial lint corrections; all44 static-contract files supply384 actual
+  passing assertions/26 declared skips/zero pending, and18 affected import/
+  privacy/source files supply83 pure passes/40 explicit database skips. Normal81
+  remains unapplied (SQL80 SHA3a686245…,81 SHA8c65864e…). The unchanged original
+  WXR oracle,12-model/guard diagnostic, native ownership/recovery and public
+  two-process/browser/SDK acceptance remain open. Exact evidence and limits:
+  `deploy/import-upload-index-erasure-source-2026-11-13.md`.
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
@@ -12179,6 +12437,24 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
+  Finite imported-input privacy follow-up2026-11-13: the exact3a/955 candidate
+  supplies ordinary82-journal/22-model and shared-source registration proof,
+  unchanged WXR/media-key minimization, held/accepted/later ownership boundaries
+  and actual populated old79->81 truthful historical recovery. Missing capture
+  remains explicit pending review; no new scope, original key or current graph
+  is inferred. These local private-store fixtures preserve actual task/receipt
+  identity and accepted physical facts with minimal independent hashes/counts.
+  Subsequent small mocked-REST lifecycle6.842s and actual TCP501/two-process
+  lifecycle52.825s pass with exact default-CMS/owned rollback, source receipts,
+  byte hashes, full journal and closed clients. Four subsequent unchanged
+  WXR/ZIP privacy rollback controls pass; both late-reader cases complete with
+  500 minimized entries, while both held/release cases end raw-deleted but with
+  retained partial receipts/500 unminimized entries/one private marker/no task.
+  Their same-request resume/final completion, seven other public recovery/authority
+  cases, live API/MCP/SDK/browser, other record families, restore/recovery breadth
+  or provider accounts. C11.14 stays open. See
+  `deploy/import-upload-index-erasure-source-2026-11-13.md` and
+  `deploy/import-uploaded-history-recovery-2026-11-13.md`.
   *(Reopened 2026-11-11 by actual unchanged-main controls: an exact
   `forms.delete` API key permanently removed held submissions, the same route
   removed already-trashed held evidence, and tracked-demo cleanup cascaded over

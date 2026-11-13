@@ -6,7 +6,9 @@ import { and, asc, eq, gt, gte, inArray, like, or, sql } from "drizzle-orm";
 import { auditLog } from "@/core/events/schema";
 import { mediaObjects } from "@/core/media/schema";
 import { mediaObjectWrites } from "@/core/media/write-schema";
-import { retainedSourceFromRun, retainedSourceChunkKey } from "./retained-source";
+import { importSourceObjectKeys, retainedSourceFromRun, retainedSourceChunkKey } from "./retained-source";
+import { captureOriginalSourceErasureScope, originalSourceErasureScopeAvailable } from "./source-erasure-scope";
+import { importSourceErasureObjects } from "./source-erasure-schema";
 import { IMPORT_SOURCE_ERASURE_JOB } from "./source-erasure";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { registerContactReference } from "@/core/contacts/service";
@@ -21,6 +23,8 @@ import { z } from "zod";
 import { assertImportBatchAccess } from "./batch-context";
 import { invalidateImportGraph } from "./graph-state";
 import { markGraphRunWriter } from "./graph-writer";
+import { markImportCrawlWriter } from "./crawl-writer";
+import { collectAdditionalImportOriginals } from "./source-retention";
 import { bindOwnedReaderSources, canonicalReaderSite, type ReaderSourceContext } from "./reader-ownership";
 import { markReaderOwnershipWriter } from "./reader-ownership-key";
 
@@ -150,7 +154,10 @@ async function* runs(tx: Tx, lock: boolean, noWait = false) {
       throw error;
     }
     if (!run) return;
-    if (lock) await markGraphRunWriter(tx, run);
+    if (lock) {
+      await markGraphRunWriter(tx, run);
+      if (object(run.checkpoint).sourceCrawl) await markImportCrawlWriter(tx);
+    }
     after = run.id;
     yield run;
   }
@@ -197,12 +204,14 @@ registerContactReference({
   },
 });
 
-async function ownedSourceKeys(tx: Tx, run: Run): Promise<string[]> {
+async function ownedSourceKeys(tx: Tx, run: Run, requestId?: string): Promise<string[]> {
   const checkpoint = object(run.checkpoint);
   const objects = await tx.select({ key: mediaObjects.key }).from(mediaObjects).where(like(mediaObjects.key, `imports/${run.id}/%`));
   const reserved = z.object({ uploadId: z.uuid(), chunks: z.number().int().positive().max(25) }).safeParse(checkpoint.sourceUpload);
   const retained = retainedSourceFromRun(run);
-  return [...new Set([...objects.map(item => item.key), ...(reserved.success ? Array.from({ length: reserved.data.chunks }, (_, index) => `imports/${run.id}/${reserved.data.uploadId}/${String(index).padStart(5, "0")}.part`) : []), ...(retained ? retained.chunkDigests.map((_, index) => retainedSourceChunkKey(retained, index)) : [])])];
+  const captured = requestId ? await tx.select().from(importSourceErasureObjects).where(and(eq(importSourceErasureObjects.requestId,requestId),eq(importSourceErasureObjects.runId,run.id))) : [];
+  const exact = captured.map(row => `imports/${row.runId}/${row.uploadId}/${String(row.chunkIndex).padStart(5,"0")}.part`);
+  return [...new Set([...exact, ...importSourceObjectKeys(run), ...objects.map(item => item.key), ...(reserved.success ? Array.from({ length: reserved.data.chunks }, (_, index) => `imports/${run.id}/${reserved.data.uploadId}/${String(index).padStart(5, "0")}.part`) : []), ...(retained ? retained.chunkDigests.map((_, index) => retainedSourceChunkKey(retained, index)) : [])])];
 }
 const sourceHold = z.object({ exceptionId: z.uuid(), requestId: z.uuid(), uploadId: z.uuid() });
 
@@ -214,10 +223,11 @@ const sourceHold = z.object({ exceptionId: z.uuid(), requestId: z.uuid(), upload
  */
 async function eraseUnheldOriginals(tx: Tx, context: { requestId: string; service: ServiceContext }): Promise<{ affected: number; pendingJobs: string[] }> {
   if (context.service.tx !== tx) throw new ServiceError("internal", "Original source cleanup requires the actual privacy transaction.");
+  await captureOriginalSourceErasureScope(context.service,context.requestId);
   const pendingJobs: string[] = [];
   for await (const run of runs(tx, true)) {
     const unheld: string[] = [], generations = new Map<string, boolean>();
-    for (const key of await ownedSourceKeys(tx, run)) {
+    for (const key of await ownedSourceKeys(tx, run, context.requestId)) {
       const uploadId = z.uuid().parse(key.split("/")[2]);
       let held = generations.get(uploadId);
       if (held === undefined) {
@@ -237,7 +247,16 @@ async function eraseUnheldOriginals(tx: Tx, context: { requestId: string; servic
 }
 
 registerContactPrivacySource({
-  scope: "imports.readerSources", tables: ["import_runs"], retentionScopes: ["cms.readerComments"], eraseOrder: 10,
+  scope: "imports.readerSources", tables: ["import_runs", "import_source_erasure_scopes", "import_source_erasure_members", "import_source_erasure_objects"], retentionScopes: ["cms.readerComments"], eraseOrder: 10,
+  retainedErasureArtifacts: async (tx, contactId, context) => {
+    if (!await originalSourceErasureScopeAvailable(tx)) return [];
+    const rows = await tx.execute<{ id: string }>(sql`select distinct prior.prior_request_id id
+      from freeholder_source_erasure_prior_members(${context.requestId}::uuid) prior
+      join data_requests fresh on fresh.id=${context.requestId}::uuid and fresh.contact_id=${contactId}::uuid
+      join import_source_erasure_members copied on copied.request_id=fresh.id and copied.run_id=prior.run_id and copied.upload_id=prior.upload_id
+       and copied.graph_id=prior.graph_id and copied.graph_generation=prior.graph_generation and copied.source_revision=prior.source_revision and copied.chunk_count=prior.chunk_count`);
+    return rows.map(row => row.id);
+  },
   captureRetention: async (tx, _contactId, context) => {
     if (!context.isNew) {
       if (!await retentionSourceSnapshotIsComplete(tx, context.exceptionId, "imports.readerSources")) throw new ServiceError("conflict", "Review this older hold's original uploads before changing it.");
@@ -267,6 +286,9 @@ registerContactPrivacySource({
       }
       await tx.update(importRuns).set({ checkpoint: { ...checkpoint, sourcePrivacyHolds: holds.map(({ exceptionId, requestId, uploadId }) => ({ exceptionId, requestId, uploadId })) } }).where(eq(importRuns.id, run.id));
     }
+    // Enabled HTTP originals participate before this one canonical seal. An
+    // empty legacy set must not seal first and later adopt other generations.
+    members.push(...await collectAdditionalImportOriginals(tx, context));
     await completeRetentionSourceSnapshot(context.service, { exceptionId: context.exceptionId, requestId: context.requestId, sourceScope: "imports.readerSources", isNew: context.isNew, members });
   },
   retain: async (tx, _contactId, context) => {
@@ -283,6 +305,8 @@ registerContactPrivacySource({
     return result;
   },
   erase: async (tx, contactId, context) => {
+    if (!context.service) throw new ServiceError("internal","Uploaded-source erasure requires its actual privacy service context.");
+    await captureOriginalSourceErasureScope(context.service,context.requestId);
     const matches = await subject(tx, contactId);
     let affected = 0;
     const pendingJobs: string[] = [];
@@ -320,7 +344,7 @@ registerContactPrivacySource({
         eq(auditLog.subjectType, "import_run"), eq(auditLog.subjectId, run.id),
         inArray(auditLog.action, ["imports.previewFromSource", "imports.preview", "imports.applyCrawl", "imports.applyUploadedPreview", "imports.claimSourceChunk"]),
       ));
-      const keys = await ownedSourceKeys(tx, run);
+      const keys = await ownedSourceKeys(tx, run, context.requestId);
       if (keys.length && object(run.checkpoint).sourceGraph && !["committed", "reconciled", "published"].includes(run.status)) await invalidateImportGraph(tx, run);
       for (let offset = 0; offset < keys.length; offset += 25) {
         if (!context.service) throw new ServiceError("internal", "Source-object erasure requires the real privacy service context.");

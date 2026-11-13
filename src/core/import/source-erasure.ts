@@ -2,19 +2,128 @@
 // SPDX-License-Identifier: Apache-2.0
 // C2.29/C11.10: original provider bytes are part of the erasure receipt.
 import { z } from "zod";
+import { and, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { defineService, ServiceError } from "@/core/service";
+import { lockContactIdentity } from "@/core/contacts/identity-lock";
+import { importRuns, importSourceGraphs } from "@/core/plugins/schema";
+import { dataRequests, dataRequestArtifacts, privacyRetentionExceptions } from "@/core/privacy/schema";
 import { boundStorage } from "@/adapters/storage";
 import { deleteWithReceipt, discardUnwrittenObjectReservation } from "@/core/media/write-ledger";
 import { pendingObjectIsOwned } from "@/core/media/object-ledger";
-import { completeErasureJob } from "@/core/privacy/service";
+import { originalSourceErasureScopeAvailable, originalSourceErasureScopeComplete } from "./source-erasure-scope";
+import { reconcileOriginalSourceErasure } from "./source-erasure-history";
+import { IMPORT_SOURCE_ERASURE_JOB, IMPORT_SOURCE_ERASURE_SCOPE, originalSourceErasurePayload } from "./source-erasure-contract";
+import { assertOriginalUploadMinimizable, minimizeOriginalUploadProjections } from "./source-projection-privacy";
+import { completeErasureJob, erasureArtifactIsIntact } from "@/core/privacy/service";
+export { IMPORT_SOURCE_ERASURE_JOB, IMPORT_SOURCE_ERASURE_SCOPE } from "./source-erasure-contract";
 
-export const IMPORT_SOURCE_ERASURE_JOB = "core.eraseImportSourceObjects";
-export const IMPORT_SOURCE_ERASURE_SCOPE = "imports.readerSources";
-const payload = z.object({ requestId: z.uuid(), originalJobId: z.uuid(),
-  keys: z.array(z.string().regex(/^imports\/[a-f0-9-]{36}\/[a-f0-9-]{36}\/\d{5}\.part$/)).min(1).max(25),
+const payload = originalSourceErasurePayload;
+const receipt = z.object({ format: z.literal("freeholder.erasure-receipt"), outcomes: z.array(z.object({
+  scope: z.string(), outcome: z.string(), pendingJobs: z.array(z.uuid()).optional(), completedJobs: z.array(z.uuid()).optional(),
+}).passthrough()) }).passthrough();
+
+/** C1.08/C3.47: deleting chunks does not erase their private normalized index.
+ * Check and acknowledge under the same privacy/run locks as fulfilment and
+ * indexing. This containment deliberately leaves immutable index cleanup open. */
+export const completeOriginalSourceErasure = defineService({
+  name: "imports.completeOriginalSourceErasure", summary: "Acknowledge original source deletion only when its private index does not require recovery.",
+  kind: "mutation", permission: "system", external: false,
+  input: payload, output: z.object({ completed: z.boolean() }), auditInputFields: ["requestId", "originalJobId"],
+  handler: async (input, ctx) => {
+    await lockContactIdentity(ctx.tx);
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
+    const [job] = await ctx.tx.execute<{ data: unknown }>(sql`select data from pgboss.job where id=${input.originalJobId}::uuid and name=${IMPORT_SOURCE_ERASURE_JOB} and data=${JSON.stringify(input)}::jsonb limit 1`);
+    if (!job) throw new ServiceError("permission", "Restore the exact original import erasure task before acknowledging it.");
+    const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, input.requestId)).for("update");
+    const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, input.requestId)).for("update");
+    const parsed = receipt.safeParse(artifact?.body);
+    const outcome = parsed.success ? parsed.data.outcomes.find(item => item.scope === IMPORT_SOURCE_ERASURE_SCOPE) : undefined;
+    if (!request || request.kind !== "erasure" || !request.verifiedAt || !outcome || !erasureArtifactIsIntact(artifact)) throw new ServiceError("conflict", "Restore the original verified source erasure receipt before completion.");
+    ctx.setSubject("dataRequest", request.id);
+    if (!outcome.pendingJobs?.includes(input.originalJobId)) {
+      if (outcome.outcome === "erased" && !outcome.pendingJobs?.length) {
+        if (!await originalSourceErasureScopeComplete(ctx.tx, request.id)) {
+          await ctx.call(reconcileOriginalSourceErasure, { originalJobId: input.originalJobId });
+          return { completed: false };
+        }
+        return { completed: true };
+      }
+      if (outcome.outcome === "retained" && outcome.completedJobs?.includes(input.originalJobId)) return { completed: true };
+      throw new ServiceError("conflict", "This task is absent from its original pending source receipt.");
+    }
+    if (request.status !== "in_progress") throw new ServiceError("conflict", "The original source erasure is no longer in progress.");
+    const guardedScope = await originalSourceErasureScopeAvailable(ctx.tx);
+    if (guardedScope) await minimizeOriginalUploadProjections(ctx.tx,input.requestId,input.keys);
+    let recovery = false;
+    // The original task supplies only run/upload membership. A current graph
+    // can refuse completion; it cannot prove an old generation was erased or
+    // authorize changing a later generation. Lock runs in deterministic order.
+    for (const runId of [...new Set(input.keys.map(key => key.split("/")[1]!))].sort()) {
+      const [run] = await ctx.tx.select().from(importRuns).where(eq(importRuns.id, runId)).for("update");
+      const [graph] = await ctx.tx.select({ id: importSourceGraphs.id, planDigest: importSourceGraphs.planDigest }).from(importSourceGraphs).where(eq(importSourceGraphs.runId, runId)).for("update");
+      if (!run || !guardedScope && graph && graph.planDigest === null) recovery = true;
+      const checkpoint = run?.checkpoint as Record<string, unknown> | undefined;
+      const holds = z.object({ exceptionId: z.uuid(), requestId: z.uuid(), uploadId: z.uuid() }).array().safeParse(checkpoint?.sourcePrivacyHolds ?? []);
+      if (!holds.success) { recovery = true; continue; }
+      const uploadIds = new Set(input.keys.filter(key => key.split("/")[1] === runId).map(key => key.split("/")[2]!));
+      const originalHolds = holds.data.filter(hold => uploadIds.has(hold.uploadId));
+      if (originalHolds.length) {
+        const [active] = await ctx.tx.select({ id: privacyRetentionExceptions.id }).from(privacyRetentionExceptions).where(and(
+          or(...originalHolds.map(hold => and(eq(privacyRetentionExceptions.id, hold.exceptionId), eq(privacyRetentionExceptions.dataRequestId, hold.requestId)))),
+          inArray(privacyRetentionExceptions.scope, [IMPORT_SOURCE_ERASURE_SCOPE, "cms.readerComments"]),
+          or(isNull(privacyRetentionExceptions.expiresAt), gt(privacyRetentionExceptions.expiresAt, new Date())),
+        )).limit(1);
+        if (active) recovery = true;
+      }
+    }
+    if (recovery) {
+      await ctx.tx.update(dataRequests).set({ status: "in_progress", fulfilledAt: null,
+        resolution: "Original source deletion requires recovery: verify retained ownership and erase the private normalized import index before completion." }).where(eq(dataRequests.id, request.id));
+      return { completed: false };
+    }
+    if (guardedScope) {
+      const [physical] = await ctx.tx.execute<{ ready: boolean }>(sql`select freeholder_source_task_objects_retired(${input.requestId}::uuid,${JSON.stringify(input.keys)}::jsonb) ready`);
+      if (!physical?.ready) throw new ServiceError("conflict", "Original uploaded-source bytes or physical facts still keep this task pending.");
+    }
+    await ctx.callAsSystem(completeErasureJob, { requestId: input.requestId, scope: IMPORT_SOURCE_ERASURE_SCOPE, jobId: input.originalJobId });
+    return { completed: true };
+  },
 });
+
+export const prepareOriginalSourceErasure = defineService({
+  name:"imports.prepareOriginalSourceErasure", summary:"Verify exact original uploaded-source task and unaccepted ownership before physical cleanup.",
+  kind:"mutation",permission:"system",external:false,auditInputFields:["requestId","originalJobId"],input:payload,output:z.object({ready:z.boolean()}),
+  handler:async(input,ctx)=>{
+    await lockContactIdentity(ctx.tx);
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
+    const [job]=await ctx.tx.execute<{data:unknown}>(sql`select data from pgboss.job where id=${input.originalJobId}::uuid and name=${IMPORT_SOURCE_ERASURE_JOB} and data=${JSON.stringify(input)}::jsonb limit 1`);
+    const [request]=await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id,input.requestId)).for("update");
+    const [artifact]=await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,input.requestId)).for("update");
+    const parsed=receipt.safeParse(artifact?.body);
+    const own=parsed.success?parsed.data.outcomes.find(item=>item.scope===IMPORT_SOURCE_ERASURE_SCOPE):undefined;
+    if(!job||!request||request.kind!=="erasure"||!request.verifiedAt||!erasureArtifactIsIntact(artifact)||!own) throw new ServiceError("conflict","Restore the exact original uploaded-source task and verified receipt before cleanup.");
+    ctx.setSubject("dataRequest",request.id);
+    if(!own.pendingJobs?.includes(input.originalJobId)) {
+      if(own.outcome==="erased"&&!own.pendingJobs?.length) {
+        if(!await originalSourceErasureScopeComplete(ctx.tx,request.id)) await ctx.call(reconcileOriginalSourceErasure,{originalJobId:input.originalJobId});
+        return {ready:false};
+      }
+      if(own.outcome==="retained"&&own.completedJobs?.includes(input.originalJobId)) return {ready:false};
+      throw new ServiceError("conflict","This task is absent from its original pending uploaded-source receipt.");
+    }
+    if(request.status!=="in_progress") throw new ServiceError("conflict","This uploaded-source erasure is no longer pending.");
+    await assertOriginalUploadMinimizable(ctx.tx,input.requestId,input.keys);
+    return {ready:true};
+  },
+});
+
 /** Only a durable worker calls this; provider work never holds the privacy TX. */
 export async function eraseImportSourceObjects(data: Record<string, unknown>): Promise<{ erased: number }> {
   const input = payload.parse(data);
+  if (await originalSourceErasureScopeAvailable((await import("@/core/db")).db())) {
+    const admission=await prepareOriginalSourceErasure.call(input,{kind:"system"});
+    if(!admission.ready) return {erased:0};
+  }
   const captured = await boundStorage();
   const { store } = captured;
   if (store.isPublic) throw new Error("Private source erasure requires the original private storage configuration.");
@@ -24,6 +133,7 @@ export async function eraseImportSourceObjects(data: Record<string, unknown>): P
   for (const key of input.keys) {
     if (!await discardUnwrittenObjectReservation(key) && !await deleteWithReceipt(key, captured)) throw new Error("The original storage resource or unresolved physical operation keeps source erasure pending.");
   }
-  await completeErasureJob.call({ requestId: input.requestId, scope: IMPORT_SOURCE_ERASURE_SCOPE, jobId: input.originalJobId }, { kind: "system" });
+  const completion = await completeOriginalSourceErasure.call(input, { kind: "system" });
+  if (!completion.completed) throw new Error("Original source erasure requires recovery of retained ownership or the private normalized import index.");
   return { erased: input.keys.length };
 }

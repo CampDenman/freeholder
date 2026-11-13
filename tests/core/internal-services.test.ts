@@ -16,6 +16,16 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  // C1.08/C3.47: guarded original-source cleanup and saved HTTP runtime.
+  "imports.completeOriginalSourceErasure",
+  "imports.prepareOriginalSourceErasure",
+  "imports.reconcileOriginalSourceErasure",
+  "imports.recordCrawlWrapperFinish",
+  "imports.claimCrawlOriginalErasure",
+  "imports.confirmCrawlOriginalErasure",
+  "imports.reconcileCrawlOriginalObservation",
+  "imports.retireExpiredCrawls",
+
   "invoicing.applyMerchantCollectionConfiguration",
   "invoicing.captureMerchantCollections",
   "invoicing.captureMerchantScope",
@@ -363,6 +373,33 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // C1.08/C3.47: private original-source and bounded public-advance phases.
+  "imports.completeOriginalSourceErasure",
+  "imports.prepareOriginalSourceErasure",
+  "imports.reconcileOriginalSourceErasure",
+  "imports.recordCrawlWrapperFinish",
+  "imports.claimCrawlOriginalErasure",
+  "imports.confirmCrawlOriginalErasure",
+  "imports.reconcileCrawlOriginalObservation",
+  "imports.retireExpiredCrawls",
+  "imports.initializeCrawl",
+  "imports.claimCrawlCapture",
+  "imports.admitCrawlFetch",
+  "imports.authorizeCrawlFetch",
+  "imports.recordCrawlResponse",
+  "imports.acceptCrawlObject",
+  "imports.rememberCrawlCaptureFailure",
+  "imports.applyCrawlDiscovery",
+  "imports.sealOriginalCrawl",
+  "imports.claimCrawlGraphIndex",
+  "imports.applyCrawlGraphIndex",
+  "imports.claimCrawlGraphCatalog",
+  "imports.applyCrawlGraphCatalog",
+  "imports.claimCrawlGraphCommit",
+  "imports.stageCrawlGraphBatch",
+  "imports.claimCrawlRecovery",
+  "imports.applyCrawlRecovery",
+
   "invoicing.applyMerchantCollectionConfiguration",
   "invoicing.captureMerchantCollections",
   "invoicing.captureMerchantScope",
@@ -599,8 +636,6 @@ const CALLER_AUTHORIZED_PHASES = [
   "imports.verifyPreparedMedia",
   "imports.acceptPreparedMedia",
   // C3.22: source discovery read/CAS phases never become public tools.
-  "imports.crawlSource",
-  "imports.applyCrawl",
   // C3.22: the halves of the chunked export upload around object storage.
   "imports.applyUploadedPreview",
   "imports.beginSourceUploadApply",

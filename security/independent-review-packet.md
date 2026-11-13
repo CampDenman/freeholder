@@ -1110,3 +1110,37 @@ A status change alone does not remove a device from the MLS authority witness.
 Reactivation must refuse the erased identity. The PostgreSQL before-failure and
 regressions in `tests/modules/member-held-login.test.ts` support this repair;
 they do not provide an independent sign-off or actual hosted-SFU acceptance.
+
+
+## Original WordPress normalized source copies (C1.08/C3.47/C11.14)
+
+The 2026-11-13 actual protected-main `81271622` control found a completed
+reader erasure after physical source-chunk retirement while private data
+remained in an unaccepted normalized entry and media plan. The original
+full-erasure oracle and populated failure are preserved; the candidate's
+separate containment oracle requires explicit pending recovery and passed
+at `951212de`, alongside all 15 existing raw-source erasure controls. See
+`deploy/import-wxr-index-privacy-2026-11-13.md` for facts and limits. The
+no-DDL completion guard does not erase immutable index rows or repair old
+completed receipts. Full guarded minimization and historical recovery remain
+required. This coding-agent finding and repair supply no independent C11.10
+sign-off.
+
+
+## Uploaded index and saved HTTP source candidate (C1.08/C3.47/C11.10)
+
+The current80/import81 source is type/lint/static-contract qualified, with no
+applied81/native AFTER or independent sign-off. Exact evidence and unapplied
+SQL identities are in `deploy/import-upload-index-erasure-source-2026-11-13.md`.
+Review the first-fulfillment scope/member/chunk capture and its known-empty
+boundary; the actual task/artifact/current-hold preflight; accepted and later
+ownership refusal; physical PUT/DELETE namespace binding; guarded minimization
+and same-transaction ACK; deferred whole-scope closure; and explicit recovery
+for missing old membership. Rollback releases a mutable descriptor and does not
+itself authorize cleanup. Original IDs/ranges/SHA facts remain immutable.
+
+The ordinary79 containment proof remains in
+`deploy/import-wxr-index-privacy-2026-11-13.md`. The81 candidate requires the
+stronger unchanged original full-erasure oracle. Two actual independent-index
+processes, public API/MCP/SDK and four-locale owner journeys are prepared but
+unrun. Source audits and this handoff do not provide C11.10 approval.

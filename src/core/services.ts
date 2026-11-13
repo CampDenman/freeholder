@@ -102,6 +102,18 @@ import designServices from "@/core/design/service";
 import pluginServices from "@/core/plugins/service";
 import importServices from "@/core/import/service";
 import importSourceUploadServices from "@/core/import/source-upload";
+import {completeOriginalSourceErasure,prepareOriginalSourceErasure} from "@/core/import/source-erasure";
+import { reconcileOriginalSourceErasure, registerOriginalSourceErasureRecovery } from "@/core/import/source-erasure-history";
+import { advanceCrawl } from "@/core/import/crawl-advance";
+import crawlCaptureServices from "@/core/import/crawl-capture";
+import crawlIndexServices from "@/core/import/crawl-graph-index";
+import crawlCatalogServices from "@/core/import/crawl-graph-plan";
+import crawlBatchServices from "@/core/import/crawl-graph-batches";
+import crawlProgressServices from "@/core/import/crawl-query";
+import { crawlRecoveryServices } from "@/core/import/crawl-recovery";
+import { recordCrawlWrapperFinish } from "@/core/import/crawl-finish";
+import { crawlPrivacyServices, registerCrawlPrivacy } from "@/core/import/crawl-privacy";
+import { cancelCrawl, retireExpiredCrawls } from "@/core/import/crawl-retirement";
 import readerOwnershipServices from "@/core/import/reader-ownership-review";
 import portabilityServices from "@/core/portability/service";
 import provenanceServices from "@/core/provenance/service";
@@ -202,11 +214,29 @@ const services: Service[] = [
   ...importServices,
   ...readerOwnershipServices,
   ...importSourceUploadServices,
+  completeOriginalSourceErasure,
+  prepareOriginalSourceErasure,
+  reconcileOriginalSourceErasure,
+  advanceCrawl,
+  cancelCrawl,
+  retireExpiredCrawls,
+  ...crawlCaptureServices,
+  ...crawlIndexServices,
+  ...crawlCatalogServices,
+  ...crawlBatchServices,
+  ...crawlProgressServices,
+  ...crawlRecoveryServices,
+  recordCrawlWrapperFinish,
+  ...crawlPrivacyServices,
   ...portabilityServices,
   ...provenanceServices,
   ...updateSeamServices,
   ...catalogueServices,
 ];
+
+// Register original ownership before a real hold can seal its one joint receipt.
+registerCrawlPrivacy();
+registerOriginalSourceErasureRecovery();
 
 export default services;
 
