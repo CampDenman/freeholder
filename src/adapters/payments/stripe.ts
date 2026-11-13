@@ -13,6 +13,7 @@ import { proveStripeSubscriptionPayment } from "./stripe-subscription-origin";
 import { collectOriginalStripeSubscriptionCash, originalSubscriptionInvoiceMetadata } from "./stripe-subscription-cash";
 import { cancelOriginalStripeMerchantSchedule, inspectOriginalStripeMerchantInvoices, pauseOriginalStripeMerchantSchedule, resolveOriginalStripeMerchantSchedule } from "./stripe-subscription-quiescence";
 import { inspectStripeMerchantPayment } from "./stripe-merchant-inspection";
+import { cancelOriginalStripePhaseSchedule, inspectOriginalStripePhaseSchedule, mutateOriginalStripePhaseSchedule } from "./stripe-subscription-phases";
 import { stripeMerchantRecovery } from "./stripe-merchant-recovery";
 import { stripeMerchantIntentRecovery } from "./stripe-merchant-intent-recovery";
 import { stripeReturnedCash } from "./stripe-returned-cash";
@@ -692,6 +693,18 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
         occurredAt: stripeOptionalTime(value.created),
         failureMessage: text(object(value.last_payment_error)?.message),
       };
+    },
+    async cancelMerchantPhaseSchedule(request) {
+      return cancelOriginalStripePhaseSchedule(api, request);
+    },
+    async createMerchantPhaseSchedule(request) {
+      return mutateOriginalStripePhaseSchedule(api, request);
+    },
+    async updateMerchantPhaseSchedule(request) {
+      return mutateOriginalStripePhaseSchedule(api, request);
+    },
+    async inspectMerchantPhaseSchedule(request) {
+      return inspectOriginalStripePhaseSchedule(api, request);
     },
     async createRecurringSchedule(request): Promise<RecurringScheduleResult> {
       const feeFields = new URLSearchParams();
