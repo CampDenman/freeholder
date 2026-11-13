@@ -166,7 +166,7 @@ export const finishMerchantProviderPhase = defineService({
     await retainAcknowledgments(ctx, owned); owned = await ownedCaller(ctx, operationId, completionNonce);
     const { local, operation, resource, parent } = owned, history = historySchema.parse(operation.providerObservation.history ?? []);
     if (history.some(entry => entry.source === "physical_caller_finished" && entry.operationId === operationId && entry.requestDigest === operation.requestDigest && entry.completionDigest === hash(completionNonce))) return { finished: true as const, verified: operation.state === "confirmed" };
-    const actual = providerPhaseInventory.safeParse(local.result);
+    const actual = providerPhaseInventory.safeParse(local.result ? { version: 1, ...local.result } : undefined);
     const schedules = new Set(local.positives.map(value => value.providerScheduleRef));
     const linked = new Set(local.positives.map(value => value.providerSubscriptionRef).filter((value): value is string => !!value));
     const verified = local.readRevision === readRevision(owned) && local.outcome === "returned" && actual.success && schedules.size === 1 && schedules.has(actual.data.providerScheduleRef)
