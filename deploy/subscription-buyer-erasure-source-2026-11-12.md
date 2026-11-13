@@ -80,8 +80,13 @@ provider transaction. Legacy provider-customer task dispatch semantics stay
 unchanged. Late original subscription evidence composes the real money-finisher
 reopener; missing/pruned original queue inventories remain explicit recovery.
 
-Seven new DB-free immutable money-inventory controls are prepared. This follow-up
-has not yet passed types, lint, native/privacy convergence or provider acceptance.
+Source qualification at ba0ee607 passed full Node22 types on dafdf9bf;
+12-file lint stopped on one redundant type assertion. The precise one-character
+correction then passed changed-file lint and incremental types. Six finite
+DB-free files passed all 40 assertions (the previous 33 plus seven new immutable
+money-inventory controls), zero failures/skips; JSON counts and actual process
+drain were verified. The first lint diagnostic remains preserved separately.
+This does not supply native/privacy convergence or provider acceptance.
 The commercial-terms table is still unassembled/unregistered in this isolated
 tree and provider phase admission stays false. The candidate must be composed
 with current common money/debt and terms schema before actual held/unheld,
