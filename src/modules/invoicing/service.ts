@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // One registry export for the convergent money module (C5.02-C5.05).
 
+import legacyBankReadServices from "./legacy-bank-read-service";
 import invoiceServices from "./invoice-service";
 import buyerMoneyErasureServices from "./buyer-money-erasure";
 import originalRefundRepairServices from "./merchant-refund-privacy-repair";
@@ -57,6 +58,7 @@ import "./reporting";
 import "./funnel";
 
 export default [
+  ...legacyBankReadServices,
   ...buyerMoneyErasureServices,
   ...originalRefundRepairServices,
   ...merchantRefundBasisServices,
