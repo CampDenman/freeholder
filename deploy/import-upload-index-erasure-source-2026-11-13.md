@@ -206,9 +206,16 @@ full old-index minimization and truthful completion through its actual durable
 task. The original retained receipt and first capture must remain exact. A new
 501-entry graph created after the new initial capture must retain its original
 snapshot/bytes; retirement cannot issue another DELETE or adopt current graph/
-namespace state, and replay must be idempotent. These controls are unqualified
-and unrun; they establish no additional acceptance or product-failure claim.
-The previous archive-held dataset and all original b99 oracles remain preserved.
+namespace state, and replay must be idempotent. Test-only87c393e5 passed full
+Node22 types56.411s/new-fixture lint5.921s, nine affected pure assertions and two
+explicit native DB skips across three actual files (zero pending/empty files).
+All12 dependency descriptors matched before borrowing; no install occurred.
+Canonical637 notes, licensing2915sources/8manifests/8texts, changelog and
+plan373/323checked/50open passed. Native controls remain unrun; no additional
+acceptance or product-failure claim follows. Evidence is
+`/tmp/freeholder-hold-redrive87c-qualifier-20261113-result.json` and its
+`-test-evidence.json` counterpart. The previous archive-held dataset and all
+original b99 oracles remain preserved.
 
 Seven other small REST authority/cancellation/recovery cases remain unselected.
 Live API/MCP/SDK parity, four-locale production browser, broader old-image and
