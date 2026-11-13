@@ -15850,3 +15850,16 @@ The provider COMPLETE/in-flight multipart authority guarantee is explicitly
 unproven, and both full request and dedicated part capabilities remain
 unpublished. No execution/account/host actions or C-item closure occurred. See
 `deploy/media-applied-put-retirement-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated additional transfer
+executor-drain slice records an immutable exact current-plan/digest-only mutation
+cohort before actual operator stop. Only unchanged complete actual logical and
+physical finishes plus real stop verification permit its separate release;
+sourceDrainId and all active-drain mutation fences remain unchanged. Captured
+→ released shortcuts and terminal drain births now refuse. Ten pure and four
+native negative controls are PREPARED/UNRUN, with no synthetic verified stop or
+capability publication. Truly unfinished/stopped-applied target callers still
+require exact original nonce/full-byte/complete-inventory review and physical
+settlement; actual operator/provider/platform acceptance remains open. No
+execution/host/account actions or C-item closure occurred. See
+`deploy/media-transfer-crash-drain-source-2026-11-13.md`.

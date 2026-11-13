@@ -11,7 +11,7 @@ import {classifySourceInventory,providerInventoryDigest} from "./transfer-invent
 import type {TransferInventoryConfiguration,TransferInventoryEntry} from "../../../scripts/media-transfer.mjs";
 import {transferConflict,transferDigest} from "./transfer-proof";
 const processIdentity=z.object({pid:z.number().int().positive(),startTicks:z.string().regex(/^[0-9]+$/)}).strict();
-const snapshotSchema=z.object({format:z.literal("freeholder.media-writer-drain/v1"),boot:z.uuid(),unit:z.literal("freeholder.service"),invocation:z.string().regex(/^[a-f0-9]{32}$/),group:z.string().regex(/^\/[A-Za-z0-9_.\/-]+$/).refine(value=>!value.includes("..")),processes:z.array(processIdentity).min(1).max(4096)}).strict();
+const snapshotSchema=z.object({format:z.literal("freeholder.media-writer-drain/v1"),boot:z.uuid(),unit:z.literal("freeholder.service"),invocation:z.string().regex(/^[a-f0-9]{32}$/),group:z.string().regex(/^\/[A-Za-z0-9_.\/-]+$/).refine(value=>!value.includes("..")),processes:z.array(processIdentity).min(1).max(4096),recovery:z.object({format:z.literal("freeholder.media-transfer-drain/v1"),planId:z.uuid(),namespace:z.string().regex(/^[a-f0-9]{64}$/),snapshot:z.record(z.string(),z.unknown())}).strict().optional()}).strict();
 export interface OriginalExecutorStop{
  id:string;namespace:string;state:string;sourceRevision:string;executorIdentity:string;
  originalProcesses:unknown;stopProofDigest:string|null;createdAt:Date;verifiedAt:Date|null;releasedAt:Date|null;

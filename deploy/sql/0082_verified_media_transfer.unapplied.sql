@@ -289,6 +289,19 @@ BEGIN
   IF current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Use the shared verified-transfer writer' USING ERRCODE='23514'; END IF;
  END IF;
  IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Original transfer evidence cannot be deleted' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='media_storage_writer_drains' THEN
+  IF TG_OP='INSERT' THEN
+   IF NEW.state<>'capturing' OR NEW.original_processes<>'{}'::jsonb OR NEW.stop_proof_digest IS NOT NULL OR NEW.verified_at IS NOT NULL OR NEW.released_at IS NOT NULL THEN RAISE EXCEPTION 'A writer drain is born capturing, never stopped or released' USING ERRCODE='23514'; END IF;
+  ELSE
+   IF NEW.state<>OLD.state AND NOT(OLD.state='capturing' AND NEW.state='captured' OR OLD.state='captured' AND NEW.state='verified' OR OLD.state='verified' AND NEW.state='released') THEN RAISE EXCEPTION 'A writer drain cannot skip or rewind its actual capture, stop verification and release' USING ERRCODE='23514'; END IF;
+   IF ROW(NEW.stop_proof_digest,NEW.verified_at) IS DISTINCT FROM ROW(OLD.stop_proof_digest,OLD.verified_at) AND NOT(OLD.state='captured' AND NEW.state='verified' AND NEW.stop_proof_digest ~ '^[a-f0-9]{64}$' AND NEW.verified_at IS NOT NULL AND NEW.verified_at>=NEW.created_at) THEN RAISE EXCEPTION 'Retain the first actual stop proof; a timeout or release cannot supply it' USING ERRCODE='23514'; END IF;
+   IF NEW.released_at IS DISTINCT FROM OLD.released_at AND NOT(OLD.state='verified' AND NEW.state='released' AND NEW.released_at IS NOT NULL AND NEW.released_at>=OLD.verified_at) THEN RAISE EXCEPTION 'Only a previously verified stopped executor can acquire a release timestamp' USING ERRCODE='23514'; END IF;
+  END IF;
+ IF TG_OP='UPDATE' AND OLD.state='capturing' AND NEW.state='captured' AND NEW.original_processes->'recovery' IS NOT NULL THEN
+  IF NEW.original_processes->'recovery'->>'format' IS DISTINCT FROM 'freeholder.media-transfer-drain/v1' OR NEW.original_processes->'recovery'->>'namespace' IS DISTINCT FROM NEW.namespace OR coalesce(NEW.original_processes->'recovery'->>'planId','') !~ '^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$' THEN RAISE EXCEPTION 'Capture the exact versioned current-plan recovery association before stopping its executor' USING ERRCODE='23514'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans plan WHERE plan.id=(NEW.original_processes->'recovery'->>'planId')::uuid AND plan.state NOT IN ('complete','cancelled')) OR NEW.original_processes->'recovery'->'snapshot' IS DISTINCT FROM freeholder_media_transfer_recovery_snapshot((NEW.original_processes->'recovery'->>'planId')::uuid,NEW.namespace) THEN RAISE EXCEPTION 'The complete original plan/caller cohort changed before actual executor capture; no subset or later association is accepted' USING ERRCODE='23514'; END IF;
+ END IF;
+ END IF;
  IF TG_OP='UPDATE' THEN
   IF TG_TABLE_NAME='media_storage_transfer_receipts' THEN
    IF NEW.original_snapshot='{}'::jsonb AND freeholder_media_transfer_object_retired(OLD.object_id) AND (to_jsonb(NEW)-'original_snapshot')=(to_jsonb(OLD)-'original_snapshot') THEN RETURN NEW; END IF;
@@ -317,7 +330,7 @@ BEGIN
   ELSIF TG_TABLE_NAME='media_storage_transfer_subjects' THEN
    IF ROW(NEW.id,NEW.object_id,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.object_id,OLD.created_at) OR OLD.redacted_at IS NOT NULL AND ROW(NEW.contact_id,NEW.redacted_at) IS DISTINCT FROM ROW(OLD.contact_id,OLD.redacted_at) OR NEW.redacted_at IS NOT NULL AND OLD.redacted_at IS NULL AND (NEW.contact_id IS NOT NULL OR NOT freeholder_media_transfer_object_retired(OLD.object_id)) THEN RAISE EXCEPTION 'Original subject membership cannot be rebound or erased before physical retirement' USING ERRCODE='23514'; END IF;
   ELSIF TG_TABLE_NAME='media_storage_writer_drains' THEN
-   IF ROW(NEW.id,NEW.namespace,NEW.source_revision,NEW.executor_identity,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.namespace,OLD.source_revision,OLD.executor_identity,OLD.created_at) OR OLD.state<>'capturing' AND NEW.original_processes IS DISTINCT FROM OLD.original_processes OR OLD.state IN ('verified','released') AND (ROW(NEW.stop_proof_digest,NEW.verified_at) IS DISTINCT FROM ROW(OLD.stop_proof_digest,OLD.verified_at) OR NEW.state<>OLD.state AND NOT(OLD.state='verified' AND NEW.state='released' AND NEW.released_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans WHERE source_namespace=OLD.namespace AND state<>'cancelled') AND NOT EXISTS(SELECT 1 FROM media_object_writes WHERE storage_namespace=OLD.namespace AND state IN ('unverified','started','unknown')))) THEN RAISE EXCEPTION 'Original captured process and stop witness are immutable' USING ERRCODE='23514'; END IF;
+   IF ROW(NEW.id,NEW.namespace,NEW.source_revision,NEW.executor_identity,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.namespace,OLD.source_revision,OLD.executor_identity,OLD.created_at) OR OLD.state<>'capturing' AND NEW.original_processes IS DISTINCT FROM OLD.original_processes OR OLD.state IN ('verified','released') AND (ROW(NEW.stop_proof_digest,NEW.verified_at) IS DISTINCT FROM ROW(OLD.stop_proof_digest,OLD.verified_at) OR NEW.state<>OLD.state AND NOT(OLD.state='verified' AND NEW.state='released' AND NEW.released_at IS NOT NULL AND (NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans WHERE (source_namespace=OLD.namespace OR target_namespace=OLD.namespace) AND state<>'cancelled') AND OLD.original_processes->'recovery' IS NULL OR freeholder_media_transfer_recovery_drain_releasable(OLD.id)) AND NOT EXISTS(SELECT 1 FROM media_object_writes WHERE storage_namespace=OLD.namespace AND state IN ('unverified','started','unknown')))) THEN RAISE EXCEPTION 'Original captured process and stop witness are immutable' USING ERRCODE='23514'; END IF;
   END IF;
  END IF;
  RETURN NEW;
@@ -1372,3 +1385,44 @@ BEGIN
  PERFORM set_config('freeholder.media_empty_scope_contact_v1',capture_contact::text,true);
  RETURN true;
 END $$;
+
+--> statement-breakpoint
+-- SOURCE ONLY. An additional operator stop can record the exact CURRENT plan
+-- and complete immutable namespace mutation cohort. This never rewrites the
+-- plan's first source drain and never grants mutation through an active drain.
+CREATE FUNCTION freeholder_media_transfer_recovery_snapshot(original_plan uuid,original_namespace text) RETURNS jsonb LANGUAGE sql STABLE AS $$
+ SELECT jsonb_build_object(
+  'plan',jsonb_build_object('id',plan.id,'manifestDigest',plan.manifest_digest,'sourceNamespace',plan.source_namespace,'targetNamespace',plan.target_namespace,'sourceDrainId',plan.source_drain_id,'sourceStopEvidenceDigest',plan.source_stop_evidence_digest,'createdAtEpoch',extract(epoch from plan.created_at)::text),
+  'objects',coalesce((SELECT jsonb_agg(jsonb_build_object('id',object.id,'keyDigest',object.key_digest,'targetKeyDigest',object.target_key_digest,'sha256',object.sha256,'bytes',object.bytes,'originalReceiptSetDigest',object.original_receipt_set_digest,'createdAtEpoch',extract(epoch from object.created_at)::text) ORDER BY object.id) FROM media_storage_transfer_objects object WHERE object.plan_id=plan.id),'[]'::jsonb),
+  'callers',coalesce((SELECT jsonb_agg(jsonb_build_object('id',caller.id,'objectId',caller.object_id,'objectReceiptId',caller.object_receipt_id,'multipartOperationId',caller.multipart_operation_id,'physicalReceiptId',caller.physical_receipt_id,'kind',caller.kind,'namespace',caller.namespace,'requestDigest',caller.request_digest,'callerTokenDigest',caller.caller_token_digest,'runtimeId',caller.runtime_id,'runtimeIdentity',caller.runtime_identity,'createdAtEpoch',extract(epoch from caller.created_at)::text) ORDER BY caller.id) FROM media_storage_transfer_calls caller WHERE caller.namespace=original_namespace AND caller.kind IN ('ordinary_put','ordinary_delete','target_put','source_delete','privacy_delete','privacy_source_delete','multipart_create','multipart_complete','multipart_abort')),'[]'::jsonb),
+  'requests',coalesce((SELECT jsonb_agg(jsonb_build_object('id',request.id,'callId',request.call_id,'descriptorDigest',request.descriptor_digest,'tokenDigest',request.token_digest,'keyDigest',request.key_digest,'runtimeIdentity',request.runtime_identity,'createdAtEpoch',extract(epoch from request.created_at)::text) ORDER BY request.id) FROM media_storage_transfer_requests request JOIN media_storage_transfer_calls caller ON caller.id=request.call_id WHERE caller.namespace=original_namespace AND request.descriptor->>'kind' IN ('object.put','object.delete','multipart.create','multipart.complete','multipart.abort')),'[]'::jsonb),
+  'receipts',coalesce((SELECT jsonb_agg(jsonb_build_object('id',receipt.id,'reservationId',receipt.original_reservation_id,'keyDigest',receipt.key_digest,'runtimeId',receipt.writer_runtime_id,'operation',receipt.operation_kind,'createdAtEpoch',extract(epoch from receipt.created_at)::text) ORDER BY receipt.id) FROM media_object_writes receipt WHERE receipt.storage_namespace=original_namespace),'[]'::jsonb)
+ ) FROM media_storage_transfer_plans plan
+ WHERE plan.id=original_plan AND original_namespace IN (plan.source_namespace,plan.target_namespace) AND plan.redacted_at IS NULL
+  AND EXISTS(SELECT 1 FROM media_storage_transfer_objects WHERE plan_id=plan.id)
+  AND (SELECT count(*) FROM media_storage_transfer_objects WHERE plan_id=plan.id)<=10000
+  AND (SELECT count(*) FROM media_storage_transfer_calls WHERE namespace=original_namespace)<=10000
+  AND (SELECT count(*) FROM media_storage_transfer_requests request JOIN media_storage_transfer_calls caller ON caller.id=request.call_id WHERE caller.namespace=original_namespace)<=100000
+  AND (SELECT count(*) FROM media_object_writes WHERE storage_namespace=original_namespace)<=10000
+  AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans other WHERE other.id<>plan.id AND original_namespace IN (other.source_namespace,other.target_namespace) AND other.state NOT IN ('complete','cancelled'))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_transfer_recovery_drain_releasable(original_drain uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_storage_writer_drains drain
+  WHERE drain.id=original_drain AND drain.state='verified' AND drain.verified_at IS NOT NULL AND drain.verified_at>=drain.created_at AND drain.released_at IS NULL
+   AND drain.stop_proof_digest ~ '^[a-f0-9]{64}$' AND drain.executor_identity='linux-systemd:'||(drain.original_processes->>'boot')
+   AND drain.original_processes->>'format'='freeholder.media-writer-drain/v1' AND drain.original_processes->>'unit'='freeholder.service'
+   AND drain.original_processes->'recovery'->>'format'='freeholder.media-transfer-drain/v1'
+   AND drain.original_processes->'recovery'->>'namespace'=drain.namespace
+   AND coalesce(drain.original_processes->'recovery'->>'planId','') ~ '^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$'
+   AND drain.original_processes->'recovery'->'snapshot'=freeholder_media_transfer_recovery_snapshot((CASE WHEN coalesce(drain.original_processes->'recovery'->>'planId','') ~ '^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$' THEN (drain.original_processes->'recovery'->>'planId')::uuid ELSE NULL END),drain.namespace)
+   AND NOT EXISTS(SELECT 1 FROM media_object_writes receipt WHERE receipt.storage_namespace=drain.namespace AND (receipt.writer_runtime_id IS NULL OR receipt.writer_finished_at IS NULL OR receipt.original_reservation_id IS NULL OR receipt.state NOT IN ('accepted','confirmed_absent') OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE coalesce(caller.physical_receipt_id,caller.object_receipt_id)=receipt.id AND caller.kind IN ('ordinary_put','ordinary_delete','target_put','source_delete','privacy_delete','privacy_source_delete') AND caller.runtime_id=receipt.writer_runtime_id)))
+   AND NOT EXISTS(SELECT 1 FROM media_multipart_resources resource WHERE resource.storage_namespace=drain.namespace AND resource.retired_at IS NULL)
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE caller.namespace=drain.namespace AND caller.kind IN ('ordinary_put','ordinary_delete','target_put','source_delete','privacy_delete','privacy_source_delete','multipart_create','multipart_complete','multipart_abort') AND (caller.state<>'returned' OR caller.returned_at IS NULL OR caller.result_digest IS NULL OR caller.created_at>drain.created_at OR EXISTS(SELECT 1 FROM media_storage_transfer_objects object JOIN media_storage_transfer_plans other ON other.id=object.plan_id WHERE object.id=caller.object_id AND object.plan_id::text IS DISTINCT FROM drain.original_processes->'recovery'->>'planId' AND other.state NOT IN ('complete','cancelled'))))
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_calls caller ON caller.id=request.call_id WHERE caller.namespace=drain.namespace AND request.descriptor->>'kind' IN ('object.put','object.delete','multipart.create','multipart.complete','multipart.abort') AND (request.state<>'returned' OR request.returned_at IS NULL OR request.created_at>drain.created_at OR request.descriptor_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(request.descriptor) OR request.runtime_identity IS DISTINCT FROM caller.runtime_identity OR caller.kind NOT IN ('ordinary_put','ordinary_delete','target_put','source_delete','privacy_delete','privacy_source_delete','multipart_create','multipart_complete','multipart_abort')))
+ )
+$$;
+-- This narrow finished-cohort release does not resolve any missing physical
+-- finish, stopped-applied target review, presigned part/session or legacy debt.
+-- Full request and multipart part capabilities remain UNPUBLISHED.

@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Prepare exact current-plan executor recovery capture and release for a complete physically finished transfer cohort. Preserve the first plan and stop witness, keep active drains fenced, reject unfinished or changed original admissions, and require monotone real operator capture/verification/release. Full multipart, unknown-writer recovery and actual operator/platform qualification remain open.
+
 - Prepare exact affirmative original PUT review consumption for conditional physical retirement without inventing missing caller or writer finishes. Preserve original nonce, revision, immutable review and complete provider inventory through guarded minimization. Full multipart, executor/platform acceptance and qualification remain open.
 
 - Prepare verification-only recovery of an acknowledged, actually finished DELETE whose local result commit failed. Preserve its first failure/ACK, require fresh complete physical absence proof and append a separate review without replaying DELETE. Capability and qualification remain open.
