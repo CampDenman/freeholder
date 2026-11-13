@@ -7,7 +7,22 @@ No product/service/job/SQL behavior changes. No compiler, lint, tests,
 database, native, build, install or provider operation ran in this lane.
 MASTER §43 remains the only status authority; no acceptance gate closes.
 
-## Preserved first failure
+## Follow-up qualification and upload concealment
+
+At20f6c79d, renewed full types, focused merge/transport lint and eleven source
+contract files pass. NEW ordinary V8 matches all82 migration identities. The
+incoming refusal case then stops at its prepared403 expectation for a different
+uploader: the actual shared upload service deliberately returns404/not_found
+when the frozen uploader identity differs, concealing the private upload's
+existence. The earlier missing-scope403 assertion already passed. V8 is
+preserved with independent read-only table/journal/profile/drain evidence.
+
+The test now requires the exact404 and not_found error code. All original
+private-helper, CMS-scope, revocation and unchanged-business-state assertions
+remain; their complete execution is still pending in a new database. No
+service or permission changed, and no broad403-or404 allowance was introduced.
+
+## Original audit failure
 
 The incoming WXR control reached actual HTTP upload, the SDK500/MCP501
 boundary, explicit publication and rollback, and public explicit-null

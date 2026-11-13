@@ -237,7 +237,10 @@ describe.runIf(hasDatabase)("actual incoming import transports (C3.22/C3.46/C3.4
     const before = await businessStamp();
     await expect(client.withToken(narrow.token).api.imports.previewFromUpload({ id: run.id, uploadId: upload.uploadId })).rejects.toMatchObject({ status: 403, code: "permission" });
     const wrongUploader = await fetch(`${host!.origin}/api/imports/source/chunk?id=${run.id}&uploadId=${upload.uploadId}&index=0`, { method: "POST", headers: { authorization: `Bearer ${uploader.token}`, "content-type": "application/octet-stream" }, body: bytes });
-    expect(wrongUploader.status).toBe(403);
+    // Ownership refusals conceal the private upload's existence, after the
+    // separate scope check has already established the ordinary 403 boundary.
+    expect(wrongUploader.status).toBe(404);
+    expect(await wrongUploader.json()).toMatchObject({ error: { code: "not_found" } });
     for (const helper of ["imports.claimSourceChunk", "imports.applyUploadedPreview", "imports.claimGraphCommit", "imports.completeOriginalSourceErasure"]) {
       const response = await fetch(`${host!.origin}/api/v1/${helper}`, { method: "POST", headers: authenticatedJson(primary.token), body: JSON.stringify({ id: run.id }) });
       expect(response.status).toBe(404);
