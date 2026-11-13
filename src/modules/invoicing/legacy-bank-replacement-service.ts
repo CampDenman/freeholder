@@ -13,6 +13,7 @@ import { payments, refunds, moneyStateEvents } from "./schema";
 import { originalLegacyBankRefund } from "./legacy-refund-dispatch";
 import { reconcileLegacyBankRefund } from "./legacy-bank-current-service";
 import { submitProviderRefund } from "./payment-provider-service";
+import { LegacyBankProofPendingError, matchesLegacyBankProofContinuation } from "./legacy-bank-proof-pending";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { assertLegacyBankRecoveryGuards, legacyBankReturnOwner, legacyBankInspectionRefundIds, readLegacyReplacementChain, legacyReplacementFinancialState, legacyReplacementSigningKey } from "./legacy-bank-replacement-store";
@@ -111,8 +112,23 @@ export async function replaceOriginalLegacyBankRefund(input: { refundId: string;
     if (claim.state !== "ready") return claim;
     const parentId = legacyReplacementParentId(claim.refund.idempotencyKey);
     if (!parentId) throw new ServiceError("conflict", "Restore the actual original parent-bound replacement key before physical dispatch.");
-    const actual = await submitProviderRefund.call({ paymentId: claim.refund.paymentId, amountMinor: claim.refund.amountMinor,
-      reason: legacyReplacementReason(parentId), idempotencyKey: claim.refund.idempotencyKey }, caller);
+    let actual: typeof claim.refund;
+    try {
+      actual = await submitProviderRefund.call({ paymentId: claim.refund.paymentId, amountMinor: claim.refund.amountMinor,
+        reason: legacyReplacementReason(parentId), idempotencyKey: claim.refund.idempotencyKey }, caller);
+    } catch (error) {
+      // Continue only a deliberately deferred logical projection from this
+      // actually finished exact child. Provider/SQL/unknown failures still
+      // propagate; a message/code or an equal unrelated amount proves nothing.
+      if (!(error instanceof LegacyBankProofPendingError)) {
+        if (error instanceof Error) throw error;
+        throw new Error("The actual original legacy refund dispatch failed.", { cause: error });
+      }
+      if (error.refundId !== claim.refund.id) throw error;
+      const retained = await legacyBankReplacementOutcome.call({ refundId: plan.rootRefundId, replacementRefundId: claim.refund.id }, system);
+      if (!matchesLegacyBankProofContinuation(error, retained.refund)) throw error;
+      actual = retained.refund;
+    }
     // The newly admitted caller invalidates earlier cash-inventory receipts.
     // Inspect every actual resource again after it really finishes, retaining
     // each packet even if another packet cannot yet authorize current money.

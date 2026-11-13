@@ -14473,6 +14473,15 @@ whatever is best for the people using the site.
   waiver. Receipt-only subscription native, combined source/SDK/browser/provider
   acceptance, independent review and stable sign-off remain open. See
   `deploy/original-cash-return-source-2026-11-13.md`.
+  The unchanged actual RMA lifecycle then genuinely failed after a successful
+  causal child POST/retained finish/ACK but before any fresh child GET; V21
+  remains preserved with original issuedcredit1000, paid2000/refunded1000,
+  three1000refunds and childreads0. Shared source repair separates that actual
+  creator result into a typed exact-child bank-proof continuation, preserving
+  public refusal and reaching existing fresh whole-family reads before guarded
+  cash/return closure. SQL17bf/all original native oracles remain unchanged;
+  four pure continuation refusals are prepared. New qualification is UNRUN,
+  and no C-item/stable completion follows.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

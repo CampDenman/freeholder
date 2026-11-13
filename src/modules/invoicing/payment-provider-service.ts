@@ -3,6 +3,8 @@
 // C5.06: provider orchestration and authenticated event convergence.
 
 import { retainLegacyBankFeedback } from "./legacy-bank-feedback-service";
+import { legacyBankFeedbackReviewOwned } from "./legacy-bank-feedback-store";
+import { LegacyBankProofPendingError } from "./legacy-bank-proof-pending";
 import { enqueueJob } from "@/core/jobs";
 import { legacyBankReads } from "./legacy-bank-read-schema";
 import { isLegacyReplacementKey } from "./legacy-bank-replacement-proof";
@@ -1024,6 +1026,17 @@ export const recordProviderRefundResult = defineService({
         : outcome.kind === "start" ? actual?.status === "pending" && actual.providerRef === outcome.providerRef
           : actual?.status === "failed" && Boolean(actual.providerRef);
       if (!matches) throw new ServiceError("conflict", "The original completed provider caller does not prove this refund transition.");
+      const changesStatus = outcome.kind === "settle" ? refund.status !== "succeeded" : outcome.kind === "fail" && refund.status !== "failed";
+      if (changesStatus) {
+        const [priorRead] = await ctx.tx.select({ id: legacyBankReads.id }).from(legacyBankReads).where(eq(legacyBankReads.refundId, refund.id)).limit(1);
+        if (priorRead || await legacyBankFeedbackReviewOwned(ctx.tx, refund.id)) {
+          // The actual finish and first resource ACK committed independently
+          // before this transaction. Old creator success/failure cannot stand
+          // in for a fresh finished current read in this review-owned namespace.
+          if (!actual?.providerRef || refund.providerRef !== actual.providerRef) throw new ServiceError("conflict", "Restore the actual original creator ACK before current bank review.");
+          throw new LegacyBankProofPendingError(refund.id, actual.providerRef);
+        }
+      }
     }
     if (outcome.kind === "settle") return ctx.call(settleRefund, { id: input.refundId, providerRef: outcome.providerRef, processedAt: new Date() });
     if (outcome.kind === "start") return ctx.call(startRefund, { id: input.refundId, providerRef: outcome.providerRef });
