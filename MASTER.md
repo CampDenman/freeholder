@@ -3891,6 +3891,21 @@ reading chat logs.
   `tests/core/merge-completeness.test.ts`; changeset
   `contact-privacy-rights.md`; operator guide `deploy/privacy-rights.md` **F04** `/admin/contacts/privacy` access/export/erasure. **F05** `contacts.createDataRequest`/`fulfillDataRequest`/`recordConsent` and `privacy.getMyProfile`/`createMyDataRequest`/`downloadMyDataRequestArtifact` at `/api/v1/contacts.*` and `/api/v1/privacy.*`; MCP `privacy_*`/`contacts_*`. **F07** `tests/core/contact-privacy-rights.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/privacy-rights.md`. **F12** `tests/core/contact-privacy-rights.test.ts` is the composition proof.)
 
+  Published-main WXR containment in progress (2026-11-13, C1.08/C3.47/C11.14):
+  an actual 501-entry unaccepted WXR control on protected main `81271622`
+  deleted the original private chunk but falsely completed its erasure receipt
+  with private text still present in one normalized entry and one media plan.
+  The original full-erasure oracle and populated database are preserved. A
+  private completion guard now checks the original queued task and verified
+  pending receipt under privacy/run locks, retaining explicit recovery while
+  an unaccepted normalized graph remains. Source typecheck, whole lint and 384 static controls pass (26 declared
+  database skips). The actual 501-entry pending containment passes (5.403s),
+  unchanged outage/removal/replay positive passes (6.676s), and the other 14
+  raw-source controls pass without retry; independent physical/receipt/journal
+  readback and closed database sessions are recorded. Evidence: `deploy/import-wxr-index-privacy-2026-11-13.md`. Full guarded index minimization and recovery of
+  historical completed receipts remain required; this does not close C1.08.
+
+
   Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
   documented an empty original hold, uploaded a later unheld WXR generation,
   verified and fulfilled the real erasure. The request falsely reached
@@ -3900,8 +3915,18 @@ reading chat logs.
   outcomes can carry real pending jobs; acknowledgements preserve the hold,
   and opted-in late unheld evidence reopens only its original receipt. Actual
   acknowledged job IDs distinguish completed replays from missing history.
-  Source/native/domain qualification remains pending; no independent or stable
-  sign-off follows. The original control is preserved separately at2128e673.
+  The independent optional framework at `8cd381dc` passed full Node 22 types,
+  focused lint, metadata and all 44 source-contract files (384 unique assertions,
+  26 database skips), plus three real service/job controls and eight existing
+  privacy/recovery/cleanup-acknowledgement regressions on the ordinary published
+  0–79 schema. Registered job bodies ran with live delivery disabled; independent
+  readback confirmed retained actual acknowledgements, no pending jobs in the
+  final selective fixture and no remaining database clients. First-run sandbox
+  child-process/loopback failures and their exact successful affected-check
+  retry are preserved. No domain callback or migration is enabled in that
+  framework release. Domain integration and full C1.08 acceptance remain open;
+  no independent or stable sign-off follows. The original control is preserved
+  separately at `2128e673`; see deploy/privacy-rights.md for evidence and limits.
 
   Privacy lineage repair 2026-11-11 (C1.08/C11.10): actual merge/undo controls
   reproduced other-party snapshot disclosure, transitive retained copies and

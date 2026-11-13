@@ -69,3 +69,14 @@ service inventory in this composition. Existing native tests that expected
 bounded public continuation before asserting their original business results;
 those tests have not been run or claimed passing here. Public API/MCP/SDK and
 two-process/browser acceptance remain required after final source qualification.
+
+The candidate also composes root containment source `ea222dfc` and preserves its
+actual ordinary79 pending/raw-positive/regression evidence in
+`deploy/import-wxr-index-privacy-2026-11-13.md`. The final81 candidate runs the
+byte-identical original `tests/core/import-wxr-index-erasure.test.ts` full-erasure
+oracle; the old pending-only containment fixture is replaced by this stronger
+behavior, without schema skips or conditional success assertions. Exact original
+queue identity, intact verified artifact, holds and same-transaction ACK remain
+in the one completion service. Its conservative pending refusal is bypassed
+only after the enabled81 guarded scope/minimization path runs, per-task physical
+retirement is rechecked and the deferred whole-scope closure guard is present.
