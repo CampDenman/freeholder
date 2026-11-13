@@ -27,14 +27,14 @@ test("hidden locations require location access while POS and social remain usabl
     });
     const hiddenPage = await context.request.get("/api/v1/cms.resolvePage?slug=locations/private-studio");
     expect(hiddenPage.ok()).toBe(true);
-    expect(await hiddenPage.json()).toEqual({ ok: true });
+    expect(await hiddenPage.json()).toBeNull();
     const sitemap = await context.request.get("/api/v1/cms.publishedPaths");
     expect(sitemap.ok()).toBe(true);
     expect(await sitemap.text()).not.toContain(hidden!.street!);
     for (const selector of [`id=${hidden!.id}`, "slug=private-studio"]) {
       const response = await context.request.get(`/api/v1/locations.get?${selector}`);
       expect(response.ok()).toBe(true);
-      expect(await response.json()).toEqual({ ok: true });
+      expect(await response.json()).toBeNull();
     }
     const denied = await context.request.get("/api/v1/locations.list?includeHidden=true");
     expect(denied.status()).toBe(401);
