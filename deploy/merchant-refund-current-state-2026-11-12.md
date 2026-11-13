@@ -1,6 +1,26 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # Original bank refund current-state draft
 
+## Current-source integration, not yet qualified
+
+The owned bank deltas are now composed onto exact885a37f2 in the isolated
+`/tmp/freeholder-current-bank80-20261112` worktree. Only additive MASTER/locale
+adjacency and the job export array conflicted; every current root section,
+locale key and buyer-money finisher job was retained. Current fee/C0/terms/
+privacy bodies were preserved rather than replacing older whole files.
+
+The pure owned emitter now appends the bank fragment after accepted terms.
+New unpublished80 SQL is
+`e7834c9048ecd5eace52ecc391ff392f7b0701b396e02ddcfc364cb8743d82a5`.
+The complete prior881a7901 byte prefix, all published0–79 SQL and the journal
+are unchanged. The fragment itself is a008e940. No database, compiler, native,
+SDK, install or build has run in this new integration. It needs its own source
+qualification and a NEW disposable migration database; existingV10/881a and
+earlier958/1ac databases/clones must not be changed or reused for bank tests.
+Pure-emission evidence is `/tmp/freeholder-bank-current80-current-source-assembly.json`.
+
+## Earlier isolated source qualification
+
 This checkpoint is a **source-qualified draft**, based on isolated CURRENT0fbe.
 Full Node22 types, changed-source lint and the finite63 DB-free controls pass.
 No migration, actual financial database, provider account or browser acceptance

@@ -13888,8 +13888,12 @@ whatever is best for the people using the site.
   Node22 types, changed-file lint and63 DB-free controls pass; initial import
   and fixture type-only lint diagnostics were corrected and preserved. No SQL
   application, actual financial native, browser or provider acceptance has run.
-  Its separate owned fragment is unassembled; assembled80
-  SQL958 and all preserved databases/clones are unchanged. Generic/manual
+  That isolated fragment was unassembled and its assembled80 SQL958 stayed
+  unchanged. Subsequent owned composition onto current885a37f2 appends the
+  bank fragment after accepted terms: new unpublishedSQL e7834c90 preserves
+  the entire881a byte prefix, published0–79 and the journal. This current
+  union has not run source/native/SQL/SDK qualification and needs a NEW
+  disposable database; all existing databases/clones stay unchanged. Generic/manual
   causal discharge and legacy bank recovery remain unfinished work. This does
   not activate the new model or close C12.38. See
   `deploy/merchant-refund-current-state-2026-11-12.md`.
