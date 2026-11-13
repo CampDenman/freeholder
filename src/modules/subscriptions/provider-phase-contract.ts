@@ -24,7 +24,7 @@ export type ProviderPhase=z.infer<typeof providerPhase>;
  * and metadata against the admitted full request before recording it. */
 export const providerPhaseInventory=z.object({
   version:z.literal(1),operationId:z.uuid(),requestDigest:digest,
-  providerScheduleRef:reference("sub_sched"),providerSubscriptionRef:reference("sub").nullable(),
+  providerScheduleRef:reference("sub_sched"),providerSubscriptionRef:reference("sub").nullable(),providerCustomerRef:reference("cus"),
   providerPlatformAccountId:reference("acct"),chargeAccountId:reference("acct").nullable(),
   recipientAccountId:reference("acct"),settlementMerchantAccountId:reference("acct"),
   providerApiVersion:z.literal("2026-10-28.endive"),
@@ -40,6 +40,12 @@ export const providerPhaseInventory=z.object({
     ctx.addIssue({ code: "custom", message: "An original future schedule cannot invent a linked subscription or started phase." });
   }
 });
+
+/** The actual returned customer must remain the originally admitted one;
+ * another valid customer ID is not an equivalent billing namespace. */
+export function originalPhaseCustomerMatches(inventory: z.infer<typeof providerPhaseInventory>, expected: unknown): boolean {
+  return typeof expected === "string" && /^cus_[A-Za-z0-9]{1,195}$/.test(expected) && inventory.providerCustomerRef === expected;
+}
 
 export function exactProviderDate(value:string):Date{
   const date=new Date(value);

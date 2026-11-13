@@ -15,7 +15,8 @@ import {invoiceMerchantTaxQuotes} from "./merchant-tax-schema";
 import {invoiceMerchantCollections,merchantPaymentRoutes} from "./merchant-collection-schema";
 import {invoiceMerchantScopes,merchantInvoicePaymentRoutes} from "./merchant-invoice-scope-schema";
 import {merchantAgreementPaymentRoutes} from "./merchant-agreement-schema";
-import {subscriptionCommercialTerms,subscriptionMerchantScopes,subscriptionProviderChargeReceipts,subscriptionProviderScheduleOperations,subscriptionProviderScheduleResources} from "@/modules/subscriptions/schema";
+import {subscriptionCommercialTerms,subscriptionMerchantScopes,subscriptionProviderChargeReceipts} from "@/modules/subscriptions/schema";
+import {subscriptionProviderScheduleOperations,subscriptionProviderScheduleResources} from "@/modules/subscriptions/provider-schedule-schema";
 import {merchantRefundDependencyFingerprints} from "./merchant-refund-dependencies";
 
 const scope="commerce.merchantTax";
