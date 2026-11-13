@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createClient, FreeholderError, SERVICE_NAMES } from "../../packages/sdk/src/index";
 import { db } from "@/core/db";
@@ -75,17 +75,41 @@ async function assertActualCleanupPayload(keys: string[]) {
   expect(rows.length).toBeGreaterThan(0);
 }
 
-async function assertAuditActorAndNoCredential(token: string, runId: string) {
+type OriginalStorageWitness = { key: string; keyDigest: string; namespace: string; sha256: string; bytes: number };
+async function assertAuditActorAndNoCredential(token: string, runId: string, uploaded: OriginalStorageWitness[] = []) {
   const rows = await db().select().from(auditLog).where(sql`${auditLog.action} like 'imports.%'`);
-  expect(rows.some(row => row.subjectId === runId)).toBe(true);
+  const runRows = rows.filter(row => row.subjectType === "import_run" && row.subjectId === runId);
+  expect(runRows.length).toBeGreaterThan(0);
+  expect(runRows.every(row => row.actor === `agent:${PRIMARY}`)).toBe(true);
   expect(rows.length).toBeGreaterThan(0);
-  const responses = await db().select({ id: importCrawlResponses.id }).from(importCrawlResponses)
+  const responses = await db().select({ id: importCrawlResponses.id, key: importCrawlResponses.storageKey,
+    keyDigest: importCrawlResponses.keyDigest, namespace: importCrawlResponses.storageNamespace,
+    facts: importCrawlResponses.facts, wrapperFinishedAt: importCrawlResponses.wrapperFinishedAt }).from(importCrawlResponses)
     .innerJoin(importCrawlRequests, eq(importCrawlRequests.id, importCrawlResponses.requestId))
     .innerJoin(importCrawlSources, eq(importCrawlSources.id, importCrawlRequests.sourceId)).where(eq(importCrawlSources.runId, runId));
-  const actualWrapperIds = new Set(responses.map(response => response.id));
-  expect(rows.every(row => row.action === "imports.recordCrawlWrapperFinish"
-    ? row.actor === "system" && row.subjectType === "import_crawl_response" && row.subjectId !== null && actualWrapperIds.has(row.subjectId)
-    : row.actor === `agent:${PRIMARY}`)).toBe(true);
+  const actualWrapperIds = new Set(responses.filter(response => response.wrapperFinishedAt !== null).map(response => response.id));
+  // WXR evidence comes from this run's actual accepted upload/byte assertions;
+  // REST evidence follows response->request->source->run, never a key prefix.
+  const originals: OriginalStorageWitness[] = [...uploaded, ...responses.flatMap(response => response.key && response.facts
+    ? [{ key: response.key, keyDigest: response.keyDigest, namespace: response.namespace, sha256: response.facts.digest, bytes: response.facts.bytes }] : [])];
+  const observed = originals.length ? await db().select({ id: mediaObjectWrites.id }).from(mediaObjectWrites)
+    .where(and(eq(mediaObjectWrites.state, "accepted"), sql`${mediaObjectWrites.observedAcceptedAt} is not null`,
+      or(...originals.map(original => and(eq(mediaObjectWrites.key, original.key), eq(mediaObjectWrites.keyDigest, original.keyDigest),
+        eq(mediaObjectWrites.namespace, original.namespace), eq(mediaObjectWrites.sha256, original.sha256), eq(mediaObjectWrites.bytes, original.bytes)))))) : [];
+  const actualObservationIds = new Set(observed.map(row => row.id));
+  for (const row of rows) {
+    if (row.action === "imports.reconcileCrawlOriginalObservation") {
+      // The registered periodic sweep and committed storage hook use this
+      // independent SYSTEM mutation. A nonempty receipt must be this run's
+      // actual observed original resource, including its frozen namespace.
+      expect(row.actor).toBe("system");expect(row.subjectType).toBeNull();expect(row.subjectId).toBeNull();
+      const input = z.object({ receiptId: z.uuid().optional() }).strict().parse(row.diff);
+      if (input.receiptId) expect(actualObservationIds.has(input.receiptId)).toBe(true);
+    } else if (row.action === "imports.recordCrawlWrapperFinish") {
+      expect(row.actor).toBe("system");expect(row.subjectType).toBe("import_crawl_response");
+      expect(row.subjectId !== null && actualWrapperIds.has(row.subjectId)).toBe(true);
+    } else expect(row.actor).toBe(`agent:${PRIMARY}`);
+  }
   const audit = JSON.stringify(await db().select().from(auditLog));
   expect(audit).not.toContain(token); expect(audit).not.toContain(MARKER);
 }
@@ -194,7 +218,9 @@ describe.runIf(hasDatabase)("actual incoming import transports (C3.22/C3.46/C3.4
     expect(await storage().get(originalKey)).toEqual(bytes);
     await finishLifecycle(client, mcp, key.token, run.id, reviewed.version, "transport-", "transport-501");
     expect(await storage().get(originalKey)).toEqual(bytes); await assertActualCleanupPayload([originalKey]);
-    await assertAuditActorAndNoCredential(key.token, run.id);
+    if (!put?.namespace) throw new Error("The actual original upload lost its frozen storage namespace.");
+    await assertAuditActorAndNoCredential(key.token, run.id, [{ key: originalKey, keyDigest: digest(`freeholder:media-object-key:v1\0${originalKey}`),
+      namespace: put.namespace, sha256: digest(bytes), bytes: bytes.byteLength }]);
     expect(host!.requests.some(request => request.path === "/api/mcp")).toBe(true);
     expect(host!.requests.some(request => request.path === "/api/v1/imports.commit")).toBe(true);
     expect(host!.requests.filter(request => request.path === "/api/imports/source/chunk")).toHaveLength(1);
