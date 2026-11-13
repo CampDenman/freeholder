@@ -26,20 +26,21 @@ export const originalCashRecoveryOperations = pgTable("original_cash_recovery_op
   caller: jsonb("caller").$type<MerchantPhysicalCaller>().notNull(), nonceHash: text("nonce_hash").notNull(),
   digest: text("digest").notNull(), authentication: text("authentication").notNull(), createdAt: createdAtColumn(),
 }, t => [index("original_cash_recovery_operations_owner").on(t.recoveryId),
-  uniqueIndex("original_cash_recovery_operations_creation").on(t.recoveryId, t.kind).where(sql`${t.kind}<>'inspection'`),
+  uniqueIndex("original_cash_recovery_operations_creation").on(t.recoveryId, t.kind, sql`coalesce(${t.request}->>'targetFactId','original_full_v1')`).where(sql`${t.kind}<>'inspection'`),
   check("original_cash_recovery_operations_kind", sql`${t.kind} in ('inspection','fee','recipient')`),
   check("original_cash_recovery_operations_proof", sql`${t.nonceHash} ~ '^[a-f0-9]{64}$' and ${t.digest} ~ '^[a-f0-9]{64}$' and ${t.authentication} ~ '^[a-f0-9]{64}$'`)]);
 export const originalCashRecoveryFacts = pgTable("original_cash_recovery_facts", {
   id: uuid("id").primaryKey().defaultRandom(), recoveryId: uuid("recovery_id").notNull().references(() => originalCashRecoveries.id, { onDelete: "restrict" }),
   operationId: uuid("operation_id").references(() => originalCashRecoveryOperations.id, { onDelete: "restrict" }),
   sequence: integer("sequence").notNull(),
-  kind: text("kind", { enum: ["primary", "refund", "state", "parent", "ack", "resource", "finish", "stop", "legacy_fee_stop", "customer_request"] }).notNull(),
+  kind: text("kind", { enum: ["primary", "refund", "state", "parent", "ack", "resource", "finish", "stop", "legacy_fee_stop", "customer_request", "partial_target", "partial_closure", "unassigned_refund_review"] }).notNull(),
   evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(), digest: text("digest").notNull(), authentication: text("authentication").notNull(), createdAt: createdAtColumn(),
 }, t => [index("original_cash_recovery_facts_owner").on(t.recoveryId), index("original_cash_recovery_facts_operation").on(t.operationId),
   uniqueIndex("original_cash_recovery_facts_sequence").on(t.recoveryId, t.sequence),
   check("original_cash_recovery_facts_sequence_positive", sql`${t.sequence}>0`),
   uniqueIndex("original_cash_recovery_facts_terminal").on(t.operationId, t.kind).where(sql`${t.kind} in ('finish','stop')`),
-  check("original_cash_recovery_facts_kind", sql`${t.kind} in ('primary','refund','state','parent','ack','resource','finish','stop','legacy_fee_stop','customer_request')`),
+  uniqueIndex("original_cash_recovery_facts_target").on(t.recoveryId, sql`(${t.evidence}->>'targetKey')`).where(sql`${t.kind}='partial_target'`),
+  check("original_cash_recovery_facts_kind", sql`${t.kind} in ('primary','refund','state','parent','ack','resource','finish','stop','legacy_fee_stop','customer_request','partial_target','partial_closure','unassigned_refund_review')`),
   check("original_cash_recovery_facts_proof", sql`${t.digest} ~ '^[a-f0-9]{64}$' and ${t.authentication} ~ '^[a-f0-9]{64}$'`)]);
 export const originalCashRecoveryClosures = pgTable("original_cash_recovery_closures", {
   id: uuid("id").primaryKey().defaultRandom(), recoveryId: uuid("recovery_id").notNull().references(() => originalCashRecoveries.id, { onDelete: "restrict" }),

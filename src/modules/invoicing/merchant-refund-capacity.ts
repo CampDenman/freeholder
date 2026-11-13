@@ -17,6 +17,9 @@ export interface MerchantRefundCashFact {
   status: "pending" | "requires_action" | "succeeded" | "failed" | "canceled" | null;
   bindingVerified: boolean;
 }
+/** Derived only from an authenticated fresh human review of an actual original
+ * server receipt and bank resource. This does not assign a refund request. */
+export interface MerchantRefundReviewedUnassignedResource { providerRef: string; amountMinor: number; currency: string; status: "succeeded" | "failed" | "canceled" }
 export type MerchantRefundDebt = "contradictory_provider_fact" | "unassigned_refund" | "unverified_binding" | "unfinished_creator" | "unknown_refund" | "over_refunded" | "stale_current_state";
 /** Only the shared SQL current-state receipt supplies these. A caller's
  * asserted latest status or an observation timestamp is not this proof.
@@ -29,6 +32,7 @@ export function merchantRefundCapacity(input: {
   observations: readonly MerchantRefundCashFact[];
   currentStates?: readonly MerchantRefundVerifiedCurrentState[];
   unresolvedCurrentRequests?: readonly string[];
+  reviewedUnassignedResources?: readonly MerchantRefundReviewedUnassignedResource[];
 }): { refundedMinor: number | null; reservedMinor: number | null; availableMinor: number | null; debt: MerchantRefundDebt[] } {
   const valid = (amount: number) => Number.isSafeInteger(amount) && amount > 0;
   if (!valid(input.originalCashMinor) || !/^[A-Z]{3}$/.test(input.currency)) throw new RangeError("Use the actual original provider money amount and currency.");
@@ -57,10 +61,12 @@ export function merchantRefundCapacity(input: {
     }
     const current = input.currentStates?.filter(row => row.providerRef === first.providerRef && row.requestId === associatedId) ?? [];
     if (current.length > 1) debt.add("contradictory_provider_fact");
-    const states = current.length === 1 ? [current[0]!.status] : group.map(fact => fact.status);
+    const reviewed = !associatedId ? input.reviewedUnassignedResources?.filter(resource => resource.providerRef === first.providerRef && resource.amountMinor === first.amountMinor && resource.currency === first.currency) ?? [] : [];
+    if (reviewed.length > 1) debt.add("contradictory_provider_fact");
+    const states = current.length === 1 ? [current[0]!.status] : reviewed.length === 1 ? [reviewed[0]!.status] : group.map(fact => fact.status);
     const positive = states.includes("succeeded"), pending = !positive && states.some(state => state === "pending" || state === "requires_action" || state === null);
     if (positive && states.some(state => state === "failed" || state === "canceled" || state === "requires_action" || state === "pending" || state === null)) debt.add("contradictory_provider_fact");
-    if (!request && (positive || pending)) debt.add("unassigned_refund");
+    if (!request && (positive || pending) && reviewed.length !== 1) debt.add("unassigned_refund");
     if (request && !group.some(fact => fact.bindingVerified && fact.requestId === associatedId)) debt.add("unverified_binding");
     if (positive) {
       refunded += BigInt(first.amountMinor);

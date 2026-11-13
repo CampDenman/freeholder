@@ -9108,5 +9108,13 @@
   "cashRecovery.evidence": "Hosting stop evidence",
   "cashRecovery.confirmStop": "I verified that the exact original operation has stopped on its host.",
   "cashRecovery.reviewStop": "Record hosting review",
-  "cashRecovery.oldFeeHelp": "This older fee journal has no original process-birth record. Verify that its exact original operation has stopped before recording a new review. This does not create a historical finish or prove a bank outcome."
+  "cashRecovery.oldFeeHelp": "This older fee journal has no original process-birth record. Verify that its exact original operation has stopped before recording a new review. This does not create a historical finish or prove a bank outcome.",
+  "cashRecovery.partial": "Reconcile original returned parts",
+  "cashRecovery.partialHelp": "Check fees and the original recipient transfer only for the confirmed returned parts. The rest of the original payment stays paid; keep every existing credit.",
+  "cashRecovery.partialConfirm": "I authorize only the exact cumulative fees and recipient return for these original returned parts.",
+  "cashRecovery.unassigned": "Review original resource",
+  "cashRecovery.unassignedHelp": "This bank resource has no assigned refund request. Review its actual retained server receipt and current original bank identity. This creates no payment, refund request or historical caller.",
+  "cashRecovery.unassignedConfirm": "I reviewed this actual original resource and its retained receipt.",
+  "cashRecovery.partialClosed": "The obligations for the original returned parts are confirmed.",
+  "cashRecovery.partialTotal": "Confirmed original customer return: {amount}."
 }

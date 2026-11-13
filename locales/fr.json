@@ -9108,5 +9108,13 @@
   "cashRecovery.evidence": "Preuves de l’arrêt sur l’hébergement",
   "cashRecovery.confirmStop": "J’ai vérifié que cette opération d’origine précise est arrêtée sur son hébergement.",
   "cashRecovery.reviewStop": "Enregistrer la vérification de l’hébergement",
-  "cashRecovery.oldFeeHelp": "Cet ancien journal de frais ne conserve pas le démarrage du processus d’origine. Vérifiez l’arrêt de cette opération précise avant d’enregistrer une nouvelle vérification. Cela ne crée pas de fin historique et ne prouve aucun résultat bancaire."
+  "cashRecovery.oldFeeHelp": "Cet ancien journal de frais ne conserve pas le démarrage du processus d’origine. Vérifiez l’arrêt de cette opération précise avant d’enregistrer une nouvelle vérification. Cela ne crée pas de fin historique et ne prouve aucun résultat bancaire.",
+  "cashRecovery.partial": "Rapprocher les parts d’origine remboursées",
+  "cashRecovery.partialHelp": "Vérifiez les frais et le virement au destinataire initial uniquement pour les parts dont le remboursement est confirmé. Le reste du paiement d’origine demeure payé ; conservez tous les avoirs.",
+  "cashRecovery.partialConfirm": "J’autorise uniquement les frais cumulés exacts et le retour au destinataire correspondant à ces parts d’origine remboursées.",
+  "cashRecovery.unassigned": "Vérifier l’opération d’origine",
+  "cashRecovery.unassignedHelp": "Cette opération bancaire n’a pas de demande de remboursement attribuée. Vérifiez son reçu réel conservé et son identité bancaire d’origine actuelle. Cela ne crée aucun paiement, demande ou processus historique.",
+  "cashRecovery.unassignedConfirm": "J’ai vérifié cette opération d’origine réelle et son reçu conservé.",
+  "cashRecovery.partialClosed": "Les obligations relatives aux parts d’origine remboursées sont confirmées.",
+  "cashRecovery.partialTotal": "Remboursement d’origine confirmé au client : {amount}."
 }

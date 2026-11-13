@@ -7,7 +7,6 @@ import { z } from "zod";
 import { actorString, defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { subscriptionMerchantScopes, subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
 import { merchantFeeRefunds, merchantPaymentObservations } from "./merchant-collection-schema";
-import { merchantRefundCashHistory } from "./merchant-refund-history";
 import { lockMerchantRefundCash, merchantRefundSource, originalMerchantRefundCash } from "./merchant-refund-origin";
 import { merchantPhysicalCaller, merchantCallerLiveness } from "./merchant-physical-caller";
 import { merchantReturnedCashEvidenceSchema } from "./merchant-returned-cash-contract";
@@ -23,6 +22,9 @@ import { verifyOriginalCashRecovery } from "./original-cash-recovery-proof";
 import { claimMerchantRefundRequest, merchantRefundRequestRow } from "./merchant-refund-request";
 import { recordMerchantRefundObservation } from "./merchant-refund-observations";
 import { merchantRefundRequests, merchantRefundDispatches, merchantRefundResourceBindings } from "./merchant-refund-schema";
+import { boundOriginalCashRecovery as bound, originalCashRecoveryRevision } from "./original-cash-recovery-current";
+import { legacyBankFeedbackMatchesInventory } from "./legacy-bank-feedback-proof";
+export { originalCashRecoveryRevision, originalCashFullReturnCurrent } from "./original-cash-recovery-current";
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const id = z.object({ recoveryId: z.uuid() }).strict();
 const claimResult = z.object({ recoveryId: z.uuid(), operationId: z.uuid(), nonce: z.string(), request: z.record(z.string(), z.unknown()) });
@@ -34,25 +36,13 @@ const held = globals[slot] ??= new Map<string, Holder>();
 const json = (value: unknown) => z.record(z.string(), z.unknown()).parse(JSON.parse(JSON.stringify(value)));
 function human(ctx: ServiceContext) { if (ctx.actor.kind !== "user" || ctx.actor.keyScopes) throw new ServiceError("permission", "A freshly verified signed-in person must review this exact original cash."); return actorString(ctx.actor); }
 async function write(ctx: ServiceContext) {
-  const [ready] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=4 ready from pg_trigger where not tgisinternal and tgenabled in ('O','A') and tgname='original_cash_recovery_guard'
+  const [ready] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=4 and to_regprocedure('public.freeholder_original_cash_partial_abi()') is not null ready from pg_trigger where not tgisinternal and tgenabled in ('O','A') and tgname='original_cash_recovery_guard'
     and tgrelid in(to_regclass('original_cash_recoveries'),to_regclass('original_cash_recovery_operations'),to_regclass('original_cash_recovery_facts'),to_regclass('original_cash_recovery_closures'))`);
   if (!ready?.ready) throw new ServiceError("conflict", "Install the complete original cash-return guards before admitting financial work.");
   await ctx.tx.execute(sql`select set_config('freeholder.original_cash_recovery_v1','1',true)`);
+  await ctx.tx.execute(sql`select set_config('freeholder.original_cash_recovery_v2','1',true)`);
 }
-async function bound(ctx: ServiceContext, recoveryId: string) {
-  const owner = await originalCashRecoveryOwner(ctx.tx, recoveryId), cash = await originalMerchantRefundCash(ctx, owner.owner.source);
-  await lockMerchantRefundCash(ctx, cash);
-  const actual = await originalMerchantRefundCash(ctx, owner.owner.source);
-  if (merchantTaxDigest({ ...actual, applied: owner.owner.cash.applied }) !== merchantTaxDigest(owner.owner.cash)
-    || actual.applied !== owner.owner.cash.applied) throw new ServiceError("conflict", "Restore this original cash namespace and canonical application before returning money; do not rebind its receipt.");
-  return { owner, cash: actual };
-}
-export async function originalCashRecoveryRevision(ctx: ServiceContext, recoveryId: string, excludedRead?: string) {
-  const { cash } = await bound(ctx, recoveryId), history = await merchantRefundCashHistory(ctx, cash, undefined, excludedRead);
-  if (history.incomplete) throw new ServiceError("conflict", "Restore the complete original cash/caller inventory before current return proof.");
-  return { cash, history, revision: merchantTaxDigest({ cash, history: history.digest }) };
-}
-async function appendFact(ctx: ServiceContext, recoveryId: string, operationId: string | null, kind: FactKind, evidence: Record<string, unknown>, factId = randomUUID()) {
+export async function appendOriginalCashFact(ctx: ServiceContext, recoveryId: string, operationId: string | null, kind: FactKind, evidence: Record<string, unknown>, factId = randomUUID()) {
   const [prior] = await ctx.tx.select().from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.id, factId));
   const [last] = prior ? [] : await ctx.tx.select({ sequence: originalCashRecoveryFacts.sequence }).from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.recoveryId, recoveryId)).orderBy(desc(originalCashRecoveryFacts.sequence)).limit(1);
   const sequence = prior?.sequence ?? (last?.sequence ?? 0) + 1;
@@ -62,7 +52,7 @@ async function appendFact(ctx: ServiceContext, recoveryId: string, operationId: 
   await write(ctx); await ctx.tx.insert(originalCashRecoveryFacts).values(row);
   queueOriginalMerchantRefundRepair(ctx, { kind: "original_cash_fact", id: factId });
 }
-async function admit(ctx: ServiceContext, recoveryId: string, kind: "inspection" | "fee" | "recipient", request: Record<string, unknown>, operationId = randomUUID()) {
+export async function admitOriginalCashOperation(ctx: ServiceContext, recoveryId: string, kind: "inspection" | "fee" | "recipient", request: Record<string, unknown>, operationId = randomUUID()) {
   const nonce = randomBytes(32).toString("base64url"), createdAt = new Date(), caller = merchantPhysicalCaller();
   const body = { recoveryId, kind, request: json(request), caller, nonceHash: hash(nonce) }, digest = merchantTaxDigest(body);
   await write(ctx); await ctx.tx.insert(originalCashRecoveryOperations).values({ id: operationId, ...body, digest, createdAt,
@@ -114,7 +104,7 @@ export const claimOriginalCashInspection = defineService({
       const original = await originalCashRecoveryOperation(ctx.tx, auxiliaryOperationId);
       if (original.recoveryId !== recoveryId || original.kind === "inspection") throw new ServiceError("conflict", "An auxiliary GET must follow its exact original physical admission.");
     }
-    return admit(ctx, recoveryId, "inspection", { sourceRevision: current.revision, ...(auxiliaryOperationId ? { auxiliaryOperationId } : {}) });
+    return admitOriginalCashOperation(ctx, recoveryId, "inspection", { sourceRevision: current.revision, ...(auxiliaryOperationId ? { auxiliaryOperationId } : {}) });
   },
 });
 export const recordOriginalCashFact = defineService({
@@ -127,7 +117,7 @@ export const recordOriginalCashFact = defineService({
     const original = await originalCashRecoveryOperation(ctx.tx, operationId);
     if (original.nonceHash !== hash(nonce) || original.caller.id !== merchantPhysicalCaller().id || original.recoveryId !== local.recoveryId) throw new ServiceError("permission", "Restore the exact admitted original caller before its private persistence phase.");
     const owner = await originalCashRecoveryOwner(ctx.tx, local.recoveryId); await lockMerchantRefundCash(ctx, owner.owner.cash);
-    await appendFact(ctx, local.recoveryId, operationId, fact.kind, fact.evidence, factId);
+    await appendOriginalCashFact(ctx, local.recoveryId, operationId, fact.kind, fact.evidence, factId);
     return { retained: true as const };
   },
 });
@@ -161,6 +151,8 @@ export async function currentOriginalCashInventory(ctx: ServiceContext, recovery
   const current = await originalCashRecoveryRevision(ctx, recoveryId, operationId);
   if (current.revision !== operation.request.sourceRevision) throw new ServiceError("conflict", "The original cash inventory changed during this GET. Retain its facts and inspect it again.");
   const evidence = merchantReturnedCashEvidenceSchema.parse(facts.filter(fact => fact.kind === "state").at(-1)?.evidence);
+  const feedback=await originalCashRecoveryCashWitness(ctx.tx,current.cash);
+  if(feedback.feedback.some(entry=>!legacyBankFeedbackMatchesInventory(entry.feedback.evidence,{originalPaymentRef:current.cash.providerRef,originalChargeAccountId:current.cash.chargeAccountId,readPlatformAccountId:evidence.providerPlatformAccountId,cash:evidence})))throw new ServiceError("conflict","Retain contradictory or not-yet-inventoried authentic cash feedback; a fresh namespace or equal amount cannot discard its original resource.");
   const proof = merchantReturnedCashProof({ original: { ...current.cash, paymentProviderRef: current.cash.providerRef }, evidence,
     creatorsQuiesced: current.history.creatorsQuiesced, inventoryStable: true });
   return { ...current, evidence, proof };
@@ -170,7 +162,7 @@ export const claimOriginalCashAuxiliary = defineService({
   kind: "mutation", permission: "system", external: false, writeClass: "money", input: id.extend({ operationId: z.uuid(), kind: z.enum(["fee", "recipient"]) }), output: claimResult.nullable(),
   handler: async ({ recoveryId, operationId, kind }, ctx) => {
     const { owner, cash } = await bound(ctx, recoveryId);
-    const witness = await originalCashRecoveryCashWitness(ctx.tx, cash), prior = witness.operations.find(operation => operation.kind === kind);
+    const witness = await originalCashRecoveryCashWitness(ctx.tx, cash), prior = witness.operations.find(operation => operation.kind === kind && !operation.request.targetFactId);
     if (prior) return null; // A retained admission grants GET recovery only.
     const current = await currentOriginalCashInventory(ctx, recoveryId, operationId);
     if (current.history.feeDebt || current.proof.debt.some(debt => debt !== "commission" && debt !== "recipient")) throw new ServiceError("conflict", "Restore full original customer return, actual callers and earlier fee-operation hosting evidence before auxiliary money.");
@@ -186,12 +178,12 @@ export const claimOriginalCashAuxiliary = defineService({
       providerApiVersion: cash.providerApiVersion, originalChargeRef: current.evidence.providerChargeRef, originalAccountId: account,
       parentRef: resource.providerRef, originalAmountMinor: resource.amountMinor, alreadyReturnedMinor: returned, amountMinor: amount, currency: resource.currency,
       idempotencyKey: `original-cash-auxiliary:${auxiliaryId}`, frozenBody: merchantCashAuxiliaryBody(auxiliaryId, amount) };
-    return admit(ctx, recoveryId, kind, request, auxiliaryId);
+    return admitOriginalCashOperation(ctx, recoveryId, kind, request, auxiliaryId);
   },
 });
 export const originalCashAuxiliaryRequest = z.object({ kind: z.enum(["fee", "recipient"]), operationId: z.uuid(), providerPlatformAccountId: z.string(),
   providerApiVersion: z.enum(["2026-02-25.clover", "2026-10-28.endive"]), originalChargeRef: z.string(), originalAccountId: z.string(), parentRef: z.string(),
-  originalAmountMinor: z.number().int().positive(), alreadyReturnedMinor: z.number().int().min(0), amountMinor: z.number().int().positive(), currency: z.string(), idempotencyKey: z.string(), frozenBody: z.string() }).strict();
+  originalAmountMinor: z.number().int().positive(), alreadyReturnedMinor: z.number().int().min(0), amountMinor: z.number().int().positive(), currency: z.string(), idempotencyKey: z.string(), frozenBody: z.string(), targetFactId: z.uuid().optional() }).strict();
 export async function originalCashAuxiliaryRecoveryRequest(ctx: ServiceContext, recoveryId: string, operationId: string): Promise<Omit<MerchantCashAuxiliaryRequest, "onResourceAcknowledged" | "onResourceObserved" | "onParentObserved">> {
   await bound(ctx, recoveryId); const original = await originalCashRecoveryOperation(ctx.tx, operationId);
   if (original.recoveryId !== recoveryId || original.kind === "inspection") throw new ServiceError("conflict", "Restore the exact original auxiliary caller before GET recovery.");
@@ -209,7 +201,7 @@ export const reviewOriginalCashCallerStopped = defineService({
     await lockMerchantRefundCash(ctx, owner.owner.cash);
     if (operation.digest !== input.expectedDigest || operation.caller.id !== input.callerId || merchantCallerLiveness(operation.caller) === "live") throw new ServiceError("conflict", "The exact original process is still live or changed. Stop it before recording hosting evidence.");
     const facts = await originalCashOperationFacts(ctx.tx, operation.id);
-    if (!facts.some(fact => fact.kind === "finish" || fact.kind === "stop")) await appendFact(ctx, operation.recoveryId, operation.id, "stop", { operationDigest: operation.digest,
+    if (!facts.some(fact => fact.kind === "finish" || fact.kind === "stop")) await appendOriginalCashFact(ctx, operation.recoveryId, operation.id, "stop", { operationDigest: operation.digest,
       callerInstanceId: operation.caller.id, mechanicalCheck: merchantCallerLiveness(operation.caller), reviewedBy, hostingEvidenceDigest: hash(input.hostingEvidence) });
     return { reviewed: true as const };
   },
@@ -223,7 +215,7 @@ export const reviewOriginalCashLegacyFeeStopped = defineService({
     const [fee] = await ctx.tx.select().from(merchantFeeRefunds).where(and(eq(merchantFeeRefunds.id, input.feeOperationId), or(
       ...(cash.paymentId ? [eq(merchantFeeRefunds.paymentId, cash.paymentId)] : []), ...(cash.subscriptionChargeReceiptId ? [eq(merchantFeeRefunds.originalChargeReceiptId, cash.subscriptionChargeReceiptId)] : []))));
     if (!fee || fee.providerPlatformAccountId !== cash.providerPlatformAccountId || merchantTaxDigest(fee) !== input.expectedDigest) throw new ServiceError("conflict", "Restore the exact original fee operation before its explicit hosting review.");
-    await appendFact(ctx, input.recoveryId, null, "legacy_fee_stop", { originalFeeOperationId: fee.id, originalFeeDigest: input.expectedDigest,
+    await appendOriginalCashFact(ctx, input.recoveryId, null, "legacy_fee_stop", { originalFeeOperationId: fee.id, originalFeeDigest: input.expectedDigest,
       originalCaller: null, mechanicalCheck: "historical_birth_unknown_human_hosting_review", reviewedBy, hostingEvidenceDigest: hash(input.hostingEvidence) });
     return { reviewed: true as const };
   },
@@ -283,7 +275,7 @@ export const claimOriginalUnappliedCashRefund = defineService({
     if (request.refundId !== null || request.purpose !== "unapplied_return") throw new ServiceError("conflict", "Receipt-owned cash cannot acquire a fabricated canonical refund.");
     // This is a new signed authorization occurrence, not a reconstructed old
     // creator, resource assignment, finish or credit.
-    await appendFact(ctx, recoveryId, null, "customer_request", { requestId: request.id, parentRequestId: parent, requestDigest: request.requestDigest, originalInventoryOperationId: operationId, authorizedBy });
+    await appendOriginalCashFact(ctx, recoveryId, null, "customer_request", { requestId: request.id, parentRequestId: parent, requestDigest: request.requestDigest, originalInventoryOperationId: operationId, authorizedBy });
     return request;
   },
 });
@@ -308,7 +300,7 @@ export const checkOriginalCashInventory = defineService({
     return { settled: current.proof.settled, feeDebt: current.history.feeDebt, applied: current.cash.applied, source: owner.owner.source };
   },
 });
-function auxiliaryFactsResolved(witness: Awaited<ReturnType<typeof originalCashRecoveryCashWitness>>) {
+export function auxiliaryFactsResolved(witness: Awaited<ReturnType<typeof originalCashRecoveryCashWitness>>) {
   return witness.operations.filter(operation => operation.kind !== "inspection").every(operation => {
     const facts = witness.facts.filter(fact => fact.operationId === operation.id || fact.evidence.auxiliaryOperationId === operation.id), refs = exactCashResourceRefs(facts);
     const resources = facts.filter(fact => fact.kind === "resource");
@@ -346,15 +338,5 @@ export const finalizeOriginalCashRecovery = defineService({
     return { closureId };
   },
 });
-export async function originalCashFullReturnCurrent(ctx: ServiceContext, paymentId: string): Promise<boolean> {
-  const { originalCashRecoveryFinancialWitness } = await import("./original-cash-recovery-store");
-  const witness = await originalCashRecoveryFinancialWitness(ctx.tx, [paymentId], []);
-  for (const owner of witness.owners) {
-    if (!owner.owner.cash.applied) continue;
-    const current = await originalCashRecoveryRevision(ctx, owner.id);
-    if (witness.closures.some(closure => closure.recoveryId === owner.id && closure.revision === current.revision)) return true;
-  }
-  return false;
-}
 export default [claimOriginalCashRecovery, claimOriginalCashInspection, recordOriginalCashFact, claimOriginalCashAuxiliary, claimOriginalUnappliedCashRefund,
   originalCashRecoveryPhase, checkOriginalCashInventory, finalizeOriginalCashRecovery, reviewOriginalCashCallerStopped, reviewOriginalCashLegacyFeeStopped];

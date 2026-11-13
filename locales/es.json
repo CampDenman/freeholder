@@ -9108,5 +9108,13 @@
   "cashRecovery.evidence": "Pruebas de detención en el alojamiento",
   "cashRecovery.confirmStop": "Verifiqué que la operación original exacta se detuvo en su alojamiento.",
   "cashRecovery.reviewStop": "Registrar revisión del alojamiento",
-  "cashRecovery.oldFeeHelp": "Este registro antiguo de comisión no conserva el inicio del proceso original. Verifique que esa operación exacta se detuvo antes de registrar una nueva revisión. Esto no crea una finalización histórica ni prueba un resultado bancario."
+  "cashRecovery.oldFeeHelp": "Este registro antiguo de comisión no conserva el inicio del proceso original. Verifique que esa operación exacta se detuvo antes de registrar una nueva revisión. Esto no crea una finalización histórica ni prueba un resultado bancario.",
+  "cashRecovery.partial": "Conciliar partes originales devueltas",
+  "cashRecovery.partialHelp": "Revise las comisiones y la transferencia al destinatario original solo para las partes cuya devolución está confirmada. El resto del pago original sigue pagado; conserve todos los abonos.",
+  "cashRecovery.partialConfirm": "Autorizo solo las comisiones acumuladas exactas y la devolución al destinatario de estas partes originales.",
+  "cashRecovery.unassigned": "Revisar recurso original",
+  "cashRecovery.unassignedHelp": "Este recurso bancario no tiene solicitud de reembolso asignada. Revise su comprobante real conservado y su identidad bancaria original actual. No se crea ningún pago, solicitud ni proceso histórico.",
+  "cashRecovery.unassignedConfirm": "Revisé este recurso original real y su comprobante conservado.",
+  "cashRecovery.partialClosed": "Se confirmaron las obligaciones de las partes originales devueltas.",
+  "cashRecovery.partialTotal": "Devolución original confirmada al cliente: {amount}."
 }

@@ -14,7 +14,7 @@ import { recordMerchantRefundObservation } from "./merchant-refund-observations"
 import { merchantPaymentEvidence } from "./merchant-payment-observations";
 import { prepareMerchantCashReturnInspection, performMerchantCashReturnInspection, recordCashReturnPrimaryObservation, recordCashReturnObservation, finalizeUnappliedCashReturn } from "./merchant-cash-return-service";
 const systemFor = (actor: Actor) => ({ kind: "system", request: actor.request }) as const;
-async function inspect(recoveryId: string, actor: Actor) {
+export async function inspectOriginalCashInventory(recoveryId: string, actor: Actor) {
   const system = systemFor(actor), source = await originalCashRecoveryPhase.call({ recoveryId }, system), claim = await claimOriginalCashInspection.call({ recoveryId }, system);
   const adapter = paymentAdapter("stripe"); if (!adapter.inspectMerchantReturnedCash) throw new ServiceError("conflict", "Restore original-account cash inventory support.");
   await performOriginalCashRecovery(claim, observe => adapter.inspectMerchantReturnedCash!({ providerPlatformAccountId: source.platform, providerApiVersion: source.apiVersion,
@@ -22,7 +22,7 @@ async function inspect(recoveryId: string, actor: Actor) {
     onOriginalCashObserved: value => observe("primary", value), onRefundObserved: value => observe("refund", value), onReturnStateObserved: value => observe("state", value) }));
   await checkOriginalCashInventory.call({ recoveryId, operationId: claim.operationId }, system); return claim.operationId;
 }
-async function recoverAuxiliary(recoveryId: string, auxiliaryOperationId: string, actor: Actor) {
+export async function recoverOriginalCashAuxiliary(recoveryId: string, auxiliaryOperationId: string, actor: Actor) {
   const system = systemFor(actor), source = await originalCashRecoveryPhase.call({ recoveryId, auxiliaryOperationId }, system);
   if (!source.auxiliaryRequest) throw new ServiceError("conflict", "Restore the exact original auxiliary request before recovery.");
   const adapter = paymentAdapter("stripe"); if (!adapter.recoverMerchantCashAuxiliary) throw new ServiceError("conflict", "Restore original fee/recipient GET recovery support.");
@@ -84,10 +84,10 @@ export const returnOriginalCash = defineOrchestratedService({
     const initial = await originalCashRecoveryPhase.call({ recoveryId }, system);
     // Every previously admitted POST has GET-only recovery; no age, empty
     // lookup or error path can mint a second physical key for that admission.
-    for (const operationId of initial.auxiliaryIds) await recoverAuxiliary(recoveryId, operationId, actor);
-    let operationId = await inspect(recoveryId, actor);
+    for (const operationId of initial.auxiliaryIds) await recoverOriginalCashAuxiliary(recoveryId, operationId, actor);
+    let operationId = await inspectOriginalCashInventory(recoveryId, actor);
     await returnCustomer(recoveryId, operationId, actor);
-    operationId = await inspect(recoveryId, actor);
+    operationId = await inspectOriginalCashInventory(recoveryId, actor);
     for (const kind of ["fee", "recipient"] as const) {
       const claim = await claimOriginalCashAuxiliary.call({ recoveryId, operationId, kind }, system);
       if (claim) {
@@ -97,7 +97,7 @@ export const returnOriginalCash = defineOrchestratedService({
         await performOriginalCashRecovery(claim, observe => adapter.createMerchantCashAuxiliary!({ ...original.auxiliaryRequest!,
           onParentObserved: evidence => observe("parent", evidence),
           onResourceAcknowledged: providerRef => observe("ack", { providerRef }), onResourceObserved: evidence => observe("resource", evidence) }));
-        operationId = await inspect(recoveryId, actor);
+        operationId = await inspectOriginalCashInventory(recoveryId, actor);
       }
     }
     const current = await checkOriginalCashInventory.call({ recoveryId, operationId }, system);
@@ -113,8 +113,8 @@ export const inspectOriginalCashReturn = defineOrchestratedService({
   handler: async ({ recoveryId }, actor) => {
     const system = systemFor(actor); await flushOriginalCashRecovery(recoveryId);
     const phase = await originalCashRecoveryPhase.call({ recoveryId }, system);
-    for (const operationId of phase.auxiliaryIds) await recoverAuxiliary(recoveryId, operationId, actor);
-    const operationId = await inspect(recoveryId, actor); return { operationId, ...await checkOriginalCashInventory.call({ recoveryId, operationId }, system) };
+    for (const operationId of phase.auxiliaryIds) await recoverOriginalCashAuxiliary(recoveryId, operationId, actor);
+    const operationId = await inspectOriginalCashInventory(recoveryId, actor); return { operationId, ...await checkOriginalCashInventory.call({ recoveryId, operationId }, system) };
   },
 });
 export default [returnOriginalCash, inspectOriginalCashReturn];

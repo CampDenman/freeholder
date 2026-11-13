@@ -11,6 +11,7 @@ import { startRefund } from "./invoice-service";
 import { merchantPhysicalCaller } from "./merchant-physical-caller";
 import { lockMerchantRefundCash } from "./merchant-refund-origin";
 import { merchantRefundCapacity } from "./merchant-refund-capacity";
+import { reviewedOriginalUnassignedCash } from "./original-cash-unassigned-store";
 import { originalMerchantRefundCurrentStates, refundObservationHasCurrentBinding } from "./merchant-refund-current-state";
 import { STRIPE_REFUND_REFERENCE } from "@/adapters/payments/stripe-refund-reference";
 import { assertBankReplacementDispatch } from "./merchant-bank-replacement-store";
@@ -83,7 +84,8 @@ export const claimMerchantRefundDispatch = defineService({
       }), observations: observations.map(row => {
         const proof = current.states.filter(state => refundObservationHasCurrentBinding(row, state));
         return proof.length === 1 ? { ...row, requestId: proof[0]!.requestId, bindingVerified: true } : row;
-      }), currentStates: current.states, unresolvedCurrentRequests: current.unresolvedRequestIds });
+      }), currentStates: current.states, unresolvedCurrentRequests: current.unresolvedRequestIds,
+      reviewedUnassignedResources: await reviewedOriginalUnassignedCash(ctx, original) });
     if (capacity.availableMinor === null || capacity.availableMinor < 0 || capacity.debt.length) throw new ServiceError("conflict", "Actual unknown, unapplied or contradictory refund money must be reconciled before another dispatch.");
     await assertBankReplacementDispatch(ctx, original);
     const completionNonce = randomBytes(32).toString("base64url");

@@ -62,7 +62,7 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
     .innerJoin(merchantCashReturnInspections, eq(merchantCashReturnInspections.id, merchantCashReturnObservations.inspectionId)).where(inspectionScope).limit(MAX + 1);
   const recovery = await originalCashRecoveryCashWitness(ctx.tx, cash, excludeRecoveryOperationId);
   const inventory = { requests, retirements, observations, observationCaptures, dispatches, finishes, stops, refusals, terminals, bindings, paymentCash, subscriptionCash, receiptRows, aliases, fees, feeObservations, otherPrimary, otherReturns,
-    recoveryOwners: recovery.owners, recoveryOperations: recovery.operations, recoveryFacts: recovery.facts };
+    recoveryOwners: recovery.owners, recoveryOperations: recovery.operations, recoveryFacts: recovery.facts.filter(fact => !["partial_closure", "unassigned_refund_review", "partial_target"].includes(fact.kind)), recoveryFeedback:recovery.feedback };
   const incomplete = Object.values(inventory).some(rows => rows.length > MAX);
   let creatorsQuiesced = !incomplete && dispatches.every(call => finishes.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id)
     || stops.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id && row.requestDigest === call.requestDigest));
