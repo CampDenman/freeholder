@@ -1061,8 +1061,11 @@ BEGIN
   RAISE EXCEPTION 'Original uploaded-source scope needs its actual first verified fulfilment transaction' USING ERRCODE='55000';
  END IF;
  IF TG_TABLE_NAME='import_source_erasure_members' THEN
- IF NEW.graph_id IS NULL AND EXISTS(SELECT 1 FROM import_source_graphs graph WHERE graph.run_id=NEW.run_id
-   AND NOT EXISTS(SELECT 1 FROM import_crawl_graphs http WHERE http.graph_id=graph.id)) THEN
+ IF NEW.graph_id IS NULL AND EXISTS(SELECT 1 FROM import_source_graphs graph JOIN import_runs root ON root.id=graph.run_id
+   WHERE graph.run_id=NEW.run_id AND NOT EXISTS(SELECT 1 FROM import_crawl_graphs http WHERE http.graph_id=graph.id)
+    AND (root.checkpoint->'retainedSource'->>'uploadId'=NEW.upload_id::text
+     OR EXISTS(SELECT 1 FROM freeholder_source_erasure_prior_members(NEW.request_id) prior
+       WHERE prior.run_id=NEW.run_id AND prior.upload_id=NEW.upload_id AND prior.graph_id=graph.id))) THEN
   RAISE EXCEPTION 'An actual uploaded graph requires its exact original graph witness' USING ERRCODE='55000';
  END IF;
  IF NEW.graph_id IS NOT NULL AND NOT EXISTS(
