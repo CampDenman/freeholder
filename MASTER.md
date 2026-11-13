@@ -15863,3 +15863,15 @@ require exact original nonce/full-byte/complete-inventory review and physical
 settlement; actual operator/provider/platform acceptance remains open. No
 execution/host/account actions or C-item closure occurred. See
 `deploy/media-transfer-crash-drain-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated transfer read slice
+retains actual provider nonce/token proof in the existing first logical read
+return and independently checks exact original create-only lineage through
+shared TS/SQL before copy verification, adoption and source retirement. Adoption
+now obtains new full-byte source/target reads outside transactions before its
+atomic exact membership apply; known revision reads/absence stay pinned. Old
+first returns/captures are preserved, not augmented from current metadata.
+Seven pure and four native controls are PREPARED/UNRUN. Full request/part flags,
+stopped-target review, remaining recovery/cutover and actual operator/provider/
+platform acceptance remain open. No execution/account/host actions or C-item
+closure occurred. See `deploy/media-transfer-read-provenance-source-2026-11-13.md`.

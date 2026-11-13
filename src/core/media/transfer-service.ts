@@ -3,7 +3,7 @@
 import {currentStorageCallerRuntimeSchema} from "./physical-caller-runtime";
 // C1.12/C11.08: one shared transfer lifecycle for UI, HTTP and MCP.
 import {createHash,randomUUID} from "node:crypto";
-import {asc,eq,inArray} from "drizzle-orm";
+import {asc,eq,inArray,sql} from "drizzle-orm";
 import {z} from "zod";
 import {copyManifestObjects,type AccountedTransferStore,type VersionedTransferStore} from "../../../scripts/media-transfer.mjs";
 import {defineOrchestratedService,hasModuleAccess,ServiceError,type Actor} from "@/core/service";
@@ -12,8 +12,9 @@ import {mediaObjectWrites} from "./write-schema";
 import {mediaStorageTransferCalls,mediaStorageTransferObjects,mediaStorageTransferPlans,mediaStorageTransferReviews,type StorageTransferRevision,STORAGE_TRANSFER_CALL_KINDS} from "./transfer-schema";
 import {assertTransferCallDrain,assertTransferOriginalMembership,assertTransferOwners,claimOriginalTransfer,lockedTransfer,requireTransferCapability} from "./transfer-authority";
 import {admitTransferCall,retainTransferFailure,retainTransferReturn,transferRuntimeIdentity,type ActualTransferReturn} from "./transfer-callers";
+import {assertExactTransferRead} from "./transfer-read-provenance";
 import {configuredTransferStores} from "./transfer-storage";
-import {requireFinishedTransferRead,transferConflict,transferDigest,verifiedTransferBytes} from "./transfer-proof";
+import {requireFinishedTransferRead,requireCompleteTransferInventory,transferConflict,transferDigest,verifiedTransferBytes} from "./transfer-proof";
 import {transferBindingSchema} from "./transfer-witness";
 
 import {TransferRequestNotAttemptedError,withTransferRequestScope} from "./transfer-requests";
@@ -57,14 +58,16 @@ const applyCopy=defineMediaService({
   const calls=await ctx.tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.objectId,object.id));
   const source=calls.find(row=>row.id===input.sourceReadId&&row.kind==="source_read"),target=calls.find(row=>row.id===input.targetVerifyId&&row.kind==="target_verify");
   const sourceRevision=requireFinishedTransferRead(source,plan.originalSource,object.key,object);
+  await assertExactTransferRead(ctx.tx,source!,plan.originalSource,object.key,object);
   await requireOriginalProviderBaseline(ctx.tx,plan.id,object.id,sourceRevision);
   const targetRevision=requireFinishedTransferRead(target,plan.originalTarget,object.targetKey,object);
+  await assertExactTransferRead(ctx.tx,target!,plan.originalTarget,object.targetKey,object);
   const put=calls.filter(row=>row.kind==="target_put").sort((a,b)=>a.createdAt.getTime()-b.createdAt.getTime()).at(-1),reviews=await ctx.tx.select().from(mediaStorageTransferReviews).where(eq(mediaStorageTransferReviews.objectId,object.id));
   if(!put||!transferCallApplied(put,reviews)||!object.targetReceiptId)transferConflict("The target needs its exact actual finished create-only PUT receipt.");
   const[receipt]=await ctx.tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,object.targetReceiptId)).limit(1);
   if(!receipt||receipt.state!=="accepted"||receipt.deletedAt||receipt.redactedAt||receipt.namespace!==plan.targetNamespace||receipt.sha256!==object.sha256||receipt.bytes!==object.bytes)transferConflict();
   await settleTransferQuota(ctx.tx,plan.targetNamespace,object.targetKey,put.id);
-  await ctx.tx.update(mediaStorageTransferObjects).set({state:"verified",sourceRevision,targetRevision,sourceReadCallerId:source!.id,targetVerifyCallerId:target!.id,updatedAt:new Date()}).where(eq(mediaStorageTransferObjects.id,object.id));
+  await ctx.tx.update(mediaStorageTransferObjects).set({state:"verified",sourceRevision,targetRevision,sourceReadCallerId:source!.id,targetVerifyCallerId:target!.id,updatedAt:sql`transaction_timestamp()`}).where(eq(mediaStorageTransferObjects.id,object.id));
   const verified=objects.every(row=>row.id===object.id||row.state==="verified");
   await ctx.tx.update(mediaStorageTransferPlans).set({state:verified?"verified":"copying",updatedAt:new Date()}).where(eq(mediaStorageTransferPlans.id,plan.id));
   ctx.setSubject("media_storage_transfer",plan.id);return{ok:true as const};
@@ -73,23 +76,28 @@ const applyCopy=defineMediaService({
 const verifyOriginalProviderRead=defineMediaService({name:"media.verifyOriginalProviderTransferRead",summary:"Refuse a changed original provider generation before any target copy is admitted.",kind:"query",permission:"scoped",external:false,orchestratedBy:"media.advanceStorageTransfer",input:z.object({id:z.uuid(),objectId:z.uuid(),sourceReadId:z.uuid()}),output:z.object({ok:z.literal(true)}),handler:async(input,ctx)=>{
  const{plan,objects}=await lockedTransfer(ctx.tx,input.id),object=objects.find(row=>row.id===input.objectId);if(!object)transferConflict();await assertTransferOwners(ctx.tx,objects);await assertTransferCallDrain(ctx.tx,objects.map(row=>row.id));
  const[call]=await ctx.tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.id,input.sourceReadId)).limit(1);if(!call||call.objectId!==object.id||call.kind!=="source_read")transferConflict();
- const actual=requireFinishedTransferRead(call,plan.originalSource,object.key,object);await requireOriginalProviderBaseline(ctx.tx,plan.id,object.id,actual);return{ok:true as const};
+ const actual=requireFinishedTransferRead(call,plan.originalSource,object.key,object);await assertExactTransferRead(ctx.tx,call,plan.originalSource,object.key,object);await requireOriginalProviderBaseline(ctx.tx,plan.id,object.id,actual);return{ok:true as const};
 }});
 const adoptPlan=defineMediaService({
- name:"media.adoptStorageTransfer",summary:"Atomically adopt every verified physical read key in the unchanged original plan.",kind:"mutation",permission:"scoped",external:false,orchestratedBy:"media.advanceStorageTransfer",input:z.object({id:z.uuid()}),output:progressSchema,auditInputFields:["id"],
+ name:"media.adoptStorageTransfer",summary:"Atomically adopt every verified physical read key in the unchanged original plan.",kind:"mutation",permission:"scoped",external:false,orchestratedBy:"media.advanceStorageTransfer",input:z.object({id:z.uuid(),proofs:z.array(z.object({objectId:z.uuid(),sourceReadId:z.uuid(),targetVerifyId:z.uuid()})).max(10000)}),output:progressSchema,auditInputFields:["id"],
  handler:async(input,ctx)=>{
   const{plan,objects}=await lockedTransfer(ctx.tx,input.id);
   if(plan.adoptedAt)return progress(plan,objects);
   if(plan.state!=="verified"||objects.some(row=>row.state!=="verified"))transferConflict("Verify the complete original inventory before adopting any physical key.");
   await assertTransferOwners(ctx.tx,objects);await assertTransferCallDrain(ctx.tx,objects.map(row=>row.id));await assertTransferOriginalMembership(ctx.tx,plan,objects);
   const calls=await ctx.tx.select().from(mediaStorageTransferCalls).where(inArray(mediaStorageTransferCalls.objectId,objects.map(row=>row.id)));
+  requireCompleteTransferInventory(objects.map(row=>row.id),input.proofs.map(row=>row.objectId));
   for(const object of objects){
-   const original=requireFinishedTransferRead(calls.find(row=>row.id===object.sourceReadCallerId&&row.kind==="source_read"),plan.originalSource,object.key,object);
-   const target=requireFinishedTransferRead(calls.find(row=>row.id===object.targetVerifyCallerId&&row.kind==="target_verify"),plan.originalTarget,object.targetKey,object);
+   const proof=input.proofs.find(row=>row.objectId===object.id)!,sourceRead=calls.find(row=>row.id===proof.sourceReadId&&row.objectId===object.id&&row.kind==="source_read"),targetRead=calls.find(row=>row.id===proof.targetVerifyId&&row.objectId===object.id&&row.kind==="target_verify");
+   if(!sourceRead||!targetRead||sourceRead.createdAt<object.updatedAt||targetRead.createdAt<object.updatedAt)transferConflict("Read the complete original source and target bytes again after copy verification before adopting their physical keys.");
+   const original=requireFinishedTransferRead(sourceRead,plan.originalSource,object.key,object);
+   const target=requireFinishedTransferRead(targetRead,plan.originalTarget,object.targetKey,object);
+   await assertExactTransferRead(ctx.tx,sourceRead,plan.originalSource,object.key,object);
+   await assertExactTransferRead(ctx.tx,targetRead,plan.originalTarget,object.targetKey,object);
    await requireOriginalProviderBaseline(ctx.tx,plan.id,object.id,original);
    if(transferDigest(original)!==transferDigest(object.sourceRevision)||transferDigest(target)!==transferDigest(object.targetRevision))transferConflict();
   }
-  const now=new Date();await ctx.tx.update(mediaStorageTransferObjects).set({state:"adopted",updatedAt:now}).where(eq(mediaStorageTransferObjects.planId,plan.id));
+  const now=new Date();for(const proof of input.proofs)await ctx.tx.update(mediaStorageTransferObjects).set({state:"adopted",sourceReadCallerId:proof.sourceReadId,targetVerifyCallerId:proof.targetVerifyId,updatedAt:now}).where(eq(mediaStorageTransferObjects.id,proof.objectId));
   await ctx.tx.update(mediaStorageTransferPlans).set({state:"adopted",adoptedAt:now,updatedAt:now}).where(eq(mediaStorageTransferPlans.id,plan.id));
   ctx.setSubject("media_storage_transfer",plan.id);return progress({...plan,state:"adopted",adoptedAt:now},objects.map(row=>({...row,state:"adopted" as const})));
  },
@@ -102,6 +110,7 @@ const finishRetirement=defineMediaService({
   const calls=await ctx.tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.objectId,object.id));
   const target=requireFinishedTransferRead(calls.find(row=>row.id===input.targetCurrentId&&row.kind==="target_current"),plan.originalTarget,object.targetKey,object);
   const deletion=calls.find(row=>row.id===input.deleteId&&row.kind==="source_delete"),absence=calls.find(row=>row.id===input.absenceId&&row.kind==="source_absence");
+  await assertExactTransferRead(ctx.tx,calls.find(row=>row.id===input.targetCurrentId)!,plan.originalTarget,object.targetKey,object);
   const reviews=await ctx.tx.select().from(mediaStorageTransferReviews).where(eq(mediaStorageTransferReviews.objectId,object.id));
   if(transferDigest(target)!==transferDigest(object.targetRevision)||!deletion||!transferCallApplied(deletion,reviews)||transferDigest(deletion.expectedRevision)!==transferDigest(object.sourceRevision)||absence?.state!=="returned"||!absence.returnedAt||!absence.resultAbsent||absence.namespace!==plan.sourceNamespace||absence.physicalKey!==object.key)transferConflict();
   await requireCompletePhysicalRetirementInventory(ctx.tx,input.inventoryId,object.id,"source",deletion.id);
@@ -160,17 +169,28 @@ async function ensureProviderInventory(work:Work,side:"source"|"target",store:Ac
  return complete.id;
 }
 async function readPhysical(work:Work,object:Work["objects"][number],store:VersionedTransferStore,kind:"source_read"|"target_probe"|"target_verify"|"target_current"|"source_absence",actor:Actor){
- const key=["source_read","source_absence"].includes(kind)?object.key:object.targetKey;
- return physical({planId:work.plan.id,objectId:object.id,kind},actor,()=>store.readVersioned(key),result=>result?{accepted:true,revision:result.revision,sha256:transferDigestBytes(result.body),bytes:result.body.byteLength}:{absent:true});
+ const source=["source_read","source_absence"].includes(kind),key=source?object.key:object.targetKey,expectedRevision=(source?object.sourceRevision:object.targetRevision)??undefined;
+ return physical({planId:work.plan.id,objectId:object.id,kind,...(expectedRevision?{expectedRevision}:{})},actor,()=>store.readVersioned(key,expectedRevision),result=>result?{accepted:true,revision:result.revision,...(result.requestProof?{requestProof:result.requestProof}:{}),sha256:transferDigestBytes(result.body),bytes:result.body.byteLength}:{absent:true});
 }
 function transferDigestBytes(body:Uint8Array):string {return createHash("sha256").update(body).digest("hex");}
 export const advanceStorageTransfer=defineOrchestratedService({
  name:"media.advanceStorageTransfer",summary:"Advance one exact original copy or retirement, or atomically adopt a fully verified plan.",kind:"mutation",permission:"scoped",writeClass:"destructive",input:z.object({id:z.uuid(),action:z.enum(["copy","adopt","retire"]),objectId:z.uuid().optional()}),output:progressSchema,auditInputFields:["id","action"],
  handler:async(input,actor)=>{
   const work=await captureWork.call({id:input.id},actor);
-  if(input.action==="adopt")return adoptPlan.call({id:input.id},actor);
+  if(input.action==="adopt"&&work.plan.adoptedAt)return progress(work.plan,work.objects,work.calls,work.inventories);
   const{source,target}=await configuredTransferStores();
   if(transferDigest(source.binding)!==transferDigest(work.plan.originalSource)||transferDigest(target.binding)!==transferDigest(work.plan.originalTarget))transferConflict("Restore the exact original private source and target configurations.");
+  if(input.action==="adopt"){
+   if(work.plan.state!=="verified"||work.objects.some(row=>row.state!=="verified"))transferConflict("Verify every original copy before reading its complete adoption proof.");
+   const proofs:Array<{objectId:string;sourceReadId:string;targetVerifyId:string}>=[];
+   for(const original of work.objects){
+    const originalSource=await readPhysical(work,original,source,"source_read",actor),originalTarget=await readPhysical(work,original,target,"target_verify",actor);
+    if(!originalSource.value||!originalTarget.value)transferConflict("Retain both complete original source and target objects before adoption.");
+    verifiedTransferBytes(originalSource.value.body,original);verifiedTransferBytes(originalTarget.value.body,original);
+    proofs.push({objectId:original.id,sourceReadId:originalSource.id,targetVerifyId:originalTarget.id});
+   }
+   return adoptPlan.call({id:input.id,proofs},actor);
+  }
   const object=work.objects.find(row=>(!input.objectId||row.id===input.objectId)&&(input.action==="copy"?["planned","copying"].includes(row.state):["adopted","cleanup_pending"].includes(row.state)));
   if(!object)return progress(work.plan,work.objects,work.calls,work.inventories);
   if(input.action==="copy"){

@@ -393,6 +393,8 @@ BEGIN
   SELECT * INTO source FROM media_storage_transfer_calls WHERE id=NEW.source_read_caller_id AND object_id=NEW.id AND kind='source_read';
   SELECT * INTO target FROM media_storage_transfer_calls WHERE id=NEW.target_verify_caller_id AND object_id=NEW.id AND kind='target_verify';
   IF source.id IS NULL OR target.id IS NULL OR source.state<>'returned' OR target.state<>'returned' OR source.returned_at IS NULL OR target.returned_at IS NULL OR source.namespace<>plan.source_namespace OR target.namespace<>plan.target_namespace OR source.physical_key<>NEW.object_key OR target.physical_key<>NEW.target_object_key OR source.result_sha256 IS DISTINCT FROM NEW.sha256 OR target.result_sha256 IS DISTINCT FROM NEW.sha256 OR source.result_bytes IS DISTINCT FROM NEW.bytes OR target.result_bytes IS DISTINCT FROM NEW.bytes OR source.result_revision IS NULL OR target.result_revision IS NULL OR source.result_absent IS NOT NULL OR target.result_absent IS NOT NULL OR NEW.source_revision IS DISTINCT FROM source.result_revision OR NEW.target_revision IS DISTINCT FROM target.result_revision THEN RAISE EXCEPTION 'Adoption requires finished exact source and target full-byte proofs' USING ERRCODE='23514'; END IF;
+  IF NEW.state='adopted' AND (source.created_at<OLD.updated_at OR target.created_at<OLD.updated_at) THEN RAISE EXCEPTION 'Atomic adoption needs new actual full-byte reads after the original copy verification' USING ERRCODE='23514'; END IF;
+  IF NOT freeholder_media_transfer_exact_read_nonce(source.id) OR NOT freeholder_media_transfer_exact_read_nonce(target.id) THEN RAISE EXCEPTION 'Adoption requires the original physical create-only nonce, never equal current bytes or ETag alone' USING ERRCODE='23514'; END IF;
   IF NOT EXISTS(SELECT 1 FROM media_object_writes receipt WHERE receipt.id=NEW.target_receipt_id AND receipt.operation_kind='put' AND receipt.state='accepted' AND receipt.deleted_at IS NULL AND receipt.redacted_at IS NULL AND receipt.object_key=NEW.target_object_key AND receipt.key_digest=NEW.target_key_digest AND receipt.storage_namespace=plan.target_namespace AND receipt.sha256=NEW.sha256 AND receipt.bytes=NEW.bytes) OR EXISTS(SELECT 1 FROM media_storage_transfer_calls WHERE object_id=NEW.id AND state IN ('admitted','unknown')) THEN RAISE EXCEPTION 'The original target caller is unresolved or its byte receipt is missing' USING ERRCODE='23514'; END IF;
   IF EXISTS(SELECT 1 FROM media_storage_transfer_subjects subject JOIN data_requests request ON request.contact_id=subject.contact_id WHERE subject.object_id=NEW.id AND request.kind='erasure' AND request.status IN ('verified','in_progress','completed','partially_completed')) THEN RAISE EXCEPTION 'The original owner privacy request prevents adoption' USING ERRCODE='23514'; END IF;
  END IF;
@@ -1146,6 +1148,7 @@ BEGIN
    IF EXISTS(SELECT 1 FROM media_storage_writer_drains WHERE namespace=caller.namespace AND state<>'released') OR EXISTS(SELECT 1 FROM media_storage_transfer_plans WHERE source_namespace=caller.namespace AND state<>'cancelled') THEN RAISE EXCEPTION 'Ordinary mutation remains fenced independently of writer flags' USING ERRCODE='23514'; END IF;
   ELSE
    IF NOT freeholder_media_transfer_namespace_control(caller.object_id,caller.namespace,caller.kind) THEN RAISE EXCEPTION 'This genuine transfer does not control the current namespace claim/drain or mutation phase' USING ERRCODE='23514'; END IF;
+   IF caller.kind='source_delete' AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls current_read JOIN media_storage_transfer_objects object ON object.id=caller.object_id WHERE current_read.object_id=object.id AND current_read.kind='target_current' AND current_read.created_at<=caller.created_at AND current_read.result_revision=object.target_revision AND freeholder_media_transfer_exact_read_nonce(current_read.id)) THEN RAISE EXCEPTION 'Original source deletion needs the exact adopted target nonce and actual fresh byte proof' USING ERRCODE='23514'; END IF;
    IF NOT EXISTS(
    SELECT 1 FROM media_object_writes physical JOIN media_storage_transfer_objects object ON object.id=caller.object_id JOIN media_storage_transfer_plans plan ON plan.id=object.plan_id
    WHERE physical.id=caller.physical_receipt_id AND physical.created_at=caller.created_at AND caller.state='admitted' AND caller.returned_at IS NULL
@@ -1426,3 +1429,33 @@ $$;
 -- This narrow finished-cohort release does not resolve any missing physical
 -- finish, stopped-applied target review, presigned part/session or legacy debt.
 -- Full request and multipart part capabilities remain UNPUBLISHED.
+
+--> statement-breakpoint
+-- SOURCE ONLY. Actual retained provider nonce must name this original family,
+-- not a later same-key object with equal bytes or a reused non-versioned ETag.
+CREATE FUNCTION freeholder_media_transfer_exact_read_nonce(original_read uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_storage_transfer_calls read JOIN media_storage_transfer_objects object ON object.id=read.object_id JOIN media_storage_transfer_plans plan ON plan.id=object.plan_id
+  JOIN media_storage_transfer_requests write ON write.id::text=read.result_request_proof->>'id' AND write.token_digest=read.result_request_proof->>'tokenDigest'
+  JOIN media_storage_transfer_calls writer ON writer.id=write.call_id
+  JOIN media_object_writes receipt ON receipt.id=coalesce(writer.physical_receipt_id,writer.object_receipt_id)
+  WHERE read.id=original_read AND read.kind IN ('source_read','target_verify','target_current','recovery_read','privacy_read','privacy_source_read') AND read.state='returned' AND read.returned_at IS NOT NULL AND read.redacted_at IS NULL
+   AND read.result_absent IS NULL AND read.result_sha256=object.sha256 AND read.result_bytes=object.bytes AND read.result_revision IS NOT NULL AND read.result_revision->>'key'=read.physical_key AND read.result_revision->>'namespace'=read.namespace
+   AND write.descriptor->>'kind'='object.put' AND write.descriptor->'createOnly'='true'::jsonb AND write.descriptor->'binding'->>'namespace'=read.namespace AND write.descriptor->>'key'=read.physical_key
+   AND write.descriptor->>'sha256'=object.sha256 AND write.descriptor->'bytes'=to_jsonb(object.bytes) AND write.descriptor_digest=freeholder_media_transfer_fact_digest(write.descriptor) AND write.runtime_identity=writer.runtime_identity
+   AND writer.kind IN ('ordinary_put','target_put') AND writer.returned_at IS NOT NULL AND (writer.state='returned' AND writer.observed_accepted_at IS NOT NULL OR writer.state='stopped' AND freeholder_media_original_applied_review(writer.id))
+   AND receipt.operation_kind='put' AND receipt.state='accepted' AND receipt.deleted_at IS NULL AND receipt.redacted_at IS NULL AND receipt.writer_runtime_id=writer.runtime_id AND receipt.writer_finished_at IS NOT NULL
+   AND receipt.original_reservation_id IS NOT NULL AND write.descriptor->'binding'->>'kind'=receipt.storage_kind AND write.descriptor->'binding'->'location'=receipt.storage_location AND receipt.object_key=read.physical_key AND receipt.storage_namespace=read.namespace AND receipt.sha256=object.sha256 AND receipt.bytes=object.bytes AND receipt.provider_revision_digest=freeholder_media_transfer_fact_digest(read.result_revision)
+   AND (SELECT count(*) FROM media_storage_transfer_requests WHERE call_id=writer.id AND descriptor->>'kind'='object.put')=1
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=writer.id AND (returned_at IS NULL OR state NOT IN ('returned','stopped') OR descriptor->>'kind' IN ('object.delete','multipart.create','multipart.complete','multipart.abort')))
+   AND (
+    read.namespace=plan.source_namespace AND read.physical_key=object.object_key AND EXISTS(SELECT 1 FROM media_storage_transfer_receipts member WHERE member.object_id=object.id AND member.receipt_id=receipt.id AND member.original_snapshot->>'operation'='put' AND member.original_snapshot->>'state'='accepted' AND member.original_snapshot->'deletedAt'='null'::jsonb AND member.original_snapshot_digest=freeholder_media_transfer_fact_digest(member.original_snapshot) AND member.original_snapshot->>'providerRevisionDigest'=receipt.provider_revision_digest)
+    OR read.namespace=plan.target_namespace AND read.physical_key=object.target_object_key AND receipt.id=object.target_receipt_id AND writer.object_id=object.id AND writer.kind='target_put'
+   )
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=read.id AND request.descriptor->>'kind' IN ('object.read','object.metadata') AND request.descriptor->'binding'->>'namespace'=read.namespace AND request.descriptor->>'key'=read.physical_key AND fact.facts->>'stage'='metadata' AND fact.facts->'revision'=read.result_revision AND fact.facts->'requestProof'=read.result_request_proof)
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=read.id AND request.descriptor->>'kind' IN ('object.read','object.body') AND request.descriptor->'binding'->>'namespace'=read.namespace AND request.descriptor->>'key'=read.physical_key AND fact.facts->>'stage'='body' AND fact.facts->'revision'=read.result_revision AND fact.facts->>'sha256'=read.result_sha256 AND fact.facts->'bytes'=to_jsonb(read.result_bytes))
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=read.id AND (returned_at IS NULL OR state<>'returned' OR descriptor->>'kind' NOT IN ('object.read','object.metadata','object.body') OR descriptor->'binding'->>'namespace' IS DISTINCT FROM read.namespace OR descriptor->>'key' IS DISTINCT FROM read.physical_key OR descriptor->>'kind'='object.body' AND descriptor->'expectedRevision' IS DISTINCT FROM read.result_revision))
+ )
+$$;
+-- Missing nonce/finish, historical untagged sources and stopped target review
+-- still require their real separate recovery; no new capability is published.
