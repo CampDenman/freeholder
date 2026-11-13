@@ -14776,6 +14776,117 @@ whatever is best for the people using the site.
   provider/hosting acceptance and full §4.15/C9.33 proration remain required;
   no C-item or stable gate closes. See
   `deploy/subscription-provider-reader-recovery80-source-20261113.md`.
+  Proration foundation and implementation decisions (2026-11-13,
+  C9.33/C9.38/C12.38): exact separately-rounded unused-fraction arithmetic and
+  the owner unpaid-upgrade guard are an unqualified finite source repair.
+  Root's implementation decisions within the full-spec task preserve accepted
+  trial ends with zero old paid principal/unused credit and no trial-window
+  charge; preserve original manual/platform calendars across interval changes;
+  and require explicit consent to provider preview's actual anchor/reset and
+  invoice effects. Negative adjustments issue original shared credits without
+  automatic cash refunds. A real canonical noncash credit-application extension,
+  explicit mid-cycle merchant consent and an independently admitted actual
+  provider preview/update/invoice lifecycle remain required. The new arithmetic,
+  calendar and ordinary paid-period native controls are UNRUN; this checkpoint
+  supplies no provider/SQL/business acceptance and closes no item. See
+  `deploy/subscription-proration-foundation80-source-20261113.md`.
+  Manual-commercial implementation decision (2026-11-13, C12.38/C9.33):
+  the shared authorized offline-payment/refund action records actual external
+  principal with immutable merchant, invoice, currency, reference and evidence
+  receipts. This is recorded/attested money, never independently bank-verified
+  cash. It invents no Stripe account, transfer or collected application fee.
+  Original shared fee obligations are OWED until actual remittances are
+  recorded; nonallocation refunds preserve the existing original fee epoch's
+  proportional retained-fee rule. Actual fee returns reference their exact
+  original remittance. Fully recorded principal may settle customer access;
+  unpaid or over-remitted fees remain separate financial/privacy debt.
+  Original credit applications preserve cash ancestry and do not create a
+  fake payment or automatic refund. These decisions must appear in the same
+  explicit quote/consent. Implementation and qualification remain in progress;
+  no C-item, provider acceptance or stable gate closes here.
+  Gross proration implementation decision (same date, C9.33/C9.38/C12.38):
+  the new canonical path separately preserves the old paid line's dated
+  tax/fee credit and the new dated debit invoice. The old credit is locked
+  exclusively to its explicitly accepted target in the same transaction;
+  it cannot become transferable while old paid access remains and the target
+  is unsettled. Only exact full canonical consideration switches access.
+  A lower-price change may release its unused credit remainder after that
+  actual switch. Expired effective instants require fresh reviewed consent;
+  access is never backdated and gaps are never silently billed. Recovery must
+  retain actual partial cash, fee duties and the complete issued credit
+  promise; it cannot erase them by voiding a target or inventing a refund.
+  The legacy net-only invoice policy and its separate paid-access repair are
+  historical compatibility behavior, not proof of this new gross path.
+  Gross/manual fee-carry source increment (2026-11-13, same items): shared
+  owner/customer review/acceptance creates actual dated gross debit and exact
+  old paid-line tax credit, locks the whole original credit to its target and
+  retains the real effect enqueue/body. Manual attested principal and original
+  fee carry remain separate from actually collected commission. Exact fully
+  paid consideration alone can switch access at the real accepted instant;
+  old terms/calendar stay immutable and an uncharged trial retains its end.
+  The duty40/new-cash1 variant is refused before acceptance until the required
+  bounded original commission receivable/assignment slice exists; it is not
+  waived, fictitiously collected or deferred from the full specification.
+  Authentic late/partial recovery, complete platform-card orchestration and
+  independently admitted provider preview/zero-bootstrap/controlled-draft
+  collection remain required. Full-row child witnesses, safe receipt-only
+  subject export, private retention and four-locale review are source work;
+  17 principal pure controls, nine fee-carry controls and three actual manual
+  native journeys are PREPARED/UNRUN. The new owned SQL tail is UNAPPLIED and
+  unqualified; no item or stable gate closes. See
+  `deploy/subscription-gross-proration80-source-20261113.md`.
+  Original commission assignment increment (same date/items): the new gross
+  target freezes its exact whole fee epoch and original credit/cash assignments
+  before collection. Physical fees respect actual cash capacity; the remainder
+  is a separately owed merchant receivable with actual remittance/return
+  receipts. Only authentic full canonical settlement/effect establishes fee
+  eligibility. Later duty uses all retained cash AND noncash consideration:
+  `floor(F*(C+A)/T)`, less retained original credit/cash duties K/Q; excess
+  assigned duty stays original-source review. Refunding the last cash1 while
+  credit1499 remains valid does not waive receivable39. Initial expected duty
+  is separate from current duty, which can move from an original returned cash
+  fee but stays bounded by frozen F and actual source disposition. Four-locale
+  consent explains this; owed commission and attested/provider-proved actual
+  collection remain distinct. Unknown/noncash-reversal disposition stays debt,
+  never zero. Ten pure controls and one additional actual dated-tax/manual
+  native journey are PREPARED/UNRUN; the owned SQL tail is UNAPPLIED. Complete
+  provider/platform orchestration, authentic late/partial recovery and full
+  qualification remain required; no item or stable gate closes. See
+  `deploy/subscription-agreement-fee80-source-20261113.md`.
+  The same source composes authentic exact-source raw cash feedback before
+  owner/GET/domain application: raw-only signed refund feedback is principal
+  review until a genuine current returned bank inventory covers the exact
+  occurrence and canonical money agrees. Callback amounts never decrement
+  principal. NULL-payment receipt review retains NULL principal and supplies
+  no invoice/payment/access fiction. Typed primary-caller debt is separate
+  from ancillary fee/recipient duty; original full-return closure still needs
+  full quiescence. Eight bank-fact pure controls, an actual raw-before-domain
+  native and two existing actual receipt-only refusal controls are prepared,
+  UNRUN. Parent ordinary-reader contracts and current cash source are required
+  assembly dependencies, not a passing provider or recovery claim.
+  Actual principal boundary increment (same date/items): provider object birth,
+  a supplied processedAt and PostgreSQL transaction-start defaults cannot prove
+  on-time funding. Immutable exact cash/application confirmations now force
+  database clock_timestamp retention time. Fully paid effect/commission
+  eligibility also require every actual positive source retained by the chosen
+  instant. Late real money stays recorded for fresh consent; it cannot revive
+  expired access. Entirely local acceptance that cannot commit before that
+  instant rolls back its new documents/credit. Four-locale consent/export and
+  additive full-row witnesses are source work; two actual clock/rollback native
+  controls are PREPARED/UNRUN, new SQL is UNAPPLIED/unqualified. Actual platform
+  card mandate/POST/independent GET recovery and full provider/late recovery
+  remain required; no item closes. See
+  `deploy/subscription-proration-boundary80-source-20261113.md`.
+  Financial history/export correction (same date/items): exact accepted target
+  invoice/source FKs now discover reserved credit before application, retaining
+  full funding/reservation/release fingerprints. Buyer exports retain principal
+  and fee receipt identities while excluding private commission amounts. One
+  combined5000 bound covers actual invoice children, recovery/cash, credit,
+  commission and credential/exemption families. Six synthetic-reader/pure
+  controls are PREPARED/UNRUN; no compiler, lint, database or native ran. Root
+  central merchant composition and all combined qualification remain required;
+  no SQL, historical evidence, C-item or stable gate changes. See
+  `deploy/proration-financial-export81-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

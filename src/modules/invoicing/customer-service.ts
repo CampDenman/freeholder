@@ -3,6 +3,7 @@
 // C5.25: customer capabilities never widen the owner's scoped money services.
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { invoiceOutstanding } from "./invoice-balance";
 import { paymentAdapter } from "@/adapters/payments";
 import { contacts } from "@/core/contacts/schema";
 import { env } from "@/core/env";
@@ -29,7 +30,7 @@ import { customerInvoicePath, invoiceAccessToken, paymentReturnToken, validInvoi
 const access = z.object({ id: z.string().uuid(), token: z.string().max(200).optional() }).strict();
 const receiptAccess = z.object({ token: z.string().min(1).max(200) }).strict();
 const payable = (invoice: typeof invoices.$inferSelect) =>
-  ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status) && invoice.totalMinor > invoice.paidMinor;
+  ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status) && invoiceOutstanding(invoice) > 0;
 const unavailable = () => new ServiceError("not_found", "That invoice link is not available.");
 
 
@@ -317,7 +318,7 @@ async function receiptView(payment:typeof payments.$inferSelect,ctx:ServiceConte
   const [invoice]=await ctx.tx.select().from(invoices).where(eq(invoices.id,payment.invoiceId));
   if(!invoice)throw unavailable();
   const language=await localeForContact(ctx.tx,invoice.contactId);
-  return{...original,remainingMinor:invoice.totalMinor-invoice.paidMinor,
+  return{...original,remainingMinor:invoiceOutstanding(invoice),
     continueUrl:payable(invoice)?localizeCustomerHref(customerInvoicePath(invoice.id,invoiceAccessToken(invoice)),language.locale,language):null};
 }
 export const customerPaymentReceipt = defineService({

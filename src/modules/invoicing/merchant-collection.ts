@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.26/C12.38: shared per-party issue and payment admission, with no provider I/O.
+import { invoiceOutstanding } from "./invoice-balance";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, type MerchantChargeScope } from "@/adapters/payments";
@@ -143,12 +144,12 @@ export async function reserveCollectionCharge(ctx: ServiceContext, invoice: type
 export async function verifyNextMerchantCollection(ctx: ServiceContext, invoiceId: string): Promise<void> {
   const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, invoiceId));
   if (!invoice || !verifyCollection) throw new ServiceError("conflict", "The original merchant account verifier is unavailable.");
-  if (invoice.paidMinor === invoice.totalMinor) return;
+  if (invoiceOutstanding(invoice) === 0) return;
   const active = await ctx.tx.select({ allocationId: merchantPaymentRoutes.allocationId, status: payments.status })
     .from(payments).innerJoin(merchantPaymentRoutes, eq(merchantPaymentRoutes.paymentId, payments.id)).where(eq(payments.invoiceId, invoiceId));
   const pending = active.filter(row => ["created", "processing"].includes(row.status));
   if (pending.length > 1) throw new ServiceError("conflict", "The original merchant payment attempts need reconciliation.");
-  const allocationId = pending[0]?.allocationId ?? (await nextCollectionAmount(ctx, invoice, invoice.totalMinor - invoice.paidMinor))?.allocationId;
+  const allocationId = pending[0]?.allocationId ?? (await nextCollectionAmount(ctx, invoice, invoiceOutstanding(invoice)))?.allocationId;
   if (allocationId) await verifyCollection(allocationId, ctx);
 }
 

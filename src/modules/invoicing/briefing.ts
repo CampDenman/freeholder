@@ -8,6 +8,7 @@ import { z } from "zod";
 import { and, asc, eq, lt, sql } from "drizzle-orm";
 import { contacts } from "@/core/contacts/schema";
 import { invoices } from "@/modules/invoicing/schema";
+import { invoiceOutstanding } from "./invoice-balance";
 import { formatMoney } from "@/core/i18n";
 import { getBusiness } from "@/core/settings/service";
 import { defineService } from "@/core/service";
@@ -32,6 +33,7 @@ export const overdueInvoices = defineService({
         currency: invoices.currency,
         totalMinor: invoices.totalMinor,
         paidMinor: invoices.paidMinor,
+        creditedMinor: invoices.creditedMinor,
         dueAt: invoices.dueAt,
         contactName: contacts.name,
       })
@@ -62,7 +64,7 @@ export const overdueInvoices = defineService({
         href: `/admin/invoices/${row.id}`,
         // What is still owed, not what was billed: an invoice half paid is
         // half a problem, and showing the full amount would overstate it.
-        detail: `${formatMoney(row.totalMinor - row.paidMinor, row.currency, locale)} · ${
+        detail: `${formatMoney(invoiceOutstanding(row), row.currency, locale)} · ${
           row.dueAt ? `${days(row.dueAt)} days late` : "past due"
         }`,
       })),

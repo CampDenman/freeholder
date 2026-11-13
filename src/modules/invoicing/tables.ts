@@ -36,6 +36,8 @@ export {
   taxZones,
 } from "./schema";
 export { invoiceSchedules, invoiceReminders } from "./recurring-schema";
+export * from "./credit-application-schema";
+export * from "./commercial-attestation-schema";
 export { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 export {
   merchantCollectionConfiguration,
@@ -58,3 +60,5 @@ export { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBan
 
 export { legacyBankFeedback } from "./legacy-bank-feedback-schema";
 export { originalCashRecoveries, originalCashRecoveryOperations, originalCashRecoveryFacts, originalCashRecoveryClosures } from "./original-cash-recovery-schema";
+
+export * from "./agreement-fee-schema";

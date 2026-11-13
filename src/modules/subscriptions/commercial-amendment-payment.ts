@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { ServiceError, type ServiceContext } from "@/core/service";
 import { invoiceLines, type invoices } from "@/modules/invoicing/schema";
+import { invoiceSettled } from "@/modules/invoicing/invoice-balance";
 import { getInvoiceMarketPolicy } from "@/modules/invoicing/market-policy";
 import { invoiceMerchantTaxQuoteLines, invoiceMerchantTaxQuotes } from "@/modules/invoicing/merchant-tax-schema";
 import { admittedProviderPeriod, assertCanonicalProviderPeriod } from "./provider-periods";
@@ -24,7 +25,7 @@ export async function assertPaidAmendmentInvoice(ctx: ServiceContext, parent: ty
   const fee = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id });
   const tax = taxes[0];
   if (invoice.contactId !== parent.contactId || invoice.currency !== parent.currency || !invoice.issuedAt || invoice.status !== "paid"
-    || invoice.paidMinor !== invoice.totalMinor || invoice.refundedMinor !== 0 || invoice.sourceType !== "subscription" || invoice.sourceId !== `${parent.id}:${start.toISOString()}`
+    || !invoiceSettled(invoice) || invoice.refundedMinor !== 0 || invoice.sourceType !== "subscription" || invoice.sourceId !== `${parent.id}:${start.toISOString()}`
     || invoice.shippingMinor !== 0 || invoice.discountMinor !== 0 || invoice.subtotalMinor !== components.reduce((sum, item) => sum + item.amount, 0)
     || parent.acceptedSetupFeeMinor && !parent.setupFeeInvoiceId || lines.length !== components.length || taxes.length !== 1 || !tax
     || tax.profileId !== accepted.profileId || tax.profileVersion !== accepted.profileVersion || tax.liability !== accepted.taxLiability

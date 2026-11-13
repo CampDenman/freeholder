@@ -30,7 +30,10 @@ async function originalBuyerMerchantPayments(ctx: ServiceContext, contactId: str
     .where(eq(invoices.contactId, contactId)).orderBy(payments.id).limit(5001);
   if (rows.length > 5000) throw new ServiceError("conflict", "The original buyer payment inventory needs bounded privacy recovery.");
   const ids: string[] = [];
-  for (const payment of rows) if ((await routingForPayment(ctx, payment.id)).providerPlatformAccountId) ids.push(payment.id);
+  for (const payment of rows) {
+    const route = await routingForPayment(ctx, payment.id);
+    if (route.providerPlatformAccountId || route.moneyOrigin === "recorded_external") ids.push(payment.id);
+  }
   return ids;
 }
 async function originalBuyerPaymentsAreSafe(ctx: ServiceContext, contactId: string, originalIds: string[]): Promise<boolean> {

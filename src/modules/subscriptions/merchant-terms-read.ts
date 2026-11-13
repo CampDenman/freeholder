@@ -20,6 +20,7 @@ export async function originalMerchantTerms(ctx: ServiceContext, subscription: S
   if (policy?.model !== "seller_merchant") return null;
   const [terms] = await ctx.tx.select().from(subscriptionCommercialTerms).where(and(
     eq(subscriptionCommercialTerms.subscriptionId, subscription.id), lte(subscriptionCommercialTerms.effectivePeriodStart, periodStart),
+    sql`not exists(select 1 from subscription_prorations p where p.terms_id=${subscriptionCommercialTerms.id} and p.state<>'applied')`,
     sql`not exists(select 1 from ${subscriptionCommercialAmendments} where ${subscriptionCommercialAmendments.termsId}=${subscriptionCommercialTerms.id} and ${subscriptionCommercialAmendments.state}<>'activated')`))
     .orderBy(desc(subscriptionCommercialTerms.revision)).limit(1).for("share");
   if (!terms) throw new ServiceError("conflict", "Restore the explicitly accepted original commercial terms before billing this merchant agreement.");

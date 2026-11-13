@@ -13,9 +13,11 @@ import { invoiceMerchantCollections, merchantPaymentRoutes } from "./merchant-co
 import { chargeScopeForCollection, reserveCollectionCharge } from "./merchant-collection";
 import { invoiceScopedRoutingForPayment, reserveInvoiceScopedCharge } from "./merchant-invoice-scope";
 import { agreementRoutingForPayment, reserveAgreementCharge } from "./merchant-agreement-charge";
+import { reserveCommercialOfflineRecord } from "./commercial-attestations";
 export { registerSubscriptionInvoiceRouting, type SubscriptionInvoiceRouting } from "./merchant-agreement-charge";
 
 export const paymentRouting = z.object({
+  moneyOrigin: z.literal("recorded_external").optional(),
   providerApiVersion: z.enum(["2026-02-25.clover", "2026-10-28.endive"]).optional(),
   providerAccountId: z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200).optional(),
   providerPlatformAccountId: z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200).optional(),
@@ -65,6 +67,10 @@ export async function reserveMerchantCharge(
 ): Promise<ReservedMerchantCharge> {
   const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id });
   if (policy?.model !== "seller_merchant") return { providerAccountId: "", applicationFeeMinor: 0 };
+  if (request.provider === "manual") {
+    await reserveCommercialOfflineRecord(ctx, invoice, request);
+    return { moneyOrigin: "recorded_external", providerAccountId: "", applicationFeeMinor: 0 };
+  }
   if (policy.collectionVersion === 1) {
     const routing = await reserveCollectionCharge(ctx, invoice, request);
     return { ...routing, providerAccountId: routing.providerAccountId ?? "", merchantAllocationId: routing.allocationId };
@@ -93,6 +99,9 @@ export async function reserveMerchantCharge(
 
 /** Internal claim/apply services return this only to their provider caller. */
 export async function routingForPayment(ctx: ServiceContext, paymentId: string): Promise<z.infer<typeof paymentRouting>> {
+  const [origin] = await ctx.tx.select({ provider: payments.provider, model: invoiceMarketPolicies.model }).from(payments)
+    .leftJoin(invoiceMarketPolicies, eq(invoiceMarketPolicies.invoiceId, payments.invoiceId)).where(eq(payments.id, paymentId)).limit(1);
+  if (origin?.provider === "manual" && origin.model === "seller_merchant") return { moneyOrigin: "recorded_external" };
   const [current] = await ctx.tx.select({ version: invoiceMarketPolicies.collectionVersion, route: merchantPaymentRoutes, collection: invoiceMerchantCollections })
     .from(payments).leftJoin(invoiceMarketPolicies, eq(invoiceMarketPolicies.invoiceId, payments.invoiceId))
     .leftJoin(merchantPaymentRoutes, eq(merchantPaymentRoutes.paymentId, payments.id))

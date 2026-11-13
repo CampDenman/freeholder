@@ -39,6 +39,11 @@ import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { prepareBuyerAgreementErasure, minimizeBuyerAgreements } from "./buyer-agreement-erasure";
 import { syncSubscriptionAccess } from "@/core/entitlements/service";
+import grossProrationQuotes from "./proration-quote";
+import grossProrationServices, { completePaidGrossProration } from "./proration-service";
+import prorationCreditOwnerServices from "./proration-credit-owner";
+import { subscriptionProrationCashConfirmations, subscriptionProrationCreditConfirmations } from "./proration-boundary-schema";
+import { subscriptionProrations, subscriptionProrationPrincipal, subscriptionProrationCreditUses } from "./proration-schema";
 import { originalCashRecoveryFinancialWitness } from "@/modules/invoicing/original-cash-recovery-store";
 import { exportOriginalCashHistory } from "@/modules/invoicing/original-cash-invoice-history";
 import { contacts } from "@/core/contacts/schema";
@@ -48,6 +53,7 @@ import { productVariants, products } from "@/modules/catalog/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
 import { commercialBillingStart, pendingCommercialAmendment } from "./commercial-amendment-calendar";
 import { assertPaidAmendmentInvoice } from "./commercial-amendment-payment";
+import { invoiceSettled } from "@/modules/invoicing/invoice-balance";
 import { originalMerchantPlan, originalMerchantTerms } from "./merchant-terms-read";
 import { originalMerchantInvoiceShape } from "./merchant-terms-invoice";
 import { newProviderCalendarStart, periodEnd } from "./calendar";
@@ -313,7 +319,7 @@ export async function applyPendingPlan(
     const sourceId = `${subscription.id}:${amendment.terms.effectivePeriodStart.toISOString()}`;
     const [paid] = await ctx.tx.select().from(invoices).where(and(eq(invoices.sourceType, "subscription"), eq(invoices.sourceId, sourceId))).limit(1);
     if (!paid || paid.contactId !== subscription.contactId || paid.currency !== subscription.currency || !paid.issuedAt
-      || paid.status !== "paid" || paid.paidMinor !== paid.totalMinor || paid.refundedMinor !== 0) return subscription;
+      || paid.status !== "paid" || !invoiceSettled(paid) || paid.refundedMinor !== 0) return subscription;
     await assertPaidAmendmentInvoice(ctx, subscription, amendment.terms, paid);
   }
   const productVariantId = amendment ? amendment.terms.snapshot.productVariantId : await planVariant(ctx, nextPlan.productId);
@@ -1503,7 +1509,7 @@ export const completePaidCommercialAmendment = defineService({
   handler: async ({ invoiceId }, ctx) => {
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
     const id = z.uuid().safeParse(invoice?.sourceId?.split(":")[0]);
-    if (!invoice || invoice.sourceType !== "subscription" || !id.success || invoice.status !== "paid" || invoice.paidMinor !== invoice.totalMinor) return { applied: false };
+    if (!invoice || invoice.sourceType !== "subscription" || !id.success || invoice.status !== "paid" || !invoiceSettled(invoice)) return { applied: false };
     const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, id.data)).limit(1).for("update");
     if (!parent || parent.merchantScopeVersion !== 1 || !parent.pendingPlanId || parent.signupPending || parent.cancelAtPeriodEnd || parent.cancelledAt
       || !["active", "trialing", "past_due"].includes(parent.status)) return { applied: false };
@@ -1531,6 +1537,7 @@ export async function onInvoicePaid(
       ? (payload as { invoiceId?: string }).invoiceId
       : undefined;
   if (!invoiceId) return;
+  await completePaidGrossProration.call({ invoiceId }, { kind: "system" });
   await recoverDunning.call({ invoiceId }, { kind: "system" });
   await activatePaidSignup.call({ invoiceId }, { kind: "system" });
   await completePaidPlanChange.call({ invoiceId }, { kind: "system" });
@@ -1737,7 +1744,8 @@ registerContactReference({
 // invoice's problem rather than this table's.
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
-  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines", "subscription_provider_read_tickets", "subscription_provider_read_finishes", "subscription_provider_read_stops"],
+  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines", "subscription_provider_read_tickets", "subscription_provider_read_finishes", "subscription_provider_read_stops",
+    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses", "subscription_proration_cash_confirmations", "subscription_proration_credit_confirmations"],
   retentionScopes: ["commerce.money"],
   exportData: async (tx: Tx, contactId: string) => {
     const rows = await tx
@@ -1784,10 +1792,26 @@ registerContactPrivacySource({
       .where(inArray(subscriptionProviderReadTickets.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
     const readerStops = rows.length ? await tx.select({ subscriptionId: subscriptionProviderReadStops.subscriptionId, readId: subscriptionProviderReadStops.readId, reviewedAt: subscriptionProviderReadStops.createdAt })
       .from(subscriptionProviderReadStops).where(inArray(subscriptionProviderReadStops.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
-    // Exact subject-owned frozen receipts include real cash with no local invoice/payment.
+    const prorations = rows.length ? await tx.select({ id: subscriptionProrations.id, subscriptionId: subscriptionProrations.subscriptionId, snapshot: subscriptionProrations.snapshot,
+      taxDestination: subscriptionProrations.taxDestination, noticeSnapshot: subscriptionProrations.noticeSnapshot, effectiveAt: subscriptionProrations.effectiveAt,
+      originalPeriodStart: subscriptionProrations.originalPeriodStart, originalPeriodEnd: subscriptionProrations.originalPeriodEnd, originalTrialEndsAt: subscriptionProrations.originalTrialEndsAt,
+      debitInvoiceId: subscriptionProrations.debitInvoiceId, creditNoteId: subscriptionProrations.creditNoteId, debitNetMinor: subscriptionProrations.debitNetMinor, debitTaxMinor: subscriptionProrations.debitTaxMinor,
+      creditNetMinor: subscriptionProrations.creditNetMinor, creditTaxMinor: subscriptionProrations.creditTaxMinor, state: subscriptionProrations.state, appliedAt: subscriptionProrations.appliedAt, createdAt: subscriptionProrations.createdAt })
+      .from(subscriptionProrations).where(inArray(subscriptionProrations.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
+    const prorationIds = prorations.map(row => row.id);
+    const prorationPrincipal = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationPrincipal.prorationId, sourcePaymentId: subscriptionProrationPrincipal.sourcePaymentId,
+      sourceApplicationId: subscriptionProrationPrincipal.sourceApplicationId, amountMinor: subscriptionProrationPrincipal.amountMinor }).from(subscriptionProrationPrincipal).where(inArray(subscriptionProrationPrincipal.prorationId, prorationIds)).limit(5001) : [];
+    const prorationCredits = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationCreditUses.prorationId, creditNoteId: subscriptionProrationCreditUses.creditNoteId, amountMinor: subscriptionProrationCreditUses.amountMinor })
+      .from(subscriptionProrationCreditUses).where(inArray(subscriptionProrationCreditUses.prorationId, prorationIds)).limit(5001) : [];
+    // These exact actual receipt FKs belong to the subject's subscriptions even
+    // when original paid cash has never acquired any local invoice/payment.
+    const cashBoundary = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationCashConfirmations.prorationId, paymentId: subscriptionProrationCashConfirmations.paymentId,
+      retainedAt: subscriptionProrationCashConfirmations.retainedAt }).from(subscriptionProrationCashConfirmations).where(inArray(subscriptionProrationCashConfirmations.prorationId, prorationIds)).limit(5001) : [];
+    const creditBoundary = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationCreditConfirmations.prorationId, applicationId: subscriptionProrationCreditConfirmations.applicationId,
+      retainedAt: subscriptionProrationCreditConfirmations.retainedAt }).from(subscriptionProrationCreditConfirmations).where(inArray(subscriptionProrationCreditConfirmations.prorationId, prorationIds)).limit(5001) : [];
     const originalCash = await originalCashRecoveryFinancialWitness(tx, [], charges.map(row => row.id));
     const aggregate = rows.length + charges.length + accepted.length + amendments.length + resumptions.length + periodInvoices.length + readerTickets.length + readerStops.length
-      + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length;
+      + prorations.length + prorationPrincipal.length + prorationCredits.length + cashBoundary.length + creditBoundary.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length;
     if (aggregate > 5000) throw new ServiceError("conflict", "Restore a bounded complete original subscription subject export; receipt-only cash and its authentic children cannot be truncated.");
     const cashHistory = exportOriginalCashHistory(originalCash);
     const cashFor = (subscriptionId: string) => {
@@ -1798,7 +1822,10 @@ registerContactPrivacySource({
     };
     return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [], acceptedCommercialTerms: accepted.filter(value => value.subscriptionId === row.id),
       acceptedAmendments: amendments.filter(value => value.subscriptionId === row.id), acceptedCalendarResumptions: resumptions.filter(value => value.subscriptionId === row.id), observedPeriodInvoices: periodInvoices.filter(value => value.subscriptionId === row.id),
-      providerReaderHistory: readerTickets.filter(value => value.subscriptionId === row.id), providerReaderRuntimeStops: readerStops.filter(value => value.subscriptionId === row.id), originalReceiptCashHistory: cashFor(row.id) }));
+      providerReaderHistory: readerTickets.filter(value => value.subscriptionId === row.id), providerReaderRuntimeStops: readerStops.filter(value => value.subscriptionId === row.id),
+      originalReceiptCashHistory: cashFor(row.id), acceptedGrossProrations: prorations.filter(value => value.subscriptionId === row.id).map(value => ({ ...value,
+        originalPrincipal: prorationPrincipal.filter(principal => principal.prorationId === value.id), acceptedCreditUse: prorationCredits.filter(credit => credit.prorationId === value.id),
+        actualCashRetention: cashBoundary.filter(receipt => receipt.prorationId === value.id), actualCreditRetention: creditBoundary.filter(receipt => receipt.prorationId === value.id) })) }));
   },
   erase: async (tx: Tx, contactId: string, context) => {
     if (!context.service) throw new ServiceError("conflict", "Original agreement erasure requires its actual shared privacy context.");
@@ -1854,6 +1881,9 @@ import { subscriptionCommercialResumptions } from "./commercial-resumption-schem
 import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
 
 export default [
+  ...grossProrationQuotes,
+  ...grossProrationServices,
+  ...prorationCreditOwnerServices,
   ...providerReaderRecoveryServices,
   completePaidCommercialAmendment,
   ...marketPolicyServices,

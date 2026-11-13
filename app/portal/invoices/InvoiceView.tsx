@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import { invoiceOutstanding } from "@/modules/invoicing/invoice-balance";
 import type { getCustomerInvoice } from "@/modules/invoicing/customer-service";
 import { invoiceAppReturnHref } from "@/modules/invoicing/customer-tokens";
 import { formatMoney, type Translate } from "@/core/i18n";
@@ -53,7 +54,8 @@ export function InvoiceView({ invoice, token, t, locale, timezone, businessName,
               ["invoices.subtotal", invoice.subtotalMinor], ["invoices.discount", invoice.discountMinor],
               ["invoices.shippingAmount", invoice.shippingMinor], ["invoices.taxAmount", invoice.taxMinor],
               ["invoices.total", invoice.totalMinor], ["invoices.paid", invoice.paidMinor],
-              ["customerInvoice.balance", invoice.totalMinor - invoice.paidMinor],
+              ["customerInvoice.credited", invoice.creditedMinor],
+              ["customerInvoice.balance", invoiceOutstanding(invoice)],
             ] as const).map(([label, amount]) => <div key={label} className="flex justify-between gap-4"><dt>{t(label)}</dt><dd className="font-mono">{money(amount)}</dd></div>)}
             {invoice.nextPaymentMinor !== null ? <div className="flex justify-between gap-4 font-semibold"><dt>{t("customerInvoice.nextPayment")}</dt><dd className="font-mono">{money(invoice.nextPaymentMinor)}</dd></div> : null}
           </dl>

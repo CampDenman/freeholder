@@ -20,6 +20,7 @@ import { subscriptionProviderInvoiceObservations } from "./provider-period-schem
 import { proveMerchantProviderPeriod, assertCanonicalProviderPeriod } from "./provider-periods";
 import { commercialBillingStart } from "./commercial-amendment-calendar";
 import { originalMerchantPlan, originalMerchantTerms } from "./merchant-terms-read";
+import { invoiceOutstanding, invoiceSettled } from "@/modules/invoicing/invoice-balance";
 import { merchantObservationRef, recordMerchantPaymentObservation } from "@/modules/invoicing/merchant-payment-observations";
 import { invoices, paymentMethods, payments } from "@/modules/invoicing/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
@@ -140,7 +141,7 @@ const claimCharge = defineService({
     if (invoice.contactId !== current.contactId || invoice.currency !== current.currency || invoice.sourceType !== "subscription" || invoice.sourceId?.split(":")[0] !== current.id || !invoice.issuedAt || !["sent", "viewed", "partially_paid", "overdue", "paid"].includes(invoice.status)) {
       throw new ServiceError("conflict", "That invoice cannot be charged to this membership.");
     }
-    const amountMinor = invoice.totalMinor - invoice.paidMinor;
+    const amountMinor = invoiceOutstanding(invoice);
     if (amountMinor <= 0) {
       if (current.merchantScopeVersion === 1 && current.pendingPlanId) await ctx.callAsSystem(completePaidCommercialAmendment, { invoiceId });
       return {
@@ -849,7 +850,7 @@ export const completePaidPlanChange = defineService({
       .limit(1);
     if (!pending?.fromPlanId || !pending.toPlanId || !pending.detail) return { switched: false };
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
-    if (!invoice || !invoice.issuedAt || invoice.status !== "paid" || invoice.paidMinor !== invoice.totalMinor || invoice.refundedMinor !== 0) return { switched: false };
+    if (!invoice || !invoice.issuedAt || invoice.status !== "paid" || !invoiceSettled(invoice) || invoice.refundedMinor !== 0) return { switched: false };
     const [subscription] = await ctx.tx
       .select()
       .from(subscriptions)
@@ -1071,7 +1072,7 @@ async function settlePeriodInvoice(
       assertChargeEvidence(await routingForPayment(ctx, applied.id), { ...options, status: "succeeded" }); return invoice.id;
     }
   }
-  const outstanding = invoice.totalMinor - invoice.paidMinor;
+  const outstanding = invoiceOutstanding(invoice);
   if (periodProof && invoice.totalMinor === 0 && options.amountMinor === 0) return invoice.id;
   if (outstanding <= 0) {
     if (options.providerAccountId || options.providerPlatformAccountId) throw new ServiceError("conflict", "A different original charge already paid this period. Reconcile the extra money.");
@@ -1205,8 +1206,8 @@ export const reconcileProviderPeriod = defineService({
     });
     if (routing.providerPlatformAccountId && !invoiceId) throw new ServiceError("conflict", "The original paid renewal is retained; reconcile its pinned invoice before advancing access.");
     if (routing.providerPlatformAccountId && invoiceId) {
-      const [paid] = await ctx.tx.select({ status: invoices.status, paidMinor: invoices.paidMinor, totalMinor: invoices.totalMinor }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
-      if (!paid || paid.status !== "paid" || paid.paidMinor !== paid.totalMinor) return { applied: true }; // Partial actual cash grants no next-period access.
+      const [paid] = await ctx.tx.select({ status: invoices.status, paidMinor: invoices.paidMinor, creditedMinor: invoices.creditedMinor, totalMinor: invoices.totalMinor }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+      if (!paid || paid.status !== "paid" || !invoiceSettled(paid)) return { applied: true }; // Partial actual cash/owned credit grants no next-period access.
     }
     if (subscription.status === "cancelled" || subscription.status === "expired") {
       return { applied: Boolean(invoiceId) };

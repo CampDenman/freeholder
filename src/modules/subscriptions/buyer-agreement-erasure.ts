@@ -14,6 +14,7 @@ import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohor
 import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
 import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { subscriptionCommercialTerms, subscriptionMerchantScopes, subscriptions } from "./schema";
+import { subscriptionProrations } from "./proration-schema";
 
 const SCOPE = "subscriptions.agreements";
 const JOB = "subscriptions.quiesceMerchantSchedules";
@@ -141,6 +142,9 @@ export async function minimizeBuyerAgreements(tx: Tx, ids: string[]): Promise<nu
   await tx.execute(sql`select set_config('freeholder.subscription_terms_v1','1',true),set_config('freeholder.subscription_terms_privacy_v1','1',true)`);
   await tx.update(subscriptionCommercialTerms).set({ taxDestination: null, redactedAt: new Date() })
     .where(and(inArray(subscriptionCommercialTerms.subscriptionId, ids), isNull(subscriptionCommercialTerms.redactedAt)));
+  await tx.execute(sql`select set_config('freeholder.subscription_proration_v1','1',true),set_config('freeholder.subscription_proration_privacy_v1','1',true)`);
+  await tx.update(subscriptionProrations).set({ taxDestination: null, redactedAt: new Date() })
+    .where(and(inArray(subscriptionProrations.subscriptionId, ids), isNull(subscriptionProrations.redactedAt)));
   return affected.length;
 }
 

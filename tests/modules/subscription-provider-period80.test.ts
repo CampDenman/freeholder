@@ -11,9 +11,10 @@ import { stopJobs } from "@/core/jobs";
 import { ready } from "@/core/runtime";
 import { invoices, invoiceLines, invoiceMarketPolicies, payments } from "@/modules/invoicing/schema";
 import { invoiceMerchantTaxQuotes } from "@/modules/invoicing/merchant-tax-schema";
+import { originalReceiptPrincipalReview } from "@/modules/invoicing/principal-authority";
 import { paymentWebhookRoute } from "@/modules/invoicing/payment-webhook-route";
 import { subscriptionProviderInvoiceObservations, subscriptionProviderInvoiceLines } from "@/modules/subscriptions/provider-period-schema";
-import { subscriptionProviderChargeReceipts, subscriptions } from "@/modules/subscriptions/schema";
+import { subscriptionProviderChargeReceipts, subscriptionProviderChargeObservations, subscriptions } from "@/modules/subscriptions/schema";
 import { seedActualProviderSubscription80 } from "../helpers/merchant-subscription80";
 import { closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
 const actualPhase = z.object({ start_date: z.number(), end_date: z.number(), metadata: z.record(z.string(), z.string()), items: z.array(z.object({ price: z.string() })).length(1) });
@@ -76,6 +77,11 @@ describe.runIf(hasDatabase)("actual future invoice binds admitted canonical net/
     expect((await ingress(`evt_future_bad_${mismatch}`)).status).toBe(503);
     expect(await db().select().from(subscriptionProviderChargeReceipts)).toHaveLength(1);
     expect(await db().select().from(invoices)).toHaveLength(0); expect(await db().select().from(payments)).toHaveLength(0);
+    const [receipt] = await db().select().from(subscriptionProviderChargeReceipts), [cash] = await db().select().from(subscriptionProviderChargeObservations);
+    if (!receipt || !cash) throw new Error("The actual raw paid ingress must retain its exact receipt and positive observation before canonical failure.");
+    expect(await originalReceiptPrincipalReview.call({ receiptId: receipt.id, observationId: cash.id }, { kind: "system" }))
+      .toMatchObject({ receiptId: receipt.id, paymentId: null, principalSafe: false, currentPrincipalMinor: null, receiptOnly: true, reviewRequired: true });
+    expect(await db().select().from(payments)).toHaveLength(0);
     expect((await db().select().from(subscriptionProviderInvoiceObservations))[0]?.verified).toBe(false);
     const [parent] = await db().select().from(subscriptions).where(eq(subscriptions.id, source.accepted.subscription.id)); expect(parent?.currentPeriodEnd).toEqual(source.accepted.subscription.currentPeriodEnd);
     // Even the guarded raw writer cannot rewrite a retained actual line.

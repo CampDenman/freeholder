@@ -13,6 +13,11 @@ import legacyBankReplacementServices from "./legacy-bank-replacement-service";
 import legacyBankReaderRecoveryServices from "./legacy-bank-reader-recovery";
 import legacyBankCurrentServices from "./legacy-bank-current-service";
 import legacyBankReadServices from "./legacy-bank-read-service";
+import creditDispositionServices from "./credit-disposition";
+import creditApplicationServices from "./credit-application-service";
+import commercialAttestationServices from "./commercial-attestations";
+import agreementFeeServices from "./agreement-fee-service";
+import principalAuthorityServices from "./principal-authority";
 import invoiceServices from "./invoice-service";
 import buyerMoneyErasureServices from "./buyer-money-erasure";
 import originalRefundRepairServices from "./merchant-refund-privacy-repair";
@@ -74,6 +79,11 @@ export default [
   ...originalCashPartialPhases,
   ...originalCashPartialServices,
   ...originalCashUnassignedServices,
+  ...commercialAttestationServices,
+  ...principalAuthorityServices,
+  ...agreementFeeServices,
+  ...creditDispositionServices,
+  ...creditApplicationServices,
   ...legacyBankReadServices,
   ...legacyBankCurrentServices,
   ...legacyBankReaderRecoveryServices,
