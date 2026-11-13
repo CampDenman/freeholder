@@ -3929,6 +3929,19 @@ reading chat logs.
   no account or stable sign-off follows.
 
 
+  Released-hold NEW-request repair source2026-11-13 (C1.08/C3.47/C11.14):
+  the documented new verified request failed before job assertions on actual
+  WXR3a35/955 because rollback removed the mutable upload descriptor. Its
+  failure database and unchanged positive oracle remain preserved. A narrow
+  source repair admits only a complete original capture with an intact retained
+  same-contact receipt, exact graph/generation/revision/chunk membership and
+  positive same-namespace physical retirement, with no live hold/writer/rebind
+  or accepted ownership. The new capture/tasks preserve the old receipt and
+  scope. Four prepared native other-subject/corrupted-receipt refusals accompany
+  the unchanged WXR/ZIP positive controls. Source/native/migration checks are
+  UNRUN at this checkpoint; no completion claim follows. See
+  `deploy/import-held-original-new-request-2026-11-13.md`.
+
   Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
   documented an empty original hold, uploaded a later unheld WXR generation,
   verified and fulfilled the real erasure. The request falsely reached

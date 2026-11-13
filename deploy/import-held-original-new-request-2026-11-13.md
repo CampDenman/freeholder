@@ -1,0 +1,20 @@
+<!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
+# Released original input: a new verified request
+
+C1.08/C3.47/C11.14 remain open. This source slice repairs a genuine failure of the documented **new request** path after a terminal partial erasure and released named hold. It adds no same-request resume or automatic queueing after hold removal.
+
+## Preserved before evidence
+
+The original WXR native control on 3a35cf3c/SQL81 955a04d2 failed during capture, before any pending-job expectations. Rollback had removed the mutable upload descriptor, although the original complete immutable scope, intact retained receipt and accepted same-namespace PUT/DELETE evidence survived. The populated failure database `freeholder_current_full81_normal_v3_test_20261113`, original fixture and minimal independent classification are preserved. The archive counterpart had not run. No failed or golden database is migrated or reset by this repair.
+
+## Finite source repair
+
+A new first-fulfilment capture may copy an original member only from a verified, applied, terminal partial request for the **same exact retained contact ID**. Its retained receipt must be intact, self-bound to that original request/contact, and have no pending source job. The old capture must be complete and the exact graph generation, source revision and chunk-key digests must still match. The existing positive projection-retired predicate must prove no live hold, writer, replacement alias, rebind, lease, accepted batch, target page or accepted/unresolved media ownership. Every original chunk additionally requires accepted retired PUT and DELETE receipts with the same original namespace, kind, location, content digest and byte count. A missing mutable descriptor, rollback status or absent object alone supplies no authority.
+
+The new immutable scope includes exactly current originals plus these proven retained originals. Its existing durable job uses the copied exact original keys. The existing physical ledger recognizes completed retirement without sending another DELETE, and existing guarded projection minimization/ACK finishes the new receipt. The old scope and receipt remain unchanged. Generic privacy artifact erasure now accepts a source's narrow opt-in evidence-retention callback; it validates same-subject ownership, erasure format and checksum before protecting only those exact original receipts referenced by the new capture. Other artifacts retain their existing erasure behavior.
+
+Owned SQL suffix `deploy/import-source-held-release81.fragment.sql` is appended after the frozen 955a04d2 prefix of unpublished migration81. The resulting SQL81 SHA256 is `773c935e323db8e20a9efb334c074b16571c50ba85e9f3cc8f2c719c1136dbea`; the owned suffix SHA256 is `82ae4b6bf891d8fb9a7ea768c43b4dcfcc8f0598ec3d1f0d6314b0bdf3357476`. There are no new tables, columns, API/MCP verbs or journal entries. Any qualification requires a **new database at the new SQL81 hash**, never reuse of the preserved V3 failure or previously qualified databases. The original positive WXR/archive fixture remains byte-for-byte unchanged; four prepared native negative cases exercise real other-subject and corrupted-receipt refusals and rollback of the attempted new capture.
+
+## Qualification
+
+Source-only checkpoint: compiler, lint, unit tests, native tests, ordinary migration, provider/account acceptance and final combined candidate verification are **UNRUN** for this repair until the shared lane is granted. No C-item, stable announcement, provider acceptance, security review or completion signature is supplied by this source checkpoint.

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { auditLog } from "@/core/events/schema";
 import { mediaObjects } from "@/core/media/schema";
 import { importRuns, importSourceGraphs } from "@/core/plugins/schema";
+import { erasureArtifactIsIntact } from "@/core/privacy/service";
 import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
 import { ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { importSourceObjectKeys, retainedSourceFromRun } from "./retained-source";
@@ -15,7 +16,8 @@ export const sourceObjectKey = z.string().regex(/^imports\/[a-f0-9-]{36}\/[a-f0-
 const recover = () => new ServiceError("conflict", "The original uploaded-source erasure membership needs reviewed recovery; no later or empty source set was assumed.");
 export async function originalSourceErasureScopeAvailable(tx: Pick<Tx, "execute">): Promise<boolean> {
   const [row] = await tx.execute<{ available: boolean }>(sql`select to_regprocedure('public.freeholder_source_erasure_scope_complete(uuid)') is not null
-    and to_regprocedure('public.freeholder_source_graph_projection_retired(uuid,uuid)') is not null as available`);
+    and to_regprocedure('public.freeholder_source_graph_projection_retired(uuid,uuid)') is not null
+    and to_regprocedure('public.freeholder_source_erasure_prior_members(uuid)') is not null as available`);
   if (!row?.available) return false;
   const [guards] = await tx.execute<{ available: boolean }>(sql`select count(*)=10 as available from (values
     ('public.import_source_erasure_scopes','import_source_erasure_scopes_capture','public.freeholder_guard_source_erasure_capture()'),
@@ -58,7 +60,26 @@ export async function captureOriginalSourceErasureScope(ctx: ServiceContext, req
     const [graph] = await tx.select().from(importSourceGraphs).where(eq(importSourceGraphs.runId, run.id)).for("update");
     const [http] = graph ? await tx.execute<{ linked: boolean }>(sql`select exists(select 1 from import_crawl_graphs where graph_id=${graph.id}::uuid) linked`) : [];
     const retained = retainedSourceFromRun(run);
-    if (graph && !http?.linked && (!retained || retained.revision !== graph.sourceRevision || !keys.some(key => key.split("/")[2] === retained.uploadId))) throw recover();
+    if (graph && !http?.linked && (!retained || retained.revision !== graph.sourceRevision || !keys.some(key => key.split("/")[2] === retained.uploadId))) {
+      // Rollback may retire the mutable upload descriptor. Only an intact
+      // same-subject prior first capture plus positive physical retirement can
+      // supply this NEW request's membership. Never rebuild an old unknown set.
+      const prior = await tx.execute<{ request_id: string; upload_id: string; chunk_count: number }>(sql`
+        select prior_request_id request_id,upload_id,chunk_count from freeholder_source_erasure_prior_members(${requestId}::uuid)
+        where run_id=${run.id}::uuid and graph_id=${graph.id}::uuid order by prior_request_id`);
+      const candidate = prior[0];
+      if (!candidate || prior.some(row => row.upload_id !== candidate.upload_id || row.chunk_count !== candidate.chunk_count)) throw recover();
+      const [previousArtifact] = await tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,candidate.request_id));
+      if (!erasureArtifactIsIntact(previousArtifact)) throw recover();
+      const original = await tx.select().from(importSourceErasureObjects).where(and(eq(importSourceErasureObjects.requestId,candidate.request_id),eq(importSourceErasureObjects.runId,run.id),eq(importSourceErasureObjects.uploadId,candidate.upload_id))).orderBy(asc(importSourceErasureObjects.chunkIndex));
+      if (original.length !== candidate.chunk_count || original.some((row,index) => row.chunkIndex !== index)) throw recover();
+      const originalKeys = original.map(row => `imports/${run.id}/${candidate.upload_id}/${String(row.chunkIndex).padStart(5,"0")}.part`);
+      if (keys.some(key => !originalKeys.includes(key))) throw recover();
+      members.push({ requestId,runId:run.id,uploadId:candidate.upload_id,chunkCount:candidate.chunk_count,graphId:graph.id,graphGeneration:graph.generation,sourceRevision:graph.sourceRevision });
+      objects.push(...original.map(row => ({ requestId,runId:row.runId,uploadId:row.uploadId,chunkIndex:row.chunkIndex,keyDigest:row.keyDigest })));
+      if (members.length > 10_000 || objects.length > 250_000) throw recover();
+      continue;
+    }
     const groups = new Map<string, string[]>();
     for (const key of keys) { sourceObjectKey.parse(key); const uploadId = z.uuid().parse(key.split("/")[2]); groups.set(uploadId, [...(groups.get(uploadId) ?? []), key]); }
     for (const [uploadId, originals] of groups) {

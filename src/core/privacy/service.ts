@@ -148,6 +148,9 @@ export interface ContactPrivacySource {
    * deletion would cascade over or be blocked by runs before it.
    */
   eraseOrder?: number;
+  /** Keep only exact prior erasure receipts required by this request's
+   * immutable recovery witnesses. Other artifacts still follow erasure. */
+  retainedErasureArtifacts?: (tx: Tx, contactId: string, context: { requestId: string }) => Promise<string[]>;
   exportData: (tx: Tx, contactId: string) => Promise<unknown>;
   /** Protect held copies; context.requestId identifies the hold's originating request. */
   retain?: (tx: Tx, contactId: string, context: { requestId: string; exceptionId: string; service?: ServiceContext }) => Promise<void>;
@@ -1456,18 +1459,29 @@ registerContactPrivacySource({
       .where(eq(dataRequests.contactId, contactId));
     let affected = 0;
     if (requests.length) {
-      const removed = await tx
+      const protectedRequests = new Set<string>();
+      const ownRequests = new Set(requests.map(request => request.id));
+      for (const source of privacySourceRegistry) {
+        for (const id of await source.retainedErasureArtifacts?.(tx,contactId,context) ?? []) {
+          if (!ownRequests.has(id) || id === context.requestId) throw new ServiceError("conflict", "A source recovery witness references another privacy subject.");
+          const [original] = await tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,id));
+          if (!erasureArtifactIsIntact(original) || !z.object({ format: z.literal("freeholder.erasure-receipt") }).safeParse(original?.body).success) throw new ServiceError("conflict", "Restore the intact original erasure receipt before retaining its recovery witness.");
+          protectedRequests.add(id);
+        }
+      }
+      const erasable = requests.filter(request => !protectedRequests.has(request.id)).map(request => request.id);
+      const removed = erasable.length ? await tx
         .delete(dataRequestArtifacts)
         .where(
           and(
             inArray(
               dataRequestArtifacts.dataRequestId,
-              requests.map((row) => row.id),
+              erasable,
             ),
             sql`${dataRequestArtifacts.dataRequestId} <> ${context.requestId}`,
           ),
         )
-        .returning({ id: dataRequestArtifacts.id });
+        .returning({ id: dataRequestArtifacts.id }) : [];
       affected += removed.length;
       const scrubbed = await tx
         .update(dataRequests)
