@@ -16,8 +16,8 @@ import { markImportCrawlWriter } from "./crawl-writer";
 import { startImport } from "./service";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
-async function currentOwner(ctx: ServiceContext) {
-  await assertCurrentImportAuthority(ctx, "imports.recoverCrawlResponse");
+async function currentOwner(ctx: ServiceContext, operation = "imports.recoverCrawlResponse") {
+  await assertCurrentImportAuthority(ctx, operation);
   const actor = await currentImportAuthority(ctx);
   if (actor.kind !== "user" || actor.role !== "owner" || actor.keyId || !actor.sessionId) throw new ServiceError("permission", "Sign in as the freshly verified owner to review original-source recovery.");
   return actor;
@@ -79,7 +79,7 @@ export const restartCrawlReview = defineService({
   input: z.object({ id: z.uuid(), generation: z.uuid(), origin: z.string().url().max(8_192), url: z.string().url().max(8_192), confirmation: z.literal("START NEW SOURCE REVIEW") }),
   output: z.object({ id: z.uuid(), generation: z.uuid() }), auditInputFields: ["id", "generation"],
   handler: async (input, ctx) => {
-    await currentOwner(ctx); await lockContactIdentityForRead(ctx.tx);
+    await currentOwner(ctx, "imports.restartCrawlReview"); await lockContactIdentityForRead(ctx.tx);
     const [old] = await ctx.tx.select().from(importCrawlSources).where(eq(importCrawlSources.runId, input.id)).limit(1).for("share");
     if (!old || old.generation !== input.generation || old.redactedAt) throw new ServiceError("conflict", "An erased original cannot be recovered or used to reconstruct a new source. Start an unrelated review with its own authority.");
     const run = await ctx.call(startImport, { origin: input.origin, kind: old.kind, approvedMediaOrigins: [] });
