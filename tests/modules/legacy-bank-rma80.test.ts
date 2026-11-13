@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
 import { stopJobs, reconcileJobDeploymentAdmission } from "@/core/jobs";
@@ -50,7 +51,7 @@ describe.runIf(hasDatabase)("authentic original legacy RMA bank recovery80", { t
     const [lineage] = await db().select().from(moneyStateEvents).where(sql`${moneyStateEvents.metadata}->>'protocol'=${LEGACY_REPLACEMENT_PROTOCOL}`);
     expect(lineage?.metadata).toMatchObject({ rootRefundId: actual.original.id, parentRefundId: actual.original.id,
       returnPart: { returnId: actual.returnId, allocationId: actual.part.id, creditNoteId: credit.credit.id }, originalCreatePlatformAccountId: null, originalCreateProtocolVersion: null });
-    const childId = lineage?.metadata.replacementRefundId;
+    const childId = z.object({ replacementRefundId: z.uuid() }).parse(lineage?.metadata).replacementRefundId;
     expect(childId).not.toBe(unrelated.id);
     await actual.replace(); await actual.balances(2000); expect(actual.posts).toHaveLength(3); expect(await actual.originalCredit()).toEqual(credit);
     expect((await getCustomerInvoice.call({ id: actual.invoiceId }, actual.customer)).canPay).toBe(false);
@@ -135,7 +136,8 @@ describe.runIf(hasDatabase)("authentic original legacy RMA bank recovery80", { t
       // successful result cannot settle later bank-review debt by itself.
       const [finished] = await db().select().from(refunds).where(eq(refunds.id, actual.original.id));
       expect(finished).toMatchObject({ providerRef, status: "processing" });
-      expect((await db().select().from(moneyStateEvents)).some(row => row.subjectId === actual.original.id && row.metadata.physicalState === "finished")).toBe(true);
+      expect((await db().select().from(moneyStateEvents)).some(row => row.subjectId === actual.original.id
+        && row.metadata !== null && typeof row.metadata === "object" && "physicalState" in row.metadata && row.metadata.physicalState === "finished")).toBe(true);
       await actual.check(); await actual.balances(1000); expect(actual.posts).toHaveLength(1);
       expect((await db().select().from(refunds).where(eq(refunds.id, actual.original.id)))[0]).toMatchObject({ providerRef, status: "succeeded" });
     } finally { actual.release.resolve(); await actual.pending; }
