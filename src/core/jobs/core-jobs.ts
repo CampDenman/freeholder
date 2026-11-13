@@ -9,6 +9,7 @@
 import { and, eq, isNotNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { defineJob, pruneJobIdempotencyKeys } from "@/core/jobs";
+import { crawlJobs } from "@/core/import/crawl-jobs";
 import {
   passwordResets,
   loginSecurityEvents,
@@ -433,6 +434,19 @@ export const eraseImportSourceObjects = defineJob({
     await context.throwIfCancelled();
     const { eraseImportSourceObjects: erase } = await import("@/core/import/source-erasure");
     return erase(data);
+  },
+});
+
+/** Periodic fallback also covers old images that missed physical callbacks. */
+export const reconcileImportSourceErasure = defineJob({
+  name: "core.reconcileImportSourceErasure",
+  summary: "Reopen retained uploaded erasure tasks that lack their original initial scope.",
+  schedule: "*/5 * * * *", concurrency: 1,
+  handler: async (data, context) => {
+    if (!context) throw new Error("Import-source reconciliation requires a durable worker identity.");
+    await context.throwIfCancelled();
+    const { reconcileOriginalSourceErasure } = await import("@/core/import/source-erasure-history");
+    return reconcileOriginalSourceErasure.call(data, { kind: "system" });
   },
 });
 
@@ -1095,6 +1109,8 @@ export const reconcileFormLeadErasure = defineJob({
 });
 
 export default [
+  ...crawlJobs,
+  reconcileImportSourceErasure,
   reconcileFormLeadErasure,
   eraseFormLeadCopies,
   sweepSessions,
@@ -1159,3 +1175,18 @@ export default [
   checkUpdates,
   escalateSecurityUpdates,
 ];
+
+/** Original transfer phases never automatically repeat an uncertain I/O. */
+export const advanceMediaStorageTransfer=defineJob({
+ name:"core.advanceMediaStorageTransfer",summary:"Run one immutable original transfer object/phase with actual caller receipts.",retry:{limit:0},concurrency:1,
+ handler:async(data,context)=>{if(!context)throw Error("Storage transfer requires its actual durable worker identity.");const{executeQueuedStorageTransfer}=await import("@/core/media/transfer-jobs");return executeQueuedStorageTransfer(data,context);},
+});
+export const eraseMediaStorageTransfer=defineJob({
+ name:"core.eraseMediaStorageTransfer",summary:"Finish exact original transfer erasure only after every copy and caller is retired.",retry:{limit:40,delaySeconds:60,backoff:true,maxDelaySeconds:3600},concurrency:1,
+ handler:async(data,context)=>{if(!context)throw Error("Transfer erasure requires its actual durable worker identity.");await context.throwIfCancelled();const{withStorageTransferJob}=await import("@/core/media/transfer-job-scope");const{eraseMediaStorageTransfer:erase}=await import("@/core/media/transfer-privacy");return withStorageTransferJob(context,()=>erase(data,context));},
+});
+let transferErasureCursor:string|undefined;
+export const reconcileMediaStorageTransfer=defineJob({
+ name:"core.reconcileMediaStorageTransfer",summary:"Reconcile late original physical facts against immutable transfer erasure membership.",schedule:"*/5 * * * *",concurrency:1,
+ handler:async(_data,context)=>{if(!context)throw Error("Transfer reconciliation requires an actual durable worker identity.");await context.throwIfCancelled();const{reconcileStorageTransferErasure}=await import("@/core/media/transfer-privacy");const result=await reconcileStorageTransferErasure.call({after:transferErasureCursor},{kind:"system"});transferErasureCursor=result.next??undefined;return result;},
+});

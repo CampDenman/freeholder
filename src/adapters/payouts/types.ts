@@ -10,7 +10,7 @@
 // ledger in src/modules/members/payouts.ts decides what is owed and when;
 // providers only carry it out.
 
-import type { PaymentProviderEvent } from "../payments/types";
+import type { PaymentProviderEvent, PaymentWebhookRequest } from "../payments/types";
 import type { PublicMerchantSupport } from "@/core/commerce/merchant-identity";
 
 export type PayoutAccountStatus = "pending" | "ready" | "disabled";
@@ -68,7 +68,7 @@ export type PayoutWebhookEvent =
    */
   | { kind: "transfer"; reference: string; key?: string; state: "settled" | "failed" | "unclaimed"; error?: string };
 
-export interface PayoutWebhookRequest {
+export interface PayoutWebhookRequest extends Omit<PaymentWebhookRequest, "headers" | "body"> {
   headers: Record<string, string | undefined>;
   body: Uint8Array;
   receivedAt: string;

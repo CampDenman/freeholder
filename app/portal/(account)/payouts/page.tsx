@@ -37,6 +37,7 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Prom
   return (
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">{t("members.payouts.title")}</h1>
+      <a className="text-sm underline" href="/portal/payouts/tax">{t("merchantTax.title")}</a>
       <p className="text-sm text-ink-muted">
         {t(`members.payouts.model.${rules.payoutModel}`, { days: rules.holdDays })} {rules.siteFeeBps > 0 ? t("members.payouts.fee", { percent: rules.siteFeeBps / 100 }) : t("members.payouts.noFee")}
       </p>

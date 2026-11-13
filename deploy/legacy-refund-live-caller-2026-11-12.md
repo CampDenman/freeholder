@@ -218,6 +218,41 @@ answer cache and leaves durable unknown admission debt; full restart recovery
 still requires actual original-provider evidence. No real provider acceptance,
 deployment, independent security sign-off or stable release is supplied here.
 
+## Composition with unpublished merchant collection 80
+
+The isolated composition retains the existing merchant refund request, physical
+caller finish and resource ACK guards. Shared failure/cancellation runs those
+guards first; their positive result identifies a handled merchant request. Only
+the historical provider route uses the separate authenticated caller journal.
+The hosted orchestrator still delegates original merchant routes before legacy
+admission, and shared result application preserves the merchant state-machine
+checks. No caller input selects or bypasses either authority.
+
+The migration remains byte-identical to qualified v8 (`1ac4652c6e4234cdf07848b244368eca30108b00b3eb54f1eeacfe0f83d4e2c8`).
+Base79 caller evidence does not qualify this composition. Source checks, both
+unchanged legacy and merchant caller controls, and the affected state-machine
+regressions must pass before it is treated as a qualified combined candidate.
+No provider acceptance, historical terminal recovery or stable sign-off follows.
+
+### Exact combined-source qualification
+
+Frozen `309a5574` passed full Node22 TypeScript, focused lint and twenty
+private/audit/schema/changelog controls (one explicit database skip). On exact
+normal v8 SQL `1ac4652c6e4234cdf07848b244368eca30108b00b3eb54f1eeacfe0f83d4e2c8`,
+the unchanged legacy caller control passed in 5.298s and the unchanged merchant
+caller control in 6.505s. Independent readback asserted the legacy 1000 CAD-cent
+refund and payment application with one admission/finish, and the merchant
+500 CAD-cent refund/payment application with one original request, ordinal-one
+dispatch, returned finish, verified success and physical ACK. Both runners
+exited zero and database backends drained. Logs/JSON are preserved at
+`/tmp/freeholder-combined-refund-caller80-{legacy,merchant}-native.*`,
+`-legacy-ledger-drain.json` and `-merchant-ledger.json`.
+
+This qualifies that frozen composition only. Its common ancestor with protected
+main is `eea40ee2`; the current protected REST/ZIP/reader/storage increments
+still require full composition before a final candidate claim. The immutable
+migration and all earlier candidate artifacts remain preserved.
+
 ## Browser qualification diagnosis
 
 At protected PR #694 head `5dff3f92`, all 32 native shards passed. Browser

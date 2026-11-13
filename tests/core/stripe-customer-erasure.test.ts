@@ -42,6 +42,24 @@ describe("Stripe customer erasure (C1.08/C12.38)",()=>{
   const p=provider([new Response(JSON.stringify({error:{code:"account_invalid"}}),{status:403})]);
   await expect(p.erase(request)).rejects.toMatchObject({code:"authentication"});expect(p.fetcher).toHaveBeenCalledOnce();expect(p.fetcher.mock.calls[0]![1]).toMatchObject({headers:{"stripe-account":"acct_original"}});
  });
+ it("verifies a new resource's original platform before its customer read and deletion",async()=>{
+  const p=provider([{id:"acct_platform"},{id:"cus_original"},{id:"acct_platform"},{id:"cus_original",deleted:true}]);
+  await p.erase({...request,providerPlatformAccountId:"acct_platform"});
+  expect(p.fetcher).toHaveBeenCalledTimes(4);
+  expect(p.fetcher.mock.calls.map(([url])=>url)).toEqual(["https://stripe.example.test/v1/account","https://stripe.example.test/v1/customers/cus_original","https://stripe.example.test/v1/account","https://stripe.example.test/v1/customers/cus_original"]);
+  for(const index of [0,2])expect(new Headers(p.fetcher.mock.calls[index]![1]?.headers).has("stripe-account")).toBe(false);
+  for(const index of [1,3])expect(new Headers(p.fetcher.mock.calls[index]![1]?.headers).get("stripe-account")).toBe("acct_original");
+ });
+ it("refuses replacement platform credentials before touching a new scoped customer",async()=>{
+  const p=provider([{id:"acct_replacement"}]);
+  await expect(p.erase({...request,providerPlatformAccountId:"acct_platform"})).rejects.toMatchObject({code:"authentication"});
+  expect(p.fetcher).toHaveBeenCalledOnce();expect(p.fetcher.mock.calls[0]![0]).toBe("https://stripe.example.test/v1/account");
+ });
+ it("keeps erasure pending if the platform changes between the original read and deletion",async()=>{
+  const p=provider([{id:"acct_platform"},{id:"cus_original"},{id:"acct_replacement"}]);
+  await expect(p.erase({...request,providerPlatformAccountId:"acct_platform"})).rejects.toMatchObject({code:"authentication"});
+  expect(p.fetcher.mock.calls.some(([,init])=>init?.method==="DELETE")).toBe(false);
+ });
  it.each(["../cus_other","acct_other","cus_"])("refuses invalid customer references before provider I/O: %s",async reference=>{
   const p=provider([]);await expect(p.erase({...request,providerCustomerRef:reference})).rejects.toMatchObject({code:"invalid_request"});expect(p.fetcher).not.toHaveBeenCalled();
  });

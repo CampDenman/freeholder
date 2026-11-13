@@ -210,44 +210,52 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # vitest.config.ts uses the runtime-balanced sequencer. Thirty-two
+        # vitest.config.ts uses the runtime-balanced sequencer. Forty
         # isolated databases keep the 25-minute limit safe even when one hosted
         # runner executes DB-backed files at the measured 6.7x degraded rate.
         # The sequencer integrity test binds this topology to that resilience
         # budget. C11.13 added shards rather than raising the timeout.
         shard:
-          - 1/32
-          - 2/32
-          - 3/32
-          - 4/32
-          - 5/32
-          - 6/32
-          - 7/32
-          - 8/32
-          - 9/32
-          - 10/32
-          - 11/32
-          - 12/32
-          - 13/32
-          - 14/32
-          - 15/32
-          - 16/32
-          - 17/32
-          - 18/32
-          - 19/32
-          - 20/32
-          - 21/32
-          - 22/32
-          - 23/32
-          - 24/32
-          - 25/32
-          - 26/32
-          - 27/32
-          - 28/32
-          - 29/32
-          - 30/32
-          - 31/32
-          - 32/32
+          - 1/40
+          - 2/40
+          - 3/40
+          - 4/40
+          - 5/40
+          - 6/40
+          - 7/40
+          - 8/40
+          - 9/40
+          - 10/40
+          - 11/40
+          - 12/40
+          - 13/40
+          - 14/40
+          - 15/40
+          - 16/40
+          - 17/40
+          - 18/40
+          - 19/40
+          - 20/40
+          - 21/40
+          - 22/40
+          - 23/40
+          - 24/40
+          - 25/40
+          - 26/40
+          - 27/40
+          - 28/40
+          - 29/40
+          - 30/40
+          - 31/40
+          - 32/40
+          - 33/40
+          - 34/40
+          - 35/40
+          - 36/40
+          - 37/40
+          - 38/40
+          - 39/40
+          - 40/40
     services:
       postgres:
         image: postgres:16@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94

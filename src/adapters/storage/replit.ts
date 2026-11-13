@@ -10,9 +10,11 @@
 // hands back a path served by the platform's own media route. That is the same
 // shape a private S3 bucket takes, which is why the contract makes `url` async
 // and `isPublic` explicit rather than assuming either.
+import {createReplitTransferProtocol} from "../../../scripts/media-transfer-protocol.mjs";
+import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
 import type { Bucket } from "@google-cloud/storage";
 import { createHash } from "node:crypto";
-import type { StorageAdapter, StoredObject } from "@/adapters/storage/types";
+import type { StorageAdapter, StoredObject, StoredObjectRevision } from "@/adapters/storage/types";
 import { storageNamespace } from "@/core/media/storage-quota";
 
 export interface ReplitConfig {
@@ -113,7 +115,7 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
   };
 
   return {
-    id: "replit",
+    id: "replit",writeProtocol:"nonresumable-put-v1",
     // Objects are not reachable without going through the app.
     isPublic: false,
     async binding() {
@@ -123,19 +125,35 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
     },
 
     async put(key, body, contentType, observation): Promise<StoredObject> {
+      if(observation?.request){
+        const bucketId=await bucketOnce();let originalRevision:StoredObjectRevision|undefined;
+        const request:TransferRequestObserver=(descriptor,operation)=>observation.request!(descriptor,async(notify,identity)=>operation(async facts=>{await notify(facts);if(descriptor.kind==="object.put"&&facts.stage==="metadata"&&facts.revision)originalRevision=facts.revision;},identity));
+        const protocol=createReplitTransferProtocol({destination:writableOnce,binding:{kind:"replit",namespace:storageNamespace({id:"replit",bucket:bucketId}),location:{bucket:bucketId}},requireOriginalEndpoint,observer:request});
+        await protocol.put(key,body,contentType);
+        if(!originalRevision)throw new Error("storage: original Replit generation was not retained");
+        await observation.onAccepted?.({revision:originalRevision});
+        const actual=await protocol.readVersioned(key,originalRevision);
+        if(!actual||actual.body.byteLength!==body.byteLength||createHash("sha256").update(actual.body).digest("hex")!==createHash("sha256").update(body).digest("hex"))throw new Error("storage: original Replit upload failed full-byte verification");
+        return{key,bytes:body.byteLength,contentType};
+      }
+
       const file = (await writableOnce()).file(key);
       requireOriginalEndpoint();
       try {
         // Never authorize SDK integrity cleanup. Verify every target byte
         // ourselves, while retaining the positive ACK before readback.
-        await file.save(Buffer.from(body), { validation: false, metadata: { contentType } });
+        await file.save(Buffer.from(body), { resumable:false,validation: false, metadata: { contentType } });
       } catch {
         throw new Error("storage: original Replit upload was not acknowledged");
       }
-      await observation?.onAccepted?.();
+      const metadata=file.metadata,bucketId=await bucketOnce();
+      const value=metadata.generation;
+      const valid=metadata.name===key&&metadata.bucket===bucketId&&typeof value==="string"&&/^[1-9][0-9]{0,19}$/.test(value)&&String(metadata.size)===String(body.byteLength);
+      await observation?.onAccepted?.({revision:valid?{kind:"generation",key,namespace:storageNamespace({id:"replit",bucket:bucketId}),value}:undefined});
+      if(!valid)throw new Error("storage: original Replit upload metadata is incomplete; retain its positive acknowledgement for recovery");
       requireOriginalEndpoint();
       let actual: Buffer;
-      try { [actual] = await file.download({ validation: false }); }
+      try { [actual] = await (await writableOnce()).file(key,{generation:value}).download({ validation: false,decompress:false }); }
       catch { throw new Error("storage: original Replit readback failed"); }
       if (actual.length !== body.byteLength || createHash("sha256").update(actual).digest("hex") !== createHash("sha256").update(body).digest("hex")) throw new Error("storage: original Replit upload failed full-byte verification");
       return { key, bytes: body.byteLength, contentType };

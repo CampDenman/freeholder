@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { AwsClient } from "aws4fetch";
+import {createS3TransferProtocol,createReplitTransferProtocol} from "./media-transfer-protocol.mjs";
 
 function argument(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
@@ -36,6 +37,7 @@ function checkedRevision(revision, key, binding, kind) {
   if (kind === "etag" ? !/^"[\x21\x23-\x7e\x80-\xff]+"$/.test(revision.value) : !/^[1-9][0-9]{0,19}$/.test(revision.value)) {
     throw new Error("The original storage revision is unavailable or invalid.");
   }
+  if(revision.versionId!==undefined&&(kind!=="etag"||typeof revision.versionId!=="string"||!revision.versionId||revision.versionId.length>4096||/[\u0000-\u001f\u007f]/.test(revision.versionId)))throw new Error("The exact original version identifier is invalid.");
   return revision.value;
 }
 
@@ -89,6 +91,7 @@ export function createS3Store(environment, prefix, { allowInsecureHttp = false, 
   const binding = transferBinding("s3", { endpoint, bucket });
   return {
     binding,
+    accounted(observer){return createS3TransferProtocol({client,url,binding,observer});},
     async readVersioned(key) {
       const response = await client.fetch(url(key), { redirect: "error", headers: { "accept-encoding": "identity" } });
       if (response.status === 404) return undefined;
@@ -100,7 +103,8 @@ export function createS3Store(environment, prefix, { allowInsecureHttp = false, 
     },
     async deleteVersioned(key, revision) {
       const value = checkedRevision(revision, key, binding, "etag");
-      const response = await client.fetch(url(key), { method: "DELETE", redirect: "error", headers: { "if-match": value } });
+      const target=new URL(url(key));if(revision.versionId!==undefined)target.searchParams.set("versionId",revision.versionId);
+      const response = await client.fetch(target, { method: "DELETE", redirect: "error", headers: { "if-match": value } });
       if (!response.ok) throw new Error(`${prefix}: conditional source deletion failed (${response.status}).`);
     },
     async get(key) {
@@ -141,7 +145,7 @@ export async function createReplitStore(environment, prefix) {
     // or default bucket may replace this explicit original resource.
     const { Storage } = await import("@google-cloud/storage");
     requireOriginalEndpoint();
-    const google = new Storage({ projectId: "", retryOptions: { autoRetry: false }, credentials: {
+    const google = new Storage({ projectId: "", retryOptions: { autoRetry: false, maxRetries: 0 }, credentials: {
       audience: "replit", subject_token_type: "access_token", type: "external_account",
       token_url: "http://127.0.0.1:1106/token", universe_domain: "googleapis.com",
       credential_source: { url: "http://127.0.0.1:1106/credential", format: { type: "json", subject_token_field_name: "access_token" } },
@@ -151,6 +155,7 @@ export async function createReplitStore(environment, prefix) {
   const binding = transferBinding("replit", { bucket: bucketId });
   return {
     binding,
+    accounted(observer){return createReplitTransferProtocol({destination,binding,requireOriginalEndpoint,observer});},
     async readVersioned(key) {
       validateObjectKey(key);
       const bucket = await destination();

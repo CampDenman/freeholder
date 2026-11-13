@@ -2,6 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // C5.06: provider orchestration and authenticated event convergence.
 
+import { retainLegacyBankFeedback } from "./legacy-bank-feedback-service";
+import { legacyBankFeedbackReviewOwned } from "./legacy-bank-feedback-store";
+import { LegacyBankProofPendingError } from "./legacy-bank-proof-pending";
+import { enqueueJob } from "@/core/jobs";
+import { legacyBankReads } from "./legacy-bank-read-schema";
+import { isLegacyReplacementKey } from "./legacy-bank-replacement-proof";
+import { assertLegacyReplacementOriginalScope } from "./legacy-bank-replacement-store";
+import { assertLegacyBankRefundCapacity } from "./legacy-bank-current-state";
+import { invoiceOutstanding } from "./invoice-balance";
+import { captureCommercialPaymentAttestation, captureCommercialRefundAttestation } from "./commercial-attestations";
+import { submitOriginalMerchantRefund } from "./merchant-refund-execution";
+import { originalRefundProviderEvent, originalMerchantRefundEventRetained, retainOriginalMerchantRefundEvent } from "./merchant-refund-provider-events";
 import { and, desc, getTableColumns, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, paymentAdapters } from "@/adapters/payments";
@@ -42,6 +54,20 @@ import {
 } from "./invoice-service";
 import { observeProviderPayout } from "./advanced-money-service";
 import { assertChargeEvidence, assertProviderAccount, paymentRouting, routingForPayment, verifiedCheckoutSession } from "./merchant-charge";
+import { merchantObservationRef, merchantPaymentEvidence, recordMerchantPaymentObservation } from "./merchant-payment-observations";
+import { merchantPaymentDispatches, merchantPaymentRequests } from "./merchant-payment-recovery-schema";
+import { inspectMerchantCheckoutForRetry } from "./merchant-payment-recovery";
+import { claimMerchantPaymentDispatch, merchantCreationRefusalCode, performMerchantPaymentDispatch, retainMerchantCreationRefusal } from "./merchant-payment-request";
+import { merchantTaxDigest } from "./merchant-tax-store";
+import { invoiceMerchantCollections, merchantPaymentRoutes, merchantPaymentEventReceipts } from "./merchant-collection-schema";
+import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
+import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
+import { providerPeriodInvoiceEvidence } from "@/modules/subscriptions/provider-period-contract";
+import { nextCollectionAmount } from "./merchant-collection";
+import { invoicePaymentDueAmount } from "./invoice-payment-due";
+import { getInvoiceMarketPolicy } from "./market-policy";
+import { retainSubscriptionProviderEvidence } from "./merchant-provider-stage";
+import { originalProviderPlatform } from "./provider-platform-scope";
 import { admitLegacyRefundDispatch, completedLegacyRefundFor, forgetCompletedLegacyRefund, legacyRefundDispatch, legacyRefundFinishedResult, legacyRefundObservation,
   performLegacyRefundDispatch, retainLegacyRefundCaller, retainLegacyRefundTerminal } from "./legacy-refund-dispatch";
 import {
@@ -76,10 +102,16 @@ const methodEvidence = z.object({
 });
 const paymentEvent = z.object({
   providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
+  providerPlatformAccountId: paymentRouting.shape.providerPlatformAccountId,
+  destinationAccountId: paymentRouting.shape.destinationAccountId,
+  settlementMerchantAccountId: paymentRouting.shape.settlementMerchantAccountId,
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["payment_processing", "payment_succeeded", "payment_failed", "payment_cancelled"]),
   providerRef: z.string().trim().min(1).max(500),
   checkoutRef: z.string().trim().min(1).max(500).optional(),
+  paymentAttemptId: z.uuid().optional(),
+  customerChargeVerified: z.boolean().optional(), merchantRouteVerified: z.boolean().optional(),
+  providerChargeRef: z.string().min(1).max(500).optional(), applicationFeeRef: z.string().min(1).max(500).optional(), transferRef: z.string().min(1).max(500).optional(),
   amountMinor: positiveMinor.optional(),
   currency: currency.optional(),
   occurredAt: z.string().datetime(),
@@ -89,19 +121,15 @@ const paymentEvent = z.object({
   savedMethod: methodEvidence.optional(),
   applicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
 });
-const refundEvent = z.object({
-  providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
-  id: z.string().trim().min(1).max(500),
-  kind: z.enum(["refund_processing", "refund_succeeded", "refund_failed"]),
-  providerRef: z.string().trim().min(1).max(500),
-  paymentProviderRef: z.string().trim().min(1).max(500),
-  failureCode: z.literal("provider_cancelled").optional(),
-  amountMinor: positiveMinor.optional(),
-  currency: currency.optional(),
-  occurredAt: z.string().datetime(),
+const refundEvent = originalRefundProviderEvent.extend({
+  destinationAccountId: paymentRouting.shape.destinationAccountId,
+  settlementMerchantAccountId: paymentRouting.shape.settlementMerchantAccountId,
 });
 const disputeEvent = z.object({
   providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
+  providerPlatformAccountId: paymentRouting.shape.providerPlatformAccountId,
+  destinationAccountId: paymentRouting.shape.destinationAccountId,
+  settlementMerchantAccountId: paymentRouting.shape.settlementMerchantAccountId,
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["dispute_opened", "dispute_won", "dispute_lost"]),
   providerRef: z.string().trim().min(1).max(500),
@@ -114,30 +142,44 @@ const disputeEvent = z.object({
 });
 const savedMethodEvent = z.object({
   providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
+  providerPlatformAccountId: paymentRouting.shape.providerPlatformAccountId,
+  destinationAccountId: paymentRouting.shape.destinationAccountId,
+  settlementMerchantAccountId: paymentRouting.shape.settlementMerchantAccountId,
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["saved_method_added", "saved_method_removed"]),
-  setup:z.object({attemptId:z.uuid(),subscriptionId:z.uuid(),checkoutRef:z.string().min(1).max(500),setupIntentRef:z.string().min(1).max(500)}).optional(),
+  setup:z.object({attemptId:z.uuid(),subscriptionId:z.uuid(),checkoutRef:z.string().min(1).max(500),setupIntentRef:z.string().min(1).max(500),settlementMerchantAccountId:paymentRouting.shape.settlementMerchantAccountId}).optional(),
   providerCustomerRef: z.string().trim().min(1).max(500).optional(),
   contactId: z.string().uuid().optional(),
   method: methodEvidence,
   occurredAt: z.string().datetime(),
 });
 const subscriptionBillingEvent = z.object({
+  subscriptionInvoiceEvidence: providerPeriodInvoiceEvidence.optional(), subscriptionInvoiceObservationId: z.uuid().optional(),
   providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
+  providerPlatformAccountId: paymentRouting.shape.providerPlatformAccountId,
+  destinationAccountId: paymentRouting.shape.destinationAccountId,
+  settlementMerchantAccountId: paymentRouting.shape.settlementMerchantAccountId,
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["subscription_period_paid", "subscription_period_failed", "subscription_cancelled"]),
   providerRef: z.string().trim().min(1).max(500),
   occurredAt: z.string().datetime(),
-  amountMinor: positiveMinor.optional(),
+  amountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   currency: currency.optional(),
   periodStart: z.string().datetime().optional(),
   periodEnd: z.string().datetime().optional(),
   invoiceProviderRef: z.string().trim().min(1).max(500).optional(),
   paymentProviderRef: z.string().trim().min(1).max(500).optional(),
+  subscriptionChargeReceiptId: z.uuid().optional(), providerChargeRef: z.string().min(1).max(500).optional(),
+  subscriptionChargeObservationId: z.uuid().optional(),
+  customerChargeVerified: z.boolean().optional(), merchantRouteVerified: z.boolean().optional(),
+  observedApplicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(), applicationFeeCurrency: currency.optional(),
   applicationFeeMinor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
 });
 const payoutEvent = z.object({
   providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
+  providerPlatformAccountId: paymentRouting.shape.providerPlatformAccountId,
+  destinationAccountId: paymentRouting.shape.destinationAccountId,
+  settlementMerchantAccountId: paymentRouting.shape.settlementMerchantAccountId,
   id: z.string().trim().min(1).max(500),
   kind: z.enum(["payout_pending", "payout_in_transit", "payout_paid", "payout_failed", "payout_cancelled"]),
   providerRef: z.string().trim().min(1).max(500),
@@ -177,23 +219,33 @@ function sameInstanceUrl(value: string): string {
   return candidate.toString();
 }
 
+function paymentEventScope(event: { providerAccountId?: string; providerPlatformAccountId?: string }, legacyOnly = false) {
+  const legacy = and(isNull(merchantPaymentRoutes.paymentId), isNull(merchantAgreementPaymentRoutes.paymentId), isNull(merchantInvoicePaymentRoutes.paymentId), eq(sql<string>`coalesce(${paymentMerchantRoutes.providerAccountId}, '')`, event.providerAccountId ?? ""));
+  if (legacyOnly || !event.providerPlatformAccountId) return legacy;
+  return or(legacy, and(
+    eq(sql<string>`coalesce(${invoiceMerchantCollections.providerPlatformAccountId}, ${merchantAgreementPaymentRoutes.providerPlatformAccountId}, ${invoiceMerchantScopes.providerPlatformAccountId})`, event.providerPlatformAccountId),
+    eq(sql<string>`coalesce(${invoiceMerchantCollections.chargeAccountId}, ${merchantAgreementPaymentRoutes.chargeAccountId}, ${invoiceMerchantScopes.chargeAccountId}, '')`, event.providerAccountId ?? ""),
+  ));
+}
+
 async function paymentByEvent(tx: Tx, providerId: string, event: z.infer<typeof paymentEvent>) {
   const refs = [event.providerRef, event.checkoutRef].filter((value): value is string => Boolean(value));
   const filters = refs.flatMap((ref) => [eq(payments.providerRef, ref), eq(payments.providerCheckoutRef, ref)]);
-  let rows = filters.length
-    ? await tx.select(getTableColumns(payments)).from(payments).leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, payments.id)).where(and(eq(payments.provider, providerId), eq(sql<string>`coalesce(${paymentMerchantRoutes.providerAccountId}, '')`, event.providerAccountId ?? ""), or(...filters))).limit(2)
-    : [];
-  if (rows.length === 0 && event.invoiceId) {
-    rows = await tx
-      .select(getTableColumns(payments))
-      .from(payments)
-      .leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, payments.id))
-      .where(and(eq(payments.provider, providerId), eq(sql<string>`coalesce(${paymentMerchantRoutes.providerAccountId}, '')`, event.providerAccountId ?? ""), eq(payments.invoiceId, event.invoiceId), inArray(payments.status, ["created", "processing"])))
-      .orderBy(desc(payments.createdAt))
-      .limit(2);
+  if (event.paymentAttemptId) filters.push(eq(payments.id, event.paymentAttemptId));
+  const query = () => tx.select(getTableColumns(payments)).from(payments)
+    .leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, payments.id))
+    .leftJoin(merchantPaymentRoutes, eq(merchantPaymentRoutes.paymentId, payments.id))
+    .leftJoin(invoiceMerchantCollections, eq(invoiceMerchantCollections.allocationId, merchantPaymentRoutes.allocationId))
+    .leftJoin(merchantAgreementPaymentRoutes, eq(merchantAgreementPaymentRoutes.paymentId, payments.id))
+    .leftJoin(merchantInvoicePaymentRoutes, eq(merchantInvoicePaymentRoutes.paymentId, payments.id))
+    .leftJoin(invoiceMerchantScopes, eq(invoiceMerchantScopes.invoiceId, merchantInvoicePaymentRoutes.invoiceId));
+  let rows = filters.length ? await query().where(and(eq(payments.provider, providerId), paymentEventScope(event), or(...filters))).limit(2) : [];
+  if (rows.length === 0 && event.invoiceId && !event.providerPlatformAccountId && !event.paymentAttemptId) {
+    // Historical invoice-only fallback never adopts a newly scoped charge.
+    rows = await query().where(and(eq(payments.provider, providerId), paymentEventScope(event, true), eq(payments.invoiceId, event.invoiceId), inArray(payments.status, ["created", "processing"]))).orderBy(desc(payments.createdAt)).limit(2);
   }
-  if (rows.length !== 1) {
-    throw new ServiceError("conflict", rows.length === 0 ? "The authenticated provider event arrived before its payment was ready; retry it." : "The provider event matches more than one payment.");
+  if (rows.length !== 1 || event.paymentAttemptId && rows[0]?.id !== event.paymentAttemptId) {
+    throw new ServiceError("conflict", rows.length === 0 ? "The authenticated provider event arrived before its payment was ready; retry it." : "The provider event does not identify one original payment.");
   }
   return rows[0]!;
 }
@@ -207,17 +259,17 @@ function assertMovement(payment: typeof payments.$inferSelect, event: { amountMi
   }
 }
 
-async function upsertProviderCustomer(tx: Tx, contactId: string, providerId: string, providerCustomerRef?: string, providerAccountId = ""): Promise<boolean> {
+async function upsertProviderCustomer(tx: Tx, contactId: string, providerId: string, providerCustomerRef?: string, providerAccountId = "", providerPlatformAccountId?: string): Promise<boolean> {
   await lockContactIdentity(tx);
   const [contact]=await tx.select({source:contacts.source}).from(contacts).where(eq(contacts.id,contactId)).limit(1);
   if(!contact || contact.source==="privacy-erasure")return false;
   if (!providerCustomerRef) return true;
-  const [created] = await tx.insert(paymentProviderCustomers).values({ contactId, provider: providerId, providerAccountId, providerCustomerRef }).onConflictDoNothing().returning({ id: paymentProviderCustomers.id });
+  const [created] = await tx.insert(paymentProviderCustomers).values({ contactId, provider: providerId, providerAccountId, providerPlatformAccountId: providerPlatformAccountId ?? null, providerCustomerRef }).onConflictDoNothing().returning({ id: paymentProviderCustomers.id });
   if (created) return true;
   const [existing] = await tx
     .select()
     .from(paymentProviderCustomers)
-    .where(and(eq(paymentProviderCustomers.provider, providerId), eq(paymentProviderCustomers.providerAccountId, providerAccountId), eq(paymentProviderCustomers.providerCustomerRef, providerCustomerRef)))
+    .where(and(eq(paymentProviderCustomers.provider, providerId), originalProviderPlatform(paymentProviderCustomers.providerPlatformAccountId, providerPlatformAccountId), eq(paymentProviderCustomers.providerAccountId, providerAccountId), eq(paymentProviderCustomers.providerCustomerRef, providerCustomerRef)))
     .limit(1);
   if (existing && existing.contactId !== contactId) {
     throw new ServiceError("conflict", "The payment provider customer is already linked to a different contact.");
@@ -232,6 +284,7 @@ async function resolveMethodContact(
   explicitContactId?: string,
   providerCustomerRef?: string,
   providerAccountId = "",
+  providerPlatformAccountId?: string,
 ): Promise<string | undefined> {
   if (explicitContactId && !providerAccountId) {
     const [contact] = await tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.id, explicitContactId)).limit(1);
@@ -241,7 +294,7 @@ async function resolveMethodContact(
   const rows = await tx
     .select({ contactId: paymentProviderCustomers.contactId })
     .from(paymentProviderCustomers)
-    .where(and(eq(paymentProviderCustomers.provider, providerId), eq(paymentProviderCustomers.providerAccountId, providerAccountId), eq(paymentProviderCustomers.providerCustomerRef, providerCustomerRef)))
+    .where(and(eq(paymentProviderCustomers.provider, providerId), originalProviderPlatform(paymentProviderCustomers.providerPlatformAccountId, providerPlatformAccountId), eq(paymentProviderCustomers.providerAccountId, providerAccountId), eq(paymentProviderCustomers.providerCustomerRef, providerCustomerRef)))
     .limit(2);
   return rows.length === 1 && (!explicitContactId || rows[0]!.contactId === explicitContactId) ? rows[0]!.contactId : undefined;
 }
@@ -254,12 +307,13 @@ async function persistMethod(
   kind: "saved_method_added" | "saved_method_removed",
   occurredAt: Date,
   providerAccountId = "",
+  providerPlatformAccountId?: string,
 ): Promise<string> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment-method:${providerId}:${providerAccountId}:${evidence.providerRef}`}))`);
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment-method:${providerId}:${providerPlatformAccountId ?? ""}:${providerAccountId}:${evidence.providerRef}`}))`);
   const [existing] = await tx
     .select()
     .from(paymentMethods)
-    .where(and(eq(paymentMethods.provider, providerId), eq(paymentMethods.providerAccountId, providerAccountId), eq(paymentMethods.providerMethodRef, evidence.providerRef)))
+    .where(and(eq(paymentMethods.provider, providerId), originalProviderPlatform(paymentMethods.providerPlatformAccountId, providerPlatformAccountId), eq(paymentMethods.providerAccountId, providerAccountId), eq(paymentMethods.providerMethodRef, evidence.providerRef)))
     .limit(1);
   if (existing && existing.contactId !== contactId) {
     throw new ServiceError("conflict", "The saved payment method is already linked to a different contact.");
@@ -270,6 +324,7 @@ async function persistMethod(
     contactId,
     provider: providerId,
     providerAccountId,
+    providerPlatformAccountId: providerPlatformAccountId ?? null,
     providerMethodRef: evidence.providerRef,
     providerCustomerRef: evidence.providerCustomerRef,
     kind: evidence.kind,
@@ -309,15 +364,16 @@ async function processPaymentEvent(providerId: string, event: z.infer<typeof pay
   if (event.kind === "payment_succeeded") {
     if (payment.status === "failed" || payment.status === "cancelled") return `payment_terminal_${payment.status}`;
     const routing = await routingForPayment(ctx, payment.id);
-    if (routing.providerAccountId && event.applicationFeeMinor !== routing.applicationFeeMinor) throw new ServiceError("conflict", "The seller charge application fee does not match its reserved payment.");
+    if (routing.providerPlatformAccountId) assertChargeEvidence(routing, { ...event, status: "succeeded" });
+    if (!routing.providerPlatformAccountId && routing.providerAccountId && event.applicationFeeMinor !== routing.applicationFeeMinor) throw new ServiceError("conflict", "The seller charge application fee does not match its reserved payment.");
     await ctx.callAsSystem(settlePayment, { id: payment.id, providerRef: event.providerRef, processedAt: new Date(event.occurredAt) });
     const [invoice] = await ctx.tx.select({ contactId: invoices.contactId }).from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
     const contactId = invoice?.contactId ?? event.contactId;
     if (contactId) {
-      const keepPersonalData=await upsertProviderCustomer(ctx.tx, contactId, providerId, event.providerCustomerRef ?? event.savedMethod?.providerCustomerRef, event.providerAccountId ?? "");
+      const keepPersonalData=await upsertProviderCustomer(ctx.tx, contactId, providerId, event.providerCustomerRef ?? event.savedMethod?.providerCustomerRef, event.providerAccountId ?? "", event.providerPlatformAccountId);
       const metadata = payment.metadata && typeof payment.metadata === "object" && !Array.isArray(payment.metadata) ? payment.metadata as Record<string, unknown> : {};
       if (keepPersonalData && event.savedMethod && metadata.saveMethodRequested === true) {
-        const savedPaymentMethodId = await persistMethod(ctx.tx, providerId, contactId, event.savedMethod, "saved_method_added", new Date(event.occurredAt), event.providerAccountId ?? "");
+        const savedPaymentMethodId = await persistMethod(ctx.tx, providerId, contactId, event.savedMethod, "saved_method_added", new Date(event.occurredAt), event.providerAccountId ?? "", event.providerPlatformAccountId);
         await ctx.tx.update(payments).set({ metadata: { ...metadata, savedPaymentMethodId } }).where(eq(payments.id, payment.id));
       }
     }
@@ -333,18 +389,33 @@ async function processPaymentEvent(providerId: string, event: z.infer<typeof pay
 }
 
 async function processRefundEvent(providerId: string, event: z.infer<typeof refundEvent>, ctx: ServiceContext): Promise<string> {
+  const retained = await ctx.callAsSystem(originalMerchantRefundEventRetained, { provider: providerId, event });
+  if (retained.managed) return "refund_current_state_pending";
+  if (!event.paymentProviderRef) throw new ServiceError("conflict", "Restore this authenticated legacy refund's original payment linkage before applying it.");
   const rows = await ctx.tx
     .select({...getTableColumns(refunds), parentProviderRef: payments.providerRef})
     .from(refunds)
     .innerJoin(payments, eq(payments.id, refunds.paymentId))
     .leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, refunds.paymentId))
-    .where(and(eq(refunds.provider, providerId), eq(sql<string>`coalesce(${paymentMerchantRoutes.providerAccountId}, '')`, event.providerAccountId ?? ""), eq(refunds.providerRef, event.providerRef)))
+    .leftJoin(merchantPaymentRoutes, eq(merchantPaymentRoutes.paymentId, refunds.paymentId))
+    .leftJoin(invoiceMerchantCollections, eq(invoiceMerchantCollections.allocationId, merchantPaymentRoutes.allocationId))
+    .leftJoin(merchantAgreementPaymentRoutes, eq(merchantAgreementPaymentRoutes.paymentId, refunds.paymentId))
+    .leftJoin(merchantInvoicePaymentRoutes, eq(merchantInvoicePaymentRoutes.paymentId, refunds.paymentId))
+    .leftJoin(invoiceMerchantScopes, eq(invoiceMerchantScopes.invoiceId, merchantInvoicePaymentRoutes.invoiceId))
+    .where(and(eq(refunds.provider, providerId), paymentEventScope(event), eq(refunds.providerRef, event.providerRef)))
     .limit(2);
   if (rows.length !== 1) throw new ServiceError("conflict", "The authenticated refund event arrived before its refund was ready; retry it.");
   const refund = rows[0]!;
   if (refund.parentProviderRef !== event.paymentProviderRef) throw new ServiceError("conflict", "The authenticated refund does not identify its original payment.");
   if (event.amountMinor !== undefined && event.amountMinor !== refund.amountMinor) throw new ServiceError("conflict", "The authenticated provider refund amount does not match the ledger.");
   if (event.currency !== undefined && event.currency !== refund.currency) throw new ServiceError("conflict", "The authenticated provider refund currency does not match the ledger.");
+  const [legacyRead] = await ctx.tx.select({ id: legacyBankReads.id }).from(legacyBankReads).where(eq(legacyBankReads.refundId, refund.id)).limit(1);
+  const [legacyReturn] = providerId === "stripe" ? await ctx.tx.execute<{ prepared: boolean }>(sql`select freeholder_legacy_bank_feedback_review(${refund.id}::uuid) prepared`) : [];
+  if (legacyRead || legacyReturn?.prepared) {
+    await enqueueJob(ctx.tx, "invoicing.reconcileOriginalLegacyRefundCurrentState", { refundId: refund.id },
+      { idempotencyKey: `legacy-bank-current:${providerId}:${event.id}:${refund.id}`, startAfter: 5 });
+    return "legacy_refund_current_state_pending";
+  }
   if (event.kind === "refund_processing") {
     if (refund.status === "created") await ctx.callAsSystem(startRefund, { id: refund.id, providerRef: event.providerRef });
     return `refund_${refund.status === "created" ? "processing" : refund.status}`;
@@ -365,7 +436,12 @@ async function processDisputeEvent(providerId: string, event: z.infer<typeof dis
     .select(getTableColumns(payments))
     .from(payments)
     .leftJoin(paymentMerchantRoutes, eq(paymentMerchantRoutes.paymentId, payments.id))
-    .where(and(eq(payments.provider, providerId), eq(sql<string>`coalesce(${paymentMerchantRoutes.providerAccountId}, '')`, event.providerAccountId ?? ""), eq(payments.providerRef, event.paymentProviderRef)))
+    .leftJoin(merchantPaymentRoutes, eq(merchantPaymentRoutes.paymentId, payments.id))
+    .leftJoin(invoiceMerchantCollections, eq(invoiceMerchantCollections.allocationId, merchantPaymentRoutes.allocationId))
+    .leftJoin(merchantAgreementPaymentRoutes, eq(merchantAgreementPaymentRoutes.paymentId, payments.id))
+    .leftJoin(merchantInvoicePaymentRoutes, eq(merchantInvoicePaymentRoutes.paymentId, payments.id))
+    .leftJoin(invoiceMerchantScopes, eq(invoiceMerchantScopes.invoiceId, merchantInvoicePaymentRoutes.invoiceId))
+    .where(and(eq(payments.provider, providerId), paymentEventScope(event), eq(payments.providerRef, event.paymentProviderRef)))
     .limit(1);
   if (!payment) throw new ServiceError("conflict", "The authenticated dispute arrived before its payment was ready; retry it.");
   if (event.amountMinor !== undefined && event.amountMinor > payment.amountMinor) {
@@ -435,13 +511,13 @@ async function processMethodEvent(providerId: string, event: z.infer<typeof save
   }
   const customerRef = event.providerCustomerRef ?? event.method.providerCustomerRef;
   const setupHelpers=event.setup?await import("@/modules/subscriptions/card-setup"):null;
-  const bound=event.setup && setupHelpers?await setupHelpers.bindSetupEvidence(ctx,{provider:providerId,providerAccountId:event.providerAccountId??"",contactId:event.contactId,customerRef,methodRef:event.method.providerRef,setup:event.setup}):undefined;
+  const bound=event.setup && setupHelpers?await setupHelpers.bindSetupEvidence(ctx,{provider:providerId,providerAccountId:event.providerAccountId??"",providerPlatformAccountId:event.providerPlatformAccountId,contactId:event.contactId,customerRef,methodRef:event.method.providerRef,setup:event.setup}):undefined;
   if(event.setup && !bound)return "saved_method_without_setup_ignored";
-  const contactId = bound?.contactId??await resolveMethodContact(ctx.tx, providerId, event.contactId, customerRef, event.providerAccountId ?? "");
+  const contactId = bound?.contactId??await resolveMethodContact(ctx.tx, providerId, event.contactId, customerRef, event.providerAccountId ?? "", event.providerPlatformAccountId);
   if (!contactId && event.providerAccountId) throw new ServiceError("conflict", "The seller method arrived before its authorized customer binding; retry it.");
   if (!contactId) return "saved_method_without_contact_ignored";
-  if(!await upsertProviderCustomer(ctx.tx, contactId, providerId, customerRef, event.providerAccountId ?? ""))return "saved_method_after_erasure_ignored";
-  const methodId=await persistMethod(ctx.tx, providerId, contactId, event.method, event.kind, new Date(event.occurredAt), event.providerAccountId ?? "");
+  if(!await upsertProviderCustomer(ctx.tx, contactId, providerId, customerRef, event.providerAccountId ?? "", event.providerPlatformAccountId))return "saved_method_after_erasure_ignored";
+  const methodId=await persistMethod(ctx.tx, providerId, contactId, event.method, event.kind, new Date(event.occurredAt), event.providerAccountId ?? "", event.providerPlatformAccountId);
   if(bound && event.setup && setupHelpers && customerRef){
     if(event.kind!=="saved_method_added")throw new ServiceError("conflict","A method removal cannot confirm a card setup.");
     await setupHelpers.applySetupEvidence(ctx.tx,{attemptId:bound.attempt.id,methodId,customerRef,checkoutRef:event.setup.checkoutRef,setupIntentRef:event.setup.setupIntentRef,occurredAt:new Date(event.occurredAt)});
@@ -481,6 +557,10 @@ async function applyEvent(providerId: string, event: PaymentProviderEvent, ctx: 
       provider: providerId,
       providerRef: billing.providerRef,
       providerAccountId: billing.providerAccountId,
+      providerPlatformAccountId: billing.providerPlatformAccountId,
+      subscriptionChargeReceiptId: billing.subscriptionChargeReceiptId,
+      ...(billing.subscriptionChargeObservationId ? { subscriptionChargeObservationId: billing.subscriptionChargeObservationId } : {}),
+      subscriptionInvoiceObservationId: billing.subscriptionInvoiceObservationId,
       kind: billing.kind,
       amountMinor: billing.amountMinor,
       currency: billing.currency,
@@ -492,6 +572,66 @@ async function applyEvent(providerId: string, event: PaymentProviderEvent, ctx: 
     return result.applied ? billing.kind : "subscription_event_ignored";
   }
   return processMethodEvent(providerId, event as z.infer<typeof savedMethodEvent>, ctx);
+}
+
+/** This private phase commits before balance application or source hooks. */
+export const retainMerchantProviderEvent = defineService({
+  name: "invoicing.retainMerchantProviderEvent", summary: "Retain authenticated original merchant charge facts before attempting invoice reconciliation.",
+  kind: "mutation", permission: "system", external: false, writeClass: "money",
+  auditInputFields: ["provider"],
+  input: z.object({ provider, event: paymentEvent }), output: z.object({ retained: z.boolean(), matched: z.boolean() }),
+  handler: async ({ provider: providerId, event }, ctx) => {
+    if (!event.providerPlatformAccountId || providerId !== "stripe") return { retained: false, matched: false };
+    const evidence = merchantPaymentEvidence.parse({ ...event, status: event.kind === "payment_succeeded" ? "succeeded" : event.kind === "payment_processing" ? "pending" : "failed", providerAccountId: event.providerAccountId || undefined });
+    const values = { providerPlatformAccountId: event.providerPlatformAccountId, chargeAccountId: event.providerAccountId || null,
+      providerEventRef: event.id, claimedPaymentId: event.paymentAttemptId ?? null, evidence };
+    await ctx.tx.insert(merchantPaymentEventReceipts).values(values).onConflictDoNothing();
+    const [saved] = await ctx.tx.select().from(merchantPaymentEventReceipts).where(and(
+      eq(merchantPaymentEventReceipts.providerPlatformAccountId, event.providerPlatformAccountId),
+      eq(sql<string>`coalesce(${merchantPaymentEventReceipts.chargeAccountId}, '')`, event.providerAccountId ?? ""), eq(merchantPaymentEventReceipts.providerEventRef, event.id)));
+    // JSONB canonicalizes key order; compare the parsed, named money facts.
+    if (!saved || saved.claimedPaymentId !== values.claimedPaymentId || JSON.stringify(merchantPaymentEvidence.parse(saved.evidence)) !== JSON.stringify(evidence)) throw new ServiceError("conflict", "The provider event reference already retains different original money facts.");
+    let payment: typeof payments.$inferSelect;
+    try { payment = await paymentByEvent(ctx.tx, providerId, event); }
+    catch (error) { if (error instanceof ServiceError && error.code === "conflict") return { retained: true, matched: false }; throw error; }
+    if (evidence.amountMinor === undefined || !evidence.currency) return { retained: true, matched: false };
+    const recorded = await ctx.callAsSystem(recordMerchantPaymentObservation, { paymentId: payment.id, providerEventRef: `webhook:${event.id}`, evidence });
+    return { retained: true, matched: recorded.recorded };
+  },
+});
+
+/** Call only after exact raw signature verification, outside an applying TX. */
+export async function retainPaymentProviderEvidence(providerId: z.infer<typeof provider>, events: readonly PaymentProviderEvent[], verification?: { rawBodySha256: string; receivedAt: string }): Promise<PaymentProviderEvent[]> {
+  const prepared: PaymentProviderEvent[] = [];
+  const errors: unknown[] = [];
+  for (const original of events) {
+    try {
+      const event = await retainSubscriptionProviderEvidence(providerId, original);
+      if (["refund_processing", "refund_succeeded", "refund_failed"].includes(event.kind)) {
+        let managed = false, scopedError: Error | undefined;
+        try { managed = (await retainOriginalMerchantRefundEvent.call({ provider: providerId, event: originalRefundProviderEvent.parse(event) }, { kind: "system" })).managed; }
+        catch (error) { scopedError = error instanceof Error ? error : new Error("Original scoped refund evidence could not be retained.", { cause: error }); }
+        // A current original-request receipt already has its own committed
+        // capture. Legacy or unassigned facts get a separate raw receipt even
+        // when that scoped retention policy could not accept the event.
+        if (providerId === "stripe" && !managed) {
+          const raw = await retainLegacyBankFeedback.call({ provider: "stripe", event, rawBodySha256: verification?.rawBodySha256 ?? null, receivedAt: verification?.receivedAt ?? null }, { kind: "system" });
+          if (raw.conflict) errors.push(new ServiceError("conflict", "The actual new bank facts were retained, but an earlier raw receipt needs authentication repair."));
+        }
+        if (scopedError) throw scopedError;
+      }
+      if (event.providerPlatformAccountId && ["payment_processing", "payment_succeeded", "payment_failed", "payment_cancelled"].includes(event.kind)) {
+        await retainMerchantProviderEvent.call({ provider: providerId, event: paymentEvent.parse(event) }, { kind: "system" });
+      }
+      prepared.push(event);
+    } catch (error) {
+      // Each cash receipt owns a committed short phase. A later policy failure
+      // must not prevent retention of the other authenticated positive facts.
+      errors.push(error);
+    }
+  }
+  if (errors.length) throw errors[0];
+  return prepared;
 }
 
 /** Not registered in API/MCP: only a route that has verified exact raw bytes calls it. */
@@ -681,7 +821,7 @@ export const claimPaymentCheckout = defineService({
   kind: "mutation",
   permission: "system",
   input: beginCheckoutInput.extend({ initiatedBy }),
-  output: z.object({ payment: paymentRow, invoice: invoiceRow, email: z.string(), name: z.string(), providerCustomerRef: z.string().nullable(), routing: paymentRouting }),
+  output: z.object({ payment: paymentRow, invoice: invoiceRow, email: z.string(), name: z.string(), providerCustomerRef: z.string().nullable(), providerRequestContactRef: z.uuid().optional(), creationAdmitted: z.boolean(), routing: paymentRouting }),
   handler: async (input, ctx) => {
     if (input.saveMethod && input.saveMethodConsent !== true) throw new ServiceError("validation", "Saving a payment method requires the customer's explicit consent.");
     const adapter = paymentAdapter(input.provider);
@@ -693,7 +833,14 @@ export const claimPaymentCheckout = defineService({
     if (!invoice || !invoice.number) throw new ServiceError("not_found", "That issued invoice is not here.");
     const [contact] = await ctx.tx.select({ id: contacts.id, name: contacts.name, email: contacts.email }).from(contacts).where(eq(contacts.id, invoice.contactId)).limit(1);
     if (!contact?.email) throw new ServiceError("validation", "Hosted checkout needs an email address on the invoice contact.");
-    const amountMinor = input.amountMinor ?? invoice.totalMinor - invoice.paidMinor;
+    const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id });
+    const [originalAttempt] = await ctx.tx.select({ amountMinor: payments.amountMinor }).from(payments)
+      .where(and(eq(payments.provider, input.provider), eq(payments.idempotencyKey, input.idempotencyKey)));
+    const permittedDue = policy?.model === "seller_merchant" ? await invoicePaymentDueAmount(invoice, ctx) : null;
+    const amountMinor = input.amountMinor ?? originalAttempt?.amountMinor ?? (policy?.collectionVersion === 1
+      ? (permittedDue === null ? 0 : (await nextCollectionAmount(ctx, invoice, permittedDue))?.amountMinor ?? 0)
+      : policy?.model === "seller_merchant" ? permittedDue ?? 0 : invoiceOutstanding(invoice));
+    if (policy?.model === "seller_merchant" && (permittedDue === null || amountMinor > permittedDue)) throw new ServiceError("conflict", "The original merchant payment is no longer released for collection. Reconcile its existing attempt first.");
     // Idempotent on (provider, key): a retry after a crash or timeout returns
     // this same committed attempt instead of minting a second one.
     const payment = await ctx.call(createPayment, {
@@ -708,8 +855,11 @@ export const claimPaymentCheckout = defineService({
     // again, and an old one could outlive the provider's idempotency window.
     assertRetryableAttempt(payment, "payment");
     const routing = await routingForPayment(ctx, payment.id);
-    const [customer] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, invoice.contactId), eq(paymentProviderCustomers.provider, input.provider), eq(paymentProviderCustomers.providerAccountId, routing.providerAccountId ?? ""))).orderBy(desc(paymentProviderCustomers.updatedAt)).limit(1);
-    return { routing, payment, invoice, email: contact.email, name: contact.name, providerCustomerRef: customer?.providerCustomerRef ?? null };
+    const [request] = routing.providerPlatformAccountId ? await ctx.tx.select().from(merchantPaymentRequests).where(eq(merchantPaymentRequests.paymentId, payment.id)) : [];
+    if (routing.providerPlatformAccountId && (!request || request.providerInvoiceRef !== invoice.id)) throw new ServiceError("conflict", "Restore this attempt's actual original provider request before another hosted call.");
+    const [customer] = await ctx.tx.select().from(paymentProviderCustomers).where(and(eq(paymentProviderCustomers.contactId, invoice.contactId), eq(paymentProviderCustomers.provider, input.provider), originalProviderPlatform(paymentProviderCustomers.providerPlatformAccountId, routing.providerPlatformAccountId), eq(paymentProviderCustomers.providerAccountId, routing.providerAccountId ?? ""))).orderBy(desc(paymentProviderCustomers.updatedAt)).limit(1);
+    const [admission] = routing.providerPlatformAccountId ? await ctx.tx.select({ id: merchantPaymentDispatches.id }).from(merchantPaymentDispatches).where(eq(merchantPaymentDispatches.paymentId, payment.id)).limit(1) : [];
+    return { creationAdmitted: Boolean(admission), routing, payment, invoice, email: contact.email, name: contact.name, providerCustomerRef: customer?.providerCustomerRef ?? null, providerRequestContactRef: request?.providerContactRef };
   },
 });
 
@@ -726,7 +876,7 @@ export const applyPaymentCheckout = defineService({
     assertProviderAccount(await routingForPayment(ctx, payment.id), input.checkout);
     // Recheck after provider I/O: the invoice can be paid or closed meanwhile.
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
-    if (!invoice || !OPEN_INVOICE_STATUSES.includes(invoice.status) || invoice.totalMinor - invoice.paidMinor < payment.amountMinor) {
+    if (!invoice || !OPEN_INVOICE_STATUSES.includes(invoice.status) || invoiceOutstanding(invoice) < payment.amountMinor) {
       throw new ServiceError("conflict", "The invoice changed while checkout was opening, so the checkout was not attached. Open the invoice again.");
     }
     return ctx.call(startPayment, {
@@ -743,11 +893,15 @@ export const providerPaymentSource = defineService({
   kind: "query",
   permission: "system", external: false,
   input: z.object({ paymentId: z.string().uuid() }),
-  output: z.object({ payment: paymentRow, routing: paymentRouting }),
+  output: z.object({ payment: paymentRow, routing: paymentRouting, providerRequestContactRef: z.uuid().optional(), providerRequestInvoiceRef: z.uuid().optional() }),
   handler: async (input, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");
-    return { payment, routing: await routingForPayment(ctx, payment.id) };
+    const routing = await routingForPayment(ctx, payment.id);
+    const [request] = routing.providerPlatformAccountId && ["hosted_checkout", "saved_method"].includes(payment.method)
+      ? await ctx.tx.select().from(merchantPaymentRequests).where(eq(merchantPaymentRequests.paymentId, payment.id)) : [];
+    if (routing.providerPlatformAccountId && ["hosted_checkout", "saved_method"].includes(payment.method) && !request) throw new ServiceError("conflict", "Restore this original payment request before new provider operations; today's merged customer cannot supply historical metadata.");
+    return { payment, routing, providerRequestContactRef: request?.providerContactRef, providerRequestInvoiceRef: request?.providerInvoiceRef };
   },
 });
 
@@ -808,6 +962,11 @@ export const claimProviderRefund = defineService({
       if (replay && replay.status !== "unknown" && replay.providerRef) return { refund, dispatch: null, replay, persist: null };
     }
     if (refund.status !== "created") throw new ServiceError("conflict", "The original refund is already admitted. Reconcile its actual result instead of sending another provider request.");
+    // An older unsubmitted reservation is not permission to dispatch a new
+    // physical key after original bank debt appeared. Actual finished callers
+    // may still retain/apply their positive answers through the branches above.
+    await assertLegacyBankRefundCapacity(ctx, refund.paymentId, refund.idempotencyKey, refund.id);
+    await assertLegacyReplacementOriginalScope(ctx, refund, source.payment.providerRef, source.routing.providerAccountId ?? null, source.routing.providerPlatformAccountId ?? null);
     const dispatch = await admitLegacyRefundDispatch(ctx, refund, { paymentId: source.payment.id, providerRef: source.payment.providerRef ?? source.payment.id,
       currency: source.payment.currency, amountMinor: refund.amountMinor, reason: input.reason, idempotencyKey: refund.idempotencyKey,
       providerAccountId: source.routing.providerAccountId,
@@ -859,11 +1018,28 @@ export const recordProviderRefundResult = defineService({
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment:${refund.paymentId}`}))`);
     await ctx.tx.select({ id: payments.id }).from(payments).where(eq(payments.id, refund.paymentId)).for("update");
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`invoice:${refund.invoiceId}`}))`);
-    const actual = await legacyRefundFinishedResult(ctx.tx, refund);
-    const matches = outcome.kind === "settle" ? actual?.status === "succeeded" && actual.providerRef === outcome.providerRef
-      : outcome.kind === "start" ? actual?.status === "pending" && actual.providerRef === outcome.providerRef
-        : actual?.status === "failed" && Boolean(actual.providerRef);
-    if (!matches) throw new ServiceError("conflict", "The original completed provider caller does not prove this refund transition.");
+    // Merchant mutations below enforce their immutable request, actual caller
+    // finish and resource ACK through the shared state-machine guards. Legacy
+    // payments require their separate authenticated original caller journal.
+    const routing = await routingForPayment(ctx, refund.paymentId);
+    if (!routing.providerPlatformAccountId) {
+      const actual = await legacyRefundFinishedResult(ctx.tx, refund);
+      const matches = outcome.kind === "settle" ? actual?.status === "succeeded" && actual.providerRef === outcome.providerRef
+        : outcome.kind === "start" ? actual?.status === "pending" && actual.providerRef === outcome.providerRef
+          : actual?.status === "failed" && Boolean(actual.providerRef);
+      if (!matches) throw new ServiceError("conflict", "The original completed provider caller does not prove this refund transition.");
+      const changesStatus = outcome.kind === "settle" ? refund.status !== "succeeded" : outcome.kind === "fail" && refund.status !== "failed";
+      if (changesStatus) {
+        const [priorRead] = await ctx.tx.select({ id: legacyBankReads.id }).from(legacyBankReads).where(eq(legacyBankReads.refundId, refund.id)).limit(1);
+        if (priorRead || await legacyBankFeedbackReviewOwned(ctx.tx, refund.id)) {
+          // The actual finish and first resource ACK committed independently
+          // before this transaction. Old creator success/failure cannot stand
+          // in for a fresh finished current read in this review-owned namespace.
+          if (!actual?.providerRef || refund.providerRef !== actual.providerRef) throw new ServiceError("conflict", "Restore the actual original creator ACK before current bank review.");
+          throw new LegacyBankProofPendingError(refund.id, actual.providerRef);
+        }
+      }
+    }
     if (outcome.kind === "settle") return ctx.call(settleRefund, { id: input.refundId, providerRef: outcome.providerRef, processedAt: new Date() });
     if (outcome.kind === "start") return ctx.call(startRefund, { id: input.refundId, providerRef: outcome.providerRef });
     return ctx.call(failRefund, { id: input.refundId, code: outcome.code, message: outcome.message });
@@ -902,12 +1078,15 @@ export const beginPaymentCheckout = defineOrchestratedService({
     const cancelUrl = sameInstanceUrl(input.cancelUrl);
     const source = await claimPaymentCheckout.call({ ...input, initiatedBy: by }, system);
     const { payment, invoice } = source;
-    let checkout: z.infer<typeof checkoutSession>;
-    try {
-      checkout = await paymentAdapter(input.provider).createCheckout({
+    if (source.routing.providerPlatformAccountId && source.creationAdmitted) {
+      const original = await inspectMerchantCheckoutForRetry(payment.id, caller);
+      if (original.state !== "open" || !original.checkoutRef || !original.checkoutUrl) throw new ServiceError("conflict", "The original payment is already admitted. Refresh the invoice or reconcile that exact original resource before another creation.");
+      return { payment: original.payment, checkout: { ...source.routing, providerRef: original.checkoutRef, url: original.checkoutUrl, expiresAt: original.checkoutExpiresAt } };
+    }
+    const providerRequest = {
         invoiceId: invoice.id,
         invoiceNumber: invoice.number!,
-        contactId: invoice.contactId,
+        contactId: source.providerRequestContactRef ?? invoice.contactId,
         currency: invoice.currency,
         amountMinor: payment.amountMinor,
         description: `Invoice ${invoice.number}`,
@@ -915,14 +1094,22 @@ export const beginPaymentCheckout = defineOrchestratedService({
         successUrl,
         cancelUrl,
         idempotencyKey: input.idempotencyKey,
+        paymentAttemptId: payment.id,
         methodIds: input.methodIds,
         saveMethod: input.saveMethod,
         providerCustomerRef: source.providerCustomerRef ?? undefined,
         ...source.routing,
-      });
+    };
+    const dispatch = source.routing.providerPlatformAccountId ? await claimMerchantPaymentDispatch.call({ paymentId: payment.id, requestDigest: merchantTaxDigest(providerRequest) }, system) : null;
+    let checkout: z.infer<typeof checkoutSession>;
+    try {
+      const create = () => paymentAdapter(input.provider).createCheckout(providerRequest);
+      checkout = dispatch ? await performMerchantPaymentDispatch(dispatch, payment.id, create) : await create();
     } catch (error) {
       if (definitiveRefusal(error) && payment.status === "created") {
-        await recordProviderPaymentResult.call({ paymentId: payment.id, initiatedBy: by, outcome: { kind: "fail", code: "provider_refused", message: `${input.provider} refused to open this checkout.` } }, system);
+        const code = merchantCreationRefusalCode.safeParse(error instanceof AdapterError ? error.providerCode : undefined);
+        const refusal = dispatch && code.success ? await retainMerchantCreationRefusal.call({ paymentId: payment.id, dispatchId: dispatch.dispatchId, providerCode: code.data }, system) : null;
+        if (!source.routing.providerPlatformAccountId || refusal?.mayFail) await recordProviderPaymentResult.call({ paymentId: payment.id, initiatedBy: by, outcome: { kind: "fail", code: "provider_refused", message: `${input.provider} refused to open this checkout.` } }, system);
       }
       return adapterFailure(error);
     }
@@ -946,13 +1133,47 @@ export const completePaymentCheckout = defineOrchestratedService({
     if (!payment.providerCheckoutRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment has no hosted checkout to complete.");
     let result: Awaited<ReturnType<PaymentAdapter["captureCheckout"]>>;
     try {
-      result = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: input.idempotencyKey, providerAccountId: routing.providerAccountId });
+      result = await paymentAdapter(payment.provider).captureCheckout({ checkoutRef: payment.providerCheckoutRef, idempotencyKey: input.idempotencyKey, paymentAttemptId: payment.id, ...routing });
     } catch (error) { return adapterFailure(error); }
+    if (routing.providerPlatformAccountId) await recordMerchantPaymentObservation.call({ paymentId: payment.id, providerEventRef: merchantObservationRef(result), evidence: result }, system);
     assertMovement(payment, result);
     assertChargeEvidence(routing, result);
     if (result.status === "succeeded") return recordProviderPaymentResult.call({ paymentId: payment.id, initiatedBy: by, outcome: { kind: "settle", providerRef: result.providerRef, processedAt: result.occurredAt ? new Date(result.occurredAt) : undefined } }, system);
     if (result.status === "failed") return recordProviderPaymentResult.call({ paymentId: payment.id, initiatedBy: by, outcome: { kind: "fail", code: "provider_failed", message: `${payment.provider} reported that checkout failed.` } }, system);
     return payment;
+  },
+});
+
+export const inspectMerchantPayment = defineOrchestratedService({
+  name: "invoicing.inspectMerchantPayment", summary: "Read an original merchant charge and retain actual customer, fee and transfer evidence without dispatching another charge.",
+  kind: "mutation", permission: "scoped", stepUp: true, writeClass: "money",
+  input: z.object({ paymentId: z.uuid() }).strict(), output: z.object({ payment: paymentRow, evidence: merchantPaymentEvidence, unapplied: z.boolean() }),
+  handler: async ({ paymentId }, caller) => {
+    const system = { kind: "system", request: caller.request } as const;
+    const { payment, routing } = await providerPaymentSource.call({ paymentId }, system);
+    const adapter = paymentAdapter(payment.provider);
+    if (!routing.providerPlatformAccountId || !payment.providerRef?.startsWith("pi_") || !adapter.inspectMerchantPayment) throw new ServiceError("conflict", "This payment needs its original merchant platform and PaymentIntent before inspection.");
+    const subscriptionOrigin = routing.originalChargeReceiptId ? { providerApiVersion: routing.providerApiVersion as "2026-10-28.endive", providerSubscriptionRef: routing.providerSubscriptionRef!, providerInvoiceRef: routing.providerInvoiceRef!, providerPaymentIntentRef: routing.providerPaymentIntentRef! } : undefined;
+    let current = payment, unapplied = false;
+    const observe = async (evidence: z.infer<typeof merchantPaymentEvidence>) => {
+      await recordMerchantPaymentObservation.call({ paymentId, providerEventRef: merchantObservationRef(evidence), evidence }, system);
+      if (evidence.status !== "succeeded" || current.status === "succeeded") return;
+      try {
+        assertMovement(current, evidence);
+        assertChargeEvidence(routing, evidence);
+        current = await recordProviderPaymentResult.call({ paymentId, initiatedBy: actorString(caller), outcome: { kind: "settle", providerRef: evidence.providerRef } }, system);
+      } catch (error) {
+        // Keep the independent actual charge evidence even when the balance,
+        // original invoice lifecycle or a downstream source needs review.
+        if (!(error instanceof ServiceError) || !["conflict", "validation"].includes(error.code)) throw error;
+        unapplied = true;
+      }
+    };
+    let evidence: z.infer<typeof merchantPaymentEvidence>;
+    try { evidence = await adapter.inspectMerchantPayment({ ...routing, providerPlatformAccountId: routing.providerPlatformAccountId, ...(subscriptionOrigin ? { subscriptionOrigin } : { paymentAttemptId: paymentId }), providerRef: payment.providerRef, onPaymentObserved: observe }); }
+    catch (error) { return adapterFailure(error); }
+    await observe(evidence);
+    return { payment: current, evidence, unapplied };
   },
 });
 
@@ -970,6 +1191,8 @@ export const submitProviderRefund = defineOrchestratedService({
     const { payment, routing } = await providerPaymentSource.call({ paymentId: input.paymentId }, system);
     if (!payment.providerRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment does not have a refundable hosted-provider settlement.");
     if (!paymentAdapter(payment.provider).capabilities().refunds) throw new ServiceError("conflict", `${payment.provider} refunds are not implemented by this adapter.`);
+    if (isLegacyReplacementKey(input.idempotencyKey) && routing.providerPlatformAccountId) throw new ServiceError("conflict", "Restore the original legacy charge scope before its replacement; a later merchant route cannot adopt historical money.");
+    if (routing.providerPlatformAccountId) return submitOriginalMerchantRefund(input, caller);
     // Admission commits before the provider is asked. A crash leaves
     // processing debt; a retry can apply a retained answer, never resend POST.
     const claimed = await claimProviderRefund.call({ ...input, initiatedBy: by }, system);
@@ -1000,6 +1223,7 @@ export const recordOfflinePayment = defineService({
   name: "invoicing.recordOfflinePayment",
   summary: "Record owner-attested cash, cheque, transfer, or externally processed money.",
   kind: "mutation",
+  writeClass: "money",
   permission: "scoped",
   stepUp: true,
   input: z.object({
@@ -1014,6 +1238,7 @@ export const recordOfflinePayment = defineService({
   output: paymentRow,
   handler: async (input, ctx) => {
     const payment = await ctx.call(createPayment, { invoiceId: input.invoiceId, provider: "manual", method: input.method, amountMinor: input.amountMinor, idempotencyKey: input.idempotencyKey, metadata: { evidence: input.evidence, externalReference: input.reference } });
+    await captureCommercialPaymentAttestation(ctx, payment, input);
     return ctx.call(settlePayment, { id: payment.id, providerRef: input.reference ? `manual:${input.reference}` : `manual:${payment.id}`, processedAt: input.processedAt });
   },
 });
@@ -1022,6 +1247,7 @@ export const recordOfflineRefund = defineService({
   name: "invoicing.recordOfflineRefund",
   summary: "Record an owner-attested offline refund through the shared refund ledger.",
   kind: "mutation",
+  writeClass: "money",
   permission: "scoped",
   stepUp: true,
   input: z.object({ paymentId: z.string().uuid(), amountMinor: positiveMinor, reason: z.string().trim().min(3).max(1_000), reference: z.string().trim().min(1).max(300).optional(), processedAt: z.coerce.date().default(() => new Date()), idempotencyKey }),
@@ -1030,6 +1256,7 @@ export const recordOfflineRefund = defineService({
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment || payment.provider !== "manual") throw new ServiceError("conflict", "Use the payment provider's refund path for a hosted payment.");
     const refund = await ctx.call(createRefund, input);
+    await captureCommercialRefundAttestation(ctx, refund, input);
     return ctx.call(settleRefund, { id: refund.id, providerRef: input.reference ? `manual-refund:${input.reference}` : `manual-refund:${refund.id}`, processedAt: input.processedAt });
   },
 });
@@ -1137,7 +1364,7 @@ export const savedPaymentMethodSource = defineService({
   kind: "query",
   permission: "system",
   input: z.object({ id: z.string().uuid() }),
-  output: paymentMethodRow.extend({ providerAccountId: z.string().max(200) }),
+  output: paymentMethodRow.extend({ providerAccountId: z.string().max(200), providerPlatformAccountId: z.string().max(200).nullable() }),
   handler: async (input, ctx) => {
     const [method] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, input.id)).limit(1);
     if (!method) throw new ServiceError("not_found", "That saved payment method is not here.");
@@ -1180,7 +1407,7 @@ export const revokeSavedPaymentMethod = defineOrchestratedService({
     const method = await savedPaymentMethodSource.call({ id: input.id }, system);
     if (method.status === "revoked") return method;
     try {
-      await paymentAdapter(method.provider).revokeSavedMethod({ providerAccountId: method.providerAccountId || undefined, providerRef: method.providerMethodRef, idempotencyKey: input.idempotencyKey });
+      await paymentAdapter(method.provider).revokeSavedMethod({ providerAccountId: method.providerAccountId || undefined, providerPlatformAccountId: method.providerPlatformAccountId ?? undefined, providerRef: method.providerMethodRef, idempotencyKey: input.idempotencyKey });
     } catch (error) { return adapterFailure(error); }
     return applySavedPaymentMethodRevocation.call({ id: method.id, initiatedBy: actorString(caller) }, system);
   },
@@ -1232,6 +1459,7 @@ export default [
   // service that boot has never heard of has no audit entry, no OpenAPI row
   // and no truncation between tests, and "the route imports it" is not the
   // same thing as the registry knowing it exists.
+  retainMerchantProviderEvent,
   processPaymentProviderEvents,
   listPaymentProviders,
   claimPaymentCheckout,
@@ -1243,6 +1471,7 @@ export default [
   recordProviderRefundCaller,
   beginPaymentCheckout,
   completePaymentCheckout,
+  inspectMerchantPayment,
   submitProviderRefund,
   recordOfflinePayment,
   recordOfflineRefund,

@@ -10,6 +10,10 @@ import { actorFromToken } from "@/core/http/actor";
 import { myRecords } from "@/core/portal/service";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
+import { CommercialAmendment } from "../../../../components/CommercialAmendment";
+import { GrossProration } from "../../../../components/GrossProration";
+import { myGrossProrationStatus } from "@/modules/subscriptions/proration-service";
+import { myMerchantAmendmentStatus } from "@/modules/subscriptions/commercial-amendments";
 import { myMembership } from "@/modules/subscriptions/public-signup";
 import { listOfferedPlans } from "@/modules/subscriptions/service";
 import { getLocale, getT } from "../../../../i18n";
@@ -58,7 +62,7 @@ export default async function PortalSubscriptionPage({
   const record = rooms[0]?.records.find((each) => each.id === id);
   if (!record) notFound();
 
-  const membership = await myMembership.call({id},actor);
+  const [membership, amendment, proration] = await Promise.all([myMembership.call({id},actor), myMerchantAmendmentStatus.call({id},actor), myGrossProrationStatus.call({id},actor)]);
   const status = record.status ?? "active";
   const canCancel =
     !query.cancelled &&
@@ -133,7 +137,8 @@ export default async function PortalSubscriptionPage({
             </p>
           ) : null}
 
-          {canChange ? (
+          {amendment.commercial ? proration.prorating ? <GrossProration id={id} audience="customer" locale={locale} offered={canChange ? offered : []} status={proration}/> : <CommercialAmendment id={id} audience="customer" locale={locale} offered={canChange ? offered : []} status={amendment}/> : null}
+          {canChange && !amendment.commercial ? (
             <form action={changeMyPlanAction} className="mt-4 grid gap-3">
               <input type="hidden" name="id" value={record.id} />
               <p className="max-w-prose text-sm text-ink-muted">

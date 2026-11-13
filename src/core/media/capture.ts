@@ -35,10 +35,11 @@ import {
 const CAPTURE_TTL_MS = 24 * 60 * 60 * 1000;
 // Logical chunks/items retain their physical witness until their own durable
 // transaction retires that pointer. An orphan timer is not that authority.
-registerPendingObjectOwner("capture/",async key=>{
- const chunk=await db().select({id:mediaCaptureChunks.id}).from(mediaCaptureChunks).where(eq(mediaCaptureChunks.storageKey,key)).limit(1);if(chunk.length)return true;
- const item=await db().select({id:mediaCaptureItems.id}).from(mediaCaptureItems).where(eq(mediaCaptureItems.stagedKey,key)).limit(1);if(item.length)return true;
- return Boolean((await db().select({id:mediaCaptureSessions.id}).from(mediaCaptureSessions).where(eq(mediaCaptureSessions.stagedKey,key)).limit(1)).length);
+registerPendingObjectOwner("capture/",async(key,_now,tx)=>{
+ const executor=tx??db();
+ const chunk=await executor.select({id:mediaCaptureChunks.id}).from(mediaCaptureChunks).where(eq(mediaCaptureChunks.storageKey,key)).limit(1);if(chunk.length)return true;
+ const item=await executor.select({id:mediaCaptureItems.id}).from(mediaCaptureItems).where(eq(mediaCaptureItems.stagedKey,key)).limit(1);if(item.length)return true;
+ return Boolean((await executor.select({id:mediaCaptureSessions.id}).from(mediaCaptureSessions).where(eq(mediaCaptureSessions.stagedKey,key)).limit(1)).length);
 });
 const id = z.string().uuid();
 const token = z.string().trim().min(16).max(128);

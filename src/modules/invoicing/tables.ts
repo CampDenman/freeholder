@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+export { merchantPaymentRequests, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts, merchantPaymentDispatches, merchantPaymentDispatchFinishes, merchantPaymentDispatchStops, merchantPaymentResourceBindings, merchantPaymentCreationRefusals } from "./merchant-payment-recovery-schema";
 export {
   creditNoteLines,
   creditNotes,
@@ -35,3 +36,29 @@ export {
   taxZones,
 } from "./schema";
 export { invoiceSchedules, invoiceReminders } from "./recurring-schema";
+export * from "./credit-application-schema";
+export * from "./commercial-attestation-schema";
+export { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
+export {
+  merchantCollectionConfiguration,
+  invoiceMerchantCollections,
+  merchantPaymentRoutes,
+  merchantPaymentObservations, merchantPaymentEventReceipts,
+  merchantFeeRefunds, merchantFeeObservations,
+} from "./merchant-collection-schema";
+export { merchantTaxProfiles, merchantTaxProfileVersions, invoiceMerchantTaxQuotes, invoiceMerchantTaxQuoteLines } from "./merchant-tax-schema";
+
+export { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
+
+export { merchantRefundRequests, merchantRefundReservationRetirements, merchantRefundDispatches, merchantRefundObservations,
+  merchantRefundCreationRefusals, merchantRefundTerminalReceipts, merchantRefundDispatchFinishes, merchantRefundDispatchStops,
+  merchantRefundResourceBindings, merchantCashReturnInspections, merchantCashReturnInspectionFinishes, merchantCashReturnPrimaryObservations,
+  merchantCashReturnObservations, merchantUnappliedChargeResolutions, merchantUnappliedChargeResolutionRefunds } from "./merchant-refund-schema";
+export { merchantRefundObservationCaptures, merchantRefundStateReads, merchantRefundStateReadFinishes, merchantRefundCurrentReceipts } from "./merchant-refund-current-schema";
+
+export { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBankCurrentReceipts, legacyBankReadStops } from "./legacy-bank-read-schema";
+
+export { legacyBankFeedback } from "./legacy-bank-feedback-schema";
+export { originalCashRecoveries, originalCashRecoveryOperations, originalCashRecoveryFacts, originalCashRecoveryClosures } from "./original-cash-recovery-schema";
+
+export * from "./agreement-fee-schema";

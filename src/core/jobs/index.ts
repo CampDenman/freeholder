@@ -6,6 +6,7 @@
 // caused by a business mutation is inserted through pg-boss's Drizzle adapter
 // on the caller's transaction: the business row, idempotency claim and queue
 // row therefore commit together or do not exist at all.
+import {withActualWorkerExecution} from "./execution-scope";
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -929,7 +930,7 @@ async function mountWorkers(instance: PgBoss, drainExisting: boolean): Promise<P
             },
           };
           await context.throwIfCancelled();
-          await withDeploymentContinuation(() => job.handler(message.data ?? {}, context));
+          await withDeploymentContinuation(() => withActualWorkerExecution(context,() => job.handler(message.data ?? {}, context)));
         }
       },
     );

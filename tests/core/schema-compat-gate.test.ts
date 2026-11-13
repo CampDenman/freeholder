@@ -124,6 +124,17 @@ describe("the migrations already in the tree", () => {
     expect(assertSchemaRisk("breaking", [review]).ok).toBe(true);
     for (const file of files.slice(1)) {
       const later = reviewMigration(file, readFileSync(`${dir}/${file}`, "utf8"));
+      if (file === "0080_merchant_per_party_collection.sql") {
+        expect(later.ok).toBe(true);
+        expect(later.acknowledged).toBe(true);
+        expect(later.breaking.map(statement => statement.id)).toEqual(["rename", "add-required-column"]);
+        expect(readFileSync(`${dir}/${file}`, "utf8")).toContain("ALTER TABLE legacy_bank_reads ADD COLUMN source_revision text NOT NULL;");
+        expect(later.reason).toBe("Stop and drain all older payment, subscription and tax readers/writers before upgrade. Cold older runtimes must fail readiness; restore the exact pre-upgrade database and reconcile admitted provider effects for rollback.");
+        expect(readFileSync(`${dir}/${file}`, "utf8")).toContain("also stop and drain older privacy retention, capture, and import/storage cleanup runtimes; already-admitted provider work needs actual caller completion or verified owning-runtime stop.");
+        expect(assertSchemaRisk("compatible", [later]).ok).toBe(false);
+        expect(assertSchemaRisk("breaking", [later]).ok).toBe(true);
+        continue;
+      }
       if (file === "0076_mail_carrier_operations.sql" || file === "0079_form_original_lead_copies.sql") {
         expect(later.ok).toBe(true);
         expect(later.acknowledged).toBe(true);
