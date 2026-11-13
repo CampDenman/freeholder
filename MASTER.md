@@ -14331,6 +14331,16 @@ whatever is best for the people using the site.
   card mandate/POST/independent GET recovery and full provider/late recovery
   remain required; no item closes. See
   `deploy/subscription-proration-boundary80-source-20261113.md`.
+  Financial history/export correction (same date/items): exact accepted target
+  invoice/source FKs now discover reserved credit before application, retaining
+  full funding/reservation/release fingerprints. Buyer exports retain principal
+  and fee receipt identities while excluding private commission amounts. One
+  combined5000 bound covers actual invoice children, recovery/cash, credit,
+  commission and credential/exemption families. Six synthetic-reader/pure
+  controls are PREPARED/UNRUN; no compiler, lint, database or native ran. Root
+  central merchant composition and all combined qualification remain required;
+  no SQL, historical evidence, C-item or stable gate changes. See
+  `deploy/proration-financial-export81-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

@@ -14,6 +14,7 @@ import { queueMerchantFeeReconciliation } from "./merchant-fee-service";
 import { reserveMerchantCharge } from "./merchant-charge";
 import { commercialPaymentRecorded, commercialRefundRecorded } from "./commercial-attestations";
 import { exportProrationMoney } from "./proration-money-export";
+import { assertFinancialExportBound } from "./financial-export-bound";
 import { invoiceCreditApplications, invoiceCreditReservations } from "./credit-application-schema";
 import { isHostedPaymentProvider } from "@/adapters/payments/providers";
 import { assertLegacyRefundRelease, refundReservationMarker } from "./legacy-refund-dispatch";
@@ -312,10 +313,11 @@ registerContactPrivacySource({
   tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods", "merchant_payment_requests", "merchant_payment_dispatches", "merchant_payment_creation_refusals", "merchant_payment_retirement_acks", "merchant_payment_terminal_receipts", "merchant_payment_observations", "merchant_fee_refunds", "merchant_fee_observations",
     "commercial_payment_attestations", "commercial_refund_attestations", "commercial_fee_attestations", "invoice_credit_funding", "invoice_credit_reservations", "invoice_credit_applications", "invoice_credit_releases", "agreement_fee_duties", "agreement_fee_credit_assignments", "agreement_fee_cash_assignments", "agreement_fee_eligibility", "agreement_fee_remittances"],
   exportData: async (tx, contactId) => {
-    const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId));
+    const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId)).orderBy(invoices.id).limit(5001);
     const ids = owned.map((row) => row.id);
-    return {
-      invoices: await Promise.all(ids.map((id) => invoiceBundle(tx, id))),
+    assertFinancialExportBound({ invoices: owned });
+    const bundles = await Promise.all(ids.map((id) => invoiceBundle(tx, id)));
+    const families = {
       merchantRecovery: await exportMerchantRecoveryHistory(tx, ids),
       originalCreditAndExternalMoney: await exportProrationMoney(tx, ids),
       originalCommissionAssignments: await exportAgreementFeeHistory(tx, ids),
@@ -323,6 +325,10 @@ registerContactPrivacySource({
       paymentProviderCustomers: await tx.select().from(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, contactId)),
       paymentMethods: await tx.select().from(paymentMethods).where(eq(paymentMethods.contactId, contactId)),
     };
+    // Count every actual family together: independent per-helper limits do
+    // not bound a subject archive containing several complete histories.
+    assertFinancialExportBound(families, ...bundles.map(({ invoice, ...children }) => ({ invoice: [invoice], ...children })));
+    return { invoices: bundles, ...families };
   },
   erase: eraseBuyerMoneySource,
 });
