@@ -3,7 +3,7 @@
 // C1.08/C12.38: PREPARED/UNRUN real services; synthetic provider HTTP only.
 // The subscription helper is the existing combined b8e source, unchanged.
 import { createHash, createHmac, randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq,sql } from "drizzle-orm";
 import { z } from "zod";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStripePayments } from "@/adapters/payments/stripe";
@@ -19,6 +19,7 @@ import { retainLegacyBankFeedback } from "@/modules/invoicing/legacy-bank-feedba
 import { originalBankFeedbackOwner } from "@/modules/invoicing/original-cash-feedback-owner";
 import { originalCashRecoveries, originalCashRecoveryOperations } from "@/modules/invoicing/original-cash-recovery-schema";
 import { originalMerchantRefundRepairSource, ORIGINAL_REFUND_EVIDENCE_EVENT } from "@/modules/invoicing/merchant-refund-privacy-repair";
+import { retainPaymentProviderEvidence } from "@/modules/invoicing/payment-provider-service";
 import { paymentWebhookRoute } from "@/modules/invoicing/payment-webhook-route";
 import { invoices, payments, refunds } from "@/modules/invoicing/schema";
 import { subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
@@ -28,9 +29,9 @@ import { seedActualProviderSubscription80 } from "../helpers/merchant-subscripti
 import { closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
 
 const phaseSchema=z.object({start_date:z.number(),end_date:z.number(),metadata:z.record(z.string(),z.string()),items:z.array(z.object({price:z.string()})).length(1)});
-async function signedRawRefund(input:{ref:string;intent:string;charge:string;amount:number;currency:string}) {
-  const secret="whsec_feedback_owner_fixture_only",timestamp=Math.floor(Date.now()/1000),receivedAt=new Date(timestamp*1000).toISOString();
-  const body=Buffer.from(JSON.stringify({id:`evt_Owner${randomUUID()}`,type:"refund.updated",api_version:"2026-10-28.endive",created:timestamp,data:{object:{id:input.ref,payment_intent:input.intent,charge:input.charge,amount:input.amount,currency:input.currency.toLowerCase(),status:"succeeded"}}}));
+async function signedRawRefund(input:{ref:string;intent:string|null;charge:string;amount:number;currency:string;throughIngress?:boolean}) {
+  const secret="whsec_feedback_owner_fixture_only",timestamp=Math.floor(Date.now()/1000),receivedAt=new Date(timestamp*1000).toISOString(),eventId=`evt_Owner${randomUUID()}`;
+  const body=Buffer.from(JSON.stringify({id:eventId,type:"refund.updated",api_version:"2026-10-28.endive",created:timestamp,data:{object:{id:input.ref,payment_intent:input.intent,charge:input.charge,amount:input.amount,currency:input.currency.toLowerCase(),status:"succeeded"}}}));
   const signature=createHmac("sha256",secret).update(`${timestamp}.`).update(body).digest("hex"),adapter=createStripePayments({secretKey:"sk_feedback_owner_fixture_only",webhookSecrets:[secret],fetch:async(input,init={})=>{
     const url=new URL(typeof input==="string"?input:input instanceof URL?input.href:input.url);
     if(url.href==="https://api.stripe.com/v1/account"&&(init.method??"GET")==="GET")return Response.json({id:"acct_fixturePlatform"});
@@ -38,7 +39,14 @@ async function signedRawRefund(input:{ref:string;intent:string;charge:string;amo
   }});
   const events=await adapter.verifyWebhook({body,receivedAt,headers:{"stripe-signature":`t=${timestamp},v1=${signature}`}});expect(events).toHaveLength(1);
   if(!events[0])throw new Error("Actual verified original feedback was not decoded.");
-  return retainLegacyBankFeedback.call({provider:"stripe",event:{...events[0]},rawBodySha256:createHash("sha256").update(body).digest("hex"),receivedAt},{kind:"system"});
+  const rawBodySha256=createHash("sha256").update(body).digest("hex");
+  if(input.throughIngress){
+    await retainPaymentProviderEvidence("stripe",events,{rawBodySha256,receivedAt});
+    const[raw]=await db().select().from(legacyBankFeedback).where(sql`${legacyBankFeedback.evidence}->>'providerEventId'=${eventId}`);
+    if(!raw)throw new Error("The actual charge-only ingress did not retain its raw unassigned feedback.");
+    return{feedbackId:raw.id,conflict:false};
+  }
+  return retainLegacyBankFeedback.call({provider:"stripe",event:{...events[0]},rawBodySha256,receivedAt},{kind:"system"});
 }
 describe.runIf(hasDatabase)("actual original raw feedback privacy owner81",{timeout:60000},()=>{
   let paymentSource:Awaited<ReturnType<typeof partialCashFixture>>|undefined;
@@ -133,5 +141,16 @@ describe.runIf(hasDatabase)("actual original raw feedback privacy owner81",{time
     expect(snapshot.originalEvidence).toEqual(original.evidence);
     expect(snapshot.originalEvidence).toContainEqual({ kind: "refund_financial", id: child.id,
       fingerprint: createHash("sha256").update(JSON.stringify([child.table, child.fingerprint])).digest("hex") });
+    // A second actual exact-byte callback owns the same REAL receipt by its
+    // original charge alone; no local payment/refund/owner is inserted.
+    const chargeOnly=await signedRawRefund({ref:"re_feedbackOwnerChargeOnly",intent:null,charge:receipt.providerChargeRef,amount:1,currency:receipt.currency,throughIngress:true});
+    const[chargeRaw]=await db().select().from(legacyBankFeedback).where(eq(legacyBankFeedback.id,chargeOnly.feedbackId));if(!chargeRaw)throw new Error("Retain the actual charge-only receipt feedback.");
+    expect(chargeRaw.evidence).toMatchObject({observedPaymentRef:null,observedChargeRef:receipt.providerChargeRef,observedPlatformAccountId:"acct_fixturePlatform"});
+    expect(await db().transaction(tx=>originalBankFeedbackOwner(tx,chargeRaw))).toMatchObject({kind:"subscription",paymentId:null,subscriptionChargeReceiptId:receipt.id});
+    expect((await originalMerchantRefundRepairSource.call({kind:"legacy_bank_feedback",id:chargeRaw.id},{kind:"system"})).profileId).toBe(subscriptionSource.fixture.profiles[0]!.profileId);
+    const chargeFinancial=await db().transaction(tx=>merchantRefundDependencyFingerprints(tx,{paymentIds:[],subscriptionChargeReceiptIds:[receipt.id]}));
+    expect(chargeFinancial.incomplete).toBe(false);expect(chargeFinancial.entries.some(entry=>entry.table==="original_cash_feedback"&&entry.id.endsWith(`:${chargeRaw.id}`))).toBe(true);
+    expect(await db().select().from(payments)).toHaveLength(0);expect(await db().select().from(refunds)).toHaveLength(0);expect(await db().select().from(originalCashRecoveries)).toHaveLength(0);
+    expect(await db().select().from(subscriptionProviderChargeReceipts)).toEqual(receipts);
   });
 });
