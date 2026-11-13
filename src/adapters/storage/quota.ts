@@ -24,11 +24,11 @@ export function withStorageQuota(inner: StorageAdapter, ledger: StorageQuotaLedg
     }
   };
   return {
-    id: inner.id, isPublic: inner.isPublic,
+    id: inner.id, isPublic: inner.isPublic,writeProtocol:inner.writeProtocol,binding:inner.binding,verifyPhysicalAbsence:inner.verifyPhysicalAbsence?key=>inner.verifyPhysicalAbsence!(key):undefined,
     get: key => inner.get(key), head: key => inner.head(key),
     readRange: (key, start, end) => inner.readRange(key, start, end),
     stream: key => inner.stream(key), url: (key, options) => inner.url(key, options),
-    async put(key, body, contentType) {
+    async put(key, body, contentType, observation) {
       valid(key, body.byteLength);
       // A caller may reuse or resize its buffer while the reservation awaits
       // PostgreSQL. Bind provider bytes to the accepted immutable snapshot.
@@ -36,7 +36,7 @@ export function withStorageQuota(inner: StorageAdapter, ledger: StorageQuotaLedg
       const token = randomUUID();
       await ledger.reserve(key, bytes, token);
       // Never release on a thrown/ambiguous provider reply: bytes may exist.
-      const result = await inner.put(key, snapshot, contentType);
+      const result = await inner.put(key, snapshot, contentType, observation);
       if (result.key !== key || result.bytes !== bytes) {
         throw new StorageQuotaError("storage_quota_provider_result_mismatch");
       }

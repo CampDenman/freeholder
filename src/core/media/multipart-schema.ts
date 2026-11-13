@@ -37,6 +37,7 @@ export const mediaMultipartOperations=pgTable("media_multipart_operations",{
  // Original admission, not a current account or a reconstructed provider ID.
  providerUploadId:text("provider_upload_id"),parts:jsonb("parts").$type<MultipartPart[]>().notNull().default([]),partsDigest:text("parts_digest"),
  actor:text("actor").notNull(),
+ writerRuntimeId:uuid("writer_runtime_id"),writerFinishedAt:timestamp("writer_finished_at",{withTimezone:true}),
  providerAcceptedAt:timestamp("provider_accepted_at",{withTimezone:true}),verifiedAt:timestamp("verified_at",{withTimezone:true}),
  observedProviderUploadId:text("observed_provider_upload_id"),
  reviewedAt:timestamp("reviewed_at",{withTimezone:true}),reviewedBy:text("reviewed_by"),evidenceDigest:text("evidence_digest"),

@@ -18,6 +18,18 @@ export interface StorageBinding {
   location: Readonly<Record<string, string>>;
 }
 
+/** Actual original provider result; never derived from a later HEAD. */
+export interface StoredObjectRevision {
+  kind: "etag" | "generation";
+  key: string;
+  namespace: string;
+  value: string;
+  versionId?: string;
+}
+export interface StorageWriteObservation {
+  onAccepted?: (result?: { revision?: StoredObjectRevision }) => Promise<void>;
+}
+
 export interface StoredObject {
   key: string;
   bytes: number;
@@ -76,6 +88,8 @@ export interface SignedUrlOptions {
 
 export interface StorageAdapter {
   readonly id: StorageId;
+  /** Protocol actually used by new PUT admissions; never inferred for history. */
+  readonly writeProtocol?: "single-put-v1" | "nonresumable-put-v1";
   /** Resolve before admission/provider writes, never inside a business TX. */
   binding?(): Promise<StorageBinding>;
 
@@ -98,7 +112,7 @@ export interface StorageAdapter {
     key: string,
     body: Uint8Array<ArrayBuffer>,
     contentType: string,
-    observation?: { onAccepted?: () => Promise<void> },
+    observation?: StorageWriteObservation,
   ): Promise<StoredObject>;
 
   get(key: string): Promise<Uint8Array<ArrayBuffer> | undefined>;
@@ -118,6 +132,8 @@ export interface StorageAdapter {
   ): Promise<AsyncIterable<Uint8Array<ArrayBuffer>> | undefined>;
 
   delete(key: string): Promise<void>;
+  /** Complete physical absence, never current-key404 alone. */
+  verifyPhysicalAbsence?(key:string):Promise<void>;
 
   /**
    * A URL a browser can fetch. For a private bucket this is signed and
