@@ -135,3 +135,48 @@ journal/SQL881a. Logs and drain readbacks are
 `/tmp/freeholder-current-terms80-sdk-*20261112.*`. This closes only this SDK
 generation seam, not browser, new provider creation or complete financial
 acceptance. The two demonstrated recovery findings above remain open.
+
+## Minimal recovery repairs and unchanged AFTER controls
+
+The normal signed-off merge `e7293e1f` incorporates protected main81271622;
+its two conflicts were evidence-only, resolved with the verified framework
+results. Entire src/app/plugins/packages/db trees are byte-identical to the
+previous current candidate after this merge.
+
+Actual current-source repair `8f06564c` composes only the three reviewed product
+file deltas from `6b222350`, their two affected source controls and evidence.
+Frozen new-scope/resource history now determines agreement inventory and
+authority; mutable local billingMode does not discard an original resource.
+Never-admitted manual/platform resources still need no provider cancellation.
+Missing original money inventory commits in-progress recovery after the real
+subscription scope reopens, and only the outer worker then refuses. A pending
+buyer cohort additionally needs an actual retained money-finisher task before
+ACK. No original payload/child ID is reconstructed and no money or SQL is changed.
+
+The component passed full Node22 types, five-file lint and41 DB-free assertions.
+The actual current composition independently passed incremental full types,
+the same focused lint and all41 assertions in six files without skips. The
+entire native fixture blob remains exactly
+`60d837198839e410364cfb48f55df71e862ed84f`.
+
+Both unchanged original failing controls then passed separately on V10/SQL881a:
+local-mode6.047s and missing-finisher5.888s. Independent readback shows the former
+retains methods/customer1 each, an active original resource and both scopes
+pending1 with its real cohort; the latter commits request in_progress with
+fulfilledAtNULL, original resource unknown/recovery_pending and the agreement
+cohort pending1. Its money scope remains erased from the earlier actual cleanup;
+no missing task/payload is invented. Original DELETE counts remain1/1.
+
+Because the new ACK guard affects the earlier flows, their four unchanged
+controls ran separately again on this same frozen source: paused caller5.890s,
+hold/release6.126s, corrupt artifact5.905s and post-money/pre-customer hold5.890s.
+All passed with their original deadlines/bail1. Each case had its own independent
+state readback and no remaining clients before the next fixture reset. All six
+keep journal81/SQL881a and are six unique controls, not additional coverage from
+filtered cases or earlier runs. Native reports and ledgers remain under
+`/tmp/freeholder-current-buyer-recovery8f-after-*` and
+`/tmp/freeholder-current8f-buyer-money-v10-*`. Both populated failing clones
+remain preserved and unmigrated. Actual preserved-history recovery review,
+accepted-term/profile merge controls, nonempty paid/returned cash, late-positive
+recovery, new provider creation and complete browser/provider acceptance remain
+required. These local repairs do not close C1.08/C12.38 or independent review.

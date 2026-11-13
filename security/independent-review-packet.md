@@ -155,8 +155,7 @@ are supporting evidence, with their exact limitations in
 is intercepted; a synthetic prior-create journal does not establish actual
 provider-account acceptance or a newly accepted agreement.
 
-Two additional recovery controls genuinely fail on this candidate and remain
-open: a restored local billing-mode change hides an active original resource
+Two additional recovery controls genuinely failed on the earlier candidate: a restored local billing-mode change hides an active original resource
 from agreement erasure, and a missing original money-finisher queue payload
 rolls back the recovery receipt transition despite a pending original resource
 cohort. Both populated failures are independently preserved with thirteen
@@ -164,8 +163,14 @@ original table hash/count goldens and unchanged schema journal. The reviewer
 must check the eventual minimal source repairs against the unchanged AFTER
 controls and inspect missing/restored inventories without inferring original
 payloads from current mutable rows. No repair or independent approval is implied
-by this packet update. Actual provider, complete financial/recovery acceptance
-and Tony's signed review remain required.
+by the initial packet update. Minimal current-source repair8f06564c now passes
+both unchanged failing controls(6.047/5.888s), all four directly affected original
+journeys, types/lint and41 source controls. Independent per-case readbacks confirm
+retained pending credentials/work or committed explicit recovery as appropriate.
+The two actual populated failing clones remain immutable. The reviewer must
+inspect these fixes and their preserved-history limitations; these local passes
+supply no independent approval. Actual provider, complete financial/recovery
+acceptance and Tony's signed review remain required.
 
 ## Payment-provider privacy cleanup repair (2026-11-11)
 

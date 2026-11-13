@@ -13893,6 +13893,18 @@ whatever is best for the people using the site.
   verification after incremental types. Both runs drained clients and preserved
   journal81/SQL881a. Generated-file lint is deliberately ignored by repository
   policy, not extra coverage. The two demonstrated recovery findings remain open.
+  Minimal current-source repair8f06564c subsequently fixes those two local
+  findings without SQL/money rewrite: frozen original history determines
+  inventory; missing original money work commits explicit recovery before worker
+  refusal; pending buyer ACK requires its actual retained money-finisher task.
+  Component fulltypes and actual current incrementaltypes/five-file lint/41
+  source assertions all pass. Both unchanged failing natives pass(localmode
+  6.047s/missing5.888s); all four affected original journeys pass again
+  (5.890/6.126/5.905/5.890s). Each has independent state/client-drain readback and
+  unchanged SQL881a/journal81. Both failing clones remain preserved/unmigrated.
+  Full preserved-history recovery, accepted terms/profile merge, nonempty cash,
+  late positives, new provider creation and browser/provider acceptance remain
+  required. These targeted repairs leave C1.08/C12.38/stable and review open.
   Current-main financial composition 2026-11-12: exact `73e145af` merges protected
   main `bad846e4` (#694) and both fee repairs while preserving SQL958, all published
   migrations and helper `46a6ec02`. Full source gates passed at `5f53daf5` (384 assertions,
