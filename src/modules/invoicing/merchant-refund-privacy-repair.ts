@@ -132,15 +132,15 @@ export const originalMerchantRefundRepairSource = defineService({
         .innerJoin(invoiceMerchantScopes, eq(invoiceMerchantScopes.invoiceId, merchantInvoicePaymentRoutes.invoiceId)).where(eq(merchantInvoicePaymentRoutes.paymentId, paymentId)).limit(2);
       const agreements = await ctx.tx.select({ profileId: subscriptionMerchantScopes.taxProfileId,platform:subscriptionMerchantScopes.providerPlatformAccountId,account:subscriptionMerchantScopes.chargeAccountId,routePlatform:merchantAgreementPaymentRoutes.providerPlatformAccountId,routeAccount:merchantAgreementPaymentRoutes.chargeAccountId }).from(merchantAgreementPaymentRoutes)
         .innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, merchantAgreementPaymentRoutes.subscriptionId)).where(eq(merchantAgreementPaymentRoutes.paymentId, paymentId)).limit(2);
-      if(originalFeedbackNamespace&&([...orders,...bookings,...agreements].some(source=>!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace!,source))
-        ||agreements.some(source=>!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace!,{platform:source.routePlatform,account:source.routeAccount}))))throw new ServiceError("conflict","Retain authenticated foreign or mismatched cash as debt; its original namespace does not belong to this frozen merchant source.");
+      if(originalFeedbackNamespace&&([...orders,...bookings,...agreements].some(source=>!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace,source))
+        ||agreements.some(source=>!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace,{platform:source.routePlatform,account:source.routeAccount}))))throw new ServiceError("conflict","Retain authenticated foreign or mismatched cash as debt; its original namespace does not belong to this frozen merchant source.");
       profiles.push(...orders.map(row => row.policy.profileId), ...bookings.map(row => row.policy.profileId), ...agreements.map(row => row.profileId));
     } else {
       const rows = await ctx.tx.select({ profileId: subscriptionMerchantScopes.taxProfileId,platform:subscriptionMerchantScopes.providerPlatformAccountId,account:subscriptionMerchantScopes.chargeAccountId,receiptPlatform:subscriptionProviderChargeReceipts.providerPlatformAccountId,receiptAccount:subscriptionProviderChargeReceipts.chargeAccountId }).from(subscriptionProviderChargeReceipts)
         .innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptionProviderChargeReceipts.subscriptionId))
-        .where(and(eq(subscriptionProviderChargeReceipts.id, receiptId))).limit(2);
-      if(originalFeedbackNamespace&&rows.some(source=>!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace!,source)
-        ||!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace!,{platform:source.receiptPlatform,account:source.receiptAccount})))throw new ServiceError("conflict","Restore the exact receipt's frozen original merchant scope before privacy repair; a different platform/account remains debt.");
+        .where(and(eq(subscriptionProviderChargeReceipts.id, receiptId!))).limit(2);
+      if(originalFeedbackNamespace&&rows.some(source=>!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace,source)
+        ||!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace,{platform:source.receiptPlatform,account:source.receiptAccount})))throw new ServiceError("conflict","Restore the exact receipt's frozen original merchant scope before privacy repair; a different platform/account remains debt.");
       profiles.push(...rows.map(row => row.profileId));
     }
     if (profiles.length !== 1 || !z.uuid().safeParse(profiles[0]).success) throw new ServiceError("conflict", "The exact original merchant scope is missing or ambiguous; retain the financial fact and restore its scope before receipt repair.");
