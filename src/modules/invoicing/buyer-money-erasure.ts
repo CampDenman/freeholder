@@ -244,46 +244,71 @@ export const buyerMoneyErasureInventory = defineService({
   },
 });
 
-/** NEW deferred tasks re-check the current original proof before actual
- * customer DELETE. A retained job or old finisher flag alone grants no I/O. */
+/** Every actual customer task, including a retained untagged task, proves its
+ * original queue admission and current dependencies before external deletion.
+ * An older task cannot manufacture the absent original finisher inventory. */
 export const prepareBuyerCustomerErasure = defineService({
   name: "invoicing.prepareBuyerCustomerErasure", summary: "Verify original provider task membership and current buyer privacy dependencies before customer deletion.",
   kind: "mutation", permission: "system", external: false, auditInputFields: ["requestId", "providerJobId", "moneyJobId"],
-  input: z.object({ requestId: z.uuid(), providerJobId: z.uuid(), moneyJobId: z.uuid(), payloadDigest: z.string().regex(/^[a-f0-9]{64}$/) }),
-  output: z.object({ ready: z.boolean(), recoveryRequired: z.boolean() }),
+  input: z.object({ requestId: z.uuid(), providerJobId: z.uuid(), moneyJobId: z.uuid().optional(), payloadDigest: z.string().regex(/^[a-f0-9]{64}$/) }),
+  output: z.object({ ready: z.boolean(), recoveryRequired: z.boolean(), completed: z.boolean().optional() }),
   handler: async (input, ctx) => {
     await lockContactIdentity(ctx.tx);
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
-    const original = await originalMoneyPayload(ctx.tx, input.requestId, input.moneyJobId);
     const [providerClaim] = await ctx.tx.select({ payloadHash: jobIdempotencyKeys.payloadHash }).from(jobIdempotencyKeys).where(and(
       eq(jobIdempotencyKeys.jobName, erasePaymentProviderCustomer.name), eq(jobIdempotencyKeys.jobId, input.providerJobId))).limit(1);
     const [providerJob] = await ctx.tx.execute<{ data: unknown }>(sql`select data from pgboss.job where id=${input.providerJobId}::uuid and name=${erasePaymentProviderCustomer.name} limit 1`);
     const target = providerCustomerErasurePayload.safeParse(providerJob?.data);
-    // Hash the exact queue payload; optional defaults are not silently added
-    // to the original hashed admission material.
-    if (!providerClaim || providerClaim.payloadHash !== input.payloadDigest || !target.success || merchantTaxDigest(providerJob?.data) !== providerClaim.payloadHash
+    // Compare the exact retained raw payload: adding parser defaults must not
+    // alter its original admission hash or silently rebind its namespace.
+    if (!target.success || merchantTaxDigest(providerJob?.data) !== input.payloadDigest
       || target.data.requestId !== input.requestId || target.data.originalJobId !== input.providerJobId
       || target.data.buyerMoneyFinisherJobId !== input.moneyJobId) throw new ServiceError("permission", "Restore the exact original provider-customer admission before deletion.");
     const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, input.requestId)).limit(1).for("update");
     if (!request || request.kind !== "erasure" || !request.verifiedAt) throw new ServiceError("permission", "This provider-customer task does not belong to a verified original buyer erasure.");
+    const recover = async () => {
+      // Retain the actual pending provider task and record recovery. Neither a
+      // missing old claim nor current rows may invent a money job/child list.
+      await ctx.tx.update(dataRequests).set({ status: "in_progress", fulfilledAt: null,
+        resolution: "Restore the exact original provider-customer and buyer money enqueue inventory before external deletion." })
+        .where(eq(dataRequests.id, request.id));
+      ctx.setSubject("dataRequest", request.id);
+      return { ready: false, recoveryRequired: true };
+    };
+    if (!providerClaim || providerClaim.payloadHash !== input.payloadDigest) return recover();
+    let original: z.infer<typeof payload> | undefined;
+    if (input.moneyJobId) {
+      try { original = await originalMoneyPayload(ctx.tx, input.requestId, input.moneyJobId); }
+      catch (error) { if (error instanceof ServiceError && error.code === "conflict") return recover(); throw error; }
+    }
     const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id)).limit(1).for("update");
     const parsed = receiptBody.safeParse(artifact?.body);
     if (!erasureArtifactIsIntact(artifact) || !parsed.success) {
-      await ctx.callAsSystem(reopenErasureJob, { requestId: request.id, scope: SCOPE, jobName: BUYER_MONEY_ERASURE_JOB,
+      if (original) await ctx.callAsSystem(reopenErasureJob, { requestId: request.id, scope: SCOPE, jobName: BUYER_MONEY_ERASURE_JOB,
         jobData: { originalAgreementIds: original.originalAgreementIds, originalPaymentIds: original.originalPaymentIds }, idempotencyKey: `buyer-customer-artifact:${input.providerJobId}` });
-      return { ready: false, recoveryRequired: true };
+      return recover();
     }
     const outcome = parsed.data.outcomes.find(item => item.scope === SCOPE);
-    if (request.status !== "in_progress" || outcome?.outcome !== "pending" || !outcome.pendingJobs?.includes(input.providerJobId)) return { ready: false, recoveryRequired: true };
+    // A confirmed completed receipt permits a no-I/O duplicate only. It must
+    // still pass the same current hold/schedule/cash proof below.
+    const completed = request.status === "completed" && outcome?.outcome === "erased";
+    if (!completed && (request.status !== "in_progress" || outcome?.outcome !== "pending" || !outcome.pendingJobs?.includes(input.providerJobId))) return recover();
     const [hold] = await ctx.tx.select({ id: privacyRetentionExceptions.id }).from(privacyRetentionExceptions)
       .innerJoin(dataRequests, eq(dataRequests.id, privacyRetentionExceptions.dataRequestId)).where(and(eq(dataRequests.contactId, request.contactId),
         inArray(privacyRetentionExceptions.scope, [SCOPE, "subscriptions.agreements", "privacy.records"]),
         or(isNull(privacyRetentionExceptions.expiresAt), gt(privacyRetentionExceptions.expiresAt, new Date())))).limit(1);
     if (hold) return { ready: false, recoveryRequired: false };
     const state = getService("subscriptions.buyerAgreementErasureState");
-    if (!state) throw new ServiceError("conflict", "Restore the original buyer schedule proof before deleting its provider customer.");
-    const current = readiness.parse(await ctx.callAsSystem(state, { requestId: request.id, originalAgreementIds: original.originalAgreementIds }));
-    return { ready: current.safe && await originalBuyerPaymentsAreSafe(ctx, request.contactId, original.originalPaymentIds), recoveryRequired: false };
+    if (!state) return recover();
+    // An untagged task has no original new-mode child inventory. Empty is a
+    // constraint to prove, not a reconstruction from today's agreement rows.
+    const current = readiness.parse(await ctx.callAsSystem(state, { requestId: request.id, originalAgreementIds: original?.originalAgreementIds ?? [] }));
+    if (!original) {
+      if (!current.safe || (await originalBuyerMerchantPayments(ctx, request.contactId)).length) return recover();
+    } else if (!current.safe || !await originalBuyerPaymentsAreSafe(ctx, request.contactId, original.originalPaymentIds)) {
+      return { ready: false, recoveryRequired: false };
+    }
+    return { ready: !completed, recoveryRequired: false, ...(completed ? { completed: true } : {}) };
   },
 });
 
