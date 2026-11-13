@@ -41,7 +41,8 @@ Logs are `/tmp/freeholder-bank-replacement80-types-v1.log`,
 `/tmp/freeholder-bank-replacement80-lint-v1.log` and
 `/tmp/freeholder-bank-replacement80-controls-v1.{json,log}`.
 
-Qualification remains pending for actual generic replacement and RMA credit/resource
+Further qualification remains pending for generic replacement faults and
+concurrency recovery, RMA credit/resource
 convergence, late positives, stale reads, caller barriers and populated history.
 Historical legacy bank recovery is also required and remains unfinished; no
 new platform, request, invoice or causal history is backfilled for old refunds.
@@ -74,6 +75,10 @@ No eight-table golden hash was taken for this case.
 
 Evidence: `/tmp/freeholder-bank-current80-generic-native-v1.{json,log}`,
 `-v1-ledger.json` and `-v1-receipts.json`. The other four bank-native controls
-remain unexecuted. The paused-caller fixture is being strengthened separately
-to commit the real ACK and raw positive first, then hold only the actual
-physical caller's promise before its finish receipt.
+remain unexecuted. Separate test-only `a490551c` strengthens the paused-caller
+fixture to commit the real ACK and raw positive first, then hold only the
+actual physical caller's promise before its finish receipt. It asserts the
+physical ACK and bound positive exist while the finish receipt is absent.
+Incremental full Node22 types and single-fixture lint both pass; no native has
+run for this stronger case. The first generic case body stays byte-identical
+to a6 (body SHA256 `336ab6879390bb8fd112c85e9c9446f9109524a7ccb2ea190891c4733e4cf6a6`).
