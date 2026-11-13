@@ -27,8 +27,18 @@ The narrow source repair uses the existing UTC `periodEnd` calendar for the
 known first-paid trial boundary and following renewal. Acceptance supplies the
 actual locked agreement start to the private quote phase; public callers
 cannot choose that internal calendar anchor. Initial amounts use the
-current date. Existing accepted records and money remain untouched. Source
-qualification and the unchanged native AFTER are pending. No actual tax
+current date. Existing accepted records and money remain untouched. The combined exact source `421e0cce` (recovery source `5c7e18fd` plus trial
+repair `8af5c6b9`) passes full Node22 types, nine targeted lint paths and39
+finite source assertions with zero skips. The unchanged original native AFTER
+passes once in5.442 seconds, retaining the original60-second timeout and
+bail-on-first-failure setting. Independent UTC readback confirms initial0,
+first-paid4725 with225 tax and the actual future tax quote digest, renewal4200
+with200 tax, and zero invoices/payments/refunds/provider operations/charge
+receipts. Actual certificate expiry still precedes the real trial end. The
+current schema and81-entry881a journal are unchanged; the20-table BEFORE golden
+and its full schema/journal were rechecked unchanged, and all clients drained.
+Results are `/tmp/freeholder-phase-trial-combined-qualified-20261113.json` and
+`/tmp/freeholder-trial-tax-f0-after-ledger-20261113.json`. No actual tax
 certificate, tax-authority decision, provider creation or enabled-provider
 acceptance is claimed; complete unknown-start, phase, amendment, invoice and
 cash integration remains required.

@@ -14181,7 +14181,12 @@ whatever is best for the people using the site.
   the unchanged native oracle failed5.600s. A20-table/schema/journal-matched
   populated BEFORE golden is preserved. The narrow source repair quotes known
   trial/renewal boundaries with the existing UTC billing calendar, without
-  rewriting accepted history. Source/native AFTER qualification is pending;
+  rewriting accepted history. Combined recovery/trial source `421e0cce` passes
+  full Node22 types,nine lint paths and39 finite source assertions with no
+  skips. The unchanged trial AFTER passes5.442s; independent readback confirms
+  initial0/first-paid4725tax225/renewal4200tax200, no invoice or payment, and
+  unchanged BEFORE golden/current schema/journal with drained clients. Exact
+  recovery-native and complete phase/amendment/cash acceptance remain required;
   see `deploy/subscription-trial-tax-calendar-2026-11-13.md`. C12.38 stays open.
   Provider lifecycle protocol work uses Stripe's actual flexible-subscription
   pause endpoint, with2026-10-28.endive frozen only on new scope/charge

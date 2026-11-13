@@ -45,8 +45,7 @@ are `/tmp/freeholder-phase-product-f2-qualified-20261113.json`. This evidence
 does not qualify the subsequent recovery-read source described below. Actual
 service producer/paused duplicate, ACK-before-logical failure, failed finish
 persistence, missing history and buyer privacy controls need the NEW assembled
-schema and separately authorized native fixtures. The subsequent retained-product recovery workflow is now a separate UNQUALIFIED
-source delta. Its short private admission requires the actual retained ACK and
+schema and separately authorized native fixtures. The subsequent retained-product recovery workflow is a separate source delta. Its short private admission requires the actual retained ACK and
 original creation-caller finish, freezes an existing-history read ticket and
 original namespace, then the orchestrator invokes only the actual product GET
 outside a transaction. The completion phase requires the same process's actual
@@ -56,9 +55,13 @@ operation/resource journal. Only a sole uncreated original product can clear
 preparatory debt; later billing work remains unresolved. A failed fact commit
 stays cached for a no-GET flush. No GET or clock can supply creation-caller exit.
 
-Four new declared-evidence recovery controls are prepared but unrun. Exact
-recovery-delta types/lint/private/audit checks, real service producer/fault/stale
-GET/native controls and original caller-loss recovery remain required. Lost
+The recovery delta, combined with the dated trial fix as exact source
+`421e0cce`, passes full Node22 types, nine changed/f0 lint paths and39 finite
+source assertions. Four new declared-evidence recovery controls,17 affected
+private/audit/product-proof controls and18 calendar/commercial-phase controls
+all pass with zero skips. This supplies source qualification only. Real
+service producer/fault/stale GET/native controls and original caller-loss
+recovery remain required. Lost
 original ACK or caller-finish history refuses read admission; no replacement
 product is invented. The existing f2 creation and f0 trial fixtures are unchanged.
 
