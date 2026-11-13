@@ -4031,6 +4031,10 @@ reading chat logs.
 - [ ] **C1.12** Complete media support for video, audio and documents,
   resumable/presigned direct uploads, validation, malware scanning seam,
   metadata/provenance, focal points, lifecycle and orphan cleanup.
+  Immutable first media scopes and original birth/locator retirement source are
+  prepared but unrun;16 models/owned UNAPPLIED82 stay inactive, and physical
+  retirement/multipart/crash/cutover implementation and actual acceptance remain
+  required. See `deploy/media-original-first-capture-source-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;
@@ -11768,6 +11772,16 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Original first-capture/minimization source continuation 2026-11-13 prepares
+  a sealed16th media scope model, NULL-preserving original reservation birth,
+  exact queued worker tuple/immutable first membership and retirement-gated
+  original provider/quota locator minimization.11 pure and3 native declarations
+  remain entirely unrun. Owned82 is UNAPPLIED and the complete capability stays
+  unpublished. Standalone physical retirement, tracked stop, multipart session/
+  pinned completion, quota initialization, chained/cutover and full qualification
+  remain unfinished. Root integrates and qualifies this finite baseline before
+  further source expansion. See
+  `deploy/media-original-first-capture-source-2026-11-13.md`. No item closes.
   Original provider privacy/quota-debt source continuation 2026-11-13 prepares
   exact original parent/cohort exports, captured-ID worker containment, immutable
   physical observation versions and original-token late quota charge restoration

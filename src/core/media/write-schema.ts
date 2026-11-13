@@ -10,6 +10,7 @@ import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 export const MEDIA_WRITE_STATES = ["unverified", "started", "accepted", "unknown", "confirmed_absent"] as const;
 export const mediaObjectWrites = pgTable("media_object_writes", {
   id: uuid("id").primaryKey().defaultRandom(),
+  originalReservationId:uuid("original_reservation_id"),
   operation: text("operation_kind", { enum: ["put", "delete"] }).notNull().default("put"),
   key: text("object_key").notNull(),
   keyDigest: text("key_digest").notNull(),

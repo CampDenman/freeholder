@@ -31,3 +31,17 @@ export async function originalTransferPhysicalRevision(tx: Tx, object: { id: str
   const captured = await tx.select().from(mediaStorageTransferReceipts).where(eq(mediaStorageTransferReceipts.objectId, object.id));
   return originalCapturedSourceRevision(captured,object.key);
 }
+
+/** Reservation birth is independent of provider revision. A later pointer
+ * with an equal key cannot replace a missing immutable original identity. */
+export async function originalTransferReservation(tx:Tx,object:{id:string;targetReceiptId:string|null},side:"source"|"target"):Promise<string>{
+ if(side==="target"){
+  const[row]=object.targetReceiptId?await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,object.targetReceiptId)).limit(1):[];
+  if(!row?.originalReservationId)transferConflict("The original target reservation birth is missing; a current pointer cannot backfill it.");return row.originalReservationId;
+ }
+ const members=await tx.select().from(mediaStorageTransferReceipts).where(eq(mediaStorageTransferReceipts.objectId,object.id));
+ const live=members.filter(member=>{if(transferDigest(member.originalSnapshot)!==member.originalSnapshotDigest)transferConflict("Restore the intact original reservation capture.");return member.originalSnapshot.operation==="put"&&member.originalSnapshot.state==="accepted"&&!member.originalSnapshot.deletedAt;});
+ const identities=live.map(member=>member.originalSnapshot.originalReservationId);
+ if(!identities.length||identities.some(id=>typeof id!=="string"||id!==identities[0]))transferConflict("Original source reservation birth is absent or conflicting; later equal-key state cannot supply it.");
+ return String(identities[0]);
+}
