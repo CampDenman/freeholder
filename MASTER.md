@@ -14451,8 +14451,10 @@ whatever is best for the people using the site.
   invoices/payments/physical refunds for just that ownership leaf, with all
   financial assertions and both real undo attempts unchanged and explicit
   initial undoable assertions. The other four actual checkout/RMA/credit bodies,
-  product/cart policy and17bfSQL are unchanged. Corrected setup source checks
-  and native remain UNRUN pending a granted lane; no completion follows.
+  product/cart policy and17bfSQL are unchanged. Corrected setup fulltypes/
+  focusedlint/43actualproof-contract assertions pass, with5explicitnative
+  skips and metadata gates green/drained. Corrected actual native remains
+  UNRUN pending freshV21; no completion follows.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original
