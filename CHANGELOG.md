@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Prepare exact original-generation ordinary media retirement through the shared conditional provider/request ledger, retaining actual returns across later verification failure and requiring complete physical version/session absence before retirement. Legacy, held, copied, multipart and unfinished callers remain pending; the full capability and source/native/provider acceptance remain open.
+
 - Keep genuinely empty first media privacy captures independent of inactive provider I/O. Bind metadata-only authority to the exact original request, scope and contact; refuse any original birth, unknown ancestry or later generation, and preserve all provider admission and immutable capture guards.
 
 - Allow contact merge and undo to proceed when an exact, locked check proves both contacts have no storage-transfer ownership rows. Preserve the complete transfer capability and original lineage guards whenever transfer ownership exists.

@@ -53,6 +53,7 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
    }else if(call.kind!==descriptor.kind.replace(".","_")||descriptor.kind==="multipart.create"&&descriptor.contentType!==resource.contentType||descriptor.kind!=="multipart.create"&&(descriptor.uploadId!==parent.providerUploadId||descriptor.uploadId!==resource.providerUploadId)||descriptor.kind==="multipart.complete"&&(!descriptor.createOnly||descriptor.partsDigest!==parent.partsDigest))transferConflict("The actual multipart request differs from its immutable original session or manifest.");
   }
   if(descriptor.kind==="object.delete"&&(!["source_delete","privacy_delete","privacy_source_delete","ordinary_delete"].includes(call.kind)||!call.expectedRevision||transferDigest(descriptor.expectedRevision)!==transferDigest(call.expectedRevision)))transferConflict();
+  if(descriptor.kind==="object.delete"&&call.kind==="ordinary_delete")await(await import("./original-retirement")).assertOrdinaryRetirementRequest(tx,call,descriptor);
   if(descriptor.kind==="object.body"){
    if(!descriptor.expectedRevision)transferConflict();
    const previous=await tx.select({request:mediaStorageTransferRequests,observation:mediaStorageTransferRequestObservations}).from(mediaStorageTransferRequests).innerJoin(mediaStorageTransferRequestObservations,eq(mediaStorageTransferRequestObservations.requestId,mediaStorageTransferRequests.id)).where(and(eq(mediaStorageTransferRequests.callId,call.id),eq(mediaStorageTransferRequests.state,"returned"))).orderBy(asc(mediaStorageTransferRequests.createdAt));

@@ -4061,6 +4061,15 @@ reading chat logs.
   prepared but unrun;16 models/owned UNAPPLIED82 stay inactive, and physical
   retirement/multipart/crash/cutover implementation and actual acceptance remain
   required. See `deploy/media-original-first-capture-source-2026-11-13.md`.
+  Ordinary retirement source checkpoint2026-11-13: the existing cleanup path
+  now prepares exact original-UUID conditional deletion, retained actual caller
+  returns, fresh pinned absence and complete two-pass physical-version/session
+  proof before retiring its two exact receipts and releasing only the original
+  quota token. Four new owned82 functions/two guards add no models or published
+  capability; all16 pure and six native declarations are unrun. Crash/stop,
+  failed/unattempted admission recovery, multipart, quota initialization,
+  cutover, translated recovery and actual acceptance remain required. See
+  `deploy/media-original-retirement-source-2026-11-13.md`. No C row closes.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;
