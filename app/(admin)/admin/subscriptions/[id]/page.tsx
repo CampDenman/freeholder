@@ -6,6 +6,8 @@ import { notFound } from "next/navigation";
 import {listTrialSetupDispatches} from "@/modules/subscriptions/setup-reconciliation";
 import {reconcileTrialSetupDispatchAction} from "../../../subscription-actions";
 import { CommercialAmendment } from "../../../../components/CommercialAmendment";
+import { ProviderReaderRecovery } from "../../../../components/ProviderReaderRecovery";
+import { providerReaderRecoveryPlan } from "@/modules/subscriptions/provider-reader-recovery";
 import { merchantAmendmentStatus } from "@/modules/subscriptions/commercial-amendments";
 import { getSubscription, listOfferedPlans } from "@/modules/subscriptions/service";
 import { getContact } from "@/core/contacts/service";
@@ -19,7 +21,7 @@ import { requireStaffActor } from "../../guard";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
-export default async function SubscriptionDetailPage({ params,searchParams }: { params: Promise<{ id: string }>;searchParams:Promise<{setupError?:string;setupReconciled?:string;setupAfter?:string}> }) {
+export default async function SubscriptionDetailPage({ params,searchParams }: { params: Promise<{ id: string }>;searchParams:Promise<{setupError?:string;setupReconciled?:string;setupAfter?:string;readerResult?:string}> }) {
   const actor = await requireStaffActor("subscriptions");
   const { id } = await params;
   const query=await searchParams;
@@ -36,6 +38,7 @@ export default async function SubscriptionDetailPage({ params,searchParams }: { 
   const fresh=actor.kind==="user" && actor.security?.stepUpValid!==false;
   const cursor=query.setupAfter && /^[a-f0-9-]{36}$/i.test(query.setupAfter)?query.setupAfter:undefined;
   const recovery=canRecover && fresh?await listTrialSetupDispatches.call({subscriptionId:id,afterId:cursor},actor):null;
+  const readers=canRecover && fresh && amendment.commercial?await providerReaderRecoveryPlan.call({subscriptionId:id},actor):[];
   const date = (value: Date) => new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: business?.timezone ?? "UTC" }).format(value);
   return <div className="grid gap-6">
     <h1 className="text-xl font-bold tracking-tight">{plan?.name ?? t("admin.search.kind.subscription")}</h1>
@@ -48,6 +51,8 @@ export default async function SubscriptionDetailPage({ params,searchParams }: { 
     </dl></CardBody></Card>
     {query.setupError ? <Callout tone="danger">{t(`subscriptions.setup.error.${["validation","permission","conflict"].includes(query.setupError)?query.setupError:"conflict"}`)}</Callout>:null}
     {query.setupReconciled ? <Callout tone="success">{t("subscriptions.setup.saved")}</Callout>:null}
+    {query.readerResult ? <Callout tone={query.readerResult==="saved"?"success":"danger"}>{t(query.readerResult==="saved"?"subscriptions.reader.saved":"subscriptions.reader.failed")}</Callout>:null}
+    {readers.length ? <ProviderReaderRecovery subscriptionId={id} rows={readers} locale={locale}/> : null}
     {canRecover && !fresh ? <Card><CardHeader title={t("subscriptions.setup.title")}/><CardBody><a className="text-accent underline" href={`/security/verify?returnTo=${encodeURIComponent(`/admin/subscriptions/${id}`)}`}>{t("subscriptions.setup.verify")}</a></CardBody></Card>:null}
     {recovery && (recovery.rows.length>0 || query.setupAfter) ? <Card><CardHeader title={t("subscriptions.setup.title")}/><CardBody>
       <p className="max-w-prose text-sm text-ink-muted">{t("subscriptions.setup.intro")}</p>

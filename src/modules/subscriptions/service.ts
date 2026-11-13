@@ -1781,7 +1781,7 @@ registerContactReference({
 // invoice's problem rather than this table's.
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
-  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines"],
+  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines", "subscription_provider_read_tickets", "subscription_provider_read_finishes", "subscription_provider_read_stops"],
   retentionScopes: ["commerce.money"],
   exportData: async (tx: Tx, contactId: string) => {
     const rows = await tx
@@ -1823,8 +1823,14 @@ registerContactPrivacySource({
       totalMinor: subscriptionProviderInvoiceObservations.totalMinor, paidMinor: subscriptionProviderInvoiceObservations.paidMinor, remainingMinor: subscriptionProviderInvoiceObservations.remainingMinor,
       verified: subscriptionProviderInvoiceObservations.verified, createdAt: subscriptionProviderInvoiceObservations.createdAt })
       .from(subscriptionProviderInvoiceObservations).where(inArray(subscriptionProviderInvoiceObservations.subscriptionId, rows.map(row => row.id))) : [];
+    const readerTickets = rows.length ? await tx.select({ subscriptionId: subscriptionProviderReadTickets.subscriptionId, readId: subscriptionProviderReadTickets.readId, admittedAt: subscriptionProviderReadTickets.createdAt,
+      finishedAt: subscriptionProviderReadFinishes.createdAt }).from(subscriptionProviderReadTickets).leftJoin(subscriptionProviderReadFinishes, eq(subscriptionProviderReadFinishes.readId, subscriptionProviderReadTickets.readId))
+      .where(inArray(subscriptionProviderReadTickets.subscriptionId, rows.map(row => row.id))) : [];
+    const readerStops = rows.length ? await tx.select({ subscriptionId: subscriptionProviderReadStops.subscriptionId, readId: subscriptionProviderReadStops.readId, reviewedAt: subscriptionProviderReadStops.createdAt })
+      .from(subscriptionProviderReadStops).where(inArray(subscriptionProviderReadStops.subscriptionId, rows.map(row => row.id))) : [];
     return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [], acceptedCommercialTerms: accepted.filter(value => value.subscriptionId === row.id),
-      acceptedAmendments: amendments.filter(value => value.subscriptionId === row.id), acceptedCalendarResumptions: resumptions.filter(value => value.subscriptionId === row.id), observedPeriodInvoices: periodInvoices.filter(value => value.subscriptionId === row.id) }));
+      acceptedAmendments: amendments.filter(value => value.subscriptionId === row.id), acceptedCalendarResumptions: resumptions.filter(value => value.subscriptionId === row.id), observedPeriodInvoices: periodInvoices.filter(value => value.subscriptionId === row.id),
+      providerReaderHistory: readerTickets.filter(value => value.subscriptionId === row.id), providerReaderRuntimeStops: readerStops.filter(value => value.subscriptionId === row.id) }));
   },
   erase: async (tx: Tx, contactId: string, context) => {
     if (!context.service) throw new ServiceError("conflict", "Original agreement erasure requires its actual shared privacy context.");
@@ -1873,11 +1879,14 @@ import setupDispatchServices from "./setup-dispatch";
 import setupReconciliationServices from "./setup-reconciliation";
 import providerChargeReceiptServices from "./provider-charge-receipts";
 import commercialAmendmentServices from "./commercial-amendments";
+import providerReaderRecoveryServices from "./provider-reader-recovery";
+import { subscriptionProviderReadTickets, subscriptionProviderReadFinishes, subscriptionProviderReadStops } from "./provider-read-ownership-schema";
 import { subscriptionProviderInvoiceObservations } from "./provider-period-schema";
 import { subscriptionCommercialResumptions } from "./commercial-resumption-schema";
 import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
 
 export default [
+  ...providerReaderRecoveryServices,
   completePaidCommercialAmendment,
   ...marketPolicyServices,
   ...merchantTermsQuoteServices,

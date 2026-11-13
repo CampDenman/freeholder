@@ -13,6 +13,7 @@ import { subscriptions } from "./schema";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { recoverableOriginalPhaseProduct } from "./provider-phase-product-proof";
 import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
+import { assertProviderReadNotStopped, captureProviderReadAdmission, captureProviderReadFinish } from "./provider-read-ownership";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
 
 const digest = (nonce: string) => createHash("sha256").update(nonce).digest("hex");
@@ -55,9 +56,10 @@ export const prepareMerchantPhaseProductRead = defineService({
     const frozen = originalRequest.parse(operation.originalRequest);
     if (frozen.operationId !== operation.id || frozen.subscriptionId !== operation.subscriptionId || frozen.providerScheduleApiVersion !== operation.providerApiVersion) throw new ServiceError("conflict", "Restore the exact original product read namespace.");
     const readId = randomUUID(), nonce = randomBytes(32).toString("base64url");
-    const observation = { ...operation.providerObservation, history: [...historySchema.parse(operation.providerObservation.history), {
+    const admission = await captureProviderReadAdmission(ctx, operation, resource, {
       source: "phase_product_read_admitted", operationId, requestDigest: operation.requestDigest, readId, providerProductRef,
-      callerId: merchantPhysicalCaller().id, completionDigest: digest(nonce) }] };
+      callerId: merchantPhysicalCaller().id, completionDigest: digest(nonce) });
+    const observation = { ...operation.providerObservation, history: [...historySchema.parse(operation.providerObservation.history), admission] };
     const nextResource = { ...resource, evidenceRevision: resource.evidenceRevision + 1, recoveryPending: true, stoppedProof: null };
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
     await ctx.tx.update(subscriptionProviderScheduleOperations).set({ providerObservation: observation }).where(eq(subscriptionProviderScheduleOperations.id, operationId));
@@ -75,6 +77,7 @@ export const applyMerchantPhaseProductRead = defineService({
     const local = reads.get(readId);
     if (!local || !local.invoked || local.nonce !== completionNonce || !local.outcome) throw new ServiceError("permission", "This original verification GET has not actually finished in this process.");
     const { operation, resource } = await lockedOriginal(ctx, local.operationId);
+    await assertProviderReadNotStopped(ctx, readId);
     const history = historySchema.parse(operation.providerObservation.history);
     if (operation.subscriptionId !== local.subscriptionId || operation.requestDigest !== local.requestDigest || merchantTaxDigest(operation.originalRequest) !== operation.requestDigest
       || !history.some(entry => entry.source === "phase_product_read_admitted" && entry.readId === readId && entry.operationId === operation.id
@@ -85,10 +88,11 @@ export const applyMerchantPhaseProductRead = defineService({
     }
     const current = operationDigest(operation) === local.operationDigest && resourceDigest(resource) === local.resourceDigest;
     const verified = current && local.outcome === "returned" && local.result === local.providerProductRef && recoverableOriginalPhaseProduct(operation) === local.providerProductRef;
+    const finish = await captureProviderReadFinish(ctx, operation, { source: "phase_product_read_finished", operationId: operation.id, requestDigest: operation.requestDigest,
+      readId, completionDigest: digest(completionNonce), outcome: local.outcome }, { history, providerProductRef: local.result ?? null, verified });
     const observation = { ...operation.providerObservation, ...(verified ? { productProof: { version: 1, operationId: operation.id, requestDigest: operation.requestDigest, providerProductRef: local.result } } : {}),
       history: [...history, ...(local.outcome === "returned" ? [{ source: verified ? "phase_product_read_verified" : "phase_product_read_stale", version: 1,
-        operationId: operation.id, requestDigest: operation.requestDigest, providerProductRef: local.result, readId }] : []), {
-        source: "phase_product_read_finished", operationId: operation.id, requestDigest: operation.requestDigest, readId, completionDigest: digest(completionNonce), outcome: local.outcome }] };
+        operationId: operation.id, requestDigest: operation.requestDigest, providerProductRef: local.result, readId }] : []), finish] };
     // Verification of a product cannot settle later admitted billing work.
     const clearDebt = verified && resource.operationRevision === 1 && operation.operationRevision === 1 && resource.state === "uncreated"
       && !resource.providerSubscriptionRef && !resource.providerCustomerRef && originalProviderReadsFinished({ ...operation, providerObservation: observation });

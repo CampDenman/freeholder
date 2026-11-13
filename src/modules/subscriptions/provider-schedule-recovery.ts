@@ -15,11 +15,12 @@ import { assertOriginalPhaseFinancials, phaseScheduleReadRequest } from "./provi
 import { phaseScheduleStopRequest, phaseScheduleStopped } from "./provider-phase-stop";
 import { providerPhaseInventory, originalPhaseCustomerMatches } from "./provider-phase-contract";
 import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
+import { assertProviderReadNotStopped, captureProviderReadAdmission, captureProviderReadFinish } from "./provider-read-ownership";
+import { retainProviderCharge, subscriptionScheduleCashObservation } from "./provider-charge-receipts";
 import { closedOriginalPhaseSchedules, originalPhaseResources, phaseOperationCallerFinished } from "./provider-phase-resources";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
 import { invoiceActionRequest, invoiceActionAcknowledgment } from "./provider-invoice-action-contract";
-import { retainOriginalScheduleCash } from "./provider-invoice-actions";
 import { subscriptions } from "./schema";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -73,9 +74,10 @@ export const prepareMerchantScheduleRead = defineService({
     const { operation, resource, journal, generation } = await locked(ctx, operationId), original = plan(operation);
     if ([...reads.values()].some(read => read.operationId === operationId && read.invoked && !read.outcome)) throw new ServiceError("conflict", "The original verification read is still running in this process.");
     const readId = randomUUID(), nonce = randomBytes(32).toString("base64url");
-    const observation = { ...operation.providerObservation, history: [...historySchema.parse(operation.providerObservation.history ?? []), {
+    const admission = await captureProviderReadAdmission(ctx, operation, resource, {
       source: "schedule_read_admitted", operationId, requestDigest: operation.requestDigest, readId, kind: original.kind, request: original.request,
-      callerId: merchantPhysicalCaller().id, completionDigest: hash(nonce) }] };
+      callerId: merchantPhysicalCaller().id, completionDigest: hash(nonce) });
+    const observation = { ...operation.providerObservation, history: [...historySchema.parse(operation.providerObservation.history ?? []), admission] };
     const next = { ...resource, evidenceRevision: resource.evidenceRevision + 1, recoveryPending: true, stoppedProof: null };
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
     await ctx.tx.update(subscriptionProviderScheduleOperations).set({ state: "unknown", providerObservation: observation }).where(eq(subscriptionProviderScheduleOperations.id, operationId));
@@ -88,6 +90,7 @@ async function owned(ctx: ServiceContext, readId: string, nonce: string) {
   const local = reads.get(readId);
   if (!local || !local.invoked || local.nonce !== nonce) throw new ServiceError("permission", "This is not the actual admitted verification caller.");
   const current = await locked(ctx, local.operationId), history = historySchema.parse(current.operation.providerObservation.history ?? []);
+  await assertProviderReadNotStopped(ctx, readId);
   if (!history.some(entry => entry.source === "schedule_read_admitted" && entry.readId === readId && entry.operationId === local.operationId
     && entry.requestDigest === current.operation.requestDigest && entry.callerId === merchantPhysicalCaller().id && entry.completionDigest === hash(nonce))) throw new ServiceError("permission", "Restore the original nonce-owned read admission.");
   return { ...current, local, history };
@@ -139,7 +142,8 @@ export const applyMerchantScheduleRead = defineService({
     if (local.kind === "invoice_action" && actual) additions.push({ source: "invoice_stop_ack", operationId: operation.id, requestDigest: operation.requestDigest, readId, actualDigest, actual });
     if (local.kind === "subscription_cancel" && verified) additions.push({ source: "provider_cancel_readback", operationId: operation.id, requestDigest: operation.requestDigest, readId,
       providerSubscriptionRef: actual?.providerSubscriptionRef, providerState: "cancelled" });
-    additions.push({ source: "schedule_read_finished", operationId: operation.id, requestDigest: operation.requestDigest, readId, completionDigest: hash(completionNonce), outcome: local.outcome, verified, actualDigest });
+    additions.push(await captureProviderReadFinish(ctx, operation, { source: "schedule_read_finished", operationId: operation.id, requestDigest: operation.requestDigest,
+      readId, completionDigest: hash(completionNonce), outcome: local.outcome, verified, actualDigest }, { history, additions, actualDigest }));
     const observation = { ...operation.providerObservation, ...(verified && local.result ? { phaseInventory: local.result } : {}), history: [...history, ...additions] };
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
     await ctx.tx.update(subscriptionProviderScheduleOperations).set({ state: verified ? "confirmed" : "unknown", providerObservation: observation }).where(eq(subscriptionProviderScheduleOperations.id, operation.id));
@@ -180,6 +184,17 @@ export async function flushMerchantScheduleReads(subscriptionId: string) {
     await applyMerchantScheduleRead.call({ readId, completionNonce: local.nonce }, { kind: "system" }); reads.delete(readId);
   }
 }
+export const retainMerchantReadCash = defineService({
+  name: "subscriptions.retainReadCash", summary: "Retain actual positive cash only from its still-owned original reader before subsequent provider work.",
+  kind: "mutation", permission: "system", external: false, input: completion.extend({ cash: subscriptionScheduleCashObservation }), output: z.object({ retained: z.literal(true) }),
+  handler: async (input, ctx) => {
+    const original = await owned(ctx, input.readId, input.completionNonce);
+    if (input.cash.subscriptionId !== original.operation.subscriptionId || original.local.kind !== "invoice_action") throw new ServiceError("permission", "This original read does not own that observed cash.");
+    const retained = await ctx.callAsSystem(retainProviderCharge, input.cash);
+    if (!retained.receiptId || !retained.observationId) throw new ServiceError("conflict", "Restore the original cash observation before reading further provider obligations.");
+    return { retained: true as const };
+  },
+});
 export const recoverMerchantSchedule = defineOrchestratedService({
   name: "subscriptions.recoverMerchantSchedule", summary: "Recover an original schedule or cancellation using only GETs after its own physical caller finished.",
   kind: "mutation", permission: "system", external: false, input: z.object({ operationId: z.uuid() }), output: z.object({ verified: z.boolean() }),
@@ -208,7 +223,9 @@ export const recoverMerchantSchedule = defineOrchestratedService({
         await adapter.inspectMerchantPhaseScheduleStop({ ...phaseScheduleStopRequest.parse(claimed.request), onStopped: async value => observed(phaseScheduleStopped.parse(value)) });
       } else if (claimed.kind === "invoice_action") {
         if (!adapter.inspectMerchantScheduleInvoiceStop) throw new ServiceError("conflict", "Restore the GET-only original invoice action adapter.");
-        await adapter.inspectMerchantScheduleInvoiceStop({ ...invoiceActionRequest.parse(claimed.request), onPaidIntentObserved: retainOriginalScheduleCash,
+        await adapter.inspectMerchantScheduleInvoiceStop({ ...invoiceActionRequest.parse(claimed.request), onPaidIntentObserved: async actual => {
+          await retainMerchantReadCash.call({ readId: claimed.readId, completionNonce: local.nonce, cash: { provider: "stripe", ...actual } }, { kind: "system" });
+        },
           onAcknowledged: async value => observed(invoiceActionAcknowledgment.parse(value)) });
       } else {
         if (!adapter.inspectMerchantScheduleCancellation) throw new ServiceError("conflict", "Restore the GET-only original subscription cancellation adapter.");
@@ -219,4 +236,4 @@ export const recoverMerchantSchedule = defineOrchestratedService({
     const applied = await applyMerchantScheduleRead.call({ readId: claimed.readId, completionNonce: local.nonce }, { kind: "system" }); reads.delete(claimed.readId); return applied;
   },
 });
-export default [prepareMerchantScheduleRead, observeMerchantScheduleRead, applyMerchantScheduleRead, recoverMerchantSchedule];
+export default [prepareMerchantScheduleRead, observeMerchantScheduleRead, applyMerchantScheduleRead, retainMerchantReadCash, recoverMerchantSchedule];
