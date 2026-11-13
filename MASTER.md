@@ -14259,6 +14259,15 @@ whatever is best for the people using the site.
   (-result.json and -ledger-v2.json),
   /tmp/freeholder-financial-json-key-source-v1-20261113-result.json.
   This component proof supplies no provider-account or stable acceptance.
+  Controlled raw-finance native preparation2026-11-13: the first newly
+  executed positive-intent interruption control stopped before controlled
+  provider admission because its synthetic Stripe edge supplied a secret but
+  omitted webhook configuration, making the real adapter unavailable. Failed
+  V6 is preserved with zero controlled resources/facts and canonical money,
+  exact83-entry journal/profile and drained clients. The fixture now explicitly
+  supplies its own fictional webhook secret instead of depending on inherited
+  process configuration. No production availability guard changed. Both actual
+  raw-finance controls still require a fresh database and original assertions.
   Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
   parity stopped at the first genuine model/source mismatch in the named
   nonnegative invoice amount CHECK after125 complete models. The unchanged
