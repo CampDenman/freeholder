@@ -36,7 +36,7 @@ export const freezeOriginalMerchantTerms = defineService({
     if (!original.taxDestination) throw new ServiceError("conflict", "The original destination was erased; a new agreement is required before billing.");
     const quote = await ctx.callAsSystem(quoteOriginalMerchantTerms, { planId: parent.planId, contactId: parent.contactId,
       productVariantId: parent.productVariantId, currency: parent.currency, taxDestination: original.taxDestination,
-      paymentMethodId: parent.paymentMethodId ?? undefined, deferFirstPayment: input.deferFirstPayment, locale: input.locale });
+      paymentMethodId: parent.paymentMethodId ?? undefined, deferFirstPayment: input.deferFirstPayment, locale: input.locale, calendarStart: parent.currentPeriodStart });
     if (!quote || quote.quoteDigest !== input.acceptedQuoteDigest) throw new ServiceError("conflict", "The original price, tax policy or billing notice changed. Review the exact quote again.");
     if (quote.snapshot.productVariantId !== parent.productVariantId || quote.snapshot.billingMode !== parent.billingMode
       || quote.snapshot.setupFeeMinor !== parent.acceptedSetupFeeMinor) throw new ServiceError("conflict", "The original variant, billing method or setup obligation differs from the reviewed agreement.");
