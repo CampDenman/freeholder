@@ -589,17 +589,58 @@ BEGIN
  RETURN NEW;
 END $$;
 --> statement-breakpoint
+-- The actual original URL digest is separate from fetched-file bytes. Missing
+-- historical witnesses are recovery debt, never guessed or backfilled here.
+ALTER TABLE import_source_media ADD COLUMN source_key_digest text CHECK (source_key_digest IS NULL OR source_key_digest ~ '^[a-f0-9]{64}$');
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_crawl_media_key_capture() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF EXISTS(SELECT 1 FROM import_crawl_graphs binding WHERE binding.graph_id=NEW.graph_id)
+   AND (NEW.source_key_digest IS DISTINCT FROM encode(sha256(convert_to(NEW.key,'UTF8')),'hex')
+     OR NEW.key LIKE 'redacted:%') THEN
+  RAISE EXCEPTION 'The original HTTP media URL needs its actual first capture digest' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER import_source_media_crawl_key_capture BEFORE INSERT ON import_source_media
+ FOR EACH ROW EXECUTE FUNCTION freeholder_guard_crawl_media_key_capture();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_crawl_media_projection_retired(original_media uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM import_source_media media
+   JOIN import_crawl_graphs binding ON binding.graph_id=media.graph_id
+   JOIN import_source_graphs graph ON graph.id=binding.graph_id
+   JOIN import_crawl_sources source ON source.id=binding.source_id AND source.generation=binding.source_generation
+   JOIN import_crawl_erasure_sources member ON member.source_id=source.id AND member.generation=source.generation
+   WHERE media.id=original_media AND media.source_key_digest IS NOT NULL
+    AND (media.key='redacted:'||media.id::text OR media.source_key_digest=encode(sha256(convert_to(media.key,'UTF8')),'hex'))
+    AND media.asset_id IS NULL AND media.digest IS NULL AND media.bytes IS NULL
+    AND graph.plan_digest IS NULL AND graph.lease_token IS NULL AND source.lease_token IS NULL
+    AND freeholder_crawl_erasure_scope_complete(member.request_id)
+    AND freeholder_crawl_projection_retired(source.id,null::uuid)
+    AND NOT EXISTS(SELECT 1 FROM import_source_batches batch WHERE batch.graph_id=graph.id))
+$$;
+--> statement-breakpoint
 CREATE OR REPLACE FUNCTION freeholder_guard_import_media_identity() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE minimize boolean;
 BEGIN
  minimize:=current_setting('freeholder.import_crawl_projection_redaction',true)='v1'
   AND NEW.planned='{"redacted":true}'::jsonb
-  AND EXISTS(SELECT 1 FROM import_crawl_graphs binding WHERE binding.graph_id=OLD.graph_id AND freeholder_crawl_projection_retired(binding.source_id,null::uuid));
- IF NEW.graph_id IS DISTINCT FROM OLD.graph_id OR NEW.key IS DISTINCT FROM OLD.key
+  AND freeholder_crawl_media_projection_retired(OLD.id);
+ IF NEW.id IS DISTINCT FROM OLD.id OR NEW.graph_id IS DISTINCT FROM OLD.graph_id
+    OR NEW.source_key_digest IS DISTINCT FROM OLD.source_key_digest
+    OR (NEW.key IS DISTINCT FROM OLD.key AND NOT coalesce(minimize,false))
     OR (NEW.planned IS DISTINCT FROM OLD.planned AND NOT coalesce(minimize,false))
     OR (OLD.digest IS NOT NULL AND (NEW.digest IS DISTINCT FROM OLD.digest OR NEW.bytes IS DISTINCT FROM OLD.bytes))
     OR (OLD.asset_id IS NOT NULL AND NEW.asset_id IS DISTINCT FROM OLD.asset_id) THEN
   RAISE EXCEPTION 'The original shared media identity and accepted receipt are immutable' USING ERRCODE='23514';
+ END IF;
+ IF NEW.key IS DISTINCT FROM OLD.key AND NOT (
+   OLD.source_key_digest=encode(sha256(convert_to(OLD.key,'UTF8')),'hex') AND NEW.key='redacted:'||OLD.id::text AND NEW.error IS NULL
+   AND OLD.asset_id IS NULL AND NEW.asset_id IS NULL AND OLD.digest IS NULL AND NEW.digest IS NULL AND OLD.bytes IS NULL AND NEW.bytes IS NULL
+   AND freeholder_crawl_media_projection_retired(OLD.id)
+ ) THEN
+  RAISE EXCEPTION 'Accepted or unresolved original HTTP file identity needs reviewed recovery before erasure' USING ERRCODE='55000';
  END IF;
  RETURN NEW;
 END $$;
@@ -634,7 +675,8 @@ BEGIN
     OR EXISTS(SELECT 1 FROM import_crawl_entry_originals witness JOIN import_crawl_graphs binding ON binding.graph_id=witness.graph_id JOIN import_source_entries entry ON entry.id=witness.entry_id
       WHERE binding.source_id=member.source_id AND (entry.metadata IS DISTINCT FROM '{"format":"http-originals","redacted":true}'::jsonb OR entry.target_page_id IS NULL AND entry.target_slug IS NOT NULL))
     OR EXISTS(SELECT 1 FROM import_crawl_graphs binding JOIN import_source_media media ON media.graph_id=binding.graph_id
-      WHERE binding.source_id=member.source_id AND media.planned IS DISTINCT FROM '{"redacted":true}'::jsonb)
+      WHERE binding.source_id=member.source_id AND (media.planned IS DISTINCT FROM '{"redacted":true}'::jsonb
+        OR media.source_key_digest IS NULL OR media.key IS DISTINCT FROM 'redacted:'||media.id::text OR media.error IS NOT NULL))
     OR EXISTS(SELECT 1 FROM import_crawl_graphs binding JOIN import_source_batches batch ON batch.graph_id=binding.graph_id JOIN import_runs child ON child.id=batch.child_run_id
       WHERE binding.source_id=member.source_id AND child.status IN ('discover','previewed','mapped','failed')
        AND (child.preview IS DISTINCT FROM '{"sourceFormat":"redacted-http-input"}'::jsonb OR child.checkpoint ? 'pendingBlogPosts'))) THEN

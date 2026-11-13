@@ -67,7 +67,7 @@ export const applyCrawlGraphCatalog = defineService({
       catch { throw new ServiceError("conflict", "The saved robots policy is not valid UTF-8."); }
     }
     const plan = buildCrawlGraphCatalog(graph.headerMetadata, entries.map(row => row.metadata), policyText);
-    if (plan.media.length) await ctx.tx.insert(importSourceMedia).values(plan.media.map(item => ({ graphId: graph.id, key: item.key, planned: item })));
+    if (plan.media.length) await ctx.tx.insert(importSourceMedia).values(plan.media.map(item => ({ graphId: graph.id, key: item.key, sourceKeyDigest: createHash("sha256").update(item.key).digest("hex"), planned: item })));
     await ctx.tx.update(importSourceGraphs).set({ planMetadata: plan.catalog, leaseToken: null, leaseActor: null, leaseUntil: null, updatedAt: new Date() }).where(eq(importSourceGraphs.id, graph.id));
     const counts = root.counts && typeof root.counts === "object" ? root.counts : {};
     await ctx.tx.update(importRuns).set({ counts: { ...counts, media: plan.media.length }, error: null }).where(eq(importRuns.id, root.id));

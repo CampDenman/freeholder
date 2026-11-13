@@ -8,9 +8,10 @@ import { closeDb, db } from "@/core/db";
 import { importCrawlRequests, importCrawlResponseErasures, importCrawlResponses, importCrawlSources } from "@/core/import/crawl-schema";
 import { importCrawlEntryOriginals, importCrawlGraphs } from "@/core/import/crawl-graph-schema";
 import { importCrawlErasureScopes, importCrawlErasureSources } from "@/core/import/crawl-erasure-schema";
+import { importSourceMedia } from "@/core/plugins/schema";
 
 const hasDatabase = Boolean(process.env.DATABASE_URL);
-const tables = [importCrawlSources, importCrawlRequests, importCrawlResponses, importCrawlResponseErasures, importCrawlGraphs, importCrawlEntryOriginals, importCrawlErasureScopes, importCrawlErasureSources];
+const tables = [importCrawlSources, importCrawlRequests, importCrawlResponses, importCrawlResponseErasures, importCrawlGraphs, importCrawlEntryOriginals, importCrawlErasureScopes, importCrawlErasureSources, importSourceMedia];
 describe.runIf(hasDatabase)("actual crawl source SQL/model columns (C3.47)", () => {
   afterAll(closeDb);
   for (const table of tables) {

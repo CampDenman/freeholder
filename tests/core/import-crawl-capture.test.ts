@@ -251,4 +251,34 @@ describe.runIf(hasDatabase)("actual saved HTTP response capture (C3.47)", () => 
     expect(JSON.stringify({ header: retiredGraph!.headerMetadata, catalog: retiredGraph!.planMetadata, entries, media })).not.toContain(privateMarker);
   });
 
+  it("keeps an actual admitted image batch pending for reviewed privacy recovery without rekeying its URL", async () => {
+    const privateMarker = "fictional-pending-media-reader@example.test";
+    const owner = await actualOwner(), site = await actualOriginalServer(undefined, `<main>Actual pending file.<img src="/${privateMarker}.png"></main>`);
+    const run = await startImport.call({ origin: site, kind: "html" }, owner);
+    await initializeCrawl.call({ id: run.id, url: `${site}original` }, owner);
+    const [source] = await db().select().from(importCrawlSources).where(eq(importCrawlSources.runId, run.id));
+    for (let phase = 0; phase < 6; phase++) await advanceCrawl.call({ id: run.id, generation: source!.generation }, owner);
+    const [graph] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.runId, run.id));
+    // This real public commit first admits its immutable plan/batch. The
+    // owned HTTP fixture intentionally serves HTML rather than image bytes;
+    // either its ordinary failed-file receipt or error is recovery state.
+    await Promise.allSettled([commitImport.call({ id: run.id, observed: { generation: graph!.generation, sourceRevision: graph!.sourceRevision, planRevision: graph!.planRevision } }, owner)]);
+    const [admitted] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.id, graph!.id));
+    expect(admitted?.planDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(await db().select().from(importSourceBatches).where(eq(importSourceBatches.graphId, graph!.id))).toHaveLength(1);
+    const mediaBefore = await db().select().from(importSourceMedia).where(eq(importSourceMedia.graphId, graph!.id));
+    expect(mediaBefore).toHaveLength(1); expect(mediaBefore[0]?.key).toContain(privateMarker);
+    const reader = (await resolveContact.call({ email: privateMarker }, owner)).contact;
+    const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, owner);
+    await verifyDataRequest.call({ id: request.id, method: "Synthetic actual admitted file subject verification" }, owner);
+    await expect(fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, owner)).rejects.toMatchObject({ code: "conflict" });
+    expect(await db().select().from(importSourceMedia).where(eq(importSourceMedia.graphId, graph!.id))).toEqual(mediaBefore);
+    expect(await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id))).toEqual([]);
+    for (const response of await db().select().from(importCrawlResponses)) {
+      expect(response.retiredAt).toBeNull();
+      expect(await storage().get(response.storageKey!)).toBeDefined();
+    }
+    expect((await db().select().from(mediaObjectWrites)).some(row => row.operation === "delete")).toBe(false);
+  });
+
 });

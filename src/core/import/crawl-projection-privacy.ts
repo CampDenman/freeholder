@@ -12,12 +12,37 @@ import { markImportCrawlWriter } from "./crawl-writer";
 export const REDACTED_HTTP_ENTRY = Object.freeze({ format: "http-originals", redacted: true });
 export const REDACTED_HTTP_PLAN = Object.freeze({ redacted: true });
 
+/** A file URL already admitted into a plan, batch or asset remains business
+ * recovery identity. Refuse its erasure ACK rather than silently rekeying it.
+ * This check runs before physical deletion and again in the final TX; SQL
+ * independently fences the actual projection update and completion.
+ */
+export async function assertCrawlMediaMinimizable(tx: Tx, responseIds: string[]): Promise<void> {
+  if (!responseIds.length) return;
+  const [capability] = await tx.execute<{ available: boolean }>(sql`select to_regprocedure('public.freeholder_guard_crawl_media_key_capture()') is not null as available`);
+  if (!capability?.available) throw new ServiceError("conflict", "Original HTTP file-key capture needs reviewed schema recovery before cleanup can continue.");
+  const [blocked] = await tx.execute<{ blocked: boolean }>(sql`
+    select exists(select 1 from import_crawl_responses response
+      join import_crawl_requests request on request.id=response.request_id
+      join import_crawl_graphs binding on binding.source_id=request.source_id
+      join import_source_graphs graph on graph.id=binding.graph_id
+      join import_source_media media on media.graph_id=graph.id
+      where response.id in (${sql.join(responseIds.map(id => sql`${id}::uuid`), sql`,`)})
+        and (media.source_key_digest is null or graph.plan_digest is not null
+          or graph.lease_token is not null or media.asset_id is not null
+          or media.digest is not null or media.bytes is not null
+          or exists(select 1 from import_source_batches batch where batch.graph_id=graph.id))) as blocked
+  `);
+  if (blocked?.blocked) throw new ServiceError("conflict", "Original HTTP file URLs belong to an accepted or unresolved import receipt. Review its business recovery before erasure can complete.");
+}
+
 /** This method never substitutes a metadata flag for physical absence. Both
  * its reads and the SQL update guards recheck original generation holds and
  * actual receipts. Normalized IDs/ranges/digests and ownership mappings remain.
  */
 export async function minimizeCrawlInputProjections(tx: Tx, responseIds: string[]): Promise<void> {
   if (!responseIds.length) return;
+  await assertCrawlMediaMinimizable(tx, responseIds);
   await markImportCrawlWriter(tx);
   const [available] = await tx.execute<{ available: boolean }>(sql`select to_regprocedure('public.freeholder_crawl_projection_retired(uuid,uuid)') is not null as available`);
   if (!available?.available) throw new ServiceError("conflict", "The known original responses need the current guarded projection-recovery schema before erasure can complete.");
@@ -43,7 +68,7 @@ export async function minimizeCrawlInputProjections(tx: Tx, responseIds: string[
     const [eligible] = await tx.execute<{ ready: boolean }>(sql`select freeholder_crawl_projection_retired(${row.sourceId}::uuid,null::uuid) as ready`);
     if (!eligible?.ready) continue;
     await tx.update(importSourceGraphs).set({ state: "invalidated", headerMetadata: REDACTED_HTTP_ENTRY, planMetadata: REDACTED_HTTP_PLAN, leaseToken: null, leaseActor: null, leaseUntil: null, updatedAt: new Date() }).where(eq(importSourceGraphs.id, row.graphId));
-    await tx.update(importSourceMedia).set({ planned: REDACTED_HTTP_PLAN, error: null }).where(eq(importSourceMedia.graphId, row.graphId));
+    await tx.update(importSourceMedia).set({ key: sql`'redacted:' || ${importSourceMedia.id}::text`, planned: REDACTED_HTTP_PLAN, error: null }).where(eq(importSourceMedia.graphId, row.graphId));
     const children = await tx.select({ run: importRuns }).from(importSourceBatches).innerJoin(importRuns, eq(importRuns.id, importSourceBatches.childRunId)).where(and(eq(importSourceBatches.graphId, row.graphId), inArray(importRuns.status, ["discover", "previewed", "mapped", "failed"])));
     for (const { run } of children) {
       const checkpoint = run.checkpoint && typeof run.checkpoint === "object" && !Array.isArray(run.checkpoint) ? { ...run.checkpoint as Record<string, unknown> } : {};

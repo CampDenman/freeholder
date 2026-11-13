@@ -6585,6 +6585,16 @@ deployments are portable, testable and incapable of silently forking the truth.
   cancellation/expiry/erasure acceptance remain required; C3.47 stays open.
   See deploy/import-http501-lifecycle-2026-11-12.md.
 
+  A further C3.47 actual-native boundary at b716e252 genuinely retained a
+  private image URL in an unaccepted media key after completed reader erasure.
+  The populated failure is preserved. A new unjournalled81 source repair keeps
+  the original row/digest witness and permits opaque key minimization only for
+  the exact unheld, physically retired original scope with no admitted plan,
+  batch, asset or file receipt. Accepted or unresolved work requires recovery;
+  a flag alone cannot establish erasure. New-database/nine-model/native
+  qualification remains required; no checklist closure is claimed. Evidence:
+  `deploy/import-http-media-key-erasure-2026-11-12.md`.
+
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
 #### Workforce completion

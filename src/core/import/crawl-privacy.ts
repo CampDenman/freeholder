@@ -21,7 +21,7 @@ import { boundStorage } from "@/adapters/storage";
 import { importCrawlRequests, importCrawlResponseErasures, importCrawlResponses, importCrawlSources } from "./crawl-schema";
 import { markImportCrawlWriter } from "./crawl-writer";
 import { captureCrawlErasureScope, crawlErasureGuardsAvailable, hasAppliedCrawlRetirementEvidence, hasOriginalCrawlRecoveryEvidence, originalCrawlScopeIsComplete } from "./crawl-erasure-scope";
-import { minimizeCrawlInputProjections, minimizeCrawlRootInput } from "./crawl-projection-privacy";
+import { assertCrawlMediaMinimizable, minimizeCrawlInputProjections, minimizeCrawlRootInput } from "./crawl-projection-privacy";
 import { registerImportOriginalCollector, type ImportOriginalCaptureContext, type ImportOriginalMember } from "./source-retention";
 
 export const CRAWL_ERASURE_SCOPE = "imports.crawlOriginals";
@@ -200,6 +200,7 @@ export const claimCrawlOriginalErasure = defineService({
   auditInputFields: ["requestId", "responseIds"], input: erasureInput, output: z.object({ keys: z.string().array().max(25) }),
   handler: async (input, ctx) => {
     const rows = await originalErasureRows(ctx.tx, input), keys: string[] = [];
+    await assertCrawlMediaMinimizable(ctx.tx, input.responseIds);
     for (const response of rows) {
       const receipts = await ctx.tx.select({ state: mediaObjectWrites.state }).from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest, response.keyDigest));
       if (receipts.some(row => ["unverified", "started", "unknown"].includes(row.state))) throw new ServiceError("conflict", "The original HTTP physical operation is still unresolved.");
@@ -293,7 +294,9 @@ export const reconcileCrawlOriginalObservation = defineService({
          or exists(select 1 from import_crawl_entry_originals witness join import_source_entries entry on entry.id=witness.entry_id
            where witness.response_id=original.id and entry.metadata is distinct from '{"format":"http-originals","redacted":true}'::jsonb)
          or exists(select 1 from import_crawl_requests request join import_crawl_graphs binding on binding.source_id=request.source_id join import_source_graphs graph on graph.id=binding.graph_id
-           where request.id=original.request_id and (graph.header_metadata is distinct from '{"format":"http-originals","redacted":true}'::jsonb or graph.plan_metadata is distinct from '{"redacted":true}'::jsonb)))
+           where request.id=original.request_id and (graph.header_metadata is distinct from '{"format":"http-originals","redacted":true}'::jsonb or graph.plan_metadata is distinct from '{"redacted":true}'::jsonb))
+         or exists(select 1 from import_crawl_requests request join import_crawl_graphs binding on binding.source_id=request.source_id join import_source_media media on media.graph_id=binding.graph_id
+           where request.id=original.request_id and (to_jsonb(media)->>'source_key_digest' is null or media.key is distinct from 'redacted:'||media.id::text or media.planned is distinct from '{"redacted":true}'::jsonb or media.error is not null)))
       group by cohort.id,cohort.request_id,original.id order by cohort.id limit 500
     `);
     let recoveryRequired = 0;

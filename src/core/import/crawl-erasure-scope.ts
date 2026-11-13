@@ -26,14 +26,17 @@ export async function crawlErasureScopeAvailable(tx: ScopeReader): Promise<boole
  */
 export async function crawlErasureGuardsAvailable(tx: ScopeReader): Promise<boolean> {
   const [row] = await tx.execute<{ available: boolean }>(sql`
-    select count(*)=4
+    select count(*)=6
       and to_regprocedure('public.freeholder_crawl_erasure_scope_complete(uuid)') is not null
+      and to_regprocedure('public.freeholder_crawl_media_projection_retired(uuid)') is not null
       and to_regprocedure('public.freeholder_crawl_projection_retired(uuid,uuid)') is not null as available
     from (values
       ('public.import_crawl_erasure_scopes','import_crawl_erasure_scopes_capture','public.freeholder_guard_crawl_erasure_capture()'),
       ('public.import_crawl_erasure_sources','import_crawl_erasure_sources_capture','public.freeholder_guard_crawl_erasure_capture()'),
       ('public.import_crawl_erasure_scopes','import_crawl_erasure_scopes_complete','public.freeholder_require_crawl_erasure_scope_complete()'),
-      ('public.data_requests','data_requests_crawl_erasure_completion','public.freeholder_require_crawl_erasure_completion()')
+      ('public.data_requests','data_requests_crawl_erasure_completion','public.freeholder_require_crawl_erasure_completion()'),
+      ('public.import_source_media','import_source_media_crawl_key_capture','public.freeholder_guard_crawl_media_key_capture()'),
+      ('public.import_source_media','import_source_media_identity_guard','public.freeholder_guard_import_media_identity()')
     ) required(table_name,trigger_name,function_name)
     join pg_trigger guard on guard.tgrelid=to_regclass(required.table_name)
       and guard.tgname=required.trigger_name and guard.tgfoid=to_regprocedure(required.function_name)
