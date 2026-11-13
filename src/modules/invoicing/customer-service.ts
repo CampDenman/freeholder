@@ -73,6 +73,7 @@ const customerInvoice = z.object({
   merchants: z.array(publicInvoiceMerchant),
   subtotalMinor: z.number().int(), discountMinor: z.number().int(), shippingMinor: z.number().int(),
   taxMinor: z.number().int(), totalMinor: z.number().int(), paidMinor: z.number().int(),
+  creditedMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   dueAt: z.date().nullable(), memo: z.string().nullable(), requiredTaxLegend: z.string().nullable(),
   // `amountMinor` is the line's share of the subtotal (before discount and
   // before tax — the invoice subtotal sums exactly these, and the discount is
@@ -116,7 +117,7 @@ export const getCustomerInvoice = defineService({
     return { id: invoice.id, number: invoice.number!, status: invoice.status, currency: invoice.currency, ...issuer,
       merchants: policy?.collectionVersion === 1 ? await publicInvoiceMerchants(ctx, invoice.id) : [],
       subtotalMinor: invoice.subtotalMinor, discountMinor: invoice.discountMinor, shippingMinor: invoice.shippingMinor,
-      taxMinor: invoice.taxMinor, totalMinor: invoice.totalMinor, paidMinor: invoice.paidMinor,
+      taxMinor: invoice.taxMinor, totalMinor: invoice.totalMinor, paidMinor: invoice.paidMinor, creditedMinor: invoice.creditedMinor,
       dueAt: invoice.dueAt, memo: invoice.memo, requiredTaxLegend: invoice.requiredTaxLegend, lines, canPay: nextPaymentMinor !== null,
       saveMethodRequired: await requiresSavedMethod(ctx, invoice),
       nextPaymentMinor, awaitingRelease: payable(invoice) && nextPaymentMinor === null,

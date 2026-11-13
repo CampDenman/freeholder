@@ -23,6 +23,9 @@ import { recordAgreementFeeRemittance, reviewAgreementFee } from "@/modules/invo
 import { agreementFeeDuties, agreementFeeEligibility, agreementFeeRemittances } from "@/modules/invoicing/agreement-fee-schema";
 import { creditNoteDisposition } from "@/modules/invoicing/credit-disposition";
 import { commercialPaymentAttestations } from "@/modules/invoicing/commercial-attestation-schema";
+import { getCustomerInvoice } from "@/modules/invoicing/customer-service";
+import { invoiceAccessToken } from "@/modules/invoicing/customer-tokens";
+import { invoiceOutstanding } from "@/modules/invoicing/invoice-balance";
 import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agreement-schema";
 import { quoteNewAgreement } from "@/modules/subscriptions/merchant-terms-quote";
 import { subscriptionCommercialTerms, subscriptions } from "@/modules/subscriptions/schema";
@@ -33,7 +36,7 @@ import { subscriptionProrationCashConfirmations } from "@/modules/subscriptions/
 import { subscriptionProrations } from "@/modules/subscriptions/proration-schema";
 import { subscriptionProrationWitnesses } from "@/modules/subscriptions/proration-witnesses";
 import { seedMerchantCheckout80 } from "../helpers/merchant-checkout80";
-import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { ANONYMOUS, closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 describe.runIf(hasDatabase)("actual original gross proration, attested cash and exclusive canonical credit", { timeout: 90000 }, () => {
   let fixture: Awaited<ReturnType<typeof seedMerchantCheckout80>> | undefined;
@@ -69,7 +72,9 @@ describe.runIf(hasDatabase)("actual original gross proration, attested cash and 
     return { accepted, plan, input, terms, originalInvoice, effectiveAt };
   }
   async function target(price: string) {
-    const listing = await createListing.call({ title: `Actual gross target ${price}`, kind: "digital", price, acceptPolicy: true }, fixture!.sellers[0]);
+    const seller = fixture?.sellers[0];
+    if (!seller) throw new Error("The actual original merchant fixture must provide its seller before creating a target.");
+    const listing = await createListing.call({ title: `Actual gross target ${price}`, kind: "digital", price, acceptPolicy: true }, seller);
     const variant = (await getProductVariants.call({ productId: listing.productId }, OWNER)).variants[0]!;
     const plan = await savePlan.call({ productId: listing.productId, name: `Actual gross target ${price}`, interval: "day", intervalCount: 2,
       billingMode: "manual", proration: "create_prorations", status: "active" }, OWNER);
@@ -98,7 +103,11 @@ describe.runIf(hasDatabase)("actual original gross proration, attested cash and 
     expect((await acceptGrossProration.call(consent, OWNER)).prorationId).toBe(accepted.prorationId);
     if (!accepted.invoiceId || !accepted.creditNoteId) throw new Error("Actual canonical debit and old credit are required.");
     const [invoice] = await db().select().from(invoices).where(eq(invoices.id, accepted.invoiceId));
+    if (!invoice) throw new Error("The accepted original gross debit must have its actual issued invoice.");
     expect(invoice).toMatchObject({ totalMinor: 5250, paidMinor: 0, creditedMinor: 2100 });
+    const customerReview = await getCustomerInvoice.call({ id: invoice.id, token: invoiceAccessToken(invoice) }, ANONYMOUS);
+    expect(customerReview).toMatchObject({ totalMinor: 5250, paidMinor: 0, creditedMinor: 2100 });
+    expect(invoiceOutstanding(customerReview)).toBe(3150);
     expect((await db().select().from(invoiceLines).where(eq(invoiceLines.invoiceId, accepted.invoiceId)))[0]).toMatchObject({ subtotalMinor: 5000, taxMinor: 250 });
     expect((await db().select().from(creditNotes).where(eq(creditNotes.id, accepted.creditNoteId)))[0]).toMatchObject({ totalMinor: 2100, status: "issued" });
     const funding = await db().select().from(invoiceCreditFunding), reservations = await db().select().from(invoiceCreditReservations), applications = await db().select().from(invoiceCreditApplications);
@@ -111,6 +120,9 @@ describe.runIf(hasDatabase)("actual original gross proration, attested cash and 
     expect(await completePaidGrossProration.call({ invoiceId: invoice!.id }, { kind: "system" })).toEqual({ applied: false, reviewRequired: false });
     expect((await parent(input.id)).planId).toBe(old.plan.id); expect(await access(input.id)).toEqual(beforeAccess);
     expect(partial.amountMinor).toBe(1);
+    const partialCustomerReview = await getCustomerInvoice.call({ id: invoice.id, token: invoiceAccessToken(invoice) }, ANONYMOUS);
+    expect(partialCustomerReview).toMatchObject({ totalMinor: 5250, paidMinor: 1, creditedMinor: 2100 });
+    expect(invoiceOutstanding(partialCustomerReview)).toBe(3149);
     await recordOfflinePayment.call({ invoiceId: invoice!.id, method: "bank_transfer", amountMinor: 3149, reference: "fictional-gross-final",
       evidence: "Synthetic remaining external principal attestation", idempotencyKey: "gross-final" }, OWNER);
     expect((await parent(input.id)).planId).toBe(old.plan.id);

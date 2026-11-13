@@ -110,9 +110,10 @@ export async function commercialRefundRecorded(ctx: ServiceContext, refund: type
   const [record] = await ctx.tx.select().from(commercialRefundAttestations).where(eq(commercialRefundAttestations.refundId, refund.id)).limit(1);
   return Boolean(record && refund.provider === "manual" && record.paymentId === refund.paymentId && record.amountMinor === refund.amountMinor && record.currency === refund.currency);
 }
+const commercialPrincipalStateOutput = z.object({ recorded: z.boolean(), principalSafe: z.boolean(), feeOwedMinor: z.number().int().nonnegative(), feeRecordedMinor: z.number().int(), reviewRequired: z.boolean() });
 export const commercialPrincipalState = defineService({ name: "invoicing.commercialPrincipalState", summary: "Distinguish owner-recorded commercial principal and fee owed from independently verified provider settlement.",
   kind: "query", permission: "system", external: false, input: z.object({ paymentId: z.uuid() }),
-  output: z.object({ recorded: z.boolean(), principalSafe: z.boolean(), feeOwedMinor: z.number().int().nonnegative(), feeRecordedMinor: z.number().int(), reviewRequired: z.boolean() }),
+  output: commercialPrincipalStateOutput,
   handler: async ({ paymentId }, ctx) => {
     const record = await commercialPaymentRecorded(ctx, paymentId);
     if (!record) return { recorded: false, principalSafe: false, feeOwedMinor: 0, feeRecordedMinor: 0, reviewRequired: false };
@@ -156,7 +157,7 @@ export const recordCommercialFee = defineService({ name: "invoicing.recordCommer
 });
 export const reviewCommercialPayment = defineService({ name: "invoicing.reviewCommercialPayment", summary: "Review original recorded external principal, actual fee remittance receipts and remaining original liability without claiming independent bank verification.",
   kind: "query", permission: "scoped", input: z.object({ paymentId: z.uuid() }),
-  output: commercialPrincipalState.def.output.extend({ paymentId: z.uuid(), invoiceId: z.uuid(), currency: z.string(), amountMinor: z.number().int().positive(),
+  output: commercialPrincipalStateOutput.extend({ paymentId: z.uuid(), invoiceId: z.uuid(), currency: z.string(), amountMinor: z.number().int().positive(),
     receipts: z.array(z.object({ id: z.uuid(), direction: z.enum(["remitted", "returned"]), originalRemittanceId: z.uuid().nullable(), amountMinor: z.number().int().positive(), recordedBy: z.string(), createdAt: z.date() })) }),
   handler: async ({ paymentId }, ctx) => {
     const original = await commercialPaymentRecorded(ctx, paymentId); if (!original) throw new ServiceError("not_found", "This payment has no original recorded commercial principal.");
