@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
+import type { merchantSubscriptionUndo } from "./merchant-scope-undo";
 import { getService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { getMerchantCollectionConfiguration } from "@/modules/invoicing/merchant-collection";
 import { subscriptionCommercialTerms, subscriptionMerchantScopes, subscriptionProviderChargeObservations, subscriptionProviderChargeReceipts, subscriptions } from "./schema";
@@ -18,9 +19,9 @@ import { subscriptionProviderInvoiceObservations, subscriptionProviderInvoiceLin
 import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { subscriptionMerchantScope, type subscriptionTaxDestination } from "./merchant-scope-contract";
 import type { SubscriptionMarketPolicy } from "./market-policy";
+export { merchantSubscriptionUndo } from "./merchant-scope-undo";
 
 const profileReceipt = z.object({ profileId: z.uuid(), profileVersion: z.number().int().positive(), liability: z.enum(["platform", "seller"]) });
-export const merchantSubscriptionUndo = z.object({ movedIds: z.array(z.uuid()).max(5000), originalEvidence: z.array(z.object({ kind: z.enum(["scope", "cash", "cash_observation", "schedule_resource", "schedule_operation", "setup_fee", "commercial_terms", "commercial_amendment", "commercial_resumption", "provider_read_ticket", "provider_read_finish", "provider_read_stop", "provider_generation", "provider_invoice", "provider_invoice_line", "invoice_financial", "refund_financial"]), id: z.uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) })).max(5000) });
 
 /** Store bounded fingerprints rather than personal destinations in merge history. */
 export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[]) {
