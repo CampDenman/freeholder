@@ -14276,8 +14276,20 @@ whatever is best for the people using the site.
   assembled SQL80 body now use prior_schedule. Every original ownership
   exclusion stays intact; the entire old397928-byte prefix and0–79/81/82 are
   unchanged. Failed V7 and all independently verified journal/profile/drain
-  evidence remain preserved. Fresh migration, strict parity and the unchanged
-  business journey remain required.
+  evidence remain preserved. NEW V8 normally applied all83 entries in6.829s;
+  strict read-only v17 passed all142 models,282 guards and227 installed
+  function bodies in11.400s/3357 queries, with the parser and all prior model
+  controls unchanged. The unchanged positive-intent interruption/recovery
+  journey passed10.832s: the original positive fact and thrown finish stay
+  byte-identical, genuine recovery retains one original cash receipt and no
+  canonical invoice/payment. The separate unpaid nonzero invoice/processing
+  intent control passed9.929s with zero cash receipts/invoices/payments and
+  unchanged accepted subscription. Independent component SHA/count, all83
+  journal/profile and drained-client proofs passed before either reset.
+  Evidence: /tmp/freeholder-current-full82-parity142-v17-{result,drain}-20261113.json;
+  /tmp/freeholder-current-full82-controlled-raw-{positive,unpaid}-native-v3-20261113
+  (-result.json and -ledger-v3.json). These are synthetic-provider component
+  checks, not full positive collection, provider-account or stable acceptance.
   Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
   parity stopped at the first genuine model/source mismatch in the named
   nonnegative invoice amount CHECK after125 complete models. The unchanged
