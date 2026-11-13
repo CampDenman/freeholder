@@ -26,7 +26,7 @@ describe("authentic legacy bank current proof", () => {
   });
   it("recognizes only exact original success without inventing create platform metadata", () => {
     const { input, refund, own, cash } = actual(); refund.rawProviderStatus = own.status = "succeeded"; cash.amountRefundedMinor = 400;
-    expect(legacyBankCurrentVerdict(input)).toEqual({ state: "verified", status: "succeeded", rawStatus: "succeeded", requiresReview: false });
+    expect(legacyBankCurrentVerdict(input)).toEqual({ state: "verified", status: "succeeded", rawStatus: "succeeded", requiresReview: false, replacementEligible: false });
     expect(input.original.originalCreatePlatformAccountId).toBeNull();
   });
   it.each([null, "unknown_future_bank_status"])("keeps raw nullable or unknown status as review: %s", status => {
@@ -70,7 +70,7 @@ describe("authentic legacy bank current proof", () => {
   });
   it("requires the primary cash callback and complete inventory to name the same actual charge", () => {
     const { input } = actual(), primary = input.facts[1]?.evidence;
-    if (!primary || !("actual" in primary)) throw new Error("The primary cash fixture must contain its actual response.");
+    if (!primary || !("actual" in primary) || !("providerChargeRef" in primary.actual)) throw new Error("The primary cash fixture must contain its actual charge response.");
     primary.actual.providerChargeRef = "ch_foreign";
     expect(legacyBankCurrentVerdict(input)).toMatchObject({ state: "review", reason: "incomplete_original_cash" });
   });

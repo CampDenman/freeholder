@@ -7,8 +7,9 @@ import { z } from "zod";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { refunds } from "./schema";
-import { originalLegacyBankRefund } from "./legacy-refund-dispatch";
+import { legacyBankKnownRefundResources, originalLegacyBankRefund } from "./legacy-refund-dispatch";
 import { legacyBankCurrentReceipts, legacyBankReadFacts, legacyBankReadFinishes, legacyBankReads } from "./legacy-bank-read-schema";
+import { legacyBankReplacementCapacity } from "./legacy-bank-replacement-store";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { legacyBankCurrentVerdict, type LegacyBankStatus } from "./legacy-bank-current-proof";
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
@@ -20,9 +21,9 @@ export async function legacyBankCurrentRevision(ctx: ServiceContext, refundId: s
   if (!saved || saved.incomplete) throw new ServiceError("conflict", "Restore the complete original legacy resource history; a truncated inventory cannot prove current cash.");
   return z.string().regex(/^[a-f0-9]{64}$/).parse(saved.revision);
 }
-export async function assertLegacyBankRefundCapacity(ctx: ServiceContext, paymentId: string) {
-  const [row] = await ctx.tx.execute<{ allowed: boolean }>(sql`select freeholder_legacy_bank_refund_capacity(${paymentId}::uuid) allowed`);
-  if (!row?.allowed) throw new ServiceError("conflict", "The original legacy bank refund promise is live, returned or needs review. Reconcile its exact resources before another refund key.");
+export async function assertLegacyBankRefundCapacity(ctx: ServiceContext, paymentId: string, key?: string, refundId?: string) {
+  await ctx.tx.execute(sql`select freeholder_legacy_bank_refund_capacity(${paymentId}::uuid)`);
+  if (!await legacyBankReplacementCapacity(ctx, paymentId, key, refundId)) throw new ServiceError("conflict", "The original legacy bank refund promise is live, returned or needs review. Reconcile its exact resources before another refund key.");
 }
 
 export const completeLegacyBankCurrentRead = defineService({
@@ -46,7 +47,8 @@ export const completeLegacyBankCurrentRead = defineService({
     const digest = createHash("sha256").update(facts.map(fact => fact.evidenceDigest).join(",")).digest("hex");
     const authenticFacts = facts.every(fact => merchantTaxDigest({ kind: fact.kind, value: fact.evidence }) === fact.evidenceDigest);
     const prior = await legacyBankCurrentRevision(ctx, refund.id, read.id);
-    const verdict = legacyBankCurrentVerdict({ original, authenticOriginal: authenticFacts && merchantTaxDigest(original) === read.originalDigest
+    const inventory = await legacyBankKnownRefundResources(ctx.tx, refund.paymentId, original);
+    const verdict = legacyBankCurrentVerdict({ original, knownRefunds: inventory.resources, allOriginalCallersFinished: inventory.allCallersFinished, authenticOriginal: authenticFacts && merchantTaxDigest(original) === read.originalDigest
       && merchantTaxDigest(read.original) === read.originalDigest && finish?.factsDigest === digest,
       preparedRevision: read.sourceRevision, currentPriorRevision: prior, wrapperReturned: finish?.outcome === "returned",
       exactCallerFinished: finish?.callerInstanceId === read.caller.id, factCount: finish?.factCount ?? -1, facts });
@@ -55,12 +57,12 @@ export const completeLegacyBankCurrentRead = defineService({
     const [priorReceipt] = await ctx.tx.select().from(legacyBankCurrentReceipts).where(eq(legacyBankCurrentReceipts.readId, read.id));
     if (priorReceipt) {
       if (priorReceipt.refundId !== refund.id || priorReceipt.resolvedRevision !== resolvedRevision || priorReceipt.status !== verdict.status
-        || priorReceipt.rawStatus !== verdict.rawStatus || priorReceipt.requiresReview !== verdict.requiresReview) throw new ServiceError("conflict", "Preserve the original legacy current receipt; later facts cannot replace it.");
+        || priorReceipt.rawStatus !== verdict.rawStatus || priorReceipt.requiresReview !== verdict.requiresReview || priorReceipt.replacementEligible !== verdict.replacementEligible) throw new ServiceError("conflict", "Preserve the original legacy current receipt; later facts cannot replace it.");
       return { receiptId: priorReceipt.id, status: verdict.status, requiresReview: verdict.requiresReview };
     }
     await ctx.tx.execute(sql`select set_config('freeholder.legacy_bank_current_v1','1',true)`);
     const [saved] = await ctx.tx.insert(legacyBankCurrentReceipts).values({ readId: read.id, refundId: refund.id, resolvedRevision,
-      status: verdict.status, rawStatus: verdict.rawStatus, requiresReview: verdict.requiresReview }).returning();
+      status: verdict.status, rawStatus: verdict.rawStatus, requiresReview: verdict.requiresReview, replacementEligible: verdict.replacementEligible }).returning();
     queueOriginalMerchantRefundRepair(ctx, { kind: "legacy_bank_current", id: saved!.id });
     ctx.setSubject("refund", refund.id); return { receiptId: saved!.id, status: verdict.status, requiresReview: verdict.requiresReview };
   },
@@ -70,7 +72,7 @@ export const completeLegacyBankCurrentRead = defineService({
  * logical succeeded row cannot stand in for an actual current bank receipt. */
 export async function legacyRefundBankState(ctx: ServiceContext, refundId: string) {
   const [read] = await ctx.tx.select({ id: legacyBankReads.id }).from(legacyBankReads).where(eq(legacyBankReads.refundId, refundId)).limit(1);
-  const empty = { hasRead: Boolean(read), verified: false, receiptId: null as string | null, status: null as LegacyBankStatus, requiresReview: Boolean(read) };
+  const empty = { hasRead: Boolean(read), verified: false, receiptId: null as string | null, status: null as LegacyBankStatus, requiresReview: Boolean(read), replacementEligible: false };
   if (!read) return empty;
   const [current] = await ctx.tx.execute<{ receipt_id: string; status: LegacyBankStatus; requires_review: boolean }>(sql`select * from freeholder_legacy_bank_current(${refundId}::uuid)`);
   if (!current) return empty;
@@ -85,5 +87,5 @@ export async function legacyRefundBankState(ctx: ServiceContext, refundId: strin
     if (error instanceof z.ZodError || error instanceof ServiceError && ["conflict", "not_found"].includes(error.code)) return empty;
     throw error;
   }
-  return { hasRead: true, verified: true, receiptId: current.receipt_id, status: current.status, requiresReview: current.requires_review };
+  return { hasRead: true, verified: true, receiptId: current.receipt_id, status: current.status, requiresReview: current.requires_review, replacementEligible: receipt?.replacementEligible === true };
 }

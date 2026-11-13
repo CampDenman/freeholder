@@ -15,6 +15,9 @@ import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { ServiceError } from "@/core/service";
 import { sendInvoice } from "@/modules/invoicing/customer-service";
 import { reconcileMerchantRefundCurrentState } from "@/modules/invoicing/merchant-refund-current-service";
+import { recoverLegacyBankRefund, replaceLegacyReturnedBankRefund } from "@/modules/invoicing/legacy-bank-replacement-service";
+import { LEGACY_REPLACEMENT_CONFIRMATION } from "@/modules/invoicing/legacy-bank-replacement-proof";
+import { LEGACY_READER_STOP_CONFIRMATION, reviewLegacyBankReaderStopped } from "@/modules/invoicing/legacy-bank-reader-recovery";
 import { replaceReturnedBankRefund } from "@/modules/invoicing/merchant-bank-replacement-service";
 import { BANK_REPLACEMENT_CONFIRMATION } from "@/modules/invoicing/merchant-bank-replacement-proof";
 import {
@@ -126,7 +129,21 @@ export async function invoiceAction(form: FormData): Promise<void> {
   let destination = invoiceId ? `/admin/invoices/${invoiceId}` : "/admin/invoices/new";
   try {
     const actor = await currentActor();
-    if (intent === "replaceReturnedBankRefund") {
+    if (intent === "recoverLegacyBankRefund") {
+      await recoverLegacyBankRefund.call({ refundId: field(form, "refundId") }, actor);
+      destination = `/admin/invoices/${invoiceId}?saved=refundState`;
+    } else if (intent === "replaceLegacyReturnedBankRefund") {
+      const confirmation = field(form, "confirmation");
+      if (confirmation !== LEGACY_REPLACEMENT_CONFIRMATION) throw new ServiceError("validation", "Confirm the exact original legacy returned refund before authorizing its replacement.");
+      await replaceLegacyReturnedBankRefund.call({ refundId: field(form, "refundId"), confirmation }, actor);
+      destination = `/admin/invoices/${invoiceId}?saved=refundState`;
+    } else if (intent === "reviewLegacyBankReaderStopped") {
+      const confirmation = field(form, "confirmation");
+      if (confirmation !== LEGACY_READER_STOP_CONFIRMATION) throw new ServiceError("validation", "Verify the original read's actual hosting stop before recording review.");
+      await reviewLegacyBankReaderStopped.call({ readId: field(form, "readId"), expectedCallerId: field(form, "callerId"), expectedOriginalDigest: field(form, "originalDigest"),
+        expectedSourceRevision: field(form, "sourceRevision"), hostingEvidence: field(form, "hostingEvidence"), confirmation }, actor);
+      destination = `/admin/invoices/${invoiceId}?saved=refundState`;
+    } else if (intent === "replaceReturnedBankRefund") {
       const confirmation = field(form, "confirmation");
       if (confirmation !== BANK_REPLACEMENT_CONFIRMATION) throw new ServiceError("validation", "Confirm the exact original returned refund before authorizing its replacement.");
       await replaceReturnedBankRefund.call({ requestId: field(form, "requestId"), confirmation }, actor);

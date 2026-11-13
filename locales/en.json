@@ -9077,5 +9077,12 @@
   "refundStatus.promiseFulfilled": "This original refund was fulfilled by its verified replacement.",
   "refundStatus.review": "The refund history needs review before another return can be sent.",
   "refundStatus.replaceConfirmation": "I confirm a replacement of the original {amount} refund after checking its current bank status.",
-  "refundStatus.replace": "Replace original {amount} refund"
+  "refundStatus.replace": "Replace original {amount} refund",
+  "refundRecovery.interruptedTitle": "An earlier refund check did not finish",
+  "refundRecovery.stopHint": "Verify in your hosting account that the original process has stopped. A timeout alone is not confirmation. This review does not confirm a refund payment.",
+  "refundRecovery.caller": "Original process {pid} on {host}",
+  "refundRecovery.live": "The original process is still running. Finish or stop it before reviewing.",
+  "refundRecovery.evidence": "Hosting stop evidence",
+  "refundRecovery.stopConfirmation": "I verified that the original refund-check process has stopped.",
+  "refundRecovery.recordStop": "Record hosting stop review"
 }

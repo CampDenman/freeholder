@@ -27,6 +27,8 @@ import { getPaymentPlan } from "@/modules/invoicing/advanced-money-service";
 import { listInvoiceMerchantPayments } from "@/modules/invoicing/merchant-payment-review";
 import { invoiceRefundStates } from "@/modules/invoicing/merchant-refund-bank-state-service";
 import { RefundStatusList } from "../../../../portal/invoices/RefundStatusList";
+import { LEGACY_REPLACEMENT_CONFIRMATION } from "@/modules/invoicing/legacy-bank-replacement-proof";
+import { LEGACY_READER_STOP_CONFIRMATION, legacyBankReaderRecoveryPlan } from "@/modules/invoicing/legacy-bank-reader-recovery";
 import { BANK_REPLACEMENT_CONFIRMATION } from "@/modules/invoicing/merchant-bank-replacement-proof";
 import { requireStaffActor } from "../../guard";
 import { formatPpm, invoiceLineAmounts, invoiceTone, money, quantityFromMicros } from "../format";
@@ -64,6 +66,7 @@ export default async function InvoiceDetailPage({
   const invoice = bundle.invoice;
   const merchantPayments = new Set(await listInvoiceMerchantPayments.call({ invoiceId: id }, actor));
   const refundStates = await invoiceRefundStates.call({ invoiceId: id }, actor);
+  const interruptedReads = canManage ? await legacyBankReaderRecoveryPlan.call({ invoiceId: id }, actor) : [];
   const errorCode = ["validation", "conflict", "not_found", "permission", "rate_limited"].includes(query.error ?? "")
     ? query.error!
     : query.error
@@ -136,6 +139,38 @@ export default async function InvoiceDetailPage({
             <span>{t("refundStatus.replaceConfirmation", { amount: money(refund.amountMinor, refund.currency) })}</span></label>
           <Button type="submit">{t("refundStatus.replace", { amount: money(refund.amountMinor, refund.currency) })}</Button>
         </form>
+      )) : null}
+      {canManage && stepUpValid ? refundStates.filter(refund => refund.legacy).map(refund => (
+        <form key={`legacy-check:${refund.id}`} action={invoiceAction}>
+          <input type="hidden" name="intent" value="recoverLegacyBankRefund" /><input type="hidden" name="id" value={invoice.id} /><input type="hidden" name="refundId" value={refund.id} />
+          <Button type="submit">{t("refundStatus.check", { amount: money(refund.amountMinor, refund.currency) })}</Button>
+        </form>
+      )) : null}
+      {canManage && stepUpValid ? refundStates.filter(refund => refund.legacy && refund.canReplace).map(refund => (
+        <form key={`legacy-replace:${refund.id}`} action={invoiceAction} className="grid justify-items-start gap-2">
+          <input type="hidden" name="intent" value="replaceLegacyReturnedBankRefund" /><input type="hidden" name="id" value={invoice.id} /><input type="hidden" name="refundId" value={refund.id} />
+          <label className="flex items-start gap-2"><input type="checkbox" name="confirmation" value={LEGACY_REPLACEMENT_CONFIRMATION} required /><span>{t("refundStatus.replaceConfirmation", { amount: money(refund.amountMinor, refund.currency) })}</span></label>
+          <Button type="submit">{t("refundStatus.replace", { amount: money(refund.amountMinor, refund.currency) })}</Button>
+        </form>
+      )) : null}
+      {canManage ? interruptedReads.map(read => (
+        <Card key={read.readId}>
+          <CardHeader title={t("refundRecovery.interruptedTitle")} />
+          <CardBody>
+            <p>{t("refundRecovery.stopHint")}</p>
+            <p>{t("refundRecovery.caller", { host: read.host, pid: read.pid })} · {formatDateTime(new Date(read.startedAt), timezone, locale)}</p>
+            {read.liveness === "live" ? <Callout tone="warning">{t("refundRecovery.live")}</Callout> : stepUpValid ? (
+              <form action={invoiceAction} className="grid justify-items-start gap-3">
+                <input type="hidden" name="intent" value="reviewLegacyBankReaderStopped" /><input type="hidden" name="id" value={invoice.id} />
+                <input type="hidden" name="readId" value={read.readId} /><input type="hidden" name="callerId" value={read.callerId} />
+                <input type="hidden" name="originalDigest" value={read.originalDigest} /><input type="hidden" name="sourceRevision" value={read.sourceRevision} />
+                <Field label={t("refundRecovery.evidence")}><textarea name="hostingEvidence" required minLength={30} maxLength={2000} className="w-full rounded border border-rule bg-surface p-2 text-ink" /></Field>
+                <label className="flex items-start gap-2"><input type="checkbox" name="confirmation" value={LEGACY_READER_STOP_CONFIRMATION} required /><span>{t("refundRecovery.stopConfirmation")}</span></label>
+                <Button type="submit">{t("refundRecovery.recordStop")}</Button>
+              </form>
+            ) : null}
+          </CardBody>
+        </Card>
       )) : null}
       <Card>
         <CardHeader title={t("invoices.totals")} />

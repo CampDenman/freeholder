@@ -39,8 +39,19 @@ export const legacyBankCurrentReceipts = pgTable("legacy_bank_current_receipts",
   id: uuid("id").primaryKey().defaultRandom(), readId: uuid("read_id").notNull().references(() => legacyBankReads.id, { onDelete: "restrict" }),
   refundId: uuid("refund_id").notNull().references(() => refunds.id, { onDelete: "restrict" }),
   resolvedRevision: text("resolved_revision").notNull(), status: text("status", { enum: ["pending", "requires_action", "succeeded", "failed", "canceled"] }),
-  rawStatus: text("raw_status"), requiresReview: boolean("requires_review").notNull(), createdAt: createdAtColumn(),
+  rawStatus: text("raw_status"), requiresReview: boolean("requires_review").notNull(), replacementEligible: boolean("replacement_eligible").notNull().default(false), createdAt: createdAtColumn(),
 }, table => [uniqueIndex("legacy_bank_current_receipts_read_idx").on(table.readId), index("legacy_bank_current_receipts_refund_idx").on(table.refundId),
   check("legacy_bank_current_receipts_revision", sql`${table.resolvedRevision} ~ '^[a-f0-9]{64}$' and (${table.rawStatus} is null or length(${table.rawStatus})<=100)`),
   check("legacy_bank_current_receipts_status", sql`${table.status} is null or ${table.status} in ('pending','requires_action','succeeded','failed','canceled')`),
+]);
+
+/** A reviewed hosting stop is not a returned or thrown provider wrapper. */
+export const legacyBankReadStops = pgTable("legacy_bank_read_stops", {
+  readId: uuid("read_id").primaryKey().references(() => legacyBankReads.id, { onDelete: "restrict" }),
+  callerInstanceId: uuid("caller_instance_id").notNull(), originalDigest: text("original_digest").notNull(),
+  sourceRevision: text("source_revision").notNull(), mechanicalCheck: text("mechanical_check", { enum: ["original_process_absent", "unobservable_host_review"] }).notNull(),
+  hostingEvidenceDigest: text("hosting_evidence_digest").notNull(), reviewedBy: text("reviewed_by").notNull(), createdAt: createdAtColumn(),
+}, table => [check("legacy_bank_read_stops_digests", sql`${table.originalDigest} ~ '^[a-f0-9]{64}$' and ${table.sourceRevision} ~ '^[a-f0-9]{64}$' and ${table.hostingEvidenceDigest} ~ '^[a-f0-9]{64}$'`),
+  check("legacy_bank_read_stops_kind", sql`${table.mechanicalCheck} in ('original_process_absent','unobservable_host_review')`),
+  check("legacy_bank_read_stops_reviewer", sql`${table.reviewedBy} ~ '^user:[0-9a-f-]{36}$'`),
 ]);

@@ -9077,5 +9077,12 @@
   "refundStatus.promiseFulfilled": "تم الوفاء بالمبلغ المسترد الأصلي من خلال البديل الذي تم التحقق منه.",
   "refundStatus.review": "يلزم مراجعة سجل الاسترداد قبل إرسال مبلغ آخر.",
   "refundStatus.replaceConfirmation": "أؤكد استبدال المبلغ المسترد الأصلي البالغ {amount} بعد التحقق من حالته المصرفية الحالية.",
-  "refundStatus.replace": "استبدال المبلغ المسترد الأصلي البالغ {amount}"
+  "refundStatus.replace": "استبدال المبلغ المسترد الأصلي البالغ {amount}",
+  "refundRecovery.interruptedTitle": "لم يكتمل فحص سابق لاسترداد المبلغ",
+  "refundRecovery.stopHint": "تحقق في حساب الاستضافة من توقف العملية الأصلية. انتهاء المهلة وحده ليس تأكيدًا. لا تؤكد هذه المراجعة دفع مبلغ مسترد.",
+  "refundRecovery.caller": "العملية الأصلية {pid} على {host}",
+  "refundRecovery.live": "لا تزال العملية الأصلية قيد التشغيل. أكملها أو أوقفها قبل المراجعة.",
+  "refundRecovery.evidence": "دليل التوقف في الاستضافة",
+  "refundRecovery.stopConfirmation": "تحققت من توقف العملية الأصلية لفحص الاسترداد.",
+  "refundRecovery.recordStop": "تسجيل مراجعة التوقف"
 }

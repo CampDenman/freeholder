@@ -9077,5 +9077,12 @@
   "refundStatus.promiseFulfilled": "El reembolso original se completó mediante su sustitución verificada.",
   "refundStatus.review": "Hay que revisar el historial del reembolso antes de enviar otro.",
   "refundStatus.replaceConfirmation": "Confirmo la sustitución del reembolso original de {amount} tras comprobar su estado bancario actual.",
-  "refundStatus.replace": "Sustituir el reembolso original de {amount}"
+  "refundStatus.replace": "Sustituir el reembolso original de {amount}",
+  "refundRecovery.interruptedTitle": "Una comprobación anterior del reembolso no terminó",
+  "refundRecovery.stopHint": "Verifica en tu cuenta de alojamiento que el proceso original se ha detenido. Un tiempo de espera agotado no basta. Esta revisión no confirma el pago de un reembolso.",
+  "refundRecovery.caller": "Proceso original {pid} en {host}",
+  "refundRecovery.live": "El proceso original sigue en ejecución. Finalízalo o detenlo antes de revisarlo.",
+  "refundRecovery.evidence": "Prueba de detención en el alojamiento",
+  "refundRecovery.stopConfirmation": "He verificado que el proceso original de comprobación del reembolso se ha detenido.",
+  "refundRecovery.recordStop": "Registrar revisión de detención"
 }
