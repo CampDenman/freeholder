@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { translator } from "@/core/i18n";
 import { Button,Card,CardBody,CardHeader,Field,Input,Pill } from "@/ui/primitives";
-import { controlledProviderRecoveryPlan,controlledProviderResourceStatus,CONTROLLED_PROVIDER_STOP_CONFIRMATION } from "@/modules/subscriptions/controlled-provider-stop";
+import { type controlledProviderRecoveryPlan,type controlledProviderResourceStatus,CONTROLLED_PROVIDER_STOP_CONFIRMATION } from "@/modules/subscriptions/controlled-provider-stop";
 import { reviewControlledProviderStopAction,recoverControlledProviderOperationAction,recoverControlledProviderCalendarAction,stopControlledProviderCalendarAction,closeControlledZeroProviderResourceAction } from "../controlled-provider-actions";
 type Calls=Awaited<ReturnType<typeof controlledProviderRecoveryPlan.call>>;
 type Resources=Awaited<ReturnType<typeof controlledProviderResourceStatus.call>>;

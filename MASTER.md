@@ -15108,6 +15108,13 @@ whatever is best for the people using the site.
   published0–79 identities are unchanged. This remains unapplied source; parent
   reader composition, final82 assembly and fresh migration/parity/native gates
   are pending, and positive provider collection remains mechanically closed.
+  Controlled provider source renewal 2026-11-13 (C12.38): at2ecffdbc full
+  types pass in62.647seconds; the broader source cohort passes298 actual
+  assertions with44 explicit database skips across46 complete files. Whole
+  lint then stops at eight new provider diagnostics. Source fixes use explicit
+  type imports, retained JSON-object validation and concrete test URL types;
+  original fields and all request/body/nonce/finish assertions remain. Renewed
+  gates and fresh actual database/native qualification are pending.
   Controlled source type repair 2026-11-13 (C12.38): the first compiler
   run after this checkpoint stops at two broad database-row/literal-protocol
   scope mismatches. Admission now validates the real retained scope through

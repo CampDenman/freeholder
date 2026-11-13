@@ -78,7 +78,7 @@ export const planControlledProviderOperation=defineService({name:"subscriptions.
   if(history.count>=5000)throw new ServiceError("conflict","The complete original controlled history exceeds its bounded admission capacity.");
   const id=randomUUID(),ordinal=(history.operations.at(-1)?.ordinal??0)+1,idempotencyKey=request.kind==="bootstrap"?`controlled:${resource.id}:bootstrap`:`controlled:${resource.id}:${request.kind}:${id}`;
   const parentReadiness=controlledWorkNeedsParentReadiness(request.kind)?await controlledFinancialReadiness(ctx,resource.subscriptionId):null;
-  const originalRequest=JSON.parse(JSON.stringify({scopeDigest:merchantTaxDigest(resource.originalScope),payload,parentFinancialRevision:parentReadiness?.revision??null}));
+  const originalRequest=z.record(z.string(),z.unknown()).parse(JSON.parse(JSON.stringify({scopeDigest:merchantTaxDigest(resource.originalScope),payload,parentFinancialRevision:parentReadiness?.revision??null})));
   await ctx.tx.execute(sql`select set_config('freeholder.controlled_provider_v1','1',true)`);
   await ctx.tx.insert(subscriptionControlledOperations).values({id,resourceId:resource.id,kind:request.kind,ordinal,originalRequest,requestDigest:merchantTaxDigest(originalRequest),idempotencyKey,
    previousEvidenceRevision:history.revision,acceptedQuoteDigest:terms.acceptedQuoteDigest});

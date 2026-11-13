@@ -18,6 +18,7 @@ import { requireControlledProviderSchema } from "./controlled-provider-source";
 import { signProviderReadProof } from "./provider-read-signatures";
 const digest=(nonce:string)=>createHash("sha256").update(nonce).digest("hex");
 type Actual=MerchantControlledObservation;
+function isOriginalRecord(value:unknown):value is Record<string,unknown>{return value!==null&&typeof value==="object"&&!Array.isArray(value);}
 type Held={operationId:string;nonce:string;invoked:boolean;completed:boolean;actualResult?:Record<string,unknown>;facts:Map<number,{id:string;actual:Actual}>};
 const slot=Symbol.for("freeholder.controlled-provider.original-callers.v1");
 const runtime=globalThis as typeof globalThis&{[slot]?:Map<string,Held>};
@@ -121,7 +122,9 @@ export async function withControlledProviderCall<T>(operationId:string,actor:Act
  await flushControlledProviderFinishes(operationId);
  const system={kind:"system",request:actor.request} as const,claim=await claimControlledProviderCall.call({operationId},system);
  const local:Held={operationId,nonce:claim.nonce,invoked:true,completed:false,facts:new Map()};held.set(claim.callId,local);
- const observe=async(actual:Actual)=>{const ordinal=local.facts.size+1;local.facts.set(ordinal,{id:randomUUID(),actual:JSON.parse(JSON.stringify(actual))});
+ const observe=async(actual:Actual)=>{const ordinal=local.facts.size+1,snapshot:unknown=JSON.parse(JSON.stringify(actual));
+  if(!isOriginalRecord(snapshot)||snapshot.kind!==actual.kind||!isOriginalRecord(snapshot.raw))throw new ServiceError("conflict","Preserve this original SDK observation as its complete unchanged JSON object.");
+  const retained:Actual={...snapshot,kind:actual.kind,raw:snapshot.raw};local.facts.set(ordinal,{id:randomUUID(),actual:retained});
   await retainControlledProviderFact.call({callId:claim.callId,nonce:claim.nonce,ordinal},system);
   // A separate committed transaction deliberately follows the raw occurrence.
   // Bridge/domain refusal cannot roll that authentic positive fact back.
