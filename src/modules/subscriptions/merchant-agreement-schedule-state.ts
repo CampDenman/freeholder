@@ -89,4 +89,3 @@ export async function merchantAgreementScheduleState(ctx:ServiceContext,agreemen
     }
   return {safe:true,external};
 }
-

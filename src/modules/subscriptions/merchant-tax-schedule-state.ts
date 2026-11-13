@@ -36,4 +36,3 @@ export async function merchantTaxScheduleState(ctx: ServiceContext, profileId: s
   }
   return { safe: true, external };
 }
-

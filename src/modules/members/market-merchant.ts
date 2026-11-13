@@ -21,7 +21,7 @@ import { products, orders } from "@/modules/catalog/schema";
 import { orderCommercialTerms } from "@/modules/catalog/order-commercial";
 import { plans, subscriptions } from "@/modules/subscriptions/schema";
 import { getSubscriptionMarketPolicy, registerSubscriptionMarketResolver, registerSubscriptionPlanMarketResolver, registerSubscriptionMerchantVerifier, subscriptionMarketPolicy, type SubscriptionMarketPolicy } from "@/modules/subscriptions/market-policy";
-import { sellerForInvoice } from "./member-subscriptions";
+import { sellerForInvoice } from "./invoice-seller";
 import { marketRules } from "./payouts";
 import { merchantCollectionReceipt, registerMerchantCollectionResolver, registerMerchantCollectionVerifier, registerMerchantCheckoutRequirement } from "@/modules/invoicing/merchant-collection";
 import { memberPayoutAccounts, memberProfiles, memberSettings } from "./schema";
