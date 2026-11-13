@@ -13,6 +13,7 @@ import { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBan
 import { LEGACY_REPLACEMENT_PROTOCOL, LEGACY_REPLACEMENT_REASON, LEGACY_REPLACEMENT_STATE } from "./legacy-bank-replacement-proof";
 import { BANK_REPLACEMENT_PROTOCOL, BANK_REPLACEMENT_REASON, BANK_REPLACEMENT_STATE } from "./merchant-bank-replacement-proof";
 import { legacyBankFeedbackFinancialWitness } from "./legacy-bank-feedback-store";
+import { originalCashRecoveryFinancialWitness } from "./original-cash-recovery-store";
 export interface MerchantRefundDependencyReceipt { version: 1; entries: Array<{ table: string; id: string; fingerprint: string }>; incomplete: boolean }
 const MAX = 5000;
 const ids = (column: string, values: readonly string[]): SQL => values.length
@@ -37,6 +38,16 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
   }
   if (paymentIds.length > MAX || receiptIds.length > MAX) return incomplete();
   const collected: Array<{ table: string; rows: Record<string, unknown>[] }> = [];
+  // Include original owners even before their first GET, and signed feedback
+  // even before an owner exists. Keep every authorization/closure occurrence.
+  const cash = await originalCashRecoveryFinancialWitness(tx, paymentIds, receiptIds);
+  collected.push(
+    { table: "original_cash_recoveries", rows: cash.owners },
+    { table: "original_cash_recovery_operations", rows: cash.operations },
+    { table: "original_cash_recovery_facts", rows: cash.facts },
+    { table: "original_cash_recovery_closures", rows: cash.closures },
+    { table: "original_cash_feedback", rows: cash.feedback.map(row => ({ id: `${merchantTaxDigest(row.namespace)}:${row.feedback.id}`, ...row })) },
+  );
   let overflow = false;
   const read = async (name: string, table: PgTable, where: SQL) => {
     const result = await tx.execute<{ row: Record<string, unknown> }>(sql`select to_jsonb(r) as row from ${table} r where ${where} limit ${MAX + 1}`);

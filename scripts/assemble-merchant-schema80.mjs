@@ -28,6 +28,8 @@ const fragments = [
   "deploy/subscription-commercial-amendments80.fragment.sql",
   "deploy/subscription-amendment-late-reconsent80.fragment.sql",
   "deploy/subscription-provider-reader-recovery80.fragment.sql",
+  "deploy/original-cash-return81.fragment.sql",
+  "deploy/original-cash-partial81.fragment.sql",
 ];
 const header = `-- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0

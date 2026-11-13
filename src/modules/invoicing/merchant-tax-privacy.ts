@@ -23,10 +23,35 @@ import {subscriptionCommercialAmendments} from "@/modules/subscriptions/commerci
 import {subscriptionProviderGenerations} from "@/modules/subscriptions/provider-generation-schema";
 import {subscriptionProviderInvoiceObservations,subscriptionProviderInvoiceLines} from "@/modules/subscriptions/provider-period-schema";
 import {merchantRefundDependencyFingerprints} from "./merchant-refund-dependencies";
+import {originalCashRecoveryFinancialWitness} from "./original-cash-recovery-store";
+import {exportOriginalCashHistory} from "./original-cash-invoice-history";
 
 const scope="commerce.merchantTax";
 export const MERCHANT_TAX_ERASURE_JOB="subscriptions.quiesceMerchantSchedules";
 const witness=z.object({id:z.uuid(),contactId:z.uuid().nullable(),fingerprint:z.string().regex(/^[a-f0-9]{64}$/)});
+async function merchantProfileCashOwners(tx:Tx,profileIds:string[]){
+ if(profileIds.length>5000)return null;
+ const allocationPayments=await tx.select({id:merchantPaymentRoutes.paymentId}).from(invoiceMerchantTaxQuotes)
+  .innerJoin(invoiceMerchantCollections,and(eq(invoiceMerchantCollections.invoiceId,invoiceMerchantTaxQuotes.invoiceId),sql`${invoiceMerchantCollections.taxPolicy}->>'profileId'=${invoiceMerchantTaxQuotes.profileId}::text`))
+  .innerJoin(merchantPaymentRoutes,eq(merchantPaymentRoutes.allocationId,invoiceMerchantCollections.allocationId))
+  .where(inArray(invoiceMerchantTaxQuotes.profileId,profileIds)).limit(5001);
+ const bookingPayments=await tx.select({id:merchantInvoicePaymentRoutes.paymentId}).from(invoiceMerchantTaxQuotes)
+  .innerJoin(invoiceMerchantScopes,and(eq(invoiceMerchantScopes.invoiceId,invoiceMerchantTaxQuotes.invoiceId),sql`${invoiceMerchantScopes.taxPolicy}->>'profileId'=${invoiceMerchantTaxQuotes.profileId}::text`))
+  .innerJoin(merchantInvoicePaymentRoutes,eq(merchantInvoicePaymentRoutes.invoiceId,invoiceMerchantScopes.invoiceId))
+  .where(inArray(invoiceMerchantTaxQuotes.profileId,profileIds)).limit(5001);
+ const agreementPayments=await tx.select({id:merchantAgreementPaymentRoutes.paymentId}).from(subscriptionMerchantScopes)
+  .innerJoin(merchantAgreementPaymentRoutes,eq(merchantAgreementPaymentRoutes.subscriptionId,subscriptionMerchantScopes.subscriptionId))
+  .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).limit(5001);
+ // Unapplied authenticated subscription cash can have no local payment.
+ const originalReceipts=await tx.select({id:subscriptionProviderChargeReceipts.id}).from(subscriptionMerchantScopes)
+  .innerJoin(subscriptionProviderChargeReceipts,eq(subscriptionProviderChargeReceipts.subscriptionId,subscriptionMerchantScopes.subscriptionId))
+  .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).limit(5001);
+ if([allocationPayments,bookingPayments,agreementPayments,originalReceipts].some(found=>found.length>5000))return null;
+ const paymentIds=[...new Set([...allocationPayments,...bookingPayments,...agreementPayments].map(row=>row.id))].sort();
+ const subscriptionChargeReceiptIds=[...new Set(originalReceipts.map(row=>row.id))].sort();
+ if(paymentIds.length+subscriptionChargeReceiptIds.length>5000)return null;
+ return{paymentIds,subscriptionChargeReceiptIds};
+}
 async function snapshot(tx:Tx,ids:string[]){
  // Preserve the outer identity inside child subqueries: the ORM renders bare
  // Column chunks unqualified in a single-table SELECT. Inner child.id is not
@@ -90,25 +115,9 @@ async function snapshot(tx:Tx,ids:string[]){
  // Anchor each charge to the original profile's allocation/single-source
  // route. Selecting every payment on a mixed invoice would attach another
  // seller's refund history to this subject.
- const allocationPayments=await tx.select({id:merchantPaymentRoutes.paymentId}).from(invoiceMerchantTaxQuotes)
-  .innerJoin(invoiceMerchantCollections,and(eq(invoiceMerchantCollections.invoiceId,invoiceMerchantTaxQuotes.invoiceId),sql`${invoiceMerchantCollections.taxPolicy}->>'profileId'=${invoiceMerchantTaxQuotes.profileId}::text`))
-  .innerJoin(merchantPaymentRoutes,eq(merchantPaymentRoutes.allocationId,invoiceMerchantCollections.allocationId))
-  .where(inArray(invoiceMerchantTaxQuotes.profileId,profileIds)).limit(5001);
- const bookingPayments=await tx.select({id:merchantInvoicePaymentRoutes.paymentId}).from(invoiceMerchantTaxQuotes)
-  .innerJoin(invoiceMerchantScopes,and(eq(invoiceMerchantScopes.invoiceId,invoiceMerchantTaxQuotes.invoiceId),sql`${invoiceMerchantScopes.taxPolicy}->>'profileId'=${invoiceMerchantTaxQuotes.profileId}::text`))
-  .innerJoin(merchantInvoicePaymentRoutes,eq(merchantInvoicePaymentRoutes.invoiceId,invoiceMerchantScopes.invoiceId))
-  .where(inArray(invoiceMerchantTaxQuotes.profileId,profileIds)).limit(5001);
- const agreementPayments=await tx.select({id:merchantAgreementPaymentRoutes.paymentId}).from(subscriptionMerchantScopes)
-  .innerJoin(merchantAgreementPaymentRoutes,eq(merchantAgreementPaymentRoutes.subscriptionId,subscriptionMerchantScopes.subscriptionId))
-  .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).limit(5001);
- // Unapplied authenticated subscription cash can have no local payment.
- const originalReceipts=await tx.select({id:subscriptionProviderChargeReceipts.id}).from(subscriptionMerchantScopes)
-  .innerJoin(subscriptionProviderChargeReceipts,eq(subscriptionProviderChargeReceipts.subscriptionId,subscriptionMerchantScopes.subscriptionId))
-  .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).limit(5001);
- if([allocationPayments,bookingPayments,agreementPayments,originalReceipts].some(found=>found.length>5000))return null;
- const paymentIds=[...new Set([...allocationPayments,...bookingPayments,...agreementPayments].map(row=>row.id))].sort();
- const subscriptionChargeReceiptIds=[...new Set(originalReceipts.map(row=>row.id))].sort();
- if(paymentIds.length+subscriptionChargeReceiptIds.length>5000)return null;
+ const cashOwners=await merchantProfileCashOwners(tx,profileIds);
+ if(!cashOwners)return null;
+ const{paymentIds,subscriptionChargeReceiptIds}=cashOwners;
  const children=await merchantRefundDependencyFingerprints(tx,{paymentIds,subscriptionChargeReceiptIds});
  if(children.incomplete||originalHistoryCount+readerCount+children.entries.length>5000)return null;
  // The immutable child set belongs to this entire merge pair. Folding it
@@ -180,9 +189,15 @@ export const completeMerchantTaxErasure=defineService({
 registerContactPrivacySource({
  scope,tables:["merchant_tax_profiles"],requiresLogin:true,eraseOrder:35,
  exportData:async(tx,contactId)=>{
-  const profiles=await tx.select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.contactId,contactId));
+  const profiles=await tx.select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.contactId,contactId)).limit(5001);
   const ids=profiles.map(profile=>profile.id);
-  return{profiles,versions:ids.length?await tx.select().from(merchantTaxProfileVersions).where(inArray(merchantTaxProfileVersions.profileId,ids)):[],registrations:ids.length?await tx.select().from(taxRegistrations).where(inArray(taxRegistrations.merchantProfileId,ids)):[]};
+  const owners=await merchantProfileCashOwners(tx,ids);
+  if(!owners)throw new ServiceError("conflict","Restore the complete original merchant cash ownership before financial export.");
+  const cash=await originalCashRecoveryFinancialWitness(tx,owners.paymentIds,owners.subscriptionChargeReceiptIds);
+  const versions=ids.length?await tx.select().from(merchantTaxProfileVersions).where(inArray(merchantTaxProfileVersions.profileId,ids)).limit(5001):[];
+  const registrations=ids.length?await tx.select().from(taxRegistrations).where(inArray(taxRegistrations.merchantProfileId,ids)).limit(5001):[];
+  if(profiles.length+versions.length+registrations.length+Object.values(cash).reduce((sum,rows)=>sum+rows.length,0)>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant financial export.");
+  return{profiles,versions,registrations,originalCash:exportOriginalCashHistory(cash)};
  },
  erase:async(tx,contactId,context)=>{
   const profiles=await tx.select({id:merchantTaxProfiles.id}).from(merchantTaxProfiles).where(eq(merchantTaxProfiles.contactId,contactId));

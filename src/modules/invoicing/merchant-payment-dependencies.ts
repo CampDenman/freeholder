@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: bounded child-effect fingerprints follow the invoice's real owner.
 import { and, asc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
-import type { Tx } from "@/core/service";
+import { ServiceError, type Tx } from "@/core/service";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
 import { merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
@@ -11,6 +11,7 @@ import { legacyBankReads } from "./legacy-bank-read-schema";
 import { legacyBankReadFinancialWitness } from "./legacy-bank-read-witness";
 import { merchantRefundDependencyFingerprints } from "./merchant-refund-dependencies";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import { exportOriginalCashHistory, originalCashForInvoice, originalCashInvoiceHistory } from "./original-cash-invoice-history";
 import { invoices, paymentDisputes, payments, refunds } from "./schema";
 
 /** NULL makes the existing parent merge explicitly non-undoable.
@@ -21,6 +22,8 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   if (!invoiceIds.length) return new Map();
   if (originalPaymentIds && originalPaymentIds.length > 5000) return null;
   if (originalPaymentIds && !originalPaymentIds.length) return new Map();
+  const originalCash = await originalCashInvoiceHistory(tx, invoiceIds, originalPaymentIds);
+  const cashCount = Object.values(originalCash.witness).reduce((sum, rows) => sum + rows.length, 0);
   // Authentic feedback creates financial debt before the first GET. Select
   // through exact original payments, including feedback-owned legacy refunds,
   // while retaining the seller's frozen payment filter and old empty history.
@@ -31,9 +34,11 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
     .orderBy(asc(payments.invoiceId), asc(refunds.id)).limit(5001);
   if (legacyReferences.length > 5000) return null;
   const legacyFinancial = new Map<string, string>();
+  let legacyCount = 0;
   if (legacyReferences.length) {
     const history = await legacyBankReadFinancialWitness(tx, legacyReferences.map(row => row.refundId));
-    if (history.reads.length + history.facts.length + history.finishes.length + history.current.length + history.stops.length + history.replacements.length + history.feedback.length > 5000) return null;
+    legacyCount = history.reads.length + history.facts.length + history.finishes.length + history.current.length + history.stops.length + history.replacements.length + history.feedback.length;
+    if (cashCount + legacyCount > 5000) return null;
     for (const invoiceId of [...new Set(legacyReferences.map(row => row.invoiceId))]) {
       const refundIds = new Set(legacyReferences.filter(row => row.invoiceId === invoiceId).map(row => row.refundId));
       const reads = history.reads.filter(row => refundIds.has(row.refundId)), readIds = new Set(reads.map(row => row.id));
@@ -43,6 +48,12 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
       legacyFinancial.set(invoiceId, merchantTaxDigest({ reads, facts: history.facts.filter(row => readIds.has(row.readId)), finishes: history.finishes.filter(row => readIds.has(row.readId)),
         ...(current.length ? { current } : {}), ...(stops.length ? { stops } : {}), ...(replacements.length ? { replacements } : {}), ...(feedback.length ? { feedback } : {}) }));
     }
+  }
+  for (const invoiceId of [...new Set(originalCash.references.map(row => row.invoiceId))]) {
+    const cash = originalCashForInvoice(originalCash, invoiceId);
+    if (!Object.values(cash).some(rows => rows.length)) continue;
+    const legacy = legacyFinancial.get(invoiceId);
+    legacyFinancial.set(invoiceId, merchantTaxDigest({ ...(legacy ? { legacy } : {}), originalCash: cash }));
   }
   const owned = await tx.select({ payment: payments, orderRoute: merchantPaymentRoutes, singleRoute: merchantInvoicePaymentRoutes, agreementRoute: merchantAgreementPaymentRoutes }).from(payments)
     .leftJoin(merchantPaymentRoutes, eq(merchantPaymentRoutes.paymentId, payments.id)).leftJoin(merchantInvoicePaymentRoutes, eq(merchantInvoicePaymentRoutes.paymentId, payments.id))
@@ -65,19 +76,19 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   const customerRefunds = await tx.select().from(refunds).where(inArray(refunds.paymentId, paymentIds)).orderBy(asc(refunds.id)).limit(5001);
   const disputes = await tx.select().from(paymentDisputes).where(inArray(paymentDisputes.paymentId, paymentIds)).orderBy(asc(paymentDisputes.id)).limit(5001);
   let count = scoped.length + parent.length + requests.length + dispatches.length + bindings.length + acks.length + terminals.length + observed.length + feeOperations.length + customerRefunds.length + disputes.length;
-  if (count > 5000) return null;
+  if (count + cashCount + legacyCount > 5000) return null;
   const refusals = dispatches.length ? await tx.select().from(merchantPaymentCreationRefusals).where(inArray(merchantPaymentCreationRefusals.dispatchId, dispatches.map(row => row.id))).orderBy(asc(merchantPaymentCreationRefusals.dispatchId)).limit(5001) : [];
   const finishes = dispatches.length ? await tx.select().from(merchantPaymentDispatchFinishes).where(inArray(merchantPaymentDispatchFinishes.dispatchId, dispatches.map(row => row.id))).orderBy(asc(merchantPaymentDispatchFinishes.dispatchId)).limit(5001) : [];
   const stops = dispatches.length ? await tx.select().from(merchantPaymentDispatchStops).where(inArray(merchantPaymentDispatchStops.dispatchId, dispatches.map(row => row.id))).orderBy(asc(merchantPaymentDispatchStops.dispatchId)).limit(5001) : [];
   const feeAcks = feeOperations.length ? await tx.select().from(merchantFeeObservations).where(inArray(merchantFeeObservations.operationId, feeOperations.map(row => row.id))).orderBy(asc(merchantFeeObservations.id)).limit(5001) : [];
   count += refusals.length + feeAcks.length + finishes.length + stops.length;
-  if (count > 5000) return null;
+  if (count + cashCount + legacyCount > 5000) return null;
   // These invoices are one original contact-merge cohort. Any late financial
   // child makes the operation non-undoable, without adding unparsed fields to
   // the existing invoice reference receipt.
   const refundChildren = await merchantRefundDependencyFingerprints(tx, { paymentIds,
     subscriptionChargeReceiptIds: scoped.map(row => row.agreementRoute?.originalChargeReceiptId).filter((id): id is string => Boolean(id)) });
-  if (refundChildren.incomplete || count + refundChildren.entries.length > 5000) return null;
+  if (refundChildren.incomplete || count + cashCount + legacyCount + refundChildren.entries.length > 5000) return null;
   const result = new Map(parent.map(invoice => {
     const money = scoped.filter(row => row.payment.invoiceId === invoice.id), ids = new Set(money.map(row => row.payment.id));
     const sends = dispatches.filter(row => ids.has(row.paymentId)), sendIds = new Set(sends.map(row => row.id));
@@ -103,16 +114,20 @@ export async function exportMerchantRecoveryHistory(tx: Tx, invoiceIds: readonly
   const ownedPayments = tx.select({ id: payments.id }).from(payments).where(inArray(payments.invoiceId, [...invoiceIds]));
   const ownedDispatches = tx.select({ id: merchantPaymentDispatches.id }).from(merchantPaymentDispatches).where(inArray(merchantPaymentDispatches.paymentId, ownedPayments));
   const ownedFees = tx.select({ id: merchantFeeRefunds.id }).from(merchantFeeRefunds).where(inArray(merchantFeeRefunds.paymentId, ownedPayments));
-  return {
-    requests: await tx.select().from(merchantPaymentRequests).where(inArray(merchantPaymentRequests.paymentId, ownedPayments)).orderBy(asc(merchantPaymentRequests.paymentId)),
-    dispatches: await tx.select({ id: merchantPaymentDispatches.id, paymentId: merchantPaymentDispatches.paymentId, ordinal: merchantPaymentDispatches.ordinal, requestDigest: merchantPaymentDispatches.requestDigest, dispatchedAt: merchantPaymentDispatches.dispatchedAt }).from(merchantPaymentDispatches).where(inArray(merchantPaymentDispatches.paymentId, ownedPayments)).orderBy(asc(merchantPaymentDispatches.id)),
-    finishes: await tx.select({ dispatchId: merchantPaymentDispatchFinishes.dispatchId, outcome: merchantPaymentDispatchFinishes.outcome, finishedAt: merchantPaymentDispatchFinishes.finishedAt }).from(merchantPaymentDispatchFinishes).where(inArray(merchantPaymentDispatchFinishes.dispatchId, ownedDispatches)).orderBy(asc(merchantPaymentDispatchFinishes.dispatchId)),
-    stoppedCallers: await tx.select({ dispatchId: merchantPaymentDispatchStops.dispatchId, reviewedAt: merchantPaymentDispatchStops.reviewedAt }).from(merchantPaymentDispatchStops).where(inArray(merchantPaymentDispatchStops.dispatchId, ownedDispatches)).orderBy(asc(merchantPaymentDispatchStops.dispatchId)),
-    refusals: await tx.select().from(merchantPaymentCreationRefusals).where(inArray(merchantPaymentCreationRefusals.dispatchId, ownedDispatches)).orderBy(asc(merchantPaymentCreationRefusals.dispatchId)),
-    retirementAcks: await tx.select().from(merchantPaymentRetirementAcks).where(inArray(merchantPaymentRetirementAcks.paymentId, ownedPayments)).orderBy(asc(merchantPaymentRetirementAcks.id)),
-    terminalReceipts: await tx.select().from(merchantPaymentTerminalReceipts).where(inArray(merchantPaymentTerminalReceipts.paymentId, ownedPayments)).orderBy(asc(merchantPaymentTerminalReceipts.paymentId)),
-    moneyObservations: await tx.select().from(merchantPaymentObservations).where(inArray(merchantPaymentObservations.paymentId, ownedPayments)).orderBy(asc(merchantPaymentObservations.id)),
-    feeOperations: await tx.select().from(merchantFeeRefunds).where(inArray(merchantFeeRefunds.paymentId, ownedPayments)).orderBy(asc(merchantFeeRefunds.id)),
-    feeAcknowledgements: await tx.select().from(merchantFeeObservations).where(inArray(merchantFeeObservations.operationId, ownedFees)).orderBy(asc(merchantFeeObservations.id)),
+  const originalCash = await originalCashInvoiceHistory(tx, invoiceIds);
+  const history = {
+    requests: await tx.select().from(merchantPaymentRequests).where(inArray(merchantPaymentRequests.paymentId, ownedPayments)).orderBy(asc(merchantPaymentRequests.paymentId)).limit(5001),
+    dispatches: await tx.select({ id: merchantPaymentDispatches.id, paymentId: merchantPaymentDispatches.paymentId, ordinal: merchantPaymentDispatches.ordinal, requestDigest: merchantPaymentDispatches.requestDigest, dispatchedAt: merchantPaymentDispatches.dispatchedAt }).from(merchantPaymentDispatches).where(inArray(merchantPaymentDispatches.paymentId, ownedPayments)).orderBy(asc(merchantPaymentDispatches.id)).limit(5001),
+    finishes: await tx.select({ dispatchId: merchantPaymentDispatchFinishes.dispatchId, outcome: merchantPaymentDispatchFinishes.outcome, finishedAt: merchantPaymentDispatchFinishes.finishedAt }).from(merchantPaymentDispatchFinishes).where(inArray(merchantPaymentDispatchFinishes.dispatchId, ownedDispatches)).orderBy(asc(merchantPaymentDispatchFinishes.dispatchId)).limit(5001),
+    stoppedCallers: await tx.select({ dispatchId: merchantPaymentDispatchStops.dispatchId, reviewedAt: merchantPaymentDispatchStops.reviewedAt }).from(merchantPaymentDispatchStops).where(inArray(merchantPaymentDispatchStops.dispatchId, ownedDispatches)).orderBy(asc(merchantPaymentDispatchStops.dispatchId)).limit(5001),
+    refusals: await tx.select().from(merchantPaymentCreationRefusals).where(inArray(merchantPaymentCreationRefusals.dispatchId, ownedDispatches)).orderBy(asc(merchantPaymentCreationRefusals.dispatchId)).limit(5001),
+    retirementAcks: await tx.select().from(merchantPaymentRetirementAcks).where(inArray(merchantPaymentRetirementAcks.paymentId, ownedPayments)).orderBy(asc(merchantPaymentRetirementAcks.id)).limit(5001),
+    terminalReceipts: await tx.select().from(merchantPaymentTerminalReceipts).where(inArray(merchantPaymentTerminalReceipts.paymentId, ownedPayments)).orderBy(asc(merchantPaymentTerminalReceipts.paymentId)).limit(5001),
+    moneyObservations: await tx.select().from(merchantPaymentObservations).where(inArray(merchantPaymentObservations.paymentId, ownedPayments)).orderBy(asc(merchantPaymentObservations.id)).limit(5001),
+    feeOperations: await tx.select().from(merchantFeeRefunds).where(inArray(merchantFeeRefunds.paymentId, ownedPayments)).orderBy(asc(merchantFeeRefunds.id)).limit(5001),
+    feeAcknowledgements: await tx.select().from(merchantFeeObservations).where(inArray(merchantFeeObservations.operationId, ownedFees)).orderBy(asc(merchantFeeObservations.id)).limit(5001),
   };
+  if (Object.values(history).reduce((sum, rows) => sum + rows.length, 0) + Object.values(originalCash.witness).reduce((sum, rows) => sum + rows.length, 0) > 5000)
+    throw new ServiceError("conflict", "Restore the complete bounded original financial export before issuing the subject archive.");
+  return { ...history, originalCash: exportOriginalCashHistory(originalCash.witness) };
 }

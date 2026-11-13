@@ -4306,3 +4306,265 @@ CREATE OR REPLACE FUNCTION freeholder_subscription_resumption_callers_closed(tar
     OR admission.value->>'completionDigest' IS NOT DISTINCT FROM o.original_request->>'callerCompletionDigest'
     OR NOT freeholder_subscription_provider_reader_closed(o.id,admission.value)))))
 $$;
+--> statement-breakpoint
+-- Source: deploy/original-cash-return81.fragment.sql
+-- SHA256: 87fcddc234c41bb96f903fdc8015a0a2db0ee18ea666f81f184ce0b9b7cd5eb9
+-- Copyright (C) 2026 Tony Aly
+-- SPDX-License-Identifier: Apache-2.0
+-- C12.38/C1.08: SOURCE ONLY, UNASSEMBLED suffix after the unchanged RMA fragment.
+-- freeholder:schema-breaking Exact original cash-return callers and raw receipt-only sources are new financial debt; the previous image must not dispatch older fee operations over them. Rollback requires the pre-upgrade database.
+CREATE TABLE original_cash_recoveries (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), namespace_key text NOT NULL,
+ payment_id uuid REFERENCES payments(id) ON DELETE RESTRICT,
+ subscription_charge_receipt_id uuid REFERENCES subscription_provider_charge_receipts(id) ON DELETE RESTRICT,
+ owner jsonb NOT NULL, digest text NOT NULL, authentication text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT original_cash_recoveries_source CHECK((payment_id IS NULL)<>(subscription_charge_receipt_id IS NULL)),
+ CONSTRAINT original_cash_recoveries_proof CHECK(namespace_key ~ '^[a-f0-9]{64}$' AND digest ~ '^[a-f0-9]{64}$' AND authentication ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX original_cash_recoveries_namespace ON original_cash_recoveries(namespace_key);
+--> statement-breakpoint
+CREATE INDEX original_cash_recoveries_payment ON original_cash_recoveries(payment_id);
+--> statement-breakpoint
+CREATE INDEX original_cash_recoveries_receipt ON original_cash_recoveries(subscription_charge_receipt_id);
+--> statement-breakpoint
+CREATE TABLE original_cash_recovery_operations (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), recovery_id uuid NOT NULL REFERENCES original_cash_recoveries(id) ON DELETE RESTRICT,
+ kind text NOT NULL, request jsonb NOT NULL, caller jsonb NOT NULL, nonce_hash text NOT NULL,
+ digest text NOT NULL, authentication text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT original_cash_recovery_operations_kind CHECK(kind IN('inspection','fee','recipient')),
+ CONSTRAINT original_cash_recovery_operations_proof CHECK(nonce_hash ~ '^[a-f0-9]{64}$' AND digest ~ '^[a-f0-9]{64}$' AND authentication ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE INDEX original_cash_recovery_operations_owner ON original_cash_recovery_operations(recovery_id);
+--> statement-breakpoint
+CREATE UNIQUE INDEX original_cash_recovery_operations_creation ON original_cash_recovery_operations(recovery_id,kind) WHERE kind<>'inspection';
+--> statement-breakpoint
+CREATE TABLE original_cash_recovery_facts (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), recovery_id uuid NOT NULL REFERENCES original_cash_recoveries(id) ON DELETE RESTRICT,
+ operation_id uuid REFERENCES original_cash_recovery_operations(id) ON DELETE RESTRICT, sequence integer NOT NULL, kind text NOT NULL, evidence jsonb NOT NULL,
+ digest text NOT NULL, authentication text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT original_cash_recovery_facts_kind CHECK(kind IN('primary','refund','state','parent','ack','resource','finish','stop','legacy_fee_stop','customer_request')),
+ CONSTRAINT original_cash_recovery_facts_sequence_positive CHECK(sequence>0),
+ CONSTRAINT original_cash_recovery_facts_proof CHECK(digest ~ '^[a-f0-9]{64}$' AND authentication ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE INDEX original_cash_recovery_facts_owner ON original_cash_recovery_facts(recovery_id);
+--> statement-breakpoint
+CREATE INDEX original_cash_recovery_facts_operation ON original_cash_recovery_facts(operation_id);
+--> statement-breakpoint
+CREATE UNIQUE INDEX original_cash_recovery_facts_sequence ON original_cash_recovery_facts(recovery_id,sequence);
+--> statement-breakpoint
+CREATE UNIQUE INDEX original_cash_recovery_facts_terminal ON original_cash_recovery_facts(operation_id,kind) WHERE kind IN('finish','stop');
+--> statement-breakpoint
+CREATE TABLE original_cash_recovery_closures (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), recovery_id uuid NOT NULL REFERENCES original_cash_recoveries(id) ON DELETE RESTRICT,
+ operation_id uuid NOT NULL REFERENCES original_cash_recovery_operations(id) ON DELETE RESTRICT,
+ revision text NOT NULL, unapplied_return_receipt_id uuid, digest text NOT NULL, authentication text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT original_cash_recovery_closures_proof CHECK(revision ~ '^[a-f0-9]{64}$' AND digest ~ '^[a-f0-9]{64}$' AND authentication ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE INDEX original_cash_recovery_closures_owner ON original_cash_recovery_closures(recovery_id);
+--> statement-breakpoint
+CREATE UNIQUE INDEX original_cash_recovery_closures_read ON original_cash_recovery_closures(operation_id);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_original_cash_recovery() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original original_cash_recoveries; operation original_cash_recovery_operations; owner_id uuid; body jsonb;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.original_cash_recovery_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Original cash-return evidence is immutable and requires the shared authenticated phases' USING ERRCODE='55000';
+ END IF;
+ body:=to_jsonb(NEW);
+ IF TG_TABLE_NAME='original_cash_recoveries' THEN
+  original:=NEW; owner_id:=NEW.id;
+  IF (NEW.owner->'cash'->>'paymentId') IS DISTINCT FROM NEW.payment_id::text
+   OR (NEW.owner->'cash'->>'subscriptionChargeReceiptId') IS DISTINCT FROM NEW.subscription_charge_receipt_id::text
+   OR (NEW.owner->>'authorizedBy') !~ '^user:[0-9a-f-]{36}$'
+   OR (NEW.owner->'cash'->>'providerPlatformAccountId') !~ '^acct_[A-Za-z0-9]+$'
+   OR (NEW.owner->'cash'->>'providerRef') !~ '^pi_[A-Za-z0-9_]+$'
+   OR (NEW.owner->'cash'->>'amountMinor')::numeric NOT BETWEEN 1 AND 9007199254740991 THEN
+   RAISE EXCEPTION 'Original cash-return ownership must retain its actual financial source' USING ERRCODE='23514';
+  END IF;
+ ELSE
+  owner_id:=NEW.recovery_id; SELECT * INTO original FROM original_cash_recoveries WHERE id=owner_id;
+  IF original.id IS NULL THEN RAISE EXCEPTION 'Restore the original cash-return owner' USING ERRCODE='23514'; END IF;
+ END IF;
+ PERFORM pg_advisory_xact_lock(hashtext('subscription-cash:'||(original.owner->'cash'->>'providerPlatformAccountId')||':'||coalesce(original.owner->'cash'->>'chargeAccountId','')||':'||(original.owner->'cash'->>'providerRef')));
+ IF TG_TABLE_NAME='original_cash_recovery_operations' THEN
+  IF jsonb_typeof(NEW.caller)<>'object' OR NEW.caller->>'id' IS NULL OR NEW.request IS NULL THEN
+   RAISE EXCEPTION 'A physical cash-return caller needs its actual retained identity and request' USING ERRCODE='23514';
+  END IF;
+  IF EXISTS(SELECT 1 FROM original_cash_recovery_operations o WHERE o.recovery_id=owner_id
+   AND NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts f WHERE f.operation_id=o.id AND
+    (f.kind='finish' AND f.evidence->>'callerInstanceId'=o.caller->>'id' OR f.kind='stop' AND f.evidence->>'operationDigest'=o.digest))) THEN
+   RAISE EXCEPTION 'Finish or review the exact original physical caller before another operation' USING ERRCODE='23514';
+  END IF;
+ ELSIF TG_TABLE_NAME='original_cash_recovery_facts' THEN
+  IF NEW.operation_id IS NOT NULL THEN
+   SELECT * INTO operation FROM original_cash_recovery_operations WHERE id=NEW.operation_id;
+   IF operation.recovery_id IS DISTINCT FROM owner_id THEN RAISE EXCEPTION 'A cash fact cannot move between original owners' USING ERRCODE='23514'; END IF;
+   IF NEW.kind='finish' AND (NEW.evidence->>'callerInstanceId' IS DISTINCT FROM operation.caller->>'id' OR NEW.evidence->>'outcome' NOT IN('returned','threw')) THEN
+    RAISE EXCEPTION 'Retain the exact original wrapper finish independently of its bank result' USING ERRCODE='23514';
+   END IF;
+   IF NEW.kind='stop' AND NEW.evidence->>'operationDigest' IS DISTINCT FROM operation.digest THEN
+    RAISE EXCEPTION 'A hosting review must name its exact original operation' USING ERRCODE='23514';
+   END IF;
+  ELSIF NEW.kind NOT IN('legacy_fee_stop','customer_request') THEN
+   RAISE EXCEPTION 'A raw financial callback requires its actual admitted physical caller' USING ERRCODE='23514';
+  END IF;
+ ELSIF TG_TABLE_NAME='original_cash_recovery_closures' THEN
+  SELECT * INTO operation FROM original_cash_recovery_operations WHERE id=NEW.operation_id;
+  IF operation.recovery_id IS DISTINCT FROM owner_id OR operation.kind<>'inspection'
+   OR NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts f WHERE f.operation_id=operation.id AND f.kind='finish' AND f.evidence->>'outcome'='returned' AND f.evidence->>'callerInstanceId'=operation.caller->>'id') THEN
+   RAISE EXCEPTION 'A cash-return closure requires a real returned complete original read' USING ERRCODE='23514';
+  END IF;
+  IF (original.owner->'cash'->>'applied')::boolean=false AND NOT EXISTS(SELECT 1 FROM merchant_unapplied_charge_resolutions r WHERE r.id=NEW.unapplied_return_receipt_id
+   AND r.provider_platform_account_id=original.owner->'cash'->>'providerPlatformAccountId' AND r.charge_account_id IS NOT DISTINCT FROM original.owner->'cash'->>'chargeAccountId'
+   AND r.original_payment_ref=original.owner->'cash'->>'providerRef') THEN
+   RAISE EXCEPTION 'Unapplied cash requires its real original return disposition without a fabricated payment' USING ERRCODE='23514';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER original_cash_recovery_guard BEFORE INSERT OR UPDATE OR DELETE ON original_cash_recoveries FOR EACH ROW EXECUTE FUNCTION freeholder_guard_original_cash_recovery();
+--> statement-breakpoint
+CREATE TRIGGER original_cash_recovery_guard BEFORE INSERT OR UPDATE OR DELETE ON original_cash_recovery_operations FOR EACH ROW EXECUTE FUNCTION freeholder_guard_original_cash_recovery();
+--> statement-breakpoint
+CREATE TRIGGER original_cash_recovery_guard BEFORE INSERT OR UPDATE OR DELETE ON original_cash_recovery_facts FOR EACH ROW EXECUTE FUNCTION freeholder_guard_original_cash_recovery();
+--> statement-breakpoint
+CREATE TRIGGER original_cash_recovery_guard BEFORE INSERT OR UPDATE OR DELETE ON original_cash_recovery_closures FOR EACH ROW EXECUTE FUNCTION freeholder_guard_original_cash_recovery();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_original_cash_old_fee_dispatch() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF (TG_OP='INSERT' OR NEW.status='dispatching' AND OLD.status IS DISTINCT FROM 'dispatching') AND EXISTS(
+  SELECT 1 FROM original_cash_recoveries c LEFT JOIN payments p ON p.id=NEW.payment_id WHERE
+   c.subscription_charge_receipt_id=NEW.original_charge_receipt_id OR c.payment_id=NEW.payment_id AND c.owner->'cash'->>'providerRef'=p.provider_ref) THEN
+  RAISE EXCEPTION 'Use the exact original cash-return fee caller; the older payment-only fee writer cannot add another operation' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER original_cash_old_fee_dispatch BEFORE INSERT OR UPDATE ON merchant_fee_refunds FOR EACH ROW EXECUTE FUNCTION freeholder_guard_original_cash_old_fee_dispatch();
+--> statement-breakpoint
+-- Source: deploy/original-cash-partial81.fragment.sql
+-- SHA256: ece7abc2a554b1b4b70df48d546ccda811da0deb76de5e5c0e6efa4ff47a3b80
+-- Copyright (C) 2026 Tony Aly
+-- SPDX-License-Identifier: Apache-2.0
+-- C12.38/C1.08/C5.19: SOURCE ONLY, UNASSEMBLED tail AFTER unchanged ab894.
+-- freeholder:schema-breaking Cumulative partial target generations and explicit actual-resource review extend the original cash debt ABI. The previous image must fail closed; rollback requires the pre-upgrade database.
+-- The ordinary migration transaction holds these locks across the caller
+-- preflight and ABI replacement; a racing old admission must not pass between.
+LOCK TABLE original_cash_recoveries, original_cash_recovery_operations, original_cash_recovery_facts, original_cash_recovery_closures IN ACCESS EXCLUSIVE MODE;
+--> statement-breakpoint
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM original_cash_recovery_operations o WHERE NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts f WHERE f.operation_id=o.id AND (f.kind='finish' AND f.evidence->>'callerInstanceId'=o.caller->>'id' OR f.kind='stop' AND f.evidence->>'operationDigest'=o.digest))) THEN
+  RAISE EXCEPTION 'Finish or review actual original cash callers before this ABI upgrade; never discard or backfill their physical history' USING ERRCODE='55000';
+ END IF;
+END $$;
+--> statement-breakpoint
+ALTER TABLE original_cash_recovery_facts DROP CONSTRAINT original_cash_recovery_facts_kind;
+--> statement-breakpoint
+ALTER TABLE original_cash_recovery_facts ADD CONSTRAINT original_cash_recovery_facts_kind CHECK(kind IN('primary','refund','state','parent','ack','resource','finish','stop','legacy_fee_stop','customer_request','partial_target','partial_closure','unassigned_refund_review'));
+--> statement-breakpoint
+DROP INDEX original_cash_recovery_operations_creation;
+--> statement-breakpoint
+CREATE UNIQUE INDEX original_cash_recovery_operations_creation ON original_cash_recovery_operations(recovery_id,kind,coalesce(request->>'targetFactId','original_full_v1')) WHERE kind<>'inspection';
+--> statement-breakpoint
+CREATE UNIQUE INDEX original_cash_recovery_facts_target ON original_cash_recovery_facts(recovery_id,(evidence->>'targetKey')) WHERE kind='partial_target';
+--> statement-breakpoint
+CREATE FUNCTION freeholder_original_cash_partial_abi() RETURNS integer LANGUAGE sql IMMUTABLE AS $$ SELECT 2 $$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_guard_original_cash_recovery() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original original_cash_recoveries; operation original_cash_recovery_operations; owner_id uuid; body jsonb;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.original_cash_recovery_v1',true) IS DISTINCT FROM '1' OR current_setting('freeholder.original_cash_recovery_v2',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Original cash-return evidence is immutable and requires the shared authenticated phases' USING ERRCODE='55000';
+ END IF;
+ body:=to_jsonb(NEW);
+ IF TG_TABLE_NAME='original_cash_recoveries' THEN
+  original:=NEW; owner_id:=NEW.id;
+  IF (NEW.owner->'cash'->>'paymentId') IS DISTINCT FROM NEW.payment_id::text
+   OR (NEW.owner->'cash'->>'subscriptionChargeReceiptId') IS DISTINCT FROM NEW.subscription_charge_receipt_id::text
+   OR (NEW.owner->>'authorizedBy') !~ '^user:[0-9a-f-]{36}$'
+   OR (NEW.owner->'cash'->>'providerPlatformAccountId') !~ '^acct_[A-Za-z0-9]+$'
+   OR (NEW.owner->'cash'->>'providerRef') !~ '^pi_[A-Za-z0-9_]+$'
+   OR (NEW.owner->'cash'->>'amountMinor')::numeric NOT BETWEEN 1 AND 9007199254740991 THEN
+   RAISE EXCEPTION 'Original cash-return ownership must retain its actual financial source' USING ERRCODE='23514';
+  END IF;
+ ELSE
+  owner_id:=NEW.recovery_id; SELECT * INTO original FROM original_cash_recoveries WHERE id=owner_id;
+  IF original.id IS NULL THEN RAISE EXCEPTION 'Restore the original cash-return owner' USING ERRCODE='23514'; END IF;
+ END IF;
+ PERFORM pg_advisory_xact_lock(hashtext('subscription-cash:'||(original.owner->'cash'->>'providerPlatformAccountId')||':'||coalesce(original.owner->'cash'->>'chargeAccountId','')||':'||(original.owner->'cash'->>'providerRef')));
+ IF TG_TABLE_NAME='original_cash_recovery_operations' THEN
+  IF NEW.request ? 'targetFactId' AND NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts f WHERE f.id=(NEW.request->>'targetFactId')::uuid AND f.recovery_id=owner_id AND f.kind='partial_target') THEN RAISE EXCEPTION 'A partial auxiliary creation requires its exact original immutable target' USING ERRCODE='23514'; END IF;
+  IF jsonb_typeof(NEW.caller)<>'object' OR NEW.caller->>'id' IS NULL OR NEW.request IS NULL THEN
+   RAISE EXCEPTION 'A physical cash-return caller needs its actual retained identity and request' USING ERRCODE='23514';
+  END IF;
+  IF EXISTS(SELECT 1 FROM original_cash_recovery_operations o WHERE o.recovery_id=owner_id
+   AND NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts f WHERE f.operation_id=o.id AND
+    (f.kind='finish' AND f.evidence->>'callerInstanceId'=o.caller->>'id' OR f.kind='stop' AND f.evidence->>'operationDigest'=o.digest))) THEN
+   RAISE EXCEPTION 'Finish or review the exact original physical caller before another operation' USING ERRCODE='23514';
+  END IF;
+ ELSIF TG_TABLE_NAME='original_cash_recovery_facts' THEN
+  IF NEW.operation_id IS NOT NULL THEN
+   SELECT * INTO operation FROM original_cash_recovery_operations WHERE id=NEW.operation_id;
+   IF operation.recovery_id IS DISTINCT FROM owner_id THEN RAISE EXCEPTION 'A cash fact cannot move between original owners' USING ERRCODE='23514'; END IF;
+   IF NEW.kind='finish' AND (NEW.evidence->>'callerInstanceId' IS DISTINCT FROM operation.caller->>'id' OR NEW.evidence->>'outcome' NOT IN('returned','threw')) THEN
+    RAISE EXCEPTION 'Retain the exact original wrapper finish independently of its bank result' USING ERRCODE='23514';
+   END IF;
+   IF NEW.kind='stop' AND NEW.evidence->>'operationDigest' IS DISTINCT FROM operation.digest THEN
+    RAISE EXCEPTION 'A hosting review must name its exact original operation' USING ERRCODE='23514';
+   END IF;
+  ELSIF NEW.kind NOT IN('legacy_fee_stop','customer_request','partial_target','partial_closure','unassigned_refund_review') THEN
+   RAISE EXCEPTION 'A raw financial callback requires its actual admitted physical caller' USING ERRCODE='23514';
+  END IF;
+  IF NEW.kind='partial_target' AND ((original.owner->'cash'->>'applied')::boolean IS DISTINCT FROM true OR NEW.evidence->>'protocol' IS DISTINCT FROM 'freeholder.original-cash-partial-target.v1' OR NEW.evidence->>'targetKey' !~ '^[a-f0-9]{64}$' OR jsonb_typeof(NEW.evidence->'originalCreditIds') IS DISTINCT FROM 'array') THEN
+   RAISE EXCEPTION 'A partial target requires its exact original applied principal and issued-credit witnesses' USING ERRCODE='23514';
+  END IF;
+  IF NEW.kind='partial_closure' AND NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts f WHERE f.id=(NEW.evidence->>'targetFactId')::uuid AND f.recovery_id=owner_id AND f.kind='partial_target' AND f.evidence->>'targetKey'=NEW.evidence->>'targetKey' AND f.evidence->>'sourceDigest'=NEW.evidence->>'sourceDigest') THEN
+   RAISE EXCEPTION 'A partial closure must retain its exact original target, never a full-cash debt waiver' USING ERRCODE='23514';
+  END IF;
+ ELSIF TG_TABLE_NAME='original_cash_recovery_closures' THEN
+  SELECT * INTO operation FROM original_cash_recovery_operations WHERE id=NEW.operation_id;
+  IF operation.recovery_id IS DISTINCT FROM owner_id OR operation.kind<>'inspection'
+   OR NOT EXISTS(SELECT 1 FROM original_cash_recovery_facts f WHERE f.operation_id=operation.id AND f.kind='finish' AND f.evidence->>'outcome'='returned' AND f.evidence->>'callerInstanceId'=operation.caller->>'id') THEN
+   RAISE EXCEPTION 'A cash-return closure requires a real returned complete original read' USING ERRCODE='23514';
+  END IF;
+  IF (original.owner->'cash'->>'applied')::boolean=false AND NOT EXISTS(SELECT 1 FROM merchant_unapplied_charge_resolutions r WHERE r.id=NEW.unapplied_return_receipt_id
+   AND r.provider_platform_account_id=original.owner->'cash'->>'providerPlatformAccountId' AND r.charge_account_id IS NOT DISTINCT FROM original.owner->'cash'->>'chargeAccountId'
+   AND r.original_payment_ref=original.owner->'cash'->>'providerRef') THEN
+   RAISE EXCEPTION 'Unapplied cash requires its real original return disposition without a fabricated payment' USING ERRCODE='23514';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_guard_legacy_bank_feedback() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original_payment uuid; original_cash text;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.legacy_bank_feedback_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Raw original bank feedback is immutable and requires the verified shared intake' USING ERRCODE='55000';
+ END IF;
+ FOR original_payment IN SELECT DISTINCT p.id FROM payments p WHERE p.provider='stripe'
+  AND(p.provider_ref=NEW.evidence->>'observedPaymentRef' OR EXISTS(SELECT 1 FROM refunds r WHERE r.payment_id=p.id AND r.provider_ref=NEW.evidence->>'observedRefundRef')) ORDER BY p.id LOOP
+  PERFORM pg_advisory_xact_lock(hashtext('payment:'||original_payment::text));
+ END LOOP;
+ FOR original_cash IN
+  WITH scopes AS (
+   SELECT m.provider_platform_account_id platform,m.charge_account_id account,m.provider_ref intent FROM merchant_payment_observations m WHERE m.status='succeeded' AND m.amount_minor>0
+   UNION SELECT r.provider_platform_account_id,r.charge_account_id,r.provider_payment_intent_ref FROM subscription_provider_charge_receipts r
+  ), owned AS (
+   SELECT s.* FROM scopes s WHERE s.account IS NOT DISTINCT FROM NEW.evidence->>'observedChargeAccountId'
+    AND(NEW.evidence->>'observedPlatformAccountId' IS NULL OR NEW.evidence->>'observedPlatformAccountId'=s.platform)
+    AND(s.intent=NEW.evidence->>'observedPaymentRef' OR EXISTS(SELECT 1 FROM merchant_refund_resource_bindings b JOIN merchant_refund_requests q ON q.id=b.request_id
+      WHERE b.provider_ref=NEW.evidence->>'observedRefundRef' AND q.provider_platform_account_id=s.platform AND q.charge_account_id IS NOT DISTINCT FROM s.account AND q.original_payment_ref=s.intent)
+     OR EXISTS(SELECT 1 FROM original_cash_recovery_facts f JOIN original_cash_recoveries c ON c.id=f.recovery_id WHERE f.kind='refund' AND f.evidence->>'providerRef'=NEW.evidence->>'observedRefundRef'
+      AND f.evidence->>'paymentProviderRef'=s.intent AND c.owner->'cash'->>'providerPlatformAccountId'=s.platform AND c.owner->'cash'->>'chargeAccountId' IS NOT DISTINCT FROM s.account AND c.owner->'cash'->>'providerRef'=s.intent))
+  ) SELECT DISTINCT 'subscription-cash:'||platform||':'||coalesce(account,'')||':'||intent FROM owned ORDER BY 1 LOOP
+  PERFORM pg_advisory_xact_lock(hashtext(original_cash));
+ END LOOP;
+ RETURN NEW;
+END $$;
