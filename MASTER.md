@@ -14135,6 +14135,15 @@ whatever is best for the people using the site.
   and revokes mid-call against a recording SFU adapter; the browser test has
   a member leave mid-call through the real LiveKit and checks the others keep
   decoding on the new key. Changeset `member-call-removal.md`.)*
+  Buyer proration export projection checkpoint 2026-11-13 (C1.08/C12.38):
+  the subject archive explicitly whitelists accepted buyer commercial/calendar/
+  tax/credit/status fields and actual FK-bound invoice cash consideration,
+  rather than returning raw retained snapshot/destination/notice JSON. Internal
+  originals and full financial row hashes remain unchanged. Four nested-canary,
+  genuine-null/trial, foreign-invoice and lifecycle controls are PREPARED/UNRUN;
+  no observed current-writer fee disclosure or qualification is claimed. See
+  deploy/subscription-proration-buyer-export82-source-20261113.md. All native
+  privacy, financial and stable acceptance requirements remain open.
   Commercial assembly checkpoint 2026-11-13 (C12.38): SQL80/cf1e now
   appends the six attestation/credit/gross/fee/boundary/card tails while
   preserving the entire qualified397928-byte0cff prefix and unchanged81.
