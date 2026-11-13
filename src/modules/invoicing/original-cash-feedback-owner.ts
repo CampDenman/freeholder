@@ -64,8 +64,9 @@ export function uniqueOriginalFeedbackOwner(candidates: readonly OriginalFeedbac
 }
 
 export async function originalBankFeedbackOwner(tx: Tx, raw: typeof legacyBankFeedback.$inferSelect): Promise<OriginalFeedbackOwner> {
-  const keys = legacyFeedbackVerificationKeys(), evidence = verifyLegacyBankFeedback(raw, keys);
-  if (!evidence) throw unresolved();
+  const keys = legacyFeedbackVerificationKeys(), verified = verifyLegacyBankFeedback(raw, keys);
+  if (!verified) throw unresolved();
+  const evidence = verified;
   let count = 0;
   const bounded = <T>(rows: T[]): T[] => { count += rows.length; if (rows.length > 5000 || count > 5000) throw unresolved(); return rows; };
   const candidates: OriginalFeedbackOwnerCandidate[] = [];
