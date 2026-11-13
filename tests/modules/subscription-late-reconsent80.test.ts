@@ -3,6 +3,7 @@
 // C12.38/C9.38: actual original producers and retained task bodies; synthetic HTTP/clock.
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
+import type { z } from "zod";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/core/db";
 import { getJob, stopJobs } from "@/core/jobs";
@@ -24,7 +25,7 @@ describe.runIf(hasDatabase)("fresh explicit consent after a missed provider boun
   beforeAll(ready, 60000); beforeEach(truncateSpine);
   afterEach(() => { vi.useRealTimers(); source?.fixture.cleanup(); source = undefined; vi.restoreAllMocks(); });
   afterAll(async () => { await stopJobs(); await closeDb(); });
-  async function accept(input: Parameters<typeof quoteMerchantAmendment.call>[0]) {
+  async function accept(input: z.input<typeof quoteMerchantAmendment.def.input>) {
     const review = await quoteMerchantAmendment.call(input, OWNER);
     const accepted = await acceptMerchantAmendment.call({ ...input, previousTermsId: review.previousTermsId, acceptedQuoteDigest: review.quoteDigest, confirm: true }, OWNER);
     const [receipt] = await db().select().from(subscriptionCommercialAmendments).where(eq(subscriptionCommercialAmendments.termsId, accepted.termsId));
