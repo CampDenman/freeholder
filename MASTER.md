@@ -14179,6 +14179,17 @@ whatever is best for the people using the site.
   account. Split from C12.26 on 2026-10-15. This follows Stripe's current
   [charge types](https://docs.stripe.com/connect/charges) and
   [refund/dispute documentation](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
+  Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
+  parity stopped at the first genuine model/source mismatch in the named
+  nonnegative invoice amount CHECK after125 complete models. The unchanged
+  model also includes credit in invoices_paid_bounded, while the old source
+  did not. The owned unpublished credit fragment now replaces both exact named
+  CHECKs; existing credited bounds and already-correct paid-status/total/refund
+  arithmetic remain intact. No model waiver or diagnostic exemption is added.
+  Failed V2/v14 proof stays preserved; this source-only repair is unparsed and
+  unqualified. Root must review/reassemble unpublished80 after the whole old0cff
+  prefix, preserve0–79/81/82 and qualify a genuinely new normal database. See
+  `deploy/subscription-proration-credit-check-parity80-source-20261113.md`.
   Allocation-scoped merge source repair 2026-11-12: the actual mixed-seller
   control failed because an unrelated seller's refund changed the first
   seller's whole-invoice collection fingerprint. A new internal scope
