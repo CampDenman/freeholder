@@ -3941,7 +3941,13 @@ reading chat logs.
   the unchanged WXR/ZIP positive controls. Full Node22 types, corrected lint,
   registry/composition/participation contracts and68 unique NoDB assertions
   pass (138 explicit DB skips); note regeneration and metadata pass. Actual
-  native/migration checks remain UNRUN; no completion claim follows. See
+  NEW ordinary0–81/438 schema passes all82hashes/22models/28guards. Both
+  unchanged87 positives pass (WXR10.323s/ZIP8.655s), independently proving
+  original500minimized, oldpartial/intactretainedreceipt unchanged, new exact
+  capture/job/completedreceipt, later501+bytes unchanged and no second DELETE;
+  UTC/fsyncON/jitOFF/journal/PGclient drain pass after each. Four prepared
+  negative cases and final combined/API/MCP/SDK/browser/provider acceptance
+  remain UNRUN; no C-item/stable completion claim follows. See
   `deploy/import-held-original-new-request-2026-11-13.md`.
 
   Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
