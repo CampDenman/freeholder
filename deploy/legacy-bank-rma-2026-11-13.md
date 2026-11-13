@@ -138,3 +138,22 @@ SQL assembly and parity, a genuinely new database per controlled native case,
 first-failure preservation and independent UTC/current-journal/client-drain
 proof remain required. Populated upgrades, browser/SDK journeys, actual provider
 acceptance and independent review remain part of the full specification.
+
+
+## Root feedback integration checkpoint
+
+The local composition includes the verified recovery checkpoint3513fb24 and
+signed RMA source722b53d0. The equivalent owner-form label conflict retains the
+qualified matching label/textarea IDs. Prior async-main/universal-tsx/IPC
+fixture corrections remain intact. The original2100 SQL is a byte prefix of
+new unpublished80 SHA-256
+17bf9c66942486e874f48c6b1f15aff56740176535de768e6e16142435b71f57;
+no previous database is migrated or reset for this new schema.
+
+Invoice selection now includes authentic feedback-owned original refunds before
+any GET, through their exact invoice/payment ownership and the seller's frozen
+payment filter. Both central refund and invoice histories include authenticated
+feedback plus its original admission namespace in the complete5000-child bound.
+Empty new child arrays preserve previous financial fingerprints. This supplies
+the missing source hook for the prepared feedback-only merge-undo control; it
+is not native or final-candidate proof. All new qualification remains pending.

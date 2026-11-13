@@ -12,6 +12,7 @@ import { moneyStateEvents, refunds } from "./schema";
 import { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBankCurrentReceipts, legacyBankReadStops } from "./legacy-bank-read-schema";
 import { LEGACY_REPLACEMENT_PROTOCOL, LEGACY_REPLACEMENT_REASON, LEGACY_REPLACEMENT_STATE } from "./legacy-bank-replacement-proof";
 import { BANK_REPLACEMENT_PROTOCOL, BANK_REPLACEMENT_REASON, BANK_REPLACEMENT_STATE } from "./merchant-bank-replacement-proof";
+import { legacyBankFeedbackFinancialWitness } from "./legacy-bank-feedback-store";
 export interface MerchantRefundDependencyReceipt { version: 1; entries: Array<{ table: string; id: string; fingerprint: string }>; incomplete: boolean }
 const MAX = 5000;
 const ids = (column: string, values: readonly string[]): SQL => values.length
@@ -59,6 +60,8 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
   if (originalRefunds.length > MAX) return incomplete();
   const refundIds = [...new Set([...requests.map(row => row.refund_id).filter((id): id is string => typeof id === "string"), ...originalRefunds.map(row => row.id)])];
   if (refundIds.length > MAX) return incomplete();
+  const feedback = await legacyBankFeedbackFinancialWitness(tx, refundIds);
+  collected.push({ table: "legacy_bank_feedback", rows: feedback.map(row => ({ id: `${row.refundId}:${row.feedback.id}`, ...row })) });
   const legacyReads = await read("legacy_bank_reads", legacyBankReads, ids("refund_id", refundIds));
   if (overflow) return incomplete();
   await read("legacy_bank_read_facts", legacyBankReadFacts, ids("read_id", rowIds(legacyReads)));

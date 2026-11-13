@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: bounded child-effect fingerprints follow the invoice's real owner.
-import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { Tx } from "@/core/service";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
@@ -21,25 +21,27 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   if (!invoiceIds.length) return new Map();
   if (originalPaymentIds && originalPaymentIds.length > 5000) return null;
   if (originalPaymentIds && !originalPaymentIds.length) return new Map();
-  // New authenticated legacy read children also belong to ordinary invoices
-  // that have no new-model route. Existing history with no such read keeps
-  // its prior undo contract. Seller callers retain their exact payment filter.
-  const legacyReferences = await tx.select({ refundId: refunds.id, invoiceId: payments.invoiceId }).from(legacyBankReads)
-    .innerJoin(refunds, eq(refunds.id, legacyBankReads.refundId)).innerJoin(payments, eq(payments.id, refunds.paymentId))
-    .where(and(inArray(payments.invoiceId, [...invoiceIds]), originalPaymentIds ? inArray(payments.id, [...originalPaymentIds]) : undefined))
+  // Authentic feedback creates financial debt before the first GET. Select
+  // through exact original payments, including feedback-owned legacy refunds,
+  // while retaining the seller's frozen payment filter and old empty history.
+  const legacyReferences = await tx.select({ refundId: refunds.id, invoiceId: payments.invoiceId }).from(refunds)
+    .innerJoin(payments, eq(payments.id, refunds.paymentId))
+    .where(and(inArray(payments.invoiceId, [...invoiceIds]), originalPaymentIds ? inArray(payments.id, [...originalPaymentIds]) : undefined,
+      sql`(exists(select 1 from ${legacyBankReads} where ${legacyBankReads.refundId}=${refunds.id}) or freeholder_legacy_bank_feedback_review(${refunds.id}))`))
     .orderBy(asc(payments.invoiceId), asc(refunds.id)).limit(5001);
   if (legacyReferences.length > 5000) return null;
   const legacyFinancial = new Map<string, string>();
   if (legacyReferences.length) {
     const history = await legacyBankReadFinancialWitness(tx, legacyReferences.map(row => row.refundId));
-    if (history.reads.length + history.facts.length + history.finishes.length + history.current.length + history.stops.length + history.replacements.length > 5000) return null;
+    if (history.reads.length + history.facts.length + history.finishes.length + history.current.length + history.stops.length + history.replacements.length + history.feedback.length > 5000) return null;
     for (const invoiceId of [...new Set(legacyReferences.map(row => row.invoiceId))]) {
       const refundIds = new Set(legacyReferences.filter(row => row.invoiceId === invoiceId).map(row => row.refundId));
       const reads = history.reads.filter(row => refundIds.has(row.refundId)), readIds = new Set(reads.map(row => row.id));
       const current = history.current.filter(row => readIds.has(row.readId));
       const stops = history.stops.filter(row => readIds.has(row.readId)), replacements = history.replacements.filter(row => refundIds.has(row.subjectId));
+      const feedback = history.feedback.filter(row => refundIds.has(row.refundId));
       legacyFinancial.set(invoiceId, merchantTaxDigest({ reads, facts: history.facts.filter(row => readIds.has(row.readId)), finishes: history.finishes.filter(row => readIds.has(row.readId)),
-        ...(current.length ? { current } : {}), ...(stops.length ? { stops } : {}), ...(replacements.length ? { replacements } : {}) }));
+        ...(current.length ? { current } : {}), ...(stops.length ? { stops } : {}), ...(replacements.length ? { replacements } : {}), ...(feedback.length ? { feedback } : {}) }));
     }
   }
   const owned = await tx.select({ payment: payments, orderRoute: merchantPaymentRoutes, singleRoute: merchantInvoicePaymentRoutes, agreementRoute: merchantAgreementPaymentRoutes }).from(payments)
