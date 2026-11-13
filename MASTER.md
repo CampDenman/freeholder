@@ -12595,6 +12595,15 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
+  Empty transfer ownership merge scope source repair2026-11-13: actual CI701
+  original merge/outbox controls reached the deliberately inactive media
+  capability before checking for any scoped transfer subject. The shared
+  reference now proves exact two-contact subject absence under the original
+  inventory fence before empty capture/no-op repoint; nonempty scopes still
+  require every complete capability and full original lineage guard. Existing
+  oracles remain unchanged and AFTER qualification is unrun. No physical
+  retirement, empty erasure capture or capability publication is inferred. See
+  `deploy/media-empty-transfer-merge82-source-20261113.md`.
   Source-only original media proof policy audit2026-11-13 adds the actual
   transfer subject contact-FK private-search/noTTL reasons and documents all17
   original proof tables' parent-scoped recovery/privacy lifetime. Invalid header
