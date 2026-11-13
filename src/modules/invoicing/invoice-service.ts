@@ -4,7 +4,23 @@
 
 import { createHash } from "node:crypto";
 import { captureInvoiceMarketPolicy, getInvoiceMarketPolicy } from "./market-policy";
+import { captureOriginalMerchantRefund } from "./merchant-refund-capture";
+import { lockMerchantRefundCash } from "./merchant-refund-origin";
+import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
+import { merchantRefundRequests } from "./merchant-refund-schema";
+import type { LegacyBankStatus } from "./legacy-bank-current-proof";
+import { legacyBankCurrentReceipts, legacyBankReadFacts } from "./legacy-bank-read-schema";
+import { assertLegacyBankRefundCapacity, legacyRefundBankState } from "./legacy-bank-current-state";
+import { merchantRefundCurrentReceipts } from "./merchant-refund-current-schema";
+import { assertOriginalMerchantRefundResult, assertOriginalMerchantRefundStart, retireOriginalMerchantRefund } from "./merchant-refund-core-guards";
+import { queueMerchantFeeReconciliation } from "./merchant-fee-service";
 import { reserveMerchantCharge } from "./merchant-charge";
+import { commercialPaymentRecorded, commercialRefundRecorded } from "./commercial-attestations";
+import { exportControlledFinancialHistory } from "./controlled-provider-financial-witness";
+import { exportProrationMoney } from "./proration-money-export";
+import { exportProrationCardHistory, subscriptionProrationCardWitnesses } from "@/modules/subscriptions/proration-card-witnesses";
+import { assertFinancialExportBound } from "./financial-export-bound";
+import { invoiceCreditApplications, invoiceCreditReservations } from "./credit-application-schema";
 import { isHostedPaymentProvider } from "@/adapters/payments/providers";
 import { assertLegacyRefundRelease, refundReservationMarker } from "./legacy-refund-dispatch";
 import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
@@ -13,7 +29,7 @@ import {
   registerContactReference,
 } from "@/core/contacts/service";
 import { contacts } from "@/core/contacts/schema";
-import {queuePaymentProviderErasure} from "./provider-erasure";
+import {eraseBuyerMoneySource} from "./buyer-money-erasure";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
   clipSnippet,
@@ -29,6 +45,9 @@ import {
   type Tx,
 } from "@/core/service";
 import { listed, uuid } from "@/core/contract";
+import { exportAgreementFeeHistory } from "./agreement-fee-witnesses";
+import { captureAgreementFeeCashAssignment } from "./agreement-fee-store";
+import { invoiceOutstanding, invoiceSettled } from "./invoice-balance";
 import {
   creditNoteRow,
   invoiceBundle as invoiceBundleOutput,
@@ -53,11 +72,14 @@ import {
   taxLines,
 } from "./schema";
 import {
-  extendMinor,
-  subtractMinor,
   sumMinor,
 } from "./money";
 import { quoteTax } from "./tax-service";
+import {calculateInvoiceAmounts} from "./invoice-amounts";
+import {prepareMerchantInvoiceTax,freezeMerchantInvoiceTax} from "./merchant-tax-invoice";
+import {allowMerchantTaxWrites} from "./merchant-tax-store";
+import {captureMerchantPaymentRequest,assertMerchantPaymentTerminal,assertInvoiceMerchantCreatorsQuiesced} from "./merchant-payment-request";
+import {invoiceMerchantDependencyFingerprints,exportMerchantRecoveryHistory} from "./merchant-payment-dependencies";
 import { allocateSettledPayment } from "./payment-plan-ledger";
 
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/);
@@ -102,6 +124,7 @@ const lineInput = z.object({
   snapshot: boundedObject.default({}),
 });
 const taxChoice = z.discriminatedUnion("mode", [
+  z.object({mode:z.literal("merchant"),destination:taxAddress,quoteDigest:z.string().regex(/^[a-f0-9]{64}$/).optional()}),
   z.object({
     mode: z.literal("calculate"),
     origin: taxAddress,
@@ -191,27 +214,28 @@ async function invoiceBundle(tx: Tx, id: string) {
 interface PointerRow {
   id: string;
   contactId: string;
+  fingerprint?: string;
 }
 
 function registerPointer(
   table: "invoices" | "tax_exemptions" | "payment_provider_customers" | "payment_methods",
-  selectRows: (tx: Tx, ids: string[]) => Promise<PointerRow[]>,
+  selectRows: (tx: Tx, ids: string[]) => Promise<PointerRow[] | null>,
   repointRows: (tx: Tx, from: string, to: string) => Promise<unknown>,
 ): void {
   registerContactReference({
     table,
     repoint: repointRows,
-    captureForUndo: async (tx, duplicateId, survivingId) => ({
-      state: await selectRows(tx, [duplicateId, survivingId]),
-      undoable: true,
-    }),
-    restoreAfterUndo: async (tx, beforeState, afterState, duplicateId) => {
-      const schema = z.array(z.object({ id: z.string().uuid(), contactId: z.string().uuid() }));
+    captureForUndo: async (tx, duplicateId, survivingId) => {
+      const state = await selectRows(tx, [duplicateId, survivingId]);
+      return { state: state ?? [], undoable: state !== null, ...(state === null ? { blocker: "Original invoice financial dependencies exceed the bounded undo limit." } : {}) };
+    },
+    restoreAfterUndo: async (tx, beforeState, afterState, duplicateId, survivingId) => {
+      const schema = z.array(z.object({ id: z.string().uuid(), contactId: z.string().uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional() }));
       const before = schema.parse(beforeState);
       const after = schema.parse(afterState);
-      const current = after.length ? await selectRows(tx, [...new Set(after.map((row) => row.contactId))]) : [];
-      const currentById = new Map(current.map((row) => [row.id, row.contactId]));
-      if (current.length !== after.length || after.some((row) => currentById.get(row.id) !== row.contactId)) {
+      const current = await selectRows(tx, [duplicateId, survivingId]);
+      const currentById = new Map(current?.map((row) => [row.id, row]) ?? []);
+      if (current === null || current.length !== after.length || after.some((row) => currentById.get(row.id)?.contactId !== row.contactId || currentById.get(row.id)?.fingerprint !== row.fingerprint)) {
         throw new ServiceError(
           "conflict",
           `A ${table.replaceAll("_", " ")} record changed after this merge. Leave the merge in place or restore that record first.`,
@@ -222,6 +246,7 @@ function registerPointer(
       if (table === "invoices") {
         await tx.update(invoices).set({ contactId: duplicateId }).where(inArray(invoices.id, movedIds));
       } else if (table === "tax_exemptions") {
+        await allowMerchantTaxWrites(tx);
         await tx.update(taxExemptions).set({ contactId: duplicateId }).where(inArray(taxExemptions.id, movedIds));
       } else if (table === "payment_provider_customers") {
         await tx.update(paymentProviderCustomers).set({ contactId: duplicateId }).where(inArray(paymentProviderCustomers.id, movedIds));
@@ -234,13 +259,18 @@ function registerPointer(
 
 registerPointer(
   "invoices",
-  (tx, ids) => tx.select({ id: invoices.id, contactId: invoices.contactId }).from(invoices).where(inArray(invoices.contactId, ids)),
+  async (tx, ids) => {
+    const rows = await tx.select({ id: invoices.id, contactId: invoices.contactId }).from(invoices).where(inArray(invoices.contactId, ids)).orderBy(asc(invoices.id)).limit(5001);
+    if (rows.length > 5000) return null;
+    const fingerprints = await invoiceMerchantDependencyFingerprints(tx, rows.map(row => row.id));
+    return fingerprints === null ? null : rows.map(row => ({ ...row, ...(fingerprints.has(row.id) ? { fingerprint: fingerprints.get(row.id)! } : {}) }));
+  },
   (tx, from, to) => tx.update(invoices).set({ contactId: to }).where(eq(invoices.contactId, from)),
 );
 registerPointer(
   "tax_exemptions",
   (tx, ids) => tx.select({ id: taxExemptions.id, contactId: taxExemptions.contactId }).from(taxExemptions).where(inArray(taxExemptions.contactId, ids)),
-  (tx, from, to) => tx.update(taxExemptions).set({ contactId: to }).where(eq(taxExemptions.contactId, from)),
+  async (tx, from, to) => {await allowMerchantTaxWrites(tx);return tx.update(taxExemptions).set({ contactId: to }).where(eq(taxExemptions.contactId, from));},
 );
 registerPointer(
   "payment_provider_customers",
@@ -284,48 +314,34 @@ registerSearchSource({
 
 registerContactPrivacySource({
   scope: "commerce.money",
-  tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods"],
+  retentionScopes: ["subscriptions.agreements"],
+  tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods", "merchant_payment_requests", "merchant_payment_dispatches", "merchant_payment_creation_refusals", "merchant_payment_retirement_acks", "merchant_payment_terminal_receipts", "merchant_payment_observations", "merchant_fee_refunds", "merchant_fee_observations",
+    "commercial_payment_attestations", "commercial_refund_attestations", "commercial_fee_attestations", "invoice_credit_funding", "invoice_credit_reservations", "invoice_credit_applications", "invoice_credit_releases", "agreement_fee_duties", "agreement_fee_credit_assignments", "agreement_fee_cash_assignments", "agreement_fee_eligibility", "agreement_fee_remittances",
+    "subscription_proration_payment_protocols", "subscription_proration_card_mandates", "subscription_proration_card_attempts", "subscription_proration_card_jobs", "subscription_proration_card_reads", "subscription_proration_card_read_finishes", "subscription_proration_card_read_stops"],
   exportData: async (tx, contactId) => {
-    const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId));
+    const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId)).orderBy(invoices.id).limit(5001);
     const ids = owned.map((row) => row.id);
-    return {
-      invoices: await Promise.all(ids.map((id) => invoiceBundle(tx, id))),
+    assertFinancialExportBound({ invoices: owned });
+    const bundles = await Promise.all(ids.map((id) => invoiceBundle(tx, id)));
+    const card = await subscriptionProrationCardWitnesses(tx, ids);
+    if (card.incomplete) throw new ServiceError("conflict", "Restore the complete bounded original payment-caller history before issuing the subject archive.");
+    const controlled = await exportControlledFinancialHistory(tx, { invoiceIds: ids });
+    const families = {
+      ...(controlled.selected.entries.length ? { originalControlledProvider: controlled.exported } : {}),
+      merchantRecovery: await exportMerchantRecoveryHistory(tx, ids),
+      originalCreditAndExternalMoney: await exportProrationMoney(tx, ids),
+      originalCommissionAssignments: await exportAgreementFeeHistory(tx, ids),
+      originalPaymentCallers: exportProrationCardHistory(card),
       taxExemptions: await tx.select().from(taxExemptions).where(eq(taxExemptions.contactId, contactId)),
       paymentProviderCustomers: await tx.select().from(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, contactId)),
       paymentMethods: await tx.select().from(paymentMethods).where(eq(paymentMethods.contactId, contactId)),
     };
+    // Count every actual family together: independent per-helper limits do
+    // not bound a subject archive containing several complete histories.
+    assertFinancialExportBound(families, ...bundles.map(({ invoice, ...children }) => ({ invoice: [invoice], ...children })));
+    return { invoices: bundles, ...families };
   },
-  erase: async (tx, contactId, context) => {
-    const providerErasure=await queuePaymentProviderErasure(tx,contactId,context);
-    const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId));
-    const ids = owned.map((row) => row.id);
-    let affected = 0;
-    if (ids.length) {
-      affected += (
-        await tx
-          .update(invoices)
-          .set({ billingAddress: {}, customerTaxId: null, memo: null, schedule: null })
-          .where(inArray(invoices.id, ids))
-          .returning({ id: invoices.id })
-      ).length;
-      await tx.update(payments).set({ failureMessage: null, metadata: {} }).where(inArray(payments.invoiceId, ids));
-      await tx.update(refunds).set({ failureMessage: null, reason: null }).where(inArray(refunds.invoiceId, ids));
-    }
-    affected += (
-      await tx
-        .update(taxExemptions)
-        .set({ certificateRef: null, status: "revoked" })
-        .where(eq(taxExemptions.contactId, contactId))
-        .returning({ id: taxExemptions.id })
-    ).length;
-    affected += (
-      await tx.delete(paymentMethods).where(eq(paymentMethods.contactId, contactId)).returning({ id: paymentMethods.id })
-    ).length;
-    affected += (
-      await tx.delete(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, contactId)).returning({ id: paymentProviderCustomers.id })
-    ).length;
-    return { affected,pendingJobs:providerErasure.pendingJobs };
-  },
+  erase: eraseBuyerMoneySource,
 });
 
 const invoiceListRow = invoiceRow.extend({
@@ -372,7 +388,7 @@ export const listInvoices = defineService({
       currency: invoice.currency, subtotalMinor: invoice.subtotalMinor,
       discountMinor: invoice.discountMinor, shippingMinor: invoice.shippingMinor,
       taxMinor: invoice.taxMinor, taxZoneId: invoice.taxZoneId, totalMinor: invoice.totalMinor,
-      paidMinor: invoice.paidMinor, refundedMinor: invoice.refundedMinor,
+      paidMinor: invoice.paidMinor, creditedMinor: invoice.creditedMinor, refundedMinor: invoice.refundedMinor,
       billingAddress: invoice.billingAddress, customerTaxId: invoice.customerTaxId,
       requiredTaxLegend: invoice.requiredTaxLegend, memo: invoice.memo,
       schedule: invoice.schedule, depositOfInvoiceId: invoice.depositOfInvoiceId,
@@ -458,6 +474,7 @@ export const reconcileMoney = defineService({
       invoices: z.number().int(),
       payments: z.number().int(),
       refunds: z.number().int(),
+      creditApplications: z.number().int(),
     }),
     discrepancies: listed(
       z.object({
@@ -482,6 +499,10 @@ export const reconcileMoney = defineService({
           ctx.tx.select().from(refunds).where(inArray(refunds.invoiceId, invoiceIds)),
         ])
       : [[], []];
+    const appliedCredits = invoiceIds.length ? await ctx.tx.select({ invoiceId: invoiceCreditApplications.invoiceId, amountMinor: invoiceCreditReservations.amountMinor })
+      .from(invoiceCreditApplications).innerJoin(invoiceCreditReservations, eq(invoiceCreditReservations.id, invoiceCreditApplications.reservationId))
+      .where(inArray(invoiceCreditApplications.invoiceId, invoiceIds)).limit(5001) : [];
+    if (appliedCredits.length > 5000) throw new ServiceError("conflict", "Reconcile this bounded original credit inventory in a smaller exact invoice cohort.");
     const discrepancies: Array<{
       subjectType: "invoice" | "payment";
       subjectId: string;
@@ -502,6 +523,8 @@ export const reconcileMoney = defineService({
           .map((refund) => refund.amountMinor),
         "Reconciled invoice refunds",
       );
+      const calculatedCredited = sumMinor(appliedCredits.filter(row => row.invoiceId === invoice.id).map(row => row.amountMinor), "Reconciled original applied credit");
+      if (invoice.creditedMinor !== calculatedCredited) discrepancies.push({ subjectType: "invoice", subjectId: invoice.id, field: "creditedMinor", recordedMinor: invoice.creditedMinor, calculatedMinor: calculatedCredited });
       if (invoice.paidMinor !== calculatedPaid) {
         discrepancies.push({
           subjectType: "invoice",
@@ -544,6 +567,7 @@ export const reconcileMoney = defineService({
         invoices: invoiceRows.length,
         payments: paymentRows.length,
         refunds: refundRows.length,
+        creditApplications: appliedCredits.length,
       },
       discrepancies,
     };
@@ -572,6 +596,7 @@ export const createDraftInvoice = defineService({
   summary: "Create one idempotent draft with fixed-point lines and explicit tax treatment.",
   kind: "mutation",
   permission: "scoped",
+  auditInputFields:["contactId","currency","sourceType","sourceId","shippingMinor","depositOfInvoiceId","dueAt"],
   input: createDraftInput,
   output: invoiceBundleOutput,
   handler: async (input, ctx) => {
@@ -621,7 +646,8 @@ export const createDraftInvoice = defineService({
       })),
       shippingMinor: input.shippingMinor,
     };
-    const quote =
+    const merchantTax = input.tax.mode === "merchant" ? await prepareMerchantInvoiceTax({...input,destination:input.tax.destination,expectedQuoteDigest:input.tax.quoteDigest},ctx) : null;
+    const quote = merchantTax?.quote ?? (
       input.tax.mode === "calculate"
         ? await ctx.call(quoteTax, {
             ...taxInput,
@@ -634,10 +660,10 @@ export const createDraftInvoice = defineService({
             lines: [],
             totalTaxMinor: 0,
             includedTaxMinor: 0,
-            explanation: [input.tax.reason],
+            explanation: [input.tax.mode === "not_applicable" ? input.tax.reason : ""],
             zone: null,
-          };
-    const preDiscountQuote =
+          });
+    const preDiscountQuote = merchantTax?.preDiscountQuote ?? (
       input.tax.mode === "calculate" && quote.lines.some((line) => line.inclusive)
         ? await ctx.call(quoteTax, {
             ...taxInput,
@@ -645,48 +671,14 @@ export const createDraftInvoice = defineService({
             origin: input.tax.origin,
             destination: input.tax.destination,
           })
-        : quote;
+        : quote);
 
-    const calculatedLines = input.lines.map((line, index) => {
-      const key = itemKeys[index]!;
-      const grossSubtotal = extendMinor(line.unitAmountMinor, line.quantityMicros);
-      if (line.discountMinor > grossSubtotal) {
-        throw new ServiceError("validation", `Line ${index + 1}'s discount exceeds its extended amount.`);
-      }
-      const currentTax = quote.lines.filter((tax) => tax.itemId === key);
-      const beforeTax = preDiscountQuote.lines.filter((tax) => tax.itemId === key);
-      const includedAfter = sumMinor(currentTax.filter((tax) => tax.inclusive).map((tax) => tax.taxMinor), "Included line tax");
-      const includedBefore = sumMinor(beforeTax.filter((tax) => tax.inclusive).map((tax) => tax.taxMinor), "Included pre-discount tax");
-      const taxDiscount = subtractMinor(includedBefore, includedAfter, "Included-tax discount");
-      const subtotalMinor = subtractMinor(grossSubtotal, includedBefore, "Net line subtotal");
-      const discountMinor = subtractMinor(line.discountMinor, taxDiscount, "Net line discount");
-      const taxMinor = sumMinor(currentTax.map((tax) => tax.taxMinor), "Line tax");
-      return {
-        input: line,
-        key,
-        position: index,
-        subtotalMinor,
-        discountMinor,
-        taxMinor,
-        totalMinor: sumMinor([subtractMinor(subtotalMinor, discountMinor, "Net line"), taxMinor], "Line total"),
-      };
-    });
-    const shippingTaxes = quote.lines.filter((line) => !line.itemId);
-    const includedShippingTax = sumMinor(
-      shippingTaxes.filter((line) => line.inclusive).map((line) => line.taxMinor),
-      "Included shipping tax",
-    );
-    const netShippingMinor = subtractMinor(input.shippingMinor, includedShippingTax, "Net shipping");
-    const subtotalMinor = sumMinor(calculatedLines.map((line) => line.subtotalMinor), "Invoice subtotal");
-    const discountMinor = sumMinor(calculatedLines.map((line) => line.discountMinor), "Invoice discount");
-    const taxMinor = sumMinor(quote.lines.map((line) => line.taxMinor), "Invoice tax");
-    const totalMinor = sumMinor(
-      [subtractMinor(subtotalMinor, discountMinor, "Invoice subtotal after discount"), netShippingMinor, taxMinor],
-      "Invoice total",
-    );
+    const {calculatedLines,subtotalMinor,discountMinor,shippingMinor:netShippingMinor,taxMinor,totalMinor}=calculateInvoiceAmounts(input.lines,input.shippingMinor,quote,preDiscountQuote,itemKeys);
     const quoteDetails = quote as typeof quote & {
       registration?: { number: string | null };
       exemption?: { kind: string } | null;
+      registrationNumbers?: Array<{lineIndex:number;number:string|null}>;
+      lineExemptions?: Array<{lineIndex:number;kind:string}>;
     };
     const [invoice] = await ctx.tx
       .insert(invoices)
@@ -742,24 +734,25 @@ export const createDraftInvoice = defineService({
     const lineIdByKey = new Map(savedLines.map((line) => [itemKeys[line.position]!, line.id]));
     if (quote.lines.length) {
       await ctx.tx.insert(taxLines).values(
-        quote.lines.map((line) => ({
+        quote.lines.map((line,lineIndex) => ({
           invoiceId: invoice!.id,
           invoiceLineId: line.itemId ? lineIdByKey.get(line.itemId) : undefined,
-          kind: quoteDetails.exemption ? "exemption" as const : line.itemId ? "item" as const : "shipping" as const,
+          kind: quoteDetails.lineExemptions?.some(row=>row.lineIndex===lineIndex) || quoteDetails.exemption ? "exemption" as const : line.itemId ? "item" as const : "shipping" as const,
           rateName: line.name,
           ratePpm: line.ratePartsPerMillion,
           taxableMinor: line.taxableMinor,
           amountMinor: line.taxMinor,
           jurisdiction: line.jurisdiction,
-          registrationNumber: quoteDetails.registration?.number ?? undefined,
+          registrationNumber: quoteDetails.registrationNumbers?.find(row=>row.lineIndex===lineIndex)?.number ?? quoteDetails.registration?.number ?? undefined,
           inclusive: line.inclusive,
           compound: line.compound,
           priority: line.priority,
-          exemptionKind: quoteDetails.exemption?.kind,
+          exemptionKind: quoteDetails.lineExemptions?.find(row=>row.lineIndex===lineIndex)?.kind ?? quoteDetails.exemption?.kind,
           explanation: quote.explanation.join(" ").slice(0, 4_000),
         })),
       );
     }
+    if(merchantTax)await freezeMerchantInvoiceTax(merchantTax,invoice!,savedLines,ctx);
     await stateEvent(ctx, "invoice", invoice!.id, null, "draft", "created");
     await ctx.emitTimeline({
       contactId: input.contactId,
@@ -892,8 +885,8 @@ export const voidInvoice = defineService({
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.id)).limit(1);
     if (!invoice) throw new ServiceError("not_found", "That invoice is not here.");
     if (invoice.status === "void") return invoice;
-    if (invoice.status === "paid" || invoice.status === "refunded" || invoice.paidMinor > 0) {
-      throw new ServiceError("conflict", "A paid invoice cannot be voided. Issue a credit note and refund instead.");
+    if (invoice.status === "paid" || invoice.status === "refunded" || invoice.paidMinor > 0 || invoice.creditedMinor > 0) {
+      throw new ServiceError("conflict", "An invoice with real cash or applied original credit cannot be voided. Preserve and reconcile its actual consideration and credit promise.");
     }
     const [activeAttempt] = await ctx.tx.select({ id: payments.id }).from(payments).where(and(
       eq(payments.invoiceId, invoice.id), inArray(payments.status, ["created", "processing"]),
@@ -924,6 +917,8 @@ const paymentInput = z.object({
   method: z.string().trim().min(1).max(100),
   amountMinor: positiveMinor,
   idempotencyKey,
+  merchantAllocationId: z.uuid().optional(),
+  subscriptionChargeReceiptId: z.uuid().optional(),
   metadata: boundedObject.default({}),
 });
 
@@ -935,6 +930,7 @@ export const createPayment = defineService({
   input: paymentInput,
   output: paymentRow,
   handler: async (input, ctx) => {
+    if (input.subscriptionChargeReceiptId && (ctx.actor.kind !== "system" || input.method !== "provider_schedule")) throw new ServiceError("permission", "Only authenticated provider reconciliation can apply an original subscription charge receipt.");
     const hash = requestHash(input);
     await lock(ctx.tx, "payment-idempotency", `${input.provider}:${input.idempotencyKey}`);
     const [duplicate] = await ctx.tx
@@ -954,11 +950,12 @@ export const createPayment = defineService({
     if (!inArrayValue(invoice.status, ["sent", "viewed", "partially_paid", "overdue"])) {
       throw new ServiceError("conflict", "That invoice is not open for payment.");
     }
-    const outstanding = invoice.totalMinor - invoice.paidMinor;
+    const outstanding = invoiceOutstanding(invoice);
     if (input.amountMinor > outstanding) {
       throw new ServiceError("validation", "The payment exceeds this invoice's outstanding balance.");
     }
     const routing = await reserveMerchantCharge(ctx, invoice, input);
+    if ((routing.providerPlatformAccountId || routing.moneyOrigin === "recorded_external") && input.method !== "provider_schedule") await assertInvoiceMerchantCreatorsQuiesced(ctx, invoice.id);
     const [created] = await ctx.tx
       .insert(payments)
       .values({
@@ -972,7 +969,23 @@ export const createPayment = defineService({
         metadata: input.metadata,
       })
       .returning();
-    if (routing.providerAccountId) await ctx.tx.insert(paymentMerchantRoutes).values({ paymentId: created!.id, ...routing });
+    if (routing.merchantAllocationId) {
+      const { merchantPaymentRoutes } = await import("./merchant-collection-schema");
+      await ctx.tx.insert(merchantPaymentRoutes).values({ paymentId: created!.id, allocationId: routing.merchantAllocationId, applicationFeeMinor: routing.applicationFeeMinor });
+    } else if (routing.invoiceScopeId) {
+      const { merchantInvoicePaymentRoutes } = await import("./merchant-invoice-scope-schema");
+      await ctx.tx.insert(merchantInvoicePaymentRoutes).values({ paymentId: created!.id, invoiceId: routing.invoiceScopeId, applicationFeeMinor: routing.applicationFeeMinor });
+    } else if ("agreementSubscriptionId" in routing && routing.agreementSubscriptionId) {
+      const { merchantAgreementPaymentRoutes } = await import("./merchant-agreement-schema");
+      await ctx.tx.insert(merchantAgreementPaymentRoutes).values({ paymentId: created!.id, subscriptionId: routing.agreementSubscriptionId, agreementRoutingVersion: 1,
+        collectionKind: routing.destinationAccountId ? "destination" : "direct", providerPlatformAccountId: routing.providerPlatformAccountId!,
+        chargeAccountId: routing.providerAccountId || null, recipientAccountId: routing.destinationAccountId ?? routing.providerAccountId,
+        settlementMerchantAccountId: routing.settlementMerchantAccountId ?? routing.providerAccountId,
+        applicationFeeMinor: routing.applicationFeeMinor, providerApiVersion: input.method === "provider_schedule" ? routing.providerApiVersion as "2026-10-28.endive" : null, originKind: input.method === "provider_schedule" ? "provider_schedule" : "attempt",
+        providerSubscriptionRef: routing.providerSubscriptionRef, providerInvoiceRef: routing.providerInvoiceRef, providerPaymentIntentRef: routing.providerPaymentIntentRef, providerChargeRef: routing.providerChargeRef, originalChargeReceiptId: routing.originalChargeReceiptId });
+    } else if (routing.providerAccountId) await ctx.tx.insert(paymentMerchantRoutes).values({ paymentId: created!.id, providerAccountId: routing.providerAccountId, applicationFeeMinor: routing.applicationFeeMinor });
+    if (routing.providerPlatformAccountId && "agreementSubscriptionId" in routing && routing.agreementSubscriptionId) await captureAgreementFeeCashAssignment(ctx, created!.id);
+    await captureMerchantPaymentRequest(ctx, created!, invoice, routing);
     await stateEvent(ctx, "payment", created!.id, null, "created");
     ctx.queueEvent("payment.created", { paymentId: created!.id, invoiceId: invoice.id, contactId: invoice.contactId });
     ctx.setSubject("payment", created!.id);
@@ -1032,6 +1045,7 @@ export const failPayment = defineService({
     if (!inArrayValue(payment.status, ["created", "processing"])) {
       throw new ServiceError("conflict", "A terminal payment cannot fail again.");
     }
+    await assertMerchantPaymentTerminal(ctx, payment.id);
     const [updated] = await ctx.tx.update(payments).set({ status: "failed", failureCode: input.code, failureMessage: input.message, failedAt: new Date() }).where(eq(payments.id, payment.id)).returning();
     await stateEvent(ctx, "payment", payment.id, payment.status, "failed", input.code);
     ctx.queueEvent("payment.failed", { paymentId: payment.id, invoiceId: payment.invoiceId, code: input.code });
@@ -1055,7 +1069,8 @@ export const cancelPayment = defineService({
     if (!inArrayValue(payment.status, ["created", "processing"])) {
       throw new ServiceError("conflict", "A terminal payment cannot be cancelled.");
     }
-    if (payment.method === "hosted_checkout") {
+    const merchantTerminal = await assertMerchantPaymentTerminal(ctx, payment.id);
+    if (payment.method === "hosted_checkout" && !merchantTerminal) {
       throw new ServiceError("conflict", "A hosted checkout must be reconciled with its provider before its payment can be closed.");
     }
     const [updated] = await ctx.tx
@@ -1081,7 +1096,13 @@ export const settlePayment = defineService({
     await lock(ctx.tx, "payment", input.id);
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.id)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");
-    if (ctx.actor.kind!=="system" && (await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:payment.invoiceId}))?.model === "seller_merchant") throw new ServiceError("permission","A direct seller payment must be confirmed through its provider.");
+    if ((await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:payment.invoiceId}))?.model === "seller_merchant") {
+      if (payment.provider === "manual") {
+        const recorded = await commercialPaymentRecorded(ctx, payment.id);
+        if (!recorded || recorded.invoiceId !== payment.invoiceId || recorded.amountMinor !== payment.amountMinor || recorded.currency !== payment.currency)
+          throw new ServiceError("permission", "Record the actual commercial external principal through the authorized offline-payment action before applying its balance.");
+      } else if (ctx.actor.kind !== "system") throw new ServiceError("permission","A direct seller payment must be confirmed through its provider.");
+    }
     if (payment.status === "succeeded") {
       if (payment.providerRef !== input.providerRef) throw new ServiceError("conflict", "That payment already settled under a different provider reference.");
       return payment;
@@ -1112,10 +1133,10 @@ export const settlePayment = defineService({
       throw new ServiceError("conflict", "That invoice is no longer open for payment.");
     }
     const paidMinor = sumMinor([invoice.paidMinor, payment.amountMinor], "Paid balance");
-    if (paidMinor > invoice.totalMinor) {
+    if (BigInt(paidMinor) + BigInt(invoice.creditedMinor) > BigInt(invoice.totalMinor)) {
       throw new ServiceError("conflict", "Settling this payment would overpay the invoice. Refund or cancel the competing attempt first.");
     }
-    const invoiceStatus = paidMinor === invoice.totalMinor ? "paid" as const : "partially_paid" as const;
+    const invoiceStatus = invoiceSettled({ ...invoice, paidMinor }) ? "paid" as const : "partially_paid" as const;
     const [updatedPayment] = await ctx.tx.update(payments).set({ status: "succeeded", providerRef: input.providerRef, processedAt: input.processedAt, failureCode: null, failureMessage: null }).where(eq(payments.id, payment.id)).returning();
     await ctx.tx.update(invoices).set({ status: invoiceStatus, paidMinor, ...(invoiceStatus === "paid" ? { paidAt: input.processedAt } : {}) }).where(eq(invoices.id, invoice.id));
     await allocateSettledPayment(ctx, updatedPayment!, input.processedAt);
@@ -1165,6 +1186,7 @@ export const settlePayment = defineService({
       // guessing wrong misfiles somebody's commission (C9.10).
       payload: { paymentId: payment.id, amountMinor: payment.amountMinor, paidMinor, totalMinor: invoice.totalMinor, currency: invoice.currency, sourceType: invoice.sourceType },
     });
+    await queueMerchantFeeReconciliation(ctx, payment.id);
     ctx.queueEvent("payment.succeeded", { paymentId: payment.id, invoiceId: invoice.id, contactId: invoice.contactId, amountMinor: payment.amountMinor });
     ctx.queueEvent(invoiceStatus === "paid" ? "invoice.paid" : "invoice.partiallyPaid", { invoiceId: invoice.id, contactId: invoice.contactId, paidMinor });
     if (invoiceStatus === "paid" && invoice.sourceType === "unlock") {
@@ -1207,6 +1229,7 @@ export const createRefund = defineService({
       if (duplicate.requestHash !== hash) throw new ServiceError("conflict", "That refund idempotency key was already used for a different refund.");
       return duplicate;
     }
+    await assertLegacyBankRefundCapacity(ctx, payment.id, input.idempotencyKey);
     const reserved = await ctx.tx
       .select({ amountMinor: refunds.amountMinor })
       .from(refunds)
@@ -1227,6 +1250,7 @@ export const createRefund = defineService({
       amountMinor: input.amountMinor,
       reason: input.reason,
     }).returning();
+    await captureOriginalMerchantRefund(ctx, payment, created!);
     await stateEvent(ctx, "refund", created!.id, null, "created", input.reason, refundReservationMarker(created!));
     ctx.queueEvent("refund.created", { refundId: created!.id, paymentId: payment.id, invoiceId: payment.invoiceId });
     ctx.setSubject("refund", created!.id);
@@ -1269,8 +1293,17 @@ export const startRefund = defineService({
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
     if (!refund) throw new ServiceError("not_found", "That refund is not here.");
     if (isHostedPaymentProvider(refund.provider) && ctx.actor.kind !== "system") throw new ServiceError("permission", "A hosted refund must be observed through its original provider.");
-    if (refund.status === "processing") return refund;
+    if (refund.status === "processing") {
+      if (!input.providerRef || refund.providerRef === input.providerRef) return refund;
+      const originalMerchant = await assertOriginalMerchantRefundStart(ctx, refund, input.providerRef);
+      if (!originalMerchant) return refund; // Preserve existing historical behavior.
+      if (refund.providerRef) throw new ServiceError("conflict", "This original refund already has a different physical provider reference.");
+      const [bound] = await ctx.tx.update(refunds).set({ providerRef: input.providerRef }).where(eq(refunds.id, refund.id)).returning();
+      ctx.setSubject("refund", refund.id);
+      return bound!;
+    }
     if (refund.status !== "created") throw new ServiceError("conflict", "Only a created refund can start processing.");
+    await assertOriginalMerchantRefundStart(ctx, refund, input.providerRef);
     const [updated] = await ctx.tx.update(refunds).set({ status: "processing", providerRef: input.providerRef }).where(eq(refunds.id, refund.id)).returning();
     await stateEvent(ctx, "refund", refund.id, "created", "processing");
     ctx.queueEvent("refund.processing", { refundId: refund.id, paymentId: refund.paymentId });
@@ -1292,7 +1325,7 @@ export const failRefund = defineService({
     if (!refund) throw new ServiceError("not_found", "That refund is not here.");
     if (refund.status === "failed") return refund;
     if (!inArrayValue(refund.status, ["created", "processing"])) throw new ServiceError("conflict", "A terminal refund cannot fail again.");
-    await assertLegacyRefundRelease(ctx, refund);
+    if (!await assertOriginalMerchantRefundResult(ctx, refund, "failed")) await assertLegacyRefundRelease(ctx, refund);
     const [updated] = await ctx.tx.update(refunds).set({ status: "failed", failureCode: input.code, failureMessage: input.message, failedAt: new Date() }).where(eq(refunds.id, refund.id)).returning();
     await stateEvent(ctx, "refund", refund.id, refund.status, "failed", input.code);
     ctx.queueEvent("refund.failed", { refundId: refund.id, paymentId: refund.paymentId, code: input.code });
@@ -1317,7 +1350,7 @@ export const cancelRefund = defineService({
     if (!inArrayValue(refund.status, ["created", "processing"])) {
       throw new ServiceError("conflict", "A terminal refund cannot be cancelled.");
     }
-    await assertLegacyRefundRelease(ctx, refund);
+    if (!await retireOriginalMerchantRefund(ctx, refund)) await assertLegacyRefundRelease(ctx, refund);
     const [updated] = await ctx.tx
       .update(refunds)
       .set({ status: "cancelled", failureCode: null, failureMessage: null })
@@ -1342,7 +1375,11 @@ export const settleRefund = defineService({
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
     if (!refund) throw new ServiceError("not_found", "That refund is not here.");
     if (isHostedPaymentProvider(refund.provider) && ctx.actor.kind !== "system") throw new ServiceError("permission", "A hosted refund's actual positive result must be confirmed through its original provider.");
-    if (ctx.actor.kind!=="system" && (await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:refund.invoiceId}))?.model === "seller_merchant") throw new ServiceError("permission","A direct seller refund must be confirmed through its original provider account.");
+    if ((await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:refund.invoiceId}))?.model === "seller_merchant") {
+      if (refund.provider === "manual") {
+        if (!await commercialRefundRecorded(ctx, refund)) throw new ServiceError("permission", "Record the actual external commercial refund through its original offline-payment action.");
+      } else if (ctx.actor.kind !== "system") throw new ServiceError("permission","A direct seller refund must be confirmed through its original provider account.");
+    }
     const prepared=await ctx.tx.execute<{bound:boolean}>(sql`select freeholder_refund_is_prepared_return(${refund.id}::uuid) as bound`);
     if(prepared[0]?.bound && ctx.actor.kind!=="system") throw new ServiceError("permission","Confirm a prepared return through its original provider or its verified offline return action.");
     if (refund.status === "succeeded") {
@@ -1357,6 +1394,7 @@ export const settleRefund = defineService({
       ctx.tx.select().from(invoices).where(eq(invoices.id, refund.invoiceId)).limit(1),
     ]);
     if (!payment || !invoice) throw new ServiceError("not_found", "That refund's payment or invoice is not here.");
+    await assertOriginalMerchantRefundResult(ctx, refund, "succeeded", input.providerRef);
     const paymentRefunded = sumMinor([payment.refundedMinor, refund.amountMinor], "Payment refunded balance");
     const invoiceRefunded = sumMinor([invoice.refundedMinor, refund.amountMinor], "Invoice refunded balance");
     if (paymentRefunded > payment.amountMinor || invoiceRefunded > invoice.paidMinor) throw new ServiceError("conflict", "Settling this refund would exceed the paid balance.");
@@ -1374,10 +1412,115 @@ export const settleRefund = defineService({
       subjectId: invoice.id,
       payload: { refundId: refund.id, amountMinor: refund.amountMinor, refundedMinor: invoiceRefunded, currency: invoice.currency, full: invoiceStatus === "refunded" },
     });
+    await queueMerchantFeeReconciliation(ctx, payment.id);
     ctx.queueEvent("refund.succeeded", { refundId: refund.id, paymentId: payment.id, invoiceId: invoice.id, contactId: invoice.contactId, amountMinor: refund.amountMinor });
     if (invoiceStatus === "refunded") ctx.queueEvent("invoice.refunded", { invoiceId: invoice.id, contactId: invoice.contactId });
     ctx.setSubject("refund", refund.id);
     return updatedRefund!;
+  },
+});
+
+/** A bank lifecycle changes the current cash projection, not the original
+ * charge, issued credit, provider request or any earlier positive observation.
+ * This phase is separate from the committed physical fact/read receipt.
+ */
+export const applyCurrentMerchantRefundState = defineService({
+  name: "invoicing.applyCurrentMerchantRefundState", summary: "Project an exact original bank refund's verified current state without waiving its commercial credit.",
+  kind: "mutation", permission: "system", external: false, writeClass: "money", input: z.object({ receiptId: z.uuid() }),
+  output: z.object({ applied: z.boolean(), requiresReview: z.boolean(), refundId: z.uuid().nullable() }),
+  handler: async ({ receiptId }, ctx) => {
+    const [receipt] = await ctx.tx.select().from(merchantRefundCurrentReceipts).where(eq(merchantRefundCurrentReceipts.id, receiptId));
+    const [request] = receipt ? await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, receipt.requestId)) : [];
+    if (!receipt || !request) throw new ServiceError("conflict", "Restore the actual original current-read receipt before applying bank state.");
+    if (!request.refundId) return { applied: false, requiresReview: false, refundId: null }; // No fictitious invoice for receipt-owned cash.
+    await lock(ctx.tx, "refund", request.refundId);
+    const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, request.refundId)).for("update");
+    if (!refund || refund.paymentId !== request.paymentId || refund.amountMinor !== request.amountMinor || refund.currency !== request.currency) throw new ServiceError("conflict", "Restore the immutable logical refund identity before applying its current provider state.");
+    await lock(ctx.tx, "payment", refund.paymentId);
+    await lock(ctx.tx, "invoice", refund.invoiceId);
+    await lockMerchantRefundCash(ctx, { ...request, providerRef: request.originalPaymentRef });
+    const [state] = await ctx.tx.execute<{ receipt_id: string | null; status: LegacyBankStatus; observation_id: string | null; provider_ref: string | null }>(sql`
+      select s.receipt_id,s.status,s.observation_id,o.provider_ref from freeholder_refund_current_state(${request.id}::uuid) s
+      left join merchant_refund_observations o on o.id=s.observation_id`);
+    if (state?.receipt_id !== receipt.id || !state.observation_id || !state.provider_ref) throw new ServiceError("conflict", "Concurrent refund evidence invalidated this bank-state receipt; retain it and read the original resource again.");
+    if (refund.providerRef && refund.providerRef !== state.provider_ref) throw new ServiceError("conflict", "The actual original refund reference cannot be rebound during bank reconciliation.");
+    return projectVerifiedOriginalRefundBankState(ctx, refund, { receiptId, status: state.status, providerRef: state.provider_ref, evidenceId: state.observation_id });
+  },
+});
+
+/** Both current-read protocols use this same invoice/payment projection. The
+ * owning private service supplies its already validated actual receipt; this
+ * helper neither creates proof nor contacts a provider. */
+async function projectVerifiedOriginalRefundBankState(ctx: ServiceContext, refund: typeof refunds.$inferSelect, state: {
+  receiptId: string; status: "pending" | "requires_action" | "succeeded" | "failed" | "canceled" | null;
+  providerRef: string; evidenceId: string;
+}) {
+  const receiptId = state.receiptId;
+  // An unknown status does not prove that earlier positive money came back.
+  if (state.status === null) {
+    ctx.queueEvent("refund.bankStateChanged", { refundId: refund.id, paymentId: refund.paymentId, invoiceId: refund.invoiceId, receiptId, status: null });
+    ctx.setSubject("refund", refund.id);
+    return { applied: false, requiresReview: true, refundId: refund.id };
+  }
+  const target = state.status === "succeeded" ? "succeeded" as const : state.status === "failed" || state.status === "canceled" ? "failed" as const : "processing" as const;
+  await lock(ctx.tx, "payment", refund.paymentId);
+  await lock(ctx.tx, "invoice", refund.invoiceId);
+  const [[payment], [invoice]] = await Promise.all([
+    ctx.tx.select().from(payments).where(eq(payments.id, refund.paymentId)).for("update"),
+    ctx.tx.select().from(invoices).where(eq(invoices.id, refund.invoiceId)).for("update"),
+  ]);
+  if (!payment || !invoice || payment.currency !== refund.currency || invoice.currency !== refund.currency) throw new ServiceError("conflict", "Restore the original payment and invoice currencies before applying a bank-state projection.");
+  const priorRefunds = await ctx.tx.select({ status: refunds.status, amountMinor: refunds.amountMinor }).from(refunds).where(eq(refunds.paymentId, payment.id)).limit(5001);
+  const invoicePayments = await ctx.tx.select({ refundedMinor: payments.refundedMinor }).from(payments).where(eq(payments.invoiceId, invoice.id)).limit(5001);
+  const represented = priorRefunds.filter(row => row.status === "succeeded").reduce((sum, row) => sum + BigInt(row.amountMinor), 0n);
+  const representedInvoice = invoicePayments.reduce((sum, row) => sum + BigInt(row.refundedMinor), 0n);
+  if (priorRefunds.length > 5000 || invoicePayments.length > 5000 || represented !== BigInt(payment.refundedMinor) || representedInvoice !== BigInt(invoice.refundedMinor)) {
+    return { applied: false, requiresReview: true, refundId: refund.id }; // Primary money/read evidence already committed.
+  }
+  const delta = (target === "succeeded" ? BigInt(refund.amountMinor) : 0n) - (refund.status === "succeeded" ? BigInt(refund.amountMinor) : 0n);
+  const paymentReturned = BigInt(payment.refundedMinor) + delta, invoiceReturned = BigInt(invoice.refundedMinor) + delta;
+  if (paymentReturned < 0n || paymentReturned > BigInt(payment.amountMinor) || invoiceReturned < 0n || invoiceReturned > BigInt(invoice.paidMinor)) {
+    return { applied: false, requiresReview: true, refundId: refund.id }; // Actual over-return remains visible, never clamped or discarded.
+  }
+  const failureCode = target === "succeeded" ? null : state.status === "requires_action" ? "provider_requires_action"
+    : state.status === "pending" ? "provider_pending" : state.status === "canceled" ? "provider_cancelled" : "provider_failed";
+  if (refund.status === target && refund.providerRef === state.providerRef && refund.failureCode === failureCode) return { applied: true, requiresReview: target !== "succeeded", refundId: refund.id };
+  const invoiceStatus = invoiceReturned === BigInt(invoice.paidMinor) && invoice.paidMinor > 0 ? "refunded" as const
+    : invoice.status === "refunded" ? invoiceSettled(invoice) ? "paid" as const : "partially_paid" as const : invoice.status;
+  await allowOriginalMerchantRefundWrites(ctx.tx);
+  const [prepared] = await ctx.tx.execute<{ bound: boolean }>(sql`select freeholder_refund_is_prepared_return(${refund.id}::uuid) as bound`);
+  if (prepared?.bound && target === "succeeded") await ctx.tx.execute(sql`select set_config('freeholder.confirmed_return_refund',${refund.id},true)`);
+  await ctx.tx.update(refunds).set({ status: target, providerRef: state.providerRef, failureCode,
+    failureMessage: target === "failed" ? "Review the original refund and any outstanding customer credit before another payment." : null,
+    ...(target === "succeeded" && !refund.processedAt ? { processedAt: new Date() } : {}), ...(target === "failed" ? { failedAt: new Date() } : {}) }).where(eq(refunds.id, refund.id));
+  await ctx.tx.update(payments).set({ refundedMinor: Number(paymentReturned) }).where(eq(payments.id, payment.id));
+  await ctx.tx.update(invoices).set({ refundedMinor: Number(invoiceReturned), status: invoiceStatus }).where(eq(invoices.id, invoice.id));
+  if (refund.status !== target) await stateEvent(ctx, "refund", refund.id, refund.status, target, "original_provider_current_state", { receiptId, observationId: state.evidenceId, providerStatus: state.status });
+  if (invoiceStatus !== invoice.status) await stateEvent(ctx, "invoice", invoice.id, invoice.status, invoiceStatus, "original_refund_current_state", { receiptId, refundId: refund.id });
+  await queueMerchantFeeReconciliation(ctx, payment.id);
+  ctx.queueEvent("refund.bankStateChanged", { refundId: refund.id, paymentId: payment.id, invoiceId: invoice.id, receiptId, status: state.status });
+  if (target === "succeeded" && refund.status !== "succeeded") ctx.queueEvent("refund.succeeded", { refundId: refund.id, paymentId: payment.id, invoiceId: invoice.id, contactId: invoice.contactId, amountMinor: refund.amountMinor });
+  ctx.setSubject("refund", refund.id);
+  return { applied: true, requiresReview: target !== "succeeded", refundId: refund.id };
+}
+
+export const applyLegacyCurrentRefundState = defineService({
+  name: "invoicing.applyLegacyCurrentRefundState", summary: "Project an authentic finished legacy bank read while retaining its original payment and issued credit.",
+  kind: "mutation", permission: "system", external: false, writeClass: "money", auditInputFields: ["receiptId"],
+  input: z.object({ receiptId: z.uuid() }).strict(), output: z.object({ applied: z.boolean(), requiresReview: z.boolean(), refundId: z.uuid().nullable() }),
+  handler: async ({ receiptId }, ctx) => {
+    const [receipt] = await ctx.tx.select().from(legacyBankCurrentReceipts).where(eq(legacyBankCurrentReceipts.id, receiptId));
+    if (!receipt) throw new ServiceError("conflict", "Restore the actual original legacy current receipt before applying its money projection.");
+    await lock(ctx.tx, "refund", receipt.refundId);
+    const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, receipt.refundId)).for("update");
+    if (!refund) throw new ServiceError("conflict", "Restore the exact original legacy refund before projecting its bank state.");
+    await lock(ctx.tx, "payment", refund.paymentId); await lock(ctx.tx, "invoice", refund.invoiceId);
+    const current = await legacyRefundBankState(ctx, refund.id);
+    if (!current.verified || current.receiptId !== receipt.id || !refund.providerRef) throw new ServiceError("conflict", "New original evidence invalidated this legacy bank proof. Retain it and read the actual original resource again.");
+    const [fact] = await ctx.tx.select({ id: legacyBankReadFacts.id }).from(legacyBankReadFacts).where(and(eq(legacyBankReadFacts.readId, receipt.readId), eq(legacyBankReadFacts.kind, "exact_refund"))).limit(1);
+    if (!fact) throw new ServiceError("conflict", "Restore the exact original legacy bank fact before its current cash projection.");
+    const projected = await projectVerifiedOriginalRefundBankState(ctx, refund, { receiptId, status: current.status, providerRef: refund.providerRef, evidenceId: fact.id });
+    return { ...projected, requiresReview: projected.requiresReview || current.requiresReview };
   },
 });
 
@@ -1546,6 +1689,8 @@ export default [
   failRefund,
   cancelRefund,
   settleRefund,
+  applyCurrentMerchantRefundState,
+  applyLegacyCurrentRefundState,
   createCreditNote,
   issueCreditNote,
   reconcilePluginRefund,

@@ -21,8 +21,10 @@
 // never edited: `status` says where a subscription is and the events say how
 // it got there, which is the only one of the two that can answer "why did this
 // customer stop paying in March".
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
+import { selfServePlans, planSeller } from "./plan-access";
+export { selfServePlans, planSeller } from "./plan-access";
 import { matchesIlike, registerSearchSource } from "@/core/search/registry";
 import { listed, row, timestamp, uuid as uuidSchema } from "@/core/contract";
 import {
@@ -35,17 +37,41 @@ import {
 } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { prepareBuyerAgreementErasure, minimizeBuyerAgreements } from "./buyer-agreement-erasure";
+import { buyerAcceptedProration } from "./proration-buyer-export";
 import { syncSubscriptionAccess } from "@/core/entitlements/service";
+import { controlledProviderWitnesses,exportControlledProviderHistory } from "./controlled-provider-witnesses";
+import { subscriptionProrationCardWitnesses, exportProrationCardHistory } from "./proration-card-witnesses";
+import prorationCardServices from "./proration-card-service";
+import grossProrationQuotes from "./proration-quote";
+import grossProrationServices, { completePaidGrossProration } from "./proration-service";
+import prorationCreditOwnerServices from "./proration-credit-owner";
+import { subscriptionProrationCashConfirmations, subscriptionProrationCreditConfirmations } from "./proration-boundary-schema";
+import { subscriptionProrations, subscriptionProrationPrincipal, subscriptionProrationCreditUses } from "./proration-schema";
+import { originalCashRecoveryFinancialWitness } from "@/modules/invoicing/original-cash-recovery-store";
+import { exportOriginalCashHistory } from "@/modules/invoicing/original-cash-invoice-history";
 import { contacts } from "@/core/contacts/schema";
 import { listLocations } from "@/core/locations/service";
 import { getBusiness } from "@/core/settings/service";
 import { productVariants, products } from "@/modules/catalog/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
+import { commercialBillingStart, pendingCommercialAmendment } from "./commercial-amendment-calendar";
+import { assertPaidAmendmentInvoice } from "./commercial-amendment-payment";
+import { invoiceSettled } from "@/modules/invoicing/invoice-balance";
+import { originalMerchantPlan, originalMerchantTerms } from "./merchant-terms-read";
+import { originalMerchantInvoiceShape } from "./merchant-terms-invoice";
+import { newProviderCalendarStart, periodEnd } from "./calendar";
+export { periodEnd } from "./calendar";
+import merchantTermsQuoteServices from "./merchant-terms-quote";
+import merchantTermsStoreServices, { freezeOriginalMerchantTerms } from "./merchant-terms-store";
 import { paymentAdapter } from "@/adapters/payments";
 import { createDraftInvoice, issueInvoice } from "@/modules/invoicing/invoice-service";
 import { paymentMethods } from "@/modules/invoicing/schema";
 import { invoices } from "@/modules/invoicing/schema";
 import marketPolicyServices, { captureSubscriptionMarketPolicy, getSubscriptionMarketPolicy } from "./market-policy";
+import { subscriptionPaymentScope } from "./market-policy";
+import { subscriptionMethodScopeMatches, subscriptionTaxDestination } from "./merchant-scope-contract";
+import { merchantSubscriptionUndo, subscriptionOriginalEvidence } from "./merchant-scope";
 import {
   BILLING_MODES,
   CANCEL_BEHAVIOURS,
@@ -58,43 +84,16 @@ import {
   SUBSCRIPTION_STATUSES,
   dunningPolicies,
   plans,
+  subscriptionCommercialTerms,
   subscriptionEvents,
+  subscriptionMerchantScopes,
+  subscriptionProviderChargeReceipts,
   subscriptions,
 } from "./schema";
 
 /** Quantity is fixed-point in `invoicing`; one of something is this. */
 const QUANTITY_SCALE = 1_000_000;
 
-/**
- * The end of a period that starts here.
- *
- * Calendar arithmetic rather than a fixed number of days: a monthly
- * subscription taken out on the 31st renews on the 30th in April and the 28th
- * in February, which is what everybody means by "monthly" and what adding
- * 30 days does not do.
- */
-export function periodEnd(
-  from: Date,
-  interval: (typeof PLAN_INTERVALS)[number],
-  count: number,
-): Date {
-  const end = new Date(from.getTime());
-  if (interval === "day") end.setUTCDate(end.getUTCDate() + count);
-  else if (interval === "week") end.setUTCDate(end.getUTCDate() + 7 * count);
-  else if (interval === "year") end.setUTCFullYear(end.getUTCFullYear() + count);
-  else {
-    // Months, with the overflow Date would otherwise silently roll forward:
-    // 31 January plus one month is 28 or 29 February, never 2 or 3 March.
-    const day = end.getUTCDate();
-    end.setUTCDate(1);
-    end.setUTCMonth(end.getUTCMonth() + count);
-    const lastOfMonth = new Date(
-      Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 0),
-    ).getUTCDate();
-    end.setUTCDate(Math.min(day, lastOfMonth));
-  }
-  return end;
-}
 
 const planRow = row({
   id: uuidSchema,
@@ -315,11 +314,24 @@ export async function applyPendingPlan(
   // The new plan is priced by its own product's variant. Keeping the old
   // variant would bill the old price at every renewal after the switch. A
   // plan with nothing on sale is not switched to; the change stays pending.
-  const productVariantId = await planVariant(ctx, nextPlan.productId);
+  const amendment = await pendingCommercialAmendment(ctx, subscription);
+  if (subscription.merchantScopeVersion === 1 && amendment?.amendment.state !== "activated") return subscription;
+  if (amendment) {
+    if (amendment.terms.effectivePeriodStart.getTime() > Date.now() || amendment.terms.effectivePeriodStart < subscription.currentPeriodEnd) return subscription;
+    // Acceptance authorizes billing; only the canonical paid period authorizes
+    // a different entitlement. Neither a pending invoice nor partial cash does.
+    const sourceId = `${subscription.id}:${amendment.terms.effectivePeriodStart.toISOString()}`;
+    const [paid] = await ctx.tx.select().from(invoices).where(and(eq(invoices.sourceType, "subscription"), eq(invoices.sourceId, sourceId))).limit(1);
+    if (!paid || paid.contactId !== subscription.contactId || paid.currency !== subscription.currency || !paid.issuedAt
+      || paid.status !== "paid" || !invoiceSettled(paid) || paid.refundedMinor !== 0) return subscription;
+    await assertPaidAmendmentInvoice(ctx, subscription, amendment.terms, paid);
+  }
+  const productVariantId = amendment ? amendment.terms.snapshot.productVariantId : await planVariant(ctx, nextPlan.productId);
+  const billingMode = amendment ? amendment.terms.snapshot.billingMode : nextPlan.billingMode;
   if (!productVariantId) return subscription;
   await ctx.tx
     .update(subscriptions)
-    .set({ planId: nextPlan.id, pendingPlanId: null, billingMode: nextPlan.billingMode, productVariantId })
+    .set({ planId: nextPlan.id, pendingPlanId: null, billingMode, productVariantId })
     .where(eq(subscriptions.id, subscription.id));
   await ctx.tx.insert(subscriptionEvents).values({
     subscriptionId: subscription.id,
@@ -332,7 +344,7 @@ export async function applyPendingPlan(
     ...subscription,
     planId: nextPlan.id,
     pendingPlanId: null,
-    billingMode: nextPlan.billingMode,
+    billingMode,
     productVariantId,
   };
 }
@@ -498,54 +510,6 @@ export const listPlans = defineService({
   },
 });
 
-/**
- * Plans a customer may choose for themselves: the same rule as public signup
- * (§C9.38) — an active plan on an active, public product with a live default
- * variant, sold by the same seller as the plan they are leaving. Hidden,
- * staff-only and other sellers' plans are never offered or accepted (C11.10).
- */
-export async function selfServePlans(
-  ctx: ServiceContext,
-  sellerUserId: string | null,
-): Promise<Array<typeof plans.$inferSelect>> {
-  const { sellerCanSell } = await import("@/modules/catalog/market");
-  if (!(await sellerCanSell(ctx, sellerUserId))) return [];
-  const rows = await ctx.tx
-    .select({ plan: plans })
-    .from(plans)
-    .innerJoin(products, eq(products.id, plans.productId))
-    .innerJoin(
-      productVariants,
-      and(
-        eq(productVariants.productId, products.id),
-        eq(productVariants.isDefault, true),
-        eq(productVariants.status, "active"),
-      ),
-    )
-    .where(
-      and(
-        eq(plans.status, "active"),
-        eq(products.status, "active"),
-        eq(products.visibility, "public"),
-        sellerUserId === null ? isNull(products.sellerUserId) : eq(products.sellerUserId, sellerUserId),
-      ),
-    )
-    .orderBy(desc(plans.createdAt))
-    .limit(200);
-  return rows.map((entry) => entry.plan);
-}
-
-/** The seller behind a plan: null for the site's own plans. */
-export async function planSeller(ctx: ServiceContext, planId: string): Promise<string | null> {
-  const [found] = await ctx.tx
-    .select({ sellerUserId: products.sellerUserId })
-    .from(plans)
-    .innerJoin(products, eq(products.id, plans.productId))
-    .where(eq(plans.id, planId))
-    .limit(1);
-  return found?.sellerUserId ?? null;
-}
-
 export const listOfferedPlans = defineService({
   name: "subscriptions.listOffered",
   summary: "Plans a customer may move to from the portal.",
@@ -593,7 +557,10 @@ export const listOfferedPlans = defineService({
 export async function priceFor(
   ctx: ServiceContext,
   subscription: typeof subscriptions.$inferSelect,
+  periodStart = subscription.currentPeriodStart,
 ): Promise<{ amountMinor: number } | { refused: string }> {
+  const accepted = await originalMerchantTerms(ctx, subscription, periodStart);
+  if (accepted) return { amountMinor: accepted.snapshot.periodAmountMinor };
   const priced = (await ctx.callAsSystem(resolvePrice, {
     variantId: subscription.productVariantId,
     currency: subscription.currency,
@@ -624,6 +591,36 @@ export async function raiseInvoice(
     periodEnd: Date;
   },
 ): Promise<string> {
+  // Serialize the original one-time obligation with the invoice it creates.
+  // In particular, a no-card trial has no signup invoice to carry this fee.
+  // A durable invoice witness also preserves the same first-period payload
+  // after later renewals, without inferring ordering from transaction dates.
+  const sourceId = `${subscription.id}:${options.periodStart.toISOString()}`;
+  const [original] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, subscription.id)).for("update");
+  if (!original) throw new ServiceError("not_found", "That subscription is not here.");
+  const merchantShape = await originalMerchantInvoiceShape(ctx, original, options.periodStart, options.periodEnd);
+  if (merchantShape?.existingInvoiceId) {
+    await ctx.callAsSystem(issueInvoice, { id: merchantShape.existingInvoiceId });
+    return merchantShape.existingInvoiceId;
+  }
+  if (merchantShape && merchantShape.periodAmountMinor !== options.amountMinor) throw new ServiceError("conflict", "The period amount differs from the explicitly accepted original agreement.");
+  const accepted = merchantShape?.terms;
+  if (accepted && !accepted.taxDestination) throw new ServiceError("conflict", "The original destination was erased; a new agreement is required before billing.");
+  let setupFeeMinor = options.setupFeeMinor ?? 0;
+  if (original.acceptedSetupFeeMinor !== null) {
+    const [feeInvoice] = original.setupFeeInvoiceId
+      ? await ctx.tx.select({ sourceType: invoices.sourceType, sourceId: invoices.sourceId, status: invoices.status })
+        .from(invoices).where(eq(invoices.id, original.setupFeeInvoiceId)).for("update")
+      : [];
+    if (original.setupFeeInvoiceId && (!feeInvoice || feeInvoice.sourceType !== "subscription" || feeInvoice.sourceId?.split(":")[0] !== subscription.id)) {
+      throw new ServiceError("conflict", "The original setup-fee invoice cannot be proved.");
+    }
+    if (feeInvoice?.status === "void") {
+      throw new ServiceError("conflict", "Review the voided original setup-fee invoice before billing another period.");
+    }
+    setupFeeMinor = !original.setupFeeInvoiceId || feeInvoice?.sourceId === sourceId
+      ? original.acceptedSetupFeeMinor : 0;
+  }
   const [variant] = await ctx.tx
     .select({ sku: productVariants.sku, name: products.name })
     .from(productVariants)
@@ -641,22 +638,28 @@ export async function raiseInvoice(
     {
       sourceType: "subscription" as const,
       sourceId: subscription.id,
-      description: `${variant?.name ?? "Subscription"} — ${options.periodStart
+      description: `${accepted ? accepted.snapshot.name : variant?.name ?? "Subscription"} — ${options.periodStart
         .toISOString()
         .slice(0, 10)} to ${options.periodEnd.toISOString().slice(0, 10)}`,
       quantityMicros: QUANTITY_SCALE,
       unitAmountMinor: options.amountMinor,
+      ...(accepted ? { taxCategoryCode: accepted.snapshot.taxCategoryCode, requiresShipping: accepted.snapshot.requiresShipping,
+        snapshot: { subscriptionTermsId: accepted.id, subscriptionPeriodStart: options.periodStart.toISOString(),
+          subscriptionPeriodEnd: options.periodEnd.toISOString(), subscriptionComponent: "period", ...(merchantShape?.phase ? { subscriptionPhaseDigest: merchantShape.phase.phaseDigest } : {}) } } : {}),
     },
   ];
   // Charged once, on the first invoice only, because that is what a setup fee
   // is — a line on a renewal would be a second one.
-  if (options.setupFeeMinor && options.setupFeeMinor > 0) {
+  if (setupFeeMinor > 0) {
     lines.push({
       sourceType: "subscription" as const,
       sourceId: subscription.id,
-      description: `${variant?.name ?? "Subscription"} — setup`,
+      description: `${accepted ? accepted.snapshot.name : variant?.name ?? "Subscription"} — setup`,
       quantityMicros: QUANTITY_SCALE,
-      unitAmountMinor: options.setupFeeMinor,
+      unitAmountMinor: setupFeeMinor,
+      ...(accepted ? { taxCategoryCode: accepted.snapshot.taxCategoryCode, requiresShipping: accepted.snapshot.requiresShipping,
+        snapshot: { subscriptionTermsId: accepted.id, subscriptionPeriodStart: options.periodStart.toISOString(),
+          subscriptionPeriodEnd: options.periodEnd.toISOString(), subscriptionComponent: "setup", ...(merchantShape?.phase ? { subscriptionPhaseDigest: merchantShape.phase.phaseDigest } : {}) } } : {}),
     });
   }
 
@@ -669,14 +672,16 @@ export async function raiseInvoice(
     // agreement has to name which period each invoice is for, or the second
     // month collides with the first. The same compound-id convention the
     // deposit/balance pair uses.
-    sourceId: `${subscription.id}:${options.periodStart.toISOString()}`,
+    sourceId,
     // One invoice per subscription per period, whatever retries the sweep
     // makes. The period start is in the key because that is what makes this
     // period's invoice a different request from the last one's.
     idempotencyKey: `subscription:${subscription.id}:${options.periodStart.toISOString()}`,
     lines,
     tax:
-      origin && person?.country
+      accepted
+        ? { mode: "merchant" as const, destination: accepted.taxDestination! }
+        : origin && person?.country
         ? {
             mode: "calculate" as const,
             origin: {
@@ -693,6 +698,11 @@ export async function raiseInvoice(
           },
   });
   const issued = await ctx.callAsSystem(issueInvoice, { id: draft.invoice.id });
+  if (original.acceptedSetupFeeMinor !== null && original.acceptedSetupFeeMinor > 0 && !original.setupFeeInvoiceId) {
+    await ctx.tx.execute(sql`select set_config('freeholder.subscription_setup_fee_v1','1',true)`);
+    await ctx.tx.update(subscriptions).set({ setupFeeInvoiceId: issued.invoice.id })
+      .where(eq(subscriptions.id, subscription.id));
+  }
   return issued.invoice.id;
 }
 
@@ -711,6 +721,9 @@ export const subscribe = defineService({
     /** Required for platform and provider billing. */
     paymentMethodId: uuidSchema.optional(),
     deferFirstPayment: z.boolean().default(false),
+    taxDestination: subscriptionTaxDestination.optional(),
+    commercialTerms: z.object({ quoteDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      locale: z.enum(["en", "es", "fr", "ar"]).default("en"), source: z.enum(["owner_subscription", "public_join"]).default("owner_subscription") }).optional(),
   }),
   output: row({
     subscription: subscriptionRow,
@@ -718,7 +731,10 @@ export const subscribe = defineService({
     invoiceId: uuidSchema.nullable(),
   }),
   handler: async (input, ctx) => {
-    const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, input.planId));
+    if (input.commercialTerms?.source === "public_join" && ctx.actor.kind !== "system") {
+      throw new ServiceError("permission", "Public agreement acceptance belongs to the signed-in buyer's actual signup service.");
+    }
+    const [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, input.planId)).for("share");
     if (!plan) throw new ServiceError("not_found", "There is no such plan.");
     if (plan.status !== "active") {
       throw new ServiceError("conflict", "That plan is not on sale.");
@@ -773,7 +789,7 @@ export const subscribe = defineService({
       paymentMethod = method;
     }
 
-    const now = new Date();
+    const now = input.commercialTerms&&plan.billingMode==="provider"?newProviderCalendarStart(new Date()):new Date();
     // A card-required trial without a method is not a trial yet. It waits,
     // paused, until the card exists. The trial window is counted from that
     // moment, not from the click. Manual billing cannot store a card, so it
@@ -804,6 +820,7 @@ export const subscribe = defineService({
         planId: plan.id,
         productVariantId: variantId,
         currency,
+        acceptedSetupFeeMinor: plan.setupFeeMinor,
         billingMode: plan.billingMode,
         provider: paymentMethod?.provider ?? (plan.billingMode !== "manual" ? paymentAdapter().id : null),
         paymentMethodId: paymentMethod?.id ?? null,
@@ -816,13 +833,20 @@ export const subscribe = defineService({
       })
       .returning();
 
-    await ctx.callAsSystem(captureSubscriptionMarketPolicy, { subscriptionId: created!.id });
+    await ctx.callAsSystem(captureSubscriptionMarketPolicy, { subscriptionId: created!.id, taxDestination: input.taxDestination });
     const merchant = await ctx.callAsSystem(getSubscriptionMarketPolicy, { subscriptionId: created!.id });
+    if (merchant?.model === "seller_merchant") {
+      if (!input.commercialTerms) throw new ServiceError("conflict", "Review and explicitly accept the merchant's original commercial quote before starting this agreement.");
+      await ctx.callAsSystem(freezeOriginalMerchantTerms, { subscriptionId: created!.id, acceptedQuoteDigest: input.commercialTerms.quoteDigest,
+        acceptanceSource: input.commercialTerms.source, deferFirstPayment: input.deferFirstPayment, locale: input.commercialTerms.locale });
+    } else if (input.commercialTerms) {
+      throw new ServiceError("conflict", "This accepted merchant quote does not belong to the selected agreement.");
+    }
     if (merchant?.model === "seller_merchant" && plan.billingMode !== "manual" && created!.provider !== "stripe") {
       await ctx.tx.update(subscriptions).set({provider:"stripe"}).where(eq(subscriptions.id,created!.id));
       created!.provider = "stripe";
     }
-    if (paymentMethod && paymentMethod.providerAccountId !== (merchant?.providerAccountId ?? "")) throw new ServiceError("conflict", "The saved method belongs to a different merchant account.");
+    if (paymentMethod && !subscriptionMethodScopeMatches(await subscriptionPaymentScope(ctx, created!.id), paymentMethod)) throw new ServiceError("conflict", "The saved method belongs to a different original platform or charge account.");
     await record(ctx, created!.id, "created");
     if (!pending) await record(ctx, created!.id, trialing ? "trialing" : "activated");
 
@@ -925,6 +949,8 @@ export const renewDue = defineService({
       if (subscription.billingMode === "platform" && !subscription.cancelAtPeriodEnd) {
         continue;
       }
+      const commercialCalendar = await commercialBillingStart(ctx, subscription);
+      if (!subscription.cancelAtPeriodEnd && (!commercialCalendar.ready || commercialCalendar.start > now)) continue;
       Object.assign(subscription, await applyPendingPlan(ctx, subscription));
       // Somebody who asked to stop leaves at the end of the period they paid
       // for — §4.15's rule, applied at the only moment it can be applied.
@@ -952,19 +978,20 @@ export const renewDue = defineService({
         continue;
       }
 
-      const [plan] = await ctx.tx
+      const [currentPlan] = await ctx.tx
         .select()
         .from(plans)
         .where(eq(plans.id, subscription.planId));
-      if (!plan) {
+      if (!currentPlan) {
         failed += 1;
         continue;
       }
 
-      const start = subscription.currentPeriodEnd;
+      const start = commercialCalendar.start;
+      const plan = await originalMerchantPlan(ctx, subscription, currentPlan, start);
       const end = periodEnd(start, plan.interval, plan.intervalCount);
 
-      const price = await priceFor(ctx, subscription);
+      const price = await priceFor(ctx, subscription, start);
       if ("refused" in price) {
         // Not silently skipped: the reason lands on the history, where an
         // owner will look. A DunningPolicy (C9.16) then retries, keeps access
@@ -986,6 +1013,11 @@ export const renewDue = defineService({
         periodStart: start,
         periodEnd: end,
       });
+      if (subscription.merchantScopeVersion === 1 && subscription.pendingPlanId) {
+        const applied = await applyPendingPlan(ctx, subscription);
+        if (applied.pendingPlanId) continue; // The invoice exists, but no unpaid amendment grants access.
+        Object.assign(subscription, applied);
+      }
       await ctx.tx
         .update(subscriptions)
         .set({
@@ -1128,10 +1160,11 @@ export const resumeSubscription = defineService({
       subscription.currentPeriodEnd.getTime() -
         (subscription.pausedAt ?? subscription.currentPeriodStart).getTime(),
     );
+    const accepted = await originalMerchantTerms(ctx, subscription, now);
     const end = remaining > 0 ? new Date(now.getTime() + remaining) : periodEnd(
       now,
-      plan?.interval ?? "month",
-      plan?.intervalCount ?? 1,
+      accepted?.snapshot.interval ?? plan?.interval ?? "month",
+      accepted?.snapshot.intervalCount ?? plan?.intervalCount ?? 1,
     );
 
     const [resumed] = await ctx.tx
@@ -1192,7 +1225,8 @@ export const cancelSubscription = defineService({
       .select({ cancelBehaviour: plans.cancelBehaviour })
       .from(plans)
       .where(eq(plans.id, subscription.planId));
-    const atOnce = subscription.signupPending || (input.immediately ?? plan?.cancelBehaviour === "immediate");
+    const accepted = await originalMerchantTerms(ctx, subscription);
+    const atOnce = subscription.signupPending || (input.immediately ?? (accepted?.snapshot.cancelBehaviour ?? plan?.cancelBehaviour) === "immediate");
     const now = new Date();
 
     const [cancelled] = await ctx.tx
@@ -1473,6 +1507,31 @@ export const advanceDunning = defineService({
   },
 });
 
+export const completePaidCommercialAmendment = defineService({
+  name: "subscriptions.completePaidAmendment", summary: "Apply only the exact fully paid accepted next-period amendment.",
+  kind: "mutation", permission: "system", external: false, input: z.object({ invoiceId: uuidSchema }), output: z.object({ applied: z.boolean() }),
+  handler: async ({ invoiceId }, ctx) => {
+    const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+    const id = z.uuid().safeParse(invoice?.sourceId?.split(":")[0]);
+    if (!invoice || invoice.sourceType !== "subscription" || !id.success || invoice.status !== "paid" || !invoiceSettled(invoice)) return { applied: false };
+    const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, id.data)).limit(1).for("update");
+    if (!parent || parent.merchantScopeVersion !== 1 || !parent.pendingPlanId || parent.signupPending || parent.cancelAtPeriodEnd || parent.cancelledAt
+      || !["active", "trialing", "past_due"].includes(parent.status)) return { applied: false };
+    const calendar = await commercialBillingStart(ctx, parent);
+    if (!calendar.ready || calendar.start.getTime() > Date.now() || invoice.sourceId !== `${parent.id}:${calendar.start.toISOString()}`) return { applied: false };
+    const current = await applyPendingPlan(ctx, parent);
+    if (current.pendingPlanId) return { applied: false };
+    const [offer] = await ctx.tx.select().from(plans).where(eq(plans.id, current.planId)).limit(1);
+    if (!offer) throw new ServiceError("conflict", "Restore the paid amendment's original plan before advancing access.");
+    const plan = await originalMerchantPlan(ctx, current, offer, calendar.start);
+    const start = calendar.start, end = periodEnd(start, plan.interval, plan.intervalCount);
+    await ctx.tx.update(subscriptions).set({ status: "active", currentPeriodStart: start, currentPeriodEnd: end, trialEndsAt: null }).where(eq(subscriptions.id, parent.id));
+    await record(ctx, parent.id, "renewed", { invoiceId });
+    await keepAccess(ctx, { ...current, currentPeriodStart: start, currentPeriodEnd: end }, plan.name, end, "active");
+    ctx.setSubject("subscription", parent.id); return { applied: true };
+  },
+});
+
 export async function onInvoicePaid(
   payload: unknown,
   _eventName?: string,
@@ -1482,9 +1541,11 @@ export async function onInvoicePaid(
       ? (payload as { invoiceId?: string }).invoiceId
       : undefined;
   if (!invoiceId) return;
+  await completePaidGrossProration.call({ invoiceId }, { kind: "system" });
   await recoverDunning.call({ invoiceId }, { kind: "system" });
   await activatePaidSignup.call({ invoiceId }, { kind: "system" });
   await completePaidPlanChange.call({ invoiceId }, { kind: "system" });
+  await completePaidCommercialAmendment.call({ invoiceId }, { kind: "system" });
 }
 
 /* -------------------------------------------------------------- reading */
@@ -1576,7 +1637,7 @@ export const getSubscription = defineService({
       // Staff can see it. A self-service read cannot.
       detail: !staff && event.kind === "card_setup" ? null : event.detail,
     }));
-    return { subscription, plan: plan ?? null, history };
+    return { subscription, plan: plan?await originalMerchantPlan(ctx,subscription,plan):null, history };
   },
 });
 
@@ -1652,17 +1713,26 @@ registerContactReference({
       .set({ contactId: survivingId })
       .where(eq(subscriptions.contactId, duplicateId));
   },
-  captureForUndo: async (tx, duplicateId) => {
+  captureForUndo: async (tx, duplicateId, survivingId) => {
     // Exactly recoverable: a subscription moves wholesale and nothing is
     // combined, so the rows that moved are the rows that move back.
     const moved = await tx
       .select({ id: subscriptions.id })
       .from(subscriptions)
-      .where(eq(subscriptions.contactId, duplicateId));
-    return { state: moved.map((each) => each.id), undoable: true };
+      .where(eq(subscriptions.contactId, duplicateId)).orderBy(subscriptions.id).limit(5001);
+    const original = await subscriptionOriginalEvidence(tx, [duplicateId, survivingId]);
+    if (moved.length > 5000 || original.overflow) return { state: [], undoable: false, blocker: "Original subscription evidence exceeds the safe merge undo limit." };
+    const movedIds = moved.map(each => each.id);
+    return { state: original.evidence.length ? { movedIds, originalEvidence: original.evidence } : movedIds, undoable: true };
   },
-  restoreAfterUndo: async (tx, before, _after, duplicateId) => {
-    const ids = (Array.isArray(before) ? before : []).filter(
+  restoreAfterUndo: async (tx, before, after, duplicateId, survivingId) => {
+    const original = await subscriptionOriginalEvidence(tx, [duplicateId, survivingId]);
+    const modern = !Array.isArray(before) ? merchantSubscriptionUndo.parse(before) : null;
+    if (modern) {
+      const expected = merchantSubscriptionUndo.parse(after);
+      if (original.overflow || JSON.stringify(original.evidence) !== JSON.stringify(expected.originalEvidence)) throw new ServiceError("conflict", "Original subscription scope or observed money changed after the merge. Reconcile it before separating ownership.");
+    } else if (original.overflow || original.evidence.length) throw new ServiceError("conflict", "This historical merge did not record the new original subscription evidence. Restore the pre-upgrade snapshot to separate it safely.");
+    const ids = (modern?.movedIds ?? (Array.isArray(before) ? before : [])).filter(
       (each): each is string => typeof each === "string",
     );
     if (ids.length === 0) return;
@@ -1678,32 +1748,118 @@ registerContactReference({
 // invoice's problem rather than this table's.
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
-  tables: ["subscriptions", "subscription_events"],
-  exportData: async (tx: Tx, contactId: string) =>
-    tx
+  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines", "subscription_provider_read_tickets", "subscription_provider_read_finishes", "subscription_provider_read_stops",
+    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses", "subscription_proration_cash_confirmations", "subscription_proration_credit_confirmations", "subscription_proration_payment_protocols", "subscription_proration_card_mandates", "subscription_proration_card_attempts", "subscription_proration_card_jobs", "subscription_proration_card_reads", "subscription_proration_card_read_finishes", "subscription_proration_card_read_stops","subscription_controlled_resources", "subscription_controlled_operations", "subscription_controlled_calls", "subscription_controlled_facts", "subscription_controlled_finishes", "subscription_controlled_stops", "subscription_controlled_verifications", "subscription_controlled_charge_origins", "subscription_controlled_closures"],
+  retentionScopes: ["commerce.money"],
+  exportData: async (tx: Tx, contactId: string) => {
+    const rows = await tx
       .select({
         id: subscriptions.id,
         planId: subscriptions.planId,
         status: subscriptions.status,
         currency: subscriptions.currency,
+        acceptedSetupFeeMinor: subscriptions.acceptedSetupFeeMinor,
+        setupFeeInvoiceId: subscriptions.setupFeeInvoiceId,
         currentPeriodStart: subscriptions.currentPeriodStart,
         currentPeriodEnd: subscriptions.currentPeriodEnd,
         cancelledAt: subscriptions.cancelledAt,
         endedAt: subscriptions.endedAt,
+        originalTaxDestination: subscriptionMerchantScopes.taxDestination,
       })
       .from(subscriptions)
-      .where(eq(subscriptions.contactId, contactId)),
-  erase: async (tx: Tx, contactId: string) => {
-    // Ended rather than deleted, and the grants dropped. A business must still
-    // be able to say how many subscriptions it had last March, and the money
-    // is the invoice's record rather than this table's — but somebody who
-    // asked to be forgotten must stop holding access.
-    const cleared = await tx
-      .update(subscriptions)
-      .set({ grants: {}, cancelAtPeriodEnd: true })
-      .where(eq(subscriptions.contactId, contactId))
-      .returning({ id: subscriptions.id });
-    return { affected: cleared.length };
+      .leftJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptions.id))
+      .where(eq(subscriptions.contactId, contactId)).limit(5001);
+    const charges = await tx.select({ id: subscriptionProviderChargeReceipts.id, subscriptionId: subscriptionProviderChargeReceipts.subscriptionId,
+      amountMinor: subscriptionProviderChargeReceipts.amountMinor, currency: subscriptionProviderChargeReceipts.currency, observedAt: subscriptionProviderChargeReceipts.createdAt })
+      .from(subscriptionProviderChargeReceipts).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderChargeReceipts.subscriptionId))
+      .where(eq(subscriptions.contactId, contactId)).limit(5001);
+    const byAgreement = new Map<string, typeof charges>();
+    for (const charge of charges) {
+      const group = byAgreement.get(charge.subscriptionId) ?? []; group.push(charge); byAgreement.set(charge.subscriptionId, group);
+    }
+    const accepted = rows.length ? await tx.select({ subscriptionId: subscriptionCommercialTerms.subscriptionId, revision: subscriptionCommercialTerms.revision,
+      snapshot: subscriptionCommercialTerms.snapshot, taxDestination: subscriptionCommercialTerms.taxDestination, acceptedAt: subscriptionCommercialTerms.acceptedAt,
+      effectivePeriodStart: subscriptionCommercialTerms.effectivePeriodStart, noticeSnapshot: subscriptionCommercialTerms.noticeSnapshot })
+      .from(subscriptionCommercialTerms).where(inArray(subscriptionCommercialTerms.subscriptionId, rows.map(row => row.id))).orderBy(subscriptionCommercialTerms.revision).limit(5001) : [];
+    const amendments = rows.length ? await tx.select({ subscriptionId: subscriptionCommercialAmendments.subscriptionId, termsId: subscriptionCommercialAmendments.termsId,
+      planId: subscriptionCommercialAmendments.planId, acceptedBy: subscriptionCommercialAmendments.acceptedBy, state: subscriptionCommercialAmendments.state, createdAt: subscriptionCommercialAmendments.createdAt })
+      .from(subscriptionCommercialAmendments).where(inArray(subscriptionCommercialAmendments.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
+    const resumptions = rows.length ? await tx.select({ subscriptionId: subscriptionCommercialResumptions.subscriptionId, termsId: subscriptionCommercialResumptions.termsId,
+      originalPeriodEnd: subscriptionCommercialResumptions.originalPeriodEnd, acceptedPeriodStart: subscriptionCommercialResumptions.acceptedPeriodStart, createdAt: subscriptionCommercialResumptions.createdAt })
+      .from(subscriptionCommercialResumptions).where(inArray(subscriptionCommercialResumptions.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
+    const periodInvoices = rows.length ? await tx.select({ subscriptionId: subscriptionProviderInvoiceObservations.subscriptionId, currency: subscriptionProviderInvoiceObservations.currency,
+      totalMinor: subscriptionProviderInvoiceObservations.totalMinor, paidMinor: subscriptionProviderInvoiceObservations.paidMinor, remainingMinor: subscriptionProviderInvoiceObservations.remainingMinor,
+      verified: subscriptionProviderInvoiceObservations.verified, createdAt: subscriptionProviderInvoiceObservations.createdAt })
+      .from(subscriptionProviderInvoiceObservations).where(inArray(subscriptionProviderInvoiceObservations.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
+    const readerTickets = rows.length ? await tx.select({ subscriptionId: subscriptionProviderReadTickets.subscriptionId, readId: subscriptionProviderReadTickets.readId, admittedAt: subscriptionProviderReadTickets.createdAt,
+      finishedAt: subscriptionProviderReadFinishes.createdAt }).from(subscriptionProviderReadTickets).leftJoin(subscriptionProviderReadFinishes, eq(subscriptionProviderReadFinishes.readId, subscriptionProviderReadTickets.readId))
+      .where(inArray(subscriptionProviderReadTickets.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
+    const readerStops = rows.length ? await tx.select({ subscriptionId: subscriptionProviderReadStops.subscriptionId, readId: subscriptionProviderReadStops.readId, reviewedAt: subscriptionProviderReadStops.createdAt })
+      .from(subscriptionProviderReadStops).where(inArray(subscriptionProviderReadStops.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
+    const prorations = rows.length ? await tx.select({ id: subscriptionProrations.id, subscriptionId: subscriptionProrations.subscriptionId,
+      planId:subscriptionProrations.planId,previousTermsId:subscriptionProrations.previousTermsId,termsId:subscriptionProrations.termsId,snapshot: subscriptionProrations.snapshot,
+      taxDestination: subscriptionProrations.taxDestination, noticeSnapshot: subscriptionProrations.noticeSnapshot, effectiveAt: subscriptionProrations.effectiveAt,
+      originalPeriodStart: subscriptionProrations.originalPeriodStart, originalPeriodEnd: subscriptionProrations.originalPeriodEnd, originalTrialEndsAt: subscriptionProrations.originalTrialEndsAt,
+      proposedPeriodStart:subscriptionProrations.proposedPeriodStart,proposedPeriodEnd:subscriptionProrations.proposedPeriodEnd,
+      originalInvoiceId:subscriptionProrations.originalInvoiceId,originalInvoiceLineId:subscriptionProrations.originalInvoiceLineId,
+      targetInvoice:{id:invoices.id,currency:invoices.currency,totalMinor:invoices.totalMinor,paidMinor:invoices.paidMinor,creditedMinor:invoices.creditedMinor,refundedMinor:invoices.refundedMinor},
+      debitInvoiceId: subscriptionProrations.debitInvoiceId, creditNoteId: subscriptionProrations.creditNoteId, debitNetMinor: subscriptionProrations.debitNetMinor, debitTaxMinor: subscriptionProrations.debitTaxMinor,
+      creditNetMinor: subscriptionProrations.creditNetMinor, creditTaxMinor: subscriptionProrations.creditTaxMinor, state: subscriptionProrations.state, appliedAt: subscriptionProrations.appliedAt,cancelledAt:subscriptionProrations.cancelledAt, createdAt: subscriptionProrations.createdAt })
+      .from(subscriptionProrations).leftJoin(invoices,eq(invoices.id,subscriptionProrations.debitInvoiceId)).where(inArray(subscriptionProrations.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
+    const prorationIds = prorations.map(row => row.id);
+    const prorationPrincipal = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationPrincipal.prorationId, sourcePaymentId: subscriptionProrationPrincipal.sourcePaymentId,
+      sourceApplicationId: subscriptionProrationPrincipal.sourceApplicationId, amountMinor: subscriptionProrationPrincipal.amountMinor }).from(subscriptionProrationPrincipal).where(inArray(subscriptionProrationPrincipal.prorationId, prorationIds)).limit(5001) : [];
+    const prorationCredits = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationCreditUses.prorationId, creditNoteId: subscriptionProrationCreditUses.creditNoteId, amountMinor: subscriptionProrationCreditUses.amountMinor })
+      .from(subscriptionProrationCreditUses).where(inArray(subscriptionProrationCreditUses.prorationId, prorationIds)).limit(5001) : [];
+    // These exact actual receipt FKs belong to the subject's subscriptions even
+    // when original paid cash has never acquired any local invoice/payment.
+    const cashBoundary = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationCashConfirmations.prorationId, paymentId: subscriptionProrationCashConfirmations.paymentId,
+      retainedAt: subscriptionProrationCashConfirmations.retainedAt }).from(subscriptionProrationCashConfirmations).where(inArray(subscriptionProrationCashConfirmations.prorationId, prorationIds)).limit(5001) : [];
+    const creditBoundary = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationCreditConfirmations.prorationId, applicationId: subscriptionProrationCreditConfirmations.applicationId,
+      retainedAt: subscriptionProrationCreditConfirmations.retainedAt }).from(subscriptionProrationCreditConfirmations).where(inArray(subscriptionProrationCreditConfirmations.prorationId, prorationIds)).limit(5001) : [];
+    const cardWitness = await subscriptionProrationCardWitnesses(tx, prorations.flatMap(row => row.debitInvoiceId ? [row.debitInvoiceId] : []));
+    if (cardWitness.incomplete) throw new ServiceError("conflict", "Restore the complete original stored-method/reader inventory before export.");
+    const cardHistory = exportProrationCardHistory(cardWitness);
+    const cardCount = Object.values(cardHistory).reduce((total, family) => total + family.length, 0);
+    const controlled=await controlledProviderWitnesses(tx,{subscriptionIds:rows.map(row=>row.id)});
+    if(controlled.incomplete)throw new ServiceError("conflict","Restore every original controlled calendar/caller/fact, including resources without an invoice or cash receipt, before export.");
+    const controlledHistory=exportControlledProviderHistory(controlled),controlledCount=Object.values(controlledHistory).reduce((total,family)=>total+family.length,0);
+    const controlledFor=(subscriptionId:string)=>{
+      const resources=controlledHistory.resources.filter(row=>row.subscriptionId===subscriptionId),resourceIds=new Set(resources.map(row=>row.resourceId));
+      const operations=controlledHistory.operations.filter(row=>resourceIds.has(row.resourceId)),operationIds=new Set(operations.map(row=>row.operationId));
+      const calls=controlledHistory.calls.filter(row=>operationIds.has(row.operationId)),callIds=new Set(calls.map(row=>row.callId));
+      return{resources,operations,calls,facts:controlledHistory.facts.filter(row=>callIds.has(row.callId)),actualFinishes:controlledHistory.actualFinishes.filter(row=>callIds.has(row.callId)),
+        independentStops:controlledHistory.independentStops.filter(row=>callIds.has(row.callId)),verifications:controlledHistory.verifications.filter(row=>operationIds.has(row.operationId)),
+        originalChargeLinks:controlledHistory.originalChargeLinks.filter(row=>resourceIds.has(row.resourceId)),actualClosures:controlledHistory.actualClosures.filter(row=>resourceIds.has(row.resourceId))};
+    };
+    const originalCash = await originalCashRecoveryFinancialWitness(tx, [], charges.map(row => row.id));
+    const aggregate = rows.length + charges.length + accepted.length + amendments.length + resumptions.length + periodInvoices.length + readerTickets.length + readerStops.length
+      + controlledCount + cardCount + prorations.length + prorations.filter(row=>row.targetInvoice!==null).length + prorationPrincipal.length + prorationCredits.length + cashBoundary.length + creditBoundary.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length;
+    if (aggregate > 5000) throw new ServiceError("conflict", "Restore a bounded complete original subscription subject export; receipt-only cash and its authentic children cannot be truncated.");
+    const cashHistory = exportOriginalCashHistory(originalCash);
+    const cashFor = (subscriptionId: string) => {
+      const receiptIds = new Set(charges.filter(row => row.subscriptionId === subscriptionId).map(row => row.id));
+      const owners = cashHistory.owners.filter(row => row.subscriptionChargeReceiptId !== null && receiptIds.has(row.subscriptionChargeReceiptId)), ownerIds = new Set(owners.map(row => row.id));
+      return { owners, operations: cashHistory.operations.filter(row => ownerIds.has(row.recoveryId)), facts: cashHistory.facts.filter(row => ownerIds.has(row.recoveryId)),
+        closures: cashHistory.closures.filter(row => ownerIds.has(row.recoveryId)), feedback: cashHistory.feedback.filter(row => row.namespace.subscriptionChargeReceiptId !== null && receiptIds.has(row.namespace.subscriptionChargeReceiptId)) };
+    };
+    return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [], acceptedCommercialTerms: accepted.filter(value => value.subscriptionId === row.id),
+      acceptedAmendments: amendments.filter(value => value.subscriptionId === row.id), acceptedCalendarResumptions: resumptions.filter(value => value.subscriptionId === row.id), observedPeriodInvoices: periodInvoices.filter(value => value.subscriptionId === row.id),
+      providerReaderHistory: readerTickets.filter(value => value.subscriptionId === row.id), providerReaderRuntimeStops: readerStops.filter(value => value.subscriptionId === row.id),
+      originalReceiptCashHistory: cashFor(row.id), originalControlledProviderHistory:controlledFor(row.id), acceptedGrossProrations: prorations.filter(value => value.subscriptionId === row.id).map(value => ({ ...buyerAcceptedProration(value,value.targetInvoice),
+        originalPrincipal: prorationPrincipal.filter(principal => principal.prorationId === value.id), acceptedCreditUse: prorationCredits.filter(credit => credit.prorationId === value.id),
+        originalCardPaymentHistory: Object.fromEntries(Object.entries(cardHistory).map(([key, family]) => [key, family.filter(entry => entry.invoiceId === value.debitInvoiceId)])),
+        actualCashRetention: cashBoundary.filter(receipt => receipt.prorationId === value.id), actualCreditRetention: creditBoundary.filter(receipt => receipt.prorationId === value.id) })) }));
+  },
+  erase: async (tx: Tx, contactId: string, context) => {
+    if (!context.service) throw new ServiceError("conflict", "Original agreement erasure requires its actual shared privacy context.");
+    const prepared = await context.service.callAsSystem(prepareBuyerAgreementErasure, { requestId: context.requestId });
+    const rows = await tx.select({ id: subscriptions.id }).from(subscriptions).where(eq(subscriptions.contactId, contactId));
+    // Stop local access immediately; these flags are never remote stop proof.
+    await tx.update(subscriptions).set({ grants: {}, cancelAtPeriodEnd: true }).where(eq(subscriptions.contactId, contactId));
+    const pending = new Set(prepared.pendingAgreements.map(value => value.subscriptionId));
+    const affected = await minimizeBuyerAgreements(tx, rows.filter(row => !pending.has(row.id)).map(row => row.id));
+    return { affected, pendingJobs: prepared.pendingJobs };
   },
 });
 
@@ -1740,13 +1896,30 @@ import publicMembershipServices, { activatePaidSignup } from "./public-signup";
 import setupErasureServices from "./setup-erasure";
 import setupDispatchServices from "./setup-dispatch";
 import setupReconciliationServices from "./setup-reconciliation";
+import providerChargeReceiptServices from "./provider-charge-services";
+import commercialAmendmentServices from "./commercial-amendments";
+import providerReaderRecoveryServices from "./provider-reader-recovery";
+import { subscriptionProviderReadTickets, subscriptionProviderReadFinishes, subscriptionProviderReadStops } from "./provider-read-ownership-schema";
+import { subscriptionProviderInvoiceObservations } from "./provider-period-schema";
+import { subscriptionCommercialResumptions } from "./commercial-resumption-schema";
+import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
 
 export default [
+  ...prorationCardServices,
+  ...grossProrationQuotes,
+  ...grossProrationServices,
+  ...prorationCreditOwnerServices,
+  ...providerReaderRecoveryServices,
+  completePaidCommercialAmendment,
   ...marketPolicyServices,
+  ...merchantTermsQuoteServices,
+  ...merchantTermsStoreServices,
   ...publicMembershipServices,
   ...setupErasureServices,
   ...setupDispatchServices,
   ...setupReconciliationServices,
+  ...providerChargeReceiptServices,
+  ...commercialAmendmentServices,
   savePlan,
   listPlans,
   listOfferedPlans,

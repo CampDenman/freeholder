@@ -35,6 +35,7 @@ import {defineMediaService as defineService} from "./guarded-service";
 import {allowMediaReceiptWrites} from "./write-ledger";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {originalUploadContact,assertOriginalUploadWritable} from "./upload-ownership";
+import {withOriginalMultipartInvocation} from "./provider-callers";
 import {reserveMultipart,createOriginalMultipart,originalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
 import {
   storageKey,
@@ -968,7 +969,7 @@ export const beginUpload = defineOrchestratedService({
   writeClass: "write",
   input: uploadIntent,
   output: beginUploadOutput,
-  handler: async (input, actor) => {
+  handler: async (input, actor) => withOriginalMultipartInvocation(async()=>{
     await verifyCaptureUpload.call(
       { captureToken: input.provenance.captureToken, captureSessionId: input.provenance.captureSessionId },
       actor,
@@ -1013,7 +1014,7 @@ export const beginUpload = defineOrchestratedService({
     if(reserved.operationId)await createOriginalMultipart(reserved.id,reserved.operationId);
     const{operationId:_,...result}=reserved;
     return result;
-  },
+  }),
 });
 
 async function uploadSession(tx: Tx, id: string) {
@@ -1441,7 +1442,7 @@ export const completeUpload = defineOrchestratedService({
     altText: z.string().max(500).optional(),
   }),
   output: completeUploadResult,
-  handler: async (input, actor) => {
+  handler: async (input, actor) => withOriginalMultipartInvocation(async()=>{
     const source = await completeUploadSource.call(
       { id: input.id, parts: input.parts },
       actor,
@@ -1550,7 +1551,7 @@ export const completeUpload = defineOrchestratedService({
       }
       throw error;
     }
-  },
+  }),
 });
 
 export const registerStoredOriginal = defineOrchestratedService({
@@ -1703,7 +1704,7 @@ export const abortUpload = defineOrchestratedService({
   writeClass: "write",
   input: z.object({ id: z.string().uuid() }),
   output: okResult,
-  handler: async (input, actor) => {
+  handler: async (input, actor) => withOriginalMultipartInvocation(async()=>{
     const claimed = await abortUploadClaim.call(input, actor);
     if (claimed.alreadyTerminal) return { ok: true };
     if(claimed.operationId){await abortOriginalMultipart(input.id,claimed.operationId);return abortUploadApply.call({id:input.id,storageKey:claimed.storageKey},actor);}
@@ -1713,7 +1714,7 @@ export const abortUpload = defineOrchestratedService({
       { id: input.id, storageKey: claimed.storageKey },
       actor,
     );
-  },
+  }),
 });
 
 export const listAssets = defineService({

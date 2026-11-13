@@ -1215,11 +1215,13 @@ export const orders = pgTable(
     shippingAddress: jsonb("shipping_address").$type<Record<string, unknown>>(),
     checkoutTermsSnapshot: jsonb("checkout_terms_snapshot").$type<Record<string, unknown>>(),
     checkoutPaymentSnapshot: jsonb("checkout_payment_snapshot").$type<Record<string, unknown>>(),
+    commercialEpoch: integer("commercial_epoch").notNull().default(0),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     index("orders_contact_idx").on(t.contactId, t.status),
+    check("orders_commercial_epoch",sql`${t.commercialEpoch} in (0,1)`),
     index("orders_invoice_idx").on(t.invoiceId),
     check("orders_currency", sql`${t.currency} ~ '^[A-Z]{3}$'`),
     check(

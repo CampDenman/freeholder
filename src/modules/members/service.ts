@@ -32,7 +32,14 @@ import messageServices from "./messages";
 import callServices from "./calls";
 import listingServices from "./listings";
 import payoutServices, { payoutAdapters } from "./payouts";
+import "./booking-merchant-privacy";
+import orderCommercialServices from "./order-commercial";
+import bookingMerchantServices from "./booking-merchant";
+import bookingMerchantQuoteServices from "./booking-merchant-quote";
 import merchantServices from "./market-merchant";
+import {memberMerchantTaxServices} from "@/modules/invoicing/merchant-tax-profiles";
+import {myMerchantTaxThresholds} from "@/modules/invoicing/merchant-tax-thresholds";
+import {memberMerchantTaxExemptionServices} from "@/modules/invoicing/merchant-tax-exemptions";
 import protectionServices from "./protection";
 import reputationServices from "./reputation";
 import reportServices from "./reports";
@@ -54,7 +61,7 @@ import { applyMemberStatus } from "./status";
 // Member export and erasure through the site's privacy requests (C12.15).
 import "./data-rights";
 import { siteAllowsAdult } from "./adult";
-export { onOrderPaid, onRefundSucceeded } from "./payouts";
+export { onOrderPaid, onRefundSucceeded, onBankRefundStateChanged } from "./payouts";
 export { onInvoicePaid } from "./member-subscriptions";
 export { onMemberPosted, onMemberPostDeleted } from "./federation/core";
 export { onCallSeatLost } from "./call-seats";
@@ -460,6 +467,12 @@ export async function activeMember(ctx: ServiceContext, userId: string) {
 
 export default [
   ...merchantServices,
+  ...bookingMerchantServices,
+  ...bookingMerchantQuoteServices,
+  ...orderCommercialServices,
+  ...memberMerchantTaxServices,
+  myMerchantTaxThresholds,
+  ...memberMerchantTaxExemptionServices,
   ...graphServices,
   ...postServices,
   ...messageServices,

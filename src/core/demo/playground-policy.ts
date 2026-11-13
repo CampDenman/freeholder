@@ -157,6 +157,7 @@ export const PLAYGROUND_PUBLIC_REFUSED: Readonly<Record<string, string>> = {
   "giftRegistry.contribute": "Opens a payment for a registry item.",
   "invoicing.claimCustomerCheckout": "Payment provider I/O.",
   "invoicing.applyCustomerCheckout": "Payment provider I/O.",
+  "invoicing.recordCustomerPaymentObservation": "Private phase of provider confirmation; playground payments are refused.",
   "invoicing.applyCustomerPayment": "Payment provider I/O.",
   "galleries.invitePartner": "Invites a third party by email.",
   "galleries.revokePartner": "Pairs with the refused invitation.",

@@ -23,6 +23,7 @@ export default async function PurchasesPage() {
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">{t("members.sales.purchases")}</h1>
       <p className="text-sm text-ink-muted">{t("members.sales.protectionIntro")}</p>
+      <a className="text-sm underline" href="/portal/purchases/tax">{t("merchantTax.exemption.title")}</a>
       {bought.length === 0 ? <p className="text-ink-muted">{t("members.sales.noPurchases")}</p> : null}
       <ul className="grid gap-2">
         {bought.map((s) => (

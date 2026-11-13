@@ -1,0 +1,62 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// A positive automatic renewal must survive failure of its later invoice TX.
+import type { MerchantScheduleLocator, PaymentProviderEvent } from "@/adapters/payments";
+import { ServiceError } from "@/core/service";
+
+type Retainer = (providerId: string, event: PaymentProviderEvent) => Promise<PaymentProviderEvent>;
+let subscriptionRetainer: Retainer | undefined;
+let subscriptionChargeObserver: Retainer | undefined;
+
+/** Capture-only phase: no later invoice policy or auxiliary fee work. */
+export function registerSubscriptionProviderChargeObserver(observer: Retainer): void { subscriptionChargeObserver = observer; }
+
+/** Recovery jobs have original-cohort authority, rather than webhook authority.
+ * Both boundaries require the same committed primary-cash phase before reads. */
+export function assertSubscriptionProviderCaptureReady(): void {
+  if (!subscriptionChargeObserver) throw new ServiceError("conflict", "The original subscription cash receipt phase is unavailable before provider inspection.");
+}
+
+export async function observeSubscriptionProviderCharge(providerId: string, event: PaymentProviderEvent): Promise<PaymentProviderEvent> {
+  if (event.kind !== "subscription_period_paid" || !event.providerPlatformAccountId) return event;
+  assertSubscriptionProviderCaptureReady();
+  return subscriptionChargeObserver!(providerId, event);
+}
+
+export interface SubscriptionProviderScopeInput {
+  providerSubscriptionRef: string;
+  providerInvoiceRef?: string;
+  providerAccountId?: string;
+  metadata: Record<string, unknown>;
+}
+export interface SubscriptionProviderWebhookScope extends MerchantScheduleLocator {
+  providerScheduleOperationId?: string;
+  providerCustomerRef?: string;
+}
+type ScopeResolver = (providerId: string, input: SubscriptionProviderScopeInput) => Promise<SubscriptionProviderWebhookScope | null>;
+let subscriptionScopeResolver: ScopeResolver | undefined;
+
+/** Called by an adapter only after authenticating the exact raw event bytes. */
+export function registerSubscriptionProviderScopeResolver(resolver: ScopeResolver): void { subscriptionScopeResolver = resolver; }
+
+export async function resolveSubscriptionProviderScope(providerId: string, input: SubscriptionProviderScopeInput): Promise<SubscriptionProviderWebhookScope | null> {
+  if (subscriptionScopeResolver) {
+    const scope = await subscriptionScopeResolver(providerId, input);
+    if (scope) assertSubscriptionProviderCaptureReady();
+    return scope;
+  }
+  // An admitted new schedule must never fall back to an older protocol if its
+  // source integration is unavailable. Unmarked legacy feedback stays intact.
+  if (input.metadata.freeholder_subscription_scope_version === "1" || input.metadata.freeholder_subscription_operation_id !== undefined) throw new ServiceError("conflict", "The original merchant subscription scope phase is unavailable; retry authenticated feedback after recovery.");
+  return null;
+}
+
+/** Trusted startup integration calls a committed shared-service phase. */
+export function registerSubscriptionProviderEvidenceRetainer(retainer: Retainer): void { subscriptionRetainer = retainer; }
+
+export async function retainSubscriptionProviderEvidence(providerId: string, event: PaymentProviderEvent): Promise<PaymentProviderEvent> {
+  if (!["subscription_period_paid", "subscription_period_failed", "subscription_cancelled"].includes(event.kind)) return event;
+  if (subscriptionRetainer) return subscriptionRetainer(providerId, event);
+  if (event.providerPlatformAccountId) throw new ServiceError("conflict", "The original merchant subscription receipt phase is unavailable; retry authenticated feedback after recovery.");
+  return event;
+}

@@ -21,12 +21,13 @@ export async function bookServiceAction(form: FormData) {
     const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
     // C1.38: only the playground's reserve form sends an address; the service ignores it elsewhere.
     const guest = { ...(text("email") ? { email: text("email") } : {}), ...(text("name").trim() ? { name: text("name") } : {}) };
-    result = await bookPublicService.call({ productId: text("productId"), currency: text("currency"), mode: text("mode") as "full" | "deposit_balance", seats: Number(text("seats")), calendarId: text("calendarId"), startsAt: text("startsAt"), termsHash: text("termsHash"), acceptedTerms: (form.get("acceptedTerms") === "on") as true, requestKey: text("requestKey"), ...guest }, { ...actor, request: requestMetadataFromHeaders(await headers()) });
+    const taxDestination = text("taxCountry") ? { country: text("taxCountry"), ...(text("taxRegion") ? { region: text("taxRegion") } : {}), ...(text("taxPostalCode") ? { postalCode: text("taxPostalCode") } : {}), ...(text("taxCity") ? { city: text("taxCity") } : {}) } : undefined;
+    result = await bookPublicService.call({ taxDestination, ...(text("taxQuoteDigest") ? { taxQuoteDigest: text("taxQuoteDigest") } : {}), ...(text("commercialQuoteDigest") ? { commercialQuoteDigest: text("commercialQuoteDigest") } : {}), productId: text("productId"), currency: text("currency"), mode: text("mode") as "full" | "deposit_balance", seats: Number(text("seats")), calendarId: text("calendarId"), startsAt: text("startsAt"), termsHash: text("termsHash"), acceptedTerms: (form.get("acceptedTerms") === "on") as true, requestKey: text("requestKey"), ...guest }, { ...actor, request: requestMetadataFromHeaders(await headers()) });
   } catch (error) {
     const code = error instanceof ServiceError ? (error.message === PLAYGROUND_FICTIONAL_BOOKING_EMAIL ? "playgroundEmail" : error.code) : "failed";
     // A refused address keeps the chosen time chosen, so the visitor only fixes the address.
     const chosen: Record<string, string> = code === "playgroundEmail" ? { calendar: text("calendarId"), at: text("startsAt") } : {};
-    const q = new URLSearchParams({ service: text("productId"), date: text("date"), mode: text("mode"), seats: text("seats"), error: code, ...chosen, ...(/^[0-9a-f-]{36}$/.test(text("seller")) ? { seller: text("seller") } : {}) });
+    const q = new URLSearchParams({ service: text("productId"), date: text("date"), mode: text("mode"), seats: text("seats"), error: code, taxCountry: text("taxCountry"), taxRegion: text("taxRegion"), taxPostalCode: text("taxPostalCode"), taxCity: text("taxCity"), ...chosen, ...(/^[0-9a-f-]{36}$/.test(text("seller")) ? { seller: text("seller") } : {}) });
     redirect(href(`/book?${q}`));
   }
   // A playground guest has no portal session; their appointment's own link is the confirmation.

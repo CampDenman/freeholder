@@ -20,6 +20,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { contacts } from "@/core/contacts/schema";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
+import { merchantTaxProfiles } from "./merchant-tax-schema";
 
 const amount = (name: string) => bigint(name, { mode: "number" }).notNull().default(0);
 const signedAmount = (name: string) => bigint(name, { mode: "number" }).notNull();
@@ -120,6 +121,8 @@ export const taxRegistrations = pgTable(
   "tax_registrations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** NULL is the historical site business, never an unspecified seller. */
+    merchantProfileId: uuid("merchant_profile_id").references(() => merchantTaxProfiles.id, { onDelete: "restrict" }),
     zoneId: uuid("zone_id").notNull().references(() => taxZones.id, { onDelete: "restrict" }),
     number: text("number"),
     scheme: text("scheme", { enum: ["standard", "oss", "ioss", "simplified"] })
@@ -136,6 +139,7 @@ export const taxRegistrations = pgTable(
   },
   (t) => [
     index("tax_registrations_zone_idx").on(t.zoneId, t.status),
+    index("tax_registrations_merchant_idx").on(t.merchantProfileId, t.zoneId, t.status),
     check("tax_registrations_threshold_valid", sql`${t.thresholdMinor} >= 0`),
     check(
       "tax_registrations_threshold_currency_valid",
@@ -149,6 +153,8 @@ export const taxExemptions = pgTable(
   "tax_exemptions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** A customer's exemption applies only to its explicitly selected business. */
+    merchantProfileId: uuid("merchant_profile_id").references(() => merchantTaxProfiles.id, { onDelete: "restrict" }),
     contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "restrict" }),
     zoneId: uuid("zone_id").notNull().references(() => taxZones.id, { onDelete: "restrict" }),
     kind: text("kind", { enum: ["reseller", "nonprofit", "reverse_charge", "diplomatic"] }).notNull(),
@@ -163,6 +169,7 @@ export const taxExemptions = pgTable(
   },
   (t) => [
     index("tax_exemptions_contact_idx").on(t.contactId, t.status),
+    index("tax_exemptions_merchant_idx").on(t.merchantProfileId, t.contactId, t.zoneId),
     index("tax_exemptions_zone_idx").on(t.zoneId, t.status),
     check("tax_exemptions_status_valid", sql`${t.status} in ('pending','valid','expired','revoked')`),
     check(
@@ -221,6 +228,7 @@ export const invoices = pgTable(
     taxZoneId: uuid("tax_zone_id").references(() => taxZones.id, { onDelete: "restrict" }),
     totalMinor: amount("total_minor"),
     paidMinor: amount("paid_minor"),
+    creditedMinor: amount("credited_minor"),
     refundedMinor: amount("refunded_minor"),
     billingAddress: jsonb("billing_address"),
     customerTaxId: text("customer_tax_id"),
@@ -254,20 +262,20 @@ export const invoices = pgTable(
     check("invoices_status_valid", sql`${t.status} in ('draft','sent','viewed','partially_paid','paid','overdue','void','refunded')`),
     check(
       "invoices_amounts_nonnegative",
-      sql`${t.subtotalMinor} >= 0 and ${t.discountMinor} >= 0 and ${t.shippingMinor} >= 0 and ${t.taxMinor} >= 0 and ${t.totalMinor} >= 0 and ${t.paidMinor} >= 0 and ${t.refundedMinor} >= 0`,
+      sql`${t.subtotalMinor} >= 0 and ${t.discountMinor} >= 0 and ${t.shippingMinor} >= 0 and ${t.taxMinor} >= 0 and ${t.totalMinor} >= 0 and ${t.paidMinor} >= 0 and ${t.creditedMinor} >= 0 and ${t.refundedMinor} >= 0`,
     ),
     check(
       "invoices_total_consistent",
       sql`${t.totalMinor} = ${t.subtotalMinor} - ${t.discountMinor} + ${t.shippingMinor} + ${t.taxMinor}`,
     ),
     check("invoices_discount_bounded", sql`${t.discountMinor} <= ${t.subtotalMinor}`),
-    check("invoices_paid_bounded", sql`${t.paidMinor} <= ${t.totalMinor}`),
+    check("invoices_paid_bounded", sql`${t.paidMinor}+${t.creditedMinor} <= ${t.totalMinor}`),
     check("invoices_refund_bounded", sql`${t.refundedMinor} <= ${t.paidMinor}`),
     check(
       "invoices_issued_consistent",
       sql`(${t.status} = 'draft' and ${t.number} is null and ${t.issuedAt} is null) or (${t.status} <> 'draft' and ${t.number} is not null and ${t.issuedAt} is not null)`,
     ),
-    check("invoices_paid_consistent", sql`${t.status} <> 'paid' or (${t.paidMinor} = ${t.totalMinor} and ${t.paidAt} is not null)`),
+    check("invoices_paid_consistent", sql`${t.status} <> 'paid' or (${t.paidMinor}+${t.creditedMinor} = ${t.totalMinor} and ${t.paidAt} is not null)`),
     check("invoices_void_consistent", sql`${t.status} <> 'void' or ${t.voidedAt} is not null`),
     check("invoices_refunded_consistent", sql`${t.status} <> 'refunded' or (${t.refundedMinor} = ${t.paidMinor} and ${t.paidMinor} > 0)`),
     check("invoices_not_own_deposit", sql`${t.depositOfInvoiceId} is null or ${t.depositOfInvoiceId} <> ${t.id}`),
@@ -348,6 +356,8 @@ export const taxLines = pgTable(
 export const invoiceMarketPolicies = pgTable("invoice_market_policies", {
   invoiceId: uuid("invoice_id").primaryKey().references(() => invoices.id, { onDelete: "cascade" }),
   allocationVersion: integer("allocation_version").notNull().default(1),
+  /** Zero preserves historical single-merchant routing; one freezes per-party collection. */
+  collectionVersion: integer("collection_version").notNull().default(0),
   model: text("model", { enum: ["hold", "instant", "seller_merchant"] }).notNull(),
   adapter: text("adapter").notNull(),
   siteFeeBps: integer("site_fee_bps").notNull(),
@@ -361,12 +371,16 @@ export const invoiceMarketPolicies = pgTable("invoice_market_policies", {
   createdAt: createdAtColumn(),
 }, (t) => [
   check("invoice_market_policies_allocation_version", sql`${t.allocationVersion} in (0,1)`),
+  check("invoice_market_policies_collection_version", sql`${t.collectionVersion} in (0,1)`),
   check("invoice_market_policies_model_check", sql`${t.model} in ('hold','instant','seller_merchant')`),
   index("invoice_market_policies_merchant_contact_idx").on(t.merchantContactId),
   check("invoice_market_policies_fee_bps_check", sql`${t.siteFeeBps} between 0 and 10000`),
   check("invoice_market_policies_hold_days_check", sql`${t.holdDays} between 0 and 365`),
   check("invoice_market_policies_fee_check", sql`${t.feeMinor} >= 0`),
-  check("invoice_market_policies_merchant_check", sql`${t.model} <> 'seller_merchant' or (${t.adapter} = 'stripe_connect' and ${t.sellerUserId} is not null and ${t.merchantName} is not null and ${t.providerAccountId} is not null)`),
+  check("invoice_market_policies_merchant_check", sql`${t.model} <> 'seller_merchant' or (${t.adapter} = 'stripe_connect' and (
+    (${t.collectionVersion} = 0 and ${t.sellerUserId} is not null and ${t.merchantName} is not null and ${t.providerAccountId} is not null)
+    or (${t.collectionVersion} = 1 and ${t.sellerUserId} is null and ${t.merchantName} is null and ${t.merchantSupport} is null and ${t.merchantContactId} is null and ${t.providerAccountId} is null)
+  ))`),
 ]);
 
 /** C12.38: original portions of ONE invoice, including its site's own lines.
@@ -465,13 +479,16 @@ export const paymentProviderCustomers = pgTable(
     provider: text("provider").notNull(),
     /** Empty means the platform; seller routing is frozen by core. */
     providerAccountId: text("provider_account_id").notNull().default(""),
+    /** NULL preserves original history; it never means today's platform. */
+    providerPlatformAccountId: text("provider_platform_account_id"),
     providerCustomerRef: text("provider_customer_ref").notNull(),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (t) => [
     index("payment_provider_customers_contact_idx").on(t.contactId, t.provider),
-    uniqueIndex("payment_provider_customers_ref_idx").on(t.provider, t.providerAccountId, t.providerCustomerRef),
+    uniqueIndex("payment_provider_customers_ref_idx").on(t.provider, sql`coalesce(${t.providerPlatformAccountId}, '')`, t.providerAccountId, t.providerCustomerRef),
+    check("payment_provider_customers_platform_valid", sql`${t.providerPlatformAccountId} is null or ${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$'`),
     index("payment_provider_customers_contact_created_idx").on(t.contactId, t.createdAt),
     check("payment_provider_customers_provider_valid", sql`length(trim(${t.provider})) between 1 and 100`),
     check("payment_provider_customers_ref_valid", sql`length(trim(${t.providerCustomerRef})) between 1 and 500`),
@@ -486,6 +503,8 @@ export const paymentMethods = pgTable(
     provider: text("provider").notNull(),
     /** Empty means the platform; seller routing is frozen by core. */
     providerAccountId: text("provider_account_id").notNull().default(""),
+    /** Original platform scope for new methods; no historical backfill. */
+    providerPlatformAccountId: text("provider_platform_account_id"),
     providerMethodRef: text("provider_method_ref").notNull(),
     providerCustomerRef: text("provider_customer_ref"),
     kind: text("kind", { enum: ["card", "wallet", "bank_debit", "bank_redirect", "buy_now_pay_later", "cash", "bank_transfer", "other"] }).notNull(),
@@ -503,9 +522,10 @@ export const paymentMethods = pgTable(
     updatedAt: updatedAtColumn(),
   },
   (t) => [
-    uniqueIndex("payment_methods_provider_ref_idx").on(t.provider, t.providerAccountId, t.providerMethodRef),
+    uniqueIndex("payment_methods_provider_ref_idx").on(t.provider, sql`coalesce(${t.providerPlatformAccountId}, '')`, t.providerAccountId, t.providerMethodRef),
     index("payment_methods_contact_status_idx").on(t.contactId, t.status, t.createdAt),
-    index("payment_methods_customer_ref_idx").on(t.provider, t.providerAccountId, t.providerCustomerRef),
+    index("payment_methods_customer_ref_idx").on(t.provider, t.providerPlatformAccountId, t.providerAccountId, t.providerCustomerRef),
+    check("payment_methods_platform_valid", sql`${t.providerPlatformAccountId} is null or ${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$'`),
     check("payment_methods_provider_valid", sql`length(trim(${t.provider})) between 1 and 100`),
     check("payment_methods_ref_valid", sql`length(trim(${t.providerMethodRef})) between 1 and 500`),
     check("payment_methods_label_valid", sql`length(trim(${t.label})) between 1 and 200`),

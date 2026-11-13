@@ -1,10 +1,12 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import originalRecoveryServices,{recoverExactOriginalPut} from "./original-write-recovery";
+import {storageRecoveryConfirmation} from "./storage-recovery-contract";
+import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C11.08: explicit human evidence settles each original physical call.
 import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
-import { boundStorage } from "@/adapters/storage";
 import { timestamp } from "@/core/contract";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { actorString, defineOrchestratedService, hasModuleAccess, ServiceError, type Actor } from "@/core/service";
@@ -12,20 +14,13 @@ import {defineMediaService as defineService} from "./guarded-service";
 import { mediaObjects } from "./schema";
 import { allowMediaReceiptWrites, lockObjectDigest,objectKeyDigest } from "./write-ledger";
 import { mediaObjectWrites } from "./write-schema";
-import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
+import {captureMediaErasureCohort,originalMediaErasureRequests} from "./erasure-cohorts";
 
 function human(actor: Actor) {
   if (actor.kind !== "user" || actor.keyScopes || !hasModuleAccess(actor, "media", "manage")) throw new ServiceError("permission", "Sign in as a person with permission to manage media recovery.");
 }
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const confirmation = z.object({ id: z.uuid(), expectedUpdatedAt: z.iso.datetime(), originalNamespace: digest,
-  originalKey:z.string().min(1).max(2048).optional(),
-  outcome: z.enum(["applied", "not_applied"]), sha256: digest.optional(), bytes: z.number().int().min(0).max(5 * 1024 ** 3).optional(),
-  providerFinalReference: z.string().trim().min(8).max(300),
-  providerEvidence: z.string().trim().min(20).max(2_000),
-  stoppedWriterEvidence: z.string().trim().min(20).max(2_000),
-  confirmation: z.literal("ORIGINAL STORAGE OUTCOME CONFIRMED"),
-});
+const confirmation = storageRecoveryConfirmation;
 function physicalKey(row:typeof mediaObjectWrites.$inferSelect,input:z.infer<typeof confirmation>):string{
  const key=row.redactedAt?input.originalKey:row.key;
  if(!key||(input.originalKey&&input.originalKey!==key)||objectKeyDigest(key)!==row.keyDigest||/[\u0000-\u001f]/.test(key))throw new ServiceError("validation","Restore the exact original object key; it must match the immutable original key digest.");
@@ -56,6 +51,7 @@ const claimStorageRecovery = defineService({
     physicalKey(row,input);
     if (row.namespace && row.namespace !== input.originalNamespace) throw new ServiceError("conflict", "The evidence does not identify the original storage resource.");
     if (row.observedAcceptedAt && input.outcome === "not_applied") throw new ServiceError("conflict", "The provider already acknowledged this operation. A later failure cannot erase that fact.");
+    if(row.operation==="put"?input.outcome==="not_applied":input.outcome==="applied")requireDurableMediaRetirementProof();
     ctx.setSubject("media_storage_operation", row.id);
     return row;
   },
@@ -78,6 +74,7 @@ const applyStorageRecovery = defineService({
     if (row.observedAcceptedAt && input.outcome === "not_applied") throw new ServiceError("conflict", "A recorded provider acknowledgement cannot be marked unapplied.");
     const evidenceDigest = createHash("sha256").update(JSON.stringify({ ...input, actor: actorString(ctx.actor) })).digest("hex");
     const absent = row.operation === "put" ? input.outcome === "not_applied" : input.outcome === "applied";
+    if(absent)requireDurableMediaRetirementProof();
     if(row.redactedAt&&!absent){
       // A fresh physical cleanup witness may restore a verified provider key;
       // the minimized historical identity and its digest remain unchanged.
@@ -110,31 +107,7 @@ export const reconcileStorageOperation = defineOrchestratedService({
   auditInputFields: ["id", "outcome"], input: confirmation, output: z.object({ ok: z.literal(true) }),
   handler: async (input, actor) => {
     human(actor);
-    const original = await claimStorageRecovery.call(input, actor);
-    // claim's public schema intentionally omits the digest. The fresh claim
-    // already checked this supplied original key against its immutable hash.
-    const key=input.originalKey??original.key;
-    const { store, binding } = await boundStorage();
-    if (binding.namespace !== input.originalNamespace || (original.namespace && original.namespace !== binding.namespace)) throw new ServiceError("conflict", "Restore the exact original private storage resource before reviewing this operation.");
-    const absent = original.operation === "put" ? input.outcome === "not_applied" : input.outcome === "applied";
-    if (absent) {
-      if (await store.head(key)) throw new ServiceError("conflict", "The original object is still present. The recorded provider outcome must match it.");
-    } else {
-      const expected = original.sha256 ?? input.sha256;
-      const expectedBytes = original.bytes ?? input.bytes;
-      if (!expected || (input.sha256 && input.sha256 !== expected) || expectedBytes === undefined || (input.bytes !== undefined && input.bytes !== expectedBytes)) throw new ServiceError("validation", "Verify the exact original object's byte count and SHA-256 before recording this outcome.");
-      const stream = await store.stream(key);
-      if (!stream) throw new ServiceError("conflict", "The original object is not present.");
-      const hash = createHash("sha256"); let bytes = 0;
-      for await (const chunk of stream) {
-        bytes += chunk.byteLength;
-        if (bytes > expectedBytes) throw new ServiceError("conflict", "The original object has different bytes.");
-        hash.update(chunk);
-      }
-      if (bytes !== expectedBytes || hash.digest("hex") !== expected) throw new ServiceError("conflict", "The original object does not match this operation's exact bytes.");
-    }
-    const result=await applyStorageRecovery.call({ ...input, storageKind: binding.kind, storageLocation: { ...binding.location } }, actor);
-    await reconcileMediaErasureCohorts({objectReceiptId:input.id}).catch(()=>{});return result;
+    return recoverExactOriginalPut(input,actor);
   },
 });
-export default [listStorageOperations, claimStorageRecovery, applyStorageRecovery, reconcileStorageOperation];
+export default [listStorageOperations, claimStorageRecovery, applyStorageRecovery, ...originalRecoveryServices,reconcileStorageOperation];

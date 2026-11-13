@@ -40,7 +40,7 @@ export const claimTrialSetupDispatch=defineService({
 export const recordTrialSetupDispatch=defineService({
  name:"subscriptions.recordTrialSetupDispatch",auditInputFields:["dispatchId","outcome"],summary:"Record the actual outcome of one physical provider request.",
  kind:"mutation",permission:"system",external:false,
- input:z.object({dispatchId:z.uuid(),outcome:z.enum(["succeeded","unknown"]),providerAccountId:z.string().max(200).optional(),providerRef:z.string().min(1).max(500).optional(),providerCustomerRef:z.string().min(1).max(500).optional(),errorCode:z.string().max(100).optional()}),
+ input:z.object({dispatchId:z.uuid(),outcome:z.enum(["succeeded","unknown"]),providerAccountId:z.string().max(200).optional(),providerPlatformAccountId:z.string().max(200).optional(),providerRef:z.string().min(1).max(500).optional(),providerCustomerRef:z.string().min(1).max(500).optional(),errorCode:z.string().max(100).optional()}),
  output:z.object({accepted:z.boolean(),erasing:z.boolean(),customerRef:z.string().nullable()}),
  handler:async(input,ctx)=>{
   // No identity guard: this phase must retain actual I/O evidence even while
@@ -53,11 +53,11 @@ export const recordTrialSetupDispatch=defineService({
   const request=setupRequest.parse({...originalSetupRequest(attempt),providerCustomerRef:dispatch.customerAtStart??undefined});
   if(dispatch.requestHash!==dispatchRequestHash(request))throw new ServiceError("conflict","The original physical setup request is inconsistent.");
   if(dispatch.state!=="running"){
-   const same=dispatch.state==="succeeded" && input.outcome==="succeeded" && (input.providerAccountId??"")===attempt.providerAccountId && attempt.providerCustomerRef===input.providerCustomerRef && dispatch.providerCustomerRef===input.providerCustomerRef && (dispatch.kind==="customer" || dispatch.providerRef===input.providerRef && attempt.providerCheckoutRef===input.providerRef);
+   const same=dispatch.state==="succeeded" && input.outcome==="succeeded" && (input.providerAccountId??"")===attempt.providerAccountId && (input.providerPlatformAccountId??null)===attempt.providerPlatformAccountId && attempt.providerCustomerRef===input.providerCustomerRef && dispatch.providerCustomerRef===input.providerCustomerRef && (dispatch.kind==="customer" || dispatch.providerRef===input.providerRef && attempt.providerCheckoutRef===input.providerRef);
    return {accepted:same,erasing:!!attempt.erasureRequestId,customerRef:attempt.providerCustomerRef};
   }
-  const valid=input.outcome==="succeeded" && (input.providerAccountId??"")===attempt.providerAccountId && !!input.providerCustomerRef && (dispatch.kind==="customer" || !!input.providerRef && input.providerCustomerRef===dispatch.customerAtStart);
-  await ctx.tx.update(subscriptionSetupDispatches).set({state:valid?"succeeded":"unknown",finishedAt:sql`clock_timestamp()`,providerCustomerRef:valid?input.providerCustomerRef!:null,providerRef:valid?(input.providerRef??null):null,unverifiedEvidence:valid?{}:{providerAccountId:input.providerAccountId??"",providerCustomerRef:input.providerCustomerRef??null,providerRef:input.providerRef??null,errorCode:input.errorCode??"unresolved"}}).where(eq(subscriptionSetupDispatches.id,dispatch.id));
+  const valid=input.outcome==="succeeded" && (input.providerAccountId??"")===attempt.providerAccountId && (input.providerPlatformAccountId??null)===attempt.providerPlatformAccountId && !!input.providerCustomerRef && (dispatch.kind==="customer" || !!input.providerRef && input.providerCustomerRef===dispatch.customerAtStart);
+  await ctx.tx.update(subscriptionSetupDispatches).set({state:valid?"succeeded":"unknown",finishedAt:sql`clock_timestamp()`,providerCustomerRef:valid?input.providerCustomerRef!:null,providerRef:valid?(input.providerRef??null):null,unverifiedEvidence:valid?{}:{providerAccountId:input.providerAccountId??"",providerPlatformAccountId:input.providerPlatformAccountId??null,providerCustomerRef:input.providerCustomerRef??null,providerRef:input.providerRef??null,errorCode:input.errorCode??"unresolved"}}).where(eq(subscriptionSetupDispatches.id,dispatch.id));
   let accepted=valid;
   if(valid){
    if(attempt.providerCustomerRef && attempt.providerCustomerRef!==input.providerCustomerRef)accepted=false;

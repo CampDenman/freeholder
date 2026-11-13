@@ -3,6 +3,7 @@
 // Invoice detail, issue/void, tax evidence, credits, and receipts.
 
 import { randomUUID } from "node:crypto";
+import { invoiceOutstanding } from "@/modules/invoicing/invoice-balance";
 import { notFound } from "next/navigation";
 import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { getContact } from "@/core/contacts/service";
@@ -24,6 +25,12 @@ import {
 import { scheduleRemindersAction } from "../../../recurring-actions";
 import { listInvoiceReminders } from "@/modules/invoicing/recurring-service";
 import { getPaymentPlan } from "@/modules/invoicing/advanced-money-service";
+import { listInvoiceMerchantPayments } from "@/modules/invoicing/merchant-payment-review";
+import { invoiceRefundStates } from "@/modules/invoicing/merchant-refund-bank-state-service";
+import { RefundStatusList } from "../../../../portal/invoices/RefundStatusList";
+import { LEGACY_REPLACEMENT_CONFIRMATION } from "@/modules/invoicing/legacy-bank-replacement-proof";
+import { LEGACY_READER_STOP_CONFIRMATION, legacyBankReaderRecoveryPlan } from "@/modules/invoicing/legacy-bank-reader-recovery";
+import { BANK_REPLACEMENT_CONFIRMATION } from "@/modules/invoicing/merchant-bank-replacement-proof";
 import { requireStaffActor } from "../../guard";
 import { formatPpm, invoiceLineAmounts, invoiceTone, money, quantityFromMicros } from "../format";
 import { domainOrNull } from "../../../read-helpers";
@@ -58,6 +65,9 @@ export default async function InvoiceDetailPage({
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
   const invoice = bundle.invoice;
+  const merchantPayments = new Set(await listInvoiceMerchantPayments.call({ invoiceId: id }, actor));
+  const refundStates = await invoiceRefundStates.call({ invoiceId: id }, actor);
+  const interruptedReads = canManage ? await legacyBankReaderRecoveryPlan.call({ invoiceId: id }, actor) : [];
   const errorCode = ["validation", "conflict", "not_found", "permission", "rate_limited"].includes(query.error ?? "")
     ? query.error!
     : query.error
@@ -89,6 +99,7 @@ export default async function InvoiceDetailPage({
         </p>
       </div>
 
+      {invoice.sourceType === "subscription" && invoice.sourceId?.split(":")[1] === "proration" && invoice.totalMinor > 0 ? <a className="text-accent underline" href={`/admin/invoices/${invoice.id}/commission`}>{t("agreementCommission.title")}</a> : null}
       {errorCode ? (
         <Callout tone="danger" icon={<WarningCircle size={17} weight="fill" />}>
           {t(`invoices.error.${errorCode}`)}
@@ -112,6 +123,57 @@ export default async function InvoiceDetailPage({
         </Callout>
       ) : null}
 
+      <RefundStatusList refunds={refundStates} t={t} locale={locale} />
+      {canManage && stepUpValid ? refundStates.filter(refund => refund.requestId).map(refund => (
+        <form key={refund.id} action={invoiceAction}>
+          <input type="hidden" name="intent" value="reconcileRefundState" />
+          <input type="hidden" name="id" value={invoice.id} />
+          <input type="hidden" name="requestId" value={refund.requestId!} />
+          <Button type="submit">{t("refundStatus.check", { amount: money(refund.amountMinor, refund.currency) })}</Button>
+        </form>
+      )) : null}
+      {canManage && stepUpValid ? refundStates.filter(refund => refund.requestId && refund.canReplace).map(refund => (
+        <form key={`replacement:${refund.id}`} action={invoiceAction} className="grid justify-items-start gap-2">
+          <input type="hidden" name="intent" value="replaceReturnedBankRefund" />
+          <input type="hidden" name="id" value={invoice.id} />
+          <input type="hidden" name="requestId" value={refund.requestId!} />
+          <label className="flex items-start gap-2"><input type="checkbox" name="confirmation" value={BANK_REPLACEMENT_CONFIRMATION} required />
+            <span>{t("refundStatus.replaceConfirmation", { amount: money(refund.amountMinor, refund.currency) })}</span></label>
+          <Button type="submit">{t("refundStatus.replace", { amount: money(refund.amountMinor, refund.currency) })}</Button>
+        </form>
+      )) : null}
+      {canManage && stepUpValid ? refundStates.filter(refund => refund.legacy).map(refund => (
+        <form key={`legacy-check:${refund.id}`} action={invoiceAction}>
+          <input type="hidden" name="intent" value="recoverLegacyBankRefund" /><input type="hidden" name="id" value={invoice.id} /><input type="hidden" name="refundId" value={refund.id} />
+          <Button type="submit">{t("refundStatus.check", { amount: money(refund.amountMinor, refund.currency) })}</Button>
+        </form>
+      )) : null}
+      {canManage && stepUpValid ? refundStates.filter(refund => refund.legacy && refund.canReplace).map(refund => (
+        <form key={`legacy-replace:${refund.id}`} action={invoiceAction} className="grid justify-items-start gap-2">
+          <input type="hidden" name="intent" value="replaceLegacyReturnedBankRefund" /><input type="hidden" name="id" value={invoice.id} /><input type="hidden" name="refundId" value={refund.id} />
+          <label className="flex items-start gap-2"><input type="checkbox" name="confirmation" value={LEGACY_REPLACEMENT_CONFIRMATION} required /><span>{t("refundStatus.replaceConfirmation", { amount: money(refund.amountMinor, refund.currency) })}</span></label>
+          <Button type="submit">{t("refundStatus.replace", { amount: money(refund.amountMinor, refund.currency) })}</Button>
+        </form>
+      )) : null}
+      {canManage ? interruptedReads.map(read => (
+        <Card key={read.readId}>
+          <CardHeader title={t("refundRecovery.interruptedTitle")} />
+          <CardBody>
+            <p>{t("refundRecovery.stopHint")}</p>
+            <p>{t("refundRecovery.caller", { host: read.host, pid: read.pid })} · {formatDateTime(new Date(read.startedAt), timezone, locale)}</p>
+            {read.liveness === "live" ? <Callout tone="warning">{t("refundRecovery.live")}</Callout> : stepUpValid ? (
+              <form action={invoiceAction} className="grid justify-items-start gap-3">
+                <input type="hidden" name="intent" value="reviewLegacyBankReaderStopped" /><input type="hidden" name="id" value={invoice.id} />
+                <input type="hidden" name="readId" value={read.readId} /><input type="hidden" name="callerId" value={read.callerId} />
+                <input type="hidden" name="originalDigest" value={read.originalDigest} /><input type="hidden" name="sourceRevision" value={read.sourceRevision} />
+                <Field label={t("refundRecovery.evidence")} htmlFor={`legacy-reader-evidence-${read.readId}`}><textarea id={`legacy-reader-evidence-${read.readId}`} name="hostingEvidence" required minLength={30} maxLength={2000} className="w-full rounded border border-rule bg-surface p-2 text-ink" /></Field>
+                <label className="flex items-start gap-2"><input type="checkbox" name="confirmation" value={LEGACY_READER_STOP_CONFIRMATION} required /><span>{t("refundRecovery.stopConfirmation")}</span></label>
+                <Button type="submit">{t("refundRecovery.recordStop")}</Button>
+              </form>
+            ) : null}
+          </CardBody>
+        </Card>
+      )) : null}
       <Card>
         <CardHeader title={t("invoices.totals")} />
         <CardBody>
@@ -122,6 +184,7 @@ export default async function InvoiceDetailPage({
             <div className="flex justify-between gap-4"><dt className="text-ink-muted">{t("invoices.taxAmount")}</dt><dd className="font-mono">{money(invoice.taxMinor, invoice.currency)}</dd></div>
             <div className="flex justify-between gap-4 font-semibold"><dt>{t("invoices.total")}</dt><dd className="font-mono">{money(invoice.totalMinor, invoice.currency)}</dd></div>
             <div className="flex justify-between gap-4"><dt className="text-ink-muted">{t("invoices.paid")}</dt><dd className="font-mono">{money(invoice.paidMinor, invoice.currency)}</dd></div>
+            {invoice.creditedMinor > 0 ? <div className="flex justify-between gap-4"><dt className="text-ink-muted">{t("customerInvoice.credited")}</dt><dd className="font-mono">{money(invoice.creditedMinor, invoice.currency)}</dd></div> : null}
             <div className="flex justify-between gap-4"><dt className="text-ink-muted">{t("invoices.refunded")}</dt><dd className="font-mono">{money(invoice.refundedMinor, invoice.currency)}</dd></div>
             {invoice.issuedAt ? (
               <div className="flex justify-between gap-4">
@@ -262,7 +325,7 @@ export default async function InvoiceDetailPage({
         </Card>
       ) : null}
 
-      {canManage && ["draft", "sent", "viewed", "overdue", "partially_paid"].includes(invoice.status) && invoice.paidMinor === 0 ? (
+      {canManage && ["draft", "sent", "viewed", "overdue", "partially_paid"].includes(invoice.status) && invoice.paidMinor === 0 && invoice.creditedMinor === 0 ? (
         <Card>
           <CardHeader title={t("invoices.void")} />
           <CardBody>
@@ -293,11 +356,12 @@ export default async function InvoiceDetailPage({
                 <li key={payment.id} className="flex flex-wrap gap-2">
                   <Pill>{payment.status}</Pill>
                   <span>{payment.provider} · {money(payment.amountMinor, payment.currency)}</span>
+                  {merchantPayments.has(payment.id) ? <a className="text-accent underline" href={`/admin/payments/${payment.id}/merchant`}>{t("merchantPayments.title")}</a> : null}
                 </li>
               ))}
             </ul>
           )}
-          {invoice.status !== "draft" && invoice.status !== "void" && invoice.totalMinor > invoice.paidMinor ? (
+          {invoice.status !== "draft" && invoice.status !== "void" && invoiceOutstanding(invoice) > 0 ? (
             <p className="mt-3 text-sm">
               <a href="/admin/payments" className="font-semibold text-accent">{t("invoices.recordPayment")}</a>
             </p>

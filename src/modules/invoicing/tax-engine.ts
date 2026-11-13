@@ -107,6 +107,7 @@ function subjects(request: TaxQuoteRequest): TaxSubject[] {
 export function calculateTaxQuote(
   request: TaxQuoteRequest,
   ruleSet: TaxRuleSet,
+  observeRuleLine?: (line: QuotedTaxLine, rule: TaxRule, lineIndex: number) => void,
 ): TaxQuote & { includedTaxMinor: number } {
   const taxableSubjects = subjects(request);
   if (ruleSet.exemption) {
@@ -183,7 +184,7 @@ export function calculateTaxQuote(
       const amount = amounts[index]!;
       const key = row.subject.id ?? "shipping";
       accumulated.set(key, sumMinor([accumulated.get(key) ?? 0, amount], "Accumulated tax"));
-      lines.push({
+      const line: QuotedTaxLine = {
         ...(row.subject.id ? { itemId: row.subject.id } : {}),
         jurisdiction: rule.jurisdiction,
         name: rule.name,
@@ -193,7 +194,9 @@ export function calculateTaxQuote(
         inclusive: ruleSet.pricesIncludeTax,
         compound: rule.compound,
         priority: rule.priority,
-      });
+      };
+      lines.push(line);
+      observeRuleLine?.(line,rule,lines.length-1);
     });
   }
   const totalTaxMinor = sumMinor(lines.map((line) => line.taxMinor), "Total tax");

@@ -1,0 +1,256 @@
+<!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
+# Original legacy RMA and bank-feedback source checkpoint
+
+MASTER §43 C5.19/C12.38/C1.08. This isolated increment is SOURCE ONLY and
+UNQUALIFIED. No compiler, lint, test, dependency installation, build, database
+migration, native execution or real provider request ran for this increment.
+The controls below are prepared, not passing evidence. No checklist closure,
+merchant-model activation, provider acceptance or stable sign-off is claimed.
+
+The actual existing return allocation chooses ownership by return/allocation/
+payment IDs and original keys. Its already-created credit and actual returned
+invoice-line identities must agree. Neither an equal refund amount nor an
+inferred same-price line can choose the owner. The credit digest preserves
+financial line identity across draft-to-issued progression and excludes mutable
+status, free text and later privacy minimization. Recovery does not create or
+edit a credit, credit line or original payment principal. Initial completion may
+issue the existing draft credit through the original shared lifecycle.
+
+Human-authorized causal children use the frozen original allocation prefix and
+exact parent refund UUID. Their purpose-separated HMAC includes the actual
+return, allocation and credit witness, all parent/child refund IDs and original
+HMAC authority. Existing non-RMA signatures retain their prior shape. Separate
+failed generations of one actual allocation reserve one original business
+obligation; active reservations and positive cash remain fully counted. Other
+original parts and independent promises retain their own owed capacity.
+
+The same catalog services back owner recovery, generated HTTP/MCP contracts and
+return actions. Replacement requires fresh verification, a signed-in human,
+no API key and explicit original-return confirmation. Checking performs only
+actual reads. The customer sees confirmed original-part totals and a reminder
+that the original payment remains paid; no private bank/caller details escape.
+A raw refunded return is presented as received while actual bank debt remains,
+even before a later workflow callback has updated its stored lifecycle.
+
+## Raw signed feedback before the first GET
+
+A new sixth legacy model, `legacy_bank_feedback`, retains only normalized
+financial facts: actual observed refund/PaymentIntent/charge/account/platform/
+protocol identifiers, nullable raw/mapped status, money, failure identifiers,
+event/receipt times, exact raw body SHA-256 when available, and upstream exact
+byte HMAC verification provenance. Customer metadata is excluded. The actual
+retained occurrence receives a purpose-separated HMAC. Its immutable observed
+namespace is separate from unknown original create platform/protocol, which
+remain null. Direct older normalized callers without a raw byte digest retain
+null rather than an invented digest. Healthy duplicates reuse the exact row;
+a corrupt prior row is preserved and a genuinely new callback occurrence is
+retained before reporting authentication repair debt.
+
+The raw receipt commits in its own short shared-service mutation before the
+applying transaction. It also commits when original scoped retention policy
+fails, before propagating that failure. Genuine unassigned feedback stays
+unassigned when no authentic old namespace or stored resource binding exists.
+An authentic original admission can own review of its payment/account namespace
+while its real creator is outstanding. That ownership does not assign the new
+resource to that caller, manufacture its finish or settle money. Amounts never
+select ownership. Contradictory observed identity/money is retained and prevents
+current money proof; every observed raw resource must occur in the actual
+complete cash inventory before a fresh current receipt can be issued.
+
+A narrow original ACK setting allows only the actual server-held creator's
+independently retained, non-recovery finish to bind its first real provider
+reference. It changes no status or cash. If feedback arrived while that creator
+was paused, its older successful result cannot bypass fresh current proof after
+its actual return. Corrupt original admissions preserve the actual finish as
+repair evidence and do not bind a speculative reference.
+
+## Parent integration ownership
+
+The owned helper `legacyBankReadFinancialWitness(tx, exactOriginalRefundIds)` now
+returns seven arrays: `reads`, `facts`, `finishes`, `current`, `stops`,
+`replacements`, `feedback`. Their aggregate bound remains 5000. Feedback entries
+are `{ refundId, namespace, feedback }`; `namespace` comes from
+`originalLegacyBankAdmissionNamespace`, which authenticates the actual old
+admission and immutable original payment tuple without selecting today's
+account. `legacyBankFeedbackReviewOwned(tx, refundId)` calls
+`freeholder_legacy_bank_feedback_review(uuid)`. The SQL review predicate also
+matches an exact stored refund reference so contradictory observed PI fields
+cannot silently disappear from review. JavaScript authenticates all retained
+raw rows before they can contribute to financial or current-state proof.
+
+The root owns central/invoice financial-witness integration. Its legacy source
+selection must include actual review-owned original refunds before the first
+read, join `feedback` into both histories and include it in aggregate bounds.
+The three root-owned financial-witness files are unchanged by this increment.
+The local chain helper now accepts a real `ServiceContext` rather than a naked
+transaction so it can call the actual private catalog ownership service inside
+the same transaction. No fabricated contexts or merchant requests are used.
+
+## SQL and prepared qualification
+
+`deploy/legacy-bank-rma80.fragment.sql` is a separate UNAPPLIED suffix after the
+unchanged recovery fragment. Its SHA-256 is
+`5c2a285cc619a2fcd7a4314e98ac62a08f7a842e1740a245cfaf6e5ed1d07a11`.
+It adds the raw model/immutable guard, exact old namespace review predicates,
+raw feedback freshness, capacity debt and current projection/balance guards.
+The reader requires all 13 enabled guards and the new review function; recovery
+admission requires six enabled recovery guards and that function. The previous
+image fails closed on this expanded money domain; rollback requires the
+pre-upgrade database. No candidate was assembled or applied here. The recovery
+fragment remains `d4ae54e3b8b9f93b28b98a6e5f42d9f98835353f221f3290afbd8613a9f9a3f0`
+and the parenthesized current fragment remains
+`73a89f9dcc9b79bca72b713f53db81949c27cdd805f0fc05714cae6ea2203678`.
+
+Prepared controls are 38 pure, five contract and five native cases:
+
+- Actual RMA credit/lines survive nullable, action, pending, failed and restored
+  bank states. An equal unrelated refund does not close the part. A signed
+  exact original-part replacement closes it once; replay makes no extra POST.
+- A test-owned trigger refuses the actual later return closure after positive
+  facts/current proof/cash commit. The same original credit closes after that
+  later fault is removed, without a new physical refund.
+- Foreign feedback before any GET permits undo; actual owned raw feedback
+  after a new merge blocks undo while refund/payment rows remain unchanged.
+  Canonical invoice/contact ownership is preserved on refusal. This fixture
+  needs the root's before-first-read witness integration.
+- Feedback during an accepted paused original creator is retained without
+  inventing a provider reference, read ticket or finish. Only its actual return
+  persists the first ACK; a later real current read applies money.
+- Actual signed contradictory amount facts commit before applying policy
+  rejects them, retaining original positive cash, credit and explicit debt.
+
+The raw/current identity controls also require the observed original charge,
+account and platform to agree with the one actual resource in complete cash
+inventory. A later bank-status change can be reconciled without rewriting an
+older immutable receipt; contradictory identity or an equal unrelated resource
+retains review. These additional pure controls are prepared and UNRUN too.
+
+The native fixtures use actual checkout/return services, original HMAC physical
+admissions and the real Stripe adapter with bounded synthetic HTTP responses;
+no ServiceContext, historical capture or first scope is fabricated. They keep
+60-second per-case deadlines, stop/join the actual producer and close clients.
+All five prior lifecycle, three current and five recovery fixture bodies are
+unchanged here, including the old stopped-child loader fixture: the root's later
+async-main/universal-tsx/IPC corrections must remain when integrating.
+
+After source integration: bounded full types/lint/pure qualification, new full
+SQL assembly and parity, a genuinely new database per controlled native case,
+first-failure preservation and independent UTC/current-journal/client-drain
+proof remain required. Populated upgrades, browser/SDK journeys, actual provider
+acceptance and independent review remain part of the full specification.
+
+
+## Root feedback integration checkpoint
+
+The local composition includes the verified recovery checkpoint3513fb24 and
+signed RMA source722b53d0. The equivalent owner-form label conflict retains the
+qualified matching label/textarea IDs. Prior async-main/universal-tsx/IPC
+fixture corrections remain intact. The original2100 SQL is a byte prefix of
+new unpublished80 SHA-256
+17bf9c66942486e874f48c6b1f15aff56740176535de768e6e16142435b71f57;
+no previous database is migrated or reset for this new schema.
+
+Invoice selection now includes authentic feedback-owned original refunds before
+any GET, through their exact invoice/payment ownership and the seller's frozen
+payment filter. Both central refund and invoice histories include authenticated
+feedback plus its original admission namespace in the complete5000-child bound.
+Empty new child arrays preserve previous financial fingerprints. This supplies
+the missing source hook for the prepared feedback-only merge-undo control; it
+is not native or final-candidate proof. All new qualification remains pending.
+
+
+## Bounded source qualification after integration
+
+Product source d2d9e6b4 passes full Node22 types53.832s, whole-project
+lint109.922s and75 nonempty test files:650 actual passing assertions,
+50 explicit database skips and no failed, pending or empty bail placeholders.
+License,635-note changelog and plan373/323/50 checks pass. The first type gate
+found two unvalidated unknown metadata reads in the new native fixture; typed
+UUID parsing and record narrowing repaired those without changing its success
+oracle. The first lint gate found an unknown scoped error throw after raw
+retention. The actual Error is now preserved; a non-Error thrown value is
+wrapped with its cause, so even a falsy thrown value cannot silently disappear.
+Each failing run was stopped/drained, with its diagnostics preserved before
+renewal. The first two runs did not reach source tests.
+
+Evidence is /tmp/freeholder-rma-feedback-v3-source-result-20261113.json and
+its decoded-source-summary file. Exact twelve dependency descriptor equality
+allowed reuse of the prior install; no dependency installation ran. All five
+new RMA native cases remain unrun, and17bf remains unapplied. A prepared V20
+ordinary-migration inspector is not execution or schema proof. Populated
+upgrades and complete provider/UI/SDK/final-candidate acceptance remain open.
+
+
+## First actual owner-control fixture boundary
+
+The first new bank-feedback-only ownership control on `a82817c0`/ordinary80 `17bf` reached the existing cart merge rule before its intended financial oracle. Checkout had correctly converted both carts; the contact reference nevertheless marks **any** associated cart non-undoable. The first actual undo refused with its existing cart blocker, before owned feedback and the second merge. Minimal read-only classification confirms two paid invoices/payments/refunds, foreign feedback1, reads/facts/finishes/current0 and one non-undoable merge. The original V20 failure database and native report remain preserved; this establishes a fixture precondition failure, not a result for the financial target. See `/tmp/freeholder-rma-feedback-owner-17bf-v1-classification.json`.
+
+A separate fixture-only successor changes just that ownership leaf to two real cartless manual invoices. The sequence follows the existing authentic legacy recovery fixture: shared contact resolution, draft/issue invoice, create/settle payment and actual physical `submitProviderRefund` through the real Stripe factory, with distinct actual payment/charge/refund/owner identities and exact-byte HMAC-verified retained feedback. Both invoices retain the original2000paid/1000refunded setup. No order, credit, cart or provider history is fabricated or seeded. The helper fails any financial GET before the target and records its actual physical POST key. Explicit first and second merge `undoable:true`/empty-blocker assertions prove the unrelated lifecycle is clear before testing raw financial history.
+
+Every original financial assertion and actual undo remains unchanged: foreign feedback permits the first undo, owned raw feedback before any bank read preserves payment/refund state and refuses the second undo without changing canonical invoice/contact ownership. The other four actual checkout/RMA/issued-credit native bodies and their helper remain byte-for-byte unchanged. Product source/cart policy/SQL17bf are unchanged; no cart deletion, erasure side effect or weakened undo guard is used. Fixture-only source `c51544b4` passes full Node22 types64.770s, focused lint7.577s, all3 collected files with43 actual proof/contract passes and5 explicit native database skips (no pending/failed/empty placeholders), licensing2901source files/8manifests/8license texts, unchanged changelog and plan373/323/50. All12 dependency descriptors matched before shared reuse; no install ran. Evidence is `/tmp/freeholder-rma-owner-cartless-v1-source-20261113-result.json` and its decoded file. Qualification processes are drained; the corrected native remains **UNRUN** pending a freshV21/17bf lane. V20 is never reset or migrated. It closes no C-item and supplies no provider, independent or stable acceptance.
+
+
+## Genuine creator-to-current-proof ordering failure
+
+The unchanged actual checkout/RMA lifecycle control on source `3a54a269` and ordinary80 `17bf` failed in12.203s (runner15.386s), after its real causal child POST returned success and its authentic finished-caller/first resource ACK committed. The child remained processing, with no fresh child read, because ordinary `recordProviderRefundResult` attempted `settleRefund` before replacement orchestration reached its existing whole-family GET loop. The strict SQL legacy projection guard correctly refused an old creator result without a fresh exact finished current receipt. The populated V21 failure, original test and minimal read-only classification remain preserved: paid2000/refunded1000, three actual1000refunds, one original issued1000credit and exact allocation/causal journal,16reads/144facts/16finishes/16current receipts/six raw feedback receipts, childreads0. See `/tmp/freeholder-rma-lifecycle-17bf-v1-classification.json` and the original native report. This is a genuine orchestration defect; no guard or fixture is relaxed to fix it.
+
+A finite shared legacy fix adds a typed `LegacyBankProofPendingError` after the record service has verified the authentic original admission/finish/result and exact independently committed ACK. A real logical status transition on a refund that already participates in original reads or raw bank review refuses creator-only application before touching cash/status. Public submission still receives a conflict, preserving the paused-original refusal behavior. The shared replacement engine recognizes only that exact typed child continuation, reads the existing authenticated causal outcome and requires its actual retained processing row/resource to match; ordinary provider/SQL failures and unknown thrown values remain errors. It then reaches the existing fresh GET/finished-current-receipt reconciliation loop for the actual whole family, after the real creator has finished. Only the existing guarded shared bank projection changes money, followed by the existing return closure. Existing deterministic admission/replay prevents another POST on retry.
+
+No new provider fact, resource reference, admission, finish, context, replacement key, credit, SQL exception or current receipt is invented. The SQL17bf guards and all three parent-owned financial witness files are unchanged. Both original native files/helpers, all five RMA bodies, the cartless owner control and older causal recovery oracles remain unchanged. Four new pure controls classify exact typed child/ref correlation and reject generic conflicts/provider errors/lookalikes, wrong children/resources, absent ACKs and nonprocessing rows; they do not claim to prove bank state.
+
+Source `2dfdd25b` passes full Node22 types54.342s, focused four-file lint7.226s and14 nonempty collected files:104 actual passing assertions (including the four new typed correlation/refusal controls),25 explicit database skips and zero failed/pending/empty placeholders. License2903source files/8manifests/8license texts,636-note generated changelog at unchanged beta version and plan373/323/50 pass. All12 dependency descriptors matched before reuse; no install ran. Exact execution and decoded assertions are `/tmp/freeholder-legacy-proof-continuation-v1-source-20261113-result.json` and `...-decoded.json`; all processes drained. Actual native AFTER, combined migration/transport/provider qualification remain **UNRUN** pending the parent's lane grant. Any actual AFTER must use a fresh database, never reset/migrate V21 or another failure/golden. The original issued credit, primary positive facts/cash and fresh bank-proof refusal remain acceptance requirements. No C-item, model activation, stable announcement, independent review or owner signature follows from this source checkpoint.
+
+
+## Actual recovery controls and genuine replacement BEFORE/AFTER
+
+Five distinct controls now have passing actual database runs and independent
+read-only financial/journal/client-drain ledgers. Their source heads are
+recorded separately in /tmp/freeholder-rma-five-actual-qualified-summary-20261113.json;
+this is component evidence, not a final combined-candidate run.
+
+The feedback-only ownership control uses the qualified cartless setup on
+3a54a269/V21: two real issued/paid2000 invoices and original1000 refunds,
+actual foreign-feedback undo followed by owned-feedback refusal, preserved
+canonical ownership/cash, two authenticated raw receipts and zero bank reads.
+Its runner passes9.785s. The other four checkout/RMA/credit bodies remain
+byte-identical to their original source.
+
+The unchanged full RMA lifecycle then genuinely fails on V21: an actual
+successful causal child finish/ACK is retained, but original creator settlement
+reaches the fresh-bank-proof SQL guard before any child GET. The issued1000
+credit and exact original part remain; paid2000/refunded1000, three1000refunds,
+16reads/144facts/16finishes/current receipts and six raw callbacks are retained.
+V21 is preserved, never reset or migrated after this failure.
+
+The shared2dfdd25b repair retains a typed exact-child continuation only after
+correlating the actual authenticated finished creator result and committed ACK.
+The replacement engine can then reach its existing fresh family GET loop.
+Public original-creator settlement still refuses, unrelated errors propagate,
+and no SQL guard, credit or original oracle is weakened. Its source gates pass
+full types54.342s, affected lint7.226s and14 nonempty files/104 actual assertions
+with25 explicit database skips, plus license/636-note/plan checks.
+
+Fresh V22 has unchanged17bf ordinary0–80/all81 hashes and14 named model parity.
+The UNCHANGED full RMA oracle passes with assertion duration20.337s and
+runner23.483s on5cfa206c. Independent proof confirms paid2000/refunded2000,
+failed original parent, equal unrelated success and exact successful causal
+child; original issued credit/line/part, one signed original lineage,
+28 real returned reads/276 facts/current receipts and no merchant request.
+The return closes once and retry adds no POST.
+
+The remaining three actual controls also pass on5cfa206c/V22, each inspected
+before the next owned fixture reset: later workflow failure keeps primary cash
+and the same issued credit before successful retry (runner10.278s); accepted
+paused original creator retains real feedback then its actual ACK/finish before
+fresh bank application (9.420s); contradictory authenticated1001 bank facts
+remain while canonical1000 cash/credit are preserved and public return review
+is required (8.947s). The last retains the original stored refunded workflow;
+its shared read projection truthfully reports review. No fabricated read,
+finish, credit, canonical payment or principal is inserted.
+
+All ledgers prove exact81-entry source hashes, UTC/read-only inspection,
+fsync-on/jit-off and empty clients. Inspector-only column/cause extraction
+corrections were read-only and did not rerun any native. V20 cart-precondition
+failure and V21 genuine failure remain preserved. New partial, receipt-only
+cash/fee/recipient, populated-upgrade, transport/UI, actual-provider and final
+release acceptance remain open; no C-item or stable sign-off follows.

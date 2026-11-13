@@ -21,8 +21,11 @@ import { createPaymentPlan } from "@/modules/invoicing/advanced-money-service";
 import { products as productTable, serviceOfferings } from "./schema";
 import { sellerCanSell } from "./market";
 import { bookingTerms, getServiceOffering, listPriceRules, quoteServicePayment } from "./offerings";
+import { bookingTaxDestination } from "@/core/scheduling/commercial-policy";
+import { publicMerchantSupport } from "@/core/commerce/merchant-identity";
+import { quoteBookingMerchantTerms } from "@/modules/members/booking-merchant-quote";
 
-const selection = z.object({ productId: z.uuid(), currency: z.string().length(3), mode: z.enum(["full", "deposit_balance"]).default("full"), seats: z.number().int().min(1).max(100).default(1) });
+const selection = z.object({ productId: z.uuid(), currency: z.string().length(3), mode: z.enum(["full", "deposit_balance"]).default("full"), seats: z.number().int().min(1).max(100).default(1), taxDestination: bookingTaxDestination.optional() });
 /**
  * The fingerprint a booking page carries back with its reservation. It covers
  * the terms in force, which without a policy are still `NO_POLICY`: hashing
@@ -35,7 +38,8 @@ export function bookingTermsHash(fields: { productId: string; offeringId: string
   return createHash("sha256").update(JSON.stringify({ ...rest, policy: policy ?? NO_POLICY })).digest("hex");
 }
 
-const quoteOut = z.object({ productId: z.uuid(), offeringId: z.uuid(), name: z.string(), durationMin: z.number().int(), capacity: z.number().int(), currency: z.string(), totalMinor: z.number().int(), dueNowMinor: z.number().int(), balanceMinor: z.number().int(), mode: z.enum(["full", "deposit_balance"]), termsHash: z.string(), policy: cancellationTerms.nullable() });
+const quoteOut = z.object({ productId: z.uuid(), offeringId: z.uuid(), name: z.string(), durationMin: z.number().int(), capacity: z.number().int(), currency: z.string(), totalMinor: z.number().int(), dueNowMinor: z.number().int(), balanceMinor: z.number().int(), mode: z.enum(["full", "deposit_balance"]), termsHash: z.string(), policy: cancellationTerms.nullable(),
+  merchant: z.object({ name: z.string(), support: publicMerchantSupport, collectionKind: z.enum(["direct", "destination"]), baseAmountMinor: z.number().int(), taxMinor: z.number().int(), taxCategoryCode: z.string(), taxQuoteDigest: z.string(), commercialQuoteDigest: z.string() }).nullable() });
 
 export const publicBookingQuote = defineService({
   name: "catalog.publicBookingQuote", summary: "The public service price and cancellation promise a customer must accept.", kind: "query", permission: "public", input: selection, output: quoteOut,
@@ -53,8 +57,14 @@ export const publicBookingQuote = defineService({
     // cancellation policy" on the other). Cancelling still runs on NO_POLICY.
     const attached = await ctx.call(bookingTerms, { serviceOfferingId: offering.id });
     const policy = attached ? termsFrom(attached) : null;
-    const hash = bookingTermsHash({ productId: product.id, offeringId: offering.id, durationMin: offering.durationMin, capacity: offering.capacity, offeringUpdatedAt: offering.updatedAt, price: price.priceMinor, due: price.dueNowMinor, currency: input.currency, mode: input.mode, seats: input.seats, policy });
-    return { productId: product.id, offeringId: offering.id, name: product.name, durationMin: offering.durationMin, capacity: offering.capacity, currency: input.currency, totalMinor: price.priceMinor, dueNowMinor: price.dueNowMinor, balanceMinor: price.priceMinor-price.dueNowMinor, mode: input.mode, termsHash: hash, policy };
+    const own = ctx.actor.kind === "anonymous" ? null : await contactForActor(ctx).catch((error: unknown) => { if (error instanceof ServiceError && ["permission", "not_found"].includes(error.code)) return null; throw error; });
+    const commercial = await ctx.callAsSystem(quoteBookingMerchantTerms, { offeringId: offering.id, currency: input.currency, mode: input.mode, seats: input.seats, contactId: own?.id ?? null, destination: input.taxDestination });
+    const totalMinor = commercial?.tax.amounts.totalMinor ?? price.priceMinor;
+    const dueNowMinor = commercial ? input.mode === "full" ? totalMinor : Math.min(commercial.price.dueNowMinor, totalMinor) : price.dueNowMinor;
+    const baseHash = bookingTermsHash({ productId: product.id, offeringId: offering.id, durationMin: offering.durationMin, capacity: offering.capacity, offeringUpdatedAt: offering.updatedAt, price: totalMinor, due: dueNowMinor, currency: input.currency, mode: input.mode, seats: input.seats, policy });
+    const hash = commercial ? createHash("sha256").update(`${baseHash}:${commercial.commercialQuoteDigest}`).digest("hex") : baseHash;
+    return { productId: product.id, offeringId: offering.id, name: product.name, durationMin: offering.durationMin, capacity: offering.capacity, currency: input.currency, totalMinor, dueNowMinor, balanceMinor: totalMinor-dueNowMinor, mode: input.mode, termsHash: hash, policy,
+      merchant: commercial ? { name: commercial.merchantName, support: commercial.merchantSupport, collectionKind: commercial.collectionKind, baseAmountMinor: commercial.price.baseAmountMinor, taxMinor: commercial.tax.amounts.taxMinor, taxCategoryCode: commercial.price.taxCategoryCode, taxQuoteDigest: commercial.tax.quoteDigest, commercialQuoteDigest: commercial.commercialQuoteDigest } : null };
   },
 });
 
@@ -102,6 +112,7 @@ async function bookingContact(ctx: ServiceContext, input: { email?: string; name
 export const bookPublicService = defineService({
   name: "catalog.bookService", summary: "Reserve a currently available service for the signed-in customer and issue its canonical invoice.", kind: "mutation", permission: "public", writeClass: "money",
   input: selection.extend({ calendarId: z.uuid(), startsAt: z.iso.datetime(), termsHash: z.string().regex(/^[a-f0-9]{64}$/), acceptedTerms: z.literal(true), requestKey: z.uuid(),
+    taxQuoteDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(), commercialQuoteDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     // C1.38: honoured only in the public playground, and only for a made-up address.
     email: z.string().trim().email().toLowerCase().max(320).optional(), name: z.string().trim().min(1).max(200).optional() }),
   rateLimit: { limit: 10, windowSeconds: 60, subject: (_input, actor) => actor.kind === "anonymous" ? `booking-guest:${anonymousClientKey(actor)}` : actorString(actor), message: "Please wait before trying this reservation again." },
@@ -122,6 +133,7 @@ export const bookPublicService = defineService({
     if (owner?.seller && !(await sellerCanSell(ctx, owner.seller))) throw new ServiceError("conflict", "This member cannot take bookings yet.");
     const quote = await ctx.call(publicBookingQuote, input);
     if (quote.termsHash !== input.termsHash) throw new ServiceError("conflict", "The price or terms changed. Review them before booking.");
+    if (quote.merchant && (quote.merchant.taxQuoteDigest !== input.taxQuoteDigest || quote.merchant.commercialQuoteDigest !== input.commercialQuoteDigest || !input.taxDestination)) throw new ServiceError("conflict", "Accept this original business's actual price and declared tax quote before booking.");
     const business = await ctx.call(getBusiness, {});
     const day = new Intl.DateTimeFormat("en-CA", { timeZone: business?.timezone ?? "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(input.startsAt));
     // The business's day, asked as the calendar days around it: a calendar in
@@ -136,12 +148,14 @@ export const bookPublicService = defineService({
     const slot = await find();
     if (!slot) throw new ServiceError("conflict", "That time was just taken. Choose another.");
     if (slot.endsAt.getTime() - slot.startsAt.getTime() !== quote.durationMin * 60000) throw new ServiceError("conflict", "The appointment duration changed. Review it before booking.");
-    const booking = await ctx.callAsSystem(createBooking, { calendarId: slot.calendarId, contact: { email: contact.email }, serviceOfferingId: quote.offeringId, secondaryCalendarIds: slot.resourceCalendarIds, startsAt: slot.startsAt.toISOString(), endsAt: slot.endsAt.toISOString(), capacityUsed: input.seats, source: "site", status: "requested" });
+    const booking = await ctx.callAsSystem(createBooking, { calendarId: slot.calendarId, contact: { email: contact.email }, serviceOfferingId: quote.offeringId, secondaryCalendarIds: slot.resourceCalendarIds, startsAt: slot.startsAt.toISOString(), endsAt: slot.endsAt.toISOString(), capacityUsed: input.seats, source: "site", status: "requested",
+      ...(quote.merchant ? { taxDestination: input.taxDestination, taxQuoteDigest: quote.merchant.taxQuoteDigest, commercialQuoteDigest: quote.merchant.commercialQuoteDigest, commercialSelection: { currency: input.currency, mode: input.mode } } : {}) });
     let invoiceId: string | null = null;
     if (quote.totalMinor > 0) {
       const business = await ctx.call(getBusiness, {});
-      if (!business?.country) throw new ServiceError("conflict", "The business needs its tax location configured before taking bookings.");
-      const invoice = await ctx.callAsSystem(createDraftInvoice, { contactId: contact.id, currency: input.currency, sourceType: "booking", sourceId: booking.id, idempotencyKey: `public-booking:${booking.id}`, lines: [{ description: quote.name, quantityMicros: 1000000, unitAmountMinor: quote.totalMinor }], tax: { mode: "calculate", origin: { country: business.country }, destination: { country: business.country } } });
+      if (!quote.merchant && !business?.country) throw new ServiceError("conflict", "The business needs its tax location configured before taking bookings.");
+      const invoice = await ctx.callAsSystem(createDraftInvoice, { contactId: contact.id, currency: input.currency, sourceType: "booking", sourceId: booking.id, idempotencyKey: `public-booking:${booking.id}`, lines: [{ description: quote.name, quantityMicros: 1000000, unitAmountMinor: quote.merchant?.baseAmountMinor ?? quote.totalMinor, taxCategoryCode: quote.merchant?.taxCategoryCode ?? "standard" }], tax: quote.merchant ? { mode: "merchant", destination: input.taxDestination! } : { mode: "calculate", origin: { country: business!.country }, destination: { country: business!.country } } });
+      if (quote.merchant && invoice.invoice.totalMinor !== quote.totalMinor) throw new ServiceError("conflict", "The accepted booking total differs from its actual original merchant invoice.");
       const issued = await ctx.callAsSystem(issueInvoice, { id: invoice.invoice.id });
       invoiceId = issued.invoice.id;
       const deposit = Math.min(quote.dueNowMinor, issued.invoice.totalMinor);

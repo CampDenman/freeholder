@@ -10,6 +10,8 @@ export type MerchantAllocationLine = {
   subtotalMinor: number; discountMinor: number; taxMinor: number; totalMinor: number;
 };
 export type MerchantAllocationAmounts = InvoiceAmounts & { sellerUserId: string | null; lineIds: string[]; revenueMinor: number; feeMinor: number };
+/** Original per-party quote, after any tax-inclusive freight extraction. */
+export type MerchantFreightReceipt = { sellerUserId: string | null; shippingMinor: number; shippingTaxMinor: number };
 function checked(value: number): bigint {
   if (!Number.isSafeInteger(value) || value < 0) throw new ServiceError("conflict", "The original invoice amounts need reconciliation before merchant allocation.");
   return BigInt(value);
@@ -34,7 +36,30 @@ function distribute(amount: bigint, lines: MerchantAllocationLine[]): Map<string
   return new Map(shares.map(share => [share.id, share.amount]));
 }
 
-export function allocateMerchantAmounts(invoice: InvoiceAmounts, lines: MerchantAllocationLine[], siteFeeBps: number): MerchantAllocationAmounts[] {
+function explicitFreight(lines: MerchantAllocationLine[], receipts: readonly MerchantFreightReceipt[], freight: bigint, tax: bigint): { shipping: Map<string,bigint>; shippingTax: Map<string,bigint> } {
+  const owners = new Map<string, MerchantAllocationLine[]>();
+  const ownerKey = (id: string | null) => id === null ? "site" : `seller:${id}`;
+  for (const line of lines) {
+    const key = ownerKey(line.sellerUserId);
+    const owned = owners.get(key) ?? []; owned.push(line); owners.set(key, owned);
+  }
+  const witnessed = new Set<string>(), shipping = new Map<string,bigint>(), shippingTax = new Map<string,bigint>();
+  let totalFreight = 0n, totalTax = 0n;
+  for (const receipt of receipts) {
+    if (receipt.sellerUserId !== null && (typeof receipt.sellerUserId !== "string" || !receipt.sellerUserId)) throw new ServiceError("conflict", "The original freight merchant is unknown.");
+    const key = ownerKey(receipt.sellerUserId), owned = owners.get(key);
+    if (!owned || witnessed.has(key)) throw new ServiceError("conflict", "The original freight quote has duplicate or unrelated merchant ownership.");
+    witnessed.add(key);
+    const ownedFreight = checked(receipt.shippingMinor), ownedTax = checked(receipt.shippingTaxMinor);
+    for (const [id, amount] of distribute(ownedFreight, owned)) shipping.set(id, amount);
+    for (const [id, amount] of distribute(ownedTax, owned)) shippingTax.set(id, amount);
+    totalFreight += ownedFreight; totalTax += ownedTax;
+  }
+  if (witnessed.size !== owners.size || totalFreight !== freight || totalTax !== tax) throw new ServiceError("conflict", "The original per-merchant freight quotes do not conserve the invoice amounts.");
+  return { shipping, shippingTax };
+}
+
+export function allocateMerchantAmounts(invoice: InvoiceAmounts, lines: MerchantAllocationLine[], siteFeeBps: number, freightReceipts?: readonly MerchantFreightReceipt[]): MerchantAllocationAmounts[] {
   const amounts = { subtotalMinor: checked(invoice.subtotalMinor), discountMinor: checked(invoice.discountMinor), shippingMinor: checked(invoice.shippingMinor), taxMinor: checked(invoice.taxMinor), totalMinor: checked(invoice.totalMinor) };
   if (!lines.length || amounts.subtotalMinor - amounts.discountMinor + amounts.shippingMinor + amounts.taxMinor !== amounts.totalMinor) throw new ServiceError("conflict", "The original invoice total does not reconcile.");
   const seen = new Set<string>();
@@ -47,7 +72,9 @@ export function allocateMerchantAmounts(invoice: InvoiceAmounts, lines: Merchant
   if (totals.subtotal !== amounts.subtotalMinor || totals.discount !== amounts.discountMinor || totals.tax > amounts.taxMinor) throw new ServiceError("conflict", "The original invoice and line amounts differ.");
   // Use the existing fee validator even for a site-only/zero-value invoice.
   marketFeeMinor(0, siteFeeBps);
-  const shipping = distribute(amounts.shippingMinor, lines), shippingTax = distribute(amounts.taxMinor - totals.tax, lines);
+  const { shipping, shippingTax } = freightReceipts === undefined
+    ? { shipping: distribute(amounts.shippingMinor, lines), shippingTax: distribute(amounts.taxMinor - totals.tax, lines) }
+    : explicitFreight(lines, freightReceipts, amounts.shippingMinor, amounts.taxMinor - totals.tax);
   const groups = new Map<string, MerchantAllocationAmounts>();
   for (const line of [...lines].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) {
     const key = line.sellerUserId === null ? "site" : `seller:${line.sellerUserId}`;
