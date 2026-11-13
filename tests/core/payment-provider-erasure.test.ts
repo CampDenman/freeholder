@@ -165,7 +165,8 @@ describe.runIf(hasDatabase)("payment-provider erasure (C1.08/C12.38/C11.10)",()=
   const contact=await subject("later-customer-hold");
   await db().insert(paymentProviderCustomers).values({contactId:contact.id,provider:"stripe",providerAccountId:"acct_original",providerCustomerRef:"cus_LaterHold"});
   const result=await erase(contact.id),id=jobIds(result)[0]!,job=await getJob(erasePaymentProviderCustomer.name,id);
-  await addRetentionException.call({dataRequestId:result.request.id,scope:"commerce.money",reason:"legal_obligation",legalBasis:"Synthetic hold added after actual customer task admission"},OWNER);
+  const holdRequest=await createDataRequest.call({contactId:contact.id,request:{kind:"erasure"}},OWNER);
+  await addRetentionException.call({dataRequestId:holdRequest.id,scope:"commerce.money",reason:"legal_obligation",legalBasis:"Synthetic hold added after actual customer task admission"},OWNER);
   const adapter=vi.spyOn(adapters,"paymentAdapter");
   await expect(erasePaymentProviderCustomer.handler(job!.data,jobContext(id))).rejects.toMatchObject({code:"conflict"});
   expect(adapter).not.toHaveBeenCalled();
