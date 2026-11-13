@@ -44,6 +44,7 @@ import { productVariants, products } from "@/modules/catalog/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
 import { commercialBillingStart, pendingCommercialAmendment } from "./commercial-amendment-calendar";
 import { assertPaidAmendmentInvoice } from "./commercial-amendment-payment";
+import { invoiceSettled } from "@/modules/invoicing/invoice-balance";
 import { originalMerchantPlan, originalMerchantTerms } from "./merchant-terms-read";
 import { originalMerchantInvoiceShape } from "./merchant-terms-invoice";
 import { newProviderCalendarStart, periodEnd } from "./calendar";
@@ -309,7 +310,7 @@ export async function applyPendingPlan(
     const sourceId = `${subscription.id}:${amendment.terms.effectivePeriodStart.toISOString()}`;
     const [paid] = await ctx.tx.select().from(invoices).where(and(eq(invoices.sourceType, "subscription"), eq(invoices.sourceId, sourceId))).limit(1);
     if (!paid || paid.contactId !== subscription.contactId || paid.currency !== subscription.currency || !paid.issuedAt
-      || paid.status !== "paid" || paid.paidMinor !== paid.totalMinor || paid.refundedMinor !== 0) return subscription;
+      || paid.status !== "paid" || !invoiceSettled(paid) || paid.refundedMinor !== 0) return subscription;
     await assertPaidAmendmentInvoice(ctx, subscription, amendment.terms, paid);
   }
   const productVariantId = amendment ? amendment.terms.snapshot.productVariantId : await planVariant(ctx, nextPlan.productId);
@@ -1547,7 +1548,7 @@ export const completePaidCommercialAmendment = defineService({
   handler: async ({ invoiceId }, ctx) => {
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
     const id = z.uuid().safeParse(invoice?.sourceId?.split(":")[0]);
-    if (!invoice || invoice.sourceType !== "subscription" || !id.success || invoice.status !== "paid" || invoice.paidMinor !== invoice.totalMinor) return { applied: false };
+    if (!invoice || invoice.sourceType !== "subscription" || !id.success || invoice.status !== "paid" || !invoiceSettled(invoice)) return { applied: false };
     const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, id.data)).limit(1).for("update");
     if (!parent || parent.merchantScopeVersion !== 1 || !parent.pendingPlanId || parent.signupPending || parent.cancelAtPeriodEnd || parent.cancelledAt
       || !["active", "trialing", "past_due"].includes(parent.status)) return { applied: false };

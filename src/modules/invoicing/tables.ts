@@ -36,6 +36,8 @@ export {
   taxZones,
 } from "./schema";
 export { invoiceSchedules, invoiceReminders } from "./recurring-schema";
+export * from "./credit-application-schema";
+export * from "./commercial-attestation-schema";
 export { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 export {
   merchantCollectionConfiguration,

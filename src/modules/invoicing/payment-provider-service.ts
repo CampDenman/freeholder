@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // C5.06: provider orchestration and authenticated event convergence.
 
+import { invoiceOutstanding } from "./invoice-balance";
+import { captureCommercialPaymentAttestation, captureCommercialRefundAttestation } from "./commercial-attestations";
 import { submitOriginalMerchantRefund } from "./merchant-refund-execution";
 import { originalRefundProviderEvent, originalMerchantRefundEventRetained, retainOriginalMerchantRefundEvent } from "./merchant-refund-provider-events";
 import { and, desc, getTableColumns, eq, inArray, isNull, or, sql } from "drizzle-orm";
@@ -812,7 +814,7 @@ export const claimPaymentCheckout = defineService({
     const permittedDue = policy?.model === "seller_merchant" ? await invoicePaymentDueAmount(invoice, ctx) : null;
     const amountMinor = input.amountMinor ?? originalAttempt?.amountMinor ?? (policy?.collectionVersion === 1
       ? (permittedDue === null ? 0 : (await nextCollectionAmount(ctx, invoice, permittedDue))?.amountMinor ?? 0)
-      : policy?.model === "seller_merchant" ? permittedDue ?? 0 : invoice.totalMinor - invoice.paidMinor);
+      : policy?.model === "seller_merchant" ? permittedDue ?? 0 : invoiceOutstanding(invoice));
     if (policy?.model === "seller_merchant" && (permittedDue === null || amountMinor > permittedDue)) throw new ServiceError("conflict", "The original merchant payment is no longer released for collection. Reconcile its existing attempt first.");
     // Idempotent on (provider, key): a retry after a crash or timeout returns
     // this same committed attempt instead of minting a second one.
@@ -849,7 +851,7 @@ export const applyPaymentCheckout = defineService({
     assertProviderAccount(await routingForPayment(ctx, payment.id), input.checkout);
     // Recheck after provider I/O: the invoice can be paid or closed meanwhile.
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
-    if (!invoice || !OPEN_INVOICE_STATUSES.includes(invoice.status) || invoice.totalMinor - invoice.paidMinor < payment.amountMinor) {
+    if (!invoice || !OPEN_INVOICE_STATUSES.includes(invoice.status) || invoiceOutstanding(invoice) < payment.amountMinor) {
       throw new ServiceError("conflict", "The invoice changed while checkout was opening, so the checkout was not attached. Open the invoice again.");
     }
     return ctx.call(startPayment, {
@@ -1179,6 +1181,7 @@ export const recordOfflinePayment = defineService({
   name: "invoicing.recordOfflinePayment",
   summary: "Record owner-attested cash, cheque, transfer, or externally processed money.",
   kind: "mutation",
+  writeClass: "money",
   permission: "scoped",
   stepUp: true,
   input: z.object({
@@ -1193,6 +1196,7 @@ export const recordOfflinePayment = defineService({
   output: paymentRow,
   handler: async (input, ctx) => {
     const payment = await ctx.call(createPayment, { invoiceId: input.invoiceId, provider: "manual", method: input.method, amountMinor: input.amountMinor, idempotencyKey: input.idempotencyKey, metadata: { evidence: input.evidence, externalReference: input.reference } });
+    await captureCommercialPaymentAttestation(ctx, payment, input);
     return ctx.call(settlePayment, { id: payment.id, providerRef: input.reference ? `manual:${input.reference}` : `manual:${payment.id}`, processedAt: input.processedAt });
   },
 });
@@ -1201,6 +1205,7 @@ export const recordOfflineRefund = defineService({
   name: "invoicing.recordOfflineRefund",
   summary: "Record an owner-attested offline refund through the shared refund ledger.",
   kind: "mutation",
+  writeClass: "money",
   permission: "scoped",
   stepUp: true,
   input: z.object({ paymentId: z.string().uuid(), amountMinor: positiveMinor, reason: z.string().trim().min(3).max(1_000), reference: z.string().trim().min(1).max(300).optional(), processedAt: z.coerce.date().default(() => new Date()), idempotencyKey }),
@@ -1209,6 +1214,7 @@ export const recordOfflineRefund = defineService({
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).limit(1);
     if (!payment || payment.provider !== "manual") throw new ServiceError("conflict", "Use the payment provider's refund path for a hosted payment.");
     const refund = await ctx.call(createRefund, input);
+    await captureCommercialRefundAttestation(ctx, refund, input);
     return ctx.call(settleRefund, { id: refund.id, providerRef: input.reference ? `manual-refund:${input.reference}` : `manual-refund:${refund.id}`, processedAt: input.processedAt });
   },
 });

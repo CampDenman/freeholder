@@ -10,7 +10,8 @@ import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations
 import { invoicePaymentDueAmount } from "./invoice-payment-due";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { getInvoiceMarketPolicy, verifyInvoiceMerchant } from "./market-policy";
-import { type invoices, payments } from "./schema";
+import { type invoices } from "./schema";
+import { commercialInvoiceCashHistory } from "./commercial-attestations";
 
 export type SubscriptionInvoiceRouting = {
   subscriptionId: string; agreementRoutingVersion: 1; scope: MerchantChargeScope; siteFeeBps: number;
@@ -45,13 +46,9 @@ export async function reserveAgreementCharge(ctx: ServiceContext, invoice: typeo
     if (due === null || request.amountMinor > due) throw new ServiceError("conflict", "This agreement payment exceeds the amount currently released for collection.");
     await verifyInvoiceMerchant(invoice.id, ctx);
   }
-  const previous = await ctx.tx.select({ payment: payments, fee: merchantAgreementPaymentRoutes.applicationFeeMinor }).from(payments)
-    .leftJoin(merchantAgreementPaymentRoutes, eq(merchantAgreementPaymentRoutes.paymentId, payments.id)).where(eq(payments.invoiceId, invoice.id));
-  if (previous.some(({ payment }) => ["created", "processing"].includes(payment.status))) throw new ServiceError("conflict", "Reconcile the original agreement payment before another attempt.");
-  const successful = previous.filter(({ payment }) => payment.status === "succeeded");
-  if (successful.some(row => row.fee === null) || successful.reduce((sum, row) => sum + BigInt(row.payment.amountMinor), 0n) !== BigInt(invoice.paidMinor)) throw new ServiceError("conflict", "The original new-agreement payment history is incomplete.");
-  const chargedFee = successful.reduce((sum, row) => sum + BigInt(row.fee!), 0n);
-  const fee = BigInt(policy.feeMinor) * (BigInt(invoice.paidMinor) + BigInt(request.amountMinor)) / BigInt(invoice.totalMinor) - chargedFee;
+  const previous = await commercialInvoiceCashHistory(ctx, invoice);
+  if (previous.pending || previous.cash !== BigInt(invoice.paidMinor)) throw new ServiceError("conflict", "Reconcile original refunded or outstanding agreement principal before another attempt.");
+  const fee = BigInt(policy.feeMinor) * (previous.cash + BigInt(request.amountMinor)) / BigInt(invoice.totalMinor) - previous.allocatedFee;
   if (fee < 0n || fee > BigInt(request.amountMinor)) throw new ServiceError("conflict", "The original agreement application fee needs reconciliation.");
   return { ...scope, providerAccountId: scope.providerAccountId ?? "", applicationFeeMinor: Number(fee), agreementSubscriptionId: original.subscriptionId,
     ...(request.method === "provider_schedule" && original.providerOrigin ? { ...original.providerOrigin, originalChargeReceiptId: original.providerOrigin.receiptId } : {}) };

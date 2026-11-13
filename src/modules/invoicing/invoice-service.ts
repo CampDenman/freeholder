@@ -12,6 +12,8 @@ import { merchantRefundCurrentReceipts } from "./merchant-refund-current-schema"
 import { assertOriginalMerchantRefundResult, assertOriginalMerchantRefundStart, retireOriginalMerchantRefund } from "./merchant-refund-core-guards";
 import { queueMerchantFeeReconciliation } from "./merchant-fee-service";
 import { reserveMerchantCharge } from "./merchant-charge";
+import { commercialPaymentRecorded, commercialRefundRecorded } from "./commercial-attestations";
+import { exportProrationMoney } from "./proration-money-export";
 import { isHostedPaymentProvider } from "@/adapters/payments/providers";
 import { assertLegacyRefundRelease, refundReservationMarker } from "./legacy-refund-dispatch";
 import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
@@ -36,6 +38,7 @@ import {
   type Tx,
 } from "@/core/service";
 import { listed, uuid } from "@/core/contract";
+import { invoiceOutstanding, invoiceSettled } from "./invoice-balance";
 import {
   creditNoteRow,
   invoiceBundle as invoiceBundleOutput,
@@ -303,13 +306,15 @@ registerSearchSource({
 registerContactPrivacySource({
   scope: "commerce.money",
   retentionScopes: ["subscriptions.agreements"],
-  tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods", "merchant_payment_requests", "merchant_payment_dispatches", "merchant_payment_creation_refusals", "merchant_payment_retirement_acks", "merchant_payment_terminal_receipts", "merchant_payment_observations", "merchant_fee_refunds", "merchant_fee_observations"],
+  tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods", "merchant_payment_requests", "merchant_payment_dispatches", "merchant_payment_creation_refusals", "merchant_payment_retirement_acks", "merchant_payment_terminal_receipts", "merchant_payment_observations", "merchant_fee_refunds", "merchant_fee_observations",
+    "commercial_payment_attestations", "commercial_refund_attestations", "commercial_fee_attestations", "invoice_credit_funding", "invoice_credit_reservations", "invoice_credit_applications", "invoice_credit_releases"],
   exportData: async (tx, contactId) => {
     const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId));
     const ids = owned.map((row) => row.id);
     return {
       invoices: await Promise.all(ids.map((id) => invoiceBundle(tx, id))),
       merchantRecovery: await exportMerchantRecoveryHistory(tx, ids),
+      originalCreditAndExternalMoney: await exportProrationMoney(tx, ids),
       taxExemptions: await tx.select().from(taxExemptions).where(eq(taxExemptions.contactId, contactId)),
       paymentProviderCustomers: await tx.select().from(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, contactId)),
       paymentMethods: await tx.select().from(paymentMethods).where(eq(paymentMethods.contactId, contactId)),
@@ -362,7 +367,7 @@ export const listInvoices = defineService({
       currency: invoice.currency, subtotalMinor: invoice.subtotalMinor,
       discountMinor: invoice.discountMinor, shippingMinor: invoice.shippingMinor,
       taxMinor: invoice.taxMinor, taxZoneId: invoice.taxZoneId, totalMinor: invoice.totalMinor,
-      paidMinor: invoice.paidMinor, refundedMinor: invoice.refundedMinor,
+      paidMinor: invoice.paidMinor, creditedMinor: invoice.creditedMinor, refundedMinor: invoice.refundedMinor,
       billingAddress: invoice.billingAddress, customerTaxId: invoice.customerTaxId,
       requiredTaxLegend: invoice.requiredTaxLegend, memo: invoice.memo,
       schedule: invoice.schedule, depositOfInvoiceId: invoice.depositOfInvoiceId,
@@ -916,12 +921,12 @@ export const createPayment = defineService({
     if (!inArrayValue(invoice.status, ["sent", "viewed", "partially_paid", "overdue"])) {
       throw new ServiceError("conflict", "That invoice is not open for payment.");
     }
-    const outstanding = invoice.totalMinor - invoice.paidMinor;
+    const outstanding = invoiceOutstanding(invoice);
     if (input.amountMinor > outstanding) {
       throw new ServiceError("validation", "The payment exceeds this invoice's outstanding balance.");
     }
     const routing = await reserveMerchantCharge(ctx, invoice, input);
-    if (routing.providerPlatformAccountId && input.method !== "provider_schedule") await assertInvoiceMerchantCreatorsQuiesced(ctx, invoice.id);
+    if ((routing.providerPlatformAccountId || routing.moneyOrigin === "recorded_external") && input.method !== "provider_schedule") await assertInvoiceMerchantCreatorsQuiesced(ctx, invoice.id);
     const [created] = await ctx.tx
       .insert(payments)
       .values({
@@ -1061,7 +1066,13 @@ export const settlePayment = defineService({
     await lock(ctx.tx, "payment", input.id);
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.id)).limit(1);
     if (!payment) throw new ServiceError("not_found", "That payment is not here.");
-    if (ctx.actor.kind!=="system" && (await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:payment.invoiceId}))?.model === "seller_merchant") throw new ServiceError("permission","A direct seller payment must be confirmed through its provider.");
+    if ((await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:payment.invoiceId}))?.model === "seller_merchant") {
+      if (payment.provider === "manual") {
+        const recorded = await commercialPaymentRecorded(ctx, payment.id);
+        if (!recorded || recorded.invoiceId !== payment.invoiceId || recorded.amountMinor !== payment.amountMinor || recorded.currency !== payment.currency)
+          throw new ServiceError("permission", "Record the actual commercial external principal through the authorized offline-payment action before applying its balance.");
+      } else if (ctx.actor.kind !== "system") throw new ServiceError("permission","A direct seller payment must be confirmed through its provider.");
+    }
     if (payment.status === "succeeded") {
       if (payment.providerRef !== input.providerRef) throw new ServiceError("conflict", "That payment already settled under a different provider reference.");
       return payment;
@@ -1092,10 +1103,10 @@ export const settlePayment = defineService({
       throw new ServiceError("conflict", "That invoice is no longer open for payment.");
     }
     const paidMinor = sumMinor([invoice.paidMinor, payment.amountMinor], "Paid balance");
-    if (paidMinor > invoice.totalMinor) {
+    if (BigInt(paidMinor) + BigInt(invoice.creditedMinor) > BigInt(invoice.totalMinor)) {
       throw new ServiceError("conflict", "Settling this payment would overpay the invoice. Refund or cancel the competing attempt first.");
     }
-    const invoiceStatus = paidMinor === invoice.totalMinor ? "paid" as const : "partially_paid" as const;
+    const invoiceStatus = invoiceSettled({ ...invoice, paidMinor }) ? "paid" as const : "partially_paid" as const;
     const [updatedPayment] = await ctx.tx.update(payments).set({ status: "succeeded", providerRef: input.providerRef, processedAt: input.processedAt, failureCode: null, failureMessage: null }).where(eq(payments.id, payment.id)).returning();
     await ctx.tx.update(invoices).set({ status: invoiceStatus, paidMinor, ...(invoiceStatus === "paid" ? { paidAt: input.processedAt } : {}) }).where(eq(invoices.id, invoice.id));
     await allocateSettledPayment(ctx, updatedPayment!, input.processedAt);
@@ -1333,7 +1344,11 @@ export const settleRefund = defineService({
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, input.id)).limit(1);
     if (!refund) throw new ServiceError("not_found", "That refund is not here.");
     if (isHostedPaymentProvider(refund.provider) && ctx.actor.kind !== "system") throw new ServiceError("permission", "A hosted refund's actual positive result must be confirmed through its original provider.");
-    if (ctx.actor.kind!=="system" && (await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:refund.invoiceId}))?.model === "seller_merchant") throw new ServiceError("permission","A direct seller refund must be confirmed through its original provider account.");
+    if ((await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:refund.invoiceId}))?.model === "seller_merchant") {
+      if (refund.provider === "manual") {
+        if (!await commercialRefundRecorded(ctx, refund)) throw new ServiceError("permission", "Record the actual external commercial refund through its original offline-payment action.");
+      } else if (ctx.actor.kind !== "system") throw new ServiceError("permission","A direct seller refund must be confirmed through its original provider account.");
+    }
     const prepared=await ctx.tx.execute<{bound:boolean}>(sql`select freeholder_refund_is_prepared_return(${refund.id}::uuid) as bound`);
     if(prepared[0]?.bound && ctx.actor.kind!=="system") throw new ServiceError("permission","Confirm a prepared return through its original provider or its verified offline return action.");
     if (refund.status === "succeeded") {
@@ -1422,7 +1437,7 @@ export const applyCurrentMerchantRefundState = defineService({
       : state.status === "pending" ? "provider_pending" : state.status === "canceled" ? "provider_cancelled" : "provider_failed";
     if (refund.status === target && refund.providerRef === state.provider_ref && refund.failureCode === failureCode) return { applied: true, requiresReview: target !== "succeeded", refundId: refund.id };
     const invoiceStatus = invoiceReturned === BigInt(invoice.paidMinor) && invoice.paidMinor > 0 ? "refunded" as const
-      : invoice.status === "refunded" ? invoice.paidMinor === invoice.totalMinor ? "paid" as const : "partially_paid" as const : invoice.status;
+      : invoice.status === "refunded" ? invoiceSettled(invoice) ? "paid" as const : "partially_paid" as const : invoice.status;
     await allowOriginalMerchantRefundWrites(ctx.tx);
     const [prepared] = await ctx.tx.execute<{ bound: boolean }>(sql`select freeholder_refund_is_prepared_return(${refund.id}::uuid) as bound`);
     if (prepared?.bound && target === "succeeded") await ctx.tx.execute(sql`select set_config('freeholder.confirmed_return_refund',${refund.id},true)`);

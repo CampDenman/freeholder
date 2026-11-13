@@ -14244,6 +14244,33 @@ whatever is best for the people using the site.
   calendar and ordinary paid-period native controls are UNRUN; this checkpoint
   supplies no provider/SQL/business acceptance and closes no item. See
   `deploy/subscription-proration-foundation80-source-20261113.md`.
+  Manual-commercial implementation decision (2026-11-13, C12.38/C9.33):
+  the shared authorized offline-payment/refund action records actual external
+  principal with immutable merchant, invoice, currency, reference and evidence
+  receipts. This is recorded/attested money, never independently bank-verified
+  cash. It invents no Stripe account, transfer or collected application fee.
+  Original shared fee obligations are OWED until actual remittances are
+  recorded; nonallocation refunds preserve the existing original fee epoch's
+  proportional retained-fee rule. Actual fee returns reference their exact
+  original remittance. Fully recorded principal may settle customer access;
+  unpaid or over-remitted fees remain separate financial/privacy debt.
+  Original credit applications preserve cash ancestry and do not create a
+  fake payment or automatic refund. These decisions must appear in the same
+  explicit quote/consent. Implementation and qualification remain in progress;
+  no C-item, provider acceptance or stable gate closes here.
+  Gross proration implementation decision (same date, C9.33/C9.38/C12.38):
+  the new canonical path separately preserves the old paid line's dated
+  tax/fee credit and the new dated debit invoice. The old credit is locked
+  exclusively to its explicitly accepted target in the same transaction;
+  it cannot become transferable while old paid access remains and the target
+  is unsettled. Only exact full canonical consideration switches access.
+  A lower-price change may release its unused credit remainder after that
+  actual switch. Expired effective instants require fresh reviewed consent;
+  access is never backdated and gaps are never silently billed. Recovery must
+  retain actual partial cash, fee duties and the complete issued credit
+  promise; it cannot erase them by voiding a target or inventing a refund.
+  The legacy net-only invoice policy and its separate paid-access repair are
+  historical compatibility behavior, not proof of this new gross path.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

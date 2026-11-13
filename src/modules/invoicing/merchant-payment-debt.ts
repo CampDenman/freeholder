@@ -15,6 +15,8 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { invoiceMerchantTaxQuotes } from "./merchant-tax-schema";
 import { subscriptionMerchantScopes } from "@/modules/subscriptions/schema";
 import { paymentDisputes, payments, refunds } from "./schema";
+import { commercialPrincipalState } from "./commercial-attestations";
+import { commercialPaymentAttestations } from "./commercial-attestation-schema";
 
 const reason = z.enum(["original_scope", "unknown_payment", "unapplied_money", "provider_settlement", "commission", "refund", "dispute"]);
 export const merchantPaymentRecoveryDebt = defineService({
@@ -23,6 +25,14 @@ export const merchantPaymentRecoveryDebt = defineService({
   handler: async ({ paymentId }, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, paymentId));
     if (!payment) return { pending: true, reasons: ["original_scope" as const] };
+    if (payment.provider === "manual") {
+      const principal = await ctx.callAsSystem(commercialPrincipalState, { paymentId });
+      if (!principal.recorded) return { pending: true, reasons: ["original_scope" as const] };
+      const recordedReasons: z.infer<typeof reason>[] = [];
+      if (!principal.principalSafe) recordedReasons.push("refund");
+      if (principal.feeRecordedMinor !== principal.feeOwedMinor || principal.reviewRequired && principal.principalSafe) recordedReasons.push("commission");
+      return { pending: recordedReasons.length > 0, reasons: recordedReasons };
+    }
     const routing = await routingForPayment(ctx, paymentId), reasons = new Set<z.infer<typeof reason>>();
     if (!routing.providerPlatformAccountId || routing.applicationFeeMinor === undefined || !Number.isSafeInteger(payment.amountMinor) || payment.amountMinor <= 0
       || !Number.isSafeInteger(payment.refundedMinor) || payment.refundedMinor < 0 || payment.refundedMinor > payment.amountMinor
@@ -83,7 +93,9 @@ export const merchantTaxPaymentDebt = defineService({
     const rows = await ctx.tx.select({ paymentId: payments.id, invoiceId: payments.invoiceId,
       orderId: merchantPaymentRoutes.paymentId, orderProfile: invoiceMerchantCollections.taxPolicy,
       bookingId: merchantInvoicePaymentRoutes.paymentId, bookingProfile: invoiceMerchantScopes.taxPolicy,
-      agreementId: merchantAgreementPaymentRoutes.paymentId, agreementProfile: subscriptionMerchantScopes.taxProfileId }).from(payments)
+      agreementId: merchantAgreementPaymentRoutes.paymentId, agreementProfile: subscriptionMerchantScopes.taxProfileId,
+      recordedId: commercialPaymentAttestations.paymentId, recordedProfile: commercialPaymentAttestations.merchantProfileId }).from(payments)
+      .leftJoin(commercialPaymentAttestations, eq(commercialPaymentAttestations.paymentId, payments.id))
       .leftJoin(merchantPaymentRoutes, eq(merchantPaymentRoutes.paymentId, payments.id))
       .leftJoin(invoiceMerchantCollections, eq(invoiceMerchantCollections.allocationId, merchantPaymentRoutes.allocationId))
       .leftJoin(merchantInvoicePaymentRoutes, eq(merchantInvoicePaymentRoutes.paymentId, payments.id))
@@ -91,14 +103,14 @@ export const merchantTaxPaymentDebt = defineService({
       .leftJoin(merchantAgreementPaymentRoutes, eq(merchantAgreementPaymentRoutes.paymentId, payments.id))
       .leftJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, merchantAgreementPaymentRoutes.subscriptionId))
       .where(or(sql`${invoiceMerchantCollections.taxPolicy}->>'profileId' = ${profileId}`,
-        sql`${invoiceMerchantScopes.taxPolicy}->>'profileId' = ${profileId}`, eq(subscriptionMerchantScopes.taxProfileId, profileId),
+        sql`${invoiceMerchantScopes.taxPolicy}->>'profileId' = ${profileId}`, eq(subscriptionMerchantScopes.taxProfileId, profileId), eq(commercialPaymentAttestations.merchantProfileId, profileId),
         ...(invoices.length ? [inArray(payments.invoiceId, invoices)] : []))).limit(5001);
     if (rows.length > 5000) return { pending: true, hasHistory: true, paymentIds: [], incomplete: true };
     const anchored = new Set(invoices), ids = new Set<string>();
     let incomplete = false;
     for (const row of rows) {
-      const profiles = [row.orderProfile?.profileId, row.bookingProfile?.profileId, row.agreementProfile].filter((id): id is string => Boolean(id));
-      const scopes = [row.orderId, row.bookingId, row.agreementId].filter(Boolean).length;
+      const profiles = [row.orderProfile?.profileId, row.bookingProfile?.profileId, row.agreementProfile, row.recordedProfile].filter((id): id is string => Boolean(id));
+      const scopes = [row.orderId, row.bookingId, row.agreementId, row.recordedId].filter(Boolean).length;
       // A missing original owner is debt, not proof that a partial restore
       // erased its payment. A known other seller's portion stays independent.
       if (scopes > 1 || profiles.some(id => !z.uuid().safeParse(id).success) || anchored.has(row.invoiceId) && (scopes !== 1 || profiles.length !== 1)) incomplete = true;

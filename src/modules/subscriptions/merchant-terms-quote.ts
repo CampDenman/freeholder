@@ -126,7 +126,8 @@ export const quoteOriginalMerchantTerms = defineService({
     const initialTaxQuote = await quote(phase.periodAmountMinor, phase.setupFeeMinor, input.amendmentFor ? calendarStart : occurredAt), firstPeriodTaxQuote = await quote(snapshot.periodAmountMinor,
       snapshot.trialDays > 0 ? phase.firstPaidSetupFeeMinor : snapshot.setupFeeMinor, firstPaidAt), renewalTaxQuote = await quote(snapshot.periodAmountMinor, 0, renewalAt);
     const issuer = { name: policy.merchantName, support: policy.merchantSupport ?? null };
-    const noticeSnapshot = { locale: input.locale, text: translator(input.locale)("subscriptions.merchantTermsNotice") };
+    const t = translator(input.locale);
+    const noticeSnapshot = { locale: input.locale, text: `${t("subscriptions.merchantTermsNotice")}${snapshot.billingMode === "manual" ? `\n${t("subscriptions.attestedManualNotice")}` : ""}` };
     const noticeDigest = merchantTaxDigest({ version: 1, snapshot, issuer, initialTaxQuote, firstPeriodTaxQuote, renewalTaxQuote, noticeSnapshot });
     const quoteDigest = merchantTaxDigest({ version: 1, kind: "subscription-commercial-terms", contactId: input.contactId, planId: input.planId,
       snapshot, issuer, profile, route, siteFeeBps: policy.siteFeeBps, taxDestination: input.taxDestination, date: occurredAt.toISOString().slice(0, 10),

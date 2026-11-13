@@ -21,6 +21,7 @@
 // the same reason: a job that fell behind must not spend the morning firing
 // history.
 import { z } from "zod";
+import { invoiceOutstanding } from "./invoice-balance";
 import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
@@ -437,6 +438,7 @@ export async function sendDueInvoiceReminders(): Promise<{
       dueAt: invoices.dueAt,
       totalMinor: invoices.totalMinor,
       paidMinor: invoices.paidMinor,
+      creditedMinor: invoices.creditedMinor,
       currency: invoices.currency,
       contactEmail: contacts.email,
       contactName: contacts.name,
@@ -473,7 +475,7 @@ export async function sendDueInvoiceReminders(): Promise<{
       await skip(`The invoice is ${reminder.status}.`);
       continue;
     }
-    if (reminder.paidMinor >= reminder.totalMinor) {
+    if (invoiceOutstanding(reminder) === 0) {
       await skip("The invoice has been paid in full.");
       continue;
     }
@@ -482,7 +484,7 @@ export async function sendDueInvoiceReminders(): Promise<{
       continue;
     }
 
-    const outstanding = reminder.totalMinor - reminder.paidMinor;
+    const outstanding = invoiceOutstanding(reminder);
     const overdue = reminder.offsetDays > 0;
     const lines = [
       `${overdue ? "A reminder about" : "A note about"} invoice ${reminder.number ?? ""}`.trim(),

@@ -3,6 +3,7 @@
 // C5.25: customer capabilities never widen the owner's scoped money services.
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { invoiceOutstanding } from "./invoice-balance";
 import { paymentAdapter } from "@/adapters/payments";
 import { contacts } from "@/core/contacts/schema";
 import { env } from "@/core/env";
@@ -317,7 +318,7 @@ async function receiptView(payment:typeof payments.$inferSelect,ctx:ServiceConte
   const [invoice]=await ctx.tx.select().from(invoices).where(eq(invoices.id,payment.invoiceId));
   if(!invoice)throw unavailable();
   const language=await localeForContact(ctx.tx,invoice.contactId);
-  return{...original,remainingMinor:invoice.totalMinor-invoice.paidMinor,
+  return{...original,remainingMinor:invoiceOutstanding(invoice),
     continueUrl:payable(invoice)?localizeCustomerHref(customerInvoicePath(invoice.id,invoiceAccessToken(invoice)),language.locale,language):null};
 }
 export const customerPaymentReceipt = defineService({
