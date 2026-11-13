@@ -14195,6 +14195,16 @@ whatever is best for the people using the site.
   by both consumers; its exact query body and shared transaction are preserved,
   as is the member-subscription compatibility export. The actual production
   rebuild and existing member subscription/merchant journeys remain required.
+  Cumulative-return qualification2026-11-13: the unchanged three-generation
+  journey passed on normal V3, with independent original-principal, invoice,
+  refund,83-journal/profile and empty-client proof. The lost second recipient
+  response case recovered without another POST and retained8400 of12600 minor
+  units returned, but its old oracle searched only original POST acknowledgements.
+  Minimal read-only diagnosis proved the distinct actual GET/auxiliary UUID and
+  resource-reference hashes. The oracle now follows that exact inspection
+  ancestry and additionally requires the original failed POST facts unchanged;
+  no runtime money rule changed. Failed V3 is preserved. A fresh database and
+  actual corrected-case/unassigned-case runs remain required.
   Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
   parity stopped at the first genuine model/source mismatch in the named
   nonnegative invoice amount CHECK after125 complete models. The unchanged
