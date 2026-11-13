@@ -50,3 +50,42 @@ no duplicate while its caller is paused; current hold refusal; missing/restored
 original inventory; corrupted artifact preserving positive facts; and a late
 positive after an actually completed buyer erasure. Fresh assembled terms schema
 is required before destination minimization can be exercised.
+
+## Separate money-finisher source candidate
+
+The follow-up candidate replaces only the verified existing money erasure block
+and composes the actual subscription privacy source. It inherits holds in both
+directions, creates one stable real money-finisher admission with the exact
+original agreement IDs and actual new-mode payment IDs, and preserves already pending tasks when fulfilment is
+repeated. Local access is withdrawn while remote schedule work remains pending;
+local cancellation flags never serve as stop proof.
+
+The resident finisher independently checks its original queue payload against
+the durable enqueue hash, canonical artifact and exact scope/job membership,
+all original agreement/caller/cash proof and current holds. Immutable common
+routing identifies new order/booking/agreement payments; every originally
+captured ID must remain present, and current shared financial recovery debt
+must clear without adopting legacy platform identity. It appends actual
+provider-customer tasks using the shared reopen service before minimizing local
+money evidence and acknowledging only its own task in the same transaction.
+Original customer namespaces come from retained provider rows and original
+subscription resource/operation facts, including positive customer references
+that have not become a local saved-method row. No current platform/account is
+substituted.
+
+New deferred provider-customer tasks additionally recheck their exact original
+job/finisher linkage, current canonical artifact membership, holds and current
+schedule/cash proof before DELETE. The job runs this shared phase outside any
+provider transaction. Legacy provider-customer task dispatch semantics stay
+unchanged. Late original subscription evidence composes the real money-finisher
+reopener; missing/pruned original queue inventories remain explicit recovery.
+
+Seven new DB-free immutable money-inventory controls are prepared. This follow-up
+has not yet passed types, lint, native/privacy convergence or provider acceptance.
+The commercial-terms table is still unassembled/unregistered in this isolated
+tree and provider phase admission stays false. The candidate must be composed
+with current common money/debt and terms schema before actual held/unheld,
+artifact corruption, customer-deletion preflight and late-positive controls.
+Actual setup callers, nonempty invoice inventory, returned-unapplied cash and
+long-lived queue-retention recovery remain qualification/integration work;
+this source checkpoint does not close those boundaries.

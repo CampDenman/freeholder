@@ -35,6 +35,7 @@ import {
 } from "@/core/service";
 import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
+import { prepareBuyerAgreementErasure, minimizeBuyerAgreements } from "./buyer-agreement-erasure";
 import { syncSubscriptionAccess } from "@/core/entitlements/service";
 import { contacts } from "@/core/contacts/schema";
 import { listLocations } from "@/core/locations/service";
@@ -1766,32 +1767,15 @@ registerContactPrivacySource({
       .from(subscriptionCommercialTerms).where(inArray(subscriptionCommercialTerms.subscriptionId, rows.map(row => row.id))).orderBy(subscriptionCommercialTerms.revision) : [];
     return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [], acceptedCommercialTerms: accepted.filter(value => value.subscriptionId === row.id) }));
   },
-  erase: async (tx: Tx, contactId: string) => {
-    // Local status cannot prove an external provider schedule has stopped.
-    // Keep this source pending until its original remote dependencies can be
-    // reconciled; never acknowledge erasure from cancelAtPeriodEnd alone.
-    const external = await tx.select({ id: subscriptions.id }).from(subscriptionMerchantScopes)
-      .innerJoin(subscriptions, eq(subscriptions.id, subscriptionMerchantScopes.subscriptionId))
-      .where(and(eq(subscriptions.contactId, contactId), eq(subscriptions.billingMode, "provider"))).limit(1);
-    if (external.length) throw new ServiceError("conflict", "Reconcile and stop the original external subscription schedules before completing this agreement's erasure.");
-    // Ended rather than deleted, and the grants dropped. A business must still
-    // be able to say how many subscriptions it had last March, and the money
-    // is the invoice's record rather than this table's — but somebody who
-    // asked to be forgotten must stop holding access.
-    const cleared = await tx
-      .update(subscriptions)
-      .set({ grants: {}, cancelAtPeriodEnd: true })
-      .where(eq(subscriptions.contactId, contactId))
-      .returning({ id: subscriptions.id });
-    if (cleared.length) {
-      await tx.execute(sql`select set_config('freeholder.subscription_scope_v1','1',true)`);
-      await tx.update(subscriptionMerchantScopes).set({ taxDestination: null, redactedAt: new Date() })
-        .where(and(inArray(subscriptionMerchantScopes.subscriptionId, cleared.map(row => row.id)), sql`${subscriptionMerchantScopes.redactedAt} is null`));
-      await tx.execute(sql`select set_config('freeholder.subscription_terms_v1','1',true),set_config('freeholder.subscription_terms_privacy_v1','1',true)`);
-      await tx.update(subscriptionCommercialTerms).set({ taxDestination: null, redactedAt: new Date() })
-        .where(and(inArray(subscriptionCommercialTerms.subscriptionId, cleared.map(row => row.id)), sql`${subscriptionCommercialTerms.redactedAt} is null`));
-    }
-    return { affected: cleared.length };
+  erase: async (tx: Tx, contactId: string, context) => {
+    if (!context.service) throw new ServiceError("conflict", "Original agreement erasure requires its actual shared privacy context.");
+    const prepared = await context.service.callAsSystem(prepareBuyerAgreementErasure, { requestId: context.requestId });
+    const rows = await tx.select({ id: subscriptions.id }).from(subscriptions).where(eq(subscriptions.contactId, contactId));
+    // Stop local access immediately; these flags are never remote stop proof.
+    await tx.update(subscriptions).set({ grants: {}, cancelAtPeriodEnd: true }).where(eq(subscriptions.contactId, contactId));
+    const pending = new Set(prepared.pendingAgreements.map(value => value.subscriptionId));
+    const affected = await minimizeBuyerAgreements(tx, rows.filter(row => !pending.has(row.id)).map(row => row.id));
+    return { affected, pendingJobs: prepared.pendingJobs };
   },
 });
 

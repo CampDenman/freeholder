@@ -16,7 +16,7 @@ import {
   registerContactReference,
 } from "@/core/contacts/service";
 import { contacts } from "@/core/contacts/schema";
-import {queuePaymentProviderErasure} from "./provider-erasure";
+import {eraseBuyerMoneySource} from "./buyer-money-erasure";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {
   clipSnippet,
@@ -298,6 +298,7 @@ registerSearchSource({
 
 registerContactPrivacySource({
   scope: "commerce.money",
+  retentionScopes: ["subscriptions.agreements"],
   tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods", "merchant_payment_requests", "merchant_payment_dispatches", "merchant_payment_creation_refusals", "merchant_payment_retirement_acks", "merchant_payment_terminal_receipts", "merchant_payment_observations", "merchant_fee_refunds", "merchant_fee_observations"],
   exportData: async (tx, contactId) => {
     const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId));
@@ -310,38 +311,7 @@ registerContactPrivacySource({
       paymentMethods: await tx.select().from(paymentMethods).where(eq(paymentMethods.contactId, contactId)),
     };
   },
-  erase: async (tx, contactId, context) => {
-    await allowMerchantTaxWrites(tx);
-    const providerErasure=await queuePaymentProviderErasure(tx,contactId,context);
-    const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId));
-    const ids = owned.map((row) => row.id);
-    let affected = 0;
-    if (ids.length) {
-      affected += (
-        await tx
-          .update(invoices)
-          .set({ billingAddress: {}, customerTaxId: null, memo: null, schedule: null })
-          .where(inArray(invoices.id, ids))
-          .returning({ id: invoices.id })
-      ).length;
-      await tx.update(payments).set({ failureMessage: null, metadata: {} }).where(inArray(payments.invoiceId, ids));
-      await tx.update(refunds).set({ failureMessage: null, reason: null }).where(inArray(refunds.invoiceId, ids));
-    }
-    affected += (
-      await tx
-        .update(taxExemptions)
-        .set({ certificateRef: null, status: "revoked" })
-        .where(eq(taxExemptions.contactId, contactId))
-        .returning({ id: taxExemptions.id })
-    ).length;
-    affected += (
-      await tx.delete(paymentMethods).where(eq(paymentMethods.contactId, contactId)).returning({ id: paymentMethods.id })
-    ).length;
-    affected += (
-      await tx.delete(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, contactId)).returning({ id: paymentProviderCustomers.id })
-    ).length;
-    return { affected,pendingJobs:providerErasure.pendingJobs };
-  },
+  erase: eraseBuyerMoneySource,
 });
 
 const invoiceListRow = invoiceRow.extend({

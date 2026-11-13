@@ -86,13 +86,22 @@ async function reconcileOriginalProfile(ctx: ServiceContext, input: z.infer<type
       const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, current.requestId)).limit(1).for("update");
       const parsed = z.object({ outcomes: z.array(z.object({ scope: z.string(), outcome: z.string(), pendingJobs: z.array(z.uuid()).optional() }).passthrough()) }).passthrough().safeParse(artifact?.body);
       const outcome = parsed.success ? parsed.data.outcomes.find(value => value.scope === current.privacyScope) : undefined;
+      const repairBuyerMoney = async () => {
+        if (current.privacyScope !== "subscriptions.agreements") return;
+        const money = getService("invoicing.reopenBuyerMoneyErasure");
+        if (!money) throw new ServiceError("conflict", "Restore the original buyer money-finisher repair phase before completing this schedule repair.");
+        const repaired = z.object({ recoveryRequired: z.boolean() }).passthrough().parse(await ctx.callAsSystem(money, {
+          requestId: current.requestId, sourceKey: input.sourceKey, evidenceDigest: input.evidenceDigest,
+        }));
+        recoveryRequired ||= repaired.recoveryRequired;
+      };
       // Another real cohort task may already have covered this delayed
       // notification. Current complete provider/financial proof, not a clock
       // or an old completed flag alone, permits that duplicate to converge.
       if (current.state === "completed" && cohortSafe && erasureArtifactIsIntact(artifact) && outcome?.outcome === "erased") continue;
       // Work already visible on its real original task needs no invented
       // replacement task. Failed tasks retain ordinary owner retry/review.
-      if (erasureArtifactIsIntact(artifact) && outcome?.outcome === "pending" && outcome.pendingJobs?.includes(current.jobId)) continue;
+      if (erasureArtifactIsIntact(artifact) && outcome?.outcome === "pending" && outcome.pendingJobs?.includes(current.jobId)) { await repairBuyerMoney(); continue; }
       // The last actual job identity separates a genuinely reopened generation
       // from a completed idempotent task. A retry while pending reuses its real
       // task above; it never produces another physical provider mutation.
@@ -107,6 +116,7 @@ async function reconcileOriginalProfile(ctx: ServiceContext, input: z.infer<type
           .where(eq(subscriptionProviderScheduleErasures.id, current.id));
         reopened++;
       }
+      await repairBuyerMoney();
     }
     return { reopened, recoveryRequired };
 }

@@ -12,7 +12,7 @@ import { defineService, ServiceError, type Tx } from "@/core/service";
 import { merchantAgreementScheduleState } from "./merchant-agreement-schedule-state";
 import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
 import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
-import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
+import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { subscriptionCommercialTerms, subscriptionMerchantScopes, subscriptions } from "./schema";
 
 const SCOPE = "subscriptions.agreements";
@@ -28,7 +28,8 @@ const artifactBody = z.object({ format: z.literal("freeholder.erasure-receipt"),
 export const prepareBuyerAgreementErasure = defineService({
   name: "subscriptions.prepareBuyerAgreementErasure", summary: "Admit real original buyer schedule tasks before agreement erasure.",
   kind: "mutation", permission: "system", external: false, auditInputFields: ["requestId"],
-  input: z.object({ requestId: z.uuid() }), output: z.object({ pendingJobs: z.array(z.uuid()).max(5000) }),
+  input: z.object({ requestId: z.uuid() }), output: z.object({ pendingJobs: z.array(z.uuid()).max(5000), originalAgreementIds: z.array(z.uuid()).max(5000),
+    pendingAgreements: z.array(z.object({ subscriptionId: z.uuid(), jobId: z.uuid() })).max(5000) }),
   handler: async ({ requestId }, ctx) => {
     await lockContactIdentity(ctx.tx);
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${requestId}`}))`);
@@ -49,12 +50,13 @@ export const prepareBuyerAgreementErasure = defineService({
       }
     }
     const pendingJobs: string[] = [];
+    const pendingAgreements: Array<{ subscriptionId: string; jobId: string }> = [];
     for (const original of originals) {
       const existing = cohorts.find(cohort => cohort.subscriptionId === original.subscription.id);
       const state = await merchantAgreementScheduleState(ctx, original);
       if (existing) {
         if (!state.safe && existing.state === "completed") throw new ServiceError("conflict", "New original evidence needs its real reopened cohort task before this buyer erasure can converge.");
-        if (!state.safe || existing.state !== "completed") pendingJobs.push(existing.jobId);
+        if (!state.safe || existing.state !== "completed") { pendingJobs.push(existing.jobId); pendingAgreements.push({ subscriptionId: original.subscription.id, jobId: existing.jobId }); }
         continue;
       }
       // Only the retained never-admitted resource and empty actual histories
@@ -68,9 +70,62 @@ export const prepareBuyerAgreementErasure = defineService({
       await ctx.tx.insert(subscriptionProviderScheduleErasures).values({ id, profileId: original.scope.taxProfileId, subscriptionId: original.subscription.id,
         privacyScope: SCOPE, requestId, originalJobId: job.id, jobId: job.id, jobKey, jobIds: [job.id] });
       pendingJobs.push(job.id);
+      pendingAgreements.push({ subscriptionId: original.subscription.id, jobId: job.id });
     }
     ctx.setSubject("dataRequest", requestId);
-    return { pendingJobs: [...new Set(pendingJobs)] };
+    return { pendingJobs: [...new Set(pendingJobs)], originalAgreementIds: [...ids].sort(), pendingAgreements };
+  },
+});
+
+/** The finisher supplies IDs from its independently verified original enqueue
+ * payload. This read cannot itself authorize minimization or provider I/O. */
+export const buyerAgreementErasureState = defineService({
+  name: "subscriptions.buyerAgreementErasureState", summary: "Verify the complete original buyer inventory and current physical/cash quiescence without provider I/O.",
+  kind: "query", permission: "system", external: false,
+  input: z.object({ requestId: z.uuid(), originalAgreementIds: z.array(z.uuid()).max(5000) }), output: z.object({ safe: z.boolean(), providerCustomers: z.array(z.object({ provider: z.literal("stripe"), providerAccountId: z.string(), providerPlatformAccountId: z.string(), providerCustomerRef: z.string() })).max(5000) }),
+  handler: async ({ requestId, originalAgreementIds }, ctx) => {
+    await lockContactIdentity(ctx.tx);
+    const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, requestId)).limit(1);
+    if (!request || request.kind !== "erasure" || !request.verifiedAt) throw new ServiceError("permission", "Restore the original verified buyer erasure request before testing its schedules.");
+    const originals = await ctx.tx.select({ subscription: subscriptions, scope: subscriptionMerchantScopes, resource: subscriptionProviderScheduleResources })
+      .from(subscriptions).innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptions.id))
+      .leftJoin(subscriptionProviderScheduleResources, eq(subscriptionProviderScheduleResources.subscriptionId, subscriptions.id))
+      .where(and(eq(subscriptions.contactId, request.contactId), eq(subscriptions.merchantScopeVersion, 1), eq(subscriptions.billingMode, "provider")))
+      .orderBy(subscriptions.id).limit(5001);
+    const ids = new Set(originalAgreementIds);
+    if (originals.length > 5000 || ids.size !== originalAgreementIds.length || originals.length !== ids.size
+      || originals.some(original => !ids.has(original.subscription.id))) return { safe: false, providerCustomers: [] };
+    const cohorts = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(and(
+      eq(subscriptionProviderScheduleErasures.requestId, requestId), eq(subscriptionProviderScheduleErasures.privacyScope, SCOPE))).limit(5001);
+    if (cohorts.length > 5000) return { safe: false, providerCustomers: [] };
+    for (const cohort of cohorts) if (!cohort.subscriptionId || !ids.has(cohort.subscriptionId)
+      || !await merchantScheduleCohortInventoryCovers(ctx.tx, cohort, ids)) return { safe: false, providerCustomers: [] };
+    const providerCustomers = new Map<string, { provider: "stripe"; providerAccountId: string; providerPlatformAccountId: string; providerCustomerRef: string }>();
+    for (const original of originals) {
+      const state = await merchantAgreementScheduleState(ctx, original);
+      const cohort = cohorts.find(value => value.subscriptionId === original.subscription.id);
+      if (!state.safe || (state.external && (!cohort || cohort.state !== "completed"))) return { safe: false, providerCustomers: [] };
+      const operations = await ctx.tx.select().from(subscriptionProviderScheduleOperations)
+        .where(eq(subscriptionProviderScheduleOperations.subscriptionId, original.subscription.id)).limit(5001);
+      if (operations.length > 5000) return { safe: false, providerCustomers: [] };
+      const references = new Set<string>();
+      if (original.resource?.providerCustomerRef) references.add(original.resource.providerCustomerRef);
+      for (const operation of operations) {
+        const customer = operation.originalRequest.providerCustomerRef;
+        if (typeof customer === "string") {
+          if (operation.originalRequest.providerPlatformAccountId !== original.scope.providerPlatformAccountId
+            || (operation.originalRequest.providerAccountId ?? null) !== original.scope.chargeAccountId) return { safe: false, providerCustomers: [] };
+          references.add(customer);
+        }
+      }
+      for (const providerCustomerRef of references) {
+        if (!/^cus_[A-Za-z0-9]{1,195}$/.test(providerCustomerRef)) return { safe: false, providerCustomers: [] };
+        const customer = { provider: "stripe" as const, providerAccountId: original.scope.chargeAccountId ?? "", providerPlatformAccountId: original.scope.providerPlatformAccountId, providerCustomerRef };
+        providerCustomers.set(JSON.stringify(customer), customer);
+      }
+      if (providerCustomers.size > 5000) return { safe: false, providerCustomers: [] };
+    }
+    return { safe: true, providerCustomers: [...providerCustomers.values()] };
   },
 });
 
@@ -135,4 +190,4 @@ export const completeBuyerAgreementErasure = defineService({
     return { settled: true, recoveryRequired: false };
   },
 });
-export default [prepareBuyerAgreementErasure, completeBuyerAgreementErasure];
+export default [prepareBuyerAgreementErasure, completeBuyerAgreementErasure, buyerAgreementErasureState];
