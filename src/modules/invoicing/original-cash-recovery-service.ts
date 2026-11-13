@@ -9,8 +9,6 @@ import { subscriptionMerchantScopes, subscriptionProviderChargeReceipts } from "
 import { merchantFeeRefunds, merchantPaymentObservations } from "./merchant-collection-schema";
 import { lockMerchantRefundCash, merchantRefundSource, originalMerchantRefundCash } from "./merchant-refund-origin";
 import { merchantPhysicalCaller, merchantCallerLiveness } from "./merchant-physical-caller";
-import { merchantReturnedCashEvidenceSchema } from "./merchant-returned-cash-contract";
-import { merchantReturnedCashProof } from "./merchant-returned-cash-proof";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { merchantCashAuxiliaryBody } from "@/adapters/payments/stripe-cash-auxiliary";
@@ -23,7 +21,8 @@ import { claimMerchantRefundRequest, merchantRefundRequestRow } from "./merchant
 import { recordMerchantRefundObservation } from "./merchant-refund-observations";
 import { merchantRefundRequests, merchantRefundDispatches, merchantRefundResourceBindings } from "./merchant-refund-schema";
 import { boundOriginalCashRecovery as bound, originalCashRecoveryRevision } from "./original-cash-recovery-current";
-import { legacyBankFeedbackMatchesInventory } from "./legacy-bank-feedback-proof";
+import { currentOriginalCashInventory } from "./original-cash-inventory-current";
+export { currentOriginalCashInventory } from "./original-cash-inventory-current";
 export { originalCashRecoveryRevision, originalCashFullReturnCurrent } from "./original-cash-recovery-current";
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const id = z.object({ recoveryId: z.uuid() }).strict();
@@ -142,20 +141,6 @@ export async function flushOriginalCashRecovery(recoveryId: string) {
     for (const factId of local.facts.keys()) await recordOriginalCashFact.call({ operationId, nonce: local.nonce, factId }, { kind: "system" });
     held.delete(operationId);
   }
-}
-export async function currentOriginalCashInventory(ctx: ServiceContext, recoveryId: string, operationId: string) {
-  const operation = await originalCashRecoveryOperation(ctx.tx, operationId);
-  if (operation.recoveryId !== recoveryId || operation.kind !== "inspection" || operation.request.auxiliaryOperationId) throw new ServiceError("conflict", "Use the exact finished original cash-inventory GET.");
-  const facts = await originalCashOperationFacts(ctx.tx, operation.id), finish = facts.find(fact => fact.kind === "finish");
-  if (finish?.evidence.outcome !== "returned" || finish.evidence.callerInstanceId !== operation.caller.id) throw new ServiceError("conflict", "Retain the actual returned complete original inventory; a hosting stop is not a returned bank snapshot.");
-  const current = await originalCashRecoveryRevision(ctx, recoveryId, operationId);
-  if (current.revision !== operation.request.sourceRevision) throw new ServiceError("conflict", "The original cash inventory changed during this GET. Retain its facts and inspect it again.");
-  const evidence = merchantReturnedCashEvidenceSchema.parse(facts.filter(fact => fact.kind === "state").at(-1)?.evidence);
-  const feedback=await originalCashRecoveryCashWitness(ctx.tx,current.cash);
-  if(feedback.feedback.some(entry=>!legacyBankFeedbackMatchesInventory(entry.feedback.evidence,{originalPaymentRef:current.cash.providerRef,originalChargeAccountId:current.cash.chargeAccountId,readPlatformAccountId:evidence.providerPlatformAccountId,cash:evidence})))throw new ServiceError("conflict","Retain contradictory or not-yet-inventoried authentic cash feedback; a fresh namespace or equal amount cannot discard its original resource.");
-  const proof = merchantReturnedCashProof({ original: { ...current.cash, paymentProviderRef: current.cash.providerRef }, evidence,
-    creatorsQuiesced: current.history.creatorsQuiesced, inventoryStable: true });
-  return { ...current, evidence, proof };
 }
 export const claimOriginalCashAuxiliary = defineService({
   name: "invoicing.claimOriginalCashAuxiliary", summary: "Admit one exact original fee or recipient return after full customer-cash confirmation and actual caller quiescence.",

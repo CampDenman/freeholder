@@ -16,7 +16,7 @@ import { originalCashCallersFinished, originalCashHistoricalFeesQuiesced, origin
 const MAX = 5000;
 const sorted = (rows: readonly object[]) => rows.map(row => merchantTaxDigest(row)).toSorted();
 export async function merchantRefundCashHistory(ctx: ServiceContext, cash: MerchantRefundCashOrigin, ownInspectionId?: string, excludeRecoveryOperationId?: string): Promise<{
-  digest: string; incomplete: boolean; creatorsQuiesced: boolean; feeDebt: boolean;
+  digest: string; incomplete: boolean; inventoryCount: number; creatorsQuiesced: boolean; feeDebt: boolean;
   refundRequests: Array<{ id: string; amountMinor: number; currency: string; dispatched: boolean; retired: boolean; resourceRefs: string[]; definitelyRefused: boolean }>;
 }> {
   const scope = (platform: typeof merchantRefundRequests.providerPlatformAccountId, account: typeof merchantRefundRequests.chargeAccountId) =>
@@ -63,7 +63,8 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
   const recovery = await originalCashRecoveryCashWitness(ctx.tx, cash, excludeRecoveryOperationId);
   const inventory = { requests, retirements, observations, observationCaptures, dispatches, finishes, stops, refusals, terminals, bindings, paymentCash, subscriptionCash, receiptRows, aliases, fees, feeObservations, otherPrimary, otherReturns,
     recoveryOwners: recovery.owners, recoveryOperations: recovery.operations, recoveryFacts: recovery.facts.filter(fact => !["partial_closure", "unassigned_refund_review", "partial_target"].includes(fact.kind)), recoveryFeedback:recovery.feedback };
-  const incomplete = Object.values(inventory).some(rows => rows.length > MAX);
+  const inventoryCount = Object.values(inventory).reduce((count, rows) => count + rows.length, 0);
+  const incomplete = inventoryCount > MAX;
   let creatorsQuiesced = !incomplete && dispatches.every(call => finishes.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id)
     || stops.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id && row.requestDigest === call.requestDigest));
   for (const paymentId of paymentIds) {
@@ -86,5 +87,5 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
       definitelyRefused: false, // Generic codes/empty lookups do not prove no effect.
     };
   });
-  return { refundRequests, digest: merchantTaxDigest(Object.fromEntries(Object.entries(inventory).map(([key, rows]) => [key, sorted(rows)]))), incomplete, creatorsQuiesced, feeDebt };
+  return { refundRequests, inventoryCount, digest: merchantTaxDigest(Object.fromEntries(Object.entries(inventory).map(([key, rows]) => [key, sorted(rows)]))), incomplete, creatorsQuiesced, feeDebt };
 }
