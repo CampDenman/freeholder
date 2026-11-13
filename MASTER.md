@@ -13934,8 +13934,15 @@ whatever is best for the people using the site.
   separate 15-table UTC golden-equal populated clone (0.479s, journal81/e783,
   clients drained). A one-line source repair now skips only the impossible
   same-status transition event, retaining actual code/update/audit/outbox/fee
-  effects; source qualification and unchanged AFTER are pending. No schema,
-  historical money, oracle or model activation changed.
+  effects. Source2a191d44 passes full incremental Node22 types, changed-file lint
+  and63 finite core checks; unchanged oracle48cf8407 AFTER passes7.381s on
+  V11/e783. Actual failed400 plus independent600 action/null/pending/restored
+  success leave4200 paid/600 refunded; UTC readback verifies both current
+  receipts, retained raw facts, two finished original resources and real bank
+  state events, with no remaining clients. The RMA-credit, stale-read and
+  strengthened caller natives remain unrun. No schema, historical money,
+  oracle or model activation changed; final combined/legacy/provider acceptance
+  remains open.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

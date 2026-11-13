@@ -105,5 +105,24 @@ and `/tmp/freeholder-bank-pending80-populated-clone-v11.json`.
 The narrow source repair emits a logical refund transition only when its
 logical status changes. It keeps the actual row/failure-code update, committed
 provider read facts, ordinary service audit, bank-state outbox and fee
-reconciliation. No SQL, old money or test oracle changes. Source qualification
-and unchanged AFTER native remain pending for this repair.
+reconciliation. No SQL, old money or test oracle changes. Source `2a191d44`
+passes incremental full Node22 types, changed invoice-service lint and the five
+finite core files'63 assertions with no skips. No registry or oracle changed.
+
+The **unchanged two-resource AFTER passed7.381s** on 2a191, original test
+SHA48cf8407 and existing V11/e783. The actual factory/HMAC flow completed
+failed400 and independent600 action→null→pending→success. It asserted two
+physical keys/POSTs and customer `canPay=false`. Independent UTC SQL asserts
+paid4200/refunded600, failed400 plus succeeded600, two finished ordinal-one
+original resources, both simultaneously valid FAILED/SUCCEEDED current
+receipts, all retained raw success/action/null/pending/failure-balance facts and
+real bank-state outbox events for failed/action/pending/succeeded. Journal81,
+e783 and final empty target backends are unchanged. No causal replacement
+journal or issued credit is expected in this case.
+
+AFTER evidence is `/tmp/freeholder-bank-current80-resources-native-v2.{json,log}`
+and `-v2-ledger.json`; the latter uses exclusive creation. BEFORE files and the
+15-table golden clone remain separate and unchanged. Generic first proof and
+this two-resource proof are component runs on their exact source checkpoints;
+the RMA-credit, stale-read and strengthened unfinished-caller natives are still
+unexecuted, and final combined-source/legacy/provider acceptance remains open.
