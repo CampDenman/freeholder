@@ -135,6 +135,38 @@ returns and recipient/fee reconciliation remain explicit unfinished scope.
 These are agent-authored proofs; Tony's review and real-provider acceptance
 remain open, and no sign-off is inferred.
 
+## Current original billing and privacy follow-up (2026-11-12)
+
+Protected main now includes the original live-refund caller repair (#694,
+`bad846e4`) and selective-erasure core framework (#695, `81271622`), each
+through the ordinary protected merge queue with all44 merge-group checks
+successful. The latter adds the optional source hook and real receipt/job
+convergence behavior, without schema/domain activation. Neither merge closes
+C1.08, full financial acceptance or this independent review.
+
+The isolated current financial/subscription candidate (`81e42159` plus test-only
+`885a37f2`) is broader than that protected baseline. Review its original
+physical resource/caller inventory, independent positive-money facts, frozen
+accepted terms, scope-limited merge witnesses, current retention holds, canonical
+artifact hashes and original queued money/customer job identities together.
+The fresh SQL881a database/model checks and four actual buyer-erasure controls
+are supporting evidence, with their exact limitations in
+`deploy/current-subscription-terms80-source-2026-11-12.md`. Provider factory HTTP
+is intercepted; a synthetic prior-create journal does not establish actual
+provider-account acceptance or a newly accepted agreement.
+
+Two additional recovery controls genuinely fail on this candidate and remain
+open: a restored local billing-mode change hides an active original resource
+from agreement erasure, and a missing original money-finisher queue payload
+rolls back the recovery receipt transition despite a pending original resource
+cohort. Both populated failures are independently preserved with thirteen
+original table hash/count goldens and unchanged schema journal. The reviewer
+must check the eventual minimal source repairs against the unchanged AFTER
+controls and inspect missing/restored inventories without inferring original
+payloads from current mutable rows. No repair or independent approval is implied
+by this packet update. Actual provider, complete financial/recovery acceptance
+and Tony's signed review remain required.
+
 ## Payment-provider privacy cleanup repair (2026-11-11)
 
 Review `invoicing/provider-erasure.ts`, the existing `commerce.money` source,
