@@ -13926,6 +13926,16 @@ whatever is best for the people using the site.
   credit and does not prove RMA reuse. Four other bank natives, legacy recovery,
   final source union, SDK/browser/provider and full financial acceptance remain
   open; this does not activate the model or close C12.38.
+  The next two-resource native found a genuine repeat-processing audit event
+  refusal after actual failed400 and action/null600 state reads passed. Its
+  pending600 primary fact and current receipt survived; logical projection
+  rolled back at the existing transition constraint, preserving paid4200 and
+  refunded0. Before source287/a490/e783 failed7.062s and is retained with a
+  separate 15-table UTC golden-equal populated clone (0.479s, journal81/e783,
+  clients drained). A one-line source repair now skips only the impossible
+  same-status transition event, retaining actual code/update/audit/outbox/fee
+  effects; source qualification and unchanged AFTER are pending. No schema,
+  historical money, oracle or model activation changed.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

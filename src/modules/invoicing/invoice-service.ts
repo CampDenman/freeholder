@@ -1431,7 +1431,7 @@ export const applyCurrentMerchantRefundState = defineService({
       ...(target === "succeeded" && !refund.processedAt ? { processedAt: new Date() } : {}), ...(target === "failed" ? { failedAt: new Date() } : {}) }).where(eq(refunds.id, refund.id));
     await ctx.tx.update(payments).set({ refundedMinor: Number(paymentReturned) }).where(eq(payments.id, payment.id));
     await ctx.tx.update(invoices).set({ refundedMinor: Number(invoiceReturned), status: invoiceStatus }).where(eq(invoices.id, invoice.id));
-    await stateEvent(ctx, "refund", refund.id, refund.status, target, "original_provider_current_state", { receiptId, observationId: state.observation_id, providerStatus: state.status });
+    if (refund.status !== target) await stateEvent(ctx, "refund", refund.id, refund.status, target, "original_provider_current_state", { receiptId, observationId: state.observation_id, providerStatus: state.status });
     if (invoiceStatus !== invoice.status) await stateEvent(ctx, "invoice", invoice.id, invoice.status, invoiceStatus, "original_refund_current_state", { receiptId, refundId: refund.id });
     await queueMerchantFeeReconciliation(ctx, payment.id);
     ctx.queueEvent("refund.bankStateChanged", { refundId: refund.id, paymentId: payment.id, invoiceId: invoice.id, receiptId, status: state.status });

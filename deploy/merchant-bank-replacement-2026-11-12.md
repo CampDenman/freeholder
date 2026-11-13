@@ -82,3 +82,28 @@ physical ACK and bound positive exist while the finish receipt is absent.
 Incremental full Node22 types and single-fixture lint both pass; no native has
 run for this stronger case. The first generic case body stays byte-identical
 to a6 (body SHA256 `336ab6879390bb8fd112c85e9c9446f9109524a7ccb2ea190891c4733e4cf6a6`).
+
+The first two-resource native then reached a genuine code defect on exact
+287/a490, unchanged test SHA48cf8407/V11 e783. It failed 7.062s after the real
+400 failure and independent 600 action/null reads had passed. The next actual
+600 pending read committed its raw observation, capture, read finish and valid
+current receipt. Its logical projection tried to insert a `processing` to
+`processing` transition when the failure code changed from action to pending;
+the existing `money_state_events` transition constraint correctly refused it.
+The projection transaction rolled back, leaving paid4200/current-refunded0,
+failed400 and processing600, two original finished resources and both resources'
+independent current receipts intact. Success restoration was not reached.
+
+The failed populated state is preserved in
+`freeholder_bank_pending80_populated_before_v11_test_20261112`. A template-only
+clone passed0.479s with 15 UTC table count/SHA comparisons across source-before,
+clone and source-after; ordinary journal81/max60/e783 and both backend sets were
+unchanged/empty. Its report and start flag use exclusive creation and refuse
+overwrites. Evidence is `/tmp/freeholder-bank-current80-resources-native-v1.*`
+and `/tmp/freeholder-bank-pending80-populated-clone-v11.json`.
+
+The narrow source repair emits a logical refund transition only when its
+logical status changes. It keeps the actual row/failure-code update, committed
+provider read facts, ordinary service audit, bank-state outbox and fee
+reconciliation. No SQL, old money or test oracle changes. Source qualification
+and unchanged AFTER native remain pending for this repair.
