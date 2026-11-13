@@ -13935,10 +13935,24 @@ whatever is best for the people using the site.
   reader also reuses the bounded primary-first provider collector, preserving
   every callback before a later page can fail; unmatched resources are not
   associated by amount. Its fresh-read wrapper keeps original-create metadata
-  unknown. Both adapter methods and15 draft HTTP controls are unqualified.
-  No durable legacy receipt, caller-stop review,
-  money projection, causal replacement, UI or public recovery service is claimed
-  by this unqualified adapter stage; actual legacy recovery remains required.
+  unknown. Exact adapter67665ea2 now passes full Node22 types8GB, four changed
+  TypeScript files' lint and15 actual factory HTTP controls, with no skips or
+  database connection. Logs are `/tmp/freeholder-legacy-bank676-*`.
+  A separate finite legacy lifecycle source slice now adds three private
+  original-refund-owned models, guarded unapplied SQL and real registered
+  claim/fact/actual-finish services. Its private orchestrator reads only the
+  authentic HMAC-bound original resource, then bounded cash inventory; each
+  actual callback is held before persistence, and a settled wrapper can flush
+  the same retained facts/finish without new I/O. A missing original finish
+  remains debt and blocks a new read. Original create platform/protocol remain
+  null, and unmatched refunds remain unassigned. Financial repair pointers and
+  a bounded exact-refund child-witness helper are supplied, but final seller/
+  buyer financial-witness composition remains required. Four actual-service
+  native controls are drafted. This new lifecycle slice is UNQUALIFIED and its
+  fragment is unapplied; normal80/e783 and all prior databases are untouched.
+  Current-state proof, money projection, causal replacement, stopped-reader
+  recovery, UI/API/SDK, populated upgrades and actual legacy acceptance remain
+  required. See `deploy/legacy-bank-read-lifecycle-2026-11-13.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original
