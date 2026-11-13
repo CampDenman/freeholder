@@ -93,7 +93,7 @@ async function capture(key:string,expectedBinding?:StorageBinding){
   }
   const original=await inventory.captureFinishedPut(tx,receipt.id);
   if(expectedBinding&&transferDigest(expectedBinding)!==transferDigest(original.binding))transferConflict("The captured cleanup resource differs from the exact original private provider binding.");
-  if(receipt.state!=="accepted"||!receipt.providerRevision||transferDigest(receipt.providerRevision)!==receipt.providerRevisionDigest||original.caller.state!=="returned"||!await transferRequestsDrained(tx,[original.caller.id]))transferConflict("Recover the original finished PUT and its exact first revision before retiring it.");
+  if(receipt.state!=="accepted"||!receipt.providerRevision||transferDigest(receipt.providerRevision)!==receipt.providerRevisionDigest||original.appliedReview===null&&(original.caller.state!=="returned"||!await transferRequestsDrained(tx,[original.caller.id])))transferConflict("Recover the original finished PUT or its exact affirmative applied review and first revision before retiring it.");
   const prior=await earlierDeletes(tx,history),continuation=originalDeleteContinuation(prior);
   if(continuation==="verification_only"){
    const actual=prior.find(row=>row.observedAcceptedAt);const deletion=history.find(row=>row.id===actual?.objectReceiptId);

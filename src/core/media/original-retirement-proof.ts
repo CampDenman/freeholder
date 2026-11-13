@@ -3,6 +3,7 @@
 // An empty current key is not an original caller finish or a version inventory.
 import type {TransferInventoryConfiguration,TransferInventoryEntry,TransferRevision} from "../../../scripts/media-transfer.mjs";
 import type {OriginalPhysicalRequest,ReturnedOriginalCaller} from "./original-request-recovery-proof";
+import type {OriginalProviderWriteAdmission} from "./provider-request-proof";
 import {requireFinishedOriginalPut} from "./original-request-recovery-proof";
 import {originalResourceAbsent,providerInventoryDigest} from "./transfer-inventory-proof";
 import {transferConflict,transferDigest} from "./transfer-proof";
@@ -19,6 +20,12 @@ export function requireOriginalAbsenceRead(input:{key:string;namespace:string;re
 }
 export function requireOriginalPutRetirementProof(input:{caller:ReturnedOriginalCaller;requests:readonly OriginalPhysicalRequest[];key:string;namespace:string;revision:TransferRevision;absence:OriginalAbsenceRead;absenceRequests:readonly OriginalAbsenceRequest[];absenceRequestIds:readonly string[];first:{configuration:TransferInventoryConfiguration;entries:readonly TransferInventoryEntry[]};confirmed:{configuration:TransferInventoryConfiguration;entries:readonly TransferInventoryEntry[]}}){
  const write=requireFinishedOriginalPut(input.caller,input.requests);
+ return requireOriginalPhysicalAbsenceProof(write,input);
+}
+/** Internal lifecycle consumer supplies either the strict actual-finish write
+ * above or the independently revalidated guarded affirmative applied review.
+ * This checks fresh physical absence only; it never establishes quiescence. */
+export function requireOriginalPhysicalAbsenceProof(write:OriginalProviderWriteAdmission,input:{key:string;namespace:string;revision:TransferRevision;absence:OriginalAbsenceRead;absenceRequests:readonly OriginalAbsenceRequest[];absenceRequestIds:readonly string[];first:{configuration:TransferInventoryConfiguration;entries:readonly TransferInventoryEntry[]};confirmed:{configuration:TransferInventoryConfiguration;entries:readonly TransferInventoryEntry[]}}){
  if(write.descriptor.key!==input.key||write.descriptor.binding.namespace!==input.namespace||input.revision.key!==input.key||input.revision.namespace!==input.namespace)transferConflict("Retirement cannot adopt another original key, namespace or generation.");
  requireOriginalAbsenceRead({...input,requests:input.absenceRequests});
  if(providerInventoryDigest(input.first.configuration,input.first.entries)!==providerInventoryDigest(input.confirmed.configuration,input.confirmed.entries))transferConflict("Both complete retirement version/session inventories must agree.");

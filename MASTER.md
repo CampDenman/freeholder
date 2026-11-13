@@ -15838,3 +15838,15 @@ requires an empty fifth dependency array and adds one strict nine-empty-family/
 unknown-parent control. Root's v6 first failure is preserved; the corrected15
 controls are UNRUN. No product behavior or database changed. See
 `deploy/member-controlled-financial-driver82-source-20261113.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated ordinary retirement
+slice now consumes the exact guarded affirmative original PUT review, retained
+nonce/full-byte/two-pass positive inventory and actual finishes or independent
+executor stop. It preserves missing actual return/writer-finish values and still
+requires fresh pinned original revision reads, conditional DELETE and complete
+physical absence inventories before retirement/minimization. Nine pure and three
+native controls are PREPARED/UNRUN; real stopped-runtime acceptance remains open.
+The provider COMPLETE/in-flight multipart authority guarantee is explicitly
+unproven, and both full request and dedicated part capabilities remain
+unpublished. No execution/account/host actions or C-item closure occurred. See
+`deploy/media-applied-put-retirement-source-2026-11-13.md`.
