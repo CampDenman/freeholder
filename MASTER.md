@@ -5186,6 +5186,9 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   96 actual HTTP/API/MCP/contract/SDK checks then pass on NEW ordinary0–79
   with all80 hashes/profile/drain verified. Evidence and limits are in
   `deploy/http-null-results-2026-11-13.md`; protected CI remains required.
+  The hidden-location browser fixture now expects the declared null absence;
+  its full Chromium journey passes against the checked CI build, preserving
+  address privacy and unrelated POS/social access. Updated-head CI stays open.
   This repair does not close import, provider, security or stable acceptance.
 - [x] **C3.04** Make MCP discovery actor-aware—including actor kind, service
   opt-out and approval annotations—so listed tools are genuinely callable.

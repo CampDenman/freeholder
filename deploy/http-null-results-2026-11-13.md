@@ -53,3 +53,19 @@ database clients. Every earlier failed component database stays preserved.
 The main-based source and native proofs qualify this narrow response repair.
 Protected PR and merge-queue CI remain required. No deployment or stable gate
 has advanced.
+
+## Browser contract follow-up
+
+The first protected CI run at 3a29850b passed 42 checks and stopped on the
+hidden-location browser fixture's former `{ok:true}` absence expectation.
+Both `cms.resolvePage` and `locations.get` declare nullable outputs. The
+fixture now expects null for the hidden page and both ID/slug location reads;
+the hidden-list refusal, address omission, sitemap and POS/social checks stay
+unchanged. No application behavior changed in this follow-up.
+
+The complete focused Chromium journey passes locally in 14.345 seconds using
+the unchanged, digest-verified application artifact from CI run43443715799.
+The artifact ZIP and runtime tar hashes were verified; it contains no
+environment files. Renewed full types and focused browser lint pass. Independent
+read-only inspection confirms all80 migration identities and drained clients.
+Full protected CI must pass on the updated PR head before queueing a merge.
