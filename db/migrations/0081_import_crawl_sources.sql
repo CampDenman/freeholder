@@ -7,6 +7,7 @@ CREATE TABLE import_crawl_sources (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  run_id uuid NOT NULL REFERENCES import_runs(id) ON DELETE CASCADE,
  generation uuid NOT NULL,
+ recovery_of_source_id uuid REFERENCES import_crawl_sources(id) ON DELETE RESTRICT,
  kind text NOT NULL CHECK (kind IN ('wordpress-rest','sitemap','rss','atom','html')),
  site_url text CHECK (site_url IS NULL OR length(site_url) BETWEEN 1 AND 8192),
  source_url text CHECK (source_url IS NULL OR length(source_url) BETWEEN 1 AND 8192),
@@ -85,6 +86,8 @@ CREATE TABLE import_crawl_responses (
  discovery_ordinal integer NOT NULL DEFAULT 0 CHECK (discovery_ordinal BETWEEN 0 AND 20010),
  discovery_complete boolean NOT NULL DEFAULT false,
  started_at timestamptz NOT NULL,
+ wrapper_token_digest text CHECK (wrapper_token_digest IS NULL OR wrapper_token_digest ~ '^[a-f0-9]{64}$'),
+ wrapper_finished_at timestamptz,
  received_at timestamptz,
  provider_accepted_at timestamptz,
  retired_at timestamptz,
@@ -153,6 +156,7 @@ CREATE TRIGGER import_runs_crawl_writer BEFORE UPDATE OR DELETE ON import_runs F
 CREATE FUNCTION freeholder_guard_import_crawl_identity() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
  IF NEW.run_id IS DISTINCT FROM OLD.run_id OR NEW.generation IS DISTINCT FROM OLD.generation
+    OR NEW.recovery_of_source_id IS DISTINCT FROM OLD.recovery_of_source_id
     OR NEW.kind IS DISTINCT FROM OLD.kind OR NEW.created_by IS DISTINCT FROM OLD.created_by
     OR NEW.executor_identity IS DISTINCT FROM OLD.executor_identity
     OR NEW.source_started_at IS DISTINCT FROM OLD.source_started_at OR NEW.created_at IS DISTINCT FROM OLD.created_at
@@ -227,12 +231,18 @@ BEGIN
     OR NEW.claimed_by IS DISTINCT FROM OLD.claimed_by OR NEW.executor_identity IS DISTINCT FROM OLD.executor_identity
     OR NEW.key_digest IS DISTINCT FROM OLD.key_digest OR NEW.storage_namespace IS DISTINCT FROM OLD.storage_namespace
     OR NEW.reserved_bytes IS DISTINCT FROM OLD.reserved_bytes OR NEW.started_at IS DISTINCT FROM OLD.started_at
+    OR NEW.wrapper_token_digest IS DISTINCT FROM OLD.wrapper_token_digest
+    OR (OLD.wrapper_finished_at IS NOT NULL AND NEW.wrapper_finished_at IS DISTINCT FROM OLD.wrapper_finished_at)
     OR NEW.created_at IS DISTINCT FROM OLD.created_at
     OR (OLD.retired_at IS NOT NULL AND NEW.retired_at IS DISTINCT FROM OLD.retired_at)
     OR (OLD.redacted_at IS NOT NULL AND NEW.redacted_at IS DISTINCT FROM OLD.redacted_at)
     OR (OLD.received_at IS NOT NULL AND NEW.received_at IS DISTINCT FROM OLD.received_at)
     OR (OLD.provider_accepted_at IS NOT NULL AND NEW.provider_accepted_at IS DISTINCT FROM OLD.provider_accepted_at) THEN
   RAISE EXCEPTION 'An actual HTTP response cannot acquire a new source, executor or storage resource' USING ERRCODE='23514';
+ END IF;
+ IF NEW.wrapper_finished_at IS DISTINCT FROM OLD.wrapper_finished_at
+   AND (OLD.wrapper_token_digest IS NULL OR current_setting('freeholder.import_crawl_finished_wrapper',true) IS DISTINCT FROM OLD.wrapper_token_digest) THEN
+  RAISE EXCEPTION 'Only the actual admitted HTTP wrapper can record its finish fact' USING ERRCODE='55000';
  END IF;
  IF (OLD.facts IS NOT NULL AND NEW.facts IS DISTINCT FROM OLD.facts) OR NEW.storage_key IS DISTINCT FROM OLD.storage_key THEN
   IF NOT (NEW.state='retired' AND NEW.retired_at IS NOT NULL AND NEW.redacted_at IS NOT NULL AND NEW.storage_key IS NOT DISTINCT FROM OLD.storage_key AND NEW.facts IS NULL

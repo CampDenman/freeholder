@@ -14,6 +14,7 @@ import { claimCrawlGraphCatalog, applyCrawlGraphCatalog } from "./crawl-graph-pl
 import { indexCrawlOriginalResponse } from "./crawl-index";
 import { crawlOriginalFactsSchema } from "./crawl-original";
 import { readCrawlOriginalResponse } from "./crawl-original";
+import { recordCrawlWrapperFinish } from "./crawl-finish";
 
 export const advanceCrawl = defineOrchestratedService({
   name: "imports.advanceCrawl",
@@ -89,6 +90,10 @@ export const advanceCrawl = defineOrchestratedService({
       // claimed row and independent physical receipt still remain durable.
       await rememberCrawlCaptureFailure.call(phase, actor).catch(() => undefined);
       throw new ServiceError("conflict", "The original HTTP response needs verified recovery before this crawl can continue.");
+    } finally {
+      // This executes after the actual GET/PUT wrapper has returned or thrown.
+      // A missing finish fact remains recovery debt; no clock/GET infers it.
+      await recordCrawlWrapperFinish.call({ responseId: claim.response.id, token: claim.leaseToken }, { kind: "system" }).catch(() => undefined);
     }
   },
 });

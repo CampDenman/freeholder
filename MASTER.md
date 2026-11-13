@@ -6585,6 +6585,16 @@ deployments are portable, testable and incapable of silently forking the truth.
   cancellation/expiry/erasure acceptance remain required; C3.47 stays open.
   See deploy/import-http501-lifecycle-2026-11-12.md.
 
+  C3.47 runtime activation is now a separate source checkpoint: shared public
+  bounded start/advance/progress/cancel, eight-model privacy/job inventories,
+  four-locale owner controls, exact settled-original response recovery and an
+  explicitly distinct new source review. Actual wrapper completion has its own
+  immutable capability-bound fact; clocks and GETs do not establish it. The
+  source is unqualified and81 remains unjournalled pending full latest80
+  composition, new-schema/model checks, actual public transport/two-process
+  continuation and production browser/recovery acceptance. No checkbox closes.
+  `deploy/import-http-runtime-activation-source-2026-11-12.md` records the scope.
+
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
 #### Workforce completion

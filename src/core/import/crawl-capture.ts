@@ -41,7 +41,7 @@ function sourceUrl(value: string) {
 export const initializeCrawl = defineService({
   name: "imports.initializeCrawl", orchestratedBy: "imports.previewFromUrl", external: false,
   summary: "Reserve the actual selected public source and its first robots request.", kind: "mutation", permission: "scoped",
-  auditInputFields: ["id"], input: z.object({ id: z.uuid(), url: z.string().url().max(8_192) }), output: z.custom<Run>(),
+  auditInputFields: ["id"], input: z.object({ id: z.uuid(), url: z.string().url().max(8_192), recoveryOfSourceId: z.uuid().optional() }), output: z.custom<Run>(),
   handler: async (input, ctx) => {
     await assertCurrentImportAuthority(ctx, "imports.previewFromUrl");
     await lockContactIdentityForRead(ctx.tx); await markImportCrawlWriter(ctx.tx);
@@ -49,6 +49,12 @@ export const initializeCrawl = defineService({
     if (!run) throw new ServiceError("not_found", "No such source import.");
     const [existing] = await ctx.tx.select().from(importCrawlSources).where(eq(importCrawlSources.runId, run.id)).limit(1).for("update");
     const selected = sourceUrl(input.url);
+    if (input.recoveryOfSourceId) {
+      const caller = await currentImportAuthority(ctx);
+      if (caller.kind !== "user" || caller.role !== "owner" || caller.keyId) throw new ServiceError("permission", "Only the freshly verified owner can start a new source review for an older recovery.");
+      const [original] = await ctx.tx.select({ id: importCrawlSources.id }).from(importCrawlSources).where(eq(importCrawlSources.id, input.recoveryOfSourceId)).limit(1).for("share");
+      if (!original || original.id === existing?.id) throw new ServiceError("conflict", "Keep the actual original source separate from its new reviewed generation.");
+    }
     if (existing) {
       if (existing.sourceUrl !== selected.href || existing.state !== "discovering") throw new ServiceError("conflict", "Resume the unchanged source or start a new import.");
       return publicImportRun(run);
@@ -58,7 +64,7 @@ export const initializeCrawl = defineService({
     const site = sourceUrl(run.origin);
     if (site.origin !== selected.origin || run.kind === "wordpress-rest" && crawlRestCollectionUrl(site.href, "pages", 1) !== crawlRestCollectionUrl(selected.href, "pages", 1)) throw new ServiceError("validation", "The URL must belong to the selected original source instance.");
     const generation = randomUUID(), started = new Date(), robots = new URL("/robots.txt", selected).href;
-    const [source] = await ctx.tx.insert(importCrawlSources).values({ runId: run.id, generation, kind: run.kind as Source["kind"], siteUrl: site.href, sourceUrl: selected.href, createdBy: actorString(ctx.actor), executorIdentity: identity(await currentImportAuthority(ctx)), sourceStartedAt: started, expiresAt: new Date(started.getTime() + 86_400_000), nextRequestAt: started, requestCounter: 1, metadataBytes: Buffer.byteLength(robots) }).returning();
+    const [source] = await ctx.tx.insert(importCrawlSources).values({ runId: run.id, generation, recoveryOfSourceId: input.recoveryOfSourceId ?? null, kind: run.kind as Source["kind"], siteUrl: site.href, sourceUrl: selected.href, createdBy: actorString(ctx.actor), executorIdentity: identity(await currentImportAuthority(ctx)), sourceStartedAt: started, expiresAt: new Date(started.getTime() + 86_400_000), nextRequestAt: started, requestCounter: 1, metadataBytes: Buffer.byteLength(robots) }).returning();
     if (!source) throw new ServiceError("internal", "The original public source could not be reserved.");
     await ctx.tx.insert(importCrawlRequests).values({ sourceId: source.id, ordinal: 0, url: robots, urlDigest: hash(robots), role: "robots", depth: 0 });
     const [saved] = await ctx.tx.update(importRuns).set({ status: "discover", error: null, preview: {}, counts: { requests: 0, capturedBytes: 0, pages: 0 }, checkpoint: { ...object(run.checkpoint), sourceCrawl: { id: source.id, generation } } }).where(eq(importRuns.id, run.id)).returning();
@@ -110,7 +116,7 @@ export const claimCrawlCapture = defineService({
     const maximum = Math.min(remaining, request.role === "robots" ? 512 * 1024 : 20 * 1024 * 1024 - policy!.bytes);
     if (maximum <= 0) throw new ServiceError("validation", "This complete source exhausted its original byte budget.");
     const responseId = randomUUID(), leaseToken = randomUUID(), key = `import-crawl/${root.id}/${source.generation}/${responseId}.http`, started = new Date();
-    const [response] = await ctx.tx.insert(importCrawlResponses).values({ id: responseId, requestId: request.id, attempt: request.attempts + 1, claimedBy: actorString(ctx.actor), executorIdentity: identity(await currentImportAuthority(ctx)), storageKey: key, keyDigest: objectKeyDigest(key), storageNamespace: input.storageNamespace, reservedBytes: maximum, startedAt: started }).returning();
+    const [response] = await ctx.tx.insert(importCrawlResponses).values({ id: responseId, requestId: request.id, attempt: request.attempts + 1, claimedBy: actorString(ctx.actor), executorIdentity: identity(await currentImportAuthority(ctx)), storageKey: key, keyDigest: objectKeyDigest(key), storageNamespace: input.storageNamespace, reservedBytes: maximum, startedAt: started, wrapperTokenDigest: hash(leaseToken) }).returning();
     if (!response) throw new ServiceError("internal", "The actual response capture could not be reserved.");
     await reservePendingMediaObject(ctx, { key, role: "staged", bytes: maximum, contentType: "application/octet-stream" });
     await ctx.tx.update(importCrawlRequests).set({ state: "claimed", attempts: response.attempt }).where(eq(importCrawlRequests.id, request.id));
