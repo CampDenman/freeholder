@@ -40,7 +40,7 @@ describe.runIf(hasDatabase)("original buyer schedule and money erasure", { timeo
     const [artifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, requestId));
     return receipt.parse(artifact?.body).outcomes.find(outcome => outcome.scope === scope)?.pendingJobs ?? [];
   }
-  async function originalBuyer() {
+  async function seedPriorBuyer() {
     fixture = await seedMerchantCheckout80("destination");
     const [profile] = await db().select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id, fixture.profiles[0]!.profileId));
     const [item] = await db().select({ variant: productVariants }).from(cartItems).innerJoin(productVariants, eq(productVariants.id, cartItems.variantId)).where(eq(cartItems.cartId, fixture.cart.id));
@@ -73,7 +73,11 @@ describe.runIf(hasDatabase)("original buyer schedule and money erasure", { timeo
         providerCustomerRef: "cus_originalBuyer", providerMethodRef: "pm_originalBuyer", kind: "card", label: "Synthetic original saved method", status: "active",
         consentSource: "provider_checkout", consentedAt: new Date(), providerStatusAt: new Date() });
     });
-    const request = await createDataRequest.call({ contactId: fixture.buyer.id, request: { kind: "erasure" } }, OWNER);
+    return { subscriptionId, profile, buyerId: fixture.buyer.id };
+  }
+  async function originalBuyer() {
+    const { subscriptionId, profile, buyerId } = await seedPriorBuyer();
+    const request = await createDataRequest.call({ contactId: buyerId, request: { kind: "erasure" } }, OWNER);
     await verifyDataRequest.call({ id: request.id, method: "Synthetic original buyer verified separately from the seller" }, OWNER);
     const erased = await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER);
     expect(erased.request.status).toBe("in_progress");
@@ -85,7 +89,7 @@ describe.runIf(hasDatabase)("original buyer schedule and money erasure", { timeo
     const money = await getJob(BUYER_MONEY_ERASURE_JOB, moneyIds[0]!);
     if (!stop || !money) throw new Error("The source receipt named an actual queued task that could not be read.");
     expect(money.data).toMatchObject({ requestId: request.id, originalJobId: money.id, originalAgreementIds: [subscriptionId], originalPaymentIds: [] });
-    return { subscriptionId, request, cohort, stop, money, profile, buyerId: fixture.buyer.id };
+    return { subscriptionId, request, cohort, stop, money, profile, buyerId };
   }
 
   function provider(subscriptionId: string, pause?: { entered: ReturnType<typeof signal>; release: ReturnType<typeof signal> }) {
@@ -198,4 +202,23 @@ describe.runIf(hasDatabase)("original buyer schedule and money erasure", { timeo
     expect(physical.customerDeletes()).toBe(1);
     expect((await db().select().from(dataRequests).where(eq(dataRequests.id, source.request.id)))[0]?.status).toBe("completed");
   });
+
+  it("keeps original provider debt pending after a restored local billing mode changes", async () => {
+    const prior = await seedPriorBuyer(), physical = provider(prior.subscriptionId);
+    // A declared recovery fixture, not a newly accepted manual agreement:
+    // original create/route/resource facts stay intact while local state has
+    // changed. applyPendingPlan can write this local field; it is not stop proof.
+    await db().update(subscriptions).set({ billingMode: "manual" }).where(eq(subscriptions.id, prior.subscriptionId));
+    const request = await createDataRequest.call({ contactId: prior.buyerId, request: { kind: "erasure" } }, OWNER);
+    await verifyDataRequest.call({ id: request.id, method: "Synthetic restored buyer history with original provider resource still live" }, OWNER);
+    const result = await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER);
+    expect((await db().select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId, prior.subscriptionId)))[0])
+      .toMatchObject({ state: "active", providerSubscriptionRef: "sub_originalBuyer", operationRevision: 1 });
+    const agreement = receipt.parse(result.artifact.body).outcomes.find(outcome => outcome.scope === "subscriptions.agreements");
+    expect(agreement).toMatchObject({ outcome: "pending" });
+    expect(agreement?.pendingJobs?.length).toBeGreaterThan(0);
+    expect(await db().select().from(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, prior.buyerId))).toHaveLength(1);
+    expect(physical.subscriptionDeletes()).toBe(0); expect(physical.customerDeletes()).toBe(0);
+  });
+
 });
