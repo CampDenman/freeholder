@@ -12595,6 +12595,14 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
+  Source-only original media proof policy audit2026-11-13 adds the actual
+  transfer subject contact-FK private-search/noTTL reasons and documents all17
+  original proof tables' parent-scoped recovery/privacy lifetime. Invalid header
+  and quota labels leave the contact-FK/source-only opt-out maps; actual core
+  exports, privacy/accounting/recovery producers and asset search stay intact.
+  Existing conformance tests are unchanged and unrun; no fake source or purge
+  coverage is added. See
+  `deploy/media-original-first-capture-source-2026-11-13.md`. No item closes.
   Finite imported-input privacy follow-up2026-11-13: the exact3a/955 candidate
   supplies ordinary82-journal/22-model and shared-source registration proof,
   unchanged WXR/media-key minimization, held/accepted/later ownership boundaries

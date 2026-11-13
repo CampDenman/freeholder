@@ -93,8 +93,6 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
-  storage_quota_state: "Namespace capacity remains coupled to actual original storage inventory and cannot expire by age.",
-  storage_quota_objects: "Original resource quota reservations and settlement debt follow exact physical/privacy recovery; no TTL can erase unresolved accounting.",
   original_cash_recoveries: "Original financial cash-return owner and source observation; immutable financial proof, no age purge.",
   original_cash_recovery_operations: "Original admitted refund/fee/recipient read and write caller proof; no clock can erase its recovery debt.",
   original_cash_recovery_facts: "Private minimal authenticated financial callbacks, actual finishes and hosting reviews remain with original money.",
@@ -177,10 +175,10 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_provider_generations: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
   subscription_provider_invoice_observations: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
   subscription_provider_invoice_lines: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
+  media_storage_transfer_subjects: "Original transfer ownership has no generic TTL; shared contact merge, named holds and exact original privacy minimization govern it.",
   media_uploads:"Original reservations survive unresolved physical work; guarded lifecycle and subject erasure own retirement.",
   media_objects:"Original object ownership survives unknown writes; guarded physical cleanup and privacy jobs remove it.",
   media_multipart_resources:"Original multipart resources survive timers; explicit original-provider retirement and subject erasure own cleanup.",
-  media_original_erasure_scopes:"Immutable first original media membership/digests, including empty captures and explicit legacy birth debt, remain minimal erasure authority; physical/locator cleanup never replaces them with current ownership.",
   media_object_writes: "Original physical-operation and retired-key receipts are not a TTL store. Privacy minimizes personal fields only after settled original cleanup; unresolved work keeps its erasure receipt pending.",
   import_crawl_sources: "Original HTTP lifecycle and reader erasure minimize payload only after actual physical settlement and current holds. Immutable generation/receipt witnesses have no generic table TTL.",
   import_crawl_requests: "Original HTTP lifecycle and reader erasure minimize payload only after actual physical settlement and current holds. Immutable generation/receipt witnesses have no generic table TTL.",

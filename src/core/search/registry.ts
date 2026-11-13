@@ -69,8 +69,6 @@ export function clipSnippet(value: string | null | undefined): string | null {
  * Completeness is asserted in `tests/core/c11-14-search.test.ts`.
  */
 export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
-  storage_quota_state: "Private namespace capacity and original inventory accounting; authorized storage operations only, never content search.",
-  storage_quota_objects: "Private original object locator, quota reservation and settlement tokens; exact storage/privacy recovery only.",
   original_cash_recoveries: "Private exact original financial source; authorized shared recovery and financial export only.",
   original_cash_recovery_operations: "Private frozen money requests and physical caller capabilities are excluded from content search.",
   original_cash_recovery_facts: "Private raw financial facts and hashed hosting reviews have no public search projection.",
@@ -153,6 +151,7 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_provider_generations: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",
   subscription_provider_invoice_observations: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",
   subscription_provider_invoice_lines: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",
+  media_storage_transfer_subjects: "Private original transfer ownership pointer; shared contact merge and exact storage/privacy recovery own access, never a separate content-search hit.",
   media_object_writes:"Private physical-operation receipts; inspect through human storage recovery, not global search.",
   media_uploads:"Private original upload reservations and ownership; accessed through their authorized upload capability.",
   media_objects:"Private physical ownership pointers; the authorized library asset is the searchable record.",
