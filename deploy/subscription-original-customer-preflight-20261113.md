@@ -63,9 +63,21 @@ Logs and exact task-scoped ledgers use prefixes
 `/tmp/freeholder-customer-preflight356-{positive,hash}` and
 `/tmp/freeholder-customer-preflightf041-hold`; earlier failed logs remain.
 
+The two separate accepted-terms/profile witnesses now pass on currentf041,
+normalV10: accepted manual promises and owning-vs-foreign term-child undo
+(6.371 s), and actual owning-vs-foreign exemption-child undo (5.959 s).
+Independent readbacks bind exact terms/profile/merge/request/finisher IDs and
+retain the 81-entry881a journal with no clients. The first demonstrates frozen
+month/trial7/setup500/net4000+1000 terms after the current plan changes to
+year/trial0/setup900, both zero trial quotes and first-paid totals4725+1575,
+plus actual manual-buyer erasure. The second demonstrates that an exemption
+child change blocks only its owning profile's undo while the profile and
+version records themselves remain unchanged. All declarations are synthetic.
+Evidence prefixes are `/tmp/freeholder-accepted-termsf041-{first,exemption}`.
+There is no local invoice, payment or provider creation in these cases.
+
 The complete affected18-case native suite and repeated original four recovery
-controls have not yet run against this product delta. Accepted-terms/profile
-witness cases remain a separate unexecuted fixture. These facts are not full
+controls have not yet run against this product delta. These facts are not full
 subscription, actual provider or privacy completion acceptance.
 
 Missing original payload recovery is still debt. This preflight is not a
