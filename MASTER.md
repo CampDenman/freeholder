@@ -13892,8 +13892,10 @@ whatever is best for the people using the site.
   unchanged. Subsequent owned composition onto current885a37f2 appends the
   bank fragment after accepted terms: new unpublishedSQL e7834c90 preserves
   the entire881a byte prefix, published0–79 and the journal. This current
-  union has not run source/native/SQL/SDK qualification and needs a NEW
-  disposable database; all existing databases/clones stay unchanged. Generic/manual
+  union at38c997c5 passes full Node22 types,48-file lint and74 affected
+  source assertions with25 declared database skips. No native/SQL/SDK
+  qualification has run; it needs a NEW disposable database and final gates.
+  All existing databases/clones stay unchanged. Generic/manual
   causal discharge and legacy bank recovery remain unfinished work. This does
   not activate the new model or close C12.38. See
   `deploy/merchant-refund-current-state-2026-11-12.md`.

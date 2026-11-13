@@ -1,7 +1,7 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # Original bank refund current-state draft
 
-## Current-source integration, not yet qualified
+## Current-source integration; SQL/native acceptance pending
 
 The owned bank deltas are now composed onto exact885a37f2 in the isolated
 `/tmp/freeholder-current-bank80-20261112` worktree. Only additive MASTER/locale
@@ -13,11 +13,20 @@ The pure owned emitter now appends the bank fragment after accepted terms.
 New unpublished80 SQL is
 `e7834c9048ecd5eace52ecc391ff392f7b0701b396e02ddcfc364cb8743d82a5`.
 The complete prior881a7901 byte prefix, all published0–79 SQL and the journal
-are unchanged. The fragment itself is a008e940. No database, compiler, native,
-SDK, install or build has run in this new integration. It needs its own source
-qualification and a NEW disposable migration database; existingV10/881a and
+are unchanged. The fragment itself is a008e940. On exact38c997c5, full Node22
+8GB types, all48 changed TS/TSX lint and eight affected core files passed:
+74 assertions with0 failures and25 explicitly skipped database cases. The
+bank/private63, audit7 and search/retention source4 assertions ran against this
+actual composition. No database, native, SDK, install or build has run here.
+It still needs a NEW disposable migration database; existingV10/881a and
 earlier958/1ac databases/clones must not be changed or reused for bank tests.
 Pure-emission evidence is `/tmp/freeholder-bank-current80-current-source-assembly.json`.
+Source logs are `/tmp/freeholder-bank-current-union80-types-v1.log`,
+`/tmp/freeholder-bank-current-union80-lint-v1.log` and
+`/tmp/freeholder-bank-current-union80-controls-v1.{json,log}`. All runners exited;
+no database environment/client was used. Twelve dependency manifests matched
+and an existing dependency tree was borrowed without an install. These finite
+checks do not replace full final gates, generated SDK/notes or native proof.
 
 ## Earlier isolated source qualification
 
