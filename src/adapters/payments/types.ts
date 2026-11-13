@@ -3,6 +3,9 @@
 // Provider-neutral payment boundary (MASTER.md §12, C5.01).
 
 import type { MerchantCashAuxiliaryRequest, MerchantCashAuxiliaryEvidence } from "./merchant-cash-auxiliary-types";
+import type { MerchantControlledBootstrapRequest, MerchantControlledSubscriptionPauseRequest, MerchantControlledSubscriptionReadRequest,
+  MerchantControlledSubscriptionAcknowledgment, MerchantControlledBootstrapInventory, MerchantControlledProrationPreviewRequest, MerchantControlledProrationPreview, MerchantControlledInvoiceReadRequest, MerchantControlledInvoiceInventory, MerchantControlledProductRequest, MerchantControlledProductReadRequest, MerchantControlledBootstrapDiscoveryRequest, MerchantControlledCalendarUpdateRequest, MerchantControlledCalendarInventory, MerchantControlledCalendarCancelRequest, MerchantControlledInvoiceListInventory } from "./merchant-controlled-subscription-types";
+export * from "./merchant-controlled-subscription-types";
 import type { MerchantReturnedCashEvidence } from "./merchant-returned-cash-types";
 import type { AdapterStatus, RawProviderRequest } from "../types";
 
@@ -694,6 +697,18 @@ export interface PaymentAdapter {
   stopMerchantScheduleInvoice?(request: MerchantScheduleInvoiceActionRequest): Promise<void>;
   inspectMerchantScheduleInvoiceStop?(request: MerchantScheduleInvoiceActionRequest): Promise<void>;
   /** NEW original phase protocol; optional until its durable admission is enabled. */
+  inspectMerchantControlledCalendar?(request:MerchantControlledSubscriptionReadRequest):Promise<MerchantControlledCalendarInventory>;
+  cancelMerchantControlledCalendar?(request:MerchantControlledCalendarCancelRequest):Promise<{providerSubscriptionRef:string;requiresIndependentRead:true}>;
+  listMerchantControlledInvoices?(request:MerchantControlledSubscriptionReadRequest):Promise<MerchantControlledInvoiceListInventory>;
+  updateMerchantControlledCalendar?(request:MerchantControlledCalendarUpdateRequest):Promise<{providerSubscriptionRef:string;providerInvoiceRef:string|null;prorationSuppressed:true;pauseRequested:true;requiresIndependentRead:true}>;
+  discoverMerchantControlledBootstrap?(request: MerchantControlledBootstrapDiscoveryRequest): Promise<{complete:true;matches:Array<{providerSubscriptionRef:string;providerInvoiceRef:string|null}>}>;
+  createMerchantControlledTaxProduct?(request: MerchantControlledProductRequest): Promise<{createdProductRef:string}>;
+  inspectMerchantControlledTaxProduct?(request: MerchantControlledProductReadRequest): Promise<{createdProductRef:string;component:"merchant_declared_tax_collection";taxAuthority:"canonical_merchant_tax_ledger"}>;
+  inspectMerchantControlledInvoice?(request: MerchantControlledInvoiceReadRequest): Promise<MerchantControlledInvoiceInventory>;
+  previewMerchantControlledProration?(request: MerchantControlledProrationPreviewRequest): Promise<MerchantControlledProrationPreview>;
+  createMerchantControlledBootstrap?(request: MerchantControlledBootstrapRequest): Promise<MerchantControlledSubscriptionAcknowledgment>;
+  pauseMerchantControlledBootstrap?(request: MerchantControlledSubscriptionPauseRequest): Promise<MerchantControlledSubscriptionAcknowledgment>;
+  inspectMerchantControlledBootstrap?(request: MerchantControlledSubscriptionReadRequest): Promise<MerchantControlledBootstrapInventory>;
   createMerchantPhaseProduct?(request: MerchantPhaseProductRequest): Promise<{ providerProductRef: string }>;
   inspectMerchantPhaseProduct?(request: MerchantPhaseProductReadRequest): Promise<{ providerProductRef: string }>;
   createMerchantPhaseSchedule?(request: MerchantPhaseScheduleRequest): Promise<MerchantPhaseScheduleInventory>;
