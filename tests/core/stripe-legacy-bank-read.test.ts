@@ -59,3 +59,55 @@ describe("historical bank refund exact resource reader", () => {
     expect(paths).toEqual([]);
   });
 });
+
+describe("historical cash inventory read authority", () => {
+  function inventory(failSecondPage: boolean) {
+    const order: string[] = [];
+    const fetcher = vi.fn<typeof fetch>(async (input, init = {}) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      expect(init.method).toBe("GET");
+      if (url.pathname === "/v1/account") return Response.json({ id: "acct_currentAuthenticatedPlatform" });
+      expect(new Headers(init.headers).get("stripe-account")).toBe("acct_originalSeller");
+      if (url.pathname === "/v1/payment_intents/pi_historical") return Response.json({ id: "pi_historical", status: "succeeded", amount_received: 1000, currency: "cad", latest_charge: "ch_historical", amount_capturable: 0 });
+      if (url.pathname === "/v1/charges/ch_historical") {
+        expect(order).toEqual(["primary"]);
+        return Response.json({ id: "ch_historical", payment_intent: "pi_historical", amount_captured: 1000, amount_refunded: failSecondPage ? 200 : 0,
+          currency: "cad", paid: true, captured: true, refunded: false, application_fee: null, transfer: null });
+      }
+      if (url.pathname === "/v1/refunds") {
+        if (url.searchParams.has("starting_after")) {
+          expect(order).toEqual(["primary", "pyr_historical", "pyr_unassigned"]);
+          throw Error("Synthetic later inventory page failure after all earlier callbacks.");
+        }
+        return Response.json({ has_more: failSecondPage, data: failSecondPage ? [
+          { id: "pyr_historical", payment_intent: "pi_historical", charge: "ch_historical", amount: 400, currency: "cad", status: "failed" },
+          { id: "pyr_unassigned", payment_intent: "pi_historical", charge: "ch_historical", amount: 200, currency: "cad", status: "succeeded" },
+        ] : [] });
+      }
+      if (url.pathname === "/v1/disputes") return Response.json({ data: [], has_more: false });
+      throw Error(`Unexpected historical cash read ${url.pathname}`);
+    });
+    const adapter = createStripePayments({ secretKey: "sk_legacy_inventory_fixture_only", webhookSecrets: ["whsec_legacy_inventory_fixture_only"], fetch: fetcher });
+    const read = adapter.inspectLegacyBankCash?.bind(adapter);
+    if (!read) throw Error("The actual factory must expose the primary-first read-only inventory edge.");
+    return { read, order };
+  }
+  it("invokes primary and every known or unmatched refund callback before a later inventory page can fail", async () => {
+    const { read, order } = inventory(true);
+    await expect(read({ originalPaymentRef: "pi_historical", originalChargeAccountId: "acct_originalSeller",
+      onPrimaryObserved: async fact => { expect(fact).toMatchObject({ originalCreateProtocolVersion: null, originalCreatePlatformAccountId: null,
+        actual: { providerRef: "pi_historical", amountMinor: 1000, customerChargeVerified: false } }); order.push("primary"); },
+      onRefundObserved: async fact => { expect(fact.actual.bindingVerified).toBe(false); order.push(fact.actual.providerRef); },
+      onInventoryObserved: async () => {},
+    })).rejects.toBeDefined();
+    expect(order).toEqual(["primary", "pyr_historical", "pyr_unassigned"]);
+  });
+  it("returns observed namespace and complete inventory without claiming an original create platform or a returned-cash settlement", async () => {
+    const { read, order } = inventory(false);
+    const result = await read({ originalPaymentRef: "pi_historical", originalChargeAccountId: "acct_originalSeller",
+      onPrimaryObserved: async () => { order.push("primary"); }, onRefundObserved: async () => {}, onInventoryObserved: async () => {}, });
+    expect(result).toMatchObject({ readProviderPlatformAccountId: "acct_currentAuthenticatedPlatform", readProtocolVersion: "2026-02-25.clover",
+      originalCreatePlatformAccountId: null, originalCreateProtocolVersion: null,
+      actual: { amountMinor: 1000, amountRefundedMinor: 0, refundsComplete: true, disputesComplete: true, refunds: [] } });
+  });
+});

@@ -13931,7 +13931,12 @@ whatever is best for the people using the site.
   request or refund attempt. Its freshly authenticated platform and explicit
   read protocol are distinct from unknown original-create metadata, which
   remains null. The callback retains nullable or contradictory raw response
-  facts before terminal policy. No durable legacy receipt, caller-stop review,
+  facts before terminal policy. A staged full cash/refund/fee/recipient/dispute
+  reader also reuses the bounded primary-first provider collector, preserving
+  every callback before a later page can fail; unmatched resources are not
+  associated by amount. Its fresh-read wrapper keeps original-create metadata
+  unknown. Both adapter methods and15 draft HTTP controls are unqualified.
+  No durable legacy receipt, caller-stop review,
   money projection, causal replacement, UI or public recovery service is claimed
   by this unqualified adapter stage; actual legacy recovery remains required.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
