@@ -6660,6 +6660,16 @@ deployments are portable, testable and incapable of silently forking the truth.
   continuation and production browser/recovery acceptance. No checkbox closes.
   `deploy/import-http-runtime-activation-source-2026-11-12.md` records the scope.
 
+  Combined current80/import81 source qualification (2026-11-13, C1.08/C3.47):
+  full Node22 types and whole-lint coverage pass after the preserved narrow
+  financial lint corrections; all44 static-contract files supply384 actual
+  passing assertions/26 declared skips/zero pending, and18 affected import/
+  privacy/source files supply83 pure passes/40 explicit database skips. Normal81
+  remains unapplied (SQL80 SHA3a686245…,81 SHA8c65864e…). The unchanged original
+  WXR oracle,12-model/guard diagnostic, native ownership/recovery and public
+  two-process/browser/SDK acceptance remain open. Exact evidence and limits:
+  `deploy/import-upload-index-erasure-source-2026-11-13.md`.
+
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
 #### Workforce completion
