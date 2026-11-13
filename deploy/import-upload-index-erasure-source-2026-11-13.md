@@ -190,6 +190,26 @@ classification found exactly one current-request task. An authorized new-named
 collector filtered that exact request and passed without rerunning the native
 case. Product/tests/SQL and all original oracles were unchanged.
 
+The documented retention policy makes `partially_completed` terminal. The
+existing shared services do not re-verify or fulfill that same terminal request,
+and removing a named exception does not itself queue erasure. The owner creates
+and verifies a NEW request for the same preserved contact after hold removal;
+`deploy/privacy-rights.md` documents this policy. No new public resume action or
+automatic release feature is required by these finite controls.
+
+A separate source-only fixture,
+`tests/core/import-source-hold-release-redrive.test.ts`, prepares two actual WXR/
+ZIP controls for that documented path. Each first preserves a legal original
+hold, rolls back, removes the named hold and physically retires the raw bytes.
+It then uses a new verified request for the already-erased contact, requiring
+full old-index minimization and truthful completion through its actual durable
+task. The original retained receipt and first capture must remain exact. A new
+501-entry graph created after the new initial capture must retain its original
+snapshot/bytes; retirement cannot issue another DELETE or adopt current graph/
+namespace state, and replay must be idempotent. These controls are unqualified
+and unrun; they establish no additional acceptance or product-failure claim.
+The previous archive-held dataset and all original b99 oracles remain preserved.
+
 Seven other small REST authority/cancellation/recovery cases remain unselected.
 Live API/MCP/SDK parity, four-locale production browser, broader old-image and
 record/recovery coverage, final combined-source qualification, owner/provider
