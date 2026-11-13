@@ -15648,6 +15648,19 @@ whatever is best for the people using the site.
   `payment-provider-customer-erasure.md`; `deploy/privacy-rights.md`.
   Actual provider acceptance and independent review remain open; this source
   increment closes no C-item and does not enable direct seller collection.
+  Original cash inspection source repair (2026-11-13, C12.38/C1.08/C11.10):
+  the current history now counts bare cash-inspection admissions and their real
+  matching finishes before any callback. A new ordinary reader authenticates
+  current complete charge/refund/dispute evidence separately from returned
+  disposition, retaining negative snapshots and every original caller. The
+  existing final-return wrapper keeps its strict return/fee/refund predicates;
+  late holder callbacks cannot rewrite a finished read. Seven pure and three
+  actual shared-service/HTTP native controls are PREPARED/UNRUN; the four
+  existing cash oracles remain unchanged. No schema, future-six import or gate
+  changes. Authentic lost-process stop/review for bare inspections, prospective
+  controlled observation/application and source-money transition fencing remain
+  REQUIRED implementation/qualification. No later read invents an old finish.
+  See deploy/original-cash-inspection-current83-source-20261113.md.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;

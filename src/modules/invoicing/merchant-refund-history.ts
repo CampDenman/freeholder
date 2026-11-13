@@ -8,8 +8,9 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations } from "./merchant-collection-schema";
 import { assertMerchantCreatorsQuiesced } from "./merchant-payment-request";
 import type { MerchantRefundCashOrigin } from "./merchant-refund-origin";
-import { merchantCashReturnInspections, merchantCashReturnObservations, merchantCashReturnPrimaryObservations, merchantRefundCreationRefusals, merchantRefundDispatches,
+import { merchantCashReturnInspections, merchantCashReturnInspectionFinishes, merchantCashReturnObservations, merchantCashReturnPrimaryObservations, merchantRefundCreationRefusals, merchantRefundDispatches,
   merchantRefundDispatchFinishes, merchantRefundDispatchStops, merchantRefundObservations, merchantRefundRequests, merchantRefundReservationRetirements, merchantRefundResourceBindings, merchantRefundTerminalReceipts } from "./merchant-refund-schema";
+import { cashInspectionCallersClosed } from "./merchant-cash-inspection-evidence";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { merchantRefundObservationCaptures } from "./merchant-refund-current-schema";
 import { originalCashCallersFinished, originalCashHistoricalFeesQuiesced, originalCashRecoveryCashWitness } from "./original-cash-recovery-store";
@@ -57,6 +58,13 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
   const inspectionScope = and(eq(merchantCashReturnInspections.providerPlatformAccountId, cash.providerPlatformAccountId),
     sql`${merchantCashReturnInspections.chargeAccountId} is not distinct from ${cash.chargeAccountId}`, eq(merchantCashReturnInspections.originalPaymentRef, cash.providerRef),
     ownInspectionId ? sql`${merchantCashReturnInspections.id} <> ${ownInspectionId}::uuid` : undefined);
+  // Every actual admission is debt before the first callback. Own admission
+  // remains in the closure check; only its explicitly composed causal rows are
+  // absent from the historical pre-read source digest.
+  const inspectionAdmissions=await ctx.tx.select().from(merchantCashReturnInspections).where(and(eq(merchantCashReturnInspections.providerPlatformAccountId,cash.providerPlatformAccountId),
+    sql`${merchantCashReturnInspections.chargeAccountId} is not distinct from ${cash.chargeAccountId}`,eq(merchantCashReturnInspections.originalPaymentRef,cash.providerRef))).limit(MAX+1);
+  const inspectionIds=inspectionAdmissions.map(row=>row.id),inspectionFinishes=inspectionIds.length?await ctx.tx.select().from(merchantCashReturnInspectionFinishes).where(inArray(merchantCashReturnInspectionFinishes.inspectionId,inspectionIds)).limit(MAX+1):[];
+  const otherInspectionAdmissions=inspectionAdmissions.filter(row=>row.id!==ownInspectionId),otherInspectionFinishes=inspectionFinishes.filter(row=>row.inspectionId!==ownInspectionId);
   const otherPrimary = await ctx.tx.select({ observation: merchantCashReturnPrimaryObservations }).from(merchantCashReturnPrimaryObservations)
     .innerJoin(merchantCashReturnInspections, eq(merchantCashReturnInspections.id, merchantCashReturnPrimaryObservations.inspectionId)).where(inspectionScope).limit(MAX + 1);
   const otherReturns = await ctx.tx.select({ observation: merchantCashReturnObservations }).from(merchantCashReturnObservations)
@@ -66,10 +74,10 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
     .where(inArray(merchantAgreementPaymentRoutes.paymentId, paymentIds)).limit(MAX + 1) : [];
   const controlled = await controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.subscriptionId));
   const inventory = { requests, retirements, observations, observationCaptures, dispatches, finishes, stops, refusals, terminals, bindings, paymentCash, subscriptionCash, receiptRows, aliases, fees, feeObservations, otherPrimary, otherReturns,
-    recoveryOwners: recovery.owners, recoveryOperations: recovery.operations, recoveryFacts: recovery.facts.filter(fact => !["partial_closure", "unassigned_refund_review", "partial_target"].includes(fact.kind)), recoveryFeedback:recovery.feedback, ...(controlled.entries.length ? { controlledFinancial: controlled.entries } : {}) };
+    recoveryOwners: recovery.owners, recoveryOperations: recovery.operations, recoveryFacts: recovery.facts.filter(fact => !["partial_closure", "unassigned_refund_review", "partial_target"].includes(fact.kind)), recoveryFeedback:recovery.feedback, ...(otherInspectionAdmissions.length||otherInspectionFinishes.length?{cashInspectionAdmissions:otherInspectionAdmissions,cashInspectionFinishes:otherInspectionFinishes}:{}), ...(controlled.entries.length ? { controlledFinancial: controlled.entries } : {}) };
   const inventoryCount = Object.values(inventory).reduce((count, rows) => count + rows.length, 0);
-  const incomplete = inventoryCount > MAX || controlled.incomplete || controlledParents.length > MAX;
-  let creatorsQuiesced = !incomplete && dispatches.every(call => finishes.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id)
+  const incomplete = inventoryCount+inspectionAdmissions.length+inspectionFinishes.length-otherInspectionAdmissions.length-otherInspectionFinishes.length > MAX || controlled.incomplete || controlledParents.length > MAX;
+  let creatorsQuiesced = !incomplete && cashInspectionCallersClosed(inspectionAdmissions,inspectionFinishes) && dispatches.every(call => finishes.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id)
     || stops.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id && row.requestDigest === call.requestDigest));
   for (const paymentId of paymentIds) {
     try { await assertMerchantCreatorsQuiesced(ctx, paymentId); }
