@@ -9,7 +9,7 @@ import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { moduleSettings } from "@/core/settings/schema";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { subscriptionControlledResources,subscriptionControlledOperations } from "./controlled-provider-schema";
-import { subscriptionCommercialTerms } from "./schema";
+import { subscriptionCommercialTerms,subscriptions } from "./schema";
 import { subscriptionControlledCollections,subscriptionControlledQuotes } from "./controlled-provider-collection-schema";
 import { controlledCollectionState } from "./controlled-provider-collection-state";
 import { controlledCalendarSource } from "./controlled-provider-calendar-source";
@@ -33,9 +33,11 @@ export const planControlledCollectionOperation=defineService({name:"subscription
   const[reference]=await ctx.tx.select({resourceId:subscriptionControlledQuotes.resourceId}).from(subscriptionControlledCollections).innerJoin(subscriptionControlledQuotes,eq(subscriptionControlledQuotes.id,subscriptionControlledCollections.quoteId)).where(eq(subscriptionControlledCollections.id,input.collectionId)).limit(1);
   if(!reference)throw new ServiceError("not_found","There is no such accepted controlled canonical target.");
   await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`controlled-provider:${reference.resourceId}`}))`);
-  await ctx.tx.select({id:subscriptionControlledResources.id}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,reference.resourceId)).limit(1).for("update");
+  const[heldResource]=await ctx.tx.select({id:subscriptionControlledResources.id,subscriptionId:subscriptionControlledResources.subscriptionId}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,reference.resourceId)).limit(1).for("update");
+  if(!heldResource)throw new ServiceError("conflict","Retain the exact original resource before target admission.");
+  await ctx.tx.select({id:subscriptions.id}).from(subscriptions).where(eq(subscriptions.id,heldResource.subscriptionId)).limit(1).for("update");
   let source=await controlledCollectionState(ctx.tx,input.collectionId);
-  // Canonical order follows the held resource: original payments, target
+  // Canonical order follows the held resource and parent: original payments, target
   // invoice, then notes. Re-read after the actual parent locks are acquired.
   for(const id of [...new Set(source.canonical.funding.map(row=>row.sourcePaymentId))].sort())await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment:${id}`}))`);
   await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`invoice:${source.canonical.invoice.id}`}))`);

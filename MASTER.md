@@ -15184,6 +15184,15 @@ whatever is best for the people using the site.
   authentic late/partial recovery still REQUIRE implementation and qualification.
   No requirement is deferred. See
   `deploy/subscription-controlled-provider80-source-20261113.md`.
+  Controlled target identity/lock source correction (2026-11-13, C9.33/C12.38):
+  the accepted commercial digest now binds stable subscription/source/invoice/
+  original policy and issued-credit economic identity, separately from current
+  contact aliases and mutable status/timestamps. Current invoice/parent buyer
+  and merchant policy identities must still agree, and full physical row SHA
+  remains in current financial revisions. The target planner locks the actual
+  parent immediately after resource, before payments/invoice/notes, preserving
+  resource→parent→sorted payment→invoice→note→cash. This is source only;
+  qualification and the full positive lifecycle remain required.
   Controlled canonical collection contract/runtime checkpoint (2026-11-13,
   C9.33/C9.38/C12.38/C1.08): a new six-family source boundary distinguishes
   actual ordinary periods from explicit prorations and preserves original

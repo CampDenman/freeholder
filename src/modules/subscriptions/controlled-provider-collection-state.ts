@@ -4,7 +4,7 @@
 import { eq } from "drizzle-orm";
 import { ServiceError,type Tx } from "@/core/service";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
-import { subscriptionCommercialTerms,subscriptions } from "./schema";
+import { subscriptionCommercialTerms,subscriptionMarketPolicies,subscriptions } from "./schema";
 import { subscriptionControlledResources } from "./controlled-provider-schema";
 import { subscriptionControlledQuotes,subscriptionControlledCollections,subscriptionControlledComponents,subscriptionControlledInvoiceBindings,subscriptionControlledItemReceipts,subscriptionControlledInvoiceProofs } from "./controlled-provider-collection-schema";
 import { controlledComponentProvenance,controlledTargetReview } from "./controlled-provider-collection-contract";
@@ -34,6 +34,9 @@ export async function controlledCollectionState(tx:Tx,collectionId:string){
   ||collection.kind==="period"&&collection.acceptanceKind!=="original_period_mandate"||collection.kind==="proration"&&collection.acceptanceKind!=="explicit_change")refuse();
  const history=await controlledProviderJournal(tx,resource.id);authenticatedControlledQuote(quote,resource,history);
  const canonical=await controlledCanonicalTarget(tx,collection.invoiceId);
+ const[market]=await tx.select().from(subscriptionMarketPolicies).where(eq(subscriptionMarketPolicies.subscriptionId,parent.id)).limit(1);
+ if(!market||market.model!=="seller_merchant"||canonical.marketPolicy.sellerUserId!==market.sellerUserId||canonical.marketPolicy.siteFeeBps!==market.siteFeeBps
+  ||canonical.marketPolicy.merchantContactId!==market.merchantContactId||canonical.marketPolicy.providerAccountId!==market.providerAccountId)refuse();
  const components=await tx.select().from(subscriptionControlledComponents).where(eq(subscriptionControlledComponents.collectionId,collection.id)).orderBy(subscriptionControlledComponents.position).limit(5001);
  const[binding]=await tx.select().from(subscriptionControlledInvoiceBindings).where(eq(subscriptionControlledInvoiceBindings.collectionId,collection.id)).limit(1);
  const itemReceipts=[];
