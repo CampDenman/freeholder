@@ -13853,6 +13853,21 @@ whatever is best for the people using the site.
   artifacts stay preserved. Provider admission remains closed, and amendments,
   money-finisher integration and full provider acceptance are still required.
   See `deploy/current-subscription-terms80-source-2026-11-12.md`.
+  Current-source follow-up at81e42159: fresh ordinary0–80 SQL881a migration
+  passed5.753s on a NEW V10 database; three actual retention/terms models passed
+  full SQL parity. All384 source assertions passed with26 explicit DB skips,
+  composed finisher types/lint/40 focused assertions and616-note metadata pass.
+  Four separate actual buyer-erasure journeys passed: paused cancellation6.354s,
+  current hold/release5.946s, corrupt original artifact5.748s and a hold after
+  money completion/before customer DELETE5.700s. Independent per-case ledgers
+  verify scope outcomes, credentials, original resource/cohort and seller
+  preservation, unchanged81-entry journal and no remaining database clients.
+  This uses a synthetic prior-create journal with actual shared services/jobs
+  and intercepted provider HTTP; it does not prove new provider creation,
+  accepted-terms signup or actual provider-account acceptance. Actual terms
+  merge witnesses, paid/returned cash, missing/restored queue recovery, late
+  positives, amendments and complete browser/provider acceptance remain open.
+  Provider phase admission remains false; C1.08/C12.38 and stable stay open.
   Current-main financial composition 2026-11-12: exact `73e145af` merges protected
   main `bad846e4` (#694) and both fee repairs while preserving SQL958, all published
   migrations and helper `46a6ec02`. Full source gates passed at `5f53daf5` (384 assertions,

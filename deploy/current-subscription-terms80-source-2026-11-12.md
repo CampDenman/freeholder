@@ -33,3 +33,52 @@ place. Initial model/native/source qualification is still pending.
 Provider phase admission remains false. Actual amendments, complete paid invoice
 and returned-cash inventory, composed money-erasure finishing, browser/SDK/provider
 acceptance and full C12.38 remain open. This is not stable or launch sign-off.
+
+## Actual current-source database and buyer erasure qualification
+
+The composed current source at `81e42159` includes the real money-finisher
+implementation and the four actual buyer journeys. Full Node22 types and
+whole-project lint passed for the terms composition; all44 source-contract files
+passed384 assertions with26 declared database skips. The composed finisher
+passed fresh types, twelve-file lint, the same384 source assertions and40
+focused assertions, plus metadata and actual616-note generation. The added
+four-case fixture separately passed types and focused lint.
+
+A NEW `freeholder_collection80_normal_v10_terms_test_20261112` database passed
+ordinary0–80 migration in5.753s. Actual Drizzle/SQL parity passed for both
+retention models and subscription_commercial_terms: columns, types, defaults,
+nullability, PKs, FK delete actions, checks and indexes. Existing financial and
+retention tables/guards remained present, with81 journal entries and the exact
+SQL881a hash. PostgreSQL retained fsync=on, jit=off and recovery=false.
+
+Four original60-second, bail=1 native cases then ran separately without retries:
+
+| Actual buyer journey | Duration | Result |
+|---|---:|---|
+| Cancellation caller paused, then original queued jobs converge |6.354s|PASS|
+| Current hold before money finisher, then actual release |5.946s|PASS|
+| Parseable corrupt original artifact |5.748s|PASS: recovery, no customer I/O/minimization|
+| New hold after money completion but before customer DELETE |5.700s|PASS: DELETE refused until release|
+
+These use the actual shared services, real queued getJob payloads/IDs and actual
+registered job bodies; the provider factory reaches an intercepted HTTP edge
+outside the business transaction. The buyer differs from the seller. Setup
+explicitly records a synthetic prior-create journal: it does not prove a new
+provider creation, accepted-terms signup or an actual provider account. Each
+command selects one case; the other three filtered cases are not extra coverage.
+
+Independent per-case database readbacks show both scopes erased/pending0 and
+methods/customers0 after convergence, with the original resource quiesced,
+cohort completed and seller profile active. The stored agreement remains active
+with local cancellation/access flags; remote stop proof comes from the original
+resource, not this local status. Corruption instead leaves both scopes pending1,
+credentials/resource intact and the original artifact body/checksum preserved.
+Every case kept the81-entry journal and drained all database clients before the
+next fixture reset. Reports, per-case ledgers and diagnostic logs are preserved
+under `/tmp/freeholder-current-buyer-money-v10-*` and
+`/tmp/freeholder-collection80-normal-diagnostic-v10-terms.*`.
+
+Provider admission remains false. Actual terms/profile merge witnesses, mutable
+local-mode and missing original-finisher recovery controls, paid/returned cash,
+late positive recovery, amendments, browser/SDK and full provider acceptance
+remain required. This targeted result leaves C1.08/C12.38 and stable open.
