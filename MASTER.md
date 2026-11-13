@@ -13975,11 +13975,18 @@ whatever is best for the people using the site.
   and28da stopped legacy readers/causal replacements. Root witnesses include
   exact stop and signed lineage children with complete six-array bounds.
   Unpublished80 SHA2100aa76 appends exact owned recovery tails after the whole
-  c189 prefix; published0–79 and journal remain byte exact. It is UNQUALIFIED
-  and UNAPPLIED; no prototype/golden has been migrated. Prepared actual
-  current-only-lineage merge-undo control, full source/native/new-DB/upgrade/
-  SDK/browser/provider and remaining RMA/amendment/future-lineage work are
-  still required. No model admission or live C-item is closed.
+  c189 prefix; published0–79 and journal remain byte exact. Sourceef45 passes
+  types/wholelint/72 nonempty files/607 assertions with45 explicit DB skips and
+  metadata gates; the only initial type issue was the now-paired form label.
+  NEW V17 ordinary0–80 passes6.005s/81 journal entries/13 named models/47tables
+  and additional guards. First actual causal legacy refund case passes7.858s
+  (paid1000/refunded800/three400 refunds/one authentic lineage/six returned
+  reads/62 facts); reservation-only merge-undo control passes5.952s
+  (paid1000/refunded0/childcreated/no extra IO). Per-case independent UTC
+  ledger/full source journal/empty-client checks pass. Remaining four legacy
+  and three schedule recovery cases, combined regressions/upgrade/SDK/browser/
+  provider and RMA/amendment/future-lineage work remain required. All earlier
+  prototypes/goldens stay untouched. No model admission or live C-item closes.
   Actual phase-producer repair 2026-11-13 (C12.38): test-only3ea on c189
   genuinely failed5.776s after an actual original schedule ACK and returned
   caller, because the real adapter DTO lacks the core projection version.

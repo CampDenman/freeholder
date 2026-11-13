@@ -168,7 +168,7 @@ A sixth actual legacy recovery control is prepared: after finished original
 reads and a contact merge, only the actual signed replacement reservation is
 added; it must change the owned financial fingerprint, refuse undo without
 changing canonical ownership, and create no provider call or cash. It is unrun.
-The original five source controls are also unrun at this next composition.
+The five original legacy recovery native cases were unrun when this composition was frozen; the first is now proved below.
 
 The assembler appends the two owned recovery suffixes after complete c189.
 New unpublished80 SHA-256 is
@@ -176,9 +176,27 @@ New unpublished80 SHA-256 is
 Prior published0–79, journal entries and the complete c189 byte prefix stay
 exact. The stop-recovery tail SHAea555f14 and legacy-recovery tail SHAd4ae54e3
 remain their owners' exact bytes. No database has been migrated to2100.
-The new source is UNQUALIFIED. It needs full bounded NoDB qualification and a
-NEW normal0–80 database before its actual controls, populated-upgrade, SDK,
-browser and provider proof. V14/V15 failures, V16 producer success and every
+Sourceef45c63b passes full types, whole-tree lint,72 nonempty actual test
+files/607 assertions with45 declared database skips and zero pending, plus
+license/634-note/plan gates. The initial missing recovery-form htmlFor was
+corrected with a per-reader label/input ID; no permission or oracle changed.
+
+NEW V17 ordinary0–80 passes6.005s with81 journal entries, thirteen named model
+definitions,47 required tables and all additional guards. The original full
+c189 prefix remains exact. First actual legacy causal journey passes7.858s:
+three distinct400 refunds retain the failed parent, unrelated success and
+exact successful causal child; paid1000/refunded800, one authentic signed
+parent/child link, six actual returned reads and62 facts agree independently.
+The new reservation-only merge-undo control passes5.952s: child remains
+created without another provider call, paid1000/refunded0; one finished read/
+seven facts and only the owned signed lineage change prevent unsafe undo
+without changing canonical invoice/contact ownership. Independent UTC
+money/receipt ledgers, all81 source journal hashes and empty client inventories
+follow each case before any later owned fixture reset.
+
+The remaining four legacy recovery cases, three schedule recovery cases,
+combined regression, populated-upgrade, SDK, browser and provider proof remain
+unrun on2100. V14/V15 failures, V16 producer success and every
 earlier prototype/golden stay untouched. This checkpoint supplies no enabled
 model, C-item closure or stable sign-off; amendments/future-invoice lineage and
 exact legacy RMA integration remain required source work.
