@@ -60,4 +60,16 @@ describe("original primary schedule cancellation evidence", () => {
     expect(observed).toMatchObject({ source: "readback" });
     expect(observed).toHaveProperty("neverStartedProof.providerCanceledAt", new Date(canceled * 1000).toISOString());
   });
+  it("does not turn an active primary's GET recovery into another cancel POST", async () => {
+    const { provider, posts } = edge(), onStopped = vi.fn();
+    await expect(provider.inspectMerchantPhaseScheduleStop!({ ...request, onStopped })).rejects.toMatchObject({ code: "provider_failure" });
+    expect(posts()).toBe(0); expect(onStopped).not.toHaveBeenCalled();
+  });
+  it("recovers a terminal primary with a GET-only actual readback", async () => {
+    const { provider, posts, fetcher } = edge({ terminal: true }), onStopped = vi.fn().mockResolvedValue(undefined);
+    await provider.inspectMerchantPhaseScheduleStop!({ ...request, onStopped });
+    expect(posts()).toBe(0); expect(fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+    expect(onStopped).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ source: "readback", linkedInventoryComplete: true }));
+  });
+
 });

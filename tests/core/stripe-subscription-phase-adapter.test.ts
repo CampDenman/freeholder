@@ -64,7 +64,9 @@ describe("original Stripe phase adapter (inactive C12.38)", () => {
     const onResourceAcknowledged = vi.fn().mockResolvedValue(undefined);
     const { provider } = edge((path, init) => init.method === "POST" ? { id: "sub_sched_original" } : path.startsWith("/v1/prices/") ? price : actual());
     await provider.createMerchantPhaseSchedule!({ ...request, onResourceAcknowledged });
-    expect(onResourceAcknowledged).toHaveBeenCalledExactlyOnceWith({ providerScheduleRef: "sub_sched_original" });
+    expect(onResourceAcknowledged).toHaveBeenCalledTimes(2);
+    expect(onResourceAcknowledged).toHaveBeenNthCalledWith(1, { providerScheduleRef: "sub_sched_original" });
+    expect(onResourceAcknowledged).toHaveBeenNthCalledWith(2, { providerScheduleRef: "sub_sched_original", providerSubscriptionRef: null, providerCustomerRef: "cus_original" });
   });
   it("keeps an ACK independent of later actual price disagreement", async () => {
     const onResourceAcknowledged = vi.fn().mockResolvedValue(undefined);

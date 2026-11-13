@@ -14264,6 +14264,19 @@ whatever is best for the people using the site.
   unqualified; fresh schema/native, uncertain-response recovery, PI/invoice
   closure callers, amendments and future invoice lineage remain required.
   See `deploy/subscription-phase-stop80-source-20261113.md`; no item closes.
+  Original schedule read/unpaid-stop source checkpoint (2026-11-13,
+  C12.38/C1.08): four private phases bind actual phase, primary/linked cancel
+  and invoice-action GETs to their own retained nonce and returned wrapper;
+  the earlier mutation caller's real finish remains separately required.
+  Three original unpaid PI-cancel/invoice-void phases reuse current cohort,
+  receipt and hold authority and the shared cash retainer. Complete fresh
+  inventory and current shared financial closure still govern erasure.
+  The separate SQL suffix follows the frozen stop tail and is unapplied;
+  twenty-four new controls are prepared but unrun. Compose the separate
+  actual-producer version repair before qualification. Unsupported subscription
+  draft deletion remains pending supported resolution, alongside amendments,
+  future-invoice lineage and complete actual acceptance; none is deferred.
+  See `deploy/subscription-phase-recovery80-source-20261113.md`; no item closes.
   Provider lifecycle protocol work uses Stripe's actual flexible-subscription
   pause endpoint, with2026-10-28.endive frozen only on new scope/charge
   receipts. Legacy operations keep their original version. Sixteen bounded

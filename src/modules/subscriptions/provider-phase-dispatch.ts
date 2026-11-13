@@ -28,8 +28,8 @@ const request = z.object({ subscriptionId: z.uuid(), operationId: z.uuid(), requ
   providerPlatformAccountId: account, providerAccountId: account.optional(), destinationAccountId: account.optional(), settlementMerchantAccountId: account.optional(),
   providerScheduleApiVersion: z.literal("2026-10-28.endive"), providerCustomerRef: reference("cus"), providerMethodRef: reference("pm"), providerProductRef: reference("prod"),
   phases: z.array(providerPhase).min(1).max(10) });
-const previous = request.omit({ idempotencyKey: true }).extend({ providerScheduleRef: reference("sub_sched") });
-const dispatchRequest = request.extend({ providerScheduleRef: reference("sub_sched").optional(), previous: previous.optional() });
+export const phaseScheduleReadRequest = request.omit({ idempotencyKey: true }).extend({ providerScheduleRef: reference("sub_sched") });
+const dispatchRequest = request.extend({ providerScheduleRef: reference("sub_sched").optional(), previous: phaseScheduleReadRequest.optional() });
 const claimInput = z.object({ subscriptionId: z.uuid(), additionalPeriods: z.number().int().positive().max(10), expectedHorizonDigest: sha });
 const claimOutput = z.object({ operationId: z.uuid(), completionNonce: z.string(), request: dispatchRequest });
 const callerInput = z.object({ operationId: z.uuid(), completionNonce: z.string().regex(/^[A-Za-z0-9_-]{43}$/) });
@@ -92,11 +92,11 @@ export const claimMerchantProviderPhases = defineService({
     const base = { ...subscriptionChargeScope(horizon.originalScope), providerPlatformAccountId: horizon.originalScope.providerPlatformAccountId,
       providerScheduleApiVersion: horizon.originalScope.providerScheduleApiVersion, subscriptionId: parent.id, operationId, idempotencyKey: `phase-schedule:${operationId}`,
       providerCustomerRef: horizon.providerCustomerRef, providerMethodRef: horizon.providerMethodRef, providerProductRef: products[0], phases: horizon.phases };
-    let prior: z.infer<typeof previous> | undefined;
+    let prior: z.infer<typeof phaseScheduleReadRequest> | undefined;
     if (horizon.mode === "extension") {
       const original = operations.find(operation => operation.id === horizon.anchor.sourceOperationId);
       if (!original || !horizon.providerScheduleRef) throw new ServiceError("conflict", "Restore the actual original phase operation and schedule before extension.");
-      prior = previous.parse({ ...original.originalRequest, requestDigest: original.requestDigest, providerScheduleRef: horizon.providerScheduleRef });
+      prior = phaseScheduleReadRequest.parse({ ...original.originalRequest, requestDigest: original.requestDigest, providerScheduleRef: horizon.providerScheduleRef });
     }
     // The provider metadata uses the operation UUID; it never embeds the
     // self-referential digest of a request that includes its own POST body.

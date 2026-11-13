@@ -406,6 +406,7 @@ export interface MerchantPhaseScheduleUpdateRequest extends MerchantPhaseSchedul
   providerScheduleRef: string; previous: MerchantPhaseScheduleReadRequest;
 }
 export interface MerchantPhaseScheduleReadRequest extends MerchantPhaseScheduleScope {
+  onResourceAcknowledged?: (actual: MerchantPhaseScheduleAcknowledgment) => Promise<void>;
   operationId: string; requestDigest: string; providerScheduleRef: string;
   providerMethodRef: string; providerProductRef: string; phases: MerchantProviderPhase[];
 }
@@ -426,6 +427,14 @@ export interface MerchantPhaseScheduleStopRequest extends MerchantPhaseScheduleS
   providerScheduleRef: string;
   originalFirstPhaseStart?: string;
   onStopped: (actual: MerchantPhaseScheduleStopped) => Promise<void>;
+}
+
+export type MerchantScheduleInvoiceActionAcknowledgment =
+  | { action: "cancel_intent"; providerInvoiceRef: string; providerPaymentIntentRef: string; state: "canceled" }
+  | { action: "void_invoice"; providerInvoiceRef: string; state: "void" };
+export interface MerchantScheduleInvoiceActionRequest extends MerchantScheduleResource {
+  providerInvoiceRef: string; action: "cancel_intent" | "void_invoice"; providerPaymentIntentRef?: string;
+  onAcknowledged: (actual: MerchantScheduleInvoiceActionAcknowledgment) => Promise<void>;
 }
 
 export interface MerchantScheduleInvoiceInventory {
@@ -663,12 +672,16 @@ export interface PaymentAdapter {
   pauseMerchantSchedule?(request: MerchantScheduleResource & { idempotencyKey: string; onPaused: (actual: { providerSubscriptionRef: string; state: "paused" }) => Promise<void> }): Promise<void>;
   cancelMerchantSchedule?(request: MerchantScheduleLocator & { providerCustomerRef?: string; onCancelled: (actual: { providerSubscriptionRef: string; state: "cancelled"; source: "readback" | "delete_ack" }) => Promise<void> }): Promise<void>;
   inspectMerchantScheduleInvoices?(request: MerchantScheduleResource): Promise<MerchantScheduleInvoiceInventory>;
+  stopMerchantScheduleInvoice?(request: MerchantScheduleInvoiceActionRequest): Promise<void>;
+  inspectMerchantScheduleInvoiceStop?(request: MerchantScheduleInvoiceActionRequest): Promise<void>;
   /** NEW original phase protocol; optional until its durable admission is enabled. */
   createMerchantPhaseProduct?(request: MerchantPhaseProductRequest): Promise<{ providerProductRef: string }>;
   inspectMerchantPhaseProduct?(request: MerchantPhaseProductReadRequest): Promise<{ providerProductRef: string }>;
   createMerchantPhaseSchedule?(request: MerchantPhaseScheduleRequest): Promise<MerchantPhaseScheduleInventory>;
   updateMerchantPhaseSchedule?(request: MerchantPhaseScheduleUpdateRequest): Promise<MerchantPhaseScheduleInventory>;
   inspectMerchantPhaseSchedule?(request: MerchantPhaseScheduleReadRequest): Promise<MerchantPhaseScheduleInventory>;
+  inspectMerchantPhaseScheduleStop?(request: MerchantPhaseScheduleStopRequest): Promise<void>;
+  inspectMerchantScheduleCancellation?(request: MerchantScheduleLocator & { providerCustomerRef?: string; onCancelled: (actual: { providerSubscriptionRef: string; state: "cancelled"; source: "readback" }) => Promise<void> }): Promise<void>;
   cancelMerchantPhaseSchedule?(request: MerchantPhaseScheduleStopRequest): Promise<void>;
   updateRecurringSchedule(request: RecurringScheduleUpdateRequest): Promise<RecurringScheduleResult>;
   cancelRecurringSchedule(request: PaymentAccountScope & { providerRef: string; idempotencyKey: string }): Promise<void>;

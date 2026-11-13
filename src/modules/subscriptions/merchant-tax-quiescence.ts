@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: original schedule debt survives module disable and merchant erasure.
+import { originalProviderInvoiceInventory } from "./provider-invoice-action-contract";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -17,7 +18,7 @@ import { scheduleCallerHasStopped, scheduleKnownResources, scheduleOperationDige
 import { subscriptionMerchantScopes, subscriptions, subscriptionProviderChargeReceipts } from "./schema";
 import scheduleCallerServices from "./provider-schedule-callers";
 import scheduleErasureServices from "./provider-schedule-erasure";
-import { claimMerchantScheduleCancellation, flushMerchantScheduleCallerFinishes, merchantScheduleCancellationTargets, observeMerchantScheduleCancellation, performMerchantScheduleCancellation, retainMerchantScheduleCancellation } from "./provider-schedule-callers";
+import { claimMerchantScheduleCancellation, flushMerchantScheduleCallerFinishes, merchantScheduleCancellationTargets, performMerchantScheduleCancellation, retainMerchantScheduleCancellation } from "./provider-schedule-callers";
 import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
 import buyerErasureServices, { completeBuyerAgreementErasure } from "./buyer-agreement-erasure";
 import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
@@ -25,7 +26,8 @@ import phaseProductServices from "./provider-phase-products";
 import phaseDispatchServices, { assertOriginalPhaseFinancials } from "./provider-phase-dispatch";
 import phaseStopServices, { stopMerchantPhaseSchedules, merchantPhaseScheduleTargets } from "./provider-phase-stop";
 import { closedOriginalPhaseSchedules, originalPhaseResources } from "./provider-phase-resources";
-import { retainProviderCharge } from "./provider-charge-receipts";
+import invoiceStopServices, { flushMerchantInvoiceStops, stopMerchantInvoice, retainOriginalScheduleCash } from "./provider-invoice-actions";
+import scheduleReadServices, { recoverMerchantSchedule, flushMerchantScheduleReads } from "./provider-schedule-recovery";
 import { invoices } from "@/modules/invoicing/schema";
 
 const JOB = "subscriptions.quiesceMerchantSchedules";
@@ -95,13 +97,7 @@ export const prepareMerchantTaxErasure = defineService({
   },
 });
 
-const stoppedInventory = z.object({ subscriptionId: z.uuid(), resources: z.array(z.object({ providerSubscriptionRef: z.string(),
-  state: z.enum(["paused", "cancelled"]), invoices: z.array(z.object({ providerInvoiceRef: z.string(), state: z.enum(["paid", "void", "draft", "open", "uncollectible"]),
-    currency: z.string().regex(/^[A-Z]{3}$/), totalMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), paidMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-    remainingMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), periodStart: z.iso.datetime(), complete: z.literal(true),
-    paymentIntents: z.array(z.object({ providerPaymentIntentRef: z.string().regex(/^pi_[A-Za-z0-9]{1,196}$/), state: z.string(), amountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-      receivedMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), currency: z.string().regex(/^[A-Z]{3}$/) })).max(2000),
-  })).max(2000) })).max(5000) });
+const stoppedInventory = z.object({ subscriptionId: z.uuid(), resources: z.array(originalProviderInvoiceInventory).max(5000) });
 export const retainMerchantScheduleInventory = defineService({
   name: "subscriptions.retainMerchantScheduleInventory", summary: "Retain authenticated original stopped-resource inventory without inventing resolution of earlier invoices.",
   kind: "mutation", permission: "system", external: false, auditInputFields: ["cohortId", "subscriptionId"],
@@ -127,7 +123,7 @@ export const retainMerchantScheduleInventory = defineService({
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
     let updatedOperations = operations;
     for (const actual of input.resources) {
-      const original = [...updatedOperations].reverse().find(operation => operation.kind === "cancel" && operation.originalRequest.providerSubscriptionRef === actual.providerSubscriptionRef);
+      const original = [...updatedOperations].reverse().find(operation => operation.kind === "cancel" && operation.originalRequest.method === "DELETE" && operation.originalRequest.providerSubscriptionRef === actual.providerSubscriptionRef);
       if (!original) return { quiesced: false };
       const history = z.array(z.record(z.string(), z.unknown())).max(5000).parse(original.providerObservation.history ?? []), inventoryDigest = merchantTaxDigest(actual);
       if (!history.some(entry => entry.source === "authenticated_invoice_inventory" && entry.inventoryDigest === inventoryDigest)) {
@@ -238,6 +234,9 @@ export const quiesceMerchantSchedules = defineJob({
     const adapter = paymentAdapter("stripe");
     for (const target of targets) {
       await flushMerchantScheduleCallerFinishes(target.subscriptionId);
+      await flushMerchantInvoiceStops(target.subscriptionId); await flushMerchantScheduleReads(target.subscriptionId);
+      const recovery = (await merchantScheduleCancellationTargets.call(input, { kind: "system" })).find(value => value.subscriptionId === target.subscriptionId);
+      for (const operationId of recovery?.recoveryOperationIds ?? []) { await context?.throwIfCancelled(); await recoverMerchantSchedule.call({ operationId }, { kind: "system" }); }
       if (target.providerSubscriptionRefs.length && !adapter.cancelMerchantSchedule) throw new ServiceError("conflict", "Restore the original provider cancellation adapter before admitting this task.");
       for (const providerSubscriptionRef of target.providerSubscriptionRefs) {
         await context?.throwIfCancelled();
@@ -253,18 +252,30 @@ export const quiesceMerchantSchedules = defineJob({
       }
       const current = (await merchantScheduleCancellationTargets.call(input, { kind: "system" })).find(value => value.subscriptionId === target.subscriptionId);
       if (!current?.request.providerCustomerRef || !adapter.inspectMerchantScheduleInvoices) continue;
-      const resources = [];
-      for (const providerSubscriptionRef of current.providerSubscriptionRefs) {
-        await context?.throwIfCancelled();
-        const actual = await adapter.inspectMerchantScheduleInvoices({ ...current.request, providerCustomerRef: current.request.providerCustomerRef, providerSubscriptionRef, providerScheduleRefs: phaseTargets.find(target => target.subscriptionId === current.subscriptionId)?.providerScheduleRefs,
-          providerScheduleOperationId: phaseTargets.find(target => target.subscriptionId === current.subscriptionId)?.resources.find(resource => resource.providerSubscriptionRefs.includes(providerSubscriptionRef))?.providerScheduleOperationId ?? undefined,
-          onPaidIntentObserved: async actual => {
-            const retained = await retainProviderCharge.call({ provider: "stripe", ...actual }, { kind: "system" });
-            if (!retained.receiptId || !retained.observationId) throw new ServiceError("conflict", "Restore the original agreement and cash observation before reading further provider obligations.");
-          } });
-        const cancellation = [...current.cancellationOperations].reverse().find(value => value.providerSubscriptionRef === providerSubscriptionRef);
-        if (cancellation && actual.state === "cancelled") await observeMerchantScheduleCancellation.call({ operationId: cancellation.operationId, providerSubscriptionRef, source: "readback" }, { kind: "system" });
-        resources.push({ providerSubscriptionRef, state: actual.state, invoices: actual.invoices });
+      const inspect = async () => {
+        const resources = [];
+        for (const providerSubscriptionRef of current.providerSubscriptionRefs) {
+          await context?.throwIfCancelled();
+          const actual = await adapter.inspectMerchantScheduleInvoices!({ ...current.request, providerCustomerRef: current.request.providerCustomerRef!, providerSubscriptionRef,
+            providerScheduleRefs: phaseTargets.find(target => target.subscriptionId === current.subscriptionId)?.providerScheduleRefs,
+            providerScheduleOperationId: phaseTargets.find(target => target.subscriptionId === current.subscriptionId)?.resources.find(resource => resource.providerSubscriptionRefs.includes(providerSubscriptionRef))?.providerScheduleOperationId ?? undefined,
+            onPaidIntentObserved: retainOriginalScheduleCash });
+          resources.push({ providerSubscriptionRef, state: actual.state, invoices: actual.invoices });
+        }
+        return resources;
+      };
+      let resources = await inspect();
+      // Commit complete actual inventory before any original action claim. A
+      // bounded pass leaves remaining work pending for the durable queue.
+      for (let round = 0; round < 32; round++) {
+        await retainMerchantScheduleInventory.call({ ...input, subscriptionId: target.subscriptionId, resources }, { kind: "system" });
+        let changed = false;
+        for (const resource of resources) for (const invoice of resource.invoices) {
+          await context?.throwIfCancelled();
+          if (await stopMerchantInvoice({ ...input, subscriptionId: target.subscriptionId, providerSubscriptionRef: resource.providerSubscriptionRef, providerInvoiceRef: invoice.providerInvoiceRef })) changed = true;
+        }
+        if (!changed) break;
+        resources = await inspect();
       }
       await retainMerchantScheduleInventory.call({ ...input, subscriptionId: target.subscriptionId, resources }, { kind: "system" });
     }
@@ -275,4 +286,4 @@ export const quiesceMerchantSchedules = defineJob({
   },
 });
 registerJob(quiesceMerchantSchedules);
-export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices, ...phaseProductServices, ...phaseDispatchServices, ...phaseStopServices];
+export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices, ...phaseProductServices, ...phaseDispatchServices, ...phaseStopServices, ...scheduleReadServices, ...invoiceStopServices];

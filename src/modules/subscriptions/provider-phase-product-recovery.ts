@@ -111,7 +111,7 @@ export const recoverMerchantPhaseProduct = defineOrchestratedService({
     // A failed fact commit is flushed from its actual returned caller cache,
     // without another GET and without inventing creation-caller evidence.
     for (const [readId, finished] of reads) if (finished.operationId === operationId && finished.outcome) {
-      await applyMerchantPhaseProductRead.call({ readId, completionNonce: finished.nonce }, { kind: "system" }); reads.delete(readId);
+      const applied = await applyMerchantPhaseProductRead.call({ readId, completionNonce: finished.nonce }, { kind: "system" }); reads.delete(readId); return applied;
     }
     const claimed = await prepareMerchantPhaseProductRead.call({ operationId }, { kind: "system" });
     const local = reads.get(claimed.readId);
