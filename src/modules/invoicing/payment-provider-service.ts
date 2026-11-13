@@ -58,6 +58,7 @@ import { merchantTaxDigest } from "./merchant-tax-store";
 import { invoiceMerchantCollections, merchantPaymentRoutes, merchantPaymentEventReceipts } from "./merchant-collection-schema";
 import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
+import { providerPeriodInvoiceEvidence } from "@/modules/subscriptions/provider-period-contract";
 import { nextCollectionAmount } from "./merchant-collection";
 import { invoicePaymentDueAmount } from "./invoice-payment-due";
 import { getInvoiceMarketPolicy } from "./market-policy";
@@ -149,6 +150,7 @@ const savedMethodEvent = z.object({
   occurredAt: z.string().datetime(),
 });
 const subscriptionBillingEvent = z.object({
+  subscriptionInvoiceEvidence: providerPeriodInvoiceEvidence.optional(), subscriptionInvoiceObservationId: z.uuid().optional(),
   providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
   providerPlatformAccountId: paymentRouting.shape.providerPlatformAccountId,
   destinationAccountId: paymentRouting.shape.destinationAccountId,
@@ -157,7 +159,7 @@ const subscriptionBillingEvent = z.object({
   kind: z.enum(["subscription_period_paid", "subscription_period_failed", "subscription_cancelled"]),
   providerRef: z.string().trim().min(1).max(500),
   occurredAt: z.string().datetime(),
-  amountMinor: positiveMinor.optional(),
+  amountMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   currency: currency.optional(),
   periodStart: z.string().datetime().optional(),
   periodEnd: z.string().datetime().optional(),
@@ -554,6 +556,7 @@ async function applyEvent(providerId: string, event: PaymentProviderEvent, ctx: 
       providerPlatformAccountId: billing.providerPlatformAccountId,
       subscriptionChargeReceiptId: billing.subscriptionChargeReceiptId,
       ...(billing.subscriptionChargeObservationId ? { subscriptionChargeObservationId: billing.subscriptionChargeObservationId } : {}),
+      subscriptionInvoiceObservationId: billing.subscriptionInvoiceObservationId,
       kind: billing.kind,
       amountMinor: billing.amountMinor,
       currency: billing.currency,

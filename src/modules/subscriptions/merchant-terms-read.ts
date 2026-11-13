@@ -1,8 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: an accepted agreement reads its original promises, not today's offer.
-import { and, desc, eq, lte } from "drizzle-orm";
+import { and, desc, eq, lte, sql } from "drizzle-orm";
 import { ServiceError, type ServiceContext } from "@/core/service";
+import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
 import { subscriptionCommercialSnapshot } from "./merchant-terms-contract";
 import { subscriptionCommercialTerms, subscriptionMarketPolicies } from "./schema";
 import type { subscriptions } from "./schema";
@@ -18,11 +19,12 @@ export async function originalMerchantTerms(ctx: ServiceContext, subscription: S
     .where(eq(subscriptionMarketPolicies.subscriptionId, subscription.id)).limit(1);
   if (policy?.model !== "seller_merchant") return null;
   const [terms] = await ctx.tx.select().from(subscriptionCommercialTerms).where(and(
-    eq(subscriptionCommercialTerms.subscriptionId, subscription.id), lte(subscriptionCommercialTerms.effectivePeriodStart, periodStart)))
+    eq(subscriptionCommercialTerms.subscriptionId, subscription.id), lte(subscriptionCommercialTerms.effectivePeriodStart, periodStart),
+    sql`not exists(select 1 from ${subscriptionCommercialAmendments} where ${subscriptionCommercialAmendments.termsId}=${subscriptionCommercialTerms.id} and ${subscriptionCommercialAmendments.state}<>'activated')`))
     .orderBy(desc(subscriptionCommercialTerms.revision)).limit(1).for("share");
   if (!terms) throw new ServiceError("conflict", "Restore the explicitly accepted original commercial terms before billing this merchant agreement.");
   const snapshot = subscriptionCommercialSnapshot.parse(terms.snapshot);
-  if (snapshot.currency !== subscription.currency || snapshot.billingMode !== subscription.billingMode || snapshot.productVariantId !== subscription.productVariantId) {
+  if (snapshot.currency !== subscription.currency || snapshot.billingMode !== subscription.billingMode) {
     throw new ServiceError("conflict", "The agreement differs from its accepted currency or billing calendar. Review an explicit amendment before billing.");
   }
   return { ...terms, snapshot };

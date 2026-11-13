@@ -1,12 +1,14 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: original schedule debt survives module disable and merchant erasure.
+import amendmentActivationServices from "./commercial-amendment-jobs";
+import { originalScheduleTask, originalQuiescenceAction } from "./provider-quiescence-authority";
 import { originalProviderInvoiceInventory } from "./provider-invoice-action-contract";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { lockContactIdentity } from "@/core/contacts/identity-lock";
-import { defineJob, enqueueJob, registerJob } from "@/core/jobs";
+import { defineJob, enqueueJob, registerJob, type JobExecutionContext } from "@/core/jobs";
 import { completeErasureJob, erasureArtifactIsIntact } from "@/core/privacy/service";
 import { dataRequests, dataRequestArtifacts } from "@/core/privacy/schema";
 import { defineService, getService, ServiceError, type ServiceContext } from "@/core/service";
@@ -15,6 +17,7 @@ import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { paymentAdapter } from "@/adapters/payments";
 import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources, type ScheduleStopProof } from "./provider-schedule-schema";
 import { scheduleCallerHasStopped, scheduleKnownResources, scheduleOperationDigest } from "./provider-schedule-proof";
+import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
 import { subscriptionMerchantScopes, subscriptions, subscriptionProviderChargeReceipts } from "./schema";
 import scheduleCallerServices from "./provider-schedule-callers";
 import scheduleErasureServices from "./provider-schedule-erasure";
@@ -100,23 +103,13 @@ export const prepareMerchantTaxErasure = defineService({
 const stoppedInventory = z.object({ subscriptionId: z.uuid(), resources: z.array(originalProviderInvoiceInventory).max(5000) });
 export const retainMerchantScheduleInventory = defineService({
   name: "subscriptions.retainMerchantScheduleInventory", summary: "Retain authenticated original stopped-resource inventory without inventing resolution of earlier invoices.",
-  kind: "mutation", permission: "system", external: false, auditInputFields: ["cohortId", "subscriptionId"],
-  input: jobInput.merge(stoppedInventory), output: z.object({ quiesced: z.boolean() }),
+  kind: "mutation", permission: "system", external: false, auditInputFields: ["subscriptionId"],
+  input: z.intersection(originalScheduleTask, stoppedInventory), output: z.object({ quiesced: z.boolean() }),
   handler: async (input, ctx) => {
-    await lockContactIdentity(ctx.tx);
-    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
-    const { cohort, request: originalErasure } = await originalScheduleCohortAuthority(ctx.tx, input, true);
-    if (cohort.subscriptionId !== null && cohort.subscriptionId !== input.subscriptionId) throw new ServiceError("permission", "This inventory belongs to another original buyer agreement.");
-    const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, input.requestId)).limit(1).for("update");
-    const receipt = z.object({ outcomes: z.array(z.object({ scope: z.string(), pendingJobs: z.array(z.uuid()).optional() }).passthrough()) }).passthrough().safeParse(artifact?.body);
-    if (originalErasure.status !== "in_progress" || !erasureArtifactIsIntact(artifact) || !receipt.success
-      || !receipt.data.outcomes.some(outcome => outcome.scope === cohort.privacyScope && outcome.pendingJobs?.includes(input.originalJobId))) return { quiesced: false };
-    const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, input.subscriptionId)).limit(1).for("update");
-    const [scope] = await ctx.tx.select().from(subscriptionMerchantScopes).where(eq(subscriptionMerchantScopes.subscriptionId, input.subscriptionId)).limit(1);
-    const [resource] = await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId, input.subscriptionId)).limit(1).for("update");
-    const operations = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, input.subscriptionId))
-      .orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
-    if (!parent || !scope || scope.taxProfileId !== input.profileId || !resource || operations.length > 5000) throw new ServiceError("conflict", "Restore the original agreement before retaining its stopped inventory.");
+    const authority = await originalQuiescenceAction(ctx, input, input.subscriptionId, true);
+    if (!authority) return { quiesced: false };
+    const { parent, scope, resource, operations } = authority;
+    if (operations.length > 5000) throw new ServiceError("conflict", "Restore the bounded original agreement history before retaining its stopped inventory.");
     const known = scheduleKnownResources(resource, operations);
     if (!known || known.size !== input.resources.length || new Set(input.resources.map(value => value.providerSubscriptionRef)).size !== known.size
       || input.resources.some(value => !known.has(value.providerSubscriptionRef))) return { quiesced: false };
@@ -132,8 +125,8 @@ export const retainMerchantScheduleInventory = defineService({
         updatedOperations = updatedOperations.map(operation => operation.id === original.id ? { ...operation, providerObservation: observation } : operation);
       }
     }
-    if (operations.length !== resource.operationRevision || updatedOperations.some((operation, index) => operation.operationRevision !== index + 1
-      || !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation))) return { quiesced: false };
+    if (authority.held || operations.length !== resource.operationRevision || updatedOperations.some((operation, index) => operation.operationRevision !== index + 1
+      || !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation) || !originalProviderReadsFinished(operation))) return { quiesced: false };
     const phaseResources = originalPhaseResources(updatedOperations), phaseSchedules = closedOriginalPhaseSchedules(updatedOperations);
     if (!phaseResources || !known.size && !phaseResources.size || phaseResources.size && (!phaseSchedules || phaseSchedules.length !== phaseResources.size)) return { quiesced: false };
     const actualReceipts = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId, parent.id)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001);
@@ -222,12 +215,8 @@ export const settleMerchantTaxSchedules = defineService({
   },
 });
 
-export const quiesceMerchantSchedules = defineJob({
-  name: JOB, summary: "Verify original provider and financial quiescence before completing merchant tax erasure.", concurrency: 1, leaseSeconds: 120,
-  handler: async (data, context) => {
-    const input = jobInput.parse(data);
-    if (context && context.id !== input.originalJobId) throw new ServiceError("conflict", "The running job does not match its durable original task payload.");
-    await context?.throwIfCancelled();
+export async function quiesceOriginalScheduleTask(value: z.input<typeof originalScheduleTask>, context?: JobExecutionContext): Promise<void> {
+  const input = originalScheduleTask.parse(value);
     await stopMerchantPhaseSchedules(input, context);
     const phaseTargets = await merchantPhaseScheduleTargets.call(input, { kind: "system" });
     const targets = await merchantScheduleCancellationTargets.call(input, { kind: "system" });
@@ -279,6 +268,15 @@ export const quiesceMerchantSchedules = defineJob({
       }
       await retainMerchantScheduleInventory.call({ ...input, subscriptionId: target.subscriptionId, resources }, { kind: "system" });
     }
+}
+
+export const quiesceMerchantSchedules = defineJob({
+  name: JOB, summary: "Verify original provider and financial quiescence before completing merchant tax erasure.", concurrency: 1, leaseSeconds: 120,
+  handler: async (data, context) => {
+    const input = jobInput.parse(data);
+    if (context && context.id !== input.originalJobId) throw new ServiceError("conflict", "The running job does not match its durable original task payload.");
+    await context?.throwIfCancelled();
+    await quiesceOriginalScheduleTask(input, context);
     const result = await settleMerchantTaxSchedules.call(input, { kind: "system" });
     // Recovery must commit before the queue records an unsuccessful attempt.
     if (!result.settled) throw new ServiceError("conflict", result.recoveryRequired ? "Restore the original merchant erasure artifact before retrying." : "Original provider schedules or financial recovery work remain unresolved.");
@@ -286,4 +284,4 @@ export const quiesceMerchantSchedules = defineJob({
   },
 });
 registerJob(quiesceMerchantSchedules);
-export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices, ...phaseProductServices, ...phaseDispatchServices, ...phaseStopServices, ...scheduleReadServices, ...invoiceStopServices];
+export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices, ...phaseProductServices, ...phaseDispatchServices, ...phaseStopServices, ...scheduleReadServices, ...invoiceStopServices, ...amendmentActivationServices];

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: declared GET evidence cannot substitute for original physical shutdown.
 import { describe, expect, it } from "vitest";
-import { verifiedScheduleRead } from "@/modules/subscriptions/provider-schedule-read-proof";
+import { originalProviderReadsFinished, verifiedScheduleRead } from "@/modules/subscriptions/provider-schedule-read-proof";
 import { phaseOperationCallerFinished } from "@/modules/subscriptions/provider-phase-resources";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import type { subscriptionProviderScheduleOperations } from "@/modules/subscriptions/provider-schedule-schema";
@@ -20,6 +20,28 @@ function declared(): Operation {
 }
 const history = (operation: Operation) => operation.providerObservation.history as Array<Record<string, unknown>>;
 describe("separate original schedule GET completion authority", () => {
+  it("keeps an earlier unreturned reader as debt despite a later verified returned GET", () => {
+    const operation = declared(), pending = { ...history(operation)[1]!, readId: "00000000-0000-4000-8000-000000000904", completionDigest: "d".repeat(64) };
+    history(operation).unshift(pending);
+    expect(verifiedScheduleRead(operation, readId, actualDigest)).toBe(true);
+    expect(originalProviderReadsFinished(operation)).toBe(false);
+  });
+  it("requires the matching nonce-bound finish for every product read as well as schedule read", () => {
+    const operation = declared(), binding = { operationId: operation.id, requestDigest: operation.requestDigest, readId: "00000000-0000-4000-8000-000000000904", completionDigest: "d".repeat(64) };
+    history(operation).push({ source: "phase_product_read_admitted", ...binding });
+    expect(originalProviderReadsFinished(operation)).toBe(false);
+    history(operation).push({ source: "phase_product_read_finished", ...binding, outcome: "threw" });
+    expect(originalProviderReadsFinished(operation)).toBe(true); // A throw finishes a reader; it supplies no verified resource fact.
+  });
+  it("does not turn another reader, mutation nonce or local summary into the missing actual finish", () => {
+    for (const patch of [{ completionDigest: "a".repeat(64) }, { readId: "other-reader" }, { requestDigest: "f".repeat(64) }, { outcome: "running" }]) {
+      const operation = declared(); Object.assign(history(operation)[2]!, patch); expect(originalProviderReadsFinished(operation)).toBe(false);
+    }
+  });
+  it("rejects malformed or overflowing reader history rather than truncating original admissions", () => {
+    const operation = declared(); operation.providerObservation.history = [null]; expect(originalProviderReadsFinished(operation)).toBe(false);
+    operation.providerObservation.history = Array.from({ length: 5001 }, () => ({})); expect(originalProviderReadsFinished(operation)).toBe(false);
+  });
   it("recognizes an actual separate returned GET after the original cancellation threw", () => {
     const operation = declared(); expect(verifiedScheduleRead(operation, readId, actualDigest)).toBe(true); expect(phaseOperationCallerFinished(operation)).toBe(true); expect(phaseOperationCallerFinished(operation, true)).toBe(false);
   });

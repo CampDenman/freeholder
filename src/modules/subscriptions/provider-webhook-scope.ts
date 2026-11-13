@@ -43,7 +43,7 @@ export const resolveProviderWebhookScope = defineService({
       if (!operationId.success || !subscriptionId.success || input.metadata.freeholder_subscription_scope_version !== "1") throw new ServiceError("conflict", "Recover the original admitted subscription operation before applying this tagged feedback.");
       const [operation] = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(and(
         eq(subscriptionProviderScheduleOperations.id, operationId.data), eq(subscriptionProviderScheduleOperations.subscriptionId, subscriptionId.data))).limit(1);
-      if (!operation || !["create", "update", "resume"].includes(operation.kind)) throw new ServiceError("conflict", "This tagged provider subscription has no matching admitted original billing operation.");
+      if (!operation || operation.originalRequest.resourceKind !== undefined && operation.originalRequest.resourceKind !== "phase_schedule" || !["create", "update", "resume"].includes(operation.kind)) throw new ServiceError("conflict", "This tagged provider subscription has no matching admitted original billing operation.");
       const [known] = await ctx.tx.select({ subscription: subscriptions, scope: subscriptionMerchantScopes }).from(subscriptions)
         .innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptions.id))
         .where(and(eq(subscriptions.id, subscriptionId.data), eq(subscriptions.merchantScopeVersion, 1),
@@ -57,6 +57,19 @@ export const resolveProviderWebhookScope = defineService({
       providerScheduleOperationId = operation.id;
       const customer = z.string().regex(/^cus_[A-Za-z0-9]+$/).max(200).safeParse(operation.originalRequest.providerCustomerRef);
       expectedCustomer = customer.success ? customer.data : undefined;
+    }
+    // A logical projection already existing does not erase the actual tagged
+    // phase operation. Missing metadata keeps money capturable in that known
+    // namespace, but cannot supply fabricated price/period application proof.
+    if (original && tagged && operationId.success && subscriptionId.success && subscriptionId.data === original.subscription.id && !providerScheduleOperationId) {
+      const [operation] = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(and(eq(subscriptionProviderScheduleOperations.id, operationId.data), eq(subscriptionProviderScheduleOperations.subscriptionId, original.subscription.id))).limit(1);
+      if (operation?.originalRequest.resourceKind === "phase_schedule" && ["create", "update"].includes(operation.kind)
+        && operation.providerApiVersion === original.scope.providerScheduleApiVersion && operation.originalRequest.providerPlatformAccountId === original.scope.providerPlatformAccountId
+        && (operation.originalRequest.providerAccountId ?? null) === original.scope.chargeAccountId) {
+        providerScheduleOperationId = operation.id;
+        const customer = z.string().regex(/^cus_[A-Za-z0-9]+$/).max(200).safeParse(operation.originalRequest.providerCustomerRef);
+        expectedCustomer = customer.success ? customer.data : undefined;
+      }
     }
     const scope = subscriptionMerchantScope.parse(original.scope);
     const [resource] = await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId, original.subscription.id)).limit(1);

@@ -158,6 +158,7 @@ export interface MerchantSubscriptionChargeOrigin {
 
 export interface MerchantPaymentInspectionRequest extends MerchantChargeScope {
   providerPlatformAccountId: string;
+  providerCustomerRef?: string;
   paymentAttemptId?: string;
   subscriptionOrigin?: MerchantSubscriptionChargeOrigin;
   providerRef: string;
@@ -348,6 +349,16 @@ export interface MerchantScheduleResource extends MerchantScheduleLocator {
   providerScheduleOperationId?: string;
   /** Commit each actual positive PI before reading another page or obligation. */
   onPaidIntentObserved?: (actual: MerchantScheduleCashObservation) => Promise<void>;
+}
+export interface MerchantProviderPeriodLineEvidence {
+  providerLineRef: string; providerPriceRef: string | null; providerProductRef: string | null; quantity: number | null; quantityDecimal: string | null; amountMinor: number | null; currency: string | null;
+  periodStart: string | null; periodEnd: string | null; subscriptionLine: boolean; proration: boolean | null; unadjusted: boolean;
+  priceAmountMinor: number | null; priceCurrency: string | null; priceInterval: string | null; priceIntervalCount: number | null; licensed: boolean; perUnit: boolean; inclusive: boolean; noTransform: boolean;
+}
+export interface MerchantProviderPeriodInvoiceEvidence {
+  providerInvoiceRef: string; providerSubscriptionRef: string; providerCustomerRef: string | null; providerOperationId: string | null; phaseDigest: string | null; termsId: string | null;
+  currency: string | null; subtotalMinor: number | null; totalMinor: number | null; paidMinor: number | null; remainingMinor: number | null; paid: boolean; unadjusted: boolean; complete: true;
+  lines: MerchantProviderPeriodLineEvidence[];
 }
 export interface MerchantScheduleWebhookScope extends MerchantScheduleLocator {
   providerScheduleOperationId?: string;
@@ -625,6 +636,8 @@ export type PaymentProviderEvent = MerchantChargeScope & (
       providerChargeRef?: string;
       observedApplicationFeeMinor?: number;
       applicationFeeCurrency?: string;
+      subscriptionInvoiceEvidence?: MerchantProviderPeriodInvoiceEvidence;
+      subscriptionInvoiceObservationId?: string;
     });
 
 export interface PaymentAdapter {

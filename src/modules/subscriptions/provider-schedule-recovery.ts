@@ -9,9 +9,12 @@ import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { defineOrchestratedService, defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { merchantPhysicalCaller } from "@/modules/invoicing/merchant-physical-caller";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
+import { operationProviderGeneration, retainGenerationInventory, generationInventoryMatches, generationMaterial } from "./provider-generations";
+import type { subscriptionProviderGenerations } from "./provider-generation-schema";
 import { assertOriginalPhaseFinancials, phaseScheduleReadRequest } from "./provider-phase-dispatch";
 import { phaseScheduleStopRequest, phaseScheduleStopped } from "./provider-phase-stop";
 import { providerPhaseInventory, originalPhaseCustomerMatches } from "./provider-phase-contract";
+import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
 import { closedOriginalPhaseSchedules, originalPhaseResources, phaseOperationCallerFinished } from "./provider-phase-resources";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
@@ -35,8 +38,8 @@ type Read = { operationId: string; subscriptionId: string; nonce: string; kind: 
 const slot = Symbol.for("freeholder.subscription.schedule-recovery-reads.v1");
 const state = globalThis as typeof globalThis & { [slot]?: Map<string, Read> };
 const reads = state[slot] ??= new Map<string, Read>();
-const revision = (operation: Operation, resource: Resource, journal: readonly Operation[]) => merchantTaxDigest([operation.id, operation.requestDigest, operation.state, operation.positiveObserved,
-  operation.providerObservation, resource.operationRevision, resource.evidenceRevision, resource.providerSubscriptionRef, resource.providerCustomerRef, resource.state, resource.recoveryPending, resource.stoppedProof, journal.map(entry => [entry.id, entry.requestDigest, entry.state, entry.positiveObserved, entry.providerObservation])]);
+const revision = (operation: Operation, resource: Resource, journal: readonly Operation[], generation?: typeof subscriptionProviderGenerations.$inferSelect | null) => merchantTaxDigest([operation.id, operation.requestDigest, operation.state, operation.positiveObserved,
+  operation.providerObservation, resource.operationRevision, resource.evidenceRevision, resource.providerSubscriptionRef, resource.providerCustomerRef, resource.state, resource.recoveryPending, resource.stoppedProof, journal.map(entry => [entry.id, entry.requestDigest, entry.state, entry.positiveObserved, entry.providerObservation]), generationMaterial(generation)]);
 async function locked(ctx: ServiceContext, operationId: string) {
   await lockContactIdentity(ctx.tx);
   const [reference] = await ctx.tx.select({ subscriptionId: subscriptionProviderScheduleOperations.subscriptionId }).from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.id, operationId)).limit(1);
@@ -47,7 +50,8 @@ async function locked(ctx: ServiceContext, operationId: string) {
   if (!parent || !resource || !operation || merchantTaxDigest(operation.originalRequest) !== operation.requestDigest) throw new ServiceError("conflict", "Restore the unchanged original agreement, request and resource.");
   const journal = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, operation.subscriptionId)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
   if (journal.length > 5000 || journal.length !== resource.operationRevision || journal.some((entry, index) => entry.operationRevision !== index + 1)) throw new ServiceError("conflict", "Restore the complete original operation journal before a read.");
-  return { parent, resource, operation, journal };
+  const generation = operation.originalRequest.resourceKind === "phase_schedule" ? await operationProviderGeneration(ctx, operation) : null;
+  return { parent, resource, operation, journal, generation };
 }
 function plan(operation: Operation): { kind: Kind; request: Record<string, unknown> } {
   if (!phaseOperationCallerFinished(operation)) throw new ServiceError("conflict", "A GET cannot prove that the original physical mutation caller finished.");
@@ -66,7 +70,7 @@ export const prepareMerchantScheduleRead = defineService({
   kind: "mutation", permission: "system", external: false, auditInputFields: ["operationId"], input: z.object({ operationId: z.uuid() }),
   output: z.object({ readId: z.uuid(), completionNonce: z.string(), kind: z.enum(["phase", "phase_stop", "subscription_cancel", "invoice_action"]), request: z.record(z.string(), z.unknown()) }),
   handler: async ({ operationId }, ctx) => {
-    const { operation, resource, journal } = await locked(ctx, operationId), original = plan(operation);
+    const { operation, resource, journal, generation } = await locked(ctx, operationId), original = plan(operation);
     if ([...reads.values()].some(read => read.operationId === operationId && read.invoked && !read.outcome)) throw new ServiceError("conflict", "The original verification read is still running in this process.");
     const readId = randomUUID(), nonce = randomBytes(32).toString("base64url");
     const observation = { ...operation.providerObservation, history: [...historySchema.parse(operation.providerObservation.history ?? []), {
@@ -76,7 +80,7 @@ export const prepareMerchantScheduleRead = defineService({
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
     await ctx.tx.update(subscriptionProviderScheduleOperations).set({ state: "unknown", providerObservation: observation }).where(eq(subscriptionProviderScheduleOperations.id, operationId));
     await ctx.tx.update(subscriptionProviderScheduleResources).set({ evidenceRevision: next.evidenceRevision, recoveryPending: true, stoppedProof: null, updatedAt: new Date() }).where(eq(subscriptionProviderScheduleResources.subscriptionId, resource.subscriptionId));
-    reads.set(readId, { operationId, subscriptionId: operation.subscriptionId, nonce, kind: original.kind, expected: revision({ ...operation, state: "unknown", providerObservation: observation }, next, journal.map(entry => entry.id === operation.id ? { ...operation, state: "unknown" as const, providerObservation: observation } : entry)), invoked: false, outcome: null, stale: false, positives: [] });
+    reads.set(readId, { operationId, subscriptionId: operation.subscriptionId, nonce, kind: original.kind, expected: revision({ ...operation, state: "unknown", providerObservation: observation }, next, journal.map(entry => entry.id === operation.id ? { ...operation, state: "unknown" as const, providerObservation: observation } : entry), generation), invoked: false, outcome: null, stale: false, positives: [] });
     ctx.setSubject("subscription", operation.subscriptionId); return { readId, completionNonce: nonce, ...original };
   },
 });
@@ -92,27 +96,27 @@ export const observeMerchantScheduleRead = defineService({
   name: "subscriptions.observeMerchantScheduleRead", summary: "Retain actual schedule linkage or a terminal GET before any later price, scope or persistence failure.",
   kind: "mutation", permission: "system", external: false, auditInputFields: ["readId"], input: completion, output: z.object({ revision: z.string() }),
   handler: async ({ readId, completionNonce }, ctx) => {
-    const { operation, resource, local, history, journal } = await owned(ctx, readId, completionNonce);
-    const fresh = revision(operation, resource, journal) === local.expected;
+    const { operation, resource, local, history, journal, generation } = await owned(ctx, readId, completionNonce);
+    const fresh = revision(operation, resource, journal, generation) === local.expected;
     const additions = local.positives.filter(actual => !history.some(entry => entry.source === "schedule_read_positive" && entry.readId === readId && entry.actualDigest === merchantTaxDigest(actual)))
       .flatMap(actual => [{ source: "schedule_read_positive", operationId: operation.id, requestDigest: operation.requestDigest, readId, actualDigest: merchantTaxDigest(actual), actual },
         ...(local.kind === "phase" ? [{ source: "phase_schedule_ack", operationId: operation.id, requestDigest: operation.requestDigest, readId, ...actual }] : []),
         ...(local.kind === "phase_stop" ? [{ source: "phase_schedule_stop_ack", operationId: operation.id, requestDigest: operation.requestDigest, readId,
           providerScheduleRef: actual.providerScheduleRef, actualDigest: merchantTaxDigest(actual), actual }] : [])]);
-    if (!additions.length) return { revision: fresh ? revision(operation, resource, journal) : "stale" };
+    if (!additions.length) return { revision: fresh ? revision(operation, resource, journal, generation) : "stale" };
     const observation = { ...operation.providerObservation, history: [...history, ...additions] }, next = { ...resource, evidenceRevision: resource.evidenceRevision + 1, recoveryPending: true, stoppedProof: null };
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
     await ctx.tx.update(subscriptionProviderScheduleOperations).set({ positiveObserved: true, providerObservation: observation }).where(eq(subscriptionProviderScheduleOperations.id, operation.id));
     await ctx.tx.update(subscriptionProviderScheduleResources).set({ evidenceRevision: next.evidenceRevision, recoveryPending: true, stoppedProof: null, updatedAt: new Date() }).where(eq(subscriptionProviderScheduleResources.subscriptionId, resource.subscriptionId));
     await enqueueMerchantScheduleErasureRepair(ctx.tx, { subscriptionId: operation.subscriptionId, evidenceDigest: merchantTaxDigest(additions) });
-    return { revision: fresh ? revision({ ...operation, positiveObserved: true, providerObservation: observation }, next, journal.map(entry => entry.id === operation.id ? { ...operation, positiveObserved: true, providerObservation: observation } : entry)) : "stale" };
+    return { revision: fresh ? revision({ ...operation, positiveObserved: true, providerObservation: observation }, next, journal.map(entry => entry.id === operation.id ? { ...operation, positiveObserved: true, providerObservation: observation } : entry), generation) : "stale" };
   },
 });
 export const applyMerchantScheduleRead = defineService({
   name: "subscriptions.applyMerchantScheduleRead", summary: "Finish this actual GET and retain stale evidence without granting original caller or cash closure.",
   kind: "mutation", permission: "system", external: false, auditInputFields: ["readId"], input: completion, output: z.object({ verified: z.boolean() }),
   handler: async ({ readId, completionNonce }, ctx) => {
-    const { operation, resource, local, history, parent, journal } = await owned(ctx, readId, completionNonce);
+    const { operation, resource, local, history, parent, journal, generation } = await owned(ctx, readId, completionNonce);
     if (!local.outcome) throw new ServiceError("permission", "The actual verification promise has not finished.");
     const previous = history.find(entry => entry.source === "schedule_read_finished" && entry.readId === readId && entry.completionDigest === hash(completionNonce));
     if (previous) return { verified: previous.verified === true };
@@ -121,12 +125,12 @@ export const applyMerchantScheduleRead = defineService({
     const original = plan(operation).request;
     const matches = local.kind === "phase" ? !!local.result && local.result.operationId === operation.id && local.result.requestDigest === operation.requestDigest
       && local.result.providerScheduleRef === original.providerScheduleRef && originalPhaseCustomerMatches(local.result, operation.originalRequest.providerCustomerRef)
-      && (!resource.providerSubscriptionRef || local.result.providerSubscriptionRef === resource.providerSubscriptionRef)
+      && (generation ? await generationInventoryMatches(ctx, generation, local.result) : !resource.providerSubscriptionRef || local.result.providerSubscriptionRef === resource.providerSubscriptionRef)
       : local.kind === "phase_stop" ? actual?.providerScheduleRef === original.providerScheduleRef && actual?.linkedInventoryComplete === true
       : local.kind === "subscription_cancel" ? actual?.providerSubscriptionRef === original.providerSubscriptionRef
       : actual?.providerInvoiceRef === original.providerInvoiceRef && actual?.action === original.action
         && (original.action !== "cancel_intent" || actual?.providerPaymentIntentRef === original.providerPaymentIntentRef);
-    const verified = !local.stale && local.expected === revision(operation, resource, journal) && local.outcome === "returned" && !!actual && matches && phaseOperationCallerFinished(operation);
+    const verified = !local.stale && local.expected === revision(operation, resource, journal, generation) && local.outcome === "returned" && !!actual && matches && phaseOperationCallerFinished(operation);
     const additions: Array<Record<string, unknown>> = [];
     if (local.kind === "phase" && local.result) additions.push({ source: verified ? "phase_schedule_read_verified" : "phase_schedule_read_stale", operationId: operation.id, requestDigest: operation.requestDigest,
       readId, providerScheduleRef: local.result.providerScheduleRef, providerSubscriptionRef: local.result.providerSubscriptionRef, inventoryDigest: actualDigest, inventory: local.result });
@@ -150,10 +154,12 @@ export const applyMerchantScheduleRead = defineService({
     }
     // Only the latest unchanged commercial phase may clear its own read debt;
     // actual old money still uses the shared applied-or-returned authority.
+    const firstCurrentRevision = generation ? journal.find(entry => entry.id === generation.firstOperationId)?.operationRevision ?? 0 : 0;
     let clearDebt = verified && local.kind === "phase" && !!local.result && ["active", "not_started"].includes(local.result.status)
       && journal.filter(entry => entry.originalRequest.resourceKind === "phase_schedule").at(-1)?.id === operation.id
       && journal.every(entry => (entry.id === operation.id || ["confirmed", "refused"].includes(entry.state)) && phaseOperationCallerFinished(entry))
-      && !journal.some(entry => ["cancel", "pause", "resume", "void_invoice", "delete_draft"].includes(entry.kind));
+      && journal.every(entry => originalProviderReadsFinished(entry.id === operation.id ? { ...operation, providerObservation: observation } : entry))
+      && !journal.some(entry => entry.operationRevision >= firstCurrentRevision && ["cancel", "pause", "resume", "void_invoice", "delete_draft"].includes(entry.kind));
     if (clearDebt) try { await assertOriginalPhaseFinancials(ctx, operation.subscriptionId); }
     catch (error) { if (error instanceof ServiceError && error.code === "conflict") clearDebt = false; else throw error; }
     // Primary stop reads never discharge linked-subscription, invoice or privacy
@@ -161,7 +167,8 @@ export const applyMerchantScheduleRead = defineService({
     const linked = resource.providerSubscriptionRef ?? (verified && local.result ? local.result.providerSubscriptionRef : null);
     await ctx.tx.update(subscriptionProviderScheduleResources).set({ providerSubscriptionRef: linked, state: clearDebt ? "active" : "quiescing", recoveryPending: !clearDebt,
       stoppedProof: null, evidenceRevision: resource.evidenceRevision + 1, updatedAt: new Date() }).where(eq(subscriptionProviderScheduleResources.subscriptionId, resource.subscriptionId));
-    if (verified && linked && !parent.providerRef && parent.merchantScopeVersion === 1 && parent.provider === "stripe") await ctx.tx.update(subscriptions).set({ providerRef: linked }).where(eq(subscriptions.id, parent.id));
+    if (verified && local.result && generation) await retainGenerationInventory(ctx, operation, local.result);
+    if (verified && linked && !generation && !parent.providerRef && parent.merchantScopeVersion === 1 && parent.provider === "stripe") await ctx.tx.update(subscriptions).set({ providerRef: linked }).where(eq(subscriptions.id, parent.id));
     await enqueueMerchantScheduleErasureRepair(ctx.tx, { subscriptionId: operation.subscriptionId, evidenceDigest: merchantTaxDigest(additions) });
     ctx.setSubject("subscription", operation.subscriptionId); return { verified };
   },

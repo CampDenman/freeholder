@@ -20,7 +20,7 @@ export async function inspectStripeMerchantPayment(input: MerchantPaymentInspect
   const intent = request.subscriptionOrigin
     ? await proveStripeSubscriptionPayment((path, _init, scope) => read(path, scope), request, request.subscriptionOrigin)
     : await read(`/v1/payment_intents/${encodeURIComponent(request.providerRef)}`, request);
-  let customerChargeVerified = intent.status === "succeeded";
+  let customerChargeVerified = intent.status === "succeeded" && (!request.providerCustomerRef || ref(intent.customer) === request.providerCustomerRef);
   if (!request.subscriptionOrigin) { try { assertMerchantAttempt(request, request.paymentAttemptId, intent.metadata); } catch { customerChargeVerified = false; } }
   if (intent.id !== request.providerRef) throw new AdapterError("payments", "stripe", "provider_failure", "Stripe did not return the original PaymentIntent.", true);
   const amountMinor = number(intent.amount_received), currency = text(intent.currency)?.toUpperCase();

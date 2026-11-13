@@ -9091,5 +9091,21 @@
   "catalog.returns.replaceBankRefunds": "Remplacer les remboursements d’origine échoués",
   "catalog.saved.recoverReturnBankRefunds": "Remboursements bancaires vérifiés. Le retour reste ouvert jusqu’à la confirmation de chaque part.",
   "catalog.saved.replaceReturnBankRefunds": "Remboursements échoués vérifiés et remplacements autorisés envoyés.",
-  "catalog.customerReturns.bankReviewHelp": "Votre paiement d’origine reste réglé et votre avoir est conservé. Nous vérifions le remboursement auprès de la banque. Ne payez pas à nouveau."
+  "catalog.customerReturns.bankReviewHelp": "Votre paiement d’origine reste réglé et votre avoir est conservé. Nous vérifions le remboursement auprès de la banque. Ne payez pas à nouveau.",
+  "subscriptions.amendment.title": "Modifier la prochaine période",
+  "subscriptions.amendment.intro": "Vérifiez le prix et les taxes de la prochaine période avant d’accepter. La période déjà payée conserve ses conditions initiales.",
+  "subscriptions.amendment.pending_stop": "Le changement accepté vers {name} attend l’arrêt de la facturation initiale. Il prendra effet à partir du {date}.",
+  "subscriptions.amendment.activated": "Le changement vers {name} est accepté à partir du {date}. L’accès change après paiement intégral de la facture exacte de la période.",
+  "subscriptions.amendment.recovery": "Les données de facturation initiales doivent encore être rapprochées. Les conditions acceptées sont conservées ; la récupération doit se terminer avant toute nouvelle facturation.",
+  "subscriptions.amendment.retry": "Reprendre la récupération initiale",
+  "subscriptions.amendment.saved": "Votre changement accepté a été enregistré.",
+  "subscriptions.amendment.failed": "L’offre ou l’historique de facturation a changé. Vérifiez l’offre actuelle avant de réessayer.",
+  "subscriptions.amendment.effective": "Prend effet le {date}",
+  "subscriptions.amendment.confirm": "J’accepte ce prix futur, ce calendrier, cette destination fiscale et cet avis exacts du commerçant.",
+  "subscriptions.amendment.accept": "Accepter le changement futur",
+  "subscriptions.merchantAmendmentNotice": "Cette modification remplace uniquement les périodes futures. Les conditions et factures antérieures restent inchangées. La facturation reprend uniquement après résolution des obligations initiales du prestataire et des obligations financières ; le nouveau forfait ouvre l’accès seulement après paiement intégral de sa facture exacte de période.",
+  "admin.activity.subscriptionAmendmentAccepted": "A accepté une modification future de l’abonnement",
+  "subscriptions.resumption.intro": "La date de facturation initiale a été manquée. Terminez la récupération, puis vérifiez une nouvelle date future. L’intervalle n’est ni facturé ni ouvert à l’accès ; les dates précédemment acceptées sont conservées.",
+  "subscriptions.resumption.start": "Nouveau début (votre heure locale)",
+  "subscriptions.resumption.notice": "J’accepte cette nouvelle date future de facturation, ce prix, cette destination fiscale et cet avis du commerçant après la période manquée. L’intervalle ne sera ni facturé ni ouvert à l’accès. Les engagements et factures antérieurs restent inchangés ; le nouveau forfait commence seulement après paiement intégral de sa facture exacte de période."
 }

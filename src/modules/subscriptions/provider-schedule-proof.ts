@@ -3,6 +3,7 @@
 // C12.38: a quiescence receipt covers exact durable facts, never a local status.
 import { createHash } from "node:crypto";
 import { originalPhaseResources, closedOriginalPhaseSchedules } from "./provider-phase-resources";
+import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
 import type { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 
 type Resource = typeof subscriptionProviderScheduleResources.$inferSelect;
@@ -74,7 +75,7 @@ export function scheduleQuiescenceCovers(resource: Resource | undefined, operati
     || resource.stoppedProof.journalDigest !== scheduleOperationDigest(operations)
     || operations.length !== resource.operationRevision
     || [...operations].sort((left, right) => left.operationRevision - right.operationRevision).some((operation, index) => operation.operationRevision !== index + 1)
-    || operations.some(operation => operation.subscriptionId !== resource.subscriptionId || !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation))) return false;
+    || operations.some(operation => operation.subscriptionId !== resource.subscriptionId || !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation) || !originalProviderReadsFinished(operation))) return false;
   const phases = originalPhaseResources(operations); if (!phases) return false;
   if (phases.size) {
     const closed = closedOriginalPhaseSchedules(operations);

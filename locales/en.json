@@ -9091,5 +9091,21 @@
   "catalog.returns.replaceBankRefunds": "Replace failed original refunds",
   "catalog.saved.recoverReturnBankRefunds": "Original bank refunds checked. The return stays open until every part is confirmed.",
   "catalog.saved.replaceReturnBankRefunds": "Original failed return refunds checked and replacements submitted where authorized.",
-  "catalog.customerReturns.bankReviewHelp": "Your original payment remains paid and your existing credit is kept. We are checking the refund with the bank. Please do not pay again."
+  "catalog.customerReturns.bankReviewHelp": "Your original payment remains paid and your existing credit is kept. We are checking the refund with the bank. Please do not pay again.",
+  "subscriptions.amendment.title": "Change the next period",
+  "subscriptions.amendment.intro": "Review the merchant’s next-period price and tax before accepting. Your current paid period keeps its original terms.",
+  "subscriptions.amendment.pending_stop": "The accepted change to {name} is waiting for the original billing work to stop. It takes effect from {date}.",
+  "subscriptions.amendment.activated": "The change to {name} is accepted from {date}. Access changes after the exact period invoice is fully paid.",
+  "subscriptions.amendment.recovery": "Original billing facts still need reconciliation. Accepted terms remain recorded; recovery must finish before new billing can start.",
+  "subscriptions.amendment.retry": "Resume original recovery",
+  "subscriptions.amendment.saved": "Your accepted change has been saved.",
+  "subscriptions.amendment.failed": "The offer or billing history changed. Review the current offer before trying again.",
+  "subscriptions.amendment.effective": "Effective from {date}",
+  "subscriptions.amendment.confirm": "I accept this exact future price, calendar, tax destination and merchant notice.",
+  "subscriptions.amendment.accept": "Accept future change",
+  "subscriptions.merchantAmendmentNotice": "This amendment replaces only future periods. Previous accepted terms and invoices stay unchanged. Billing resumes only after original provider and financial obligations are resolved; the new plan grants access only after its exact period invoice is fully paid.",
+  "admin.activity.subscriptionAmendmentAccepted": "Accepted a future subscription amendment",
+  "subscriptions.resumption.intro": "The original billing date was missed. Finish any original recovery, then review a new future start. The gap is not billed or granted access, and earlier accepted dates stay recorded.",
+  "subscriptions.resumption.start": "New start (your local time)",
+  "subscriptions.resumption.notice": "I accept this new future billing date, price, tax destination and merchant notice after the missed period. The gap will not be charged or granted access. Earlier promises and invoices remain unchanged; the new plan starts only after its exact period invoice is fully paid."
 }

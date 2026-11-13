@@ -5,7 +5,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {listTrialSetupDispatches} from "@/modules/subscriptions/setup-reconciliation";
 import {reconcileTrialSetupDispatchAction} from "../../../subscription-actions";
-import { getSubscription } from "@/modules/subscriptions/service";
+import { CommercialAmendment } from "../../../../components/CommercialAmendment";
+import { merchantAmendmentStatus } from "@/modules/subscriptions/commercial-amendments";
+import { getSubscription, listOfferedPlans } from "@/modules/subscriptions/service";
 import { getContact } from "@/core/contacts/service";
 import { currentBusiness } from "@/core/settings/read";
 import { hasModuleAccess, ServiceError } from "@/core/service";
@@ -29,6 +31,8 @@ export default async function SubscriptionDetailPage({ params,searchParams }: { 
   const [t, locale, business, contact] = await Promise.all([getT(), getLocale(), currentBusiness(),
     domainOrNull(getContact.call({ id: subscription.contactId }, actor))]);
   const canRecover=hasModuleAccess(actor,"subscriptions","manage") && actor.kind==="user" && !actor.keyScopes;
+  const amendment = await merchantAmendmentStatus.call({id},actor);
+  const offered = canRecover && ["active","trialing"].includes(subscription.status) ? await listOfferedPlans.call({subscriptionId:id},actor) : [];
   const fresh=actor.kind==="user" && actor.security?.stepUpValid!==false;
   const cursor=query.setupAfter && /^[a-f0-9-]{36}$/i.test(query.setupAfter)?query.setupAfter:undefined;
   const recovery=canRecover && fresh?await listTrialSetupDispatches.call({subscriptionId:id,afterId:cursor},actor):null;
@@ -71,6 +75,7 @@ export default async function SubscriptionDetailPage({ params,searchParams }: { 
       </li>)}</ul>
       <div className="flex flex-wrap gap-4"><a className="text-sm text-accent underline" href={`/admin/subscriptions/${id}`}>{t("subscriptions.setup.firstPage")}</a>{recovery.nextCursor?<a className="text-sm text-accent underline" href={`/admin/subscriptions/${id}?setupAfter=${recovery.nextCursor}`}>{t("subscriptions.setup.nextPage")}</a>:null}</div>
     </CardBody></Card>:null}
+    {canRecover && amendment.commercial ? <CommercialAmendment id={id} audience="owner" locale={locale} offered={offered} status={amendment}/> : null}
     {hasModuleAccess(actor, "subscriptions", "manage") ? <a className="text-accent" href={`/admin/subscriptions?plan=${subscription.planId}`}>{t("subscriptions.detail.manage")}</a> : null}
     <a className="text-accent" href="/admin/search">{t("admin.search.title")}</a>
   </div>;

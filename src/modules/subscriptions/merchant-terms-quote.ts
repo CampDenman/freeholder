@@ -3,6 +3,9 @@
 // C12.38: quote original commercial terms before accepting or billing them.
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { subscriptionMerchantScope } from "./merchant-scope-contract";
+import { subscriptionMerchantScopes, subscriptionMarketPolicies, subscriptions } from "./schema";
+import { invoices } from "@/modules/invoicing/schema";
 import { publicMerchantSupport } from "@/core/commerce/merchant-identity";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { contacts } from "@/core/contacts/schema";
@@ -44,7 +47,7 @@ export const publicMerchantTermsQuote = merchantTermsQuoteOutput.unwrap().pick({
  * only public supplier details, commercial amounts and opaque consent digests. */
 export const quoteOriginalMerchantTerms = defineService({
   name: "subscriptions.quoteOriginalMerchantTerms", summary: "Quote the actual new agreement's original price, declared business and exact first invoice before consent.",
-  kind: "query", permission: "system", external: false, input: merchantTermsQuoteInput.extend({ calendarStart: z.date().optional() }), output: merchantTermsQuoteOutput,
+  kind: "query", permission: "system", external: false, input: merchantTermsQuoteInput.extend({ calendarStart: z.date().optional(), amendmentFor: z.uuid().optional() }), output: merchantTermsQuoteOutput,
   handler: async (input, ctx) => {
     await lockContactIdentityForRead(ctx.tx);
     const [buyer] = await ctx.tx.select({ source: contacts.source }).from(contacts).where(eq(contacts.id, input.contactId)).limit(1);
@@ -68,7 +71,7 @@ export const quoteOriginalMerchantTerms = defineService({
     const price = await ctx.callAsSystem(resolvePrice, { variantId: found.variant.id, contactId: input.contactId, currency, quantity: 1 });
     if (!price.available || price.amountMinor === undefined) throw new ServiceError("conflict", "This plan has no available original price in the chosen currency.");
     if (found.product.taxCategoryId && (!found.category || !found.category.active)) throw new ServiceError("conflict", "Review the original product tax category before quoting a new agreement.");
-    const snapshot = subscriptionCommercialSnapshot.parse({ version: 1, name: found.plan.name, description: found.product.subtitle,
+    let snapshot = subscriptionCommercialSnapshot.parse({ version: 1, name: found.plan.name, description: found.product.subtitle,
       productVariantId: found.variant.id, taxCategoryCode: found.category?.code ?? "standard", requiresShipping: found.variant.requiresShipping,
       currency, periodAmountMinor: price.amountMinor, setupFeeMinor: found.plan.setupFeeMinor, interval: found.plan.interval, intervalCount: found.plan.intervalCount,
       trialDays: found.plan.trialDays, trialRequiresCard: found.plan.trialRequiresCard, cancelBehaviour: found.plan.cancelBehaviour,
@@ -76,6 +79,25 @@ export const quoteOriginalMerchantTerms = defineService({
     const route = { collectionKind: configuration.collectionKind, providerPlatformAccountId: configuration.providerPlatformAccountId,
       chargeAccountId: configuration.collectionKind === "direct" ? policy.providerAccountId : null,
       recipientAccountId: policy.providerAccountId, settlementMerchantAccountId: policy.providerAccountId };
+    if (input.amendmentFor) {
+      const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, input.amendmentFor)).limit(1).for("share");
+      const [scopeRow] = await ctx.tx.select().from(subscriptionMerchantScopes).where(eq(subscriptionMerchantScopes.subscriptionId, input.amendmentFor)).limit(1).for("share");
+      const [originalPolicy] = await ctx.tx.select().from(subscriptionMarketPolicies).where(eq(subscriptionMarketPolicies.subscriptionId, input.amendmentFor)).limit(1).for("share");
+      if (!parent || !scopeRow || !originalPolicy || parent.merchantScopeVersion !== 1 || parent.contactId !== input.contactId || parent.currency !== currency || parent.billingMode !== snapshot.billingMode
+        || !input.calendarStart || input.calendarStart.getTime() < parent.currentPeriodEnd.getTime()
+        || input.calendarStart.getTime() > parent.currentPeriodEnd.getTime() && input.calendarStart.getTime() <= Date.now()) throw new ServiceError("conflict", "Review an amendment for this original buyer, billing protocol and exact next period.");
+      const original = subscriptionMerchantScope.parse(scopeRow);
+      if (originalPolicy.sellerUserId !== policy.sellerUserId || originalPolicy.siteFeeBps !== policy.siteFeeBps || profile.profileId !== original.taxProfileId || profile.liability !== original.taxLiability
+        || merchantTaxDigest(route) !== merchantTaxDigest({ collectionKind: original.collectionKind, providerPlatformAccountId: original.providerPlatformAccountId, chargeAccountId: original.chargeAccountId,
+          recipientAccountId: original.recipientAccountId, settlementMerchantAccountId: original.settlementMerchantAccountId })) throw new ServiceError("conflict", "A different original merchant, fee contract or charge namespace requires a new agreement.");
+      let outstandingSetup = parent.acceptedSetupFeeMinor ?? 0;
+      if (parent.setupFeeInvoiceId) {
+        const [setup] = await ctx.tx.select().from(invoices).where(eq(invoices.id, parent.setupFeeInvoiceId)).limit(1).for("share");
+        if (!setup || setup.sourceType !== "subscription" || setup.sourceId?.split(":")[0] !== parent.id || setup.status === "void") throw new ServiceError("conflict", "Resolve the original setup obligation before amending this agreement.");
+        outstandingSetup = 0;
+      }
+      snapshot = subscriptionCommercialSnapshot.parse({ ...snapshot, setupFeeMinor: outstandingSetup, trialDays: 0, trialRequiresCard: false });
+    }
     let hasSavedMethod = false;
     if (input.paymentMethodId && snapshot.billingMode !== "manual") {
       const [method] = await ctx.tx.select().from(paymentMethods).where(eq(paymentMethods.id, input.paymentMethodId)).limit(1);
@@ -101,7 +123,7 @@ export const quoteOriginalMerchantTerms = defineService({
     const calendarStart = input.calendarStart ?? occurredAt;
     const firstPaidAt = phase.trialing ? periodEnd(calendarStart, "day", snapshot.trialDays) : calendarStart;
     const renewalAt = periodEnd(firstPaidAt, snapshot.interval, snapshot.intervalCount);
-    const initialTaxQuote = await quote(phase.periodAmountMinor, phase.setupFeeMinor, occurredAt), firstPeriodTaxQuote = await quote(snapshot.periodAmountMinor,
+    const initialTaxQuote = await quote(phase.periodAmountMinor, phase.setupFeeMinor, input.amendmentFor ? calendarStart : occurredAt), firstPeriodTaxQuote = await quote(snapshot.periodAmountMinor,
       snapshot.trialDays > 0 ? phase.firstPaidSetupFeeMinor : snapshot.setupFeeMinor, firstPaidAt), renewalTaxQuote = await quote(snapshot.periodAmountMinor, 0, renewalAt);
     const issuer = { name: policy.merchantName, support: policy.merchantSupport ?? null };
     const noticeSnapshot = { locale: input.locale, text: translator(input.locale)("subscriptions.merchantTermsNotice") };
