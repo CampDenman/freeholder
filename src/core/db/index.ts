@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The one sacred database (MASTER.md §2, principle 12). Lazy singleton so
 // importing this module never connects — only use does.
+import {serverRuntimeId} from "@/core/runtime-identity";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { databasePoolMax, databaseUrl } from "@/core/env";
@@ -16,7 +17,7 @@ import { databasePoolMax, databaseUrl } from "@/core/env";
  * those boundaries without any code changing. Pinning it here makes them UTC
  * by construction rather than by luck.
  */
-export const SESSION_SETTINGS = { TimeZone: "UTC", options: "-c freeholder.media_runtime_v1=1 -c freeholder.media_transfer_runtime_v1=1 -c freeholder.media_transfer_requests_runtime_v1=1" } as const;
+export const SESSION_SETTINGS = { TimeZone: "UTC", options: `-c freeholder.media_runtime_v1=1 -c freeholder.media_transfer_runtime_v1=1 -c freeholder.media_transfer_requests_runtime_v1=1 -c freeholder.media_caller_runtime_uuid=${serverRuntimeId}` } as const;
 
 function connect() {
   const conn = postgres(databaseUrl(), {

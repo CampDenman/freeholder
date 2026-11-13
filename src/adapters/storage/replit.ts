@@ -10,6 +10,8 @@
 // hands back a path served by the platform's own media route. That is the same
 // shape a private S3 bucket takes, which is why the contract makes `url` async
 // and `isPublic` explicit rather than assuming either.
+import {createReplitTransferProtocol} from "../../../scripts/media-transfer-protocol.mjs";
+import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
 import type { Bucket } from "@google-cloud/storage";
 import { createHash } from "node:crypto";
 import type { StorageAdapter, StoredObject } from "@/adapters/storage/types";
@@ -123,6 +125,18 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
     },
 
     async put(key, body, contentType, observation): Promise<StoredObject> {
+      if(observation?.request){
+        const bucketId=await bucketOnce();let originalRevision:import("./types").StoredObjectRevision|undefined;
+        const request:TransferRequestObserver=(descriptor,operation)=>observation.request!(descriptor,async(notify,identity)=>operation(async facts=>{await notify(facts);if(descriptor.kind==="object.put"&&facts.stage==="metadata"&&facts.revision)originalRevision=facts.revision;},identity));
+        const protocol=createReplitTransferProtocol({destination:writableOnce,binding:{kind:"replit",namespace:storageNamespace({id:"replit",bucket:bucketId}),location:{bucket:bucketId}},requireOriginalEndpoint,observer:request});
+        await protocol.put(key,body,contentType);
+        if(!originalRevision)throw new Error("storage: original Replit generation was not retained");
+        await observation.onAccepted?.({revision:originalRevision});
+        const actual=await protocol.readVersioned(key,originalRevision);
+        if(!actual||actual.body.byteLength!==body.byteLength||createHash("sha256").update(actual.body).digest("hex")!==createHash("sha256").update(body).digest("hex"))throw new Error("storage: original Replit upload failed full-byte verification");
+        return{key,bytes:body.byteLength,contentType};
+      }
+
       const file = (await writableOnce()).file(key);
       requireOriginalEndpoint();
       try {

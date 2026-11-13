@@ -10,6 +10,9 @@
 // four operations used here, and install size is not a detail on a Replit box
 // or a small droplet (§14).
 import { AwsClient } from "aws4fetch";
+import {createS3MultipartProtocol} from "../../../scripts/media-multipart-protocol.mjs";
+import {createS3TransferProtocol} from "../../../scripts/media-transfer-protocol.mjs";
+import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
 import {verifyS3PhysicalAbsence} from "./physical-absence";
 import {storageNamespace} from "@/core/media/storage-quota";
 import type {
@@ -100,7 +103,9 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     return target;
   };
 
-  async function inspectMultipart(key: string, uploadId: string): Promise<MultipartInspection> {
+  const accountedMultipart=(observer:TransferRequestObserver)=>createS3MultipartProtocol({client,binding:{kind:"s3",namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer});
+  async function inspectMultipart(key: string, uploadId: string, observation?:import("./types").MultipartObservation): Promise<MultipartInspection> {
+    if(observation?.request)return accountedMultipart(observation.request).inspect(key,uploadId);
     const parts: MultipartPart[] = [];
     let marker: string | undefined;
     for (let page = 0; page < 11; page++) {
@@ -130,6 +135,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     // private-bucket capability, not merely an S3 capability.
     directMultipart: config.isPublic ? undefined : {
       async create(key, contentType, observation) {
+        if(observation?.request)return accountedMultipart(observation.request).create(key,contentType,observation.onAccepted);
         const response = await client.fetch(multipartUrl(key), {
           method: "POST",
           headers: { "content-type": contentType },
@@ -158,8 +164,8 @@ export function createS3Storage(config: S3Config): StorageAdapter {
         return { url: signed.url, method: "PUT" as const };
       },
 
-      async listParts(key, uploadId) {
-        const result = await inspectMultipart(key, uploadId);
+      async listParts(key, uploadId, observation) {
+        const result = await inspectMultipart(key, uploadId,observation);
         if (result.state === "absent") throw new Error("storage: the original multipart upload is no longer present");
         return result.parts;
       },
@@ -194,6 +200,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
       },
 
       async complete(key, uploadId, parts, observation) {
+        if(observation?.request)return accountedMultipart(observation.request).complete(key,uploadId,parts,observation.onAccepted);
         const body = `<CompleteMultipartUpload>${[...parts]
           .sort((a, b) => a.partNumber - b.partNumber)
           .map(
@@ -229,6 +236,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
       },
 
       async abort(key, uploadId, observation) {
+        if(observation?.request)return accountedMultipart(observation.request).abort(key,uploadId,observation.onAccepted);
         const response = await client.fetch(multipartUrl(key, uploadId), {
           method: "DELETE",
         });
@@ -243,6 +251,15 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     },
 
     async put(key, body, contentType, observation): Promise<StoredObject> {
+      if(observation?.request){
+        let originalRevision:import("./types").StoredObjectRevision|undefined;
+        const request:TransferRequestObserver=(descriptor,operation)=>observation.request!(descriptor,async(notify,identity)=>operation(async facts=>{await notify(facts);if(facts.stage==="metadata"&&facts.revision)originalRevision=facts.revision;},identity));
+        const namespace=storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket});
+        const protocol=createS3TransferProtocol({client,binding:{kind:"s3",namespace,location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer:request});
+        await protocol.put(key,body,contentType);await observation.onAccepted?.({revision:originalRevision});
+        return{key,bytes:body.byteLength,contentType};
+      }
+
       // A Blob rather than the raw view: it carries the content type with it.
       const response = await client.fetch(objectUrl(key), {
         method: "PUT",

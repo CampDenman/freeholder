@@ -11768,6 +11768,15 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Original ordinary/multipart request source continuation 2026-11-13 prepares
+  same-transaction originating callers, actual per-request nonce/facts/finish,
+  quota-token binding, multipart protocol accounting, portable finished-caller
+  identity and genuine worker cancellation scope.28 pure/protocol and3 native
+  declarations are entirely unrun. The15 models and owned UNAPPLIED82 remain
+  inactive: complete inventory/recovery, stop review, quota retirement, pinned
+  reads and exact ordinary privacy composition are unfinished. All legacy
+  ordinary recovery stays restricted; no actual account incident is asserted.
+  See `deploy/media-original-request-source-2026-11-13.md`.
   Durable provider-inventory source checkpoint 2026-11-13 adds five request/
   inventory models, immutable two-pass page application, actual original PUT
   revision capture, exact source/target generation erasure and scoped privacy

@@ -3,7 +3,6 @@
 // C1.12/C11.08: actual physical return commits independently of domain apply.
 import {randomUUID} from "node:crypto";
 import {and,eq,inArray,sql} from "drizzle-orm";
-import {readFile} from "node:fs/promises";
 import {db} from "@/core/db";
 import type {Actor,Tx} from "@/core/service";
 import {actorString} from "@/core/service";
@@ -12,7 +11,7 @@ import {mediaObjects} from "./schema";
 import {mediaStorageTransferCalls,mediaStorageTransferObjects,mediaStorageTransferReceipts,mediaStorageTransferSubjects,mediaStorageTransferReviews,type StorageTransferRevision,type STORAGE_TRANSFER_CALL_KINDS} from "./transfer-schema";
 import {assertTransferCallDrain,assertTransferOwners,lockedTransfer,requireTransferCapability} from "./transfer-authority";
 import {requireFinishedTransferRead,transferConflict,transferDigest,transferTargetKey} from "./transfer-proof";
-import {mediaWriterRuntimeId} from "./physical-caller-runtime";
+import {mediaWriterRuntimeId,actualStorageCallerRuntimeIdentity,type StorageCallerRuntimeIdentity} from "./physical-caller-runtime";
 import {objectKeyDigest} from "./write-ledger";
 import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 import {reconcileCommittedStorageObservation} from "./observation-hooks";
@@ -21,14 +20,10 @@ import {transferCallRetryPermitted} from "./transfer-reviewed-call";
 import {reserveTransferQuota} from "./transfer-quota";
 
 type Kind=typeof STORAGE_TRANSFER_CALL_KINDS[number];
-export const transferRuntimeId=randomUUID();
-export async function transferRuntimeIdentity(){
- const boot=(await readFile("/proc/sys/kernel/random/boot_id","utf8")).trim();
- const text=await readFile("/proc/self/stat","utf8"),end=text.lastIndexOf(") "),startTicks=text.slice(end+2).trim().split(/\s+/)[19];
- if(!startTicks||!/^\d+$/.test(startTicks))transferConflict("The actual storage caller process identity is unavailable.");
- return{boot,pid:process.pid,startTicks};
-}
-export interface TransferCallAdmission {planId:string;objectId:string;kind:Kind;token:string;runtimeIdentity:{boot:string;pid:number;startTicks:string};expectedRevision?:StorageTransferRevision;physicalKey?:string}
+export const transferRuntimeId=mediaWriterRuntimeId;
+export async function transferRuntimeIdentity(){return actualStorageCallerRuntimeIdentity(transferRuntimeId);}
+
+export interface TransferCallAdmission {planId:string;objectId:string;kind:Kind;token:string;runtimeIdentity:StorageCallerRuntimeIdentity;expectedRevision?:StorageTransferRevision;physicalKey?:string}
 export async function admitTransferCall(tx:Tx,input:TransferCallAdmission,actor:Actor){
  const{plan,objects}=await lockedTransfer(tx,input.planId),object=objects.find(row=>row.id===input.objectId);
  if(!object)transferConflict();
@@ -91,6 +86,7 @@ export async function retainTransferReturn(id:string,token:string,result:ActualT
    if(call.resultDigest!==transferDigest(result))transferConflict("A physical caller cannot return two different outcomes.");
    return;
   }
+  if(!call.objectId)transferConflict("Use the exact original ordinary/multipart caller return path.");
   const[object]=await tx.select().from(mediaStorageTransferObjects).where(eq(mediaStorageTransferObjects.id,call.objectId)).limit(1).for("update");
   if(!object)transferConflict();
   const now=new Date(),late=call.state==="stopped"||Boolean(call.stoppedAt)||Boolean(object.redactedAt);

@@ -114,6 +114,7 @@ export const reconcileStorageOperation = defineOrchestratedService({
   auditInputFields: ["id", "outcome"], input: confirmation, output: z.object({ ok: z.literal(true) }),
   handler: async (input, actor) => {
     human(actor);
+    requireDurableMediaRetirementProof();
     const original = await claimStorageRecovery.call(input, actor);
     // claim's public schema intentionally omits the digest. The fresh claim
     // already checked this supplied original key against its immutable hash.

@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import {currentStorageCallerRuntimeSchema} from "./physical-caller-runtime";
 // C1.12/C11.08: existing original erasure authority retires every physical copy.
 import {createHash,randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,or,sql} from "drizzle-orm";
@@ -53,7 +54,7 @@ async function erasureWork(tx:Parameters<typeof lockedTransfer>[0],id:string,obj
 }
 type ErasureWork=Awaited<ReturnType<typeof erasureWork>>;
 const readWork=defineMediaService({name:"media.captureTransferErasure",summary:"Capture exact original erasure lineage after its owning reference retires.",kind:"query",permission:"system",external:false,input:z.object({id:z.uuid(),objectId:z.uuid()}),output:z.custom<ErasureWork>(),handler:async(input,ctx)=>erasureWork(ctx.tx,input.id,input.objectId)});
-const admission=z.object({planId:z.uuid(),objectId:z.uuid(),kind:z.enum(["privacy_read","privacy_delete","privacy_absence","privacy_source_read","privacy_source_delete","privacy_source_absence","source_erasure_inventory","target_erasure_inventory"]),token:z.string().min(36),runtimeIdentity:z.object({boot:z.string(),pid:z.number().int().positive(),startTicks:z.string()}),expectedRevision:z.object({kind:z.enum(["etag","generation"]),namespace:z.string(),key:z.string(),value:z.string(),versionId:z.string().optional()}).optional()});
+const admission=z.object({planId:z.uuid(),objectId:z.uuid(),kind:z.enum(["privacy_read","privacy_delete","privacy_absence","privacy_source_read","privacy_source_delete","privacy_source_absence","source_erasure_inventory","target_erasure_inventory"]),token:z.string().min(36),runtimeIdentity:currentStorageCallerRuntimeSchema,expectedRevision:z.object({kind:z.enum(["etag","generation"]),namespace:z.string(),key:z.string(),value:z.string(),versionId:z.string().optional()}).optional()});
 const admit=defineMediaService({name:"media.admitTransferErasureCall",summary:"Commit an original transfer erasure caller before private provider I/O.",kind:"mutation",permission:"system",external:false,input:admission,output:z.object({id:z.uuid()}),auditInputFields:["planId","objectId","kind"],handler:async(input,ctx)=>{const work=await erasureWork(ctx.tx,input.planId,input.objectId),source=input.kind.startsWith("privacy_source_")||input.kind==="source_erasure_inventory";
  if(input.kind==="privacy_delete"||input.kind==="privacy_source_delete"||input.kind==="privacy_read"||input.kind==="privacy_source_read"||input.kind==="privacy_absence"||input.kind==="privacy_source_absence"){
   const original=source?work.sourceRevision:work.targetRevision;

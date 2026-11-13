@@ -9,6 +9,8 @@
 // Deliberately small. Every method here is one an owner's files genuinely
 // need; anything vendor-specific stays behind the implementation.
 
+import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
+
 export type StorageId = "s3" | "replit" | "local";
 
 /** Stable resource names only; no credentials or bearer capabilities. */
@@ -27,6 +29,7 @@ export interface StoredObjectRevision {
   versionId?: string;
 }
 export interface StorageWriteObservation {
+  request?:TransferRequestObserver;
   onAccepted?: (result?: { revision?: StoredObjectRevision }) => Promise<void>;
 }
 
@@ -50,8 +53,9 @@ export interface MultipartPart {
 }
 export type MultipartInspection = { state: "open"; parts: MultipartPart[] } | { state: "absent" };
 export interface MultipartObservation {
+  request?:TransferRequestObserver;
   /** Commit the positive provider fact before subsequent inspection can fail. */
-  onAccepted?: (result?: { uploadId: string }) => Promise<void>;
+  onAccepted?: (result?: { uploadId: string;revision?:StoredObjectRevision }) => Promise<void>;
 }
 
 /** Optional capability: only object stores that really support it expose it. */
@@ -63,9 +67,9 @@ export interface DirectMultipartStorage {
     partNumber: number,
     expiresIn?: number,
   ): Promise<{ url: string; method: "PUT" }>;
-  listParts(key: string, uploadId: string): Promise<MultipartPart[]>;
+  listParts(key: string, uploadId: string, observation?:MultipartObservation): Promise<MultipartPart[]>;
   /** Absence is authoritative NoSuchUpload, not an empty object HEAD. */
-  inspect?(key: string, uploadId: string): Promise<MultipartInspection>;
+  inspect?(key: string, uploadId: string, observation?:MultipartObservation): Promise<MultipartInspection>;
   /** Complete exact-key inventory, including uploads whose CREATE reply was lost. */
   listUploadsForKey?(key: string): Promise<string[]>;
   complete(

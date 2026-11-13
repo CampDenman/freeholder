@@ -1,5 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import {admitOriginalMediaCaller,admitOriginalMultipartCaller,originalMultipartCaller,retainOriginalMediaCallerReturn,withOriginalMultipartInvocation} from "./provider-callers";
+import {observeTransferRequest,withTransferRequestScope,TransferRequestNotAttemptedError} from "./transfer-requests";
 import {assertPhysicalStorageAbsence} from "./physical-absence";
 import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C11.08: commit original intent, call its provider, then record facts.
@@ -11,7 +13,8 @@ import {db} from "@/core/db";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {actorString,ServiceError,type ServiceContext,type Tx} from "@/core/service";
 import {mediaObjects,mediaUploads} from "./schema";
-import {mediaWriterRuntimeId} from "./physical-caller-runtime";
+import {actualStorageCallerRuntimeIdentity,mediaWriterRuntimeId} from "./physical-caller-runtime";
+import {transferDigest} from "./transfer-proof";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartOperations,mediaMultipartResources} from "./multipart-schema";
 import {allowMediaReceiptWrites,lockObjectDigest,objectKeyDigest,storageOperationsHeld} from "./write-ledger";
@@ -30,6 +33,7 @@ export async function reserveMultipart(ctx:ServiceContext,upload:Upload,binding:
  await assertOriginalUploadWritable(ctx.tx,upload.ownerContactId,upload.uploadedBy);
  const[resource]=await ctx.tx.insert(mediaMultipartResources).values({uploadId:upload.id,key:upload.storageKey,keyDigest:objectKeyDigest(upload.storageKey),namespace:binding.namespace,storageKind:binding.kind,storageLocation:{...binding.location},contentType:upload.declaredMime,expectedBytes:upload.expectedBytes,actor:actorString(ctx.actor),contactId:upload.ownerContactId,state:"creating"}).returning();
  const[operation]=await ctx.tx.insert(mediaMultipartOperations).values({resourceId:resource!.id,kind:"create",state:"started",writerRuntimeId:mediaWriterRuntimeId,actor:actorString(ctx.actor)}).returning();
+ await admitOriginalMultipartCaller(ctx.tx,operation!.id,"multipart_create",ctx.actor);
  return operation!.id;
 }
 
@@ -49,16 +53,27 @@ export async function originalMultipart(uploadId:string):Promise<BoundMultipart>
  }
  return{...captured,resource};
 }
-export async function originalMultipartParts(uploadId:string):Promise<MultipartPart[]>{
- const captured=await originalMultipart(uploadId),multipart=captured.store.directMultipart!;
- if(!multipart.inspect)return multipart.listParts(captured.resource.key,captured.resource.providerUploadId!);
- const inspection=await multipart.inspect(captured.resource.key,captured.resource.providerUploadId!);
- if(inspection.state==="open")return inspection.parts;
- const completed=await db().select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,captured.resource.id),eq(mediaMultipartOperations.kind,"complete"))).orderBy(asc(mediaMultipartOperations.createdAt),asc(mediaMultipartOperations.id));
- const original=completed.filter(row=>row.state!=="not_applied").at(-1);
- if(original&&await captured.store.head(captured.resource.key))return original.parts;
- conflict("The original multipart state cannot be established from its receipts.");
+/** A fresh read has its own caller. It cannot resume the original CREATE or
+ * make a completed session's absent response stand in for object lineage. */
+async function inspectOriginalMultipart(captured:BoundMultipart,operationId:string){
+ if(!captured.store.directMultipart?.inspect||!captured.resource.providerUploadId)conflict("The exact original session cannot be inspected.");
+ const token=randomUUID()+randomUUID(),runtimeIdentity=await actualStorageCallerRuntimeIdentity();
+ const caller=await db().transaction(async tx=>{await lockContactIdentityForRead(tx);return admitOriginalMediaCaller(tx,{kind:"multipart_recovery_inspect",multipartOperationId:operationId,token,runtimeIdentity},{kind:"system"});});
+ try{
+  const result=await withTransferRequestScope({callId:caller.id,token,runtimeIdentity},()=>captured.store.directMultipart!.inspect!(captured.resource.key,captured.resource.providerUploadId!,{request:observeTransferRequest}));
+  if(!(await retainOriginalMediaCallerReturn(caller.id,token,{inspectionDigest:transferDigest(result)})).settled)conflict();
+  return result;
+ }catch(error){await retainOriginalMediaCallerReturn(caller.id,token,{failed:true}).catch(()=>{});throw error;}
 }
+export async function originalMultipartParts(uploadId:string):Promise<MultipartPart[]>{
+ const captured=await originalMultipart(uploadId);
+ const operations=await db().select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.resourceId,captured.resource.id)).orderBy(asc(mediaMultipartOperations.createdAt),asc(mediaMultipartOperations.id));
+ const original=operations.filter(row=>row.state!=="not_applied").at(-1);if(!original)conflict();
+ const inspection=await inspectOriginalMultipart(captured,original.id);
+ if(inspection.state==="open")return inspection.parts;
+ conflict("The exact original session is absent. Current object existence cannot prove this original completion; retain its caller and request receipts for recovery.");
+}
+
 async function lockedOperation(tx:Tx,id:string,allowMinimized=false){
  const[identity]=await tx.select({digest:mediaMultipartResources.keyDigest}).from(mediaMultipartOperations).innerJoin(mediaMultipartResources,eq(mediaMultipartResources.id,mediaMultipartOperations.resourceId)).where(eq(mediaMultipartOperations.id,id)).limit(1);
  if(!identity)conflict("The original multipart call receipt is missing.");
@@ -96,13 +111,16 @@ export async function observeMultipart(id:string,options:{accepted?:boolean;uplo
 }
 
 export async function createOriginalMultipart(uploadId:string,operationId:string):Promise<void>{
+ const caller=originalMultipartCaller(operationId);
  let captured:BoundMultipart;
- try{captured=await originalMultipart(uploadId);}catch(error){await notAttempted(operationId);throw error;}
+ try{captured=await originalMultipart(uploadId);}catch(error){await retainOriginalMediaCallerReturn(caller.id,caller.token,{notAttempted:true});await notAttempted(operationId);throw error;}
  let acknowledged=false,observedId:string|undefined;
  try{
-  const result=await captured.store.directMultipart!.create(captured.resource.key,captured.resource.contentType,{onAccepted:async result=>{acknowledged=true;observedId=result?.uploadId;if(!observedId)conflict();await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,uploadId:observedId});}});
-  acknowledged=true;observedId=result.uploadId;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,uploadId:observedId,finished:true});
- }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,uploadId:observedId,unknown:true,finished:true}).catch(()=>{});throw error;}
+  const result=await withTransferRequestScope({callId:caller.id,token:caller.token,runtimeIdentity:caller.runtimeIdentity},()=>captured.store.directMultipart!.create(captured.resource.key,captured.resource.contentType,{request:observeTransferRequest,onAccepted:async result=>{acknowledged=true;observedId=result?.uploadId;if(!observedId)conflict();await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,uploadId:observedId});}}));
+  acknowledged=true;observedId=result.uploadId;
+  if(!(await retainOriginalMediaCallerReturn(caller.id,caller.token,{accepted:true,providerUploadId:observedId})).settled)conflict();
+  await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,uploadId:observedId,finished:true});
+ }catch(error){await retainOriginalMediaCallerReturn(caller.id,caller.token,error instanceof TransferRequestNotAttemptedError?{notAttempted:true}:{failed:true}).catch(()=>{});await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,uploadId:observedId,unknown:true,finished:true}).catch(()=>{});throw error;}
 }
 
 /** Use the common contact → object → resource → upload lock ordering. */
@@ -129,27 +147,29 @@ export async function claimMultipartComplete(ctx:ServiceContext,uploadId:string,
  const[operation]=await ctx.tx.insert(mediaMultipartOperations).values({resourceId:resource.id,kind:"complete",state:"started",writerRuntimeId:mediaWriterRuntimeId,providerUploadId:resource.providerUploadId,parts:manifest,partsDigest:digest,actor:actorString(ctx.actor)}).returning();
  await ctx.tx.update(mediaMultipartResources).set({state:"completing",updatedAt:new Date()}).where(eq(mediaMultipartResources.id,resource.id));
  await ctx.tx.update(mediaUploads).set({state:"processing",updatedAt:new Date()}).where(eq(mediaUploads.id,upload.id));
+ await admitOriginalMultipartCaller(ctx.tx,operation!.id,"multipart_complete",ctx.actor);
  return{operationId:operation!.id,recoverOnly:false};
 }
 export async function completeOriginalMultipart(uploadId:string,operationId:string,recoverOnly:boolean):Promise<BoundMultipart>{
  let captured:BoundMultipart;
- try{captured=await originalMultipart(uploadId);}catch(error){if(!recoverOnly)await notAttempted(operationId);throw error;}
+ try{captured=await originalMultipart(uploadId);}catch(error){if(!recoverOnly){const caller=originalMultipartCaller(operationId);await retainOriginalMediaCallerReturn(caller.id,caller.token,{notAttempted:true});await notAttempted(operationId);}throw error;}
  const[operation]=await db().select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,operationId)).limit(1);
  if(!operation||operation.resourceId!==captured.resource.id||operation.kind!=="complete"||operation.providerUploadId!==captured.resource.providerUploadId)conflict();
+ const caller=recoverOnly?null:originalMultipartCaller(operationId);
  let acknowledged=Boolean(operation.providerAcceptedAt);
  try{
   if(recoverOnly){
-   // No duplicate COMPLETE. Recovery inspects this exact original resource;
-   // full content verification still precedes adoption and asset attachment.
-   if(!await captured.store.head(captured.resource.key))conflict();
-   if(!captured.store.directMultipart!.inspect)conflict("This provider cannot verify original multipart recovery.");
-   if((await captured.store.directMultipart!.inspect(captured.resource.key,operation.providerUploadId!)).state!=="absent")conflict("The original multipart upload is still open; its completion is unresolved.");
+   requireDurableMediaRetirementProof();
+   conflict("The earlier original completion needs exact caller/request recovery; it cannot be retried or adopted from a current-key HEAD.");
   }else{
-   await captured.store.directMultipart!.complete(captured.resource.key,operation.providerUploadId!,operation.parts,{onAccepted:async()=>{acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}});
+   if(!caller)conflict();
+   let revision:import("./transfer-schema").StorageTransferRevision|undefined;
+   await withTransferRequestScope({callId:caller.id,token:caller.token,runtimeIdentity:caller.runtimeIdentity},()=>captured.store.directMultipart!.complete(captured.resource.key,operation.providerUploadId!,operation.parts,{request:observeTransferRequest,onAccepted:async result=>{acknowledged=true;revision=result?.revision;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}}));
+   if(!revision||!(await retainOriginalMediaCallerReturn(caller.id,caller.token,{accepted:true,providerUploadId:operation.providerUploadId!,revision})).settled)conflict();
    acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,finished:true});
   }
   return captured;
- }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true,finished:true}).catch(()=>{});throw error;}
+ }catch(error){if(caller)await retainOriginalMediaCallerReturn(caller.id,caller.token,error instanceof TransferRequestNotAttemptedError?{notAttempted:true}:{failed:true}).catch(()=>{});await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true,finished:true}).catch(()=>{});throw error;}
 }
 
 /** The COMPLETE intent already committed before I/O; this is its object fact. */
@@ -181,15 +201,18 @@ export async function claimMultipartAbort(ctx:Pick<ServiceContext,"tx"|"actor">,
  const[operation]=await ctx.tx.insert(mediaMultipartOperations).values({resourceId:resource.id,kind:"abort",state:"started",writerRuntimeId:mediaWriterRuntimeId,providerUploadId:resource.providerUploadId,actor:actorString(ctx.actor)}).returning();
  await ctx.tx.update(mediaMultipartResources).set({state:"aborting",updatedAt:new Date()}).where(eq(mediaMultipartResources.id,resource.id));
  await ctx.tx.update(mediaUploads).set({state:"aborted",completedAt:new Date(),updatedAt:new Date()}).where(eq(mediaUploads.id,uploadId));
+ await admitOriginalMultipartCaller(ctx.tx,operation!.id,"multipart_abort",ctx.actor);
  return{operationId:operation!.id,terminal:false};
 }
 export async function abortOriginalMultipart(uploadId:string,operationId:string):Promise<void>{
  requireDurableMediaRetirementProof();
+ const caller=originalMultipartCaller(operationId);
  let captured:BoundMultipart;
- try{captured=await originalMultipart(uploadId);}catch(error){await notAttempted(operationId);throw error;}
+ try{captured=await originalMultipart(uploadId);}catch(error){await retainOriginalMediaCallerReturn(caller.id,caller.token,{notAttempted:true});await notAttempted(operationId);throw error;}
  let acknowledged=false;
  try{
-  await captured.store.directMultipart!.abort(captured.resource.key,captured.resource.providerUploadId!,{onAccepted:async()=>{acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}});
+  await withTransferRequestScope({callId:caller.id,token:caller.token,runtimeIdentity:caller.runtimeIdentity},()=>captured.store.directMultipart!.abort(captured.resource.key,captured.resource.providerUploadId!,{request:observeTransferRequest,onAccepted:async()=>{acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}}));
+  if(!(await retainOriginalMediaCallerReturn(caller.id,caller.token,{accepted:true,providerUploadId:captured.resource.providerUploadId!})).settled)conflict();
   acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,finished:true});
   if(!captured.store.directMultipart!.inspect)conflict("The original provider cannot verify multipart retirement.");
   const inspection=await captured.store.directMultipart!.inspect(captured.resource.key,captured.resource.providerUploadId!);
@@ -204,11 +227,11 @@ export async function abortOriginalMultipart(uploadId:string,operationId:string)
    const unsettled=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.keyDigest,resource.keyDigest),isNull(mediaObjectWrites.deletedAt))).limit(1);
    if(!unsettled.length)await tx.delete(mediaObjects).where(and(eq(mediaObjects.key,captured.resource.key),eq(mediaObjects.state,"pending")));
   });
- }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true,finished:true}).catch(()=>{});throw error;}
+ }catch(error){await retainOriginalMediaCallerReturn(caller.id,caller.token,error instanceof TransferRequestNotAttemptedError?{notAttempted:true}:{failed:true}).catch(()=>{});await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true,finished:true}).catch(()=>{});throw error;}
 }
 /** Existing expiry/erasure authority may retire a known, idle original upload. */
 export async function retireKnownMultipart(uploadId:string):Promise<boolean>{
- try{
+ return withOriginalMultipartInvocation(async()=>{try{
   const captured=await originalMultipart(uploadId);
   requireDurableMediaRetirementProof();
   if(captured.resource.retiredAt)return true;
@@ -216,5 +239,5 @@ export async function retireKnownMultipart(uploadId:string):Promise<boolean>{
   const claim=await db().transaction(async tx=>claimMultipartAbort({tx,actor:{kind:"system"}},uploadId,Boolean(captured.resource.redactedAt)));
   if(claim.terminal)return true;
   await abortOriginalMultipart(uploadId,claim.operationId);return true;
- }catch{return false;}
+ }catch{return false;}});
 }
