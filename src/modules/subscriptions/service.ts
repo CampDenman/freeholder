@@ -40,6 +40,7 @@ import { syncSubscriptionAccess } from "@/core/entitlements/service";
 import grossProrationQuotes from "./proration-quote";
 import grossProrationServices, { completePaidGrossProration } from "./proration-service";
 import prorationCreditOwnerServices from "./proration-credit-owner";
+import { subscriptionProrationCashConfirmations, subscriptionProrationCreditConfirmations } from "./proration-boundary-schema";
 import { subscriptionProrations, subscriptionProrationPrincipal, subscriptionProrationCreditUses } from "./proration-schema";
 import { originalCashRecoveryFinancialWitness } from "@/modules/invoicing/original-cash-recovery-store";
 import { exportOriginalCashHistory } from "@/modules/invoicing/original-cash-invoice-history";
@@ -1790,7 +1791,7 @@ registerContactReference({
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
   tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines", "subscription_provider_read_tickets", "subscription_provider_read_finishes", "subscription_provider_read_stops",
-    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses"],
+    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses", "subscription_proration_cash_confirmations", "subscription_proration_credit_confirmations"],
   retentionScopes: ["commerce.money"],
   exportData: async (tx: Tx, contactId: string) => {
     const rows = await tx
@@ -1850,9 +1851,13 @@ registerContactPrivacySource({
       .from(subscriptionProrationCreditUses).where(inArray(subscriptionProrationCreditUses.prorationId, prorationIds)).limit(5001) : [];
     // These exact actual receipt FKs belong to the subject's subscriptions even
     // when original paid cash has never acquired any local invoice/payment.
+    const cashBoundary = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationCashConfirmations.prorationId, paymentId: subscriptionProrationCashConfirmations.paymentId,
+      retainedAt: subscriptionProrationCashConfirmations.retainedAt }).from(subscriptionProrationCashConfirmations).where(inArray(subscriptionProrationCashConfirmations.prorationId, prorationIds)).limit(5001) : [];
+    const creditBoundary = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationCreditConfirmations.prorationId, applicationId: subscriptionProrationCreditConfirmations.applicationId,
+      retainedAt: subscriptionProrationCreditConfirmations.retainedAt }).from(subscriptionProrationCreditConfirmations).where(inArray(subscriptionProrationCreditConfirmations.prorationId, prorationIds)).limit(5001) : [];
     const originalCash = await originalCashRecoveryFinancialWitness(tx, [], charges.map(row => row.id));
     const aggregate = rows.length + charges.length + accepted.length + amendments.length + resumptions.length + periodInvoices.length + readerTickets.length + readerStops.length
-      + prorations.length + prorationPrincipal.length + prorationCredits.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length;
+      + prorations.length + prorationPrincipal.length + prorationCredits.length + cashBoundary.length + creditBoundary.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length;
     if (aggregate > 5000) throw new ServiceError("conflict", "Restore a bounded complete original subscription subject export; receipt-only cash and its authentic children cannot be truncated.");
     const cashHistory = exportOriginalCashHistory(originalCash);
     const cashFor = (subscriptionId: string) => {
@@ -1865,7 +1870,8 @@ registerContactPrivacySource({
       acceptedAmendments: amendments.filter(value => value.subscriptionId === row.id), acceptedCalendarResumptions: resumptions.filter(value => value.subscriptionId === row.id), observedPeriodInvoices: periodInvoices.filter(value => value.subscriptionId === row.id),
       providerReaderHistory: readerTickets.filter(value => value.subscriptionId === row.id), providerReaderRuntimeStops: readerStops.filter(value => value.subscriptionId === row.id),
       originalReceiptCashHistory: cashFor(row.id), acceptedGrossProrations: prorations.filter(value => value.subscriptionId === row.id).map(value => ({ ...value,
-        originalPrincipal: prorationPrincipal.filter(principal => principal.prorationId === value.id), acceptedCreditUse: prorationCredits.filter(credit => credit.prorationId === value.id) })) }));
+        originalPrincipal: prorationPrincipal.filter(principal => principal.prorationId === value.id), acceptedCreditUse: prorationCredits.filter(credit => credit.prorationId === value.id),
+        actualCashRetention: cashBoundary.filter(receipt => receipt.prorationId === value.id), actualCreditRetention: creditBoundary.filter(receipt => receipt.prorationId === value.id) })) }));
   },
   erase: async (tx: Tx, contactId: string, context) => {
     if (!context.service) throw new ServiceError("conflict", "Original agreement erasure requires its actual shared privacy context.");

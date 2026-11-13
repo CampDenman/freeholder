@@ -14318,6 +14318,19 @@ whatever is best for the people using the site.
   native and two existing actual receipt-only refusal controls are prepared,
   UNRUN. Parent ordinary-reader contracts and current cash source are required
   assembly dependencies, not a passing provider or recovery claim.
+  Actual principal boundary increment (same date/items): provider object birth,
+  a supplied processedAt and PostgreSQL transaction-start defaults cannot prove
+  on-time funding. Immutable exact cash/application confirmations now force
+  database clock_timestamp retention time. Fully paid effect/commission
+  eligibility also require every actual positive source retained by the chosen
+  instant. Late real money stays recorded for fresh consent; it cannot revive
+  expired access. Entirely local acceptance that cannot commit before that
+  instant rolls back its new documents/credit. Four-locale consent/export and
+  additive full-row witnesses are source work; two actual clock/rollback native
+  controls are PREPARED/UNRUN, new SQL is UNAPPLIED/unqualified. Actual platform
+  card mandate/POST/independent GET recovery and full provider/late recovery
+  remain required; no item closes. See
+  `deploy/subscription-proration-boundary80-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

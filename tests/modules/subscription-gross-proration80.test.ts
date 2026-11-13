@@ -3,10 +3,12 @@
 // C9.33/C9.38/C12.38 PREPARED/UNRUN native controls. Every money row is produced
 // by actual shared services. Fictional identity/bank attachment and the initial
 // application clock are explicit fixtures, never independently verified money.
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { db } from "@/core/db";
 import { stopJobs } from "@/core/jobs";
+import { defineService } from "@/core/service";
 import { ready } from "@/core/runtime";
 import { setModuleEnabled } from "@/core/settings/service";
 import { entitlementGrants, entitlements } from "@/core/entitlements/schema";
@@ -27,6 +29,7 @@ import { subscriptionCommercialTerms, subscriptions } from "@/modules/subscripti
 import { savePlan, subscribe } from "@/modules/subscriptions/service";
 import { quoteGrossProration } from "@/modules/subscriptions/proration-quote";
 import { acceptGrossProration, applyGrossProrationTask, completePaidGrossProration } from "@/modules/subscriptions/proration-service";
+import { subscriptionProrationCashConfirmations } from "@/modules/subscriptions/proration-boundary-schema";
 import { subscriptionProrations } from "@/modules/subscriptions/proration-schema";
 import { subscriptionProrationWitnesses } from "@/modules/subscriptions/proration-witnesses";
 import { seedMerchantCheckout80 } from "../helpers/merchant-checkout80";
@@ -170,6 +173,68 @@ describe.runIf(hasDatabase)("actual original gross proration, attested cash and 
     expect(await reviewAgreementFee.call({ invoiceId: accepted.invoiceId }, OWNER)).toMatchObject({ eligible: true, owedMinor: 9, recordedMinor: 9, returnDueMinor: 0, reviewRequired: false });
     expect((await db().select().from(invoices).where(eq(invoices.id, accepted.invoiceId)))[0]).toMatchObject({ paidMinor: 1, refundedMinor: 1, creditedMinor: 2100 });
     expect(await db().select().from(payments)).toHaveLength(2); expect(await db().select().from(merchantAgreementPaymentRoutes)).toHaveLength(0);
+  });
+
+  it("retains legitimate late external money but refuses expired-consent activation even when its supplied processedAt predates the boundary", async () => {
+    const old = await original(), next = await target("100");
+    const input = { id: old.accepted.subscription.id, planId: next.plan.id, productVariantId: next.variant.id, effectiveAt: old.effectiveAt.toISOString(), taxDestination: old.input.taxDestination, locale: "en" as const };
+    const quote = await quoteGrossProration.call(input, OWNER);
+    const accepted = await acceptGrossProration.call({ ...input, previousTermsId: quote.previousTermsId, acceptedQuoteDigest: quote.quoteDigest, confirm: true }, OWNER);
+    if (!accepted.invoiceId) throw new Error("Retain the actual original target before recording late money.");
+    await stopJobs(); // Preserve its original queue row; prevent an unrelated expiry worker from satisfying the oracle first.
+    const waitMs = old.effectiveAt.getTime() - Date.now() + 30;
+    if (waitMs > 45030) throw new Error("The actual boundary wait exceeded this finite native control.");
+    if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+    const earlier = new Date(old.effectiveAt.getTime() - 1000);
+    let actualDecision: { applied: boolean; reviewRequired: boolean } | undefined;
+    const recordLate = defineService({ name: "tests.recordLateOriginalProrationPrincipalAtomic", summary: "Record actual late attested cash and test its original access decision before a separate expiry worker can race the row.",
+      kind: "mutation", permission: "scoped", stepUp: true, external: false, writeClass: "money", input: recordOfflinePayment.def.input, output: recordOfflinePayment.def.output,
+      handler: async (paymentInput, ctx) => {
+        await lockContactIdentity(ctx.tx);
+        const [before] = await ctx.tx.select().from(subscriptionProrations).where(eq(subscriptionProrations.id, accepted.prorationId)).limit(1).for("update");
+        expect(before?.state).toBe("awaiting_payment");
+        const payment = await ctx.call(recordOfflinePayment, paymentInput);
+        actualDecision = await ctx.callAsSystem(completePaidGrossProration, { invoiceId: accepted.invoiceId! });
+        return payment;
+      } });
+    const paid = await recordLate.call({ invoiceId: accepted.invoiceId, method: "bank_transfer", amountMinor: 3150, processedAt: earlier,
+      reference: "fictional-late-principal", evidence: "Actual synthetic owner attestation retained after the accepted boundary", idempotencyKey: "late-record-old-processed-at" }, OWNER);
+    expect(actualDecision).toEqual({ applied: false, reviewRequired: true });
+    const [invoice] = await db().select().from(invoices).where(eq(invoices.id, accepted.invoiceId));
+    expect(invoice).toMatchObject({ status: "paid", paidMinor: 3150, creditedMinor: 2100, paidAt: earlier });
+    const [actual] = await db().select().from(subscriptionProrationCashConfirmations).where(eq(subscriptionProrationCashConfirmations.paymentId, paid.id));
+    expect(actual?.retainedAt.getTime()).toBeGreaterThan(old.effectiveAt.getTime());
+    expect(await completePaidGrossProration.call({ invoiceId: accepted.invoiceId }, { kind: "system" })).toEqual({ applied: false, reviewRequired: true });
+    expect((await parent(input.id)).planId).toBe(old.plan.id);
+    expect((await db().select().from(subscriptionProrations).where(eq(subscriptionProrations.id, accepted.prorationId)))[0]?.state).toBe("review");
+    await expect(db().transaction(tx => tx.execute(sql`update subscription_proration_cash_confirmations set retained_at=${earlier.toISOString()}::timestamptz where payment_id=${paid.id}::uuid`))).rejects.toMatchObject({ cause: { code: "23514" } });
+    expect((await db().select().from(invoices).where(eq(invoices.id, old.originalInvoice!.id)))[0]).toEqual(old.originalInvoice);
+    expect(await db().select().from(payments)).toHaveLength(2);
+  });
+
+  it("rolls back entirely local new documents/credit when the actual acceptance transaction cannot commit before its reviewed instant", async () => {
+    const old = await original(), next = await target("100");
+    const input = { id: old.accepted.subscription.id, planId: next.plan.id, productVariantId: next.variant.id, effectiveAt: old.effectiveAt.toISOString(), taxDestination: old.input.taxDestination, locale: "en" as const };
+    const quote = await quoteGrossProration.call(input, OWNER);
+    let reachedActualAcceptance: { prorationId: string; invoiceId: string | null } | undefined;
+    const delayed = defineService({ name: "tests.retainActualProrationAcceptanceUntilBoundary", summary: "Hold one actual original local acceptance through its real deadline before attempting commit.", kind: "mutation", permission: "system", external: false, writeClass: "money",
+      input: acceptGrossProration.def.input, output: acceptGrossProration.def.output,
+      handler: async (consent, ctx) => {
+        const result = await ctx.callAsSystem(acceptGrossProration, consent); reachedActualAcceptance = result;
+        const waitMs = old.effectiveAt.getTime() - Date.now() + 30;
+        if (waitMs > 45030) throw new Error("The original acceptance wait exceeded its finite native control.");
+        if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+        return result;
+      } });
+    await expect(delayed.call({ ...input, previousTermsId: quote.previousTermsId, acceptedQuoteDigest: quote.quoteDigest, confirm: true }, { kind: "system" })).rejects.toMatchObject({ cause: { code: "23514" } });
+    expect(Date.now()).toBeGreaterThanOrEqual(old.effectiveAt.getTime());
+    expect(reachedActualAcceptance?.prorationId).toMatch(/^[a-f0-9-]{36}$/);
+    expect(reachedActualAcceptance?.invoiceId).toBeTruthy();
+    expect(await db().select().from(subscriptionProrations)).toHaveLength(0); expect(await db().select().from(creditNotes)).toHaveLength(0);
+    expect(await db().select().from(invoices)).toHaveLength(1); expect(await db().select().from(payments)).toHaveLength(1);
+    expect(await parent(input.id)).toMatchObject({ planId: old.plan.id, pendingPlanId: null, currentPeriodEnd: old.accepted.subscription.currentPeriodEnd });
+    expect((await db().select().from(invoices).where(eq(invoices.id, old.originalInvoice!.id)))[0]).toEqual(old.originalInvoice);
+    expect((await db().select().from(subscriptionCommercialTerms).where(eq(subscriptionCommercialTerms.id, old.terms!.id)))[0]).toEqual(old.terms);
   });
 
   it("preserves an uncharged trial's accepted end and records neither old paid credit nor a trial-window invoice or payment", async () => {

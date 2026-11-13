@@ -105,6 +105,8 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_commercial_terms: "Immutable accepted price, calendar, tax and notice evidence; read through the authorized original agreement, never global content search.",
   subscription_commercial_amendments: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",
   subscription_commercial_resumptions: "Immutable explicit replacement-calendar consent; read only through the authorized agreement, never global content search.",
+  subscription_proration_cash_confirmations: "Private actual original principal-retention receipts; authorized agreement/money services only.",
+  subscription_proration_credit_confirmations: "Private actual original principal-retention receipts; authorized agreement/money services only.",
   subscription_prorations: "Private accepted original proration price/calendar and invoice/credit provenance; authorized agreement services only.",
   subscription_proration_principal: "Private exact original cash/credit principal allocations, never global content search.",
   subscription_proration_credit_uses: "Private explicitly accepted credit dispositions; authorized original agreement only.",

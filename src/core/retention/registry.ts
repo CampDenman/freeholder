@@ -129,6 +129,8 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_commercial_terms: "Accepted commercial evidence has no TTL; original agreement privacy and legal holds govern personal-destination minimization after actual provider work is quiescent.",
   subscription_commercial_amendments: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
   subscription_commercial_resumptions: "Immutable fresh calendar consent has no TTL; original agreement privacy, financial duties and legal holds govern minimization.",
+  subscription_proration_cash_confirmations: "Immutable actual principal-retention receipts have no TTL; original financial/privacy holds govern retention.",
+  subscription_proration_credit_confirmations: "Immutable actual principal-retention receipts have no TTL; original financial/privacy holds govern retention.",
   subscription_prorations: "Immutable accepted original proration evidence has no TTL; original financial/privacy holds own minimization.",
   subscription_proration_principal: "Original principal allocations have no TTL; deleting cash/credit ancestry cannot release a promise.",
   subscription_proration_credit_uses: "Explicit accepted credit use has no TTL; original financial/privacy holds own retention.",

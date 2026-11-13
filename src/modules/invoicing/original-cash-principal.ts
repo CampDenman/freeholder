@@ -78,8 +78,13 @@ export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, sour
       }
     }
   }
+  // Independently committed callback ingress can race these ordinary reads.
+  // Fence the authentic exact-source inventory again; later state cannot
+  // silently supersede a callback that appeared after the first snapshot.
+  const currentWitness = await originalCashRecoveryFinancialWitness(ctx.tx, paymentIds, receiptIds);
+  if (merchantTaxDigest(currentWitness) !== merchantTaxDigest(witness)) reviewRequired = true;
   return { reviewRequired, receiptOnly, principalCallerDebt: !history.principalCreatorsQuiesced,
     ancillaryDebtPending: history.feeDebt || !history.creatorsQuiesced,
     currentPrincipalMinor: reviewRequired || !payment ? null : payment.amountMinor - payment.refundedMinor, inventoryCount,
-    revision: merchantTaxDigest({ source, cash, aliases, witness, history, bankEvidenceDigest, receiptOnly, reviewRequired }) };
+    revision: merchantTaxDigest({ source, cash, aliases, witness, currentWitness, history, bankEvidenceDigest, receiptOnly, reviewRequired }) };
 }

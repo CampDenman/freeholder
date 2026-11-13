@@ -22,6 +22,7 @@ import { grossProrationInput, ownGrossProration, prepareGrossProrationQuote, req
 import { safeProrationPrincipal } from "./proration-basis";
 import { captureAgreementFeeDuty, retainAgreementFeeEligibility } from "@/modules/invoicing/agreement-fee-store";
 import { originalCreditFeeAllocation } from "@/modules/invoicing/credit-fee-origin";
+import { prorationBoundaryFunded } from "./proration-boundary";
 import { originalMerchantTerms } from "./merchant-terms-read";
 
 export const APPLY_GROSS_PRORATION_JOB = "subscriptions.applyGrossProration";
@@ -201,9 +202,10 @@ async function apply(ctx: ServiceContext, accepted: typeof subscriptionProration
   const trial = accepted.originalTrialEndsAt !== null;
   if (trial && (parent.status !== "trialing" || parent.trialEndsAt?.getTime() !== accepted.originalTrialEndsAt!.getTime() || accepted.debitNetMinor + accepted.debitTaxMinor + accepted.creditNetMinor + accepted.creditTaxMinor !== 0 || accepted.debitInvoiceId || accepted.creditNoteId))
     throw new ServiceError("conflict", "Preserve the accepted trial end with zero paid principal, credit and trial-window charge.");
-  const fullyPaid = trial || Boolean(invoice && invoice.sourceType === "subscription" && invoice.sourceId === `${parent.id}:proration:${accepted.id}` && invoice.contactId === parent.contactId && invoice.currency === parent.currency
+  const boundary = await prorationBoundaryFunded(ctx, accepted);
+  const fullyPaid = boundary.onTime && (trial || Boolean(invoice && invoice.sourceType === "subscription" && invoice.sourceId === `${parent.id}:proration:${accepted.id}` && invoice.contactId === parent.contactId && invoice.currency === parent.currency
     && invoice.issuedAt && invoice.status === "paid" && invoiceSettled(invoice) && invoice.refundedMinor === 0 && invoice.paidAt && invoice.paidAt <= accepted.effectiveAt
-    && invoice.totalMinor === accepted.debitNetMinor + accepted.debitTaxMinor && invoice.taxMinor === accepted.debitTaxMinor);
+    && invoice.totalMinor === accepted.debitNetMinor + accepted.debitTaxMinor && invoice.taxMinor === accepted.debitTaxMinor));
   const now = new Date();
   if (!fullyPaid && now < accepted.effectiveAt) return { applied: false, reviewRequired: false };
   if (!fullyPaid || now >= accepted.originalPeriodEnd) {
@@ -280,7 +282,7 @@ async function status(ctx: ServiceContext, id: string) {
   const original = await originalMerchantTerms(ctx, parent);
   const activeSnapshot = accepted?.state === "applied" && accepted.planId === parent.planId ? accepted.snapshot : original?.snapshot;
   const [invoice] = accepted?.debitInvoiceId ? await ctx.tx.select().from(invoices).where(eq(invoices.id, accepted.debitInvoiceId)).limit(1) : [];
-  const paidInTime = invoice?.status === "paid" && invoiceSettled(invoice) && invoice.refundedMinor === 0 && invoice.paidAt && invoice.paidAt <= accepted!.effectiveAt;
+  const paidInTime = accepted && (await prorationBoundaryFunded(ctx, accepted)).onTime && invoice?.status === "paid" && invoiceSettled(invoice) && invoice.refundedMinor === 0 && invoice.paidAt && invoice.paidAt <= accepted!.effectiveAt;
   return { commercial, prorating: activeSnapshot?.proration === "create_prorations", billingMode: parent.billingMode,
     accepted: accepted ? { ...view(accepted), currency: accepted.snapshot.currency, debitMinor: accepted.debitNetMinor + accepted.debitTaxMinor,
       creditMinor: accepted.creditNetMinor + accepted.creditTaxMinor, remainingMinor: invoice ? Math.max(0, invoice.totalMinor - invoice.paidMinor - invoice.creditedMinor) : null,

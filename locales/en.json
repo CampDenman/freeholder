@@ -9177,5 +9177,6 @@
   "agreementCommission.realized": "Actual full canonical settlement has established eligibility. Current duty includes retained cash and noncash consideration.",
   "agreementCommission.pending": "Actual full canonical settlement or original recovery is pending. Expected commission is not collected money.",
   "subscriptions.proration.feeReceivable": "Expected separate merchant commission receivable: {amount}. Original fee obligations and actual remittance are distinct.",
-  "subscriptions.proration.feeReceivableNotice": "Merchant commission is reconciled against all retained cash and applied original credit after actual full settlement. A cash refund can leave commission owed on retained credit or move an original returned cash fee into a separate merchant receivable. Original fee epochs, actual remittance and excess-return duties remain separate."
+  "subscriptions.proration.feeReceivableNotice": "Merchant commission is reconciled against all retained cash and applied original credit after actual full settlement. A cash refund can leave commission owed on retained credit or move an original returned cash fee into a separate merchant receivable. Original fee epochs, actual remittance and excess-return duties remain separate.",
+  "subscriptions.proration.boundaryNotice": "Payment confirmation and applied original credit must be retained before the chosen instant. A supplied payment date or provider object creation time cannot revive expired consent. Late actual money stays recorded for fresh review."
 }

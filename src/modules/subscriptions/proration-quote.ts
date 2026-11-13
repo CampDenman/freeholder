@@ -21,6 +21,7 @@ import { subscriptionInitialTaxQuote } from "./merchant-terms-contract";
 import { subscriptionCommercialTerms, subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptions } from "./schema";
 import { subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { subscriptionProrations } from "./proration-schema";
+import { requireProrationBoundarySchema } from "./proration-boundary";
 import { paidProrationBasis } from "./proration-basis";
 import { proratedAmounts } from "./proration-amounts";
 import { reviewedProrationCalendar } from "./proration-contract";
@@ -56,7 +57,7 @@ export async function ownGrossProration(ctx: ServiceContext, id: string, planId?
   }
 }
 export async function prepareGrossProrationQuote(ctx: ServiceContext, input: z.infer<typeof grossProrationInput>) {
-  await requireGrossProrationSchema(ctx); await requireAgreementFeeSchema(ctx); await lockContactIdentity(ctx.tx);
+  await requireGrossProrationSchema(ctx); await requireAgreementFeeSchema(ctx); await requireProrationBoundarySchema(ctx); await lockContactIdentity(ctx.tx);
   const [enabled] = await ctx.tx.select({ enabled: moduleSettings.enabled }).from(moduleSettings).where(eq(moduleSettings.module, "subscriptions")).limit(1);
   const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, input.id)).limit(1).for("update");
   const [policy] = await ctx.tx.select().from(subscriptionMarketPolicies).where(eq(subscriptionMarketPolicies.subscriptionId, input.id)).limit(1);
@@ -87,6 +88,7 @@ export async function prepareGrossProrationQuote(ctx: ServiceContext, input: z.i
   const effectiveAt = new Date(input.effectiveAt), basis = await paidProrationBasis(ctx, parent, effectiveAt);
   const economic = merchantTermsQuoteOutput.unwrap().parse(await ctx.callAsSystem(quoteOriginalMerchantTerms, { planId: input.planId, productVariantId: input.productVariantId, taxDestination: input.taxDestination,
     contactId: parent.contactId, currency: parent.currency, locale: input.locale, paymentMethodId: parent.paymentMethodId ?? undefined, amendmentFor: parent.id, calendarStart: parent.currentPeriodEnd }));
+  if (economic.snapshot.billingMode !== parent.billingMode) throw new ServiceError("conflict", "This original agreement's billing backend cannot change silently with a price or interval review.");
   const calendar = reviewedProrationCalendar({ billingMode: parent.billingMode, policy: "create_prorations", status: parent.status as "active" | "trialing", currentPeriodStart: parent.currentPeriodStart,
     currentPeriodEnd: parent.currentPeriodEnd, trialEndsAt: parent.trialEndsAt, at: effectiveAt, nextInterval: economic.snapshot.interval, nextIntervalCount: economic.snapshot.intervalCount });
   if (calendar.kind !== "preserve_trial" && calendar.kind !== "original_calendar") throw new ServiceError("conflict", "This backend requires its actual provider calendar preview.");
@@ -108,7 +110,7 @@ export async function prepareGrossProrationQuote(ctx: ServiceContext, input: z.i
   const feeReview = { debitFeeObligationMinor, creditFeeObligationMinor, appliedFeeObligationMinor, appliedFeeProvenCollectedMinor, remainingNewCashFeeMinor: Math.min(feeBudget.feeObligationMinor, feeBudget.principalMinor),
     separateMerchantReceivableMinor: Math.max(0, feeBudget.feeObligationMinor - feeBudget.principalMinor),
     originalOverTargetMinor: feeBudget.originalOverTargetMinor, originalSourceDebt: basis.principal.some(source => source.feeUnexpected || ["owed", "review"].includes(source.feeCollectionState)), sources: basis.principal };
-  const noticeSnapshot = { locale: input.locale, text: `${economic.noticeSnapshot.text}\n${translator(input.locale)("subscriptions.grossProrationNotice")}\n${translator(input.locale)("subscriptions.proration.feeReceivableNotice")}` };
+  const noticeSnapshot = { locale: input.locale, text: `${economic.noticeSnapshot.text}\n${translator(input.locale)("subscriptions.grossProrationNotice")}\n${translator(input.locale)("subscriptions.proration.feeReceivableNotice")}\n${translator(input.locale)("subscriptions.proration.boundaryNotice")}` };
   const noticeDigest = merchantTaxDigest({ version: 1, noticeSnapshot, calendar, effectiveAt: input.effectiveAt, totalCredit: Number(totalCredit), totalDebit: Number(totalDebit), trialEndPreserved: parent.trialEndsAt?.toISOString() ?? null });
   const quoteDigest = merchantTaxDigest({ version: 1, kind: "gross-original-proration", subscriptionId: parent.id, previousTermsId: previous.id, effectiveAt: input.effectiveAt,
     sourceRevision: basis.sourceRevision, economicQuoteDigest: economic.quoteDigest, debitTaxQuote, calendar, noticeDigest, feeReview, originalScope: scope, originalPolicy: policy });
