@@ -122,3 +122,24 @@ provider I/O. It is not account or transport acceptance.
    account/provider/cross-target acceptance before publishing capability.
 
 These remain required work, not new deferrals. No C checkbox closes.
+
+## Migration parser correction, source only
+
+Root's first genuinely fresh ordinary83 migration stopped before business/native
+operations with PostgreSQL42601 in
+`freeholder_media_provider_inventory_evidence_guard`. The PL/pgSQL condition
+contained bare scalar CASE expressions. The failed
+`freeholder_current_full82_normal_v1_test_20261113` database is preserved and
+drained; it must never be reset or reused for qualification.
+
+This isolated descendant of `3a96e711` reviews all8 scalar CASE expressions on6
+owned82 source lines, including the nested page-kind expression, and wraps
+each expression in parentheses. All comparisons, operators, alternatives,
+guards and exception branches are unchanged. The assignment expression is
+parenthesized consistently as well. Inverse source replacement reproduces the
+original owned SQL byte-for-byte; this is a source comparison, not a PostgreSQL
+parse/migration pass. The original a09295aa owned-tail freeze stays preserved.
+No model, runtime, provider or native oracle changes are included. Root owns
+assembled82, journal/parity contracts and a genuinely new V2 database after
+this correction. No compiler/test/SQL parser/PG/native/provider lane ran here.
+C1.12/C11.08 and all final qualification remain open.
