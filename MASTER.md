@@ -14284,6 +14284,16 @@ whatever is best for the people using the site.
   supplies its own fictional webhook secret instead of depending on inherited
   process configuration. No production availability guard changed. Both actual
   raw-finance controls still require a fresh database and original assertions.
+  Source callback checkpoint 2026-11-13 (C12.38/C1.08/C11.10): new optional
+  private original-holder validation authenticates each actual inspection refund
+  capture with its original admission/caller and occurrence UUID/time. Late or
+  foreign callbacks retain raw money independently and cannot be adopted as that
+  read by a semantic FK. Legacy defaults remain intact. Six pure and one actual
+  shared-service/HTTP controls are PREPARED/UNRUN; no schema/SQL or financial
+  permission changes. This grants no recovery/money authority. Genuine positive
+  observational context, causal comparison, bank proof and full acceptance remain
+  REQUIRED; no C/stable closure. See
+  deploy/original-cash-inspection-capture83-source-20261113.md.
   Current cash-reader source qualification2026-11-13: full TypeScript passes
   at4cc200a9. Whole-repository lint stops only at two new issues: schema imports
   used solely as types and an unbound actual Stripe inspection method in the

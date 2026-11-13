@@ -1,6 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: actual refund facts commit before policy or invoice application.
+import { cashInspectionHolder } from "./merchant-cash-inspection-holder";
+import { cashInspectionSigningKey } from "./merchant-cash-inspection-stops";
+import { signCashInspectionRefundCapture } from "./merchant-cash-inspection-refund-capture";
 import { merchantCashReturnInspectionStops } from "./merchant-cash-inspection-stop-schema";
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
@@ -30,20 +33,22 @@ const source = z.discriminatedUnion("kind", [z.object({ kind: z.literal("payment
 export const recordMerchantRefundObservation = defineService({
   name: "invoicing.recordMerchantRefundObservation", summary: "Retain authenticated refund facts against their original cash owner before applying recovery policy.",
   kind: "mutation", permission: "system", external: false, writeClass: "money",
-  input: z.object({ source, requestId: z.uuid().optional(), inspectionId: z.uuid().optional(), evidence: merchantRefundEvidence,
+  input: z.object({ source, requestId: z.uuid().optional(), inspectionId: z.uuid().optional(), inspectionCompletionNonce:z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(), evidence: merchantRefundEvidence,
     captureKey: z.string().regex(/^[a-f0-9]{64}$/).optional() }),
   output: z.object({ observationId: z.uuid(), captureId: z.uuid(), bindingVerified: z.boolean() }), auditInputFields: ["source", "requestId", "inspectionId"],
-  handler: async ({ source, requestId, inspectionId, evidence, captureKey }, ctx) => {
+  handler: async ({ source, requestId, inspectionId, inspectionCompletionNonce, evidence, captureKey }, ctx) => {
     const paymentId = source.kind === "payment" ? source.paymentId : null, subscriptionChargeReceiptId = source.kind === "subscription" ? source.receiptId : null;
     const [original] = requestId ? await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, requestId)) : [];
     if(inspectionId)await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`merchant-return-read:${inspectionId}`}))`);
     const [inspection] = inspectionId ? await ctx.tx.select().from(merchantCashReturnInspections).where(eq(merchantCashReturnInspections.id, inspectionId)) : [];
     const originalOwner = original && original.paymentId === paymentId && original.subscriptionChargeReceiptId === subscriptionChargeReceiptId;
+    let originalCallback:Awaited<ReturnType<typeof cashInspectionHolder>>|null=null;
+    if(inspectionId&&inspectionCompletionNonce){try{originalCallback=await cashInspectionHolder(ctx,inspectionId,inspectionCompletionNonce);}catch(error){if(!(error instanceof ServiceError)||!["permission","conflict"].includes(error.code))throw error;}}
     const[stoppedInspection]=inspectionId?await ctx.tx.select().from(merchantCashReturnInspectionStops).where(eq(merchantCashReturnInspectionStops.inspectionId,inspectionId)).limit(1):[];
     // Actual authenticated refund ingress is retained even after a late holder
     // callback. Its claimed original inspection stays explicit; a stopped
     // caller can never append to that inspection's authenticated evidence.
-    const inspectionBound = inspection && !stoppedInspection && inspection.paymentId === paymentId && inspection.subscriptionChargeReceiptId === subscriptionChargeReceiptId;
+    const inspectionBound = inspection && !stoppedInspection && (!inspectionCompletionNonce||!!originalCallback) && inspection.paymentId === paymentId && inspection.subscriptionChargeReceiptId === subscriptionChargeReceiptId;
     if (paymentId) {
       const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, paymentId));
       if (!payment || payment.provider !== "stripe" || !originalOwner && !inspectionBound && !(await routingForPayment(ctx, paymentId)).providerPlatformAccountId) throw new ServiceError("conflict", "Restore the actual original merchant payment before associating refund evidence.");
@@ -76,8 +81,13 @@ export const recordMerchantRefundObservation = defineService({
     // A new authenticated occurrence can repeat an earlier semantic state.
     // Preserve that occurrence so a later requires_action cannot disappear
     // behind an old deduplicated row after a current-read success receipt.
-    const key = captureKey ?? merchantTaxDigest({ captureId: randomUUID() });
-    await ctx.tx.insert(merchantRefundObservationCaptures).values({ observationId: saved.id, captureKey: key }).onConflictDoNothing();
+    let callbackSigningKey:string|null=null;
+    if(originalCallback&&inspectionBound&&!captureKey){try{callbackSigningKey=cashInspectionSigningKey();}catch(error){if(!(error instanceof ServiceError)||error.code!=="conflict")throw error;}}
+    // Missing auxiliary signing authority never rolls back authentic raw money.
+    // Its ordinary capture remains explicit and cannot supply causal ownership.
+    const ownedCapture=callbackSigningKey&&originalCallback&&inspectionBound&&!captureKey?{id:randomUUID(),createdAt:new Date()}:null;
+    const key = ownedCapture&&originalCallback&&callbackSigningKey?signCashInspectionRefundCapture(originalCallback,saved,ownedCapture,callbackSigningKey):captureKey ?? merchantTaxDigest({ captureId: randomUUID() });
+    await ctx.tx.insert(merchantRefundObservationCaptures).values({ ...(ownedCapture??{}), observationId: saved.id, captureKey: key }).onConflictDoNothing();
     const [existingCapture] = await ctx.tx.select().from(merchantRefundObservationCaptures).where(eq(merchantRefundObservationCaptures.captureKey, key));
     let capture = existingCapture;
     if (capture && capture.observationId !== saved.id) {
