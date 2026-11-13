@@ -15270,6 +15270,23 @@ whatever is best for the people using the site.
   positive-target closure/late-partial recovery and provider acceptance remain
   REQUIRED implementation and qualification, with no deferral or feature/stable
   closure. See deploy/subscription-controlled-collection82-source-20261113.md.
+  Controlled original draft retention source checkpoint (2026-11-13,
+  C9.33/C9.38/C12.38/C1.08): three private shared services retain genuine
+  original invoice bindings, separate creator/observer item receipts and
+  complete returned manifest proofs. Ordinary reader/writer ownership checks
+  preserve original bootstrap, merchant route, actual price/period/interval
+  and immutable target identity. Renewal origins bind their original price
+  epoch separately from the new canonical period. Observation inventories
+  actual positive money before later calendar/manifest refusal; it never
+  releases an unfinished caller or grants settlement/access. Normal-period
+  finalize/pay stay behind accepted service/trial dates at final SQL admission.
+  Six pure and three additional mocked-HTTP controls are PREPARED/UNRUN; the
+  additive owned suffix is UNAPPLIED. Public canonical factories, real first
+  periods, paid effect, generated-draft disposition, genuine positive/partial/
+  late/terminal alternative recovery and durable unapplied manual receipts
+  remain REQUIRED implementation and qualification. No gate closes or
+  requirement is deferred. See
+  deploy/subscription-controlled-retention82-source-20261113.md.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

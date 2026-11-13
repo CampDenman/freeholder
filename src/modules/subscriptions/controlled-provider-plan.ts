@@ -60,8 +60,8 @@ export const planControlledProviderOperation=defineService({name:"subscriptions.
   if(request.kind==="read_invoice"){
    const invoiceRef=request.providerInvoiceRef;
    const acknowledged=invoiceRef&&history.facts.some(fact=>{
-    if(!["bootstrap_subscription","subscription_read","invoice_read","calendar_updated","calendar_canceled","invoice_list_read"].includes(fact.actual.kind))return false;
-    return ref(fact.actual.raw.latest_invoice)===invoiceRef||fact.actual.kind==="invoice_read"&&ref(fact.actual.raw.id)===invoiceRef||fact.actual.kind==="invoice_list_read"&&Array.isArray(fact.actual.raw.data)&&fact.actual.raw.data.some(row=>ref(row)===invoiceRef);
+    if(!["bootstrap_subscription","subscription_read","invoice_read","calendar_updated","calendar_canceled","invoice_list_read","controlled_draft_created","controlled_invoice_paid"].includes(fact.actual.kind))return false;
+    return ref(fact.actual.raw.latest_invoice)===invoiceRef||["invoice_read","controlled_draft_created","controlled_invoice_paid"].includes(fact.actual.kind)&&ref(fact.actual.raw.id)===invoiceRef||fact.actual.kind==="invoice_list_read"&&Array.isArray(fact.actual.raw.data)&&fact.actual.raw.data.some(row=>ref(row)===invoiceRef);
    });
    if(!invoiceRef||!acknowledged)throw new ServiceError("conflict","Only an actual original bank ACK/inventory can select an invoice; do not supply an unrelated reference.");
    payload.providerInvoiceRef=invoiceRef;

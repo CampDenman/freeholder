@@ -45,12 +45,16 @@ export const planControlledCollectionOperation=defineService({name:"subscription
   source=await controlledCollectionState(ctx.tx,input.collectionId);
   const{history,collection,resource,parent,review,manifest}=source;
   const[enabled]=await ctx.tx.select().from(moduleSettings).where(eq(moduleSettings.module,"subscriptions")).limit(1);
-  if(!source.canonical.currentCollectible||!enabled?.enabled||history.unfinished.length||history.closures.length||parent.cancelledAt||parent.cancelAtPeriodEnd||!["active","trialing"].includes(parent.status)
-   ||collection.kind==="proration"&&new Date()>=source.quote.effectiveAt||source.canonical.invoice.paidMinor!==0||source.canonical.invoice.refundedMinor!==0)throw new ServiceError("conflict","Recover the exact stopped/expired/partially paid original target and every real caller before another collection; no gap is backdated or old money erased.");
+  const observing=input.kind==="read_manifest";
+  if(history.unfinished.length||history.closures.length||!observing&&(!source.canonical.currentCollectible||!enabled?.enabled||parent.cancelledAt||parent.cancelAtPeriodEnd||!["active","trialing"].includes(parent.status)
+   ||collection.kind==="proration"&&new Date()>=source.quote.effectiveAt||source.canonical.invoice.paidMinor!==0||source.canonical.invoice.refundedMinor!==0))throw new ServiceError("conflict","Recover the exact stopped/expired/partially paid original target and every real caller before another collection; no gap is backdated or old money erased.");
+  if(collection.kind==="period"&&["finalize_invoice","pay_invoice"].includes(input.kind)
+   &&(Date.now()<Date.parse(review.calendar.proposedPeriodStart)||review.originalTrialEndsAt!==null&&Date.now()<Date.parse(review.originalTrialEndsAt)))
+   throw new ServiceError("conflict","This actual accepted service period or preserved trial has not started. Keep the exact draft paused; do not finalize or bill the trial window early.");
   const money=await controlledTargetFinancialAuthority(ctx,collection.id,input.kind),parentReadiness=await controlledCollectionReadiness(ctx,parent.id);
   const target={providerProductRef:resource.originalScope.providerProductRef,principalMinor:review.quote.snapshot.periodAmountMinor,interval:review.quote.snapshot.interval,intervalCount:review.quote.snapshot.intervalCount};
-  const calendar=controlledCalendarSource(history,resource.originalScope,source.terms,target,review.effectiveAt).payload;
-  if(input.kind!=="update_calendar"){
+  const calendar=controlledCalendarSource(history,resource.originalScope,source.terms,target,review.effectiveAt,observing?{observationOnly:true}:undefined).payload;
+  if(!observing&&input.kind!=="update_calendar"){
    if(calendar.originalComponents[0]!.amountMinor!==target.principalMinor||calendar.originalComponents[0]!.providerProductRef!==target.providerProductRef
     ||calendar.originalPeriodStart!==review.calendar.expectedProviderPeriodStart||calendar.originalPeriodEnd!==review.calendar.expectedProviderPeriodEnd
     ||calendar.originalAnchor!==review.calendar.expectedProviderBillingAnchor||calendar.originalProviderTrialEnd!==review.calendar.expectedProviderTrialEndsAt)
@@ -77,7 +81,7 @@ export const planControlledCollectionOperation=defineService({name:"subscription
    if(["finalize_invoice","pay_invoice"].includes(input.kind)&&(!proof||!verified||verified.actualResult.canonicalTargetDigest!==undefined&&verified.actualResult.canonicalTargetDigest!==source.canonical.digest))throw new ServiceError("conflict","Perform a new complete exact manifest/customer/fee read before finalization or payment.");
    if(input.kind==="add_invoice_component"&&(!input.componentId||!source.components.some(row=>row.id===input.componentId)||source.itemReceipts.some(row=>row.componentId===input.componentId)))throw new ServiceError("conflict","Only an actual missing immutable canonical component can acquire its one original bank item.");
    payload=controlledCollectionPayload.parse({bootstrapOperationId:calendar.bootstrapOperationId,bootstrapRequestDigest:calendar.bootstrapRequestDigest,providerSubscriptionRef:calendar.providerSubscriptionRef,
-    manifest,calendar,invoiceOrigin:binding&&creator?{kind:binding.originKind,creatorOperationId:creator.id,creatorRequestDigest:creator.requestDigest}:{kind:"created_draft",creatorOperationId:null,creatorRequestDigest:null},lineBindings,
+    manifest,calendar,invoiceOrigin:binding&&creator?{kind:binding.originKind,creatorOperationId:creator.id,creatorRequestDigest:creator.requestDigest,...(binding.originKind!=="created_draft"?{priceEpochCollectionId:z.uuid().parse(Reflect.get(z.record(z.string(),z.unknown()).parse(creator.originalRequest.payload),"collectionId")),priceEpochAcceptedQuoteDigest:z.string().regex(/^[a-f0-9]{64}$/).parse(Reflect.get(z.record(z.string(),z.unknown()).parse(creator.originalRequest.payload),"acceptedQuoteDigest"))}:{})}:{kind:"created_draft",creatorOperationId:null,creatorRequestDigest:null},lineBindings,
     ...(input.kind==="create_draft"?{mode:"create"}:{}),...(binding?{providerInvoiceRef:binding.providerInvoiceRef}:{}),...(input.componentId?{componentId:input.componentId}:{})});
   }
   if(history.count>=4995)throw new ServiceError("conflict","Retain bounded capacity for actual original admission/raw/finish and its independent verification before another bank call.");

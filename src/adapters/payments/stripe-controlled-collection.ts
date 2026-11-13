@@ -23,6 +23,8 @@ function validate(request:MerchantControlledCollectionRequest){
  if(request.providerApiVersion!=="2026-10-28.endive"||m.protocol!=="controlled_net_gross.v1"||![m.collectionId,m.quoteId,m.canonicalInvoiceId,m.termsId,request.operationId,request.invoiceOrigin.creatorOperationId].every(uuid)
   ||![m.acceptedQuoteDigest,m.canonicalTargetDigest,request.requestDigest,request.invoiceOrigin.creatorRequestDigest].every(hash)||m.currency!==request.currency||!request.idempotencyKey||request.idempotencyKey.length>200
   ||![m.grossMinor,m.creditedMinor,m.cashDueMinor,m.applicationFeeMinor].every(n=>money(n)&&n>=0)||m.creditedMinor>m.grossMinor||m.cashDueMinor!==m.grossMinor-m.creditedMinor||m.applicationFeeMinor>m.cashDueMinor
+  ||request.calendar.originalComponents.some(row=>!row.interval||!Number.isSafeInteger(row.intervalCount)||Number(row.intervalCount)<1)
+  ||request.invoiceOrigin.kind!=="created_draft"&&(!request.invoiceOrigin.priceEpochCollectionId||!uuid(request.invoiceOrigin.priceEpochCollectionId)||!request.invoiceOrigin.priceEpochAcceptedQuoteDigest||!hash(request.invoiceOrigin.priceEpochAcceptedQuoteDigest))
   ||m.components.length<1||m.components.length>250||request.lineBindings.length>250)refuse();
  let gross=0n,credit=0n;const ids=new Set<string>(),positions=new Set<number>();
  for(const c of m.components){
@@ -59,8 +61,8 @@ function originalInvoice(request:MerchantControlledCollectionRequest,invoice:Rec
  if(request.invoiceOrigin.kind==="created_draft"){
   const own=object(invoice.metadata);if(Object.entries(targetTag(request)).some(([k,v])=>own?.[k]!==v))refuse();
  }else{
-  if(tag.freeholder_controlled_price_epoch_id!==request.manifest.collectionId||tag.freeholder_controlled_update_operation_id!==request.invoiceOrigin.creatorOperationId
-   ||tag.freeholder_controlled_update_request_digest!==request.invoiceOrigin.creatorRequestDigest||tag.freeholder_controlled_accepted_quote_digest!==request.manifest.acceptedQuoteDigest
+  if(tag.freeholder_controlled_price_epoch_id!==request.invoiceOrigin.priceEpochCollectionId||tag.freeholder_controlled_update_operation_id!==request.invoiceOrigin.creatorOperationId
+   ||tag.freeholder_controlled_update_request_digest!==request.invoiceOrigin.creatorRequestDigest||tag.freeholder_controlled_accepted_quote_digest!==request.invoiceOrigin.priceEpochAcceptedQuoteDigest
    ||request.invoiceOrigin.kind==="update_generated"&&invoice.billing_reason!=="subscription_update"||request.invoiceOrigin.kind==="calendar_generated"&&!["subscription_cycle","subscription_create"].includes(String(invoice.billing_reason)))refuse();
  }
 }
@@ -90,7 +92,12 @@ export function stripeControlledCollections(api:Api){
  }
  async function isolated(request:MerchantControlledCollectionRequest){const actual=await customers.inspectMerchantControlledCustomerFinancials(request);if(actual.balanceState!=="known_zero")refuse();return actual;}
  async function inventory(request:MerchantControlledInvoiceActionRequest,complete:boolean){const actual=await invoices.inspectMerchantControlledInvoice(request);originalInvoice(request,actual.actualInvoice);lines(request,actual,complete);return actual;}
- async function proof(request:MerchantControlledInvoiceActionRequest){await current(request);const financial=await isolated(request),actual=await inventory(request,true),m=request.manifest;
+ async function proof(request:MerchantControlledInvoiceActionRequest){
+  validate(request);
+  // Observation/recovery retains every actual original PI/cash BEFORE a
+  // canceled/changed calendar, customer promise or target mismatch can refuse.
+  // Exact proof still confers no settlement/access or write authority.
+  const actual=await inventory(request,true);await current(request);const financial=await isolated(request),m=request.manifest;
   if(actual.totalMinor!==m.cashDueMinor||actual.actualInvoice.subtotal!==m.cashDueMinor||(actual.actualInvoice.application_fee_amount??0)!==m.applicationFeeMinor
    ||actual.actualInvoice.starting_balance!==0||actual.actualInvoice.ending_balance!==0||actual.actualInvoice.pre_payment_credit_notes_amount!==0||actual.actualInvoice.post_payment_credit_notes_amount!==0
    ||!empty(actual.actualInvoice.total_discount_amounts)||!empty(actual.actualInvoice.total_taxes)||actual.actualInvoice.total_tax_amounts!==undefined&&!empty(actual.actualInvoice.total_tax_amounts))refuse();

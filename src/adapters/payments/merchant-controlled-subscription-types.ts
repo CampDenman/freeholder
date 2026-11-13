@@ -75,7 +75,9 @@ export interface MerchantControlledProrationPreviewRequest extends MerchantContr
   requestDigest: string;
   idempotencyKey: string;
   originalComponents: Array<{ kind: "principal"; subscriptionItemRef: string; providerPriceRef: string; providerProductRef: string;
-    amountMinor: number; actualPeriodStart: string; actualPeriodEnd: string; taxQuoteDigest: string; profileId: string; profileVersion: number }>;
+    amountMinor: number; actualPeriodStart: string; actualPeriodEnd: string; taxQuoteDigest: string; profileId: string; profileVersion: number;
+    /** Additive actual read lineage; positive canonical collection requires both. */
+    interval?: "day" | "week" | "month" | "year"; intervalCount?: number }>;
   originalAnchor: string;
   originalProviderTrialEnd: string|null;
   originalPeriodStart: string;
