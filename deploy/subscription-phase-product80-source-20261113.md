@@ -36,14 +36,31 @@ receipts and financial debt checks remain mandatory. Registered private fact
 phases stay available with the subscriptions module off; new admission refuses
 that state. Existing four-locale recovery activity labels cover these phases.
 
-Nine new finite source controls are drafted: four real-factory injected HTTP
-product cases and five immutable-evidence cases. Full types, changed-file lint,
-those controls and affected private/audit/authority checks have not run. Actual
+The exact frozen creation component `f2e612d2` now passes full Node22 types,
+changed13-TS lint plus the separate trial-date fixture, and all50 finite source
+controls: nine new real-factory HTTP/immutable-evidence cases plus41 affected
+private/audit/buyer/cohort/quiescence assertions. These ran in an exact-source
+worktree, with no skips, database or provider-account calls; durable results
+are `/tmp/freeholder-phase-product-f2-qualified-20261113.json`. This evidence
+does not qualify the subsequent recovery-read source described below. Actual
 service producer/paused duplicate, ACK-before-logical failure, failed finish
 persistence, missing history and buyer privacy controls need the NEW assembled
-schema and separately authorized native fixtures. The retained known-product
-read-only recovery apply service remains to be implemented before activation;
-its SDK read primitive alone is not a shared business recovery workflow.
+schema and separately authorized native fixtures. The subsequent retained-product recovery workflow is now a separate UNQUALIFIED
+source delta. Its short private admission requires the actual retained ACK and
+original creation-caller finish, freezes an existing-history read ticket and
+original namespace, then the orchestrator invokes only the actual product GET
+outside a transaction. The completion phase requires the same process's actual
+returned promise and private nonce. It preserves the returned GET separately
+from caller-stop evidence and refuses convergence after a changed original
+operation/resource journal. Only a sole uncreated original product can clear
+preparatory debt; later billing work remains unresolved. A failed fact commit
+stays cached for a no-GET flush. No GET or clock can supply creation-caller exit.
+
+Four new declared-evidence recovery controls are prepared but unrun. Exact
+recovery-delta types/lint/private/audit checks, real service producer/fault/stale
+GET/native controls and original caller-loss recovery remain required. Lost
+original ACK or caller-finish history refuses read admission; no replacement
+product is invented. The existing f2 creation and f0 trial fixtures are unchanged.
 
 The next phase layer still needs original schedule-only/linked-sub resource
 proof, its own claim/caller/ACK/finish, frozen future-period invoice lineage,

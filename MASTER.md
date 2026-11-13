@@ -14137,6 +14137,16 @@ whatever is best for the people using the site.
   The composed source passes full typecheck, focused lint,62 bounded
   origin/setup/scope controls and all five private-service boundary controls.
   These checks do not apply80 or prove an actual provider outcome.
+  Auxiliary-product recovery source checkpoint (2026-11-13, C12.38): frozen
+  creation source `f2e612d2` passes full Node22 types,14 targeted lint paths
+  and50 finite source assertions with no skips. A separate unqualified
+  recovery-read workflow now binds the original ACK and finished creating
+  caller to a private GET ticket, preserves the actual returned read, and
+  refuses stale convergence without admitting another POST. It does not
+  enable provider admission, qualify a new schema or supply native/provider
+  acceptance. Exact recovery qualification and complete phase/amendment/cash
+  integration remain required; see
+  `deploy/subscription-phase-product80-source-20261113.md`.
   Provider lifecycle protocol work uses Stripe's actual flexible-subscription
   pause endpoint, with2026-10-28.endive frozen only on new scope/charge
   receipts. Legacy operations keep their original version. Sixteen bounded
