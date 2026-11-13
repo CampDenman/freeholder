@@ -24,6 +24,7 @@ import { merchantRefundRequests } from "@/modules/invoicing/merchant-refund-sche
 import { invoices, moneyStateEvents, payments, refunds } from "@/modules/invoicing/schema";
 import { LEGACY_REPLACEMENT_PROTOCOL } from "@/modules/invoicing/legacy-bank-replacement-proof";
 import { legacyRmaFixture } from "../helpers/legacy-bank-rma";
+import { legacyFeedbackOwnerFixture } from "../helpers/legacy-bank-feedback-owner";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 async function drain() { await stopJobs(); await reconcileJobDeploymentAdmission(); await closeDb(); }
 describe.runIf(hasDatabase)("authentic original legacy RMA bank recovery80", { timeout: 60000 }, () => {
@@ -86,10 +87,14 @@ describe.runIf(hasDatabase)("authentic original legacy RMA bank recovery80", { t
     expect(await actual.originalCredit()).toEqual(credit); expect(actual.posts).toHaveLength(1);
   });
   it("binds bank-feedback-only financial history before the first GET to its exact original owner and preserves canonical ownership on refused undo", async () => {
-    const own = await legacyRmaFixture(), foreign = await legacyRmaFixture();
+    // This leaf tests financial history ownership, independently of the
+    // deliberately non-undoable cart merge lifecycle used by the RMA leaves.
+    const own = await legacyFeedbackOwnerFixture(), foreign = await legacyFeedbackOwnerFixture();
     expect(own.paymentRef).not.toBe(foreign.paymentRef);
+    expect(own.buyer.id).not.toBe(foreign.buyer.id);
     const alias = await createContact.call({ name: "Original bank-feedback buyer alias", email: `fictional-feedback-alias-${randomUUID()}@example.test` }, OWNER);
     const first = await mergeContacts.call({ survivingId: alias.id, duplicateId: own.buyer.id }, OWNER);
+    expect((await db().select().from(contactMergeOperations).where(eq(contactMergeOperations.id, first.mergeOperationId)))[0]).toMatchObject({ undoable: true, undoBlockers: [], undoneAt: null });
     const [firstInvoice] = await db().select().from(invoices).where(eq(invoices.id, own.invoiceId));
     await foreign.signedStatus(foreign.original.providerRef!, "requires_action", false);
     expect((await db().select().from(invoices).where(eq(invoices.id, own.invoiceId)))[0]).toEqual(firstInvoice);
@@ -97,6 +102,7 @@ describe.runIf(hasDatabase)("authentic original legacy RMA bank recovery80", { t
     await undoContactMerge.call({ operationId: first.mergeOperationId }, OWNER);
     expect((await db().select().from(invoices).where(eq(invoices.id, own.invoiceId)))[0]?.contactId).toBe(own.buyer.id);
     const second = await mergeContacts.call({ survivingId: alias.id, duplicateId: own.buyer.id }, OWNER);
+    expect((await db().select().from(contactMergeOperations).where(eq(contactMergeOperations.id, second.mergeOperationId)))[0]).toMatchObject({ undoable: true, undoBlockers: [], undoneAt: null });
     const [canonicalInvoice] = await db().select().from(invoices).where(eq(invoices.id, own.invoiceId));
     const [canonicalContact] = await db().select().from(contacts).where(eq(contacts.id, alias.id));
     const [originalRefund] = await db().select().from(refunds).where(eq(refunds.id, own.original.id));

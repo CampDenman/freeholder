@@ -14445,6 +14445,14 @@ whatever is best for the people using the site.
   integrated financial witnesses, UI/API/SDK journeys, actual acceptance and
   independent review remain required. No stable or model activation sign-off
   is supplied. See `deploy/legacy-bank-rma-2026-11-13.md`.
+  First actual feedback-only owner control hit an existing any-cart
+  non-undoable precondition before the financial target; V20 failure/old oracle
+  are preserved. Its isolated fixture-only successor uses real cartless manual
+  invoices/payments/physical refunds for just that ownership leaf, with all
+  financial assertions and both real undo attempts unchanged and explicit
+  initial undoable assertions. The other four actual checkout/RMA/credit bodies,
+  product/cart policy and17bfSQL are unchanged. Corrected setup source checks
+  and native remain UNRUN pending a granted lane; no completion follows.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original
