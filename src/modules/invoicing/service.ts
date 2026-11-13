@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // One registry export for the convergent money module (C5.02-C5.05).
 
+import prorationPaymentReadServices from "@/modules/subscriptions/proration-card-read-runtime";
+import prorationPaymentReadRecoveryServices from "@/modules/subscriptions/proration-card-read-recovery";
 import legacyBankReadServices from "./legacy-bank-read-service";
 import creditDispositionServices from "./credit-disposition";
 import creditApplicationServices from "./credit-application-service";
@@ -63,6 +65,8 @@ import "./reporting";
 import "./funnel";
 
 export default [
+  ...prorationPaymentReadServices,
+  ...prorationPaymentReadRecoveryServices,
   ...commercialAttestationServices,
   ...principalAuthorityServices,
   ...agreementFeeServices,

@@ -14331,6 +14331,29 @@ whatever is best for the people using the site.
   card mandate/POST/independent GET recovery and full provider/late recovery
   remain required; no item closes. See
   `deploy/subscription-proration-boundary80-source-20261113.md`.
+  Stored-method gross-proration source increment (same date/items): explicit
+  consent now names the actual original active stored method and remaining
+  changed-price amount. The accepted transaction retains its exact original
+  collection task/body. One fixed original attempt admits its physical POST;
+  actual positive observations commit before finish/domain failures. Saved
+  and hosted gross-payment recovery select the first captured explicit API
+  protocol and independently admit each actual GET/cancel caller. Unknown old
+  callers remain debt; later reads cannot supersede them. Original process
+  finish proof and an independently reviewed genuine hosting stop are distinct;
+  fresh human stop approval refuses API keys/agents and actual live births.
+  Owner/customer collection, owner recovery, safe bounded subject history and
+  four-locale consent share the same services. Actual collection still requires
+  enabled current authority and a fresh effective instant; only fully paid
+  exact consideration can switch access at that instant. Original period,
+  old paid access and fee/cash separation remain intact. Seven new child
+  families carry full-row SQL witnesses under a combined5000 bound. Six pure
+  controls (including an actual OS birth/stop) and three actual HTTP-adapter
+  native journeys are PREPARED/UNRUN. SQL is an owned UNAPPLIED additive tail;
+  this source is unqualified and closes no item or stable gate. Authentic
+  late/partial target recovery and the actual provider preview/birth-safe
+  zero-bootstrap/pause-readback/exact draft-fee/finalize/pay lifecycle still
+  require implementation and qualification. See
+  `deploy/subscription-proration-card80-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

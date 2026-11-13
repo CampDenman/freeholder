@@ -5,6 +5,8 @@ import { cookies } from "next/headers";
 import { formatDateTime, formatMoney } from "@/core/i18n";
 import { actorString, hasModuleAccess, ServiceError } from "@/core/service";
 import { currentBusiness } from "@/core/settings/read";
+import { ProrationCardReadRecovery } from "../../../../../components/ProrationCardReadRecovery";
+import { prorationPaymentReadRecoveryPlan } from "@/modules/subscriptions/proration-card-read-recovery";
 import { merchantPaymentReview } from "@/modules/invoicing/merchant-payment-review";
 import { Button, Callout, Card, CardBody, CardHeader, Field, Input } from "@/ui/primitives";
 import { getLocale, getT } from "../../../../../i18n";
@@ -27,6 +29,7 @@ export default async function MerchantPaymentPage({ params, searchParams }: {
   });
   if (!review) notFound();
   const canManage = hasModuleAccess(actor, "invoicing", "manage"), stepUpValid = actor.kind === "user" && actor.security?.stepUpValid !== false;
+  const cardReaders = canManage && stepUpValid && actor.kind === "user" && !actor.keyScopes ? (await prorationPaymentReadRecoveryPlan.call({ invoiceId: review.payment.invoiceId }, actor)).filter(row => row.paymentId === id) : [];
   const date = (value: Date) => formatDateTime(value, business?.timezone ?? "UTC", locale);
   const money = (value: number, currency: string) => formatMoney(value, currency, locale);
   const saved = states.includes(query.saved ?? "") ? query.saved : undefined;
@@ -60,6 +63,7 @@ export default async function MerchantPaymentPage({ params, searchParams }: {
       {canManage && !stepUpValid ? <Callout><a className="text-accent underline" href={`/security/verify?returnTo=${encodeURIComponent(`/admin/payments/${id}/merchant`)}`}>{t("merchantPayments.verify")}</a></Callout> : null}
       <p className="text-sm text-ink-muted">{t("merchantPayments.unknownHint")}</p>
     </div></CardBody></Card>
+    <ProrationCardReadRecovery rows={cardReaders} locale={locale}/>
     <Card><CardHeader title={t("merchantPayments.actualMoney")} /><CardBody><div className="grid gap-3">
       {review.observations.map(observation => <div key={observation.id} className="grid gap-1 border-b border-rule pb-3 text-sm">
         <p>{money(observation.amountMinor, observation.currency)} · <code>{observation.status}</code> · {date(observation.observedAt)}</p>

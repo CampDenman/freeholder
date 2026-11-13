@@ -9,7 +9,7 @@ import type { GrossProrationReview } from "@/modules/subscriptions/proration-quo
 import type { GrossProrationStatus } from "@/modules/subscriptions/proration-service";
 import { Button, Callout, Field, Input, Select } from "@/ui/primitives";
 import { InvoiceIssuer } from "../portal/invoices/InvoiceIssuer";
-import { confirmGrossProration, reviewGrossProration } from "../gross-proration-actions";
+import { collectOriginalProrationCard, confirmGrossProration, reviewGrossProration } from "../gross-proration-actions";
 export function GrossProration({ id, audience, locale, offered, status }: { id: string; audience: "owner" | "customer"; locale: string; offered: Array<{ id: string; name: string }>; status: GrossProrationStatus }) {
   const t = translator(locale), router = useRouter(), [busy, setBusy] = useState(false), [failed, setFailed] = useState(false), [saved, setSaved] = useState(false);
   const [review, setReview] = useState<{ result: GrossProrationReview; selection: Array<[string, string]> } | null>(null);
@@ -31,6 +31,11 @@ export function GrossProration({ id, audience, locale, offered, status }: { id: 
     try { const result = await confirmGrossProration(form); setFailed(result.failed); if (!result.failed) { setSaved(true); setReview(null); router.refresh(); } }
     catch { setFailed(true); } finally { setBusy(false); }
   }
+  async function collect(form: FormData) {
+    setBusy(true); setFailed(false);
+    try { const result = await collectOriginalProrationCard(form); setFailed(result.failed); router.refresh(); }
+    catch { setFailed(true); } finally { setBusy(false); }
+  }
   const accepted = status.accepted, result = review?.result, snapshot = result?.quote.snapshot;
   const money = (minor: number, currency = snapshot?.currency ?? accepted?.currency ?? "USD") => formatMoney(minor, currency, locale);
   const date = (iso: string) => new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "long" });
@@ -43,6 +48,10 @@ export function GrossProration({ id, audience, locale, offered, status }: { id: 
     {accepted ? <div className="grid gap-2" role="status">
       <p>{t(`subscriptions.proration.state.${accepted.state}`)}</p><p>{t("subscriptions.proration.effective", { date: date(accepted.effectiveAt) })}</p>
       {accepted.remainingMinor !== null ? <p>{t("subscriptions.proration.remaining", { amount: money(accepted.remainingMinor) })}</p> : null}
+      {accepted.originalCardMandate && !accepted.needsFreshConsent && accepted.state === "awaiting_payment" ? <form action={collect}>
+        <input type="hidden" name="id" value={id}/><input type="hidden" name="prorationId" value={accepted.prorationId}/><input type="hidden" name="audience" value={audience}/>
+        <Button type="submit" disabled={busy}>{t("subscriptions.proration.cardCollect")}</Button>
+      </form> : null}
       {accepted.needsFreshConsent ? <Callout tone="warning">{t("subscriptions.proration.recovery")}</Callout> : null}
       {accepted.invoiceId ? <a className="text-accent underline" href={`${audience === "owner" ? "/admin" : "/portal"}/invoices/${accepted.invoiceId}`}>{t("subscriptions.prorationInvoice")}</a> : null}
     </div> : null}
@@ -64,6 +73,7 @@ export function GrossProration({ id, audience, locale, offered, status }: { id: 
       <p>{t("subscriptions.proration.effective", { date: date(result.effectiveAt) })}</p>
       <p>{t("subscriptions.proration.calendar", { date: date(result.originalPeriodEnd) })}</p>
       <dl className="grid gap-2 text-sm">{([ ["newDebit", result.debitNetMinor + result.debitTaxMinor], ["oldCredit", result.creditNetMinor + result.creditTaxMinor], ["applied", result.creditAppliedMinor], ["cash", result.cashDueMinor], ["residual", result.residualCreditMinor] ] as const).map(([key, amount]) => <div key={key} className="flex justify-between gap-4"><dt>{t(`subscriptions.proration.${key}`)}</dt><dd className="font-mono">{money(amount)}</dd></div>)}</dl>
+      {result.payment ? <p>{t("subscriptions.proration.cardMethod", { method: result.payment.label, last4: result.payment.last4 ?? "" })}</p> : null}
       {result.originalTrialEndsAt ? <Callout>{t("subscriptions.proration.trial", { date: date(result.originalTrialEndsAt) })}</Callout> : null}
       {result.feeReview ? <div className="grid gap-2 text-sm"><p>{t("subscriptions.proration.feeCarry", { amount: money(result.feeReview.appliedFeeObligationMinor), proved: money(result.feeReview.appliedFeeProvenCollectedMinor) })}</p>
         {result.feeReview.separateMerchantReceivableMinor > 0 ? <p>{t("subscriptions.proration.feeReceivable", { amount: money(result.feeReview.separateMerchantReceivableMinor) })}</p> : null}

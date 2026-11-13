@@ -7,6 +7,7 @@ import { z } from "zod";
 import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { syncSubscriptionAccess } from "@/core/entitlements/service";
 import { enqueueJob } from "@/core/jobs";
+import { moduleSettings } from "@/core/settings/schema";
 import { jobIdempotencyKeys } from "@/core/jobs/schema";
 import { actorString, defineService, getService, ServiceError, type ServiceContext } from "@/core/service";
 import { createCreditNote, createDraftInvoice, issueCreditNote, issueInvoice } from "@/modules/invoicing/invoice-service";
@@ -22,6 +23,8 @@ import { grossProrationInput, ownGrossProration, prepareGrossProrationQuote, req
 import { safeProrationPrincipal } from "./proration-basis";
 import { captureAgreementFeeDuty, retainAgreementFeeEligibility } from "@/modules/invoicing/agreement-fee-store";
 import { originalCreditFeeAllocation } from "@/modules/invoicing/credit-fee-origin";
+import { subscriptionProrationCardMandates } from "./proration-card-schema";
+import { retainProrationCardMandate } from "./proration-card-mandate";
 import { prorationBoundaryFunded } from "./proration-boundary";
 import { originalMerchantTerms } from "./merchant-terms-read";
 
@@ -105,6 +108,12 @@ async function accept(ctx: ServiceContext, input: z.infer<typeof acceptance>) {
     }
   }
   if (invoiceId && prepared.debitTaxQuote.totalMinor > 0) await captureAgreementFeeDuty(ctx, id, invoiceId);
+  if (invoiceId && prepared.card) {
+    const [original] = await ctx.tx.select().from(subscriptionProrations).where(eq(subscriptionProrations.id, id)).limit(1);
+    const [target] = await ctx.tx.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+    if (!original || !target) throw new ServiceError("conflict", "Retain the exact original canonical target before its reviewed stored-method mandate.");
+    await retainProrationCardMandate(ctx, original, target, prepared.card);
+  }
   const task = { prorationId: id, subscriptionId: parent.id, originalJobId, acceptedQuoteDigest: input.acceptedQuoteDigest };
   const job = await enqueueJob(ctx.tx, APPLY_GROSS_PRORATION_JOB, task, { id: originalJobId, idempotencyKey: `gross-proration:${id}`, startAfter: effectiveAt });
   const [claim] = await ctx.tx.select().from(jobIdempotencyKeys).where(and(eq(jobIdempotencyKeys.jobName, APPLY_GROSS_PRORATION_JOB), eq(jobIdempotencyKeys.jobId, job.id))).limit(1);
@@ -155,7 +164,8 @@ export const grossProrationCollectionAuthority = defineService({ name: "subscrip
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
     const [parent] = accepted ? await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, accepted.subscriptionId)).limit(1) : [];
     const states: unknown[] = [];
-    let allowed = Boolean(accepted && invoice && parent && ["awaiting_payment", "awaiting_effective"].includes(accepted.state) && accepted.effectiveAt > new Date() && parent.pendingPlanId === accepted.planId
+    const [enabled] = await ctx.tx.select({ enabled: moduleSettings.enabled }).from(moduleSettings).where(eq(moduleSettings.module, "subscriptions")).limit(1);
+    let allowed = Boolean(enabled?.enabled && accepted && invoice && parent && ["awaiting_payment", "awaiting_effective"].includes(accepted.state) && accepted.effectiveAt > new Date() && parent.pendingPlanId === accepted.planId
       && !parent.cancelledAt && !parent.cancelAtPeriodEnd && parent.status === "active" && parent.contactId === invoice.contactId && parent.currency === invoice.currency
       && invoice.sourceType === "subscription" && invoice.sourceId === `${parent.id}:proration:${accepted.id}` && ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status));
     if (allowed && accepted) {
@@ -188,6 +198,11 @@ async function apply(ctx: ServiceContext, accepted: typeof subscriptionProration
   const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, accepted.subscriptionId)).limit(1).for("update");
   if (!parent || !["awaiting_payment", "awaiting_effective"].includes(accepted.state) || parent.pendingPlanId !== accepted.planId || parent.cancelledAt || parent.cancelAtPeriodEnd || !["active", "trialing"].includes(parent.status)
     || parent.currentPeriodStart.getTime() !== accepted.originalPeriodStart.getTime() || parent.currentPeriodEnd.getTime() !== accepted.originalPeriodEnd.getTime()) return { applied: false, reviewRequired: true };
+  const [enabled] = await ctx.tx.select({ enabled: moduleSettings.enabled }).from(moduleSettings).where(eq(moduleSettings.module, "subscriptions")).limit(1);
+  if (!enabled?.enabled) {
+    await ctx.tx.update(subscriptionProrations).set({ state: "review" }).where(eq(subscriptionProrations.id, accepted.id));
+    return { applied: false, reviewRequired: true };
+  }
   if (accepted.debitInvoiceId) {
     const targetCash = await ctx.tx.select({ id: payments.id }).from(payments).where(eq(payments.invoiceId, accepted.debitInvoiceId)).limit(1001);
     const creditCash = await ctx.tx.select({ id: invoiceCreditFunding.sourcePaymentId }).from(invoiceCreditApplications)
@@ -271,7 +286,7 @@ export const completePaidGrossProration = defineService({ name: "subscriptions.c
     return accepted ? apply(ctx, accepted) : { applied: false, reviewRequired: false }; },
 });
 const statusResult = z.object({ commercial: z.boolean(), prorating: z.boolean(), billingMode: z.enum(["manual", "platform", "provider"]),
-  accepted: result.extend({ currency: z.string(), debitMinor: z.number().int().nonnegative(), creditMinor: z.number().int().nonnegative(), remainingMinor: z.number().int().nonnegative().nullable(), needsFreshConsent: z.boolean() }).nullable() });
+  accepted: result.extend({ currency: z.string(), debitMinor: z.number().int().nonnegative(), creditMinor: z.number().int().nonnegative(), remainingMinor: z.number().int().nonnegative().nullable(), needsFreshConsent: z.boolean(), originalCardMandate: z.boolean() }).nullable() });
 async function status(ctx: ServiceContext, id: string) {
   const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, id)).limit(1);
   if (!parent) throw new ServiceError("not_found", "There is no such subscription.");
@@ -282,9 +297,10 @@ async function status(ctx: ServiceContext, id: string) {
   const original = await originalMerchantTerms(ctx, parent);
   const activeSnapshot = accepted?.state === "applied" && accepted.planId === parent.planId ? accepted.snapshot : original?.snapshot;
   const [invoice] = accepted?.debitInvoiceId ? await ctx.tx.select().from(invoices).where(eq(invoices.id, accepted.debitInvoiceId)).limit(1) : [];
+  const [cardMandate] = accepted ? await ctx.tx.select({ id: subscriptionProrationCardMandates.prorationId }).from(subscriptionProrationCardMandates).where(eq(subscriptionProrationCardMandates.prorationId, accepted.id)).limit(1) : [];
   const paidInTime = accepted && (await prorationBoundaryFunded(ctx, accepted)).onTime && invoice?.status === "paid" && invoiceSettled(invoice) && invoice.refundedMinor === 0 && invoice.paidAt && invoice.paidAt <= accepted!.effectiveAt;
   return { commercial, prorating: activeSnapshot?.proration === "create_prorations", billingMode: parent.billingMode,
-    accepted: accepted ? { ...view(accepted), currency: accepted.snapshot.currency, debitMinor: accepted.debitNetMinor + accepted.debitTaxMinor,
+    accepted: accepted ? { ...view(accepted), originalCardMandate: !!cardMandate, currency: accepted.snapshot.currency, debitMinor: accepted.debitNetMinor + accepted.debitTaxMinor,
       creditMinor: accepted.creditNetMinor + accepted.creditTaxMinor, remainingMinor: invoice ? Math.max(0, invoice.totalMinor - invoice.paidMinor - invoice.creditedMinor) : null,
       needsFreshConsent: accepted.state === "review" || !["applied", "cancelled"].includes(accepted.state) && !accepted.originalTrialEndsAt && !paidInTime && accepted.effectiveAt <= new Date() } : null };
 }

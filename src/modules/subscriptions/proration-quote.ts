@@ -21,6 +21,8 @@ import { subscriptionInitialTaxQuote } from "./merchant-terms-contract";
 import { subscriptionCommercialTerms, subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptions } from "./schema";
 import { subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { subscriptionProrations } from "./proration-schema";
+import { reviewedProrationCard } from "./proration-card-mandate";
+import { prorationCardSummary } from "./proration-card-contract";
 import { requireProrationBoundarySchema } from "./proration-boundary";
 import { paidProrationBasis } from "./proration-basis";
 import { proratedAmounts } from "./proration-amounts";
@@ -34,7 +36,7 @@ export const grossProrationReview = z.object({ subscriptionId: z.uuid(), previou
     z.object({ kind: z.literal("original_calendar"), prorationAt: z.iso.datetime(), currentPeriodStart: z.iso.datetime(), currentPeriodEnd: z.iso.datetime(), nextPeriodStart: z.iso.datetime(), nextPeriodEnd: z.iso.datetime() })]),
   debitNetMinor: minor, debitTaxMinor: minor, creditNetMinor: minor, creditTaxMinor: minor, creditAppliedMinor: minor, cashDueMinor: minor,
   residualCreditMinor: minor, creditDisposition: z.literal("exclusive_until_paid_access_switch_no_automatic_cash_refund"),
-  requiresMerchantReview: z.boolean(),
+  requiresMerchantReview: z.boolean(), payment: prorationCardSummary.nullable(),
   feeReview: z.object({ debitFeeObligationMinor: minor, creditFeeObligationMinor: minor, appliedFeeObligationMinor: minor, appliedFeeProvenCollectedMinor: minor,
     remainingNewCashFeeMinor: minor, separateMerchantReceivableMinor: minor, originalOverTargetMinor: minor, originalSourceDebt: z.boolean(), sources: z.array(z.object({ sourcePaymentId: z.uuid(), sourceApplicationId: z.uuid().nullable(),
       amountMinor: minor, feeObligationMinor: minor, feeProvenCollectedMinor: minor, feeCollectionState, feeEvidenceDigest: sha, feeUnexpected: z.boolean() })).max(1000) }).nullable(),
@@ -110,16 +112,18 @@ export async function prepareGrossProrationQuote(ctx: ServiceContext, input: z.i
   const feeReview = { debitFeeObligationMinor, creditFeeObligationMinor, appliedFeeObligationMinor, appliedFeeProvenCollectedMinor, remainingNewCashFeeMinor: Math.min(feeBudget.feeObligationMinor, feeBudget.principalMinor),
     separateMerchantReceivableMinor: Math.max(0, feeBudget.feeObligationMinor - feeBudget.principalMinor),
     originalOverTargetMinor: feeBudget.originalOverTargetMinor, originalSourceDebt: basis.principal.some(source => source.feeUnexpected || ["owed", "review"].includes(source.feeCollectionState)), sources: basis.principal };
-  const noticeSnapshot = { locale: input.locale, text: `${economic.noticeSnapshot.text}\n${translator(input.locale)("subscriptions.grossProrationNotice")}\n${translator(input.locale)("subscriptions.proration.feeReceivableNotice")}\n${translator(input.locale)("subscriptions.proration.boundaryNotice")}` };
+  const card = await reviewedProrationCard(ctx, parent, { providerPlatformAccountId: economic.route.providerPlatformAccountId,
+    ...(economic.route.collectionKind === "direct" ? { providerAccountId: economic.route.chargeAccountId! } : { destinationAccountId: economic.route.recipientAccountId, settlementMerchantAccountId: economic.route.settlementMerchantAccountId }) }, Number(totalDebit - applied));
+  const noticeSnapshot = { locale: input.locale, text: `${economic.noticeSnapshot.text}\n${translator(input.locale)("subscriptions.grossProrationNotice")}\n${translator(input.locale)("subscriptions.proration.feeReceivableNotice")}\n${translator(input.locale)("subscriptions.proration.boundaryNotice")}${card ? `\n${translator(input.locale)("subscriptions.proration.cardNotice", { method: card.summary.label })}` : ""}` };
   const noticeDigest = merchantTaxDigest({ version: 1, noticeSnapshot, calendar, effectiveAt: input.effectiveAt, totalCredit: Number(totalCredit), totalDebit: Number(totalDebit), trialEndPreserved: parent.trialEndsAt?.toISOString() ?? null });
   const quoteDigest = merchantTaxDigest({ version: 1, kind: "gross-original-proration", subscriptionId: parent.id, previousTermsId: previous.id, effectiveAt: input.effectiveAt,
-    sourceRevision: basis.sourceRevision, economicQuoteDigest: economic.quoteDigest, debitTaxQuote, calendar, noticeDigest, feeReview, originalScope: scope, originalPolicy: policy });
+    sourceRevision: basis.sourceRevision, economicQuoteDigest: economic.quoteDigest, debitTaxQuote, calendar, noticeDigest, feeReview, card: card ? { methodDigest: card.methodDigest, summary: card.summary } : null, originalScope: scope, originalPolicy: policy });
   const review = grossProrationReview.parse({ subscriptionId: parent.id, previousTermsId: previous.id, quoteDigest, sourceRevision: basis.sourceRevision, effectiveAt: input.effectiveAt,
     originalPeriodStart: parent.currentPeriodStart.toISOString(), originalPeriodEnd: parent.currentPeriodEnd.toISOString(), originalTrialEndsAt: parent.trialEndsAt?.toISOString() ?? null, calendar,
     debitNetMinor, debitTaxMinor: debitTaxQuote.taxMinor, creditNetMinor: basis.creditNetMinor, creditTaxMinor: basis.creditTaxMinor, creditAppliedMinor: Number(applied),
     cashDueMinor: Number(totalDebit - applied), residualCreditMinor: Number(totalCredit - applied), creditDisposition: "exclusive_until_paid_access_switch_no_automatic_cash_refund",
-    quote: publicMerchantTermsQuote.unwrap().parse(economic), noticeSnapshot, feeReview, requiresMerchantReview: false });
-  return { parent, previous, policy, scope, resource, effectiveAt, economic, basis, debitTaxQuote, noticeSnapshot, noticeDigest, feeReview, review };
+    quote: publicMerchantTermsQuote.unwrap().parse(economic), noticeSnapshot, feeReview, payment: card?.summary ?? null, requiresMerchantReview: false });
+  return { parent, previous, policy, scope, resource, effectiveAt, economic, basis, debitTaxQuote, noticeSnapshot, noticeDigest, feeReview, card, review };
 }
 export const quoteGrossProration = defineService({ name: "subscriptions.quoteProration", summary: "Review the exact original paid credit, dated new gross invoice, preserved calendar and locked credit before explicit plan-change consent.",
   kind: "query", permission: "scoped", input: grossProrationInput, output: grossProrationReview, handler: async (input, ctx) => (await prepareGrossProrationQuote(ctx, input)).review });

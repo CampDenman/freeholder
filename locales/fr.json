@@ -9178,5 +9178,11 @@
   "agreementCommission.pending": "Le règlement canonique complet réel ou la récupération d’origine est en attente. Une commission prévue n’est pas un montant encaissé.",
   "subscriptions.proration.feeReceivable": "Créance distincte prévue de commission sur le marchand : {amount}. L’obligation d’origine et le versement réel sont distincts.",
   "subscriptions.proration.feeReceivableNotice": "La commission du marchand est rapprochée de toutes les contreparties conservées en espèces et en avoir d’origine après le règlement complet réel. Un remboursement en espèces peut laisser une commission due sur l’avoir conservé ou transformer une commission sur espèces rendue en créance distincte sur le marchand. Les règles de commission d’origine, les versements réels et les restitutions de trop-perçus restent distincts.",
-  "subscriptions.proration.boundaryNotice": "La confirmation du paiement et l’avoir d’origine appliqué doivent être conservés avant l’instant choisi. Une date de paiement fournie ou la création d’un objet chez le prestataire ne peut réactiver un consentement expiré. Les fonds réels tardifs restent enregistrés pour un nouvel examen."
+  "subscriptions.proration.boundaryNotice": "La confirmation du paiement et l’avoir d’origine appliqué doivent être conservés avant l’instant choisi. Une date de paiement fournie ou la création d’un objet chez le prestataire ne peut réactiver un consentement expiré. Les fonds réels tardifs restent enregistrés pour un nouvel examen.",
+  "subscriptions.proration.cardNotice": "Votre acceptation autorise un seul paiement automatique du solde examiné avec {method}. Tout débit initial incertain doit être récupéré avant une autre tentative ; cela ne modifie ni les dates de renouvellement ni les droits avant paiement.",
+  "subscriptions.proration.cardMethod": "Moyen de paiement enregistré : {method} · {last4}",
+  "subscriptions.proration.cardCollect": "Encaisser ou récupérer le paiement initial",
+  "subscriptions.proration.cardReaderTitle": "Lectures bancaires initiales du changement de prix",
+  "subscriptions.proration.cardReaderIntro": "Chaque vérification bancaire initiale doit réellement se terminer ou disposer d’un arrêt du processus examiné indépendamment. Une lecture ultérieure réussie ne remplace pas un appel perdu ; un examen d’arrêt ne prouve pas si des fonds ont été déplacés.",
+  "subscriptions.proration.cardReaderRecover": "L’arrêt du processus initial est enregistré. Utilisez l’inspection du paiement initial ci-dessus pour une nouvelle lecture bancaire autorisée."
 }
