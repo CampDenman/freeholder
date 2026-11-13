@@ -49,7 +49,11 @@ describe.runIf(hasDatabase)("actual original raw feedback privacy owner81",{time
     const invoiceId=paymentSource.invoiceId,paymentId=paymentSource.paymentId;
     const beforeFingerprint=await db().transaction(tx=>invoiceMerchantDependencyFingerprints(tx,[invoiceId]));
     expect(beforeFingerprint?.get(invoiceId)).toBeTruthy();
-    await paymentSource.signedDashboard(external);
+    // Historical raw-retention entry: the current webhook path recognizes
+    // this original payment and correctly stores a managed observation.
+    // Authenticate and commit the legacy receipt through its real service.
+    if(!external.paymentProviderRef||!external.providerChargeRef)throw new Error("Retain the original provider intent and charge before its raw receipt.");
+    await signedRawRefund({ref:external.providerRef,intent:external.paymentProviderRef,charge:external.providerChargeRef,amount:external.amountMinor,currency:external.currency});
     const rows=await db().select().from(legacyBankFeedback);expect(rows).toHaveLength(1);const raw=rows[0]!;
     const beforePayment=await db().select().from(payments),beforeRefunds=await db().select().from(refunds);
     await expect(db().transaction(tx=>originalBankFeedbackOwner(tx,{...raw,authentication:"0".repeat(64)}))).rejects.toMatchObject({code:"conflict"});

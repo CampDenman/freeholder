@@ -1,6 +1,30 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # Exact raw-feedback privacy owner source checkpoint
 
+## Combined qualification follow-up, 2026-11-13
+
+The first combined native attempt at c96cd325 stopped before the ownership
+assertions: its helper used the current webhook retention path, which correctly
+found the original payment and committed one managed observation/capture rather
+than a legacy receipt. The failed V5 database is preserved with one payment,
+zero logical refunds, zero cash recovery owners and zero legacy receipts; the
+independent read-only proof records all 82 migration identities and drained
+clients. This is an entry-path mismatch in the prepared test.
+
+The first test now uses the existing exact-byte HMAC verifier and the real
+system-only legacy retention service, as the other raw-owner controls already
+do. Every original fingerprint, export, authentication, money, ownership and
+no-provider-POST assertion remains. It tests repair of a retained historical raw
+receipt; it does not claim the current webhook selects legacy retention. The
+corrected body remains unrun until its new database qualification.
+
+Separately, combined c96cd325 passes full types, affected model lint and metadata
+renewal. Read-only schema parity passes all 86 models and all 82 migration
+identities, including source-backed unnamed CHECK groupings and the explicitly
+deferred first-operation FK. Actual SDK drift checks pass 8/8 with independent
+proof that the previously qualified financial dataset was unchanged. These
+component checks do not supply callback behavior or stable acceptance.
+
 This bounded SOURCE ONLY increment follows qualified cacb80bd and its
 7164e9d6 evidence documentation. It addresses MASTER §43 C1.08/C12.38. All new
 controls are PREPARED/UNRUN. No compiler, lint, test, build, install, database,
