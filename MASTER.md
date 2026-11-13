@@ -14313,6 +14313,21 @@ whatever is best for the people using the site.
   lost-recipient,unassigned,managed}-native-v6-20261113 (-ledger-v6.json).
   These are synthetic-provider component checks, not independent stopped-read
   recovery, full positive collection, provider-account or stable acceptance.
+  Actual external-money continuation2026-11-13: combined dcd1ea1e (same tree
+  at48d20e4e) passed full types, affected lint,368 actual controls in61 complete
+  files and license/notes/plan, with101 native cases explicitly skipped there.
+  NEW V9 applied all83 entries in6.780s; strict v18 passed142 models/282 guards/
+  227 function bodies in11.410s/3357 queries. The unchanged actual offline
+  payment journey then caught PostgreSQL42702 before its first attestation: a
+  local refunds record r conflicts with applied-credit reservation alias r.
+  A broader owned-body source scan also found the same clause in both final
+  attestation redefinitions and eligibility payment alias p conflicting with
+  the declared payment record. These exact three aliases are now distinct
+  applied_reservation/eligible_payment names; all financial conditions remain
+  unchanged. Failed V9 is preserved with independent table/journal/profile/
+  client-drain proof. No first payment/attestation was partially committed.
+  Fresh V10, strict installed-body parity and unchanged offline/gross business
+  controls remain required. All142 models and0–79/81/82 stay unchanged.
   Related external-money alias audit2026-11-13: source review found the same
   trigger OLD collision in all three owned guard_commercial_attestation bodies
   (commercial attestation, agreement fee and gross proration). Signed af8c4b77
