@@ -18,7 +18,7 @@ import { invoiceRefundStates } from "@/modules/invoicing/merchant-refund-bank-st
 import { reconcileMerchantRefundCurrentState } from "@/modules/invoicing/merchant-refund-current-service";
 import { replaceReturnedBankRefund } from "@/modules/invoicing/merchant-bank-replacement-service";
 import { BANK_REPLACEMENT_CONFIRMATION, BANK_REPLACEMENT_STATE } from "@/modules/invoicing/merchant-bank-replacement-proof";
-import { merchantRefundObservations, merchantRefundRequests } from "@/modules/invoicing/merchant-refund-schema";
+import { merchantRefundDispatchFinishes, merchantRefundObservations, merchantRefundRequests, merchantRefundResourceBindings } from "@/modules/invoicing/merchant-refund-schema";
 import { merchantRefundCurrentReceipts, merchantRefundStateReadFinishes } from "@/modules/invoicing/merchant-refund-current-schema";
 import { creditNotes, creditNoteLines, invoices, moneyStateEvents, payments, refunds } from "@/modules/invoicing/schema";
 import { orderItems, returnRefundAllocations } from "@/modules/catalog/schema";
@@ -83,7 +83,6 @@ describe.runIf(hasDatabase)("original bank refund cash and promise80", { timeout
         const id = `pyr_bank${resources.size + 1}`, metadata = Object.fromEntries([...data].filter(([name]) => name.startsWith("metadata[")).map(([name, datum]) => [name.slice(9, -1), datum]));
         const resource: Resource = { id, amount, payment_intent: "pi_bankOriginal", currency: "cad", status: "succeeded", charge: "ch_bankOriginal", metadata, failure_balance_transaction: null };
         resources.set(id, resource); keys.set(key, id);
-        if (postPause) { postPause.entered.resolve(); await postPause.release.promise; }
         return Response.json(resource);
       }
       if (url.pathname.startsWith("/v1/refunds/") && init.method === "GET") {
@@ -96,7 +95,14 @@ describe.runIf(hasDatabase)("original bank refund cash and promise80", { timeout
       throw Error(`Unexpected bank fixture request: ${init.method} ${url.pathname}`);
     });
     const adapter = createStripePayments({ secretKey: "sk_bank_native_fixture_only", webhookSecrets: [secret], apiBase: "https://stripe.example.test", fetch: fetcher });
-    value.stripe.createMerchantRefund = adapter.createMerchantRefund?.bind(adapter);
+    const create = adapter.createMerchantRefund?.bind(adapter);
+    if (!create) throw Error("The actual bank-refund factory must support original creation.");
+    value.stripe.createMerchantRefund = request => create({ ...request, onRefundObserved: async evidence => {
+      // Keep the actual ACK and original committed observation. Only this
+      // physical caller's promise is paused, not a forged business result.
+      await request.onRefundObserved(evidence);
+      if (postPause) { postPause.entered.resolve(); await postPause.release.promise; }
+    } });
     value.stripe.recoverMerchantRefund = adapter.recoverMerchantRefund?.bind(adapter);
     async function webhook(id: string, status: BankStatus) {
       const resource = resources.get(id); if (!resource) throw Error("Change only an actual provider resource.");
@@ -180,6 +186,9 @@ describe.runIf(hasDatabase)("original bank refund cash and promise80", { timeout
     try {
       expect(await Promise.race([barrier.entered.promise.then(() => "entered"), first.then(() => "ended")])).toBe("entered");
       const [original] = await db().select().from(merchantRefundRequests).where(eq(merchantRefundRequests.paymentId, actual.paymentId));
+      expect((await db().select().from(merchantRefundResourceBindings).where(eq(merchantRefundResourceBindings.requestId, original!.id)))[0]).toMatchObject({ providerRef: "pyr_bank1", origin: "physical_ack" });
+      expect((await db().select().from(merchantRefundObservations).where(eq(merchantRefundObservations.requestId, original!.id)))[0]).toMatchObject({ providerRef: "pyr_bank1", status: "succeeded", amountMinor: 400, bindingVerified: true });
+      expect(await db().select().from(merchantRefundDispatchFinishes)).toHaveLength(0);
       expect(await failure(actual.inspect(original!.id))).toMatchObject({ code: "conflict" }); expect(actual.reads).toEqual([]); expect(actual.posts).toHaveLength(1);
       barrier.release.resolve(); const returned = await first; expect(returned).toHaveProperty("value");
       expect((await actual.inspect(original!.id)).status).toBe("succeeded"); await actual.balances(400); expect(actual.posts).toHaveLength(1);
