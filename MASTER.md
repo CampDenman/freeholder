@@ -11740,6 +11740,12 @@ schema they inherit reads as a designed thing rather than an excavation.
   `pnpm plan:check` in CI. **F12** `tests/core/f-matrix.test.ts` validates
   the matrix against the whole live plan, the tracked tree and the suite
   glob in one call. Changeset `f-matrix-2026-09-16.md`.)*
+  Caller nonce audit repair 2026-11-13 (C11.10/C12.38): the shared audit
+  redactor now recursively handles original/completion nonce names, retaining
+  call/read identities. The unchanged regression fails once BEFORE and the
+  complete core service file passes29 assertions AFTER; the earlier zero-match
+  attempt is excluded from proof. See `deploy/audit-caller-nonces-2026-11-13.md`.
+  Full source gates and the independent review remain open.
 - [ ] **C11.10** Complete independent security review of auth, payments,
   webhooks, MCP/agents, OAuth, plugins, updater, uploads and customer privacy;
   resolve every critical/high and disposition every lower finding.
