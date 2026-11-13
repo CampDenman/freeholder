@@ -14230,6 +14230,20 @@ whatever is best for the people using the site.
   provider/hosting acceptance and full §4.15/C9.33 proration remain required;
   no C-item or stable gate closes. See
   `deploy/subscription-provider-reader-recovery80-source-20261113.md`.
+  Proration foundation and implementation decisions (2026-11-13,
+  C9.33/C9.38/C12.38): exact separately-rounded unused-fraction arithmetic and
+  the owner unpaid-upgrade guard are an unqualified finite source repair.
+  Root's implementation decisions within the full-spec task preserve accepted
+  trial ends with zero old paid principal/unused credit and no trial-window
+  charge; preserve original manual/platform calendars across interval changes;
+  and require explicit consent to provider preview's actual anchor/reset and
+  invoice effects. Negative adjustments issue original shared credits without
+  automatic cash refunds. A real canonical noncash credit-application extension,
+  explicit mid-cycle merchant consent and an independently admitted actual
+  provider preview/update/invoice lifecycle remain required. The new arithmetic,
+  calendar and ordinary paid-period native controls are UNRUN; this checkpoint
+  supplies no provider/SQL/business acceptance and closes no item. See
+  `deploy/subscription-proration-foundation80-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the
