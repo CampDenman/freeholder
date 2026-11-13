@@ -12,6 +12,7 @@ import { merchantRefundRequests } from "./merchant-refund-schema";
 import { merchantPhysicalCaller } from "./merchant-physical-caller";
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import { legacyBankCurrentRevision } from "./legacy-bank-current-state";
 import { originalLegacyBankRefund } from "./legacy-refund-dispatch";
 import { legacyBankOriginal, legacyBankReadFact, legacyBankReadFinishInput, legacyBankReadNonce } from "./legacy-bank-read-contract";
 import { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes } from "./legacy-bank-read-schema";
@@ -61,7 +62,7 @@ export const prepareLegacyBankRead = defineService({
     if (unfinished) throw new ServiceError("conflict", "The original legacy inspection caller is live or unresolved; restore its actual finish before another read.");
     const completionNonce = randomBytes(32).toString("base64url"); await allowWrites(ctx);
     const [read] = await ctx.tx.insert(legacyBankReads).values({ refundId: refund.id, original, originalDigest: merchantTaxDigest(original),
-      caller: merchantPhysicalCaller(), completionNonceHash: hash(completionNonce) }).returning();
+      caller: merchantPhysicalCaller(), completionNonceHash: hash(completionNonce), sourceRevision: await legacyBankCurrentRevision(ctx, refund.id) }).returning();
     queueOriginalMerchantRefundRepair(ctx, { kind: "legacy_bank_read", id: read!.id });
     ctx.setSubject("refund", refund.id); return { readId: read!.id, completionNonce, original };
   },
