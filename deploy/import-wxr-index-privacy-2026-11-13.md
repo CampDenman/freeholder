@@ -84,5 +84,13 @@ chunk absence, retained marker, unchanged pending job, NULL fulfilment time
 and recovery after rollback. No product guard, assertion timeout or physical
 proof was relaxed. Agent coding review agreed that rollback is not index
 minimization. The changed fixture passes incremental typecheck and lint;
-its four native cases are pending. This is a deliberate stronger privacy
+all four changed native cases pass without retry (22.293s summed case
+time). Both WXR/ZIP unparsed-reader races refuse late results and preserve
+pending recovery after raw retirement. Both named-hold controls retain exact
+bytes through rollback and delete only after explicit hold removal. Independent
+final readback confirms the last archive's historical retained outcome,
+rolled-back graph with500 entries/one private marker, named exception removed,
+actual accepted PUT/DELETE and chunk absence, full unchanged80-entry journal
+and zero clients. Intermediate pending states are native assertions; no
+separate external paused snapshot is claimed. This is a deliberate stronger privacy
 contract, not a claim of full minimization.
