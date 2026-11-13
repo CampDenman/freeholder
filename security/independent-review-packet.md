@@ -172,6 +172,17 @@ inspect these fixes and their preserved-history limitations; these local passes
 supply no independent approval. Actual provider, complete financial/recovery
 acceptance and Tony's signed review remain required.
 
+The retained untagged customer-task path subsequently exposed a separate
+unpublished candidate defect: an actual intercepted DELETE and false completed
+receipt while the original billing resource stayed active. All-task preflight
+99f566b9/356306b7 now passes the unchanged preserved-history oracle with0 I/O,
+plus actual queued safe-legacy, missing-hash and later-hold controls. Both
+original13-table goldens remain untouched. See
+`deploy/subscription-original-customer-preflight-20261113.md` for exact provenance
+and the still-open full regression, post-admission hold/caller and provider
+acceptance boundaries. The actual accepted manual terms/own-versus-foreign
+profile-child controls also pass; these do not supply the independent review.
+
 ## Payment-provider privacy cleanup repair (2026-11-11)
 
 Review `invoicing/provider-erasure.ts`, the existing `commerce.money` source,

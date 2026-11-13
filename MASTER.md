@@ -13905,6 +13905,32 @@ whatever is best for the people using the site.
   Full preserved-history recovery, accepted terms/profile merge, nonempty cash,
   late positives, new provider creation and browser/provider acceptance remain
   required. These targeted repairs leave C1.08/C12.38/stable and review open.
+  A preserved original untagged customer task then exposed another candidate
+  defect(f49128aa/426.29ms): actual intercepted DELETE1 and false completed
+  request while its original resource stayed active. The new13-table workcopy
+  preserves that result; the original golden/schema/journal remain untouched.
+  Minimal all-task preflight99f566b9, composed356306b7, passes component fulltypes
+  and current incrementaltypes/three-file lint/41 source assertions. The unchanged
+  preserved oracle passes375.55ms on a NEW after-copy with0 provider I/O and
+  explicit in-progress recovery. Three actual queued legacy controls also pass:
+  safe cleanup/UUID/namespace/no-I/O replay7.029s, missing original hash7.112s,
+  and a later same-contact hold7.162s. Per-case exact task/claim/hold readbacks,
+  unchanged normal881a/journal81 and drained clients are retained. Initial global
+  queue-count inspection assumptions and an ineligible-hold fixture refusal
+  are preserved separately; corrected inspections/fixture did not alter product
+  expectations or deadlines. The no-reset missing original-finisher review
+  also commits recovery from its actual retained repair without provider I/O,
+  new original claims or reconstructed payloads; its golden13 remain unchanged.
+  Actual accepted manual terms/profile witnesses now pass6.371s and5.959s:
+  frozen original month/trial/setup/price/tax promises survive plan edits; foreign
+  accepted-term or exemption children allow undo, owning children block undo,
+  with profile/version rows unchanged in the exemption control. Exact erasure
+  claims/terms IDs/merge receipts and independent journal/client readbacks pass.
+  These are synthetic actual-service controls, not new provider creation, real
+  certificate or independent review. Affected full18 provider-erasure native
+  regression, updated original buyer journeys, amendments/provider phases and
+  complete C1.08/C12.38 acceptance remain required. See
+  deploy/subscription-original-customer-preflight-20261113.md.
   Current-main financial composition 2026-11-12: exact `73e145af` merges protected
   main `bad846e4` (#694) and both fee repairs while preserving SQL958, all published
   migrations and helper `46a6ec02`. Full source gates passed at `5f53daf5` (384 assertions,
