@@ -151,7 +151,7 @@ This proves the real producer consumes its real adapter DTO. Actual account
 acceptance, phase-stop/recovery cash-fault controls, amendments and future
 invoice lineage remain required; stable and C12.38 remain open.
 
-## Next recovery composition: source only
+## Recovery composition: source checkpoint and subsequent proof
 
 A separate integration now composes a8281b63 schedule GET and unpaid PI/void
 caller recovery,8f0e2dfd supported subscription draft finalization, and28da3dd2
@@ -175,7 +175,7 @@ New unpublished80 SHA-256 is
 2100aa769636b26667ad9a715cc4cefffae60144f711d43b2fcf0592e83827f9.
 Prior published0–79, journal entries and the complete c189 byte prefix stay
 exact. The stop-recovery tail SHAea555f14 and legacy-recovery tail SHAd4ae54e3
-remain their owners' exact bytes. No database has been migrated to2100.
+remain their owners' exact bytes. At assembly time no database had been migrated to2100; subsequent fresh-database proof follows.
 Sourceef45c63b passes full types, whole-tree lint,72 nonempty actual test
 files/607 assertions with45 declared database skips and zero pending, plus
 license/634-note/plan gates. The initial missing recovery-form htmlFor was
@@ -200,3 +200,49 @@ unrun on2100. V14/V15 failures, V16 producer success and every
 earlier prototype/golden stay untouched. This checkpoint supplies no enabled
 model, C-item closure or stable sign-off; amendments/future-invoice lineage and
 exact legacy RMA integration remain required source work.
+
+
+## Completed bounded recovery controls on 2100
+
+All six actual legacy recovery controls now pass, each with an independent
+read-only ledger before the next owned fixture reset: causal replacement,
+reservation-only merge undo, accepted paused foreign caller, corrupt lineage,
+excess positive provider cash, and an actually stopped Linux child. The last
+proves two retained pre-stop facts, no invented finish/current receipt, a
+mechanically reviewed process absence and a genuinely new returned read.
+Paid1000/refunded400 survives; no merchant request is manufactured.
+
+The stopped-child fixture first failed before any read because its child was
+transformed as CommonJS with top-level await; V17 is preserved. An async main
+then exposed an ESM-only loader alias failure, preserved in V18. Fixture-only
+commits a6898df9 and6c0d2920 use the existing universal tsx loader resolved
+through Vite and retain child IPC errors. No product or success oracle changes.
+The real stopped-child control then passes on fresh V19. All three fresh
+ordinary migration runs retain the exact2100 SQL and81 source journal hashes.
+
+All three actual schedule recovery controls also pass on V19 with the original
+60-second limits, bail1 and no retry. Runner durations are8.833s for the failed
+commercial GET,8.983s for the lost cancel reply and9.494s for the retained
+worker body. Independent read-only checks prove the actual failed original
+caller and a distinct nonce-bound returned verification GET, original immutable
+ownership, complete81-entry source journal and no invoices, payments, refunds
+or charge receipts. The cancel-only control closes its original schedule while
+broader privacy quiescence remains explicitly pending; it sends no second
+cancel. The worker-body control runs the actual retained job payload through
+linked-subscription cancellation, unpaid PaymentIntent cancellation and invoice
+void. Six original operations finish confirmed and the resource reaches
+quiesced with its actual stop proof. This is a worker-body control, not a live
+queue lease or real provider account acceptance.
+
+The first read-only collector used an incorrect charge-receipt table name;
+the next exposed an overly broad final-resource expectation for the cancel-only
+case. Both collector corrections were read-only; neither repeated a native
+case or changed product state. Every final ledger proves UTC, fsync-on,
+jit-off, read-only inspection, no crash recovery and drained clients.
+Artifacts use /tmp/freeholder-legacy-reader-universal-after-2100-v1 and
+/tmp/freeholder-subscription-recovery-{get,cancel,body}-2100-v1 prefixes.
+
+These nine bounded recovery passes leave combined regression, populated
+upgrade, SDK/browser, live queue/provider acceptance and the final complete
+candidate gates open. RMA feedback and amendment source are separate, newer
+unqualified increments; no feature checkbox or stable sign-off is supplied.
