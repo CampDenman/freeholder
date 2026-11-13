@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C5.25: customer capabilities never widen the owner's scoped money services.
+import { lockControlledOrdinaryCollectionParent } from "./controlled-ordinary-collection-parent";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { invoiceOutstanding } from "./invoice-balance";
@@ -182,10 +183,11 @@ export const claimCustomerCheckout = defineService({
   name: "invoicing.claimCustomerCheckout", summary: "Authorize and durably reserve a customer payment before contacting its provider.",
   kind: "mutation", permission: "public", external: false, input: checkoutAccess, output: checkoutSource,
   handler: async (input, ctx) => {
-    // Serialize only customer claims; preserve the shared ledger's own lock
-    // order (payment idempotency, then invoice) to avoid cross-flow deadlocks.
-    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`customer-checkout:${input.id}`}))`);
     const invoice = await authorizedInvoice(input, ctx);
+    await lockControlledOrdinaryCollectionParent(ctx.tx,invoice.id);
+    // Authenticate before target locks, then retain resource→parent order
+    // ahead of the ordinary checkout/idempotency/canonical money locks.
+    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`customer-checkout:${input.id}`}))`);
     if (!payable(invoice)) throw new ServiceError("conflict", "This invoice is not open for payment.");
     const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: invoice.id });
     const adapter = paymentAdapter(policy?.model === "seller_merchant" ? "stripe" : undefined);

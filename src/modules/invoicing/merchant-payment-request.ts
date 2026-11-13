@@ -18,6 +18,8 @@ import { routingForPayment } from "./merchant-charge";
 import { verifyInvoiceMerchant } from "./market-policy";
 import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations";
 import { invoicePaymentDueAmount } from "./invoice-payment-due";
+import { lockControlledOrdinaryCollectionParent } from "./controlled-ordinary-collection-parent";
+import { requireControlledOrdinaryCollectionAuthority } from "./controlled-ordinary-collection-authority";
 import { forgetLocalMerchantCallFinish, localMerchantCallFinish, localMerchantCallFinishes, merchantCallerLiveness, merchantPhysicalCaller, retainLocalMerchantCallFinish } from "./merchant-physical-caller";
 
 const nonceHash = (nonce: string) => createHash("sha256").update(nonce).digest("hex");
@@ -146,8 +148,10 @@ export const claimMerchantPaymentDispatch = defineService({
   input: z.object({ paymentId: z.uuid(), requestDigest: z.string().regex(/^[a-f0-9]{64}$/) }), output: z.object({ dispatchId: z.uuid(), ordinal: z.number().int().positive(), completionNonce: z.string() }),
   handler: async (input, ctx) => {
     await lockContactIdentityForRead(ctx.tx);
-    const [parent] = await ctx.tx.select({ invoiceId: payments.invoiceId }).from(payments).where(eq(payments.id, input.paymentId));
+    const [parent] = await ctx.tx.select({ invoiceId: payments.invoiceId,provider:payments.provider,method:payments.method }).from(payments).where(eq(payments.id, input.paymentId));
     if (!parent) throw new ServiceError("not_found", "That original payment is not here.");
+    const controlled=await lockControlledOrdinaryCollectionParent(ctx.tx,parent.invoiceId);
+    await requireControlledOrdinaryCollectionAuthority(ctx,controlled,{provider:parent.provider,method:parent.method,paymentId:input.paymentId});
     // Match createPayment's invoice lock before checking any sibling creator.
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`invoice:${parent.invoiceId}`}))`);
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, input.paymentId)).for("update");

@@ -15217,6 +15217,19 @@ whatever is best for the people using the site.
   parent immediately after resource, before payments/invoice/notes, preserving
   resource→parent→sorted payment→invoice→note→cash. This is source only;
   qualification and the full positive lifecycle remain required.
+  Ordinary controlled collection pre-admission source checkpoint 2026-11-13
+  (C12.38/C9.38): exact accepted invoice→quote→resource→subscription discovery
+  now precedes ordinary canonical money locks in shared new-payment, dispatch,
+  hosted/customer/POS and stored-method entry points. Incomplete foreign source
+  ancestry refuses instead of becoming legacy. New collection requires a real
+  terminal/alternative-disposition authority; that producer/reader is absent,
+  so the handoff mechanically refuses, without borrowing controlled pay authority.
+  Actual signed original receipt application and read-only due calculations stay
+  separate. Eight real SQL-adapter controls are PREPARED/UNRUN. Durable unapplied
+  manual/in-person receipt retention, genuine alternative disposition/physical
+  request binding and full native/provider acceptance remain REQUIRED; see
+  deploy/controlled-ordinary-admission82-source-20261113.md. No SQL/CPU/PG or
+  stable qualification is claimed.
   Controlled15 parent consumer source checkpoint 2026-11-13 (C9.33/C9.38/
   C12.38/C1.08): exact actual invoice/payment/receipt/frozen-profile FKs now
   discover the six target families, including unaccepted cashless normal periods,

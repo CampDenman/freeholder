@@ -10,6 +10,7 @@ import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { moduleSettings } from "@/core/settings/schema";
 import { jobIdempotencyKeys } from "@/core/jobs/schema";
 import { createPayment, startPayment } from "@/modules/invoicing/invoice-service";
+import { lockControlledOrdinaryCollectionParent } from "@/modules/invoicing/controlled-ordinary-collection-parent";
 import { invoiceOutstanding } from "@/modules/invoicing/invoice-balance";
 import { providerPaymentSource, recordProviderPaymentResult } from "@/modules/invoicing/payment-provider-service";
 import { assertChargeEvidence, routingForPayment } from "@/modules/invoicing/merchant-charge";
@@ -36,6 +37,8 @@ export const claimProrationCardCharge = defineService({ name: "subscriptions.cla
   kind: "mutation", permission: "system", external: false, writeClass: "money", input: z.object({ prorationId: z.uuid() }), output: claimResult,
   handler: async ({ prorationId }, ctx) => {
     await lockContactIdentity(ctx.tx); await requireProrationCardSchema(ctx);
+    const[reference]=await ctx.tx.select({invoiceId:subscriptionProrations.debitInvoiceId}).from(subscriptionProrations).where(eq(subscriptionProrations.id,prorationId)).limit(1);
+    if(reference?.invoiceId)await lockControlledOrdinaryCollectionParent(ctx.tx,reference.invoiceId);
     const [accepted] = await ctx.tx.select().from(subscriptionProrations).where(eq(subscriptionProrations.id, prorationId)).limit(1).for("update");
     if (!accepted) throw new ServiceError("not_found", "There is no such original accepted proration.");
     const [existing] = await ctx.tx.select({ attempt: subscriptionProrationCardAttempts, payment: payments }).from(subscriptionProrationCardAttempts)
