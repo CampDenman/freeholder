@@ -27,12 +27,12 @@ const outcomes = z.object({ outcomes: z.array(z.object({ scope: z.string(), outc
 function context(id: string): JobExecutionContext { return { id, name: eraseImportSourceObjects.name, attempt: 1, signal: new AbortController().signal,
   leaseSeconds: 120, heartbeat: async () => true, isCancelled: async () => false, throwIfCancelled: async () => {} }; }
 
-describe.runIf(hasDatabase)("actual unaccepted WXR index privacy (C1.08/C3.47/C11.14)", { timeout: 60_000 }, () => {
+describe.runIf(hasDatabase)("WXR private index completion containment (C1.08/C3.47/C11.14)", { timeout: 60_000 }, () => {
   beforeAll(ready, 60_000);
   beforeEach(async () => { await truncateSpine(); resetStorageForTests(); });
   afterEach(() => { vi.useRealTimers(); });
   afterAll(async () => { await stopJobs(); await closeDb(); });
-  it("removes private indexed copies after the actual original reader erasure jobs retire WXR chunks", async () => {
+  it("keeps the original receipt pending after raw deletion while the private index needs recovery", async () => {
     await db().insert(users).values({ id: OWNER.userId, email: "fictional-wxr-index-owner@example.test", role: "owner" });
     await db().insert(totpFactors).values({ userId: OWNER.userId, encryptedSecret: "fictional-wxr-index-factor" });
     const session = await db().transaction(tx => createSession(tx, OWNER.userId, { twoFactorVerified: true }));
@@ -69,22 +69,23 @@ describe.runIf(hasDatabase)("actual unaccepted WXR index privacy (C1.08/C3.47/C1
     // Time is not used as evidence that a provider caller finished.
     vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(Math.max(...expiries) + 1);
 
-    for (let phase = 0; phase < 16; phase++) {
-      const [artifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
-      const pending = outcomes.parse(artifact?.body).outcomes.find(value => value.scope === IMPORT_SOURCE_ERASURE_SCOPE)?.pendingJobs ?? [];
-      if (!pending.length) break;
-      const job = await getJob(eraseImportSourceObjects.name, pending[0]!);
-      if (!job) throw new Error("The real original WXR privacy task is missing.");
-      await eraseImportSourceObjects.handler(job.data, context(job.id));
-    }
+    const [pendingArtifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
+    const pendingJobs = outcomes.parse(pendingArtifact?.body).outcomes.find(value => value.scope === IMPORT_SOURCE_ERASURE_SCOPE)?.pendingJobs;
+    expect(pendingJobs).toHaveLength(1);
+    const job = await getJob(eraseImportSourceObjects.name, pendingJobs![0]!);
+    if (!job) throw new Error("The real original WXR privacy task is missing.");
+    await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/private normalized import index/);
     const [artifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
-    expect(outcomes.parse(artifact?.body).outcomes.find(value => value.scope === IMPORT_SOURCE_ERASURE_SCOPE)).toMatchObject({ outcome: "erased" });
-    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]?.status).toBe("completed");
+    expect(outcomes.parse(artifact?.body).outcomes.find(value => value.scope === IMPORT_SOURCE_ERASURE_SCOPE)).toMatchObject({ outcome: "pending", pendingJobs });
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]?.status).toBe("in_progress");
     for (let index = 0; index < upload.chunkCount; index++) expect(await storage().get(`imports/${run.id}/${upload.uploadId}/${String(index).padStart(5, "0")}.part`)).toBeUndefined();
+    const [pendingRequest] = await db().select().from(dataRequests).where(eq(dataRequests.id, request.id));
+    expect(pendingRequest?.fulfilledAt).toBeNull();
+    expect(pendingRequest?.resolution).toContain("private normalized import index");
     const [retired] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.id, graph.id));
     expect(retired?.state).toBe("invalidated");
     const entries = await db().select().from(importSourceEntries).where(eq(importSourceEntries.graphId, graph.id));
     const media = await db().select().from(importSourceMedia).where(eq(importSourceMedia.graphId, graph.id));
-    expect(JSON.stringify({ header: retired?.headerMetadata, catalog: retired?.planMetadata, entries, media }).includes(marker)).toBe(false);
+    expect(JSON.stringify({ header: retired?.headerMetadata, catalog: retired?.planMetadata, entries, media }).includes(marker)).toBe(true);
   });
 });

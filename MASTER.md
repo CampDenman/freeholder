@@ -3891,6 +3891,18 @@ reading chat logs.
   `tests/core/merge-completeness.test.ts`; changeset
   `contact-privacy-rights.md`; operator guide `deploy/privacy-rights.md` **F04** `/admin/contacts/privacy` access/export/erasure. **F05** `contacts.createDataRequest`/`fulfillDataRequest`/`recordConsent` and `privacy.getMyProfile`/`createMyDataRequest`/`downloadMyDataRequestArtifact` at `/api/v1/contacts.*` and `/api/v1/privacy.*`; MCP `privacy_*`/`contacts_*`. **F07** `tests/core/contact-privacy-rights.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/privacy-rights.md`. **F12** `tests/core/contact-privacy-rights.test.ts` is the composition proof.)
 
+  Published-main WXR containment in progress (2026-11-13, C1.08/C3.47/C11.14):
+  an actual 501-entry unaccepted WXR control on protected main `81271622`
+  deleted the original private chunk but falsely completed its erasure receipt
+  with private text still present in one normalized entry and one media plan.
+  The original full-erasure oracle and populated database are preserved. A
+  private completion guard now checks the original queued task and verified
+  pending receipt under privacy/run locks, retaining explicit recovery while
+  an unaccepted normalized graph remains. Source/native qualification of this
+  containment is pending; evidence: `deploy/import-wxr-index-privacy-2026-11-13.md`. Full guarded index minimization and recovery of
+  historical completed receipts remain required; this does not close C1.08.
+
+
   Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
   documented an empty original hold, uploaded a later unheld WXR generation,
   verified and fulfilled the real erasure. The request falsely reached
