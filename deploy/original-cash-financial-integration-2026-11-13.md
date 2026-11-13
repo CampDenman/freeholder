@@ -148,3 +148,10 @@ to their exact frozen source expressions. Every installed-source constraint
 still requires independent validated expression/count checks, and named SQL
 and original22 exact-name assertions stay strict. No live-generated names or
 missing constraints may be invented to obtain a pass.
+
+Retirement and terminal-receipt models now also declare their existing SQL
+resource/terminal IS TRUE conditions separately from nullable reference syntax
+and zero-amount checks. This preserves all predicates and aligns their exact
+grouping rather than adding a broad equivalence/implication rule to the audit.
+Only model metadata changes; all migration bytes and existing data remain
+unchanged.
