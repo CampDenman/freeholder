@@ -13886,16 +13886,21 @@ whatever is best for the people using the site.
   outstanding refund promises keep financial review debt. Masked owner/buyer
   status and the scoped original-resource recovery path are drafted. Full
   Node22 types, changed-file lint and63 DB-free controls pass; initial import
-  and fixture type-only lint diagnostics were corrected and preserved. No SQL
-  application, actual financial native, browser or provider acceptance has run.
+  and fixture type-only lint diagnostics were corrected and preserved. At that
+  isolated checkpoint no SQL, financial native, browser or provider acceptance
+  had run.
   That isolated fragment was unassembled and its assembled80 SQL958 stayed
   unchanged. Subsequent owned composition onto current885a37f2 appends the
   bank fragment after accepted terms: new unpublishedSQL e7834c90 preserves
   the entire881a byte prefix, published0–79 and the journal. This current
   union at38c997c5 passes full Node22 types,48-file lint and74 affected
-  source assertions with25 declared database skips. No native/SQL/SDK
-  qualification has run; it needs a NEW disposable database and final gates.
-  All existing databases/clones stay unchanged. Generic/manual
+  source assertions with25 declared database skips. No bank native or SDK
+  business qualification has run. A subsequent NEW V11 ordinary0–80
+  diagnostic on productf45e4bde/e783 passed5.927s:81 journal/max60/hash,
+  full seven-model parity, original/new financial guards, fsync on and final
+  independent backend[] drain. This is schema structure only, not populated
+  upgrade, actual bank state/credit/native or provider acceptance. Prior
+  databases/clones stay unchanged; final gates remain required. Generic/manual
   causal discharge and legacy bank recovery remain unfinished work. This does
   not activate the new model or close C12.38. See
   `deploy/merchant-refund-current-state-2026-11-12.md`.

@@ -17,8 +17,9 @@ are unchanged. The fragment itself is a008e940. On exact38c997c5, full Node22
 8GB types, all48 changed TS/TSX lint and eight affected core files passed:
 74 assertions with0 failures and25 explicitly skipped database cases. The
 bank/private63, audit7 and search/retention source4 assertions ran against this
-actual composition. No database, native, SDK, install or build has run here.
-It still needs a NEW disposable migration database; existingV10/881a and
+actual composition. The fresh diagnostic below subsequently passed on a NEW
+database. No bank
+business native, SDK, install or build has run here. ExistingV10/881a and
 earlier958/1ac databases/clones must not be changed or reused for bank tests.
 Pure-emission evidence is `/tmp/freeholder-bank-current80-current-source-assembly.json`.
 Source logs are `/tmp/freeholder-bank-current-union80-types-v1.log`,
@@ -27,6 +28,32 @@ Source logs are `/tmp/freeholder-bank-current-union80-types-v1.log`,
 no database environment/client was used. Twelve dependency manifests matched
 and an existing dependency tree was borrowed without an install. These finite
 checks do not replace full final gates, generated SDK/notes or native proof.
+
+## Fresh ordinary migration diagnostic
+
+Root's exact sole-database lease ran the prepared diagnostic on productf45e4bde
+and NEW `freeholder_collection80_normal_v11_bank_test_20261112`. Ordinary0–80
+migration passed5.927s, with81 journal entries, maximum1793310000060 and the
+exacte783 migration hash. The complete prior881a prefix and published0–79
+source manifest were verified before database creation; no explicit fragment
+application or existing database mutation occurred.
+
+All seven models passed actual SQL columns/nullability/defaults, primary key,
+foreign-key target/delete-action, named checks and index parity: the four bank
+models, two normalized retention models and accepted commercial terms. Prior
+financial, fee-target and retention guards and the new append-only/capture/read/
+finish/receipt/projection/deferred-balance guards were verified. Raw nullable
+protocol/status/linkage/failure-balance fields remain distinct from strict
+immutable original request protocol. PostgreSQL reported fsync on, JIT off and
+recovery false. This is structure/creation evidence, not a populated upgrade,
+bank transaction/state-machine test or actual provider acceptance.
+
+The runner exited0; after closing the migration client an independent admin
+connection found no backend on the new database, then closed too. Evidence:
+`/tmp/freeholder-collection80-normal-diagnostic-v11-bank.mjs`, `.log` and
+`-drain.json`. No additional case, retry, provider operation, data reset or
+schema change followed this diagnostic. The V11 database is preserved for
+separately qualified and explicitly leased bank business controls.
 
 ## Earlier isolated source qualification
 
