@@ -4076,6 +4076,13 @@ reading chat logs.
   Thirteen additional pure cases and one added native leaf remain unrun; no
   request capability or completion status advances. See
   `deploy/media-original-delete-continuation-source-2026-11-13.md`.
+  Pre-enable namespace fence source repair2026-11-13: shared full-writer tags
+  cannot authorize ordinary logical or physical mutations through a captured
+  drain/active source claim. Two new owned82 functions/three guards require
+  exact genuine transfer caller ancestry for the narrow exception and keep GET
+  recovery distinct. Six native controls are prepared/unrun; no production
+  incident, capability publication or C completion is claimed. See
+  `deploy/media-original-namespace-fence-source-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;

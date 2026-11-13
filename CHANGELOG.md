@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Prepare namespace fences at ordinary logical and actual physical mutation admission; a shared writer flag cannot bypass captured drains or source-transfer claims. Require exact genuine transfer ancestry for the exception, preserve fresh recovery GETs and late actual facts, and keep capability/acceptance disabled and open.
+
 - Prepare a separately born ordinary-media retirement caller only after authentic unattempted preflight proof; preserve prior returns and refuse physical replay after acknowledged or ambiguous deletion. Full request capability and qualification remain open.
 
 - Prepare exact original-generation ordinary media retirement through the shared conditional provider/request ledger, retaining actual returns across later verification failure and requiring complete physical version/session absence before retirement. Legacy, held, copied, multipart and unfinished callers remain pending; the full capability and source/native/provider acceptance remain open.
