@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Source-only controlled bank observation now has distinct complete coverage and actual caller checks, retaining raw money debt and exact returned-own history; application and qualification remain separately required.
+
 - Internal recovery source identifies only the authenticated entries belonging to one genuinely returned inspection; every event stays in the full financial history and working recovery qualification remains pending.
 
 - Internal recovery source now distinguishes an inspection’s authenticated refund callbacks from later raw events without discarding either occurrence; qualification remains pending.

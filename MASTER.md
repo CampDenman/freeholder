@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled observation parent source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): isolated source registers the distinct private
+observational GET query and ordinary complete coverage reader. Actual source,
+all raw/private financial rows and every caller remain represented; only a new
+GET requires closure. Independent fresh-human stops must preserve other caller
+debt. Finished historical comparison removes only the exact authenticated six
+returned-own families, matching separate PG/canonical hash domains while full
+current coverage retains all. No post-application classifier/state, amount owner,
+public override or application authority is used. Thirteen pure and six strict
+contract controls are PREPARED/UNRUN; no CPU/database/provider/build ran. Genuine
+producer/current bank context, prospective batch application and old guard
+composition, effects, security and full acceptance remain required. No C/stable
+closure or new deferral. See
+`deploy/controlled-cash-observation-authority82-source-20261113.md`.
+
 Genuine current-bank SQL source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): four NEW UNAPPLIED functions independently resolve
 actual controlled receipt/origin/accepted-target lineage and latest receipt-owned

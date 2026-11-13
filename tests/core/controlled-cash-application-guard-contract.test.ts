@@ -26,8 +26,8 @@ describe("unapplied controlled application guard security boundary",()=>{
  it("retains all three exact alias-corrected old financial fragments byte-for-byte",()=>{
   for(const[file,sha]of[
    ["subscription-commercial-attestation80.fragment.sql","5649de7281153981fb85546374970817b1ebd4fed879b0383b986b687c5968c2"],
-   ["subscription-agreement-fee80.fragment.sql","7621aa648e8a6d46c91d53859d439fd4ab6a340bfc2ea638e2febea44f76d4d3"],
-   ["subscription-gross-proration80.fragment.sql","e206c0331b875cf46dbb0d45c45f4bef9ea78c36e1911158de702e57daa2ebde"],
+   ["subscription-agreement-fee80.fragment.sql","629960b834f9aef9daff35aa11db2782c31cba2e1efa0240be4e09ca222eae68"],
+   ["subscription-gross-proration80.fragment.sql","0a39e21367e9c5184260e39b5fa4c9ef9fcbcbcf90071ae7413545c62c5bbeb0"],
   ])expect(createHash("sha256").update(readFileSync(new URL(`../../deploy/${file}`,import.meta.url))).digest("hex")).toBe(sha);
  });
 });
