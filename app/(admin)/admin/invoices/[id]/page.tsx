@@ -3,6 +3,7 @@
 // Invoice detail, issue/void, tax evidence, credits, and receipts.
 
 import { randomUUID } from "node:crypto";
+import { invoiceOutstanding } from "@/modules/invoicing/invoice-balance";
 import { notFound } from "next/navigation";
 import { WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { getContact } from "@/core/contacts/service";
@@ -147,6 +148,7 @@ export default async function InvoiceDetailPage({
             <div className="flex justify-between gap-4"><dt className="text-ink-muted">{t("invoices.taxAmount")}</dt><dd className="font-mono">{money(invoice.taxMinor, invoice.currency)}</dd></div>
             <div className="flex justify-between gap-4 font-semibold"><dt>{t("invoices.total")}</dt><dd className="font-mono">{money(invoice.totalMinor, invoice.currency)}</dd></div>
             <div className="flex justify-between gap-4"><dt className="text-ink-muted">{t("invoices.paid")}</dt><dd className="font-mono">{money(invoice.paidMinor, invoice.currency)}</dd></div>
+            {invoice.creditedMinor > 0 ? <div className="flex justify-between gap-4"><dt className="text-ink-muted">{t("customerInvoice.credited")}</dt><dd className="font-mono">{money(invoice.creditedMinor, invoice.currency)}</dd></div> : null}
             <div className="flex justify-between gap-4"><dt className="text-ink-muted">{t("invoices.refunded")}</dt><dd className="font-mono">{money(invoice.refundedMinor, invoice.currency)}</dd></div>
             {invoice.issuedAt ? (
               <div className="flex justify-between gap-4">
@@ -287,7 +289,7 @@ export default async function InvoiceDetailPage({
         </Card>
       ) : null}
 
-      {canManage && ["draft", "sent", "viewed", "overdue", "partially_paid"].includes(invoice.status) && invoice.paidMinor === 0 ? (
+      {canManage && ["draft", "sent", "viewed", "overdue", "partially_paid"].includes(invoice.status) && invoice.paidMinor === 0 && invoice.creditedMinor === 0 ? (
         <Card>
           <CardHeader title={t("invoices.void")} />
           <CardBody>
@@ -323,7 +325,7 @@ export default async function InvoiceDetailPage({
               ))}
             </ul>
           )}
-          {invoice.status !== "draft" && invoice.status !== "void" && invoice.totalMinor > invoice.paidMinor ? (
+          {invoice.status !== "draft" && invoice.status !== "void" && invoiceOutstanding(invoice) > 0 ? (
             <p className="mt-3 text-sm">
               <a href="/admin/payments" className="font-semibold text-accent">{t("invoices.recordPayment")}</a>
             </p>

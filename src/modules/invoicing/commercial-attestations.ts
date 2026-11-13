@@ -12,6 +12,7 @@ import { commercialFeeAttestations, commercialPaymentAttestations, commercialRef
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { paymentMerchantRoutes } from "./schema";
 import { recordedCommercialFeeTarget } from "./commercial-attestation-amounts";
+import { invoiceCashFeeAllocation } from "./invoice-credit-cash-fee";
 
 /** Invoice lock is held by the shared payment creator. The absent Stripe
  * route is deliberate: this is a record of money outside the provider. */
@@ -54,8 +55,8 @@ export async function commercialInvoiceCashHistory(ctx: ServiceContext, invoice:
   // Refunded original amounts still own their original fee allocation. A
   // refund's later fee disposition is a separate retained obligation.
   const refunded = rows.filter(row => row.payment.id !== excludePaymentId && row.payment.status === "succeeded").reduce((sum, row) => sum + BigInt(row.payment.refundedMinor), 0n);
-  if (cash - refunded !== BigInt(invoice.paidMinor)) throw new ServiceError("conflict", "The actual recorded invoice cash and original principal inventory disagree.");
-  return { cash, allocatedFee, pending };
+  if (cash !== BigInt(invoice.paidMinor) || refunded !== BigInt(invoice.refundedMinor)) throw new ServiceError("conflict", "The actual recorded invoice cash/refund projections and original principal inventory disagree.");
+  return { cash, refunded, allocatedFee, pending };
 }
 async function attestationWriter(ctx: ServiceContext) {
   const [ready] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=3 as ready from pg_trigger where not tgisinternal and tgenabled in('O','A') and(tgrelid,tgname) in
@@ -85,7 +86,7 @@ export async function captureCommercialPaymentAttestation(ctx: ServiceContext, p
   if (history.pending || invoice.totalMinor <= 0 || history.cash !== BigInt(invoice.paidMinor)) throw new ServiceError("conflict", "Resolve original refunded or outstanding commercial money before recording another principal against this invoice.");
   // This is a shared frozen policy obligation, not evidence of a collected
   // Stripe fee. Credited consideration remains a separately owned disposition.
-  const feeOwedMinor = Number(BigInt(policy.feeMinor) * (history.cash + BigInt(payment.amountMinor)) / BigInt(invoice.totalMinor) - history.allocatedFee);
+  const { feeMinor: feeOwedMinor } = await invoiceCashFeeAllocation(ctx, invoice, policy.feeMinor, { amountMinor: payment.amountMinor, priorCashMinor: Number(history.cash), priorAllocatedFeeMinor: Number(history.allocatedFee) });
   if (!Number.isSafeInteger(feeOwedMinor) || feeOwedMinor < 0 || feeOwedMinor > payment.amountMinor) throw new ServiceError("conflict", "Reconcile the original shared commercial fee liability before another external record.");
   await attestationWriter(ctx);
   await ctx.tx.insert(commercialPaymentAttestations).values({ paymentId: payment.id, invoiceId: invoice.id, merchantProfileId: parties[0]!.profileId, profileVersion: parties[0]!.profileVersion,

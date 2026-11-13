@@ -37,6 +37,12 @@ import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { prepareBuyerAgreementErasure, minimizeBuyerAgreements } from "./buyer-agreement-erasure";
 import { syncSubscriptionAccess } from "@/core/entitlements/service";
+import grossProrationQuotes from "./proration-quote";
+import grossProrationServices, { completePaidGrossProration } from "./proration-service";
+import prorationCreditOwnerServices from "./proration-credit-owner";
+import { subscriptionProrations, subscriptionProrationPrincipal, subscriptionProrationCreditUses } from "./proration-schema";
+import { originalCashRecoveryFinancialWitness } from "@/modules/invoicing/original-cash-recovery-store";
+import { exportOriginalCashHistory } from "@/modules/invoicing/original-cash-invoice-history";
 import { contacts } from "@/core/contacts/schema";
 import { listLocations } from "@/core/locations/service";
 import { getBusiness } from "@/core/settings/service";
@@ -1576,6 +1582,7 @@ export async function onInvoicePaid(
       ? (payload as { invoiceId?: string }).invoiceId
       : undefined;
   if (!invoiceId) return;
+  await completePaidGrossProration.call({ invoiceId }, { kind: "system" });
   await recoverDunning.call({ invoiceId }, { kind: "system" });
   await activatePaidSignup.call({ invoiceId }, { kind: "system" });
   await completePaidPlanChange.call({ invoiceId }, { kind: "system" });
@@ -1782,7 +1789,8 @@ registerContactReference({
 // invoice's problem rather than this table's.
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
-  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines", "subscription_provider_read_tickets", "subscription_provider_read_finishes", "subscription_provider_read_stops"],
+  tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines", "subscription_provider_read_tickets", "subscription_provider_read_finishes", "subscription_provider_read_stops",
+    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses"],
   retentionScopes: ["commerce.money"],
   exportData: async (tx: Tx, contactId: string) => {
     const rows = await tx
@@ -1801,11 +1809,11 @@ registerContactPrivacySource({
       })
       .from(subscriptions)
       .leftJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptions.id))
-      .where(eq(subscriptions.contactId, contactId));
+      .where(eq(subscriptions.contactId, contactId)).limit(5001);
     const charges = await tx.select({ id: subscriptionProviderChargeReceipts.id, subscriptionId: subscriptionProviderChargeReceipts.subscriptionId,
       amountMinor: subscriptionProviderChargeReceipts.amountMinor, currency: subscriptionProviderChargeReceipts.currency, observedAt: subscriptionProviderChargeReceipts.createdAt })
       .from(subscriptionProviderChargeReceipts).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderChargeReceipts.subscriptionId))
-      .where(eq(subscriptions.contactId, contactId));
+      .where(eq(subscriptions.contactId, contactId)).limit(5001);
     const byAgreement = new Map<string, typeof charges>();
     for (const charge of charges) {
       const group = byAgreement.get(charge.subscriptionId) ?? []; group.push(charge); byAgreement.set(charge.subscriptionId, group);
@@ -1813,25 +1821,51 @@ registerContactPrivacySource({
     const accepted = rows.length ? await tx.select({ subscriptionId: subscriptionCommercialTerms.subscriptionId, revision: subscriptionCommercialTerms.revision,
       snapshot: subscriptionCommercialTerms.snapshot, taxDestination: subscriptionCommercialTerms.taxDestination, acceptedAt: subscriptionCommercialTerms.acceptedAt,
       effectivePeriodStart: subscriptionCommercialTerms.effectivePeriodStart, noticeSnapshot: subscriptionCommercialTerms.noticeSnapshot })
-      .from(subscriptionCommercialTerms).where(inArray(subscriptionCommercialTerms.subscriptionId, rows.map(row => row.id))).orderBy(subscriptionCommercialTerms.revision) : [];
+      .from(subscriptionCommercialTerms).where(inArray(subscriptionCommercialTerms.subscriptionId, rows.map(row => row.id))).orderBy(subscriptionCommercialTerms.revision).limit(5001) : [];
     const amendments = rows.length ? await tx.select({ subscriptionId: subscriptionCommercialAmendments.subscriptionId, termsId: subscriptionCommercialAmendments.termsId,
       planId: subscriptionCommercialAmendments.planId, acceptedBy: subscriptionCommercialAmendments.acceptedBy, state: subscriptionCommercialAmendments.state, createdAt: subscriptionCommercialAmendments.createdAt })
-      .from(subscriptionCommercialAmendments).where(inArray(subscriptionCommercialAmendments.subscriptionId, rows.map(row => row.id))) : [];
+      .from(subscriptionCommercialAmendments).where(inArray(subscriptionCommercialAmendments.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
     const resumptions = rows.length ? await tx.select({ subscriptionId: subscriptionCommercialResumptions.subscriptionId, termsId: subscriptionCommercialResumptions.termsId,
       originalPeriodEnd: subscriptionCommercialResumptions.originalPeriodEnd, acceptedPeriodStart: subscriptionCommercialResumptions.acceptedPeriodStart, createdAt: subscriptionCommercialResumptions.createdAt })
-      .from(subscriptionCommercialResumptions).where(inArray(subscriptionCommercialResumptions.subscriptionId, rows.map(row => row.id))) : [];
+      .from(subscriptionCommercialResumptions).where(inArray(subscriptionCommercialResumptions.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
     const periodInvoices = rows.length ? await tx.select({ subscriptionId: subscriptionProviderInvoiceObservations.subscriptionId, currency: subscriptionProviderInvoiceObservations.currency,
       totalMinor: subscriptionProviderInvoiceObservations.totalMinor, paidMinor: subscriptionProviderInvoiceObservations.paidMinor, remainingMinor: subscriptionProviderInvoiceObservations.remainingMinor,
       verified: subscriptionProviderInvoiceObservations.verified, createdAt: subscriptionProviderInvoiceObservations.createdAt })
-      .from(subscriptionProviderInvoiceObservations).where(inArray(subscriptionProviderInvoiceObservations.subscriptionId, rows.map(row => row.id))) : [];
+      .from(subscriptionProviderInvoiceObservations).where(inArray(subscriptionProviderInvoiceObservations.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
     const readerTickets = rows.length ? await tx.select({ subscriptionId: subscriptionProviderReadTickets.subscriptionId, readId: subscriptionProviderReadTickets.readId, admittedAt: subscriptionProviderReadTickets.createdAt,
       finishedAt: subscriptionProviderReadFinishes.createdAt }).from(subscriptionProviderReadTickets).leftJoin(subscriptionProviderReadFinishes, eq(subscriptionProviderReadFinishes.readId, subscriptionProviderReadTickets.readId))
-      .where(inArray(subscriptionProviderReadTickets.subscriptionId, rows.map(row => row.id))) : [];
+      .where(inArray(subscriptionProviderReadTickets.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
     const readerStops = rows.length ? await tx.select({ subscriptionId: subscriptionProviderReadStops.subscriptionId, readId: subscriptionProviderReadStops.readId, reviewedAt: subscriptionProviderReadStops.createdAt })
-      .from(subscriptionProviderReadStops).where(inArray(subscriptionProviderReadStops.subscriptionId, rows.map(row => row.id))) : [];
+      .from(subscriptionProviderReadStops).where(inArray(subscriptionProviderReadStops.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
+    const prorations = rows.length ? await tx.select({ id: subscriptionProrations.id, subscriptionId: subscriptionProrations.subscriptionId, snapshot: subscriptionProrations.snapshot,
+      taxDestination: subscriptionProrations.taxDestination, noticeSnapshot: subscriptionProrations.noticeSnapshot, effectiveAt: subscriptionProrations.effectiveAt,
+      originalPeriodStart: subscriptionProrations.originalPeriodStart, originalPeriodEnd: subscriptionProrations.originalPeriodEnd, originalTrialEndsAt: subscriptionProrations.originalTrialEndsAt,
+      debitInvoiceId: subscriptionProrations.debitInvoiceId, creditNoteId: subscriptionProrations.creditNoteId, debitNetMinor: subscriptionProrations.debitNetMinor, debitTaxMinor: subscriptionProrations.debitTaxMinor,
+      creditNetMinor: subscriptionProrations.creditNetMinor, creditTaxMinor: subscriptionProrations.creditTaxMinor, state: subscriptionProrations.state, appliedAt: subscriptionProrations.appliedAt, createdAt: subscriptionProrations.createdAt })
+      .from(subscriptionProrations).where(inArray(subscriptionProrations.subscriptionId, rows.map(row => row.id))).limit(5001) : [];
+    const prorationIds = prorations.map(row => row.id);
+    const prorationPrincipal = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationPrincipal.prorationId, sourcePaymentId: subscriptionProrationPrincipal.sourcePaymentId,
+      sourceApplicationId: subscriptionProrationPrincipal.sourceApplicationId, amountMinor: subscriptionProrationPrincipal.amountMinor }).from(subscriptionProrationPrincipal).where(inArray(subscriptionProrationPrincipal.prorationId, prorationIds)).limit(5001) : [];
+    const prorationCredits = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationCreditUses.prorationId, creditNoteId: subscriptionProrationCreditUses.creditNoteId, amountMinor: subscriptionProrationCreditUses.amountMinor })
+      .from(subscriptionProrationCreditUses).where(inArray(subscriptionProrationCreditUses.prorationId, prorationIds)).limit(5001) : [];
+    // These exact actual receipt FKs belong to the subject's subscriptions even
+    // when original paid cash has never acquired any local invoice/payment.
+    const originalCash = await originalCashRecoveryFinancialWitness(tx, [], charges.map(row => row.id));
+    const aggregate = rows.length + charges.length + accepted.length + amendments.length + resumptions.length + periodInvoices.length + readerTickets.length + readerStops.length
+      + prorations.length + prorationPrincipal.length + prorationCredits.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length;
+    if (aggregate > 5000) throw new ServiceError("conflict", "Restore a bounded complete original subscription subject export; receipt-only cash and its authentic children cannot be truncated.");
+    const cashHistory = exportOriginalCashHistory(originalCash);
+    const cashFor = (subscriptionId: string) => {
+      const receiptIds = new Set(charges.filter(row => row.subscriptionId === subscriptionId).map(row => row.id));
+      const owners = cashHistory.owners.filter(row => row.subscriptionChargeReceiptId !== null && receiptIds.has(row.subscriptionChargeReceiptId)), ownerIds = new Set(owners.map(row => row.id));
+      return { owners, operations: cashHistory.operations.filter(row => ownerIds.has(row.recoveryId)), facts: cashHistory.facts.filter(row => ownerIds.has(row.recoveryId)),
+        closures: cashHistory.closures.filter(row => ownerIds.has(row.recoveryId)), feedback: cashHistory.feedback.filter(row => row.namespace.subscriptionChargeReceiptId !== null && receiptIds.has(row.namespace.subscriptionChargeReceiptId)) };
+    };
     return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [], acceptedCommercialTerms: accepted.filter(value => value.subscriptionId === row.id),
       acceptedAmendments: amendments.filter(value => value.subscriptionId === row.id), acceptedCalendarResumptions: resumptions.filter(value => value.subscriptionId === row.id), observedPeriodInvoices: periodInvoices.filter(value => value.subscriptionId === row.id),
-      providerReaderHistory: readerTickets.filter(value => value.subscriptionId === row.id), providerReaderRuntimeStops: readerStops.filter(value => value.subscriptionId === row.id) }));
+      providerReaderHistory: readerTickets.filter(value => value.subscriptionId === row.id), providerReaderRuntimeStops: readerStops.filter(value => value.subscriptionId === row.id),
+      originalReceiptCashHistory: cashFor(row.id), acceptedGrossProrations: prorations.filter(value => value.subscriptionId === row.id).map(value => ({ ...value,
+        originalPrincipal: prorationPrincipal.filter(principal => principal.prorationId === value.id), acceptedCreditUse: prorationCredits.filter(credit => credit.prorationId === value.id) })) }));
   },
   erase: async (tx: Tx, contactId: string, context) => {
     if (!context.service) throw new ServiceError("conflict", "Original agreement erasure requires its actual shared privacy context.");
@@ -1878,7 +1912,7 @@ import publicMembershipServices, { activatePaidSignup } from "./public-signup";
 import setupErasureServices from "./setup-erasure";
 import setupDispatchServices from "./setup-dispatch";
 import setupReconciliationServices from "./setup-reconciliation";
-import providerChargeReceiptServices from "./provider-charge-receipts";
+import providerChargeReceiptServices from "./provider-charge-services";
 import commercialAmendmentServices from "./commercial-amendments";
 import providerReaderRecoveryServices from "./provider-reader-recovery";
 import { subscriptionProviderReadTickets, subscriptionProviderReadFinishes, subscriptionProviderReadStops } from "./provider-read-ownership-schema";
@@ -1887,6 +1921,9 @@ import { subscriptionCommercialResumptions } from "./commercial-resumption-schem
 import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
 
 export default [
+  ...grossProrationQuotes,
+  ...grossProrationServices,
+  ...prorationCreditOwnerServices,
   ...providerReaderRecoveryServices,
   completePaidCommercialAmendment,
   ...marketPolicyServices,

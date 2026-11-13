@@ -433,6 +433,8 @@ export async function sendDueInvoiceReminders(): Promise<{
       id: invoiceReminders.id,
       offsetDays: invoiceReminders.offsetDays,
       invoiceId: invoices.id,
+      sourceType: invoices.sourceType,
+      sourceId: invoices.sourceId,
       number: invoices.number,
       status: invoices.status,
       dueAt: invoices.dueAt,
@@ -478,6 +480,13 @@ export async function sendDueInvoiceReminders(): Promise<{
     if (invoiceOutstanding(reminder) === 0) {
       await skip("The invoice has been paid in full.");
       continue;
+    }
+    if (reminder.sourceType === "subscription" && reminder.sourceId?.split(":")[1] === "proration") {
+      const authority = getService("subscriptions.prorationCollectionAuthority");
+      if (!authority || !z.object({ allowed: z.boolean() }).passthrough().parse(await authority.call({ invoiceId: reminder.invoiceId }, { kind: "system" })).allowed) {
+        await skip("The accepted proration needs fresh reviewed consent or original money recovery before another payment invitation.");
+        continue;
+      }
     }
     if (!reminder.contactEmail) {
       await skip("No email address on the contact.");

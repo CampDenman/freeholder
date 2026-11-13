@@ -7,11 +7,13 @@ import { defineService, ServiceError } from "@/core/service";
 import { creditNoteLines, creditNotes, invoiceLines, invoices, payments } from "@/modules/invoicing/schema";
 import { invoiceCreditApplications, invoiceCreditFunding, invoiceCreditReservations } from "@/modules/invoicing/credit-application-schema";
 import { subscriptionProrationPrincipal, subscriptionProrations, subscriptionProrationCreditUses } from "./proration-schema";
+import { feeCollectionState } from "@/modules/invoicing/credit-fee-origin";
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 export const prorationCreditSource = defineService({ name: "subscriptions.prorationCreditSource", summary: "Prove the exact accepted original credit, invoice line and real principal allocation for the shared noncash ledger.",
   kind: "query", permission: "system", external: false, input: z.object({ prorationId: z.uuid(), creditNoteId: z.uuid() }),
   output: z.object({ prorationId: z.uuid(), creditNoteId: z.uuid(), sourceInvoiceId: z.uuid(), evidenceDigest: sha,
-    lines: z.array(z.object({ creditNoteLineId: z.uuid(), sourcePaymentId: z.uuid(), sourceApplicationId: z.uuid().nullable(), amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) })).min(1).max(1000) }),
+    lines: z.array(z.object({ creditNoteLineId: z.uuid(), sourcePaymentId: z.uuid(), sourceApplicationId: z.uuid().nullable(), amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+      feeObligationMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), feeProvenCollectedMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), feeCollectionState, feeEvidenceDigest: sha, feeUnexpected: z.boolean() })).min(1).max(1000) }),
   handler: async (input, ctx) => {
     const [accepted] = await ctx.tx.select().from(subscriptionProrations).where(eq(subscriptionProrations.id, input.prorationId)).limit(1);
     const [note] = await ctx.tx.select().from(creditNotes).where(eq(creditNotes.id, input.creditNoteId)).limit(1);
@@ -39,7 +41,8 @@ export const prorationCreditSource = defineService({ name: "subscriptions.prorat
         || (row.sourceApplicationId ? !parent || parent.application.invoiceId !== original.id || parent.funding.sourcePaymentId !== payment.id : payment.invoiceId !== original.id); }))
       throw new ServiceError("conflict", "The original credit's actual successful payment principal changed.");
     return { prorationId: accepted.id, creditNoteId: note.id, sourceInvoiceId: original.id, evidenceDigest: accepted.sourceRevision,
-      lines: principal.map(row => ({ creditNoteLineId: lines[0]!.id, sourcePaymentId: row.sourcePaymentId, sourceApplicationId: row.sourceApplicationId, amountMinor: row.amountMinor })) };
+      lines: principal.map(row => ({ creditNoteLineId: lines[0]!.id, sourcePaymentId: row.sourcePaymentId, sourceApplicationId: row.sourceApplicationId, amountMinor: row.amountMinor,
+        feeObligationMinor: row.feeObligationMinor, feeProvenCollectedMinor: row.feeProvenCollectedMinor, feeCollectionState: row.feeCollectionState, feeEvidenceDigest: row.feeEvidenceDigest, feeUnexpected: row.feeUnexpected })) };
   },
 });
 export const prorationCreditReleaseAllowed = defineService({ name: "subscriptions.prorationCreditReleaseAllowed", summary: "Release only an unused original credit after its accepted local obligation is actually cancelled.",

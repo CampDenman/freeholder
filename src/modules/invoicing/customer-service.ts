@@ -30,7 +30,7 @@ import { customerInvoicePath, invoiceAccessToken, paymentReturnToken, validInvoi
 const access = z.object({ id: z.string().uuid(), token: z.string().max(200).optional() }).strict();
 const receiptAccess = z.object({ token: z.string().min(1).max(200) }).strict();
 const payable = (invoice: typeof invoices.$inferSelect) =>
-  ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status) && invoice.totalMinor > invoice.paidMinor;
+  ["sent", "viewed", "partially_paid", "overdue"].includes(invoice.status) && invoiceOutstanding(invoice) > 0;
 const unavailable = () => new ServiceError("not_found", "That invoice link is not available.");
 
 

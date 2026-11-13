@@ -27,6 +27,8 @@ export async function pendingCommercialAmendment(ctx: ServiceContext, parent: ty
   return accepted?.amendment.planId === parent.pendingPlanId ? accepted : null;
 }
 export async function commercialBillingStart(ctx: ServiceContext, parent: typeof subscriptions.$inferSelect) {
+  const [gross] = await ctx.tx.execute<{ pending: boolean }>(sql`select exists(select 1 from subscription_prorations p where p.subscription_id=${parent.id}::uuid and p.state in('accepted','preparing','awaiting_invoice','awaiting_payment','awaiting_effective','review')) as pending`);
+  if (gross?.pending) return { start: parent.currentPeriodEnd, pending: null, ready: false };
   const pending = await pendingCommercialAmendment(ctx, parent);
   if (parent.merchantScopeVersion === 1 && parent.pendingPlanId && (!pending || pending.terms.effectivePeriodStart < parent.currentPeriodEnd)) throw new ServiceError("conflict", "Restore the current accepted amendment and original billing boundary before renewal.");
   return { start: pending?.terms.effectivePeriodStart ?? parent.currentPeriodEnd, pending, ready: !pending || pending.amendment.state === "activated" };

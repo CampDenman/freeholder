@@ -14,6 +14,7 @@ import { queueMerchantFeeReconciliation } from "./merchant-fee-service";
 import { reserveMerchantCharge } from "./merchant-charge";
 import { commercialPaymentRecorded, commercialRefundRecorded } from "./commercial-attestations";
 import { exportProrationMoney } from "./proration-money-export";
+import { invoiceCreditApplications, invoiceCreditReservations } from "./credit-application-schema";
 import { isHostedPaymentProvider } from "@/adapters/payments/providers";
 import { assertLegacyRefundRelease, refundReservationMarker } from "./legacy-refund-dispatch";
 import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
@@ -453,6 +454,7 @@ export const reconcileMoney = defineService({
       invoices: z.number().int(),
       payments: z.number().int(),
       refunds: z.number().int(),
+      creditApplications: z.number().int(),
     }),
     discrepancies: listed(
       z.object({
@@ -477,6 +479,10 @@ export const reconcileMoney = defineService({
           ctx.tx.select().from(refunds).where(inArray(refunds.invoiceId, invoiceIds)),
         ])
       : [[], []];
+    const appliedCredits = invoiceIds.length ? await ctx.tx.select({ invoiceId: invoiceCreditApplications.invoiceId, amountMinor: invoiceCreditReservations.amountMinor })
+      .from(invoiceCreditApplications).innerJoin(invoiceCreditReservations, eq(invoiceCreditReservations.id, invoiceCreditApplications.reservationId))
+      .where(inArray(invoiceCreditApplications.invoiceId, invoiceIds)).limit(5001) : [];
+    if (appliedCredits.length > 5000) throw new ServiceError("conflict", "Reconcile this bounded original credit inventory in a smaller exact invoice cohort.");
     const discrepancies: Array<{
       subjectType: "invoice" | "payment";
       subjectId: string;
@@ -497,6 +503,8 @@ export const reconcileMoney = defineService({
           .map((refund) => refund.amountMinor),
         "Reconciled invoice refunds",
       );
+      const calculatedCredited = sumMinor(appliedCredits.filter(row => row.invoiceId === invoice.id).map(row => row.amountMinor), "Reconciled original applied credit");
+      if (invoice.creditedMinor !== calculatedCredited) discrepancies.push({ subjectType: "invoice", subjectId: invoice.id, field: "creditedMinor", recordedMinor: invoice.creditedMinor, calculatedMinor: calculatedCredited });
       if (invoice.paidMinor !== calculatedPaid) {
         discrepancies.push({
           subjectType: "invoice",
@@ -539,6 +547,7 @@ export const reconcileMoney = defineService({
         invoices: invoiceRows.length,
         payments: paymentRows.length,
         refunds: refundRows.length,
+        creditApplications: appliedCredits.length,
       },
       discrepancies,
     };
@@ -856,8 +865,8 @@ export const voidInvoice = defineService({
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.id)).limit(1);
     if (!invoice) throw new ServiceError("not_found", "That invoice is not here.");
     if (invoice.status === "void") return invoice;
-    if (invoice.status === "paid" || invoice.status === "refunded" || invoice.paidMinor > 0) {
-      throw new ServiceError("conflict", "A paid invoice cannot be voided. Issue a credit note and refund instead.");
+    if (invoice.status === "paid" || invoice.status === "refunded" || invoice.paidMinor > 0 || invoice.creditedMinor > 0) {
+      throw new ServiceError("conflict", "An invoice with real cash or applied original credit cannot be voided. Preserve and reconcile its actual consideration and credit promise.");
     }
     const [activeAttempt] = await ctx.tx.select({ id: payments.id }).from(payments).where(and(
       eq(payments.invoiceId, invoice.id), inArray(payments.status, ["created", "processing"]),

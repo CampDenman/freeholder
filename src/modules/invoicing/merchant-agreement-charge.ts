@@ -12,6 +12,7 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { getInvoiceMarketPolicy, verifyInvoiceMerchant } from "./market-policy";
 import { type invoices } from "./schema";
 import { commercialInvoiceCashHistory } from "./commercial-attestations";
+import { invoiceCashFeeAllocation } from "./invoice-credit-cash-fee";
 
 export type SubscriptionInvoiceRouting = {
   subscriptionId: string; agreementRoutingVersion: 1; scope: MerchantChargeScope; siteFeeBps: number;
@@ -48,9 +49,9 @@ export async function reserveAgreementCharge(ctx: ServiceContext, invoice: typeo
   }
   const previous = await commercialInvoiceCashHistory(ctx, invoice);
   if (previous.pending || previous.cash !== BigInt(invoice.paidMinor)) throw new ServiceError("conflict", "Reconcile original refunded or outstanding agreement principal before another attempt.");
-  const fee = BigInt(policy.feeMinor) * (previous.cash + BigInt(request.amountMinor)) / BigInt(invoice.totalMinor) - previous.allocatedFee;
-  if (fee < 0n || fee > BigInt(request.amountMinor)) throw new ServiceError("conflict", "The original agreement application fee needs reconciliation.");
-  return { ...scope, providerAccountId: scope.providerAccountId ?? "", applicationFeeMinor: Number(fee), agreementSubscriptionId: original.subscriptionId,
+  const { feeMinor } = await invoiceCashFeeAllocation(ctx, invoice, policy.feeMinor, { amountMinor: request.amountMinor, priorCashMinor: Number(previous.cash), priorAllocatedFeeMinor: Number(previous.allocatedFee) });
+  if (feeMinor < 0 || feeMinor > request.amountMinor) throw new ServiceError("conflict", "The original agreement application fee needs reconciliation.");
+  return { ...scope, providerAccountId: scope.providerAccountId ?? "", applicationFeeMinor: feeMinor, agreementSubscriptionId: original.subscriptionId,
     ...(request.method === "provider_schedule" && original.providerOrigin ? { ...original.providerOrigin, originalChargeReceiptId: original.providerOrigin.receiptId } : {}) };
 }
 

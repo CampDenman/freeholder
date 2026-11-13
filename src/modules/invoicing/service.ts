@@ -6,6 +6,7 @@ import legacyBankReadServices from "./legacy-bank-read-service";
 import creditDispositionServices from "./credit-disposition";
 import creditApplicationServices from "./credit-application-service";
 import commercialAttestationServices from "./commercial-attestations";
+import principalAuthorityServices from "./principal-authority";
 import invoiceServices from "./invoice-service";
 import buyerMoneyErasureServices from "./buyer-money-erasure";
 import originalRefundRepairServices from "./merchant-refund-privacy-repair";
@@ -31,9 +32,9 @@ import merchantPaymentRecoveryServices from "./merchant-payment-recovery";
 import merchantPaymentRequestServices from "./merchant-payment-request";
 import merchantPaymentDebtServices from "./merchant-payment-debt";
 import merchantSubscriptionApplicationServices from "./merchant-subscription-application";
-import originalSubscriptionCashServices from "@/modules/subscriptions/provider-charge-receipts";
+import originalSubscriptionCashServices from "@/modules/subscriptions/provider-charge-services";
 import originalSubscriptionScopeServices from "@/modules/subscriptions/provider-webhook-scope";
-import merchantTaxQuiescenceServices from "@/modules/subscriptions/merchant-tax-quiescence";
+import merchantTaxQuiescenceServices from "@/modules/subscriptions/merchant-tax-quiescence-services";
 import merchantFeeServices from "./merchant-fee-service";
 import {siteMerchantTaxServices} from "./merchant-tax-profiles";
 import {siteMerchantTaxThresholds} from "./merchant-tax-thresholds";
@@ -62,6 +63,7 @@ import "./funnel";
 
 export default [
   ...commercialAttestationServices,
+  ...principalAuthorityServices,
   ...creditDispositionServices,
   ...creditApplicationServices,
   ...legacyBankReadServices,

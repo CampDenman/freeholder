@@ -3,7 +3,8 @@
 // Shared admission limits for customer and original-merchant collection.
 import { and, asc, eq } from "drizzle-orm";
 import { bookings } from "@/core/scheduling/schema";
-import { ServiceError, type ServiceContext } from "@/core/service";
+import { getService, ServiceError, type ServiceContext } from "@/core/service";
+import { z } from "zod";
 import { checkoutPaymentSchema } from "@/modules/catalog/checkout-policy";
 import { orderPaymentMilestones, orders } from "@/modules/catalog/schema";
 import { customerCheckoutAllowed } from "./checkout-requirements";
@@ -12,6 +13,10 @@ import { type invoices, paymentPlans, paymentPlanInstallments } from "./schema";
 
 export async function invoicePaymentDueAmount(invoice: typeof invoices.$inferSelect, ctx: ServiceContext): Promise<number | null> {
   if (!await customerCheckoutAllowed(ctx, invoice)) return null;
+  if (invoice.sourceType === "subscription" && invoice.sourceId?.split(":")[1] === "proration") {
+    const authority = getService("subscriptions.prorationCollectionAuthority");
+    if (!authority || !z.object({ allowed: z.boolean() }).passthrough().parse(await ctx.callAsSystem(authority, { invoiceId: invoice.id })).allowed) return null;
+  }
   if (invoice.sourceType === "booking" && invoice.sourceId) {
     const [booking] = await ctx.tx.select({status:bookings.status}).from(bookings).where(eq(bookings.id, invoice.sourceId)).limit(1);
     if (!booking || ["cancelled", "no_show"].includes(booking.status)) return null;

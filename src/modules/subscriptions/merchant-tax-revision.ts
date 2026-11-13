@@ -3,7 +3,7 @@
 // C12.38: a local pause cannot stop an independently running provider schedule.
 import { z } from "zod";
 import { defineService, ServiceError } from "@/core/service";
-import { merchantTaxScheduleState } from "./merchant-tax-quiescence";
+import { merchantTaxScheduleState } from "./merchant-tax-schedule-state";
 
 /** No status, missing reference, deadline or current configuration proves quiescence. */
 export function assertNoExternalTaxDependencies(hasExternalAgreement: boolean): void {

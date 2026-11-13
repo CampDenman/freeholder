@@ -1,7 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: original schedule debt survives module disable and merchant erasure.
-import amendmentActivationServices from "./commercial-amendment-jobs";
 import { originalScheduleTask, originalQuiescenceAction } from "./provider-quiescence-authority";
 import { originalProviderInvoiceInventory } from "./provider-invoice-action-contract";
 import { randomUUID } from "node:crypto";
@@ -19,52 +18,22 @@ import { type ScheduleStopProof, subscriptionProviderScheduleErasures, subscript
 import { scheduleCallerHasStopped, scheduleKnownResources, scheduleOperationDigest } from "./provider-schedule-proof";
 import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
 import { subscriptionMerchantScopes, subscriptions, subscriptionProviderChargeReceipts } from "./schema";
-import scheduleCallerServices from "./provider-schedule-callers";
-import scheduleErasureServices from "./provider-schedule-erasure";
 import { claimMerchantScheduleCancellation, flushMerchantScheduleCallerFinishes, merchantScheduleCancellationTargets, performMerchantScheduleCancellation, retainMerchantScheduleCancellation } from "./provider-schedule-callers";
-import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
-import buyerErasureServices, { completeBuyerAgreementErasure } from "./buyer-agreement-erasure";
+import { completeBuyerAgreementErasure } from "./buyer-agreement-erasure";
 import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
-import phaseProductServices from "./provider-phase-products";
-import phaseDispatchServices, { assertOriginalPhaseFinancials } from "./provider-phase-dispatch";
-import phaseStopServices, { stopMerchantPhaseSchedules, merchantPhaseScheduleTargets } from "./provider-phase-stop";
+import { assertOriginalPhaseFinancials } from "./provider-phase-dispatch";
+import { stopMerchantPhaseSchedules, merchantPhaseScheduleTargets } from "./provider-phase-stop";
 import { closedOriginalPhaseSchedules, originalPhaseResources } from "./provider-phase-resources";
-import invoiceStopServices, { flushMerchantInvoiceStops, stopMerchantInvoice, retainOriginalScheduleCash } from "./provider-invoice-actions";
-import scheduleReadServices, { recoverMerchantSchedule, flushMerchantScheduleReads } from "./provider-schedule-recovery";
+import { flushMerchantInvoiceStops, stopMerchantInvoice, retainOriginalScheduleCash } from "./provider-invoice-actions";
+import { recoverMerchantSchedule, flushMerchantScheduleReads } from "./provider-schedule-recovery";
 import { invoices } from "@/modules/invoicing/schema";
 
 const JOB = "subscriptions.quiesceMerchantSchedules";
 const jobInput = z.object({ profileId: z.uuid(), requestId: z.uuid(), originalJobId: z.uuid(), cohortId: z.uuid() });
-import { merchantAgreementScheduleState } from "./merchant-agreement-schedule-state";
+import { merchantTaxScheduleState } from "./merchant-tax-schedule-state";
+export { merchantTaxScheduleState } from "./merchant-tax-schedule-state";
 export { merchantAgreementScheduleState } from "./merchant-agreement-schedule-state";
 
-/** No provider I/O; all positive money and current original receipts are checked. */
-export async function merchantTaxScheduleState(ctx: ServiceContext, profileId: string): Promise<{ safe: boolean; external: boolean }> {
-  // Original order and booking payment callers can still charge even when this
-  // merchant has never owned a provider subscription. Missing recovery source
-  // is unknown debt, not a zero-schedules proof.
-  const paymentDebtService = getService("invoicing.merchantTaxPaymentDebt");
-  if (!paymentDebtService) return { safe: false, external: true };
-  const paymentDebt = z.object({ pending: z.boolean(), hasHistory: z.boolean(), paymentIds: z.array(z.uuid()).max(5000), incomplete: z.boolean() })
-    .parse(await ctx.callAsSystem(paymentDebtService, { profileId }));
-  if (paymentDebt.pending || paymentDebt.incomplete) return { safe: false, external: true };
-  const agreements = await ctx.tx.select({ subscription: subscriptions, scope: subscriptionMerchantScopes, resource: subscriptionProviderScheduleResources })
-    .from(subscriptionMerchantScopes).innerJoin(subscriptions, eq(subscriptions.id, subscriptionMerchantScopes.subscriptionId))
-    .leftJoin(subscriptionProviderScheduleResources, eq(subscriptionProviderScheduleResources.subscriptionId, subscriptions.id))
-    .where(eq(subscriptionMerchantScopes.taxProfileId, profileId)).orderBy(subscriptions.id).limit(5001);
-  if (agreements.length > 5000) return { safe: false, external: true };
-  const cohorts = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(eq(subscriptionProviderScheduleErasures.profileId, profileId)).limit(5001);
-  if (cohorts.length > 5000) return { safe: false, external: true };
-  const currentAgreementIds = new Set(agreements.map(agreement => agreement.subscription.id));
-  for (const cohort of cohorts) if (!await merchantScheduleCohortInventoryCovers(ctx.tx, cohort, currentAgreementIds)) return { safe: false, external: true };
-  let external = paymentDebt.hasHistory || cohorts.length > 0;
-  for (const agreement of agreements) {
-    const state=await merchantAgreementScheduleState(ctx,agreement);
-    external=external||state.external;
-    if(!state.safe)return {safe:false,external};
-  }
-  return { safe: true, external };
-}
 
 export const prepareMerchantTaxErasure = defineService({
   name: "subscriptions.prepareMerchantTaxErasure", summary: "Keep actual original schedule verification jobs pending before merchant tax minimization.",
@@ -284,4 +253,4 @@ export const quiesceMerchantSchedules = defineJob({
   },
 });
 registerJob(quiesceMerchantSchedules);
-export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices, ...phaseProductServices, ...phaseDispatchServices, ...phaseStopServices, ...scheduleReadServices, ...invoiceStopServices, ...amendmentActivationServices];
+export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory];

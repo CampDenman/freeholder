@@ -15,11 +15,9 @@ import { subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptionPro
 import { subscriptionChargeScope, subscriptionMerchantScope } from "./merchant-scope-contract";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
-import originalMerchantInvoiceServices from "./merchant-terms-invoice";
-import providerPhaseServices from "./provider-phase-quote";
 import { subscriptionProviderInvoiceObservations } from "./provider-period-schema";
 import { providerPhase } from "./provider-phase-contract";
-import providerPeriodServices, { retainMerchantProviderInvoice, proveMerchantProviderPeriod, assertCanonicalProviderPeriod } from "./provider-periods";
+import { retainMerchantProviderInvoice, proveMerchantProviderPeriod, assertCanonicalProviderPeriod } from "./provider-periods";
 
 const account = z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200);
 const reference = z.string().min(1).max(500);
@@ -218,4 +216,4 @@ registerSubscriptionInvoiceRouting(async (ctx, input) => {
   return { ...routing, providerOrigin: { receiptId: receipt.id, providerApiVersion: subscriptionMerchantScope.parse(original.scope).providerScheduleApiVersion, providerSubscriptionRef: receipt.providerSubscriptionRef, providerInvoiceRef: receipt.providerInvoiceRef, providerPaymentIntentRef: receipt.providerPaymentIntentRef, providerChargeRef: receipt.providerChargeRef } };
 });
 
-export default [retainProviderCharge, completeProviderChargeFee, ...originalMerchantInvoiceServices, ...providerPhaseServices, ...providerPeriodServices];
+export default [retainProviderCharge, completeProviderChargeFee];

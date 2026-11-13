@@ -60,6 +60,8 @@ export default async function SubscriptionsPage({
     saved?: string;
     enrolled?: string;
     changed?: string;
+    awaiting?: string;
+    invoice?: string;
   }>;
 }) {
   const actor = await requireStaffActor("subscriptions", "manage");
@@ -112,6 +114,15 @@ export default async function SubscriptionsPage({
       {query.changed ? (
         <p className="rounded-md border border-success bg-success-soft px-3 py-2 text-sm text-success">
           {t("subscriptions.changed")}
+        </p>
+      ) : null}
+      {query.awaiting ? (
+        <p role="status" className="rounded-md border border-rule bg-surface px-3 py-2 text-sm text-ink">
+          {t("subscriptions.awaitingPayment")} {query.invoice ? (
+            <a href={`/admin/invoices/${encodeURIComponent(query.invoice)}`} className="font-semibold text-accent underline">
+              {t("subscriptions.prorationInvoice")}
+            </a>
+          ) : null}
         </p>
       ) : null}
 

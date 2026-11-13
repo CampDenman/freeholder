@@ -14271,6 +14271,24 @@ whatever is best for the people using the site.
   promise; it cannot erase them by voiding a target or inventing a refund.
   The legacy net-only invoice policy and its separate paid-access repair are
   historical compatibility behavior, not proof of this new gross path.
+  Gross/manual fee-carry source increment (2026-11-13, same items): shared
+  owner/customer review/acceptance creates actual dated gross debit and exact
+  old paid-line tax credit, locks the whole original credit to its target and
+  retains the real effect enqueue/body. Manual attested principal and original
+  fee carry remain separate from actually collected commission. Exact fully
+  paid consideration alone can switch access at the real accepted instant;
+  old terms/calendar stay immutable and an uncharged trial retains its end.
+  The duty40/new-cash1 variant is refused before acceptance until the required
+  bounded original commission receivable/assignment slice exists; it is not
+  waived, fictitiously collected or deferred from the full specification.
+  Authentic late/partial recovery, complete platform-card orchestration and
+  independently admitted provider preview/zero-bootstrap/controlled-draft
+  collection remain required. Full-row child witnesses, safe receipt-only
+  subject export, private retention and four-locale review are source work;
+  17 principal pure controls, nine fee-carry controls and three actual manual
+  native journeys are PREPARED/UNRUN. The new owned SQL tail is UNAPPLIED and
+  unqualified; no item or stable gate closes. See
+  `deploy/subscription-gross-proration80-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

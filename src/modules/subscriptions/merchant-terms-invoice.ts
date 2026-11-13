@@ -3,7 +3,7 @@
 // C12.38: the real agreement owns invoice amounts, business and tax date.
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { defineService, ServiceError, type ServiceContext } from "@/core/service";
+import { defineService, getService, ServiceError, type ServiceContext } from "@/core/service";
 import { invoiceLines, invoices } from "@/modules/invoicing/schema";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { merchantTaxSourceParty, merchantTaxSourceRequest, registerMerchantTaxSourceResolver } from "@/modules/invoicing/merchant-tax-invoice";
@@ -58,6 +58,11 @@ export const resolveOriginalMerchantInvoice = defineService({
   name: "subscriptions.resolveOriginalMerchantInvoice", summary: "Prove a new invoice against its accepted original agreement and actual period before freezing tax.",
   kind: "query", permission: "system", external: false, input: merchantTaxSourceRequest, output: z.array(merchantTaxSourceParty).length(1),
   handler: async (input, ctx) => {
+    if (input.sourceType === "subscription" && input.sourceId?.split(":")[1] === "proration") {
+      const resolver = getService("subscriptions.resolveProrationInvoice");
+      if (!resolver) throw new ServiceError("conflict", "Restore the exact accepted gross-proration source before creating its canonical invoice.");
+      return z.array(merchantTaxSourceParty).length(1).parse(await ctx.callAsSystem(resolver, input));
+    }
     const id = input.sourceId?.split(":")[0], parsedId = z.uuid().safeParse(id);
     if (input.sourceType !== "subscription" || !parsedId.success || !input.sourceId) throw new ServiceError("conflict", "This tax source is not an original subscription invoice.");
     const encodedStart = input.sourceId.slice(parsedId.data.length + 1), start = new Date(encodedStart);
