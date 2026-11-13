@@ -18,17 +18,22 @@ globalThis.fetch = async (input, init = {}) => {
   }
   throw Error("The interrupted reader received an unexpected provider path.");
 };
-try {
-  const [{ inspectLegacyBankRefund }, { db }, { legacyBankReads }, { eq }] = await Promise.all([
-    import("@/modules/invoicing/legacy-bank-read-service"), import("@/core/db"), import("@/modules/invoicing/legacy-bank-read-schema"), import("drizzle-orm"),
-  ]);
-  sendPaused = async () => {
-    const [read] = await db().select({ id: legacyBankReads.id }).from(legacyBankReads).where(eq(legacyBankReads.refundId, refundId));
-    if (!read || !process.send) throw Error("The actual child read ticket or its parent channel is unavailable.");
-    process.send({ readId: read.id });
-  };
-  await inspectLegacyBankRefund.call({ refundId }, { kind: "system" });
-  throw Error("The interrupted reader unexpectedly completed its outstanding provider request.");
-} catch (error) {
-  process.send?.({ error: error instanceof Error ? error.message : "Interrupted reader failed." }); process.exitCode = 1;
+async function readOriginalInChild() {
+  try {
+    const [{ inspectLegacyBankRefund }, { db }, { legacyBankReads }, { eq }] = await Promise.all([
+      import("@/modules/invoicing/legacy-bank-read-service"), import("@/core/db"), import("@/modules/invoicing/legacy-bank-read-schema"), import("drizzle-orm"),
+    ]);
+    sendPaused = async () => {
+      const [read] = await db().select({ id: legacyBankReads.id }).from(legacyBankReads).where(eq(legacyBankReads.refundId, refundId));
+      if (!read || !process.send) throw Error("The actual child read ticket or its parent channel is unavailable.");
+      process.send({ readId: read.id });
+    };
+    await inspectLegacyBankRefund.call({ refundId }, { kind: "system" });
+    throw Error("The interrupted reader unexpectedly completed its outstanding provider request.");
+  } catch (error) {
+    process.send?.({ error: error instanceof Error ? error.message : "Interrupted reader failed." }); process.exitCode = 1;
+  }
 }
+
+// The repository is CommonJS to Node; keep async imports inside the actual child.
+void readOriginalInChild();
