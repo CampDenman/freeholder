@@ -21,6 +21,7 @@ export default async function StorageRecoveryPage() {
   const needsStepUp = actor.kind === "user" && actor.security !== undefined && !actor.security.stepUpValid;
   return <div className="grid min-w-0 gap-6">
     <div><h1 className="text-xl font-bold">{t("media.recovery.title")}</h1><p className="mt-2 text-sm text-ink-muted">{t("media.recovery.intro")}</p></div>
+    {multipart.rows.some(row=>row.resource.state==="open")?<Callout>{t("media.recovery.partsUnavailable")}</Callout>:null}
     <Link href="/admin/media" className="text-sm font-semibold text-accent underline">{t("media.title")}</Link>
     {needsStepUp ? <Callout><a href="/security/verify?returnTo=%2Fadmin%2Fmedia%2Frecovery" className="underline">{t("media.recovery.verify")}</a></Callout> : null}
     {!rows.length&&!multipart.rows.length ? <Callout>{t("media.recovery.empty")}</Callout> : null}

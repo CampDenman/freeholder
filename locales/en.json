@@ -8775,6 +8775,7 @@
   "mail.recovery.changed": "A later positive server reply conflicts with the earlier review. Verify this exact send again.",
   "mail.recovery.observedReply": "The original server returned a positive reply, but local completion needs review. This send cannot be marked as never submitted.",
   "media.recovery.title": "Storage recovery",
+  "media.recovery.partsUnavailable": "New direct upload links are unavailable. Keep this original upload and its receipts for review. Full recovery for these uploads is not yet supported. An expired link or missing current file does not prove that all stored bytes are gone.",
   "media.recovery.intro": "An interrupted storage request can still finish at its original provider. Verify the final outcome for this exact operation and prove every original writer has stopped. Check the original resource with your provider; a missing file or an expired timer alone is insufficient. Only a receipt of your evidence is retained.",
   "media.recovery.namespace": "Original storage resource fingerprint",
   "media.recovery.sha256": "Original file SHA-256 (required when verifying a present legacy file)",
