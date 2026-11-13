@@ -15699,3 +15699,12 @@ NULL-payment canonical identities remain. Prepared adapter/native controls are
 UNRUN; no CPU, database, provider or schema operation ran. Full evidence and
 remaining protocol/qualification limits are in
 `deploy/controlled-parent-financial82-source-20261113.md`; all live gates stay open.
+
+Source correction 2026-11-13 (C12.38/C1.08): the original merchant identity
+synthetic read driver now checks the exact frozen subscription/terms controlled
+resource selector and bounded real-parent alias query, while preserving all14
+prior identity/foreign-owner/UUID/fingerprint/bound assertions. It explicitly
+requires an empty fifth dependency array and adds one strict nine-empty-family/
+unknown-parent control. Root's v6 first failure is preserved; the corrected15
+controls are UNRUN. No product behavior or database changed. See
+`deploy/member-controlled-financial-driver82-source-20261113.md`.
