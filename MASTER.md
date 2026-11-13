@@ -11805,6 +11805,15 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Finished-original-PUT recovery source continuation 2026-11-13 prepares
+  existing shared recovery phases, original nonce/full-byte read, immutable
+  two-pass original inventory, append-only review and exact original-token
+  quota settlement.18 pure and4 native controls remain entirely unrun; private
+  projection inventory gains phase memberships without changed assertions.
+  The15 models/owned UNAPPLIED82 stay disabled. Crash/stop, all-version physical
+  retirement, multipart pinned completion and ordinary privacy/minimization
+  composition remain unfinished. No actual provider or launch claim follows.
+  See `deploy/media-finished-put-recovery-source-2026-11-13.md`.
   Original ordinary/multipart request source continuation 2026-11-13 prepares
   same-transaction originating callers, actual per-request nonce/facts/finish,
   quota-token binding, multipart protocol accounting, portable finished-caller

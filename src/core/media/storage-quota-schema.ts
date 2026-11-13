@@ -18,6 +18,7 @@ export const storageQuotaObjects = pgTable("storage_quota_objects", {
   objectKey: text("object_key").notNull(),
   bytes: bigint("bytes", { mode: "number" }).notNull(),
   pendingToken: uuid("pending_token"),
+  lastSettledToken:uuid("last_settled_token"),
 }, t => [
   primaryKey({ columns: [t.namespace, t.objectKey] }),
   check("storage_quota_objects_object_key_check", sql`length(${t.objectKey}) BETWEEN 1 AND 2048`),

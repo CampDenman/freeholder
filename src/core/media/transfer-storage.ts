@@ -38,3 +38,27 @@ export async function configuredPhysicalStorage(binding:StorageBinding):Promise<
  const captured=await boundStorage();if(!captured.store.isPublic&&transferDigest(captured.binding)===transferDigest(binding))return captured.store;
  return transferConflict("Restore the exact configured original transfer resource before reading this object.");
 }
+
+/** A single exact original resource for ordinary recovery. Credentials come
+ * only from private configured slots; callers cannot supply a host/account.
+ * Resolve outside a business transaction, then bind the resulting factory to
+ * the immutable original namespace/location before any physical request. */
+export async function configuredOriginalRequestStore(binding:StorageBinding):Promise<AccountedTransferStore>{
+ if(currentServiceTransaction())transferConflict("Resolve the original private provider outside the business transaction.");
+ checkedTransferBinding(binding);const e=env();
+ const candidates=binding.kind==="s3"?[
+  {kind:"s3"as const,endpoint:e.S3_ENDPOINT,region:e.S3_REGION,bucket:e.S3_BUCKET,access:e.S3_ACCESS_KEY_ID,secret:e.S3_SECRET_ACCESS_KEY,style:e.S3_ADDRESSING_STYLE},
+  {kind:"s3"as const,endpoint:e.MEDIA_TRANSFER_SOURCE_S3_ENDPOINT,region:e.MEDIA_TRANSFER_SOURCE_S3_REGION,bucket:e.MEDIA_TRANSFER_SOURCE_S3_BUCKET,access:e.MEDIA_TRANSFER_SOURCE_S3_ACCESS_KEY_ID,secret:e.MEDIA_TRANSFER_SOURCE_S3_SECRET_ACCESS_KEY,style:e.MEDIA_TRANSFER_SOURCE_S3_ADDRESSING_STYLE},
+  {kind:"s3"as const,endpoint:e.MEDIA_TRANSFER_TARGET_S3_ENDPOINT,region:e.MEDIA_TRANSFER_TARGET_S3_REGION,bucket:e.MEDIA_TRANSFER_TARGET_S3_BUCKET,access:e.MEDIA_TRANSFER_TARGET_S3_ACCESS_KEY_ID,secret:e.MEDIA_TRANSFER_TARGET_S3_SECRET_ACCESS_KEY,style:e.MEDIA_TRANSFER_TARGET_S3_ADDRESSING_STYLE},
+ ]:[];
+ for(const candidate of candidates){
+  if(!candidate.endpoint||!candidate.bucket||!candidate.region||!candidate.access||!candidate.secret||storageNamespace({id:"s3",endpoint:candidate.endpoint,bucket:candidate.bucket})!==binding.namespace)continue;
+  const store=createS3Store({ORIGINAL_S3_ENDPOINT:candidate.endpoint,ORIGINAL_S3_REGION:candidate.region,ORIGINAL_S3_BUCKET:candidate.bucket,ORIGINAL_S3_ACCESS_KEY_ID:candidate.access,ORIGINAL_S3_SECRET_ACCESS_KEY:candidate.secret,ORIGINAL_S3_ADDRESSING_STYLE:candidate.style,ORIGINAL_S3_ALLOW_LOOPBACK_HTTP:e.NODE_ENV==="test"?"true":undefined},"ORIGINAL");
+  if(transferDigest(store.binding)!==transferDigest(binding)||!store.accounted)transferConflict("The configured provider differs from its exact original binding.");return store.accounted(observeTransferRequest);
+ }
+ if(binding.kind==="replit")for(const bucket of [e.REPLIT_BUCKET_ID,e.MEDIA_TRANSFER_SOURCE_REPLIT_BUCKET_ID,e.MEDIA_TRANSFER_TARGET_REPLIT_BUCKET_ID]){
+  if(!bucket||storageNamespace({id:"replit",bucket})!==binding.namespace)continue;
+  const store=await createReplitStore({ORIGINAL_REPLIT_BUCKET_ID:bucket},"ORIGINAL");if(transferDigest(store.binding)!==transferDigest(binding)||!store.accounted)transferConflict();return store.accounted(observeTransferRequest);
+ }
+ return transferConflict("Restore the exact original privately configured provider resource. A current account/key cannot rebind its namespace.");
+}

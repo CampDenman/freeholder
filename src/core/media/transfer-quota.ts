@@ -20,7 +20,7 @@ export async function reserveTransferQuota(tx:Tx,namespace:string,key:string,byt
 }
 export async function settleTransferQuota(tx:Tx,namespace:string,key:string,token:string):Promise<void>{
  await tx.execute(sql`select namespace from storage_quota_state where namespace=${namespace} for update`);
- await tx.execute(sql`update storage_quota_objects set pending_token=null where namespace=${namespace} and object_key=${key} and pending_token=${token}::uuid`);
+ await tx.execute(sql`update storage_quota_objects set pending_token=null,last_settled_token=${token}::uuid where namespace=${namespace} and object_key=${key} and pending_token=${token}::uuid`);
 }
 /** Absence is established by an exact finished conditional deletion/read. */
 export async function releaseTransferQuota(tx:Tx,namespace:string,key:string):Promise<void>{

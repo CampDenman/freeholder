@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Prepare recovery of an actually finished unknown original PUT through its exact original request nonce, fresh full-byte provider result and two complete immutable version/session inventories. Keep original responses and caller finishes intact, append a review and settle only the originally captured quota token. Refuse active/missing callers, later equal-key generations and retained version/session debt. Crash/stop, physical retirement, multipart completion and exact ordinary privacy composition remain unfinished; the final request capability stays unpublished and all qualification is unrun.
+
 - Prepare original ordinary and multipart provider request admissions, actual response/finish retention, original nonce tags, immutable quota-token binding and portable finished-caller identities. Account multipart CREATE/COMPLETE/ABORT and exact-session inspection without retrying unknown original writes. Keep recovery and retirement restricted while original complete inventory, stop/review, pinned reads, quota retirement and privacy composition remain unfinished. The complete request capability remains unpublished; source/native/provider qualification is unrun.
 
 - An image held because the abuse-imagery check could not run, for example because of a timeout or because it was too large, is no longer treated as evidence. The owner can rescan or delete it like any other held file. Only an actual match is placed under legal hold, including files held earlier under the old tagging. Every upload of a matched image is linked to its own uploader. Matches are recorded for the legal report even when the members module is off, and an upload is refused if its match could not be recorded.

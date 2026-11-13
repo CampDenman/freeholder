@@ -83,7 +83,7 @@ export function originalMultipartCaller(operationId:string){
  return call;
 }
 
-export interface OriginalMediaCallerReturn {inspectionDigest?:string;providerUploadId?:string;accepted?:boolean;failed?:true;notAttempted?:true;revision?:StorageTransferRevision;sha256?:string;bytes?:number;absent?:boolean;requestProof?:OriginalProviderRequestProof}
+export interface OriginalMediaCallerReturn {inventoryDigest?:string;inventoryCount?:number;configurationDigest?:string;inspectionDigest?:string;providerUploadId?:string;accepted?:boolean;failed?:true;notAttempted?:true;revision?:StorageTransferRevision;sha256?:string;bytes?:number;absent?:boolean;requestProof?:OriginalProviderRequestProof}
 /** Actual server closure only: this is authenticated by its admission token,
  * never an owner-supplied final-outcome string. Outcome application remains a
  * separate shared phase; a returned caller can still have unknown write debt.
