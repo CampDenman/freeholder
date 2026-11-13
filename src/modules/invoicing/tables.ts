@@ -62,3 +62,5 @@ export { legacyBankFeedback } from "./legacy-bank-feedback-schema";
 export { originalCashRecoveries, originalCashRecoveryOperations, originalCashRecoveryFacts, originalCashRecoveryClosures } from "./original-cash-recovery-schema";
 
 export * from "./agreement-fee-schema";
+
+export { merchantCashReturnInspectionStops } from "./merchant-cash-inspection-stop-schema";

@@ -11,6 +11,7 @@ import type { MerchantRefundCashOrigin } from "./merchant-refund-origin";
 import { merchantCashReturnInspections, merchantCashReturnInspectionFinishes, merchantCashReturnObservations, merchantCashReturnPrimaryObservations, merchantRefundCreationRefusals, merchantRefundDispatches,
   merchantRefundDispatchFinishes, merchantRefundDispatchStops, merchantRefundObservations, merchantRefundRequests, merchantRefundReservationRetirements, merchantRefundResourceBindings, merchantRefundTerminalReceipts } from "./merchant-refund-schema";
 import { cashInspectionCallersClosed } from "./merchant-cash-inspection-evidence";
+import { cashInspectionStops } from "./merchant-cash-inspection-stops";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { merchantRefundObservationCaptures } from "./merchant-refund-current-schema";
 import { originalCashCallersFinished, originalCashHistoricalFeesQuiesced, originalCashRecoveryCashWitness } from "./original-cash-recovery-store";
@@ -63,6 +64,7 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
   const inspectionAdmissions=await ctx.tx.select().from(merchantCashReturnInspections).where(and(eq(merchantCashReturnInspections.providerPlatformAccountId,cash.providerPlatformAccountId),
     sql`${merchantCashReturnInspections.chargeAccountId} is not distinct from ${cash.chargeAccountId}`,eq(merchantCashReturnInspections.originalPaymentRef,cash.providerRef))).limit(MAX+1);
   const inspectionIds=inspectionAdmissions.map(row=>row.id),inspectionFinishes=inspectionIds.length?await ctx.tx.select().from(merchantCashReturnInspectionFinishes).where(inArray(merchantCashReturnInspectionFinishes.inspectionId,inspectionIds)).limit(MAX+1):[];
+  const inspectionStops=await cashInspectionStops(ctx.tx,inspectionAdmissions),otherInspectionStops=inspectionStops.filter(row=>row.inspectionId!==ownInspectionId);
   const otherInspectionAdmissions=inspectionAdmissions.filter(row=>row.id!==ownInspectionId),otherInspectionFinishes=inspectionFinishes.filter(row=>row.inspectionId!==ownInspectionId);
   const otherPrimary = await ctx.tx.select({ observation: merchantCashReturnPrimaryObservations }).from(merchantCashReturnPrimaryObservations)
     .innerJoin(merchantCashReturnInspections, eq(merchantCashReturnInspections.id, merchantCashReturnPrimaryObservations.inspectionId)).where(inspectionScope).limit(MAX + 1);
@@ -70,10 +72,10 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
     .innerJoin(merchantCashReturnInspections, eq(merchantCashReturnInspections.id, merchantCashReturnObservations.inspectionId)).where(inspectionScope).limit(MAX + 1);
   const recovery = await originalCashRecoveryCashWitness(ctx.tx, cash, excludeRecoveryOperationId);
   const inventory = { requests, retirements, observations, observationCaptures, dispatches, finishes, stops, refusals, terminals, bindings, paymentCash, subscriptionCash, receiptRows, aliases, fees, feeObservations, otherPrimary, otherReturns,
-    recoveryOwners: recovery.owners, recoveryOperations: recovery.operations, recoveryFacts: recovery.facts.filter(fact => !["partial_closure", "unassigned_refund_review", "partial_target"].includes(fact.kind)), recoveryFeedback:recovery.feedback, ...(otherInspectionAdmissions.length||otherInspectionFinishes.length?{cashInspectionAdmissions:otherInspectionAdmissions,cashInspectionFinishes:otherInspectionFinishes}:{}) };
+    recoveryOwners: recovery.owners, recoveryOperations: recovery.operations, recoveryFacts: recovery.facts.filter(fact => !["partial_closure", "unassigned_refund_review", "partial_target"].includes(fact.kind)), recoveryFeedback:recovery.feedback, ...(otherInspectionStops.length?{cashInspectionStops:otherInspectionStops}:{}), ...(otherInspectionAdmissions.length||otherInspectionFinishes.length?{cashInspectionAdmissions:otherInspectionAdmissions,cashInspectionFinishes:otherInspectionFinishes}:{}) };
   const inventoryCount = Object.values(inventory).reduce((count, rows) => count + rows.length, 0);
-  const incomplete = inventoryCount+inspectionAdmissions.length+inspectionFinishes.length-otherInspectionAdmissions.length-otherInspectionFinishes.length > MAX;
-  let creatorsQuiesced = !incomplete && cashInspectionCallersClosed(inspectionAdmissions,inspectionFinishes) && dispatches.every(call => finishes.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id)
+  const incomplete = inventoryCount+inspectionAdmissions.length+inspectionFinishes.length+inspectionStops.length-otherInspectionAdmissions.length-otherInspectionFinishes.length-otherInspectionStops.length > MAX;
+  let creatorsQuiesced = !incomplete && !inspectionStops.some(stop=>inspectionFinishes.some(finish=>finish.inspectionId===stop.inspectionId)) && cashInspectionCallersClosed(inspectionAdmissions.filter(row=>!inspectionStops.some(stop=>stop.inspectionId===row.id)),inspectionFinishes) && dispatches.every(call => finishes.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id)
     || stops.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id && row.requestDigest === call.requestDigest));
   for (const paymentId of paymentIds) {
     try { await assertMerchantCreatorsQuiesced(ctx, paymentId); }

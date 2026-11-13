@@ -30,6 +30,7 @@ import originalRefundPhaseServices1 from "./merchant-refund-dispatch";
 import originalRefundPhaseServices2 from "./merchant-refund-observations";
 import originalRefundPhaseServices3 from "./merchant-refund-execution";
 import originalRefundPhaseServices4 from "./merchant-cash-return-service";
+import cashInspectionStopServices from "./merchant-cash-inspection-stop-service";
 import originalRefundPhaseServices5 from "./merchant-subscription-disposition";
 import originalRefundCurrentServices from "./merchant-refund-current-service";
 import originalRefundProviderServices from "./merchant-refund-provider-events";
@@ -101,6 +102,7 @@ export default [
   ...originalRefundPhaseServices2,
   ...originalRefundPhaseServices3,
   ...originalRefundPhaseServices4,
+  ...cashInspectionStopServices,
   ...originalRefundPhaseServices5,
   ...originalRefundCurrentServices,
   ...originalRefundProviderServices,
