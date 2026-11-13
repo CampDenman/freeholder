@@ -80,3 +80,12 @@ queue identity, intact verified artifact, holds and same-transaction ACK remain
 in the one completion service. Its conservative pending refusal is bypassed
 only after the enabled81 guarded scope/minimization path runs, per-task physical
 retirement is rechecked and the deferred whole-scope closure guard is present.
+
+Three additional unrun actual-business controls are prepared in
+`tests/core/import-uploaded-index-boundaries.test.ts`: a named held WXR with
+private host/path media key retains exactly its canonical generation and bytes;
+a real accepted 500-content child refuses physical deletion while its CMS
+ownership remains unchanged; and an original request completes only its actual
+captured graph/chunks while a later real uploaded graph and bytes remain intact.
+Each uses a real freshly verified owner and actual upload/index/privacy/job
+services. No native result or source qualification is claimed for these controls.
