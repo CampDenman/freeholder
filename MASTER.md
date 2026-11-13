@@ -3938,8 +3938,10 @@ reading chat logs.
   positive same-namespace physical retirement, with no live hold/writer/rebind
   or accepted ownership. The new capture/tasks preserve the old receipt and
   scope. Four prepared native other-subject/corrupted-receipt refusals accompany
-  the unchanged WXR/ZIP positive controls. Source/native/migration checks are
-  UNRUN at this checkpoint; no completion claim follows. See
+  the unchanged WXR/ZIP positive controls. Full Node22 types, corrected lint,
+  registry/composition/participation contracts and68 unique NoDB assertions
+  pass (138 explicit DB skips); note regeneration and metadata pass. Actual
+  native/migration checks remain UNRUN; no completion claim follows. See
   `deploy/import-held-original-new-request-2026-11-13.md`.
 
   Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
