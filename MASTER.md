@@ -13842,6 +13842,17 @@ whatever is best for the people using the site.
   clients drained. Whole current-source integration remains open.
   No SQL or old money changes. C12.38 stays open. See
   `deploy/merchant-fee-stale-dispatch-2026-11-12.md`.
+  Current subscription commercial composition source 2026-11-12: the eleven
+  owned terms/phase/exemption/buyer-cohort deltas through ddee2f75 are composed
+  onto current425642af without whole-file replacement or cherry-pick conflicts.
+  Accepted terms are registered with private search/retention decisions and a
+  bounded exact-profile seller merge witness; buyer terms evidence is retained.
+  New unpublished80 hash881a7901 appends the owned terms fragment after the exact
+  SQL958 byte prefix, preserving all published SQL and the81-entry journal.
+  NEW database/source/model/native/SDK qualification is pending; all earlier
+  artifacts stay preserved. Provider admission remains closed, and amendments,
+  money-finisher integration and full provider acceptance are still required.
+  See `deploy/current-subscription-terms80-source-2026-11-12.md`.
   Current-main financial composition 2026-11-12: exact `73e145af` merges protected
   main `bad846e4` (#694) and both fee repairs while preserving SQL958, all published
   migrations and helper `46a6ec02`. Full source gates passed at `5f53daf5` (384 assertions,

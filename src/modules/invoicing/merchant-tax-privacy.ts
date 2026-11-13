@@ -15,19 +15,31 @@ import {invoiceMerchantTaxQuotes} from "./merchant-tax-schema";
 import {invoiceMerchantCollections,merchantPaymentRoutes} from "./merchant-collection-schema";
 import {invoiceMerchantScopes,merchantInvoicePaymentRoutes} from "./merchant-invoice-scope-schema";
 import {merchantAgreementPaymentRoutes} from "./merchant-agreement-schema";
-import {subscriptionMerchantScopes,subscriptionProviderChargeReceipts} from "@/modules/subscriptions/schema";
+import {subscriptionCommercialTerms,subscriptionMerchantScopes,subscriptionProviderChargeReceipts} from "@/modules/subscriptions/schema";
 import {merchantRefundDependencyFingerprints} from "./merchant-refund-dependencies";
 
 const scope="commerce.merchantTax";
 export const MERCHANT_TAX_ERASURE_JOB="subscriptions.quiesceMerchantSchedules";
 const witness=z.object({id:z.uuid(),contactId:z.uuid().nullable(),fingerprint:z.string().regex(/^[a-f0-9]{64}$/)});
 async function snapshot(tx:Tx,ids:string[]){
+ // Preserve the outer identity inside child subqueries: the ORM renders bare
+ // Column chunks unqualified in a single-table SELECT. Inner child.id is not
+ // the original profile id. Table/identifier chunks retain this qualification.
+ const originalProfileId=sql`${merchantTaxProfiles}.${sql.identifier("id")}`;
  const rows=await tx.select({id:merchantTaxProfiles.id,contactId:merchantTaxProfiles.contactId,
-  material:sql<string>`jsonb_build_object('profile',to_jsonb(${merchantTaxProfiles}),'versions',(select encode(sha256(convert_to(coalesce(jsonb_agg(to_jsonb(v) order by v.version),'[]'::jsonb)::text,'UTF8')),'hex') from merchant_tax_profile_versions v where v.profile_id=${merchantTaxProfiles.id}),'registrations',(select encode(sha256(convert_to(coalesce(jsonb_agg(to_jsonb(r) order by r.id),'[]'::jsonb)::text,'UTF8')),'hex') from tax_registrations r where r.merchant_profile_id=${merchantTaxProfiles.id}),'exemptions',(select encode(sha256(convert_to(coalesce(jsonb_agg((to_jsonb(e)-'contact_id')||jsonb_build_object('contact_id',case when e.contact_id in (${sql.join(ids.map(id=>sql`${id}::uuid`),sql`,`)}) then 'merged-subject' else e.contact_id::text end) order by e.id),'[]'::jsonb)::text,'UTF8')),'hex') from tax_exemptions e where e.merchant_profile_id=${merchantTaxProfiles.id}))::text`,
+  material:sql<string>`jsonb_build_object('profile',to_jsonb(${merchantTaxProfiles}),'versions',(select encode(sha256(convert_to(coalesce(jsonb_agg(to_jsonb(v) order by v.version),'[]'::jsonb)::text,'UTF8')),'hex') from merchant_tax_profile_versions v where v.profile_id=${originalProfileId}),'registrations',(select encode(sha256(convert_to(coalesce(jsonb_agg(to_jsonb(r) order by r.id),'[]'::jsonb)::text,'UTF8')),'hex') from tax_registrations r where r.merchant_profile_id=${originalProfileId}),'exemptions',(select encode(sha256(convert_to(coalesce(jsonb_agg((to_jsonb(e)-'contact_id')||jsonb_build_object('contact_id',case when e.contact_id in (${sql.join(ids.map(id=>sql`${id}::uuid`),sql`,`)}) then 'merged-subject' else e.contact_id::text end) order by e.id),'[]'::jsonb)::text,'UTF8')),'hex') from tax_exemptions e where e.merchant_profile_id=${originalProfileId}))::text`,
  }).from(merchantTaxProfiles).where(inArray(merchantTaxProfiles.contactId,ids)).orderBy(merchantTaxProfiles.id).limit(5001);
  if(rows.length>5000)return null;
  if(!rows.length)return[];
  const profileIds=rows.map(row=>row.id);
+ // Accepted terms belong to their frozen profile, including when no charge
+ // exists yet. Hash in PostgreSQL so private accepted destinations and notices
+ // never enter the merge witness or an unnecessarily large application result.
+ const acceptedTerms=await tx.select({id:subscriptionCommercialTerms.id,profileId:subscriptionCommercialTerms.profileId,
+  fingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionCommercialTerms})::text,'UTF8')),'hex')`,
+ }).from(subscriptionCommercialTerms).where(inArray(subscriptionCommercialTerms.profileId,profileIds))
+  .orderBy(subscriptionCommercialTerms.profileId,subscriptionCommercialTerms.id).limit(5001);
+ if(acceptedTerms.length>5000)return null;
  // Anchor each charge to the original profile's allocation/single-source
  // route. Selecting every payment on a mixed invoice would attach another
  // seller's refund history to this subject.
@@ -54,7 +66,7 @@ async function snapshot(tx:Tx,ids:string[]){
  if(children.incomplete)return null;
  // The immutable child set belongs to this entire merge pair. Folding it
  // inside the existing fingerprint keeps its retained JSON shape unchanged.
- return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
+ return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
 }
 registerContactReference({
  table:"merchant_tax_profiles",

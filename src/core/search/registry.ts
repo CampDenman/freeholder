@@ -95,6 +95,7 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   invoice_market_policies: "Original merchant ownership and private financial routing; read through authorized invoice documents, never as separate search hits.",
   invoice_merchant_allocations: "Original private seller portions of an invoice; money facts use authorized invoice and payout services, never searchable contact hits.",
   subscription_market_policies: "Frozen merchant agreement identity and private routing; reached through authorized agreements.",
+  subscription_commercial_terms: "Immutable accepted price, calendar, tax and notice evidence; read through the authorized original agreement, never global content search.",
   media_object_writes:"Private physical-operation receipts; inspect through human storage recovery, not global search.",
   media_uploads:"Private original upload reservations and ownership; accessed through their authorized upload capability.",
   media_objects:"Private physical ownership pointers; the authorized library asset is the searchable record.",

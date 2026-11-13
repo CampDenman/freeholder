@@ -119,6 +119,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   invoice_market_policies: "Immutable issued-invoice terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",
   invoice_merchant_allocations: "Immutable original invoice money and seller ownership; retained financial facts and contact merge use members.merchantIdentity, never an age-based purge.",
   subscription_market_policies: "Immutable agreement terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",
+  subscription_commercial_terms: "Accepted commercial evidence has no TTL; original agreement privacy and legal holds govern personal-destination minimization after actual provider work is quiescent.",
   media_uploads:"Original reservations survive unresolved physical work; guarded lifecycle and subject erasure own retirement.",
   media_objects:"Original object ownership survives unknown writes; guarded physical cleanup and privacy jobs remove it.",
   media_multipart_resources:"Original multipart resources survive timers; explicit original-provider retirement and subject erasure own cleanup.",
