@@ -15761,3 +15761,13 @@ permission changes. This grants no recovery/money authority. Genuine positive
 observational context, causal comparison, bank proof and full acceptance remain
 REQUIRED; no C/stable closure. See
 deploy/original-cash-inspection-capture83-source-20261113.md.
+
+Source ancestry checkpoint 2026-11-13 (C12.38/C1.08/C11.10): a new ordinary
+reader proves only an exact receipt-owned genuinely returned inspection and its
+authenticated original callback entries. Its historical causal selector never
+contains stop receipts or unrelated repeated captures; full current financial
+coverage retains every own row/caller/fact. Six strict controls are PREPARED/
+UNRUN; no registered authority, new model, SQL or activation. The genuine
+observational parent query/producer/context and all prospective application,
+canonical effects and acceptance remain REQUIRED. See
+deploy/controlled-cash-inspection-ancestry82-20261113.md.
