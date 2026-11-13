@@ -4568,3 +4568,1508 @@ BEGIN
  END LOOP;
  RETURN NEW;
 END $$;
+--> statement-breakpoint
+-- Source: deploy/subscription-commercial-attestation80.fragment.sql
+-- SHA256: e6657f737a7a9c98e9e2a71be59de897d7d3984653c45295a01588b621778f8c
+-- Copyright (C) 2026 Tony Aly
+-- SPDX-License-Identifier: Apache-2.0
+-- C12.38/C9.33: OWNED UNAPPLIED attested-money tail AFTER1da78852ed7ba94a2e77596fe8b41bebc3ce3c174d79dacc7a60c933a98b4d46.
+-- Must precede the new proration-credit tail. Root owns assembly/hash/new DB.
+-- Recorded external money is not independently verified provider settlement.
+CREATE TABLE commercial_payment_attestations (
+ payment_id uuid PRIMARY KEY REFERENCES payments(id) ON DELETE RESTRICT,
+ invoice_id uuid NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+ merchant_profile_id uuid NOT NULL REFERENCES merchant_tax_profiles(id) ON DELETE RESTRICT,
+ profile_version integer NOT NULL,currency text NOT NULL,amount_minor bigint NOT NULL,fee_owed_minor bigint NOT NULL,
+ original_owner_digest text NOT NULL,evidence_digest text NOT NULL,reference_digest text NOT NULL,recorded_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT commercial_payment_attestations_amounts CHECK(amount_minor between 1 and 9007199254740991 AND fee_owed_minor between 0 and amount_minor AND currency ~ '^[A-Z]{3}$' AND profile_version>0),
+ CONSTRAINT commercial_payment_attestations_evidence CHECK(original_owner_digest ~ '^[a-f0-9]{64}$' AND evidence_digest ~ '^[a-f0-9]{64}$' AND reference_digest ~ '^[a-f0-9]{64}$' AND recorded_by ~ '^(user:|agent:|plugin:|system$)'),
+ CONSTRAINT commercial_payment_attestations_version FOREIGN KEY(merchant_profile_id,profile_version) REFERENCES merchant_tax_profile_versions(profile_id,version) ON DELETE RESTRICT
+);
+--> statement-breakpoint
+CREATE INDEX commercial_payment_attestations_invoice ON commercial_payment_attestations(invoice_id);
+--> statement-breakpoint
+CREATE INDEX commercial_payment_attestations_merchant ON commercial_payment_attestations(merchant_profile_id);
+--> statement-breakpoint
+CREATE TABLE commercial_refund_attestations (
+ refund_id uuid PRIMARY KEY REFERENCES refunds(id) ON DELETE RESTRICT,payment_id uuid NOT NULL REFERENCES commercial_payment_attestations(payment_id) ON DELETE RESTRICT,
+ amount_minor bigint NOT NULL,currency text NOT NULL,evidence_digest text NOT NULL,recorded_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT commercial_refund_attestations_evidence CHECK(amount_minor between 1 and 9007199254740991 AND currency ~ '^[A-Z]{3}$' AND evidence_digest ~ '^[a-f0-9]{64}$' AND recorded_by ~ '^(user:|agent:|plugin:|system$)')
+);
+--> statement-breakpoint
+CREATE INDEX commercial_refund_attestations_payment ON commercial_refund_attestations(payment_id);
+--> statement-breakpoint
+CREATE TABLE commercial_fee_attestations (
+ id uuid PRIMARY KEY,payment_id uuid NOT NULL REFERENCES commercial_payment_attestations(payment_id) ON DELETE RESTRICT,
+ amount_minor bigint NOT NULL,direction text NOT NULL,original_remittance_id uuid REFERENCES commercial_fee_attestations(id) ON DELETE RESTRICT,
+ idempotency_key text NOT NULL,evidence_digest text NOT NULL,request_digest text NOT NULL,recorded_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT commercial_fee_attestations_evidence CHECK(amount_minor between 1 and 9007199254740991 AND evidence_digest ~ '^[a-f0-9]{64}$' AND request_digest ~ '^[a-f0-9]{64}$' AND recorded_by ~ '^(user:|agent:|plugin:|system$)'),
+ CONSTRAINT commercial_fee_attestations_direction CHECK((direction='remitted' AND original_remittance_id IS NULL) OR(direction='returned' AND original_remittance_id IS NOT NULL))
+);
+--> statement-breakpoint
+CREATE INDEX commercial_fee_attestations_payment ON commercial_fee_attestations(payment_id);
+--> statement-breakpoint
+CREATE INDEX commercial_fee_attestations_original ON commercial_fee_attestations(original_remittance_id);
+--> statement-breakpoint
+CREATE UNIQUE INDEX commercial_fee_attestations_key ON commercial_fee_attestations(idempotency_key);
+--> statement-breakpoint
+CREATE FUNCTION guard_commercial_attestation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE p payments%ROWTYPE;i invoices%ROWTYPE;policy invoice_market_policies%ROWTYPE;r refunds%ROWTYPE;party invoice_merchant_tax_quotes%ROWTYPE;original commercial_payment_attestations%ROWTYPE;
+ previous_cash numeric;previous_fee numeric;actual_fee numeric;scopes integer;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.commercial_attestation_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Preserve the first recorded commercial money evidence and use its authorized shared action' USING ERRCODE='23514'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtext('payment:'||NEW.payment_id::text));
+ SELECT * INTO p FROM payments WHERE id=NEW.payment_id FOR UPDATE;
+ PERFORM pg_advisory_xact_lock(hashtext('invoice:'||p.invoice_id::text));
+ SELECT * INTO i FROM invoices WHERE id=p.invoice_id;
+ SELECT * INTO policy FROM invoice_market_policies WHERE invoice_id=i.id;
+ IF p.id IS NULL OR p.provider<>'manual' OR policy.model IS DISTINCT FROM 'seller_merchant' OR policy.collection_version<>0 OR i.source_type<>'subscription' OR i.issued_at IS NULL THEN
+  RAISE EXCEPTION 'An external commercial attestation must name its real original manual subscription payment and merchant invoice' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='commercial_payment_attestations' THEN
+  SELECT count(*) INTO scopes FROM invoice_merchant_tax_quotes WHERE invoice_id=i.id;
+  SELECT * INTO party FROM invoice_merchant_tax_quotes WHERE invoice_id=i.id;
+  IF scopes<>1 OR party.seller_user_id IS DISTINCT FROM policy.seller_user_id OR party.profile_id<>NEW.merchant_profile_id OR party.profile_version<>NEW.profile_version
+   OR NEW.invoice_id<>i.id OR NEW.currency<>i.currency OR NEW.currency<>p.currency OR NEW.amount_minor<>p.amount_minor OR p.status<>'created' OR p.provider_ref IS NOT NULL
+   OR p.method NOT IN('cash','bank_transfer','cheque','external_card','other')
+   OR EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=p.id) OR EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=p.id)
+   OR EXISTS(SELECT 1 FROM merchant_invoice_payment_routes WHERE payment_id=p.id) OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=p.id)
+   OR EXISTS(SELECT 1 FROM payments other WHERE other.invoice_id=i.id AND other.id<>p.id AND other.status IN('created','processing'))
+   OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments old ON old.id=o.payment_id WHERE old.invoice_id=i.id AND o.status='succeeded'
+    AND(old.status<>'succeeded' OR o.amount_minor<>old.amount_minor OR o.currency<>old.currency OR(o.provider_ref IS DISTINCT FROM old.provider_ref AND o.provider_ref IS DISTINCT FROM old.provider_checkout_ref)))
+   OR EXISTS(SELECT 1 FROM merchant_payment_dispatches d JOIN payments old ON old.id=d.payment_id
+      WHERE old.invoice_id=i.id AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_finishes f WHERE f.dispatch_id=d.id) AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_stops s WHERE s.dispatch_id=d.id)) THEN
+   RAISE EXCEPTION 'Retain exactly one real external origin with its original declared merchant, amount, evidence and quiesced competing callers' USING ERRCODE='23514'; END IF;
+  SELECT coalesce(sum(old.amount_minor),0),coalesce(sum(coalesce(a.fee_owed_minor,g.application_fee_minor,l.application_fee_minor)),0)
+   INTO previous_cash,previous_fee FROM payments old
+   LEFT JOIN commercial_payment_attestations a ON a.payment_id=old.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=old.id LEFT JOIN payment_merchant_routes l ON l.payment_id=old.id
+   WHERE old.invoice_id=i.id AND old.id<>p.id AND old.status='succeeded';
+  IF i.total_minor<=0 OR previous_cash<>i.paid_minor OR EXISTS(SELECT 1 FROM payments old
+   LEFT JOIN commercial_payment_attestations a ON a.payment_id=old.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=old.id LEFT JOIN payment_merchant_routes l ON l.payment_id=old.id
+   WHERE old.invoice_id=i.id AND old.id<>p.id AND old.status='succeeded' AND ((a.payment_id IS NOT NULL)::integer+(g.payment_id IS NOT NULL)::integer+(l.payment_id IS NOT NULL)::integer<>1 OR old.refunded_minor<>0)) THEN
+   RAISE EXCEPTION 'Restore the complete original cash and exactly one fee owner before a new external record' USING ERRCODE='23514'; END IF;
+  actual_fee:=floor(policy.fee_minor::numeric*(previous_cash+p.amount_minor)/i.total_minor)-previous_fee;
+  IF NEW.fee_owed_minor<>actual_fee THEN RAISE EXCEPTION 'The recorded fee owed must use the frozen shared invoice policy, never a fabricated collected fee' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO original FROM commercial_payment_attestations WHERE payment_id=p.id;
+  IF original.payment_id IS NULL OR p.status<>'succeeded' OR original.amount_minor<>p.amount_minor OR original.currency<>p.currency THEN
+   RAISE EXCEPTION 'Restore the exact original successful recorded external principal' USING ERRCODE='23514'; END IF;
+  IF TG_TABLE_NAME='commercial_refund_attestations' THEN
+   SELECT * INTO r FROM refunds WHERE id=NEW.refund_id;
+   IF r.id IS NULL OR r.payment_id<>p.id OR r.provider<>'manual' OR r.status<>'created' OR r.provider_ref IS NOT NULL OR NEW.amount_minor<>r.amount_minor OR NEW.currency<>r.currency THEN
+    RAISE EXCEPTION 'Record only this actual original manual refund attempt before its balance settles' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='commercial_fee_attestations' THEN
+   IF NEW.direction='remitted' AND coalesce((SELECT sum(CASE WHEN direction='returned' THEN -amount_minor ELSE amount_minor END) FROM commercial_fee_attestations WHERE payment_id=p.id),0)+NEW.amount_minor>floor(original.fee_owed_minor::numeric*(p.amount_minor-p.refunded_minor)/p.amount_minor) THEN
+    RAISE EXCEPTION 'Recorded external remittances cannot exceed the original bounded current fee obligation' USING ERRCODE='23514'; END IF;
+   IF NEW.direction='returned' AND NOT EXISTS(SELECT 1 FROM commercial_fee_attestations first WHERE first.id=NEW.original_remittance_id AND first.direction='remitted' AND first.payment_id=p.id
+    AND coalesce((SELECT sum(a.amount_minor) FROM commercial_fee_attestations a WHERE a.original_remittance_id=first.id),0)+NEW.amount_minor<=first.amount_minor) THEN
+    RAISE EXCEPTION 'An external fee return must retain its exact original remittance and remaining actual amount' USING ERRCODE='23514'; END IF;
+  ELSE RAISE EXCEPTION 'Unknown recorded commercial money family' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER commercial_payment_attestations_guard BEFORE INSERT OR UPDATE OR DELETE ON commercial_payment_attestations FOR EACH ROW EXECUTE FUNCTION guard_commercial_attestation();
+--> statement-breakpoint
+CREATE TRIGGER commercial_refund_attestations_guard BEFORE INSERT OR UPDATE OR DELETE ON commercial_refund_attestations FOR EACH ROW EXECUTE FUNCTION guard_commercial_attestation();
+--> statement-breakpoint
+CREATE TRIGGER commercial_fee_attestations_guard BEFORE INSERT OR UPDATE OR DELETE ON commercial_fee_attestations FOR EACH ROW EXECUTE FUNCTION guard_commercial_attestation();
+--> statement-breakpoint
+-- Add the new explicit origin to the existing binding authority. Every old
+-- provider branch is retained; manual money never acquires a Stripe route.
+CREATE OR REPLACE FUNCTION guard_merchant_payment_binding() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE current_payment payments%ROWTYPE;policy invoice_market_policies%ROWTYPE;new_agreement boolean;new_single boolean;route_count integer;
+BEGIN
+ SELECT * INTO current_payment FROM payments WHERE id=NEW.id;
+ SELECT * INTO policy FROM invoice_market_policies WHERE invoice_id=current_payment.invoice_id;
+ IF current_payment.provider='manual' AND policy.model='seller_merchant' THEN
+  IF NOT EXISTS(SELECT 1 FROM commercial_payment_attestations a WHERE a.payment_id=current_payment.id AND a.invoice_id=current_payment.invoice_id AND a.amount_minor=current_payment.amount_minor AND a.currency=current_payment.currency)
+   OR EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=current_payment.id) OR EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=current_payment.id)
+   OR EXISTS(SELECT 1 FROM merchant_invoice_payment_routes WHERE payment_id=current_payment.id) OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=current_payment.id) THEN
+   RAISE EXCEPTION 'A recorded external payment needs its exact original attestation and cannot invent provider routing' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+ END IF;
+ SELECT EXISTS(SELECT 1 FROM invoices i JOIN subscriptions s ON s.id::text=split_part(i.source_id,':',1)
+  WHERE i.id=current_payment.invoice_id AND i.source_type='subscription' AND s.merchant_scope_version=1 AND policy.model='seller_merchant') INTO new_agreement;
+ SELECT EXISTS(SELECT 1 FROM invoice_merchant_scopes WHERE invoice_id=current_payment.invoice_id) INTO new_single;
+ IF policy.collection_version IS DISTINCT FROM 1 AND NOT new_agreement AND NOT new_single THEN RETURN NEW; END IF;
+ SELECT(EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=current_payment.id))::integer
+  +(EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=current_payment.id))::integer
+  +(EXISTS(SELECT 1 FROM merchant_invoice_payment_routes WHERE payment_id=current_payment.id))::integer INTO route_count;
+ IF route_count<>1 OR(policy.collection_version=1 AND NOT EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=current_payment.id))
+  OR(new_agreement AND NOT EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=current_payment.id))
+  OR(new_single AND NOT EXISTS(SELECT 1 FROM merchant_invoice_payment_routes WHERE payment_id=current_payment.id))
+  OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=current_payment.id) THEN
+  RAISE EXCEPTION 'This payment requires its original per-party route before commit.' USING ERRCODE='23514'; END IF;
+ IF current_payment.status='succeeded' AND NOT EXISTS(SELECT 1 FROM merchant_payment_observations o WHERE o.payment_id=current_payment.id
+  AND o.status='succeeded' AND o.customer_charge_verified AND o.provider_ref=current_payment.provider_ref AND o.amount_minor=current_payment.amount_minor AND o.currency=current_payment.currency) THEN
+  RAISE EXCEPTION 'Retain the positive original provider observation before applying paid money.' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE FUNCTION guard_commercial_refund_projection() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.status='succeeded' AND EXISTS(SELECT 1 FROM commercial_payment_attestations WHERE payment_id=NEW.payment_id)
+  AND NOT EXISTS(SELECT 1 FROM commercial_refund_attestations a WHERE a.refund_id=NEW.id AND a.payment_id=NEW.payment_id AND a.amount_minor=NEW.amount_minor AND a.currency=NEW.currency) THEN
+  RAISE EXCEPTION 'Retain the actual original external refund attestation before applying returned principal' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER commercial_refund_projection_guard AFTER INSERT OR UPDATE ON refunds DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION guard_commercial_refund_projection();
+--> statement-breakpoint
+-- Source: deploy/subscription-proration-credit80.fragment.sql
+-- SHA256: 9e35bc9a7a9f4e4200e940608da22501c34049037e6d8bbbaed451bec4b42305
+-- Copyright (C) 2026 Tony Aly
+-- SPDX-License-Identifier: Apache-2.0
+-- C9.33/C12.38: OWNED UNAPPLIED lifecycle tail AFTER1da78852ed7ba94a2e77596fe8b41bebc3ce3c174d79dacc7a60c933a98b4d46.
+-- Root owns new assembly/hash/NEW normal DB. Earlier schemas and all original evidence stay frozen.
+ALTER TABLE invoices ADD COLUMN credited_minor bigint NOT NULL DEFAULT 0;
+--> statement-breakpoint
+ALTER TABLE invoices ADD CONSTRAINT invoices_credited_bounded CHECK(credited_minor between 0 and 9007199254740991 AND paid_minor+credited_minor<=total_minor);
+--> statement-breakpoint
+ALTER TABLE invoices DROP CONSTRAINT invoices_paid_consistent;
+--> statement-breakpoint
+ALTER TABLE invoices ADD CONSTRAINT invoices_paid_consistent CHECK(status<>'paid' OR(paid_minor+credited_minor=total_minor AND paid_at IS NOT NULL));
+--> statement-breakpoint
+CREATE TABLE invoice_credit_funding (
+ id uuid PRIMARY KEY,credit_note_id uuid NOT NULL REFERENCES credit_notes(id) ON DELETE RESTRICT,credit_note_line_id uuid NOT NULL REFERENCES credit_note_lines(id) ON DELETE RESTRICT,
+ source_invoice_id uuid NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,source_payment_id uuid NOT NULL REFERENCES payments(id) ON DELETE RESTRICT,source_application_id uuid,
+ proration_id uuid NOT NULL,amount_minor bigint NOT NULL,original_evidence_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT invoice_credit_funding_amount CHECK(amount_minor between 1 and 9007199254740991 AND original_evidence_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE INDEX invoice_credit_funding_note ON invoice_credit_funding(credit_note_id);
+--> statement-breakpoint
+CREATE INDEX invoice_credit_funding_payment ON invoice_credit_funding(source_payment_id);
+--> statement-breakpoint
+CREATE INDEX invoice_credit_funding_origin ON invoice_credit_funding(proration_id);
+--> statement-breakpoint
+CREATE TABLE invoice_credit_reservations (
+ id uuid PRIMARY KEY,funding_id uuid NOT NULL REFERENCES invoice_credit_funding(id) ON DELETE RESTRICT,target_source_id text NOT NULL,amount_minor bigint NOT NULL,
+ idempotency_key text NOT NULL,request_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT invoice_credit_reservations_amount CHECK(amount_minor between 1 and 9007199254740991 AND request_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX invoice_credit_reservations_key ON invoice_credit_reservations(idempotency_key);
+--> statement-breakpoint
+CREATE INDEX invoice_credit_reservations_funding ON invoice_credit_reservations(funding_id);
+--> statement-breakpoint
+CREATE INDEX invoice_credit_reservations_source ON invoice_credit_reservations(target_source_id);
+--> statement-breakpoint
+CREATE TABLE invoice_credit_applications (
+ reservation_id uuid PRIMARY KEY REFERENCES invoice_credit_reservations(id) ON DELETE RESTRICT,invoice_id uuid NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+ original_owner_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),CONSTRAINT invoice_credit_applications_owner CHECK(original_owner_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE INDEX invoice_credit_applications_invoice ON invoice_credit_applications(invoice_id);
+--> statement-breakpoint
+ALTER TABLE invoice_credit_funding ADD CONSTRAINT invoice_credit_funding_source_application FOREIGN KEY(source_application_id) REFERENCES invoice_credit_applications(reservation_id) ON DELETE RESTRICT;
+--> statement-breakpoint
+CREATE TABLE invoice_credit_releases (
+ reservation_id uuid PRIMARY KEY REFERENCES invoice_credit_reservations(id) ON DELETE RESTRICT,reviewed_by text NOT NULL,reason_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT invoice_credit_releases_actor CHECK(reviewed_by ~ '^(user:|agent:|system$)' AND reason_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+-- Issuing a noncash credit reserves principal even before it is applied. A
+-- released target reservation leaves the issued customer credit promise intact.
+CREATE FUNCTION freeholder_credit_principal_reserved(target uuid) RETURNS bigint LANGUAGE sql STABLE AS $$
+ SELECT coalesce(sum(f.amount_minor),0)::bigint FROM invoice_credit_funding f JOIN credit_notes c ON c.id=f.credit_note_id WHERE f.source_payment_id=target AND f.source_application_id IS NULL AND c.status='issued'
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_credit_refund_capacity(target uuid,request_key text,requested bigint) RETURNS boolean LANGUAGE sql STABLE AS $$
+ WITH active AS(SELECT amount_minor,idempotency_key FROM refunds WHERE payment_id=target AND status IN('created','processing','succeeded')),
+ plans AS(SELECT a.amount_minor,coalesce((SELECT sum(r.amount_minor) FROM active r WHERE
+   r.idempotency_key LIKE 'return:'||a.return_id::text||':allocation:'||a.id::text||':%'
+   OR r.idempotency_key='return:'||a.return_id::text||':refund:'||a.payment_id::text OR r.idempotency_key LIKE 'return:'||a.return_id::text||':provider:%:'||a.payment_id::text),0) represented,
+   (request_key LIKE 'return:'||a.return_id::text||':allocation:'||a.id::text||':%' OR request_key='return:'||a.return_id::text||':refund:'||a.payment_id::text
+    OR request_key LIKE 'return:'||a.return_id::text||':provider:%:'||a.payment_id::text) claimant
+  FROM return_refund_allocations a WHERE a.payment_id=target)
+ SELECT coalesce((SELECT coalesce((SELECT sum(amount_minor) FROM active),0)+requested
+  +coalesce((SELECT sum(greatest(amount_minor-represented-CASE WHEN claimant THEN requested ELSE 0 END,0)) FROM plans),0)
+  +freeholder_credit_principal_reserved(target)<=p.amount_minor FROM payments p WHERE p.id=target AND p.status='succeeded'),false)
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_refund_credit_principal() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ PERFORM pg_advisory_xact_lock(hashtext('payment:'||NEW.payment_id::text));
+ IF NEW.status IN('created','processing','succeeded') AND NOT freeholder_credit_refund_capacity(NEW.payment_id,NEW.idempotency_key,NEW.amount_minor) THEN
+  RAISE EXCEPTION 'The exact original payment principal also backs an issued noncash credit; it cannot be returned again' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER refund_credit_principal_guard BEFORE INSERT ON refunds FOR EACH ROW EXECUTE FUNCTION freeholder_guard_refund_credit_principal();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_invoice_credit() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE funding invoice_credit_funding%ROWTYPE; reservation invoice_credit_reservations%ROWTYPE; note credit_notes%ROWTYPE; line credit_note_lines%ROWTYPE;
+ source invoices%ROWTYPE; target invoices%ROWTYPE; payment payments%ROWTYPE; used bigint; parent_application invoice_credit_applications%ROWTYPE; parent_reservation invoice_credit_reservations%ROWTYPE; parent_funding invoice_credit_funding%ROWTYPE;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.invoice_credit_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Original noncash credit funding/reservations/applications/releases are immutable through their guarded exact writer' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='invoice_credit_funding' THEN
+  SELECT * INTO note FROM credit_notes WHERE id=NEW.credit_note_id;
+  SELECT * INTO line FROM credit_note_lines WHERE id=NEW.credit_note_line_id;
+  SELECT * INTO payment FROM payments WHERE id=NEW.source_payment_id;
+  SELECT * INTO source FROM invoices WHERE id=NEW.source_invoice_id;
+  IF NEW.source_application_id IS NOT NULL THEN
+   SELECT * INTO parent_application FROM invoice_credit_applications WHERE reservation_id=NEW.source_application_id;
+   SELECT * INTO parent_reservation FROM invoice_credit_reservations WHERE id=parent_application.reservation_id;
+   SELECT * INTO parent_funding FROM invoice_credit_funding WHERE id=parent_reservation.funding_id;
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtext('payment:'||NEW.source_payment_id::text));
+  PERFORM pg_advisory_xact_lock(hashtext('invoice:'||NEW.source_invoice_id::text));
+  PERFORM pg_advisory_xact_lock(hashtext('credit-note:'||NEW.credit_note_id::text));
+  IF note.id IS NULL OR note.status<>'issued' OR note.invoice_id IS DISTINCT FROM source.id OR line.credit_note_id IS DISTINCT FROM note.id
+   OR payment.status<>'succeeded' OR payment.currency IS DISTINCT FROM note.currency OR source.currency IS DISTINCT FROM note.currency
+   OR(NEW.source_application_id IS NULL AND payment.invoice_id IS DISTINCT FROM source.id)
+   OR(NEW.source_application_id IS NOT NULL AND(parent_application.invoice_id IS DISTINCT FROM source.id OR parent_funding.source_payment_id IS DISTINCT FROM payment.id OR parent_reservation.id IS NULL))
+   OR NOT EXISTS(SELECT 1 FROM invoice_lines original WHERE original.id=line.invoice_line_id AND original.invoice_id=source.id)
+   OR EXISTS(SELECT 1 FROM return_requests r WHERE r.credit_note_id=note.id)
+   OR(NEW.source_application_id IS NULL AND NOT freeholder_refund_amount_available(payment.id,'invoice-credit-funding:'||NEW.id::text,freeholder_credit_principal_reserved(payment.id)+NEW.amount_minor))
+   OR NOT freeholder_subscription_proration_credit_owner(NEW.proration_id,note.id,line.id,payment.id,NEW.amount_minor,NEW.original_evidence_digest) THEN
+   RAISE EXCEPTION 'Credit needs exact original issued lines, successful principal, current refund capacity and causal accepted proration ownership' USING ERRCODE='23514'; END IF;
+  SELECT coalesce(sum(f.amount_minor),0) INTO used FROM invoice_credit_funding f WHERE f.credit_note_line_id=line.id;
+  IF used+NEW.amount_minor>line.total_minor THEN RAISE EXCEPTION 'Credit line funding cannot borrow another original line principal' USING ERRCODE='23514'; END IF;
+  IF NEW.source_application_id IS NOT NULL THEN
+   SELECT coalesce(sum(f.amount_minor),0) INTO used FROM invoice_credit_funding f JOIN credit_notes c ON c.id=f.credit_note_id WHERE f.source_application_id=NEW.source_application_id AND c.status='issued';
+   IF used+NEW.amount_minor>parent_reservation.amount_minor THEN RAISE EXCEPTION 'Original applied credit principal cannot fund multiple successor promises beyond its exact own amount' USING ERRCODE='23514'; END IF;
+  END IF;
+ ELSE
+  IF TG_TABLE_NAME='invoice_credit_reservations' THEN SELECT * INTO funding FROM invoice_credit_funding WHERE id=NEW.funding_id;
+  ELSE SELECT * INTO reservation FROM invoice_credit_reservations WHERE id=NEW.reservation_id; SELECT * INTO funding FROM invoice_credit_funding WHERE id=reservation.funding_id; END IF;
+  SELECT * INTO note FROM credit_notes WHERE id=funding.credit_note_id;
+  IF funding.id IS NULL OR note.id IS NULL OR note.status<>'issued' OR EXISTS(SELECT 1 FROM return_requests WHERE credit_note_id=note.id) THEN
+   RAISE EXCEPTION 'Original issued credit ownership changed or already backs a whole return/refund promise' USING ERRCODE='23514'; END IF;
+  PERFORM pg_advisory_xact_lock(hashtext('payment:'||funding.source_payment_id::text));
+  PERFORM pg_advisory_xact_lock(hashtext('invoice:'||funding.source_invoice_id::text));
+  PERFORM pg_advisory_xact_lock(hashtext('credit-note:'||note.id::text));
+  IF TG_TABLE_NAME='invoice_credit_reservations' THEN
+   SELECT coalesce(sum(r.amount_minor),0) INTO used FROM invoice_credit_reservations r LEFT JOIN invoice_credit_releases released ON released.reservation_id=r.id WHERE r.funding_id=funding.id AND released.reservation_id IS NULL;
+   IF used+NEW.amount_minor>funding.amount_minor OR NOT freeholder_subscription_proration_credit_target(funding.proration_id,NEW.target_source_id) THEN
+    RAISE EXCEPTION 'Reserve only actual available original credit for its exact accepted proration target' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='invoice_credit_applications' THEN
+   SELECT * INTO source FROM invoices WHERE id=funding.source_invoice_id;
+   SELECT * INTO target FROM invoices WHERE id=NEW.invoice_id FOR UPDATE;
+   IF reservation.id IS NULL OR target.id IS NULL OR target.source_type<>'subscription' OR target.source_id IS DISTINCT FROM reservation.target_source_id
+    OR target.contact_id IS DISTINCT FROM source.contact_id OR target.currency IS DISTINCT FROM source.currency OR source.refunded_minor<>0
+    OR target.issued_at IS NULL OR target.status NOT IN('sent','viewed','partially_paid','overdue') OR target.total_minor-target.paid_minor-target.credited_minor<reservation.amount_minor
+    OR EXISTS(SELECT 1 FROM invoice_credit_releases WHERE reservation_id=reservation.id)
+    OR EXISTS(SELECT 1 FROM payments p WHERE p.invoice_id=target.id AND p.status IN('created','processing')) THEN
+    RAISE EXCEPTION 'Apply the exact unused credit to its actual original issued buyer/currency/target after every original target caller is resolved' USING ERRCODE='23514'; END IF;
+  ELSIF EXISTS(SELECT 1 FROM invoice_credit_applications WHERE reservation_id=reservation.id)
+   OR NOT freeholder_subscription_proration_credit_release(funding.proration_id,reservation.id) THEN
+   RAISE EXCEPTION 'The whole original proration promise or actual applied credit still owns this reservation' USING ERRCODE='23514';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER invoice_credit_funding_guard BEFORE INSERT OR UPDATE OR DELETE ON invoice_credit_funding FOR EACH ROW EXECUTE FUNCTION freeholder_guard_invoice_credit();
+--> statement-breakpoint
+CREATE TRIGGER invoice_credit_reservations_guard BEFORE INSERT OR UPDATE OR DELETE ON invoice_credit_reservations FOR EACH ROW EXECUTE FUNCTION freeholder_guard_invoice_credit();
+--> statement-breakpoint
+CREATE TRIGGER invoice_credit_applications_guard BEFORE INSERT OR UPDATE OR DELETE ON invoice_credit_applications FOR EACH ROW EXECUTE FUNCTION freeholder_guard_invoice_credit();
+--> statement-breakpoint
+CREATE TRIGGER invoice_credit_releases_guard BEFORE INSERT OR UPDATE OR DELETE ON invoice_credit_releases FOR EACH ROW EXECUTE FUNCTION freeholder_guard_invoice_credit();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_invoice_credit_projection() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE actual bigint;
+BEGIN
+ SELECT coalesce(sum(r.amount_minor),0) INTO actual FROM invoice_credit_applications a JOIN invoice_credit_reservations r ON r.id=a.reservation_id WHERE a.invoice_id=NEW.id;
+ IF NEW.credited_minor IS DISTINCT FROM actual OR(TG_OP='UPDATE' AND NEW.credited_minor IS DISTINCT FROM OLD.credited_minor AND current_setting('freeholder.invoice_credit_v1',true) IS DISTINCT FROM '1') THEN
+  RAISE EXCEPTION 'Invoice credited principal is exactly its immutable noncash application receipts; cash remains separate' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER invoice_credit_projection_guard BEFORE INSERT OR UPDATE ON invoices FOR EACH ROW EXECUTE FUNCTION freeholder_invoice_credit_projection();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_credit_note_live_disposition() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.status='void' AND OLD.status IS DISTINCT FROM 'void' AND EXISTS(SELECT 1 FROM invoice_credit_funding f JOIN invoice_credit_reservations r ON r.funding_id=f.id
+  LEFT JOIN invoice_credit_releases released ON released.reservation_id=r.id WHERE f.credit_note_id=NEW.id AND released.reservation_id IS NULL) THEN
+  RAISE EXCEPTION 'The exact issued credit still has reserved/applied principal and cannot be voided away' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER credit_note_live_disposition_guard BEFORE UPDATE ON credit_notes FOR EACH ROW EXECUTE FUNCTION freeholder_credit_note_live_disposition();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_rma_credit_reverse_owner() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original credit_notes%ROWTYPE; payment uuid;
+BEGIN
+ IF NEW.credit_note_id IS NULL OR(TG_OP='UPDATE' AND NEW.credit_note_id IS NOT DISTINCT FROM OLD.credit_note_id) THEN RETURN NEW; END IF;
+ SELECT * INTO original FROM credit_notes WHERE id=NEW.credit_note_id;
+ FOR payment IN SELECT p.id FROM payments p WHERE p.invoice_id=original.invoice_id ORDER BY p.id LOOP PERFORM pg_advisory_xact_lock(hashtext('payment:'||payment::text)); END LOOP;
+ PERFORM pg_advisory_xact_lock(hashtext('invoice:'||original.invoice_id::text));
+ PERFORM pg_advisory_xact_lock(hashtext('credit-note:'||NEW.credit_note_id::text));
+ IF EXISTS(SELECT 1 FROM invoice_credit_funding WHERE credit_note_id=NEW.credit_note_id) THEN
+  RAISE EXCEPTION 'This exact credit already has independent noncash funding/disposition history; it cannot also become an RMA refund promise' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER return_credit_reverse_owner_guard BEFORE INSERT OR UPDATE ON return_requests FOR EACH ROW EXECUTE FUNCTION freeholder_rma_credit_reverse_owner();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_credit_funding_complete() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE note credit_notes%ROWTYPE; line credit_note_lines%ROWTYPE; funded bigint;
+BEGIN
+ SELECT * INTO note FROM credit_notes WHERE id=NEW.credit_note_id;
+ SELECT coalesce(sum(amount_minor),0) INTO funded FROM invoice_credit_funding WHERE credit_note_id=note.id;
+ IF funded<>note.total_minor THEN RAISE EXCEPTION 'The whole exact issued credit requires complete original principal ownership' USING ERRCODE='23514'; END IF;
+ FOR line IN SELECT * FROM credit_note_lines WHERE credit_note_id=note.id LOOP
+  SELECT coalesce(sum(amount_minor),0) INTO funded FROM invoice_credit_funding WHERE credit_note_line_id=line.id;
+  IF funded<>line.total_minor THEN RAISE EXCEPTION 'Each original credit line requires complete own principal ownership' USING ERRCODE='23514'; END IF;
+ END LOOP;
+ RETURN NULL;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER invoice_credit_funding_complete AFTER INSERT ON invoice_credit_funding DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_credit_funding_complete();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_credit_application_projection() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE invoice invoices%ROWTYPE; actual bigint;
+BEGIN
+ SELECT * INTO invoice FROM invoices WHERE id=NEW.invoice_id;
+ SELECT coalesce(sum(r.amount_minor),0) INTO actual FROM invoice_credit_applications a JOIN invoice_credit_reservations r ON r.id=a.reservation_id WHERE a.invoice_id=NEW.invoice_id;
+ IF invoice.id IS NULL OR invoice.credited_minor<>actual THEN RAISE EXCEPTION 'Applying original credit must update its exact noncash invoice projection in the same transaction' USING ERRCODE='23514'; END IF;
+ RETURN NULL;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER invoice_credit_application_projection AFTER INSERT ON invoice_credit_applications DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_credit_application_projection();
+--> statement-breakpoint
+-- Source: deploy/subscription-gross-proration80.fragment.sql
+-- SHA256: 1e3d836819143f0f939b5dc119ab806e584447e27e955707d9d08274b6330b33
+-- Copyright (C) 2026 Tony Aly
+-- SPDX-License-Identifier: Apache-2.0
+-- C9.33/C9.38/C12.38: OWNED UNAPPLIED continuation AFTER bf4a36c9 credit tail
+-- cebd65035c3f9c8580a89c37c2bb794e7109e50747bc4cd1dc52319ae9e17f70.
+-- Earlier SQL and source checkpoints stay frozen. Root owns assembly/new DB.
+CREATE TABLE subscription_prorations (
+ id uuid PRIMARY KEY,subscription_id uuid NOT NULL REFERENCES subscriptions(id) ON DELETE RESTRICT,plan_id uuid NOT NULL REFERENCES plans(id) ON DELETE RESTRICT,
+ previous_terms_id uuid REFERENCES subscription_commercial_terms(id) ON DELETE RESTRICT,
+ terms_id uuid REFERENCES subscription_commercial_terms(id) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+ generation_id uuid REFERENCES subscription_provider_generations(id) ON DELETE RESTRICT,
+ snapshot jsonb NOT NULL,accepted_quote_digest text NOT NULL,source_revision text NOT NULL,
+ profile_id uuid NOT NULL REFERENCES merchant_tax_profiles(id) ON DELETE RESTRICT,profile_version integer NOT NULL,tax_destination jsonb,redacted_at timestamptz,
+ debit_tax_quote jsonb NOT NULL,notice_digest text NOT NULL,notice_snapshot jsonb NOT NULL,quote_occurred_at timestamptz NOT NULL,
+ accepted_by text NOT NULL,effective_at timestamptz NOT NULL,original_period_start timestamptz NOT NULL,original_period_end timestamptz NOT NULL,
+ original_trial_ends_at timestamptz,proposed_period_start timestamptz NOT NULL,proposed_period_end timestamptz NOT NULL,basis_period_start timestamptz NOT NULL,basis_period_end timestamptz NOT NULL,
+ original_invoice_id uuid REFERENCES invoices(id) ON DELETE RESTRICT,original_invoice_line_id uuid REFERENCES invoice_lines(id) ON DELETE RESTRICT,
+ debit_invoice_id uuid REFERENCES invoices(id) ON DELETE RESTRICT,credit_note_id uuid REFERENCES credit_notes(id) ON DELETE RESTRICT,
+ debit_net_minor bigint NOT NULL,debit_tax_minor bigint NOT NULL,credit_net_minor bigint NOT NULL,credit_tax_minor bigint NOT NULL,
+ debit_fee_obligation_minor bigint NOT NULL,credit_fee_obligation_minor bigint NOT NULL,applied_fee_obligation_minor bigint NOT NULL,applied_fee_proven_collected_minor bigint NOT NULL,
+ original_job_id uuid,job_claim_digest text,original_task jsonb,state text NOT NULL,operation_revision integer NOT NULL DEFAULT 0,applied_at timestamptz,cancelled_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT subscription_prorations_profile_version FOREIGN KEY(profile_id,profile_version) REFERENCES merchant_tax_profile_versions(profile_id,version) ON DELETE RESTRICT,
+ CONSTRAINT subscription_prorations_calendar CHECK(original_period_end>original_period_start AND effective_at>=original_period_start AND effective_at<original_period_end AND proposed_period_end>proposed_period_start AND(original_trial_ends_at IS NULL OR original_trial_ends_at=original_period_end)),
+ CONSTRAINT subscription_prorations_amounts CHECK(debit_net_minor between 0 and 9007199254740991 AND debit_tax_minor between 0 and 9007199254740991 AND credit_net_minor between 0 and 9007199254740991 AND credit_tax_minor between 0 and 9007199254740991 AND(original_trial_ends_at IS NULL OR(debit_net_minor=0 AND debit_tax_minor=0 AND credit_net_minor=0 AND credit_tax_minor=0))),
+ CONSTRAINT subscription_prorations_acceptance CHECK(accepted_quote_digest ~ '^[a-f0-9]{64}$' AND source_revision ~ '^[a-f0-9]{64}$' AND accepted_by ~ '^(user:|agent:|plugin:)' AND operation_revision>=0),
+ CONSTRAINT subscription_prorations_tax CHECK(profile_version>0 AND notice_digest ~ '^[a-f0-9]{64}$' AND((tax_destination IS NOT NULL AND redacted_at IS NULL)OR(tax_destination IS NULL AND redacted_at IS NOT NULL)) AND basis_period_end>basis_period_start AND effective_at>=basis_period_start AND effective_at<basis_period_end),
+ CONSTRAINT subscription_prorations_fee CHECK(debit_fee_obligation_minor between 0 and 9007199254740991 AND credit_fee_obligation_minor between 0 and 9007199254740991 AND applied_fee_obligation_minor between 0 and credit_fee_obligation_minor AND applied_fee_proven_collected_minor between 0 and applied_fee_obligation_minor AND(original_trial_ends_at IS NULL OR(debit_fee_obligation_minor=0 AND credit_fee_obligation_minor=0 AND applied_fee_obligation_minor=0 AND applied_fee_proven_collected_minor=0))),
+ CONSTRAINT subscription_prorations_state CHECK(state IN('accepted','preparing','awaiting_invoice','awaiting_payment','awaiting_effective','applied','cancelled','review')AND(state<>'applied'OR applied_at IS NOT NULL)AND(state<>'cancelled'OR cancelled_at IS NOT NULL))
+);
+--> statement-breakpoint
+CREATE INDEX subscription_prorations_parent ON subscription_prorations(subscription_id);
+--> statement-breakpoint
+CREATE INDEX subscription_prorations_terms ON subscription_prorations(terms_id);
+--> statement-breakpoint
+CREATE INDEX subscription_prorations_credit ON subscription_prorations(credit_note_id);
+--> statement-breakpoint
+CREATE UNIQUE INDEX subscription_prorations_job ON subscription_prorations(original_job_id);
+--> statement-breakpoint
+CREATE TABLE subscription_proration_principal (
+ id uuid PRIMARY KEY,proration_id uuid NOT NULL REFERENCES subscription_prorations(id) ON DELETE RESTRICT,source_payment_id uuid NOT NULL REFERENCES payments(id) ON DELETE RESTRICT,
+ source_application_id uuid REFERENCES invoice_credit_applications(reservation_id) ON DELETE RESTRICT,amount_minor bigint NOT NULL,original_evidence_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ fee_obligation_minor bigint NOT NULL,fee_proven_collected_minor bigint NOT NULL,fee_collection_state text NOT NULL,fee_evidence_digest text NOT NULL,fee_unexpected boolean NOT NULL DEFAULT false,
+ CONSTRAINT subscription_proration_principal_amount CHECK(amount_minor between 1 and 9007199254740991 AND original_evidence_digest ~ '^[a-f0-9]{64}$'),
+ CONSTRAINT subscription_proration_principal_fee CHECK(fee_obligation_minor between 0 and amount_minor AND fee_proven_collected_minor between 0 and fee_obligation_minor AND fee_collection_state IN('not_due','owed','recorded_remitted','verified_collected','review')AND fee_evidence_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX subscription_proration_principal_payment ON subscription_proration_principal(proration_id,source_payment_id,source_application_id);
+--> statement-breakpoint
+CREATE UNIQUE INDEX subscription_proration_principal_root ON subscription_proration_principal(proration_id,source_payment_id) WHERE source_application_id IS NULL;
+--> statement-breakpoint
+CREATE TABLE subscription_proration_credit_uses (
+ id uuid PRIMARY KEY,proration_id uuid NOT NULL REFERENCES subscription_prorations(id) ON DELETE RESTRICT,credit_note_id uuid NOT NULL REFERENCES credit_notes(id) ON DELETE RESTRICT,
+ amount_minor bigint NOT NULL,expected_revision text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT subscription_proration_credit_uses_amount CHECK(amount_minor between 1 and 9007199254740991 AND expected_revision ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX subscription_proration_credit_uses_note ON subscription_proration_credit_uses(proration_id,credit_note_id);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_proration_principal_capacity(target uuid,parent_application uuid) RETURNS bigint LANGUAGE sql STABLE AS $$
+ SELECT CASE WHEN parent_application IS NULL THEN greatest(0,coalesce((SELECT p.amount_minor
+   -coalesce((SELECT sum(r.amount_minor) FROM refunds r WHERE r.payment_id=p.id AND r.status IN('created','processing','succeeded')),0)
+   -coalesce((SELECT sum(greatest(a.amount_minor-coalesce((SELECT sum(r.amount_minor) FROM refunds r WHERE r.payment_id=p.id AND r.status IN('created','processing','succeeded')
+     AND(r.idempotency_key LIKE 'return:'||a.return_id::text||':allocation:'||a.id::text||':%' OR r.idempotency_key='return:'||a.return_id::text||':refund:'||p.id::text OR r.idempotency_key LIKE 'return:'||a.return_id::text||':provider:%:'||p.id::text)),0),0)) FROM return_refund_allocations a WHERE a.payment_id=p.id),0)
+   -freeholder_credit_principal_reserved(p.id) FROM payments p WHERE p.id=target AND p.status='succeeded'),0))::bigint
+ ELSE greatest(0,coalesce((SELECT r.amount_minor-coalesce((SELECT sum(child.amount_minor) FROM invoice_credit_funding child JOIN credit_notes n ON n.id=child.credit_note_id WHERE child.source_application_id=a.reservation_id AND n.status='issued'),0)
+  FROM invoice_credit_applications a JOIN invoice_credit_reservations r ON r.id=a.reservation_id JOIN invoice_credit_funding f ON f.id=r.funding_id
+  WHERE a.reservation_id=parent_application AND f.source_payment_id=target),0))::bigint END
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_subscription_proration_credit_owner(target uuid,note uuid,line uuid,payment uuid,amount bigint,evidence text) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM subscription_prorations p JOIN credit_notes n ON n.id=p.credit_note_id JOIN credit_note_lines l ON l.credit_note_id=n.id
+  JOIN subscription_proration_principal s ON s.proration_id=p.id WHERE p.id=target AND n.id=note AND l.id=line AND n.status='issued' AND n.invoice_id=p.original_invoice_id
+  AND l.invoice_line_id=p.original_invoice_line_id AND l.subtotal_minor=p.credit_net_minor AND l.tax_minor=p.credit_tax_minor AND n.total_minor=p.credit_net_minor+p.credit_tax_minor
+  AND n.idempotency_key='subscription-proration:'||p.id::text||':credit' AND s.source_payment_id=payment AND s.amount_minor=amount AND s.original_evidence_digest=evidence AND evidence=p.source_revision AND p.state<>'cancelled')
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_subscription_proration_credit_target(source uuid,target_source text) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM subscription_prorations original JOIN subscription_proration_credit_uses use ON use.credit_note_id=original.credit_note_id
+  JOIN subscription_prorations target ON target.id=use.proration_id
+  WHERE original.id=source AND target_source=target.subscription_id::text||':proration:'||target.id::text AND target.state IN('accepted','preparing','awaiting_invoice','awaiting_payment','awaiting_effective')
+   AND(target.id=original.id OR original.state='applied'))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_subscription_proration_credit_release(source uuid,target_reservation uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ -- No current recovery route waives a new issued promise. A later separately
+ -- reviewed recovery receipt must mechanically represent actual cash/fees and
+ -- original access before this function can permit any release/rebinding.
+ SELECT false
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_subscription_proration_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE parent subscriptions%ROWTYPE;source invoices%ROWTYPE;line invoice_lines%ROWTYPE;scope subscription_merchant_scopes%ROWTYPE;resource subscription_provider_schedule_resources%ROWTYPE;previous subscription_commercial_terms%ROWTYPE;new_net numeric;old_net numeric;old_tax numeric;
+BEGIN
+ IF TG_OP='DELETE' OR current_setting('freeholder.subscription_proration_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Original gross-proration promises require their immutable guarded writer' USING ERRCODE='23514'; END IF;
+ SELECT * INTO parent FROM subscriptions WHERE id=NEW.subscription_id;
+ SELECT * INTO scope FROM subscription_merchant_scopes WHERE subscription_id=NEW.subscription_id;
+ SELECT * INTO resource FROM subscription_provider_schedule_resources WHERE subscription_id=NEW.subscription_id;
+ IF TG_OP='UPDATE' THEN
+  IF current_setting('freeholder.subscription_proration_privacy_v1',true)='1' AND scope.redacted_at IS NOT NULL AND NEW.tax_destination IS NULL AND NEW.redacted_at IS NOT NULL AND OLD.redacted_at IS NULL
+   AND(to_jsonb(NEW)-ARRAY['tax_destination','redacted_at'])IS NOT DISTINCT FROM(to_jsonb(OLD)-ARRAY['tax_destination','redacted_at']) THEN RETURN NEW; END IF;
+  IF(to_jsonb(NEW)-ARRAY['debit_invoice_id','credit_note_id','original_job_id','job_claim_digest','original_task','state','operation_revision','applied_at','cancelled_at'])IS DISTINCT FROM(to_jsonb(OLD)-ARRAY['debit_invoice_id','credit_note_id','original_job_id','job_claim_digest','original_task','state','operation_revision','applied_at','cancelled_at'])
+   OR OLD.debit_invoice_id IS NOT NULL AND NEW.debit_invoice_id IS DISTINCT FROM OLD.debit_invoice_id OR OLD.credit_note_id IS NOT NULL AND NEW.credit_note_id IS DISTINCT FROM OLD.credit_note_id
+   OR OLD.original_job_id IS NOT NULL AND(NEW.original_job_id IS DISTINCT FROM OLD.original_job_id OR NEW.job_claim_digest IS DISTINCT FROM OLD.job_claim_digest OR NEW.original_task IS DISTINCT FROM OLD.original_task)
+   OR OLD.state IN('applied','cancelled') AND to_jsonb(NEW) IS DISTINCT FROM to_jsonb(OLD) THEN RAISE EXCEPTION 'Never rewrite original accepted gross money, calendar, caller or issued-credit promises' USING ERRCODE='23514'; END IF;
+  IF NEW.state='applied' AND OLD.state<>'applied' THEN
+   IF NEW.effective_at>clock_timestamp() OR NEW.original_period_end<=clock_timestamp() OR NEW.applied_at IS NULL OR NEW.applied_at<NEW.effective_at
+    OR parent.plan_id<>NEW.plan_id OR parent.pending_plan_id IS NOT NULL OR parent.current_period_start<>NEW.original_period_start OR parent.current_period_end<>NEW.original_period_end
+    OR NOT EXISTS(SELECT 1 FROM job_idempotency_keys c JOIN pgboss.job j ON j.id=c.job_id AND j.name=c.job_name WHERE c.job_id=NEW.original_job_id AND c.job_name='subscriptions.applyGrossProration' AND c.payload_hash=NEW.job_claim_digest AND j.data=NEW.original_task)
+    OR(NEW.original_trial_ends_at IS NULL AND NOT EXISTS(SELECT 1 FROM invoices i WHERE i.id=NEW.debit_invoice_id AND i.source_type='subscription' AND i.source_id=parent.id::text||':proration:'||NEW.id::text AND i.contact_id=parent.contact_id AND i.currency=parent.currency
+     AND i.status='paid' AND i.paid_minor+i.credited_minor=i.total_minor AND i.refunded_minor=0 AND i.paid_at<=NEW.effective_at AND i.total_minor=NEW.debit_net_minor+NEW.debit_tax_minor AND i.tax_minor=NEW.debit_tax_minor)) THEN
+    RAISE EXCEPTION 'Only exact fully paid consideration inside the real accepted window can activate new access; late or partial money remains recovery debt' USING ERRCODE='23514'; END IF;
+  END IF;
+  RETURN NEW;
+ END IF;
+ SELECT * INTO previous FROM subscription_commercial_terms WHERE id=NEW.previous_terms_id;
+ IF parent.id IS NULL OR parent.merchant_scope_version<>1 OR parent.status NOT IN('active','trialing') OR parent.signup_pending OR parent.pending_plan_id IS NOT NULL OR parent.cancel_at_period_end OR parent.cancelled_at IS NOT NULL
+  OR parent.billing_mode NOT IN('manual','platform') OR scope.subscription_id IS NULL OR resource.operation_revision<>0 OR resource.state<>'uncreated' OR resource.recovery_pending OR resource.provider_subscription_ref IS NOT NULL
+  OR previous.id IS NULL OR previous.subscription_id<>parent.id OR previous.snapshot->>'proration' IS DISTINCT FROM 'create_prorations'
+  OR EXISTS(SELECT 1 FROM subscription_commercial_terms other WHERE other.subscription_id=parent.id AND other.revision>previous.revision)
+  OR(previous.effective_period_start>=parent.current_period_end AND NOT EXISTS(SELECT 1 FROM subscription_prorations prior WHERE prior.terms_id=previous.id AND prior.state='applied'))
+  OR NEW.original_period_start<>parent.current_period_start OR NEW.original_period_end<>parent.current_period_end OR NEW.effective_at<=clock_timestamp()
+  OR NEW.proposed_period_start<>NEW.effective_at OR NEW.proposed_period_end<>parent.current_period_end OR NEW.profile_id<>scope.tax_profile_id
+  OR NEW.snapshot->>'version' IS DISTINCT FROM '1' OR NEW.snapshot->>'currency' IS DISTINCT FROM parent.currency OR NEW.snapshot->>'billingMode' IS DISTINCT FROM parent.billing_mode
+  OR NEW.debit_tax_quote->>'subtotalMinor' IS DISTINCT FROM NEW.debit_net_minor::text OR NEW.debit_tax_quote->>'taxMinor' IS DISTINCT FROM NEW.debit_tax_minor::text
+  OR NEW.debit_tax_quote->>'totalMinor' IS DISTINCT FROM(NEW.debit_net_minor+NEW.debit_tax_minor)::text OR NOT coalesce(NEW.debit_tax_quote->>'quoteDigest' ~ '^[a-f0-9]{64}$',false)
+  OR NEW.state<>'accepted' OR NEW.original_job_id IS NOT NULL OR NEW.original_task IS NOT NULL OR NEW.credit_note_id IS NOT NULL OR NEW.debit_invoice_id IS NOT NULL
+  OR EXISTS(SELECT 1 FROM subscription_prorations other WHERE other.subscription_id=parent.id AND other.state NOT IN('applied','cancelled')) THEN
+  RAISE EXCEPTION 'Accept one fresh original gross proration with its actual paid period, merchant and quiescent local-calendar authority' USING ERRCODE='23514'; END IF;
+ IF parent.status='trialing' THEN
+  IF NEW.original_trial_ends_at IS DISTINCT FROM parent.trial_ends_at OR NEW.original_trial_ends_at IS DISTINCT FROM parent.current_period_end OR NEW.original_invoice_id IS NOT NULL OR NEW.original_invoice_line_id IS NOT NULL THEN
+   RAISE EXCEPTION 'An uncharged trial preserves its accepted end and has no old paid principal or credit' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO source FROM invoices WHERE id=NEW.original_invoice_id;
+  SELECT * INTO line FROM invoice_lines WHERE id=NEW.original_invoice_line_id;
+  IF source.id IS NULL OR source.source_type<>'subscription' OR split_part(source.source_id,':',1)<>parent.id::text OR source.contact_id<>parent.contact_id OR source.currency<>parent.currency OR source.status<>'paid'
+   OR source.paid_minor+source.credited_minor<>source.total_minor OR source.refunded_minor<>0 OR line.id IS NULL OR line.invoice_id<>source.id OR line.source_type<>'subscription' OR line.source_id<>parent.id::text OR line.discount_minor<>0 OR line.quantity_micros<>1000000
+   OR NEW.basis_period_end<>parent.current_period_end OR NOT((source.source_id=parent.id::text||':'||to_char(parent.current_period_start AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AND NEW.basis_period_start=parent.current_period_start AND line.snapshot->>'subscriptionComponent'='period')
+    OR EXISTS(SELECT 1 FROM subscription_prorations prior WHERE prior.debit_invoice_id=source.id AND prior.state='applied' AND prior.plan_id=parent.plan_id AND prior.effective_at=NEW.basis_period_start AND line.snapshot->>'subscriptionProrationId'=prior.id::text)) THEN
+   RAISE EXCEPTION 'Only the exact original paid period line and its retained ancestor consideration can fund unused credit' USING ERRCODE='23514'; END IF;
+  old_net:=floor(line.subtotal_minor::numeric*extract(epoch FROM(NEW.basis_period_end-NEW.effective_at))/extract(epoch FROM(NEW.basis_period_end-NEW.basis_period_start))+0.5);
+  old_tax:=floor(line.tax_minor::numeric*extract(epoch FROM(NEW.basis_period_end-NEW.effective_at))/extract(epoch FROM(NEW.basis_period_end-NEW.basis_period_start))+0.5);
+  new_net:=floor((NEW.snapshot->>'periodAmountMinor')::numeric*extract(epoch FROM(parent.current_period_end-NEW.effective_at))/extract(epoch FROM(parent.current_period_end-parent.current_period_start))+0.5);
+  IF NEW.credit_net_minor<>old_net OR NEW.credit_tax_minor<>old_tax OR NEW.debit_net_minor<>new_net THEN RAISE EXCEPTION 'Preserve separately rounded actual old principal/tax and the accepted new gross unused rate exactly' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER subscription_prorations_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_prorations FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_receipt();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_subscription_proration_child() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original subscription_prorations%ROWTYPE;payment payments%ROWTYPE;note credit_notes%ROWTYPE;parent invoice_credit_applications%ROWTYPE;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.subscription_proration_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Original accepted credit principal and use are immutable' USING ERRCODE='23514'; END IF;
+ SELECT * INTO original FROM subscription_prorations WHERE id=NEW.proration_id;
+ IF original.id IS NULL OR original.state<>'accepted' THEN RAISE EXCEPTION 'Retain the exact original acceptance before its credit principal and explicit use' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='subscription_proration_principal' THEN
+  SELECT * INTO payment FROM payments WHERE id=NEW.source_payment_id;
+  IF NEW.source_application_id IS NOT NULL THEN SELECT * INTO parent FROM invoice_credit_applications WHERE reservation_id=NEW.source_application_id; END IF;
+  IF payment.id IS NULL OR payment.status<>'succeeded' OR payment.refunded_minor<>0 OR payment.currency<>original.snapshot->>'currency' OR NEW.original_evidence_digest<>original.source_revision
+   OR(NEW.source_application_id IS NULL AND payment.invoice_id IS DISTINCT FROM original.original_invoice_id)
+   OR(NEW.source_application_id IS NOT NULL AND(parent.invoice_id IS DISTINCT FROM original.original_invoice_id OR NOT EXISTS(SELECT 1 FROM invoice_credit_reservations r JOIN invoice_credit_funding f ON f.id=r.funding_id WHERE r.id=parent.reservation_id AND f.source_payment_id=payment.id)))
+   OR NEW.amount_minor>freeholder_proration_principal_capacity(payment.id,NEW.source_application_id) THEN
+   RAISE EXCEPTION 'Accepted unused credit must bind actual available original cash or its exact immutable applied-credit ancestor' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO note FROM credit_notes WHERE id=NEW.credit_note_id;
+  IF note.id IS NULL OR note.status<>'issued' OR note.id IS DISTINCT FROM original.credit_note_id
+   OR NEW.amount_minor>least(original.debit_net_minor+original.debit_tax_minor,original.credit_net_minor+original.credit_tax_minor) THEN
+   RAISE EXCEPTION 'Accept only the exact old-credit application to this gross target; its remaining promise stays exclusively locked until access actually switches' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_principal_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_proration_principal FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_child();
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_credit_uses_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_proration_credit_uses FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_child();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_proration_exact_credit_lineage() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NOT EXISTS(SELECT 1 FROM subscription_proration_principal s JOIN subscription_prorations p ON p.id=s.proration_id
+  WHERE s.proration_id=NEW.proration_id AND p.credit_note_id=NEW.credit_note_id AND s.source_payment_id=NEW.source_payment_id
+   AND s.source_application_id IS NOT DISTINCT FROM NEW.source_application_id AND s.amount_minor=NEW.amount_minor AND s.original_evidence_digest=NEW.original_evidence_digest) THEN
+  RAISE EXCEPTION 'Credit funding must reproduce the exact original cash or applied-credit principal receipt; equal amounts cannot choose an ancestor' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER invoice_credit_proration_lineage_guard BEFORE INSERT ON invoice_credit_funding FOR EACH ROW EXECUTE FUNCTION freeholder_proration_exact_credit_lineage();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_proration_complete() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE current subscription_prorations%ROWTYPE;terms subscription_commercial_terms%ROWTYPE;invoice invoices%ROWTYPE;note credit_notes%ROWTYPE;claim job_idempotency_keys%ROWTYPE;body jsonb;credit_amount bigint;required_application bigint;actual_application bigint;
+BEGIN
+ SELECT * INTO current FROM subscription_prorations WHERE id=NEW.id;
+ SELECT * INTO terms FROM subscription_commercial_terms WHERE id=current.terms_id;
+ SELECT * INTO claim FROM job_idempotency_keys WHERE job_name='subscriptions.applyGrossProration' AND job_id=current.original_job_id;
+ SELECT data INTO body FROM pgboss.job WHERE name='subscriptions.applyGrossProration' AND id=current.original_job_id;
+ IF terms.id IS NULL OR terms.subscription_id<>current.subscription_id OR terms.previous_terms_id IS DISTINCT FROM current.previous_terms_id OR terms.accepted_quote_digest<>current.accepted_quote_digest
+  OR terms.snapshot IS DISTINCT FROM current.snapshot OR terms.notice_digest<>current.notice_digest OR terms.effective_period_start<>current.original_period_end
+  OR current.original_task->>'prorationId' IS DISTINCT FROM current.id::text OR current.original_task->>'subscriptionId' IS DISTINCT FROM current.subscription_id::text
+  OR current.original_task->>'originalJobId' IS DISTINCT FROM current.original_job_id::text OR current.original_task->>'acceptedQuoteDigest' IS DISTINCT FROM current.accepted_quote_digest
+  OR(current.state<>'applied' AND(claim.id IS NULL OR claim.payload_hash IS DISTINCT FROM current.job_claim_digest OR body IS DISTINCT FROM current.original_task)) OR current.state IN('accepted','preparing','awaiting_invoice') THEN
+  RAISE EXCEPTION 'Commit the actual accepted future terms, original effect enqueue and complete canonical proration in one transaction' USING ERRCODE='23514'; END IF;
+ IF current.original_trial_ends_at IS NOT NULL THEN
+  IF current.debit_invoice_id IS NOT NULL OR current.credit_note_id IS NOT NULL OR EXISTS(SELECT 1 FROM subscription_proration_principal WHERE proration_id=current.id)
+   OR EXISTS(SELECT 1 FROM subscription_proration_credit_uses WHERE proration_id=current.id) THEN RAISE EXCEPTION 'An uncharged trial cannot mint a paid invoice or unused principal credit' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO invoice FROM invoices WHERE id=current.debit_invoice_id;
+  IF invoice.id IS NULL OR invoice.source_type<>'subscription' OR invoice.source_id<>current.subscription_id::text||':proration:'||current.id::text OR invoice.status IN('draft','void') OR invoice.issued_at IS NULL
+   OR invoice.total_minor<>current.debit_net_minor+current.debit_tax_minor OR invoice.tax_minor<>current.debit_tax_minor
+   OR(SELECT count(*) FROM invoice_lines l WHERE l.invoice_id=invoice.id)<>1
+   OR NOT EXISTS(SELECT 1 FROM invoice_lines l WHERE l.invoice_id=invoice.id AND l.snapshot->>'subscriptionProrationId'=current.id::text AND l.snapshot->>'subscriptionTermsId'=current.terms_id::text AND l.unit_amount_minor=current.debit_net_minor AND l.tax_minor=current.debit_tax_minor)
+   OR NOT EXISTS(SELECT 1 FROM invoice_market_policies m WHERE m.invoice_id=invoice.id AND m.fee_minor=current.debit_fee_obligation_minor) THEN
+   RAISE EXCEPTION 'The original gross debit requires its exact one canonical issued price/tax line before commit' USING ERRCODE='23514'; END IF;
+  credit_amount:=current.credit_net_minor+current.credit_tax_minor;
+  IF credit_amount>0 THEN
+   SELECT * INTO note FROM credit_notes WHERE id=current.credit_note_id;
+   IF note.id IS NULL OR note.status<>'issued' OR note.invoice_id IS DISTINCT FROM current.original_invoice_id OR note.total_minor<>credit_amount OR note.subtotal_minor<>current.credit_net_minor OR note.tax_minor<>current.credit_tax_minor
+    OR coalesce((SELECT sum(amount_minor) FROM subscription_proration_principal WHERE proration_id=current.id),0)<>credit_amount
+  OR coalesce((SELECT sum(amount_minor) FROM invoice_credit_funding WHERE proration_id=current.id AND credit_note_id=note.id),0)<>credit_amount
+  OR coalesce((SELECT sum(fee_obligation_minor) FROM invoice_credit_funding WHERE proration_id=current.id AND credit_note_id=note.id),0)<>current.credit_fee_obligation_minor THEN
+    RAISE EXCEPTION 'Preserve the whole exact old-tax credit and all actual original principal in the same accepted transaction' USING ERRCODE='23514'; END IF;
+   required_application:=least(credit_amount,invoice.total_minor);
+   SELECT coalesce(sum(r.amount_minor),0) INTO actual_application FROM invoice_credit_reservations r JOIN invoice_credit_funding f ON f.id=r.funding_id JOIN invoice_credit_applications a ON a.reservation_id=r.id
+    WHERE f.credit_note_id=note.id AND r.target_source_id=invoice.source_id AND a.invoice_id=invoice.id;
+   IF actual_application<>required_application OR(required_application>0 AND NOT EXISTS(SELECT 1 FROM subscription_proration_credit_uses u WHERE u.proration_id=current.id AND u.credit_note_id=note.id AND u.amount_minor=required_application)) THEN
+    RAISE EXCEPTION 'Atomically apply exactly the original credit portion to its accepted gross target; unspent credit remains locked until the actual access switch' USING ERRCODE='23514'; END IF;
+   IF coalesce((SELECT sum(a.fee_obligation_minor) FROM invoice_credit_applications a WHERE a.invoice_id=invoice.id),0)<>current.applied_fee_obligation_minor
+    OR coalesce((SELECT sum(a.fee_proven_collected_minor) FROM invoice_credit_applications a WHERE a.invoice_id=invoice.id),0)<>current.applied_fee_proven_collected_minor THEN
+    RAISE EXCEPTION 'The target must retain exactly the accepted original fee obligation and separately proved collection, never a duplicated new fee' USING ERRCODE='23514'; END IF;
+  ELSIF current.credit_note_id IS NOT NULL OR EXISTS(SELECT 1 FROM subscription_proration_principal WHERE proration_id=current.id) THEN
+   RAISE EXCEPTION 'Zero unused original principal cannot mint a credit or fake payment' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NULL;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER subscription_proration_complete AFTER INSERT OR UPDATE ON subscription_prorations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_proration_complete();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_credit_invoice_void_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.status='void' AND NEW.credited_minor>0 THEN RAISE EXCEPTION 'Applied real credit is consideration, not erasable unpaid debt; preserve its actual promise through explicit recovery' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER credit_invoice_void_guard BEFORE UPDATE OF status ON invoices FOR EACH ROW EXECUTE FUNCTION freeholder_credit_invoice_void_guard();
+--> statement-breakpoint
+-- Defaults mark an unqualified older prototype as missing fee evidence; they
+-- never manufacture a zero-fee proof. Every new admission requires a digest.
+ALTER TABLE invoice_credit_funding ADD COLUMN fee_obligation_minor bigint NOT NULL DEFAULT 0,ADD COLUMN fee_proven_collected_minor bigint NOT NULL DEFAULT 0,
+ ADD COLUMN fee_collection_state text NOT NULL DEFAULT 'review',ADD COLUMN fee_evidence_digest text,ADD COLUMN fee_unexpected boolean NOT NULL DEFAULT false;
+--> statement-breakpoint
+ALTER TABLE invoice_credit_reservations ADD COLUMN fee_obligation_minor bigint NOT NULL DEFAULT 0,ADD COLUMN fee_proven_collected_minor bigint NOT NULL DEFAULT 0,
+ ADD COLUMN fee_collection_state text NOT NULL DEFAULT 'review',ADD COLUMN fee_evidence_digest text,ADD COLUMN fee_unexpected boolean NOT NULL DEFAULT false;
+--> statement-breakpoint
+ALTER TABLE invoice_credit_applications ADD COLUMN fee_obligation_minor bigint NOT NULL DEFAULT 0,ADD COLUMN fee_proven_collected_minor bigint NOT NULL DEFAULT 0,
+ ADD COLUMN fee_collection_state text NOT NULL DEFAULT 'review',ADD COLUMN fee_evidence_digest text,ADD COLUMN fee_unexpected boolean NOT NULL DEFAULT false;
+--> statement-breakpoint
+ALTER TABLE invoice_credit_funding ADD CONSTRAINT invoice_credit_funding_fee CHECK(fee_obligation_minor between 0 and amount_minor AND fee_proven_collected_minor between 0 and fee_obligation_minor AND fee_collection_state IN('not_due','owed','recorded_remitted','verified_collected','review')AND(fee_evidence_digest IS NULL OR fee_evidence_digest ~ '^[a-f0-9]{64}$'));
+--> statement-breakpoint
+ALTER TABLE invoice_credit_reservations ADD CONSTRAINT invoice_credit_reservations_fee CHECK(fee_obligation_minor between 0 and amount_minor AND fee_proven_collected_minor between 0 and fee_obligation_minor AND fee_collection_state IN('not_due','owed','recorded_remitted','verified_collected','review')AND(fee_evidence_digest IS NULL OR fee_evidence_digest ~ '^[a-f0-9]{64}$'));
+--> statement-breakpoint
+ALTER TABLE invoice_credit_applications ADD CONSTRAINT invoice_credit_applications_fee CHECK(fee_obligation_minor between 0 and 9007199254740991 AND fee_proven_collected_minor between 0 and fee_obligation_minor AND fee_collection_state IN('not_due','owed','recorded_remitted','verified_collected','review')AND(fee_evidence_digest IS NULL OR fee_evidence_digest ~ '^[a-f0-9]{64}$'));
+--> statement-breakpoint
+CREATE FUNCTION freeholder_original_payment_fee(target uuid) RETURNS bigint LANGUAGE sql STABLE AS $$
+ WITH owners AS(SELECT a.fee_owed_minor fee FROM commercial_payment_attestations a WHERE a.payment_id=target
+  UNION ALL SELECT a.application_fee_minor FROM merchant_agreement_payment_routes a WHERE a.payment_id=target
+  UNION ALL SELECT a.application_fee_minor FROM payment_merchant_routes a WHERE a.payment_id=target)
+ SELECT CASE WHEN count(*)=1 THEN min(fee) ELSE NULL END FROM owners
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_credit_fee_is_collected(target uuid,kind text) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT CASE WHEN kind='recorded_remitted' THEN EXISTS(SELECT 1 FROM commercial_payment_attestations a JOIN payments p ON p.id=a.payment_id WHERE a.payment_id=target AND p.status='succeeded' AND p.refunded_minor=0
+  AND coalesce((SELECT sum(CASE WHEN f.direction='returned' THEN -f.amount_minor ELSE f.amount_minor END)FROM commercial_fee_attestations f WHERE f.payment_id=p.id),0)=a.fee_owed_minor)
+ WHEN kind IN('verified_collected','not_due') THEN EXISTS(SELECT 1 FROM payments p JOIN LATERAL(SELECT * FROM merchant_payment_observations o WHERE o.payment_id=p.id AND o.provider_ref=p.provider_ref AND o.status='succeeded' ORDER BY o.observed_at DESC,o.id DESC LIMIT 1)o ON true
+  WHERE p.id=target AND p.status='succeeded' AND p.refunded_minor=0 AND o.customer_charge_verified AND o.route_verified AND o.amount_minor=p.amount_minor AND o.currency=p.currency
+  AND o.application_fee_currency=p.currency AND o.observed_application_fee_minor=freeholder_original_payment_fee(p.id)AND o.observed_fee_refunded_minor=0
+  AND(kind='not_due' AND freeholder_original_payment_fee(p.id)=0 AND o.application_fee_ref IS NULL OR kind='verified_collected' AND o.application_fee_ref IS NOT NULL)
+  AND NOT EXISTS(SELECT 1 FROM merchant_fee_refunds f WHERE f.payment_id=p.id AND f.status IN('reserved','dispatching','unknown')))
+  OR(kind='not_due'AND EXISTS(SELECT 1 FROM commercial_payment_attestations a WHERE a.payment_id=target AND a.fee_owed_minor=0)) ELSE false END
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_credit_fee_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE funding invoice_credit_funding%ROWTYPE;reservation invoice_credit_reservations%ROWTYPE;payment payments%ROWTYPE;parent invoice_credit_applications%ROWTYPE;parent_r invoice_credit_reservations%ROWTYPE;
+ total_principal numeric;total_fee numeric;prior_principal numeric;prior_fee numeric;prior_proven numeric;expected_fee numeric;expected_proven numeric;
+BEGIN
+ IF current_setting('freeholder.invoice_credit_v1',true)IS DISTINCT FROM '1' OR NEW.fee_evidence_digest IS NULL OR NEW.fee_evidence_digest !~ '^[a-f0-9]{64}$' THEN RAISE EXCEPTION 'Retain the exact original fee obligation and actual collection evidence before new credit disposition' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='invoice_credit_funding' THEN
+  SELECT * INTO payment FROM payments WHERE id=NEW.source_payment_id;
+  IF NEW.source_application_id IS NULL THEN total_principal:=payment.amount_minor;total_fee:=freeholder_original_payment_fee(payment.id);
+  ELSE SELECT * INTO parent FROM invoice_credit_applications WHERE reservation_id=NEW.source_application_id;SELECT * INTO parent_r FROM invoice_credit_reservations WHERE id=parent.reservation_id;
+   total_principal:=parent_r.amount_minor;total_fee:=parent.fee_obligation_minor;
+   IF parent.fee_evidence_digest IS NULL THEN RAISE EXCEPTION 'An inherited applied credit requires its real original fee disposition' USING ERRCODE='23514';END IF;
+  END IF;
+  SELECT coalesce(sum(f.amount_minor),0),coalesce(sum(f.fee_obligation_minor),0) INTO prior_principal,prior_fee FROM invoice_credit_funding f JOIN credit_notes n ON n.id=f.credit_note_id
+   WHERE f.source_payment_id=payment.id AND f.source_application_id IS NOT DISTINCT FROM NEW.source_application_id AND n.status='issued';
+  IF payment.id IS NULL OR payment.refunded_minor<>0 OR total_principal IS NULL OR total_principal<=0 OR total_fee IS NULL OR prior_fee<>floor(total_fee*prior_principal/total_principal) THEN
+   RAISE EXCEPTION 'Restore the complete original fee epoch and cumulative allocation; never reprice it at a later bps' USING ERRCODE='23514';END IF;
+  expected_fee:=floor(total_fee*(prior_principal+NEW.amount_minor)/total_principal)-prior_fee;
+  IF NEW.fee_obligation_minor<>expected_fee OR NOT EXISTS(SELECT 1 FROM subscription_proration_principal s WHERE s.proration_id=NEW.proration_id AND s.source_payment_id=NEW.source_payment_id AND s.source_application_id IS NOT DISTINCT FROM NEW.source_application_id
+   AND s.amount_minor=NEW.amount_minor AND s.fee_obligation_minor=NEW.fee_obligation_minor AND s.fee_proven_collected_minor=NEW.fee_proven_collected_minor AND s.fee_collection_state=NEW.fee_collection_state AND s.fee_evidence_digest=NEW.fee_evidence_digest AND s.fee_unexpected=NEW.fee_unexpected) THEN
+   RAISE EXCEPTION 'The issued credit must reproduce its exact accepted principal/fee source receipt' USING ERRCODE='23514';END IF;
+  IF NEW.fee_collection_state IN('recorded_remitted','verified_collected','not_due') AND NOT freeholder_credit_fee_is_collected(payment.id,NEW.fee_collection_state)
+   OR NEW.fee_proven_collected_minor<>CASE WHEN NEW.fee_collection_state IN('recorded_remitted','verified_collected') THEN NEW.fee_obligation_minor ELSE 0 END THEN
+   RAISE EXCEPTION 'An expected carried fee is not a collected commission; preserve owed or review until actual original proof exists' USING ERRCODE='23514';END IF;
+ ELSIF TG_TABLE_NAME='invoice_credit_reservations' THEN
+  SELECT * INTO funding FROM invoice_credit_funding WHERE id=NEW.funding_id;
+  SELECT coalesce(sum(r.amount_minor),0),coalesce(sum(r.fee_obligation_minor),0),coalesce(sum(r.fee_proven_collected_minor),0) INTO prior_principal,prior_fee,prior_proven
+   FROM invoice_credit_reservations r LEFT JOIN invoice_credit_applications a ON a.reservation_id=r.id LEFT JOIN invoice_credit_releases l ON l.reservation_id=r.id WHERE r.funding_id=funding.id AND(a.reservation_id IS NOT NULL OR l.reservation_id IS NULL);
+  expected_fee:=floor(funding.fee_obligation_minor::numeric*(prior_principal+NEW.amount_minor)/funding.amount_minor)-prior_fee;
+  expected_proven:=floor(funding.fee_proven_collected_minor::numeric*(prior_principal+NEW.amount_minor)/funding.amount_minor)-prior_proven;
+  IF funding.fee_evidence_digest IS NULL OR NEW.fee_obligation_minor<>expected_fee OR NEW.fee_proven_collected_minor<>expected_proven OR NEW.fee_collection_state<>funding.fee_collection_state OR NEW.fee_unexpected<>funding.fee_unexpected THEN
+   RAISE EXCEPTION 'Reserve the same original fee epoch with deterministic residual ownership, separately from proven collection' USING ERRCODE='23514';END IF;
+ ELSE SELECT * INTO reservation FROM invoice_credit_reservations WHERE id=NEW.reservation_id;
+  IF reservation.fee_evidence_digest IS NULL OR NEW.fee_obligation_minor<>reservation.fee_obligation_minor OR NEW.fee_proven_collected_minor<>reservation.fee_proven_collected_minor OR NEW.fee_collection_state<>reservation.fee_collection_state OR NEW.fee_unexpected<>reservation.fee_unexpected THEN
+   RAISE EXCEPTION 'An actual credit application cannot invent or lose its original fee obligation or collection state' USING ERRCODE='23514';END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER invoice_credit_fee_funding_guard BEFORE INSERT ON invoice_credit_funding FOR EACH ROW EXECUTE FUNCTION freeholder_credit_fee_receipt();
+--> statement-breakpoint
+CREATE TRIGGER invoice_credit_fee_reservations_guard BEFORE INSERT ON invoice_credit_reservations FOR EACH ROW EXECUTE FUNCTION freeholder_credit_fee_receipt();
+--> statement-breakpoint
+CREATE TRIGGER invoice_credit_fee_applications_guard BEFORE INSERT ON invoice_credit_applications FOR EACH ROW EXECUTE FUNCTION freeholder_credit_fee_receipt();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_credit_note_fee_promise() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.status='void'AND EXISTS(SELECT 1 FROM subscription_prorations p WHERE p.credit_note_id=NEW.id) THEN RAISE EXCEPTION 'An issued original proration credit remains a whole customer promise; use explicit genuine recovery, never void it to free cash or fee capacity' USING ERRCODE='23514';END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER credit_fee_note_promise_guard BEFORE UPDATE OF status ON credit_notes FOR EACH ROW EXECUTE FUNCTION freeholder_credit_note_fee_promise();
+
+--> statement-breakpoint
+-- Exact previous late-resumption authority retained; the distinct gross receipt
+-- branch alone admits its own future terms, never a full-period provider DTO.
+CREATE OR REPLACE FUNCTION freeholder_subscription_commercial_terms() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE parent subscriptions%ROWTYPE; original subscription_merchant_scopes%ROWTYPE; prior subscription_commercial_terms%ROWTYPE; business merchant_tax_profiles%ROWTYPE; resource subscription_provider_schedule_resources%ROWTYPE;
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Accepted subscription promises cannot be deleted' USING ERRCODE='23514'; END IF;
+ IF current_setting('freeholder.subscription_terms_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Accepted subscription promises require their guarded current writer' USING ERRCODE='23514'; END IF;
+ IF TG_OP='UPDATE' THEN
+  IF current_setting('freeholder.subscription_terms_privacy_v1',true) IS DISTINCT FROM '1'
+   OR(to_jsonb(NEW)-ARRAY['tax_destination','redacted_at'])IS DISTINCT FROM(to_jsonb(OLD)-ARRAY['tax_destination','redacted_at'])
+   OR OLD.redacted_at IS NOT NULL OR NEW.tax_destination IS NOT NULL OR NEW.redacted_at IS NULL THEN
+   RAISE EXCEPTION 'Accepted subscription promises permit only guarded personal-destination minimization' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+ END IF;
+ SELECT * INTO parent FROM subscriptions WHERE id=NEW.subscription_id;
+ SELECT * INTO original FROM subscription_merchant_scopes WHERE subscription_id=NEW.subscription_id;
+ SELECT * INTO business FROM merchant_tax_profiles WHERE id=NEW.profile_id;
+ SELECT * INTO resource FROM subscription_provider_schedule_resources WHERE subscription_id=NEW.subscription_id;
+ IF parent.id IS NULL OR parent.merchant_scope_version<>1 OR original.subscription_id IS NULL
+  OR NEW.profile_id IS DISTINCT FROM original.tax_profile_id OR NEW.tax_liability IS DISTINCT FROM original.tax_liability
+  OR business.state IS DISTINCT FROM 'active' OR business.current_version IS DISTINCT FROM NEW.profile_version
+  OR NEW.snapshot->>'version' IS DISTINCT FROM '1' OR NEW.snapshot->>'currency' IS DISTINCT FROM parent.currency
+  OR jsonb_typeof(NEW.snapshot) IS DISTINCT FROM 'object' OR jsonb_typeof(NEW.notice_snapshot) IS DISTINCT FROM 'object'
+  OR resource.subscription_id IS NULL OR NEW.redacted_at IS NOT NULL THEN
+  RAISE EXCEPTION 'A new acceptance needs its actual original agreement, business and current declared policy' USING ERRCODE='23514';
+ END IF;
+ IF NEW.revision>1 AND current_setting('freeholder.subscription_proration_v1',true)='1' AND EXISTS(SELECT 1 FROM subscription_prorations p WHERE p.terms_id=NEW.id) THEN
+  SELECT * INTO prior FROM subscription_commercial_terms WHERE id=NEW.previous_terms_id;
+  IF prior.id IS NULL OR prior.subscription_id<>parent.id OR prior.revision+1<>NEW.revision OR NEW.acceptance_source<>'amendment'
+   OR current_setting('freeholder.subscription_amendment_v1',true) IS DISTINCT FROM '1'
+   OR NOT EXISTS(SELECT 1 FROM subscription_prorations p WHERE p.terms_id=NEW.id AND p.subscription_id=parent.id AND p.previous_terms_id=prior.id AND p.state='accepted'
+    AND p.accepted_quote_digest=NEW.accepted_quote_digest AND p.snapshot=NEW.snapshot AND p.profile_id=NEW.profile_id AND p.profile_version=NEW.profile_version
+    AND p.tax_destination=NEW.tax_destination AND p.notice_digest=NEW.notice_digest AND p.notice_snapshot=NEW.notice_snapshot
+    AND p.original_period_start=parent.current_period_start AND p.original_period_end=parent.current_period_end AND NEW.effective_period_start=p.original_period_end AND p.effective_at>clock_timestamp())
+   OR EXISTS(SELECT 1 FROM subscription_commercial_terms other WHERE other.subscription_id=parent.id AND other.revision>prior.revision)
+   OR EXISTS(SELECT 1 FROM invoices i WHERE i.source_type='subscription' AND i.source_id=parent.id::text||':'||to_char(NEW.effective_period_start AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) THEN
+   RAISE EXCEPTION 'New gross terms need their exact explicit acceptance and unbilled future boundary, preserving all earlier terms' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+ END IF;
+ IF NEW.revision=1 THEN
+  IF resource.operation_revision<>0 OR resource.provider_subscription_ref IS NOT NULL OR resource.state<>'uncreated' OR NEW.effective_period_start IS DISTINCT FROM parent.current_period_start
+   OR EXISTS(SELECT 1 FROM subscription_card_setups setup WHERE setup.subscription_id=parent.id)
+   OR EXISTS(SELECT 1 FROM invoices invoice WHERE invoice.source_type='subscription' AND split_part(invoice.source_id,':',1)=parent.id::text) THEN
+   RAISE EXCEPTION 'Accept original commercial terms before admitting provider schedule work' USING ERRCODE='23514';
+  END IF;
+ ELSE
+  SELECT * INTO prior FROM subscription_commercial_terms WHERE id=NEW.previous_terms_id;
+  IF prior.id IS NULL OR prior.subscription_id IS DISTINCT FROM NEW.subscription_id OR prior.revision+1<>NEW.revision
+   OR current_setting('freeholder.subscription_amendment_v1',true) IS DISTINCT FROM '1' OR NEW.acceptance_source<>'amendment'
+   OR NEW.effective_period_start<parent.current_period_end OR NEW.effective_period_start<=prior.effective_period_start
+   OR(NEW.effective_period_start>parent.current_period_end AND(current_setting('freeholder.subscription_resumption_v1',true) IS DISTINCT FROM '1' OR parent.current_period_end>clock_timestamp() OR NEW.effective_period_start<=clock_timestamp()))
+   OR EXISTS(SELECT 1 FROM subscription_commercial_terms other WHERE other.subscription_id=NEW.subscription_id AND other.revision>prior.revision)
+   OR EXISTS(SELECT 1 FROM invoices invoice WHERE invoice.source_type='subscription' AND invoice.source_id=parent.id::text||':'||to_char(NEW.effective_period_start AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) THEN
+   RAISE EXCEPTION 'An amendment needs its exact previous acceptance and an unbilled next period' USING ERRCODE='23514';
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_subscription_terms_amendment() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.revision>1 AND NOT EXISTS(SELECT 1 FROM subscription_commercial_amendments a WHERE a.terms_id=NEW.id AND a.subscription_id=NEW.subscription_id AND a.previous_terms_id=NEW.previous_terms_id AND a.accepted_quote_digest=NEW.accepted_quote_digest)
+  AND NOT EXISTS(SELECT 1 FROM subscription_prorations p WHERE p.terms_id=NEW.id AND p.subscription_id=NEW.subscription_id AND p.previous_terms_id=NEW.previous_terms_id AND p.accepted_quote_digest=NEW.accepted_quote_digest AND p.original_period_end=NEW.effective_period_start) THEN
+  RAISE EXCEPTION 'Accepted changed terms require their exact original future-amendment or gross-proration consent receipt' USING ERRCODE='23514'; END IF;
+ RETURN NULL;
+END $$;
+
+--> statement-breakpoint
+-- Preserve the original attested writer; only subtract exact carried fee duty
+-- before allocating NEW cash commission. No order-v1 path is changed.
+CREATE OR REPLACE FUNCTION guard_commercial_attestation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE p payments%ROWTYPE;i invoices%ROWTYPE;policy invoice_market_policies%ROWTYPE;r refunds%ROWTYPE;party invoice_merchant_tax_quotes%ROWTYPE;original commercial_payment_attestations%ROWTYPE;
+ previous_cash numeric;previous_fee numeric;actual_fee numeric;scopes integer;carried_fee numeric;cash_fee numeric;cash_principal numeric;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.commercial_attestation_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Preserve the first recorded commercial money evidence and use its authorized shared action' USING ERRCODE='23514'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtext('payment:'||NEW.payment_id::text));
+ SELECT * INTO p FROM payments WHERE id=NEW.payment_id FOR UPDATE;
+ PERFORM pg_advisory_xact_lock(hashtext('invoice:'||p.invoice_id::text));
+ SELECT * INTO i FROM invoices WHERE id=p.invoice_id;
+ SELECT * INTO policy FROM invoice_market_policies WHERE invoice_id=i.id;
+ IF p.id IS NULL OR p.provider<>'manual' OR policy.model IS DISTINCT FROM 'seller_merchant' OR policy.collection_version<>0 OR i.source_type<>'subscription' OR i.issued_at IS NULL THEN
+  RAISE EXCEPTION 'An external commercial attestation must name its real original manual subscription payment and merchant invoice' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='commercial_payment_attestations' THEN
+  SELECT count(*) INTO scopes FROM invoice_merchant_tax_quotes WHERE invoice_id=i.id;
+  SELECT * INTO party FROM invoice_merchant_tax_quotes WHERE invoice_id=i.id;
+  IF scopes<>1 OR party.seller_user_id IS DISTINCT FROM policy.seller_user_id OR party.profile_id<>NEW.merchant_profile_id OR party.profile_version<>NEW.profile_version
+   OR NEW.invoice_id<>i.id OR NEW.currency<>i.currency OR NEW.currency<>p.currency OR NEW.amount_minor<>p.amount_minor OR p.status<>'created' OR p.provider_ref IS NOT NULL
+   OR p.method NOT IN('cash','bank_transfer','cheque','external_card','other')
+   OR EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=p.id) OR EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=p.id)
+   OR EXISTS(SELECT 1 FROM merchant_invoice_payment_routes WHERE payment_id=p.id) OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=p.id)
+   OR EXISTS(SELECT 1 FROM payments other WHERE other.invoice_id=i.id AND other.id<>p.id AND other.status IN('created','processing'))
+   OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments old ON old.id=o.payment_id WHERE old.invoice_id=i.id AND o.status='succeeded'
+    AND(old.status<>'succeeded' OR o.amount_minor<>old.amount_minor OR o.currency<>old.currency OR(o.provider_ref IS DISTINCT FROM old.provider_ref AND o.provider_ref IS DISTINCT FROM old.provider_checkout_ref)))
+   OR EXISTS(SELECT 1 FROM merchant_payment_dispatches d JOIN payments old ON old.id=d.payment_id
+      WHERE old.invoice_id=i.id AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_finishes f WHERE f.dispatch_id=d.id) AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_stops s WHERE s.dispatch_id=d.id)) THEN
+   RAISE EXCEPTION 'Retain exactly one real external origin with its original declared merchant, amount, evidence and quiesced competing callers' USING ERRCODE='23514'; END IF;
+  SELECT coalesce(sum(old.amount_minor),0),coalesce(sum(coalesce(a.fee_owed_minor,g.application_fee_minor,l.application_fee_minor)),0)
+   INTO previous_cash,previous_fee FROM payments old
+   LEFT JOIN commercial_payment_attestations a ON a.payment_id=old.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=old.id LEFT JOIN payment_merchant_routes l ON l.payment_id=old.id
+   WHERE old.invoice_id=i.id AND old.id<>p.id AND old.status='succeeded';
+  IF i.total_minor<=0 OR previous_cash<>i.paid_minor OR EXISTS(SELECT 1 FROM payments old
+   LEFT JOIN commercial_payment_attestations a ON a.payment_id=old.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=old.id LEFT JOIN payment_merchant_routes l ON l.payment_id=old.id
+   WHERE old.invoice_id=i.id AND old.id<>p.id AND old.status='succeeded' AND ((a.payment_id IS NOT NULL)::integer+(g.payment_id IS NOT NULL)::integer+(l.payment_id IS NOT NULL)::integer<>1 OR old.refunded_minor<>0)) THEN
+   RAISE EXCEPTION 'Restore the complete original cash and exactly one fee owner before a new external record' USING ERRCODE='23514'; END IF;
+  SELECT coalesce(sum(a.fee_obligation_minor),0) INTO carried_fee FROM invoice_credit_applications a WHERE a.invoice_id=i.id;
+  IF EXISTS(SELECT 1 FROM invoice_credit_applications a WHERE a.invoice_id=i.id AND a.fee_evidence_digest IS NULL)
+   OR coalesce((SELECT sum(r.amount_minor)FROM invoice_credit_applications a JOIN invoice_credit_reservations r ON r.id=a.reservation_id WHERE a.invoice_id=i.id),0)<>i.credited_minor THEN
+   RAISE EXCEPTION 'Restore exact noncash consideration and original fee ownership before recording another commission' USING ERRCODE='23514';END IF;
+  cash_principal:=i.total_minor-i.credited_minor;cash_fee:=greatest(0,policy.fee_minor-carried_fee);
+  IF cash_principal<=0 OR cash_fee>cash_principal THEN RAISE EXCEPTION 'The new fee duty requires its separate bounded merchant receivable; never invent a collected fee or oversized customer charge' USING ERRCODE='23514';END IF;
+  actual_fee:=floor(cash_fee*(previous_cash+p.amount_minor)/cash_principal)-previous_fee;
+  IF NEW.fee_owed_minor<>actual_fee THEN RAISE EXCEPTION 'The recorded fee owed must use the frozen shared invoice policy, never a fabricated collected fee' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO original FROM commercial_payment_attestations WHERE payment_id=p.id;
+  IF original.payment_id IS NULL OR p.status<>'succeeded' OR original.amount_minor<>p.amount_minor OR original.currency<>p.currency THEN
+   RAISE EXCEPTION 'Restore the exact original successful recorded external principal' USING ERRCODE='23514'; END IF;
+  IF TG_TABLE_NAME='commercial_refund_attestations' THEN
+   SELECT * INTO r FROM refunds WHERE id=NEW.refund_id;
+   IF r.id IS NULL OR r.payment_id<>p.id OR r.provider<>'manual' OR r.status<>'created' OR r.provider_ref IS NOT NULL OR NEW.amount_minor<>r.amount_minor OR NEW.currency<>r.currency THEN
+    RAISE EXCEPTION 'Record only this actual original manual refund attempt before its balance settles' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='commercial_fee_attestations' THEN
+   IF NEW.direction='remitted' AND coalesce((SELECT sum(CASE WHEN direction='returned' THEN -amount_minor ELSE amount_minor END) FROM commercial_fee_attestations WHERE payment_id=p.id),0)+NEW.amount_minor>floor(original.fee_owed_minor::numeric*(p.amount_minor-p.refunded_minor)/p.amount_minor) THEN
+    RAISE EXCEPTION 'Recorded external remittances cannot exceed the original bounded current fee obligation' USING ERRCODE='23514'; END IF;
+   IF NEW.direction='returned' AND NOT EXISTS(SELECT 1 FROM commercial_fee_attestations first WHERE first.id=NEW.original_remittance_id AND first.direction='remitted' AND first.payment_id=p.id
+    AND coalesce((SELECT sum(a.amount_minor) FROM commercial_fee_attestations a WHERE a.original_remittance_id=first.id),0)+NEW.amount_minor<=first.amount_minor) THEN
+    RAISE EXCEPTION 'An external fee return must retain its exact original remittance and remaining actual amount' USING ERRCODE='23514'; END IF;
+  ELSE RAISE EXCEPTION 'Unknown recorded commercial money family' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+-- Source: deploy/subscription-agreement-fee80.fragment.sql
+-- SHA256: 89f8d98bbd6fdd6ad20fdbeef715bd68c01dee4af4acc4d80e79bb1be710c108
+-- Copyright (C) 2026 Tony Aly
+-- SPDX-License-Identifier: Apache-2.0
+-- C12.38/C9.33: OWNED UNAPPLIED tail AFTER frozen34837db8 gross31e3acdc.
+-- Root owns assembly/new database. No previous fragment is changed.
+CREATE TABLE agreement_fee_duties (
+ invoice_id uuid PRIMARY KEY REFERENCES invoices(id) ON DELETE RESTRICT,acceptance_id uuid NOT NULL UNIQUE REFERENCES subscription_prorations(id) ON DELETE RESTRICT,
+ merchant_profile_id uuid NOT NULL REFERENCES merchant_tax_profiles(id) ON DELETE RESTRICT,profile_version integer NOT NULL,
+ currency text NOT NULL,total_minor bigint NOT NULL,target_fee_minor bigint NOT NULL,credited_minor bigint NOT NULL,carried_fee_minor bigint NOT NULL,
+ cash_principal_minor bigint NOT NULL,cash_fee_target_minor bigint NOT NULL,expected_receivable_minor bigint NOT NULL,
+ accepted_quote_digest text NOT NULL,original_owner_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT agreement_fee_duties_profile_version FOREIGN KEY(merchant_profile_id,profile_version) REFERENCES merchant_tax_profile_versions(profile_id,version) ON DELETE RESTRICT,
+ CONSTRAINT agreement_fee_duties_amounts CHECK(total_minor between 1 and 9007199254740991 AND target_fee_minor between 0 and total_minor AND credited_minor between 0 and total_minor AND carried_fee_minor between 0 and credited_minor
+  AND cash_principal_minor=total_minor-credited_minor AND cash_fee_target_minor=least(cash_principal_minor,greatest(0,target_fee_minor-carried_fee_minor)) AND expected_receivable_minor=greatest(0,target_fee_minor-carried_fee_minor-cash_fee_target_minor)),
+ CONSTRAINT agreement_fee_duties_owner CHECK(currency ~ '^[A-Z]{3}$' AND profile_version>0 AND accepted_quote_digest ~ '^[a-f0-9]{64}$' AND original_owner_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE INDEX agreement_fee_duties_merchant ON agreement_fee_duties(merchant_profile_id);
+--> statement-breakpoint
+CREATE TABLE agreement_fee_credit_assignments (
+ application_id uuid PRIMARY KEY REFERENCES invoice_credit_applications(reservation_id) ON DELETE RESTRICT,invoice_id uuid NOT NULL REFERENCES agreement_fee_duties(invoice_id) ON DELETE RESTRICT,
+ amount_minor bigint NOT NULL,fee_obligation_minor bigint NOT NULL,proven_collected_minor bigint NOT NULL,original_evidence_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT agreement_fee_credit_assignments_amounts CHECK(amount_minor between 1 and 9007199254740991 AND fee_obligation_minor between 0 and amount_minor AND proven_collected_minor between 0 and fee_obligation_minor AND original_evidence_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE INDEX agreement_fee_credit_assignments_invoice ON agreement_fee_credit_assignments(invoice_id);
+--> statement-breakpoint
+CREATE TABLE agreement_fee_cash_assignments (
+ payment_id uuid PRIMARY KEY REFERENCES payments(id) ON DELETE RESTRICT,invoice_id uuid NOT NULL REFERENCES agreement_fee_duties(invoice_id) ON DELETE RESTRICT,
+ amount_minor bigint NOT NULL,fee_obligation_minor bigint NOT NULL,origin text NOT NULL,original_evidence_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT agreement_fee_cash_assignments_amounts CHECK(amount_minor between 1 and 9007199254740991 AND fee_obligation_minor between 0 and amount_minor AND origin IN('recorded_external','provider') AND original_evidence_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE INDEX agreement_fee_cash_assignments_invoice ON agreement_fee_cash_assignments(invoice_id);
+--> statement-breakpoint
+CREATE TABLE agreement_fee_eligibility (
+ invoice_id uuid PRIMARY KEY REFERENCES agreement_fee_duties(invoice_id) ON DELETE RESTRICT,paid_at timestamptz NOT NULL,principal_evidence_digest text NOT NULL,
+ cash_payment_ids jsonb NOT NULL,credit_application_ids jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT agreement_fee_eligibility_evidence CHECK(principal_evidence_digest ~ '^[a-f0-9]{64}$' AND jsonb_typeof(cash_payment_ids)='array' AND jsonb_array_length(cash_payment_ids)<=1000 AND jsonb_typeof(credit_application_ids)='array' AND jsonb_array_length(credit_application_ids)<=1000)
+);
+--> statement-breakpoint
+CREATE TABLE agreement_fee_remittances (
+ id uuid PRIMARY KEY,invoice_id uuid NOT NULL REFERENCES agreement_fee_duties(invoice_id) ON DELETE RESTRICT,direction text NOT NULL,
+ original_remittance_id uuid REFERENCES agreement_fee_remittances(id) ON DELETE RESTRICT,amount_minor bigint NOT NULL,currency text NOT NULL,
+ recorded_by text NOT NULL,evidence_digest text NOT NULL,request_digest text NOT NULL,idempotency_key text NOT NULL UNIQUE,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT agreement_fee_remittances_amounts CHECK(amount_minor between 1 and 9007199254740991 AND currency ~ '^[A-Z]{3}$'),
+ CONSTRAINT agreement_fee_remittances_original CHECK((direction='remitted' AND original_remittance_id IS NULL)OR(direction='returned' AND original_remittance_id IS NOT NULL)),
+ CONSTRAINT agreement_fee_remittances_evidence CHECK(recorded_by ~ '^(user:|agent:|plugin:|system$)' AND evidence_digest ~ '^[a-f0-9]{64}$' AND request_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE INDEX agreement_fee_remittances_invoice ON agreement_fee_remittances(invoice_id);
+--> statement-breakpoint
+-- Nonallocation target cash keeps its own frozen fee epoch. Unknown actual
+-- principal/refund/caller evidence is NULL, never a reduced consideration.
+CREATE FUNCTION freeholder_agreement_fee_principal_safe(target uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM payments p WHERE p.id=target AND p.status='succeeded' AND p.amount_minor>0 AND p.refunded_minor between 0 and p.amount_minor
+  AND freeholder_merchant_creators_quiesced(p.id)
+  AND coalesce((SELECT sum(r.amount_minor) FROM refunds r WHERE r.payment_id=p.id AND r.status='succeeded'),0)=p.refunded_minor
+  AND NOT EXISTS(SELECT 1 FROM refunds r WHERE r.payment_id=p.id AND(r.status IN('created','processing')OR(r.status='failed' AND r.failure_code='provider_already_refunded')))
+  AND NOT EXISTS(SELECT 1 FROM payment_disputes d WHERE d.payment_id=p.id AND d.status IN('open','lost'))
+  AND((p.provider='manual' AND EXISTS(SELECT 1 FROM commercial_payment_attestations a WHERE a.payment_id=p.id AND a.amount_minor=p.amount_minor AND a.currency=p.currency)
+    AND NOT EXISTS(SELECT 1 FROM refunds r WHERE r.payment_id=p.id AND r.status='succeeded' AND NOT EXISTS(SELECT 1 FROM commercial_refund_attestations a WHERE a.refund_id=r.id AND a.payment_id=p.id AND a.amount_minor=r.amount_minor AND a.currency=r.currency)))
+   OR(p.provider='stripe' AND EXISTS(SELECT 1 FROM merchant_agreement_payment_routes g JOIN LATERAL(SELECT * FROM merchant_payment_observations o WHERE o.payment_id=p.id AND o.provider_ref=p.provider_ref AND o.status='succeeded' ORDER BY o.observed_at DESC,o.id DESC LIMIT 1)o ON true
+     WHERE g.payment_id=p.id AND o.customer_charge_verified AND o.route_verified AND o.amount_minor=p.amount_minor AND o.currency=p.currency AND o.provider_platform_account_id=g.provider_platform_account_id
+      AND o.charge_account_id IS NOT DISTINCT FROM g.charge_account_id AND o.recipient_account_id=g.recipient_account_id AND o.settlement_merchant_account_id=g.settlement_merchant_account_id)
+    AND NOT EXISTS(SELECT 1 FROM refunds r WHERE r.payment_id=p.id AND r.status='succeeded' AND NOT EXISTS(SELECT 1 FROM merchant_refund_requests q WHERE q.refund_id=r.id AND q.payment_id=p.id AND freeholder_original_refund_resolved(q.id,'succeeded',r.provider_ref)))))
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_agreement_fee_current(target uuid) RETURNS TABLE(known boolean,eligible boolean,owed bigint,recorded bigint,excess bigint) LANGUAGE plpgsql STABLE AS $$
+DECLARE duty agreement_fee_duties%ROWTYPE;i invoices%ROWTYPE;cash_gross numeric;cash_returned numeric;cash_remaining numeric;cash_duty numeric;credit_remaining numeric;credit_duty numeric;target_duty numeric;
+BEGIN
+ SELECT * INTO duty FROM agreement_fee_duties WHERE invoice_id=target;
+ SELECT * INTO i FROM invoices WHERE id=target;
+ IF duty.invoice_id IS NULL OR i.id IS NULL OR i.total_minor<>duty.total_minor OR i.credited_minor<>duty.credited_minor OR i.currency<>duty.currency
+  OR(SELECT count(*) FROM invoice_lines WHERE invoice_id=i.id)<>1 OR NOT EXISTS(SELECT 1 FROM invoice_lines l WHERE l.invoice_id=i.id AND l.snapshot->>'subscriptionProrationId'=duty.acceptance_id::text)
+  OR NOT EXISTS(SELECT 1 FROM invoice_market_policies m WHERE m.invoice_id=i.id AND m.model='seller_merchant' AND m.fee_minor=duty.target_fee_minor)
+  OR(SELECT count(*) FROM payments WHERE invoice_id=i.id)+(SELECT count(*) FROM agreement_fee_credit_assignments WHERE invoice_id=i.id)+(SELECT count(*) FROM agreement_fee_remittances WHERE invoice_id=i.id)>1000
+  OR EXISTS(SELECT 1 FROM payments p WHERE p.invoice_id=i.id AND NOT freeholder_merchant_creators_quiesced(p.id))
+  OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments p ON p.id=o.payment_id WHERE p.invoice_id=i.id AND o.status='succeeded' AND(p.status<>'succeeded' OR o.amount_minor<>p.amount_minor OR o.currency<>p.currency OR(o.provider_ref IS DISTINCT FROM p.provider_ref AND o.provider_ref IS DISTINCT FROM p.provider_checkout_ref)))
+  OR EXISTS(SELECT 1 FROM payments p WHERE p.invoice_id=i.id AND p.status IN('failed','cancelled') AND(
+   EXISTS(SELECT 1 FROM commercial_payment_attestations a WHERE a.payment_id=p.id)
+   OR NOT EXISTS(SELECT 1 FROM merchant_payment_requests q WHERE q.payment_id=p.id)
+   OR NOT(EXISTS(SELECT 1 FROM merchant_payment_terminal_receipts q WHERE q.payment_id=p.id)
+    OR(p.provider_ref IS NULL AND p.provider_checkout_ref IS NULL AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatches d LEFT JOIN merchant_payment_creation_refusals r ON r.dispatch_id=d.id WHERE d.payment_id=p.id AND r.dispatch_id IS NULL)))))
+  OR EXISTS(SELECT 1 FROM payments p LEFT JOIN agreement_fee_cash_assignments a ON a.payment_id=p.id WHERE p.invoice_id=i.id AND(p.status IN('created','processing')OR(p.status='succeeded' AND(a.payment_id IS NULL OR a.invoice_id<>i.id OR a.amount_minor<>p.amount_minor OR NOT freeholder_agreement_fee_principal_safe(p.id) OR freeholder_original_payment_fee(p.id) IS DISTINCT FROM a.fee_obligation_minor)))) THEN
+  RETURN QUERY SELECT false,false,NULL::bigint,NULL::bigint,NULL::bigint;RETURN;END IF;
+ SELECT coalesce(sum(p.amount_minor),0),coalesce(sum(p.refunded_minor),0),coalesce(sum(p.amount_minor-p.refunded_minor),0),coalesce(sum(floor(a.fee_obligation_minor::numeric*(p.amount_minor-p.refunded_minor)/p.amount_minor)),0)
+  INTO cash_gross,cash_returned,cash_remaining,cash_duty FROM payments p JOIN agreement_fee_cash_assignments a ON a.payment_id=p.id WHERE p.invoice_id=i.id AND p.status='succeeded';
+ IF cash_gross<>i.paid_minor OR cash_returned<>i.refunded_minor OR EXISTS(SELECT 1 FROM agreement_fee_credit_assignments a
+  LEFT JOIN invoice_credit_applications x ON x.reservation_id=a.application_id LEFT JOIN invoice_credit_reservations r ON r.id=x.reservation_id LEFT JOIN invoice_credit_funding f ON f.id=r.funding_id LEFT JOIN payments p ON p.id=f.source_payment_id
+  WHERE a.invoice_id=i.id AND(x.invoice_id IS DISTINCT FROM i.id OR r.target_source_id IS DISTINCT FROM i.source_id OR a.amount_minor IS DISTINCT FROM r.amount_minor OR a.fee_obligation_minor IS DISTINCT FROM x.fee_obligation_minor
+   OR a.proven_collected_minor IS DISTINCT FROM x.fee_proven_collected_minor OR p.id IS NULL OR p.refunded_minor<>0 OR NOT freeholder_agreement_fee_principal_safe(p.id))) THEN
+  RETURN QUERY SELECT false,false,NULL::bigint,NULL::bigint,NULL::bigint;RETURN;END IF;
+ SELECT coalesce(sum(amount_minor),0),coalesce(sum(fee_obligation_minor),0) INTO credit_remaining,credit_duty FROM agreement_fee_credit_assignments WHERE invoice_id=i.id;
+ IF credit_remaining<>duty.credited_minor OR cash_remaining+credit_remaining>duty.total_minor THEN RETURN QUERY SELECT false,false,NULL::bigint,NULL::bigint,NULL::bigint;RETURN;END IF;
+ SELECT coalesce(sum(CASE WHEN direction='returned' THEN -amount_minor ELSE amount_minor END),0) INTO recorded FROM agreement_fee_remittances WHERE invoice_id=i.id;
+ eligible:=EXISTS(SELECT 1 FROM agreement_fee_eligibility WHERE invoice_id=i.id);
+ target_duty:=CASE WHEN eligible THEN floor(duty.target_fee_minor::numeric*(cash_remaining+credit_remaining)/duty.total_minor) ELSE 0 END;
+ known:=true;owed:=CASE WHEN eligible THEN greatest(0,target_duty-credit_duty-cash_duty) ELSE 0 END;excess:=CASE WHEN eligible THEN greatest(0,credit_duty+cash_duty-target_duty) ELSE 0 END;
+ RETURN NEXT;
+END $$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_agreement_fee() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE duty agreement_fee_duties%ROWTYPE;i invoices%ROWTYPE;a subscription_prorations%ROWTYPE;p payments%ROWTYPE;x invoice_credit_applications%ROWTYPE;r invoice_credit_reservations%ROWTYPE;
+ prior_cash numeric;prior_fee numeric;current_state record;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.agreement_fee_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Original commission duty, assignments, eligibility and actual remittances are immutable guarded receipts' USING ERRCODE='23514';END IF;
+ SELECT * INTO i FROM invoices WHERE id=NEW.invoice_id;
+ IF TG_TABLE_NAME='agreement_fee_duties' THEN
+  SELECT * INTO a FROM subscription_prorations WHERE id=NEW.acceptance_id;
+  IF a.id IS NULL OR a.state<>'accepted' OR a.original_trial_ends_at IS NOT NULL OR a.debit_invoice_id IS DISTINCT FROM i.id OR i.source_type<>'subscription' OR i.source_id<>a.subscription_id::text||':proration:'||a.id::text
+   OR i.currency<>NEW.currency OR i.total_minor<>NEW.total_minor OR i.credited_minor<>NEW.credited_minor OR i.paid_minor<>0 OR i.status IN('draft','void')
+   OR NEW.merchant_profile_id<>a.profile_id OR NEW.profile_version<>a.profile_version OR NEW.accepted_quote_digest<>a.accepted_quote_digest OR NEW.target_fee_minor<>a.debit_fee_obligation_minor OR NEW.carried_fee_minor<>a.applied_fee_obligation_minor
+   OR NOT EXISTS(SELECT 1 FROM invoice_market_policies m WHERE m.invoice_id=i.id AND m.model='seller_merchant' AND m.fee_minor=NEW.target_fee_minor)
+   OR(SELECT count(*) FROM invoice_lines WHERE invoice_id=i.id)<>1 THEN RAISE EXCEPTION 'Freeze one exact accepted target commission epoch before collection, without rewriting an old or order-v1 policy' USING ERRCODE='23514';END IF;
+  RETURN NEW;
+ END IF;
+ SELECT * INTO duty FROM agreement_fee_duties WHERE invoice_id=NEW.invoice_id;
+ IF duty.invoice_id IS NULL OR i.id IS NULL THEN RAISE EXCEPTION 'Restore the exact original accepted commission duty before its children' USING ERRCODE='23514';END IF;
+ IF TG_TABLE_NAME='agreement_fee_credit_assignments' THEN
+  SELECT * INTO x FROM invoice_credit_applications WHERE reservation_id=NEW.application_id;SELECT * INTO r FROM invoice_credit_reservations WHERE id=x.reservation_id;
+  IF x.reservation_id IS NULL OR x.invoice_id<>i.id OR r.target_source_id<>i.source_id OR NEW.amount_minor<>r.amount_minor OR NEW.fee_obligation_minor<>x.fee_obligation_minor OR NEW.proven_collected_minor<>x.fee_proven_collected_minor OR x.fee_evidence_digest IS NULL THEN
+   RAISE EXCEPTION 'Each carried commission assignment retains its exact actual application and original fee proof' USING ERRCODE='23514';END IF;
+ ELSIF TG_TABLE_NAME='agreement_fee_cash_assignments' THEN
+  SELECT * INTO p FROM payments WHERE id=NEW.payment_id;
+  IF p.id IS NULL OR p.invoice_id<>i.id OR p.status<>'created' OR p.currency<>duty.currency OR NEW.amount_minor<>p.amount_minor OR freeholder_original_payment_fee(p.id) IS DISTINCT FROM NEW.fee_obligation_minor
+   OR(NEW.origin='recorded_external' AND(p.provider<>'manual' OR NOT EXISTS(SELECT 1 FROM commercial_payment_attestations WHERE payment_id=p.id)))
+   OR(NEW.origin='provider' AND(p.provider<>'stripe' OR NOT EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=p.id))) THEN
+   RAISE EXCEPTION 'A physical fee assignment needs its exact real principal attempt and one original provider route or external attestation' USING ERRCODE='23514';END IF;
+  SELECT coalesce(sum(q.amount_minor),0),coalesce(sum(c.fee_obligation_minor),0) INTO prior_cash,prior_fee FROM payments q LEFT JOIN agreement_fee_cash_assignments c ON c.payment_id=q.id WHERE q.invoice_id=i.id AND q.id<>p.id AND q.status='succeeded';
+  IF duty.cash_principal_minor<=0 OR prior_cash<>i.paid_minor OR prior_cash+p.amount_minor>duty.cash_principal_minor
+   OR prior_fee<>floor(duty.cash_fee_target_minor::numeric*prior_cash/duty.cash_principal_minor)
+   OR NEW.fee_obligation_minor<>floor(duty.cash_fee_target_minor::numeric*(prior_cash+p.amount_minor)/duty.cash_principal_minor)-prior_fee
+   OR EXISTS(SELECT 1 FROM payments q LEFT JOIN agreement_fee_cash_assignments c ON c.payment_id=q.id WHERE q.invoice_id=i.id AND q.id<>p.id AND(q.status IN('created','processing')OR(q.status='succeeded' AND(c.payment_id IS NULL OR q.refunded_minor<>0)))) THEN
+   RAISE EXCEPTION 'Preserve complete original cash assignments and cumulative physical-fee residuals within the actual cash cap' USING ERRCODE='23514';END IF;
+ ELSIF TG_TABLE_NAME='agreement_fee_eligibility' THEN
+  SELECT * INTO a FROM subscription_prorations WHERE id=duty.acceptance_id;
+  SELECT * INTO current_state FROM freeholder_agreement_fee_current(i.id);
+  IF NOT current_state.known OR i.status<>'paid' OR i.paid_at IS NULL OR NEW.paid_at<>i.paid_at OR i.paid_at>a.effective_at OR i.refunded_minor<>0 OR i.paid_minor+i.credited_minor<>i.total_minor
+   OR NEW.cash_payment_ids IS DISTINCT FROM coalesce((SELECT jsonb_agg(p.id::text ORDER BY p.id) FROM payments p WHERE p.invoice_id=i.id AND p.status='succeeded'),'[]'::jsonb)
+   OR NEW.credit_application_ids IS DISTINCT FROM coalesce((SELECT jsonb_agg(c.application_id::text ORDER BY c.application_id) FROM agreement_fee_credit_assignments c WHERE c.invoice_id=i.id),'[]'::jsonb) THEN
+   RAISE EXCEPTION 'Only authentic full canonical consideration in the accepted window establishes eligibility; it never proves commission remittance' USING ERRCODE='23514';END IF;
+ ELSIF TG_TABLE_NAME='agreement_fee_remittances' THEN
+  SELECT * INTO current_state FROM freeholder_agreement_fee_current(i.id);
+  IF NOT current_state.known OR NOT current_state.eligible OR NEW.currency<>duty.currency THEN RAISE EXCEPTION 'Resolve complete actual cash and noncash disposition before attesting commission money' USING ERRCODE='23514';END IF;
+  IF NEW.direction='remitted' AND current_state.recorded+NEW.amount_minor>current_state.owed THEN RAISE EXCEPTION 'An actual remittance cannot exceed the current original whole-consideration receivable' USING ERRCODE='23514';END IF;
+  IF NEW.direction='returned' AND NOT EXISTS(SELECT 1 FROM agreement_fee_remittances f WHERE f.id=NEW.original_remittance_id AND f.invoice_id=i.id AND f.direction='remitted'
+   AND coalesce((SELECT sum(q.amount_minor) FROM agreement_fee_remittances q WHERE q.original_remittance_id=f.id),0)+NEW.amount_minor<=f.amount_minor) THEN
+   RAISE EXCEPTION 'An actual commission return names its exact original bounded remittance receipt' USING ERRCODE='23514';END IF;
+ ELSE RAISE EXCEPTION 'Unknown original commission receipt family' USING ERRCODE='23514';END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER agreement_fee_duties_guard BEFORE INSERT OR UPDATE OR DELETE ON agreement_fee_duties FOR EACH ROW EXECUTE FUNCTION freeholder_guard_agreement_fee();
+--> statement-breakpoint
+CREATE TRIGGER agreement_fee_credit_assignments_guard BEFORE INSERT OR UPDATE OR DELETE ON agreement_fee_credit_assignments FOR EACH ROW EXECUTE FUNCTION freeholder_guard_agreement_fee();
+--> statement-breakpoint
+CREATE TRIGGER agreement_fee_cash_assignments_guard BEFORE INSERT OR UPDATE OR DELETE ON agreement_fee_cash_assignments FOR EACH ROW EXECUTE FUNCTION freeholder_guard_agreement_fee();
+--> statement-breakpoint
+CREATE TRIGGER agreement_fee_eligibility_guard BEFORE INSERT OR UPDATE OR DELETE ON agreement_fee_eligibility FOR EACH ROW EXECUTE FUNCTION freeholder_guard_agreement_fee();
+--> statement-breakpoint
+CREATE TRIGGER agreement_fee_remittances_guard BEFORE INSERT OR UPDATE OR DELETE ON agreement_fee_remittances FOR EACH ROW EXECUTE FUNCTION freeholder_guard_agreement_fee();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_agreement_fee_complete() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE duty agreement_fee_duties%ROWTYPE;i invoices%ROWTYPE;
+BEGIN
+ IF TG_TABLE_NAME='payments' THEN
+  SELECT * INTO i FROM invoices WHERE id=NEW.invoice_id;
+  IF i.source_type<>'subscription' OR split_part(i.source_id,':',2)<>'proration' OR i.total_minor=0 OR NEW.status NOT IN('created','processing','succeeded') THEN RETURN NULL;END IF;
+  SELECT * INTO duty FROM agreement_fee_duties WHERE invoice_id=i.id;
+  IF duty.invoice_id IS NULL OR(NOT(NEW.provider='manual' AND NEW.status='created') AND NOT EXISTS(SELECT 1 FROM agreement_fee_cash_assignments WHERE payment_id=NEW.id AND invoice_id=i.id)) THEN
+   RAISE EXCEPTION 'Retain the original accepted duty and exact real cash assignment before a caller or settlement can commit' USING ERRCODE='23514';END IF;
+ ELSE
+  SELECT * INTO duty FROM agreement_fee_duties WHERE invoice_id=NEW.invoice_id;
+  IF coalesce((SELECT sum(amount_minor) FROM agreement_fee_credit_assignments WHERE invoice_id=duty.invoice_id),0)<>duty.credited_minor
+   OR coalesce((SELECT sum(fee_obligation_minor) FROM agreement_fee_credit_assignments WHERE invoice_id=duty.invoice_id),0)<>duty.carried_fee_minor THEN
+   RAISE EXCEPTION 'Freeze every actual original credit consideration and its whole carried duty with the accepted fee plan' USING ERRCODE='23514';END IF;
+ END IF;
+ RETURN NULL;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER agreement_fee_duties_complete AFTER INSERT ON agreement_fee_duties DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_agreement_fee_complete();
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER agreement_fee_payment_assignment_complete AFTER INSERT OR UPDATE ON payments DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_agreement_fee_complete();
+
+--> statement-breakpoint
+-- Preserve the entire previous external writer; cap only an exact new gross
+-- target whose separate original duty is already frozen in this transaction.
+CREATE OR REPLACE FUNCTION guard_commercial_attestation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE p payments%ROWTYPE;i invoices%ROWTYPE;policy invoice_market_policies%ROWTYPE;r refunds%ROWTYPE;party invoice_merchant_tax_quotes%ROWTYPE;original commercial_payment_attestations%ROWTYPE;
+ previous_cash numeric;previous_fee numeric;actual_fee numeric;scopes integer;carried_fee numeric;cash_fee numeric;cash_principal numeric;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.commercial_attestation_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Preserve the first recorded commercial money evidence and use its authorized shared action' USING ERRCODE='23514'; END IF;
+ PERFORM pg_advisory_xact_lock(hashtext('payment:'||NEW.payment_id::text));
+ SELECT * INTO p FROM payments WHERE id=NEW.payment_id FOR UPDATE;
+ PERFORM pg_advisory_xact_lock(hashtext('invoice:'||p.invoice_id::text));
+ SELECT * INTO i FROM invoices WHERE id=p.invoice_id;
+ SELECT * INTO policy FROM invoice_market_policies WHERE invoice_id=i.id;
+ IF p.id IS NULL OR p.provider<>'manual' OR policy.model IS DISTINCT FROM 'seller_merchant' OR policy.collection_version<>0 OR i.source_type<>'subscription' OR i.issued_at IS NULL THEN
+  RAISE EXCEPTION 'An external commercial attestation must name its real original manual subscription payment and merchant invoice' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='commercial_payment_attestations' THEN
+  SELECT count(*) INTO scopes FROM invoice_merchant_tax_quotes WHERE invoice_id=i.id;
+  SELECT * INTO party FROM invoice_merchant_tax_quotes WHERE invoice_id=i.id;
+  IF scopes<>1 OR party.seller_user_id IS DISTINCT FROM policy.seller_user_id OR party.profile_id<>NEW.merchant_profile_id OR party.profile_version<>NEW.profile_version
+   OR NEW.invoice_id<>i.id OR NEW.currency<>i.currency OR NEW.currency<>p.currency OR NEW.amount_minor<>p.amount_minor OR p.status<>'created' OR p.provider_ref IS NOT NULL
+   OR p.method NOT IN('cash','bank_transfer','cheque','external_card','other')
+   OR EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=p.id) OR EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=p.id)
+   OR EXISTS(SELECT 1 FROM merchant_invoice_payment_routes WHERE payment_id=p.id) OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=p.id)
+   OR EXISTS(SELECT 1 FROM payments other WHERE other.invoice_id=i.id AND other.id<>p.id AND other.status IN('created','processing'))
+   OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments old ON old.id=o.payment_id WHERE old.invoice_id=i.id AND o.status='succeeded'
+    AND(old.status<>'succeeded' OR o.amount_minor<>old.amount_minor OR o.currency<>old.currency OR(o.provider_ref IS DISTINCT FROM old.provider_ref AND o.provider_ref IS DISTINCT FROM old.provider_checkout_ref)))
+   OR EXISTS(SELECT 1 FROM merchant_payment_dispatches d JOIN payments old ON old.id=d.payment_id
+      WHERE old.invoice_id=i.id AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_finishes f WHERE f.dispatch_id=d.id) AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_stops s WHERE s.dispatch_id=d.id)) THEN
+   RAISE EXCEPTION 'Retain exactly one real external origin with its original declared merchant, amount, evidence and quiesced competing callers' USING ERRCODE='23514'; END IF;
+  SELECT coalesce(sum(old.amount_minor),0),coalesce(sum(coalesce(a.fee_owed_minor,g.application_fee_minor,l.application_fee_minor)),0)
+   INTO previous_cash,previous_fee FROM payments old
+   LEFT JOIN commercial_payment_attestations a ON a.payment_id=old.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=old.id LEFT JOIN payment_merchant_routes l ON l.payment_id=old.id
+   WHERE old.invoice_id=i.id AND old.id<>p.id AND old.status='succeeded';
+  IF i.total_minor<=0 OR previous_cash<>i.paid_minor OR EXISTS(SELECT 1 FROM payments old
+   LEFT JOIN commercial_payment_attestations a ON a.payment_id=old.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=old.id LEFT JOIN payment_merchant_routes l ON l.payment_id=old.id
+   WHERE old.invoice_id=i.id AND old.id<>p.id AND old.status='succeeded' AND ((a.payment_id IS NOT NULL)::integer+(g.payment_id IS NOT NULL)::integer+(l.payment_id IS NOT NULL)::integer<>1 OR old.refunded_minor<>0)) THEN
+   RAISE EXCEPTION 'Restore the complete original cash and exactly one fee owner before a new external record' USING ERRCODE='23514'; END IF;
+  SELECT coalesce(sum(a.fee_obligation_minor),0) INTO carried_fee FROM invoice_credit_applications a WHERE a.invoice_id=i.id;
+  IF EXISTS(SELECT 1 FROM invoice_credit_applications a WHERE a.invoice_id=i.id AND a.fee_evidence_digest IS NULL)
+   OR coalesce((SELECT sum(r.amount_minor)FROM invoice_credit_applications a JOIN invoice_credit_reservations r ON r.id=a.reservation_id WHERE a.invoice_id=i.id),0)<>i.credited_minor THEN
+   RAISE EXCEPTION 'Restore exact noncash consideration and original fee ownership before recording another commission' USING ERRCODE='23514';END IF;
+  cash_principal:=i.total_minor-i.credited_minor;cash_fee:=greatest(0,policy.fee_minor-carried_fee);
+  IF split_part(i.source_id,':',2)='proration' THEN
+   IF NOT EXISTS(SELECT 1 FROM agreement_fee_duties d WHERE d.invoice_id=i.id AND d.total_minor=i.total_minor AND d.target_fee_minor=policy.fee_minor AND d.credited_minor=i.credited_minor AND d.carried_fee_minor=carried_fee AND d.cash_principal_minor=cash_principal
+    AND d.cash_fee_target_minor=least(cash_principal,cash_fee) AND d.expected_receivable_minor=greatest(0,cash_fee-cash_principal)) THEN
+    RAISE EXCEPTION 'Preserve the exact original separate commission receivable before recording its physically bounded cash fee' USING ERRCODE='23514';END IF;
+   cash_fee:=least(cash_principal,cash_fee);
+  END IF;
+  IF cash_principal<=0 OR cash_fee>cash_principal THEN RAISE EXCEPTION 'The original fee duty requires its bounded receivable; never invent collection or enlarge an unrelated charge' USING ERRCODE='23514';END IF;
+  actual_fee:=floor(cash_fee*(previous_cash+p.amount_minor)/cash_principal)-previous_fee;
+  IF NEW.fee_owed_minor<>actual_fee THEN RAISE EXCEPTION 'The recorded fee owed must use the frozen shared invoice policy, never a fabricated collected fee' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO original FROM commercial_payment_attestations WHERE payment_id=p.id;
+  IF original.payment_id IS NULL OR p.status<>'succeeded' OR original.amount_minor<>p.amount_minor OR original.currency<>p.currency THEN
+   RAISE EXCEPTION 'Restore the exact original successful recorded external principal' USING ERRCODE='23514'; END IF;
+  IF TG_TABLE_NAME='commercial_refund_attestations' THEN
+   SELECT * INTO r FROM refunds WHERE id=NEW.refund_id;
+   IF r.id IS NULL OR r.payment_id<>p.id OR r.provider<>'manual' OR r.status<>'created' OR r.provider_ref IS NOT NULL OR NEW.amount_minor<>r.amount_minor OR NEW.currency<>r.currency THEN
+    RAISE EXCEPTION 'Record only this actual original manual refund attempt before its balance settles' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='commercial_fee_attestations' THEN
+   IF NEW.direction='remitted' AND coalesce((SELECT sum(CASE WHEN direction='returned' THEN -amount_minor ELSE amount_minor END) FROM commercial_fee_attestations WHERE payment_id=p.id),0)+NEW.amount_minor>floor(original.fee_owed_minor::numeric*(p.amount_minor-p.refunded_minor)/p.amount_minor) THEN
+    RAISE EXCEPTION 'Recorded external remittances cannot exceed the original bounded current fee obligation' USING ERRCODE='23514'; END IF;
+   IF NEW.direction='returned' AND NOT EXISTS(SELECT 1 FROM commercial_fee_attestations first WHERE first.id=NEW.original_remittance_id AND first.direction='remitted' AND first.payment_id=p.id
+    AND coalesce((SELECT sum(a.amount_minor) FROM commercial_fee_attestations a WHERE a.original_remittance_id=first.id),0)+NEW.amount_minor<=first.amount_minor) THEN
+    RAISE EXCEPTION 'An external fee return must retain its exact original remittance and remaining actual amount' USING ERRCODE='23514'; END IF;
+  ELSE RAISE EXCEPTION 'Unknown recorded commercial money family' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+--> statement-breakpoint
+CREATE FUNCTION freeholder_agreement_fee_acceptance_complete() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE current subscription_prorations%ROWTYPE;
+BEGIN
+ SELECT * INTO current FROM subscription_prorations WHERE id=NEW.id;
+ IF current.original_trial_ends_at IS NULL AND current.debit_net_minor+current.debit_tax_minor>0 AND NOT EXISTS(SELECT 1 FROM agreement_fee_duties d WHERE d.acceptance_id=current.id AND d.invoice_id=current.debit_invoice_id
+  AND d.target_fee_minor=current.debit_fee_obligation_minor AND d.carried_fee_minor=current.applied_fee_obligation_minor AND d.accepted_quote_digest=current.accepted_quote_digest) THEN
+  RAISE EXCEPTION 'The whole original commission duty and exact source assignments must commit with their accepted gross target' USING ERRCODE='23514';END IF;
+ RETURN NULL;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER agreement_fee_acceptance_complete AFTER INSERT OR UPDATE ON subscription_prorations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_agreement_fee_acceptance_complete();
+
+--> statement-breakpoint
+-- Keep every existing provider/recipient/origin/caller guard and the complete
+-- historical ordinary branch; only exact new gross duties use their cash cap.
+CREATE OR REPLACE FUNCTION guard_merchant_agreement_payment_route() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE payment payments%ROWTYPE; parent invoices%ROWTYPE; policy invoice_market_policies%ROWTYPE; original record; paid numeric; prior_fee numeric; duty agreement_fee_duties%ROWTYPE;
+BEGIN
+ IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Original agreement payment routing is immutable.' USING ERRCODE='23514'; END IF;
+ SELECT * INTO payment FROM payments WHERE id=NEW.payment_id;
+ SELECT * INTO parent FROM invoices WHERE id=payment.invoice_id FOR UPDATE;
+ SELECT * INTO policy FROM invoice_market_policies WHERE invoice_id=payment.invoice_id;
+ SELECT scope.* INTO original FROM subscription_merchant_scopes scope JOIN subscriptions s ON s.id=scope.subscription_id
+  WHERE scope.subscription_id=NEW.subscription_id AND s.merchant_scope_version=1;
+ IF payment.id IS NULL OR parent.id IS NULL OR original.subscription_id IS NULL OR parent.source_type IS DISTINCT FROM 'subscription'
+  OR split_part(parent.source_id,':',1) IS DISTINCT FROM NEW.subscription_id::text OR policy.invoice_id IS NULL OR policy.model IS DISTINCT FROM 'seller_merchant'
+  OR payment.currency IS DISTINCT FROM parent.currency
+  OR payment.provider<>'stripe' OR payment.status<>'created' OR payment.method NOT IN('hosted_checkout','saved_method','provider_schedule')
+  OR NEW.collection_kind IS DISTINCT FROM original.collection_kind OR NEW.provider_platform_account_id IS DISTINCT FROM original.provider_platform_account_id
+  OR NEW.charge_account_id IS DISTINCT FROM original.charge_account_id OR NEW.recipient_account_id IS DISTINCT FROM original.recipient_account_id
+  OR NEW.settlement_merchant_account_id IS DISTINCT FROM original.settlement_merchant_account_id
+  OR(NEW.origin_kind='provider_schedule') IS DISTINCT FROM(payment.method='provider_schedule')
+  OR(NEW.origin_kind='provider_schedule' AND NEW.provider_api_version IS DISTINCT FROM original.provider_schedule_api_version)
+  OR(NEW.origin_kind='provider_schedule' AND NOT EXISTS(SELECT 1 FROM subscription_provider_charge_receipts receipt WHERE receipt.id=NEW.original_charge_receipt_id
+   AND receipt.subscription_id=NEW.subscription_id AND receipt.provider_platform_account_id=NEW.provider_platform_account_id AND receipt.charge_account_id IS NOT DISTINCT FROM NEW.charge_account_id
+   AND receipt.provider_api_version=NEW.provider_api_version AND receipt.provider_subscription_ref=NEW.provider_subscription_ref AND receipt.provider_invoice_ref=NEW.provider_invoice_ref
+   AND receipt.provider_payment_intent_ref=NEW.provider_payment_intent_ref AND receipt.provider_charge_ref=NEW.provider_charge_ref AND receipt.amount_minor=payment.amount_minor AND receipt.currency=payment.currency))
+  OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments p ON p.id=o.payment_id WHERE p.invoice_id=payment.invoice_id AND o.status='succeeded' AND(p.status<>'succeeded' OR o.amount_minor<>p.amount_minor OR o.currency<>p.currency OR(o.provider_ref IS DISTINCT FROM p.provider_ref AND o.provider_ref IS DISTINCT FROM p.provider_checkout_ref)))
+  OR NEW.application_fee_minor>payment.amount_minor
+  OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=NEW.payment_id)
+  OR EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=NEW.payment_id)
+  OR EXISTS(SELECT 1 FROM payments p WHERE p.invoice_id=payment.invoice_id AND p.id<>payment.id AND p.status IN('created','processing')) THEN
+  RAISE EXCEPTION 'Bind each new agreement payment to its immutable original merchant namespace.' USING ERRCODE='23514';
+ END IF;
+ IF split_part(parent.source_id,':',2)='proration' THEN
+  SELECT * INTO duty FROM agreement_fee_duties WHERE invoice_id=parent.id;
+  SELECT coalesce(sum(p.amount_minor),0),coalesce(sum(coalesce(a.fee_owed_minor,g.application_fee_minor)),0) INTO paid,prior_fee FROM payments p
+   LEFT JOIN commercial_payment_attestations a ON a.payment_id=p.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=p.id
+   WHERE p.invoice_id=parent.id AND p.status='succeeded';
+  IF duty.invoice_id IS NULL OR NEW.origin_kind<>'attempt' OR duty.total_minor<>parent.total_minor OR duty.credited_minor<>parent.credited_minor OR duty.target_fee_minor<>policy.fee_minor
+   OR duty.cash_principal_minor<=0 OR paid<>parent.paid_minor OR paid+payment.amount_minor>duty.cash_principal_minor
+   OR prior_fee<>floor(duty.cash_fee_target_minor::numeric*paid/duty.cash_principal_minor)
+   OR NEW.application_fee_minor<>floor(duty.cash_fee_target_minor::numeric*(paid+payment.amount_minor)/duty.cash_principal_minor)-prior_fee
+   OR EXISTS(SELECT 1 FROM payments p LEFT JOIN commercial_payment_attestations a ON a.payment_id=p.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=p.id WHERE p.invoice_id=parent.id AND p.status='succeeded'
+    AND((a.payment_id IS NOT NULL)::integer+(g.payment_id IS NOT NULL)::integer<>1 OR p.refunded_minor<>0)) THEN
+   RAISE EXCEPTION 'Bind only the physically bounded original gross-target fee while preserving its separately frozen merchant receivable and actual source assignments' USING ERRCODE='23514';END IF;
+  RETURN NEW;
+ END IF;
+ SELECT COALESCE(sum(p.amount_minor),0),COALESCE(sum(r.application_fee_minor),0) INTO paid,prior_fee
+ FROM payments p JOIN merchant_agreement_payment_routes r ON r.payment_id=p.id WHERE p.invoice_id=payment.invoice_id AND p.status='succeeded';
+ IF parent.total_minor=0 OR paid<>parent.paid_minor OR paid+payment.amount_minor>parent.total_minor
+  OR prior_fee<>floor(policy.fee_minor::numeric*paid/parent.total_minor)
+  OR NEW.application_fee_minor<>floor(policy.fee_minor::numeric*(paid+payment.amount_minor)/parent.total_minor)-prior_fee THEN
+  RAISE EXCEPTION 'The original agreement payment and application fee must conserve every invoice cent.' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+-- Source: deploy/subscription-proration-boundary80.fragment.sql
+-- SHA256: 1270f3f5e0c2295326a7f5b856654d8b26f0f66cdcd9556d20b15c1039ea1105
+-- Copyright (C) 2026 Tony Aly
+-- SPDX-License-Identifier: Apache-2.0
+-- C9.33/C12.38: OWNED UNAPPLIED continuation AFTER frozen2a943a01/818462a6.
+-- Only root assembles/applies a new database. Earlier tails are untouched.
+CREATE TABLE subscription_proration_cash_confirmations (
+ payment_id uuid PRIMARY KEY REFERENCES payments(id) ON DELETE RESTRICT,proration_id uuid NOT NULL REFERENCES subscription_prorations(id) ON DELETE RESTRICT,
+ invoice_id uuid NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,provider_observation_id uuid REFERENCES merchant_payment_observations(id) ON DELETE RESTRICT,
+ external_attestation_id uuid REFERENCES commercial_payment_attestations(payment_id) ON DELETE RESTRICT,retained_at timestamptz NOT NULL DEFAULT clock_timestamp(),original_evidence_digest text NOT NULL,
+ CONSTRAINT subscription_proration_cash_confirmations_origin CHECK((provider_observation_id IS NULL)<>(external_attestation_id IS NULL)),
+ CONSTRAINT subscription_proration_cash_confirmations_digest CHECK(original_evidence_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE INDEX subscription_proration_cash_confirmations_parent ON subscription_proration_cash_confirmations(proration_id);
+--> statement-breakpoint
+CREATE TABLE subscription_proration_credit_confirmations (
+ application_id uuid PRIMARY KEY REFERENCES invoice_credit_applications(reservation_id) ON DELETE RESTRICT,proration_id uuid NOT NULL REFERENCES subscription_prorations(id) ON DELETE RESTRICT,
+ invoice_id uuid NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,retained_at timestamptz NOT NULL DEFAULT clock_timestamp(),original_evidence_digest text NOT NULL,
+ CONSTRAINT subscription_proration_credit_confirmations_digest CHECK(original_evidence_digest ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE INDEX subscription_proration_credit_confirmations_parent ON subscription_proration_credit_confirmations(proration_id);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_proration_boundary_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE accepted subscription_prorations%ROWTYPE;i invoices%ROWTYPE;p payments%ROWTYPE;o merchant_payment_observations%ROWTYPE;
+ a commercial_payment_attestations%ROWTYPE;x invoice_credit_applications%ROWTYPE;r invoice_credit_reservations%ROWTYPE;
+BEGIN
+ IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Preserve actual original principal-retention time; no receipt can be rewritten or backdated' USING ERRCODE='23514';END IF;
+ SELECT * INTO accepted FROM subscription_prorations WHERE id=NEW.proration_id;
+ SELECT * INTO i FROM invoices WHERE id=NEW.invoice_id;
+ IF accepted.id IS NULL OR accepted.original_trial_ends_at IS NOT NULL OR accepted.debit_invoice_id IS DISTINCT FROM i.id OR i.source_type<>'subscription'
+  OR i.source_id IS DISTINCT FROM accepted.subscription_id::text||':proration:'||accepted.id::text OR i.currency IS DISTINCT FROM accepted.snapshot->>'currency' THEN
+  RAISE EXCEPTION 'Retain positive consideration only for its exact original accepted canonical target' USING ERRCODE='23514';END IF;
+ IF TG_TABLE_NAME='subscription_proration_cash_confirmations' THEN
+  SELECT * INTO p FROM payments WHERE id=NEW.payment_id;
+  IF p.id IS NULL OR p.invoice_id<>i.id OR p.currency<>i.currency OR p.amount_minor<=0 OR(NEW.provider_observation_id IS NULL)=(NEW.external_attestation_id IS NULL) THEN
+   RAISE EXCEPTION 'A principal confirmation needs one real original payment and exactly one actual source receipt' USING ERRCODE='23514';END IF;
+  IF NEW.provider_observation_id IS NOT NULL THEN
+   SELECT * INTO o FROM merchant_payment_observations WHERE id=NEW.provider_observation_id;
+   IF p.provider<>'stripe' OR o.id IS NULL OR o.payment_id<>p.id OR o.status<>'succeeded' OR NOT o.customer_charge_verified OR NOT o.route_verified OR o.amount_minor<>p.amount_minor OR o.currency<>p.currency
+    OR NOT EXISTS(SELECT 1 FROM merchant_agreement_payment_routes g WHERE g.payment_id=p.id AND g.provider_platform_account_id=o.provider_platform_account_id AND g.charge_account_id IS NOT DISTINCT FROM o.charge_account_id
+     AND g.recipient_account_id=o.recipient_account_id AND g.settlement_merchant_account_id=o.settlement_merchant_account_id) THEN
+    RAISE EXCEPTION 'Retain actual customer and merchant-route proof before claiming on-time provider principal; ancillary fees remain separate' USING ERRCODE='23514';END IF;
+   NEW.original_evidence_digest:=encode(sha256(convert_to(to_jsonb(o)::text,'UTF8')),'hex');
+  ELSE
+   SELECT * INTO a FROM commercial_payment_attestations WHERE payment_id=NEW.external_attestation_id;
+   IF p.provider<>'manual' OR a.payment_id IS DISTINCT FROM p.id OR a.invoice_id<>i.id OR a.amount_minor<>p.amount_minor OR a.currency<>p.currency
+    OR a.merchant_profile_id<>accepted.profile_id OR a.profile_version<>accepted.profile_version THEN
+    RAISE EXCEPTION 'Retain the actual exact external principal attestation; a supplied processedAt is not retention-time evidence' USING ERRCODE='23514';END IF;
+   NEW.original_evidence_digest:=encode(sha256(convert_to(to_jsonb(a)::text,'UTF8')),'hex');
+  END IF;
+ ELSIF TG_TABLE_NAME='subscription_proration_credit_confirmations' THEN
+  SELECT * INTO x FROM invoice_credit_applications WHERE reservation_id=NEW.application_id;
+  SELECT * INTO r FROM invoice_credit_reservations WHERE id=x.reservation_id;
+  IF x.reservation_id IS NULL OR x.invoice_id<>i.id OR r.target_source_id<>i.source_id OR r.amount_minor<=0 THEN
+   RAISE EXCEPTION 'Retain the actual original application to its exact accepted target before claiming on-time noncash consideration' USING ERRCODE='23514';END IF;
+  NEW.original_evidence_digest:=encode(sha256(convert_to(jsonb_build_object('application',to_jsonb(x),'reservation',to_jsonb(r))::text,'UTF8')),'hex');
+ ELSE RAISE EXCEPTION 'Unknown original principal boundary family' USING ERRCODE='23514';END IF;
+ -- Force actual execution time. Neither a caller-supplied date nor now()
+ -- (transaction start) may supply a false earlier retention instant.
+ NEW.retained_at:=clock_timestamp();
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_cash_confirmations_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_proration_cash_confirmations FOR EACH ROW EXECUTE FUNCTION freeholder_proration_boundary_receipt();
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_credit_confirmations_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_proration_credit_confirmations FOR EACH ROW EXECUTE FUNCTION freeholder_proration_boundary_receipt();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_capture_proration_boundary() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE target_invoice_id uuid;accepted subscription_prorations%ROWTYPE;
+BEGIN
+ IF TG_TABLE_NAME='invoice_credit_applications' THEN target_invoice_id:=NEW.invoice_id;
+ ELSIF TG_TABLE_NAME='commercial_payment_attestations' THEN target_invoice_id:=NEW.invoice_id;
+ ELSIF TG_TABLE_NAME='merchant_payment_observations' THEN
+  IF NEW.status<>'succeeded' OR NOT NEW.customer_charge_verified OR NOT NEW.route_verified THEN RETURN NEW;END IF;
+  SELECT p.invoice_id INTO target_invoice_id FROM payments p WHERE p.id=NEW.payment_id;
+ ELSE RAISE EXCEPTION 'Unknown real positive principal source' USING ERRCODE='23514';END IF;
+ SELECT p.* INTO accepted FROM subscription_prorations p WHERE p.debit_invoice_id=target_invoice_id;
+ IF accepted.id IS NULL THEN RETURN NEW;END IF;
+ IF TG_TABLE_NAME='invoice_credit_applications' THEN
+  INSERT INTO subscription_proration_credit_confirmations(application_id,proration_id,invoice_id,original_evidence_digest) VALUES(NEW.reservation_id,accepted.id,target_invoice_id,'') ON CONFLICT DO NOTHING;
+ ELSIF TG_TABLE_NAME='merchant_payment_observations' THEN
+  INSERT INTO subscription_proration_cash_confirmations(payment_id,proration_id,invoice_id,provider_observation_id,external_attestation_id,original_evidence_digest)
+   VALUES(NEW.payment_id,accepted.id,target_invoice_id,NEW.id,NULL,'') ON CONFLICT DO NOTHING;
+ ELSE
+  INSERT INTO subscription_proration_cash_confirmations(payment_id,proration_id,invoice_id,provider_observation_id,external_attestation_id,original_evidence_digest)
+   VALUES(NEW.payment_id,accepted.id,target_invoice_id,NULL,NEW.payment_id,'') ON CONFLICT DO NOTHING;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_provider_cash_confirmation AFTER INSERT ON merchant_payment_observations FOR EACH ROW EXECUTE FUNCTION freeholder_capture_proration_boundary();
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_external_cash_confirmation AFTER INSERT ON commercial_payment_attestations FOR EACH ROW EXECUTE FUNCTION freeholder_capture_proration_boundary();
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_credit_confirmation AFTER INSERT ON invoice_credit_applications FOR EACH ROW EXECUTE FUNCTION freeholder_capture_proration_boundary();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_proration_boundary_funded(target uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM subscription_prorations a JOIN invoices i ON i.id=a.debit_invoice_id WHERE a.id=target AND a.original_trial_ends_at IS NULL AND i.status='paid'
+  AND i.source_type='subscription' AND i.source_id=a.subscription_id::text||':proration:'||a.id::text AND i.currency=a.snapshot->>'currency'
+  AND i.total_minor=a.debit_net_minor+a.debit_tax_minor AND i.refunded_minor=0 AND i.paid_minor+i.credited_minor=i.total_minor AND i.paid_at<=a.effective_at
+  AND NOT EXISTS(SELECT 1 FROM payments p WHERE p.invoice_id=i.id AND p.status IN('created','processing'))
+  AND coalesce((SELECT sum(p.amount_minor) FROM payments p WHERE p.invoice_id=i.id AND p.status='succeeded'),0)=i.paid_minor
+  AND NOT EXISTS(SELECT 1 FROM payments p LEFT JOIN subscription_proration_cash_confirmations c ON c.payment_id=p.id
+   LEFT JOIN commercial_payment_attestations x ON x.payment_id=c.external_attestation_id LEFT JOIN merchant_payment_observations o ON o.id=c.provider_observation_id
+   WHERE p.invoice_id=i.id AND p.status='succeeded' AND(c.payment_id IS NULL OR c.proration_id<>a.id OR c.invoice_id<>i.id OR c.retained_at>a.effective_at
+    OR(c.external_attestation_id IS NOT NULL AND c.original_evidence_digest IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(x)::text,'UTF8')),'hex'))
+    OR(c.provider_observation_id IS NOT NULL AND c.original_evidence_digest IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(o)::text,'UTF8')),'hex'))))
+  AND coalesce((SELECT sum(r.amount_minor) FROM invoice_credit_applications x JOIN invoice_credit_reservations r ON r.id=x.reservation_id WHERE x.invoice_id=i.id),0)=i.credited_minor
+  AND NOT EXISTS(SELECT 1 FROM invoice_credit_applications x JOIN invoice_credit_reservations r ON r.id=x.reservation_id LEFT JOIN subscription_proration_credit_confirmations c ON c.application_id=x.reservation_id
+   WHERE x.invoice_id=i.id AND(c.application_id IS NULL OR c.proration_id<>a.id OR c.invoice_id<>i.id OR c.retained_at>a.effective_at
+    OR c.original_evidence_digest IS DISTINCT FROM encode(sha256(convert_to(jsonb_build_object('application',to_jsonb(x),'reservation',to_jsonb(r))::text,'UTF8')),'hex'))))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_proration_acceptance_deadline() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.effective_at<=clock_timestamp() THEN RAISE EXCEPTION 'A local acceptance cannot commit after its reviewed effective instant; roll back its new documents and obtain fresh consent before any provider caller' USING ERRCODE='23514';END IF;
+ RETURN NULL;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER subscription_proration_acceptance_deadline AFTER INSERT ON subscription_prorations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_proration_acceptance_deadline();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_proration_actual_paid_boundary() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE accepted subscription_prorations%ROWTYPE;
+BEGIN
+ IF TG_TABLE_NAME='agreement_fee_eligibility' THEN SELECT a.* INTO accepted FROM agreement_fee_duties d JOIN subscription_prorations a ON a.id=d.acceptance_id WHERE d.invoice_id=NEW.invoice_id;
+ ELSE accepted:=NEW;IF NEW.state<>'applied' OR OLD.state='applied' THEN RETURN NEW;END IF;END IF;
+ IF accepted.original_trial_ends_at IS NULL AND NOT freeholder_proration_boundary_funded(accepted.id) THEN
+  RAISE EXCEPTION 'Actual complete principal confirmation must be retained before the original boundary; processedAt or provider object creation cannot backdate eligibility/access' USING ERRCODE='23514';END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_actual_paid_boundary BEFORE UPDATE OF state ON subscription_prorations FOR EACH ROW EXECUTE FUNCTION freeholder_proration_actual_paid_boundary();
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_fee_paid_boundary BEFORE INSERT ON agreement_fee_eligibility FOR EACH ROW EXECUTE FUNCTION freeholder_proration_actual_paid_boundary();
+--> statement-breakpoint
+-- Source: deploy/subscription-proration-card80.fragment.sql
+-- SHA256: 90115a6f2ee202978b8210215c34bf6d9ee8142a20eae407b2def436967f6404
+-- Copyright (C) 2026 Tony Aly
+-- SPDX-License-Identifier: Apache-2.0
+-- OWNED UNAPPLIED suffix AFTER30dde7ff494d1d2ea81d1561e73c0ffba15721f215a3fd16bf13c73036002bb9.
+-- SOURCE ONLY: root owns assembly, a new migration hash and NEW normal database qualification.
+CREATE TABLE subscription_proration_payment_protocols (
+ payment_id uuid PRIMARY KEY REFERENCES merchant_payment_requests(payment_id) ON DELETE RESTRICT,
+ proration_id uuid NOT NULL REFERENCES subscription_prorations(id) ON DELETE RESTRICT,invoice_id uuid NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+ provider_api_version text NOT NULL CHECK(provider_api_version IN('2026-02-25.clover','2026-10-28.endive')),created_at timestamptz NOT NULL DEFAULT now()
+);
+--> statement-breakpoint
+CREATE INDEX subscription_proration_payment_protocols_parent ON subscription_proration_payment_protocols(proration_id);
+--> statement-breakpoint
+CREATE TABLE subscription_proration_card_mandates (
+ proration_id uuid PRIMARY KEY REFERENCES subscription_prorations(id) ON DELETE RESTRICT,invoice_id uuid NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,
+ payment_method_id uuid NOT NULL REFERENCES payment_methods(id) ON DELETE RESTRICT,method jsonb NOT NULL,method_digest text NOT NULL,accepted_quote_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT subscription_proration_card_mandates_digest CHECK(method_digest ~ '^[a-f0-9]{64}$' AND accepted_quote_digest ~ '^[a-f0-9]{64}$' AND jsonb_typeof(method)='object')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX subscription_proration_card_mandates_invoice ON subscription_proration_card_mandates(invoice_id);
+--> statement-breakpoint
+CREATE TABLE subscription_proration_card_attempts (
+ payment_id uuid PRIMARY KEY REFERENCES payments(id) ON DELETE RESTRICT,proration_id uuid NOT NULL REFERENCES subscription_proration_card_mandates(proration_id) ON DELETE RESTRICT,
+ invoice_id uuid NOT NULL REFERENCES invoices(id) ON DELETE RESTRICT,provider_request jsonb NOT NULL,request_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT subscription_proration_card_attempts_digest CHECK(request_digest ~ '^[a-f0-9]{64}$' AND jsonb_typeof(provider_request)='object')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX subscription_proration_card_attempts_original ON subscription_proration_card_attempts(proration_id);
+--> statement-breakpoint
+CREATE INDEX subscription_proration_card_attempts_invoice ON subscription_proration_card_attempts(invoice_id);
+--> statement-breakpoint
+CREATE TABLE subscription_proration_card_jobs (
+ proration_id uuid PRIMARY KEY REFERENCES subscription_proration_card_mandates(proration_id) ON DELETE RESTRICT,job_id uuid NOT NULL,
+ original_task jsonb NOT NULL,claim_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT subscription_proration_card_jobs_digest CHECK(claim_digest ~ '^[a-f0-9]{64}$' AND jsonb_typeof(original_task)='object')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX subscription_proration_card_jobs_job ON subscription_proration_card_jobs(job_id);
+--> statement-breakpoint
+CREATE TABLE subscription_proration_card_reads (
+ id uuid PRIMARY KEY,payment_id uuid NOT NULL REFERENCES payments(id) ON DELETE RESTRICT,admission jsonb NOT NULL,admission_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT subscription_proration_card_reads_digest CHECK(admission_digest ~ '^[a-f0-9]{64}$' AND jsonb_typeof(admission)='object')
+);
+--> statement-breakpoint
+CREATE INDEX subscription_proration_card_reads_payment ON subscription_proration_card_reads(payment_id);
+--> statement-breakpoint
+CREATE TABLE subscription_proration_card_read_finishes (
+ read_id uuid PRIMARY KEY REFERENCES subscription_proration_card_reads(id) ON DELETE RESTRICT,proof jsonb NOT NULL,proof_digest text NOT NULL,actual_result jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT subscription_proration_card_read_finishes_digest CHECK(proof_digest ~ '^[a-f0-9]{64}$' AND jsonb_typeof(proof)='object' AND jsonb_typeof(actual_result)='object')
+);
+--> statement-breakpoint
+CREATE TABLE subscription_proration_card_read_stops (
+ read_id uuid PRIMARY KEY REFERENCES subscription_proration_card_reads(id) ON DELETE RESTRICT,proof jsonb NOT NULL,proof_digest text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT subscription_proration_card_read_stops_digest CHECK(proof_digest ~ '^[a-f0-9]{64}$' AND jsonb_typeof(proof)='object')
+);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_subscription_proration_card_writer() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE p subscription_prorations%ROWTYPE;i invoices%ROWTYPE;cash payments%ROWTYPE;m subscription_proration_card_mandates%ROWTYPE;
+ ticket subscription_proration_card_reads%ROWTYPE;payload jsonb;original jsonb;body jsonb;parent subscriptions%ROWTYPE;method payment_methods%ROWTYPE;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.proration_card_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Original card mandates, attempts, protocols, jobs and distinct actual read receipts are immutable' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='subscription_proration_payment_protocols' THEN
+  SELECT * INTO p FROM subscription_prorations WHERE id=NEW.proration_id;
+  SELECT * INTO i FROM invoices WHERE id=NEW.invoice_id;SELECT * INTO cash FROM payments WHERE id=NEW.payment_id;
+  IF p.id IS NULL OR p.debit_invoice_id IS DISTINCT FROM i.id OR cash.invoice_id IS DISTINCT FROM i.id OR i.source_type<>'subscription'
+   OR i.source_id IS DISTINCT FROM p.subscription_id::text||':proration:'||p.id::text OR cash.provider<>'stripe' OR cash.method NOT IN('saved_method','hosted_checkout')
+   OR cash.status<>'created' OR cash.provider_ref IS NOT NULL OR cash.provider_checkout_ref IS NOT NULL
+   OR EXISTS(SELECT 1 FROM merchant_payment_dispatches WHERE payment_id=cash.id) THEN
+   RAISE EXCEPTION 'Only an actual new original gross-proration request can select its first provider protocol before any caller' USING ERRCODE='23514'; END IF;
+ ELSIF TG_TABLE_NAME='subscription_proration_card_mandates' THEN
+  SELECT * INTO p FROM subscription_prorations WHERE id=NEW.proration_id;SELECT * INTO parent FROM subscriptions WHERE id=p.subscription_id;
+  SELECT * INTO i FROM invoices WHERE id=NEW.invoice_id;SELECT * INTO method FROM payment_methods WHERE id=NEW.payment_method_id;
+  IF p.id IS NULL OR p.debit_invoice_id IS DISTINCT FROM i.id OR p.snapshot->>'billingMode' IS DISTINCT FROM 'platform' OR p.original_trial_ends_at IS NOT NULL
+   OR NEW.accepted_quote_digest IS DISTINCT FROM p.accepted_quote_digest OR i.total_minor-i.credited_minor<=0 OR method.status IS DISTINCT FROM 'active'
+   OR parent.payment_method_id IS DISTINCT FROM method.id OR method.contact_id IS DISTINCT FROM parent.contact_id
+   OR NEW.method->>'id' IS DISTINCT FROM method.id::text OR NEW.method->>'provider' IS DISTINCT FROM 'stripe'
+   OR NEW.method->>'providerMethodRef' IS DISTINCT FROM method.provider_method_ref OR NEW.method->>'providerCustomerRef' IS DISTINCT FROM method.provider_customer_ref
+   OR NEW.method->>'providerPlatformAccountId' IS DISTINCT FROM method.provider_platform_account_id OR NEW.method->>'providerAccountId' IS DISTINCT FROM method.provider_account_id
+   OR NEW.method->>'providerApiVersion' IS DISTINCT FROM '2026-02-25.clover' OR NEW.method->>'kind' IS DISTINCT FROM method.kind THEN
+   RAISE EXCEPTION 'Retain only the explicitly reviewed original-account active method and exact positive accepted target' USING ERRCODE='23514'; END IF;
+ ELSIF TG_TABLE_NAME='subscription_proration_card_attempts' THEN
+  SELECT * INTO m FROM subscription_proration_card_mandates WHERE proration_id=NEW.proration_id;SELECT * INTO p FROM subscription_prorations WHERE id=m.proration_id;
+  SELECT * INTO cash FROM payments WHERE id=NEW.payment_id;body=NEW.provider_request;
+  IF m.proration_id IS NULL OR NEW.invoice_id IS DISTINCT FROM m.invoice_id OR cash.invoice_id IS DISTINCT FROM m.invoice_id OR cash.status<>'created' OR cash.method<>'saved_method' OR cash.provider<>'stripe'
+   OR cash.provider_ref IS NOT NULL OR cash.provider_checkout_ref IS NOT NULL OR p.state<>'awaiting_payment' OR p.effective_at<=clock_timestamp()
+   OR body->>'paymentAttemptId' IS DISTINCT FROM cash.id::text OR body->>'invoiceId' IS DISTINCT FROM m.invoice_id::text
+   OR body->>'agreementSubscriptionId' IS DISTINCT FROM p.subscription_id::text OR body->>'amountMinor' IS DISTINCT FROM cash.amount_minor::text
+   OR body->>'currency' IS DISTINCT FROM cash.currency OR body->>'idempotencyKey' IS DISTINCT FROM cash.idempotency_key
+   OR body->>'methodRef' IS DISTINCT FROM m.method->>'providerMethodRef' OR body->>'customerRef' IS DISTINCT FROM m.method->>'providerCustomerRef'
+   OR body->>'providerApiVersion' IS DISTINCT FROM m.method->>'providerApiVersion' OR body->>'providerPlatformAccountId' IS DISTINCT FROM m.method->>'providerPlatformAccountId'
+   OR coalesce(body->>'providerAccountId','') IS DISTINCT FROM m.method->>'providerAccountId'
+   OR NOT EXISTS(SELECT 1 FROM subscription_proration_payment_protocols v WHERE v.payment_id=cash.id AND v.proration_id=p.id AND v.provider_api_version=body->>'providerApiVersion')
+   OR NOT EXISTS(SELECT 1 FROM merchant_payment_requests r WHERE r.payment_id=cash.id AND r.provider_contact_ref::text=body->>'contactId' AND r.provider_invoice_ref=m.invoice_id)
+   OR EXISTS(SELECT 1 FROM merchant_payment_dispatches WHERE payment_id=cash.id) THEN
+   RAISE EXCEPTION 'The original fixed-key card attempt must retain its actual payment, protocol, method and accepted changed-price request before POST' USING ERRCODE='23514'; END IF;
+ ELSIF TG_TABLE_NAME='subscription_proration_card_jobs' THEN
+  SELECT * INTO m FROM subscription_proration_card_mandates WHERE proration_id=NEW.proration_id;
+  IF m.proration_id IS NULL OR NEW.original_task->>'prorationId' IS DISTINCT FROM NEW.proration_id::text OR NEW.original_task->>'originalJobId' IS DISTINCT FROM NEW.job_id::text
+   OR NEW.original_task->>'acceptedQuoteDigest' IS DISTINCT FROM m.accepted_quote_digest
+   OR NOT EXISTS(SELECT 1 FROM job_idempotency_keys c JOIN pgboss.job j ON j.id=c.job_id WHERE c.job_name='subscriptions.collectProrationCard' AND c.job_id=NEW.job_id AND c.payload_hash=NEW.claim_digest AND j.name=c.job_name AND j.data=NEW.original_task) THEN
+   RAISE EXCEPTION 'Retain the actual original card collection worker body and immutable enqueue claim in the accepted transaction' USING ERRCODE='23514'; END IF;
+ ELSIF TG_TABLE_NAME='subscription_proration_card_reads' THEN
+  SELECT * INTO cash FROM payments WHERE id=NEW.payment_id;SELECT * INTO p FROM subscription_prorations WHERE debit_invoice_id=cash.invoice_id;
+  body=NEW.admission;payload=body->'payload';
+  IF p.id IS NULL OR cash.provider<>'stripe' OR cash.method NOT IN('saved_method','hosted_checkout') OR body->>'kind' IS DISTINCT FROM 'admission' OR body->>'version' IS DISTINCT FROM '1'
+   OR payload->>'purpose' IS DISTINCT FROM 'gross_proration_payment_read.v1' OR payload->>'readId' IS DISTINCT FROM NEW.id::text
+   OR payload->>'paymentId' IS DISTINCT FROM cash.id::text OR payload->>'prorationId' IS DISTINCT FROM p.id::text
+   OR payload->'caller'->>'id' IS DISTINCT FROM payload->>'callerId' OR NOT coalesce(payload->'caller'->>'id' ~ '^[a-f0-9-]{36}$',false)
+   OR NOT coalesce(payload->'caller'->>'pid' ~ '^[1-9][0-9]*$',false) OR NOT coalesce(payload->>'requestDigest' ~ '^[a-f0-9]{64}$',false)
+   OR NOT coalesce(payload->>'sourceRevision' ~ '^[a-f0-9]{64}$',false) OR NOT coalesce(payload->>'completionDigest' ~ '^[a-f0-9]{64}$',false)
+   OR NOT coalesce(payload->'request'->>'action' IN('inspect','retire'),false)
+   OR NOT coalesce(body->>'signature' ~ '^[A-Za-z0-9_-]{86}$',false) OR NOT coalesce(length(body->>'publicKey') BETWEEN 40 AND 2000,false) OR octet_length(body::text)>128000
+   OR NOT freeholder_merchant_creators_quiesced(cash.id) THEN
+   RAISE EXCEPTION 'A real independent bank GET needs its own actual signed birth/nonce and every original POST/GET finished or genuinely stopped' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO ticket FROM subscription_proration_card_reads WHERE id=NEW.read_id;original=ticket.admission->'payload';payload=NEW.proof->'payload';
+  IF ticket.id IS NULL OR NEW.proof->>'version' IS DISTINCT FROM '1' OR payload->>'purpose' IS DISTINCT FROM 'gross_proration_payment_read.v1'
+   OR payload->>'readId' IS DISTINCT FROM ticket.id::text OR payload->>'paymentId' IS DISTINCT FROM ticket.payment_id::text
+   OR payload->>'prorationId' IS DISTINCT FROM original->>'prorationId' OR payload->>'callerId' IS DISTINCT FROM original->>'callerId'
+   OR payload->>'requestDigest' IS DISTINCT FROM original->>'requestDigest' OR payload->>'admissionDigest' IS DISTINCT FROM ticket.admission_digest
+   OR NOT coalesce(NEW.proof->>'signature' ~ '^[A-Za-z0-9_-]{86}$',false) OR NOT coalesce(length(NEW.proof->>'publicKey') BETWEEN 40 AND 2000,false) THEN
+   RAISE EXCEPTION 'Retain the exact original signed read identity and request without substituting another process or resource' USING ERRCODE='23514'; END IF;
+  IF TG_TABLE_NAME='subscription_proration_card_read_finishes' THEN
+   IF NEW.proof->>'kind' IS DISTINCT FROM 'finish' OR NEW.proof->>'publicKey' IS DISTINCT FROM ticket.admission->>'publicKey'
+    OR payload->>'completionDigest' IS DISTINCT FROM original->>'completionDigest' OR NOT coalesce(payload->>'outcome' IN('returned','threw'),false)
+    OR payload->>'outcome' IS DISTINCT FROM NEW.actual_result->>'outcome' OR NOT coalesce(payload->>'factsDigest' ~ '^[a-f0-9]{64}$',false)
+    OR EXISTS(SELECT 1 FROM subscription_proration_card_read_stops WHERE read_id=ticket.id) THEN
+    RAISE EXCEPTION 'Only the actual unstopped original caller can finish its real bank return/throw' USING ERRCODE='23514'; END IF;
+  ELSE
+   IF NEW.proof->>'kind' IS DISTINCT FROM 'stop_review' OR payload->'originalAdmission' IS DISTINCT FROM ticket.admission
+    OR NOT coalesce(payload->>'reviewedBy' ~ '^user:[a-f0-9-]{36}$',false) OR NOT coalesce(payload->>'mechanicalCheck' IN('original_process_absent','unobservable_host_review'),false)
+    OR payload->>'sourceRevision' IS DISTINCT FROM original->>'sourceRevision' OR NOT coalesce(payload->>'hostingEvidenceDigest' ~ '^[a-f0-9]{64}$',false)
+    OR EXISTS(SELECT 1 FROM subscription_proration_card_read_finishes WHERE read_id=ticket.id) THEN
+    RAISE EXCEPTION 'A distinct actual hosting stop must retain the original admission and never invent its finish' USING ERRCODE='23514'; END IF;
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_payment_protocols_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_proration_payment_protocols FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_card_writer();
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_card_mandates_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_proration_card_mandates FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_card_writer();
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_card_attempts_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_proration_card_attempts FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_card_writer();
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_card_jobs_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_proration_card_jobs FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_card_writer();
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_card_reads_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_proration_card_reads FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_card_writer();
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_card_read_finishes_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_proration_card_read_finishes FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_card_writer();
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_card_read_stops_guard BEFORE INSERT OR UPDATE OR DELETE ON subscription_proration_card_read_stops FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_card_writer();
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_merchant_creators_quiesced(target uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT NOT EXISTS(SELECT 1 FROM merchant_payment_dispatches d
+  LEFT JOIN merchant_payment_dispatch_finishes f ON f.dispatch_id=d.id LEFT JOIN merchant_payment_dispatch_stops r ON r.dispatch_id=d.id
+  WHERE d.payment_id=target AND f.dispatch_id IS NULL AND r.dispatch_id IS NULL)
+ AND NOT EXISTS(SELECT 1 FROM subscription_proration_card_reads d
+  LEFT JOIN subscription_proration_card_read_finishes f ON f.read_id=d.id LEFT JOIN subscription_proration_card_read_stops s ON s.read_id=d.id
+  WHERE d.payment_id=target AND f.read_id IS NULL AND s.read_id IS NULL)
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_subscription_proration_card_complete() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE p subscription_prorations%ROWTYPE;cash payments%ROWTYPE;i invoices%ROWTYPE;
+BEGIN
+ IF TG_TABLE_NAME='merchant_payment_requests' THEN
+  SELECT * INTO cash FROM payments WHERE id=NEW.payment_id;SELECT * INTO i FROM invoices WHERE id=cash.invoice_id;
+  SELECT * INTO p FROM subscription_prorations WHERE debit_invoice_id=i.id;
+  IF p.id IS NOT NULL AND cash.provider='stripe' AND cash.method IN('saved_method','hosted_checkout') AND NOT EXISTS(
+   SELECT 1 FROM subscription_proration_payment_protocols v WHERE v.payment_id=cash.id AND v.proration_id=p.id AND v.invoice_id=i.id) THEN
+   RAISE EXCEPTION 'A new gross-proration payment must retain its original protocol with its immutable request before commit' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO p FROM subscription_prorations WHERE id=NEW.id;SELECT * INTO i FROM invoices WHERE id=p.debit_invoice_id;
+  IF p.snapshot->>'billingMode'='platform' AND p.original_trial_ends_at IS NULL AND i.total_minor-i.credited_minor>0 AND NOT EXISTS(
+   SELECT 1 FROM subscription_proration_card_mandates m JOIN subscription_proration_card_jobs j ON j.proration_id=m.proration_id
+   WHERE m.proration_id=p.id AND m.invoice_id=i.id AND m.accepted_quote_digest=p.accepted_quote_digest) THEN
+   RAISE EXCEPTION 'The accepted automatic changed-price mandate needs its exact original collection task before commit' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NULL;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER subscription_proration_payment_protocol_complete AFTER INSERT ON merchant_payment_requests DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_card_complete();
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER subscription_proration_card_mandate_complete AFTER INSERT OR UPDATE ON subscription_prorations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_card_complete();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_subscription_proration_card_dispatch() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE cash payments%ROWTYPE;p subscription_prorations%ROWTYPE;parent subscriptions%ROWTYPE;a subscription_proration_card_attempts%ROWTYPE;m subscription_proration_card_mandates%ROWTYPE;method payment_methods%ROWTYPE;
+BEGIN
+ SELECT * INTO cash FROM payments WHERE id=NEW.payment_id;SELECT * INTO p FROM subscription_prorations WHERE debit_invoice_id=cash.invoice_id;
+ IF p.id IS NULL THEN RETURN NEW; END IF;
+ SELECT * INTO parent FROM subscriptions WHERE id=p.subscription_id;
+ IF NOT EXISTS(SELECT 1 FROM module_settings WHERE module='subscriptions' AND enabled) OR p.effective_at<=clock_timestamp() OR p.state<>'awaiting_payment'
+  OR parent.status<>'active' OR parent.pending_plan_id IS DISTINCT FROM p.plan_id OR parent.cancelled_at IS NOT NULL OR parent.cancel_at_period_end
+  OR NOT EXISTS(SELECT 1 FROM subscription_proration_payment_protocols v WHERE v.payment_id=cash.id AND v.proration_id=p.id)
+  OR EXISTS(SELECT 1 FROM merchant_payment_dispatches d WHERE d.payment_id=cash.id) THEN
+  RAISE EXCEPTION 'Only the actual first admitted unexpired target can create a charge; stale jobs cannot charge successors' USING ERRCODE='23514'; END IF;
+ IF cash.method='saved_method' THEN
+  SELECT * INTO a FROM subscription_proration_card_attempts WHERE payment_id=cash.id;SELECT * INTO m FROM subscription_proration_card_mandates WHERE proration_id=p.id;
+  SELECT * INTO method FROM payment_methods WHERE id=m.payment_method_id;
+  IF a.payment_id IS NULL OR NEW.request_digest IS DISTINCT FROM a.request_digest OR method.status IS DISTINCT FROM 'active' OR method.contact_id IS DISTINCT FROM parent.contact_id
+   OR method.provider_method_ref IS DISTINCT FROM m.method->>'providerMethodRef' OR method.provider_customer_ref IS DISTINCT FROM m.method->>'providerCustomerRef'
+   OR method.provider_platform_account_id IS DISTINCT FROM m.method->>'providerPlatformAccountId' OR method.provider_account_id IS DISTINCT FROM m.method->>'providerAccountId' THEN
+   RAISE EXCEPTION 'The physical charge needs its original accepted mandate, actual immutable request and still-active exact method' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER subscription_proration_card_dispatch_guard BEFORE INSERT ON merchant_payment_dispatches FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_card_dispatch();

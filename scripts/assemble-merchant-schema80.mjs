@@ -30,6 +30,12 @@ const fragments = [
   "deploy/subscription-provider-reader-recovery80.fragment.sql",
   "deploy/original-cash-return81.fragment.sql",
   "deploy/original-cash-partial81.fragment.sql",
+  "deploy/subscription-commercial-attestation80.fragment.sql",
+  "deploy/subscription-proration-credit80.fragment.sql",
+  "deploy/subscription-gross-proration80.fragment.sql",
+  "deploy/subscription-agreement-fee80.fragment.sql",
+  "deploy/subscription-proration-boundary80.fragment.sql",
+  "deploy/subscription-proration-card80.fragment.sql",
 ];
 const header = `-- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0

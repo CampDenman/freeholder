@@ -75,3 +75,32 @@ Independent minimal proof, journal/profile and no remaining clients are in
 `/tmp/freeholder-current-cash81-partial-three-controls-v7-20261113-ledger-v12.json`;
 actual failure/result files share that prefix. This is a preserved missing
 integration dependency, not a passing or waived business gate.
+
+## Subsequent source and stopped-reader checks
+
+The renewed full TypeScript gate passes at6ddf7b5066f2d10126a04e96e1bb75b1240294c9
+in55.402seconds after the explicit label/nullable fixture and actual commercial
+output/caller repairs. This proves compilation only. The earlier failure is
+preserved; renewed result is
+`/tmp/freeholder-current-full82-types-v2-20261113-result.json`.
+
+At unchanged old0dca source, NEW ordinary V11 applies all82 identities normally
+in6.124seconds. The entire actual stopped-child reader control then passes in
+14.665seconds. It refuses a live original process, records independently
+reviewed stop after actual SIGKILL/exit, preserves the original observation
+history, rejects a forged finish, permits a genuine new GET, retains two
+tickets/one actual finish/one stop, and creates no invoice or payment. The
+provider HTTP edge remains synthetic. Independent read-only table SHA,
+journal, profile and drained-client proof are under
+`/tmp/freeholder-current-cash81-reader-stop-controls-v8-20261113-ledger-v13.json`.
+This is a component proof, not hosted/provider/stable acceptance.
+
+The commercial assembler now appends the six frozen attestation, credit,
+gross, fee, boundary and card tails to SQL80. The result is560886bytes,
+SHA256`cf1e735e6a0b349c09cbd777b2a2a09f9e11bebb9a3e76d74b5ff9cd66d6998f`,
+with the exact397928-byte0cff prefix preserved. SQL81 is unchanged. An
+independent source comparison retains every newer original guard in the five
+redefined base functions, including the final late-resumption commercial-terms
+branch. Neither assembly nor this source review supplies migration, parity or
+new business acceptance. The final owned82 source and complete qualification
+remain pending.

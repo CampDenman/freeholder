@@ -14066,6 +14066,13 @@ whatever is best for the people using the site.
   and revokes mid-call against a recording SFU adapter; the browser test has
   a member leave mid-call through the real LiveKit and checks the others keep
   decoding on the new key. Changeset `member-call-removal.md`.)*
+  Commercial assembly checkpoint 2026-11-13 (C12.38): SQL80/cf1e now
+  appends the six attestation/credit/gross/fee/boundary/card tails while
+  preserving the entire qualified397928-byte0cff prefix and unchanged81.
+  Five final function replacements preserve the newer original predicates,
+  including late resumption; see
+  `deploy/full82-commercial-function-review-2026-11-13.md`.
+  Full types pass at6ddf7b50; migration/parity/business gates remain open.
   Full integration wiring 2026-11-13 (C1.08/C12.38): buyer, frozen merchant
   profile and subscription merge evidence now select the exact24-family
   commercial/card footprint, including cashless/trial history. Existing evidence
