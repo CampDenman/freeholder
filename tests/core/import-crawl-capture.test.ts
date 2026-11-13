@@ -262,7 +262,7 @@ describe.runIf(hasDatabase)("actual saved HTTP response capture (C3.47)", () => 
     // This real public commit first admits its immutable plan/batch. The
     // owned HTTP fixture intentionally serves HTML rather than image bytes;
     // either its ordinary failed-file receipt or error is recovery state.
-    await Promise.allSettled([commitImport.call({ id: run.id, observed: { generation: graph!.generation, sourceRevision: graph!.sourceRevision, planRevision: graph!.planRevision } }, owner)]);
+    await Promise.allSettled([commitImport.call({ id: run.id, graph: { generation: graph!.generation, sourceRevision: graph!.sourceRevision, planRevision: graph!.planRevision } }, owner)]);
     const [admitted] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.id, graph!.id));
     expect(admitted?.planDigest).toMatch(/^[a-f0-9]{64}$/);
     expect(await db().select().from(importSourceBatches).where(eq(importSourceBatches.graphId, graph!.id))).toHaveLength(1);
