@@ -15101,6 +15101,14 @@ whatever is best for the people using the site.
   Root media/storage corrections and full renewed qualification remain required;
   no schema, SQL, activation, item or stable gate changes. See
   `deploy/commercial-lint82-source-20261113.md`.
+  Combined83 source assembly 2026-11-13 (C1.12/C11.08/C12.38): frozen
+  media checkpoint76f supplies SQL82/db89 and one new journal entry after
+  unchanged0–81. Its15 media models plus nine controlled/commercial families
+  form the current source baseline; immutable first-scope16 continuation is
+  still separate required implementation. Nothing is applied to a database by
+  this assembly, and the media request capability remains unpublished. A new
+  ordinary database and exact current-model parity are required before native
+  execution; changed unapplied82 must never be installed into an older proof DB.
   Controlled assembly checkpoint 2026-11-13 (C12.38): the frozen ee87
   nine-family provider tail now follows the six commercial tails in SQL80/1c2e
   (603826bytes), retaining both entire earlier cf1e and0cff prefixes. It adds
