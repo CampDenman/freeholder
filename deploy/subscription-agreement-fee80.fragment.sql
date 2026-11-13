@@ -137,7 +137,7 @@ BEGIN
   SELECT * INTO a FROM subscription_prorations WHERE id=duty.acceptance_id;
   SELECT * INTO current_state FROM freeholder_agreement_fee_current(i.id);
   IF NOT current_state.known OR i.status<>'paid' OR i.paid_at IS NULL OR NEW.paid_at<>i.paid_at OR i.paid_at>a.effective_at OR i.refunded_minor<>0 OR i.paid_minor+i.credited_minor<>i.total_minor
-   OR NEW.cash_payment_ids IS DISTINCT FROM coalesce((SELECT jsonb_agg(p.id::text ORDER BY p.id) FROM payments p WHERE p.invoice_id=i.id AND p.status='succeeded'),'[]'::jsonb)
+   OR NEW.cash_payment_ids IS DISTINCT FROM coalesce((SELECT jsonb_agg(eligible_payment.id::text ORDER BY eligible_payment.id) FROM payments eligible_payment WHERE eligible_payment.invoice_id=i.id AND eligible_payment.status='succeeded'),'[]'::jsonb)
    OR NEW.credit_application_ids IS DISTINCT FROM coalesce((SELECT jsonb_agg(c.application_id::text ORDER BY c.application_id) FROM agreement_fee_credit_assignments c WHERE c.invoice_id=i.id),'[]'::jsonb) THEN
    RAISE EXCEPTION 'Only authentic full canonical consideration in the accepted window establishes eligibility; it never proves commission remittance' USING ERRCODE='23514';END IF;
  ELSIF TG_TABLE_NAME='agreement_fee_remittances' THEN
@@ -223,7 +223,7 @@ BEGIN
    RAISE EXCEPTION 'Restore the complete original cash and exactly one fee owner before a new external record' USING ERRCODE='23514'; END IF;
   SELECT coalesce(sum(a.fee_obligation_minor),0) INTO carried_fee FROM invoice_credit_applications a WHERE a.invoice_id=i.id;
   IF EXISTS(SELECT 1 FROM invoice_credit_applications a WHERE a.invoice_id=i.id AND a.fee_evidence_digest IS NULL)
-   OR coalesce((SELECT sum(r.amount_minor)FROM invoice_credit_applications a JOIN invoice_credit_reservations r ON r.id=a.reservation_id WHERE a.invoice_id=i.id),0)<>i.credited_minor THEN
+   OR coalesce((SELECT sum(applied_reservation.amount_minor)FROM invoice_credit_applications a JOIN invoice_credit_reservations applied_reservation ON applied_reservation.id=a.reservation_id WHERE a.invoice_id=i.id),0)<>i.credited_minor THEN
    RAISE EXCEPTION 'Restore exact noncash consideration and original fee ownership before recording another commission' USING ERRCODE='23514';END IF;
   cash_principal:=i.total_minor-i.credited_minor;cash_fee:=greatest(0,policy.fee_minor-carried_fee);
   IF split_part(i.source_id,':',2)='proration' THEN

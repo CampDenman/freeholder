@@ -30,7 +30,7 @@ describe.runIf(hasDatabase)("actual read-only original cash inspection and bare 
  beforeAll(ready,60000);beforeEach(truncateSpine);afterEach(()=>{fixture?.base.cleanup();fixture=undefined;vi.restoreAllMocks();});afterAll(async()=>{await stopJobs();await closeDb();});
  async function original(){fixture=await partialCashFixture({unapplied:true});return fixture;}
  async function perform(f:Awaited<ReturnType<typeof partialCashFixture>>,claim:Awaited<ReturnType<typeof prepareMerchantCashReturnInspection.call>>){
-  const inspect=f.base.stripe.inspectMerchantReturnedCash;if(!inspect)throw Error("The real original-account Stripe GET adapter is required.");let observationId:string|undefined;
+  const inspect=f.base.stripe.inspectMerchantReturnedCash?.bind(f.base.stripe);if(!inspect)throw Error("The real original-account Stripe GET adapter is required.");let observationId:string|undefined;
   await performMerchantCashReturnInspection(claim,()=>inspect({providerPlatformAccountId:claim.providerPlatformAccountId,providerApiVersion:claim.providerApiVersion,...(claim.providerAccountId?{providerAccountId:claim.providerAccountId}:{}),paymentProviderRef:claim.paymentProviderRef,
    onOriginalCashObserved:async evidence=>{await recordCashReturnPrimaryObservation.call({...claim,evidence:merchantPaymentEvidence.extend({amountMinor:z.number().int().nonnegative(),currency:z.string().regex(/^[A-Z]{3}$/)}).parse(evidence)},system);},
    onRefundObserved:async evidence=>{await recordMerchantRefundObservation.call({source:f.source,inspectionId:claim.inspectionId,evidence:{...evidence,providerApiVersion:evidence.providerApiVersion??null,status:evidence.providerStatus??null}},system);},

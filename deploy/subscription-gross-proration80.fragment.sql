@@ -436,7 +436,7 @@ BEGIN
    RAISE EXCEPTION 'Restore the complete original cash and exactly one fee owner before a new external record' USING ERRCODE='23514'; END IF;
   SELECT coalesce(sum(a.fee_obligation_minor),0) INTO carried_fee FROM invoice_credit_applications a WHERE a.invoice_id=i.id;
   IF EXISTS(SELECT 1 FROM invoice_credit_applications a WHERE a.invoice_id=i.id AND a.fee_evidence_digest IS NULL)
-   OR coalesce((SELECT sum(r.amount_minor)FROM invoice_credit_applications a JOIN invoice_credit_reservations r ON r.id=a.reservation_id WHERE a.invoice_id=i.id),0)<>i.credited_minor THEN
+   OR coalesce((SELECT sum(applied_reservation.amount_minor)FROM invoice_credit_applications a JOIN invoice_credit_reservations applied_reservation ON applied_reservation.id=a.reservation_id WHERE a.invoice_id=i.id),0)<>i.credited_minor THEN
    RAISE EXCEPTION 'Restore exact noncash consideration and original fee ownership before recording another commission' USING ERRCODE='23514';END IF;
   cash_principal:=i.total_minor-i.credited_minor;cash_fee:=greatest(0,policy.fee_minor-carried_fee);
   IF cash_principal<=0 OR cash_fee>cash_principal THEN RAISE EXCEPTION 'The new fee duty requires its separate bounded merchant receivable; never invent a collected fee or oversized customer charge' USING ERRCODE='23514';END IF;

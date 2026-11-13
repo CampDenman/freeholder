@@ -4,7 +4,8 @@
 import { eq } from "drizzle-orm";
 import { ServiceError,type Tx } from "@/core/service";
 import { merchantTaxDigest } from "./merchant-tax-store";
-import { merchantCashReturnInspections,merchantCashReturnInspectionFinishes,merchantCashReturnPrimaryObservations,merchantCashReturnObservations,merchantRefundObservations } from "./merchant-refund-schema";
+import type { merchantCashReturnInspections,merchantCashReturnInspectionFinishes } from "./merchant-refund-schema";
+import { merchantCashReturnPrimaryObservations,merchantCashReturnObservations,merchantRefundObservations } from "./merchant-refund-schema";
 import type { MerchantRefundSource } from "./merchant-refund-origin";
 type Inspection=typeof merchantCashReturnInspections.$inferSelect;
 type Finish=typeof merchantCashReturnInspectionFinishes.$inferSelect;

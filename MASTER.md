@@ -3663,7 +3663,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-13 checkpoint. Protected main remains fe2645dc after HTTP null-result PR698 and audit nonce-redaction PR699; no deployment or stable version advanced. Draft PR701 review commit 5b504abb exactly matches integration 27c0eda4, with full signed history preserved separately and DCO passed. At that source, full types, whole lint, 336 actual cases in 56 complete changed test files, and license/notes/plan gates passed; 60 database cases were explicitly skipped. NEW V5 normally applied all 83 migrations in 6.799s. Strict read-only v16 then passed the 142-model cohort, 282 guards, both new empty-scope functions and required function bodies, exact journal/settings and independent client drain. Four actual empty-media service controls and the historical import-upgrade control passed individually with independent metadata/journal/profile/drain proofs; upgrade rollback also restored all four guard functions and three modern FK definitions exactly. SDK generation and non-update verification each passed eight live-registry cases. Cumulative partial returns and lost-response recovery passed; failed V3/V4 datasets remain preserved. The original unassigned-feedback fixture correctly took managed retention, so its raw-path expectation failed. A genuine charge-only ownership repair and nullable-PI controls are now integrated, with new source/native qualification pending. Current CI still requires a complete green run; enabled ordinary media I/O remains blocked on the unfinished full protocol. Positive controlled collection and media retirement/crash/multipart/quota/cutover remain implementation work. Actual provider/platform acceptance, final object-byte recovery, Tony's independent C11.10 report and exact C11.17 signature remain absent. No live checklist item closes from this checkpoint. |
+| Latest launch audit | 2026-11-13 checkpoint. Protected main remains fe2645dc; draft PR701 still reviews older5b504abb/27c0eda4 and CI is not green. Current integration4be0b712 passed full types, affected lint,355 actual controls in59 complete files and license/notes/plan (64 native cases explicitly skipped there). NEW V8 normally applied all83 migrations; strict v17 passed142 models,282 guards and227 function bodies. Three actual cash-inspection journeys and all four original cash-return/feedback regressions passed individually with independent financial/journal/profile/drain proof. NULL-payment receipt feedback and controlled raw-positive/unpaid journeys also passed after documented SQL fixes. Historical empty-media/import/SDK proofs stay preserved. Media retirement/crash/multipart/quota/cutover and positive controlled collection remain implementation work; a separate existing-session browser signing containment patch is in preparation. Current-source green CI, provider/platform acceptance, final object-byte recovery, Tony’s C11.10 report and exact C11.17 signature remain absent. No live item closes from this checkpoint. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -4150,6 +4150,22 @@ reading chat logs.
   prepared but unrun;16 models/owned UNAPPLIED82 stay inactive, and physical
   retirement/multipart/crash/cutover implementation and actual acceptance remain
   required. See `deploy/media-original-first-capture-source-2026-11-13.md`.
+  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and
+  signer handoff require a dedicated unpublished durable-part capability;
+  generic storage/request flags cannot mint new browser PUT URLs. Existing
+  sessions/receipts stay intact, with four-locale recovery guidance. Two actual
+  shared-service/TCP signer-not-called controls passed individually at3e722c90
+  (created10.528s, uploading7.523s), with the real signer never called and
+  original session/rows unchanged. Full types46.183s, affected lint6.673s and
+  license/notes/plan passed. A fresh database normally applied all80 unchanged
+  published migrations in5.315s. The existing assembly/validation/receipt/
+  idempotency control also passed7.976s. Independent table hashes, completed
+  asset ancestry, all80 journal hashes, PostgreSQL profile and drained clients
+  passed after each case. These are fictional-provider component checks. The old
+  assembly fixture changes only its newly forbidden signing expectation and
+  retains all assembly/receipt/idempotency assertions. Full per-part recovery,
+  old-runtime/issued-URL retirement, full-protocol/provider acceptance and this
+  C item remain open. See `deploy/media-part-signing-containment-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;
@@ -14357,6 +14373,60 @@ whatever is best for the people using the site.
   supplies its own fictional webhook secret instead of depending on inherited
   process configuration. No production availability guard changed. Both actual
   raw-finance controls still require a fresh database and original assertions.
+  Current cash-reader source qualification2026-11-13: full TypeScript passes
+  at4cc200a9. Whole-repository lint stops only at two new issues: schema imports
+  used solely as types and an unbound actual Stripe inspection method in the
+  native helper. The source now uses type-only imports and binds that genuine
+  method to its original adapter. No lint rule, runtime policy or financial
+  oracle is relaxed. Failed v17 logs remain preserved. Renewed full types55.463s,
+  seven affected lint files7.726s and355 actual controls in59 complete files
+  32.366s passed, with64 native cases explicitly skipped. A sandbox EPERM on
+  the license gate Git child was preserved; only the remaining metadata gates
+  reran with approval at the exact same source. License, notes and plan passed
+  (source v18 plus exact-head continuation v19). Three actual reader journeys
+  then passed individually at4be0b712: bare admission blocks the successor
+  before its first callback9.878s; neutral current evidence cannot invent a
+  returned disposition or replay its GET9.427s; later actual refund invalidates
+  the old snapshot and refuses late callbacks10.128s. The four original cash
+  journeys renewed individually: cumulative returns22.247s, lost recipient
+  response15.435s, genuine charge-only unapplied remainder19.894s and managed
+  PI-bearing feedback9.527s. Independent financial totals/full-row table SHAs,
+  all83 journal hashes, PostgreSQL profile and zero-client proof passed before
+  every subsequent reset. Real Stripe reads retain progressive snapshots: the
+  first independent inspector incorrectly assumed one snapshot/read. That
+  inspector is preserved; replacement v2 proves every contiguous sequence,
+  genuine caller/finish and latest complete refund/dispute state without
+  changing product oracles or resetting the dataset. Evidence prefixes under
+  /tmp: freeholder-current-full82-cash-inspection-{bare,neutral,latest}-native-
+  v1-20261113 (-ledger-v2.json); freeholder-current-full82-partial-{three,
+  lost-recipient,unassigned,managed}-native-v6-20261113 (-ledger-v6.json).
+  These are synthetic-provider component checks, not independent stopped-read
+  recovery, full positive collection, provider-account or stable acceptance.
+  Actual external-money continuation2026-11-13: combined dcd1ea1e (same tree
+  at48d20e4e) passed full types, affected lint,368 actual controls in61 complete
+  files and license/notes/plan, with101 native cases explicitly skipped there.
+  NEW V9 applied all83 entries in6.780s; strict v18 passed142 models/282 guards/
+  227 function bodies in11.410s/3357 queries. The unchanged actual offline
+  payment journey then caught PostgreSQL42702 before its first attestation: a
+  local refunds record r conflicts with applied-credit reservation alias r.
+  A broader owned-body source scan also found the same clause in both final
+  attestation redefinitions and eligibility payment alias p conflicting with
+  the declared payment record. These exact three aliases are now distinct
+  applied_reservation/eligible_payment names; all financial conditions remain
+  unchanged. Failed V9 is preserved with independent table/journal/profile/
+  client-drain proof. No first payment/attestation was partially committed.
+  Fresh V10, strict installed-body parity and unchanged offline/gross business
+  controls remain required. All142 models and0–79/81/82 stay unchanged.
+  Related external-money alias audit2026-11-13: source review found the same
+  trigger OLD collision in all three owned guard_commercial_attestation bodies
+  (commercial attestation, agreement fee and gross proration). Signed af8c4b77
+  changes only payments old to prior_payment and its field references. Root
+  replaces each complete owned fragment exactly once in unpublished SQL80,
+  preserving the entire397928-byte prefix and every original condition/fee
+  epoch. SQL80 is605453 bytes/SHA931337667425e57f4fa9e25288109a07be4c0be86630ab8f3323efdc9dc268ee;
+  0–79/81/82 and all142 models remain unchanged. Fresh normal migration, strict
+  installed-body parity and the existing real shared-service offline-payment
+  and gross-proration native journeys are required; no acceptance is claimed.
   Controlled origin SQL correction2026-11-13: after the fixture availability
   correction, the original interruption/recovery journey reached its actual
   cash receipt and caught PostgreSQL42703. The origin trigger used table alias
