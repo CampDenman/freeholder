@@ -3983,6 +3983,15 @@ reading chat logs.
 - [ ] **C1.12** Complete media support for video, audio and documents,
   resumable/presigned direct uploads, validation, malware scanning seam,
   metadata/provenance, focal points, lifecycle and orphan cleanup.
+  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and
+  signer handoff require a dedicated unpublished durable-part capability;
+  generic storage/request flags cannot mint new browser PUT URLs. Existing
+  sessions/receipts stay intact, with four-locale recovery guidance. Two actual
+  shared-service/TCP signer-not-called controls are prepared/unrun. The old
+  assembly fixture changes only its newly forbidden signing expectation and
+  retains all assembly/receipt/idempotency assertions. Full per-part recovery,
+  old-runtime/issued-URL retirement, source/native/provider acceptance and this
+  C item remain open. See `deploy/media-part-signing-containment-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;

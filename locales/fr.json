@@ -8775,6 +8775,7 @@
   "mail.recovery.changed": "Une réponse positive ultérieure du serveur contredit l’examen précédent. Vérifiez à nouveau cet envoi exact.",
   "mail.recovery.observedReply": "Le serveur d’origine a renvoyé une réponse positive, mais la finalisation locale doit être examinée. Cet envoi ne peut pas être déclaré non soumis.",
   "media.recovery.title": "Récupération du stockage",
+  "media.recovery.partsUnavailable": "Les nouveaux liens de téléversement direct ne sont pas disponibles. Conservez ce téléversement d’origine et ses reçus pour examen. La récupération complète de ces téléversements n’est pas encore prise en charge. Un lien expiré ou un fichier courant absent ne prouve pas que tous les octets stockés ont été supprimés.",
   "media.recovery.intro": "Une demande interrompue peut encore aboutir chez le fournisseur d’origine. Vérifiez le résultat de cette opération précise et prouvez que tous ses processus d’écriture sont arrêtés. Vérifiez la ressource d’origine auprès du fournisseur ; un fichier absent ou un délai expiré ne suffit pas. Seul un reçu de vos preuves est conservé.",
   "media.recovery.namespace": "Empreinte de la ressource de stockage d’origine",
   "media.recovery.sha256": "SHA-256 du fichier d’origine (obligatoire pour vérifier un ancien fichier présent)",

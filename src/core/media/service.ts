@@ -5,6 +5,7 @@
 // The only door to the asset library. Reserve physical-operation ownership
 // before storage I/O; attach a library asset only after accepted bytes and
 // validation. Failed acknowledgements keep their original pending witnesses.
+import {assertDurableMultipartPartIssuance} from "./multipart-part-authority";
 import { z } from "zod";
 import { and, count, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
@@ -1187,6 +1188,7 @@ const signUploadClaim = defineService({
     if (partNumbers.some((part) => part > partCount)) {
       throw new ServiceError("validation", "A requested upload part is outside the file.");
     }
+    await assertDurableMultipartPartIssuance(ctx.tx);
     if (session.state === "created") {
       await ctx.tx
         .update(mediaUploads)
@@ -1225,6 +1227,7 @@ export const signUploadParts = defineOrchestratedService({
   }),
   handler: async (input, actor) => {
     const claimed = await signUploadClaim.call(input, actor);
+    await db().transaction(assertDurableMultipartPartIssuance);
     const captured=await originalMultipart(input.id),multipart=captured.store.directMultipart;
     if (!multipart) {
       throw new ServiceError("conflict", "Direct uploads are unavailable.");
