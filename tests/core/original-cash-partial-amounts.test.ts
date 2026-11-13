@@ -63,6 +63,8 @@ describe("reviewed actual unassigned cash remains unassigned", () => {
     expect(capacity([{ ...reviewed, amountMinor: 399 }]).debt).toContain("unassigned_refund");
   });
   it("fails closed on duplicate review authority", () => {
-    expect(capacity([reviewed, reviewed])).toMatchObject({ refundedMinor: null, availableMinor: null, debt: expect.arrayContaining(["contradictory_provider_fact", "unassigned_refund"]) });
+    const result=capacity([reviewed, reviewed]);
+    expect(result).toMatchObject({ refundedMinor:null,availableMinor:null });
+    expect(result.debt).toContain("contradictory_provider_fact");expect(result.debt).toContain("unassigned_refund");
   });
 });

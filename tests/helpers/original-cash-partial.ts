@@ -89,7 +89,7 @@ export async function partialCashFixture(options: { unapplied?: boolean; unreada
     throw Error(`Unexpected original cash transport ${init.method} ${url.pathname}`);
   });
   const secret="whsec_cash_partial_fixture_only",actual = createStripePayments({ secretKey: "sk_cash_fixture_only", webhookSecrets:[secret],fetch: fetcher });
-  base.stripe.inspectMerchantReturnedCash = actual.inspectMerchantReturnedCash; base.stripe.createMerchantCashAuxiliary = actual.createMerchantCashAuxiliary; base.stripe.recoverMerchantCashAuxiliary = actual.recoverMerchantCashAuxiliary;
+  base.stripe.inspectMerchantReturnedCash = request => actual.inspectMerchantReturnedCash!(request); base.stripe.createMerchantCashAuxiliary = request => actual.createMerchantCashAuxiliary!(request); base.stripe.recoverMerchantCashAuxiliary = request => actual.recoverMerchantCashAuxiliary!(request);
   async function returnOne() {
     if(!paid)throw Error("Unapplied cash has no actual paid order to return.");
     const returned=await requestReturn.call({orderId:paid.order.id,reason:"Return one actual original unit",restock:false,items:[{orderItemId:paid.lines[0]!.id,quantity:1}]},OWNER);
