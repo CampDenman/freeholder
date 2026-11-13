@@ -182,20 +182,65 @@ export const reopenBuyerMoneyErasure = defineService({
         jobData: {}, idempotencyKey: `buyer-money-recovery:${input.evidenceDigest}` });
       return { jobId: recovered.jobId, recoveryRequired: recovered.recoveryRequired };
     }
+    const missingInventory = async () => {
+      // The caller has already reopened its real subscription cohort in this
+      // same TX. Commit that actual pending receipt and explicit recovery
+      // status; throwing here would roll it back to a false completed state.
+      await ctx.tx.update(dataRequests).set({ status: "in_progress", fulfilledAt: null,
+        resolution: "Restore the exact original money-finisher enqueue inventory before completing buyer billing erasure." })
+        .where(and(eq(dataRequests.id, input.requestId), eq(dataRequests.kind, "erasure"), sql`${dataRequests.verifiedAt} is not null`));
+      ctx.setSubject("dataRequest", input.requestId);
+      return { jobId: null, recoveryRequired: true };
+    };
     const current = parsed.data.outcomes.find(item => item.scope === SCOPE);
     if (current?.outcome === "pending" && current.pendingJobs?.length) {
       if (current.pendingJobs.length > 5000) throw new ServiceError("conflict", "The original money task inventory needs bounded recovery.");
       const [pending] = await ctx.tx.select({ jobId: jobIdempotencyKeys.jobId }).from(jobIdempotencyKeys).where(and(
         eq(jobIdempotencyKeys.jobName, BUYER_MONEY_ERASURE_JOB), inArray(jobIdempotencyKeys.jobId, current.pendingJobs))).limit(1);
-      if (pending) { await originalMoneyPayload(ctx.tx, input.requestId, pending.jobId); return { jobId: pending.jobId, recoveryRequired: false }; }
+      if (pending) {
+        try { await originalMoneyPayload(ctx.tx, input.requestId, pending.jobId); }
+        catch (error) { if (error instanceof ServiceError && error.code === "conflict") return missingInventory(); throw error; }
+        return { jobId: pending.jobId, recoveryRequired: false };
+      }
     }
     const [initial] = await ctx.tx.select({ jobId: jobIdempotencyKeys.jobId }).from(jobIdempotencyKeys).where(and(
       eq(jobIdempotencyKeys.jobName, BUYER_MONEY_ERASURE_JOB), eq(jobIdempotencyKeys.idempotencyKey, `buyer-money-erasure:${input.requestId}`))).limit(1);
-    if (!initial) throw new ServiceError("conflict", "Restore the original money-finisher inventory before admitting a late-evidence generation.");
-    const original = await originalMoneyPayload(ctx.tx, input.requestId, initial.jobId);
+    if (!initial) return missingInventory();
+    let original: z.infer<typeof payload>;
+    try { original = await originalMoneyPayload(ctx.tx, input.requestId, initial.jobId); }
+    catch (error) {
+      if (error instanceof ServiceError && error.code === "conflict") return missingInventory();
+      throw error;
+    }
     const reopened = await ctx.callAsSystem(reopenErasureJob, { requestId: input.requestId, scope: SCOPE, jobName: BUYER_MONEY_ERASURE_JOB,
       jobData: { originalAgreementIds: original.originalAgreementIds, originalPaymentIds: original.originalPaymentIds }, idempotencyKey: `buyer-money-evidence:${merchantTaxDigest(input)}` });
     return { jobId: reopened.jobId, recoveryRequired: reopened.recoveryRequired };
+  },
+});
+
+/** Pending buyer cohorts need an actual retained money-finisher admission,
+ * including after restore. A current stopped-resource flag cannot replace a
+ * missing original child list or manufacture its money task. */
+export const buyerMoneyErasureInventory = defineService({
+  name: "invoicing.buyerMoneyErasureInventory", summary: "Verify a pending original buyer cohort still has its real retained money-finisher task.",
+  kind: "query", permission: "system", external: false, input: z.object({ requestId: z.uuid(), subscriptionId: z.uuid() }), output: z.object({ ready: z.boolean() }),
+  handler: async ({ requestId, subscriptionId }, ctx) => {
+    await lockContactIdentity(ctx.tx);
+    const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, requestId)).limit(1);
+    const parsed = receiptBody.safeParse(artifact?.body);
+    if (!erasureArtifactIsIntact(artifact) || !parsed.success) return { ready: false };
+    const money = parsed.data.outcomes.find(item => item.scope === SCOPE);
+    if (money?.outcome !== "pending" || !money.pendingJobs?.length || money.pendingJobs.length > 5000) return { ready: false };
+    const claims = await ctx.tx.select({ jobId: jobIdempotencyKeys.jobId }).from(jobIdempotencyKeys).where(and(
+      eq(jobIdempotencyKeys.jobName, BUYER_MONEY_ERASURE_JOB), inArray(jobIdempotencyKeys.jobId, money.pendingJobs))).limit(5001);
+    if (claims.length > 5000) return { ready: false };
+    for (const claim of claims) {
+      try {
+        const original = await originalMoneyPayload(ctx.tx, requestId, claim.jobId);
+        if (original.originalAgreementIds.includes(subscriptionId)) return { ready: true };
+      } catch (error) { if (!(error instanceof ServiceError) || error.code !== "conflict") throw error; }
+    }
+    return { ready: false };
   },
 });
 
@@ -257,4 +302,4 @@ export const finishBuyerMoneyErasure = defineJob({
   },
 });
 registerJob(finishBuyerMoneyErasure);
-export default [completeBuyerMoneyErasure, reopenBuyerMoneyErasure, prepareBuyerCustomerErasure];
+export default [completeBuyerMoneyErasure, reopenBuyerMoneyErasure, prepareBuyerCustomerErasure, buyerMoneyErasureInventory];

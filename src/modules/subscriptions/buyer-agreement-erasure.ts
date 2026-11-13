@@ -8,7 +8,7 @@ import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { enqueueJob } from "@/core/jobs";
 import { dataRequestArtifacts, dataRequests, privacyRetentionExceptions } from "@/core/privacy/schema";
 import { completeErasureJob, erasureArtifactIsIntact, reopenErasureJob } from "@/core/privacy/service";
-import { defineService, ServiceError, type Tx } from "@/core/service";
+import { defineService, getService, ServiceError, type Tx } from "@/core/service";
 import { merchantAgreementScheduleState } from "./merchant-agreement-schedule-state";
 import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
 import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
@@ -38,7 +38,7 @@ export const prepareBuyerAgreementErasure = defineService({
     const originals = await ctx.tx.select({ subscription: subscriptions, scope: subscriptionMerchantScopes, resource: subscriptionProviderScheduleResources })
       .from(subscriptions).innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptions.id))
       .leftJoin(subscriptionProviderScheduleResources, eq(subscriptionProviderScheduleResources.subscriptionId, subscriptions.id))
-      .where(and(eq(subscriptions.contactId, request.contactId), eq(subscriptions.merchantScopeVersion, 1), eq(subscriptions.billingMode, "provider")))
+      .where(and(eq(subscriptions.contactId, request.contactId), eq(subscriptions.merchantScopeVersion, 1)))
       .orderBy(subscriptions.id).limit(5001);
     const cohorts = await ctx.tx.select().from(subscriptionProviderScheduleErasures).where(and(
       eq(subscriptionProviderScheduleErasures.requestId, requestId), eq(subscriptionProviderScheduleErasures.privacyScope, SCOPE))).limit(5001);
@@ -90,7 +90,7 @@ export const buyerAgreementErasureState = defineService({
     const originals = await ctx.tx.select({ subscription: subscriptions, scope: subscriptionMerchantScopes, resource: subscriptionProviderScheduleResources })
       .from(subscriptions).innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptions.id))
       .leftJoin(subscriptionProviderScheduleResources, eq(subscriptionProviderScheduleResources.subscriptionId, subscriptions.id))
-      .where(and(eq(subscriptions.contactId, request.contactId), eq(subscriptions.merchantScopeVersion, 1), eq(subscriptions.billingMode, "provider")))
+      .where(and(eq(subscriptions.contactId, request.contactId), eq(subscriptions.merchantScopeVersion, 1)))
       .orderBy(subscriptions.id).limit(5001);
     const ids = new Set(originalAgreementIds);
     if (originals.length > 5000 || ids.size !== originalAgreementIds.length || originals.length !== ids.size
@@ -173,6 +173,13 @@ export const completeBuyerAgreementErasure = defineService({
     const state = await merchantAgreementScheduleState(ctx, original);
     if (!state.safe) return { settled: false, recoveryRequired: false };
     if (outcome.outcome === "erased" && cohort.state === "completed" && original.scope.redactedAt) return { settled: true, recoveryRequired: false };
+    // A stopped resource alone cannot acknowledge a reopened buyer cohort
+    // after its money inventory was lost. Require an actual retained finisher
+    // task; never reconstruct its child IDs from today's rows.
+    const money = getService("invoicing.buyerMoneyErasureInventory");
+    if (!money || !z.object({ ready: z.boolean() }).parse(await ctx.callAsSystem(money, { requestId: request.id, subscriptionId: cohort.subscriptionId })).ready) {
+      return { settled: false, recoveryRequired: true };
+    }
     if (outcome.outcome !== "pending" || !outcome.pendingJobs?.includes(input.originalJobId)) return { settled: false, recoveryRequired: true };
     const [hold] = await ctx.tx.select({ id: privacyRetentionExceptions.id }).from(privacyRetentionExceptions)
       .innerJoin(dataRequests, eq(dataRequests.id, privacyRetentionExceptions.dataRequestId)).where(and(eq(dataRequests.contactId, request.contactId),

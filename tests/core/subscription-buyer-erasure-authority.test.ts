@@ -36,11 +36,17 @@ describe("original buyer schedule-erasure authority", () => {
   it("refuses a later holder or another buyer using the original cohort", async () => {
     await expect(originalScheduleCohortAuthority(txFor([{ ...request, contactId: merchant }], [cohort], [original]), input)).rejects.toMatchObject({ code: "permission" });
   });
-  it("refuses a forged profile or a platform-era agreement as buyer authority", async () => {
+  it("refuses a forged profile or a legacy epoch as buyer authority", async () => {
     for (const invalid of [{ ...original, scope: { taxProfileId: input.requestId } },
-      { ...original, parent: { ...original.parent, merchantScopeVersion: 0 } },
-      { ...original, parent: { ...original.parent, billingMode: "platform" } }]) {
+      { ...original, parent: { ...original.parent, merchantScopeVersion: 0 } }]) {
       await expect(originalScheduleCohortAuthority(txFor([request], [cohort], [invalid]), input)).rejects.toMatchObject({ code: "permission" });
+    }
+  });
+  it("does not discard an original buyer cohort when mutable local billing mode later changes", async () => {
+    for (const billingMode of ["manual", "platform"]) {
+      const restored = { ...original, parent: { ...original.parent, billingMode } };
+      const result = await originalScheduleCohortAuthority(txFor([request], [cohort], [restored]), input);
+      expect(result.cohort.subscriptionId).toBe(subscriptionId);
     }
   });
   it("requires both the current real task and original cohort membership", async () => {
