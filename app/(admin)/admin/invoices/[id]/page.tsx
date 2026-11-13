@@ -164,7 +164,7 @@ export default async function InvoiceDetailPage({
                 <input type="hidden" name="intent" value="reviewLegacyBankReaderStopped" /><input type="hidden" name="id" value={invoice.id} />
                 <input type="hidden" name="readId" value={read.readId} /><input type="hidden" name="callerId" value={read.callerId} />
                 <input type="hidden" name="originalDigest" value={read.originalDigest} /><input type="hidden" name="sourceRevision" value={read.sourceRevision} />
-                <Field label={t("refundRecovery.evidence")}><textarea name="hostingEvidence" required minLength={30} maxLength={2000} className="w-full rounded border border-rule bg-surface p-2 text-ink" /></Field>
+                <Field htmlFor={`legacy-reader-hosting-${read.readId}`} label={t("refundRecovery.evidence")}><textarea id={`legacy-reader-hosting-${read.readId}`} name="hostingEvidence" required minLength={30} maxLength={2000} className="w-full rounded border border-rule bg-surface p-2 text-ink" /></Field>
                 <label className="flex items-start gap-2"><input type="checkbox" name="confirmation" value={LEGACY_READER_STOP_CONFIRMATION} required /><span>{t("refundRecovery.stopConfirmation")}</span></label>
                 <Button type="submit">{t("refundRecovery.recordStop")}</Button>
               </form>

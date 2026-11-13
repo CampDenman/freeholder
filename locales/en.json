@@ -9084,5 +9084,12 @@
   "refundRecovery.live": "The original process is still running. Finish or stop it before reviewing.",
   "refundRecovery.evidence": "Hosting stop evidence",
   "refundRecovery.stopConfirmation": "I verified that the original refund-check process has stopped.",
-  "refundRecovery.recordStop": "Record hosting stop review"
+  "refundRecovery.recordStop": "Record hosting stop review",
+  "catalog.returns.bankReviewHelp": "The bank has changed or has not confirmed an original return refund. Check its original payments before closing the return. Keep the existing credit; do not charge the buyer again.",
+  "catalog.returns.checkBankRefunds": "Check original bank refunds",
+  "catalog.returns.replaceBankConfirmation": "I approve replacements only for the verified failed original return refunds.",
+  "catalog.returns.replaceBankRefunds": "Replace failed original refunds",
+  "catalog.saved.recoverReturnBankRefunds": "Original bank refunds checked. The return stays open until every part is confirmed.",
+  "catalog.saved.replaceReturnBankRefunds": "Original failed return refunds checked and replacements submitted where authorized.",
+  "catalog.customerReturns.bankReviewHelp": "Your original payment remains paid and your existing credit is kept. We are checking the refund with the bank. Please do not pay again."
 }

@@ -184,7 +184,13 @@ export async function retainLegacyRefundCaller(ctx: ServiceContext, input: { dis
     await ctx.tx.insert(moneyStateEvents).values({ subjectType: "refund", subjectId: refund.id, fromState: null, toState: "provider_result_observed",
       actor: actorString(ctx.actor), reason: "Original physical refund caller finished", metadata });
   }
-  if (bindingsMatch && result.providerRef && !refund.providerRef) await ctx.tx.update(refunds).set({ providerRef: result.providerRef }).where(eq(refunds.id, refund.id));
+  if (bindingsMatch && !recoveryRequired && result.providerRef && !refund.providerRef) {
+    // Authentic feedback may precede the real creator's return. Bind only
+    // this actual retained caller ACK; it authorizes no money/status update.
+    await ctx.tx.execute(sql`select set_config('freeholder.legacy_bank_original_ack',${refund.id},true)`);
+    await ctx.tx.update(refunds).set({ providerRef: result.providerRef }).where(eq(refunds.id, refund.id));
+    await ctx.tx.execute(sql`select set_config('freeholder.legacy_bank_original_ack','',true)`);
+  }
   ctx.setSubject("refund", refund.id);
   return { recoveryRequired, result };
 }
@@ -284,4 +290,23 @@ export async function legacyBankKnownRefundResources(tx: Tx, paymentId: string, 
     catch (error) { if (!(error instanceof ServiceError) && !(error instanceof z.ZodError)) throw error; allCallersFinished = false; }
   }
   return { resources: known, allCallersFinished };
+}
+
+/** Namespace evidence can exist while the real creator is still outstanding.
+ * This authentic admission owns a cash namespace; it never proves completion
+ * or assigns a newly observed refund resource to a still-unbound old caller. */
+export async function originalLegacyBankAdmissionNamespace(tx: Tx, refund: Refund) {
+  if (refund.provider !== "stripe") return null;
+  const rows = await events(tx, refund.id), admissions = rows.filter(row => record(row.metadata).protocol === version && record(row.metadata).physicalState === "admitted");
+  if (!originalReservationMatches(rows, refund) || admissions.length !== 1) return null;
+  const admission = record(admissions[0]!.metadata), original = record(admission.original);
+  if (!authentic(admission) || admission.refundId !== refund.id || admission.requestHash !== refund.requestHash || !originalRefundMatches(original, refund)) return null;
+  const [parent] = await tx.select().from(payments).where(eq(payments.id, refund.paymentId));
+  if (!parent || parent.provider !== original.provider || parent.invoiceId !== original.invoiceId || parent.providerRef !== original.providerPaymentRef
+    || parent.requestHash !== original.paymentRequestHash || parent.amountMinor !== original.paymentAmountMinor || parent.currency !== original.currency) return null;
+  const paymentRef = z.string().regex(/^pi_[A-Za-z0-9_]+$/).safeParse(original.providerPaymentRef), account = z.string().regex(/^acct_[A-Za-z0-9]+$/).nullable().safeParse(original.providerAccountId);
+  if (!paymentRef.success || !account.success) return null;
+  return { refundId: refund.id, paymentId: refund.paymentId, invoiceId: refund.invoiceId, provider: "stripe" as const,
+    originalPaymentRef: paymentRef.data, originalChargeAccountId: account.data, originalRefundRef: refund.providerRef,
+    originalCreatePlatformAccountId: null, originalCreateProtocolVersion: null, admissionDigest: digest(canonical(admission)) };
 }

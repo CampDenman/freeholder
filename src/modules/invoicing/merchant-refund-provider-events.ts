@@ -20,6 +20,7 @@ export const originalRefundProviderEvent = z.object({
   providerAccountId: z.string().regex(/^(?:|acct_[A-Za-z0-9]+)$/).max(200).optional(),
   providerPlatformAccountId: z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200).optional(),
   providerStatus: z.enum(["pending", "requires_action", "succeeded", "failed", "canceled"]).nullable().optional(),
+  rawProviderStatus: z.string().max(100).nullable().optional(),
   observedProviderApiVersion: z.string().min(1).max(100).nullable().optional(),
   failureCode: z.literal("provider_cancelled").optional(), failureReason: z.string().max(100).optional(),
   failureBalanceTransactionRef: z.string().min(1).max(200).optional(),

@@ -30,7 +30,7 @@ export const merchantRefundBankState = defineService({
       where r.id=${requests[0].id}::uuid and t.request_digest=r.request_digest
         and not exists(select 1 from merchant_refund_dispatches d where d.request_id=r.id)) as retired`) : [];
     return { refundId, invoiceId: refund.invoiceId, paymentId: refund.paymentId, amountMinor: refund.amountMinor, currency: refund.currency,
-      original: requests.length === 1 || legacy?.hasRead === true, verified: Boolean(state?.receipt_id) || legacy?.verified === true,
+      original: requests.length === 1 || legacy?.participates === true, verified: Boolean(state?.receipt_id) || legacy?.verified === true,
       resolvedSuccess: success?.resolved === true || legacy?.verified === true && legacy.status === "succeeded", retiredBeforeDispatch: retired?.retired === true,
       status: state?.status ?? legacy?.status ?? null, receiptId: state?.receipt_id ?? legacy?.receiptId ?? null, projectionStatus: refund.status };
   },
@@ -54,10 +54,9 @@ export async function invoiceRefundStateRows(ctx: ServiceContext, invoiceId: str
     const [request] = await ctx.tx.select({ id: merchantRefundRequests.id }).from(merchantRefundRequests).where(eq(merchantRefundRequests.refundId, refund.id));
     const legacy = request ? null : await legacyRefundBankState(ctx, refund.id);
     let promise = request ? await originalRefundPromiseState(ctx, request.id) : null;
-    if (!request && legacy?.hasRead) {
+    if (!request && legacy?.participates) {
       const proof = await legacyBankPromiseState(ctx, refund);
-      const [bound] = await ctx.tx.execute<{ prepared: boolean }>(sql`select freeholder_refund_is_prepared_return(${refund.id}::uuid) prepared`);
-      promise = { owed: proof.owed, review: proof.review || proof.owed, replaced: proof.replaced, canReplace: !bound?.prepared && proof.canReplace };
+      promise = { owed: proof.owed, review: proof.review || proof.owed, replaced: proof.replaced, canReplace: proof.canReplace };
     }
     let legacyAuthority = false;
     if (!request && refund.provider === "stripe" && refund.providerRef) {

@@ -217,7 +217,7 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
     const providerStatus = ["pending", "requires_action", "succeeded", "failed", "canceled"].includes(String(value.status))
       ? value.status as "pending" | "requires_action" | "succeeded" | "failed" | "canceled" : null;
     const common = { id, providerRef, paymentProviderRef, ...(providerChargeRef ? { providerChargeRef } : {}),
-      providerStatus, observedPaymentIntentRef, observedProviderApiVersion: text(payload.api_version) ?? null,
+      providerStatus, rawProviderStatus: text(value.status) ?? null, observedPaymentIntentRef, observedProviderApiVersion: text(payload.api_version) ?? null,
       ...(text(value.failure_reason) ? { failureReason: text(value.failure_reason)! } : {}),
       ...(text(value.failure_balance_transaction) ?? text(object(value.failure_balance_transaction)?.id)
         ? { failureBalanceTransactionRef: (text(value.failure_balance_transaction) ?? text(object(value.failure_balance_transaction)?.id))! } : {}),

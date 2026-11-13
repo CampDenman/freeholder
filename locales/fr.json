@@ -9084,5 +9084,12 @@
   "refundRecovery.live": "Le processus d’origine est toujours en cours. Terminez-le ou arrêtez-le avant l’examen.",
   "refundRecovery.evidence": "Preuve d’arrêt sur l’hébergement",
   "refundRecovery.stopConfirmation": "J’ai vérifié que le processus d’origine de vérification du remboursement s’est arrêté.",
-  "refundRecovery.recordStop": "Enregistrer l’examen de l’arrêt"
+  "refundRecovery.recordStop": "Enregistrer l’examen de l’arrêt",
+  "catalog.returns.bankReviewHelp": "La banque a modifié ou n’a pas confirmé un remboursement du retour. Vérifiez les paiements d’origine avant de clôturer le retour. Conservez l’avoir existant et ne débitez pas à nouveau le client.",
+  "catalog.returns.checkBankRefunds": "Vérifier les remboursements bancaires d’origine",
+  "catalog.returns.replaceBankConfirmation": "J’approuve uniquement le remplacement des remboursements d’origine dont l’échec est vérifié.",
+  "catalog.returns.replaceBankRefunds": "Remplacer les remboursements d’origine échoués",
+  "catalog.saved.recoverReturnBankRefunds": "Remboursements bancaires vérifiés. Le retour reste ouvert jusqu’à la confirmation de chaque part.",
+  "catalog.saved.replaceReturnBankRefunds": "Remboursements échoués vérifiés et remplacements autorisés envoyés.",
+  "catalog.customerReturns.bankReviewHelp": "Votre paiement d’origine reste réglé et votre avoir est conservé. Nous vérifions le remboursement auprès de la banque. Ne payez pas à nouveau."
 }

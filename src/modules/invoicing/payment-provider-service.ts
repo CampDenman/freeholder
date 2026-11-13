@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // C5.06: provider orchestration and authenticated event convergence.
 
+import { retainLegacyBankFeedback } from "./legacy-bank-feedback-service";
 import { enqueueJob } from "@/core/jobs";
 import { legacyBankReads } from "./legacy-bank-read-schema";
+import { isLegacyReplacementKey } from "./legacy-bank-replacement-proof";
 import { assertLegacyReplacementOriginalScope } from "./legacy-bank-replacement-store";
 import { assertLegacyBankRefundCapacity } from "./legacy-bank-current-state";
 import { submitOriginalMerchantRefund } from "./merchant-refund-execution";
@@ -402,7 +404,8 @@ async function processRefundEvent(providerId: string, event: z.infer<typeof refu
   if (event.amountMinor !== undefined && event.amountMinor !== refund.amountMinor) throw new ServiceError("conflict", "The authenticated provider refund amount does not match the ledger.");
   if (event.currency !== undefined && event.currency !== refund.currency) throw new ServiceError("conflict", "The authenticated provider refund currency does not match the ledger.");
   const [legacyRead] = await ctx.tx.select({ id: legacyBankReads.id }).from(legacyBankReads).where(eq(legacyBankReads.refundId, refund.id)).limit(1);
-  if (legacyRead) {
+  const [legacyReturn] = providerId === "stripe" ? await ctx.tx.execute<{ prepared: boolean }>(sql`select freeholder_legacy_bank_feedback_review(${refund.id}::uuid) prepared`) : [];
+  if (legacyRead || legacyReturn?.prepared) {
     await enqueueJob(ctx.tx, "invoicing.reconcileOriginalLegacyRefundCurrentState", { refundId: refund.id },
       { idempotencyKey: `legacy-bank-current:${providerId}:${event.id}:${refund.id}`, startAfter: 5 });
     return "legacy_refund_current_state_pending";
@@ -591,14 +594,24 @@ export const retainMerchantProviderEvent = defineService({
 });
 
 /** Call only after exact raw signature verification, outside an applying TX. */
-export async function retainPaymentProviderEvidence(providerId: z.infer<typeof provider>, events: readonly PaymentProviderEvent[]): Promise<PaymentProviderEvent[]> {
+export async function retainPaymentProviderEvidence(providerId: z.infer<typeof provider>, events: readonly PaymentProviderEvent[], verification?: { rawBodySha256: string; receivedAt: string }): Promise<PaymentProviderEvent[]> {
   const prepared: PaymentProviderEvent[] = [];
   const errors: unknown[] = [];
   for (const original of events) {
     try {
       const event = await retainSubscriptionProviderEvidence(providerId, original);
       if (["refund_processing", "refund_succeeded", "refund_failed"].includes(event.kind)) {
-        await retainOriginalMerchantRefundEvent.call({ provider: providerId, event: originalRefundProviderEvent.parse(event) }, { kind: "system" });
+        let managed = false, scopedError: unknown;
+        try { managed = (await retainOriginalMerchantRefundEvent.call({ provider: providerId, event: originalRefundProviderEvent.parse(event) }, { kind: "system" })).managed; }
+        catch (error) { scopedError = error; }
+        // A current original-request receipt already has its own committed
+        // capture. Legacy or unassigned facts get a separate raw receipt even
+        // when that scoped retention policy could not accept the event.
+        if (providerId === "stripe" && !managed) {
+          const raw = await retainLegacyBankFeedback.call({ provider: "stripe", event, rawBodySha256: verification?.rawBodySha256 ?? null, receivedAt: verification?.receivedAt ?? null }, { kind: "system" });
+          if (raw.conflict) errors.push(new ServiceError("conflict", "The actual new bank facts were retained, but an earlier raw receipt needs authentication repair."));
+        }
+        if (scopedError) throw scopedError;
       }
       if (event.providerPlatformAccountId && ["payment_processing", "payment_succeeded", "payment_failed", "payment_cancelled"].includes(event.kind)) {
         await retainMerchantProviderEvent.call({ provider: providerId, event: paymentEvent.parse(event) }, { kind: "system" });
@@ -1160,7 +1173,7 @@ export const submitProviderRefund = defineOrchestratedService({
     const { payment, routing } = await providerPaymentSource.call({ paymentId: input.paymentId }, system);
     if (!payment.providerRef || !isHostedPaymentProvider(payment.provider)) throw new ServiceError("conflict", "That payment does not have a refundable hosted-provider settlement.");
     if (!paymentAdapter(payment.provider).capabilities().refunds) throw new ServiceError("conflict", `${payment.provider} refunds are not implemented by this adapter.`);
-    if (input.idempotencyKey.startsWith("legacy-bank-replacement:") && routing.providerPlatformAccountId) throw new ServiceError("conflict", "Restore the original legacy charge scope before its replacement; a later merchant route cannot adopt historical money.");
+    if (isLegacyReplacementKey(input.idempotencyKey) && routing.providerPlatformAccountId) throw new ServiceError("conflict", "Restore the original legacy charge scope before its replacement; a later merchant route cannot adopt historical money.");
     if (routing.providerPlatformAccountId) return submitOriginalMerchantRefund(input, caller);
     // Admission commits before the provider is asked. A crash leaves
     // processing debt; a retry can apply a retained answer, never resend POST.

@@ -532,6 +532,7 @@ export type PaymentProviderEvent = MerchantChargeScope & (
       providerChargeRef?: string;
       /** Preserve signed raw bank state separately from its logical category. */
       providerStatus?: "pending" | "requires_action" | "succeeded" | "failed" | "canceled" | null;
+      rawProviderStatus?: string | null;
       observedProviderApiVersion?: string | null;
       failureReason?: string;
       failureBalanceTransactionRef?: string;

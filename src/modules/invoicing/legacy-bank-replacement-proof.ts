@@ -3,11 +3,17 @@
 // C5.19/C12.38: actual legacy refund lineage, never an invented merchant request.
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { legacyReturnPartWitness, type LegacyReturnPartWitness } from "./legacy-bank-return-contract";
 export const LEGACY_REPLACEMENT_PROTOCOL = "freeholder.legacy-bank-replacement.v1";
 export const LEGACY_REPLACEMENT_REASON = "Original legacy bank refund replacement authorized";
 export const LEGACY_REPLACEMENT_STATE = "legacy_bank_replacement_authorized";
 export const LEGACY_REPLACEMENT_CONFIRMATION = "REPLACE ORIGINAL LEGACY RETURNED REFUND";
-export const legacyReplacementKey = (parentId: string) => `legacy-bank-replacement:v1:${parentId}`;
+export const legacyReplacementKey = (parentId: string, owner?: LegacyReturnPartWitness | null) => owner
+  ? `return:${owner.returnId}:allocation:${owner.allocationId}:legacy-bank-replacement:v1:${parentId}` : `legacy-bank-replacement:v1:${parentId}`;
+export const isLegacyReplacementKey = (key: string) => key.startsWith("legacy-bank-replacement:") || /^return:[^:]+:allocation:[^:]+:legacy-bank-replacement:/.test(key);
+export function legacyReplacementParentId(key: string): string | null {
+  if (!isLegacyReplacementKey(key)) return null; const parent = z.uuid().safeParse(key.split(":").at(-1)); return parent.success ? parent.data : null;
+}
 export const legacyReplacementReason = (parentId: string) => `Replace original legacy bank-returned refund ${parentId}`;
 const uuid = z.uuid(), digest = z.string().regex(/^[a-f0-9]{64}$/);
 export const legacyReplacementBody = z.object({
@@ -16,6 +22,7 @@ export const legacyReplacementBody = z.object({
   paymentId: uuid, invoiceId: uuid, originalPaymentRef: z.string().regex(/^pi_[A-Za-z0-9_]+$/), originalChargeAccountId: z.string().regex(/^acct_[A-Za-z0-9]+$/).nullable(),
   originalCreatePlatformAccountId: z.null(), originalCreateProtocolVersion: z.null(),
   amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), currency: z.string().regex(/^[A-Z]{3}$/),
+  returnPart: legacyReturnPartWitness.optional(),
   terminalReads: z.array(z.object({ refundId: uuid, receiptId: uuid, resolvedRevision: digest }).strict()).min(1).max(5000),
   authorizedBy: z.string().regex(/^user:[0-9a-f-]{36}$/), authorizedAt: z.iso.datetime(),
 }).strict();
