@@ -104,3 +104,22 @@ redefined base functions, including the final late-resumption commercial-terms
 branch. Neither assembly nor this source review supplies migration, parity or
 new business acceptance. The final owned82 source and complete qualification
 remain pending.
+
+## Controlled journal source assembly
+
+Frozen controlled-provider8d496356 adds nine ordinary resource/operation/call/
+fact/finish/stop/verification/origin/closure families. The owned ee87 tail adds
+eight new function names and replaces no existing commercial function. Its
+assembly follows the six commercial tails: SQL80 is603826bytes, SHA256
+`1c2ecd172a4321ff1df7808a6c2c757e7f7c67ac5ed29451b8fd9e8659028771`.
+Both entire560886-bytecf1e and397928-byte0cff prefixes are preserved. SQL81
+and all published0–79 identities are unchanged. This is unapplied source.
+
+The first compiler run after this merge at44da1a1c stops at two raw database
+scope/literal API type mismatches. Source repair90f3c52c validates the real
+scope with the existing schema before request projection, keeps the raw
+original snapshot in its return/revision and refuses unsupported protocol
+history. No type assertion supplies missing authority. Renewed qualification
+and final82 assembly remain pending. Positive controlled collection stays
+mechanically unavailable while its required lifecycle and parent consumers
+are being implemented.
