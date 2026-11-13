@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.47: actual HTTP frontier and private original response ownership.
-// Source-only schema81 model; not registered for runtime before its migration.
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+// Private runtime models require their matching guarded migration81 schema.
+import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createdAtColumn, updatedAtColumn } from "@/core/db/columns";
 import { dataRequests } from "@/core/privacy/schema";
 import { importRuns } from "@/core/plugins/schema";
@@ -12,6 +12,7 @@ export const importCrawlSources = pgTable("import_crawl_sources", {
   id: uuid("id").primaryKey().defaultRandom(),
   runId: uuid("run_id").notNull().references(() => importRuns.id, { onDelete: "cascade" }),
   generation: uuid("generation").notNull(),
+  recoveryOfSourceId: uuid("recovery_of_source_id").references((): AnyPgColumn => importCrawlSources.id, { onDelete: "restrict" }),
   kind: text("kind", { enum: ["wordpress-rest", "sitemap", "rss", "atom", "html"] }).notNull(),
   siteUrl: text("site_url"),
   sourceUrl: text("source_url"),
@@ -78,6 +79,8 @@ export const importCrawlResponses = pgTable("import_crawl_responses", {
   discoveryOrdinal: integer("discovery_ordinal").notNull().default(0),
   discoveryComplete: boolean("discovery_complete").notNull().default(false),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  wrapperTokenDigest: text("wrapper_token_digest"),
+  wrapperFinishedAt: timestamp("wrapper_finished_at", { withTimezone: true }),
   receivedAt: timestamp("received_at", { withTimezone: true }),
   providerAcceptedAt: timestamp("provider_accepted_at", { withTimezone: true }),
   retiredAt: timestamp("retired_at", { withTimezone: true }),

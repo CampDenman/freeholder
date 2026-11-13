@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.47: actual initial erasure membership, including a completed empty capture.
-// Source-only81 models remain unregistered until the full source is qualified.
+// Private erasure scope models require their matching guarded migration81 schema.
 import { foreignKey, index, integer, pgTable, primaryKey, timestamp, uuid } from "drizzle-orm/pg-core";
 import { dataRequests } from "@/core/privacy/schema";
 import { importCrawlSources } from "./crawl-schema";

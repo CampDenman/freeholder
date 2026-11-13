@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.47: actual HTTP originals feed the ordinary bounded CMS recovery ledger.
-// Source-only: no normal81/runtime registration is enabled by this module.
+// Actual private phases run under the registered public import operations.
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";

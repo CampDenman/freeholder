@@ -244,7 +244,7 @@ async function eraseUnheldOriginals(tx: Tx, context: { requestId: string; servic
 }
 
 registerContactPrivacySource({
-  scope: "imports.readerSources", tables: ["import_runs"], retentionScopes: ["cms.readerComments"], eraseOrder: 10,
+  scope: "imports.readerSources", tables: ["import_runs", "import_source_erasure_scopes", "import_source_erasure_members", "import_source_erasure_objects"], retentionScopes: ["cms.readerComments"], eraseOrder: 10,
   captureRetention: async (tx, _contactId, context) => {
     if (!context.isNew) {
       if (!await retentionSourceSnapshotIsComplete(tx, context.exceptionId, "imports.readerSources")) throw new ServiceError("conflict", "Review this older hold's original uploads before changing it.");

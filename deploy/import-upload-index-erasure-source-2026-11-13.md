@@ -53,3 +53,19 @@ old-image/populated upgrade and historical recovery, public API/MCP/SDK plus
 four-locale production browser journeys. The three new private models still
 need composition into the runtime activation's table/search/retention inventory
 in the same future normal81 candidate. No stable readiness is claimed.
+
+The next isolated source composition joins `5dcbd1cb` and runtime `444702c5`.
+It registers all eight HTTP models plus the three uploaded-source witness
+models, services/jobs and private search/retention decisions; shared media is
+the twelfth parity model. The candidate journal now includes index81 at
+1793310000061, and the four-locale owner recovery/continuation surfaces are
+present. This is source assembly, not an applied migration or a passing runtime.
+The local SQL80 remains provisional881a until root supplies the complete current
+financial/bank/phase predecessor. Do not migrate this intermediate candidate.
+
+The obsolete synchronous preview transport phases are removed from the private
+service inventory in this composition. Existing native tests that expected
+`previewFromUrl` to fetch the whole site in one call need to drive the actual
+bounded public continuation before asserting their original business results;
+those tests have not been run or claimed passing here. Public API/MCP/SDK and
+two-process/browser acceptance remain required after final source qualification.

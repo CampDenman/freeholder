@@ -9,6 +9,7 @@
 import { and, eq, isNotNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { defineJob, pruneJobIdempotencyKeys } from "@/core/jobs";
+import { crawlJobs } from "@/core/import/crawl-jobs";
 import {
   passwordResets,
   loginSecurityEvents,
@@ -1095,6 +1096,7 @@ export const reconcileFormLeadErasure = defineJob({
 });
 
 export default [
+  ...crawlJobs,
   reconcileFormLeadErasure,
   eraseFormLeadCopies,
   sweepSessions,

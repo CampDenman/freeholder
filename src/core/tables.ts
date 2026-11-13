@@ -199,3 +199,11 @@ export {
 export { retentionPolicies } from "@/core/retention/schema";
 export * from "./media/erasure-schema";
 export { readerOwnershipKeys, readerOwnershipReceipts, readerOwnershipMergeWitnesses, readerOwnershipMergeItems } from "@/core/import/reader-ownership-schema";
+
+// C3.47: normalized private original HTTP lifecycle and exact erasure scope.
+export { importCrawlSources, importCrawlRequests, importCrawlResponses, importCrawlResponseErasures } from "@/core/import/crawl-schema";
+export { importCrawlGraphs, importCrawlEntryOriginals } from "@/core/import/crawl-graph-schema";
+export { importCrawlErasureScopes, importCrawlErasureSources } from "@/core/import/crawl-erasure-schema";
+
+// C1.08/C3.47: exact original uploaded-source erasure membership, never a TTL store.
+export { importSourceErasureScopes, importSourceErasureMembers, importSourceErasureObjects } from "@/core/import/source-erasure-schema";

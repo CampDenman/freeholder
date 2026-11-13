@@ -27,6 +27,7 @@ import { registerImportOriginalCollector, type ImportOriginalCaptureContext, typ
 export const CRAWL_ERASURE_SCOPE = "imports.crawlOriginals";
 export const CRAWL_ERASURE_JOB = "core.eraseCrawlOriginals";
 export const CRAWL_RECONCILIATION_JOB = "core.reconcileCrawlOriginals";
+let privacyRegistered = false;
 const erasureInput = z.object({ requestId: z.uuid(), responseIds: z.uuid().array().min(1).max(25) });
 
 async function held(tx: Tx, responseId: string): Promise<boolean> {
@@ -141,6 +142,7 @@ async function eraseUnheldCrawlOriginals(tx: Tx, context: { requestId: string; s
  * the actual originals present in its transaction. The IDs are durable scope
  * membership, not retrospective authorship. */
 export function registerCrawlPrivacy(): void {
+  if (privacyRegistered) return;
   registerImportOriginalCollector("http-originals", captureOriginalGenerations);
   registerContactPrivacySource({
     scope: CRAWL_ERASURE_SCOPE,
@@ -182,6 +184,7 @@ export function registerCrawlPrivacy(): void {
   registerStorageObservationReconciler("imports.crawlOriginals", async receiptId => {
     await reconcileCrawlOriginalObservation.call({ receiptId }, { kind: "system" });
   });
+  privacyRegistered = true;
 }
 
 async function originalErasureRows(tx: Tx, input: z.infer<typeof erasureInput>) {

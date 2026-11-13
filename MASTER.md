@@ -6578,6 +6578,13 @@ deployments are portable, testable and incapable of silently forking the truth.
   accepted/later-generation controls remain required. Historical missing
   captures remain explicit recovery. See
   `deploy/import-upload-index-erasure-source-2026-11-13.md`.
+  The isolated full runtime candidate now composes that checkpoint with the
+  eight-model saved-HTTP runtime and four-locale owner controls, registers the
+  three uploaded witnesses and private inventories, and drafts normal journal81.
+  SQL80 is still the provisional881a predecessor; the candidate is unqualified
+  and unapplied until the complete current80 predecessor is supplied and a NEW
+  ordinary0–81 database proves it. No stable or transport acceptance is claimed.
+
 
 
   Above500 actual HTTP lifecycle qualification at a9946538: real owned TCP
@@ -6605,6 +6612,16 @@ deployments are portable, testable and incapable of silently forking the truth.
   a flag alone cannot establish erasure. New-database/nine-model/native
   qualification remains required; no checklist closure is claimed. Evidence:
   `deploy/import-http-media-key-erasure-2026-11-12.md`.
+
+  C3.47 runtime activation is now a separate source checkpoint: shared public
+  bounded start/advance/progress/cancel, eight-model privacy/job inventories,
+  four-locale owner controls, exact settled-original response recovery and an
+  explicitly distinct new source review. Actual wrapper completion has its own
+  immutable capability-bound fact; clocks and GETs do not establish it. The
+  source is unqualified and81 remains unjournalled pending full latest80
+  composition, new-schema/model checks, actual public transport/two-process
+  continuation and production browser/recovery acceptance. No checkbox closes.
+  `deploy/import-http-runtime-activation-source-2026-11-12.md` records the scope.
 
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 

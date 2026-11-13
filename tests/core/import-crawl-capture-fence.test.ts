@@ -15,14 +15,15 @@ import { startImport } from "@/core/import/service";
 import { addRetentionException, createDataRequest } from "@/core/privacy/service";
 import { privacyRetentionExceptions } from "@/core/privacy/schema";
 import { privacyRetentionSourceMembers, privacyRetentionSourceSnapshots } from "@/core/privacy/retention-schema";
+import { actorString } from "@/core/service";
 import { OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
 
-// Deliberately do not call registerCrawlPrivacy. This is the actual disabled
-// source path, not a forged context, manually set marker or invented receipt.
+// Normal bootstrap now registers the real collector. The direct old-writer
+// SQL negative cannot invoke it; the ordinary actual service positive must.
 describe.runIf(hasDatabase)("actual HTTP collector compatibility fence (C3.47)", () => {
   beforeEach(truncateSpine);
   afterAll(async () => { await stopJobs(); await closeDb(); });
-  it("refuses an uncaptured hold even when the ordinary legacy callback locks an HTTP import", async () => {
+  it("refuses an uncaptured old-writer hold and captures the generation through ordinary runtime bootstrap", async () => {
     await db().insert(users).values({ id: OWNER.userId, email: "fictional-no-http-collector-owner@example.test", role: "owner" });
     await db().insert(totpFactors).values({ userId: OWNER.userId, encryptedSecret: "fictional-no-http-collector-factor" });
     const session = await db().transaction(tx => createSession(tx, OWNER.userId, { twoFactorVerified: true }));
@@ -37,7 +38,9 @@ describe.runIf(hasDatabase)("actual HTTP collector compatibility fence (C3.47)",
     const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, owner);
     let failure: unknown;
     try {
-      await addRetentionException.call({ dataRequestId: request.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Synthetic actual missing HTTP collector refusal" }, owner);
+      await db().transaction(async tx => {
+        await tx.insert(privacyRetentionExceptions).values({ dataRequestId: request.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Synthetic actual old SQL writer without collector", createdBy: actorString(owner) });
+      });
     } catch (error) { failure = error; }
     const causes: Array<{ code?: string; message?: string }> = [];
     for (let error = failure, depth = 0; error && depth < 8; depth++) {
@@ -50,5 +53,8 @@ describe.runIf(hasDatabase)("actual HTTP collector compatibility fence (C3.47)",
     expect(await db().select().from(privacyRetentionSourceMembers)).toEqual([]);
     expect(await db().select().from(importCrawlResponses)).toEqual([]);
     expect(await db().select().from(importCrawlSources).where(and(eq(importCrawlSources.id, original!.id), eq(importCrawlSources.generation, original!.generation)))).toEqual([original]);
+    const saved = await addRetentionException.call({ dataRequestId: request.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Synthetic actual bootstrap collector positive" }, owner);
+    expect(await db().select().from(privacyRetentionSourceSnapshots).where(eq(privacyRetentionSourceSnapshots.exceptionId, saved.id))).toMatchObject([{ sourceScope: "imports.readerSources", captureVersion: 1, memberCount: 1 }]);
+    expect(await db().select().from(privacyRetentionSourceMembers).where(eq(privacyRetentionSourceMembers.exceptionId, saved.id))).toMatchObject([{ sourceId: original!.id, generation: original!.generation, sourceScope: "imports.readerSources" }]);
   });
 });

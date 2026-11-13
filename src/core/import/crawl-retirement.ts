@@ -38,7 +38,7 @@ export async function retireCrawlOriginals(ctx: ServiceContext, runId: string, r
 
 export const cancelCrawl = defineService({
   name: "imports.cancelCrawl", summary: "Stop the original crawl and request safe private cleanup. Named holds and unresolved writes remain protected.",
-  kind: "mutation", permission: "scoped", input: z.object({ id: z.uuid() }), output: z.object({ stopped: z.literal(true) }),
+  kind: "mutation", permission: "scoped", writeClass: "write", input: z.object({ id: z.uuid() }), output: z.object({ stopped: z.literal(true) }),
   handler: async (input, ctx) => {
     await assertCurrentImportAuthority(ctx, "imports.cancelCrawl");
     await lockContactIdentityForRead(ctx.tx);
