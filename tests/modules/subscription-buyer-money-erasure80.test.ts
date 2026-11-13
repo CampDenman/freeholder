@@ -10,6 +10,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createStripePayments } from "@/adapters/payments/stripe";
 import { db } from "@/core/db";
 import { getJob, stopJobs, type JobExecutionContext } from "@/core/jobs";
+import { jobIdempotencyKeys } from "@/core/jobs/schema";
 import { addRetentionException, createDataRequest, fulfillDataRequest, removeRetentionException, verifyDataRequest } from "@/core/privacy/service";
 import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
 import { ready } from "@/core/runtime";
@@ -21,6 +22,7 @@ import { erasePaymentProviderCustomer } from "@/modules/invoicing/provider-erasu
 import { paymentMethods, paymentProviderCustomers } from "@/modules/invoicing/schema";
 import { quiesceMerchantSchedules } from "@/modules/subscriptions/merchant-tax-quiescence";
 import { subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "@/modules/subscriptions/provider-schedule-schema";
+import { enqueueMerchantScheduleErasureRepair, reconcileMerchantScheduleErasure } from "@/modules/subscriptions/provider-schedule-erasure";
 import { plans, subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptions } from "@/modules/subscriptions/schema";
 import { seedMerchantCheckout80 } from "../helpers/merchant-checkout80";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
@@ -219,6 +221,42 @@ describe.runIf(hasDatabase)("original buyer schedule and money erasure", { timeo
     expect(agreement?.pendingJobs?.length).toBeGreaterThan(0);
     expect(await db().select().from(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, prior.buyerId))).toHaveLength(1);
     expect(physical.subscriptionDeletes()).toBe(0); expect(physical.customerDeletes()).toBe(0);
+  });
+
+  it("commits recovery for restored uncertainty when the completed original money-finisher payload is missing", async () => {
+    const source = await originalBuyer(), physical = provider(source.subscriptionId);
+    await quiesceMerchantSchedules.handler(source.stop.data, jobContext(quiesceMerchantSchedules.name, source.stop.id));
+    await finishMoney(source); await runCustomers(source.request.id);
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, source.request.id)))[0]?.status).toBe("completed");
+    expect(physical.subscriptionDeletes()).toBe(1); expect(physical.customerDeletes()).toBe(1);
+    const evidenceDigest = merchantTaxDigest({ source: "synthetic_restored_original_resource_uncertainty", subscriptionId: source.subscriptionId, missingMoneyJobId: source.money.id });
+    // Explicit partial-restore uncertainty, not fabricated new cash or a new
+    // provider effect. Preserve the actual claim/hash and all original money
+    // and cancellation history while omitting only its old queue payload.
+    await db().transaction(async tx => {
+      await tx.execute(sql`delete from pgboss.job where id=${source.money.id}::uuid and name=${BUYER_MONEY_ERASURE_JOB}`);
+      await tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
+      await tx.update(subscriptionProviderScheduleResources).set({ state: "unknown", stoppedProof: null, recoveryPending: true,
+        evidenceRevision: sql`${subscriptionProviderScheduleResources.evidenceRevision}+1` }).where(eq(subscriptionProviderScheduleResources.subscriptionId, source.subscriptionId));
+      await enqueueMerchantScheduleErasureRepair(tx, { subscriptionId: source.subscriptionId, evidenceDigest });
+    });
+    const [claim] = await db().select({ jobId: jobIdempotencyKeys.jobId }).from(jobIdempotencyKeys).where(and(
+      eq(jobIdempotencyKeys.jobName, reconcileMerchantScheduleErasure.name),
+      eq(jobIdempotencyKeys.idempotencyKey, `schedule-erasure-evidence:${source.subscriptionId}:${evidenceDigest}`)));
+    if (!claim) throw new Error("The actual restored-uncertainty phase did not admit its real repair task.");
+    const repair = await getJob(reconcileMerchantScheduleErasure.name, claim.jobId);
+    if (!repair) throw new Error("The actual original repair payload is missing before the control starts.");
+    const result = await reconcileMerchantScheduleErasure.handler(repair.data, jobContext(reconcileMerchantScheduleErasure.name, repair.id))
+      .then(value => ({ value }), (error: unknown) => ({ error }));
+    expect(result).toHaveProperty("error");
+    expect((await db().select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId, source.subscriptionId)))[0])
+      .toMatchObject({ state: "unknown", recoveryPending: true });
+    // The recovery phase may refuse completion, but its real unresolved debt
+    // must commit. A thrown-away recovery TX must not leave 'completed'.
+    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, source.request.id)))[0])
+      .toMatchObject({ status: "in_progress", fulfilledAt: null });
+    expect(await getJob(BUYER_MONEY_ERASURE_JOB, source.money.id)).toBeNull();
+    expect(physical.subscriptionDeletes()).toBe(1); expect(physical.customerDeletes()).toBe(1);
   });
 
 });
