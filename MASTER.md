@@ -6569,6 +6569,22 @@ deployments are portable, testable and incapable of silently forking the truth.
   required; no schema81 or C3.47 closure is claimed. Exact evidence:
   `deploy/import-source-graph.md`.)*
 
+  Above500 actual HTTP lifecycle qualification at a9946538: real owned TCP
+  REST responses yielded501 entries/exact bindings and one shared copied PNG.
+  Fulltypes/fixturelint and incrementaltypes pass; the first native passed
+  46.613s within its initial180s limit, with actual pacing/budgets unchanged.
+  Real media/500-page/1-page children resume across fresh owner sessions,
+  explicitly publish501 pages and roll back all imported ownership while
+  preserving the three actual CMS defaults. The exact shared asset moves to
+  recoverable trash/usage0/public404. Independent topology/byte/TCP/client
+  readbacks pass with journal81 unchanged. Eight originals are retired and
+  hash-present with cleanup durably queued(workers off), not physically erased.
+  This is private shared-service qualification on ordinary80/881a plus explicit
+  unjournalled81/4669; no second-process or production owner-UI proof is claimed.
+  Normal81/runtime/public continuation, preserved-history recovery and full
+  cancellation/expiry/erasure acceptance remain required; C3.47 stays open.
+  See deploy/import-http501-lifecycle-2026-11-12.md.
+
 ### 43.9 C4 — Safe agent workforce, connections, scheduling, and briefing
 
 #### Workforce completion
