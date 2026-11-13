@@ -100,7 +100,7 @@ describe("Stripe refund finality",()=>{
     const adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_cancel"],fetch:originalStripePlatformRead});
     const raw=JSON.stringify({id:"evt_CancelledRefund",type:"refund.updated",account:"acct_Original",created:at,data:{object:{id:"re_CancelledRefund",object:"refund",payment_intent:paymentIntent,charge:"ch_OriginalRefund",amount:500,currency:"cad",status:"canceled"}}});
     const signature=createHmac("sha256","whsec_cancel").update(`${at}.${raw}`).digest("hex");
-    await expect(adapter.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:bytes(raw),receivedAt:new Date(at*1000).toISOString()})).resolves.toEqual([{id:"evt_CancelledRefund",kind:"refund_failed",failureCode:"provider_cancelled",providerRef:"re_CancelledRefund",paymentProviderRef:"pi_OriginalRefund",amountMinor:500,currency:"CAD",occurredAt:new Date(at*1000).toISOString(),providerAccountId:"acct_Original",providerPlatformAccountId:"acct_originalplatform"}]);
+    await expect(adapter.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:bytes(raw),receivedAt:new Date(at*1000).toISOString()})).resolves.toEqual([{id:"evt_CancelledRefund",kind:"refund_failed",failureCode:"provider_cancelled",providerRef:"re_CancelledRefund",paymentProviderRef:"pi_OriginalRefund",amountMinor:500,currency:"CAD",occurredAt:new Date(at*1000).toISOString(),providerAccountId:"acct_Original",providerPlatformAccountId:"acct_originalplatform",providerChargeRef:"ch_OriginalRefund",observedPaymentIntentRef:"pi_OriginalRefund",observedProviderApiVersion:null,providerStatus:"canceled",rawProviderStatus:"canceled"}]);
   });
 });
 
