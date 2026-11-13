@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import {hasDurableOriginalMediaCallerProof} from "./retirement-authority";
 // C1.12/C1.08/C11.08: reservation erasure never outruns original provider work.
 import {randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,isNull,or,sql} from "drizzle-orm";
@@ -43,6 +44,7 @@ async function minimizeOwned(tx:Tx,contactId:string):Promise<void>{
  if(await storageOperationsHeld(tx,[contactId]))return;
  const resources=await tx.select().from(mediaMultipartResources).where(and(eq(mediaMultipartResources.contactId,contactId),isNull(mediaMultipartResources.redactedAt))).orderBy(asc(mediaMultipartResources.id)).for("update");
  for(const resource of resources){
+  if(!hasDurableOriginalMediaCallerProof())continue;
   if(!resource.retiredAt||!["completed","aborted"].includes(resource.state))continue;
   const unknown=await tx.select({id:mediaMultipartOperations.id}).from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,resource.id),inArray(mediaMultipartOperations.state,["started","unknown"]))).limit(1);
   if(unknown.length)continue;
@@ -56,6 +58,7 @@ async function minimizeOwned(tx:Tx,contactId:string):Promise<void>{
  for(const object of objects){
   const digest=objectKeyDigest(object.key),writes=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,digest));
   const active=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.keyDigest,digest),isNull(mediaMultipartResources.retiredAt))).limit(1);
+  if(writes.length&&!hasDurableOriginalMediaCallerProof())continue;
   if(active.length||object.state==="attached"||writes.some(row=>!row.deletedAt||["unverified","started","unknown"].includes(row.state)))continue;
   await minimizeMediaStorageOperations(tx,writes.map(row=>row.id));
   // No physical writer was admitted for an unwritten reservation. Removing
@@ -66,6 +69,7 @@ async function minimizeOwned(tx:Tx,contactId:string):Promise<void>{
  for(const upload of uploads){
   const writes=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,objectKeyDigest(upload.storageKey)));
   const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.uploadId,upload.id),isNull(mediaMultipartResources.redactedAt))).limit(1);
+  if(writes.length&&!hasDurableOriginalMediaCallerProof())continue;
   if(multipart.length||writes.some(row=>!row.deletedAt||["unverified","started","unknown"].includes(row.state)))continue;
   await minimizeMediaStorageOperations(tx,writes.map(row=>row.id));
   await tx.update(mediaUploads).set({filename:"[erased]",uploadedBy:"erased",ownerContactId:null,storageKey:`retained:${objectKeyDigest(upload.storageKey)}`,provenance:{},mediaMetadata:{},failureReason:null,state:upload.state==="complete"?"complete":"aborted",completedAt:upload.completedAt??new Date(),updatedAt:new Date()}).where(eq(mediaUploads.id,upload.id));

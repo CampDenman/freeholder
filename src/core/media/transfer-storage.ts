@@ -1,19 +1,20 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C11.08: only privately configured original resources; no credentials in input.
-import {createS3Store,createReplitStore,type VersionedTransferStore} from "../../../scripts/media-transfer.mjs";
+import {createS3Store,createReplitStore,type AccountedTransferStore} from "../../../scripts/media-transfer.mjs";
 import {boundStorage} from "@/adapters/storage";
 import {createS3Storage} from "@/adapters/storage/s3";
 import {createReplitStorage} from "@/adapters/storage/replit";
 import type {StorageAdapter,StorageBinding} from "@/adapters/storage/types";
 import {env} from "@/core/env";
+import {observeTransferRequest} from "./transfer-requests";
 import {checkedTransferBinding} from "./transfer-witness";
 import {currentServiceTransaction} from "@/core/plugins/context";
 import {storageNamespace} from "./storage-quota";
 import {storage} from "@/adapters/storage";
 import {transferConflict,transferDigest} from "./transfer-proof";
 
-export async function configuredTransferStores():Promise<{source:VersionedTransferStore;target:VersionedTransferStore}> {
+export async function configuredTransferStores():Promise<{source:AccountedTransferStore;target:AccountedTransferStore}> {
  const e=env(),configured=await boundStorage();
  if(configured.store.isPublic||!["s3","replit"].includes(configured.binding.kind))transferConflict("Verified transfer requires the configured original private S3 or Replit storage.");
  const explicit=e.MEDIA_TRANSFER_SOURCE_STORAGE!==undefined,sourceKind=e.MEDIA_TRANSFER_SOURCE_STORAGE??configured.binding.kind;
@@ -23,7 +24,8 @@ export async function configuredTransferStores():Promise<{source:VersionedTransf
  const target=e.MEDIA_TRANSFER_TARGET_STORAGE==="s3"?createS3Store(targetEnvironment,"TARGET"):e.MEDIA_TRANSFER_TARGET_STORAGE==="replit"?await createReplitStore(targetEnvironment,"TARGET"):transferConflict("Configure the explicit private transfer destination before planning a transfer.");
  checkedTransferBinding(source.binding);checkedTransferBinding(target.binding);
  if((!explicit&&transferDigest(source.binding)!==transferDigest(configured.binding))||source.binding.namespace===target.binding.namespace)transferConflict("The configured transfer resources do not match distinct original private resources.");
- return{source,target};
+ if(!source.accounted||!target.accounted)transferConflict("The original resources do not support accountable physical requests.");
+ return{source:source.accounted(observeTransferRequest),target:target.accounted(observeTransferRequest)};
 }
 export async function configuredPhysicalStorage(binding:StorageBinding):Promise<StorageAdapter> {
  const e=env();

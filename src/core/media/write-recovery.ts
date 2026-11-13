@@ -1,5 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import {assertPhysicalStorageAbsence} from "./physical-absence";
+import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C11.08: explicit human evidence settles each original physical call.
 import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
@@ -56,6 +58,7 @@ const claimStorageRecovery = defineService({
     physicalKey(row,input);
     if (row.namespace && row.namespace !== input.originalNamespace) throw new ServiceError("conflict", "The evidence does not identify the original storage resource.");
     if (row.observedAcceptedAt && input.outcome === "not_applied") throw new ServiceError("conflict", "The provider already acknowledged this operation. A later failure cannot erase that fact.");
+    if(row.operation==="put"?input.outcome==="not_applied":input.outcome==="applied")requireDurableMediaRetirementProof();
     ctx.setSubject("media_storage_operation", row.id);
     return row;
   },
@@ -78,6 +81,7 @@ const applyStorageRecovery = defineService({
     if (row.observedAcceptedAt && input.outcome === "not_applied") throw new ServiceError("conflict", "A recorded provider acknowledgement cannot be marked unapplied.");
     const evidenceDigest = createHash("sha256").update(JSON.stringify({ ...input, actor: actorString(ctx.actor) })).digest("hex");
     const absent = row.operation === "put" ? input.outcome === "not_applied" : input.outcome === "applied";
+    if(absent)requireDurableMediaRetirementProof();
     if(row.redactedAt&&!absent){
       // A fresh physical cleanup witness may restore a verified provider key;
       // the minimized historical identity and its digest remain unchanged.
@@ -118,7 +122,7 @@ export const reconcileStorageOperation = defineOrchestratedService({
     if (binding.namespace !== input.originalNamespace || (original.namespace && original.namespace !== binding.namespace)) throw new ServiceError("conflict", "Restore the exact original private storage resource before reviewing this operation.");
     const absent = original.operation === "put" ? input.outcome === "not_applied" : input.outcome === "applied";
     if (absent) {
-      if (await store.head(key)) throw new ServiceError("conflict", "The original object is still present. The recorded provider outcome must match it.");
+      await assertPhysicalStorageAbsence(store,key);
     } else {
       const expected = original.sha256 ?? input.sha256;
       const expectedBytes = original.bytes ?? input.bytes;

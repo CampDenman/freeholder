@@ -210,3 +210,7 @@ export { importSourceErasureScopes, importSourceErasureMembers, importSourceEras
 
 // C1.12/C11.08: enabled only by the assembled verified-transfer capability.
 export {mediaStorageTransferPlans,mediaStorageTransferObjects,mediaStorageTransferReceipts,mediaStorageTransferSubjects,mediaStorageTransferCalls,mediaStorageWriterDrains,mediaStorageTransferReviews,mediaStorageTransferErasureScopes,mediaStorageTransferErasureMembers,mediaStorageTransferJobs} from "./media/transfer-schema";
+
+export {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./media/transfer-request-schema";
+
+export {mediaStorageProviderInventories,mediaStorageProviderInventoryPages,mediaStorageProviderInventoryEntries} from "./media/transfer-inventory-schema";

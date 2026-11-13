@@ -113,7 +113,7 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
   };
 
   return {
-    id: "replit",
+    id: "replit",writeProtocol:"nonresumable-put-v1",
     // Objects are not reachable without going through the app.
     isPublic: false,
     async binding() {
@@ -128,14 +128,18 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
       try {
         // Never authorize SDK integrity cleanup. Verify every target byte
         // ourselves, while retaining the positive ACK before readback.
-        await file.save(Buffer.from(body), { validation: false, metadata: { contentType } });
+        await file.save(Buffer.from(body), { resumable:false,validation: false, metadata: { contentType } });
       } catch {
         throw new Error("storage: original Replit upload was not acknowledged");
       }
-      await observation?.onAccepted?.();
+      const metadata=file.metadata,bucketId=await bucketOnce();
+      const value=metadata.generation;
+      const valid=metadata.name===key&&metadata.bucket===bucketId&&typeof value==="string"&&/^[1-9][0-9]{0,19}$/.test(value)&&String(metadata.size)===String(body.byteLength);
+      await observation?.onAccepted?.({revision:valid?{kind:"generation",key,namespace:storageNamespace({id:"replit",bucket:bucketId}),value}:undefined});
+      if(!valid)throw new Error("storage: original Replit upload metadata is incomplete; retain its positive acknowledgement for recovery");
       requireOriginalEndpoint();
       let actual: Buffer;
-      try { [actual] = await file.download({ validation: false }); }
+      try { [actual] = await (await writableOnce()).file(key,{generation:value}).download({ validation: false,decompress:false }); }
       catch { throw new Error("storage: original Replit readback failed"); }
       if (actual.length !== body.byteLength || createHash("sha256").update(actual).digest("hex") !== createHash("sha256").update(body).digest("hex")) throw new Error("storage: original Replit upload failed full-byte verification");
       return { key, bytes: body.byteLength, contentType };

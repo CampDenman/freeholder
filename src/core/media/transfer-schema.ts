@@ -93,8 +93,8 @@ export const mediaStorageTransferSubjects=pgTable("media_storage_transfer_subjec
  index("media_storage_transfer_subjects_owner_idx").on(t.contactId),
 ]);
 
-export interface StorageTransferRevision {kind:"etag"|"generation";key:string;namespace:string;value:string}
-export const STORAGE_TRANSFER_CALL_KINDS=["source_read","target_probe","target_put","target_verify","target_current","source_delete","source_absence","privacy_read","privacy_delete","privacy_absence","privacy_source_read","privacy_source_delete","privacy_source_absence","recovery_read"] as const;
+export interface StorageTransferRevision {kind:"etag"|"generation";key:string;namespace:string;value:string;versionId?:string}
+export const STORAGE_TRANSFER_CALL_KINDS=["source_read","target_probe","target_put","target_verify","target_current","source_delete","source_absence","privacy_read","privacy_delete","privacy_absence","privacy_source_read","privacy_source_delete","privacy_source_absence","recovery_read","source_inventory","target_inventory","source_retirement_inventory","target_erasure_inventory","source_erasure_inventory"] as const;
 /** One committed row per actual provider invocation. A return is not domain apply. */
 export const mediaStorageTransferCalls=pgTable("media_storage_transfer_calls",{
  id:uuid("id").primaryKey().defaultRandom(),
@@ -118,7 +118,7 @@ export const mediaStorageTransferCalls=pgTable("media_storage_transfer_calls",{
 },t=>[
  index("media_storage_transfer_calls_object_idx").on(t.objectId,t.createdAt,t.id),
  index("media_storage_transfer_calls_runtime_idx").on(t.runtimeId,t.state),
- check("media_storage_transfer_calls_kind",sql`${t.kind} in ('source_read','target_probe','target_put','target_verify','target_current','source_delete','source_absence','privacy_read','privacy_delete','privacy_absence','privacy_source_read','privacy_source_delete','privacy_source_absence','recovery_read')`),
+ check("media_storage_transfer_calls_kind",sql`${t.kind} in ('source_read','target_probe','target_put','target_verify','target_current','source_delete','source_absence','privacy_read','privacy_delete','privacy_absence','privacy_source_read','privacy_source_delete','privacy_source_absence','recovery_read','source_inventory','target_inventory','source_retirement_inventory','target_erasure_inventory','source_erasure_inventory')`),
  check("media_storage_transfer_calls_state",sql`${t.state} in ('admitted','returned','unknown','stopped')`),
  check("media_storage_transfer_calls_digests",sql`${t.namespace} ~ '^[a-f0-9]{64}$' and ${t.requestDigest} ~ '^[a-f0-9]{64}$' and ${t.callerTokenDigest} ~ '^[a-f0-9]{64}$'`),
  check("media_storage_transfer_calls_return",sql`(${t.state}<>'returned' or (${t.returnedAt} is not null and ${t.resultDigest} ~ '^[a-f0-9]{64}$')) and (${t.state}<>'stopped' or (${t.stoppedAt} is not null and ${t.stopReceiptId} is not null))`),

@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C3.22/C11.08: each physical write keeps its original resource identity.
+import type {StoredObjectRevision} from "@/adapters/storage/types";
 import { sql } from "drizzle-orm";
 import { bigint, check, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { contacts } from "@/core/contacts/schema";
@@ -22,6 +23,9 @@ export const mediaObjectWrites = pgTable("media_object_writes", {
   actor: text("actor").notNull(),
   contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "restrict" }),
   state: text("state", { enum: MEDIA_WRITE_STATES }).notNull(),
+  writerProtocol:text("writer_protocol"),
+  providerRevision:jsonb("provider_revision").$type<StoredObjectRevision>(),
+  providerRevisionDigest:text("provider_revision_digest"),
   writerRuntimeId: uuid("writer_runtime_id"),
   writerFinishedAt: timestamp("writer_finished_at", { withTimezone: true }),
   observedAcceptedAt: timestamp("observed_accepted_at", { withTimezone: true }),

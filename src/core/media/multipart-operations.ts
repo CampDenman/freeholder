@@ -1,5 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import {assertPhysicalStorageAbsence} from "./physical-absence";
+import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C11.08: commit original intent, call its provider, then record facts.
 import {createHash,randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,isNull} from "drizzle-orm";
@@ -161,7 +163,7 @@ export async function adoptCompletedMultipart(uploadId:string,operationId:string
   const existing=resource.objectReceiptId?(await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,resource.objectReceiptId)).limit(1))[0]:null;
   if(existing&&(existing.sha256!==sha256||existing.bytes!==bytes||existing.namespace!==resource.namespace))conflict("The original completed object changed.");
   const id=existing?.id??randomUUID(),now=new Date();
-  if(!existing)await tx.insert(mediaObjectWrites).values({id,operation:"put",key:resource.key,keyDigest:resource.keyDigest,namespace:resource.namespace,storageKind:resource.storageKind,storageLocation:resource.storageLocation,sha256,bytes,contentType:resource.contentType,actor:operation.actor,contactId:resource.contactId,state:"accepted",observedAcceptedAt:operation.providerAcceptedAt,writerRuntimeId:operation.writerRuntimeId,writerFinishedAt:operation.writerFinishedAt});
+  if(!existing)await tx.insert(mediaObjectWrites).values({id,operation:"put",key:resource.key,keyDigest:resource.keyDigest,namespace:resource.namespace,storageKind:resource.storageKind,storageLocation:resource.storageLocation,sha256,bytes,contentType:resource.contentType,actor:operation.actor,contactId:resource.contactId,state:"accepted",observedAcceptedAt:operation.providerAcceptedAt,writerRuntimeId:operation.writerRuntimeId,writerFinishedAt:operation.writerFinishedAt,writerProtocol:operation.writerRuntimeId?"multipart-receipts-v1":null});
   await tx.update(mediaMultipartOperations).set({state:"accepted",verifiedAt:now,updatedAt:now}).where(eq(mediaMultipartOperations.id,operation.id));
   await tx.update(mediaMultipartResources).set({state:"completed",completedAt:resource.completedAt??now,retiredAt:resource.retiredAt??now,objectReceiptId:id,updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
  });
@@ -174,6 +176,7 @@ export async function claimMultipartAbort(ctx:Pick<ServiceContext,"tx"|"actor">,
  if(await storageOperationsHeld(ctx.tx,[resource.contactId]))conflict("A named hold preserves this original multipart resource.");
  const outstanding=await ctx.tx.select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,resource.id),inArray(mediaMultipartOperations.state,uncertain))).limit(1);
  if(outstanding.length)conflict();
+ requireDurableMediaRetirementProof();
  if(resource.state==="aborted"&&resource.retiredAt)return{operationId:resource.id,terminal:true};
  const[operation]=await ctx.tx.insert(mediaMultipartOperations).values({resourceId:resource.id,kind:"abort",state:"started",writerRuntimeId:mediaWriterRuntimeId,providerUploadId:resource.providerUploadId,actor:actorString(ctx.actor)}).returning();
  await ctx.tx.update(mediaMultipartResources).set({state:"aborting",updatedAt:new Date()}).where(eq(mediaMultipartResources.id,resource.id));
@@ -181,6 +184,7 @@ export async function claimMultipartAbort(ctx:Pick<ServiceContext,"tx"|"actor">,
  return{operationId:operation!.id,terminal:false};
 }
 export async function abortOriginalMultipart(uploadId:string,operationId:string):Promise<void>{
+ requireDurableMediaRetirementProof();
  let captured:BoundMultipart;
  try{captured=await originalMultipart(uploadId);}catch(error){await notAttempted(operationId);throw error;}
  let acknowledged=false;
@@ -191,7 +195,7 @@ export async function abortOriginalMultipart(uploadId:string,operationId:string)
   const inspection=await captured.store.directMultipart!.inspect(captured.resource.key,captured.resource.providerUploadId!);
   if(inspection.state!=="absent")conflict("The original multipart resource remains open after its abort acknowledgement; keep this receipt for recovery.");
   // An ABORT acknowledgement says nothing about a separately completed object.
-  if(await captured.store.head(captured.resource.key))conflict("A completed original object remains; its tracked cleanup needs recovery.");
+  await assertPhysicalStorageAbsence(captured.store,captured.resource.key);
   await db().transaction(async tx=>{
    await lockContactIdentityForRead(tx);const{resource,operation}=await lockedOperation(tx,operationId,true),now=new Date();
    if(operation.kind!=="abort"||resource.uploadId!==uploadId)conflict();
@@ -206,6 +210,7 @@ export async function abortOriginalMultipart(uploadId:string,operationId:string)
 export async function retireKnownMultipart(uploadId:string):Promise<boolean>{
  try{
   const captured=await originalMultipart(uploadId);
+  requireDurableMediaRetirementProof();
   if(captured.resource.retiredAt)return true;
   if(captured.resource.state!=="open")return false;
   const claim=await db().transaction(async tx=>claimMultipartAbort({tx,actor:{kind:"system"}},uploadId,Boolean(captured.resource.redactedAt)));

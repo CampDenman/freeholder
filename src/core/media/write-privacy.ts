@@ -1,8 +1,9 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import {hasDurableOriginalMediaCallerProof} from "./retirement-authority";
 // C1.12/C11.08: erasure cannot outrun unresolved original storage operations.
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
 import { lockContactIdentity } from "@/core/contacts/identity-lock";
@@ -21,9 +22,10 @@ const receipt = z.object({ format: z.literal("freeholder.erasure-receipt"), outc
 export async function minimizeMediaStorageOperations(tx: Tx, ids: string[]): Promise<number> {
   await allowMediaReceiptWrites(tx);
   let affected = 0;
-  const rows = await tx.select().from(mediaObjectWrites).where(and(inArray(mediaObjectWrites.id, ids), isNull(mediaObjectWrites.redactedAt)))
+  const rows = await tx.select().from(mediaObjectWrites).where(and(inArray(mediaObjectWrites.id, ids), or(isNull(mediaObjectWrites.redactedAt),sql`${mediaObjectWrites.providerRevision} is not null`)))
     .orderBy(asc(mediaObjectWrites.id)).for("update");
   for (const row of rows) {
+    if(!hasDurableOriginalMediaCallerProof())continue;
     if (await storageOperationsHeld(tx, [row.contactId])) continue;
     if(await(await import("./transfer-lineage")).transferLineagePending(tx,row.id))continue;
     if (!row.deletedAt || !["accepted", "confirmed_absent"].includes(row.state)) continue;
@@ -31,7 +33,7 @@ export async function minimizeMediaStorageOperations(tx: Tx, ids: string[]): Pro
       .where(and(eq(mediaObjectWrites.keyDigest, row.keyDigest), inArray(mediaObjectWrites.state, ["unverified", "started", "unknown"]))).limit(1);
     if (unresolved.length) continue;
     await tx.update(mediaObjectWrites).set({ key: `retained:${row.keyDigest}`, actor: "erased", contactId: null,
-      storageLocation: {}, reviewedBy: null, redactedAt: new Date(), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, row.id));
+      storageLocation: {}, providerRevision:null,reviewedBy: null, redactedAt: row.redactedAt??new Date(), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, row.id));
     affected += 1;
   }
   return affected;
@@ -48,7 +50,7 @@ registerContactPrivacySource({
     // No provider call is made while the parent erasure transaction is open.
     await minimizeMediaStorageOperations(tx, ids);
     const pending = await tx.select({ id: mediaObjectWrites.id }).from(mediaObjectWrites)
-      .where(and(inArray(mediaObjectWrites.id, ids), isNull(mediaObjectWrites.redactedAt))).orderBy(asc(mediaObjectWrites.id));
+      .where(and(inArray(mediaObjectWrites.id, ids), or(isNull(mediaObjectWrites.redactedAt),sql`${mediaObjectWrites.providerRevision} is not null`))).orderBy(asc(mediaObjectWrites.id));
     const pendingJobs: string[] = [];
     for (let offset = 0; offset < pending.length; offset += 500) {
       const originalJobId = randomUUID();

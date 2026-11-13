@@ -15,13 +15,17 @@ import {assertOriginalUploadWritable} from "./upload-ownership";
 import {requireCompleteTransferInventory,requireNoOutstandingTransferCalls,transferConflict,transferDigest,transferTargetKey} from "./transfer-proof";
 
 export async function transferSchemaAvailable(tx:Tx):Promise<boolean>{
- const rows=await tx.execute<{present:boolean}>(sql`select to_regprocedure('freeholder_media_transfer_capability_v1()') is not null as present`);
+ const rows=await tx.execute<{present:boolean}>(sql`select to_regprocedure('freeholder_media_transfer_capability_v1()') is not null and to_regprocedure('freeholder_media_transfer_request_capability_v1()') is not null as present`);
  return rows[0]?.present===true;
 }
 export async function requireTransferCapability(tx:Tx):Promise<void>{
  if(!await transferSchemaAvailable(tx))transferConflict("Verified storage transfer is unavailable until its complete guarded migration is applied.");
  const rows=await tx.execute<{capability:string}>(sql`select freeholder_media_transfer_capability_v1() as capability`);
  if(rows[0]?.capability!=="verified-original-transfer-v1")transferConflict();
+ const requestCapability=await tx.execute<{present:boolean}>(sql`select to_regprocedure('freeholder_media_transfer_request_capability_v1()') is not null as present`);
+ if(requestCapability[0]?.present!==true)transferConflict("Apply the complete original request/inventory capability before storage transfer I/O.");
+ const verifiedRequestCapability=await tx.execute<{capability:string}>(sql`select freeholder_media_transfer_request_capability_v1() as capability`);
+ if(verifiedRequestCapability[0]?.capability!=="verified-original-request-inventory-v1")transferConflict("The exact original request/inventory capability is unavailable.");
  await tx.execute(sql`select set_config('freeholder.media_transfer_v1','1',true)`);
  await allowMediaReceiptWrites(tx);
 }
@@ -117,4 +121,5 @@ export async function assertTransferOriginalMembership(tx:Tx,plan:typeof mediaSt
 export async function assertTransferCallDrain(tx:Tx,ids:string[]):Promise<void>{
  const calls=ids.length?await tx.select().from(mediaStorageTransferCalls).where(inArray(mediaStorageTransferCalls.objectId,ids)):[];
  requireNoOutstandingTransferCalls(calls);
+ if(!await(await import("./transfer-requests")).transferRequestsDrained(tx,calls.map(row=>row.id)))transferConflict("An original physical provider subrequest remains unresolved.");
 }

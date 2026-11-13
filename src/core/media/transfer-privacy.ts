@@ -15,9 +15,12 @@ import {registerStorageObservationReconciler,reconcileCommittedStorageObservatio
 import {mediaObjectWrites} from "./write-schema";
 import {mediaStorageTransferCalls,mediaStorageTransferErasureMembers,mediaStorageTransferErasureScopes,mediaStorageTransferObjects,mediaStorageTransferPlans,mediaStorageTransferReceipts,mediaStorageTransferReviews,mediaStorageTransferSubjects} from "./transfer-schema";
 import {lockTransferInventory,requireTransferCapability} from "./transfer-authority";
-import {storageOperationsHeld} from "./write-ledger";
+import {storageOperationsHeld,objectKeyDigest} from "./write-ledger";
 import {eraseStorageTransferLineage} from "./transfer-erasure";
 import {transferConflict,transferDigest} from "./transfer-proof";
+import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
+import {mediaStorageProviderInventories,mediaStorageProviderInventoryPages,mediaStorageProviderInventoryEntries} from "./transfer-inventory-schema";
+import {transferRequestsDrained} from "./transfer-requests";
 export const TRANSFER_PRIVACY_SCOPE="media.storageTransfers";
 export const TRANSFER_ERASURE_JOB="core.eraseMediaStorageTransfer";
 const SYSTEM={kind:"system"}as const;
@@ -47,10 +50,31 @@ export async function minimizeTransferredObjects(tx:Tx,ids:string[]):Promise<num
   const subjects=await tx.select().from(mediaStorageTransferSubjects).where(eq(mediaStorageTransferSubjects.objectId,id));
   if(await storageOperationsHeld(tx,subjects.map(row=>row.contactId)))continue;
   const calls=await tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.objectId,id));
-  if(calls.some(row=>["admitted","unknown"].includes(row.state)))continue;
-  const writes=await tx.select().from(mediaObjectWrites).where(inArray(mediaObjectWrites.keyDigest,[object.keyDigest,object.targetKeyDigest]));
+  if(calls.some(row=>["admitted","unknown"].includes(row.state))||!await transferRequestsDrained(tx,calls.map(row=>row.id)))continue;
+  const membership=await tx.select().from(mediaStorageTransferReceipts).where(eq(mediaStorageTransferReceipts.objectId,id));
+  const physicalIds=[...new Set([...membership.map(row=>row.receiptId),...calls.flatMap(row=>row.physicalReceiptId?[row.physicalReceiptId]:[])])];
+  const writes=physicalIds.length?await tx.select().from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,physicalIds)):[];
   if(!writes.length||writes.some(row=>!row.deletedAt||!["accepted","confirmed_absent"].includes(row.state)))continue;
+  const complete=await tx.execute<{retired:boolean}>(sql`select freeholder_media_transfer_object_retired(${object.id}::uuid) as retired`);
+  if(complete[0]?.retired!==true)continue;
   const now=new Date();
+  // This exact captured lineage has both complete physical inventory proofs.
+  // Ordinary legacy minimization remains independently blocked.
+  for(const write of writes)await tx.update(mediaObjectWrites).set({key:`retained:${write.keyDigest}`,actor:"erased",contactId:null,storageLocation:{},providerRevision:null,reviewedBy:null,redactedAt:write.redactedAt??now,updatedAt:now}).where(eq(mediaObjectWrites.id,write.id));
+  const physicalRequests=calls.length?await tx.select().from(mediaStorageTransferRequests).where(inArray(mediaStorageTransferRequests.callId,calls.map(row=>row.id))):[];
+  for(const request of physicalRequests){
+   if(!request.redactedAt){const original=request.descriptor;await tx.update(mediaStorageTransferRequests).set({descriptor:{kind:original.kind,binding:{kind:original.binding.kind,namespace:original.binding.namespace,location:{}},...(request.keyDigest?{key:`retained:${request.keyDigest}`}:{})},redactedAt:now}).where(eq(mediaStorageTransferRequests.id,request.id));}
+   const facts=await tx.select().from(mediaStorageTransferRequestObservations).where(eq(mediaStorageTransferRequestObservations.requestId,request.id));
+   for(const fact of facts)if(!fact.redactedAt)await tx.update(mediaStorageTransferRequestObservations).set({facts:{stage:fact.facts.stage,status:fact.facts.status},redactedAt:now}).where(eq(mediaStorageTransferRequestObservations.id,fact.id));
+  }
+  const providerHeaders=await tx.select().from(mediaStorageProviderInventories).where(eq(mediaStorageProviderInventories.planId,object.planId));
+  for(const header of providerHeaders){
+   const digest=header.side==="source"?object.keyDigest:object.targetKeyDigest;
+   const capturedEntries=await tx.select().from(mediaStorageProviderInventoryEntries).where(and(eq(mediaStorageProviderInventoryEntries.inventoryId,header.id),eq(mediaStorageProviderInventoryEntries.keyDigest,digest)));
+   for(const entry of capturedEntries)if(!entry.redactedAt)await tx.update(mediaStorageProviderInventoryEntries).set({entry:{kind:entry.entry.kind,key:`retained:${entry.keyDigest}`,bytes:entry.entry.bytes,current:entry.entry.current},redactedAt:now}).where(eq(mediaStorageProviderInventoryEntries.id,entry.id));
+   const capturedPages=await tx.select().from(mediaStorageProviderInventoryPages).where(eq(mediaStorageProviderInventoryPages.inventoryId,header.id));
+   for(const page of capturedPages)if(!page.redactedAt&&[page.cursor,page.nextCursor].some(cursor=>cursor?.key&&objectKeyDigest(cursor.key)===digest))await tx.update(mediaStorageProviderInventoryPages).set({cursor:null,nextCursor:null,redactedAt:now}).where(eq(mediaStorageProviderInventoryPages.id,page.id));
+  }
   await tx.update(mediaStorageTransferReceipts).set({originalSnapshot:{}}).where(eq(mediaStorageTransferReceipts.objectId,id));
   await tx.update(mediaStorageTransferSubjects).set({contactId:null,redactedAt:now}).where(and(eq(mediaStorageTransferSubjects.objectId,id),isNull(mediaStorageTransferSubjects.redactedAt)));
   const[originalPlan]=await tx.select().from(mediaStorageTransferPlans).where(eq(mediaStorageTransferPlans.id,object.planId)).limit(1);if(!originalPlan)transferConflict();
@@ -64,9 +88,15 @@ export async function minimizeTransferredObjects(tx:Tx,ids:string[]):Promise<num
  }
  return minimized;
 }
-registerContactPrivacySource({scope:TRANSFER_PRIVACY_SCOPE,tables:["media_storage_transfer_plans","media_storage_transfer_objects","media_storage_transfer_receipts","media_storage_transfer_subjects","media_storage_transfer_calls","media_storage_transfer_reviews","media_storage_transfer_erasure_scopes","media_storage_transfer_erasure_members","media_storage_writer_drains","media_storage_transfer_jobs"],retentionScopes:["members","media.storageOperations","media.multipartOperations"],requiresLogin:true,eraseOrder:19,
+registerContactPrivacySource({scope:TRANSFER_PRIVACY_SCOPE,tables:["media_storage_transfer_plans","media_storage_transfer_objects","media_storage_transfer_receipts","media_storage_transfer_subjects","media_storage_transfer_calls","media_storage_transfer_reviews","media_storage_transfer_erasure_scopes","media_storage_transfer_erasure_members","media_storage_writer_drains","media_storage_transfer_jobs","media_storage_transfer_requests","media_storage_transfer_request_observations","media_storage_provider_inventories","media_storage_provider_inventory_pages","media_storage_provider_inventory_entries"],retentionScopes:["members","media.storageOperations","media.multipartOperations"],requiresLogin:true,eraseOrder:19,
  captureRetention:async(tx,contactId,context)=>{if(context.isNew)await capture(tx,context.requestId,contactId);},
- exportData:async(tx,contactId)=>{await requireTransferCapability(tx);const rows=await owned(tx,contactId),ids=[...new Set(rows.map(row=>row.object.id))];return{objects:rows.map(row=>row.object),plans:[...new Map(rows.map(row=>[row.plan.id,row.plan])).values()],receipts:ids.length?await tx.select().from(mediaStorageTransferReceipts).where(inArray(mediaStorageTransferReceipts.objectId,ids)):[],callers:ids.length?await tx.select().from(mediaStorageTransferCalls).where(inArray(mediaStorageTransferCalls.objectId,ids)):[],reviews:ids.length?await tx.select().from(mediaStorageTransferReviews).where(inArray(mediaStorageTransferReviews.objectId,ids)):[]};},
+ exportData:async(tx,contactId)=>{await requireTransferCapability(tx);const rows=await owned(tx,contactId),ids=[...new Set(rows.map(row=>row.object.id))];
+  const callers=ids.length?await tx.select().from(mediaStorageTransferCalls).where(inArray(mediaStorageTransferCalls.objectId,ids)):[],requests=callers.length?await tx.select().from(mediaStorageTransferRequests).where(inArray(mediaStorageTransferRequests.callId,callers.map(row=>row.id))):[];
+  const planIds=[...new Set(rows.map(row=>row.plan.id))];
+  const headers=planIds.length?await tx.select({id:mediaStorageProviderInventories.id,planId:mediaStorageProviderInventories.planId,side:mediaStorageProviderInventories.side,purpose:mediaStorageProviderInventories.purpose,state:mediaStorageProviderInventories.state,firstDigest:mediaStorageProviderInventories.firstDigest,confirmedDigest:mediaStorageProviderInventories.confirmedDigest}).from(mediaStorageProviderInventories).where(inArray(mediaStorageProviderInventories.planId,planIds)):[];
+  const resources=headers.length&&ids.length?await tx.select().from(mediaStorageProviderInventoryEntries).where(and(inArray(mediaStorageProviderInventoryEntries.inventoryId,headers.map(row=>row.id)),inArray(mediaStorageProviderInventoryEntries.originalObjectId,ids))):[];
+  const pageIds=[...new Set(resources.map(row=>row.pageId))],pageProofs=pageIds.length?await tx.select({id:mediaStorageProviderInventoryPages.id,inventoryId:mediaStorageProviderInventoryPages.inventoryId,callId:mediaStorageProviderInventoryPages.callId,pass:mediaStorageProviderInventoryPages.pass,kind:mediaStorageProviderInventoryPages.kind,pageDigest:mediaStorageProviderInventoryPages.pageDigest,membershipDigest:mediaStorageProviderInventoryPages.membershipDigest}).from(mediaStorageProviderInventoryPages).where(inArray(mediaStorageProviderInventoryPages.id,pageIds)):[];
+  return{physicalRequests:requests.map(row=>({id:row.id,callId:row.callId,keyDigest:row.keyDigest,state:row.state,returnedAt:row.returnedAt,descriptorDigest:row.descriptorDigest})),physicalObservations:requests.length?await tx.select({id:mediaStorageTransferRequestObservations.id,requestId:mediaStorageTransferRequestObservations.requestId,ordinal:mediaStorageTransferRequestObservations.ordinal,factsDigest:mediaStorageTransferRequestObservations.factsDigest,bytes:mediaStorageTransferRequestObservations.bytes,createdAt:mediaStorageTransferRequestObservations.createdAt}).from(mediaStorageTransferRequestObservations).where(inArray(mediaStorageTransferRequestObservations.requestId,requests.map(row=>row.id))):[],providerInventory:headers,providerPages:pageProofs,providerResources:resources,objects:rows.map(row=>row.object),plans:[...new Map(rows.map(row=>[row.plan.id,row.plan])).values()],receipts:ids.length?await tx.select().from(mediaStorageTransferReceipts).where(inArray(mediaStorageTransferReceipts.objectId,ids)):[],callers:ids.length?await tx.select().from(mediaStorageTransferCalls).where(inArray(mediaStorageTransferCalls.objectId,ids)):[],reviews:ids.length?await tx.select().from(mediaStorageTransferReviews).where(inArray(mediaStorageTransferReviews.objectId,ids)):[]};},
  erase:async(tx,contactId,context)=>{
   const scope=await capture(tx,context.requestId,contactId),ids=await members(tx,context.requestId);await minimizeTransferredObjects(tx,ids);
   const pending=ids.length?await tx.select({id:mediaStorageTransferObjects.id}).from(mediaStorageTransferObjects).where(and(inArray(mediaStorageTransferObjects.id,ids),isNull(mediaStorageTransferObjects.redactedAt))).orderBy(asc(mediaStorageTransferObjects.id)):[];
@@ -113,4 +143,4 @@ registerStorageObservationReconciler(TRANSFER_PRIVACY_SCOPE,async receiptId=>{
  for(const member of original)await reconcileCommittedStorageObservation(member.receiptId);
  if(original.length){const imports=getService("imports.reconcileOriginalSourceErasure");if(imports)await imports.call({},SYSTEM);}
 });
-registerRetentionSource({kind:"mediaStorageTransfers",tables:["media_storage_transfer_objects","media_storage_transfer_calls","media_storage_transfer_subjects"],privacyScope:TRANSFER_PRIVACY_SCOPE,purge:async args=>db().transaction(async tx=>{await lockContactIdentity(tx);await requireTransferCapability(tx);const rows=await tx.select({id:mediaStorageTransferObjects.id}).from(mediaStorageTransferObjects).where(and(isNull(mediaStorageTransferObjects.redactedAt),sql`${mediaStorageTransferObjects.createdAt}<${args.cutoff.toISOString()}::timestamptz`,args.exceptContactIds.length?sql`not exists(select 1 from media_storage_transfer_subjects subject where subject.object_id=${mediaStorageTransferObjects.id} and (subject.contact_id is null or subject.contact_id in (${sql.join(args.exceptContactIds.map(id=>sql`${id}::uuid`),sql`,`)})))`:undefined)).orderBy(asc(mediaStorageTransferObjects.id)).limit(100);return minimizeTransferredObjects(tx,rows.map(row=>row.id));})});
+registerRetentionSource({kind:"mediaStorageTransfers",tables:["media_storage_transfer_objects","media_storage_transfer_calls","media_storage_transfer_subjects","media_storage_transfer_requests","media_storage_transfer_request_observations","media_storage_provider_inventories","media_storage_provider_inventory_pages","media_storage_provider_inventory_entries"],privacyScope:TRANSFER_PRIVACY_SCOPE,purge:async args=>db().transaction(async tx=>{await lockContactIdentity(tx);await requireTransferCapability(tx);const rows=await tx.select({id:mediaStorageTransferObjects.id}).from(mediaStorageTransferObjects).where(and(isNull(mediaStorageTransferObjects.redactedAt),sql`${mediaStorageTransferObjects.createdAt}<${args.cutoff.toISOString()}::timestamptz`,args.exceptContactIds.length?sql`not exists(select 1 from media_storage_transfer_subjects subject where subject.object_id=${mediaStorageTransferObjects.id} and (subject.contact_id is null or subject.contact_id in (${sql.join(args.exceptContactIds.map(id=>sql`${id}::uuid`),sql`,`)})))`:undefined)).orderBy(asc(mediaStorageTransferObjects.id)).limit(100);return minimizeTransferredObjects(tx,rows.map(row=>row.id));})});

@@ -10,6 +10,8 @@
 // four operations used here, and install size is not a detail on a Replit box
 // or a small droplet (§14).
 import { AwsClient } from "aws4fetch";
+import {verifyS3PhysicalAbsence} from "./physical-absence";
+import {storageNamespace} from "@/core/media/storage-quota";
 import type {
   MultipartPart,
   MultipartInspection,
@@ -121,7 +123,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
   }
 
   return {
-    id: "s3",
+    id: "s3",writeProtocol:"single-put-v1",
     isPublic: config.isPublic ?? false,
     // A public bucket would expose each unvalidated part/object before the
     // completion service can inspect or scan it. Direct upload is therefore a
@@ -240,7 +242,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
       },
     },
 
-    async put(key, body, contentType): Promise<StoredObject> {
+    async put(key, body, contentType, observation): Promise<StoredObject> {
       // A Blob rather than the raw view: it carries the content type with it.
       const response = await client.fetch(objectUrl(key), {
         method: "PUT",
@@ -254,6 +256,10 @@ export function createS3Storage(config: S3Config): StorageAdapter {
           `storage: PUT ${key} failed (${response.status}) ${await response.text()}`,
         );
       }
+      const value=response.headers.get("etag"),versionId=response.headers.get("x-amz-version-id");
+      const valid=value!==null&&/^"[\x21\x23-\x7e\x80-\xff]+"$/.test(value)&&(!versionId||versionId.length<=4096&&!/[\u0000-\u001f\u007f]/.test(versionId));
+      await observation?.onAccepted?.({revision:valid?{kind:"etag",key,namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),value,...(versionId?{versionId}:{})}:undefined});
+      // Missing revision stays explicit provenance debt; success is no retirement authority.
       return { key, bytes: body.byteLength, contentType };
     },
 
@@ -301,6 +307,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
       return responseChunks(response.body);
     },
 
+    verifyPhysicalAbsence:key=>verifyS3PhysicalAbsence(config,key),
     async delete(key): Promise<void> {
       const response = await client.fetch(objectUrl(key), {
         method: "DELETE",

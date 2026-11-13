@@ -19,6 +19,7 @@ export function transferConflict(message="The original storage transfer needs re
 export function checkedTransferRevision(revision:StorageTransferRevision|undefined|null,binding:StorageBinding,key:string):StorageTransferRevision {
  if(!revision||revision.namespace!==binding.namespace||revision.key!==key||
   (binding.kind==="s3"?revision.kind!=="etag"||!/^"[\x21\x23-\x7e\x80-\xff]+"$/.test(revision.value):binding.kind!=="replit"||revision.kind!=="generation"||!/^[1-9][0-9]{0,19}$/.test(revision.value)))transferConflict("The provider revision does not identify the exact original resource and key.");
+ if(revision.versionId!==undefined&&(binding.kind!=="s3"||!revision.versionId||revision.versionId.length>4096||/[\u0000-\u001f\u007f]/.test(revision.versionId)))transferConflict("The exact original version identifier is invalid.");
  return revision;
 }
 export function verifiedTransferBytes(body:Uint8Array,expected:{sha256:string;bytes:number}):void {

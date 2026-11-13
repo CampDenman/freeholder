@@ -11768,6 +11768,15 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Durable provider-inventory source checkpoint 2026-11-13 adds five request/
+  inventory models, immutable two-pass page application, actual original PUT
+  revision capture, exact source/target generation erasure and scoped privacy
+  coverage. The complete request capability is deliberately unpublished;
+  ordinary cleanup remains restricted. All source/native controls are prepared
+  and entirely unrun. Original caller-stop/unknown recovery, ordinary multipart
+  provenance, pinned adopted reads, cutover and actual acceptance remain
+  unfinished; this is not source completion or an account incident. See
+  `deploy/media-durable-provider-inventory-source-2026-11-13.md`.
   Durable lifecycle source checkpoint 2026-11-13: isolated source adds complete
   application-inventory first capture, actual writer/caller facts without
   historical backfill, private byte/revision copy proofs, atomic adoption,
