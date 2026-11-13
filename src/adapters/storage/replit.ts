@@ -14,7 +14,7 @@ import {createReplitTransferProtocol} from "../../../scripts/media-transfer-prot
 import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
 import type { Bucket } from "@google-cloud/storage";
 import { createHash } from "node:crypto";
-import type { StorageAdapter, StoredObject } from "@/adapters/storage/types";
+import type { StorageAdapter, StoredObject, StoredObjectRevision } from "@/adapters/storage/types";
 import { storageNamespace } from "@/core/media/storage-quota";
 
 export interface ReplitConfig {
@@ -126,7 +126,7 @@ export function createReplitStorage(config: ReplitConfig): StorageAdapter {
 
     async put(key, body, contentType, observation): Promise<StoredObject> {
       if(observation?.request){
-        const bucketId=await bucketOnce();let originalRevision:import("./types").StoredObjectRevision|undefined;
+        const bucketId=await bucketOnce();let originalRevision:StoredObjectRevision|undefined;
         const request:TransferRequestObserver=(descriptor,operation)=>observation.request!(descriptor,async(notify,identity)=>operation(async facts=>{await notify(facts);if(descriptor.kind==="object.put"&&facts.stage==="metadata"&&facts.revision)originalRevision=facts.revision;},identity));
         const protocol=createReplitTransferProtocol({destination:writableOnce,binding:{kind:"replit",namespace:storageNamespace({id:"replit",bucket:bucketId}),location:{bucket:bucketId}},requireOriginalEndpoint,observer:request});
         await protocol.put(key,body,contentType);

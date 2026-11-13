@@ -6,6 +6,7 @@ import {requireDurableMediaRetirementProof} from "./retirement-authority";
 import { createHash, randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull, gt, sql } from "drizzle-orm";
 import { boundStorage } from "@/adapters/storage";
+import type {StoredObjectRevision} from "@/adapters/storage/types";
 import { db } from "@/core/db";
 import { contacts } from "@/core/contacts/schema";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
@@ -173,7 +174,7 @@ async function finishActualMediaWriter(id:string):Promise<void>{
  });
 }
 
-export async function observeStorageOperation(id: string, accepted: boolean, settled = true,revision?:import("@/adapters/storage/types").StoredObjectRevision): Promise<void> {
+export async function observeStorageOperation(id: string, accepted: boolean, settled = true,revision?:StoredObjectRevision): Promise<void> {
   await db().transaction(async tx => {
     await allowMediaReceiptWrites(tx);
     const [intent] = await tx.select({ keyDigest: mediaObjectWrites.keyDigest }).from(mediaObjectWrites).where(eq(mediaObjectWrites.id, id)).limit(1);

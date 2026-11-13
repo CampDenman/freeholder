@@ -8,6 +8,7 @@ import {requireDurableMediaRetirementProof} from "./retirement-authority";
 import {createHash,randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,isNull} from "drizzle-orm";
 import {boundStorage} from "@/adapters/storage";
+import type {StorageTransferRevision} from "./transfer-schema";
 import type {MultipartPart,StorageBinding} from "@/adapters/storage/types";
 import {db} from "@/core/db";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
@@ -164,7 +165,7 @@ export async function completeOriginalMultipart(uploadId:string,operationId:stri
    conflict("The earlier original completion needs exact caller/request recovery; it cannot be retried or adopted from a current-key HEAD.");
   }else{
    if(!caller)conflict();
-   let revision:import("./transfer-schema").StorageTransferRevision|undefined;
+   let revision:StorageTransferRevision|undefined;
    await withTransferRequestScope({callId:caller.id,token:caller.token,runtimeIdentity:caller.runtimeIdentity},()=>captured.store.directMultipart!.complete(captured.resource.key,operation.providerUploadId!,operation.parts,{request:observeTransferRequest,onAccepted:async result=>{acknowledged=true;revision=result?.revision;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}}));
    if(!revision||!(await retainOriginalMediaCallerReturn(caller.id,caller.token,{accepted:true,providerUploadId:operation.providerUploadId!,revision})).settled)conflict();
    acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,finished:true});

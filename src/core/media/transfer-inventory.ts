@@ -3,7 +3,7 @@
 // C1.12/C11.08: immutable provider pages, never current-key birth backfill.
 import { createHash, randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
-import type { TransferInventoryConfiguration, TransferInventoryEntry, TransferInventoryPage, TransferRevision } from "../../../scripts/media-transfer.mjs";
+import type { TransferInventoryConfiguration, TransferInventoryPage, TransferRevision } from "../../../scripts/media-transfer.mjs";
 import type { Actor, Tx } from "@/core/service";
 import { env } from "@/core/env";
 import { mediaStorageTransferCalls, mediaStorageTransferObjects, mediaStorageTransferReceipts } from "./transfer-schema";

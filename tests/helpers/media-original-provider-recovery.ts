@@ -9,7 +9,7 @@ export async function ordinaryMediaRecoveryProvider(){
  const originalRequestTags=new Map<string,{id:string;token:string}>();
  let losePutReply=false,pause:undefined|{started:()=>void;wait:Promise<void>};
  const releases=new Set<()=>void>();
- const server=createServer(async(req,res)=>{
+ const server=createServer((req,res)=>{void(async()=>{
   const chunks:Buffer[]=[];for await(const chunk of req){const input:unknown=chunk;if(typeof input==="string")chunks.push(Buffer.from(input));else if(input instanceof Uint8Array)chunks.push(Buffer.from(input));else throw Error("Synthetic provider received a non-byte request chunk.");}
   const body=new Uint8Array(Buffer.concat(chunks)),key=decodeURIComponent(new URL(req.url??"/","http://fixture.invalid").pathname),method=req.method??"GET";
   const condition=typeof req.headers["if-match"]==="string"?req.headers["if-match"]:typeof req.headers["if-none-match"]==="string"?req.headers["if-none-match"]:undefined;
@@ -44,7 +44,7 @@ export async function ordinaryMediaRecoveryProvider(){
   if(!object){res.writeHead(404).end();return;}
   const tags=originalRequestTags.get(key);
   res.writeHead(200,{"content-type":object.type,"content-length":String(object.body.byteLength),etag:object.etag,...(tags?{"x-amz-meta-freeholder-original-request":tags.id,"x-amz-meta-freeholder-original-token":tags.token}:{})});res.end(method==="HEAD"?undefined:object.body);
- });
+ })().catch((error:unknown)=>{res.destroy(error instanceof Error?error:new Error("Synthetic provider handler failed."));});});
  await new Promise<void>((resolve,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",resolve);});
  const address=server.address();if(!address||typeof address==="string")throw Error("Synthetic provider did not bind TCP.");
  return{pauseNextSourcePut(){let start!:()=>void,release!:()=>void;const started=new Promise<void>(resolve=>{start=resolve;}),wait=new Promise<void>(resolve=>{release=resolve;});releases.add(release);pause={started:start,wait};return{started,release:()=>{release();releases.delete(release);}};},releaseAll(){for(const release of releases)release();releases.clear();},endpoint:`http://127.0.0.1:${address.port}`,objects,calls,originalRequestTags,loseNextSourcePutReply(){losePutReply=true;},close:()=>new Promise<void>((resolve,reject)=>{for(const release of releases)release();releases.clear();server.close(error=>error?reject(error):resolve());server.closeAllConnections();})};

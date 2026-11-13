@@ -4028,6 +4028,11 @@ reading chat logs.
   step-up, typed confirmation and audit evidence in `tests/core/outbox.test.ts`;
   webhook replay convergence in `tests/core/webhooks.test.ts`; changeset
   `outbox-dead-letters.md`; operator runbook `deploy/event-outbox.md` **F04** `/admin/jobs/outbox` redacted replay with step-up. **F05** `platform.listOutboxEvents`/`getOutboxEvent`/`replayOutboxEvent`/`outboxSummary` at `/api/v1/platform.*`, MCP `platform_*` (replay is step-up). **F07** `tests/core/outbox.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/event-outbox.md`. **F12** `tests/core/outbox.test.ts` is the composition proof.)
+  Media source lint repair 2026-11-13 (C1.12/C11.08/C10.32): the first
+  combined whole lint run stops at41 errors. Storage bindings now preserve
+  their adapter receiver; typed imports, original-tag validation and synthetic
+  TCP handler rejection handling are explicit. Existing original-body, version,
+  request/finish and lifecycle assertions remain. Renewed gates are pending.
   Media integration type repair 2026-11-13 (C1.12/C11.08): transfer forms
   now use the exact translated-label object type, and the legacy witness
   fixture explicitly supplies NULL for newly nullable writer/revision fields.

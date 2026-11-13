@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: synthetic actual protocol tags, no provider/account acceptance.
 import { describe, expect, it, vi } from "vitest";
+import {z} from "zod";
 import type { SaveOptions } from "@google-cloud/storage";
 import { createS3TransferProtocol, createReplitTransferProtocol } from "../../scripts/media-transfer-protocol.mjs";
 import type { TransferRequestIdentity, TransferRequestObserver, TransferRequestObservation } from "../../scripts/media-transfer.mjs";
@@ -26,7 +27,7 @@ describe("C1.12/C11.08 original provider request tag round trip",()=>{
  it("binds non-resumable Replit CREATE-only metadata to the original request before pinned metadata/body readback",async()=>{
   const runtime=server(),binding={kind:"replit"as const,namespace:"b".repeat(64),location:{bucket:"original-private"}};
   const metadata={name:key,bucket:binding.location.bucket,generation:"9007199254740993",size:String(body.byteLength),metadata:{}as Record<string,string>};
-  const save=vi.fn(async(_body:Buffer,options:SaveOptions)=>{const values=options.metadata?.metadata;if(typeof values?.freeholderOriginalRequest!=="string"||typeof values.freeholderOriginalToken!=="string")throw new Error("Original server request tags are missing");metadata.metadata={freeholderOriginalRequest:values.freeholderOriginalRequest,freeholderOriginalToken:values.freeholderOriginalToken};});
+  const save=vi.fn(async(_body:Buffer,options:SaveOptions)=>{const values:unknown=options.metadata?.metadata;const parsed=z.object({freeholderOriginalRequest:z.string(),freeholderOriginalToken:z.string()}).safeParse(values);if(!parsed.success)throw new Error("Original server request tags are missing");metadata.metadata=parsed.data;});
   const download=vi.fn(async()=>[Buffer.from(body)]),files:Array<{key:string;generation:unknown}>=[];
   const store=createReplitTransferProtocol({binding,destination:async()=>({file:(name:string,options?:{generation?:string})=>{files.push({key:name,generation:options?.generation});return{metadata,save,getMetadata:async()=>[metadata],download};}}),requireOriginalEndpoint:()=>{},observer:runtime.observer});
   await store.put(key,body,"application/octet-stream");const first=runtime.identities[0]!;

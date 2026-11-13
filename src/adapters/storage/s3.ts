@@ -18,9 +18,11 @@ import {storageNamespace} from "@/core/media/storage-quota";
 import type {
   MultipartPart,
   MultipartInspection,
+  MultipartObservation,
   SignedUrlOptions,
   StorageAdapter,
   StoredObject,
+  StoredObjectRevision,
 } from "@/adapters/storage/types";
 
 export interface S3Config {
@@ -104,7 +106,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
   };
 
   const accountedMultipart=(observer:TransferRequestObserver)=>createS3MultipartProtocol({client,binding:{kind:"s3",namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer});
-  async function inspectMultipart(key: string, uploadId: string, observation?:import("./types").MultipartObservation): Promise<MultipartInspection> {
+  async function inspectMultipart(key: string, uploadId: string, observation?:MultipartObservation): Promise<MultipartInspection> {
     if(observation?.request)return accountedMultipart(observation.request).inspect(key,uploadId);
     const parts: MultipartPart[] = [];
     let marker: string | undefined;
@@ -252,7 +254,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
 
     async put(key, body, contentType, observation): Promise<StoredObject> {
       if(observation?.request){
-        let originalRevision:import("./types").StoredObjectRevision|undefined;
+        let originalRevision:StoredObjectRevision|undefined;
         const request:TransferRequestObserver=(descriptor,operation)=>observation.request!(descriptor,async(notify,identity)=>operation(async facts=>{await notify(facts);if(facts.stage==="metadata"&&facts.revision)originalRevision=facts.revision;},identity));
         const namespace=storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket});
         const protocol=createS3TransferProtocol({client,binding:{kind:"s3",namespace,location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer:request});

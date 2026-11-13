@@ -24,7 +24,7 @@ export function withStorageQuota(inner: StorageAdapter, ledger: StorageQuotaLedg
     }
   };
   return {
-    id: inner.id, isPublic: inner.isPublic,writeProtocol:inner.writeProtocol,binding:inner.binding,verifyPhysicalAbsence:inner.verifyPhysicalAbsence?key=>inner.verifyPhysicalAbsence!(key):undefined,
+    id: inner.id, isPublic: inner.isPublic,writeProtocol:inner.writeProtocol,binding:inner.binding?.bind(inner),verifyPhysicalAbsence:inner.verifyPhysicalAbsence?key=>inner.verifyPhysicalAbsence!(key):undefined,
     get: key => inner.get(key), head: key => inner.head(key),
     readRange: (key, start, end) => inner.readRange(key, start, end),
     stream: key => inner.stream(key), url: (key, options) => inner.url(key, options),
