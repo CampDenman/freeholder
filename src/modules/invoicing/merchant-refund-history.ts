@@ -16,7 +16,7 @@ import { originalCashCallersFinished, originalCashHistoricalFeesQuiesced, origin
 const MAX = 5000;
 const sorted = (rows: readonly object[]) => rows.map(row => merchantTaxDigest(row)).toSorted();
 export async function merchantRefundCashHistory(ctx: ServiceContext, cash: MerchantRefundCashOrigin, ownInspectionId?: string, excludeRecoveryOperationId?: string): Promise<{
-  digest: string; incomplete: boolean; inventoryCount: number; creatorsQuiesced: boolean; feeDebt: boolean;
+  digest: string; incomplete: boolean; inventoryCount: number; principalCreatorsQuiesced: boolean; creatorsQuiesced: boolean; feeDebt: boolean;
   refundRequests: Array<{ id: string; amountMinor: number; currency: string; dispatched: boolean; retired: boolean; resourceRefs: string[]; definitelyRefused: boolean }>;
 }> {
   const scope = (platform: typeof merchantRefundRequests.providerPlatformAccountId, account: typeof merchantRefundRequests.chargeAccountId) =>
@@ -74,6 +74,9 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
   // An accepted old projection alone does not prove its physical caller ended.
   // The common fee/reversal caller protocol must supply that separate proof;
   // until composed, any recorded fee operation keeps this return unresolved.
+  const principalCreatorsQuiesced = creatorsQuiesced && originalCashCallersFinished({
+    operations: recovery.operations.filter(operation => operation.kind === "inspection" && !operation.request.auxiliaryOperationId), facts: recovery.facts,
+  });
   creatorsQuiesced &&= originalCashCallersFinished(recovery);
   // Old fee journals did not retain a physical process birth/finish. A new
   // explicit hosting review can cover that exact existing operation now;
@@ -87,5 +90,5 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
       definitelyRefused: false, // Generic codes/empty lookups do not prove no effect.
     };
   });
-  return { refundRequests, inventoryCount, digest: merchantTaxDigest(Object.fromEntries(Object.entries(inventory).map(([key, rows]) => [key, sorted(rows)]))), incomplete, creatorsQuiesced, feeDebt };
+  return { refundRequests, inventoryCount, principalCreatorsQuiesced, digest: merchantTaxDigest(Object.fromEntries(Object.entries(inventory).map(([key, rows]) => [key, sorted(rows)]))), incomplete, creatorsQuiesced, feeDebt };
 }

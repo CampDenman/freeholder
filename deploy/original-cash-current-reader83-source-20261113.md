@@ -23,3 +23,11 @@ This source supplies no new principalSafe claim. Receipt-only/raw-before-owner
 principal controls and the gross fee reader will compose the ordinary reader
 with authenticated exact-source cash witnesses separately. Actual source
 qualification, native recovery and stable gates remain open.
+
+Additive principal-caller contract: `principalCreatorsQuiesced` preserves the
+existing original payment/customer-refund caller checks and also requires actual
+finish/stop for every admitted primary non-auxiliary bank GET. Fee/recipient
+auxiliary callers stay in the unchanged full `creatorsQuiesced` and financial
+fee debt. Existing full-return discharge still requires full creator quiescence.
+This typed separation does not declare a fee settled or a transfer returned.
+The additional contract remains SOURCE ONLY/UNRUN.
