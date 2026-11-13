@@ -176,7 +176,41 @@ unchanged. Evidence is `/tmp/freeholder-bank-current80-rma-native-v2.{json,log}`
 and exclusive `-v2-ledger.json`. The original RMA6.617s BEFORE and23-table
 golden clone remain separate and immutable.
 
-Three distinct bank business controls now have component evidence on their
-exact checkpoints; stale-read and strengthened unfinished-caller natives
-remain unexecuted. This is not final combined-source, legacy-bank, actual
-provider-account, SDK/browser or full financial completion.
+The last two distinct controls subsequently pass on exact `a50ddbd6` (the
+product remains bd549), unchanged test48cf8407, original60s and V11/e783. Each
+runs alone once, with bail1, and completes before the next starts. The four
+other cases are deliberately not selected in each invocation; this is not a
+claim of a single combined five-case run.
+
+The **delayed-GET control passes5.778s**. An actual GET captures the original
+succeeded400 response, then pauses while a newer HMAC-verified requires_action
+fact commits. When the old GET returns, its actual raw capture and returned
+caller finish commit, but it receives no current-state receipt. A second GET
+returns action and obtains the sole valid current receipt. Independent UTC
+readback confirms both finished reads and their success/action captures, one
+physical-ACK binding, one ordinal-one finished400 creator and one processed
+signed-event body hash. Original4200 remains paid and current returned cash is
+0; the action bank-state event dispatches. No replacement, credit or cash
+history is fabricated. Evidence is
+`/tmp/freeholder-bank-current80-stale-native-v1.{json,log}`,
+`-v1-ledger-complete.json` and exclusive `-v1-classification.json`.
+
+The **strengthened physical-caller control passes6.236s**. The unchanged native
+case asserts the actual physical ACK binding and bound succeeded400 observation
+have committed while the real factory wrapper is paused, with zero creator
+finish receipts. A current read refuses before any external GET. Only after
+the actual wrapper returns does its finish commit and a new GET converge.
+These paused-time facts are assertions in the actual business test, not a
+separate external snapshot. Independent final UTC readback verifies exactly
+one ordinal-one returned creator, one actual400 refund, one successful fresh
+GET/read finish/current receipt, two retained captures and paid4200/refunded400.
+No second POST, replacement, credit or bank event is expected. Evidence is
+`/tmp/freeholder-bank-current80-caller-native-v1.{json,log}`,
+`-v1-ledger-complete.json` and exclusive `-v1-classification.json`.
+
+Both independent inspectors verify journal81/max1793310000060/e783 and empty
+target backends after closing their clients. Every earlier failed populated
+clone and report remains unchanged. Five distinct bank controls now have
+component evidence on their exact checkpoints. Final combined-source,
+legacy-bank, actual provider-account, SDK/browser and full financial completion
+remain open; the model remains disabled and no stable sign-off is supplied.

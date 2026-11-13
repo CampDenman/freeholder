@@ -13959,8 +13959,19 @@ whatever is best for the people using the site.
   finished callers/keys, paid/current-refunded4200, no new credit or buyer
   charge. Actual attention notification and bank callbacks now commit; UTC
   ledger/journal81/e783 and all client drains pass. Before/source/clones remain
-  preserved. Stale-read and strengthened caller natives are still unrun;
-  final combined-source, legacy-bank and provider acceptance remain open.
+  preserved. The final two distinct controls on a50/bd549, unchanged48cf and
+  V11/e783 pass separately once: staleGET5.778s retains its old successful raw
+  capture and actual finish without a current receipt after a newer signed
+  action; a fresh action read alone receives a valid receipt, paid4200/current
+  refunded0. Strengthened paused caller6.236s proves committed actualACK and
+  rawsuccess400 with finish0, refuses externalGET until the actual wrapper
+  returns, then converges with finish1/currentreceipt1, paid4200/refunded400
+  and one physicalPOST. Paused-time facts are actual test assertions; independent
+  final UTC ledgers verify exact original resources, current receipts, retained
+  facts, journal81/e783 and empty backends. Five distinct controls now have
+  component evidence; final combined-source, legacy-bank, SDK/browser and
+  provider acceptance remain open. This does not enable the model or close
+  C12.38; details and limits remain in the bank-replacement evidence above.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original
