@@ -3,13 +3,14 @@
 // C12.38: every shared refund mutation respects original physical admission.
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { actorString, ServiceError, type ServiceContext } from "@/core/service";
 import { routingForPayment } from "./merchant-charge";
 import { assertMerchantRefundCreatorsQuiesced } from "./merchant-refund-dispatch";
 import { lockMerchantRefundCash } from "./merchant-refund-origin";
 import { merchantRefundDispatches, merchantRefundObservations, merchantRefundRequests, merchantRefundReservationRetirements, merchantRefundTerminalReceipts, merchantRefundResourceBindings } from "./merchant-refund-schema";
 import type { refunds } from "./schema";
+import { originalMerchantRefundCurrentStates } from "./merchant-refund-current-state";
 async function originalRefund(ctx: ServiceContext, refund: typeof refunds.$inferSelect) {
   const routing = await routingForPayment(ctx, refund.paymentId);
   if (!routing.providerPlatformAccountId) return null;
@@ -56,13 +57,13 @@ export async function assertOriginalMerchantRefundResult(ctx: ServiceContext, re
   const observations = await ctx.tx.select().from(merchantRefundObservations).where(and(eq(merchantRefundObservations.requestId, original.id), eq(merchantRefundObservations.providerRef, resource))).limit(5001);
   const bound = observations.filter(row => row.bindingVerified && row.providerPlatformAccountId === original.providerPlatformAccountId && row.chargeAccountId === original.chargeAccountId
     && row.providerApiVersion === original.providerApiVersion && row.paymentProviderRef === original.originalPaymentRef && row.amountMinor === original.amountMinor && row.currency === original.currency);
-  const unresolvedAction = bound.some(row => row.status === "requires_action" || row.status === null);
-  const succeeded = bound.some(row => row.status === "succeeded"), failed = bound.some(row => row.status === "failed" || row.status === "canceled");
-  // Later bank/action contradictions require their explicit current-state
-  // reconciliation receipt. Historic positive money is never overwritten.
-  if (observations.length > 5000 || succeeded && (failed || unresolvedAction) || outcome === "succeeded" && !succeeded || outcome === "failed" && !failed) throw new ServiceError("conflict", "Retain the actual original terminal refund proof; unknown or contradictory cash cannot release its reservation.");
+  const [resolved] = await ctx.tx.execute<{ resolved: boolean }>(sql`select freeholder_original_refund_resolved(${original.id}::uuid,${outcome},${providerRef ?? null}) as resolved`);
+  if (observations.length > 5000 || resolved?.resolved !== true) throw new ServiceError("conflict", "Retain the actual original terminal refund proof; unknown, stale or contradictory cash cannot release its reservation.");
   if (outcome === "failed") {
-    const actual = bound.find(row => row.status === "failed" || row.status === "canceled")!;
+    const current = await originalMerchantRefundCurrentStates(ctx, [original.id]);
+    const observationId = current.states[0]?.observationId;
+    const actual = observationId ? bound.find(row => row.id === observationId) : bound.find(row => row.status === "failed" || row.status === "canceled");
+    if (!actual) throw new ServiceError("conflict", "Restore the exact current failed resource before retaining its terminal receipt.");
     await allowOriginalMerchantRefundWrites(ctx.tx);
     await ctx.tx.insert(merchantRefundTerminalReceipts).values({ requestId: original.id, observationId: actual.id }).onConflictDoNothing();
   }

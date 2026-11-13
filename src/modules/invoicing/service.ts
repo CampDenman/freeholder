@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // One registry export for the convergent money module (C5.02-C5.05).
 
+import legacyBankReadServices from "./legacy-bank-read-service";
 import invoiceServices from "./invoice-service";
 import buyerMoneyErasureServices from "./buyer-money-erasure";
 import originalRefundRepairServices from "./merchant-refund-privacy-repair";
@@ -13,6 +14,9 @@ import originalRefundPhaseServices2 from "./merchant-refund-observations";
 import originalRefundPhaseServices3 from "./merchant-refund-execution";
 import originalRefundPhaseServices4 from "./merchant-cash-return-service";
 import originalRefundPhaseServices5 from "./merchant-subscription-disposition";
+import originalRefundCurrentServices from "./merchant-refund-current-service";
+import originalRefundProviderServices from "./merchant-refund-provider-events";
+import bankReplacementServices from "./merchant-bank-replacement-service";
 import marketPolicyServices from "./market-policy";
 import merchantAllocationServices from "./merchant-allocations";
 import merchantCollectionServices from "./merchant-collection";
@@ -54,6 +58,7 @@ import "./reporting";
 import "./funnel";
 
 export default [
+  ...legacyBankReadServices,
   ...buyerMoneyErasureServices,
   ...originalRefundRepairServices,
   ...merchantRefundBasisServices,
@@ -63,6 +68,9 @@ export default [
   ...originalRefundPhaseServices3,
   ...originalRefundPhaseServices4,
   ...originalRefundPhaseServices5,
+  ...originalRefundCurrentServices,
+  ...originalRefundProviderServices,
+  ...bankReplacementServices,
   ...marketPolicyServices,
   ...merchantAllocationServices,
   ...merchantCollectionServices,

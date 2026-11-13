@@ -19,6 +19,7 @@ import { resolveSubscriptionPlanMarketPolicy } from "./market-policy";
 import { subscriptionTaxDestination } from "./merchant-scope-contract";
 import { initialMerchantInvoiceAmounts, subscriptionCommercialSnapshot, subscriptionInitialTaxQuote } from "./merchant-terms-contract";
 import { plans } from "./schema";
+import { periodEnd } from "./calendar";
 
 const account = z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200);
 const profileReceipt = z.object({ profileId: z.uuid(), profileVersion: z.number().int().positive(), liability: z.enum(["platform", "seller"]) });
@@ -43,7 +44,7 @@ export const publicMerchantTermsQuote = merchantTermsQuoteOutput.unwrap().pick({
  * only public supplier details, commercial amounts and opaque consent digests. */
 export const quoteOriginalMerchantTerms = defineService({
   name: "subscriptions.quoteOriginalMerchantTerms", summary: "Quote the actual new agreement's original price, declared business and exact first invoice before consent.",
-  kind: "query", permission: "system", external: false, input: merchantTermsQuoteInput, output: merchantTermsQuoteOutput,
+  kind: "query", permission: "system", external: false, input: merchantTermsQuoteInput.extend({ calendarStart: z.date().optional() }), output: merchantTermsQuoteOutput,
   handler: async (input, ctx) => {
     await lockContactIdentityForRead(ctx.tx);
     const [buyer] = await ctx.tx.select({ source: contacts.source }).from(contacts).where(eq(contacts.id, input.contactId)).limit(1);
@@ -85,17 +86,23 @@ export const quoteOriginalMerchantTerms = defineService({
     const phase = initialMerchantInvoiceAmounts(snapshot, { deferFirstPayment: input.deferFirstPayment, hasSavedMethod });
     if (phase.awaitingCard && snapshot.billingMode === "manual") throw new ServiceError("conflict", "This manual-billing plan cannot start a card-required trial.");
     const occurredAt = new Date();
-    const quote = async (periodAmountMinor: number, setupFeeMinor: number) => {
+    const quote = async (periodAmountMinor: number, setupFeeMinor: number, taxOccurredAt: Date) => {
       const items = [{ id: "line:0", quantityMicros: 1000000, unitAmountMinor: periodAmountMinor, discountMinor: 0,
         category: snapshot.taxCategoryCode, requiresShipping: snapshot.requiresShipping }];
       if (setupFeeMinor > 0) items.push({ ...items[0]!, id: "line:1", unitAmountMinor: setupFeeMinor });
       const actual = merchantTaxPreviewOutput.parse(await ctx.callAsSystem(previewMerchantTax, { profileId: profile.profileId, profileVersion: profile.profileVersion,
-        contactId: input.contactId, destination: input.taxDestination, currency, items, shippingMinor: 0, occurredAt }));
+        contactId: input.contactId, destination: input.taxDestination, currency, items, shippingMinor: 0, occurredAt: taxOccurredAt }));
       return subscriptionInitialTaxQuote.parse({ quoteDigest: actual.quoteDigest, subtotalMinor: actual.amounts.subtotalMinor,
         taxMinor: actual.amounts.taxMinor, totalMinor: actual.amounts.totalMinor });
     };
-    const initialTaxQuote = await quote(phase.periodAmountMinor, phase.setupFeeMinor), firstPeriodTaxQuote = await quote(snapshot.periodAmountMinor,
-      snapshot.trialDays > 0 ? phase.firstPaidSetupFeeMinor : snapshot.setupFeeMinor), renewalTaxQuote = await quote(snapshot.periodAmountMinor, 0);
+    // A currently valid exemption can already have a known expiry before the
+    // accepted trial ends. Use the same UTC calendar as the actual agreement,
+    // rather than pricing every future obligation on today's tax date.
+    const calendarStart = input.calendarStart ?? occurredAt;
+    const firstPaidAt = phase.trialing ? periodEnd(calendarStart, "day", snapshot.trialDays) : calendarStart;
+    const renewalAt = periodEnd(firstPaidAt, snapshot.interval, snapshot.intervalCount);
+    const initialTaxQuote = await quote(phase.periodAmountMinor, phase.setupFeeMinor, occurredAt), firstPeriodTaxQuote = await quote(snapshot.periodAmountMinor,
+      snapshot.trialDays > 0 ? phase.firstPaidSetupFeeMinor : snapshot.setupFeeMinor, firstPaidAt), renewalTaxQuote = await quote(snapshot.periodAmountMinor, 0, renewalAt);
     const issuer = { name: policy.merchantName, support: policy.merchantSupport ?? null };
     const noticeSnapshot = { locale: input.locale, text: translator(input.locale)("subscriptions.merchantTermsNotice") };
     const noticeDigest = merchantTaxDigest({ version: 1, snapshot, issuer, initialTaxQuote, firstPeriodTaxQuote, renewalTaxQuote, noticeSnapshot });

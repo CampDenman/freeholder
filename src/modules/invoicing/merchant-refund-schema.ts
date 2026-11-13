@@ -78,7 +78,7 @@ export const merchantRefundObservations = pgTable("merchant_refund_observations"
   claimedInspectionId: uuid("claimed_inspection_id"),
   claimedRequestId: uuid("claimed_request_id"), // Opaque actual source intent even if its FK row needs restoration.
   providerPlatformAccountId: text("provider_platform_account_id").notNull(), chargeAccountId: text("charge_account_id"),
-  providerApiVersion: text("provider_api_version").notNull(),
+  providerApiVersion: text("provider_api_version"),
   providerRef: text("provider_ref").notNull(), paymentProviderRef: text("payment_provider_ref"), providerChargeRef: text("provider_charge_ref"),
   amountMinor: bigint("amount_minor", { mode: "number" }).notNull(), currency: text("currency").notNull(),
   status: text("status", { enum: ["pending", "requires_action", "succeeded", "failed", "canceled"] }), failureCode: text("failure_code"),
@@ -95,8 +95,8 @@ export const merchantRefundObservations = pgTable("merchant_refund_observations"
   index("merchant_refund_observations_original_idx").on(table.providerPlatformAccountId, table.chargeAccountId, table.providerRef),
   check("merchant_refund_observations_money", sql`${table.amountMinor} between 1 and 9007199254740991 and ${table.currency} ~ '^[A-Z]{3}$'`),
   check("merchant_refund_observations_status", sql`${table.status} is null or ${table.status} in ('pending','requires_action','succeeded','failed','canceled')`),
-  check("merchant_refund_observations_scope", sql`${table.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$' and (${table.chargeAccountId} is null or ${table.chargeAccountId} ~ '^acct_[A-Za-z0-9]+$') and ${table.providerApiVersion} in ('2026-02-25.clover','2026-10-28.endive')`),
-  check("merchant_refund_observations_refs", sql`${table.providerRef} ~ '^re_[A-Za-z0-9_]+$' and (${table.paymentProviderRef} is null or ${table.paymentProviderRef} ~ '^pi_[A-Za-z0-9_]+$') and ${table.evidenceDigest} ~ '^[a-f0-9]{64}$'`),
+  check("merchant_refund_observations_scope", sql`${table.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$' and (${table.chargeAccountId} is null or ${table.chargeAccountId} ~ '^acct_[A-Za-z0-9]+$') and (${table.providerApiVersion} is null or char_length(${table.providerApiVersion}) between 1 and 100)`),
+  check("merchant_refund_observations_refs", sql`${table.providerRef} ~ '^(re|pyr)_[A-Za-z0-9_]+$' and (${table.paymentProviderRef} is null or ${table.paymentProviderRef} ~ '^pi_[A-Za-z0-9_]+$') and ${table.evidenceDigest} ~ '^[a-f0-9]{64}$'`),
 ]);
 
 export const merchantRefundCreationRefusals = pgTable("merchant_refund_creation_refusals", {
@@ -136,7 +136,7 @@ export const merchantRefundResourceBindings = pgTable("merchant_refund_resource_
   evidenceDigest: text("evidence_digest").notNull(), reviewedBy: text("reviewed_by"),
   observedAt: timestamp("observed_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [uniqueIndex("merchant_refund_resource_bindings_evidence_idx").on(table.requestId, table.evidenceDigest),
-  check("merchant_refund_resource_bindings_ref", sql`${table.providerRef} ~ '^re_[A-Za-z0-9_]+$'`)]);
+  check("merchant_refund_resource_bindings_ref", sql`${table.providerRef} ~ '^(re|pyr)_[A-Za-z0-9_]+$'`)]);
 
 /** A read begins only after an exact original source/caller inventory snapshot. */
 export const merchantCashReturnInspections = pgTable("merchant_cash_return_inspections", {

@@ -5,6 +5,10 @@
 import { createHash } from "node:crypto";
 import { captureInvoiceMarketPolicy, getInvoiceMarketPolicy } from "./market-policy";
 import { captureOriginalMerchantRefund } from "./merchant-refund-capture";
+import { lockMerchantRefundCash } from "./merchant-refund-origin";
+import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
+import { merchantRefundRequests } from "./merchant-refund-schema";
+import { merchantRefundCurrentReceipts } from "./merchant-refund-current-schema";
 import { assertOriginalMerchantRefundResult, assertOriginalMerchantRefundStart, retireOriginalMerchantRefund } from "./merchant-refund-core-guards";
 import { queueMerchantFeeReconciliation } from "./merchant-fee-service";
 import { reserveMerchantCharge } from "./merchant-charge";
@@ -1370,6 +1374,73 @@ export const settleRefund = defineService({
   },
 });
 
+/** A bank lifecycle changes the current cash projection, not the original
+ * charge, issued credit, provider request or any earlier positive observation.
+ * This phase is separate from the committed physical fact/read receipt.
+ */
+export const applyCurrentMerchantRefundState = defineService({
+  name: "invoicing.applyCurrentMerchantRefundState", summary: "Project an exact original bank refund's verified current state without waiving its commercial credit.",
+  kind: "mutation", permission: "system", external: false, writeClass: "money", input: z.object({ receiptId: z.uuid() }),
+  output: z.object({ applied: z.boolean(), requiresReview: z.boolean(), refundId: z.uuid().nullable() }),
+  handler: async ({ receiptId }, ctx) => {
+    const [receipt] = await ctx.tx.select().from(merchantRefundCurrentReceipts).where(eq(merchantRefundCurrentReceipts.id, receiptId));
+    const [request] = receipt ? await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, receipt.requestId)) : [];
+    if (!receipt || !request) throw new ServiceError("conflict", "Restore the actual original current-read receipt before applying bank state.");
+    if (!request.refundId) return { applied: false, requiresReview: false, refundId: null }; // No fictitious invoice for receipt-owned cash.
+    await lock(ctx.tx, "refund", request.refundId);
+    const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, request.refundId)).for("update");
+    if (!refund || refund.paymentId !== request.paymentId || refund.amountMinor !== request.amountMinor || refund.currency !== request.currency) throw new ServiceError("conflict", "Restore the immutable logical refund identity before applying its current provider state.");
+    await lock(ctx.tx, "payment", refund.paymentId);
+    await lock(ctx.tx, "invoice", refund.invoiceId);
+    await lockMerchantRefundCash(ctx, { ...request, providerRef: request.originalPaymentRef });
+    const [state] = await ctx.tx.execute<{ receipt_id: string | null; status: string | null; observation_id: string | null; provider_ref: string | null }>(sql`
+      select s.receipt_id,s.status,s.observation_id,o.provider_ref from freeholder_refund_current_state(${request.id}::uuid) s
+      left join merchant_refund_observations o on o.id=s.observation_id`);
+    if (state?.receipt_id !== receipt.id || !state.observation_id || !state.provider_ref) throw new ServiceError("conflict", "Concurrent refund evidence invalidated this bank-state receipt; retain it and read the original resource again.");
+    if (refund.providerRef && refund.providerRef !== state.provider_ref) throw new ServiceError("conflict", "The actual original refund reference cannot be rebound during bank reconciliation.");
+    // An unknown status does not prove that earlier positive money came back.
+    if (state.status === null) return { applied: false, requiresReview: true, refundId: refund.id };
+    const target = state.status === "succeeded" ? "succeeded" as const : state.status === "failed" || state.status === "canceled" ? "failed" as const : "processing" as const;
+    const [[payment], [invoice]] = await Promise.all([
+      ctx.tx.select().from(payments).where(eq(payments.id, refund.paymentId)).for("update"),
+      ctx.tx.select().from(invoices).where(eq(invoices.id, refund.invoiceId)).for("update"),
+    ]);
+    if (!payment || !invoice || payment.currency !== refund.currency || invoice.currency !== refund.currency) throw new ServiceError("conflict", "Restore the original payment and invoice currencies before applying a bank-state projection.");
+    const priorRefunds = await ctx.tx.select({ status: refunds.status, amountMinor: refunds.amountMinor }).from(refunds).where(eq(refunds.paymentId, payment.id)).limit(5001);
+    const invoicePayments = await ctx.tx.select({ refundedMinor: payments.refundedMinor }).from(payments).where(eq(payments.invoiceId, invoice.id)).limit(5001);
+    const represented = priorRefunds.filter(row => row.status === "succeeded").reduce((sum, row) => sum + BigInt(row.amountMinor), 0n);
+    const representedInvoice = invoicePayments.reduce((sum, row) => sum + BigInt(row.refundedMinor), 0n);
+    if (priorRefunds.length > 5000 || invoicePayments.length > 5000 || represented !== BigInt(payment.refundedMinor) || representedInvoice !== BigInt(invoice.refundedMinor)) {
+      return { applied: false, requiresReview: true, refundId: refund.id }; // Primary money/read evidence already committed.
+    }
+    const delta = (target === "succeeded" ? BigInt(refund.amountMinor) : 0n) - (refund.status === "succeeded" ? BigInt(refund.amountMinor) : 0n);
+    const paymentReturned = BigInt(payment.refundedMinor) + delta, invoiceReturned = BigInt(invoice.refundedMinor) + delta;
+    if (paymentReturned < 0n || paymentReturned > BigInt(payment.amountMinor) || invoiceReturned < 0n || invoiceReturned > BigInt(invoice.paidMinor)) {
+      return { applied: false, requiresReview: true, refundId: refund.id }; // Actual over-return remains visible, never clamped or discarded.
+    }
+    const failureCode = target === "succeeded" ? null : state.status === "requires_action" ? "provider_requires_action"
+      : state.status === "pending" ? "provider_pending" : state.status === "canceled" ? "provider_cancelled" : "provider_failed";
+    if (refund.status === target && refund.providerRef === state.provider_ref && refund.failureCode === failureCode) return { applied: true, requiresReview: target !== "succeeded", refundId: refund.id };
+    const invoiceStatus = invoiceReturned === BigInt(invoice.paidMinor) && invoice.paidMinor > 0 ? "refunded" as const
+      : invoice.status === "refunded" ? invoice.paidMinor === invoice.totalMinor ? "paid" as const : "partially_paid" as const : invoice.status;
+    await allowOriginalMerchantRefundWrites(ctx.tx);
+    const [prepared] = await ctx.tx.execute<{ bound: boolean }>(sql`select freeholder_refund_is_prepared_return(${refund.id}::uuid) as bound`);
+    if (prepared?.bound && target === "succeeded") await ctx.tx.execute(sql`select set_config('freeholder.confirmed_return_refund',${refund.id},true)`);
+    await ctx.tx.update(refunds).set({ status: target, providerRef: state.provider_ref, failureCode,
+      failureMessage: target === "failed" ? "Review the original refund and any outstanding customer credit before another payment." : null,
+      ...(target === "succeeded" && !refund.processedAt ? { processedAt: new Date() } : {}), ...(target === "failed" ? { failedAt: new Date() } : {}) }).where(eq(refunds.id, refund.id));
+    await ctx.tx.update(payments).set({ refundedMinor: Number(paymentReturned) }).where(eq(payments.id, payment.id));
+    await ctx.tx.update(invoices).set({ refundedMinor: Number(invoiceReturned), status: invoiceStatus }).where(eq(invoices.id, invoice.id));
+    if (refund.status !== target) await stateEvent(ctx, "refund", refund.id, refund.status, target, "original_provider_current_state", { receiptId, observationId: state.observation_id, providerStatus: state.status });
+    if (invoiceStatus !== invoice.status) await stateEvent(ctx, "invoice", invoice.id, invoice.status, invoiceStatus, "original_refund_current_state", { receiptId, refundId: refund.id });
+    await queueMerchantFeeReconciliation(ctx, payment.id);
+    ctx.queueEvent("refund.bankStateChanged", { refundId: refund.id, paymentId: payment.id, invoiceId: invoice.id, receiptId, status: state.status });
+    if (target === "succeeded" && refund.status !== "succeeded") ctx.queueEvent("refund.succeeded", { refundId: refund.id, paymentId: payment.id, invoiceId: invoice.id, contactId: invoice.contactId, amountMinor: refund.amountMinor });
+    ctx.setSubject("refund", refund.id);
+    return { applied: true, requiresReview: target !== "succeeded", refundId: refund.id };
+  },
+});
+
 const creditLine = z.object({
   invoiceLineId: z.string().uuid().optional(),
   description: z.string().trim().min(1).max(1_000),
@@ -1535,6 +1606,7 @@ export default [
   failRefund,
   cancelRefund,
   settleRefund,
+  applyCurrentMerchantRefundState,
   createCreditNote,
   issueCreditNote,
   reconcilePluginRefund,

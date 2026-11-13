@@ -89,3 +89,13 @@ ownership remains unchanged; and an original request completes only its actual
 captured graph/chunks while a later real uploaded graph and bytes remain intact.
 Each uses a real freshly verified owner and actual upload/index/privacy/job
 services. No native result or source qualification is claimed for these controls.
+
+The complete current80 source predecessor `22d24c39` is now normally composed.
+Its assembled80 SHA is `3a6862457f9342fe7ad109bc83c7a270ef5ac535a9b1639a459c23bc8a9c997f`;
+all published0–79 files and predecessor journal entries are byte/structurally
+unchanged. Candidate81 remains unapplied at SHA
+`5c96bd062830795a25dc9dbbbcb53fc2e1576a532c138e3d8ce6e1d27682d747`.
+The four locale conflicts were adjacent additions: structural three-way merge
+preserved all current financial and import strings, with zero value conflicts.
+This supersedes the provisional881a composition above. The combined source
+still has no compiler or native qualification and no database has been changed.

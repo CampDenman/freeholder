@@ -11,11 +11,19 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { invoiceMerchantCollections, merchantPaymentRoutes } from "./merchant-collection-schema";
 import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import { moneyStateEvents } from "./schema";
+import { verifyBankReplacementJournalRow } from "./merchant-bank-replacement-store";
 
 export const ORIGINAL_REFUND_EVIDENCE_EVENT = "invoicing.originalRefundEvidenceRetained";
 const factTypes = {
+  legacy_bank_read: ["legacy_bank_reads", "id"],
+  legacy_bank_fact: ["legacy_bank_read_facts", "id"],
+  legacy_bank_finish: ["legacy_bank_read_finishes", "read_id"],
   request: ["merchant_refund_requests", "id"],
   refund_observation: ["merchant_refund_observations", "id"],
+  refund_capture: ["merchant_refund_observation_captures", "id"],
+  refund_current: ["merchant_refund_current_receipts", "id"],
+  bank_replacement: ["money_state_events", "id"],
   refund_ack: ["merchant_refund_resource_bindings", "id"],
   refund_finish: ["merchant_refund_dispatch_finishes", "dispatch_id"],
   refund_retirement: ["merchant_refund_reservation_retirements", "request_id"],
@@ -25,7 +33,7 @@ const factTypes = {
   cash_resolution: ["merchant_unapplied_charge_resolutions", "id"],
 } as const;
 export const originalRefundRepairPointer = z.object({
-  kind: z.enum(["request", "refund_observation", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_resolution"]),
+  kind: z.enum(["legacy_bank_read", "legacy_bank_fact", "legacy_bank_finish", "request", "refund_observation", "refund_capture", "refund_current", "bank_replacement", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_resolution"]),
   id: z.uuid(),
 }).strict();
 type Pointer = z.infer<typeof originalRefundRepairPointer>;
@@ -58,7 +66,23 @@ export const originalMerchantRefundRepairSource = defineService({
     const [table, column] = factTypes[pointer.kind];
     const fact = await factRow(ctx, table, column, pointer.id);
     let owner = fact;
-    if (pointer.kind === "refund_finish") {
+    if (pointer.kind === "legacy_bank_read" || pointer.kind === "legacy_bank_fact" || pointer.kind === "legacy_bank_finish") {
+      const read = pointer.kind === "legacy_bank_read" ? fact : await factRow(ctx, "legacy_bank_reads", "id", restoredId(fact.read_id));
+      const original = read.original;
+      if (!original || typeof original !== "object" || merchantTaxDigest(original) !== read.original_digest) throw new ServiceError("conflict", "Restore the authentic original legacy read owner before repairing its financial privacy evidence.");
+      const identity = original as Record<string, unknown>;
+      owner = { payment_id: restoredId(identity.paymentId), subscription_charge_receipt_id: null };
+    } else if (pointer.kind === "bank_replacement") {
+      const [journal] = await ctx.tx.select().from(moneyStateEvents).where(eq(moneyStateEvents.id, pointer.id));
+      const body = journal && verifyBankReplacementJournalRow(journal);
+      if (!body) throw new ServiceError("conflict", "Restore the exact original bank replacement receipt before repairing its erasure evidence.");
+      owner = await factRow(ctx, "merchant_refund_requests", "id", body.rootRequestId);
+      if (owner.request_digest !== body.rootRequestDigest) throw new ServiceError("conflict", "Restore the original signed replacement's frozen financial owner.");
+    } else if (pointer.kind === "refund_capture") {
+      owner = await factRow(ctx, "merchant_refund_observations", "id", restoredId(fact.observation_id));
+    } else if (pointer.kind === "refund_current") {
+      owner = await factRow(ctx, "merchant_refund_requests", "id", restoredId(fact.request_id));
+    } else if (pointer.kind === "refund_finish") {
       const dispatch = await factRow(ctx, "merchant_refund_dispatches", "id", pointer.id);
       owner = await factRow(ctx, "merchant_refund_requests", "id", restoredId(dispatch.request_id));
     } else if (pointer.kind === "refund_ack" || pointer.kind === "refund_retirement") {

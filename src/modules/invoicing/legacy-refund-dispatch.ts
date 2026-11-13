@@ -4,6 +4,7 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { legacyBankOriginal } from "./legacy-bank-read-contract";
 import { actorString, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import { isHostedPaymentProvider } from "@/adapters/payments/providers";
 import { env } from "@/core/env";
@@ -238,4 +239,25 @@ export async function assertLegacyRefundRelease(ctx: ServiceContext, refund: Ref
       && await originalPaymentMatches(ctx.tx, record(terminal[0]!.original))) return;
   }
   throw new ServiceError("conflict", "The original provider refund is live or unresolved. Reconcile its actual result before releasing the reserved balance.");
+}
+
+/** A fresh read may use the original authenticated resource, never amount
+ * matching or today's platform as a historical create admission. The caller
+ * holds the existing refund/payment/invoice locks before invoking this. */
+export async function originalLegacyBankRefund(tx: Tx, refund: Refund) {
+  const result = await legacyRefundFinishedResult(tx, refund);
+  const rows = await events(tx, refund.id);
+  const [parent] = await tx.select().from(payments).where(eq(payments.id, refund.paymentId));
+  const admission = rows.map(row => record(row.metadata)).find(value => value.protocol === version && value.physicalState === "admitted");
+  const original = record(admission?.original);
+  if (!parent || refund.provider !== "stripe" || !result?.providerRef || result.providerRef !== refund.providerRef
+    || result.status === "unknown" || !admission || !authentic(admission)) {
+    throw new ServiceError("conflict", "Restore the authentic original legacy refund resource and finished physical caller before bank inspection.");
+  }
+  return legacyBankOriginal.parse({ refundId: refund.id, paymentId: refund.paymentId, invoiceId: refund.invoiceId, provider: "stripe",
+    originalRefundRef: result.providerRef, originalPaymentRef: original.providerPaymentRef,
+    originalChargeAccountId: original.providerAccountId, amountMinor: refund.amountMinor, currency: refund.currency,
+    originalCashAmountMinor: parent.amountMinor, originalCreatePlatformAccountId: null, originalCreateProtocolVersion: null,
+    originalHistoryDigest: digest(canonical({ refund, parent, rows })),
+  });
 }

@@ -30,7 +30,7 @@ export async function originalScheduleCohortAuthority(tx: Tx, input: OriginalSch
       .innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptions.id))
       .where(eq(subscriptions.id, cohort.subscriptionId)).limit(1);
     if (!original || original.parent.contactId !== request.contactId || original.parent.merchantScopeVersion !== 1
-      || original.scope.taxProfileId !== cohort.profileId || original.parent.billingMode !== "provider") {
+      || original.scope.taxProfileId !== cohort.profileId) {
       throw new ServiceError("permission", "This agreement is not owned by the original erasure subject and merchant scope.");
     }
   } else throw new ServiceError("permission", "Restore the exact original schedule privacy scope before running its task.");

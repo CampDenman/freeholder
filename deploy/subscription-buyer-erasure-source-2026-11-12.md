@@ -94,3 +94,36 @@ artifact corruption, customer-deletion preflight and late-positive controls.
 Actual setup callers, nonempty invoice inventory, returned-unapplied cash and
 long-lived queue-retention recovery remain qualification/integration work;
 this source checkpoint does not close those boundaries.
+
+## Demonstrated recovery-boundary follow-up
+
+The current-source ordinary V10 candidate (SQL881a7901) passed all four declared
+prior-original native cases: paused cancellation/convergence6.354s,
+finisher hold/release5.946s, artifact corruption5.748s and queued customer
+hold/release5.700s. Independent readback verified final scope/job completion,
+customer/method minimization, preserved seller profile and drained backends.
+These runs used the actual services/jobs with the declared synthetic prior
+provider history and HTTP factory; they do not prove new provider creation,
+paid/late-positive acceptance or a real provider account journey. The stored
+subscription status remained historical active while local grants were cleared,
+cancel-at-period-end set and actual remote quiescence retained.
+
+Two unchanged test-only oracles then failed on that candidate: local billing
+mode change5.805s left the original resource active but agreement scope erased,
+no cohort and no local provider credentials; missing original money queue
+payload5.875s left the request completed while restored uncertainty and a real
+repair task remained. Each populated failing state was cloned independently
+with13 table hashes/counts and schema/journal identity preserved. Logs are the
+root-owned /tmp/freeholder-current-buyer-recovery885-{localmode,missing}*;
+no before state is overwritten by this source repair.
+
+The isolated repair inventories frozen scope/resource history independently of
+mutable local billing mode. Uncreated manual/platform resources still admit no
+provider cancellation; legacy epochs receive no invented original scope. Missing
+money-finisher inventory now returns committed recovery after the actual buyer
+scope reopen, before the outer worker refuses. Pending buyer-cohort ACKs also
+require a real retained money-finisher admission covering the original
+subscription, so restoring only a resource cannot invent the lost child list.
+No unknown job ID, payload, money or provider effect is reconstructed.
+
+The new repair has not yet run types, lint or either unchanged native oracle.

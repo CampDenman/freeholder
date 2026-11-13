@@ -8,6 +8,7 @@ import { SkipLink } from "@/ui/SkipLink";
 import { payInvoiceAction } from "./actions";
 import { PaymentButton } from "./PaymentButton";
 import { InvoiceIssuer } from "./InvoiceIssuer";
+import { RefundStatusList } from "./RefundStatusList";
 
 type Invoice = Awaited<ReturnType<typeof getCustomerInvoice.call>>;
 export function InvoiceView({ invoice, token, t, locale, timezone, businessName, checkout, error, backHref }: {
@@ -59,6 +60,7 @@ export function InvoiceView({ invoice, token, t, locale, timezone, businessName,
           {invoice.requiredTaxLegend ? <p className="mt-4 text-sm text-ink-muted">{invoice.requiredTaxLegend}</p> : null}
           {invoice.memo ? <p className="mt-4 whitespace-pre-wrap text-sm">{invoice.memo}</p> : null}
         </CardBody></Card>
+        <RefundStatusList refunds={invoice.refunds} t={t} locale={locale} />
         {invoice.canPay ? invoice.paymentMode === "unavailable" ? <Callout tone="warning">{t("customerInvoice.unavailable")}</Callout> : (
           <form action={payInvoiceAction} className="grid justify-items-start gap-2">
             <input type="hidden" name="id" value={invoice.id} />

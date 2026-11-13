@@ -1174,7 +1174,7 @@ describe.runIf(hasDatabase)("subscription billing", () => {
       expect(erased.request.status).toBe("in_progress");
       const id=body.outcomes.find(item=>item.scope==="commerce.money")!.pendingJobs![0]!;
       const job=await getJob(erasePaymentProviderCustomer.name,id);
-      const context:JobExecutionContext={id:randomUUID(),name:erasePaymentProviderCustomer.name,attempt:1,signal:new AbortController().signal,leaseSeconds:300,heartbeat:async()=>true,isCancelled:async()=>false,throwIfCancelled:async()=>{}};
+      const context:JobExecutionContext={id,name:erasePaymentProviderCustomer.name,attempt:1,signal:new AbortController().signal,leaseSeconds:300,heartbeat:async()=>true,isCancelled:async()=>false,throwIfCancelled:async()=>{}};
       await erasePaymentProviderCustomer.handler(job!.data,context);
       expect((await db().select().from(dataRequests).where(eq(dataRequests.id,request.id)))[0]!.status).toBe("partially_completed");
     }

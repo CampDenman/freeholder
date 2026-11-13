@@ -21,13 +21,12 @@ export const erasePaymentProviderCustomer=defineJob({
  handler:async(data,context)=>{
   if(!context)throw new Error("Payment-provider erasure requires a durable job identity.");
   const input=providerCustomerErasurePayload.parse(data);
-  if(input.buyerMoneyFinisherJobId){
-   if(context.id!==input.originalJobId)throw new ServiceError("permission","The provider customer task does not match its original durable job.");
-   const ready=getService("invoicing.prepareBuyerCustomerErasure");
-   if(!ready)throw new ServiceError("conflict","Restore the original buyer customer-erasure preflight before provider I/O.");
-   const allowed=z.object({ready:z.boolean(),recoveryRequired:z.boolean()}).parse(await ready.call({requestId:input.requestId,providerJobId:input.originalJobId,moneyJobId:input.buyerMoneyFinisherJobId,payloadDigest:merchantTaxDigest(data)},{kind:"system"}));
-   if(!allowed.ready)throw new ServiceError("conflict",allowed.recoveryRequired?"Restore the original buyer erasure artifact before provider I/O.":"Original buyer schedules, cash or holds still require this provider customer.");
-  }
+  if(context.id!==input.originalJobId)throw new ServiceError("permission","The provider customer task does not match its original durable job.");
+  const ready=getService("invoicing.prepareBuyerCustomerErasure");
+  if(!ready)throw new ServiceError("conflict","Restore the original buyer customer-erasure preflight before provider I/O.");
+  const allowed=z.object({ready:z.boolean(),recoveryRequired:z.boolean(),completed:z.boolean().default(false)}).parse(await ready.call({requestId:input.requestId,providerJobId:input.originalJobId,...(input.buyerMoneyFinisherJobId?{moneyJobId:input.buyerMoneyFinisherJobId}:{}),payloadDigest:merchantTaxDigest(data)},{kind:"system"}));
+  if(allowed.completed)return {erased:true};
+  if(!allowed.ready)throw new ServiceError("conflict",allowed.recoveryRequired?"Restore the original buyer erasure inventory before provider I/O.":"Original buyer schedules, cash or holds still require this provider customer.");
   await context.throwIfCancelled();
   const adapter=paymentAdapter(input.provider);
   if(adapter.id!==input.provider || !adapter.status.available || !adapter.eraseCustomer)throw new Error("This payment provider cannot yet acknowledge customer erasure; the privacy task remains pending.");

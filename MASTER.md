@@ -6609,6 +6609,12 @@ deployments are portable, testable and incapable of silently forking the truth.
   SQL80 is still the provisional881a predecessor; the candidate is unqualified
   and unapplied until the complete current80 predecessor is supplied and a NEW
   ordinary0–81 database proves it. No stable or transport acceptance is claimed.
+  The subsequent source merge includes the full current80 `22d24c39` predecessor
+  (assembled80 SHA3a686245…) with all predecessor files/journal entries preserved.
+  Candidate81 SHA5c96bd06… and normal journal81 remain unapplied and the whole
+  composed source remains unqualified; no database, transport or stable proof
+  is inferred from this source assembly.
+
 
 
 
@@ -14001,6 +14007,74 @@ whatever is best for the people using the site.
   artifacts stay preserved. Provider admission remains closed, and amendments,
   money-finisher integration and full provider acceptance are still required.
   See `deploy/current-subscription-terms80-source-2026-11-12.md`.
+  Current-source follow-up at81e42159: fresh ordinary0–80 SQL881a migration
+  passed5.753s on a NEW V10 database; three actual retention/terms models passed
+  full SQL parity. All384 source assertions passed with26 explicit DB skips,
+  composed finisher types/lint/40 focused assertions and616-note metadata pass.
+  Four separate actual buyer-erasure journeys passed: paused cancellation6.354s,
+  current hold/release5.946s, corrupt original artifact5.748s and a hold after
+  money completion/before customer DELETE5.700s. Independent per-case ledgers
+  verify scope outcomes, credentials, original resource/cohort and seller
+  preservation, unchanged81-entry journal and no remaining database clients.
+  This uses a synthetic prior-create journal with actual shared services/jobs
+  and intercepted provider HTTP; it does not prove new provider creation,
+  accepted-terms signup or actual provider-account acceptance. Actual terms
+  merge witnesses, paid/returned cash, missing/restored queue recovery, late
+  positives, amendments and complete browser/provider acceptance remain open.
+  Provider phase admission remains false; C1.08/C12.38 and stable stay open.
+  Separate recovery controls at885a37f2 then genuinely failed: a restored
+  local-mode change allowed agreement-erased status and local credentials
+  minimization despite an active original provider resource(5.805s); missing
+  completed original money payload caused the repair transition to roll back,
+  leaving the request completed despite unknown resource/pending cohort(5.875s).
+  Both actual populated failures are preserved in separate NEW V10 clones with
+  thirteen original table count/SHA256 goldens, unchanged SQL881a/journal81 and
+  drained clients. No actual provider-account failure or repaired AFTER pass is
+  claimed. Source repairs and unchanged controls remain required; the earlier
+  four targeted passes do not establish complete privacy acceptance.
+  Actual live-registry SDK generation passed8/8, produced the two external
+  quote services and typed accepted terms, and passed fresh-process8/8 drift
+  verification after incremental types. Both runs drained clients and preserved
+  journal81/SQL881a. Generated-file lint is deliberately ignored by repository
+  policy, not extra coverage. The two demonstrated recovery findings remain open.
+  Minimal current-source repair8f06564c subsequently fixes those two local
+  findings without SQL/money rewrite: frozen original history determines
+  inventory; missing original money work commits explicit recovery before worker
+  refusal; pending buyer ACK requires its actual retained money-finisher task.
+  Component fulltypes and actual current incrementaltypes/five-file lint/41
+  source assertions all pass. Both unchanged failing natives pass(localmode
+  6.047s/missing5.888s); all four affected original journeys pass again
+  (5.890/6.126/5.905/5.890s). Each has independent state/client-drain readback and
+  unchanged SQL881a/journal81. Both failing clones remain preserved/unmigrated.
+  Full preserved-history recovery, accepted terms/profile merge, nonempty cash,
+  late positives, new provider creation and browser/provider acceptance remain
+  required. These targeted repairs leave C1.08/C12.38/stable and review open.
+  A preserved original untagged customer task then exposed another candidate
+  defect(f49128aa/426.29ms): actual intercepted DELETE1 and false completed
+  request while its original resource stayed active. The new13-table workcopy
+  preserves that result; the original golden/schema/journal remain untouched.
+  Minimal all-task preflight99f566b9, composed356306b7, passes component fulltypes
+  and current incrementaltypes/three-file lint/41 source assertions. The unchanged
+  preserved oracle passes375.55ms on a NEW after-copy with0 provider I/O and
+  explicit in-progress recovery. Three actual queued legacy controls also pass:
+  safe cleanup/UUID/namespace/no-I/O replay7.029s, missing original hash7.112s,
+  and a later same-contact hold7.162s. Per-case exact task/claim/hold readbacks,
+  unchanged normal881a/journal81 and drained clients are retained. Initial global
+  queue-count inspection assumptions and an ineligible-hold fixture refusal
+  are preserved separately; corrected inspections/fixture did not alter product
+  expectations or deadlines. The no-reset missing original-finisher review
+  also commits recovery from its actual retained repair without provider I/O,
+  new original claims or reconstructed payloads; its golden13 remain unchanged.
+  Actual accepted manual terms/profile witnesses now pass6.371s and5.959s:
+  frozen original month/trial/setup/price/tax promises survive plan edits; foreign
+  accepted-term or exemption children allow undo, owning children block undo,
+  with profile/version rows unchanged in the exemption control. Exact erasure
+  claims/terms IDs/merge receipts and independent journal/client readbacks pass.
+  These are synthetic actual-service controls, not new provider creation, real
+  certificate or independent review. Affected full18 provider-erasure native
+  regression, updated original buyer journeys, amendments/provider phases and
+  complete C1.08/C12.38 acceptance remain required. See
+  deploy/subscription-original-customer-preflight-20261113.md.
   Current-main financial composition 2026-11-12: exact `73e145af` merges protected
   main `bad846e4` (#694) and both fee repairs while preserving SQL958, all published
   migrations and helper `46a6ec02`. Full source gates passed at `5f53daf5` (384 assertions,
@@ -14012,6 +14086,126 @@ whatever is best for the people using the site.
   The new collection model stays disabled; full financial/browser/provider/
   recovery acceptance and C12.38 remain open. Exact scope and preserved evidence
   are in `deploy/current-financial-source-2026-11-12.md`.
+  Original bank-refund current-state isolated draft 2026-11-12: source now
+  retains repeated capture occurrences, exact original-resource read/finish
+  receipts, nullable/action/failure-balance facts and current cash projections.
+  Issued return credits remain unchanged; exact original RMA parts reopen and
+  outstanding refund promises keep financial review debt. Masked owner/buyer
+  status and the scoped original-resource recovery path are drafted. Full
+  Node22 types, changed-file lint and63 DB-free controls pass; initial import
+  and fixture type-only lint diagnostics were corrected and preserved. At that
+  isolated checkpoint no SQL, financial native, browser or provider acceptance
+  had run.
+  That isolated fragment was unassembled and its assembled80 SQL958 stayed
+  unchanged. Subsequent owned composition onto current885a37f2 appends the
+  bank fragment after accepted terms: new unpublishedSQL e7834c90 preserves
+  the entire881a byte prefix, published0–79 and the journal. This current
+  union at38c997c5 passes full Node22 types,48-file lint and74 affected
+  source assertions with25 declared database skips. No bank native or SDK
+  business qualification has run. A subsequent NEW V11 ordinary0–80
+  diagnostic on productf45e4bde/e783 passed5.927s:81 journal/max60/hash,
+  full seven-model parity, original/new financial guards, fsync on and final
+  independent backend[] drain. This is schema structure only, not populated
+  upgrade, actual bank state/credit/native or provider acceptance. Prior
+  databases/clones stay unchanged; final gates remain required. Generic/manual
+  causal discharge and legacy bank recovery remain unfinished work. An isolated
+  follow-up now drafts a fresh-human-confirmed generic refund replacement:
+  exact current failed resources, finished callers, one signed causal chain,
+  cash-locked admission, shared buyer/debt status, four locales and original
+  financial merge/privacy witnesses. It refuses RMA ownership and unrelated
+  equal-amount refunds. The existing mutable journal carries authenticated
+  evidence; it is not claimed to be DB append-only. This follow-up at e4a39f30
+  passes full Node22 types, 15-file lint and 63 DB-free proof/private/audit
+  controls, with no native, provider or historical-bank proof, and does not change
+  unpublished SQL e783 or the preserved V11 database. See
+  `deploy/merchant-bank-replacement-2026-11-12.md`. This does
+  not activate the new model or close C12.38. See
+  `deploy/merchant-refund-current-state-2026-11-12.md`.
+  First generic bank-replacement native on a6c3dd47/V11 e783 subsequently
+  passes 8.118s: original400 bank failure, independent unrelated400 and one
+  explicitly causal400 replacement; replay creates no additional refund and
+  the buyer cannot pay again. Independent ledger verifies4200 paid/800 current
+  returned, three finished original resources, one causal journal and retained
+  failure-balance history. UTC inspection matches the actual application's
+  mandatory session configuration and confirms original FAILED/child SUCCEEDED
+  receipts; bare Vancouver inspection is preserved separately, with no stored
+  writes or golden-hash claim. All clients drained. This case has no issued
+  credit and does not prove RMA reuse. Four other bank natives, legacy recovery,
+  final source union, SDK/browser/provider and full financial acceptance remain
+  open; this does not activate the model or close C12.38.
+  The next two-resource native found a genuine repeat-processing audit event
+  refusal after actual failed400 and action/null600 state reads passed. Its
+  pending600 primary fact and current receipt survived; logical projection
+  rolled back at the existing transition constraint, preserving paid4200 and
+  refunded0. Before source287/a490/e783 failed7.062s and is retained with a
+  separate 15-table UTC golden-equal populated clone (0.479s, journal81/e783,
+  clients drained). A one-line source repair now skips only the impossible
+  same-status transition event, retaining actual code/update/audit/outbox/fee
+  effects. Source2a191d44 passes full incremental Node22 types, changed-file lint
+  and63 finite core checks; unchanged oracle48cf8407 AFTER passes7.381s on
+  V11/e783. Actual failed400 plus independent600 action/null/pending/restored
+  success leave4200 paid/600 refunded; UTC readback verifies both current
+  receipts, retained raw facts, two finished original resources and real bank
+  state events, with no remaining clients. The RMA-credit, stale-read and
+  strengthened caller natives remain unrun. No schema, historical money,
+  oracle or model activation changed; final combined/legacy/provider acceptance
+  remains open.
+  First RMA-credit bank native on e007/2a191/e783 failed6.617s at a genuine
+  notification-topic validation refusal. Actual4200 success then bank action
+  leaves4200 paid/0 current refunded, processing refund, same issued4200
+  credit and original part, but the bank listener's transaction rolls back
+  and the return stays refunded. Its actual outbox error remains pending;
+  terminal failure/replacement is unrun. A separate23-table UTC golden-equal
+  template clone preserves that BEFORE state (0.145s, journal81/e783, clients
+  drained). Source now changes only the notification topic and matching eight
+  locale keys to valid lowercase, retaining timeline/event names, old money,
+  schema and original oracle. Sourcebd549214 passes full incremental Node22
+  types, changed-file lint and88 actual i18n/parity controls. The unchanged RMA
+  AFTER passes7.093s: same issued4200 credit/lines and original4200 part, old
+  failed4200 plus one exact-part successful4200 replacement, two original
+  finished callers/keys, paid/current-refunded4200, no new credit or buyer
+  charge. Actual attention notification and bank callbacks now commit; UTC
+  ledger/journal81/e783 and all client drains pass. Before/source/clones remain
+  preserved. The final two distinct controls on a50/bd549, unchanged48cf and
+  V11/e783 pass separately once: staleGET5.778s retains its old successful raw
+  capture and actual finish without a current receipt after a newer signed
+  action; a fresh action read alone receives a valid receipt, paid4200/current
+  refunded0. Strengthened paused caller6.236s proves committed actualACK and
+  rawsuccess400 with finish0, refuses externalGET until the actual wrapper
+  returns, then converges with finish1/currentreceipt1, paid4200/refunded400
+  and one physicalPOST. Paused-time facts are actual test assertions; independent
+  final UTC ledgers verify exact original resources, current receipts, retained
+  facts, journal81/e783 and empty backends. Five distinct controls now have
+  component evidence; final combined-source, legacy-bank, SDK/browser and
+  provider acceptance remain open. This does not enable the model or close
+  C12.38; details and limits remain in the bank-replacement evidence above.
+  Separate legacy-bank exact-read adapter foundation is source-only: it reads
+  an actual historical refund/payment/account without creating a merchant
+  request or refund attempt. Its freshly authenticated platform and explicit
+  read protocol are distinct from unknown original-create metadata, which
+  remains null. The callback retains nullable or contradictory raw response
+  facts before terminal policy. A staged full cash/refund/fee/recipient/dispute
+  reader also reuses the bounded primary-first provider collector, preserving
+  every callback before a later page can fail; unmatched resources are not
+  associated by amount. Its fresh-read wrapper keeps original-create metadata
+  unknown. Exact adapter67665ea2 now passes full Node22 types8GB, four changed
+  TypeScript files' lint and15 actual factory HTTP controls, with no skips or
+  database connection. Logs are `/tmp/freeholder-legacy-bank676-*`.
+  A separate finite legacy lifecycle source slice now adds three private
+  original-refund-owned models, guarded unapplied SQL and real registered
+  claim/fact/actual-finish services. Its private orchestrator reads only the
+  authentic HMAC-bound original resource, then bounded cash inventory; each
+  actual callback is held before persistence, and a settled wrapper can flush
+  the same retained facts/finish without new I/O. A missing original finish
+  remains debt and blocks a new read. Original create platform/protocol remain
+  null, and unmatched refunds remain unassigned. Financial repair pointers and
+  a bounded exact-refund child-witness helper are supplied, but final seller/
+  buyer financial-witness composition remains required. Four actual-service
+  native controls are drafted. This new lifecycle slice is UNQUALIFIED and its
+  fragment is unapplied; normal80/e783 and all prior databases are untouched.
+  Current-state proof, money projection, causal replacement, stopped-reader
+  recovery, UI/API/SDK, populated upgrades and actual legacy acceptance remain
+  required. See `deploy/legacy-bank-read-lifecycle-2026-11-13.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original
@@ -14114,6 +14308,30 @@ whatever is best for the people using the site.
   The composed source passes full typecheck, focused lint,62 bounded
   origin/setup/scope controls and all five private-service boundary controls.
   These checks do not apply80 or prove an actual provider outcome.
+  Auxiliary-product recovery source checkpoint (2026-11-13, C12.38): frozen
+  creation source `f2e612d2` passes full Node22 types,14 targeted lint paths
+  and50 finite source assertions with no skips. A separate unqualified
+  recovery-read workflow now binds the original ACK and finished creating
+  caller to a private GET ticket, preserves the actual returned read, and
+  refuses stale convergence without admitting another POST. It does not
+  enable provider admission, qualify a new schema or supply native/provider
+  acceptance. Exact recovery qualification and complete phase/amendment/cash
+  integration remain required; see
+  `deploy/subscription-phase-product80-source-20261113.md`.
+  Dated trial tax repair in progress (2026-11-13, C12.38): an actual
+  seven-day manual-trial acceptance retained4500 as its first-paid total
+  although the buyer's current exemption had a known one-day expiry. The
+  actual tax preview at its real trial end returned225 tax and4725 total;
+  the unchanged native oracle failed5.600s. A20-table/schema/journal-matched
+  populated BEFORE golden is preserved. The narrow source repair quotes known
+  trial/renewal boundaries with the existing UTC billing calendar, without
+  rewriting accepted history. Combined recovery/trial source `421e0cce` passes
+  full Node22 types,nine lint paths and39 finite source assertions with no
+  skips. The unchanged trial AFTER passes5.442s; independent readback confirms
+  initial0/first-paid4725tax225/renewal4200tax200, no invoice or payment, and
+  unchanged BEFORE golden/current schema/journal with drained clients. Exact
+  recovery-native and complete phase/amendment/cash acceptance remain required;
+  see `deploy/subscription-trial-tax-calendar-2026-11-13.md`. C12.38 stays open.
   Provider lifecycle protocol work uses Stripe's actual flexible-subscription
   pause endpoint, with2026-10-28.endive frozen only on new scope/charge
   receipts. Legacy operations keep their original version. Sixteen bounded

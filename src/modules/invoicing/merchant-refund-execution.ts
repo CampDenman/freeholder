@@ -9,6 +9,7 @@ import { refundRow } from "./contract";
 import { claimMerchantRefundDispatch, assertMerchantRefundCreatorsQuiesced, flushLocalMerchantRefundDispatchFinishes, performMerchantRefundDispatch,
   recordMerchantRefundResourceAcknowledgement } from "./merchant-refund-dispatch";
 import { recordMerchantRefundObservation } from "./merchant-refund-observations";
+import { reconcileOriginalMerchantRefundCurrentState } from "./merchant-refund-current-service";
 import { claimMerchantRefundRequest, merchantRefundRequestRow } from "./merchant-refund-request";
 import { merchantRefundDispatches, merchantRefundRequests, merchantRefundResourceBindings } from "./merchant-refund-schema";
 import { recordProviderRefundResult } from "./payment-provider-service";
@@ -44,6 +45,14 @@ export async function submitOriginalMerchantRefund(input: { paymentId: string; a
   await flushLocalMerchantRefundDispatchFinishes(original.id);
   const state = await merchantRefundOperationState.call({ requestId: original.id }, system);
   if (!state.refund) throw new ServiceError("conflict", "An applied invoice refund requires its actual original logical reservation.");
+  // A later bank return can invalidate a previously succeeded projection.
+  // An exact bound-resource read never dispatches another refund or key.
+  if (state.dispatched && state.originalRefundRef) {
+    await reconcileOriginalMerchantRefundCurrentState(original.id, caller);
+    const current = await merchantRefundOperationState.call({ requestId: original.id }, system);
+    if (!current.refund) throw new ServiceError("conflict", "Restore the original logical refund after current-state reconciliation.");
+    return current.refund;
+  }
   if (["succeeded", "failed", "cancelled"].includes(state.refund.status)) return state.refund;
   if (!state.creatorsQuiesced) throw new ServiceError("conflict", "The original refund caller is still unfinished. Another physical request cannot be admitted.");
   const adapter = paymentAdapter("stripe");
@@ -51,8 +60,8 @@ export async function submitOriginalMerchantRefund(input: { paymentId: string; a
   const { originalRequest: request } = original;
   const observe = async (evidence: MerchantRefundObservation) => {
     await recordMerchantRefundObservation.call({ source: { kind: "payment", paymentId: input.paymentId }, requestId: original.id,
-      evidence: { ...evidence, providerApiVersion: evidence.providerApiVersion ?? original.providerApiVersion,
-        status: Object.hasOwn(evidence, "providerStatus") ? evidence.providerStatus ?? null : evidence.status } }, system);
+      evidence: { ...evidence, providerApiVersion: evidence.providerApiVersion ?? null,
+        status: Object.hasOwn(evidence, "providerStatus") ? evidence.providerStatus ?? null : null } }, system);
     // Original-profile erasure reopening + periodic crash-window repair must
     // be composed before activation; the primary source fact already commits.
   };

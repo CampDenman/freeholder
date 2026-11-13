@@ -1589,6 +1589,8 @@ export const SERVICE_NAMES = [
   "subscriptions.myPaymentMethods",
   "subscriptions.pause",
   "subscriptions.publicPlans",
+  "subscriptions.quoteMembership",
+  "subscriptions.quoteNewAgreement",
   "subscriptions.reconcileTrialSetupDispatch",
   "subscriptions.resume",
   "subscriptions.savePlan",
@@ -7968,7 +7970,7 @@ export interface ServiceCatalog {
     output: { subscription: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }; plan: { id: string; productId: string; name: string; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; setupFeeMinor: number; billingMode: "provider" | "platform" | "manual"; cancelBehaviour: "period_end" | "immediate"; proration: "create_prorations" | "none"; status: "draft" | "active" | "archived"; updatedAt: string; [key: string]: unknown } | null; history: { kind: "created" | "trialing" | "activated" | "renewed" | "payment_failed" | "dunning" | "paused" | "resumed" | "plan_changed" | "cancelled" | "expired" | "card_setup" | "plan_change_pending"; invoiceId: string | null; detail: string | null; at: string; [key: string]: unknown }[]; [key: string]: unknown };
   };
   "subscriptions.join": {
-    input: { planId: string; termsHash: string; requestKey: string; acceptedTerms: true; paymentMethodId?: string; taxDestination?: { country: string; region?: string; postalCode?: string; city?: string } };
+    input: { planId: string; termsHash: string; requestKey: string; acceptedTerms: true; paymentMethodId?: string; taxDestination?: { country: string; region?: string; postalCode?: string; city?: string }; commercialQuoteDigest?: string; locale?: "en" | "es" | "fr" | "ar" };
     output: { id: string; invoiceId: string | null; pending: boolean; cardSetup: boolean };
   };
   "subscriptions.list": {
@@ -8001,7 +8003,15 @@ export interface ServiceCatalog {
   };
   "subscriptions.publicPlans": {
     input: { sellerUserId?: string };
-    output: { id: string; name: string; description: string | null; currency: string; amountMinor: number; setupFeeMinor: number; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; billingMode: "manual" | "platform" | "provider"; cancelBehaviour: "immediate" | "period_end"; termsHash: string; available: boolean }[];
+    output: { id: string; name: string; description: string | null; currency: string; amountMinor: number; setupFeeMinor: number; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; billingMode: "manual" | "platform" | "provider"; cancelBehaviour: "immediate" | "period_end"; termsHash: string; available: boolean; merchantTermsRequired: boolean }[];
+  };
+  "subscriptions.quoteMembership": {
+    input: { planId: string; taxDestination: { country: string; region?: string; postalCode?: string; city?: string }; paymentMethodId?: string; locale?: "en" | "es" | "fr" | "ar" };
+    output: { planId: string; snapshot: { version: 1; name: string; description: string | null; productVariantId: string; taxCategoryCode: string; requiresShipping: boolean; currency: string; periodAmountMinor: number; setupFeeMinor: number; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; cancelBehaviour: "immediate" | "period_end"; proration: "create_prorations" | "none"; billingMode: "manual" | "platform" | "provider" }; issuer: { name: string; support: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null }; initialTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; firstPeriodTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; renewalTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; quoteDigest: string; noticeDigest: string; noticeSnapshot: { locale: "en" | "es" | "fr" | "ar"; text: string }; publicTermsHash: string } | null;
+  };
+  "subscriptions.quoteNewAgreement": {
+    input: { planId: string; contactId: string; productVariantId?: string; currency?: string; taxDestination: { country: string; region?: string; postalCode?: string; city?: string }; paymentMethodId?: string; deferFirstPayment?: boolean; locale?: "en" | "es" | "fr" | "ar" };
+    output: { planId: string; snapshot: { version: 1; name: string; description: string | null; productVariantId: string; taxCategoryCode: string; requiresShipping: boolean; currency: string; periodAmountMinor: number; setupFeeMinor: number; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; cancelBehaviour: "immediate" | "period_end"; proration: "create_prorations" | "none"; billingMode: "manual" | "platform" | "provider" }; issuer: { name: string; support: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null }; initialTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; firstPeriodTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; renewalTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; quoteDigest: string; noticeDigest: string; noticeSnapshot: { locale: "en" | "es" | "fr" | "ar"; text: string } } | null;
   };
   "subscriptions.reconcileTrialSetupDispatch": {
     input: { dispatchId: string; outcome: "completed" | "cancelled"; providerOperationRef: string; providerEvidence: string; callerStopEvidence: string; confirmation: "PROVIDER OUTCOME CONFIRMED"; providerCustomerRef?: string; providerRef?: string };
@@ -8020,7 +8030,7 @@ export interface ServiceCatalog {
     output: { id: string; started: boolean };
   };
   "subscriptions.subscribe": {
-    input: { contactId: string; planId: string; productVariantId?: string; currency?: string; paymentMethodId?: string; deferFirstPayment?: boolean; taxDestination?: { country: string; region?: string; postalCode?: string; city?: string } };
+    input: { contactId: string; planId: string; productVariantId?: string; currency?: string; paymentMethodId?: string; deferFirstPayment?: boolean; taxDestination?: { country: string; region?: string; postalCode?: string; city?: string }; commercialTerms?: { quoteDigest: string; locale?: "en" | "es" | "fr" | "ar"; source?: "owner_subscription" | "public_join" } };
     output: { subscription: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown }; invoiceId: string | null; [key: string]: unknown };
   };
   "tasks.create": {
@@ -10042,6 +10052,8 @@ export interface FreeholderApi {
     myPaymentMethods: (input?: ServiceCatalog["subscriptions.myPaymentMethods"]["input"]) => Promise<ServiceCatalog["subscriptions.myPaymentMethods"]["output"]>;
     pause: (input: ServiceCatalog["subscriptions.pause"]["input"]) => Promise<ServiceCatalog["subscriptions.pause"]["output"]>;
     publicPlans: (input?: ServiceCatalog["subscriptions.publicPlans"]["input"]) => Promise<ServiceCatalog["subscriptions.publicPlans"]["output"]>;
+    quoteMembership: (input: ServiceCatalog["subscriptions.quoteMembership"]["input"]) => Promise<ServiceCatalog["subscriptions.quoteMembership"]["output"]>;
+    quoteNewAgreement: (input: ServiceCatalog["subscriptions.quoteNewAgreement"]["input"]) => Promise<ServiceCatalog["subscriptions.quoteNewAgreement"]["output"]>;
     reconcileTrialSetupDispatch: (input: ServiceCatalog["subscriptions.reconcileTrialSetupDispatch"]["input"]) => Promise<ServiceCatalog["subscriptions.reconcileTrialSetupDispatch"]["output"]>;
     resume: (input: ServiceCatalog["subscriptions.resume"]["input"]) => Promise<ServiceCatalog["subscriptions.resume"]["output"]>;
     savePlan: (input: ServiceCatalog["subscriptions.savePlan"]["input"]) => Promise<ServiceCatalog["subscriptions.savePlan"]["output"]>;
