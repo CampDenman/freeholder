@@ -14268,6 +14268,13 @@ whatever is best for the people using the site.
   supplies its own fictional webhook secret instead of depending on inherited
   process configuration. No production availability guard changed. Both actual
   raw-finance controls still require a fresh database and original assertions.
+  Current cash-reader source qualification2026-11-13: full TypeScript passes
+  at4cc200a9. Whole-repository lint stops only at two new issues: schema imports
+  used solely as types and an unbound actual Stripe inspection method in the
+  native helper. The source now uses type-only imports and binds that genuine
+  method to its original adapter. No lint rule, runtime policy or financial
+  oracle is relaxed. Failed v17 logs remain preserved; renewed focused lint,
+  all complete affected contracts and actual reader journeys are still required.
   Controlled origin SQL correction2026-11-13: after the fixture availability
   correction, the original interruption/recovery journey reached its actual
   cash receipt and caught PostgreSQL42703. The origin trigger used table alias
