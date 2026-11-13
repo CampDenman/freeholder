@@ -25,11 +25,28 @@ function outcomes(body: unknown): Outcome[] {
   return body.outcomes as Outcome[];
 }
 const workDatabase = "freeholder_crawl81_index_leak_review_work_test_20261112";
+async function historySchemaStamp(): Promise<string> {
+  const [row] = await db().execute<{ stamp: string }>(sql`select md5(jsonb_build_object(
+    'journal',(select jsonb_agg(jsonb_build_object('hash',hash,'created_at',created_at) order by created_at) from drizzle.__drizzle_migrations),
+    'columns',(select jsonb_agg(to_jsonb(item) order by table_schema,table_name,ordinal_position) from (select table_schema,table_name,ordinal_position,column_name,data_type,is_nullable,column_default from information_schema.columns where table_schema in ('public','pgboss','drizzle')) item),
+    'constraints',(select jsonb_agg(to_jsonb(item) order by schema_name,table_name,name) from (select n.nspname as schema_name,c.relname as table_name,con.conname as name,pg_get_constraintdef(con.oid) as definition from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','pgboss','drizzle')) item),
+    'triggers',(select jsonb_agg(to_jsonb(item) order by schema_name,table_name,name) from (select n.nspname as schema_name,c.relname as table_name,t.tgname as name,pg_get_triggerdef(t.oid) as definition from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where not t.tgisinternal and n.nspname in ('public','pgboss','drizzle')) item),
+    'functions',(select jsonb_agg(to_jsonb(item) order by name,arguments) from (select p.proname as name,pg_get_function_identity_arguments(p.oid) as arguments,pg_get_functiondef(p.oid) as definition from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'freeholder_%') item)
+  )::text) as stamp`);
+  if (!row?.stamp) throw new Error("The actual historical schema/journal stamp is unavailable.");
+  return row.stamp;
+}
+
 
 describe.runIf(hasDatabase)("actual historical HTTP receipt recovery review", () => {
   beforeAll(async () => {
     if (new URL(process.env.DATABASE_URL!).pathname !== `/${workDatabase}`) throw new Error("Only the explicitly NEW review work clone is allowed; never the golden clone.");
-    await ready(); registerCrawlPrivacy(); for (const job of crawlJobs) registerJob(job);
+    const beforeReady = await historySchemaStamp();
+    await ready();
+    const afterReady = await historySchemaStamp();
+    if (process.env.FREEHOLDER_CRAWL_HISTORY_PREFLIGHT) await writeFile(process.env.FREEHOLDER_CRAWL_HISTORY_PREFLIGHT, JSON.stringify({ beforeReady, afterReady, unchanged: beforeReady === afterReady }, null, 2), { mode: 0o600, flag: "wx" });
+    if (beforeReady !== afterReady) throw new Error("Real readiness changed the historical schema/journal; no domain oracle ran.");
+    registerCrawlPrivacy(); for (const job of crawlJobs) registerJob(job);
   });
   afterAll(async () => { await stopJobs(); await closeDb(); });
   it("reports missing original completion as recovery and reopens only actual retired membership", async () => {
