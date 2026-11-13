@@ -124,7 +124,7 @@ async function accept(ctx: ServiceContext, value: z.infer<typeof acceptance>) {
 export const quoteMerchantAmendment = defineService({ name: "subscriptions.quoteAmendment", summary: "Review the original merchant's exact next-period offer before accepting an amendment.", kind: "query", permission: "scoped", input, output: review,
   handler: async (value, ctx) => (await quote(ctx, value)).public });
 export const acceptMerchantAmendment = defineService({ name: "subscriptions.acceptAmendment", summary: "Explicitly accept a future amendment without replacing original promises or admitting unreconciled provider billing.", kind: "mutation", permission: "scoped", input: acceptance, output: result,
-  auditInputFields: ["id", "previousTermsId", "acceptedQuoteDigest"], handler: accept });
+  auditInputFields: ["id", "previousTermsId", "acceptedQuoteDigest"], handler: async (value, ctx) => accept(ctx, value) });
 export const quoteMyMerchantAmendment = defineService({ name: "subscriptions.quoteMyAmendment", summary: "Review your own exact merchant amendment before next-period consent.", kind: "query", permission: "authenticated", input, output: review,
   handler: async (value, ctx) => { await own(ctx, value.id, value.planId); return (await quote(ctx, value)).public; } });
 export const acceptMyMerchantAmendment = defineService({ name: "subscriptions.acceptMyAmendment", summary: "Accept only your own reviewed future merchant amendment.", kind: "mutation", permission: "authenticated", input: acceptance, output: result,

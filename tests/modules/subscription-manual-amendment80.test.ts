@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C9.38: actual manual billing may invoice accepted terms but not grant an unpaid plan.
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/core/db";
 import { stopJobs } from "@/core/jobs";
@@ -37,7 +38,7 @@ describe.runIf(hasDatabase)("manual original amendment entitlement boundary", { 
     await renewDue.call({}, { kind: "system" });
     const [invoice] = await db().select().from(invoices); if (!invoice) throw new Error("The actual renewal did not raise its canonical invoice");
     expect(invoice).toMatchObject({ totalMinor: 4725, taxMinor: 225, paidMinor: 0, status: "sent" });
-    const lines = await db().select().from(invoiceLines).where(eq(invoiceLines.invoiceId, invoice.id)); expect(lines.every(line => line.snapshot.subscriptionTermsId === accepted.termsId)).toBe(true);
+    const lines = await db().select().from(invoiceLines).where(eq(invoiceLines.invoiceId, invoice.id)); expect(lines.every(line => z.object({ subscriptionTermsId: z.uuid() }).parse(line.snapshot).subscriptionTermsId === accepted.termsId)).toBe(true);
     expect(await completePaidCommercialAmendment.call({ invoiceId: invoice.id }, { kind: "system" })).toEqual({ applied: false });
     const [parent] = await db().select().from(subscriptions).where(eq(subscriptions.id, original.subscription.id));
     expect(parent?.planId).toBe(old.id); expect(parent?.pendingPlanId).toBe(next.id); expect(parent?.currentPeriodEnd).toEqual(original.subscription.currentPeriodEnd); expect(await db().select().from(payments)).toHaveLength(0);
