@@ -4725,6 +4725,17 @@ CREATE CONSTRAINT TRIGGER commercial_refund_projection_guard AFTER INSERT OR UPD
 -- Root owns new assembly/hash/NEW normal DB. Earlier schemas and all original evidence stay frozen.
 ALTER TABLE invoices ADD COLUMN credited_minor bigint NOT NULL DEFAULT 0;
 --> statement-breakpoint
+-- Preserve exact existing model CHECK identities when original noncash credit
+-- becomes canonical consideration. A separate credited bound does not replace
+-- the full named invoice amount/consideration invariants.
+ALTER TABLE invoices DROP CONSTRAINT invoices_amounts_nonnegative;
+--> statement-breakpoint
+ALTER TABLE invoices ADD CONSTRAINT invoices_amounts_nonnegative CHECK(subtotal_minor>=0 AND discount_minor>=0 AND shipping_minor>=0 AND tax_minor>=0 AND total_minor>=0 AND paid_minor>=0 AND credited_minor>=0 AND refunded_minor>=0);
+--> statement-breakpoint
+ALTER TABLE invoices DROP CONSTRAINT invoices_paid_bounded;
+--> statement-breakpoint
+ALTER TABLE invoices ADD CONSTRAINT invoices_paid_bounded CHECK(paid_minor+credited_minor<=total_minor);
+--> statement-breakpoint
 ALTER TABLE invoices ADD CONSTRAINT invoices_credited_bounded CHECK(credited_minor between 0 and 9007199254740991 AND paid_minor+credited_minor<=total_minor);
 --> statement-breakpoint
 ALTER TABLE invoices DROP CONSTRAINT invoices_paid_consistent;
