@@ -297,8 +297,8 @@ export const subscriptionMerchantScopes = pgTable("subscription_merchant_scopes"
   check("subscription_merchant_scopes_accounts", sql`${t.providerPlatformAccountId} ~ '^acct_[A-Za-z0-9]+$' and ${t.recipientAccountId} ~ '^acct_[A-Za-z0-9]+$'
     and ${t.recipientAccountId}<>${t.providerPlatformAccountId} and ${t.settlementMerchantAccountId}=${t.recipientAccountId}
     and ((${t.collectionKind}='direct' and ${t.chargeAccountId} is not null and ${t.chargeAccountId}=${t.recipientAccountId}) or (${t.collectionKind}='destination' and ${t.chargeAccountId} is null))`),
-  check("subscription_merchant_scopes_tax", sql`${t.taxProfileVersion}>0 and ${t.taxLiability} in ('platform','seller')
-    and ((${t.taxDestination} is null and ${t.redactedAt} is not null) or (${t.taxDestination} is not null and ${t.redactedAt} is null and jsonb_typeof(${t.taxDestination})='object' and (${t.taxDestination}->>'country') ~ '^[A-Z]{2}$')) is true`),
+  check("subscription_merchant_scopes_tax", sql`(${t.taxProfileVersion}>0 and ${t.taxLiability} in ('platform','seller')
+    and ((${t.taxDestination} is null and ${t.redactedAt} is not null) or (${t.taxDestination} is not null and ${t.redactedAt} is null and jsonb_typeof(${t.taxDestination})='object' and (${t.taxDestination}->>'country') ~ '^[A-Z]{2}$'))) is true`),
 ]);
 
 /** Each amendment is a new accepted snapshot; the original charge scope stays
@@ -332,7 +332,7 @@ export const subscriptionCommercialTerms = pgTable("subscription_commercial_term
   foreignKey({ name: "subscription_commercial_terms_previous_fk", columns: [t.previousTermsId], foreignColumns: [t.id] }).onDelete("restrict"),
   check("subscription_commercial_terms_revision_check", sql`${t.revision}>0 and ((${t.revision}=1 and ${t.previousTermsId} is null) or (${t.revision}>1 and ${t.previousTermsId} is not null))`),
   check("subscription_commercial_terms_acceptance", sql`${t.acceptanceSource} in ('public_join','owner_subscription','amendment') and ${t.acceptedQuoteDigest} ~ '^[a-f0-9]{64}$' and ${t.noticeDigest} ~ '^[a-f0-9]{64}$'`),
-  check("subscription_commercial_terms_tax", sql`${t.profileVersion}>0 and ${t.taxLiability} in ('platform','seller') and ((${t.taxDestination} is null and ${t.redactedAt} is not null) or (${t.taxDestination} is not null and ${t.redactedAt} is null and jsonb_typeof(${t.taxDestination})='object' and (${t.taxDestination}->>'country') ~ '^[A-Z]{2}$')) is true`),
+  check("subscription_commercial_terms_tax", sql`(${t.profileVersion}>0 and ${t.taxLiability} in ('platform','seller') and ((${t.taxDestination} is null and ${t.redactedAt} is not null) or (${t.taxDestination} is not null and ${t.redactedAt} is null and jsonb_typeof(${t.taxDestination})='object' and (${t.taxDestination}->>'country') ~ '^[A-Z]{2}$'))) is true`),
 ]);
 
 /** Authenticated positive scheduled money survives later invoice/fee reconciliation. */

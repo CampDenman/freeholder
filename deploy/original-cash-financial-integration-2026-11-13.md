@@ -108,3 +108,31 @@ UNRUN. The original reader collector still fails one layer later after the
 first cycle correction; a second ordinary-state/root-collector split is now
 integrated and awaits unchanged-control verification. Complete candidate
 qualification is not claimed.
+
+## Subsequent source and schema review
+
+Both ordinary-state/collector fixes now pass the unchanged reader-stop
+collection control. Staged qualification covers 185 nonempty files with
+1,209 actual passing assertions and 287 explicit database skips. Full types,
+whole-project lint coverage plus exact affected-file renewals, license, notes
+and plan checks pass at f64bff4e. This staged evidence does not replace final
+clean-room, native, browser or provider acceptance.
+
+The strict read-only 86-model diagnostic matched all 82 journal entries and
+completed two models, then found an exact tax CHECK expression grouping
+difference between the declared commercial-terms model and installed SQL.
+The scope model had the same source pattern. Both declarations now wrap the
+full conjunction before IS TRUE, matching the unchanged frozen fragments.
+No SQL, database or validation constraint was weakened. Their nonnull guards
+may make the previous expressions Boolean-equivalent; this audit does not
+claim a demonstrated invalid-row acceptance. The v5 failure and closed-client
+proof remain at the parity86-v5 evidence prefix; 84 models and the complete
+guard/function audit remain unqualified pending renewal.
+
+A separate ordinary-reader extraction preserves the current cash inventory
+body, adds a complete aggregate history bound, and exposes primary-caller
+quiescence separately from ancillary fee/recipient debt. Its source and all
+model-expression changes require renewed checks. Main PR #697 is merged at
+bedafa0a after required PR and merge-group CI; no deployment, version or social
+post followed. The future combined candidate must synchronize that main before
+its protected PR.
