@@ -18,6 +18,7 @@ import {transferDigest} from "./transfer-proof";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartOperations,mediaMultipartResources} from "./multipart-schema";
 import {allowMediaReceiptWrites,lockObjectDigest,objectKeyDigest,storageOperationsHeld} from "./write-ledger";
+import {captureMediaErasureCohort,originalMediaErasureRequests} from "./erasure-cohorts";
 import {assertOriginalUploadWritable} from "./upload-ownership";
 
 type Resource=typeof mediaMultipartResources.$inferSelect;
@@ -184,6 +185,9 @@ export async function adoptCompletedMultipart(uploadId:string,operationId:string
   if(existing&&(existing.sha256!==sha256||existing.bytes!==bytes||existing.namespace!==resource.namespace))conflict("The original completed object changed.");
   const id=existing?.id??randomUUID(),now=new Date();
   if(!existing)await tx.insert(mediaObjectWrites).values({id,operation:"put",key:resource.key,keyDigest:resource.keyDigest,namespace:resource.namespace,storageKind:resource.storageKind,storageLocation:resource.storageLocation,sha256,bytes,contentType:resource.contentType,actor:operation.actor,contactId:resource.contactId,state:"accepted",observedAcceptedAt:operation.providerAcceptedAt,writerRuntimeId:operation.writerRuntimeId,writerFinishedAt:operation.writerFinishedAt,writerProtocol:operation.writerRuntimeId?"multipart-receipts-v1":null});
+  // This receipt is an actual descendant of the already captured original
+  // session, never a new owner/current-key inference after erasure capture.
+  for(const request of await originalMediaErasureRequests(tx,[],[resource.id]))await captureMediaErasureCohort(tx,request.requestId,request.scope as "media.storageOperations"|"media.multipartOperations",[id]);
   await tx.update(mediaMultipartOperations).set({state:"accepted",verifiedAt:now,updatedAt:now}).where(eq(mediaMultipartOperations.id,operation.id));
   await tx.update(mediaMultipartResources).set({state:"completed",completedAt:resource.completedAt??now,retiredAt:resource.retiredAt??now,objectReceiptId:id,updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
  });

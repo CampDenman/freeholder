@@ -130,6 +130,7 @@ export const mediaStorageTransferCalls=pgTable("media_storage_transfer_calls",{
  index("media_storage_calls_receipt_idx").on(t.objectReceiptId,t.createdAt,t.id),
  index("media_storage_calls_multipart_idx").on(t.multipartOperationId,t.createdAt,t.id),
  check("media_storage_calls_original_parent",sql`num_nonnulls(${t.objectId},${t.objectReceiptId},${t.multipartOperationId})=1`),
+ uniqueIndex("media_storage_original_quota_token_idx").on(t.namespace,t.quotaToken).where(sql`${t.quotaToken} is not null`),
  index("media_storage_transfer_calls_runtime_idx").on(t.runtimeId,t.state),
  check("media_storage_transfer_calls_kind",sql`${t.kind} in ('source_read','target_probe','target_put','target_verify','target_current','source_delete','source_absence','privacy_read','privacy_delete','privacy_absence','privacy_source_read','privacy_source_delete','privacy_source_absence','recovery_read','source_inventory','target_inventory','source_retirement_inventory','target_erasure_inventory','source_erasure_inventory','ordinary_put','ordinary_delete','multipart_create','multipart_complete','multipart_abort','ordinary_recovery_read','multipart_recovery_inspect','ordinary_retirement_inventory','multipart_retirement_inventory')`),
  check("media_storage_transfer_calls_state",sql`${t.state} in ('admitted','returned','unknown','stopped')`),

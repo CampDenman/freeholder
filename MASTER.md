@@ -11768,6 +11768,14 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Original provider privacy/quota-debt source continuation 2026-11-13 prepares
+  exact original parent/cohort exports, captured-ID worker containment, immutable
+  physical observation versions and original-token late quota charge restoration
+  or namespace refusal.12 pure and2 native declarations remain entirely unrun.
+  The15 transfer models/owned UNAPPLIED82 stay inactive. Immutable original
+  reservation capture, full locator minimization, physical retirement/crash/
+  multipart/chained semantics and actual qualification remain unfinished. See
+  `deploy/media-original-provider-privacy-source-2026-11-13.md`.
   Finished-original-PUT recovery source continuation 2026-11-13 prepares
   existing shared recovery phases, original nonce/full-byte read, immutable
   two-pass original inventory, append-only review and exact original-token

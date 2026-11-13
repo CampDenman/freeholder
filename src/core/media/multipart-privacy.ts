@@ -1,9 +1,10 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import {ORIGINAL_PROVIDER_EVIDENCE_TABLES,exportOriginalProviderEvidence,originalProviderParentsForContact,originalProviderEvidencePending} from "./original-provider-privacy";
 import {hasDurableOriginalMediaCallerProof} from "./retirement-authority";
 // C1.12/C1.08/C11.08: reservation erasure never outruns original provider work.
 import {randomUUID} from "node:crypto";
-import {and,asc,eq,inArray,isNull,or,sql} from "drizzle-orm";
+import {and,asc,eq,inArray,isNull,notInArray,or,sql} from "drizzle-orm";
 import {z} from "zod";
 import {db} from "@/core/db";
 import {lockContactIdentity} from "@/core/contacts/identity-lock";
@@ -39,7 +40,9 @@ async function retireOwnedCapturePointers(tx:Tx,keys:string[],knownActors:Set<st
  }
 }
 
-async function minimizeOwned(tx:Tx,contactId:string):Promise<void>{
+async function minimizeOwned(tx:Tx,contactId:string,requestId:string):Promise<void>{
+ const originalIds=await objectCohortIds(tx,requestId,MULTIPART_PRIVACY_SCOPE);
+ async function scopedWrites(keyDigest:string){const history=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,keyDigest));return{writes:history.filter(row=>originalIds.includes(row.id)),foreign:history.some(row=>!originalIds.includes(row.id))};}
  await allowMediaReceiptWrites(tx);
  if(await storageOperationsHeld(tx,[contactId]))return;
  const resources=await tx.select().from(mediaMultipartResources).where(and(eq(mediaMultipartResources.contactId,contactId),isNull(mediaMultipartResources.redactedAt))).orderBy(asc(mediaMultipartResources.id)).for("update");
@@ -48,7 +51,7 @@ async function minimizeOwned(tx:Tx,contactId:string):Promise<void>{
   if(!resource.retiredAt||!["completed","aborted"].includes(resource.state))continue;
   const unknown=await tx.select({id:mediaMultipartOperations.id}).from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,resource.id),inArray(mediaMultipartOperations.state,["started","unknown"]))).limit(1);
   if(unknown.length)continue;
-  const writes=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,resource.keyDigest));
+  const{writes,foreign}=await scopedWrites(resource.keyDigest);if(foreign)continue;
   if(writes.some(row=>!row.deletedAt||["unverified","started","unknown"].includes(row.state)))continue;
   await minimizeMediaStorageOperations(tx,writes.map(row=>row.id));
   await tx.update(mediaMultipartResources).set({key:`retained:${resource.keyDigest}`,actor:"erased",contactId:null,storageLocation:{},reviewedBy:null,redactedAt:new Date(),updatedAt:new Date()}).where(eq(mediaMultipartResources.id,resource.id));
@@ -56,7 +59,7 @@ async function minimizeOwned(tx:Tx,contactId:string):Promise<void>{
  }
  const objects=await tx.select().from(mediaObjects).where(eq(mediaObjects.ownerContactId,contactId)).orderBy(asc(mediaObjects.key)).for("update");
  for(const object of objects){
-  const digest=objectKeyDigest(object.key),writes=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,digest));
+  const digest=objectKeyDigest(object.key),{writes,foreign}=await scopedWrites(digest);if(foreign)continue;
   const active=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.keyDigest,digest),isNull(mediaMultipartResources.retiredAt))).limit(1);
   if(writes.length&&!hasDurableOriginalMediaCallerProof())continue;
   if(active.length||object.state==="attached"||writes.some(row=>!row.deletedAt||["unverified","started","unknown"].includes(row.state)))continue;
@@ -67,7 +70,7 @@ async function minimizeOwned(tx:Tx,contactId:string):Promise<void>{
  }
  const uploads=await tx.select().from(mediaUploads).where(eq(mediaUploads.ownerContactId,contactId)).orderBy(asc(mediaUploads.id)).for("update");
  for(const upload of uploads){
-  const writes=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,objectKeyDigest(upload.storageKey)));
+  const{writes,foreign}=await scopedWrites(objectKeyDigest(upload.storageKey));if(foreign)continue;
   const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.uploadId,upload.id),isNull(mediaMultipartResources.redactedAt))).limit(1);
   if(writes.length&&!hasDurableOriginalMediaCallerProof())continue;
   if(multipart.length||writes.some(row=>!row.deletedAt||["unverified","started","unknown"].includes(row.state)))continue;
@@ -82,14 +85,14 @@ async function personalRows(tx:Tx,contactId:string){
  return{resourceIds:resources.map(row=>row.id),uploadIds:uploads.map(row=>row.id),keyDigests:objects.map(row=>objectKeyDigest(row.key))};
 }
 registerContactPrivacySource({
- scope:MULTIPART_PRIVACY_SCOPE,tables:["media_uploads","media_objects","media_multipart_resources","media_multipart_operations"],retentionScopes:[MEDIA_WRITES_SCOPE,"members"],eraseOrder:19,
- exportData:async(tx,contactId)=>({reservations:await tx.select().from(mediaUploads).where(eq(mediaUploads.ownerContactId,contactId)),objects:await tx.select().from(mediaObjects).where(eq(mediaObjects.ownerContactId,contactId)),resources:await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.contactId,contactId)),operations:await tx.select({operation:mediaMultipartOperations}).from(mediaMultipartOperations).innerJoin(mediaMultipartResources,eq(mediaMultipartResources.id,mediaMultipartOperations.resourceId)).where(eq(mediaMultipartResources.contactId,contactId))}),
+ scope:MULTIPART_PRIVACY_SCOPE,tables:["media_uploads","media_objects","media_multipart_resources","media_multipart_operations",...ORIGINAL_PROVIDER_EVIDENCE_TABLES],retentionScopes:[MEDIA_WRITES_SCOPE,"members"],eraseOrder:19,
+ exportData:async(tx,contactId)=>({providerEvidence:await exportOriginalProviderEvidence(tx,await originalProviderParentsForContact(tx,contactId)),reservations:await tx.select().from(mediaUploads).where(eq(mediaUploads.ownerContactId,contactId)),objects:await tx.select().from(mediaObjects).where(eq(mediaObjects.ownerContactId,contactId)),resources:await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.contactId,contactId)),operations:await tx.select({operation:mediaMultipartOperations}).from(mediaMultipartOperations).innerJoin(mediaMultipartResources,eq(mediaMultipartResources.id,mediaMultipartOperations.resourceId)).where(eq(mediaMultipartResources.contactId,contactId))}),
  erase:async(tx,contactId,context)=>{
   const before=await personalRows(tx,contactId);if(!before.resourceIds.length&&!before.uploadIds.length&&!before.keyDigests.length)return{affected:0};
   const attached=await tx.select({id:mediaObjects.assetId}).from(mediaObjects).where(and(eq(mediaObjects.ownerContactId,contactId),sql`${mediaObjects.assetId} is not null`)).limit(1);
   if(attached.length){if(!context.service)throw new Error("Attached media erasure requires its real parent service context.");const{retireOwnedAssetsForErasure}=await import("./service");await context.service.callAsSystem(retireOwnedAssetsForErasure,{contactId,requestId:context.requestId});}
   const objects=await tx.select({key:mediaObjects.key,uploadId:mediaObjects.uploadId}).from(mediaObjects).where(eq(mediaObjects.ownerContactId,contactId));
-  const physical=await tx.select({id:mediaObjectWrites.id,key:mediaObjectWrites.key,actor:mediaObjectWrites.actor}).from(mediaObjectWrites).where(or(eq(mediaObjectWrites.contactId,contactId),objects.length?inArray(mediaObjectWrites.keyDigest,objects.map(row=>objectKeyDigest(row.key))):undefined));
+  const physical=await tx.select({id:mediaObjectWrites.id,key:mediaObjectWrites.key,actor:mediaObjectWrites.actor}).from(mediaObjectWrites).where(eq(mediaObjectWrites.contactId,contactId));
   await captureMediaErasureCohort(tx,context.requestId,MULTIPART_PRIVACY_SCOPE,physical.map(row=>row.id),before.resourceIds);
   // Raw capture claims reserve and write under one immutable caller identity.
   // A later executor of a logical media upload supplies no ownership proof.
@@ -98,7 +101,7 @@ registerContactPrivacySource({
   await retireOwnedCapturePointers(tx,objects.map(row=>row.key),knownActors);
   await allowMediaReceiptWrites(tx);
   await tx.update(mediaUploads).set({state:"aborted",completedAt:new Date(),updatedAt:new Date()}).where(and(eq(mediaUploads.ownerContactId,contactId),inArray(mediaUploads.state,["created","uploading","uploaded","processing"])));
-  await minimizeOwned(tx,contactId);
+  await minimizeOwned(tx,contactId,context.requestId);
   const pending=await personalRows(tx,contactId),pendingJobs:string[]=[];
   const total=Math.max(pending.resourceIds.length,pending.uploadIds.length,pending.keyDigests.length);
   for(let offset=0;offset<total;offset+=500){const originalJobId=randomUUID(),job=await enqueueJob(tx,MULTIPART_ERASURE_JOB,{requestId:context.requestId,originalJobId,resourceIds:pending.resourceIds.slice(offset,offset+500),uploadIds:pending.uploadIds.slice(offset,offset+500),keyDigests:pending.keyDigests.slice(offset,offset+500)},{id:originalJobId,idempotencyKey:`multipart-erasure:${context.requestId}:${offset}`});pendingJobs.push(job.id);}
@@ -119,6 +122,8 @@ export async function eraseMultipartOperations(data:Record<string,unknown>):Prom
   const uploads=input.uploadIds.length?await tx.select().from(mediaUploads).where(inArray(mediaUploads.id,input.uploadIds)):[];
   const objects=await tx.select().from(mediaObjects).where(or(eq(mediaObjects.ownerContactId,request.contactId),input.uploadIds.length?inArray(mediaObjects.uploadId,input.uploadIds):undefined));
   const keys=[...new Set([...resources.filter(row=>!row.redactedAt).map(row=>row.key),...uploads.filter(row=>row.ownerContactId).map(row=>row.storageKey),...objects.filter(row=>input.keyDigests.includes(objectKeyDigest(row.key))).map(row=>row.key)])];
+  const originalIds=await objectCohortIds(tx,input.requestId,MULTIPART_PRIVACY_SCOPE);
+  for(const key of keys){const foreign=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.keyDigest,objectKeyDigest(key)),originalIds.length?notInArray(mediaObjectWrites.id,originalIds):undefined)).limit(1);if(foreign.length)throw new Error("A physical receipt outside this immutable original erasure scope shares its key; keep both generations for recovery without adopting or deleting either.");}
   return{contactId:request.contactId,keys,resources};
  });
  if(!captured)return{erased:0};
@@ -126,7 +131,7 @@ export async function eraseMultipartOperations(data:Record<string,unknown>):Prom
  // Human recovery first establishes their exact original physical outcome.
  for(const resource of captured.resources)if(!resource.retiredAt&&resource.state==="open")await retireKnownMultipart(resource.uploadId);
  for(const key of captured.keys)await deleteWithReceipt(key);
- const pending=await db().transaction(async tx=>{await lockContactIdentity(tx);await minimizeOwned(tx,captured.contactId);const cohortIds=await objectCohortIds(tx,input.requestId,MULTIPART_PRIVACY_SCOPE);await minimizeMediaStorageOperations(tx,cohortIds);const rows=await personalRows(tx,captured.contactId);return rows.resourceIds.length+rows.uploadIds.length+rows.keyDigests.length+Number(await mediaCohortPending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE));});
+ const pending=await db().transaction(async tx=>{await lockContactIdentity(tx);await minimizeOwned(tx,captured.contactId,input.requestId);const cohortIds=await objectCohortIds(tx,input.requestId,MULTIPART_PRIVACY_SCOPE);await minimizeMediaStorageOperations(tx,cohortIds);const rows=await personalRows(tx,captured.contactId);return rows.resourceIds.length+rows.uploadIds.length+rows.keyDigests.length+Number(await mediaCohortPending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE))+Number(await originalProviderEvidencePending(tx,{receiptIds:cohortIds,resourceIds:captured.resources.map(row=>row.id)}));});
  if(pending)throw new Error("Original upload ownership, a named hold or unresolved provider work keeps this erasure pending.");
  await completeErasureJob.call({requestId:input.requestId,scope:MULTIPART_PRIVACY_SCOPE,jobId:input.originalJobId},{kind:"system"});
  return{erased:captured.keys.length};
