@@ -102,3 +102,35 @@ external stop-runtime producer, shared recovery UI, genuine prospective
 observation/application context and money-transition fencing remain REQUIRED.
 This finite checkpoint neither activates controlled collection nor supplies
 provider/account acceptance, independent review, stable status or any C closure.
+
+## Parent source composition — unqualified
+
+The current-family slice is normally merged and callback checkpoint97c11c76
+is carried as a leaf only; future collection/source ancestors stay excluded.
+The exact4283-byte tail is copied to journal83/migration
+0083_original_cash_inspection_stops. All previous83 journal/SQL identities
+remain byte-identical to qualified normalV10. This prepares143 actual models,
+84 migrations, two new guard functions and five new triggers; no successful
+migration/model/native acceptance is claimed yet.
+
+merchant-refund-dependencies authenticates exact original inspection parents
+and incorporates only the actual stop-row PostgreSQL SHA in internal undo
+entries, under the complete5000 bound. The existing frozen-profile capture
+inherits those authenticated children. Invoice fingerprints additionally
+follow actual invoice/payment/receipt ancestry BEFORE the no-route exit,
+retaining seller payment filters and counting shared children once. New
+stop rows cannot disappear when an original payment has no merchant route.
+
+Invoice financial export, merchant-profile export and receipt-only buyer
+subscription export select the same actual parent IDs and expose only the
+safe stop projection. A NULL-payment receipt never borrows an invoice or an
+equal amount to choose its owner. Nonces, signatures, process/hosting identity
+and full stop/admission hashes remain internal. Aggregate5000 bounds apply
+before safe export; an empty stop family preserves existing output shape.
+
+The original actual child-stop test retains every original assertion and now
+also compares invoice merge fingerprints immediately before/after the real
+independent stop, matches its exact new PG-row witness in parent financial
+children, and checks the safe subject financial export. Full source and
+schema qualification, real child/callback/privacy journeys, generated SDK
+renewal, cross-host recovery and final provider/stable acceptance are pending.

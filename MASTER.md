@@ -14294,6 +14294,22 @@ whatever is best for the people using the site.
   observational context, causal comparison, bank proof and full acceptance remain
   REQUIRED; no C/stable closure. See
   deploy/original-cash-inspection-capture83-source-20261113.md.
+  Independent-stop parent composition2026-11-13 (C12.38/C1.08/C11.14): signed
+  current-family5ed83538 and leaf-only callback97c11c76 are integrated without
+  future six collection models. The exact4283-byte owned stop tail is copied to
+  NEW0083_original_cash_inspection_stops, SHA8bde27cacfcfd8e9363821bafac053a87e104e4ed0b23c1b6fc51669d2037409;
+  the whole previous83 journal/SQL identities remain unchanged. Target cohort
+  is143 models, with two new guard functions/five new triggers. Full stop-row
+  PostgreSQL SHA participates in actual refund, invoice and frozen-profile undo
+  witnesses, including a real unrouted original invoice before the no-route
+  exit. Buyer invoice, merchant profile and NULL-payment receipt-only exports
+  select exact original parents and expose only inspection ID/review time/
+  stopped:true/no-bank-evidence; authentication/nonce/process/hosting material
+  remains private. Aggregate5000 bounds and seller payment filters remain.
+  The original live-child/actual-exit/native oracles are retained and extended
+  to prove a new stop changes actual parent undo fingerprints and safe export.
+  Generated SDK update, full source/143-model/84-journal proof, actual child
+  recovery/callback/privacy tests and all provider/stable acceptance are pending.
   Current cash-reader source qualification2026-11-13: full TypeScript passes
   at4cc200a9. Whole-repository lint stops only at two new issues: schema imports
   used solely as types and an unbound actual Stripe inspection method in the
