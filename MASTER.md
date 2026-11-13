@@ -14991,6 +14991,19 @@ whatever is best for the people using the site.
   Root central authorization/composition and full qualification remain open;
   no SQL, activation, item or stable gate changes. See
   `deploy/proration-merchant-export81-source-20261113.md`.
+  Merchant identity financial snapshot source checkpoint (same date/items):
+  actual collection invoice/frozen-profile/source subgraphs and actual
+  subscription-policy subscription UUIDs now bind the24-family financial
+  witness even before any routed payment or invoice. Shared-platform mixed
+  ownership without exact allocation/source proof stays non-undoable/review;
+  unrelated same-profile histories are excluded. Nonempty table-bound hashes
+  extend existing
+  identity fingerprints; empty histories and strict UUID receipt shapes stay
+  unchanged. Parent/distinct-child rows share5000 with root's separately owned
+  payment-dependency count integration. Eleven prepared groups (14 expanded
+  cases) are UNRUN; no compiler, lint, database, native or provider ran. No
+  SQL, activation, item or stable gate changes. See
+  `deploy/merchant-identity-financial81-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the
