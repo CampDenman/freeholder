@@ -11,7 +11,7 @@ import {mediaObjects,mediaUploads} from "./schema";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartResources} from "./multipart-schema";
 import {mediaErasureCohorts,mediaOriginalErasureScopes,type OriginalMediaErasureMembership} from "./erasure-schema";
-import {lockTransferInventory} from "./transfer-authority";
+import {lockOriginalMediaScopeCapture} from "./empty-scope-authority";
 import {transferConflict,transferDigest} from "./transfer-proof";
 import {firstOriginalMediaMembership,intactOriginalMediaMembership,originalMediaBirthDebt,originalMediaReservationCaptured} from "./original-erasure-proof";
 import {mediaStorageTransferCalls,mediaStorageTransferReceipts} from "./transfer-schema";
@@ -37,7 +37,7 @@ async function priorAuthority(tx:Tx,requestId:string,contactId:string,scope:Orig
  return{receiptIds:unique(receiptIds),resourceIds:unique(resourceIds),uploadIds:unique(uploadIds),reservationIds:unique(reservationIds),legacyScopes:[...seen.values()],artifactIds:unique(artifactIds)};
 }
 export async function captureFirstOriginalMediaScope(tx:Tx,requestId:string,contactId:string,scope:OriginalMediaScope){
- await lockTransferInventory(tx);
+ const authorityMode=await lockOriginalMediaScopeCapture(tx,{requestId,contactId,scope});
  const[request]=await tx.select().from(dataRequests).where(eq(dataRequests.id,requestId)).limit(1);
  if(!request||request.kind!=="erasure"||request.contactId!==contactId)transferConflict("The original media capture needs its actual owning erasure request.");
  const[prior]=await tx.select().from(mediaOriginalErasureScopes).where(and(eq(mediaOriginalErasureScopes.requestId,requestId),eq(mediaOriginalErasureScopes.scope,scope))).limit(1).for("update");
@@ -53,6 +53,7 @@ export async function captureFirstOriginalMediaScope(tx:Tx,requestId:string,cont
  if(resources.length>10000||receipts.length>10000||uploads.length>10000||reservations.length>10000)transferConflict("The complete original media scope exceeds its bounded capture. No subset may be acknowledged.");
  if(authority.resourceIds.some(id=>!resources.some(row=>row.id===id)))transferConflict("Restore the exact original multipart/upload scope membership.");
  const membership=firstOriginalMediaMembership({receipts,resources,uploads,reservations,legacyScopes:authority.legacyScopes}),captureDigest=transferDigest(membership);
+ if(authorityMode==="empty_metadata"&&(membership.receipts.length||membership.resources.length||membership.uploads.length||membership.reservations.length||originalMediaBirthDebt(membership)))transferConflict("Only a genuinely empty first scope can use metadata authority; retain original legacy/birth evidence until the complete protocol is available.");
  const[header]=await tx.insert(mediaOriginalErasureScopes).values({requestId,scope,membership,captureDigest,complete:false}).returning();
  if(receipts.length)await tx.insert(mediaErasureCohorts).values(receipts.map(row=>({requestId,scope,objectReceiptId:row.id}))).onConflictDoNothing();
  if(resources.length)await tx.insert(mediaErasureCohorts).values(resources.map(row=>({requestId,scope,multipartResourceId:row.id}))).onConflictDoNothing();

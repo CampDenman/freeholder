@@ -3574,7 +3574,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-13 checkpoint. Protected main is fe2645dc after HTTP null-result PR698 and audit nonce-redaction PR699, each merged through the normal protected queue. Draft integration PR700 remains unqualified: its first run exposed real scalar CASE migration syntax errors, now corrected in owned fragments and assembled unpublished SQL80/82. A new V2 database normally applied all83 migrations in6.775s with exact journal hashes and independently verified UTC/read-only/fsyncON/jitOFF/no-recovery settings and closed clients. Strict142-model read-only parity then stopped at the first mismatch after125 complete comparisons: the actual invoice nonnegative constraint omits credited_minor while its model includes it. The failed V2 and all prior failures remain preserved; no parity or native acceptance is claimed. CI at845a21 passed whole lint, full types and package verification, then Next production TypeScript exhausted its default4GiB heap. The build command now allows8GiB, matching existing lint/typecheck; its rerun is pending and type checking remains enabled. Earlier313 source cases and component import/financial/recovery proofs remain scoped historical evidence. New media and buyer checks, current source renewal, complete positive controlled collection and standalone media retirement/crash/multipart/quota/cutover remain open. Actual providers/platforms, final-candidate object-byte recovery, independent C11.10 report and C11.17 signature remain absent. No deployment, announcement, tag or stable version advanced. |
+| Latest launch audit | 2026-11-13 checkpoint. Protected main remainsfe2645dc after HTTP null-result PR698 and audit nonce-redaction PR699, both through the normal protected queue. Draft PR701 is an exact-tree signed review snapshot of integrationf12dff09; DCO passed without bypassing checks, and application/test CI is pending. Original PR700 and all detailed source history remain preserved. Real scalar CASE migration errors and two invoice credited-amount CHECK mismatches are repaired in owned fragments and unpublished SQL80/82. NEW V3 normally applied all83 migrations in6.651s. Strict read-only parity atf12d then passed all142 full model comparisons,282 installed guards,225 installed required function bodies and2084 unfiltered expression comparisons in3354 queries/11.629s; all83 journal hashes, UTC/read-only/fsyncON/jitOFF/no-recovery settings and independent empty client inventory matched. Failed V1/V2/v14 and prior component failures remain preserved. This is schema evidence, not business or provider acceptance. Current source additionally retains raw positive/unsettled controlled bank occurrences before cash bridging; its new controls and current full source checks are pending. Earlier313 source cases and component import/financial/recovery evidence remain scoped historical proof. CI at845a21 passed whole lint, full types and package verification, then production TypeScript exhausted its default4GiB heap. The build now allows8GiB with type checking enabled; local attempts stopped on an outside-root dependency-loader path, so no build pass is claimed. Complete positive controlled collection, standalone media retirement/crash/multipart/quota/cutover and actual native acceptance remain open. Actual providers/platforms, final-candidate object-byte recovery, independent C11.10 report and C11.17 signature remain absent. No deployment, announcement, tag or stable version advanced. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -12595,6 +12595,26 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
+  Empty first media scope metadata source continuation2026-11-13 separates
+  exact request/scope/contact-bound empty header authority from provider I/O.
+  The original ABI and inventory fence recheck the complete empty ordinary,
+  transfer, quota/session and legacy/held ancestry graph; only intact sealed
+  empty headers may coexist. No full provider writer tag, caller privilege or
+  capability publication is granted; old unknown captures cannot be refilled.
+  Two owned82 metadata functions/guard continuation and4 actual-service native
+  controls remain entirely unrun. No model/published journal/original oracle
+  changes; root reviews/assembles new82 and qualifies a genuinely new database.
+  Physical producers/full source/business/provider/security/stable gates remain
+  open. See `deploy/media-empty-first-scope82-source-20261113.md`.
+  Empty transfer ownership merge scope source repair2026-11-13: actual CI701
+  original merge/outbox controls reached the deliberately inactive media
+  capability before checking for any scoped transfer subject. The shared
+  reference now proves exact two-contact subject absence under the original
+  inventory fence before empty capture/no-op repoint; nonempty scopes still
+  require every complete capability and full original lineage guard. Existing
+  oracles remain unchanged and AFTER qualification is unrun. No physical
+  retirement, empty erasure capture or capability publication is inferred. See
+  `deploy/media-empty-transfer-merge82-source-20261113.md`.
   Source-only original media proof policy audit2026-11-13 adds the actual
   transfer subject contact-FK private-search/noTTL reasons and documents all17
   original proof tables' parent-scoped recovery/privacy lifetime. Invalid header
@@ -14179,6 +14199,31 @@ whatever is best for the people using the site.
   account. Split from C12.26 on 2026-10-15. This follows Stripe's current
   [charge types](https://docs.stripe.com/connect/charges) and
   [refund/dispute documentation](https://docs.stripe.com/connect/marketplace/tasks/refunds-disputes).
+  Marketplace bootstrap repair2026-11-13: normal CI passed production TypeScript
+  with the existing8GiB allowance, then page-data collection for /portal/listings
+  exposed a catalog→public booking→merchant policy→member subscription→catalog
+  import cycle. Seller invoice ancestry now lives in a schema-only helper shared
+  by both consumers; its exact query body and shared transaction are preserved,
+  as is the member-subscription compatibility export. The actual production
+  rebuild and existing member subscription/merchant journeys remain required.
+  Cumulative-return qualification2026-11-13: the unchanged three-generation
+  journey passed on normal V3, with independent original-principal, invoice,
+  refund,83-journal/profile and empty-client proof. The lost second recipient
+  response case recovered without another POST and retained8400 of12600 minor
+  units returned, but its old oracle searched only original POST acknowledgements.
+  Minimal read-only diagnosis proved the distinct actual GET/auxiliary UUID and
+  resource-reference hashes. The oracle now follows that exact inspection
+  ancestry and additionally requires the original failed POST facts unchanged;
+  no runtime money rule changed. Failed V3 is preserved. A fresh database and
+  actual corrected-case/unassigned-case runs remain required.
+  Historical import fixture preparation2026-11-13: normal CI reached the
+  populated migration73 control, whose isolated rollback setup now encounters
+  three real migration81 foreign keys. Its setup explicitly proves those future
+  child scopes empty, removes only the three named edges within that transaction
+  and verifies all installed definitions return after rollback. Original preview,
+  checkpoint and old-writer refusal assertions remain unchanged. No shipped
+  migration, constraint or guard is removed; the actual corrected fixture run
+  remains pending.
   Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
   parity stopped at the first genuine model/source mismatch in the named
   nonnegative invoice amount CHECK after125 complete models. The unchanged
@@ -14186,9 +14231,10 @@ whatever is best for the people using the site.
   did not. The owned unpublished credit fragment now replaces both exact named
   CHECKs; existing credited bounds and already-correct paid-status/total/refund
   arithmetic remain intact. No model waiver or diagnostic exemption is added.
-  Failed V2/v14 proof stays preserved; this source-only repair is unparsed and
-  unqualified. Root must review/reassemble unpublished80 after the whole old0cff
-  prefix, preserve0–79/81/82 and qualify a genuinely new normal database. See
+  Failed V2/v14 proof stays preserved. The repair is assembled after the whole
+  old0cff prefix with0–79/81/82 unchanged; NEW V3 normally applied all83 entries
+  and strict v15 passed all142 actual model comparisons, including both CHECKs.
+  This schema evidence does not establish business acceptance. See
   `deploy/subscription-proration-credit-check-parity80-source-20261113.md`.
   Allocation-scoped merge source repair 2026-11-12: the actual mixed-seller
   control failed because an unrelated seller's refund changed the first
@@ -15199,6 +15245,21 @@ whatever is best for the people using the site.
   the existing exact schema before constructing the provider request; invalid
   legacy/API epochs refuse explicitly. No cast invents a current protocol.
   Renewed source and actual provider acceptance remain open.
+  Controlled raw financial review source correction (2026-11-13, same items):
+  the nine-family zero-only protocol now retains review debt from actual raw
+  positive intent/invoice/payment evidence even when cash_observed/receipt
+  bridging never ran. Nonzero unpaid/pending invoices/intents/lines/recurring
+  resources also require review; status/amount alone never becomes canonical
+  cash. Original bootstrap/discovery ancestry is preserved, unrelated discovery
+  results and nonpayable previews are not adopted, and a newer zero read cannot
+  release an older actual caller or erase an earlier positive occurrence.
+  Both actual coverage and receipt namespace consume the same ordinary helper.
+  Eight signed-caller controls and two actual shared-service/HTTP native fault/
+  recovery controls are PREPARED/UNRUN. Source only: no SQL/model/guard epoch,
+  compiler/lint/test/PG/provider operation or stable/acceptance closure here.
+  Future positive-protocol target/disposition and complete current principal
+  authority remain required; owned nonpayable drafts must be proved exactly,
+  never blanket-clear cash debt. See deploy/controlled-raw-financial9-source-20261113.md.
   Controlled provider transport source checkpoint (2026-11-13, same items):
   actual zero-NET bootstrap, independent pause readback, original-resource
   discovery, exact calendar cancellation/readback and complete invoice/payment

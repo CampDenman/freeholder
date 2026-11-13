@@ -45,10 +45,25 @@ describe.runIf(hasDatabase)("original partial cash checkpoint81", { timeout: 600
     await expect(active.partial()).rejects.toThrow();
     expect(active.posts).toEqual(["customer", "fee", "recipient", "customer", "fee", "recipient"]);
     expect((await db().select().from(originalCashRecoveryFacts)).some(fact => fact.kind === "finish" && fact.evidence.outcome === "threw")).toBe(true);
+    const beforeRecoveryOperations = await db().select().from(originalCashRecoveryOperations), beforeRecoveryFacts = await db().select().from(originalCashRecoveryFacts);
+    const lost = beforeRecoveryOperations.find(operation => operation.kind === "recipient"
+      && !beforeRecoveryFacts.some(fact => fact.operationId === operation.id && fact.kind === "ack"));
+    expect(lost).toBeTruthy();
+    const lostOriginalFacts = beforeRecoveryFacts.filter(fact => fact.operationId === lost!.id);
+    expect(lostOriginalFacts.some(fact => fact.kind === "finish" && fact.evidence.outcome === "threw")).toBe(true);
     const before = [...active.posts]; await active.partial(); expect(active.posts).toEqual(before);
     const operations = await db().select().from(originalCashRecoveryOperations), facts = await db().select().from(originalCashRecoveryFacts), recipients = operations.filter(operation => operation.kind === "recipient");
     expect(recipients).toHaveLength(2); expect(new Set(recipients.map(operation => operation.request.targetFactId)).size).toBe(2);
-    const refs = recipients.map(operation => new Set(facts.filter(fact => fact.operationId === operation.id && fact.kind === "ack").map(fact => fact.evidence.providerRef)));
+    // Recovery is a new physical GET tied to the exact original operation.
+    // It must not invent an acknowledgement on the POST that lost its reply.
+    expect(facts.filter(fact => fact.operationId === lost!.id)).toEqual(lostOriginalFacts);
+    const refs = recipients.map(operation => {
+      const inspections = operations.filter(row => row.kind === "inspection" && row.request.auxiliaryOperationId === operation.id);
+      for (const inspection of inspections) expect(facts.some(fact => fact.operationId === inspection.id && fact.kind === "finish" && fact.evidence.outcome === "returned")).toBe(true);
+      if (operation.id === lost!.id) expect(inspections.length).toBeGreaterThan(0);
+      return new Set(facts.filter(fact => fact.kind === "ack" && (fact.operationId === operation.id
+        || inspections.some(inspection => inspection.id === fact.operationId && fact.evidence.auxiliaryOperationId === operation.id))).map(fact => fact.evidence.providerRef));
+    });
     expect(refs.every(ref => ref.size === 1)).toBe(true); expect([...refs[0]!][0]).not.toBe([...refs[1]!][0]);
     expect((await db().select().from(payments).where(eq(payments.id, active.paymentId)))[0]?.refundedMinor).toBe(active.amount * 2 / 3);
   });
