@@ -17,6 +17,7 @@ export const mediaStorageTransferRequests=pgTable("media_storage_transfer_reques
  observationCount:integer("observation_count").notNull().default(0),
  createdAt:createdAtColumn(),
 },t=>[
+ uniqueIndex("media_storage_original_mutating_request_idx").on(t.callId).where(sql`${t.descriptor}->>'kind' in ('object.put','object.delete','multipart.create','multipart.complete','multipart.abort')`),
  index("media_storage_transfer_requests_call_idx").on(t.callId,t.createdAt,t.id),
  index("media_storage_transfer_requests_state_idx").on(t.state,t.createdAt),
  check("media_storage_transfer_requests_state",sql`${t.state} in ('admitted','returned','failed','unknown','stopped')`),

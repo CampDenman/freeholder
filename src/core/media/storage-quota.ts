@@ -38,7 +38,7 @@ export function postgresStorageQuota(namespace: string, maxBytes: number): Stora
       await db().transaction(async tx => {
         // Same lock order as reserve; token binds the single accepted operation.
         await tx.execute(sql`SELECT namespace FROM storage_quota_state WHERE namespace=${namespace} FOR UPDATE`);
-        const changed = await tx.execute(sql`UPDATE storage_quota_objects SET bytes=${bytes},pending_token=NULL WHERE namespace=${namespace} AND object_key=${key} AND pending_token=${token} AND bytes>=${bytes} RETURNING object_key`);
+        const changed = await tx.execute(sql`UPDATE storage_quota_objects SET bytes=${bytes},pending_token=NULL,last_settled_token=${token}::uuid WHERE namespace=${namespace} AND object_key=${key} AND pending_token=${token} AND bytes>=${bytes} RETURNING object_key`);
         if (changed.length !== 1) throw new StorageQuotaError("storage_quota_operation_changed");
       });
     },

@@ -219,7 +219,8 @@ ALTER TABLE media_storage_transfer_calls DROP CONSTRAINT media_storage_transfer_
 ALTER TABLE media_storage_transfer_calls ADD CONSTRAINT media_storage_transfer_calls_kind CHECK(kind IN ('source_read','target_probe','target_put','target_verify','target_current','source_delete','source_absence','privacy_read','privacy_delete','privacy_absence','privacy_source_read','privacy_source_delete','privacy_source_absence','recovery_read'));
 --> statement-breakpoint
 CREATE TABLE media_storage_transfer_reviews (
- id uuid PRIMARY KEY DEFAULT gen_random_uuid(),object_id uuid NOT NULL REFERENCES media_storage_transfer_objects(id) ON DELETE RESTRICT,
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),object_id uuid REFERENCES media_storage_transfer_objects(id) ON DELETE RESTRICT,
+ object_receipt_id uuid REFERENCES media_object_writes(id) ON DELETE RESTRICT,multipart_operation_id uuid REFERENCES media_multipart_operations(id) ON DELETE RESTRICT,inventory_id uuid,
  call_id uuid NOT NULL REFERENCES media_storage_transfer_calls(id) ON DELETE RESTRICT,original_call_witness text NOT NULL,
  read_call_id uuid NOT NULL REFERENCES media_storage_transfer_calls(id) ON DELETE RESTRICT,outcome text NOT NULL,provider_evidence_digest text NOT NULL,
  stop_drain_id uuid REFERENCES media_storage_writer_drains(id) ON DELETE RESTRICT,permits_retry boolean NOT NULL DEFAULT false,
@@ -299,7 +300,7 @@ BEGIN
     OR ROW(NEW.physical_key,NEW.expected_revision,NEW.redacted_at) IS DISTINCT FROM ROW(OLD.physical_key,OLD.expected_revision,OLD.redacted_at) AND NOT minimizing THEN RAISE EXCEPTION 'Original physical caller admission is immutable' USING ERRCODE='23514'; END IF;
    IF OLD.observed_accepted_at IS NOT NULL AND NEW.observed_accepted_at IS DISTINCT FROM OLD.observed_accepted_at THEN RAISE EXCEPTION 'A positive original provider fact cannot be erased' USING ERRCODE='23514'; END IF;
    IF OLD.result_digest IS NOT NULL AND (ROW(NEW.returned_at,NEW.result_digest,NEW.result_sha256,NEW.result_bytes,NEW.result_absent,NEW.result_request_proof) IS DISTINCT FROM ROW(OLD.returned_at,OLD.result_digest,OLD.result_sha256,OLD.result_bytes,OLD.result_absent,OLD.result_request_proof) OR NEW.result_revision IS DISTINCT FROM OLD.result_revision AND NOT minimizing) THEN RAISE EXCEPTION 'Actual original physical return cannot be replaced' USING ERRCODE='23514'; END IF;
-   IF NEW.state='stopped' AND OLD.state<>'stopped' AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=NEW.stop_receipt_id AND review.call_id=OLD.id AND review.object_id=OLD.object_id) THEN RAISE EXCEPTION 'Actual caller stop requires its exact original review receipt' USING ERRCODE='23514'; END IF;
+   IF NEW.state='stopped' AND OLD.state<>'stopped' AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=NEW.stop_receipt_id AND review.call_id=OLD.id AND review.object_id IS NOT DISTINCT FROM OLD.object_id AND review.object_receipt_id IS NOT DISTINCT FROM OLD.object_receipt_id AND review.multipart_operation_id IS NOT DISTINCT FROM OLD.multipart_operation_id) THEN RAISE EXCEPTION 'Actual caller stop requires its exact original review receipt' USING ERRCODE='23514'; END IF;
   ELSIF TG_TABLE_NAME='media_storage_transfer_subjects' THEN
    IF ROW(NEW.id,NEW.object_id,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.object_id,OLD.created_at) OR OLD.redacted_at IS NOT NULL AND ROW(NEW.contact_id,NEW.redacted_at) IS DISTINCT FROM ROW(OLD.contact_id,OLD.redacted_at) OR NEW.redacted_at IS NOT NULL AND OLD.redacted_at IS NULL AND (NEW.contact_id IS NOT NULL OR NOT freeholder_media_transfer_object_retired(OLD.object_id)) THEN RAISE EXCEPTION 'Original subject membership cannot be rebound or erased before physical retirement' USING ERRCODE='23514'; END IF;
   ELSIF TG_TABLE_NAME='media_storage_writer_drains' THEN
@@ -411,13 +412,15 @@ CREATE TABLE media_storage_transfer_request_observations (
 CREATE UNIQUE INDEX media_storage_transfer_request_observations_request_idx ON media_storage_transfer_request_observations(request_id,ordinal);
 --> statement-breakpoint
 CREATE TABLE media_storage_provider_inventories (
- id uuid PRIMARY KEY DEFAULT gen_random_uuid(),plan_id uuid NOT NULL REFERENCES media_storage_transfer_plans(id) ON DELETE RESTRICT,
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),plan_id uuid REFERENCES media_storage_transfer_plans(id) ON DELETE RESTRICT,
+ object_receipt_id uuid REFERENCES media_object_writes(id) ON DELETE RESTRICT,multipart_operation_id uuid REFERENCES media_multipart_operations(id) ON DELETE RESTRICT,
+ original_witness text,proof_call_id uuid REFERENCES media_storage_transfer_calls(id) ON DELETE RESTRICT,
  anchor_call_id uuid REFERENCES media_storage_transfer_calls(id) ON DELETE RESTRICT,object_id uuid REFERENCES media_storage_transfer_objects(id) ON DELETE RESTRICT,
  side text NOT NULL,purpose text NOT NULL,binding jsonb NOT NULL,namespace text NOT NULL,state text NOT NULL DEFAULT 'capturing',
  first_digest text,confirmed_digest text,configuration jsonb,entry_count integer NOT NULL DEFAULT 0,total_bytes bigint NOT NULL DEFAULT 0,
  blocker text,completed_at timestamptz,redacted_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
  CONSTRAINT media_storage_provider_inventory_side CHECK(side IN ('source','target')),
- CONSTRAINT media_storage_provider_inventory_purpose CHECK(purpose IN ('baseline','retirement','erasure')),
+ CONSTRAINT media_storage_provider_inventory_purpose CHECK(purpose IN ('baseline','retirement','erasure','recovery')),
  CONSTRAINT media_storage_provider_inventory_state CHECK(state IN ('capturing','complete','blocked')),
  CONSTRAINT media_storage_provider_inventory_namespace CHECK(namespace ~ '^[a-f0-9]{64}$'),
  CONSTRAINT media_storage_provider_inventory_complete CHECK(state<>'complete' OR completed_at IS NOT NULL AND first_digest ~ '^[a-f0-9]{64}$' AND first_digest=confirmed_digest)
@@ -513,6 +516,11 @@ CREATE FUNCTION freeholder_media_provider_inventory_evidence_guard() RETURNS tri
 DECLARE header media_storage_provider_inventories; page media_storage_provider_inventory_pages; plan media_storage_transfer_plans; caller media_storage_transfer_calls; original_object uuid;
 BEGIN
  IF current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' OR TG_OP='DELETE' THEN RAISE EXCEPTION 'Use the shared original provider inventory writer' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='media_storage_provider_inventories' THEN
+  IF NEW.plan_id IS NULL THEN RETURN NEW; END IF;
+ ELSE
+  IF EXISTS(SELECT 1 FROM media_storage_provider_inventories WHERE id=NEW.inventory_id AND plan_id IS NULL) THEN RETURN NEW; END IF;
+ END IF;
  IF TG_TABLE_NAME='media_storage_provider_inventories' THEN
   SELECT * INTO plan FROM media_storage_transfer_plans WHERE id=NEW.plan_id;
   IF plan.id IS NULL OR NEW.namespace<>CASE WHEN NEW.side='source' THEN plan.source_namespace ELSE plan.target_namespace END OR NEW.binding IS DISTINCT FROM CASE WHEN NEW.side='source' THEN plan.original_source ELSE plan.original_target END THEN RAISE EXCEPTION 'Inventory belongs to the exact original private resource' USING ERRCODE='23514'; END IF;
@@ -683,3 +691,94 @@ END $$;
 --> statement-breakpoint
 CREATE CONSTRAINT TRIGGER media_original_quota_reservation AFTER UPDATE ON media_storage_transfer_calls DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_quota_reservation_guard();
 -- Full semantics are still unfinished. No request capability is published.
+
+--> statement-breakpoint
+-- One original context, never a fabricated transfer plan for ordinary work.
+ALTER TABLE media_storage_provider_inventories ADD CONSTRAINT media_storage_provider_inventory_parent CHECK(num_nonnulls(plan_id,object_receipt_id,multipart_operation_id)=1 AND (plan_id IS NULL OR original_witness IS NULL AND proof_call_id IS NULL));
+--> statement-breakpoint
+CREATE UNIQUE INDEX media_storage_provider_inventory_original_idx ON media_storage_provider_inventories(anchor_call_id,proof_call_id,purpose) WHERE plan_id IS NULL;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_original_inventory_evidence_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE header media_storage_provider_inventories; receipt media_object_writes; original media_storage_transfer_calls; proof media_storage_transfer_calls; caller media_storage_transfer_calls; page media_storage_provider_inventory_pages;
+BEGIN
+ IF TG_OP='DELETE' OR current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Keep immutable original provider inventory evidence' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='media_storage_provider_inventories' THEN
+  IF NEW.plan_id IS NOT NULL THEN RETURN NEW; END IF;
+  SELECT * INTO receipt FROM media_object_writes WHERE id=NEW.object_receipt_id;
+  SELECT * INTO original FROM media_storage_transfer_calls WHERE id=NEW.anchor_call_id;
+  SELECT * INTO proof FROM media_storage_transfer_calls WHERE id=NEW.proof_call_id;
+  IF NEW.multipart_operation_id IS NOT NULL OR NEW.object_id IS NOT NULL OR receipt.id IS NULL OR receipt.operation_kind<>'put' OR receipt.redacted_at IS NOT NULL OR receipt.deleted_at IS NOT NULL OR receipt.writer_finished_at IS NULL OR NEW.side<>'source' OR NEW.purpose<>'recovery' OR coalesce(NEW.original_witness,'') !~ '^[a-f0-9]{64}$' OR NEW.namespace IS DISTINCT FROM receipt.storage_namespace OR NEW.binding->>'namespace' IS DISTINCT FROM receipt.storage_namespace OR NEW.binding->>'kind' IS DISTINCT FROM receipt.storage_kind OR NEW.binding->'location' IS DISTINCT FROM receipt.storage_location THEN RAISE EXCEPTION 'Ordinary inventory must capture its exact intact original receipt/resource; multipart retirement remains unavailable' USING ERRCODE='23514'; END IF;
+  IF original.id IS NULL OR original.object_receipt_id IS DISTINCT FROM receipt.id OR original.kind<>'ordinary_put' OR original.returned_at IS NULL OR original.runtime_id IS DISTINCT FROM receipt.writer_runtime_id OR original.namespace IS DISTINCT FROM NEW.namespace OR original.physical_key IS DISTINCT FROM receipt.object_key OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=original.id) OR EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=original.id AND returned_at IS NULL) THEN RAISE EXCEPTION 'All original originating callers and requests must actually finish before portable recovery inventory' USING ERRCODE='23514'; END IF;
+  IF proof.id IS NULL OR proof.object_receipt_id IS DISTINCT FROM receipt.id OR proof.kind<>'ordinary_recovery_read' OR proof.state<>'returned' OR proof.returned_at IS NULL OR proof.result_revision IS NULL OR proof.result_request_proof IS NULL OR proof.result_absent IS NOT NULL OR proof.namespace IS DISTINCT FROM NEW.namespace OR proof.physical_key IS DISTINCT FROM receipt.object_key OR proof.result_sha256 IS DISTINCT FROM receipt.sha256 OR proof.result_bytes IS DISTINCT FROM receipt.bytes OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=original.id AND request.descriptor->>'kind'='object.put' AND request.id::text=proof.result_request_proof->>'id' AND request.token_digest=proof.result_request_proof->>'tokenDigest') THEN RAISE EXCEPTION 'Fresh full-byte provider proof must name this exact original physical request nonce' USING ERRCODE='23514'; END IF;
+  IF TG_OP='INSERT' THEN
+   IF NEW.state<>'capturing' OR NEW.first_digest IS NOT NULL OR NEW.confirmed_digest IS NOT NULL OR NEW.completed_at IS NOT NULL THEN RAISE EXCEPTION 'Capture the immutable original inventory before reading pages' USING ERRCODE='23514'; END IF;
+  ELSE
+   IF (to_jsonb(NEW)-ARRAY['state','first_digest','confirmed_digest','configuration','entry_count','total_bytes','blocker','completed_at','updated_at']) IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['state','first_digest','confirmed_digest','configuration','entry_count','total_bytes','blocker','completed_at','updated_at']) OR OLD.state<>'capturing' AND (to_jsonb(NEW)-'updated_at') IS DISTINCT FROM (to_jsonb(OLD)-'updated_at') OR OLD.first_digest IS NOT NULL AND NEW.first_digest IS DISTINCT FROM OLD.first_digest THEN RAISE EXCEPTION 'First original recovery inventory context and proof cannot change' USING ERRCODE='23514'; END IF;
+   IF NEW.state='complete' AND (NEW.first_digest IS DISTINCT FROM NEW.confirmed_digest OR EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages item JOIN media_storage_transfer_calls actual ON actual.id=item.call_id WHERE item.inventory_id=OLD.id AND (actual.state<>'returned' OR actual.returned_at IS NULL OR actual.object_receipt_id IS DISTINCT FROM receipt.id OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=actual.id AND request.state IN ('admitted','unknown')))) OR EXISTS(SELECT required.pass_number FROM generate_series(0,1) required(pass_number) WHERE NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages WHERE inventory_id=OLD.id AND pass=required.pass_number AND kind='configuration'))) THEN RAISE EXCEPTION 'Both complete original recovery inventories and all actual page requests must finish' USING ERRCODE='23514'; END IF;
+  END IF;
+ ELSIF TG_TABLE_NAME='media_storage_provider_inventory_pages' THEN
+  SELECT * INTO header FROM media_storage_provider_inventories WHERE id=NEW.inventory_id;
+  IF header.plan_id IS NOT NULL THEN RETURN NEW; END IF;
+  SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=NEW.call_id;
+  IF TG_OP<>'INSERT' OR header.id IS NULL OR header.state<>'capturing' OR caller.id IS NULL OR caller.object_receipt_id IS DISTINCT FROM header.object_receipt_id OR caller.kind<>'ordinary_retirement_inventory' OR caller.state<>'returned' OR caller.returned_at IS NULL OR caller.namespace IS DISTINCT FROM header.namespace OR NEW.cursor_digest<>freeholder_media_transfer_fact_digest(coalesce(NEW.cursor,'null'::jsonb)) THEN RAISE EXCEPTION 'Append only the actual original returned page to its original receipt inventory' USING ERRCODE='23514'; END IF;
+  IF NEW.kind<>'configuration' AND NEW.cursor IS NOT NULL AND NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages prior WHERE prior.inventory_id=header.id AND prior.pass=NEW.pass AND prior.kind=NEW.kind AND prior.next_cursor=NEW.cursor) THEN RAISE EXCEPTION 'The original provider cursor chain is incomplete' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO header FROM media_storage_provider_inventories WHERE id=NEW.inventory_id;
+  IF header.plan_id IS NOT NULL THEN RETURN NEW; END IF;
+  SELECT * INTO page FROM media_storage_provider_inventory_pages WHERE id=NEW.page_id;
+  IF TG_OP<>'INSERT' OR header.id IS NULL OR header.state<>'capturing' OR page.id IS NULL OR page.inventory_id IS DISTINCT FROM header.id OR page.pass<>NEW.pass OR NEW.original_object_id IS NOT NULL OR NEW.attribution<>'unattributed' OR NEW.ordinal<0 OR NEW.ordinal>=page.entry_count OR NEW.entry_digest<>freeholder_media_transfer_fact_digest(NEW.entry) OR NEW.key_digest<>encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(NEW.entry->>'key','UTF8')),'hex') THEN RAISE EXCEPTION 'Original recovery resource observations are immutable and never guessed ownership' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER original_provider_inventory_evidence BEFORE INSERT OR UPDATE OR DELETE ON media_storage_provider_inventories FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_inventory_evidence_guard();
+--> statement-breakpoint
+CREATE TRIGGER original_provider_inventory_page_evidence BEFORE INSERT OR UPDATE OR DELETE ON media_storage_provider_inventory_pages FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_inventory_evidence_guard();
+--> statement-breakpoint
+CREATE TRIGGER original_provider_inventory_entry_evidence BEFORE INSERT OR UPDATE OR DELETE ON media_storage_provider_inventory_entries FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_inventory_evidence_guard();
+-- Recovery service orchestration, exact stop review, physical retirement and
+-- ordinary privacy composition remain incomplete. NO capability is published.
+
+--> statement-breakpoint
+-- An original caller cannot issue an invisible second mutating request. Every
+-- retry must have an explicit new authorized original intent/recovery plan.
+CREATE UNIQUE INDEX media_storage_original_mutating_request_idx ON media_storage_transfer_requests(call_id) WHERE descriptor->>'kind' IN ('object.put','object.delete','multipart.create','multipart.complete','multipart.abort');
+--> statement-breakpoint
+ALTER TABLE storage_quota_objects ADD COLUMN last_settled_token uuid;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_original_quota_settlement_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='INSERT' THEN
+  IF NEW.last_settled_token IS NOT NULL THEN RAISE EXCEPTION 'A historical quota settlement cannot be invented' USING ERRCODE='23514'; END IF;
+ ELSIF NEW.last_settled_token IS DISTINCT FROM OLD.last_settled_token AND (NEW.last_settled_token IS NULL OR NEW.last_settled_token IS DISTINCT FROM OLD.pending_token OR NEW.pending_token IS NOT NULL OR NEW.bytes>OLD.bytes) THEN RAISE EXCEPTION 'Settle only the exact originally reserved quota token and byte bound' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_original_quota_settlement BEFORE INSERT OR UPDATE ON storage_quota_objects FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_quota_settlement_guard();
+-- Exact physical quota retirement and key minimization remain unfinished;
+-- this records actual settlement identity without enabling a release path.
+
+--> statement-breakpoint
+ALTER TABLE media_storage_transfer_reviews ADD CONSTRAINT media_storage_transfer_review_parent CHECK(num_nonnulls(object_id,object_receipt_id,multipart_operation_id)=1);
+--> statement-breakpoint
+ALTER TABLE media_storage_transfer_reviews ADD CONSTRAINT media_storage_transfer_review_inventory_fk FOREIGN KEY(inventory_id) REFERENCES media_storage_provider_inventories(id) ON DELETE RESTRICT;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_original_review_context_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE caller media_storage_transfer_calls; proof media_storage_transfer_calls; inventory media_storage_provider_inventories;
+BEGIN
+ IF NEW.object_id IS NOT NULL THEN
+  IF NEW.inventory_id IS NOT NULL THEN RAISE EXCEPTION 'Original transfer review cannot borrow an ordinary inventory' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+ END IF;
+ SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=NEW.call_id;
+ SELECT * INTO proof FROM media_storage_transfer_calls WHERE id=NEW.read_call_id;
+ SELECT * INTO inventory FROM media_storage_provider_inventories WHERE id=NEW.inventory_id;
+ IF NEW.multipart_operation_id IS NOT NULL OR caller.id IS NULL OR caller.kind<>'ordinary_put' OR caller.object_receipt_id IS DISTINCT FROM NEW.object_receipt_id OR caller.returned_at IS NULL OR caller.result_digest IS NULL OR NEW.stop_drain_id IS NOT NULL OR NEW.permits_retry OR NEW.outcome<>'applied' OR EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=caller.id AND returned_at IS NULL) THEN RAISE EXCEPTION 'This portable review can close only an actually finished original PUT; crash/absence/multipart review remains unavailable' USING ERRCODE='23514'; END IF;
+ IF proof.id IS NULL OR proof.object_receipt_id IS DISTINCT FROM NEW.object_receipt_id OR proof.kind<>'ordinary_recovery_read' OR proof.state<>'returned' OR proof.returned_at IS NULL OR proof.result_request_proof IS NULL OR inventory.id IS NULL OR inventory.object_receipt_id IS DISTINCT FROM NEW.object_receipt_id OR inventory.anchor_call_id IS DISTINCT FROM caller.id OR inventory.proof_call_id IS DISTINCT FROM proof.id OR inventory.state<>'complete' OR inventory.purpose<>'recovery' THEN RAISE EXCEPTION 'The original review must retain the exact actual nonce-bound read and complete immutable inventory' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_original_review_context BEFORE INSERT ON media_storage_transfer_reviews FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_review_context_guard();
+-- Known-finished applied PUT review is prepared. Crash/stop, retirement,
+-- multipart/ordinary privacy closure remain incomplete; capability UNPUBLISHED.

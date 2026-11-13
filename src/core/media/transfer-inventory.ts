@@ -22,7 +22,7 @@ function kinds(row: Inventory) { return row.binding.kind === "s3" ? ["objects", 
 const wireDigest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 async function lockedInventory(tx: Tx, id: string, actor: Actor) {
   const [identity] = await tx.select({ planId: inventories.planId }).from(inventories).where(eq(inventories.id, id)).limit(1);
-  if (!identity) transferConflict("The original provider inventory header is missing.");
+  if (!identity?.planId) transferConflict("The original transfer provider inventory header is missing.");
   const work = await lockedTransfer(tx, identity.planId);
   const [inventory] = await tx.select().from(inventories).where(eq(inventories.id, id)).limit(1).for("update");
   if (!inventory || inventory.namespace !== (inventory.side === "source" ? work.plan.sourceNamespace : work.plan.targetNamespace)) transferConflict();
@@ -74,7 +74,7 @@ export async function appendProviderInventoryPage(tx: Tx, input: ProviderInvento
   if (page?.entries.length) await tx.insert(entries).values(page.entries.map((entry,ordinal) => ({ ordinal,entryDigest:transferDigest(entry),inventoryId: inventory.id, pageId: saved!.id, pass: input.pass, entry, keyDigest: objectKeyDigest(entry.key), resourceDigest: inventoryResourceDigest(entry), attribution: inventory.side === "target" && inventory.purpose === "baseline" ? "preexisting_target" as const : "unattributed" as const })));
   return { ok: true as const };
 }
-async function passContents(tx: Tx, inventory: Inventory, pass: 0 | 1) {
+export async function readProviderInventoryPass(tx: Tx, inventory: Inventory, pass: 0 | 1) {
   const saved = await tx.select().from(pages).where(and(eq(pages.inventoryId, inventory.id), eq(pages.pass, pass))).orderBy(asc(pages.createdAt), asc(pages.id));
   const config = saved.filter(row => row.kind === "configuration");
   if (config.length !== 1 || !config[0]!.configuration) transferConflict("The original provider policy page is incomplete.");
@@ -90,7 +90,7 @@ async function passContents(tx: Tx, inventory: Inventory, pass: 0 | 1) {
 export async function finishProviderInventory(tx: Tx, id: string, actor: Actor) {
   const { inventory, objects } = await lockedInventory(tx, id, actor);
   if (inventory.state !== "capturing") return inventory;
-  const first = await passContents(tx, inventory, 0), confirmed = await passContents(tx, inventory, 1);
+  const first = await readProviderInventoryPass(tx, inventory, 0), confirmed = await readProviderInventoryPass(tx, inventory, 1);
   const firstDigest = providerInventoryDigest(first.configuration, first.entries), confirmedDigest = providerInventoryDigest(confirmed.configuration, confirmed.entries);
   const provenOriginals:Array<{id:string;key:string;revision:TransferRevision}>=[];
   let blocker: string | null = firstDigest !== confirmedDigest ? "provider_inventory_changed" : null;

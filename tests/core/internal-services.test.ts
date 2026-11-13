@@ -16,6 +16,17 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  // C1.12/C11.08: exact original transfer/request/recovery phases stay private.
+  "media.captureTransferErasure",
+  "media.admitTransferErasureCall",
+  "media.finishTransferErasure",
+  "media.captureProviderTransferErasureInventory",
+  "media.readProviderTransferErasureInventory",
+  "media.appendProviderTransferErasureInventory",
+  "media.finishProviderTransferErasureInventory",
+  "media.eraseStorageTransferLineage",
+  "media.reconcileStorageTransferErasure",
+
   // C1.08/C3.47: guarded original-source cleanup and saved HTTP runtime.
   "imports.completeOriginalSourceErasure",
   "imports.prepareOriginalSourceErasure",
@@ -381,6 +392,39 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // C1.12/C11.08: exact original transfer/request/recovery phases stay private.
+  "media.captureTransferErasure",
+  "media.admitTransferErasureCall",
+  "media.finishTransferErasure",
+  "media.captureProviderTransferErasureInventory",
+  "media.readProviderTransferErasureInventory",
+  "media.appendProviderTransferErasureInventory",
+  "media.finishProviderTransferErasureInventory",
+  "media.eraseStorageTransferLineage",
+  "media.reconcileStorageTransferErasure",
+  "media.captureStorageTransfer",
+  "media.captureStorageTransferWork",
+  "media.admitStorageTransferCall",
+  "media.verifyStorageTransferCopy",
+  "media.verifyOriginalProviderTransferRead",
+  "media.adoptStorageTransfer",
+  "media.finishStorageTransferRetirement",
+  "media.captureProviderTransferInventory",
+  "media.readProviderTransferInventory",
+  "media.appendProviderTransferInventoryPage",
+  "media.finishProviderTransferInventory",
+  "media.captureTransferReview",
+  "media.admitTransferReviewRead",
+  "media.applyTransferReview",
+  "media.captureOriginalPutRecovery",
+  "media.admitOriginalPutRecoveryRead",
+  "media.captureOriginalPutRecoveryInventory",
+  "media.readOriginalPutRecoveryInventory",
+  "media.admitOriginalPutInventoryRequest",
+  "media.appendOriginalPutInventoryPage",
+  "media.finishOriginalPutRecoveryInventory",
+  "media.applyOriginalPutRecovery",
+
   // C1.08/C3.47: private original-source and bounded public-advance phases.
   "imports.completeOriginalSourceErasure",
   "imports.prepareOriginalSourceErasure",

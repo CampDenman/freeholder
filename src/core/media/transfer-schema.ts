@@ -157,7 +157,10 @@ export const mediaStorageWriterDrains=pgTable("media_storage_writer_drains",{
 /** Fresh human review appends; it never rewrites an original return or ACK. */
 export const mediaStorageTransferReviews=pgTable("media_storage_transfer_reviews",{
  id:uuid("id").primaryKey().defaultRandom(),
- objectId:uuid("object_id").notNull().references(()=>mediaStorageTransferObjects.id,{onDelete:"restrict"}),
+ objectId:uuid("object_id").references(()=>mediaStorageTransferObjects.id,{onDelete:"restrict"}),
+ objectReceiptId:uuid("object_receipt_id").references(()=>mediaObjectWrites.id,{onDelete:"restrict"}),
+ multipartOperationId:uuid("multipart_operation_id").references(()=>mediaMultipartOperations.id,{onDelete:"restrict"}),
+ inventoryId:uuid("inventory_id"),
  callId:uuid("call_id").notNull().references(()=>mediaStorageTransferCalls.id,{onDelete:"restrict"}),
  originalCallWitness:text("original_call_witness").notNull(),
  readCallId:uuid("read_call_id").notNull().references(()=>mediaStorageTransferCalls.id,{onDelete:"restrict"}),
@@ -167,6 +170,7 @@ export const mediaStorageTransferReviews=pgTable("media_storage_transfer_reviews
  permitsRetry:boolean("permits_retry").notNull().default(false),
  reviewedBy:text("reviewed_by").notNull(),createdAt:createdAtColumn(),
 },t=>[
+ check("media_storage_transfer_review_parent",sql`num_nonnulls(${t.objectId},${t.objectReceiptId},${t.multipartOperationId})=1`),
  index("media_storage_transfer_reviews_call_idx").on(t.callId,t.createdAt),
  check("media_storage_transfer_reviews_outcome",sql`${t.outcome} in ('applied','not_applied','retired')`),
  check("media_storage_transfer_reviews_digests",sql`${t.originalCallWitness} ~ '^[a-f0-9]{64}$' and ${t.providerEvidenceDigest} ~ '^[a-f0-9]{64}$'`),

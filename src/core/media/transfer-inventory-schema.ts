@@ -6,12 +6,17 @@ import {bigint,check,index,integer,jsonb,pgTable,text,timestamp,uniqueIndex,uuid
 import type {StorageBinding} from "@/adapters/storage/types";
 import type {TransferInventoryConfiguration,TransferInventoryEntry} from "../../../scripts/media-transfer.mjs";
 import {createdAtColumn,updatedAtColumn} from "@/core/db/columns";
+import {mediaObjectWrites} from "./write-schema";
+import {mediaMultipartOperations} from "./multipart-schema";
 import {mediaStorageTransferCalls,mediaStorageTransferObjects,mediaStorageTransferPlans} from "./transfer-schema";
 export const mediaStorageProviderInventories=pgTable("media_storage_provider_inventories",{
- id:uuid("id").primaryKey().defaultRandom(),planId:uuid("plan_id").notNull().references(()=>mediaStorageTransferPlans.id,{onDelete:"restrict"}),
+ id:uuid("id").primaryKey().defaultRandom(),planId:uuid("plan_id").references(()=>mediaStorageTransferPlans.id,{onDelete:"restrict"}),
+ objectReceiptId:uuid("object_receipt_id").references(()=>mediaObjectWrites.id,{onDelete:"restrict"}),
+ multipartOperationId:uuid("multipart_operation_id").references(()=>mediaMultipartOperations.id,{onDelete:"restrict"}),
+ originalWitness:text("original_witness"),proofCallId:uuid("proof_call_id").references(()=>mediaStorageTransferCalls.id,{onDelete:"restrict"}),
  anchorCallId:uuid("anchor_call_id").references(()=>mediaStorageTransferCalls.id,{onDelete:"restrict"}),
  objectId:uuid("object_id").references(()=>mediaStorageTransferObjects.id,{onDelete:"restrict"}),
- side:text("side",{enum:["source","target"]}).notNull(),purpose:text("purpose",{enum:["baseline","retirement","erasure"]}).notNull(),
+ side:text("side",{enum:["source","target"]}).notNull(),purpose:text("purpose",{enum:["baseline","retirement","erasure","recovery"]}).notNull(),
  binding:jsonb("binding").$type<StorageBinding>().notNull(),namespace:text("namespace").notNull(),
  state:text("state",{enum:["capturing","complete","blocked"]}).notNull().default("capturing"),
  firstDigest:text("first_digest"),confirmedDigest:text("confirmed_digest"),
@@ -20,11 +25,13 @@ export const mediaStorageProviderInventories=pgTable("media_storage_provider_inv
  blocker:text("blocker"),completedAt:timestamp("completed_at",{withTimezone:true}),redactedAt:timestamp("redacted_at",{withTimezone:true}),
  createdAt:createdAtColumn(),updatedAt:updatedAtColumn(),
 },t=>[
+ check("media_storage_provider_inventory_parent",sql`num_nonnulls(${t.planId},${t.objectReceiptId},${t.multipartOperationId})=1 and (${t.planId} is null or (${t.originalWitness} is null and ${t.proofCallId} is null))`),
+ uniqueIndex("media_storage_provider_inventory_original_idx").on(t.anchorCallId,t.proofCallId,t.purpose).where(sql`${t.planId} is null`),
  uniqueIndex("media_storage_provider_inventory_baseline_idx").on(t.planId,t.side).where(sql`${t.purpose}='baseline'`),
  uniqueIndex("media_storage_provider_inventory_anchor_idx").on(t.objectId,t.side,t.purpose,t.anchorCallId),
  index("media_storage_provider_inventory_object_idx").on(t.objectId,t.createdAt),
  check("media_storage_provider_inventory_side",sql`${t.side} in ('source','target')`),
- check("media_storage_provider_inventory_purpose",sql`${t.purpose} in ('baseline','retirement','erasure')`),
+ check("media_storage_provider_inventory_purpose",sql`${t.purpose} in ('baseline','retirement','erasure','recovery')`),
  check("media_storage_provider_inventory_state",sql`${t.state} in ('capturing','complete','blocked')`),
  check("media_storage_provider_inventory_namespace",sql`${t.namespace} ~ '^[a-f0-9]{64}$'`),
  check("media_storage_provider_inventory_complete",sql`${t.state}<>'complete' or (${t.completedAt} is not null and ${t.firstDigest} ~ '^[a-f0-9]{64}$' and ${t.firstDigest}=${t.confirmedDigest})`),
