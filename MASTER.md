@@ -13956,7 +13956,7 @@ whatever is best for the people using the site.
   with independent UTC ledger and empty client inventory. Exact original
   create-platform/protocol fields remainNULL; no merchant request is invented.
   New source composition with948c4544 and4064c081/4e5d05d7 adds stop/current
-  tails after complete3a; unpublished80 SHA1e7fc9e0 is UNQUALIFIED/unapplied.
+  tails after complete3a; unpublished80 SHAc1893b08 is UNQUALIFIED/unapplied.
   Root witnesses include exact current-receipt children and bounded counts.
   Current cash/native regressions, recovery, amendments/future invoice lineage,
   upgrade/SDK/browser/provider acceptance remain required; model admission is

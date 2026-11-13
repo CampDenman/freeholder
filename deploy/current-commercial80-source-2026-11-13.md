@@ -77,7 +77,7 @@ canonical invoice/contact ownership unchanged; it has not run.
 
 The assembler appends the two owned stop/current tails after the complete3a
 prefix. New unpublished80 SHA-256 is
-`1e7fc9e0223b5b24facdf18dbf3bd3fdb9d6a5c892f5138cf22d117e78d64547`.
+`c1893b0844f49a139832dee8ba614cdfb4a828713f23e88fb5c6ab669d3c702d`.
 No prior published migration or journal entry changes. This new composition
 is unqualified and has not been applied to a database. It requires a NEW
 named normal0–80 database, actual model/guard parity, regression of all five

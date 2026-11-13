@@ -3181,7 +3181,7 @@ END $$;
 CREATE TRIGGER subscription_schedule_phase_stopped_facts BEFORE INSERT OR UPDATE ON subscription_provider_schedule_resources FOR EACH ROW EXECUTE FUNCTION freeholder_phase_schedule_quiescence_guard();
 --> statement-breakpoint
 -- Source: deploy/legacy-bank-current80.fragment.sql
--- SHA256: 9a1878f8be36ed6f4470bb338bedccbb029f1471b8daa74720121a60f802980d
+-- SHA256: e0c1978a94249de8cd8beecd3a8080fc92faea36423ac5c7d11bb0b889f8db6c
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- C5.19/C12.38: UNASSEMBLED suffix after complete root3a. NEW DB/hash only.
@@ -3245,7 +3245,7 @@ BEGIN
   OR actual_finish.caller_instance_id IS DISTINCT FROM (original_read.caller->>'id')::uuid OR exact_count<>1
   OR before_revision.incomplete OR after_revision.incomplete OR before_revision.revision IS DISTINCT FROM original_read.source_revision
   OR NEW.resolved_revision IS DISTINCT FROM after_revision.revision OR NEW.raw_status IS DISTINCT FROM actual_raw
-  OR NEW.status IS DISTINCT FROM CASE WHEN actual_raw IN('pending','requires_action','succeeded','failed','canceled') THEN actual_raw ELSE NULL END THEN
+  OR NEW.status IS DISTINCT FROM (CASE WHEN actual_raw IN('pending','requires_action','succeeded','failed','canceled') THEN actual_raw ELSE NULL END) THEN
   RAISE EXCEPTION 'Retain the actual returned caller and complete unchanged exact-resource evidence before current bank proof' USING ERRCODE='55000';
  END IF;
  RETURN NEW;
