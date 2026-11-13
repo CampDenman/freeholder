@@ -13868,6 +13868,16 @@ whatever is best for the people using the site.
   merge witnesses, paid/returned cash, missing/restored queue recovery, late
   positives, amendments and complete browser/provider acceptance remain open.
   Provider phase admission remains false; C1.08/C12.38 and stable stay open.
+  Separate recovery controls at885a37f2 then genuinely failed: a restored
+  local-mode change allowed agreement-erased status and local credentials
+  minimization despite an active original provider resource(5.805s); missing
+  completed original money payload caused the repair transition to roll back,
+  leaving the request completed despite unknown resource/pending cohort(5.875s).
+  Both actual populated failures are preserved in separate NEW V10 clones with
+  thirteen original table count/SHA256 goldens, unchanged SQL881a/journal81 and
+  drained clients. No actual provider-account failure or repaired AFTER pass is
+  claimed. Source repairs and unchanged controls remain required; the earlier
+  four targeted passes do not establish complete privacy acceptance.
   Current-main financial composition 2026-11-12: exact `73e145af` merges protected
   main `bad846e4` (#694) and both fee repairs while preserving SQL958, all published
   migrations and helper `46a6ec02`. Full source gates passed at `5f53daf5` (384 assertions,

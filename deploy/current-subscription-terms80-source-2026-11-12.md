@@ -82,3 +82,39 @@ Provider admission remains false. Actual terms/profile merge witnesses, mutable
 local-mode and missing original-finisher recovery controls, paid/returned cash,
 late positive recovery, amendments, browser/SDK and full provider acceptance
 remain required. This targeted result leaves C1.08/C12.38 and stable open.
+
+## Two separate recovery controls: genuine failures preserved
+
+Test-only `885a37f2` adds two controls without changing the four earlier
+assertions or their deadlines; a shared seed extraction leaves their behavior
+unchanged. Full incremental Node22 types and fixture lint passed. Each new case
+ran separately with its original60-second deadline and bail=1 on SQL881a/V10.
+
+The changed-local-mode control genuinely failed in5.805s: the declared restored
+local billingMode was manual while the retained original create journal and
+provider resource stayed active. Real fulfillment incorrectly marked
+subscriptions.agreements erased/pending0 and admitted no agreement cohort; local
+methods/customers were already0. commerce.money remained pending1 and the whole
+request in_progress. No physical DELETE occurred. This is a defect in this
+unreleased source candidate, not evidence of an affected actual provider account.
+
+The missing-finisher control genuinely failed in5.875s. It first completed the
+actual original queued workflow, then omitted only the original money queue
+payload while preserving its claim/hash and all original financial/cancellation
+history. An explicitly declared restored-resource uncertainty and actual repair
+admission committed. The real repair worker refused the missing payload, but its
+recovery transaction rolled back: request status stayed completed with both
+scopes erased/pending0 while the original resource was unknown/recovery_pending
+and its cohort pending. Original provider DELETE counts remained1/1; no new cash
+or provider event was fabricated.
+
+Before any next fixture reset, each actual failure was independently read and
+cloned to its own NEW named database:
+`freeholder_buyer_localmode80_populated_before_v10_test_20261112` and
+`freeholder_buyer_missing80_populated_before_v10_test_20261112`. Thirteen original
+privacy/agreement/provider/credential/queue tables retain exact count and SHA256
+goldens, with unchanged81-entry journal and SQL881a hash. All database clients
+drained. These snapshots must not be reset or migrated in place. Native JSON,
+logs, independent ledgers and clone proofs remain under
+`/tmp/freeholder-current-buyer-recovery885-*`. No retry or repair pass is claimed
+here; the source repairs and unchanged AFTER controls remain required.
