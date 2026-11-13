@@ -6,6 +6,7 @@ import legacyBankReadServices from "./legacy-bank-read-service";
 import creditDispositionServices from "./credit-disposition";
 import creditApplicationServices from "./credit-application-service";
 import commercialAttestationServices from "./commercial-attestations";
+import agreementFeeServices from "./agreement-fee-service";
 import principalAuthorityServices from "./principal-authority";
 import invoiceServices from "./invoice-service";
 import buyerMoneyErasureServices from "./buyer-money-erasure";
@@ -64,6 +65,7 @@ import "./funnel";
 export default [
   ...commercialAttestationServices,
   ...principalAuthorityServices,
+  ...agreementFeeServices,
   ...creditDispositionServices,
   ...creditApplicationServices,
   ...legacyBankReadServices,

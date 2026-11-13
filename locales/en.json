@@ -9170,5 +9170,12 @@
   "subscriptions.proration.state.awaiting_effective": "Consideration is complete; access changes at the accepted time.",
   "subscriptions.proration.state.applied": "The fully paid change has taken effect.",
   "subscriptions.proration.state.cancelled": "The original change is cancelled; retained money and credit still have their original history.",
-  "subscriptions.proration.state.review": "The original change needs money and consent review."
+  "subscriptions.proration.state.review": "The original change needs money and consent review.",
+  "agreementCommission.title": "Original subscription commission",
+  "agreementCommission.expected": "Expected separate merchant receivable at full settlement",
+  "agreementCommission.notice": "Commission owed is separate from actual remittance. Recorded remittances are attestations, not independent bank verification. Refunds preserve valid cash and applied credit consideration under their frozen fee rules; commission may remain or move to this receivable when an original cash fee is returned. Any excess remittance remains due back against its original receipt.",
+  "agreementCommission.realized": "Actual full canonical settlement has established eligibility. Current duty includes retained cash and noncash consideration.",
+  "agreementCommission.pending": "Actual full canonical settlement or original recovery is pending. Expected commission is not collected money.",
+  "subscriptions.proration.feeReceivable": "Expected separate merchant commission receivable: {amount}. Original fee obligations and actual remittance are distinct.",
+  "subscriptions.proration.feeReceivableNotice": "Merchant commission is reconciled against all retained cash and applied original credit after actual full settlement. A cash refund can leave commission owed on retained credit or move an original returned cash fee into a separate merchant receivable. Original fee epochs, actual remittance and excess-return duties remain separate."
 }

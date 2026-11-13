@@ -66,6 +66,7 @@ export function GrossProration({ id, audience, locale, offered, status }: { id: 
       <dl className="grid gap-2 text-sm">{([ ["newDebit", result.debitNetMinor + result.debitTaxMinor], ["oldCredit", result.creditNetMinor + result.creditTaxMinor], ["applied", result.creditAppliedMinor], ["cash", result.cashDueMinor], ["residual", result.residualCreditMinor] ] as const).map(([key, amount]) => <div key={key} className="flex justify-between gap-4"><dt>{t(`subscriptions.proration.${key}`)}</dt><dd className="font-mono">{money(amount)}</dd></div>)}</dl>
       {result.originalTrialEndsAt ? <Callout>{t("subscriptions.proration.trial", { date: date(result.originalTrialEndsAt) })}</Callout> : null}
       {result.feeReview ? <div className="grid gap-2 text-sm"><p>{t("subscriptions.proration.feeCarry", { amount: money(result.feeReview.appliedFeeObligationMinor), proved: money(result.feeReview.appliedFeeProvenCollectedMinor) })}</p>
+        {result.feeReview.separateMerchantReceivableMinor > 0 ? <p>{t("subscriptions.proration.feeReceivable", { amount: money(result.feeReview.separateMerchantReceivableMinor) })}</p> : null}
         {result.feeReview.originalSourceDebt || result.feeReview.originalOverTargetMinor > 0 ? <Callout tone="warning">{t("subscriptions.proration.feeDebt")}</Callout> : null}</div> : null}
       {result.requiresMerchantReview ? <Callout tone="warning">{t("subscriptions.proration.merchantReview")}</Callout> : null}
       <p className="whitespace-pre-wrap text-sm text-ink-muted">{result.noticeSnapshot.text}</p>

@@ -96,6 +96,7 @@ export default async function InvoiceDetailPage({
         </p>
       </div>
 
+      {invoice.sourceType === "subscription" && invoice.sourceId?.split(":")[1] === "proration" && invoice.totalMinor > 0 ? <a className="text-accent underline" href={`/admin/invoices/${invoice.id}/commission`}>{t("agreementCommission.title")}</a> : null}
       {errorCode ? (
         <Callout tone="danger" icon={<WarningCircle size={17} weight="fill" />}>
           {t(`invoices.error.${errorCode}`)}

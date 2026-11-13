@@ -9170,5 +9170,12 @@
   "subscriptions.proration.state.awaiting_effective": "Le règlement est complet ; l’accès change à l’heure acceptée.",
   "subscriptions.proration.state.applied": "Le changement intégralement payé a pris effet.",
   "subscriptions.proration.state.cancelled": "Le changement initial est annulé ; les fonds et l’avoir conservés gardent leur historique.",
-  "subscriptions.proration.state.review": "Le changement initial exige un examen financier et du consentement."
+  "subscriptions.proration.state.review": "Le changement initial exige un examen financier et du consentement.",
+  "agreementCommission.title": "Commission d’abonnement d’origine",
+  "agreementCommission.expected": "Créance distincte prévue sur le marchand au règlement complet",
+  "agreementCommission.notice": "La commission due est distincte du versement réel. Les versements enregistrés sont des attestations, sans vérification bancaire indépendante. Les remboursements conservent les contreparties valides en espèces et en avoir selon leurs règles de commission figées ; la commission peut rester due ou devenir une créance distincte si une commission sur espèces est rendue. Tout trop-perçu reste à restituer au titre de son reçu d’origine.",
+  "agreementCommission.realized": "Le règlement canonique complet réel a établi l’admissibilité. L’obligation actuelle comprend les contreparties conservées en espèces et en avoir.",
+  "agreementCommission.pending": "Le règlement canonique complet réel ou la récupération d’origine est en attente. Une commission prévue n’est pas un montant encaissé.",
+  "subscriptions.proration.feeReceivable": "Créance distincte prévue de commission sur le marchand : {amount}. L’obligation d’origine et le versement réel sont distincts.",
+  "subscriptions.proration.feeReceivableNotice": "La commission du marchand est rapprochée de toutes les contreparties conservées en espèces et en avoir d’origine après le règlement complet réel. Un remboursement en espèces peut laisser une commission due sur l’avoir conservé ou transformer une commission sur espèces rendue en créance distincte sur le marchand. Les règles de commission d’origine, les versements réels et les restitutions de trop-perçus restent distincts."
 }

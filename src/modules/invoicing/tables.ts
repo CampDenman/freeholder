@@ -57,3 +57,4 @@ export { merchantRefundRequests, merchantRefundReservationRetirements, merchantR
 export { merchantRefundObservationCaptures, merchantRefundStateReads, merchantRefundStateReadFinishes, merchantRefundCurrentReceipts } from "./merchant-refund-current-schema";
 
 export { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes } from "./legacy-bank-read-schema";
+export * from "./agreement-fee-schema";

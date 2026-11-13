@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getService, type ServiceContext } from "@/core/service";
 import { invoiceMerchantTaxQuoteLines, invoiceMerchantTaxQuotes } from "@/modules/invoicing/merchant-tax-schema";
 import { invoiceLines, invoices } from "@/modules/invoicing/schema";
+import { agreementFeeSubscriptionDebt } from "@/modules/invoicing/agreement-fee-state";
 import { payments } from "@/modules/invoicing/schema";
 import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agreement-schema";
 import { subscriptionProviderScheduleOperations } from "./provider-schedule-schema";
@@ -25,7 +26,7 @@ export async function merchantAgreementScheduleState(ctx:ServiceContext,agreemen
     const offline = await ctx.tx.select({ paymentId: payments.id }).from(payments).innerJoin(invoices,eq(invoices.id,payments.invoiceId))
       .where(and(eq(payments.provider,"manual"),eq(invoices.sourceType,"subscription"),sql`split_part(${invoices.sourceId},':',1)=${agreement.subscription.id}`)).limit(5001);
     const [pendingProration] = await ctx.tx.execute<{ pending:boolean }>(sql`select exists(select 1 from subscription_prorations p where p.subscription_id=${agreement.subscription.id}::uuid and p.state not in('applied','cancelled')) as pending`);
-    if(offline.length>5000||pendingProration?.pending)return {safe:false,external};
+    if(offline.length>5000||pendingProration?.pending||await agreementFeeSubscriptionDebt(ctx,agreement.subscription.id))return {safe:false,external};
     for(const original of offline){
       const debt=getService("invoicing.merchantPaymentRecoveryDebt");
       if(!debt||z.object({pending:z.boolean()}).passthrough().parse(await ctx.callAsSystem(debt,{paymentId:original.paymentId})).pending)return {safe:false,external};

@@ -39,6 +39,8 @@ import {
   type Tx,
 } from "@/core/service";
 import { listed, uuid } from "@/core/contract";
+import { exportAgreementFeeHistory } from "./agreement-fee-witnesses";
+import { captureAgreementFeeCashAssignment } from "./agreement-fee-store";
 import { invoiceOutstanding, invoiceSettled } from "./invoice-balance";
 import {
   creditNoteRow,
@@ -308,7 +310,7 @@ registerContactPrivacySource({
   scope: "commerce.money",
   retentionScopes: ["subscriptions.agreements"],
   tables: ["invoices", "tax_exemptions", "payment_provider_customers", "payment_methods", "merchant_payment_requests", "merchant_payment_dispatches", "merchant_payment_creation_refusals", "merchant_payment_retirement_acks", "merchant_payment_terminal_receipts", "merchant_payment_observations", "merchant_fee_refunds", "merchant_fee_observations",
-    "commercial_payment_attestations", "commercial_refund_attestations", "commercial_fee_attestations", "invoice_credit_funding", "invoice_credit_reservations", "invoice_credit_applications", "invoice_credit_releases"],
+    "commercial_payment_attestations", "commercial_refund_attestations", "commercial_fee_attestations", "invoice_credit_funding", "invoice_credit_reservations", "invoice_credit_applications", "invoice_credit_releases", "agreement_fee_duties", "agreement_fee_credit_assignments", "agreement_fee_cash_assignments", "agreement_fee_eligibility", "agreement_fee_remittances"],
   exportData: async (tx, contactId) => {
     const owned = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.contactId, contactId));
     const ids = owned.map((row) => row.id);
@@ -316,6 +318,7 @@ registerContactPrivacySource({
       invoices: await Promise.all(ids.map((id) => invoiceBundle(tx, id))),
       merchantRecovery: await exportMerchantRecoveryHistory(tx, ids),
       originalCreditAndExternalMoney: await exportProrationMoney(tx, ids),
+      originalCommissionAssignments: await exportAgreementFeeHistory(tx, ids),
       taxExemptions: await tx.select().from(taxExemptions).where(eq(taxExemptions.contactId, contactId)),
       paymentProviderCustomers: await tx.select().from(paymentProviderCustomers).where(eq(paymentProviderCustomers.contactId, contactId)),
       paymentMethods: await tx.select().from(paymentMethods).where(eq(paymentMethods.contactId, contactId)),
@@ -964,6 +967,7 @@ export const createPayment = defineService({
         applicationFeeMinor: routing.applicationFeeMinor, providerApiVersion: input.method === "provider_schedule" ? routing.providerApiVersion as "2026-10-28.endive" : null, originKind: input.method === "provider_schedule" ? "provider_schedule" : "attempt",
         providerSubscriptionRef: routing.providerSubscriptionRef, providerInvoiceRef: routing.providerInvoiceRef, providerPaymentIntentRef: routing.providerPaymentIntentRef, providerChargeRef: routing.providerChargeRef, originalChargeReceiptId: routing.originalChargeReceiptId });
     } else if (routing.providerAccountId) await ctx.tx.insert(paymentMerchantRoutes).values({ paymentId: created!.id, providerAccountId: routing.providerAccountId, applicationFeeMinor: routing.applicationFeeMinor });
+    if (routing.providerPlatformAccountId && "agreementSubscriptionId" in routing && routing.agreementSubscriptionId) await captureAgreementFeeCashAssignment(ctx, created!.id);
     await captureMerchantPaymentRequest(ctx, created!, invoice, routing);
     await stateEvent(ctx, "payment", created!.id, null, "created");
     ctx.queueEvent("payment.created", { paymentId: created!.id, invoiceId: invoice.id, contactId: invoice.contactId });

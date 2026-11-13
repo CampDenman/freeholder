@@ -4,6 +4,8 @@
 import { eq } from "drizzle-orm";
 import { ServiceError, type ServiceContext } from "@/core/service";
 import type { invoices } from "./schema";
+import { agreementFeeDuties } from "./agreement-fee-schema";
+import { isGrossAgreementInvoice } from "./agreement-fee-store";
 import { invoiceCreditApplications, invoiceCreditReservations } from "./credit-application-schema";
 import { proportionalFeeCarry, remainingCashFeeBudget } from "./credit-fee-amounts";
 
@@ -15,9 +17,14 @@ export async function invoiceCashFeeAllocation(ctx: ServiceContext, invoice: typ
     throw new ServiceError("conflict", "Restore every original credit application and exact fee owner before allocating a new cash commission.");
   const carriedFeeMinor = applications.reduce((sum, row) => sum + row.application.feeObligationMinor, 0);
   const budget = remainingCashFeeBudget(invoice.totalMinor, originalFeeMinor, invoice.creditedMinor, carriedFeeMinor);
-  // A separate bounded merchant receivable is required here. Never collect a
-  // fee larger than actual new cash or silently relabel it as collected.
-  if (budget.feeObligationMinor > budget.principalMinor) throw new ServiceError("conflict", "The exact new commission exceeds the available cash portion. Preserve the accepted target and original credit; record its separate merchant fee assignment before another collection.");
-  return { feeMinor: proportionalFeeCarry({ principalMinor: budget.principalMinor, feeObligationMinor: budget.feeObligationMinor,
+  let physicalFeeTargetMinor = budget.feeObligationMinor;
+  if (isGrossAgreementInvoice(invoice)) {
+    const [duty] = await ctx.tx.select().from(agreementFeeDuties).where(eq(agreementFeeDuties.invoiceId, invoice.id)).limit(1);
+    if (!duty || duty.totalMinor !== invoice.totalMinor || duty.targetFeeMinor !== originalFeeMinor || duty.creditedMinor !== invoice.creditedMinor
+      || duty.carriedFeeMinor !== carriedFeeMinor || duty.cashPrincipalMinor !== budget.principalMinor)
+      throw new ServiceError("conflict", "Retain this exact accepted target's frozen cash and noncash commission assignments before another physical charge.");
+    physicalFeeTargetMinor = duty.cashFeeTargetMinor;
+  } else if (budget.feeObligationMinor > budget.principalMinor) throw new ServiceError("conflict", "The original fee duty requires its own bounded assignment before another collection.");
+  return { feeMinor: proportionalFeeCarry({ principalMinor: budget.principalMinor, feeObligationMinor: physicalFeeTargetMinor,
     allocatedPrincipalMinor: input.priorCashMinor, allocatedFeeMinor: input.priorAllocatedFeeMinor, takeMinor: input.amountMinor }), carriedFeeMinor, ...budget };
 }

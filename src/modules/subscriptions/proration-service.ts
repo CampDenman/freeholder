@@ -20,6 +20,7 @@ import { subscriptionCommercialTerms, subscriptionEvents, subscriptionMarketPoli
 import { subscriptionProrationPrincipal, subscriptionProrations, subscriptionProrationCreditUses } from "./proration-schema";
 import { grossProrationInput, ownGrossProration, prepareGrossProrationQuote, requireGrossProrationSchema } from "./proration-quote";
 import { safeProrationPrincipal } from "./proration-basis";
+import { captureAgreementFeeDuty, retainAgreementFeeEligibility } from "@/modules/invoicing/agreement-fee-store";
 import { originalCreditFeeAllocation } from "@/modules/invoicing/credit-fee-origin";
 import { originalMerchantTerms } from "./merchant-terms-read";
 
@@ -102,6 +103,7 @@ async function accept(ctx: ServiceContext, input: z.infer<typeof acceptance>) {
       }
     }
   }
+  if (invoiceId && prepared.debitTaxQuote.totalMinor > 0) await captureAgreementFeeDuty(ctx, id, invoiceId);
   const task = { prorationId: id, subscriptionId: parent.id, originalJobId, acceptedQuoteDigest: input.acceptedQuoteDigest };
   const job = await enqueueJob(ctx.tx, APPLY_GROSS_PRORATION_JOB, task, { id: originalJobId, idempotencyKey: `gross-proration:${id}`, startAfter: effectiveAt });
   const [claim] = await ctx.tx.select().from(jobIdempotencyKeys).where(and(eq(jobIdempotencyKeys.jobName, APPLY_GROSS_PRORATION_JOB), eq(jobIdempotencyKeys.jobId, job.id))).limit(1);
@@ -203,10 +205,7 @@ async function apply(ctx: ServiceContext, accepted: typeof subscriptionProration
     && invoice.issuedAt && invoice.status === "paid" && invoiceSettled(invoice) && invoice.refundedMinor === 0 && invoice.paidAt && invoice.paidAt <= accepted.effectiveAt
     && invoice.totalMinor === accepted.debitNetMinor + accepted.debitTaxMinor && invoice.taxMinor === accepted.debitTaxMinor);
   const now = new Date();
-  if (now < accepted.effectiveAt) {
-    if (fullyPaid && accepted.state !== "awaiting_effective") await ctx.tx.update(subscriptionProrations).set({ state: "awaiting_effective" }).where(eq(subscriptionProrations.id, accepted.id));
-    return { applied: false, reviewRequired: false };
-  }
+  if (!fullyPaid && now < accepted.effectiveAt) return { applied: false, reviewRequired: false };
   if (!fullyPaid || now >= accepted.originalPeriodEnd) {
     await ctx.tx.update(subscriptionProrations).set({ state: "review" }).where(eq(subscriptionProrations.id, accepted.id));
     return { applied: false, reviewRequired: true }; // Preserve partial cash, the entire locked issued credit and all fee duties.
@@ -235,6 +234,12 @@ async function apply(ctx: ServiceContext, accepted: typeof subscriptionProration
       .innerJoin(invoiceCreditReservations, eq(invoiceCreditReservations.id, invoiceCreditApplications.reservationId)).where(eq(invoiceCreditApplications.invoiceId, invoice.id)).limit(1001);
     if (applications.length > 1000 || applications.some(row => row.reservation.targetSourceId !== invoice.sourceId) || applications.reduce((sum, row) => sum + BigInt(row.reservation.amountMinor), 0n) !== BigInt(invoice.creditedMinor))
       throw new ServiceError("conflict", "The target's credited balance needs every exact immutable original application before access can switch.");
+    if (invoice.totalMinor > 0) await retainAgreementFeeEligibility(ctx, invoice, { acceptedId: accepted.id, originalTask: accepted.originalTask,
+      originalFeeSources, money, applications });
+  }
+  if (now < accepted.effectiveAt) {
+    if (accepted.state !== "awaiting_effective") await ctx.tx.update(subscriptionProrations).set({ state: "awaiting_effective" }).where(eq(subscriptionProrations.id, accepted.id));
+    return { applied: false, reviewRequired: false };
   }
   await ctx.tx.update(subscriptions).set({ planId: accepted.planId, productVariantId: accepted.snapshot.productVariantId, pendingPlanId: null }).where(eq(subscriptions.id, parent.id));
   await ctx.tx.update(subscriptionProrations).set({ state: "applied", appliedAt: now }).where(eq(subscriptionProrations.id, accepted.id));

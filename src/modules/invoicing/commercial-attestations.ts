@@ -12,6 +12,7 @@ import { commercialFeeAttestations, commercialPaymentAttestations, commercialRef
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { paymentMerchantRoutes } from "./schema";
 import { recordedCommercialFeeTarget } from "./commercial-attestation-amounts";
+import { captureAgreementFeeCashAssignment } from "./agreement-fee-store";
 import { invoiceCashFeeAllocation } from "./invoice-credit-cash-fee";
 
 /** Invoice lock is held by the shared payment creator. The absent Stripe
@@ -92,6 +93,7 @@ export async function captureCommercialPaymentAttestation(ctx: ServiceContext, p
   await ctx.tx.insert(commercialPaymentAttestations).values({ paymentId: payment.id, invoiceId: invoice.id, merchantProfileId: parties[0]!.profileId, profileVersion: parties[0]!.profileVersion,
     amountMinor: payment.amountMinor, currency: payment.currency, feeOwedMinor, originalOwnerDigest: merchantTaxDigest({ invoiceId: invoice.id, buyerId: invoice.contactId, policy, party: parties[0] }),
     referenceDigest, evidenceDigest, recordedBy: actorString(ctx.actor) });
+  await captureAgreementFeeCashAssignment(ctx, payment.id);
 }
 export async function commercialPaymentRecorded(ctx: ServiceContext, paymentId: string) {
   const [record] = await ctx.tx.select().from(commercialPaymentAttestations).where(eq(commercialPaymentAttestations.paymentId, paymentId)).limit(1);

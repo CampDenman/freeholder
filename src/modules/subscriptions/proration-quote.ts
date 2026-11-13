@@ -11,6 +11,7 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { moduleSettings } from "@/core/settings/schema";
 import { previewMerchantTax, merchantTaxPreviewOutput } from "@/modules/invoicing/merchant-tax-preview";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
+import { requireAgreementFeeSchema } from "@/modules/invoicing/agreement-fee-store";
 import { marketFeeMinor } from "@/modules/invoicing/market-policy";
 import { compareCreditSources, proportionalFeeCarry, remainingCashFeeBudget } from "@/modules/invoicing/credit-fee-amounts";
 import { feeCollectionState } from "@/modules/invoicing/credit-fee-origin";
@@ -55,7 +56,7 @@ export async function ownGrossProration(ctx: ServiceContext, id: string, planId?
   }
 }
 export async function prepareGrossProrationQuote(ctx: ServiceContext, input: z.infer<typeof grossProrationInput>) {
-  await requireGrossProrationSchema(ctx); await lockContactIdentity(ctx.tx);
+  await requireGrossProrationSchema(ctx); await requireAgreementFeeSchema(ctx); await lockContactIdentity(ctx.tx);
   const [enabled] = await ctx.tx.select({ enabled: moduleSettings.enabled }).from(moduleSettings).where(eq(moduleSettings.module, "subscriptions")).limit(1);
   const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, input.id)).limit(1).for("update");
   const [policy] = await ctx.tx.select().from(subscriptionMarketPolicies).where(eq(subscriptionMarketPolicies.subscriptionId, input.id)).limit(1);
@@ -107,7 +108,7 @@ export async function prepareGrossProrationQuote(ctx: ServiceContext, input: z.i
   const feeReview = { debitFeeObligationMinor, creditFeeObligationMinor, appliedFeeObligationMinor, appliedFeeProvenCollectedMinor, remainingNewCashFeeMinor: Math.min(feeBudget.feeObligationMinor, feeBudget.principalMinor),
     separateMerchantReceivableMinor: Math.max(0, feeBudget.feeObligationMinor - feeBudget.principalMinor),
     originalOverTargetMinor: feeBudget.originalOverTargetMinor, originalSourceDebt: basis.principal.some(source => source.feeUnexpected || ["owed", "review"].includes(source.feeCollectionState)), sources: basis.principal };
-  const noticeSnapshot = { locale: input.locale, text: `${economic.noticeSnapshot.text}\n${translator(input.locale)("subscriptions.grossProrationNotice")}` };
+  const noticeSnapshot = { locale: input.locale, text: `${economic.noticeSnapshot.text}\n${translator(input.locale)("subscriptions.grossProrationNotice")}\n${translator(input.locale)("subscriptions.proration.feeReceivableNotice")}` };
   const noticeDigest = merchantTaxDigest({ version: 1, noticeSnapshot, calendar, effectiveAt: input.effectiveAt, totalCredit: Number(totalCredit), totalDebit: Number(totalDebit), trialEndPreserved: parent.trialEndsAt?.toISOString() ?? null });
   const quoteDigest = merchantTaxDigest({ version: 1, kind: "gross-original-proration", subscriptionId: parent.id, previousTermsId: previous.id, effectiveAt: input.effectiveAt,
     sourceRevision: basis.sourceRevision, economicQuoteDigest: economic.quoteDigest, debitTaxQuote, calendar, noticeDigest, feeReview, originalScope: scope, originalPolicy: policy });
@@ -115,7 +116,7 @@ export async function prepareGrossProrationQuote(ctx: ServiceContext, input: z.i
     originalPeriodStart: parent.currentPeriodStart.toISOString(), originalPeriodEnd: parent.currentPeriodEnd.toISOString(), originalTrialEndsAt: parent.trialEndsAt?.toISOString() ?? null, calendar,
     debitNetMinor, debitTaxMinor: debitTaxQuote.taxMinor, creditNetMinor: basis.creditNetMinor, creditTaxMinor: basis.creditTaxMinor, creditAppliedMinor: Number(applied),
     cashDueMinor: Number(totalDebit - applied), residualCreditMinor: Number(totalCredit - applied), creditDisposition: "exclusive_until_paid_access_switch_no_automatic_cash_refund",
-    quote: publicMerchantTermsQuote.unwrap().parse(economic), noticeSnapshot, feeReview, requiresMerchantReview: feeReview.separateMerchantReceivableMinor > 0 });
+    quote: publicMerchantTermsQuote.unwrap().parse(economic), noticeSnapshot, feeReview, requiresMerchantReview: false });
   return { parent, previous, policy, scope, resource, effectiveAt, economic, basis, debitTaxQuote, noticeSnapshot, noticeDigest, feeReview, review };
 }
 export const quoteGrossProration = defineService({ name: "subscriptions.quoteProration", summary: "Review the exact original paid credit, dated new gross invoice, preserved calendar and locked credit before explicit plan-change consent.",

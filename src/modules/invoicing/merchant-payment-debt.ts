@@ -15,6 +15,7 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { invoiceMerchantTaxQuotes } from "./merchant-tax-schema";
 import { subscriptionMerchantScopes } from "@/modules/subscriptions/schema";
 import { paymentDisputes, payments, refunds } from "./schema";
+import { agreementFeePaymentDebt, agreementFeeProfileDebt } from "./agreement-fee-state";
 import { commercialPrincipalState } from "./commercial-attestations";
 import { commercialPaymentAttestations } from "./commercial-attestation-schema";
 
@@ -30,7 +31,7 @@ export const merchantPaymentRecoveryDebt = defineService({
       if (!principal.recorded) return { pending: true, reasons: ["original_scope" as const] };
       const recordedReasons: z.infer<typeof reason>[] = [];
       if (!principal.principalSafe) recordedReasons.push("refund");
-      if (principal.feeRecordedMinor !== principal.feeOwedMinor || principal.reviewRequired && principal.principalSafe) recordedReasons.push("commission");
+      if (principal.feeRecordedMinor !== principal.feeOwedMinor || principal.reviewRequired && principal.principalSafe || await agreementFeePaymentDebt(ctx, paymentId)) recordedReasons.push("commission");
       return { pending: recordedReasons.length > 0, reasons: recordedReasons };
     }
     const routing = await routingForPayment(ctx, paymentId), reasons = new Set<z.infer<typeof reason>>();
@@ -77,6 +78,7 @@ export const merchantPaymentRecoveryDebt = defineService({
       // The current capture-only proof deliberately refuses to infer it.
       if (routing.destinationAccountId && payment.refundedMinor > 0) reasons.add("refund");
     }
+    if (await agreementFeePaymentDebt(ctx, paymentId)) reasons.add("commission");
     return { pending: reasons.size > 0, reasons: [...reasons] };
   },
 });
@@ -130,7 +132,8 @@ export const merchantTaxPaymentDebt = defineService({
         pending = true; incomplete = true;
       }
     }
-    return { pending, hasHistory: paymentIds.length > 0 || incomplete, paymentIds, incomplete };
+    const fee = await agreementFeeProfileDebt(ctx, profileId);
+    return { pending: pending || fee.pending, hasHistory: paymentIds.length > 0 || incomplete || fee.hasHistory, paymentIds, incomplete: incomplete || fee.incomplete };
   },
 });
 

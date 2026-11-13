@@ -14289,6 +14289,35 @@ whatever is best for the people using the site.
   native journeys are PREPARED/UNRUN. The new owned SQL tail is UNAPPLIED and
   unqualified; no item or stable gate closes. See
   `deploy/subscription-gross-proration80-source-20261113.md`.
+  Original commission assignment increment (same date/items): the new gross
+  target freezes its exact whole fee epoch and original credit/cash assignments
+  before collection. Physical fees respect actual cash capacity; the remainder
+  is a separately owed merchant receivable with actual remittance/return
+  receipts. Only authentic full canonical settlement/effect establishes fee
+  eligibility. Later duty uses all retained cash AND noncash consideration:
+  `floor(F*(C+A)/T)`, less retained original credit/cash duties K/Q; excess
+  assigned duty stays original-source review. Refunding the last cash1 while
+  credit1499 remains valid does not waive receivable39. Initial expected duty
+  is separate from current duty, which can move from an original returned cash
+  fee but stays bounded by frozen F and actual source disposition. Four-locale
+  consent explains this; owed commission and attested/provider-proved actual
+  collection remain distinct. Unknown/noncash-reversal disposition stays debt,
+  never zero. Ten pure controls and one additional actual dated-tax/manual
+  native journey are PREPARED/UNRUN; the owned SQL tail is UNAPPLIED. Complete
+  provider/platform orchestration, authentic late/partial recovery and full
+  qualification remain required; no item or stable gate closes. See
+  `deploy/subscription-agreement-fee80-source-20261113.md`.
+  The same source composes authentic exact-source raw cash feedback before
+  owner/GET/domain application: raw-only signed refund feedback is principal
+  review until a genuine current returned bank inventory covers the exact
+  occurrence and canonical money agrees. Callback amounts never decrement
+  principal. NULL-payment receipt review retains NULL principal and supplies
+  no invoice/payment/access fiction. Typed primary-caller debt is separate
+  from ancillary fee/recipient duty; original full-return closure still needs
+  full quiescence. Eight bank-fact pure controls, an actual raw-before-domain
+  native and two existing actual receipt-only refusal controls are prepared,
+  UNRUN. Parent ordinary-reader contracts and current cash source are required
+  assembly dependencies, not a passing provider or recovery claim.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

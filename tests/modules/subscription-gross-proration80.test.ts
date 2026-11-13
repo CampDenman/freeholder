@@ -14,8 +14,11 @@ import { cartItems, productVariants } from "@/modules/catalog/schema";
 import { createListing } from "@/modules/members/listings";
 import { getProductVariants } from "@/modules/catalog/variants";
 import { creditNotes, invoiceLines, invoices, payments } from "@/modules/invoicing/schema";
-import { recordOfflinePayment } from "@/modules/invoicing/payment-provider-service";
+import { recordOfflinePayment, recordOfflineRefund } from "@/modules/invoicing/payment-provider-service";
 import { invoiceCreditApplications, invoiceCreditFunding, invoiceCreditReservations } from "@/modules/invoicing/credit-application-schema";
+import { recordCommercialFee, reviewCommercialPayment } from "@/modules/invoicing/commercial-attestations";
+import { recordAgreementFeeRemittance, reviewAgreementFee } from "@/modules/invoicing/agreement-fee-service";
+import { agreementFeeDuties, agreementFeeEligibility, agreementFeeRemittances } from "@/modules/invoicing/agreement-fee-schema";
 import { creditNoteDisposition } from "@/modules/invoicing/credit-disposition";
 import { commercialPaymentAttestations } from "@/modules/invoicing/commercial-attestation-schema";
 import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agreement-schema";
@@ -133,6 +136,40 @@ describe.runIf(hasDatabase)("actual original gross proration, attested cash and 
     expect(await db().transaction(tx => creditNoteDisposition(tx, accepted.creditNoteId!))).toMatchObject({ appliedMinor: 525, lockedMinor: 0, availableMinor: 1575 });
     expect(await db().select().from(payments)).toHaveLength(1);
     expect((await parent(input.id)).currentPeriodEnd).toEqual(old.accepted.subscription.currentPeriodEnd);
+  });
+
+  it("retains a separate dated-tax fee receivable through actual settlement, remittance and a refund of the last cash unit while original credit remains valid", async () => {
+    const old = await original(), next = await target("42.02");
+    // The actual shared tax engine reviews the new destination separately:
+    // original Canadian tax stays in the old credit, new destination is untaxed.
+    const input = { id: old.accepted.subscription.id, planId: next.plan.id, productVariantId: next.variant.id, effectiveAt: old.effectiveAt.toISOString(), taxDestination: { country: "US", region: "OR" }, locale: "en" as const };
+    const quote = await quoteGrossProration.call(input, OWNER);
+    expect(quote).toMatchObject({ debitNetMinor: 2101, debitTaxMinor: 0, creditAppliedMinor: 2100, cashDueMinor: 1, requiresMerchantReview: false,
+      feeReview: { debitFeeObligationMinor: 210, appliedFeeObligationMinor: 200, remainingNewCashFeeMinor: 1, separateMerchantReceivableMinor: 9 } });
+    expect(quote.noticeSnapshot.text).toContain("all retained cash and applied original credit");
+    const accepted = await acceptGrossProration.call({ ...input, previousTermsId: quote.previousTermsId, acceptedQuoteDigest: quote.quoteDigest, confirm: true }, OWNER);
+    if (!accepted.invoiceId) throw new Error("The actual separate commission duty requires its canonical target.");
+    expect((await db().select().from(agreementFeeDuties).where(eq(agreementFeeDuties.invoiceId, accepted.invoiceId)))[0])
+      .toMatchObject({ totalMinor: 2101, targetFeeMinor: 210, carriedFeeMinor: 200, cashPrincipalMinor: 1, cashFeeTargetMinor: 1, expectedReceivableMinor: 9 });
+    expect(await reviewAgreementFee.call({ invoiceId: accepted.invoiceId }, OWNER)).toMatchObject({ eligible: false, owedMinor: 0, recordedMinor: 0, pending: true });
+    const paid = await recordOfflinePayment.call({ invoiceId: accepted.invoiceId, method: "bank_transfer", amountMinor: 1, reference: "fictional-cash-one",
+      evidence: "Synthetic actual external principal receipt", idempotencyKey: "dated-tax-cash-one" }, OWNER);
+    await completePaidGrossProration.call({ invoiceId: accepted.invoiceId }, { kind: "system" });
+    expect(await reviewAgreementFee.call({ invoiceId: accepted.invoiceId }, OWNER)).toMatchObject({ eligible: true, owedMinor: 9, recordedMinor: 0 });
+    expect(await db().select().from(agreementFeeEligibility)).toHaveLength(1);
+    const remittance = { invoiceId: accepted.invoiceId, amountMinor: 9, reference: "fictional-receivable-remittance", evidence: "Synthetic attested external commission remittance", idempotencyKey: "dated-tax-fee-remittance" };
+    await recordAgreementFeeRemittance.call(remittance, OWNER); await recordAgreementFeeRemittance.call(remittance, OWNER);
+    expect(await db().select().from(agreementFeeRemittances)).toHaveLength(1);
+    await recordCommercialFee.call({ paymentId: paid.id, amountMinor: 1, reference: "fictional-original-cash-fee", evidence: "Synthetic actual external cash fee remittance", idempotencyKey: "dated-tax-physical-fee" }, OWNER);
+    expect(await effect(accepted.prorationId)).toEqual({ applied: true, reviewRequired: false });
+    // A real authorized customer-principal refund remains available even while
+    // the merchant has a separate original fee duty; there is no fake fee cash.
+    await recordOfflineRefund.call({ paymentId: paid.id, amountMinor: 1, reference: "fictional-refunded-cash-one", reason: "Synthetic legitimate actual external principal return", idempotencyKey: "dated-tax-refund-one" }, OWNER);
+    const cashFee = (await reviewCommercialPayment.call({ paymentId: paid.id }, OWNER)).receipts.find(row => row.direction === "remitted")!;
+    await recordCommercialFee.call({ paymentId: paid.id, direction: "returned", originalRemittanceId: cashFee.id, amountMinor: 1, reference: "fictional-returned-cash-fee", evidence: "Synthetic actual original fee return", idempotencyKey: "dated-tax-cash-fee-return" }, OWNER);
+    expect(await reviewAgreementFee.call({ invoiceId: accepted.invoiceId }, OWNER)).toMatchObject({ eligible: true, owedMinor: 9, recordedMinor: 9, returnDueMinor: 0, reviewRequired: false });
+    expect((await db().select().from(invoices).where(eq(invoices.id, accepted.invoiceId)))[0]).toMatchObject({ paidMinor: 1, refundedMinor: 1, creditedMinor: 2100 });
+    expect(await db().select().from(payments)).toHaveLength(2); expect(await db().select().from(merchantAgreementPaymentRoutes)).toHaveLength(0);
   });
 
   it("preserves an uncharged trial's accepted end and records neither old paid credit nor a trial-window invoice or payment", async () => {
