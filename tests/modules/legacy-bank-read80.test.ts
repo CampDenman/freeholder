@@ -7,6 +7,7 @@ import * as adapters from "@/adapters/payments";
 import { createStripePayments } from "@/adapters/payments/stripe";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
+import { reconcileJobDeploymentAdmission, stopJobs } from "@/core/jobs";
 import { createContact, mergeContacts, resolveContact, undoContactMerge } from "@/core/contacts/service";
 import { contacts, contactMergeOperations } from "@/core/contacts/schema";
 import { createDraftInvoice, createPayment, issueInvoice, settlePayment } from "@/modules/invoicing/invoice-service";
@@ -19,7 +20,7 @@ import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/
 const signal = () => { let resolve!: () => void; const promise = new Promise<void>(accept => { resolve = accept; }); return { promise, resolve }; };
 
 describe.runIf(hasDatabase)("authentic legacy bank read lifecycle80", { timeout: 60000 }, () => {
-  beforeAll(ready, 60000); beforeEach(truncateSpine); afterEach(() => vi.restoreAllMocks()); afterAll(closeDb);
+  beforeAll(ready, 60000); beforeEach(truncateSpine); afterEach(() => vi.restoreAllMocks()); afterAll(async () => { await stopJobs(); await reconcileJobDeploymentAdmission(); await closeDb(); });
   async function setup(failSecondPage = false, pauseExactRead = false, identity = "") {
     const buyer = (await resolveContact.call({ email: `fictional-legacy-bank-reader${identity}@example.test` }, OWNER)).contact;
     const draft = await createDraftInvoice.call({ contactId: buyer.id, currency: "CAD", idempotencyKey: `legacy-bank-read-invoice${identity}`,
