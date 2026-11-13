@@ -14539,6 +14539,28 @@ whatever is best for the people using the site.
   ab894 and partial b1cad tails; import81 remains43808cb3. This assembly is
   UNAPPLIED and UNQUALIFIED; no database, SDK, browser, provider or stable
   acceptance is supplied. See deploy/original-cash-financial-integration-2026-11-13.md.
+  Subsequent isolated partial source NoDB qualification on cacb80bd: full
+  Node22 types/whole lint PASS;25-file JSON246PASS/30explicitDBSKIP/0FAIL,
+  including new pure/adapter/contracts and registry/internal/composition/
+  retention/merge/four-locale gates. License/notes/plan/whitespace PASS.
+  Earlier source/type/lint failures remain preserved. New cash natives,
+  Carrier canonical-credit integration, root's newer five-array composition,
+  combined SQL, actual provider acceptance and stable sign-off remain open.
+  Exact raw-feedback privacy-owner source checkpoint 2026-11-13 (C1.08/
+  C12.38): a bounded UNQUALIFIED slice resolves verified raw feedback to an
+  unchanged authentic legacy admission or actual retained positive payment/
+  subscription-receipt namespace, including real resource aliases for a
+  contradictory observed PI. Real receipt FKs may link actual local payments;
+  absent/corrupt/ambiguous or foreign frozen merchant scope remains debt.
+  HMAC, complete5000 bounds and frozen platform/account checks precede private
+  profile repair; raw facts/outbox still commit before repair. No payment,
+  refund, old caller or namespace is invented.10 pure/three native controls
+  are prepared UNRUN, with the existing combined producer fixture unchanged.
+  No CPU, PG, native, provider or schema/model assembly ran. Root's three
+  central files and prior SQL/evidence remain unchanged. Actual outbox,
+  NULL-payment, foreign/legacy corruption, combined source qualification and
+  independent acceptance remain required. See
+  `deploy/original-feedback-owner-source-2026-11-13.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

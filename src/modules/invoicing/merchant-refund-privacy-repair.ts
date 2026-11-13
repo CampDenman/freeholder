@@ -13,7 +13,7 @@ import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "./merchant-
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { moneyStateEvents } from "./schema";
 import { legacyBankFeedback } from "./legacy-bank-feedback-schema";
-import { legacyBankFeedbackPaymentOwner } from "./legacy-bank-feedback-store";
+import { originalBankFeedbackOwner, originalFeedbackMatchesFrozenSource, type OriginalFeedbackOwner } from "./original-cash-feedback-owner";
 import { verifyLegacyReplacementJournalRow } from "./legacy-bank-replacement-store";
 import { verifyBankReplacementJournalRow } from "./merchant-bank-replacement-store";
 import { originalCashRecoveryOwner, originalCashRecoveryFinancialWitness } from "./original-cash-recovery-store";
@@ -78,6 +78,8 @@ export const originalMerchantRefundRepairSource = defineService({
     const [table, column] = factTypes[pointer.kind];
     const fact = await factRow(ctx, table, column, pointer.id);
     let owner = fact;
+    let originalFeedbackLineage: string | undefined;
+    let originalFeedbackNamespace:OriginalFeedbackOwner["namespace"]|undefined;
     if (pointer.kind.startsWith("original_cash_")) {
       const original = await originalCashRecoveryOwner(ctx.tx, pointer.kind === "original_cash_owner" ? pointer.id : restoredId(fact.recovery_id));
       // Validate the entire bounded source-owned set before private financial
@@ -87,7 +89,10 @@ export const originalMerchantRefundRepairSource = defineService({
     } else if (pointer.kind === "legacy_bank_feedback") {
       const [raw] = await ctx.tx.select().from(legacyBankFeedback).where(eq(legacyBankFeedback.id, pointer.id));
       if (!raw) throw new ServiceError("conflict", "Restore the authentic original raw bank-feedback receipt before privacy repair.");
-      owner = { payment_id: await legacyBankFeedbackPaymentOwner(ctx.tx, raw), subscription_charge_receipt_id: null };
+      const original = await originalBankFeedbackOwner(ctx.tx, raw);
+      owner = { payment_id: original.paymentId, subscription_charge_receipt_id: original.subscriptionChargeReceiptId };
+      originalFeedbackLineage = original.lineageDigest;
+      originalFeedbackNamespace=original.namespace;
     } else if (pointer.kind === "legacy_bank_replacement") {
       const [journal] = await ctx.tx.select().from(moneyStateEvents).where(eq(moneyStateEvents.id, pointer.id));
       const body = journal && verifyLegacyReplacementJournalRow(journal);
@@ -121,24 +126,28 @@ export const originalMerchantRefundRepairSource = defineService({
     if ((paymentId === null) === (receiptId === null)) throw new ServiceError("conflict", "Restore the one actual original financial owner before erasure repair.");
     const profiles: string[] = [];
     if (paymentId) {
-      const orders = await ctx.tx.select({ policy: invoiceMerchantCollections.taxPolicy }).from(merchantPaymentRoutes)
+      const orders = await ctx.tx.select({ policy: invoiceMerchantCollections.taxPolicy,platform:invoiceMerchantCollections.providerPlatformAccountId,account:invoiceMerchantCollections.chargeAccountId }).from(merchantPaymentRoutes)
         .innerJoin(invoiceMerchantCollections, eq(invoiceMerchantCollections.allocationId, merchantPaymentRoutes.allocationId)).where(eq(merchantPaymentRoutes.paymentId, paymentId)).limit(2);
-      const bookings = await ctx.tx.select({ policy: invoiceMerchantScopes.taxPolicy }).from(merchantInvoicePaymentRoutes)
+      const bookings = await ctx.tx.select({ policy: invoiceMerchantScopes.taxPolicy,platform:invoiceMerchantScopes.providerPlatformAccountId,account:invoiceMerchantScopes.chargeAccountId }).from(merchantInvoicePaymentRoutes)
         .innerJoin(invoiceMerchantScopes, eq(invoiceMerchantScopes.invoiceId, merchantInvoicePaymentRoutes.invoiceId)).where(eq(merchantInvoicePaymentRoutes.paymentId, paymentId)).limit(2);
-      const agreements = await ctx.tx.select({ profileId: subscriptionMerchantScopes.taxProfileId }).from(merchantAgreementPaymentRoutes)
+      const agreements = await ctx.tx.select({ profileId: subscriptionMerchantScopes.taxProfileId,platform:subscriptionMerchantScopes.providerPlatformAccountId,account:subscriptionMerchantScopes.chargeAccountId,routePlatform:merchantAgreementPaymentRoutes.providerPlatformAccountId,routeAccount:merchantAgreementPaymentRoutes.chargeAccountId }).from(merchantAgreementPaymentRoutes)
         .innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, merchantAgreementPaymentRoutes.subscriptionId)).where(eq(merchantAgreementPaymentRoutes.paymentId, paymentId)).limit(2);
+      if(originalFeedbackNamespace&&([...orders,...bookings,...agreements].some(source=>!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace!,source))
+        ||agreements.some(source=>!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace!,{platform:source.routePlatform,account:source.routeAccount}))))throw new ServiceError("conflict","Retain authenticated foreign or mismatched cash as debt; its original namespace does not belong to this frozen merchant source.");
       profiles.push(...orders.map(row => row.policy.profileId), ...bookings.map(row => row.policy.profileId), ...agreements.map(row => row.profileId));
     } else {
-      const rows = await ctx.tx.select({ profileId: subscriptionMerchantScopes.taxProfileId }).from(subscriptionProviderChargeReceipts)
+      const rows = await ctx.tx.select({ profileId: subscriptionMerchantScopes.taxProfileId,platform:subscriptionMerchantScopes.providerPlatformAccountId,account:subscriptionMerchantScopes.chargeAccountId,receiptPlatform:subscriptionProviderChargeReceipts.providerPlatformAccountId,receiptAccount:subscriptionProviderChargeReceipts.chargeAccountId }).from(subscriptionProviderChargeReceipts)
         .innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptionProviderChargeReceipts.subscriptionId))
         .where(and(eq(subscriptionProviderChargeReceipts.id, receiptId!))).limit(2);
+      if(originalFeedbackNamespace&&rows.some(source=>!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace!,source)
+        ||!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace!,{platform:source.receiptPlatform,account:source.receiptAccount})))throw new ServiceError("conflict","Restore the exact receipt's frozen original merchant scope before privacy repair; a different platform/account remains debt.");
       profiles.push(...rows.map(row => row.profileId));
     }
     if (profiles.length !== 1 || !z.uuid().safeParse(profiles[0]).success) throw new ServiceError("conflict", "The exact original merchant scope is missing or ambiguous; retain the financial fact and restore its scope before receipt repair.");
     // Operational insertion timestamps are not evidence versions. Actual
     // semantic fields, private caller proof and immutable source IDs remain.
     const evidence = Object.fromEntries(Object.entries(fact).filter(([key]) => !key.endsWith("_at")));
-    return { profileId: profiles[0]!, sourceKey: `financial:${pointer.kind}:${pointer.id}`, evidenceDigest: merchantTaxDigest({ ...pointer, evidence }) };
+    return { profileId: profiles[0]!, sourceKey: `financial:${pointer.kind}:${pointer.id}`, evidenceDigest: merchantTaxDigest({ ...pointer, evidence, ...(originalFeedbackLineage ? { originalFeedbackLineage } : {}) }) };
   },
 });
 
