@@ -13952,8 +13952,15 @@ whatever is best for the people using the site.
   template clone preserves that BEFORE state (0.145s, journal81/e783, clients
   drained). Source now changes only the notification topic and matching eight
   locale keys to valid lowercase, retaining timeline/event names, old money,
-  schema and original oracle. Source qualification and unchanged AFTER are
-  pending; full financial/legacy/provider acceptance remains open.
+  schema and original oracle. Sourcebd549214 passes full incremental Node22
+  types, changed-file lint and88 actual i18n/parity controls. The unchanged RMA
+  AFTER passes7.093s: same issued4200 credit/lines and original4200 part, old
+  failed4200 plus one exact-part successful4200 replacement, two original
+  finished callers/keys, paid/current-refunded4200, no new credit or buyer
+  charge. Actual attention notification and bank callbacks now commit; UTC
+  ledger/journal81/e783 and all client drains pass. Before/source/clones remain
+  preserved. Stale-read and strengthened caller natives are still unrun;
+  final combined-source, legacy-bank and provider acceptance remain open.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

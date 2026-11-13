@@ -151,4 +151,32 @@ and both clients/backend sets were unchanged/empty. Evidence is
 The narrow source repair uses notification topic `return.refund_needs_attention`
 and renames only its two translation keys in each of the four locales. Actual
 timeline/emitted event names, money, SQL and the original oracle remain
-unchanged. Source qualification and unchanged RMA AFTER remain pending.
+unchanged. Source `bd549214` passes incremental full Node22 types, changed
+catalog TypeScript lint and88 finite core i18n/key-parity/ICU assertions across
+all four JSON catalogs (no skips). The registry and financial pures were not
+repeated for a topic-only change.
+
+The **unchanged RMA AFTER passes7.093s** on exact bd549/test48cf8407/V11 e783.
+It byte-compares the original issued credit/lines before and after the bank
+failure and actual original-part replacement within the same run. Independent
+UTC SQL confirms one issued4200 credit (4000 net/200 tax), one frozen4200 return
+part, the original failed4200/pyr_bank1 and one succeeded4200/pyr_bank2 child,
+both linked by the same exact return/part/payment key lineage. There are two
+original ordinal-one finished callers/keys, original4200 paid/current4200
+refunded and no generic causal override or new credit. The test refuses the
+generic replacement path for this RMA and asserts customer `canPay=false`.
+
+The repaired callback commits one actual attention notification with the
+valid topic; requires_action and failed bank-state outbox rows are dispatched
+without error. The return closes through its actual successful part references
+while its legacy `refund_id` field keeps the first original refund witness;
+the underlying failed refund and every prior raw bank fact are retained.
+Ordinary journal81/max60/e783 and final independent target backends[] are
+unchanged. Evidence is `/tmp/freeholder-bank-current80-rma-native-v2.{json,log}`
+and exclusive `-v2-ledger.json`. The original RMA6.617s BEFORE and23-table
+golden clone remain separate and immutable.
+
+Three distinct bank business controls now have component evidence on their
+exact checkpoints; stale-read and strengthened unfinished-caller natives
+remain unexecuted. This is not final combined-source, legacy-bank, actual
+provider-account, SDK/browser or full financial completion.
