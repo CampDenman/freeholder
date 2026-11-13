@@ -60,7 +60,8 @@ describe.runIf(hasDatabase)("actual historical HTTP receipt recovery review", ()
     const laterRun = await startImport.call({ origin: "https://fictional-later-review.example/", kind: "html" }, owner);
     await initializeCrawl.call({ id: laterRun.id, url: "https://fictional-later-review.example/later-original" }, owner);
     const [laterSource] = await db().select().from(importCrawlSources).where(eq(importCrawlSources.runId, laterRun.id));
-    expect(laterSource).toMatchObject({ state: "discovering", generation: expect.any(String), sourceUrl: "https://fictional-later-review.example/later-original" });
+    expect(laterSource).toMatchObject({ state: "discovering", sourceUrl: "https://fictional-later-review.example/later-original" });
+    expect(laterSource?.generation).toBeTypeOf("string");
     const result = await reconcileCrawlOriginalObservation.call({}, { kind: "system" });
     const [afterRequest] = await db().select().from(dataRequests).where(eq(dataRequests.id, requestId));
     const [afterArtifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, requestId));
@@ -79,7 +80,7 @@ describe.runIf(hasDatabase)("actual historical HTTP receipt recovery review", ()
     expect(result.recoveryRequired, JSON.stringify(observation)).toBeGreaterThan(0);
     // This calls the real registered body on one actual durable payload. A
     // missing original-scope/schema witness must prevent final acknowledgement.
-    await expect(eraseCrawlOriginals(jobs[0]!.data!)).rejects.toThrow(/recovery|guarded/);
+    await expect(eraseCrawlOriginals(jobs[0]!.data)).rejects.toThrow(/recovery|guarded/);
     expect((await db().select().from(dataRequests).where(eq(dataRequests.id, requestId)))[0]?.status).toBe("in_progress");
     expect(await db().execute(sql`select id,operation_kind,state,deleted_at from media_object_writes order by id`)).toEqual(beforePhysical);
     expect((await db().select().from(importCrawlSources).where(eq(importCrawlSources.id, laterSource!.id)))[0]).toMatchObject({ state: "discovering", generation: laterSource!.generation, sourceUrl: laterSource!.sourceUrl, redactedAt: null });
