@@ -36,6 +36,7 @@ export default defineModule({
       "refund.succeeded",
       "refund.failed",
       "refund.cancelled",
+      "refund.bankStateChanged",
       "payment.dispute.open",
       "payment.dispute.won",
       "payment.dispute.lost",

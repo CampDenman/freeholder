@@ -6,9 +6,10 @@ import {and,eq,inArray,ne,sql} from "drizzle-orm";
 import {z} from "zod";
 import {paymentAdapter,isHostedPaymentProvider} from "@/adapters/payments";
 import {actorString,defineOrchestratedService,defineService,ServiceError,type ServiceContext} from "@/core/service";
-import {notifyReturnRefund} from "./return-notifications";
+import {notifyReturnRefund,notifyCommerceContact} from "./return-notifications";
 import {createCreditNote,getInvoice,issueCreditNote,reserveRefundBatch,settleRefund} from "@/modules/invoicing/invoice-service";
 import {merchantRefundBasis} from "@/modules/invoicing/merchant-refund-basis";
+import {merchantRefundBankState} from "@/modules/invoicing/merchant-refund-bank-state-service";
 import {orderCommercialPolicies} from "./order-commercial-schema";
 import {getInvoiceMarketPolicy} from "@/modules/invoicing/market-policy";
 import {providerPaymentSource,submitProviderRefund} from "@/modules/invoicing/payment-provider-service";
@@ -274,6 +275,10 @@ export const reconcileReturnProviderRefunds=defineService({
     const rows=assigned(invoice,request,allocation);
     if(total(rows,row=>reserved(row.status))>allocation.amountMinor) throw new ServiceError("conflict","The original return payment is over-reserved.");
     if(total(rows,row=>row.status==="succeeded")!==allocation.amountMinor) complete=false;
+    for(const refund of rows.filter(row=>row.status==="succeeded")){
+     const actual=await ctx.callAsSystem(merchantRefundBankState,{refundId:refund.id});
+     if(actual.original&&!actual.resolvedSuccess) complete=false;
+    }
     refundIds.push(...rows.filter(row=>row.status==="succeeded").map(row=>row.id));
    }
    if(!complete) continue;
@@ -281,7 +286,7 @@ export const reconcileReturnProviderRefunds=defineService({
    await ctx.tx.update(returnRequests).set({status:"refunded",updatedAt:sql`now()`}).where(eq(returnRequests.id,request.id));
    await ctx.emitTimeline({contactId:request.contactId,eventType:"return.refunded",subjectType:"return",subjectId:request.id,payload:{orderId:order.id,creditNoteId:credit.id,refundIds}});
    await notifyReturnRefund(ctx,request.contactId,request.id);
-   ctx.queueEvent("catalog.returnRefunded",{returnId:request.id,creditNoteId:credit.id,refundId:refundIds[0]});changed++;
+   ctx.queueEvent("catalog.returnRefunded",{returnId:request.id,creditNoteId:credit.id,refundId:refundIds[0],invoiceId:input.invoiceId});changed++;
   }
   if(changed && invoice.invoice.status==="refunded"){
    const pending=await ctx.tx.select().from(returnRequests).where(and(eq(returnRequests.orderId,order.id),ne(returnRequests.status,"refunded"),ne(returnRequests.status,"rejected")));
@@ -308,5 +313,35 @@ export const submitReturnProviderRefund=defineOrchestratedService({
  },
 });
 export async function onReturnRefundSucceeded(payload:unknown):Promise<void>{const invoiceId=(payload as {invoiceId?:string}|null)?.invoiceId;if(invoiceId) await reconcileReturnProviderRefunds.call({invoiceId},{kind:"system"});}
-export default [getReturnRefundPlan,prepareReturnRefund,refundReturn,claimReturnProviderRefund,reconcileReturnProviderRefunds,submitReturnProviderRefund];
+export const reconcileReturnBankRefundState=defineService({
+ name:"catalog.reconcileReturnBankRefundState",summary:"Keep an issued original return credit owed while its exact bank refund is no longer confirmed.",
+ kind:"mutation",permission:"system",external:false,writeClass:"money",input:z.object({invoiceId:id,refundId:id}),output:z.object({changed:z.number().int()}),
+ handler:async(input,ctx)=>{
+  const actual=await ctx.callAsSystem(merchantRefundBankState,{refundId:input.refundId});
+  if(!actual.original||actual.invoiceId!==input.invoiceId) return {changed:0};
+  const [order]=await ctx.tx.select().from(orders).where(eq(orders.invoiceId,input.invoiceId)).for("update");
+  if(!order) return {changed:0};
+  const invoice=await ctx.callAsSystem(getInvoice,{id:input.invoiceId});
+  const requests=await ctx.tx.select().from(returnRequests).where(and(eq(returnRequests.orderId,order.id),sql`${returnRequests.creditNoteId} is not null`)).for("update");
+  let changed=0;
+  for(const request of requests){
+   const parts=await ctx.tx.select().from(returnRefundAllocations).where(eq(returnRefundAllocations.returnId,request.id));
+   if(!parts.some(part=>assigned(invoice,request,part).some(refund=>refund.id===input.refundId))) continue;
+   const credit=invoice.creditNotes.find(note=>note.id===request.creditNoteId);
+   if(!credit||credit.status==="void") throw new ServiceError("conflict","Restore this bank refund's exact original return credit; do not create a replacement credit.");
+   if(!actual.resolvedSuccess&&request.status==="refunded"){
+    if(credit.status!=="issued") throw new ServiceError("conflict","Restore the issued original credit before reopening its unsettled bank refund.");
+    await ctx.tx.update(returnRequests).set({status:"received",updatedAt:sql`now()`}).where(eq(returnRequests.id,request.id));
+    await ctx.emitTimeline({contactId:request.contactId,eventType:"return.refundNeedsAttention",subjectType:"return",subjectId:request.id,
+     payload:{orderId:order.id,creditNoteId:credit.id,refundId:input.refundId,amountMinor:credit.totalMinor,currency:invoice.invoice.currency}});
+    await notifyCommerceContact(ctx,request.contactId,"return.refund_needs_attention",`return-bank-review:${request.id}:${actual.receiptId ?? input.refundId}`);
+    ctx.queueEvent("catalog.returnRefundNeedsAttention",{returnId:request.id,creditNoteId:credit.id,refundId:input.refundId});changed++;
+   }
+  }
+  if(actual.resolvedSuccess) changed+=(await ctx.callAsSystem(reconcileReturnProviderRefunds,{invoiceId:input.invoiceId})).changed;
+  return {changed};
+ },
+});
+export async function onReturnBankRefundStateChanged(payload:unknown):Promise<void>{const input=z.object({invoiceId:id,refundId:id}).parse(payload);await reconcileReturnBankRefundState.call(input,{kind:"system"});}
+export default [getReturnRefundPlan,prepareReturnRefund,refundReturn,claimReturnProviderRefund,reconcileReturnProviderRefunds,submitReturnProviderRefund,reconcileReturnBankRefundState];
 

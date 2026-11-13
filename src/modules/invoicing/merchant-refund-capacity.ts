@@ -17,12 +17,18 @@ export interface MerchantRefundCashFact {
   status: "pending" | "requires_action" | "succeeded" | "failed" | "canceled" | null;
   bindingVerified: boolean;
 }
-export type MerchantRefundDebt = "contradictory_provider_fact" | "unassigned_refund" | "unverified_binding" | "unfinished_creator" | "unknown_refund" | "over_refunded";
+export type MerchantRefundDebt = "contradictory_provider_fact" | "unassigned_refund" | "unverified_binding" | "unfinished_creator" | "unknown_refund" | "over_refunded" | "stale_current_state";
+/** Only the shared SQL current-state receipt supplies these. A caller's
+ * asserted latest status or an observation timestamp is not this proof.
+ */
+export interface MerchantRefundVerifiedCurrentState { requestId: string; providerRef: string; status: MerchantRefundCashFact["status"] }
 export function merchantRefundCapacity(input: {
   originalCashMinor: number;
   currency: string;
   reservations: readonly MerchantRefundReservation[];
   observations: readonly MerchantRefundCashFact[];
+  currentStates?: readonly MerchantRefundVerifiedCurrentState[];
+  unresolvedCurrentRequests?: readonly string[];
 }): { refundedMinor: number | null; reservedMinor: number | null; availableMinor: number | null; debt: MerchantRefundDebt[] } {
   const valid = (amount: number) => Number.isSafeInteger(amount) && amount > 0;
   if (!valid(input.originalCashMinor) || !/^[A-Z]{3}$/.test(input.currency)) throw new RangeError("Use the actual original provider money amount and currency.");
@@ -43,10 +49,17 @@ export function merchantRefundCapacity(input: {
     }
     const associations = new Set(group.map(fact => fact.requestId).filter((id): id is string => id !== null));
     if (associations.size > 1) debt.add("contradictory_provider_fact");
-    const positive = group.some(fact => fact.status === "succeeded"), pending = !positive && group.some(fact => fact.status === "pending" || fact.status === "requires_action" || fact.status === null);
-    if (positive && group.some(fact => fact.status === "failed" || fact.status === "canceled" || fact.status === "requires_action" || fact.status === null)) debt.add("contradictory_provider_fact");
     const associatedId = [...associations][0];
     const request = associatedId ? requests.get(associatedId) : undefined;
+    if (associatedId && input.unresolvedCurrentRequests?.includes(associatedId)) {
+      debt.add("stale_current_state");
+      continue; // No effective cash amount is inferred from a stale old success.
+    }
+    const current = input.currentStates?.filter(row => row.providerRef === first.providerRef && row.requestId === associatedId) ?? [];
+    if (current.length > 1) debt.add("contradictory_provider_fact");
+    const states = current.length === 1 ? [current[0]!.status] : group.map(fact => fact.status);
+    const positive = states.includes("succeeded"), pending = !positive && states.some(state => state === "pending" || state === "requires_action" || state === null);
+    if (positive && states.some(state => state === "failed" || state === "canceled" || state === "requires_action" || state === "pending" || state === null)) debt.add("contradictory_provider_fact");
     if (!request && (positive || pending)) debt.add("unassigned_refund");
     if (request && !group.some(fact => fact.bindingVerified && fact.requestId === associatedId)) debt.add("unverified_binding");
     if (positive) {
@@ -71,6 +84,6 @@ export function merchantRefundCapacity(input: {
     if (request.dispatched) debt.add("unknown_refund");
   }
   if (refunded + reserved > BigInt(input.originalCashMinor) || reserved < 0n) debt.add("over_refunded");
-  if (debt.has("contradictory_provider_fact") || refunded > BigInt(Number.MAX_SAFE_INTEGER) || reserved > BigInt(Number.MAX_SAFE_INTEGER) || reserved < 0n) return { refundedMinor: null, reservedMinor: null, availableMinor: null, debt: [...debt] };
+  if (debt.has("contradictory_provider_fact") || debt.has("stale_current_state") || refunded > BigInt(Number.MAX_SAFE_INTEGER) || reserved > BigInt(Number.MAX_SAFE_INTEGER) || reserved < 0n) return { refundedMinor: null, reservedMinor: null, availableMinor: null, debt: [...debt] };
   return { refundedMinor: Number(refunded), reservedMinor: Number(reserved), availableMinor: debt.has("over_refunded") ? null : Number(BigInt(input.originalCashMinor) - refunded - reserved), debt: [...debt] };
 }

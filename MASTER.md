@@ -13942,6 +13942,99 @@ whatever is best for the people using the site.
   The new collection model stays disabled; full financial/browser/provider/
   recovery acceptance and C12.38 remain open. Exact scope and preserved evidence
   are in `deploy/current-financial-source-2026-11-12.md`.
+  Original bank-refund current-state isolated draft 2026-11-12: source now
+  retains repeated capture occurrences, exact original-resource read/finish
+  receipts, nullable/action/failure-balance facts and current cash projections.
+  Issued return credits remain unchanged; exact original RMA parts reopen and
+  outstanding refund promises keep financial review debt. Masked owner/buyer
+  status and the scoped original-resource recovery path are drafted. Full
+  Node22 types, changed-file lint and63 DB-free controls pass; initial import
+  and fixture type-only lint diagnostics were corrected and preserved. At that
+  isolated checkpoint no SQL, financial native, browser or provider acceptance
+  had run.
+  That isolated fragment was unassembled and its assembled80 SQL958 stayed
+  unchanged. Subsequent owned composition onto current885a37f2 appends the
+  bank fragment after accepted terms: new unpublishedSQL e7834c90 preserves
+  the entire881a byte prefix, published0–79 and the journal. This current
+  union at38c997c5 passes full Node22 types,48-file lint and74 affected
+  source assertions with25 declared database skips. No bank native or SDK
+  business qualification has run. A subsequent NEW V11 ordinary0–80
+  diagnostic on productf45e4bde/e783 passed5.927s:81 journal/max60/hash,
+  full seven-model parity, original/new financial guards, fsync on and final
+  independent backend[] drain. This is schema structure only, not populated
+  upgrade, actual bank state/credit/native or provider acceptance. Prior
+  databases/clones stay unchanged; final gates remain required. Generic/manual
+  causal discharge and legacy bank recovery remain unfinished work. An isolated
+  follow-up now drafts a fresh-human-confirmed generic refund replacement:
+  exact current failed resources, finished callers, one signed causal chain,
+  cash-locked admission, shared buyer/debt status, four locales and original
+  financial merge/privacy witnesses. It refuses RMA ownership and unrelated
+  equal-amount refunds. The existing mutable journal carries authenticated
+  evidence; it is not claimed to be DB append-only. This follow-up at e4a39f30
+  passes full Node22 types, 15-file lint and 63 DB-free proof/private/audit
+  controls, with no native, provider or historical-bank proof, and does not change
+  unpublished SQL e783 or the preserved V11 database. See
+  `deploy/merchant-bank-replacement-2026-11-12.md`. This does
+  not activate the new model or close C12.38. See
+  `deploy/merchant-refund-current-state-2026-11-12.md`.
+  First generic bank-replacement native on a6c3dd47/V11 e783 subsequently
+  passes 8.118s: original400 bank failure, independent unrelated400 and one
+  explicitly causal400 replacement; replay creates no additional refund and
+  the buyer cannot pay again. Independent ledger verifies4200 paid/800 current
+  returned, three finished original resources, one causal journal and retained
+  failure-balance history. UTC inspection matches the actual application's
+  mandatory session configuration and confirms original FAILED/child SUCCEEDED
+  receipts; bare Vancouver inspection is preserved separately, with no stored
+  writes or golden-hash claim. All clients drained. This case has no issued
+  credit and does not prove RMA reuse. Four other bank natives, legacy recovery,
+  final source union, SDK/browser/provider and full financial acceptance remain
+  open; this does not activate the model or close C12.38.
+  The next two-resource native found a genuine repeat-processing audit event
+  refusal after actual failed400 and action/null600 state reads passed. Its
+  pending600 primary fact and current receipt survived; logical projection
+  rolled back at the existing transition constraint, preserving paid4200 and
+  refunded0. Before source287/a490/e783 failed7.062s and is retained with a
+  separate 15-table UTC golden-equal populated clone (0.479s, journal81/e783,
+  clients drained). A one-line source repair now skips only the impossible
+  same-status transition event, retaining actual code/update/audit/outbox/fee
+  effects. Source2a191d44 passes full incremental Node22 types, changed-file lint
+  and63 finite core checks; unchanged oracle48cf8407 AFTER passes7.381s on
+  V11/e783. Actual failed400 plus independent600 action/null/pending/restored
+  success leave4200 paid/600 refunded; UTC readback verifies both current
+  receipts, retained raw facts, two finished original resources and real bank
+  state events, with no remaining clients. The RMA-credit, stale-read and
+  strengthened caller natives remain unrun. No schema, historical money,
+  oracle or model activation changed; final combined/legacy/provider acceptance
+  remains open.
+  First RMA-credit bank native on e007/2a191/e783 failed6.617s at a genuine
+  notification-topic validation refusal. Actual4200 success then bank action
+  leaves4200 paid/0 current refunded, processing refund, same issued4200
+  credit and original part, but the bank listener's transaction rolls back
+  and the return stays refunded. Its actual outbox error remains pending;
+  terminal failure/replacement is unrun. A separate23-table UTC golden-equal
+  template clone preserves that BEFORE state (0.145s, journal81/e783, clients
+  drained). Source now changes only the notification topic and matching eight
+  locale keys to valid lowercase, retaining timeline/event names, old money,
+  schema and original oracle. Sourcebd549214 passes full incremental Node22
+  types, changed-file lint and88 actual i18n/parity controls. The unchanged RMA
+  AFTER passes7.093s: same issued4200 credit/lines and original4200 part, old
+  failed4200 plus one exact-part successful4200 replacement, two original
+  finished callers/keys, paid/current-refunded4200, no new credit or buyer
+  charge. Actual attention notification and bank callbacks now commit; UTC
+  ledger/journal81/e783 and all client drains pass. Before/source/clones remain
+  preserved. The final two distinct controls on a50/bd549, unchanged48cf and
+  V11/e783 pass separately once: staleGET5.778s retains its old successful raw
+  capture and actual finish without a current receipt after a newer signed
+  action; a fresh action read alone receives a valid receipt, paid4200/current
+  refunded0. Strengthened paused caller6.236s proves committed actualACK and
+  rawsuccess400 with finish0, refuses externalGET until the actual wrapper
+  returns, then converges with finish1/currentreceipt1, paid4200/refunded400
+  and one physicalPOST. Paused-time facts are actual test assertions; independent
+  final UTC ledgers verify exact original resources, current receipts, retained
+  facts, journal81/e783 and empty backends. Five distinct controls now have
+  component evidence; final combined-source, legacy-bank, SDK/browser and
+  provider acceptance remain open. This does not enable the model or close
+  C12.38; details and limits remain in the bank-replacement evidence above.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

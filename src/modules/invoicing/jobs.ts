@@ -6,4 +6,5 @@ import {erasePaymentProviderCustomer} from "./provider-erasure";
 import {reconcileOriginalMerchantFeeJob} from "./merchant-fee-service";
 import {quiesceMerchantSchedules} from "@/modules/subscriptions/merchant-tax-quiescence";
 import {reconcileMerchantScheduleErasure} from "@/modules/subscriptions/provider-schedule-erasure";
-export default [finishBuyerMoneyErasure,erasePaymentProviderCustomer,reconcileOriginalMerchantFeeJob,quiesceMerchantSchedules,reconcileMerchantScheduleErasure];
+import {reconcileOriginalRefundCurrentState} from "./merchant-refund-current-jobs";
+export default [finishBuyerMoneyErasure,erasePaymentProviderCustomer,reconcileOriginalMerchantFeeJob,quiesceMerchantSchedules,reconcileMerchantScheduleErasure,reconcileOriginalRefundCurrentState];

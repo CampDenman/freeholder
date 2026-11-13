@@ -61,7 +61,7 @@ import { applyMemberStatus } from "./status";
 // Member export and erasure through the site's privacy requests (C12.15).
 import "./data-rights";
 import { siteAllowsAdult } from "./adult";
-export { onOrderPaid, onRefundSucceeded } from "./payouts";
+export { onOrderPaid, onRefundSucceeded, onBankRefundStateChanged } from "./payouts";
 export { onInvoicePaid } from "./member-subscriptions";
 export { onMemberPosted, onMemberPostDeleted } from "./federation/core";
 export { onCallSeatLost } from "./call-seats";

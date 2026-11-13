@@ -429,7 +429,14 @@ export type PaymentProviderEvent = MerchantChargeScope & (
       id: string;
       kind: "refund_processing" | "refund_succeeded" | "refund_failed";
       providerRef: string;
-      paymentProviderRef: string;
+      paymentProviderRef: string | null;
+      observedPaymentIntentRef?: string | null;
+      providerChargeRef?: string;
+      /** Preserve signed raw bank state separately from its logical category. */
+      providerStatus?: "pending" | "requires_action" | "succeeded" | "failed" | "canceled" | null;
+      observedProviderApiVersion?: string | null;
+      failureReason?: string;
+      failureBalanceTransactionRef?: string;
       failureCode?: "provider_cancelled";
       amountMinor?: number;
       currency?: string;

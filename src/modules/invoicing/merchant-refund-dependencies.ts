@@ -6,7 +6,10 @@ import type { PgTable } from "drizzle-orm/pg-core";
 import type { Tx } from "@/core/service";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import * as tables from "./merchant-refund-schema";
+import { merchantRefundCurrentReceipts, merchantRefundObservationCaptures, merchantRefundStateReadFinishes, merchantRefundStateReads } from "./merchant-refund-current-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import { moneyStateEvents } from "./schema";
+import { BANK_REPLACEMENT_PROTOCOL, BANK_REPLACEMENT_REASON, BANK_REPLACEMENT_STATE } from "./merchant-bank-replacement-proof";
 export interface MerchantRefundDependencyReceipt { version: 1; entries: Array<{ table: string; id: string; fingerprint: string }>; incomplete: boolean }
 const MAX = 5000;
 const ids = (column: string, values: readonly string[]): SQL => values.length
@@ -45,10 +48,19 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
   if (overflow) return incomplete();
   const rowIds = (rows: Record<string, unknown>[]) => rows.map(row => row.id).filter((id): id is string => typeof id === "string");
   const requestIds = rowIds(requests), inspectionIds = rowIds(inspections), resolutionIds = rowIds(resolutions);
+  const refundIds = requests.map(row => row.refund_id).filter((id): id is string => typeof id === "string");
+  await read("money_state_events.bank_replacements", moneyStateEvents, sql`${ids("subject_id", refundIds)} and r.subject_type='refund' and
+    (r.reason=${BANK_REPLACEMENT_REASON} or r.to_state=${BANK_REPLACEMENT_STATE} or r.metadata->>'protocol'=${BANK_REPLACEMENT_PROTOCOL})`);
   const dispatches = await read("merchant_refund_dispatches", tables.merchantRefundDispatches, ids("request_id", requestIds));
   if (overflow) return incomplete();
   const dispatchIds = rowIds(dispatches);
-  await read("merchant_refund_observations", tables.merchantRefundObservations, sql`(${owner(paymentIds, receiptIds)} or ${ids("request_id", requestIds)})`);
+  const observations = await read("merchant_refund_observations", tables.merchantRefundObservations, sql`(${owner(paymentIds, receiptIds)} or ${ids("request_id", requestIds)})`);
+  if (overflow) return incomplete();
+  await read("merchant_refund_observation_captures", merchantRefundObservationCaptures, ids("observation_id", rowIds(observations)));
+  const stateReads = await read("merchant_refund_state_reads", merchantRefundStateReads, ids("request_id", requestIds));
+  if (overflow) return incomplete();
+  await read("merchant_refund_state_read_finishes", merchantRefundStateReadFinishes, ids("read_id", rowIds(stateReads)));
+  await read("merchant_refund_current_receipts", merchantRefundCurrentReceipts, ids("request_id", requestIds));
   await read("merchant_refund_reservation_retirements", tables.merchantRefundReservationRetirements, ids("request_id", requestIds));
   await read("merchant_refund_creation_refusals", tables.merchantRefundCreationRefusals, ids("dispatch_id", dispatchIds));
   await read("merchant_refund_terminal_receipts", tables.merchantRefundTerminalReceipts, ids("request_id", requestIds));
@@ -63,7 +75,7 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
   const entries: MerchantRefundDependencyReceipt["entries"] = [];
   for (const group of collected) for (const row of group.rows) {
     const composite = typeof row.resolution_id === "string" && typeof row.observation_id === "string" ? `${row.resolution_id}:${row.observation_id}` : null;
-    const key = row.id ?? row.dispatch_id ?? row.request_id ?? row.inspection_id ?? composite;
+    const key = row.id ?? row.dispatch_id ?? row.read_id ?? row.request_id ?? row.inspection_id ?? composite;
     if (typeof key !== "string") return incomplete();
     entries.push({ table: group.table, id: key, fingerprint: merchantTaxDigest(row) });
   }

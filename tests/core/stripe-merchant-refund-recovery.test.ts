@@ -25,6 +25,13 @@ function provider(response: (url: URL, init: RequestInit) => Record<string, unkn
   return { recover, observed, fetcher, adapter };
 }
 describe("original merchant refund recovery (C12.38)", () => {
+  it("reads a documented local-payment refund reference through the same exact original resource path", async () => {
+    const p = provider(() => refund({ id: "pyr_originalBank", status: "requires_action" }));
+    expect(await p.recover({ originalRefundRef: "pyr_originalBank" })).toMatchObject({ state: "observed", evidence: {
+      providerRef: "pyr_originalBank", providerStatus: "requires_action", status: "pending", bindingVerified: true } });
+    expect(p.observed).toHaveBeenCalledOnce();
+    expect(p.fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
   it("leaves a complete empty original lookup unresolved without any POST", async () => {
     const p = provider(() => ({ data: [], has_more: false }));
     expect(await p.recover()).toEqual({ state: "unresolved" });

@@ -6,6 +6,19 @@ const request = (changes: Partial<MerchantRefundReservation> = {}): MerchantRefu
 const fact = (changes: Partial<MerchantRefundCashFact> = {}): MerchantRefundCashFact => ({ requestId: "original", providerRef: "re_original", amountMinor: 400, currency: "CAD", status: "succeeded", bindingVerified: true, ...changes });
 const capacity = (reservations: MerchantRefundReservation[], observations: MerchantRefundCashFact[]) => merchantRefundCapacity({ originalCashMinor: 1000, currency: "CAD", reservations, observations });
 describe("original merchant refund cash capacity", () => {
+  it("uses a fresh original current receipt across bank reclassification without deleting old success observations", () => {
+    const history = [fact(), fact({ status: "requires_action" }), fact({ status: "pending" })];
+    const original = { originalCashMinor: 1000, currency: "CAD", reservations: [request()], observations: history };
+    expect(merchantRefundCapacity({ ...original, currentStates: [{ requestId: "original", providerRef: "re_original", status: "requires_action" }] }))
+      .toMatchObject({ refundedMinor: 0, reservedMinor: 400, availableMinor: 600, debt: ["unknown_refund"] });
+    expect(merchantRefundCapacity({ ...original, currentStates: [{ requestId: "original", providerRef: "re_original", status: "succeeded" }] }))
+      .toEqual({ refundedMinor: 400, reservedMinor: 0, availableMinor: 600, debt: [] });
+    expect(history).toHaveLength(3);
+  });
+  it("never falls back to an old success after another actual capture invalidates a current receipt", () => {
+    expect(merchantRefundCapacity({ originalCashMinor: 1000, currency: "CAD", reservations: [request()], observations: [fact()], unresolvedCurrentRequests: ["original"] }))
+      .toMatchObject({ refundedMinor: null, reservedMinor: null, availableMinor: null, debt: ["stale_current_state", "unknown_refund"] });
+  });
   it("counts one actual refund once across duplicate observations and preserves remaining original cash", () => {
     expect(capacity([request()], [fact(), fact()])).toEqual({ refundedMinor: 400, reservedMinor: 0, availableMinor: 600, debt: [] });
   });

@@ -1091,4 +1091,4 @@ export default [
   ...storefrontServices,
 ];
 
-export { onReturnRefundSucceeded } from "./fulfillment";
+export { onReturnRefundSucceeded, onReturnBankRefundStateChanged } from "./fulfillment";

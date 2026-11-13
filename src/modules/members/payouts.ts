@@ -18,6 +18,7 @@ import { orderForInvoice, orderInvoiceRevenue, orderSellers, registerSellerGate 
 import { PAYOUT_PROVIDER_IDS } from "@/adapters/payouts";
 import { getInvoiceMarketPolicy, marketFeeMinor } from "@/modules/invoicing/market-policy";
 import { merchantSettlement } from "@/modules/invoicing/merchant-settlement";
+import { merchantRefundBankState } from "@/modules/invoicing/merchant-refund-bank-state-service";
 import { getMerchantCollectionConfiguration } from "@/modules/invoicing/merchant-collection";
 import { notifyMember } from "./notify";
 import { openMessage, sealMessage } from "./message-crypto";
@@ -551,9 +552,28 @@ export async function onRefundSucceeded(payload: unknown): Promise<void> {
   await reversePayouts.call({ invoiceId, amountMinor }, { kind: "system" });
 }
 
+export const reconcileBankRefundPayouts = defineService({
+  name: "members.reconcileBankRefundPayouts", summary: "Recheck original merchant earnings against current bank cash and the remaining customer refund promise.",
+  kind: "mutation", permission: "system", external: false, writeClass: "money",
+  input: z.object({ invoiceId: uuid, refundId: uuid }), output: z.object({ changed: z.number().int() }),
+  handler: async (input, ctx) => {
+    const actual = await ctx.callAsSystem(merchantRefundBankState, { refundId: input.refundId });
+    if (!actual.original || actual.invoiceId !== input.invoiceId) return { changed: 0 };
+    const policy = await ctx.callAsSystem(getInvoiceMarketPolicy, { invoiceId: input.invoiceId });
+    if (policy?.model !== "seller_merchant") return { changed: 0 };
+    return ctx.callAsSystem(reversePayouts, { invoiceId: input.invoiceId, amountMinor: 0 });
+  },
+});
+
+export async function onBankRefundStateChanged(payload: unknown): Promise<void> {
+  const input = z.object({ invoiceId: uuid, refundId: uuid }).safeParse(payload);
+  if (input.success) await reconcileBankRefundPayouts.call(input.data, { kind: "system" });
+}
+
 export default [
   recordPayouts,
   reversePayouts,
+  reconcileBankRefundPayouts,
   releaseDuePayouts,
   myPayoutAccount,
   savePayoutInstructions,

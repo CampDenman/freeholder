@@ -207,14 +207,23 @@ function stripeEvents(payload: Record<string, unknown>): PaymentProviderEvent[] 
 
   if (type.startsWith("refund.")) {
     const providerRef = text(value.id);
-    const paymentProviderRef = text(value.payment_intent) ?? text(object(value.payment_intent)?.id) ?? text(value.charge) ?? text(object(value.charge)?.id);
-    if (!providerRef || !paymentProviderRef) return [];
-    const common = { id, providerRef, paymentProviderRef, amountMinor: number(value.amount), currency, occurredAt: created };
+    const observedPaymentIntentRef = text(value.payment_intent) ?? text(object(value.payment_intent)?.id) ?? null;
+    const providerChargeRef = text(value.charge) ?? text(object(value.charge)?.id);
+    const paymentProviderRef = observedPaymentIntentRef ?? providerChargeRef ?? null;
+    if (!providerRef) return [];
+    const providerStatus = ["pending", "requires_action", "succeeded", "failed", "canceled"].includes(String(value.status))
+      ? value.status as "pending" | "requires_action" | "succeeded" | "failed" | "canceled" : null;
+    const common = { id, providerRef, paymentProviderRef, ...(providerChargeRef ? { providerChargeRef } : {}),
+      providerStatus, observedPaymentIntentRef, observedProviderApiVersion: text(payload.api_version) ?? null,
+      ...(text(value.failure_reason) ? { failureReason: text(value.failure_reason)! } : {}),
+      ...(text(value.failure_balance_transaction) ?? text(object(value.failure_balance_transaction)?.id)
+        ? { failureBalanceTransactionRef: (text(value.failure_balance_transaction) ?? text(object(value.failure_balance_transaction)?.id))! } : {}),
+      amountMinor: number(value.amount), currency, occurredAt: created };
     if (value.status === "succeeded") return [{ ...common, kind: "refund_succeeded" }];
     if (value.status === "canceled") return [{ ...common, kind: "refund_failed", failureCode: "provider_cancelled" }];
     if (value.status === "failed" || type === "refund.failed") return [{ ...common, kind: "refund_failed" }];
-    if (value.status === "pending" || value.status === "requires_action") return [{ ...common, kind: "refund_processing" }];
-    return [];
+    // Null/unrecognized state remains retained evidence, never terminal cash.
+    return [{ ...common, kind: "refund_processing" }];
   }
 
   if (type.startsWith("charge.dispute.")) {

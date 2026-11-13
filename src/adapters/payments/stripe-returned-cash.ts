@@ -4,13 +4,14 @@
 import { AdapterError } from "../types";
 import { number, object, text } from "./http";
 import { validateMerchantChargeScope } from "./stripe-merchant-scope";
+import { STRIPE_REFUND_REFERENCE } from "./stripe-refund-reference";
 import type { MerchantReturnedCashEvidence } from "./merchant-returned-cash-types";
 import type { MerchantReturnedCashInspectionRequest, PaymentAccountScope } from "./types";
 type Api = (path: string, init: RequestInit, scope: PaymentAccountScope) => Promise<Record<string, unknown>>;
 const unresolved = () => new AdapterError("payments", "stripe", "provider_failure", "The original cash return needs complete original-account evidence.", true);
 const ref = (value: unknown, prefix: string): string | null => {
   const id = text(value) ?? text(object(value)?.id);
-  return id && id.length <= 200 && new RegExp(`^${prefix}_[A-Za-z0-9_]+$`).test(id) ? id : null;
+  return id && id.length <= 200 && (prefix === "re" ? STRIPE_REFUND_REFERENCE : new RegExp(`^${prefix}_[A-Za-z0-9_]+$`)).test(id) ? id : null;
 };
 const minor = (value: unknown): number | null => { const result = number(value); return result !== undefined && Number.isSafeInteger(result) && result >= 0 ? result : null; };
 const currency = (value: unknown): string | null => { const result = text(value)?.toUpperCase(); return result && /^[A-Z]{3}$/.test(result) ? result : null; };
