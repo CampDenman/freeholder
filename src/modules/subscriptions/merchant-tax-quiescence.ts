@@ -17,6 +17,7 @@ import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { paymentAdapter } from "@/adapters/payments";
 import { type ScheduleStopProof, subscriptionProviderScheduleErasures, subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { scheduleCallerHasStopped, scheduleKnownResources, scheduleOperationDigest } from "./provider-schedule-proof";
+import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
 import { subscriptionMerchantScopes, subscriptions, subscriptionProviderChargeReceipts } from "./schema";
 import scheduleCallerServices from "./provider-schedule-callers";
 import scheduleErasureServices from "./provider-schedule-erasure";
@@ -125,7 +126,7 @@ export const retainMerchantScheduleInventory = defineService({
       }
     }
     if (authority.held || operations.length !== resource.operationRevision || updatedOperations.some((operation, index) => operation.operationRevision !== index + 1
-      || !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation))) return { quiesced: false };
+      || !["confirmed", "refused"].includes(operation.state) || !scheduleCallerHasStopped(operation) || !originalProviderReadsFinished(operation))) return { quiesced: false };
     const phaseResources = originalPhaseResources(updatedOperations), phaseSchedules = closedOriginalPhaseSchedules(updatedOperations);
     if (!phaseResources || !known.size && !phaseResources.size || phaseResources.size && (!phaseSchedules || phaseSchedules.length !== phaseResources.size)) return { quiesced: false };
     const actualReceipts = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId, parent.id)).orderBy(subscriptionProviderChargeReceipts.id).limit(5001);

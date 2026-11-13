@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { scheduleCallerHasStopped } from "./provider-schedule-proof";
+import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
 import type { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 const productProof = z.object({ version: z.literal(1), operationId: z.uuid(), requestDigest: z.string().regex(/^[a-f0-9]{64}$/), providerProductRef: z.string().regex(/^prod_[A-Za-z0-9]{1,195}$/) });
 type Operation = typeof subscriptionProviderScheduleOperations.$inferSelect;
@@ -11,7 +12,7 @@ export function verifiedOriginalPhaseProduct(operation: Operation): string | nul
   const proof = productProof.safeParse(operation.providerObservation.productProof);
   const physical = z.object({ method: z.literal("POST"), path: z.literal("/v1/products"), body: z.record(z.string(), z.string()) }).safeParse(operation.originalRequest.physical);
   const parsedHistory = z.array(z.record(z.string(), z.unknown())).max(5000).safeParse(operation.providerObservation.history);
-  if (operation.kind !== "create_product" || operation.state !== "confirmed" || !operation.positiveObserved || !scheduleCallerHasStopped(operation)
+  if (operation.kind !== "create_product" || operation.state !== "confirmed" || !operation.positiveObserved || !scheduleCallerHasStopped(operation) || !originalProviderReadsFinished(operation)
     || merchantTaxDigest(operation.originalRequest) !== operation.requestDigest || operation.originalRequest.resourceKind !== "phase_product"
     || !physical.success || physical.data.body["metadata[freeholder_subscription_id]"] !== operation.subscriptionId
     || physical.data.body["metadata[freeholder_phase_product_operation_id]"] !== operation.id || !proof.success

@@ -37,7 +37,9 @@ export const merchantScheduleCancellationTargets = defineService({
     recoveryOperationIds: z.array(z.uuid()).max(5000), cancellationOperations: z.array(z.object({ providerSubscriptionRef: z.string(), operationId: z.uuid() })) })).max(5000),
   handler: async (input, ctx) => {
     await lockContactIdentityForRead(ctx.tx);
-    const { scopes } = await originalQuiescenceMembers(ctx, input);
+    const authority = await originalQuiescenceMembers(ctx, input);
+    if (authority.kind === "amendment" && !authority.current) return [];
+    const { scopes } = authority;
     const targets = [];
     for (const row of scopes) {
       const [resource] = await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId, row.subscriptionId)).limit(1);

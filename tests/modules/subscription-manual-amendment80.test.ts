@@ -24,7 +24,7 @@ describe.runIf(hasDatabase)("manual original amendment entitlement boundary", { 
     fixture = await seedMerchantCheckout80("destination", 1); await setModuleEnabled.call({ module: "subscriptions", enabled: true }, OWNER);
     const [item] = await db().select({ variant: productVariants }).from(cartItems).innerJoin(productVariants, eq(productVariants.id, cartItems.variantId)).where(eq(cartItems.cartId, fixture.cart.id)).limit(1);
     if (!item) throw new Error("Missing actual merchant offer");
-    const old = await savePlan.call({ productId: item.variant.productId, name: "Original manual trial", interval: "month", trialDays: 7, trialRequiresCard: false, setupFeeMinor: 500, billingMode: "manual", status: "active" }, OWNER);
+    const old = await savePlan.call({ productId: item.variant.productId, name: "Original manual trial", interval: "month", trialDays: 7, trialRequiresCard: false, setupFeeMinor: 500, billingMode: "manual", proration: "none", status: "active" }, OWNER);
     const input = { planId: old.id, productVariantId: item.variant.id, contactId: fixture.buyer.id, currency: "CAD", taxDestination: { country: "CA", region: "BC" } };
     const quote = await quoteNewAgreement.call(input, OWNER); if (!quote) throw new Error("Missing actual merchant terms");
     const original = await subscribe.call({ ...input, commercialTerms: { quoteDigest: quote.quoteDigest, locale: "en", source: "owner_subscription" } }, OWNER);

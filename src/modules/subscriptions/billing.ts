@@ -18,6 +18,7 @@ import { getSubscriptionPaymentScope, subscriptionPaymentScope } from "./market-
 import { subscriptionMethodScopeMatches } from "./merchant-scope-contract";
 import { subscriptionProviderInvoiceObservations } from "./provider-period-schema";
 import { proveMerchantProviderPeriod, assertCanonicalProviderPeriod } from "./provider-periods";
+import { commercialBillingStart } from "./commercial-amendment-calendar";
 import { originalMerchantPlan, originalMerchantTerms } from "./merchant-terms-read";
 import { merchantObservationRef, recordMerchantPaymentObservation } from "@/modules/invoicing/merchant-payment-observations";
 import { invoices, paymentMethods, payments } from "@/modules/invoicing/schema";
@@ -95,7 +96,8 @@ const claimCharge = defineService({
       .for("update");
     if (!subscription) throw new ServiceError("not_found", "There is no such subscription.");
     const current = mayChargePlatform(subscription) && subscription.merchantScopeVersion !== 1 ? await applyPendingPlan(ctx, subscription) : subscription;
-    if (!mayChargePlatform(current) || current.merchantScopeVersion === 1 && current.currentPeriodEnd.getTime() > Date.now()) {
+    const calendar = await commercialBillingStart(ctx, current);
+    if (!mayChargePlatform(current) || !calendar.ready || current.merchantScopeVersion === 1 && calendar.start.getTime() > Date.now()) {
       return {
         skip: true,
         subscriptionId: current.id,
@@ -113,7 +115,7 @@ const claimCharge = defineService({
     }
     const [currentPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, current.planId));
     if (!currentPlan) throw new ServiceError("not_found", "There is no such plan.");
-    const start = current.currentPeriodEnd;
+    const start = calendar.start;
     const plan = await originalMerchantPlan(ctx, current, currentPlan, start);
     const end = periodEnd(start, plan.interval, plan.intervalCount);
     let invoiceId = input.invoiceId ?? null;
@@ -257,9 +259,11 @@ const applyCharge = defineService({
       // money still belongs in the ledger, but it cannot restart membership
       // access or extend a cancelled renewal promise.
       if (!mayChargePlatform(subscription)) return { advanced: false };
+      const calendar = await commercialBillingStart(ctx, subscription);
+      if (!calendar.ready) return { advanced: false };
       subscription = await applyPendingPlan(ctx, subscription);
       [currentPlan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
-      plan = currentPlan ? await originalMerchantPlan(ctx, subscription, currentPlan, subscription.currentPeriodEnd) : undefined;
+      plan = currentPlan ? await originalMerchantPlan(ctx, subscription, currentPlan, calendar.start) : undefined;
       if (subscription.merchantScopeVersion === 1 && subscription.pendingPlanId) return { advanced: false };
       const now = new Date();
       if (subscription.currentPeriodEnd > now) {
@@ -273,7 +277,7 @@ const applyCharge = defineService({
         await keepAccess(ctx, subscription, plan?.name ?? "Membership", subscription.currentPeriodEnd, "active");
         return { advanced: false };
       }
-      const start = subscription.currentPeriodEnd;
+      const start = calendar.start;
       const end = periodEnd(start, plan?.interval ?? "month", plan?.intervalCount ?? 1);
       await ctx.tx
         .update(subscriptions)
@@ -1178,7 +1182,9 @@ export const reconcileProviderPeriod = defineService({
     const end = input.periodEnd
       ? new Date(input.periodEnd)
       : periodEnd(start, plan?.interval ?? "month", plan?.intervalCount ?? 1);
+    const calendar = await commercialBillingStart(ctx, subscription);
     const renewing = end > subscription.currentPeriodEnd && subscription.currentPeriodEnd <= now;
+    if (renewing && (!calendar.ready || calendar.start > now)) throw new ServiceError("conflict", "The accepted future period is not ready or has not begun; retained cash cannot advance its calendar early.");
     if (renewing) {
       subscription = await applyPendingPlan(ctx, subscription);
       [plan] = await ctx.tx.select().from(plans).where(eq(plans.id, subscription.planId));
@@ -1186,8 +1192,8 @@ export const reconcileProviderPeriod = defineService({
     }
     if (routing.providerAccountId || routing.providerPlatformAccountId) {
       if (input.provider !== "stripe" || input.amountMinor > 0 && !input.paymentProviderRef || (!routing.providerPlatformAccountId && input.applicationFeeMinor === undefined) || !input.periodStart || !input.periodEnd) throw new ServiceError("conflict", "The provider must prove this seller period's actual charge and dates; legacy fees retain their original evidence contract.");
-      const expectedStart = end > subscription.currentPeriodEnd && subscription.currentPeriodEnd <= now ? subscription.currentPeriodEnd : subscription.currentPeriodStart;
-      const expectedEnd = expectedStart === subscription.currentPeriodEnd ? periodEnd(expectedStart, plan?.interval ?? "month", plan?.intervalCount ?? 1) : subscription.currentPeriodEnd;
+      const expectedStart = renewing ? calendar.start : subscription.currentPeriodStart;
+      const expectedEnd = renewing ? periodEnd(expectedStart, plan?.interval ?? "month", plan?.intervalCount ?? 1) : subscription.currentPeriodEnd;
       if (Math.floor(start.getTime()/1000) !== Math.floor(expectedStart.getTime()/1000) || Math.floor(end.getTime()/1000) !== Math.floor(expectedEnd.getTime()/1000)) throw new ServiceError("conflict", "The seller payment dates do not match the original membership period.");
     }
     const invoiceId = await settlePeriodInvoice(ctx, subscription, {
@@ -1230,7 +1236,7 @@ export const reconcileProviderPeriod = defineService({
       }
       return { applied: true };
     }
-    const nextStart = subscription.currentPeriodEnd;
+    const nextStart = routing.providerPlatformAccountId ? start : subscription.currentPeriodEnd;
     const nextEnd = periodEnd(nextStart, plan?.interval ?? "month", plan?.intervalCount ?? 1);
     await ctx.tx
       .update(subscriptions)

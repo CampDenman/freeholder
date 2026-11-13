@@ -15,7 +15,7 @@ async function actor() { return { ...await actorFromToken((await cookies()).get(
 function selection(form: FormData) {
   const locale = text(form, "locale");
   if (!["en", "es", "fr", "ar"].includes(locale)) throw new ServiceError("validation", "Select a supported review language.");
-  return { id: text(form, "id"), planId: text(form, "planId"), locale: locale as "en" | "es" | "fr" | "ar",
+  return { id: text(form, "id"), planId: text(form, "planId"), resumeAt: text(form, "resumeAt") || undefined, locale: locale as "en" | "es" | "fr" | "ar",
     taxDestination: { country: text(form, "taxCountry").toUpperCase(), region: text(form, "taxRegion") || undefined,
       postalCode: text(form, "taxPostalCode") || undefined, city: text(form, "taxCity") || undefined } };
 }

@@ -46,7 +46,9 @@ export const merchantPhaseScheduleTargets = defineService({
   output: z.array(z.object({ subscriptionId: z.uuid(), providerScheduleRefs: z.array(reference("sub_sched")).max(5000), recoveryRequired: z.boolean(),
     recoveryOperationIds: z.array(z.uuid()).max(5000), resources: z.array(z.object({ providerScheduleRef: reference("sub_sched"), providerSubscriptionRefs: z.array(reference("sub")).max(5000), providerScheduleOperationId: z.uuid().nullable() })).max(5000) })).max(5000),
   handler: async (input, ctx) => {
-    await lockContactIdentityForRead(ctx.tx); const { scopes } = await originalQuiescenceMembers(ctx, input);
+    await lockContactIdentityForRead(ctx.tx); const authority = await originalQuiescenceMembers(ctx, input);
+    if (authority.kind === "amendment" && !authority.current) return [];
+    const { scopes } = authority;
     const result = [];
     for (const scope of scopes) {
       const operations = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, scope.subscriptionId)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);

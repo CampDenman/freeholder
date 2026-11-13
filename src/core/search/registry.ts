@@ -104,6 +104,7 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_market_policies: "Frozen merchant agreement identity and private routing; reached through authorized agreements.",
   subscription_commercial_terms: "Immutable accepted price, calendar, tax and notice evidence; read through the authorized original agreement, never global content search.",
   subscription_commercial_amendments: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",
+  subscription_commercial_resumptions: "Immutable explicit replacement-calendar consent; read only through the authorized agreement, never global content search.",
   subscription_provider_generations: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",
   subscription_provider_invoice_observations: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",
   subscription_provider_invoice_lines: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",

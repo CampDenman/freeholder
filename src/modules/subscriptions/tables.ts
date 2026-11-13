@@ -7,3 +7,5 @@ export { subscriptionCommercialAmendments } from "./commercial-amendment-schema"
 export { subscriptionProviderGenerations } from "./provider-generation-schema";
 
 export * from "./provider-period-schema";
+
+export { subscriptionCommercialResumptions } from "./commercial-resumption-schema";

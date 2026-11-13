@@ -21,7 +21,7 @@ import { subscriptionProviderScheduleOperations } from "./provider-schedule-sche
 export const merchantAmendmentTaskState = defineService({
   name: "subscriptions.merchantAmendmentTaskState", summary: "Read only the actual accepted amendment job's original generation and physical operation.",
   kind: "query", permission: "system", external: false, input: originalAmendmentScheduleTask,
-  output: z.object({ activated: z.boolean(), currentOperationId: z.uuid().nullable(), verified: z.boolean() }),
+  output: z.object({ activated: z.boolean(), current: z.boolean(), currentOperationId: z.uuid().nullable(), verified: z.boolean() }),
   handler: async (input, ctx) => {
     const authority = await originalQuiescenceMembers(ctx, input);
     if (authority.kind !== "amendment") throw new ServiceError("permission", "This is not an original accepted-amendment task.");
@@ -29,7 +29,7 @@ export const merchantAmendmentTaskState = defineService({
     const own = generation?.termsId === authority.amendment.termsId ? generation : null;
     const [operation] = own ? await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.id, own.firstOperationId)).limit(1) : [];
     const inventory = providerPhaseInventory.safeParse(operation?.providerObservation.phaseInventory);
-    return { activated: authority.amendment.state === "activated", currentOperationId: own?.firstOperationId ?? null,
+    return { current: authority.current, activated: authority.amendment.state === "activated", currentOperationId: own?.firstOperationId ?? null,
       verified: !!operation && operation.state === "confirmed" && phaseOperationCallerFinished(operation) && inventory.success && inventory.data.operationId === operation.id && inventory.data.requestDigest === operation.requestDigest };
   },
 });
@@ -56,6 +56,7 @@ export const activateMerchantAmendmentJob = defineJob({
     if (context && context.id !== input.originalJobId) throw new ServiceError("permission", "The running worker is not the accepted amendment's original job.");
     await context?.throwIfCancelled();
     let state = await merchantAmendmentTaskState.call(input, { kind: "system" });
+    if (!state.current) return { activated: false, superseded: true };
     if (!state.currentOperationId) {
       await quiesceOriginalScheduleTask(input, context);
       if (!(await activateAcceptedMerchantAmendment.call(input, { kind: "system" })).ready) throw new ServiceError("conflict", "Original provider resources, money or current holds still prevent this accepted amendment.");
@@ -69,6 +70,7 @@ export const activateMerchantAmendmentJob = defineJob({
       // stops that new generation merely to create another duplicate schedule.
       await flushMerchantProviderPhaseFinishes(input.subscriptionId);
       state = await merchantAmendmentTaskState.call(input, { kind: "system" });
+      if (!state.current) return { activated: false, superseded: true };
       if (!state.verified && !(await recoverMerchantSchedule.call({ operationId: state.currentOperationId! }, { kind: "system" })).verified) throw new ServiceError("conflict", "Recover the original admitted generation before completing its accepted amendment.");
     }
     return { activated: true };

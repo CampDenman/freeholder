@@ -9090,5 +9090,8 @@
   "subscriptions.amendment.confirm": "I accept this exact future price, calendar, tax destination and merchant notice.",
   "subscriptions.amendment.accept": "Accept future change",
   "subscriptions.merchantAmendmentNotice": "This amendment replaces only future periods. Previous accepted terms and invoices stay unchanged. Billing resumes only after original provider and financial obligations are resolved; the new plan grants access only after its exact period invoice is fully paid.",
-  "admin.activity.subscriptionAmendmentAccepted": "Accepted a future subscription amendment"
+  "admin.activity.subscriptionAmendmentAccepted": "Accepted a future subscription amendment",
+  "subscriptions.resumption.intro": "The original billing date was missed. Finish any original recovery, then review a new future start. The gap is not billed or granted access, and earlier accepted dates stay recorded.",
+  "subscriptions.resumption.start": "New start (your local time)",
+  "subscriptions.resumption.notice": "I accept this new future billing date, price, tax destination and merchant notice after the missed period. The gap will not be charged or granted access. Earlier promises and invoices remain unchanged; the new plan starts only after its exact period invoice is fully paid."
 }

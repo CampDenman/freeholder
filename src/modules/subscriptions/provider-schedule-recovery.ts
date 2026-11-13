@@ -14,6 +14,7 @@ import type { subscriptionProviderGenerations } from "./provider-generation-sche
 import { assertOriginalPhaseFinancials, phaseScheduleReadRequest } from "./provider-phase-dispatch";
 import { phaseScheduleStopRequest, phaseScheduleStopped } from "./provider-phase-stop";
 import { providerPhaseInventory, originalPhaseCustomerMatches } from "./provider-phase-contract";
+import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
 import { closedOriginalPhaseSchedules, originalPhaseResources, phaseOperationCallerFinished } from "./provider-phase-resources";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
@@ -157,6 +158,7 @@ export const applyMerchantScheduleRead = defineService({
     let clearDebt = verified && local.kind === "phase" && !!local.result && ["active", "not_started"].includes(local.result.status)
       && journal.filter(entry => entry.originalRequest.resourceKind === "phase_schedule").at(-1)?.id === operation.id
       && journal.every(entry => (entry.id === operation.id || ["confirmed", "refused"].includes(entry.state)) && phaseOperationCallerFinished(entry))
+      && journal.every(entry => originalProviderReadsFinished(entry.id === operation.id ? { ...operation, providerObservation: observation } : entry))
       && !journal.some(entry => entry.operationRevision >= firstCurrentRevision && ["cancel", "pause", "resume", "void_invoice", "delete_draft"].includes(entry.kind));
     if (clearDebt) try { await assertOriginalPhaseFinancials(ctx, operation.subscriptionId); }
     catch (error) { if (error instanceof ServiceError && error.code === "conflict") clearDebt = false; else throw error; }

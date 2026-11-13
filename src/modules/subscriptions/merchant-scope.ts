@@ -10,6 +10,7 @@ import { subscriptionCommercialTerms, subscriptionMerchantScopes, subscriptionPr
 import { invoices, payments } from "@/modules/invoicing/schema";
 import { invoiceMerchantDependencyFingerprints } from "@/modules/invoicing/merchant-payment-dependencies";
 import { merchantRefundDependencyFingerprints } from "@/modules/invoicing/merchant-refund-dependencies";
+import { subscriptionCommercialResumptions } from "./commercial-resumption-schema";
 import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
 import { subscriptionProviderGenerations } from "./provider-generation-schema";
 import { subscriptionProviderInvoiceObservations, subscriptionProviderInvoiceLines } from "./provider-period-schema";
@@ -18,7 +19,7 @@ import { subscriptionMerchantScope, type subscriptionTaxDestination } from "./me
 import type { SubscriptionMarketPolicy } from "./market-policy";
 
 const profileReceipt = z.object({ profileId: z.uuid(), profileVersion: z.number().int().positive(), liability: z.enum(["platform", "seller"]) });
-export const merchantSubscriptionUndo = z.object({ movedIds: z.array(z.uuid()).max(5000), originalEvidence: z.array(z.object({ kind: z.enum(["scope", "cash", "cash_observation", "schedule_resource", "schedule_operation", "setup_fee", "commercial_terms", "commercial_amendment", "provider_generation", "provider_invoice", "provider_invoice_line", "invoice_financial", "refund_financial"]), id: z.uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) })).max(5000) });
+export const merchantSubscriptionUndo = z.object({ movedIds: z.array(z.uuid()).max(5000), originalEvidence: z.array(z.object({ kind: z.enum(["scope", "cash", "cash_observation", "schedule_resource", "schedule_operation", "setup_fee", "commercial_terms", "commercial_amendment", "commercial_resumption", "provider_generation", "provider_invoice", "provider_invoice_line", "invoice_financial", "refund_financial"]), id: z.uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) })).max(5000) });
 
 /** Store bounded fingerprints rather than personal destinations in merge history. */
 export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[]) {
@@ -63,6 +64,11 @@ export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[])
     .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialAmendments.termsId).limit(5001 - evidence.length);
   if (commercial_amendment.length + evidence.length > 5000) return { evidence: [], overflow: true };
   evidence.push(...commercial_amendment.map(row => fingerprint(row, "commercial_amendment")));
+  const resumptions = await tx.select({ id: subscriptionCommercialResumptions.termsId, material: sql<string>`to_jsonb(${subscriptionCommercialResumptions})::text` })
+    .from(subscriptionCommercialResumptions).innerJoin(subscriptions, eq(subscriptions.id, subscriptionCommercialResumptions.subscriptionId))
+    .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialResumptions.termsId).limit(5001 - evidence.length);
+  if (resumptions.length + evidence.length > 5000) return { evidence: [], overflow: true };
+  evidence.push(...resumptions.map(row => fingerprint(row, "commercial_resumption")));
   const provider_generation = await tx.select({ id: subscriptionProviderGenerations.id, material: sql<string>`to_jsonb(${subscriptionProviderGenerations})::text` })
     .from(subscriptionProviderGenerations).innerJoin(subscriptions, eq(subscriptions.id, subscriptionProviderGenerations.subscriptionId))
     .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionProviderGenerations.id).limit(5001 - evidence.length);

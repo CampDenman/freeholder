@@ -14203,6 +14203,19 @@ whatever is best for the people using the site.
   broader business/provider acceptance remain required; this checkpoint closes
   no C-item and does not activate collection. See
   `deploy/subscription-commercial-amendments80-source-20261113.md`.
+  Missed-boundary re-consent source checkpoint (2026-11-13,
+  C12.38/C9.38/C9.33/C1.08): a fresh explicit future start binds the actual
+  generation, complete operation/evidence revisions and original stopped proof
+  in an immutable receipt. Shared provider/financial recovery precedes consent;
+  older amendment tasks are inert before stop claims, and exact paid invoice
+  ownership/net/setup/tax/merchant proof precedes access. Gaps are not billed or
+  granted access. Earlier unknown schedule/product readers remain debt despite
+  a later verified GET. All new controls and SQL/types/lint/native/browser
+  qualification are UNRUN. Authentic owner recovery for lost readers and full
+  mid-cycle proration variants remain required; this finite source slice closes
+  no item and adds no deferral. Root owns the new suffix assembly/hash/database
+  and central merchant witness integration. See
+  `deploy/subscription-amendment-late-reconsent80-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

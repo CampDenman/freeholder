@@ -7,6 +7,7 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { invoiceLines, invoices } from "@/modules/invoicing/schema";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { merchantTaxSourceParty, merchantTaxSourceRequest, registerMerchantTaxSourceResolver } from "@/modules/invoicing/merchant-tax-invoice";
+import { pendingCommercialAmendment } from "./commercial-amendment-calendar";
 import { admittedProviderPeriod } from "./provider-periods";
 import { periodEnd } from "./calendar";
 import { originalMerchantTerms } from "./merchant-terms-read";
@@ -31,7 +32,9 @@ export async function originalMerchantInvoiceShape(ctx: ServiceContext, subscrip
     return { terms, phase, sourceId, existingInvoiceId: existing.id, periodAmountMinor: 0, setupFeeMinor: 0 };
   }
   const first = start.getTime() === subscription.currentPeriodStart.getTime();
-  const next = start.getTime() === subscription.currentPeriodEnd.getTime();
+  const amendment = await pendingCommercialAmendment(ctx, subscription);
+  const next = start.getTime() === subscription.currentPeriodEnd.getTime() || amendment?.amendment.state === "activated"
+    && amendment.terms.id === terms.id && start.getTime() === amendment.terms.effectivePeriodStart.getTime() && start >= subscription.currentPeriodEnd && start.getTime() <= Date.now();
   const expectedEnd = first ? subscription.currentPeriodEnd : periodEnd(start, terms.snapshot.interval, terms.snapshot.intervalCount);
   if ((!first && !next) || end.getTime() !== expectedEnd.getTime()) {
     throw new ServiceError("conflict", "The invoice is not the agreement's actual original or next accepted calendar period.");

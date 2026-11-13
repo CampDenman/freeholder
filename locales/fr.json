@@ -9090,5 +9090,8 @@
   "subscriptions.amendment.confirm": "J’accepte ce prix futur, ce calendrier, cette destination fiscale et cet avis exacts du commerçant.",
   "subscriptions.amendment.accept": "Accepter le changement futur",
   "subscriptions.merchantAmendmentNotice": "Cette modification remplace uniquement les périodes futures. Les conditions et factures antérieures restent inchangées. La facturation reprend uniquement après résolution des obligations initiales du prestataire et des obligations financières ; le nouveau forfait ouvre l’accès seulement après paiement intégral de sa facture exacte de période.",
-  "admin.activity.subscriptionAmendmentAccepted": "A accepté une modification future de l’abonnement"
+  "admin.activity.subscriptionAmendmentAccepted": "A accepté une modification future de l’abonnement",
+  "subscriptions.resumption.intro": "La date de facturation initiale a été manquée. Terminez la récupération, puis vérifiez une nouvelle date future. L’intervalle n’est ni facturé ni ouvert à l’accès ; les dates précédemment acceptées sont conservées.",
+  "subscriptions.resumption.start": "Nouveau début (votre heure locale)",
+  "subscriptions.resumption.notice": "J’accepte cette nouvelle date future de facturation, ce prix, cette destination fiscale et cet avis du commerçant après la période manquée. L’intervalle ne sera ni facturé ni ouvert à l’accès. Les engagements et factures antérieurs restent inchangés ; le nouveau forfait commence seulement après paiement intégral de sa facture exacte de période."
 }

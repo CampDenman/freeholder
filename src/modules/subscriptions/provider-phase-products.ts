@@ -15,10 +15,10 @@ import { merchantPhysicalCaller } from "@/modules/invoicing/merchant-physical-ca
 import { merchantTaxProfiles } from "@/modules/invoicing/merchant-tax-schema";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { quoteMerchantProviderHorizon } from "./provider-phase-quote";
+import { commercialBillingStart } from "./commercial-amendment-calendar";
 import { originalMerchantTerms } from "./merchant-terms-read";
 import { subscriptionChargeScope } from "./merchant-scope-contract";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
-import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
 import { subscriptions } from "./schema";
 import { scheduleCallerHasStopped } from "./provider-schedule-proof";
 import { verifiedOriginalPhaseProduct } from "./provider-phase-product-proof";
@@ -48,11 +48,10 @@ export async function originalProductAdmission(ctx: ServiceContext, subscription
   if (!enabled?.enabled) throw new ServiceError("conflict", "Enable the original subscriptions module before admitting new provider work.");
   const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, subscriptionId)).limit(1).for("update");
   if (!parent || parent.provider !== "stripe" || parent.merchantScopeVersion !== 1 || parent.billingMode !== "provider") throw new ServiceError("conflict", "This is not an original new merchant provider agreement.");
-  const [pendingAmendment] = await ctx.tx.select({ id: subscriptionCommercialAmendments.termsId }).from(subscriptionCommercialAmendments).where(and(
-    eq(subscriptionCommercialAmendments.subscriptionId, parent.id), eq(subscriptionCommercialAmendments.state, "pending_stop"))).limit(1);
-  if (pendingAmendment) throw new ServiceError("conflict", "Complete the accepted original amendment's provider stop before admitting another billing horizon.");
+  const calendar = await commercialBillingStart(ctx, parent);
+  if (!calendar.ready) throw new ServiceError("conflict", "Complete the current accepted original amendment's provider stop before admitting another billing horizon.");
   const horizon = await ctx.callAsSystem(quoteMerchantProviderHorizon, { subscriptionId, additionalPeriods });
-  const terms = await originalMerchantTerms(ctx, parent, parent.currentPeriodEnd);
+  const terms = await originalMerchantTerms(ctx, parent, calendar.start);
   if (!terms || terms.id !== horizon.termsId) throw new ServiceError("conflict", "Restore the actual accepted original commercial terms before provider work.");
   const [profile] = await ctx.tx.select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id, terms.profileId)).limit(1).for("update");
   if (!profile || profile.state !== "active" || profile.currentVersion !== terms.profileVersion || !profile.contactId) throw new ServiceError("conflict", "The accepted original merchant tax business changed or was erased.");

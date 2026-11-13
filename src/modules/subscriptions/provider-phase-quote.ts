@@ -16,6 +16,8 @@ import { subscriptionCommercialAmendments } from "./commercial-amendment-schema"
 import { originalPhaseResources } from "./provider-phase-resources";
 import { verifiedPreparatoryPhaseProducts } from "./provider-phase-product-proof";
 import { subscriptionMerchantScope } from "./merchant-scope-contract";
+import { commercialBillingStart } from "./commercial-amendment-calendar";
+import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
 import { originalMerchantTerms } from "./merchant-terms-read";
 import { assertPhaseHorizon, exactProviderDate, freezeProviderPhase, originalPhaseFee, providerPhase, providerPhaseInventory, type ProviderPhase } from "./provider-phase-contract";
 import { scheduleCallerHasStopped, scheduleQuiescenceCovers, scheduleOperationDigest } from "./provider-schedule-proof";
@@ -75,7 +77,9 @@ export const quoteMerchantProviderHorizon=defineService({
     await lockContactIdentityForRead(ctx.tx);
     const [parent]=await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id,input.subscriptionId)).limit(1).for("share");
     if(!parent||parent.merchantScopeVersion!==1||parent.billingMode!=="provider"||parent.signupPending||parent.cancelledAt||parent.cancelAtPeriodEnd||!["active","trialing"].includes(parent.status))throw new ServiceError("conflict","This original agreement cannot admit new renewal periods.");
-    const terms=await originalMerchantTerms(ctx,parent,parent.currentPeriodEnd);
+    const calendar=await commercialBillingStart(ctx,parent);
+    if(!calendar.ready)throw new ServiceError("conflict","The current accepted amendment still needs its original recovery before billing.");
+    const terms=await originalMerchantTerms(ctx,parent,calendar.start);
     const [storedScope]=await ctx.tx.select().from(subscriptionMerchantScopes).where(eq(subscriptionMerchantScopes.subscriptionId,parent.id)).limit(1).for("share");
     const [policy]=await ctx.tx.select().from(subscriptionMarketPolicies).where(eq(subscriptionMarketPolicies.subscriptionId,parent.id)).limit(1).for("share");
     const [resource]=await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId,parent.id)).limit(1).for("share");
@@ -89,7 +93,7 @@ export const quoteMerchantProviderHorizon=defineService({
       ||resource.providerCustomerRef&&resource.providerCustomerRef!==method.providerCustomerRef)throw new ServiceError("conflict","This original renewal needs the actually consented method in its frozen platform, charge and customer namespace.");
     const operations=await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId,parent.id)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
     if(operations.length>5000||operations.length!==resource.operationRevision||operations.some((operation,index)=>operation.operationRevision!==index+1
-      ||!["confirmed","refused"].includes(operation.state)||!scheduleCallerHasStopped(operation)))throw new ServiceError("conflict","Reconcile every original physical schedule caller before quoting another remote mutation.");
+      ||!["confirmed","refused"].includes(operation.state)||!scheduleCallerHasStopped(operation)||!originalProviderReadsFinished(operation)))throw new ServiceError("conflict","Reconcile every original physical schedule caller and admitted reader before quoting another remote mutation.");
     let mode:"initial"|"extension"="initial",providerScheduleRef:string|null=null,sourceOperationId:string|null=null;
     let anchor:{kind:"accepted_trial_end"|"paid_original_period_end"|"provider_phase_inventory"|"accepted_amendment";sourceInvoiceId:string|null;start:string};
     let retained:ProviderPhase[]=[],admittedExemptionFingerprint:string|null=null;
@@ -99,7 +103,7 @@ export const quoteMerchantProviderHorizon=defineService({
 
     if(resource.recoveryPending)throw new ServiceError("conflict","Retain and reconcile the original schedule recovery debt before quoting more periods.");
     if(restarting){
-      anchor={kind:"accepted_amendment",sourceInvoiceId:null,start:parent.currentPeriodEnd.toISOString()};
+      anchor={kind:"accepted_amendment",sourceInvoiceId:null,start:terms.effectivePeriodStart.toISOString()};
     }else if((resource.operationRevision===0||verifiedPreparatoryPhaseProducts(resource,operations))&&resource.state==="uncreated"&&!resource.providerSubscriptionRef&&!resource.providerCustomerRef&&!parent.providerRef){
       const [cash]=await ctx.tx.select({id:subscriptionProviderChargeReceipts.id}).from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId,parent.id)).limit(1);
       if(cash)throw new ServiceError("conflict","Original scheduled cash survived without its creation history. Recover that resource instead of treating this as a new schedule.");

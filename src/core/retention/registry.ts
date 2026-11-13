@@ -128,6 +128,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_market_policies: "Immutable agreement terms; personal identity erasure and named holds use members.merchantIdentity, not an age-based policy purge.",
   subscription_commercial_terms: "Accepted commercial evidence has no TTL; original agreement privacy and legal holds govern personal-destination minimization after actual provider work is quiescent.",
   subscription_commercial_amendments: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
+  subscription_commercial_resumptions: "Immutable fresh calendar consent has no TTL; original agreement privacy, financial duties and legal holds govern minimization.",
   subscription_provider_generations: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
   subscription_provider_invoice_observations: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
   subscription_provider_invoice_lines: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",

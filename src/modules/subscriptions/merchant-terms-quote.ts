@@ -84,7 +84,8 @@ export const quoteOriginalMerchantTerms = defineService({
       const [scopeRow] = await ctx.tx.select().from(subscriptionMerchantScopes).where(eq(subscriptionMerchantScopes.subscriptionId, input.amendmentFor)).limit(1).for("share");
       const [originalPolicy] = await ctx.tx.select().from(subscriptionMarketPolicies).where(eq(subscriptionMarketPolicies.subscriptionId, input.amendmentFor)).limit(1).for("share");
       if (!parent || !scopeRow || !originalPolicy || parent.merchantScopeVersion !== 1 || parent.contactId !== input.contactId || parent.currency !== currency || parent.billingMode !== snapshot.billingMode
-        || !input.calendarStart || input.calendarStart.getTime() !== parent.currentPeriodEnd.getTime()) throw new ServiceError("conflict", "Review an amendment for this original buyer, billing protocol and exact next period.");
+        || !input.calendarStart || input.calendarStart.getTime() < parent.currentPeriodEnd.getTime()
+        || input.calendarStart.getTime() > parent.currentPeriodEnd.getTime() && input.calendarStart.getTime() <= Date.now()) throw new ServiceError("conflict", "Review an amendment for this original buyer, billing protocol and exact next period.");
       const original = subscriptionMerchantScope.parse(scopeRow);
       if (originalPolicy.sellerUserId !== policy.sellerUserId || originalPolicy.siteFeeBps !== policy.siteFeeBps || profile.profileId !== original.taxProfileId || profile.liability !== original.taxLiability
         || merchantTaxDigest(route) !== merchantTaxDigest({ collectionKind: original.collectionKind, providerPlatformAccountId: original.providerPlatformAccountId, chargeAccountId: original.chargeAccountId,

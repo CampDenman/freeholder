@@ -12,6 +12,7 @@ import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { subscriptions } from "./schema";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { recoverableOriginalPhaseProduct } from "./provider-phase-product-proof";
+import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
 import { enqueueMerchantScheduleErasureRepair } from "./provider-schedule-erasure";
 
 const digest = (nonce: string) => createHash("sha256").update(nonce).digest("hex");
@@ -90,7 +91,7 @@ export const applyMerchantPhaseProductRead = defineService({
         source: "phase_product_read_finished", operationId: operation.id, requestDigest: operation.requestDigest, readId, completionDigest: digest(completionNonce), outcome: local.outcome }] };
     // Verification of a product cannot settle later admitted billing work.
     const clearDebt = verified && resource.operationRevision === 1 && operation.operationRevision === 1 && resource.state === "uncreated"
-      && !resource.providerSubscriptionRef && !resource.providerCustomerRef;
+      && !resource.providerSubscriptionRef && !resource.providerCustomerRef && originalProviderReadsFinished({ ...operation, providerObservation: observation });
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
     await ctx.tx.update(subscriptionProviderScheduleOperations).set({ state: verified ? "confirmed" : "unknown", providerObservation: observation }).where(eq(subscriptionProviderScheduleOperations.id, operation.id));
     await ctx.tx.update(subscriptionProviderScheduleResources).set({ recoveryPending: !clearDebt, stoppedProof: null, evidenceRevision: resource.evidenceRevision + 1, updatedAt: new Date() }).where(eq(subscriptionProviderScheduleResources.subscriptionId, resource.subscriptionId));

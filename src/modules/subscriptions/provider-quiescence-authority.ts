@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C1.08: actual privacy and accepted-amendment jobs own different receipts.
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { jobIdempotencyKeys } from "@/core/jobs/schema";
@@ -12,7 +12,7 @@ import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
 import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohorts";
 import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
-import { subscriptionMerchantScopes, subscriptionMarketPolicies, subscriptions } from "./schema";
+import { subscriptionCommercialTerms, subscriptionMerchantScopes, subscriptionMarketPolicies, subscriptions } from "./schema";
 import { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 
 export const originalPrivacyScheduleTask = z.object({ purpose: z.literal("privacy").default("privacy"), profileId: z.uuid(), requestId: z.uuid(), cohortId: z.uuid(), originalJobId: z.uuid() });
@@ -31,7 +31,8 @@ export async function originalQuiescenceMembers(ctx: ServiceContext, input: Orig
     if (!amendment || !scope || scope.taxProfileId !== input.profileId || amendment.subscriptionId !== input.subscriptionId || amendment.originalJobId !== input.originalJobId
       || !claim || amendment.jobClaimDigest !== claim.payloadHash || !payload.success || merchantTaxDigest(payload.data) !== claim.payloadHash
       || merchantTaxDigest(payload.data) !== merchantTaxDigest(originalAmendmentScheduleTask.parse(input))) throw new ServiceError("permission", "This stop task is not the retained original accepted-amendment job.");
-    return { kind: "amendment" as const, amendment, scopes: [scope], taskReceipt: { purpose: "amendment", amendmentId: amendment.termsId, originalJobId: input.originalJobId } };
+    const [latest] = await ctx.tx.select({ id: subscriptionCommercialTerms.id }).from(subscriptionCommercialTerms).where(eq(subscriptionCommercialTerms.subscriptionId, input.subscriptionId)).orderBy(desc(subscriptionCommercialTerms.revision)).limit(1);
+    return { kind: "amendment" as const, amendment, current: latest?.id === amendment.termsId, scopes: [scope], taskReceipt: { purpose: "amendment", amendmentId: amendment.termsId, originalJobId: input.originalJobId } };
   }
   const { request: original, cohort } = await originalScheduleCohortAuthority(ctx.tx, input, lock);
   const scopes = await ctx.tx.select().from(subscriptionMerchantScopes).where(cohort.subscriptionId
@@ -44,6 +45,7 @@ export async function originalQuiescenceAction(ctx: ServiceContext, input: Origi
   await lockContactIdentity(ctx.tx);
   await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${input.purpose === "privacy" ? `privacy:${input.requestId}` : `commercial-amendment:${input.amendmentId}`}))`);
   const authority = await originalQuiescenceMembers(ctx, input, true), scope = authority.scopes.find(row => row.subscriptionId === subscriptionId);
+  if (authority.kind === "amendment" && !authority.current && !factsOnly) return null;
   if (!scope) throw new ServiceError("permission", "This actual original task does not own that agreement.");
   if (authority.kind === "privacy") {
     const [artifact] = await ctx.tx.select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, authority.original.id)).limit(1).for("update");
@@ -60,5 +62,5 @@ export async function originalQuiescenceAction(ctx: ServiceContext, input: Origi
     sql`(${privacyRetentionExceptions.expiresAt} is null or ${privacyRetentionExceptions.expiresAt}>clock_timestamp())`)).limit(1);
   if (hold && !factsOnly) return null;
   const operations = await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, subscriptionId)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
-  return { parent, resource, scope, operations, taskReceipt: authority.taskReceipt, held: !!hold };
+  return { parent, resource, scope, operations, taskReceipt: authority.taskReceipt, held: !!hold || authority.kind === "amendment" && !authority.current };
 }
