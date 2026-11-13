@@ -15,18 +15,17 @@ import { importRuns, importSourceBatches, importSourceEntries, importSourceGraph
 import { assets } from "@/core/media/schema";
 import { assetUsage } from "@/core/media/service";
 import { resetStorageForTests, storage } from "@/adapters/storage";
-import { registerJob, stopJobs } from "@/core/jobs";
+import { stopJobs } from "@/core/jobs";
 import { ready } from "@/core/runtime";
-import { crawlJobs } from "@/core/import/crawl-jobs";
-import { registerCrawlPrivacy } from "@/core/import/crawl-privacy";
-import { initializeCrawl } from "@/core/import/crawl-capture";
+import { crawlProgress } from "@/core/import/crawl-query";
 import { advanceCrawl } from "@/core/import/crawl-advance";
 import { importCrawlRequests, importCrawlResponses, importCrawlSources } from "@/core/import/crawl-schema";
 import { importCrawlEntryOriginals } from "@/core/import/crawl-graph-schema";
-import { startImport, commitImport, reconcileImport, publishImport, rollbackImport } from "@/core/import/service";
+import { startImport, previewFromUrl, commitImport, reconcileImport, publishImport, rollbackImport } from "@/core/import/service";
 import { ensureDefaults } from "@/modules/cms/service";
 import { pages } from "@/modules/cms/schema";
 import { GET as readPublicMedia } from "../../app/media/[...key]/route";
+import { runCrawlIndexProcess } from "../helpers/crawl-index-process";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 let server: Server | undefined;
@@ -74,27 +73,43 @@ async function actualRestServer() {
 }
 
 describe.runIf(hasDatabase)("actual above500 HTTP source lifecycle (C3.47)", { timeout: 180_000 }, () => {
-  beforeAll(async () => { await ready(); registerCrawlPrivacy(); for (const job of crawlJobs) registerJob(job); });
-  beforeEach(async () => { await truncateSpine(); resetStorageForTests(); observed.length = 0; await ensureDefaults.call({}, OWNER); });
+  beforeAll(ready);
+  beforeEach(async () => { await truncateSpine(); resetStorageForTests(); observed.length = 0; });
   afterEach(async () => { vi.restoreAllMocks(); if (server) { const current = server; server = undefined; await new Promise<void>((resolve, reject) => current.close(error => error ? reject(error) : resolve())); } });
   afterAll(async () => { await stopJobs(); await closeDb(); });
 
-  it("reviews501 actual REST records, resumes after an accepted500-page child, publishes shared media and reverses original ownership", async () => {
+  it("reviews501 actual REST records in separate index processes, resumes an accepted500-page child and reverses publication", async () => {
     await db().insert(users).values({ id: OWNER.userId, email: "fictional-large-http-owner@example.test", role: "owner" });
     await db().insert(totpFactors).values({ userId: OWNER.userId, encryptedSecret: "fictional-large-http-factor" });
     const owner = await ownerSession(), { site, image } = await actualRestServer();
+    await ensureDefaults.call({}, owner);
     const initialPages = await db().select().from(pages);
     const originalPages = () => db().select().from(pages).where(sql`${pages.slug} like 'actual-rest-%'`);
     const run = await startImport.call({ origin: site, kind: "wordpress-rest" }, owner);
-    await initializeCrawl.call({ id: run.id, url: site }, owner);
+    expect(await previewFromUrl.call({ id: run.id, url: site }, owner)).toMatchObject({ status: "discover" });
+    expect(observed).toEqual([]);
+    expect(await crawlProgress.call({ id: run.id }, owner)).toMatchObject({ requests: 0, indexed: 0, pending: 1, planReady: false });
     const [source] = await db().select().from(importCrawlSources).where(eq(importCrawlSources.runId, run.id));
     if (!source) throw new Error("The actual crawl source was not admitted.");
-    let previewed = false;
+    let captured = false;
     for (let phase = 0; phase < 40; phase++) {
       const result = await advanceCrawl.call({ id: run.id, generation: source.generation }, owner);
-      if (result.step === "previewed") { previewed = true; break; }
+      const progress = await crawlProgress.call({ id: run.id }, owner);
+      if (result.step === "discovered" && progress.requests === 8 && progress.pending === 0) { captured = true; break; }
     }
-    expect(previewed).toBe(true);
+    expect(captured).toBe(true);
+    expect(await crawlProgress.call({ id: run.id }, owner)).toMatchObject({ requests: 8, indexed: 0, pending: 0, planReady: false });
+    // Both index phases execute in actual new processes. Only persisted IDs,
+    // the explicit disposable database and private store configuration cross.
+    await closeDb(); resetStorageForTests();
+    const firstIndexer = await runCrawlIndexProcess(run.id, source.generation, OWNER.userId, "prefix500");
+    expect(firstIndexer.pid).not.toBe(process.pid);
+    expect(firstIndexer).toMatchObject({ beforeIndexed: 0, indexed: 500, planReady: false, transportCalls: 0 });
+    const secondIndexer = await runCrawlIndexProcess(run.id, source.generation, OWNER.userId, "finish501");
+    expect(secondIndexer.pid).not.toBe(process.pid); expect(secondIndexer.pid).not.toBe(firstIndexer.pid);
+    expect(secondIndexer.sessionId).not.toBe(firstIndexer.sessionId);
+    expect(secondIndexer).toMatchObject({ beforeIndexed: 500, indexed: 501, planReady: true, transportCalls: 0 });
+    expect(await crawlProgress.call({ id: run.id }, owner)).toMatchObject({ requests: 8, indexed: 501, pending: 0, planReady: true, recoveryRequired: false });
     expect((await db().select().from(importCrawlSources).where(eq(importCrawlSources.id, source.id)))[0]).toMatchObject({ state: "sealed", networkRequests: 8, pageCount: 501, reservedBytes: 0 });
     const [graph] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.runId, run.id));
     if (!graph) throw new Error("The real HTTP source graph is missing.");
