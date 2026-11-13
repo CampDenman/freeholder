@@ -3,6 +3,7 @@
 // Choosing the storage implementation (MASTER.md §12, §17): the id comes from
 // freeholder.config.ts, the credentials from env. Instantiated once at first
 // use, like the database pool — importing this module connects to nothing.
+import {withAdoptedStorageReads} from "@/core/media/transfer-resolver";
 import config from "../../../freeholder.config";
 import { resolve } from "node:path";
 import { env } from "@/core/env";
@@ -96,6 +97,7 @@ export function storage(): StorageAdapter {
       const binding: StorageBinding = Object.freeze({ kind: inner.id, namespace, location: Object.freeze(location) });
       instance.binding = async () => binding;
     }
+    instance=withAdoptedStorageReads(instance);
   }
   return instance;
 }

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Owner-defined tax configuration and built-in quoting (C5.02-C5.04).
 
-import { and, asc, desc, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, notExists, or, sql } from "drizzle-orm";
+import {invoiceMerchantTaxQuotes} from "./merchant-tax-schema";
 import { z } from "zod";
 import type { TaxQuoteRequest } from "@/adapters/tax";
 import { listed, uuid } from "@/core/contract";
@@ -98,8 +99,8 @@ export const listTaxConfiguration = defineService({
       ctx.tx.select().from(taxCategories).orderBy(asc(taxCategories.code)),
       ctx.tx.select().from(taxZones).orderBy(asc(taxZones.country), asc(taxZones.name)),
       ctx.tx.select().from(taxRates).orderBy(asc(taxRates.zoneId), asc(taxRates.priority)),
-      ctx.tx.select().from(taxRegistrations).orderBy(asc(taxRegistrations.zoneId)),
-      ctx.tx.select().from(taxExemptions).orderBy(asc(taxExemptions.contactId)),
+      ctx.tx.select().from(taxRegistrations).where(isNull(taxRegistrations.merchantProfileId)).orderBy(asc(taxRegistrations.zoneId)),
+      ctx.tx.select().from(taxExemptions).where(isNull(taxExemptions.merchantProfileId)).orderBy(asc(taxExemptions.contactId)),
     ]);
     return { categories, zones, rates, registrations, exemptions };
   },
@@ -216,7 +217,7 @@ export const installTaxTemplate = defineService({
       }
       const [rates, registrations] = await Promise.all([
         ctx.tx.select().from(taxRates).where(eq(taxRates.zoneId, existing.id)).orderBy(asc(taxRates.priority)),
-        ctx.tx.select().from(taxRegistrations).where(eq(taxRegistrations.zoneId, existing.id)),
+        ctx.tx.select().from(taxRegistrations).where(and(eq(taxRegistrations.zoneId, existing.id),isNull(taxRegistrations.merchantProfileId))),
       ]);
       ctx.setSubject("taxZone", existing.id);
       return {
@@ -372,7 +373,7 @@ export const setTaxRegistration = defineService({
     const [existing] = await ctx.tx
       .select()
       .from(taxRegistrations)
-      .where(eq(taxRegistrations.id, id))
+      .where(and(eq(taxRegistrations.id, id),isNull(taxRegistrations.merchantProfileId)))
       .limit(1);
     if (!existing) throw new ServiceError("not_found", "That tax registration is not here.");
     const thresholdMinor = values.thresholdMinor ?? existing.thresholdMinor;
@@ -383,7 +384,7 @@ export const setTaxRegistration = defineService({
     const [updated] = await ctx.tx
       .update(taxRegistrations)
       .set(values)
-      .where(eq(taxRegistrations.id, id))
+      .where(and(eq(taxRegistrations.id, id),isNull(taxRegistrations.merchantProfileId)))
       .returning();
     if (!updated) throw new ServiceError("conflict", "That tax registration changed while it was being updated.");
     ctx.setSubject("taxRegistration", updated.id);
@@ -419,7 +420,7 @@ export const setTaxExemption = defineService({
   handler: async (input, ctx) => {
     const { id, ...values } = input;
     const [saved] = id
-      ? await ctx.tx.update(taxExemptions).set(values).where(eq(taxExemptions.id, id)).returning()
+      ? await ctx.tx.update(taxExemptions).set(values).where(and(eq(taxExemptions.id, id),isNull(taxExemptions.merchantProfileId))).returning()
       : await ctx.tx.insert(taxExemptions).values(values).returning();
     if (!saved) throw new ServiceError("not_found", "That tax exemption is not here.");
     ctx.setSubject("taxExemption", saved.id);
@@ -480,6 +481,7 @@ export const listTaxThresholds = defineService({
       .select({ registration: taxRegistrations, zone: taxZones })
       .from(taxRegistrations)
       .innerJoin(taxZones, eq(taxZones.id, taxRegistrations.zoneId))
+      .where(isNull(taxRegistrations.merchantProfileId))
       .orderBy(asc(taxZones.country), asc(taxZones.name));
 
     const rows = [];
@@ -496,6 +498,9 @@ export const listTaxThresholds = defineService({
           .where(
             and(
               eq(invoices.taxZoneId, zone.id),
+              // Explicit business profiles have their own frozen portion
+              // reports. A shared zone never makes seller revenue site sales.
+              notExists(ctx.tx.select({id:invoiceMerchantTaxQuotes.id}).from(invoiceMerchantTaxQuotes).where(eq(invoiceMerchantTaxQuotes.invoiceId,invoices.id))),
               gte(invoices.issuedAt, start),
               lte(invoices.issuedAt, input.asOf),
             ),
@@ -626,6 +631,7 @@ export const quoteTax = defineService({
       ctx.tx.select().from(taxRegistrations).where(
         and(
           eq(taxRegistrations.zoneId, zone.id),
+          isNull(taxRegistrations.merchantProfileId),
           eq(taxRegistrations.status, "active"),
           or(isNull(taxRegistrations.collectsFrom), lte(taxRegistrations.collectsFrom, onDate)),
         ),
@@ -639,6 +645,7 @@ export const quoteTax = defineService({
         ? ctx.tx.select().from(taxExemptions).where(
             and(
               eq(taxExemptions.contactId, input.contactId),
+              isNull(taxExemptions.merchantProfileId),
               eq(taxExemptions.zoneId, zone.id),
               eq(taxExemptions.status, "valid"),
               lte(taxExemptions.validatedAt, input.occurredAt),

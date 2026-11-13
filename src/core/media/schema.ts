@@ -235,6 +235,7 @@ export const mediaObjects = pgTable(
   "media_objects",
   {
     key: text("key").primaryKey(),
+    reservationId:uuid("reservation_id").defaultRandom(),
     ownerContactId: uuid("owner_contact_id").references(() => contacts.id, { onDelete: "restrict" }),
     assetId: uuid("asset_id").references(() => assets.id, {
       onDelete: "cascade",
@@ -253,6 +254,7 @@ export const mediaObjects = pgTable(
     updatedAt: updatedAtColumn(),
   },
   (t) => [
+    uniqueIndex("media_objects_reservation_idx").on(t.reservationId),
     index("media_objects_asset_idx").on(t.assetId),
     index("media_objects_pending_idx").on(t.state, t.createdAt),
     index("media_objects_upload_idx").on(t.uploadId),

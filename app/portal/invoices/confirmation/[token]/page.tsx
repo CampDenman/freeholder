@@ -37,6 +37,10 @@ export default async function InvoiceConfirmation({ params, searchParams }: {
     <Callout tone={payment.status === "succeeded" ? "success" : "neutral"}>{t(pending ? "customerInvoice.pending" : payment.status === "succeeded" ? "customerInvoice.succeeded" : "customerInvoice.declined")}</Callout>
     {query.error ? <div role="alert"><Callout tone="danger">{t("customerInvoice.failed")}</Callout></div> : null}
     {pending ? <form action={confirmInvoicePaymentAction}><input type="hidden" name="token" value={token} /><PaymentButton label={t("customerInvoice.confirm")} pendingLabel={t("common.working")} /></form> : null}
+    {payment.continueUrl && payment.status === "succeeded" ? <div className="grid gap-2">
+      <p>{t("customerInvoice.remainingInvoice",{amount:formatMoney(payment.remainingMinor??0,payment.currency,locale)})}</p>
+      <a href={payment.continueUrl} className="text-accent underline">{t("customerInvoice.continueInvoice")}</a>
+    </div> : null}
     <a href={business ? localizeCustomerHref("/portal/invoices", locale, business) : "/portal/invoices"} className="text-accent underline">{t("customerInvoice.back")}</a>
     <a href={invoiceAppReturnHref()} className="text-accent underline">{t("app.invoice.return")}</a>
   </main>;

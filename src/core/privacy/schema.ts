@@ -308,6 +308,7 @@ export const privacyRetentionExceptions = pgTable(
       t.scope,
     ),
     index("privacy_retention_exceptions_expiry_idx").on(t.expiresAt),
+    index("privacy_retention_exceptions_name_expiry_idx").on(t.scope, t.expiresAt),
     check(
       "privacy_retention_exceptions_reason",
       sql`${t.reason} in ('legal_obligation', 'legal_claim', 'contractual_obligation', 'accounting_tax', 'security_fraud')`,

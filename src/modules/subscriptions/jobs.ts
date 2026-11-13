@@ -8,6 +8,33 @@
 // noon keep access until the small hours of the following day.
 import { defineJob } from "@/core/jobs";
 import {eraseTrialSetupCustomers} from "./setup-erasure";
+import { APPLY_GROSS_PRORATION_JOB, grossProrationTask } from "./proration-service";
+import { PRORATION_CARD_JOB, prorationCardTask } from "./proration-card-contract";
+import { ServiceError } from "@/core/service";
+
+export const applyGrossProration = defineJob({ name: APPLY_GROSS_PRORATION_JOB,
+  summary: "Apply this original accepted gross-proration effect only after exact canonical consideration, preserving actual partial money for recovery.",
+  concurrency: 1,
+  handler: async (data, context) => {
+    const task = grossProrationTask.parse(data);
+    if (context && context.id !== task.originalJobId) throw new ServiceError("permission", "This running worker is not the original accepted proration effect job.");
+    await context?.throwIfCancelled();
+    const { applyGrossProrationTask } = await import("./proration-service"); return applyGrossProrationTask.call(task, { kind: "system" });
+  },
+});
+
+export const collectProrationCardJob = defineJob({ name: PRORATION_CARD_JOB,
+  summary: "Collect only the exact accepted stored-method target after verifying its actual original worker body.", concurrency: 1,
+  handler: async (data, context) => {
+    const task = prorationCardTask.parse(data);
+    if (context && context.id !== task.originalJobId) throw new ServiceError("permission", "This worker is not the original accepted card collection job.");
+    await context?.throwIfCancelled();
+    const { collectProrationCardTask, collectProrationCard } = await import("./proration-card-service");
+    await collectProrationCardTask.call(task, { kind: "system" });
+    await context?.throwIfCancelled();
+    return collectProrationCard.call({ prorationId: task.prorationId }, { kind: "system" });
+  },
+});
 
 export const renewSubscriptions = defineJob({
   name: "subscriptions.renewDue",
@@ -50,4 +77,4 @@ export const finishCustomerSignups = defineJob({
     return result;
   },
 });
-export default [renewSubscriptions, advanceDunning, finishCustomerSignups,eraseTrialSetupCustomers];
+export default [renewSubscriptions, advanceDunning, finishCustomerSignups,eraseTrialSetupCustomers,applyGrossProration,collectProrationCardJob];

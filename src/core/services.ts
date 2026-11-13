@@ -20,6 +20,8 @@ import "@/core/mail/privacy";
 import "@/core/mail/ownership";
 import "@/core/media/write-ownership";
 import "@/core/media/multipart-ownership";
+import "@/core/media/transfer-ownership";
+import {reconcileStorageTransferErasure} from "@/core/media/transfer-privacy";
 import "@/core/media/multipart-privacy";
 import "@/core/media/write-privacy";
 import agentServices from "@/core/agents/service";
@@ -65,6 +67,10 @@ import mailServices from "@/core/mail/service";
 import mailOAuthServices from "@/core/mail/oauth";
 import mediaServices from "@/core/media/service";
 import mediaRecoveryServices from "@/core/media/write-recovery";
+import mediaTransferErasureServices from "@/core/media/transfer-erasure";
+import mediaTransferRecoveryServices from "@/core/media/transfer-recovery";
+import {queueStorageTransferStep} from "@/core/media/transfer-jobs";
+import mediaTransferServices from "@/core/media/transfer-service";
 import mediaTransferPreviewServices from "@/core/media/transfer-preview";
 import multipartRecoveryServices from "@/core/media/multipart-recovery";
 import notificationServices from "@/core/notifications/service";
@@ -102,7 +108,18 @@ import designServices from "@/core/design/service";
 import pluginServices from "@/core/plugins/service";
 import importServices from "@/core/import/service";
 import importSourceUploadServices from "@/core/import/source-upload";
-import { completeOriginalSourceErasure } from "@/core/import/source-erasure";
+import {completeOriginalSourceErasure,prepareOriginalSourceErasure} from "@/core/import/source-erasure";
+import { reconcileOriginalSourceErasure, registerOriginalSourceErasureRecovery } from "@/core/import/source-erasure-history";
+import { advanceCrawl } from "@/core/import/crawl-advance";
+import crawlCaptureServices from "@/core/import/crawl-capture";
+import crawlIndexServices from "@/core/import/crawl-graph-index";
+import crawlCatalogServices from "@/core/import/crawl-graph-plan";
+import crawlBatchServices from "@/core/import/crawl-graph-batches";
+import crawlProgressServices from "@/core/import/crawl-query";
+import { crawlRecoveryServices } from "@/core/import/crawl-recovery";
+import { recordCrawlWrapperFinish } from "@/core/import/crawl-finish";
+import { crawlPrivacyServices, registerCrawlPrivacy } from "@/core/import/crawl-privacy";
+import { cancelCrawl, retireExpiredCrawls } from "@/core/import/crawl-retirement";
 import readerOwnershipServices from "@/core/import/reader-ownership-review";
 import portabilityServices from "@/core/portability/service";
 import provenanceServices from "@/core/provenance/service";
@@ -181,6 +198,11 @@ const services: Service[] = [
   ...mediaServices,
   ...mediaRecoveryServices,
   ...mediaTransferPreviewServices,
+  ...mediaTransferServices,
+  ...mediaTransferRecoveryServices,
+  reconcileStorageTransferErasure,
+  queueStorageTransferStep,
+  ...mediaTransferErasureServices,
   ...multipartRecoveryServices,
   ...notificationServices,
   ...schedulingServices,
@@ -204,11 +226,28 @@ const services: Service[] = [
   ...readerOwnershipServices,
   ...importSourceUploadServices,
   completeOriginalSourceErasure,
+  prepareOriginalSourceErasure,
+  reconcileOriginalSourceErasure,
+  advanceCrawl,
+  cancelCrawl,
+  retireExpiredCrawls,
+  ...crawlCaptureServices,
+  ...crawlIndexServices,
+  ...crawlCatalogServices,
+  ...crawlBatchServices,
+  ...crawlProgressServices,
+  ...crawlRecoveryServices,
+  recordCrawlWrapperFinish,
+  ...crawlPrivacyServices,
   ...portabilityServices,
   ...provenanceServices,
   ...updateSeamServices,
   ...catalogueServices,
 ];
+
+// Register original ownership before a real hold can seal its one joint receipt.
+registerCrawlPrivacy();
+registerOriginalSourceErasureRecovery();
 
 export default services;
 

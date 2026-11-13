@@ -5,7 +5,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
-import { beginTrialCardSetup, joinMembership, startCardTrial } from "@/modules/subscriptions/public-signup";
+import { beginTrialCardSetup, joinMembership, quoteMembershipTerms, startCardTrial, type MembershipCommercialQuote } from "@/modules/subscriptions/public-signup";
+import { z } from "zod";
 import { currentBusiness } from "@/core/settings/read";
 import { localizeCustomerHref } from "@/core/i18n/customer";
 import { getLocale } from "../../i18n";
@@ -23,11 +24,25 @@ async function customerHref() {
   const business = await currentBusiness();
   const locale = await getLocale();
   const href = (path: string) => (business ? localizeCustomerHref(path, locale, business) : path);
-  return { actor, href };
+  return { actor, href, locale:z.enum(["en","es","fr","ar"]).parse(locale) };
+}
+
+function formText(form:FormData,key:string){const value=form.get(key);return typeof value==="string"?value.trim():"";}
+function formTaxDestination(form:FormData){return {country:formText(form,"taxCountry").toUpperCase(),
+  ...(formText(form,"taxRegion")?{region:formText(form,"taxRegion")}:{}),
+  ...(formText(form,"taxPostalCode")?{postalCode:formText(form,"taxPostalCode")}:{}),
+  ...(formText(form,"taxCity")?{city:formText(form,"taxCity")}:{}),};}
+
+/** Address and selected method travel in the POST, never a redirect URL. */
+export async function reviewMembershipAction(form:FormData):Promise<{quote:MembershipCommercialQuote|null;failed:boolean}>{
+  const {actor,locale}=await customerHref();
+  try{return {quote:await quoteMembershipTerms.call({planId:formText(form,"planId"),taxDestination:formTaxDestination(form),
+    paymentMethodId:formText(form,"paymentMethodId")||undefined,locale},actor),failed:false};}
+  catch{return {quote:null,failed:true};}
 }
 
 export async function joinMembershipAction(form: FormData): Promise<void> {
-  const { actor, href } = await customerHref();
+  const { actor, href, locale } = await customerHref();
   const text = (key: string) => {
     const value = form.get(key);
     return typeof value === "string" ? value : "";
@@ -41,6 +56,7 @@ export async function joinMembershipAction(form: FormData): Promise<void> {
         requestKey: text("requestKey"),
         acceptedTerms: (form.get("acceptedTerms") === "yes") as true,
         paymentMethodId: text("paymentMethodId") || undefined,
+        ...(text("commercialQuoteDigest")?{commercialQuoteDigest:text("commercialQuoteDigest"),taxDestination:formTaxDestination(form),locale}:{}),
       },
       actor,
     );

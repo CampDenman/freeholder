@@ -32,6 +32,8 @@ export async function deploymentWorkInventory():Promise<{calls:number;pendingJob
 }
 export async function admitDeploymentRuntime(instanceId:string):Promise<{hold:DeploymentHold|null}>{
   return db().transaction(async tx=>{await shared(tx);const hold=await current(tx);
+    // ABI capability for the actual source version, not a database-owner security boundary.
+    await tx.execute(sql`select set_config('freeholder.merchant_collection_runtime_v1','1',true)`);
     await tx.execute(sql`INSERT INTO deployment_admission_runtimes(instance_id,hold_operation_id,state)VALUES(${instanceId}::uuid,${hold?.operationId??null}::uuid,${hold && hold.phase!=='resuming'?'draining':'running'})
       ON CONFLICT(instance_id)DO UPDATE SET hold_operation_id=excluded.hold_operation_id,state=excluded.state,updated_at=now()`);
     return {hold:hold?.phase==='resuming'?null:hold};

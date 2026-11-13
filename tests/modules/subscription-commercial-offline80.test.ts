@@ -1,0 +1,74 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// UNRUN source control: actual shared manual producer, owner attestation; no bank verification claim.
+import { eq } from "drizzle-orm";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { db } from "@/core/db";
+import { stopJobs } from "@/core/jobs";
+import { ready } from "@/core/runtime";
+import { setModuleEnabled } from "@/core/settings/service";
+import { cartItems, productVariants } from "@/modules/catalog/schema";
+import { invoiceMarketPolicies, invoices, payments } from "@/modules/invoicing/schema";
+import { commercialPaymentAttestations, commercialRefundAttestations } from "@/modules/invoicing/commercial-attestation-schema";
+import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agreement-schema";
+import { merchantPaymentObservations } from "@/modules/invoicing/merchant-collection-schema";
+import { recordOfflinePayment, recordOfflineRefund } from "@/modules/invoicing/payment-provider-service";
+import { commercialPrincipalState, recordCommercialFee, reviewCommercialPayment } from "@/modules/invoicing/commercial-attestations";
+import { merchantPaymentRecoveryDebt } from "@/modules/invoicing/merchant-payment-debt";
+import { quoteNewAgreement } from "@/modules/subscriptions/merchant-terms-quote";
+import { quoteMerchantAmendment, acceptMerchantAmendment } from "@/modules/subscriptions/commercial-amendments";
+import { subscriptionCommercialTerms, subscriptions } from "@/modules/subscriptions/schema";
+import { completePaidCommercialAmendment, renewDue, savePlan, subscribe } from "@/modules/subscriptions/service";
+import { seedMerchantCheckout80 } from "../helpers/merchant-checkout80";
+import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+
+describe.runIf(hasDatabase)("actual attested manual commercial principal and separate original fee liability", { timeout: 60000 }, () => {
+  let fixture: Awaited<ReturnType<typeof seedMerchantCheckout80>> | undefined;
+  beforeAll(ready, 60000); beforeEach(truncateSpine);
+  afterEach(() => { vi.useRealTimers(); fixture?.cleanup(); fixture = undefined; vi.restoreAllMocks(); });
+  afterAll(async () => { await stopJobs(); await closeDb(); });
+  it("keeps old access through partial external payment; exact paid invoice activates without fictional Stripe settlement and retains fee debt until actual recorded remittance/return", async () => {
+    fixture = await seedMerchantCheckout80("destination", 1); await setModuleEnabled.call({ module: "subscriptions", enabled: true }, OWNER);
+    const [item] = await db().select({ variant: productVariants }).from(cartItems).innerJoin(productVariants, eq(productVariants.id, cartItems.variantId)).where(eq(cartItems.cartId, fixture.cart.id)).limit(1);
+    if (!item) throw new Error("Missing actual merchant offer");
+    const old = await savePlan.call({ productId: item.variant.productId, name: "Recorded original manual trial", interval: "month", trialDays: 7, trialRequiresCard: false, setupFeeMinor: 500, billingMode: "manual", proration: "none", status: "active" }, OWNER);
+    const input = { planId: old.id, productVariantId: item.variant.id, contactId: fixture.buyer.id, currency: "CAD", taxDestination: { country: "CA", region: "BC" } };
+    const quote = await quoteNewAgreement.call(input, OWNER); if (!quote) throw new Error("Missing original merchant terms");
+    expect(quote.noticeSnapshot.text).toContain("not independent bank verification");
+    const original = await subscribe.call({ ...input, commercialTerms: { quoteDigest: quote.quoteDigest, locale: "en", source: "owner_subscription" } }, OWNER);
+    const [first] = await db().select().from(subscriptionCommercialTerms).where(eq(subscriptionCommercialTerms.subscriptionId, original.subscription.id));
+    const next = await savePlan.call({ productId: item.variant.productId, name: "Recorded next manual plan", interval: "month", intervalCount: 2, billingMode: "manual", status: "active" }, OWNER);
+    const selection = { id: original.subscription.id, planId: next.id, taxDestination: input.taxDestination, locale: "en" as const };
+    const review = await quoteMerchantAmendment.call(selection, OWNER);
+    await acceptMerchantAmendment.call({ ...selection, previousTermsId: review.previousTermsId, acceptedQuoteDigest: review.quoteDigest, confirm: true }, OWNER);
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(original.subscription.currentPeriodEnd);
+    await renewDue.call({}, { kind: "system" });
+    const [invoice] = await db().select().from(invoices); if (!invoice || invoice.totalMinor <= 1) throw new Error("Missing actual issued accepted renewal");
+    const [policy] = await db().select().from(invoiceMarketPolicies).where(eq(invoiceMarketPolicies.invoiceId, invoice.id)); if (!policy || policy.feeMinor <= 0) throw new Error("Missing real frozen fee liability");
+    const partialInput = { invoiceId: invoice.id, method: "bank_transfer" as const, amountMinor: 1, reference: "fictional-offline-first", evidence: "Synthetic owner attestation of actual external receipt; not independent bank evidence", idempotencyKey: "offline-first" };
+    const partial = await recordOfflinePayment.call(partialInput, OWNER);
+    expect(await completePaidCommercialAmendment.call({ invoiceId: invoice.id }, { kind: "system" })).toEqual({ applied: false });
+    expect((await db().select().from(subscriptions).where(eq(subscriptions.id, original.subscription.id)))[0]?.planId).toBe(old.id);
+    expect((await commercialPrincipalState.call({ paymentId: partial.id }, { kind: "system" }))).toMatchObject({ recorded: true, principalSafe: true, feeOwedMinor: 0, feeRecordedMinor: 0 });
+    expect((await recordOfflinePayment.call(partialInput, OWNER)).id).toBe(partial.id);
+    const final = await recordOfflinePayment.call({ ...partialInput, amountMinor: invoice.totalMinor - 1, reference: "fictional-offline-final", idempotencyKey: "offline-final" }, OWNER);
+    await completePaidCommercialAmendment.call({ invoiceId: invoice.id }, { kind: "system" });
+    expect((await db().select().from(subscriptions).where(eq(subscriptions.id, original.subscription.id)))[0]?.planId).toBe(next.id);
+    expect((await db().select().from(invoices).where(eq(invoices.id, invoice.id)))[0]).toMatchObject({ status: "paid", paidMinor: invoice.totalMinor, creditedMinor: 0 });
+    expect(await db().select().from(commercialPaymentAttestations)).toHaveLength(2);
+    expect(await db().select().from(merchantAgreementPaymentRoutes)).toHaveLength(0);
+    expect(await db().select().from(merchantPaymentObservations)).toHaveLength(0);
+    expect(await merchantPaymentRecoveryDebt.call({ paymentId: final.id }, { kind: "system" })).toEqual({ pending: true, reasons: ["commission"] });
+    await recordCommercialFee.call({ paymentId: final.id, amountMinor: policy.feeMinor, reference: "fictional-fee-remittance", evidence: "Synthetic attested external fee remittance", idempotencyKey: "fee-remitted" }, OWNER);
+    expect(await merchantPaymentRecoveryDebt.call({ paymentId: final.id }, { kind: "system" })).toEqual({ pending: false, reasons: [] });
+    const remittance = (await reviewCommercialPayment.call({ paymentId: final.id }, OWNER)).receipts[0]!;
+    await recordOfflineRefund.call({ paymentId: final.id, amountMinor: final.amountMinor, reason: "Synthetic actual external principal return", reference: "fictional-offline-refund", idempotencyKey: "offline-refund" }, OWNER);
+    expect(await db().select().from(commercialRefundAttestations)).toHaveLength(1);
+    expect(await merchantPaymentRecoveryDebt.call({ paymentId: final.id }, { kind: "system" })).toEqual({ pending: true, reasons: ["commission"] });
+    await expect(recordCommercialFee.call({ paymentId: partial.id, direction: "returned", originalRemittanceId: remittance.id, amountMinor: 1, reference: "wrong-original", evidence: "Wrong original remittance", idempotencyKey: "wrong-fee-owner" }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    await recordCommercialFee.call({ paymentId: final.id, direction: "returned", originalRemittanceId: remittance.id, amountMinor: policy.feeMinor, reference: "fictional-fee-return", evidence: "Synthetic actual external fee return", idempotencyKey: "fee-returned" }, OWNER);
+    expect(await merchantPaymentRecoveryDebt.call({ paymentId: final.id }, { kind: "system" })).toEqual({ pending: false, reasons: [] });
+    expect(await db().select().from(payments)).toHaveLength(2);
+    expect((await db().select().from(subscriptionCommercialTerms).where(eq(subscriptionCommercialTerms.id, first!.id)))[0]).toEqual(first);
+  });
+});

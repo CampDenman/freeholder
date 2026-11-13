@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // In-person collection at a location (C5.24).
 
+import { invoiceOutstanding } from "@/modules/invoicing/invoice-balance";
 import { randomUUID } from "node:crypto";
 import { DeviceMobile, WarningCircle } from "@phosphor-icons/react/dist/ssr";
 import { listLocations } from "@/core/locations/service";
@@ -89,7 +90,7 @@ export default async function PointOfSalePage({
                 <Select id="pos-invoice" name="invoiceId" required>
                   {open.map((invoice) => (
                     <option key={invoice.id} value={invoice.id}>
-                      {invoice.number ?? invoice.id.slice(0, 8)} · {money(invoice.totalMinor - invoice.paidMinor, invoice.currency)}
+                      {invoice.number ?? invoice.id.slice(0, 8)} · {money(invoiceOutstanding(invoice), invoice.currency)}
                     </option>
                   ))}
                 </Select>

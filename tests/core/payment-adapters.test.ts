@@ -71,9 +71,14 @@ describe("manual payment adapter", () => {
   });
 });
 
+const originalStripePlatformRead: typeof fetch = async input => {
+  expect(requestUrl(input)).toBe("https://api.stripe.com/v1/account");
+  return Response.json({ id: "acct_originalplatform" });
+};
+
 describe("Stripe refund finality",()=>{
   it("binds signed expanded Checkout and subsequent refund to the same PaymentIntent",async()=>{
-    const at=1_800_000_000,adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_expanded"]});
+    const at=1_800_000_000,adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_expanded"],fetch:originalStripePlatformRead});
     const events=async(id:string,type:string,value:Record<string,unknown>)=>{
       const raw=JSON.stringify({id,type,created:at,data:{object:value}}),signature=createHmac("sha256","whsec_expanded").update(`${at}.${raw}`).digest("hex");
       return adapter.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:bytes(raw),receivedAt:new Date(at*1000).toISOString()});
@@ -92,10 +97,10 @@ describe("Stripe refund finality",()=>{
   });
   it.each(["pi_OriginalRefund",{id:"pi_OriginalRefund"}])("preserves signed cancellation and exact original parent %j",async paymentIntent=>{
     const at=1_800_000_000;
-    const adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_cancel"]});
+    const adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_cancel"],fetch:originalStripePlatformRead});
     const raw=JSON.stringify({id:"evt_CancelledRefund",type:"refund.updated",account:"acct_Original",created:at,data:{object:{id:"re_CancelledRefund",object:"refund",payment_intent:paymentIntent,charge:"ch_OriginalRefund",amount:500,currency:"cad",status:"canceled"}}});
     const signature=createHmac("sha256","whsec_cancel").update(`${at}.${raw}`).digest("hex");
-    await expect(adapter.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:bytes(raw),receivedAt:new Date(at*1000).toISOString()})).resolves.toEqual([{id:"evt_CancelledRefund",kind:"refund_failed",failureCode:"provider_cancelled",providerRef:"re_CancelledRefund",paymentProviderRef:"pi_OriginalRefund",amountMinor:500,currency:"CAD",occurredAt:new Date(at*1000).toISOString(),providerAccountId:"acct_Original"}]);
+    await expect(adapter.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:bytes(raw),receivedAt:new Date(at*1000).toISOString()})).resolves.toEqual([{id:"evt_CancelledRefund",kind:"refund_failed",failureCode:"provider_cancelled",providerRef:"re_CancelledRefund",paymentProviderRef:"pi_OriginalRefund",amountMinor:500,currency:"CAD",occurredAt:new Date(at*1000).toISOString(),providerAccountId:"acct_Original",providerPlatformAccountId:"acct_originalplatform",providerChargeRef:"ch_OriginalRefund",observedPaymentIntentRef:"pi_OriginalRefund",observedProviderApiVersion:null,providerStatus:"canceled",rawProviderStatus:"canceled"}]);
   });
 });
 
@@ -436,7 +441,10 @@ describe("Stripe payment adapter", () => {
 
   it("normalizes disputes and masked saved methods", async () => {
     const secret = "whsec_test";
-    const adapter = createStripePayments({ secretKey: "sk_test", webhookSecrets: [secret] });
+    const adapter = createStripePayments({ secretKey: "sk_test", webhookSecrets: [secret], fetch: async input => {
+      expect(requestUrl(input)).toBe("https://api.stripe.com/v1/account");
+      return Response.json({ id: "acct_originalplatform" });
+    } });
     const at = Math.floor(Date.now() / 1_000);
     const disputePayload = { id: "evt_dispute", type: "charge.dispute.created", created: at, data: { object: { id: "dp_1", payment_intent: "pi_1", amount: 500, currency: "cad", status: "needs_response", reason: "fraudulent", evidence_details: { due_by: at + 86400 } } } };
     const disputeRaw = JSON.stringify(disputePayload);

@@ -179,6 +179,14 @@ export function createLocalStorage(config: LocalConfig): StorageAdapter {
       })();
     },
 
+    async verifyPhysicalAbsence(key): Promise<void> {
+      // This adapter has no remote generations, trash or upload sessions.
+      // Original writer receipts separately fence concurrent admissions.
+      try { await stat(/* turbopackIgnore: true */ pathFor(key)); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+      throw new Error("storage: the original local object is still present");
+    },
+
     async delete(key): Promise<void> {
       // force: deleting what is not there already satisfies the caller.
       await rm(pathFor(key), { force: true });

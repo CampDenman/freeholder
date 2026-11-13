@@ -2,19 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Shared infrastructure: reserve before provider I/O on the owning service TX.
 import { mediaObjects } from "./schema";
-import type { ServiceContext } from "@/core/service";
+import type { ServiceContext, Tx } from "@/core/service";
 import {actorString} from "@/core/service";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {originalUploadContact,assertOriginalUploadWritable} from "./upload-ownership";
 import {allowMediaReceiptWrites} from "./write-ledger";
 
-const owners = new Map<string, (key: string, now: Date) => Promise<boolean>>();
-export function registerPendingObjectOwner(prefix: string, owns: (key: string, now: Date) => Promise<boolean>): void {
+const owners = new Map<string, (key: string, now: Date, tx?: Tx) => Promise<boolean>>();
+export function registerPendingObjectOwner(prefix: string, owns: (key: string, now: Date, tx?: Tx) => Promise<boolean>): void {
   if (!prefix || !prefix.endsWith("/")) throw new Error("A pending object owner needs a namespace prefix.");
   owners.set(prefix, owns);
 }
-export async function pendingObjectIsOwned(key: string, now = new Date()): Promise<boolean> {
-  for (const [prefix, owns] of owners) if (key.startsWith(prefix) && await owns(key, now)) return true;
+export async function pendingObjectIsOwned(key: string, now = new Date(), tx?: Tx): Promise<boolean> {
+  for (const [prefix, owns] of owners) if (key.startsWith(prefix) && await owns(key, now, tx)) return true;
   return false;
 }
 /** A queued deletion never overrides later, explicitly retained ownership. */

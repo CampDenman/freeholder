@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C3.47: expose the complete shared-file plan before any provider or CMS write.
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
@@ -35,7 +36,7 @@ export const prepareSourceGraphPlan = defineService({
       ctx.setSubject("import_run", run.id);
       return { id: run.id, status: run.status, error: message, counts: run.counts, graph: input.version };
     }
-    if (planned.media.length) await ctx.tx.insert(importSourceMedia).values(planned.media.map(item => ({ graphId: graph.id, key: item.key, planned: item })));
+    if (planned.media.length) await ctx.tx.insert(importSourceMedia).values(planned.media.map(item => ({ graphId: graph.id, key: item.key, sourceKeyDigest:createHash("sha256").update(item.key).digest("hex"), planned: item })));
     await ctx.tx.update(importSourceGraphs).set({ planMetadata: planned.catalog }).where(eq(importSourceGraphs.id, graph.id));
     const counts = { ...object(run.counts), ...(run.kind === "archive" ? { mediaWarnings: Array.isArray(planned.catalog.report.unresolvedImages) ? planned.catalog.report.unresolvedImages.length : 0 } : {}), media: planned.media.length, menus: planned.catalog.menus.length };
     await ctx.tx.update(importRuns).set({ counts, error: null, ...(run.kind === "archive" ? { checkpoint: { ...object(run.checkpoint), report: planned.catalog.report } } : {}) }).where(eq(importRuns.id, run.id));

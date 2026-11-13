@@ -1,13 +1,19 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C5.19: immutable original-tender plans, actual provider refunds and human offline attestations.
+import legacyReturnBankServices, {legacyReturnBankPlan,recoverReturnBankRefunds} from "./legacy-return-bank-recovery";
+import {refundIsProvenUnsubmitted} from "@/modules/invoicing/legacy-refund-dispatch";
 import {createHash} from "node:crypto";
 import {and,eq,inArray,ne,sql} from "drizzle-orm";
 import {z} from "zod";
 import {paymentAdapter,isHostedPaymentProvider} from "@/adapters/payments";
 import {actorString,defineOrchestratedService,defineService,ServiceError,type ServiceContext} from "@/core/service";
-import {notifyReturnRefund} from "./return-notifications";
+import {notifyReturnRefund,notifyCommerceContact} from "./return-notifications";
 import {createCreditNote,getInvoice,issueCreditNote,reserveRefundBatch,settleRefund} from "@/modules/invoicing/invoice-service";
+import {merchantRefundBasis} from "@/modules/invoicing/merchant-refund-basis";
+import {merchantRefundBankState} from "@/modules/invoicing/merchant-refund-bank-state-service";
+import {orderCommercialPolicies} from "./order-commercial-schema";
+import {getInvoiceMarketPolicy} from "@/modules/invoicing/market-policy";
 import {providerPaymentSource,submitProviderRefund} from "@/modules/invoicing/payment-provider-service";
 import {refundCustomerBalancePayment} from "@/modules/invoicing/advanced-money-service";
 import {QUANTITY_SCALE,sumMinor} from "@/modules/invoicing/money";
@@ -116,21 +122,41 @@ async function freeze(ctx:ServiceContext,input:z.infer<typeof operation>,lockFor
  const allocations=await ctx.tx.select().from(returnRefundAllocations).where(eq(returnRefundAllocations.returnId,request.id));
  let credit=request.creditNoteId ? invoice.creditNotes.find(note=>note.id===request.creditNoteId) : undefined;
  if(request.creditNoteId && (!credit || credit.status==="void")) throw new ServiceError("conflict","Reconcile this return's original credit before refunding it.");
- const calculated=credit ? undefined : await returnCredit(ctx,request,invoice);
+ const [terms]=await ctx.tx.select({model:orderCommercialPolicies.model}).from(orderCommercialPolicies).where(eq(orderCommercialPolicies.orderId,order.id));
+ const policy=await ctx.callAsSystem(getInvoiceMarketPolicy,{invoiceId:invoice.invoice.id});
+ const currentMerchant=policy?.collectionVersion===1||terms?.model==="seller_merchant";
+ const calculated=credit&&!currentMerchant ? undefined : await returnCredit(ctx,request,invoice);
+ const basis=calculated ? await ctx.callAsSystem(merchantRefundBasis,{invoiceId:invoice.invoice.id,invoiceLineIds:calculated.creditLines.map(line=>line.invoiceLineId)}) : null;
+ if(currentMerchant&&!basis) throw new ServiceError("conflict","Restore this order's original merchant collection policy before preparing its return.");
  const amountMinor=credit?.totalMinor ?? calculated!.amountMinor;
+ const merchantBudgets=new Map<string,number>();
+ const paymentOwners=new Map(basis?.payments.map(row=>[row.paymentId,row.allocationId]));
+ if(basis){
+  if(!calculated||calculated.amountMinor!==amountMinor) throw new ServiceError("conflict","The original returned lines and their frozen credit no longer agree.");
+  for(const line of calculated.creditLines){
+   const original=basis.lines.find(row=>row.invoiceLineId===line.invoiceLineId);
+   if(!original) throw new ServiceError("conflict","Restore each returned line's original merchant allocation.");
+   const gross=sumMinor([line.subtotalMinor,line.taxMinor],"Original returned line amount");
+   if(gross>0) merchantBudgets.set(original.allocationId,sumMinor([merchantBudgets.get(original.allocationId)??0,gross],"Original merchant return budget"));
+  }
+ }
  if(!allocations.length){
   let proposed:Array<{paymentId:string,amountMinor:number}>;
   if(credit) proposed=legacyPlan(request,invoice,amountMinor);
   else {
    proposed=[];let remaining=amountMinor;
+   const remainingMerchant=new Map(merchantBudgets);
    const captured=invoice.payments.filter(payment=>payment.status==="succeeded").sort((a,b)=>a.createdAt.getTime()-b.createdAt.getTime() || a.id.localeCompare(b.id));
    const frozen=captured.length ? await ctx.tx.select().from(returnRefundAllocations).where(inArray(returnRefundAllocations.paymentId,captured.map(payment=>payment.id))) : [];
    for(const payment of captured){
+    const allocationId=paymentOwners.get(payment.id);
+    const permitted=basis ? allocationId ? remainingMerchant.get(allocationId)??0 : 0 : remaining;
+    if(permitted===0) continue;
     const owed=sumMinor(frozen.filter(part=>part.paymentId===payment.id).map(part=>Math.max(0,part.amountMinor-total(assigned(invoice,{id:part.returnId},part),row=>reserved(row.status)))),"Owed original return portions");
     const available=payment.amountMinor-total(invoice.refunds,row=>row.paymentId===payment.id && reserved(row.status))-owed;
     if(available<0) throw new ServiceError("conflict","Reconcile the original refund balance before preparing this return.");
-    const amount=Math.min(remaining,available);
-    if(amount>0){proposed.push({paymentId:payment.id,amountMinor:amount});remaining-=amount;}
+    const amount=Math.min(remaining,available,permitted);
+    if(amount>0){proposed.push({paymentId:payment.id,amountMinor:amount});remaining-=amount;if(basis&&allocationId) remainingMerchant.set(allocationId,permitted-amount);}
    }
    if(remaining) throw new ServiceError("conflict","The original payments cannot cover this whole return.");
   }
@@ -139,6 +165,15 @@ async function freeze(ctx:ServiceContext,input:z.infer<typeof operation>,lockFor
    const [created]=await ctx.tx.insert(returnRefundAllocations).values({returnId:request.id,paymentId:part.paymentId,amountMinor:part.amountMinor,currency:invoice.invoice.currency,provider:source.payment.provider,providerAccountId:source.providerAccountId,applicationFeeMinor:source.applicationFeeMinor}).returning();
    allocations.push(created!);
   }
+ }
+ if(basis){
+  const recorded=new Map<string,number>();
+  for(const part of allocations){
+   const allocationId=paymentOwners.get(part.paymentId);
+   if(!allocationId||!merchantBudgets.has(allocationId)) throw new ServiceError("conflict","This frozen return names another merchant's payment. Reconcile its original plan before any provider work.");
+   recorded.set(allocationId,sumMinor([recorded.get(allocationId)??0,part.amountMinor],"Frozen merchant return budget"));
+  }
+  if(recorded.size!==merchantBudgets.size||[...merchantBudgets].some(([allocationId,amount])=>recorded.get(allocationId)!==amount)) throw new ServiceError("conflict","The frozen return payment portions do not match their original seller lines.");
  }
  if(sumMinor(allocations.map(part=>part.amountMinor),"Frozen return allocation")!==amountMinor) throw new ServiceError("conflict","The frozen return allocations do not match its whole credit.");
  const requests=[];
@@ -161,17 +196,18 @@ async function freeze(ctx:ServiceContext,input:z.infer<typeof operation>,lockFor
  return {...state,request:{...request,creditNoteId:credit.id},allocations,invoice:await ctx.callAsSystem(getInvoice,{id:invoice.invoice.id})};
 }
 
-export const refundPlanSummary=z.object({prepared:z.boolean(),available:z.boolean(),currency:z.string(),amountMinor:money,offlineMinor:money,onlineMinor:money,offlineConfirmedMinor:money,onlineConfirmedMinor:money});
+export const refundPlanSummary=z.object({prepared:z.boolean(),available:z.boolean(),currency:z.string(),amountMinor:money,offlineMinor:money,onlineMinor:money,offlineConfirmedMinor:money,onlineConfirmedMinor:money,bankReview:z.boolean(),canCheckBankRefunds:z.boolean(),canReplaceBankRefunds:z.boolean(),canResumeOriginalRefunds:z.boolean()});
 export const getReturnRefundPlan=defineService({
  name:"catalog.getReturnRefundPlan",summary:"Read masked original-payment totals for one return.",kind:"query",permission:"scoped",input:z.object({id}),output:refundPlanSummary,
  handler:async(input,ctx)=>{
   const {request,invoice}=await context(ctx,input.id);
   const allocations=await ctx.tx.select().from(returnRefundAllocations).where(eq(returnRefundAllocations.returnId,request.id));
   const credit=invoice.creditNotes.find(note=>note.id===request.creditNoteId);
-  const summary={prepared:allocations.length>0,available:request.status==="received" || request.status==="refunded",currency:invoice.invoice.currency,amountMinor:credit?.totalMinor??0,offlineMinor:0,onlineMinor:0,offlineConfirmedMinor:0,onlineConfirmedMinor:0};
+  const bank=await ctx.callAsSystem(legacyReturnBankPlan,{id:request.id});
+  const summary={bankReview:bank.participating&&bank.needsReview,canCheckBankRefunds:bank.canInspect,canReplaceBankRefunds:bank.replaceRefundIds.length>0,canResumeOriginalRefunds:bank.canResumeOriginal,prepared:allocations.length>0,available:request.status==="received" || request.status==="refunded",currency:invoice.invoice.currency,amountMinor:credit?.totalMinor??0,offlineMinor:0,onlineMinor:0,offlineConfirmedMinor:0,onlineConfirmedMinor:0};
   if(!allocations.length) return summary;
   for(const allocation of allocations){
-   const amount=total(assigned(invoice,request,allocation),refund=>refund.status==="succeeded");
+   const amount=bank.participating&&allocation.provider==="stripe" ? bank.parts.find(part=>part.allocationId===allocation.id)?.confirmedMinor??0 : total(assigned(invoice,request,allocation),refund=>refund.status==="succeeded");
    if(allocation.provider==="manual"){summary.offlineMinor+=allocation.amountMinor;summary.offlineConfirmedMinor+=amount;}
    else{summary.onlineMinor+=allocation.amountMinor;summary.onlineConfirmedMinor+=amount;}
   }
@@ -209,9 +245,13 @@ export const claimReturnProviderRefund=defineService({
  input:operation,output:z.object({invoiceId:id,attempts:z.array(attempt)}),
  handler:async(input,ctx)=>{
   const {request,invoice,allocations}=await freeze(ctx,input);
+  const bank=await ctx.callAsSystem(legacyReturnBankPlan,{id:request.id});
   const attempts: z.infer<typeof attempt>[]=[];
   if(request.status!=="refunded") for(const allocation of allocations.filter(part=>part.provider!=="manual")){
-   for(const refund of assigned(invoice,request,allocation).filter(row=>reserved(row.status))) attempts.push({paymentId:refund.paymentId,amountMinor:refund.amountMinor,reason:refund.reason??request.reason,idempotencyKey:refund.idempotencyKey,provider:allocation.provider,providerAccountId:allocation.providerAccountId,applicationFeeMinor:allocation.applicationFeeMinor,currency:allocation.currency});
+   for(const refund of assigned(invoice,request,allocation).filter(row=>reserved(row.status))){
+    if(bank.participating && !await refundIsProvenUnsubmitted(ctx.tx,refund)) continue;
+    attempts.push({paymentId:refund.paymentId,amountMinor:refund.amountMinor,reason:refund.reason??request.reason,idempotencyKey:refund.idempotencyKey,provider:allocation.provider,providerAccountId:allocation.providerAccountId,applicationFeeMinor:allocation.applicationFeeMinor,currency:allocation.currency});
+   }
   }
   return {invoiceId:invoice.invoice.id,attempts};
  },
@@ -229,6 +269,8 @@ export const reconcileReturnProviderRefunds=defineService({
    const credit=invoice.creditNotes.find(note=>note.id===request.creditNoteId);
    if(!credit || credit.status==="void") throw new ServiceError("conflict","The return credit needs reconciliation before it can close.");
    const allocations=await ctx.tx.select().from(returnRefundAllocations).where(eq(returnRefundAllocations.returnId,request.id));
+   const bank=await ctx.callAsSystem(legacyReturnBankPlan,{id:request.id});
+   if(bank.participating&&bank.needsReview) continue;
    if(!allocations.length){
     for(const part of legacyPlan(request,invoice,credit.totalMinor)){
      const source=await original(ctx,invoice,part.paymentId);
@@ -242,6 +284,10 @@ export const reconcileReturnProviderRefunds=defineService({
     const rows=assigned(invoice,request,allocation);
     if(total(rows,row=>reserved(row.status))>allocation.amountMinor) throw new ServiceError("conflict","The original return payment is over-reserved.");
     if(total(rows,row=>row.status==="succeeded")!==allocation.amountMinor) complete=false;
+    for(const refund of rows.filter(row=>row.status==="succeeded")){
+     const actual=await ctx.callAsSystem(merchantRefundBankState,{refundId:refund.id});
+     if(actual.original&&!actual.resolvedSuccess) complete=false;
+    }
     refundIds.push(...rows.filter(row=>row.status==="succeeded").map(row=>row.id));
    }
    if(!complete) continue;
@@ -249,7 +295,7 @@ export const reconcileReturnProviderRefunds=defineService({
    await ctx.tx.update(returnRequests).set({status:"refunded",updatedAt:sql`now()`}).where(eq(returnRequests.id,request.id));
    await ctx.emitTimeline({contactId:request.contactId,eventType:"return.refunded",subjectType:"return",subjectId:request.id,payload:{orderId:order.id,creditNoteId:credit.id,refundIds}});
    await notifyReturnRefund(ctx,request.contactId,request.id);
-   ctx.queueEvent("catalog.returnRefunded",{returnId:request.id,creditNoteId:credit.id,refundId:refundIds[0]});changed++;
+   ctx.queueEvent("catalog.returnRefunded",{returnId:request.id,creditNoteId:credit.id,refundId:refundIds[0],invoiceId:input.invoiceId});changed++;
   }
   if(changed && invoice.invoice.status==="refunded"){
    const pending=await ctx.tx.select().from(returnRequests).where(and(eq(returnRequests.orderId,order.id),ne(returnRequests.status,"refunded"),ne(returnRequests.status,"rejected")));
@@ -263,6 +309,8 @@ export const submitReturnProviderRefund=defineOrchestratedService({
  name:"catalog.submitReturnProviderRefund",summary:"Refund only the frozen original online portions of a received return.",kind:"mutation",permission:"scoped",stepUp:true,agentCallable:false,writeClass:"money",input:operation,output:returnDetail,
  handler:async(input,caller)=>{
   const system={kind:"system",request:caller.request} as const;
+  const bank=await legacyReturnBankPlan.call({id:input.id},system);
+  if(bank.participating&&bank.needsReview&&!bank.canResumeOriginal) throw new ServiceError("conflict","Check the exact original bank refunds and explicitly confirm any original-part replacements; do not create another return credit or ordinary refund generation.");
   const claimed=await claimReturnProviderRefund.call(input,caller);
   for(const attempt of claimed.attempts){
    const source=await providerPaymentSource.call({paymentId:attempt.paymentId},system);
@@ -271,10 +319,41 @@ export const submitReturnProviderRefund=defineOrchestratedService({
    if(attempt.provider==="balance") await refundCustomerBalancePayment.call(request,system);
    else await submitProviderRefund.call(request,system);
   }
+  if(bank.participating) return recoverReturnBankRefunds.call({id:input.id},caller);
   await reconcileReturnProviderRefunds.call({invoiceId:claimed.invoiceId},system);
   return getReturn.call({id:input.id},system);
  },
 });
 export async function onReturnRefundSucceeded(payload:unknown):Promise<void>{const invoiceId=(payload as {invoiceId?:string}|null)?.invoiceId;if(invoiceId) await reconcileReturnProviderRefunds.call({invoiceId},{kind:"system"});}
-export default [getReturnRefundPlan,prepareReturnRefund,refundReturn,claimReturnProviderRefund,reconcileReturnProviderRefunds,submitReturnProviderRefund];
+export const reconcileReturnBankRefundState=defineService({
+ name:"catalog.reconcileReturnBankRefundState",summary:"Keep an issued original return credit owed while its exact bank refund is no longer confirmed.",
+ kind:"mutation",permission:"system",external:false,writeClass:"money",input:z.object({invoiceId:id,refundId:id}),output:z.object({changed:z.number().int()}),
+ handler:async(input,ctx)=>{
+  const actual=await ctx.callAsSystem(merchantRefundBankState,{refundId:input.refundId});
+  if(!actual.original||actual.invoiceId!==input.invoiceId) return {changed:0};
+  const [order]=await ctx.tx.select().from(orders).where(eq(orders.invoiceId,input.invoiceId)).for("update");
+  if(!order) return {changed:0};
+  const invoice=await ctx.callAsSystem(getInvoice,{id:input.invoiceId});
+  const requests=await ctx.tx.select().from(returnRequests).where(and(eq(returnRequests.orderId,order.id),sql`${returnRequests.creditNoteId} is not null`)).for("update");
+  let changed=0;
+  for(const request of requests){
+   const parts=await ctx.tx.select().from(returnRefundAllocations).where(eq(returnRefundAllocations.returnId,request.id));
+   if(!parts.some(part=>assigned(invoice,request,part).some(refund=>refund.id===input.refundId))) continue;
+   const credit=invoice.creditNotes.find(note=>note.id===request.creditNoteId);
+   if(!credit||credit.status==="void") throw new ServiceError("conflict","Restore this bank refund's exact original return credit; do not create a replacement credit.");
+   if(!actual.resolvedSuccess&&request.status==="refunded"){
+    if(credit.status!=="issued") throw new ServiceError("conflict","Restore the issued original credit before reopening its unsettled bank refund.");
+    await ctx.tx.update(returnRequests).set({status:"received",updatedAt:sql`now()`}).where(eq(returnRequests.id,request.id));
+    await ctx.emitTimeline({contactId:request.contactId,eventType:"return.refundNeedsAttention",subjectType:"return",subjectId:request.id,
+     payload:{orderId:order.id,creditNoteId:credit.id,refundId:input.refundId,amountMinor:credit.totalMinor,currency:invoice.invoice.currency}});
+    await notifyCommerceContact(ctx,request.contactId,"return.refund_needs_attention",`return-bank-review:${request.id}:${actual.receiptId ?? input.refundId}`);
+    ctx.queueEvent("catalog.returnRefundNeedsAttention",{returnId:request.id,creditNoteId:credit.id,refundId:input.refundId});changed++;
+   }
+  }
+  if(actual.resolvedSuccess) changed+=(await ctx.callAsSystem(reconcileReturnProviderRefunds,{invoiceId:input.invoiceId})).changed;
+  return {changed};
+ },
+});
+export async function onReturnBankRefundStateChanged(payload:unknown):Promise<void>{const input=z.object({invoiceId:id,refundId:id}).parse(payload);await reconcileReturnBankRefundState.call(input,{kind:"system"});}
+export default [getReturnRefundPlan,prepareReturnRefund,refundReturn,claimReturnProviderRefund,reconcileReturnProviderRefunds,submitReturnProviderRefund,reconcileReturnBankRefundState,...legacyReturnBankServices];
 

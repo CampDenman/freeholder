@@ -578,3 +578,93 @@ still applies. These results supply no actual-provider launch/recovery, default
 JIT, permanent byte erasure, source cutover, independent review or stable
 signature. Protected PR qualification and the complete live-crawl source
 adapter remain required; C3.47 and all existing checklist statuses stay open.
+
+
+## Durable live-crawl original-response foundation (source only)
+
+The isolated `crawl-original.ts` primitive reads one actual pinned public HTTP
+response, preserving its request URL, source role, status, content type, byte
+count and cryptographic body digest. Actual WordPress collection totals stay on
+their original selected instance and response; they are not a claim that records
+have been indexed. Robots absence retains its actual HTTP404 and original empty
+body, without manufacturing a policy. Arbitrary response headers and cookies do
+not enter normalized metadata. Request headers remain fixed and credential-free,
+and the read stays outside service transactions with independent byte, format,
+UTF-8 and final-deadline refusal.
+
+This source primitive is not wired into the running crawler, which still retains
+its existing synchronous 500-page limit. No response is represented as an uploaded
+export, no body is copied into SQL and no schema81/journal exists in this source
+checkpoint. All 18 focused pure boundary fixtures initially pass in 1.01 seconds. An initial
+lint check caught an unsafe test matcher type. After replacing it with typed
+actual request-argument assertions, all 18 controls pass again in 795ms and
+focused lint passes. No full type or runtime/frontier acceptance is claimed.
+
+Actual frontier persistence needs separate normalized source, request and response
+facts; each response's original private object remains a captured physical write.
+Immutable key-digest witnesses must outlive payload minimization. Old-image
+mutation/cleanup must refuse these sources before provider I/O rather than
+interpreting an unknown pending-owner prefix as an orphan. Current actor, claim,
+robots/rate admission, erasure/holds, late outcomes and graph integration remain
+required parts of C3.47, not acceptance supplied by this primitive.
+
+
+An unpublished schema81 draft now models separate crawl sources, original
+frontier requests, actual response attempts and exact response/erasure cohorts.
+It is not journalled or registered in runtime tables, and has not run in
+PostgreSQL. Bodies remain private objects; response facts admit only explicit
+original HTTP fields. Source, executor, namespace and key-digest witnesses are
+immutable, with explicit terminal minimization fields. Unknown network/body
+reservations remain separate from known captured-byte counts.
+
+The draft's old-image fence targets actual I/O admission rather than an outer
+service marker: shared physical receipt APIs open independent short
+transactions. New PUTs must match the original response body/namespace facts;
+new DELETE or reservation discard refuses an active or held original. Physical
+outcome observations remain recordable after cancellation. Frontier/run writes
+require their own ABI marker. This remains unexecuted source design: no old-image
+acceptance, erasure/hold race proof, syntax qualification, runtime sequencing,
+complete crawl or contiguous0–81 migration is claimed. The actual80 predecessor
+and remaining services/cleanup/indexing/UI integration are still required.
+
+
+The v1 four-model draft passes full types and focused lint, then actual SQL
+creation against a new disposable database: the pinned real normal0–80 parent
+(81 journal entries/max1793310000060, exact80 SQL SHA256
+`ea06fa49df88e7e3ab396c4246a5d9d017682825f0758253024be0dbcf943fd0`)
+was applied first, followed by explicit unjournalled81. All four tables were
+created. Four read-only actual Drizzle/SQL column-name/type/nullability/default
+checks pass in700ms. Both diagnostics exited and their database had no nonidle
+backends. This is neither a normal0–81 journal nor runtime acceptance.
+
+Subsequent unqualified source code now implements private source initialization,
+frontier response claim, separate actual GET admission after captured robots,
+HTTP fact binding before physical PUT, and acceptance against the actual original
+private receipt. It records current credential identity independently of the
+original source creator, and does not turn lease expiry into a new provider
+retry. Its body reader uses the separately qualified explicit physical `key`
+API from read-key preparation cdcf0a68 while keeping original logical/source
+facts unchanged. The draft now distinguishes reserved work from an admitted
+GET; this enum refinement and new capture code still need their own type, SQL
+and behavioral qualification. No82 models were composed.
+
+These private services are not wired into runtime or the registry. Actual
+frontier expansion/indexing, interrupted capture recovery, erasure/hold and
+late-observation reconciliation, owned cleanup, graph/CMS integration and human
+controls remain required before the live-crawl source can be qualified.
+
+
+The current private capture/body/discovery implementation passes full types,
+focused lint and25 pure response/discovery controls (1.47 seconds), without a
+database or provider request. Actual501-link HTML produces a500-target window
+and one-target continuation with a stable original body digest and no returned
+shadow body. REST discovery retains selected instance/pagination and refuses
+record contradictions or malformed private JSON diagnostics. Feed metadata only
+schedules the rendered original and never substitutes its excerpt. Source
+kind/origin/depth/byte/cursor checks remain explicit.
+
+Response discovery now has its own monotonic ordinal/completion fields so a
+large captured response can expand in bounded phases. These draft model/SQL
+refinements have not yet run in PostgreSQL; earlier v1 creation/column evidence
+is preserved at its exact checkpoint. The new capture/frontier code remains
+unwired and has no native or owner-browser acceptance.
