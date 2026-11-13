@@ -3,6 +3,8 @@
 import { describe,expect,it } from "vitest";
 import { controlledCashBankApplicationEvidence,type ControlledCashBankExpectation } from "@/modules/invoicing/controlled-cash-application-bank-policy";
 import type { MerchantReturnedCashEvidence } from "@/modules/invoicing/merchant-returned-cash-proof";
+import { cashObservationSourceMatches } from "@/modules/subscriptions/controlled-provider-cash-observation-source";
+import type { ControlledCashEvidence } from "@/modules/subscriptions/controlled-provider-cash-origin";
 function vector(destination=false){
  const expected:ControlledCashBankExpectation={providerApiVersion:"2026-10-28.endive",providerPlatformAccountId:"acct_originalPlatform",...(destination?{destinationAccountId:"acct_originalSeller",settlementMerchantAccountId:"acct_originalSeller"}:{providerAccountId:"acct_originalSeller"}),
   providerRef:"pi_original",chargeRef:"ch_original",amountMinor:1000,currency:"CAD",feeMinor:50,originalFeeRef:"fee_original",customerChargeVerified:true,merchantRouteVerified:true};
@@ -13,6 +15,22 @@ function vector(destination=false){
  return{expected,bank};
 }
 describe("genuine-source/current-bank prospective observation policy",()=>{
+ function originalSource(){
+  const v=vector(),capture:ControlledCashEvidence={provider:"stripe",subscriptionId:"11111111-1111-4111-8111-111111111111",providerSubscriptionRef:"sub_original",providerPlatformAccountId:"acct_originalPlatform",providerAccountId:"acct_originalSeller",providerInvoiceRef:"in_original",providerPaymentIntentRef:"pi_original",providerCustomerRef:"cus_original",amountMinor:1000,currency:"CAD",customerChargeVerified:true,merchantRouteVerified:true};
+  const receipt={subscriptionId:capture.subscriptionId,providerPlatformAccountId:capture.providerPlatformAccountId,chargeAccountId:"acct_originalSeller",providerSubscriptionRef:capture.providerSubscriptionRef,providerInvoiceRef:capture.providerInvoiceRef,providerPaymentIntentRef:capture.providerPaymentIntentRef,providerChargeRef:"ch_original",amountMinor:1000,currency:"CAD"};return{...v,capture,receipt};
+ }
+ it("retains a genuinely unknown old charge while requiring the actual receipt and current same-PI captured charge",()=>{
+  const v=originalSource(),before=JSON.stringify(v.capture);expect(cashObservationSourceMatches(v.receipt,v.capture)).toBe(true);expect(controlledCashBankApplicationEvidence(v.expected,v.bank)?.providerChargeRef).toBe(v.receipt.providerChargeRef);expect(JSON.stringify(v.capture)).toBe(before);expect(v.capture.providerChargeRef).toBeUndefined();
+ });
+ it("does not reinterpret an actually known foreign original charge as missing history",()=>{
+  const v=originalSource();v.capture.providerChargeRef="ch_foreign";expect(cashObservationSourceMatches(v.receipt,v.capture)).toBe(false);
+ });
+ it("refuses a foreign current charge despite a matching original PI and an unknown old charge",()=>{
+  const v=originalSource();expect(cashObservationSourceMatches(v.receipt,v.capture)).toBe(true);v.bank.providerChargeRef="ch_foreign";expect(controlledCashBankApplicationEvidence(v.expected,v.bank)).toBeNull();
+ });
+ it("does not turn source identity with unverified capture flags into bank settlement",()=>{
+  const v=originalSource();v.capture.customerChargeVerified=false;expect(cashObservationSourceMatches(v.receipt,v.capture)).toBe(true);expect(controlledCashBankApplicationEvidence({...v.expected,customerChargeVerified:v.capture.customerChargeVerified},v.bank)).toBeNull();
+ });
  it.each([false,true])("derives settlement only from original route proof plus exact current fee/recipient fields; destination=%s",destination=>{
   const v=vector(destination),before=JSON.stringify(v),actual=controlledCashBankApplicationEvidence(v.expected,v.bank);
   expect(actual).toMatchObject({providerRef:"pi_original",providerChargeRef:"ch_original",amountMinor:1000,currency:"CAD",customerChargeVerified:true,merchantRouteVerified:true,merchantSettlementVerified:true,

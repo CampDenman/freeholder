@@ -17,6 +17,7 @@ import { recordMerchantPaymentObservation } from "./merchant-payment-observation
 import { payments,invoices } from "./schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { readControlledCashApplicationBank } from "./controlled-cash-application-bank";
+import { cashObservationSourceMatches } from "@/modules/subscriptions/controlled-provider-cash-observation-source";
 const inputSchema=z.object({collectionId:z.uuid(),receiptIds:z.array(z.uuid()).min(1).max(5000),requiredProtocol:z.literal(CONTROLLED_COLLECTION_PROTOCOL)}).strict();
 const authorityResult=z.object({allowed:z.literal(true),revision:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 const paymentResult=z.object({id:z.uuid(),invoiceId:z.uuid(),provider:z.literal("stripe"),method:z.literal("provider_schedule"),amountMinor:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),currency:z.string(),status:z.enum(["created","processing","succeeded"]),providerRef:z.string().nullable()});
@@ -61,11 +62,10 @@ export async function applyControlledReceiptBatch(ctx:ServiceContext,value:z.inp
   .orderBy(subscriptionProviderChargeObservations.createdAt,subscriptionProviderChargeObservations.id).limit(5001);if(observationRows.length>5000)refuse();
  for(const row of candidates){const origin=row.origin,fact=origin?source.history.facts.find(item=>item.id===origin.factId&&item.callId===origin.callId&&item.actual.kind==="cash_observed"):null;
   if(!origin||!fact)refuse();const actual=await readOriginalControlledChargeAuthority(ctx.tx,controlledCashEvidence.parse(fact.actual.raw.cash),{resourceId:source.resource.id,callId:origin.callId,factId:origin.factId});
-  if(actual.controlledOrigin.operationId!==origin.operationId||actual.controlledOrigin.originalEvidenceDigest!==origin.originalEvidenceDigest||actual.controlledCash.providerPaymentIntentRef!==row.receipt.providerPaymentIntentRef
-   ||actual.controlledCash.providerInvoiceRef!==row.receipt.providerInvoiceRef||actual.controlledCash.providerChargeRef!==row.receipt.providerChargeRef||actual.controlledCash.amountMinor!==row.receipt.amountMinor||actual.controlledCash.currency!==row.receipt.currency)refuse();
+  if(actual.controlledOrigin.operationId!==origin.operationId||actual.controlledOrigin.originalEvidenceDigest!==origin.originalEvidenceDigest||!cashObservationSourceMatches(row.receipt,actual.controlledCash))refuse();
   const matching=observationRows.filter(item=>item.providerPaymentIntentRef===row.receipt.providerPaymentIntentRef);
   if(!matching.length||matching.some(item=>item.providerPlatformAccountId!==row.receipt.providerPlatformAccountId||item.chargeAccountId!==row.receipt.chargeAccountId||item.providerApiVersion!==row.receipt.providerApiVersion
-   ||item.providerInvoiceRef!==row.receipt.providerInvoiceRef||item.providerSubscriptionRef!==row.receipt.providerSubscriptionRef||item.providerChargeRef!==row.receipt.providerChargeRef||item.amountMinor!==row.receipt.amountMinor
+   ||item.providerInvoiceRef!==row.receipt.providerInvoiceRef||item.providerSubscriptionRef!==row.receipt.providerSubscriptionRef||item.providerChargeRef!==null&&item.providerChargeRef!==row.receipt.providerChargeRef||item.amountMinor!==row.receipt.amountMinor
    ||item.currency!==row.receipt.currency||item.actualDestinationAccountId!==row.receipt.actualDestinationAccountId||item.actualSettlementMerchantAccountId!==row.receipt.actualSettlementMerchantAccountId
    ||!item.customerChargeVerified||!item.merchantRouteVerified))refuse();const latest=matching.at(-1);if(!latest)refuse();observed.set(row.receipt.id,latest);
  }
@@ -89,7 +89,8 @@ export async function applyControlledReceiptBatch(ctx:ServiceContext,value:z.inp
   const[route]=await ctx.tx.select().from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.paymentId,created.id)).limit(1);
   if(!route||route.originalChargeReceiptId!==item.receiptId||route.subscriptionId!==source.parent.id||route.providerInvoiceRef!==source.binding.providerInvoiceRef)refuse();
   const evidence=observed.get(item.receiptId);if(!evidence)refuse();
-  if(bank.receiptId!==item.receiptId||bank.paymentEvidence.providerRef!==evidence.providerPaymentIntentRef||bank.paymentEvidence.providerChargeRef!==evidence.providerChargeRef
+  if(bank.receiptId!==item.receiptId||bank.paymentEvidence.providerRef!==evidence.providerPaymentIntentRef||bank.paymentEvidence.providerChargeRef!==bank.receiptChargeRef
+   ||evidence.providerChargeRef!==null&&bank.paymentEvidence.providerChargeRef!==evidence.providerChargeRef
    ||bank.paymentEvidence.amountMinor!==evidence.amountMinor||bank.paymentEvidence.currency!==evidence.currency)refuse();
   await ctx.callAsSystem(recordMerchantPaymentObservation,{paymentId:created.id,providerEventRef:`controlled-cash-bank:${bank.observationId}:${item.receiptId}`,evidence:bank.paymentEvidence});
   const settled=paymentResult.parse(await ctx.callAsSystem(settle,{id:created.id,providerRef:evidence.providerPaymentIntentRef,processedAt:bank.processedAt}));

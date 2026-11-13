@@ -3564,6 +3564,22 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled bank consumer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): isolated source normally carries the actuale3
+observational producer and consumes its distinct genuine returned bank context,
+retaining original capture/route and actual current fee/recipient proof. A missing
+old raw charge remains unknown while every known original/current charge must
+match the actual receipt; bodies are not rewritten. Four pure and four source
+controls are PREPARED/UNRUN; no compiler/database/provider operation ran. Current
+legacy defaults stay strict. The prospective application query stays
+unregistered and424 final guard refuses. Sequential receipt GETs and own
+canonical writes require genuine immutable per-namespace bank plus complete
+current parent/batch transition proof; scalar historical digests cannot be
+silently rebased. This actual dependency and full partial/batch/overage/native,
+SQL/effects/security/acceptance work remain required, with no new deferral or
+C/stable claim. See
+`deploy/controlled-bank-observation-consumer82-source-20261113.md`.
+
 Controlled observation parent source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): isolated source registers the distinct private
 observational GET query and ordinary complete coverage reader. Actual source,

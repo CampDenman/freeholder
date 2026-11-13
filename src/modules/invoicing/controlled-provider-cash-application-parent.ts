@@ -8,6 +8,7 @@ import { controlledCollectionState } from "@/modules/subscriptions/controlled-pr
 import { controlledCollectionCoverage } from "@/modules/subscriptions/controlled-provider-collection-coverage";
 import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-contract";
 import { controlledCashEvidence,readOriginalControlledChargeAuthority } from "@/modules/subscriptions/controlled-provider-cash-origin";
+import { cashObservationSourceMatches } from "@/modules/subscriptions/controlled-provider-cash-observation-source";
 import { subscriptionControlledCollections,subscriptionControlledQuotes } from "@/modules/subscriptions/controlled-provider-collection-schema";
 import { subscriptionControlledResources,subscriptionControlledChargeOrigins } from "@/modules/subscriptions/controlled-provider-schema";
 import { subscriptions,subscriptionProviderChargeReceipts,subscriptionProviderChargeObservations } from "@/modules/subscriptions/schema";
@@ -89,13 +90,12 @@ export async function readControlledCashApplicationParent(ctx:ServiceContext,inp
   ||!receipt.providerChargeRef||!receipt.customerChargeVerified||!receipt.merchantRouteVerified||receipt.currency!==canonical.invoice.currency||receipt.providerInvoiceRef!==source.binding?.providerInvoiceRef)refuse();
  const actual=await readOriginalControlledChargeAuthority(ctx.tx,controlledCashEvidence.parse(originalFact.actual.raw.cash),{resourceId:resource.id,callId:origin.callId,factId:origin.factId});
  if(actual.controlledOrigin.operationId!==origin.operationId||actual.controlledOrigin.originalEvidenceDigest!==origin.originalEvidenceDigest
-  ||actual.controlledCash.providerPaymentIntentRef!==receipt.providerPaymentIntentRef||actual.controlledCash.providerInvoiceRef!==receipt.providerInvoiceRef
-  ||actual.controlledCash.providerChargeRef!==receipt.providerChargeRef||actual.controlledCash.amountMinor!==receipt.amountMinor||actual.controlledCash.currency!==receipt.currency)refuse();
+  ||!cashObservationSourceMatches(receipt,actual.controlledCash))refuse();
  const outstandingMinor=controlledCashApplicationCapacity(canonical.invoice,receipt.amountMinor);
  const observationRows=await ctx.tx.select().from(subscriptionProviderChargeObservations).where(and(eq(subscriptionProviderChargeObservations.subscriptionId,parent.id),
   eq(subscriptionProviderChargeObservations.providerPaymentIntentRef,receipt.providerPaymentIntentRef))).limit(5001);
  if(observationRows.length>5000||!observationRows.length||observationRows.some(row=>row.providerPlatformAccountId!==receipt.providerPlatformAccountId||row.chargeAccountId!==receipt.chargeAccountId
-  ||row.providerApiVersion!==receipt.providerApiVersion||row.providerSubscriptionRef!==receipt.providerSubscriptionRef||row.providerInvoiceRef!==receipt.providerInvoiceRef||row.providerChargeRef!==receipt.providerChargeRef
+  ||row.providerApiVersion!==receipt.providerApiVersion||row.providerSubscriptionRef!==receipt.providerSubscriptionRef||row.providerInvoiceRef!==receipt.providerInvoiceRef||row.providerChargeRef!==null&&row.providerChargeRef!==receipt.providerChargeRef
   ||row.amountMinor!==receipt.amountMinor||row.currency!==receipt.currency||row.actualDestinationAccountId!==receipt.actualDestinationAccountId||row.actualSettlementMerchantAccountId!==receipt.actualSettlementMerchantAccountId
   ||!row.customerChargeVerified||!row.merchantRouteVerified))refuse();
  const aliases=await ctx.tx.select().from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.originalChargeReceiptId,receipt.id)).limit(2);
