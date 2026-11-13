@@ -12,6 +12,7 @@ import { merchantRefundRequests } from "./merchant-refund-schema";
 import { merchantPhysicalCaller } from "./merchant-physical-caller";
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import { legacyBankCurrentRevision } from "./legacy-bank-current-state";
 import { originalLegacyBankRefund } from "./legacy-refund-dispatch";
 import { legacyBankOriginal, legacyBankReadFact, legacyBankReadFinishInput, legacyBankReadNonce } from "./legacy-bank-read-contract";
 import { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes } from "./legacy-bank-read-schema";
@@ -24,10 +25,14 @@ const processState = globalThis as typeof globalThis & { [slot]?: Map<string, Lo
 const localReads = processState[slot] ??= new Map<string, LocalRead>();
 
 async function schemaReady(ctx: ServiceContext) {
-  const [result] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=3 as ready from pg_trigger where not tgisinternal
+  const [result] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=7 as ready from pg_trigger where not tgisinternal
     and (tgrelid,tgname) in ((to_regclass('public.legacy_bank_reads'),'legacy_bank_reads_guard'),
       (to_regclass('public.legacy_bank_read_facts'),'legacy_bank_read_facts_guard'),
-      (to_regclass('public.legacy_bank_read_finishes'),'legacy_bank_read_finishes_guard')) and tgenabled in ('O','A')`);
+      (to_regclass('public.legacy_bank_read_finishes'),'legacy_bank_read_finishes_guard'),
+      (to_regclass('public.legacy_bank_current_receipts'),'legacy_bank_current_receipts_guard'),
+      (to_regclass('public.refunds'),'legacy_bank_refund_capacity_guard'),
+      (to_regclass('public.refunds'),'legacy_bank_current_projection'),
+      (to_regclass('public.refunds'),'legacy_bank_current_balances')) and tgenabled in ('O','A')`);
   if (result?.ready !== true) throw new ServiceError("conflict", "Install the complete guarded legacy bank-read schema before inspecting original money.");
 }
 async function allowWrites(ctx: ServiceContext) {
@@ -61,7 +66,7 @@ export const prepareLegacyBankRead = defineService({
     if (unfinished) throw new ServiceError("conflict", "The original legacy inspection caller is live or unresolved; restore its actual finish before another read.");
     const completionNonce = randomBytes(32).toString("base64url"); await allowWrites(ctx);
     const [read] = await ctx.tx.insert(legacyBankReads).values({ refundId: refund.id, original, originalDigest: merchantTaxDigest(original),
-      caller: merchantPhysicalCaller(), completionNonceHash: hash(completionNonce) }).returning();
+      caller: merchantPhysicalCaller(), completionNonceHash: hash(completionNonce), sourceRevision: await legacyBankCurrentRevision(ctx, refund.id) }).returning();
     queueOriginalMerchantRefundRepair(ctx, { kind: "legacy_bank_read", id: read!.id });
     ctx.setSubject("refund", refund.id); return { readId: read!.id, completionNonce, original };
   },

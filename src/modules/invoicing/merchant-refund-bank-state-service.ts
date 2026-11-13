@@ -6,6 +6,7 @@ import { z } from "zod";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { merchantRefundRequests } from "./merchant-refund-schema";
 import { refunds } from "./schema";
+import { legacyRefundBankState } from "./legacy-bank-current-state";
 import { originalRefundPromiseState } from "./merchant-refund-debt";
 const providerStatus = z.enum(["pending", "requires_action", "succeeded", "failed", "canceled"]).nullable();
 
@@ -19,6 +20,7 @@ export const merchantRefundBankState = defineService({
     if (!refund) throw new ServiceError("not_found", "That original refund is not here.");
     const requests = await ctx.tx.select({ id: merchantRefundRequests.id }).from(merchantRefundRequests).where(eq(merchantRefundRequests.refundId, refundId)).limit(2);
     if (requests.length > 1) throw new ServiceError("conflict", "Restore this refund's one immutable original request.");
+    const legacy = requests[0] ? null : await legacyRefundBankState(ctx, refundId);
     const [state] = requests[0] ? await ctx.tx.execute<{ receipt_id: string | null; status: z.infer<typeof providerStatus> }>(sql`select receipt_id,status from freeholder_refund_current_state(${requests[0].id}::uuid)`) : [];
     const [success] = requests[0] && refund.providerRef ? await ctx.tx.execute<{ resolved: boolean }>(sql`select freeholder_original_refund_resolved(${requests[0].id}::uuid,'succeeded',${refund.providerRef}) as resolved`) : [];
     const [retired] = requests[0] ? await ctx.tx.execute<{ retired: boolean }>(sql`select exists(
@@ -26,8 +28,9 @@ export const merchantRefundBankState = defineService({
       where r.id=${requests[0].id}::uuid and t.request_digest=r.request_digest
         and not exists(select 1 from merchant_refund_dispatches d where d.request_id=r.id)) as retired`) : [];
     return { refundId, invoiceId: refund.invoiceId, paymentId: refund.paymentId, amountMinor: refund.amountMinor, currency: refund.currency,
-      original: requests.length === 1, verified: Boolean(state?.receipt_id), resolvedSuccess: success?.resolved === true, retiredBeforeDispatch: retired?.retired === true,
-      status: state?.status ?? null, receiptId: state?.receipt_id ?? null, projectionStatus: refund.status };
+      original: requests.length === 1 || legacy?.hasRead === true, verified: Boolean(state?.receipt_id) || legacy?.verified === true,
+      resolvedSuccess: success?.resolved === true || legacy?.verified === true && legacy.status === "succeeded", retiredBeforeDispatch: retired?.retired === true,
+      status: state?.status ?? legacy?.status ?? null, receiptId: state?.receipt_id ?? legacy?.receiptId ?? null, projectionStatus: refund.status };
   },
 });
 
@@ -47,7 +50,10 @@ export async function invoiceRefundStateRows(ctx: ServiceContext, invoiceId: str
   for (const refund of rows) {
     const actual = await ctx.callAsSystem(merchantRefundBankState, { refundId: refund.id });
     const [request] = await ctx.tx.select({ id: merchantRefundRequests.id }).from(merchantRefundRequests).where(eq(merchantRefundRequests.refundId, refund.id));
-    const promise = request ? await originalRefundPromiseState(ctx, request.id) : null;
+    const legacy = request ? null : await legacyRefundBankState(ctx, refund.id);
+    const promise = request ? await originalRefundPromiseState(ctx, request.id) : legacy?.hasRead ? {
+      owed: !legacy.verified || legacy.status !== "succeeded", review: !legacy.verified || legacy.requiresReview, replaced: false, canReplace: false,
+    } : null;
     const verified = actual.resolvedSuccess || actual.verified;
     const status = actual.original ? actual.retiredBeforeDispatch ? "canceled" as const : actual.resolvedSuccess ? "succeeded" as const : actual.verified ? actual.status ?? "unknown" : "unknown"
       : refund.status === "succeeded" ? "succeeded" as const : refund.status === "failed" ? "failed" as const : refund.status === "cancelled" ? "canceled" as const : "pending" as const;

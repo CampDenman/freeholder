@@ -14073,6 +14073,22 @@ whatever is best for the people using the site.
   Current-state proof, money projection, causal replacement, stopped-reader
   recovery, UI/API/SDK, populated upgrades and actual legacy acceptance remain
   required. See `deploy/legacy-bank-read-lifecycle-2026-11-13.md`.
+  Legacy current-proof source checkpoint 2026-11-13 (C5.19/C12.38/C1.08):
+  a separate UNQUALIFIED slice adds an actual fourth current-receipt model,
+  immutable original-resource revisions and real returned-caller proof. It
+  retains nullable raw bank states, reuses the shared original invoice/payment
+  cash projection, and keeps new or older unsubmitted refund keys blocked by
+  unresolved legacy bank debt. Current-state and deferred-balance guards also
+  refuse an old positive-result replay after a newer bank reclassification.
+  Original create metadata remains null; no
+  merchant request is manufactured. Root3a SQL and all five prior lifecycle
+  fixtures are unchanged; a separate unapplied suffix needs a new combined
+  candidate/hash/database. Eighteen pure controls and three actual-service
+  native controls are drafted, not run. Fourth-child central financial
+  composition, causal replacement, stopped-reader recovery, populated upgrades,
+  return/credit and UI/API/SDK journeys and actual provider acceptance remain
+  required. No completion or stable sign-off is claimed. See
+  `deploy/legacy-bank-current-proof-2026-11-13.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

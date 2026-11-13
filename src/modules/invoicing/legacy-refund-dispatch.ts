@@ -258,6 +258,10 @@ export async function originalLegacyBankRefund(tx: Tx, refund: Refund) {
     originalRefundRef: result.providerRef, originalPaymentRef: original.providerPaymentRef,
     originalChargeAccountId: original.providerAccountId, amountMinor: refund.amountMinor, currency: refund.currency,
     originalCashAmountMinor: parent.amountMinor, originalCreatePlatformAccountId: null, originalCreateProtocolVersion: null,
-    originalHistoryDigest: digest(canonical({ refund, parent, rows })),
+    originalHistoryDigest: digest(canonical({ protocol: "freeholder.legacy-bank-original-binding.v1",
+      identity: original, payment: { id: parent.id, invoiceId: parent.invoiceId, provider: parent.provider, providerRef: parent.providerRef,
+        amountMinor: parent.amountMinor, currency: parent.currency, requestHash: parent.requestHash },
+      physical: rows.filter(row => record(row.metadata).protocol === version),
+    })),
   });
 }

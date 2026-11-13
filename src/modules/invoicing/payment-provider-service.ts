@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C5.06: provider orchestration and authenticated event convergence.
 
+import { assertLegacyBankRefundCapacity } from "./legacy-bank-current-state";
 import { submitOriginalMerchantRefund } from "./merchant-refund-execution";
 import { originalRefundProviderEvent, originalMerchantRefundEventRetained, retainOriginalMerchantRefundEvent } from "./merchant-refund-provider-events";
 import { and, desc, getTableColumns, eq, inArray, isNull, or, sql } from "drizzle-orm";
@@ -932,6 +933,10 @@ export const claimProviderRefund = defineService({
       if (replay && replay.status !== "unknown" && replay.providerRef) return { refund, dispatch: null, replay, persist: null };
     }
     if (refund.status !== "created") throw new ServiceError("conflict", "The original refund is already admitted. Reconcile its actual result instead of sending another provider request.");
+    // An older unsubmitted reservation is not permission to dispatch a new
+    // physical key after original bank debt appeared. Actual finished callers
+    // may still retain/apply their positive answers through the branches above.
+    await assertLegacyBankRefundCapacity(ctx, refund.paymentId);
     const dispatch = await admitLegacyRefundDispatch(ctx, refund, { paymentId: source.payment.id, providerRef: source.payment.providerRef ?? source.payment.id,
       currency: source.payment.currency, amountMinor: refund.amountMinor, reason: input.reason, idempotencyKey: refund.idempotencyKey,
       providerAccountId: source.routing.providerAccountId,
