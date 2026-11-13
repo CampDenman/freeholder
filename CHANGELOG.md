@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Internal recovery source now distinguishes an inspection’s authenticated refund callbacks from later raw events without discarding either occurrence; qualification remains pending.
+
 - Internal source checkpoint binds a controlled cash observation to the original receipt and actual creator/caller/facts; genuine recovery admission and payment qualification remain required.
 
 - Source-only cash inspection repair counts admitted readers before their first callback and separates genuine current bank evidence from returned-money disposition. Existing recovery acceptance remains open.

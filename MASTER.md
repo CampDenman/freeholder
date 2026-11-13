@@ -15750,3 +15750,14 @@ comparison remain REQUIRED implementation, followed by genuine finished bank
 proof and canonical batch application/effects. No private service is registered,
 financial default relaxed, SQL assembled or C-item/stable closure claimed. See
 deploy/controlled-cash-observation-source82-20261113.md.
+
+Source callback checkpoint 2026-11-13 (C12.38/C1.08/C11.10): new optional
+private original-holder validation authenticates each actual inspection refund
+capture with its original admission/caller and occurrence UUID/time. Late or
+foreign callbacks retain raw money independently and cannot be adopted as that
+read by a semantic FK. Legacy defaults remain intact. Six pure and one actual
+shared-service/HTTP controls are PREPARED/UNRUN; no schema/SQL or financial
+permission changes. This grants no recovery/money authority. Genuine positive
+observational context, causal comparison, bank proof and full acceptance remain
+REQUIRED; no C/stable closure. See
+deploy/original-cash-inspection-capture83-source-20261113.md.
