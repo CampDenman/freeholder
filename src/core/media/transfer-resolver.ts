@@ -40,6 +40,6 @@ export function withAdoptedStorageReads(original:StorageAdapter):StorageAdapter{
   async head(key){const target=await resolve(key),result=target?await target.store.head(target.key):await original.head(key);return result?{...result,key}:undefined;},
   async stream(key){const target=await resolve(key);return target?target.store.stream(target.key):original.stream(key);},
   async readRange(key,start,end){const target=await resolve(key);return target?target.store.readRange(target.key,start,end):original.readRange(key,start,end);},
-  async url(key,options){const target=await resolve(key);if(!target)return original.url(key,options);if(target.store.id==="replit")return `/media/${key.split("/").map(encodeURIComponent).join("/")}`;return target.store.url(target.key,options);},
+  async url(key,options){const adopted=await adoptedPhysicalObject(key);if(!adopted)return original.url(key,options);if(adopted.binding.kind==="replit")return `/media/${key.split("/").map(encodeURIComponent).join("/")}`;const target=await configuredPhysicalStorage(adopted.binding);return target.url(adopted.key,options);},
  };
 }

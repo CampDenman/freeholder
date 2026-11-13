@@ -66,6 +66,7 @@ export async function claimOriginalTransfer(tx:Tx,input:{id:string;requestKey:st
  if(active.length)transferConflict("Finish the existing original transfer before claiming another inventory.");
  const inventory=await originalTransferInventory(tx,input.source),manifestDigest=transferInventoryDigest(input.source,input.target,inventory);
  const births=await tx.select().from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,inventory.flatMap(row=>row.receipts.map(receipt=>receipt.id)))).orderBy(asc(mediaObjectWrites.id));
+ if(births.some(row=>row.writerRuntimeId&&!row.writerFinishedAt))transferConflict("A known tracked original caller still lacks its actual finish; another legacy process receipt cannot stand in for it.");
  if(!drain&&births.some(row=>!row.writerRuntimeId||!row.writerFinishedAt))transferConflict("Historical or untracked writers require their exact executor stop witness; new fully tracked cohorts do not require Linux.");
  const sourceStopEvidenceDigest=drain?.stopProofDigest??transferDigest(births.map(row=>({id:row.id,runtimeId:row.writerRuntimeId,finishedAt:row.writerFinishedAt})));
  const totalBytes=inventory.reduce((sum,row)=>sum+BigInt(row.bytes),0n);
@@ -74,7 +75,8 @@ export async function claimOriginalTransfer(tx:Tx,input:{id:string;requestKey:st
  for(const item of inventory){
   const targetKey=transferTargetKey(plan!.id,item.keyDigest);
   const[object]=await tx.insert(mediaStorageTransferObjects).values({planId:plan!.id,key:item.key,keyDigest:item.keyDigest,targetKey,targetKeyDigest:objectKeyDigest(targetKey),sha256:item.sha256,bytes:item.bytes,contentType:item.contentType,originalReceiptSetDigest:item.receiptSetDigest,state:"planned"}).returning();
-  await tx.insert(mediaStorageTransferReceipts).values(item.receipts.map(row=>({objectId:object!.id,receiptId:row.id,originalWitnessDigest:row.witnessDigest})));
+  const originalRows=await tx.select().from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,item.receipts.map(row=>row.id)));
+  await tx.insert(mediaStorageTransferReceipts).values(item.receipts.map(row=>{const snapshot=originalRows.find(original=>original.id===row.id);if(!snapshot)transferConflict();return{objectId:object!.id,receiptId:row.id,originalWitnessDigest:row.witnessDigest,originalSnapshot:{...snapshot},originalSnapshotDigest:transferDigest(snapshot)};}));
   if(item.contactIds.length)await tx.insert(mediaStorageTransferSubjects).values(item.contactIds.map(contactId=>({objectId:object!.id,contactId})));
  }
  return plan!;
@@ -101,8 +103,15 @@ export async function assertTransferOriginalMembership(tx:Tx,plan:typeof mediaSt
  for(const object of objects){
   const membership=await tx.select().from(mediaStorageTransferReceipts).where(eq(mediaStorageTransferReceipts.objectId,object.id)).orderBy(asc(mediaStorageTransferReceipts.receiptId));
   const history=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,object.keyDigest)).orderBy(asc(mediaObjectWrites.id));
-  const original=originalTransferObject(plan.originalSource,object.key,history);
-  if(original.receiptSetDigest!==object.originalReceiptSetDigest||transferDigest(original.receipts)!==transferDigest(membership.map(row=>({id:row.receiptId,witnessDigest:row.originalWitnessDigest}))))transferConflict("An original transfer receipt changed after the first immutable capture.");
+  if(history.length!==membership.length||history.some(row=>!membership.some(member=>member.receiptId===row.id)))transferConflict("The complete original receipt membership changed after capture.");
+  const subjects=await tx.select().from(mediaStorageTransferSubjects).where(eq(mediaStorageTransferSubjects.objectId,object.id));
+  for(const row of history){
+   const member=membership.find(value=>value.receiptId===row.id)!;
+   if(transferDigest(member.originalSnapshot)!==member.originalSnapshotDigest)transferConflict("Restore the intact original transfer receipt snapshot.");
+   const immutable=(value:Record<string,unknown>)=>Object.fromEntries(Object.entries(value).filter(([key])=>key!=="contactId"));
+   if(transferDigest(immutable({...row}))!==transferDigest(immutable(member.originalSnapshot))||
+    (member.originalSnapshot.contactId===null?row.contactId!==null:!row.contactId||!subjects.some(subject=>subject.contactId===row.contactId)))transferConflict("An original physical fact changed after capture; current ownership alone cannot replace it.");
+  }
  }
 }
 export async function assertTransferCallDrain(tx:Tx,ids:string[]):Promise<void>{

@@ -9,6 +9,12 @@ import {requireTransferCapability} from "./transfer-authority";
 const pointer=z.object({id:z.uuid(),contactId:z.uuid().nullable(),witness:z.string().length(64)});
 async function capture(tx:Tx,ids:string[]){
  await requireTransferCapability(tx);
+ const payloads=await tx.execute<{size:number}>(sql`select size from (
+  select octet_length(to_jsonb(caller)::text)::integer as size from media_storage_transfer_calls caller join media_storage_transfer_subjects subject on subject.object_id=caller.object_id where subject.contact_id in (${sql.join(ids.map(id=>sql`${id}::uuid`),sql`,` )})
+  union all
+  select octet_length(to_jsonb(member)::text)::integer as size from media_storage_transfer_receipts member join media_storage_transfer_subjects subject on subject.object_id=member.object_id where subject.contact_id in (${sql.join(ids.map(id=>sql`${id}::uuid`),sql`,` )})
+ ) evidence limit 5001`);
+ if(payloads.length>5000||payloads.reduce((sum,row)=>sum+Number(row.size),0)>1024*1024)return{state:[],undoable:false,blocker:"Original transfer evidence exceeds the bounded merge witness."};
  const rows=await tx.execute<{id:string;contact_id:string|null;witness:string;size:number}>(sql`
   select subject.id,subject.contact_id,
   encode(sha256(convert_to((jsonb_build_object('subject',to_jsonb(subject)-'contact_id','object',to_jsonb(object),'plan',to_jsonb(plan),

@@ -26,12 +26,12 @@ export function verifiedTransferBytes(body:Uint8Array,expected:{sha256:string;by
 }
 export interface TransferCallerProof {id:string;state:string;kind:string;namespace:string;physicalKey:string;returnedAt:Date|null;observedAcceptedAt:Date|null;resultRevision:StorageTransferRevision|null;resultSha256:string|null;resultBytes:number|null;resultAbsent:Date|null}
 export function requireFinishedTransferRead(call:TransferCallerProof|undefined,binding:StorageBinding,key:string,expected:{sha256:string;bytes:number}):StorageTransferRevision {
- if(!call||call.state!=="returned"||!call.returnedAt||call.namespace!==binding.namespace||call.physicalKey!==key||call.resultAbsent||call.resultSha256!==expected.sha256||call.resultBytes!==expected.bytes)transferConflict("A fresh finished exact original byte read is required.");
+ if(!call||!["source_read","target_probe","target_verify","target_current","source_absence","privacy_read","privacy_absence","privacy_source_read","privacy_source_absence","recovery_read"].includes(call.kind)||call.state!=="returned"||!call.returnedAt||call.namespace!==binding.namespace||call.physicalKey!==key||call.resultAbsent||call.resultSha256!==expected.sha256||call.resultBytes!==expected.bytes)transferConflict("A fresh finished exact original byte read is required.");
  return checkedTransferRevision(call.resultRevision,binding,key);
 }
 /** An admitted or unknown caller blocks even when an operator's timeout expired. */
-export function requireNoOutstandingTransferCalls(calls:readonly Pick<TransferCallerProof,"state"|"returnedAt">[]):void {
- if(calls.some(call=>!["returned","stopped"].includes(call.state)||(call.state==="returned"&&!call.returnedAt)))transferConflict("An admitted original caller has neither returned nor been proven stopped.");
+export function requireNoOutstandingTransferCalls(calls:readonly (Pick<TransferCallerProof,"state"|"returnedAt">&{stoppedAt?:Date|null;stopReceiptId?:string|null})[]):void {
+ if(calls.some(call=>!["returned","stopped"].includes(call.state)||(call.state==="returned"&&!call.returnedAt)||(call.state==="stopped"&&(!call.stoppedAt||!call.stopReceiptId))))transferConflict("An admitted original caller has neither returned nor been proven stopped.");
 }
 /** Complete DB inventory comparison, never a caller's selected key subset. */
 export function requireCompleteTransferInventory(expected:readonly string[],actual:readonly string[]):void {

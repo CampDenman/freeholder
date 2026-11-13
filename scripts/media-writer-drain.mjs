@@ -37,7 +37,7 @@ async function members(group){
 }
 export async function runMediaWriterDrain({sql,action,namespace,sourceRevision,id}){
  if(process.platform!=="linux"||process.getuid?.()!==0)throw Error("Run the writer-drain executor as root on the original Linux host.");
- if(!/^[a-f0-9]{64}$/.test(namespace)||!/^([a-f0-9]{40})$/.test(sourceRevision)||!["capture","verify"].includes(action))throw Error("Explicit original namespace, source revision and capture/verify action are required.");
+ if(!/^[a-f0-9]{64}$/.test(namespace)||!/^([a-f0-9]{40})$/.test(sourceRevision)||!["capture","verify","release"].includes(action))throw Error("Explicit original namespace, source revision and capture/verify action are required.");
  const boot=(await readFile("/proc/sys/kernel/random/boot_id","utf8")).trim();
  if(action==="capture"){
   const drainId=randomUUID();
@@ -56,6 +56,19 @@ export async function runMediaWriterDrain({sql,action,namespace,sourceRevision,i
    if(changed.length!==1)conflict();
   });
   return{drainId,state:"captured",next:"Stop freeholder.service using the original host's operator session, then run verify with this drain ID."};
+ }
+ if(action==="release"){
+  await sql.begin(async tx=>{
+   await tx`select pg_advisory_xact_lock(1691709,82)`;
+   await tx`select set_config('freeholder.media_transfer_operator_v1','1',true)`;
+   const [original]=await tx`select * from media_storage_writer_drains where id=${id} and namespace=${namespace} and source_revision=${sourceRevision} for update`;
+   if(!original||original.state!=="verified"||!original.verified_at||!original.stop_proof_digest)conflict();
+   const active=await tx`select id from media_storage_transfer_plans where source_namespace=${namespace} and state<>'cancelled' limit 1`;
+   const uncertain=await tx`select id from media_object_writes where storage_namespace=${namespace} and state in ('unverified','started','unknown') limit 1`;
+   if(active.length||uncertain.length)conflict();
+   await tx`update media_storage_writer_drains set state='released',released_at=now(),updated_at=now() where id=${id} and state='verified'`;
+  });
+  return{drainId:id,state:"released",originalStopWitnessPreserved:true};
  }
  const [drain]=await sql`select * from media_storage_writer_drains where id=${id} and namespace=${namespace} and source_revision=${sourceRevision}`;
  if(!drain||drain.state!=="captured"||drain.executor_identity!==`linux-systemd:${boot}`)conflict();

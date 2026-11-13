@@ -3,10 +3,11 @@
 // C1.12/C11.08: explicit verified transfer keeps original storage facts intact.
 // Runtime use requires the separately assembled verified-transfer capability.
 import { sql } from "drizzle-orm";
-import { bigint,check,index,jsonb,pgTable,text,timestamp,uniqueIndex,uuid } from "drizzle-orm/pg-core";
+import { bigint,boolean,check,index,jsonb,pgTable,primaryKey,text,timestamp,uniqueIndex,uuid } from "drizzle-orm/pg-core";
 import type { StorageBinding } from "@/adapters/storage/types";
 import { contacts } from "@/core/contacts/schema";
 import { createdAtColumn,updatedAtColumn } from "@/core/db/columns";
+import {dataRequests} from "@/core/privacy/schema";
 import { mediaObjectWrites } from "./write-schema";
 
 export const STORAGE_TRANSFER_STATES=["planned","copying","unknown","verified","adopted","cleanup_pending","complete","blocked","cancelled"] as const;
@@ -22,6 +23,7 @@ export const mediaStorageTransferPlans=pgTable("media_storage_transfer_plans",{
  inventoryCount:bigint("inventory_count",{mode:"number"}).notNull(),
  inventoryBytes:bigint("inventory_bytes",{mode:"number"}).notNull(),
  adoptedAt:timestamp("adopted_at",{withTimezone:true}),
+ redactedAt:timestamp("redacted_at",{withTimezone:true}),
  state:text("state",{enum:STORAGE_TRANSFER_STATES}).notNull().default("planned"),
  createdBy:text("created_by").notNull(),
  createdAt:createdAtColumn(),updatedAt:updatedAtColumn(),
@@ -43,6 +45,7 @@ export const mediaStorageTransferObjects=pgTable("media_storage_transfer_objects
  originalReceiptSetDigest:text("original_receipt_set_digest").notNull(),
  sourceRevision:jsonb("source_revision").$type<StorageTransferRevision>(),
  targetRevision:jsonb("target_revision").$type<StorageTransferRevision>(),
+ redactedAt:timestamp("redacted_at",{withTimezone:true}),
  sourceReadCallerId:uuid("source_read_caller_id"),
  targetVerifyCallerId:uuid("target_verify_caller_id"),
  state:text("state",{enum:STORAGE_TRANSFER_STATES}).notNull().default("planned"),
@@ -69,11 +72,13 @@ export const mediaStorageTransferReceipts=pgTable("media_storage_transfer_receip
  objectId:uuid("object_id").notNull().references(()=>mediaStorageTransferObjects.id,{onDelete:"restrict"}),
  receiptId:uuid("receipt_id").notNull().references(()=>mediaObjectWrites.id,{onDelete:"restrict"}),
  originalWitnessDigest:text("original_witness_digest").notNull(),
+ originalSnapshot:jsonb("original_snapshot").$type<Record<string,unknown>>().notNull(),
+ originalSnapshotDigest:text("original_snapshot_digest").notNull(),
  createdAt:createdAtColumn(),
 },t=>[
  uniqueIndex("media_storage_transfer_receipts_original_idx").on(t.objectId,t.receiptId),
  index("media_storage_transfer_receipts_receipt_idx").on(t.receiptId),
- check("media_storage_transfer_receipts_witness",sql`${t.originalWitnessDigest} ~ '^[a-f0-9]{64}$'`),
+ check("media_storage_transfer_receipts_witness",sql`${t.originalWitnessDigest} ~ '^[a-f0-9]{64}$' and ${t.originalSnapshotDigest} ~ '^[a-f0-9]{64}$'`),
 ]);
 
 /** Current ownership pointer; original membership stays in immutable receipts. */
@@ -89,7 +94,7 @@ export const mediaStorageTransferSubjects=pgTable("media_storage_transfer_subjec
 ]);
 
 export interface StorageTransferRevision {kind:"etag"|"generation";key:string;namespace:string;value:string}
-export const STORAGE_TRANSFER_CALL_KINDS=["source_read","target_probe","target_put","target_verify","target_current","source_delete","source_absence","privacy_read","privacy_delete","privacy_absence","privacy_source_read","privacy_source_delete","privacy_source_absence"] as const;
+export const STORAGE_TRANSFER_CALL_KINDS=["source_read","target_probe","target_put","target_verify","target_current","source_delete","source_absence","privacy_read","privacy_delete","privacy_absence","privacy_source_read","privacy_source_delete","privacy_source_absence","recovery_read"] as const;
 /** One committed row per actual provider invocation. A return is not domain apply. */
 export const mediaStorageTransferCalls=pgTable("media_storage_transfer_calls",{
  id:uuid("id").primaryKey().defaultRandom(),
@@ -108,12 +113,12 @@ export const mediaStorageTransferCalls=pgTable("media_storage_transfer_calls",{
  resultDigest:text("result_digest"),resultRevision:jsonb("result_revision").$type<StorageTransferRevision>(),
  resultSha256:text("result_sha256"),resultBytes:bigint("result_bytes",{mode:"number"}),
  resultAbsent:timestamp("result_absent",{withTimezone:true}),
- stopReceiptId:uuid("stop_receipt_id"),
+ stopReceiptId:uuid("stop_receipt_id"),redactedAt:timestamp("redacted_at",{withTimezone:true}),
  createdAt:createdAtColumn(),updatedAt:updatedAtColumn(),
 },t=>[
  index("media_storage_transfer_calls_object_idx").on(t.objectId,t.createdAt,t.id),
  index("media_storage_transfer_calls_runtime_idx").on(t.runtimeId,t.state),
- check("media_storage_transfer_calls_kind",sql`${t.kind} in ('source_read','target_probe','target_put','target_verify','target_current','source_delete','source_absence','privacy_read','privacy_delete','privacy_absence','privacy_source_read','privacy_source_delete','privacy_source_absence')`),
+ check("media_storage_transfer_calls_kind",sql`${t.kind} in ('source_read','target_probe','target_put','target_verify','target_current','source_delete','source_absence','privacy_read','privacy_delete','privacy_absence','privacy_source_read','privacy_source_delete','privacy_source_absence','recovery_read')`),
  check("media_storage_transfer_calls_state",sql`${t.state} in ('admitted','returned','unknown','stopped')`),
  check("media_storage_transfer_calls_digests",sql`${t.namespace} ~ '^[a-f0-9]{64}$' and ${t.requestDigest} ~ '^[a-f0-9]{64}$' and ${t.callerTokenDigest} ~ '^[a-f0-9]{64}$'`),
  check("media_storage_transfer_calls_return",sql`(${t.state}<>'returned' or (${t.returnedAt} is not null and ${t.resultDigest} ~ '^[a-f0-9]{64}$')) and (${t.state}<>'stopped' or (${t.stoppedAt} is not null and ${t.stopReceiptId} is not null))`),
@@ -122,16 +127,56 @@ export const mediaStorageTransferCalls=pgTable("media_storage_transfer_calls",{
 /** Operator executor records actual process identities before requesting stop. */
 export const mediaStorageWriterDrains=pgTable("media_storage_writer_drains",{
  id:uuid("id").primaryKey().defaultRandom(),namespace:text("namespace").notNull(),
- state:text("state",{enum:["capturing","captured","verified"]}).notNull(),
+ state:text("state",{enum:["capturing","captured","verified","released"]}).notNull(),
  sourceRevision:text("source_revision").notNull(),
  executorIdentity:text("executor_identity").notNull(),
  originalProcesses:jsonb("original_processes").notNull().default({}),
  stopProofDigest:text("stop_proof_digest"),
- verifiedAt:timestamp("verified_at",{withTimezone:true}),
+ verifiedAt:timestamp("verified_at",{withTimezone:true}),releasedAt:timestamp("released_at",{withTimezone:true}),
  createdAt:createdAtColumn(),updatedAt:updatedAtColumn(),
 },t=>[
  index("media_storage_writer_drains_namespace_idx").on(t.namespace,t.state),
  check("media_storage_writer_drains_namespace",sql`${t.namespace} ~ '^[a-f0-9]{64}$'`),
- check("media_storage_writer_drains_state",sql`${t.state} in ('capturing','captured','verified')`),
+ check("media_storage_writer_drains_state",sql`${t.state} in ('capturing','captured','verified','released')`),
  check("media_storage_writer_drains_proof",sql`${t.state}<>'verified' or (${t.verifiedAt} is not null and ${t.stopProofDigest} ~ '^[a-f0-9]{64}$')`),
 ]);
+
+/** Fresh human review appends; it never rewrites an original return or ACK. */
+export const mediaStorageTransferReviews=pgTable("media_storage_transfer_reviews",{
+ id:uuid("id").primaryKey().defaultRandom(),
+ objectId:uuid("object_id").notNull().references(()=>mediaStorageTransferObjects.id,{onDelete:"restrict"}),
+ callId:uuid("call_id").notNull().references(()=>mediaStorageTransferCalls.id,{onDelete:"restrict"}),
+ originalCallWitness:text("original_call_witness").notNull(),
+ readCallId:uuid("read_call_id").notNull().references(()=>mediaStorageTransferCalls.id,{onDelete:"restrict"}),
+ outcome:text("outcome",{enum:["applied","not_applied","retired"]}).notNull(),
+ providerEvidenceDigest:text("provider_evidence_digest").notNull(),
+ stopDrainId:uuid("stop_drain_id").references(()=>mediaStorageWriterDrains.id,{onDelete:"restrict"}),
+ permitsRetry:boolean("permits_retry").notNull().default(false),
+ reviewedBy:text("reviewed_by").notNull(),createdAt:createdAtColumn(),
+},t=>[
+ index("media_storage_transfer_reviews_call_idx").on(t.callId,t.createdAt),
+ check("media_storage_transfer_reviews_outcome",sql`${t.outcome} in ('applied','not_applied','retired')`),
+ check("media_storage_transfer_reviews_digests",sql`${t.originalCallWitness} ~ '^[a-f0-9]{64}$' and ${t.providerEvidenceDigest} ~ '^[a-f0-9]{64}$'`),
+ check("media_storage_transfer_reviews_retry",sql`not ${t.permitsRetry} or ${t.outcome}='not_applied'`),
+]);
+
+/** Empty and nonempty original request captures are equally immutable. */
+export const mediaStorageTransferErasureScopes=pgTable("media_storage_transfer_erasure_scopes",{
+ requestId:uuid("request_id").primaryKey().references(()=>dataRequests.id,{onDelete:"restrict"}),
+ objectCount:bigint("object_count",{mode:"number"}).notNull(),captureDigest:text("capture_digest").notNull(),
+ complete:boolean("complete").notNull().default(false),createdAt:createdAtColumn(),
+},t=>[check("media_storage_transfer_erasure_scopes_count",sql`${t.objectCount} >= 0 and ${t.objectCount} <= 10000`),check("media_storage_transfer_erasure_scopes_digest",sql`${t.captureDigest} ~ '^[a-f0-9]{64}$'`)]);
+export const mediaStorageTransferErasureMembers=pgTable("media_storage_transfer_erasure_members",{
+ requestId:uuid("request_id").notNull().references(()=>mediaStorageTransferErasureScopes.requestId,{onDelete:"restrict"}),
+ objectId:uuid("object_id").notNull().references(()=>mediaStorageTransferObjects.id,{onDelete:"restrict"}),
+ originalPlanDigest:text("original_plan_digest").notNull(),createdAt:createdAtColumn(),
+},t=>[primaryKey({columns:[t.requestId,t.objectId]}),index("media_storage_transfer_erasure_members_object_idx").on(t.objectId),check("media_storage_transfer_erasure_members_digest",sql`${t.originalPlanDigest} ~ '^[a-f0-9]{64}$'`)]);
+
+/** Actual shared-service admission; a generic queued payload is not authority. */
+export const mediaStorageTransferJobs=pgTable("media_storage_transfer_jobs",{
+ jobId:uuid("job_id").primaryKey(),requestKey:uuid("request_key").notNull(),
+ planId:uuid("plan_id").notNull().references(()=>mediaStorageTransferPlans.id,{onDelete:"restrict"}),
+ objectId:uuid("object_id").references(()=>mediaStorageTransferObjects.id,{onDelete:"restrict"}),
+ action:text("action",{enum:["copy","adopt","retire"]}).notNull(),manifestDigest:text("manifest_digest").notNull(),
+ payloadDigest:text("payload_digest").notNull(),createdBy:text("created_by").notNull(),createdAt:createdAtColumn(),
+},t=>[uniqueIndex("media_storage_transfer_jobs_request_idx").on(t.requestKey),index("media_storage_transfer_jobs_plan_idx").on(t.planId),check("media_storage_transfer_jobs_action",sql`${t.action} in ('copy','adopt','retire')`),check("media_storage_transfer_jobs_digests",sql`${t.manifestDigest} ~ '^[a-f0-9]{64}$' and ${t.payloadDigest} ~ '^[a-f0-9]{64}$'`)]);

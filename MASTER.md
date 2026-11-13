@@ -11768,15 +11768,17 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
-  Durable lifecycle implementation checkpoint 2026-11-13: isolated source
-  adds complete first-plan receipt/subject capture, new actual writer birth/
-  finish facts without historical backfill, exact physical caller receipts,
-  configured private copy/SHA/revision proofs, atomic adoption, conditional
-  source retirement and all-copy erasure infrastructure. It is incomplete and
-  unqualified: transfer-specific privacy/retention and durable late recovery,
-  human recovery, owner UI/locales, jobs, final SQL guards/assembly and all
-  execution/acceptance gates remain required. The owned82 SQL tail is UNAPPLIED;
-  no journal entry, provider operation or qualification ran. See
+  Durable lifecycle source checkpoint 2026-11-13: isolated source adds complete
+  application-inventory first capture, actual writer/caller facts without
+  historical backfill, private byte/revision copy proofs, atomic adoption,
+  conditional source retirement, exact all-copy privacy/retention recovery,
+  canonical contact pointers, original queued phases and four-locale owner
+  controls.18 controls are prepared, unrun/uncollected. The10-model owned82
+  SQL tail is UNAPPLIED; published0–81 and original fixtures are unchanged.
+  Provider-complete inventory, Replit request-level accounting, tracked-crash/
+  additional executor proof, chained/cutover and non-privacy lifecycle review,
+  all source/native/owner/transport gates and actual cross-target/provider
+  acceptance remain required. See
   `deploy/verified-media-transfer-lifecycle-2026-11-13.md`. No item closes.
   Verified-transfer source foundation 2026-11-12: four unregistered models
   keep immutable source/target locators, distinct logical and physical target

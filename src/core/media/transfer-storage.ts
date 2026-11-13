@@ -8,6 +8,9 @@ import {createReplitStorage} from "@/adapters/storage/replit";
 import type {StorageAdapter,StorageBinding} from "@/adapters/storage/types";
 import {env} from "@/core/env";
 import {checkedTransferBinding} from "./transfer-witness";
+import {currentServiceTransaction} from "@/core/plugins/context";
+import {storageNamespace} from "./storage-quota";
+import {storage} from "@/adapters/storage";
 import {transferConflict,transferDigest} from "./transfer-proof";
 
 export async function configuredTransferStores():Promise<{source:VersionedTransferStore;target:VersionedTransferStore}> {
@@ -23,11 +26,13 @@ export async function configuredTransferStores():Promise<{source:VersionedTransf
  return{source,target};
 }
 export async function configuredPhysicalStorage(binding:StorageBinding):Promise<StorageAdapter> {
- const current=await boundStorage();
- if(transferDigest(current.binding)===transferDigest(binding))return current.store;
- const e=env(),{target}=await configuredTransferStores();
- if(transferDigest(target.binding)!==transferDigest(binding))transferConflict("Restore the exact configured original transfer resource before reading this object.");
- if(binding.kind==="s3")return createS3Storage({endpoint:e.MEDIA_TRANSFER_TARGET_S3_ENDPOINT!,region:e.MEDIA_TRANSFER_TARGET_S3_REGION!,bucket:e.MEDIA_TRANSFER_TARGET_S3_BUCKET!,accessKeyId:e.MEDIA_TRANSFER_TARGET_S3_ACCESS_KEY_ID!,secretAccessKey:e.MEDIA_TRANSFER_TARGET_S3_SECRET_ACCESS_KEY!,addressingStyle:e.MEDIA_TRANSFER_TARGET_S3_ADDRESSING_STYLE,isPublic:false});
- if(binding.kind==="replit")return createReplitStorage({bucketId:e.MEDIA_TRANSFER_TARGET_REPLIT_BUCKET_ID,mediaPath:"/media"});
- return transferConflict();
+ const e=env();
+ if(e.MEDIA_TRANSFER_TARGET_STORAGE==="s3"&&binding.kind==="s3"&&e.MEDIA_TRANSFER_TARGET_S3_ENDPOINT&&e.MEDIA_TRANSFER_TARGET_S3_BUCKET&&binding.namespace===storageNamespace({id:"s3",endpoint:e.MEDIA_TRANSFER_TARGET_S3_ENDPOINT,bucket:e.MEDIA_TRANSFER_TARGET_S3_BUCKET}))return createS3Storage({endpoint:e.MEDIA_TRANSFER_TARGET_S3_ENDPOINT,region:e.MEDIA_TRANSFER_TARGET_S3_REGION!,bucket:e.MEDIA_TRANSFER_TARGET_S3_BUCKET,accessKeyId:e.MEDIA_TRANSFER_TARGET_S3_ACCESS_KEY_ID!,secretAccessKey:e.MEDIA_TRANSFER_TARGET_S3_SECRET_ACCESS_KEY!,addressingStyle:e.MEDIA_TRANSFER_TARGET_S3_ADDRESSING_STYLE,isPublic:false});
+ if(e.MEDIA_TRANSFER_TARGET_STORAGE==="replit"&&binding.kind==="replit"&&e.MEDIA_TRANSFER_TARGET_REPLIT_BUCKET_ID&&binding.namespace===storageNamespace({id:"replit",bucket:e.MEDIA_TRANSFER_TARGET_REPLIT_BUCKET_ID}))return createReplitStorage({bucketId:e.MEDIA_TRANSFER_TARGET_REPLIT_BUCKET_ID,mediaPath:"/media"});
+ const current=storage();
+ const matchesCurrent=binding.kind==="s3"&&current.id==="s3"&&binding.namespace===storageNamespace({id:"s3",endpoint:e.S3_ENDPOINT,bucket:e.S3_BUCKET})||binding.kind==="replit"&&current.id==="replit"&&e.REPLIT_BUCKET_ID&&binding.namespace===storageNamespace({id:"replit",bucket:e.REPLIT_BUCKET_ID});
+ if(matchesCurrent){if(current.isPublic)transferConflict("The original physical copy requires private configured storage.");return current;}
+ if(currentServiceTransaction())transferConflict("Restore the exact explicit original private resource before resolving its physical key.");
+ const captured=await boundStorage();if(!captured.store.isPublic&&transferDigest(captured.binding)===transferDigest(binding))return captured.store;
+ return transferConflict("Restore the exact configured original transfer resource before reading this object.");
 }

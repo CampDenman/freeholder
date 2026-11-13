@@ -8,7 +8,7 @@ atomic physical-key adoption and conditional original-source retirement.
 Preserve original erasure authority across copied bytes and retain uncertain
 provider outcomes instead of retrying them automatically.
 
-This is an incomplete, unqualified source checkpoint. Transfer privacy/job
-recovery, owner controls, final migration assembly and qualification remain
-required before enabling the feature; no provider acceptance or stable sign-off
+This is an incomplete, unqualified source checkpoint. Provider-complete inventory, request-level protocol accounting, executor/
+lifecycle review, final migration assembly and qualification remain required
+before enabling the feature; no provider acceptance or stable sign-off
 is supplied.

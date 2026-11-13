@@ -100,7 +100,7 @@ export async function createOriginalMultipart(uploadId:string,operationId:string
  try{
   const result=await captured.store.directMultipart!.create(captured.resource.key,captured.resource.contentType,{onAccepted:async result=>{acknowledged=true;observedId=result?.uploadId;if(!observedId)conflict();await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,uploadId:observedId});}});
   acknowledged=true;observedId=result.uploadId;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,uploadId:observedId,finished:true});
- }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,uploadId:observedId,unknown:true}).catch(()=>{});throw error;}
+ }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,uploadId:observedId,unknown:true,finished:true}).catch(()=>{});throw error;}
 }
 
 /** Use the common contact → object → resource → upload lock ordering. */
@@ -147,7 +147,7 @@ export async function completeOriginalMultipart(uploadId:string,operationId:stri
    acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,finished:true});
   }
   return captured;
- }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true}).catch(()=>{});throw error;}
+ }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true,finished:true}).catch(()=>{});throw error;}
 }
 
 /** The COMPLETE intent already committed before I/O; this is its object fact. */
@@ -200,7 +200,7 @@ export async function abortOriginalMultipart(uploadId:string,operationId:string)
    const unsettled=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.keyDigest,resource.keyDigest),isNull(mediaObjectWrites.deletedAt))).limit(1);
    if(!unsettled.length)await tx.delete(mediaObjects).where(and(eq(mediaObjects.key,captured.resource.key),eq(mediaObjects.state,"pending")));
   });
- }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true}).catch(()=>{});throw error;}
+ }catch(error){await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true,finished:true}).catch(()=>{});throw error;}
 }
 /** Existing expiry/erasure authority may retire a known, idle original upload. */
 export async function retireKnownMultipart(uploadId:string):Promise<boolean>{

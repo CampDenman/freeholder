@@ -209,4 +209,4 @@ export { importCrawlErasureScopes, importCrawlErasureSources } from "@/core/impo
 export { importSourceErasureScopes, importSourceErasureMembers, importSourceErasureObjects } from "@/core/import/source-erasure-schema";
 
 // C1.12/C11.08: enabled only by the assembled verified-transfer capability.
-export {mediaStorageTransferPlans,mediaStorageTransferObjects,mediaStorageTransferReceipts,mediaStorageTransferSubjects,mediaStorageTransferCalls,mediaStorageWriterDrains} from "./media/transfer-schema";
+export {mediaStorageTransferPlans,mediaStorageTransferObjects,mediaStorageTransferReceipts,mediaStorageTransferSubjects,mediaStorageTransferCalls,mediaStorageWriterDrains,mediaStorageTransferReviews,mediaStorageTransferErasureScopes,mediaStorageTransferErasureMembers,mediaStorageTransferJobs} from "./media/transfer-schema";

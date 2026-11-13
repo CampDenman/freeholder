@@ -5,19 +5,22 @@ import {createHash,randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,or,sql} from "drizzle-orm";
 import {z} from "zod";
 import {db} from "@/core/db";
+import {dataRequests,dataRequestArtifacts} from "@/core/privacy/schema";
+import {erasureArtifactIsIntact} from "@/core/privacy/service";
 import {defineOrchestratedService} from "@/core/service";
 import {defineMediaService} from "./guarded-service";
 import {mediaObjects} from "./schema";
 import {mediaObjectWrites} from "./write-schema";
-import {mediaStorageTransferCalls,mediaStorageTransferObjects,mediaStorageTransferReceipts} from "./transfer-schema";
+import {mediaStorageTransferCalls,mediaStorageTransferObjects,mediaStorageTransferPlans,mediaStorageTransferErasureMembers,mediaStorageTransferReceipts} from "./transfer-schema";
 import {assertTransferCallDrain,assertTransferOwners,lockedTransfer,transferSchemaAvailable} from "./transfer-authority";
 import {admitTransferCall,retainTransferFailure,retainTransferReturn,transferRuntimeIdentity,type ActualTransferReturn} from "./transfer-callers";
 import {configuredTransferStores} from "./transfer-storage";
 import {objectKeyDigest} from "./write-ledger";
 import {pendingObjectIsOwned,registerPendingObjectOwner} from "./object-ledger";
 import {releaseTransferQuota} from "./transfer-quota";
-import {transferConflict,transferDigest,verifiedTransferBytes} from "./transfer-proof";
+import {transferConflict,transferTargetKey,verifiedTransferBytes} from "./transfer-proof";
 import type {StorageTransferRevision} from "./transfer-schema";
+import {checkStorageTransferJob} from "./transfer-job-scope";
 const SYSTEM={kind:"system"}as const;
 registerPendingObjectOwner("transfer/",async(key,_now,tx)=>{
  const executor=tx??db();
@@ -29,7 +32,14 @@ registerPendingObjectOwner("transfer/",async(key,_now,tx)=>{
  return original.length>0||active.length>0;
 });
 async function erasureWork(tx:Parameters<typeof lockedTransfer>[0],id:string,objectId:string){
- const work=await lockedTransfer(tx,id),object=work.objects.find(row=>row.id===objectId);if(!object)transferConflict();
+ const work=await lockedTransfer(tx,id),stored=work.objects.find(row=>row.id===objectId);if(!stored)transferConflict();
+ let object=stored;
+ if(stored.redactedAt){
+  const reads=await tx.select().from(mediaStorageTransferCalls).where(and(eq(mediaStorageTransferCalls.objectId,stored.id),eq(mediaStorageTransferCalls.kind,"recovery_read"),eq(mediaStorageTransferCalls.namespace,work.plan.sourceNamespace),eq(mediaStorageTransferCalls.state,"returned"))).orderBy(asc(mediaStorageTransferCalls.createdAt),asc(mediaStorageTransferCalls.id));
+  const source=reads.filter(row=>objectKeyDigest(row.physicalKey)===stored.keyDigest&&row.returnedAt&&(row.resultAbsent||row.resultSha256===stored.sha256&&row.resultBytes===stored.bytes)).at(-1);
+  if(!source)transferConflict("Fresh original-source key proof is required to finish this minimized physical lineage.");
+  object={...stored,key:source.physicalKey,targetKey:transferTargetKey(work.plan.id,stored.keyDigest)};
+ }
  await assertTransferOwners(tx,[object],true);await assertTransferCallDrain(tx,[object.id]);
  const original=await tx.select().from(mediaObjects).where(eq(mediaObjects.key,object.key)).limit(1);
  if(original[0]?.state==="attached"||await pendingObjectIsOwned(object.key,new Date(),tx))transferConflict("Retire the original owning reference before erasing its copied physical bytes.");
@@ -38,7 +48,7 @@ async function erasureWork(tx:Parameters<typeof lockedTransfer>[0],id:string,obj
 type ErasureWork=Awaited<ReturnType<typeof erasureWork>>;
 const readWork=defineMediaService({name:"media.captureTransferErasure",summary:"Capture exact original erasure lineage after its owning reference retires.",kind:"query",permission:"system",external:false,input:z.object({id:z.uuid(),objectId:z.uuid()}),output:z.custom<ErasureWork>(),handler:async(input,ctx)=>erasureWork(ctx.tx,input.id,input.objectId)});
 const admission=z.object({planId:z.uuid(),objectId:z.uuid(),kind:z.enum(["privacy_read","privacy_delete","privacy_absence","privacy_source_read","privacy_source_delete","privacy_source_absence"]),token:z.string().min(36),runtimeIdentity:z.object({boot:z.string(),pid:z.number().int().positive(),startTicks:z.string()}),expectedRevision:z.object({kind:z.enum(["etag","generation"]),namespace:z.string(),key:z.string(),value:z.string()}).optional()});
-const admit=defineMediaService({name:"media.admitTransferErasureCall",summary:"Commit an original transfer erasure caller before private provider I/O.",kind:"mutation",permission:"system",external:false,input:admission,output:z.object({id:z.uuid()}),auditInputFields:["planId","objectId","kind"],handler:async(input,ctx)=>{await erasureWork(ctx.tx,input.planId,input.objectId);return admitTransferCall(ctx.tx,input,ctx.actor);}});
+const admit=defineMediaService({name:"media.admitTransferErasureCall",summary:"Commit an original transfer erasure caller before private provider I/O.",kind:"mutation",permission:"system",external:false,input:admission,output:z.object({id:z.uuid()}),auditInputFields:["planId","objectId","kind"],handler:async(input,ctx)=>{const work=await erasureWork(ctx.tx,input.planId,input.objectId);return admitTransferCall(ctx.tx,{...input,physicalKey:input.kind.startsWith("privacy_source_")?work.object.key:work.object.targetKey},ctx.actor);}});
 const finish=defineMediaService({name:"media.finishTransferErasure",summary:"Retire original receipt lineage only after both physical copies and callers are gone.",kind:"mutation",permission:"system",external:false,input:z.object({id:z.uuid(),objectId:z.uuid(),sourceAbsence:z.uuid(),targetAbsence:z.uuid()}),output:z.object({ok:z.literal(true)}),auditInputFields:["id","objectId"],handler:async(input,ctx)=>{
  const{plan,object}=await erasureWork(ctx.tx,input.id,input.objectId);
  const calls=await ctx.tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.objectId,object.id)).orderBy(asc(mediaStorageTransferCalls.createdAt));
@@ -63,9 +73,12 @@ const finish=defineMediaService({name:"media.finishTransferErasure",summary:"Ret
 }});
 export const eraseStorageTransferLineage=defineOrchestratedService({name:"media.eraseStorageTransferLineage",summary:"Finish original erasure across every admitted transfer copy without changing its first capture.",kind:"mutation",permission:"system",external:false,input:z.object({id:z.uuid(),objectId:z.uuid()}),output:z.object({ok:z.literal(true)}),auditInputFields:["id","objectId"],handler:async(input,actor)=>{
  const work=await readWork.call(input,actor),{source,target}=await configuredTransferStores();
- if(transferDigest(source.binding)!==transferDigest(work.plan.originalSource)||transferDigest(target.binding)!==transferDigest(work.plan.originalTarget))transferConflict("Restore both exact original private resources before completing erasure.");
+ if(source.binding.namespace!==work.plan.sourceNamespace||target.binding.namespace!==work.plan.targetNamespace)transferConflict("Restore both exact original private resources before completing erasure.");
  async function physical<T>(kind:z.infer<typeof admission>["kind"],operation:()=>Promise<T>,outcome:(value:T)=>ActualTransferReturn,expectedRevision?:StorageTransferRevision){
-  const token=randomUUID()+randomUUID(),runtimeIdentity=await transferRuntimeIdentity(),call=await admit.call({planId:input.id,objectId:input.objectId,kind,token,runtimeIdentity,expectedRevision},actor);let accepted=false;
+  await checkStorageTransferJob();
+  const token=randomUUID()+randomUUID(),runtimeIdentity=await transferRuntimeIdentity(),call=await admit.call({planId:input.id,objectId:input.objectId,kind,token,runtimeIdentity,expectedRevision},actor);
+  try{await checkStorageTransferJob();}catch(error){await retainTransferReturn(call.id,token,{notAttempted:true});throw error;}
+  let accepted=false;
   try{const value=await operation(),result=outcome(value);accepted=result.accepted===true;await retainTransferReturn(call.id,token,result);return{id:call.id,value};}catch(error){await retainTransferFailure(call.id,token,accepted).catch(()=>{});throw error;}
  }
  const absences:string[]=[];
@@ -81,6 +94,13 @@ export async function deleteTransferredLineage(key:string):Promise<boolean|undef
  const available=await db().transaction(transferSchemaAvailable);if(!available)return undefined;
  const rows=await db().select().from(mediaStorageTransferObjects).where(or(eq(mediaStorageTransferObjects.keyDigest,objectKeyDigest(key)),eq(mediaStorageTransferObjects.targetKeyDigest,objectKeyDigest(key)))).limit(2);
  if(!rows.length)return undefined;if(rows.length!==1)transferConflict("Conflicting original physical transfer lineage requires recovery.");
+ const[plan]=await db().select().from(mediaStorageTransferPlans).where(eq(mediaStorageTransferPlans.id,rows[0]!.planId)).limit(1);
+ if(plan&&["planned","copying","unknown","verified","blocked"].includes(plan.state)){
+  const scopes=await db().select({request:dataRequests,artifact:dataRequestArtifacts}).from(mediaStorageTransferErasureMembers).innerJoin(dataRequests,eq(dataRequests.id,mediaStorageTransferErasureMembers.requestId)).innerJoin(dataRequestArtifacts,eq(dataRequestArtifacts.dataRequestId,dataRequests.id)).where(eq(mediaStorageTransferErasureMembers.objectId,rows[0]!.id));
+  const schema=z.object({format:z.literal("freeholder.erasure-receipt"),outcomes:z.array(z.object({scope:z.string(),outcome:z.string(),pendingJobs:z.array(z.string()).optional()}))});
+  const authorized=scopes.some(scope=>{const parsed=schema.safeParse(scope.artifact.body);return scope.request.kind==="erasure"&&scope.request.verifiedAt&&erasureArtifactIsIntact(scope.artifact)&&parsed.success&&parsed.data.outcomes.some(outcome=>outcome.scope==="media.storageTransfers"&&outcome.outcome==="pending"&&outcome.pendingJobs?.length);});
+  if(!authorized)return false; // The active transfer itself owns these copies.
+ }
  await eraseStorageTransferLineage.call({id:rows[0]!.planId,objectId:rows[0]!.id},SYSTEM);return true;
 }
 export default [eraseStorageTransferLineage,readWork,admit,finish];

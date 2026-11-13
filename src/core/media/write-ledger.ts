@@ -146,13 +146,25 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:C
       await observeStorageOperation(admission.id, true, false);
     } });
     providerAccepted = true;
+    await finishActualMediaWriter(admission.id);
     await observeStorageOperation(admission.id, true);
   } catch (error) {
     // Even if outcome recording itself failed, the original started row still
     // protects this key. No elapsed-time rule converts it into absence.
+    await finishActualMediaWriter(admission.id).catch(()=>{});
     await observeStorageOperation(admission.id, providerAccepted, false).catch(() => {});
     throw error;
   }
+}
+
+async function finishActualMediaWriter(id:string):Promise<void>{
+ await db().transaction(async tx=>{
+  await allowMediaReceiptWrites(tx);
+  await tx.execute(sql`select pg_advisory_xact_lock_shared(1691709,82)`);
+  const[row]=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,id)).limit(1).for("update");
+  if(!row||row.writerRuntimeId!==mediaWriterRuntimeId||row.writerFinishedAt)return;
+  await tx.update(mediaObjectWrites).set({writerFinishedAt:new Date(),updatedAt:new Date()}).where(eq(mediaObjectWrites.id,id));
+ });
 }
 
 export async function observeStorageOperation(id: string, accepted: boolean, settled = true): Promise<void> {
@@ -166,7 +178,7 @@ export async function observeStorageOperation(id: string, accepted: boolean, set
     if (!accepted && row.state === "accepted") return;
     const contradiction = accepted && row.state === "confirmed_absent";
     await tx.update(mediaObjectWrites).set({ state: contradiction || !settled ? "unknown" : accepted ? "accepted" : "unknown",
-      ...(accepted&&!row.observedAcceptedAt ? { observedAcceptedAt: new Date() } : {}), ...(settled&&accepted&&row.writerRuntimeId&&!row.writerFinishedAt?{writerFinishedAt:new Date()}:{}), ...(contradiction ? { deletedAt: null } : {}), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, id));
+      ...(accepted&&!row.observedAcceptedAt ? { observedAcceptedAt: new Date() } : {}), ...(contradiction ? { deletedAt: null } : {}), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, id));
     if (contradiction && !row.redactedAt) {
       // A late positive fact supersedes a human's absence assertion. Restore
       // the pending pointer as well as the receipt so sweepers cannot lose it.
@@ -180,7 +192,7 @@ export async function observeStorageOperation(id: string, accepted: boolean, set
 export async function storageOperationsHeld(tx: Tx, owners: Array<string | null>): Promise<boolean> {
   const holds = await tx.select({ contactId: dataRequests.contactId }).from(privacyRetentionExceptions)
     .innerJoin(dataRequests, eq(dataRequests.id, privacyRetentionExceptions.dataRequestId))
-    .where(and(inArray(privacyRetentionExceptions.scope, [MEDIA_WRITES_SCOPE, "media.multipartOperations", "members"]),
+    .where(and(inArray(privacyRetentionExceptions.scope, [MEDIA_WRITES_SCOPE, "media.multipartOperations", "media.storageTransfers", "members"]),
       sql`(${privacyRetentionExceptions.expiresAt} is null or ${privacyRetentionExceptions.expiresAt}>clock_timestamp())`));
   return holds.some(hold => owners.includes(null) || owners.includes(hold.contactId));
 }
@@ -221,6 +233,7 @@ export async function deleteWithReceipt(key: string,captured?:CapturedStorage): 
   if (claim.done) return true;
   try {
     await store.delete(key);
+    await finishActualMediaWriter(claim.id);
     // Preserve the positive DELETE acknowledgement even if verification or
     // its local commit subsequently fails. It is distinct from absence.
     await observeStorageOperation(claim.id, true, false);
@@ -228,12 +241,13 @@ export async function deleteWithReceipt(key: string,captured?:CapturedStorage): 
     await db().transaction(async tx => {
       await allowMediaReceiptWrites(tx);
       await lockObject(tx, key);
-      await tx.update(mediaObjectWrites).set({ state: "accepted", observedAcceptedAt: new Date(), writerFinishedAt:new Date(), deletedAt: new Date(), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, claim.id));
+      await tx.update(mediaObjectWrites).set({ state: "accepted", observedAcceptedAt: new Date(), deletedAt: new Date(), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, claim.id));
       await tx.update(mediaObjectWrites).set({ deletedAt: new Date(), updatedAt: new Date() }).where(and(eq(mediaObjectWrites.keyDigest, objectKeyDigest(key)), eq(mediaObjectWrites.namespace, binding.namespace), isNull(mediaObjectWrites.deletedAt)));
       await tx.delete(mediaObjects).where(and(eq(mediaObjects.key, key), eq(mediaObjects.state, "pending")));
     });
     return true;
   } catch (error) {
+    await finishActualMediaWriter(claim.id).catch(()=>{});
     await observeStorageOperation(claim.id, false).catch(() => {});
     throw error;
   }
