@@ -17,6 +17,7 @@ import {invoiceMerchantScopes,merchantInvoicePaymentRoutes} from "./merchant-inv
 import {merchantAgreementPaymentRoutes} from "./merchant-agreement-schema";
 import {subscriptionCommercialTerms,subscriptionMerchantScopes,subscriptionProviderChargeReceipts} from "@/modules/subscriptions/schema";
 import {subscriptionProviderScheduleOperations,subscriptionProviderScheduleResources} from "@/modules/subscriptions/provider-schedule-schema";
+import {subscriptionProviderReadWitnesses} from "@/modules/subscriptions/provider-read-witness";
 import {subscriptionCommercialResumptions} from "@/modules/subscriptions/commercial-resumption-schema";
 import {subscriptionCommercialAmendments} from "@/modules/subscriptions/commercial-amendment-schema";
 import {subscriptionProviderGenerations} from "@/modules/subscriptions/provider-generation-schema";
@@ -81,7 +82,11 @@ async function snapshot(tx:Tx,ids:string[]){
  }).from(subscriptionProviderInvoiceLines).innerJoin(subscriptionProviderInvoiceObservations,eq(subscriptionProviderInvoiceObservations.id,subscriptionProviderInvoiceLines.observationId))
   .innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptionProviderInvoiceObservations.subscriptionId))
   .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).orderBy(subscriptionMerchantScopes.taxProfileId,subscriptionProviderInvoiceLines.id).limit(5001);
- if(rows.length+acceptedTerms.length+providerScopes.length+providerOperations.length+providerResources.length+amendments.length+resumptions.length+generations.length+periodInvoices.length+periodLines.length>5000)return null;
+ const originalHistoryCount=rows.length+acceptedTerms.length+providerScopes.length+providerOperations.length+providerResources.length+amendments.length+resumptions.length+generations.length+periodInvoices.length+periodLines.length;
+ if(originalHistoryCount>5000)return null;
+ const originalReaders=await subscriptionProviderReadWitnesses(tx,providerScopes.map(row=>row.id));
+ const readerCount=originalReaders.tickets.length+originalReaders.finishes.length+originalReaders.stops.length;
+ if(originalReaders.incomplete||originalHistoryCount+readerCount>5000)return null;
  // Anchor each charge to the original profile's allocation/single-source
  // route. Selecting every payment on a mixed invoice would attach another
  // seller's refund history to this subject.
@@ -105,10 +110,10 @@ async function snapshot(tx:Tx,ids:string[]){
  const subscriptionChargeReceiptIds=[...new Set(originalReceipts.map(row=>row.id))].sort();
  if(paymentIds.length+subscriptionChargeReceiptIds.length>5000)return null;
  const children=await merchantRefundDependencyFingerprints(tx,{paymentIds,subscriptionChargeReceiptIds});
- if(children.incomplete)return null;
+ if(children.incomplete||originalHistoryCount+readerCount+children.entries.length>5000)return null;
  // The immutable child set belongs to this entire merge pair. Folding it
  // inside the existing fingerprint keeps its retained JSON shape unchanged.
- return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,providerScopes,providerOperations,providerResources,amendments,resumptions,generations,periodInvoices,periodLines,cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
+ return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,providerScopes,providerOperations,providerResources,amendments,resumptions,generations,periodInvoices,periodLines,...(readerCount?{originalReaders}:{}),cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
 }
 registerContactReference({
  table:"merchant_tax_profiles",

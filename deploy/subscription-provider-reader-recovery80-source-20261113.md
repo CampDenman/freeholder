@@ -117,3 +117,22 @@ fixture and all 17 new controls are unqualified, not passing AFTER evidence.
 Actual cross-host hosting review, schedule/product recovery business/native
 coverage, SQL raw guards, contract consumers, privacy/merge integration and
 owner UI/browser/accessibility checks remain required. No feature closes here.
+
+
+## Root combined source assembly
+
+Root combines this frozen3f3ae63f reader increment with financial/RMA source,
+the full amendment/resumption source and qualified import738f3cd9. The original
+06ce SQL is an exact byte prefix of new unpublished80 SHA-256
+70127a6088fe05cd6d068fa13da656baa536430570842b1f51419f6a9419d989.
+SQL81 remains43808cb3085d70caf93be0d0d8765ed4187c1737caffcf246129c14b5d614b7f;
+all previous databases stay untouched by this assembly.
+
+The central merchant witness includes normalized original reader tickets,
+actual finishes and independent stops through exact profile-owned subscription
+IDs. A complete aggregate bound covers existing financial history, reader
+children and refund children. Empty reader sets preserve the preceding
+fingerprint. No source, SQL, native or final-candidate result is credited to
+this larger assembly yet. Qualified83-file amendment and six-case import
+results remain component evidence; full reader/cash/transport acceptance and
+final release gates stay required.
