@@ -53,9 +53,15 @@ authenticated application revision; it must not acquire the resource first
 there. Existing final-return proof requires an actual returned disposition and
 cannot be reused as a paid receipt. A missing proof/guard/protocol refuses.
 
-Fifteen prepared arithmetic controls cover independently applied cash/credit,
-safe-integer single-cent residuals, over/under/invalid receipts, actual refunds
-and closed invoice states. All are UNRUN. No synthetic ServiceContext, inserted
+The preserved first checkpoint has fifteen prepared arithmetic controls for
+the finite full-remainder candidate. A source continuation adds seven exact
+batch arithmetic controls: distinct real receipt identities, one-cent partial
+cash, unpaid remainders after independent credit/cash, duplicate receipt refusal,
+whole overage refusal, currency and complete5000 bounds. This arithmetic does
+not prove bank ownership. Legitimate partial cash must be applied through the
+forthcoming authenticated batch context without granting paid effects; the
+strict first-checkpoint single-receipt gate is not the final partial contract.
+All twenty-two controls are UNRUN. No synthetic ServiceContext, inserted
 canonical rows, provider call or native result is claimed. Genuine producer,
 prospective principal/financial integration, complete source/schema/native and
 provider/privacy acceptance remain required; no new deferral, SQL/model/journal,

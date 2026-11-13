@@ -3577,6 +3577,15 @@ weakening existing principal defaults. The future six models remain outside
 current142 qualification; no SQL/model/journal or stable state changed. See
 `deploy/controlled-cash-application-parent82-source-20261113.md`.
 
+Prospective exact-receipt batch arithmetic continuation (same date and items):
+seven further prepared controls preserve a one-cent partial capture and unpaid
+remainder, distinct equal-valued receipt UUIDs, duplicate refusal, exact
+cash/credit capacity, whole overage/currency refusal and the complete5000 bound.
+This is arithmetic only; all22 parent controls remain UNRUN. Actual authenticated
+partial/batch proof and same-transaction application remain required. The
+parent reader now imports the producer's existing protocol constant directly;
+no authority is registered or paid effect granted.
+
 Source-only controlled raw target checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): the isolated future fifteen-family consumer now
 keeps authenticated coverage unchanged while deriving exact original bank

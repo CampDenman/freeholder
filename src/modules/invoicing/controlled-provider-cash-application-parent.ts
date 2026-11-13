@@ -6,6 +6,7 @@ import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { getService,ServiceError,type ServiceContext } from "@/core/service";
 import { controlledCollectionState } from "@/modules/subscriptions/controlled-provider-collection-state";
 import { controlledCollectionCoverage } from "@/modules/subscriptions/controlled-provider-collection-coverage";
+import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-contract";
 import { controlledCashEvidence,readOriginalControlledChargeAuthority } from "@/modules/subscriptions/controlled-provider-cash-origin";
 import { subscriptionControlledCollections,subscriptionControlledQuotes } from "@/modules/subscriptions/controlled-provider-collection-schema";
 import { subscriptionControlledResources,subscriptionControlledChargeOrigins } from "@/modules/subscriptions/controlled-provider-schema";
@@ -14,7 +15,7 @@ import { subscriptionProviderScheduleOperations } from "@/modules/subscriptions/
 import { scheduleCallerHasStopped } from "@/modules/subscriptions/provider-schedule-proof";
 import { originalProviderReadsFinished } from "@/modules/subscriptions/provider-schedule-read-proof";
 import { parentFinancialGraph,lockControlledParentMoney } from "./controlled-provider-financial-parent";
-import { CONTROLLED_FINANCIAL_PROTOCOL,requireControlledFinancialProtocol } from "./controlled-provider-financial-protocol";
+import { requireControlledFinancialProtocol } from "./controlled-provider-financial-protocol";
 import { controlledTargetRawClassification } from "./controlled-target-raw-classification";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { merchantFeeRefunds } from "./merchant-collection-schema";
@@ -41,14 +42,29 @@ export function controlledCashApplicationCapacity(invoice:Pick<typeof invoices.$
  if(due<=0n||due!==BigInt(amountMinor))refuse();return Number(due);
 }
 
+/** Arithmetic for a separately authenticated EXACT receipt batch. This does
+ * not prove DB ownership or disposition. One real receipt can fund one payment;
+ * a partial batch preserves its genuine unpaid remainder and grants no effect.
+ * Over-capture is refused whole, never clipped into invented receipt amounts. */
+export function controlledCashApplicationBatchCapacity(invoice:Pick<typeof invoices.$inferSelect,"totalMinor"|"paidMinor"|"creditedMinor"|"refundedMinor"|"status"|"currency">,
+ receipts:readonly {receiptId:string;amountMinor:number;currency:string}[]){
+ if(!receipts.length||receipts.length>5000||new Set(receipts.map(row=>row.receiptId)).size!==receipts.length
+  ||receipts.some(row=>!z.uuid().safeParse(row.receiptId).success||!minor.positive().safeParse(row.amountMinor).success||row.currency!==invoice.currency))refuse();
+ const values=[invoice.totalMinor,invoice.paidMinor,invoice.creditedMinor,invoice.refundedMinor];
+ if(values.some(value=>!minor.safeParse(value).success)||invoice.refundedMinor!==0||!["sent","viewed","partially_paid","overdue"].includes(invoice.status))refuse();
+ const before=BigInt(invoice.totalMinor)-BigInt(invoice.creditedMinor)-BigInt(invoice.paidMinor),applied=receipts.reduce((sum,row)=>sum+BigInt(row.amountMinor),0n);
+ if(before<=0n||applied>before)refuse();
+ return{receiptIds:receipts.map(row=>row.receiptId),appliedMinor:Number(applied),outstandingBeforeMinor:Number(before),outstandingAfterMinor:Number(before-applied)};
+}
+
 /** This ordinary reader deliberately returns EVIDENCE, not allowed:true. The
  * separate service is not registered until the producer's genuine prospective
  * bank proof exists. Caller must use this BEFORE shared createPayment acquires
  * invoice locks, then repeat the whole evidence read in that SAME transaction.
  * Retained own raw facts stay unresolved here, never deleted/excluded by kind.
  * The eventual proof must bind their exact IDs and actual current bank money. */
-export async function readControlledCashApplicationParent(ctx:ServiceContext,input:{collectionId:string;receiptId:string;requiredProtocol:typeof CONTROLLED_FINANCIAL_PROTOCOL}){
- if(input.requiredProtocol!==CONTROLLED_FINANCIAL_PROTOCOL)refuse();
+export async function readControlledCashApplicationParent(ctx:ServiceContext,input:{collectionId:string;receiptId:string;requiredProtocol:typeof CONTROLLED_COLLECTION_PROTOCOL}){
+ if(input.requiredProtocol!==CONTROLLED_COLLECTION_PROTOCOL)refuse();
  await lockContactIdentityForRead(ctx.tx);await requireControlledFinancialProtocol(ctx.tx);
  const[reference]=await ctx.tx.select({resourceId:subscriptionControlledResources.id,subscriptionId:subscriptionControlledResources.subscriptionId})
   .from(subscriptionControlledCollections).innerJoin(subscriptionControlledQuotes,eq(subscriptionControlledQuotes.id,subscriptionControlledCollections.quoteId))
@@ -139,7 +155,7 @@ export async function readControlledCashApplicationParent(ctx:ServiceContext,inp
   union all select 'privacy_retention_exceptions',h.id::text,encode(sha256(convert_to(to_jsonb(h)::text,'UTF8')),'hex') from privacy_retention_exceptions h join data_requests r on r.id=h.data_request_id where r.contact_id in(${identities}) order by 1,2 limit 5001`);
  if(privateEvidence.length>5000||privateEvidence.filter(row=>row.table==="contacts").length!==new Set(contacts).size)refuse();for(const row of privateEvidence)add(row);
  const physicalEntries=[...entries].sort(([a],[b])=>a.localeCompare(b));
- const preApplicationRevision=merchantTaxDigest({protocol:CONTROLLED_FINANCIAL_PROTOCOL,collectionId:collection.id,receiptId:receipt.id,source,coverageRevision:coverage.revision,
+ const preApplicationRevision=merchantTaxDigest({protocol:CONTROLLED_COLLECTION_PROTOCOL,collectionId:collection.id,receiptId:receipt.id,source,coverageRevision:coverage.revision,
   physicalEntries,receipt,origin,observationRows,legacyOperations,paymentProofs,creditProofs,feeProofs,receiptFees,rawCash,privacy,outstandingMinor,rawClassificationRevision:rawClassification.revision});
  return{collectionId:collection.id,receiptId:receipt.id,subscriptionId:parent.id,resourceId:resource.id,invoiceId:canonical.invoice.id,outstandingMinor,
   preApplicationRevision,source,coverage,rawClassification,rawCash,physicalEntries};
@@ -148,7 +164,7 @@ export async function readControlledCashApplicationParent(ctx:ServiceContext,inp
 /** Reentrant recheck only after the real caller already acquired this helper's
  * resource→parent prefix. Neither a public DTO nor a session marker supplies
  * the original authorization; the entire genuine evidence is read again. */
-export async function recheckControlledCashApplicationParent(ctx:ServiceContext,input:{collectionId:string;receiptId:string;requiredProtocol:typeof CONTROLLED_FINANCIAL_PROTOCOL},expectedPreApplicationRevision:string){
+export async function recheckControlledCashApplicationParent(ctx:ServiceContext,input:{collectionId:string;receiptId:string;requiredProtocol:typeof CONTROLLED_COLLECTION_PROTOCOL},expectedPreApplicationRevision:string){
  const current=await readControlledCashApplicationParent(ctx,input);
  if(!sha.safeParse(expectedPreApplicationRevision).success||current.preApplicationRevision!==expectedPreApplicationRevision)refuse();return current;
 }
