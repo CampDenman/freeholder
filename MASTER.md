@@ -4028,6 +4028,11 @@ reading chat logs.
   step-up, typed confirmation and audit evidence in `tests/core/outbox.test.ts`;
   webhook replay convergence in `tests/core/webhooks.test.ts`; changeset
   `outbox-dead-letters.md`; operator runbook `deploy/event-outbox.md` **F04** `/admin/jobs/outbox` redacted replay with step-up. **F05** `platform.listOutboxEvents`/`getOutboxEvent`/`replayOutboxEvent`/`outboxSummary` at `/api/v1/platform.*`, MCP `platform_*` (replay is step-up). **F07** `tests/core/outbox.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/event-outbox.md`. **F12** `tests/core/outbox.test.ts` is the composition proof.)
+  Media integration type repair 2026-11-13 (C1.12/C11.08): transfer forms
+  now use the exact translated-label object type, and the legacy witness
+  fixture explicitly supplies NULL for newly nullable writer/revision fields.
+  This fixes the first combined type run's media errors without inventing
+  historical provenance. Renewed compilation and media acceptance remain open.
 - [ ] **C1.12** Complete media support for video, audio and documents,
   resumable/presigned direct uploads, validation, malware scanning seam,
   metadata/provenance, focal points, lifecycle and orphan cleanup.

@@ -5,7 +5,8 @@ import Link from "next/link";
 import {useActionState,useId} from "react";
 import {Button,Callout,Field,Input} from "@/ui/primitives";
 import {advanceStorageTransferAction,planStorageTransferAction,reviewStorageTransferAction,type TransferActionState} from "../../../media-transfer-actions";
-export type TransferLabels=Record<string,string>;
+import type {transferLabels} from "./labels";
+export type TransferLabels=ReturnType<typeof transferLabels>;
 export function PlanTransferForm({requestKey,labels}:{requestKey:string;labels:TransferLabels}){
  const prefix=useId(),[state,action,pending]=useActionState<TransferActionState,FormData>(planStorageTransferAction,{});
  if(state.saved&&state.id)return <Callout tone="success"><Link href={`/admin/media/transfers/${state.id}`} className="underline">{labels.open}</Link></Callout>;
