@@ -3891,6 +3891,21 @@ reading chat logs.
   `tests/core/merge-completeness.test.ts`; changeset
   `contact-privacy-rights.md`; operator guide `deploy/privacy-rights.md` **F04** `/admin/contacts/privacy` access/export/erasure. **F05** `contacts.createDataRequest`/`fulfillDataRequest`/`recordConsent` and `privacy.getMyProfile`/`createMyDataRequest`/`downloadMyDataRequestArtifact` at `/api/v1/contacts.*` and `/api/v1/privacy.*`; MCP `privacy_*`/`contacts_*`. **F07** `tests/core/contact-privacy-rights.test.ts` covers permission, refusal and recovery. **F09** operator runbook `deploy/privacy-rights.md`. **F12** `tests/core/contact-privacy-rights.test.ts` is the composition proof.)
 
+  Published-main WXR containment in progress (2026-11-13, C1.08/C3.47/C11.14):
+  an actual 501-entry unaccepted WXR control on protected main `81271622`
+  deleted the original private chunk but falsely completed its erasure receipt
+  with private text still present in one normalized entry and one media plan.
+  The original full-erasure oracle and populated database are preserved. A
+  private completion guard now checks the original queued task and verified
+  pending receipt under privacy/run locks, retaining explicit recovery while
+  an unaccepted normalized graph remains. Source typecheck, whole lint and 384 static controls pass (26 declared
+  database skips). The actual 501-entry pending containment passes (5.403s),
+  unchanged outage/removal/replay positive passes (6.676s), and the other 14
+  raw-source controls pass without retry; independent physical/receipt/journal
+  readback and closed database sessions are recorded. Evidence: `deploy/import-wxr-index-privacy-2026-11-13.md`. Full guarded index minimization and recovery of
+  historical completed receipts remain required; this does not close C1.08.
+
+
   Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
   documented an empty original hold, uploaded a later unheld WXR generation,
   verified and fulfilled the real erasure. The request falsely reached
@@ -4696,6 +4711,19 @@ project without silent telemetry, and ready to carry money.
   `tests/core/transactional-jobs.test.ts` (a job enqueued and run from
   inside the seed scope runs outside it; fails without the change),
   `tests/core/audit-labels.test.ts` (hidden-row break, "+" at the limit).
+
+  Fixture target-switch proof 2026-11-13: an actual resident producer poll
+  reopened the old cached database target while the test helper awaited pool
+  close. A deterministic CREATE-only nonce probe on0e/888 failed15.289s at
+  runtime namespace selection; direct physical production contained zero
+  visitor graffiti. The helper now stops the producer, joins reconciliation
+  and closes before synchronously changing env/cache. The byte-identical
+  probe first passes12.747s on new targets; independent post-cleanup11-table
+  hashes/full journals/schema prove both BEFORE targets unchanged and all
+  clients drained. This qualifies fixture lifecycle, not a production leak
+  claim, independent review or stable sign-off. Exact evidence and limits:
+  `deploy/playground-database-switch-2026-11-13.md`.
+
 
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable
