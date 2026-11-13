@@ -10,7 +10,7 @@ import {registerContactReference} from "@/core/contacts/service";
 import { lockContactIdentity, lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import {ServiceError,type Tx} from "@/core/service";
-import { invoiceMarketPolicies, invoiceMerchantAllocations } from "@/modules/invoicing/schema";
+import { invoiceMarketPolicies, invoiceMerchantAllocations, invoices } from "@/modules/invoicing/schema";
 import { invoiceMerchantCollections, merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "@/modules/invoicing/merchant-collection-schema";
 import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "@/modules/invoicing/merchant-invoice-scope-schema";
 import { payments } from "@/modules/invoicing/schema";
@@ -18,6 +18,7 @@ import { bookingCommercialSources, bookings } from "@/core/scheduling/schema";
 import { bookingMarketPolicies, bookingMerchantScopes } from "./booking-merchant-schema";
 import { subscriptionMarketPolicies } from "@/modules/subscriptions/schema";
 import { invoiceMerchantDependencyFingerprints } from "@/modules/invoicing/merchant-payment-dependencies";
+import { prorationFinancialWitness, type ProrationFinancialEntry } from "@/modules/invoicing/proration-financial-witness";
 
 export async function merchantIdentityErased(tx:Tx,userId:string,contactId?:string|null):Promise<boolean>{
   await lockContactIdentityForRead(tx);
@@ -67,6 +68,119 @@ registerContactPrivacySource({
 const pointer=z.object({id:z.uuid(),contactId:z.uuid().nullable(),fingerprint:z.string().regex(/^[0-9a-f]{64}$/)});
 type Pointer=z.infer<typeof pointer>;
 type RawPointer={id:string;contactId:string|null;material:string};
+// One exact frozen root at a time keeps ancestry attributable even when a
+// source invoice has multiple merchants or credit crosses subscriptions.
+// Repeated immutable rows count once across this identity cohort.
+async function identityFinancialWitnesses(tx:Tx,kind:"merchant_profile"|"subscription",rootIds:string[],parentCount:number){
+ if(!Number.isSafeInteger(parentCount)||parentCount<0||parentCount>5000||!z.array(z.uuid()).max(5000).safeParse(rootIds).success)return null;
+ const roots=new Map<string,ProrationFinancialEntry[]>(),distinct=new Map<string,string>();
+ for(const rootId of [...new Set(rootIds)].sort()){
+  const history=await prorationFinancialWitness(tx,{kind,ids:[rootId]});
+  if(history.incomplete)return null;
+  for(const entry of history.entries){
+   const key=`${entry.table}:${entry.id}`,material=JSON.stringify(entry),previous=distinct.get(key);
+   if(previous!==undefined&&previous!==material)return null;
+   distinct.set(key,material);
+  }
+  if(parentCount+distinct.size>5000)return null;
+  roots.set(rootId,history.entries);
+ }
+ return{roots,count:distinct.size};
+}
+async function subscriptionPolicyPointers(tx:Tx,ids:string[]):Promise<RawPointer[]|null>{
+ const rows=await tx.select({id:subscriptionMarketPolicies.subscriptionId,contactId:subscriptionMarketPolicies.merchantContactId,material:sql<string>`to_jsonb(${subscriptionMarketPolicies})::text`})
+  .from(subscriptionMarketPolicies).where(inArray(subscriptionMarketPolicies.merchantContactId,ids)).orderBy(subscriptionMarketPolicies.subscriptionId).limit(5001);
+ if(rows.length>5000)return null;
+ const history=await identityFinancialWitnesses(tx,"subscription",rows.map(row=>row.id),rows.length);
+ if(history===null)return null;
+ return rows.map(row=>{
+  const financial=history.roots.get(row.id)??[];
+  return financial.length?{...row,material:JSON.stringify({material:row.material,prorationFinancial:financial})}:row;
+ });
+}
+type CollectionParent={id:string;invoiceId:string;profileId:string;sellerUserId:string|null};
+const invoiceParents=["invoiceId","sourceInvoiceId","targetInvoiceId"] as const;
+function financialLinks(entry:ProrationFinancialEntry){
+ const links=new Set<string>();
+ for(const [key,value] of Object.entries(entry.parents)){
+  if(!value||["profileId","subscriptionId","invoiceId","sourceInvoiceId","targetInvoiceId","jobId","paymentMethodId"].includes(key))continue;
+  const kind=key==="sourceProrationId"||key==="targetProrationId"?"prorationId":key==="sourcePaymentId"?"paymentId":key==="sourceApplicationId"?"applicationId":key;
+  links.add(kind==="originalRemittanceId"?`${entry.table}:${value}`:`${kind}:${value}`);
+ }
+ if(entry.table==="commercial_fee_attestations"||entry.table==="agreement_fee_remittances")links.add(`${entry.table}:${entry.id}`);
+ return links;
+}
+async function collectionFinancialWitnesses(tx:Tx,rows:CollectionParent[]){
+ const candidates=await identityFinancialWitnesses(tx,"merchant_profile",rows.map(row=>row.profileId),0);
+ if(candidates===null)return null;
+ const roots=new Map<string,ProrationFinancialEntry[]>(),distinct=new Map<string,string>();
+ const active=rows.filter(row=>candidates.roots.get(row.profileId)?.some(entry=>invoiceParents.some(key=>entry.parents[key]===row.invoiceId)));
+ if(!active.length)return{roots,count:0};
+ // Actual original allocation/collection pairs establish whether invoice+
+ // profile is unique. A shared platform tax profile is not a seller owner.
+ const owners=await tx.select({id:invoiceMerchantAllocations.id,invoiceId:invoiceMerchantAllocations.invoiceId,sellerUserId:invoiceMerchantAllocations.sellerUserId,
+  collectionInvoiceId:invoiceMerchantCollections.invoiceId,profileId:sql<string>`${invoiceMerchantCollections.taxPolicy}->>'profileId'`})
+  .from(invoiceMerchantAllocations).leftJoin(invoiceMerchantCollections,eq(invoiceMerchantCollections.allocationId,invoiceMerchantAllocations.id))
+  .where(inArray(invoiceMerchantAllocations.invoiceId,[...new Set(active.map(row=>row.invoiceId))])).orderBy(invoiceMerchantAllocations.id).limit(5001);
+ if(owners.length>5000)return null;
+ const paymentIds=[...new Set([...candidates.roots.values()].flatMap(entries=>entries.flatMap(entry=>[entry.parents.paymentId,entry.parents.sourcePaymentId].filter((value):value is string=>Boolean(value)))))];
+ if(paymentIds.length>5000)return null;
+ const routes=paymentIds.length?await tx.select({paymentId:merchantPaymentRoutes.paymentId,allocationId:merchantPaymentRoutes.allocationId,invoiceId:invoiceMerchantAllocations.invoiceId,
+  paymentInvoiceId:payments.invoiceId,sellerUserId:invoiceMerchantAllocations.sellerUserId,collectionInvoiceId:invoiceMerchantCollections.invoiceId,
+  profileId:sql<string>`${invoiceMerchantCollections.taxPolicy}->>'profileId'`}).from(merchantPaymentRoutes)
+  .innerJoin(payments,eq(payments.id,merchantPaymentRoutes.paymentId)).innerJoin(invoiceMerchantAllocations,eq(invoiceMerchantAllocations.id,merchantPaymentRoutes.allocationId))
+  .leftJoin(invoiceMerchantCollections,eq(invoiceMerchantCollections.allocationId,invoiceMerchantAllocations.id))
+  .where(inArray(merchantPaymentRoutes.paymentId,paymentIds)).orderBy(merchantPaymentRoutes.paymentId).limit(5001):[];
+ if(routes.length>5000||new Set(routes.map(route=>route.paymentId)).size!==routes.length||routes.some(route=>route.invoiceId!==route.paymentInvoiceId||route.collectionInvoiceId!==route.invoiceId||!z.uuid().safeParse(route.profileId).success))return null;
+ const byPayment=new Map(routes.map(route=>[route.paymentId,route]));
+ for(const row of active){
+  const siblings=owners.filter(owner=>owner.invoiceId===row.invoiceId),own=siblings.find(owner=>owner.id===row.id);
+  if(!own||own.profileId!==row.profileId||own.sellerUserId!==row.sellerUserId||siblings.some(owner=>owner.collectionInvoiceId!==row.invoiceId||!z.uuid().safeParse(owner.profileId).success))return null;
+  const unique=siblings.filter(owner=>owner.profileId===row.profileId).length===1,entries=candidates.roots.get(row.profileId)??[];
+  const selected=new Map<string,ProrationFinancialEntry>(),excluded=new Set<string>(),links=new Set<string>();
+  const key=(entry:ProrationFinancialEntry)=>`${entry.table}:${entry.id}`;
+  const add=(entry:ProrationFinancialEntry)=>{selected.set(key(entry),entry);for(const link of financialLinks(entry))links.add(link);};
+  for(const entry of entries.filter(entry=>invoiceParents.some(name=>entry.parents[name]===row.invoiceId))){
+   const directPayments=[entry.parents.paymentId,entry.parents.sourcePaymentId].filter((value):value is string=>Boolean(value));
+   const directRoutes=directPayments.map(paymentId=>byPayment.get(paymentId)).filter((route):route is (typeof routes)[number]=>route!==undefined&&route.invoiceId===row.invoiceId);
+   const owned=directRoutes.filter(route=>route.allocationId===row.id),foreign=directRoutes.filter(route=>route.allocationId!==row.id);
+   if(owned.length&&foreign.length)return null;
+   if(foreign.length){if(unique||foreign.length!==directPayments.length||foreign.some(route=>route.profileId!==row.profileId))return null;excluded.add(key(entry));continue;}
+   if(owned.some(route=>route.profileId!==row.profileId||route.sellerUserId!==row.sellerUserId))return null;
+   if(!unique&&(!directPayments.length||owned.length!==directPayments.length))return null;
+   add(entry);
+  }
+  // Follow only actual financial FKs, never shared invoice/profile/subscriber
+  // membership. This retains genuine credit ancestors and descendants.
+  let changed=true;
+  while(changed){changed=false;for(const entry of entries){
+   if(selected.has(key(entry))||excluded.has(key(entry))||![...financialLinks(entry)].some(link=>links.has(link)))continue;
+   for(const paymentId of [entry.parents.paymentId,entry.parents.sourcePaymentId]){
+    const route=paymentId?byPayment.get(paymentId):undefined;
+    if(route&&(route.invoiceId!==route.paymentInvoiceId||route.collectionInvoiceId!==route.invoiceId||route.profileId!==row.profileId||route.sellerUserId!==row.sellerUserId))return null;
+   }
+   add(entry);changed=true;
+  }}
+  // A manual ancestor has no allocation route. Its real payment's original
+  // subscription invoice and immutable market-policy seller can prove the
+  // same source owner; a profile/amount/current account cannot replace it.
+  const manualSources=[...new Set([...selected.values()].flatMap(entry=>[entry.parents.paymentId,entry.parents.sourcePaymentId]
+   .filter((paymentId):paymentId is string=>typeof paymentId==="string"&&!byPayment.has(paymentId)&&!invoiceParents.some(name=>entry.parents[name]===row.invoiceId))))];
+  if(manualSources.length){
+   const originals=await tx.select({paymentId:payments.id,invoiceId:payments.invoiceId,sourceType:invoices.sourceType,sourceId:invoices.sourceId,
+    subscriptionId:subscriptionMarketPolicies.subscriptionId,sellerUserId:subscriptionMarketPolicies.sellerUserId}).from(payments)
+    .innerJoin(invoices,eq(invoices.id,payments.invoiceId)).leftJoin(subscriptionMarketPolicies,and(eq(invoices.sourceType,"subscription"),sql`split_part(${invoices.sourceId},':',1)=${subscriptionMarketPolicies.subscriptionId}::text`))
+    .where(inArray(payments.id,manualSources)).orderBy(payments.id).limit(5001);
+   if(originals.length!==manualSources.length||new Set(originals.map(original=>original.paymentId)).size!==manualSources.length
+    ||originals.some(original=>!manualSources.includes(original.paymentId)||!(original.invoiceId===row.invoiceId&&unique)
+     &&(original.sourceType!=="subscription"||!original.subscriptionId||original.sourceId?.split(":")[0]!==original.subscriptionId||original.sellerUserId!==row.sellerUserId)))return null;
+  }
+  for(const entry of selected.values())distinct.set(key(entry),JSON.stringify(entry));
+  if(rows.length+distinct.size>5000)return null;
+  roots.set(row.id,[...selected.values()].sort((left,right)=>left.table.localeCompare(right.table)||left.id.localeCompare(right.id)));
+ }
+ return{roots,count:distinct.size};
+}
 function registerIdentityReference(table:string,read:(tx:Tx,ids:string[])=>Promise<RawPointer[]|null>,repoint:(tx:Tx,from:string,to:string)=>Promise<unknown>,restore:(tx:Tx,ids:string[],contactId:string)=>Promise<unknown>){
  const snapshot=async(tx:Tx,ids:string[])=>{
   const rows=await read(tx,ids);return rows===null||rows.length>5000?null:rows.map(({id,contactId,material}):Pointer=>({id,contactId,fingerprint:createHash("sha256").update(material).digest("hex")}));
@@ -87,7 +201,7 @@ registerIdentityReference("invoice_market_policies",
  (tx,ids,contactId)=>tx.update(invoiceMarketPolicies).set({merchantContactId:contactId}).where(inArray(invoiceMarketPolicies.invoiceId,ids)),
 );
 registerIdentityReference("subscription_market_policies",
- (tx,ids)=>tx.select({id:subscriptionMarketPolicies.subscriptionId,contactId:subscriptionMarketPolicies.merchantContactId,material:sql<string>`to_jsonb(${subscriptionMarketPolicies})::text`}).from(subscriptionMarketPolicies).where(inArray(subscriptionMarketPolicies.merchantContactId,ids)).orderBy(subscriptionMarketPolicies.subscriptionId).limit(5001),
+ subscriptionPolicyPointers,
  (tx,from,to)=>tx.update(subscriptionMarketPolicies).set({merchantContactId:to}).where(eq(subscriptionMarketPolicies.merchantContactId,from)),
  (tx,ids,contactId)=>tx.update(subscriptionMarketPolicies).set({merchantContactId:contactId}).where(inArray(subscriptionMarketPolicies.subscriptionId,ids)),
 );
@@ -102,16 +216,23 @@ registerIdentityReference("invoice_merchant_allocations",
 // column or a second repoint of that original allocation.
 const collectionWitness=z.array(z.object({id:z.uuid(),fingerprint:z.string().regex(/^[0-9a-f]{64}$/)})).max(5000);
 async function collectionSnapshot(tx:Tx,ids:string[]){
- const rows=await tx.select({id:invoiceMerchantCollections.allocationId,invoiceId:invoiceMerchantCollections.invoiceId,material:sql<string>`to_jsonb(${invoiceMerchantCollections})::text`})
+ const rows=await tx.select({id:invoiceMerchantCollections.allocationId,invoiceId:invoiceMerchantCollections.invoiceId,profileId:sql<string>`${invoiceMerchantCollections.taxPolicy}->>'profileId'`,sellerUserId:invoiceMerchantAllocations.sellerUserId,material:sql<string>`to_jsonb(${invoiceMerchantCollections})::text`})
   .from(invoiceMerchantCollections).innerJoin(invoiceMerchantAllocations,eq(invoiceMerchantAllocations.id,invoiceMerchantCollections.allocationId))
   .where(inArray(invoiceMerchantAllocations.merchantContactId,ids)).orderBy(invoiceMerchantCollections.allocationId).limit(5001);
  if(rows.length>5000)return null;
  if(!rows.length)return[];
+ // The original collection supplies the financial root even if the profile
+ // has no contact pointer and there has never been a routed payment.
+ const history=await collectionFinancialWitnesses(tx,rows);
+ if(history===null)return null;
  const routes=await tx.select({paymentId:merchantPaymentRoutes.paymentId}).from(merchantPaymentRoutes)
   .where(inArray(merchantPaymentRoutes.allocationId,rows.map(row=>row.id))).orderBy(merchantPaymentRoutes.paymentId).limit(5001);
  if(routes.length>5000)return null;
- const dependencies=await invoiceMerchantDependencyFingerprints(tx,[...new Set(rows.map(row=>row.invoiceId))],routes.map(row=>row.paymentId));
- return dependencies===null?null:rows.map(({id,invoiceId,material})=>({id,fingerprint:createHash("sha256").update(JSON.stringify({material,paymentDependencies:dependencies.get(invoiceId)})).digest("hex")}));
+ const dependencies=await invoiceMerchantDependencyFingerprints(tx,[...new Set(rows.map(row=>row.invoiceId))],routes.map(row=>row.paymentId),rows.length+history.count);
+ return dependencies===null?null:rows.map(({id,invoiceId,material})=>{
+  const financial=history.roots.get(id)??[];
+  return{id,fingerprint:createHash("sha256").update(JSON.stringify({material,paymentDependencies:dependencies.get(invoiceId),...(financial.length?{prorationFinancial:financial}:{})})).digest("hex")};
+ });
 }
 registerContactReference({
  table:"invoice_merchant_collections",columns:[],repoint:async()=>undefined,
