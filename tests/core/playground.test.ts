@@ -6,7 +6,7 @@
 // reseeded playground.
 import { randomUUID } from "node:crypto";
 import * as coreDatabase from "@/core/db";
-import { reconcileJobDeploymentAdmission, stopJobs } from "@/core/jobs";
+import { reconcileJobDeploymentAdmission, startJobProducer, stopJobs } from "@/core/jobs";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
@@ -807,6 +807,7 @@ describe.runIf(hasDatabase)("actual playground producer poll target switch", () 
       const visitor = { kind: "user" as const, userId: session.userId, role: session.role, grants: session.grants };
       const graffiti = await createPage.call({ slug: "actual-switch-visitor-graffiti", title: "Actual switch visitor graffiti" }, visitor);
       expect((await db().execute<{ name: string }>(sql`select current_database() name`))[0]?.name).toBe(playName);
+      expect(await startJobProducer()).toBeDefined();
       // Every mutation actually started the producer. dispatchNow has already
       // drained; the separate deployment poll/heartbeat remain resident.
       let closed!: () => void;
@@ -821,6 +822,7 @@ describe.runIf(hasDatabase)("actual playground producer poll target switch", () 
       // With the safe helper, producer shutdown makes both calls no-ops.
       // With the old helper, cached old env can reopen the old core pool.
       await reconcileJobDeploymentAdmission(); await reconcileJobDeploymentAdmission();
+      if (!releaseClose) throw new Error("The actual completed-close gate is unavailable.");
       releaseClose(); await switching;
       const coreSelected = (await db().execute<{ name: string }>(sql`select current_database() name`))[0]?.name;
       const coreGraffiti = await db().select({ id: pages.id }).from(pages).where(eq(pages.id, graffiti.id));
