@@ -71,3 +71,11 @@ A newly identified raw-feedback privacy pointer can still lack a typed owner
 when unassigned cash has no local refund; a separate repair is in progress.
 Primary facts already commit before outbox repair. This remaining gap is not
 waived by the successful catalog or migration checks.
+
+The unchanged CI resilience test found that the enlarged recovery/import suite
+projects1,519,601ms on32 shards, beyond the existing1,500,000ms job deadline.
+The candidate increases native shards to40 while retaining every test, the
+25-minute deadline, seven-times degraded-runner multiplier and fixed overhead.
+Protected requirements remain the existing DCO and aggregate checks; no remote
+protection was changed. The same partition/topology assertions must pass before
+qualification. This is CI capacity work, not product performance acceptance.

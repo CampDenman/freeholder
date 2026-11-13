@@ -12444,6 +12444,14 @@ schema they inherit reads as a designed thing rather than an excavation.
   *(Cheap audit-label follow-up: CI on the card-setup increment caught missing
   owner activity labels. The existing seven-control mutation/locale inventory
   now also runs in local fast gates so this omission is caught before pushing.)*
+  Recovery-suite CI capacity repair 2026-11-13 (C11.13/C11.17): the
+  unpublished combined financial/import regressions exceed the unchanged
+ 32-shard predicted deadline (1,519,601ms versus1,500,000ms). The candidate
+  uses40 isolated native shards, preserving every test, the25-minute deadline,
+  seven-times degraded-runner budget and protected aggregate checks. Existing
+  partition/topology tests remain unchanged and require qualification; this
+  does not supply new product failure-drill or stable acceptance.
+
 - [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
