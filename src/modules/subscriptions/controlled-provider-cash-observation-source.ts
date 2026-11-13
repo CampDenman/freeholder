@@ -35,7 +35,8 @@ function refuse():never{throw new ServiceError("conflict","Restore the exact acc
 /** Reads ONLY. Caller holds resource→parent before ordinary payment/invoice/note
  * and namespace locks. Parent must independently prove full financial/privacy
  * coverage and all original caller closure, retaining every occurrence/debt.
- * No current paid/refunded/principal/fee-safety predicate is asserted here:
+ * Actual unfinished callers remain explicit evidence; only the separate real
+ * GET authority may require closure. No paid/principal/fee predicate is asserted:
  * observing unexpected partial, over-captured or disputed money is necessary
  * to recover it. The same proof can never authorize its application or return. */
 export async function readControlledCashObservationSource(tx:Tx,input:{collectionId:string;receiptId:string}):Promise<ControlledCashObservationProof>{
@@ -52,7 +53,7 @@ export async function readControlledCashObservationSource(tx:Tx,input:{collectio
   ||collection.id!==quote.plannedCollectionId||collection.prorationId!==quote.plannedProrationId||collection.kind!==quote.kind||collection.collectionPolicy!==CONTROLLED_COLLECTION_POLICY
   ||collection.acceptedQuoteDigest!==quote.quoteDigest||collection.originalConsentDigest!==quote.quoteDigest||binding.providerInvoiceRef!==receipt.providerInvoiceRef)refuse();
  const history=await controlledProviderJournal(tx,resource.id),authenticated=authenticatedControlledQuote(quote,resource,history);
- if(history.unfinished.length||authenticated.review.controlled.plannedCollectionId!==collection.id||authenticated.review.subscriptionId!==parent.id)refuse();
+ if(authenticated.review.controlled.plannedCollectionId!==collection.id||authenticated.review.subscriptionId!==parent.id)refuse();
  const ownFact=history.facts.find(row=>row.id===origin.factId),ownCall=history.calls.find(row=>row.id===origin.callId);
  if(!ownFact||!ownCall||ownCall.operationId!==origin.operationId||ownFact.callId!==ownCall.id||ownFact.actual.kind!=="cash_observed")refuse();
  const actualCash=controlledCashEvidence.parse(ownFact.actual.raw.cash),actualOrigin=await readOriginalControlledChargeAuthority(tx,actualCash,{resourceId:origin.resourceId,callId:origin.callId,factId:origin.factId});

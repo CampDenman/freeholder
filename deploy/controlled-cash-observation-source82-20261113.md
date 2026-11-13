@@ -87,3 +87,13 @@ GET producer/context, exact bank proof, batch partial application, canonical
 paid effects, normal/post-trial periods and all provider/manual alternatives
 remain required full-spec work. No C-item/stable/actual-account qualification is
 claimed or deferred.
+
+Follow-on source correction: raw identity/coverage now retains actual unfinished
+controlled caller IDs instead of refusing their presence. All original signed
+caller/fact/quote and source checks remain unchanged, and all four authority
+flags remain false. Strict GET admission/finished-current evidence still require
+actual closure through the separately implemented real parent query/context.
+This separation allows independent human review of ONE genuinely stopped
+inspection while other unfinished debt remains fully represented; it cannot
+permit a new read, payment or principal use. The original871 checkpoint and its
+qualification history are preserved. No model/SQL or execution in this follow-on.
