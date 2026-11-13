@@ -6,6 +6,8 @@ import { z } from "zod";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { merchantRefundRequests } from "./merchant-refund-schema";
 import { refunds } from "./schema";
+import { originalLegacyBankRefund } from "./legacy-refund-dispatch";
+import { legacyBankPromiseState } from "./legacy-bank-replacement-store";
 import { legacyRefundBankState } from "./legacy-bank-current-state";
 import { originalRefundPromiseState } from "./merchant-refund-debt";
 const providerStatus = z.enum(["pending", "requires_action", "succeeded", "failed", "canceled"]).nullable();
@@ -43,24 +45,32 @@ export const publicRefundState = z.object({
 /** The parent service proves invoice access first. This projection deliberately
  * omits provider references, customer/bank details and private caller proofs. */
 export async function invoiceRefundStateRows(ctx: ServiceContext, invoiceId: string) {
-  const rows = await ctx.tx.select({ id: refunds.id, status: refunds.status }).from(refunds)
+  const rows = await ctx.tx.select().from(refunds)
     .where(eq(refunds.invoiceId, invoiceId)).orderBy(asc(refunds.createdAt), asc(refunds.id)).limit(5001);
   if (rows.length > 5000) throw new ServiceError("conflict", "Restore this invoice's complete refund history before displaying its bank status.");
-  const result: Array<z.infer<typeof publicRefundState> & { requestId: string | null; canReplace: boolean }> = [];
+  const result: Array<z.infer<typeof publicRefundState> & { requestId: string | null; canReplace: boolean; legacy: boolean }> = [];
   for (const refund of rows) {
     const actual = await ctx.callAsSystem(merchantRefundBankState, { refundId: refund.id });
     const [request] = await ctx.tx.select({ id: merchantRefundRequests.id }).from(merchantRefundRequests).where(eq(merchantRefundRequests.refundId, refund.id));
     const legacy = request ? null : await legacyRefundBankState(ctx, refund.id);
-    const promise = request ? await originalRefundPromiseState(ctx, request.id) : legacy?.hasRead ? {
-      owed: !legacy.verified || legacy.status !== "succeeded", review: !legacy.verified || legacy.requiresReview, replaced: false, canReplace: false,
-    } : null;
+    let promise = request ? await originalRefundPromiseState(ctx, request.id) : null;
+    if (!request && legacy?.hasRead) {
+      const proof = await legacyBankPromiseState(ctx, refund);
+      const [bound] = await ctx.tx.execute<{ prepared: boolean }>(sql`select freeholder_refund_is_prepared_return(${refund.id}::uuid) prepared`);
+      promise = { owed: proof.owed, review: proof.review || proof.owed, replaced: proof.replaced, canReplace: !bound?.prepared && proof.canReplace };
+    }
+    let legacyAuthority = false;
+    if (!request && refund.provider === "stripe" && refund.providerRef) {
+      try { await originalLegacyBankRefund(ctx.tx, refund); legacyAuthority = true; }
+      catch (error) { if (!(error instanceof ServiceError) && !(error instanceof z.ZodError)) throw error; }
+    }
     const verified = actual.resolvedSuccess || actual.verified;
     const status = actual.original ? actual.retiredBeforeDispatch ? "canceled" as const : actual.resolvedSuccess ? "succeeded" as const : actual.verified ? actual.status ?? "unknown" : "unknown"
       : refund.status === "succeeded" ? "succeeded" as const : refund.status === "failed" ? "failed" as const : refund.status === "cancelled" ? "canceled" as const : "pending" as const;
     result.push({ id: refund.id, amountMinor: actual.amountMinor, currency: actual.currency, status,
       verified: actual.original ? verified : false, refundPromiseOpen: promise?.owed ?? !["succeeded", "cancelled"].includes(refund.status),
       reviewRequired: promise?.review ?? false, promiseFulfilledElsewhere: promise?.replaced ?? false,
-      canReplace: promise?.canReplace ?? false, requestId: actual.retiredBeforeDispatch ? null : request?.id ?? null });
+      canReplace: promise?.canReplace ?? false, legacy: legacyAuthority, requestId: actual.retiredBeforeDispatch ? null : request?.id ?? null });
   }
   return result;
 }
@@ -68,7 +78,7 @@ export async function invoiceRefundStateRows(ctx: ServiceContext, invoiceId: str
 export const invoiceRefundStates = defineService({
   name: "invoicing.invoiceRefundStates", summary: "Read an invoice's refund promises and verified bank states without altering original payments or credits.",
   kind: "query", permission: "scoped", input: z.object({ invoiceId: z.uuid() }),
-  output: z.array(publicRefundState.extend({ requestId: z.uuid().nullable(), canReplace: z.boolean() })),
+  output: z.array(publicRefundState.extend({ requestId: z.uuid().nullable(), canReplace: z.boolean(), legacy: z.boolean() })),
   handler: async ({ invoiceId }, ctx) => invoiceRefundStateRows(ctx, invoiceId),
 });
 

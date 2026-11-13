@@ -9077,5 +9077,12 @@
   "refundStatus.promiseFulfilled": "Ce remboursement initial a été effectué par son remplacement vérifié.",
   "refundStatus.review": "L’historique du remboursement doit être vérifié avant un nouvel envoi.",
   "refundStatus.replaceConfirmation": "Je confirme le remplacement du remboursement initial de {amount} après vérification de son état bancaire actuel.",
-  "refundStatus.replace": "Remplacer le remboursement initial de {amount}"
+  "refundStatus.replace": "Remplacer le remboursement initial de {amount}",
+  "refundRecovery.interruptedTitle": "Une vérification précédente du remboursement ne s’est pas terminée",
+  "refundRecovery.stopHint": "Vérifiez dans votre compte d’hébergement que le processus d’origine s’est arrêté. Un délai dépassé ne suffit pas. Cet examen ne confirme aucun paiement de remboursement.",
+  "refundRecovery.caller": "Processus d’origine {pid} sur {host}",
+  "refundRecovery.live": "Le processus d’origine est toujours en cours. Terminez-le ou arrêtez-le avant l’examen.",
+  "refundRecovery.evidence": "Preuve d’arrêt sur l’hébergement",
+  "refundRecovery.stopConfirmation": "J’ai vérifié que le processus d’origine de vérification du remboursement s’est arrêté.",
+  "refundRecovery.recordStop": "Enregistrer l’examen de l’arrêt"
 }

@@ -15,7 +15,7 @@ import { merchantTaxDigest } from "./merchant-tax-store";
 import { legacyBankCurrentRevision } from "./legacy-bank-current-state";
 import { originalLegacyBankRefund } from "./legacy-refund-dispatch";
 import { legacyBankOriginal, legacyBankReadFact, legacyBankReadFinishInput, legacyBankReadNonce } from "./legacy-bank-read-contract";
-import { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes } from "./legacy-bank-read-schema";
+import { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBankReadStops } from "./legacy-bank-read-schema";
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const system = { kind: "system" } as const;
 type Fact = z.infer<typeof legacyBankReadFact>;
@@ -25,14 +25,19 @@ const processState = globalThis as typeof globalThis & { [slot]?: Map<string, Lo
 const localReads = processState[slot] ??= new Map<string, LocalRead>();
 
 async function schemaReady(ctx: ServiceContext) {
-  const [result] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=7 as ready from pg_trigger where not tgisinternal
+  const [result] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=12 as ready from pg_trigger where not tgisinternal
     and (tgrelid,tgname) in ((to_regclass('public.legacy_bank_reads'),'legacy_bank_reads_guard'),
       (to_regclass('public.legacy_bank_read_facts'),'legacy_bank_read_facts_guard'),
       (to_regclass('public.legacy_bank_read_finishes'),'legacy_bank_read_finishes_guard'),
       (to_regclass('public.legacy_bank_current_receipts'),'legacy_bank_current_receipts_guard'),
       (to_regclass('public.refunds'),'legacy_bank_refund_capacity_guard'),
       (to_regclass('public.refunds'),'legacy_bank_current_projection'),
-      (to_regclass('public.refunds'),'legacy_bank_current_balances')) and tgenabled in ('O','A')`);
+      (to_regclass('public.refunds'),'legacy_bank_current_balances'),
+      (to_regclass('public.legacy_bank_read_stops'),'legacy_bank_read_stops_guard'),
+      (to_regclass('public.legacy_bank_read_facts'),'legacy_bank_recovered_read_guard'),
+      (to_regclass('public.legacy_bank_read_finishes'),'legacy_bank_recovered_read_guard'),
+      (to_regclass('public.payment_provider_events'),'legacy_bank_signed_event_lock'),
+      (to_regclass('public.money_state_events'),'legacy_bank_physical_event_lock')) and tgenabled in ('O','A')`);
   if (result?.ready !== true) throw new ServiceError("conflict", "Install the complete guarded legacy bank-read schema before inspecting original money.");
 }
 async function allowWrites(ctx: ServiceContext) {
@@ -62,7 +67,8 @@ export const prepareLegacyBankRead = defineService({
     const original = await originalLegacyBankRefund(ctx.tx, refund);
     const [unfinished] = await ctx.tx.select({ id: legacyBankReads.id }).from(legacyBankReads)
       .leftJoin(legacyBankReadFinishes, eq(legacyBankReadFinishes.readId, legacyBankReads.id))
-      .where(and(eq(legacyBankReads.refundId, refund.id), isNull(legacyBankReadFinishes.readId))).limit(1);
+      .leftJoin(legacyBankReadStops, eq(legacyBankReadStops.readId, legacyBankReads.id))
+      .where(and(eq(legacyBankReads.refundId, refund.id), isNull(legacyBankReadFinishes.readId), isNull(legacyBankReadStops.readId))).limit(1);
     if (unfinished) throw new ServiceError("conflict", "The original legacy inspection caller is live or unresolved; restore its actual finish before another read.");
     const completionNonce = randomBytes(32).toString("base64url"); await allowWrites(ctx);
     const [read] = await ctx.tx.insert(legacyBankReads).values({ refundId: refund.id, original, originalDigest: merchantTaxDigest(original),

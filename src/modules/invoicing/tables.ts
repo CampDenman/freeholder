@@ -54,4 +54,4 @@ export { merchantRefundRequests, merchantRefundReservationRetirements, merchantR
   merchantCashReturnObservations, merchantUnappliedChargeResolutions, merchantUnappliedChargeResolutionRefunds } from "./merchant-refund-schema";
 export { merchantRefundObservationCaptures, merchantRefundStateReads, merchantRefundStateReadFinishes, merchantRefundCurrentReceipts } from "./merchant-refund-current-schema";
 
-export { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBankCurrentReceipts } from "./legacy-bank-read-schema";
+export { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBankCurrentReceipts, legacyBankReadStops } from "./legacy-bank-read-schema";

@@ -61,7 +61,7 @@ BEGIN
   OR actual_finish.caller_instance_id IS DISTINCT FROM (original_read.caller->>'id')::uuid OR exact_count<>1
   OR before_revision.incomplete OR after_revision.incomplete OR before_revision.revision IS DISTINCT FROM original_read.source_revision
   OR NEW.resolved_revision IS DISTINCT FROM after_revision.revision OR NEW.raw_status IS DISTINCT FROM actual_raw
-  OR NEW.status IS DISTINCT FROM CASE WHEN actual_raw IN('pending','requires_action','succeeded','failed','canceled') THEN actual_raw ELSE NULL END THEN
+  OR NEW.status IS DISTINCT FROM (CASE WHEN actual_raw IN('pending','requires_action','succeeded','failed','canceled') THEN actual_raw ELSE NULL END) THEN
   RAISE EXCEPTION 'Retain the actual returned caller and complete unchanged exact-resource evidence before current bank proof' USING ERRCODE='55000';
  END IF;
  RETURN NEW;

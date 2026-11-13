@@ -118,6 +118,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   merchant_refund_observation_captures: "Original financial occurrence evidence survives repeated state; no age purge may invalidate refund or erasure debt.",
   merchant_refund_state_reads: "Original bank-read and caller proof remains with its money; no TTL or elapsed-time absence inference.",
   merchant_refund_state_read_finishes: "Actual caller completion remains independently retained with its original bank read and named financial holds.",
+  legacy_bank_read_stops: "Original stopped-reader receipts and actual partial financial facts remain with their original read and financial owner.",
   legacy_bank_current_receipts: "Original legacy bank current receipts remain with their financial source; newer facts invalidate freshness without deleting old proof.",
   legacy_bank_reads: "Authentic original refund read tickets remain with their financial owner; unresolved callers cannot be purged by age.",
   legacy_bank_read_facts: "Actual historical bank/cash facts and unassigned-resource debt remain with original money and named holds; no TTL cleanup.",

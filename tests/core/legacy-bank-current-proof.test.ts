@@ -26,7 +26,7 @@ describe("authentic legacy bank current proof", () => {
   });
   it("recognizes only exact original success without inventing create platform metadata", () => {
     const { input, refund, own, cash } = actual(); refund.rawProviderStatus = own.status = "succeeded"; cash.amountRefundedMinor = 400;
-    expect(legacyBankCurrentVerdict(input)).toEqual({ state: "verified", status: "succeeded", rawStatus: "succeeded", requiresReview: false });
+    expect(legacyBankCurrentVerdict(input)).toEqual({ state: "verified", status: "succeeded", rawStatus: "succeeded", requiresReview: false, replacementEligible: false });
     expect(input.original.originalCreatePlatformAccountId).toBeNull();
   });
   it.each([null, "unknown_future_bank_status"])("keeps raw nullable or unknown status as review: %s", status => {
@@ -69,7 +69,9 @@ describe("authentic legacy bank current proof", () => {
     expect(legacyBankCurrentVerdict(input)).toMatchObject({ state: "review", reason: "contradictory_original_cash_total" });
   });
   it("requires the primary cash callback and complete inventory to name the same actual charge", () => {
-    const { input } = actual(); (input.facts[1]!.evidence.actual as { providerChargeRef: string }).providerChargeRef = "ch_foreign";
+    const { input } = actual(); const primary = input.facts[1]!.evidence;
+    if (!("actual" in primary) || !primary.actual || !("providerChargeRef" in primary.actual)) throw Error("The actual primary cash fixture is unavailable.");
+    primary.actual.providerChargeRef = "ch_foreign";
     expect(legacyBankCurrentVerdict(input)).toMatchObject({ state: "review", reason: "incomplete_original_cash" });
   });
 });

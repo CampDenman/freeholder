@@ -6,12 +6,13 @@ export type LegacyBankStatus = "pending" | "requires_action" | "succeeded" | "fa
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const statuses = new Set(["pending", "requires_action", "succeeded", "failed", "canceled"]);
 export function legacyBankCurrentVerdict(input: {
-  original: LegacyBankOriginal; authenticOriginal: boolean; preparedRevision: string; currentPriorRevision: string;
+  original: LegacyBankOriginal; allOriginalCallersFinished?: boolean; knownRefunds?: readonly { providerRef: string; amountMinor: number; currency: string }[]; authenticOriginal: boolean; preparedRevision: string; currentPriorRevision: string;
   wrapperReturned: boolean; exactCallerFinished: boolean; factCount: number;
   facts: readonly { sequence: number; kind: string; evidence: Record<string, unknown> }[];
-}): { state: "review"; reason: string } | { state: "verified"; status: LegacyBankStatus; rawStatus: string | null; requiresReview: boolean } {
+}): { state: "review"; reason: string } | { state: "verified"; status: LegacyBankStatus; rawStatus: string | null; requiresReview: boolean; replacementEligible: boolean } {
   const review = (reason: string) => ({ state: "review" as const, reason });
   if (!input.authenticOriginal || !input.wrapperReturned || !input.exactCallerFinished) return review("original_caller_or_authority");
+  if (input.allOriginalCallersFinished === false) return review("unfinished_original_cash_caller");
   if (input.preparedRevision !== input.currentPriorRevision) return review("stale_original_revision");
   if (!input.facts.length || input.facts.length !== input.factCount || input.facts.length > 5005
     || input.facts.some((fact, index) => fact.sequence !== index + 1)) return review("incomplete_actual_inventory");
@@ -55,6 +56,10 @@ export function legacyBankCurrentVerdict(input: {
     || Number(cash.amountRefundedMinor) > original.originalCashAmountMinor
     || BigInt(Number(cash.amountRefundedMinor)) < confirmed || BigInt(Number(cash.amountRefundedMinor)) > possible
     || status === "succeeded" && Number(cash.amountRefundedMinor) < original.amountMinor) return review("contradictory_original_cash_total");
-  return { state: "verified", status, rawStatus, requiresReview: status !== "succeeded"
-    || resources.some(row => row.providerRef !== original.originalRefundRef) || cash.disputes.length > 0 || cash.fee !== null || cash.transfer !== null };
+  const known = [{ providerRef: original.originalRefundRef, amountMinor: original.amountMinor, currency: original.currency }, ...(input.knownRefunds ?? [])];
+  const inventoryReview = resources.some(row => !known.some(bound => bound.providerRef === row.providerRef && bound.amountMinor === row.amountMinor && bound.currency === row.currency)
+    || row.providerRef !== original.originalRefundRef && row.status !== "succeeded" && row.status !== "failed" && row.status !== "canceled")
+    || cash.disputes.length > 0 || cash.fee !== null || cash.transfer !== null;
+  return { state: "verified", status, rawStatus, requiresReview: status !== "succeeded" || inventoryReview,
+    replacementEligible: (status === "failed" || status === "canceled") && !inventoryReview };
 }

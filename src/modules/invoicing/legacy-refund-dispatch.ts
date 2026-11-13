@@ -265,3 +265,23 @@ export async function originalLegacyBankRefund(tx: Tx, refund: Refund) {
     })),
   });
 }
+
+/** Exact independently authentic old physical resources may explain a cash
+ * inventory. Matching an amount never grants an unrelated row this authority. */
+export async function legacyBankKnownRefundResources(tx: Tx, paymentId: string, scope: { originalPaymentRef: string; originalChargeAccountId: string | null; originalCashAmountMinor: number; currency: string }) {
+  const rows = await tx.select().from(refunds).where(eq(refunds.paymentId, paymentId)).limit(5001);
+  if (rows.length > 5000) throw new ServiceError("conflict", "Restore the bounded original refund inventory before legacy cash proof.");
+  const known: Array<{ providerRef: string; amountMinor: number; currency: string }> = [];
+  let allCallersFinished = true;
+  for (const row of rows) {
+    if (await refundIsProvenUnsubmitted(tx, row)) continue;
+    try {
+      const original = await originalLegacyBankRefund(tx, row);
+      if (original.originalPaymentRef !== scope.originalPaymentRef || original.originalChargeAccountId !== scope.originalChargeAccountId
+        || original.originalCashAmountMinor !== scope.originalCashAmountMinor || original.currency !== scope.currency) { allCallersFinished = false; continue; }
+      known.push({ providerRef: original.originalRefundRef, amountMinor: original.amountMinor, currency: original.currency });
+    }
+    catch (error) { if (!(error instanceof ServiceError) && !(error instanceof z.ZodError)) throw error; allCallersFinished = false; }
+  }
+  return { resources: known, allCallersFinished };
+}

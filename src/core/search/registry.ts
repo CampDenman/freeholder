@@ -94,6 +94,7 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   merchant_refund_observation_captures: "Private authenticated refund occurrences; original financial services own access and repeated state is never a public search hit.",
   merchant_refund_state_reads: "Private original bank-read admission and caller capability hashes; excluded from content search.",
   merchant_refund_state_read_finishes: "Private actual bank-read caller completion; original financial recovery only.",
+  legacy_bank_read_stops: "Private original legacy reader hosting-stop review; no forged wrapper finish or provider outcome.",
   legacy_bank_current_receipts: "Private authentic finished legacy bank-read freshness; scoped invoice services project status without provider/caller evidence.",
   legacy_bank_reads: "Private authentic historical-refund read tickets and caller capabilities; original money services only, never searchable content.",
   legacy_bank_read_facts: "Private original-resource bank/cash observations, including unmatched refunds; retained financial evidence, never public search hits.",

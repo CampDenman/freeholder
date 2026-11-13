@@ -14078,6 +14078,22 @@ whatever is best for the people using the site.
   return/credit and UI/API/SDK journeys and actual provider acceptance remain
   required. No completion or stable sign-off is claimed. See
   `deploy/legacy-bank-current-proof-2026-11-13.md`.
+  Legacy recovery source checkpoint 2026-11-13 (C5.19/C12.38/C1.08):
+  an isolated UNQUALIFIED slice adds separate actual hosting-stop receipts,
+  preserves interrupted partial facts without forging a wrapper finish, and
+  permits a new exact read only after the original stop is reviewed. Signed
+  actual-refund-ID chains bind fresh human-authorized causal replacements to
+  exact failed resources; equal unrelated refunds cannot discharge a promise.
+  All original physical callers and current cash inventory remain required,
+  shared payment locks serialize signed/physical facts, and changed current
+  merchant routing cannot adopt old money. Owner recovery/stop controls use the
+  shared services, four locales and masked customer promise views.21 pure/five
+  contract/five native controls are drafted, not run. The separate unapplied
+  suffix needs a new full candidate/hash/database; root3a and both prior native
+  fixture files remain unchanged. Financial child composition, actual worker
+  recovery, RMA issued-credit integration, populated upgrades, SDK/browser and
+  real provider acceptance remain required. No completion, activation or
+  stable sign-off is supplied. See `deploy/legacy-bank-recovery-2026-11-13.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

@@ -1191,7 +1191,7 @@ export const createRefund = defineService({
       if (duplicate.requestHash !== hash) throw new ServiceError("conflict", "That refund idempotency key was already used for a different refund.");
       return duplicate;
     }
-    await assertLegacyBankRefundCapacity(ctx, payment.id);
+    await assertLegacyBankRefundCapacity(ctx, payment.id, input.idempotencyKey);
     const reserved = await ctx.tx
       .select({ amountMinor: refunds.amountMinor })
       .from(refunds)

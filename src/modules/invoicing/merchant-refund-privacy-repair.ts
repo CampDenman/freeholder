@@ -12,10 +12,13 @@ import { invoiceMerchantCollections, merchantPaymentRoutes } from "./merchant-co
 import { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { moneyStateEvents } from "./schema";
+import { verifyLegacyReplacementJournalRow } from "./legacy-bank-replacement-store";
 import { verifyBankReplacementJournalRow } from "./merchant-bank-replacement-store";
 
 export const ORIGINAL_REFUND_EVIDENCE_EVENT = "invoicing.originalRefundEvidenceRetained";
 const factTypes = {
+  legacy_bank_replacement: ["money_state_events", "id"],
+  legacy_bank_stop: ["legacy_bank_read_stops", "read_id"],
   legacy_bank_current: ["legacy_bank_current_receipts", "id"],
   legacy_bank_read: ["legacy_bank_reads", "id"],
   legacy_bank_fact: ["legacy_bank_read_facts", "id"],
@@ -34,7 +37,7 @@ const factTypes = {
   cash_resolution: ["merchant_unapplied_charge_resolutions", "id"],
 } as const;
 export const originalRefundRepairPointer = z.object({
-  kind: z.enum(["legacy_bank_current", "legacy_bank_read", "legacy_bank_fact", "legacy_bank_finish", "request", "refund_observation", "refund_capture", "refund_current", "bank_replacement", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_resolution"]),
+  kind: z.enum(["legacy_bank_replacement", "legacy_bank_stop", "legacy_bank_current", "legacy_bank_read", "legacy_bank_fact", "legacy_bank_finish", "request", "refund_observation", "refund_capture", "refund_current", "bank_replacement", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_resolution"]),
   id: z.uuid(),
 }).strict();
 type Pointer = z.infer<typeof originalRefundRepairPointer>;
@@ -67,7 +70,12 @@ export const originalMerchantRefundRepairSource = defineService({
     const [table, column] = factTypes[pointer.kind];
     const fact = await factRow(ctx, table, column, pointer.id);
     let owner = fact;
-    if (pointer.kind === "legacy_bank_current" || pointer.kind === "legacy_bank_read" || pointer.kind === "legacy_bank_fact" || pointer.kind === "legacy_bank_finish") {
+    if (pointer.kind === "legacy_bank_replacement") {
+      const [journal] = await ctx.tx.select().from(moneyStateEvents).where(eq(moneyStateEvents.id, pointer.id));
+      const body = journal && verifyLegacyReplacementJournalRow(journal);
+      if (!body) throw new ServiceError("conflict", "Restore the authentic exact original legacy replacement receipt before financial privacy repair.");
+      owner = { payment_id: body.paymentId, subscription_charge_receipt_id: null };
+    } else if (pointer.kind === "legacy_bank_stop" || pointer.kind === "legacy_bank_current" || pointer.kind === "legacy_bank_read" || pointer.kind === "legacy_bank_fact" || pointer.kind === "legacy_bank_finish") {
       const read = pointer.kind === "legacy_bank_read" ? fact : await factRow(ctx, "legacy_bank_reads", "id", restoredId(fact.read_id));
       const original = read.original;
       if (!original || typeof original !== "object" || merchantTaxDigest(original) !== read.original_digest) throw new ServiceError("conflict", "Restore the authentic original legacy read owner before repairing its financial privacy evidence.");
