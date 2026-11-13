@@ -62,7 +62,7 @@ describe("original Stripe phase adapter (inactive C12.38)", () => {
   });
   it("retains the known physical resource with unknown ACK fields without inventing customer or subscription values", async () => {
     const onResourceAcknowledged = vi.fn().mockResolvedValue(undefined);
-    const { provider } = edge((_path, init) => init.method === "POST" ? { id: "sub_sched_original" } : actual());
+    const { provider } = edge((path, init) => init.method === "POST" ? { id: "sub_sched_original" } : path.startsWith("/v1/prices/") ? price : actual());
     await provider.createMerchantPhaseSchedule!({ ...request, onResourceAcknowledged });
     expect(onResourceAcknowledged).toHaveBeenCalledExactlyOnceWith({ providerScheduleRef: "sub_sched_original" });
   });
