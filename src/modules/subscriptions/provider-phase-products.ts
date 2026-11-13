@@ -39,7 +39,7 @@ const callers = state[slot] ??= new Map<string, Local>();
 
 /** The caller shares actual identity/profile/period locks. This is admission,
  * never evidence that an external effect or an old caller has stopped. */
-async function originalProductAdmission(ctx: ServiceContext, subscriptionId: string) {
+export async function originalProductAdmission(ctx: ServiceContext, subscriptionId: string, additionalPeriods = 1) {
   await lockContactIdentity(ctx.tx);
   const adapter = paymentAdapter("stripe");
   if (adapter.id !== "stripe" || !adapter.status.available || !adapter.createMerchantPhaseProduct || !adapter.inspectMerchantPhaseProduct) throw new ServiceError("conflict", "Connect the supported original provider before admitting auxiliary work.");
@@ -47,7 +47,7 @@ async function originalProductAdmission(ctx: ServiceContext, subscriptionId: str
   if (!enabled?.enabled) throw new ServiceError("conflict", "Enable the original subscriptions module before admitting new provider work.");
   const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, subscriptionId)).limit(1).for("update");
   if (!parent || parent.provider !== "stripe" || parent.merchantScopeVersion !== 1 || parent.billingMode !== "provider") throw new ServiceError("conflict", "This is not an original new merchant provider agreement.");
-  const horizon = await ctx.callAsSystem(quoteMerchantProviderHorizon, { subscriptionId, additionalPeriods: 1 });
+  const horizon = await ctx.callAsSystem(quoteMerchantProviderHorizon, { subscriptionId, additionalPeriods });
   const terms = await originalMerchantTerms(ctx, parent, parent.currentPeriodEnd);
   if (!terms || terms.id !== horizon.termsId) throw new ServiceError("conflict", "Restore the actual accepted original commercial terms before provider work.");
   const [profile] = await ctx.tx.select().from(merchantTaxProfiles).where(eq(merchantTaxProfiles.id, terms.profileId)).limit(1).for("update");

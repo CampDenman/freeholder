@@ -24,7 +24,7 @@ export type ProviderPhase=z.infer<typeof providerPhase>;
  * and metadata against the admitted full request before recording it. */
 export const providerPhaseInventory=z.object({
   version:z.literal(1),operationId:z.uuid(),requestDigest:digest,
-  providerScheduleRef:reference("sub_sched"),providerSubscriptionRef:reference("sub"),
+  providerScheduleRef:reference("sub_sched"),providerSubscriptionRef:reference("sub").nullable(),
   providerPlatformAccountId:reference("acct"),chargeAccountId:reference("acct").nullable(),
   recipientAccountId:reference("acct"),settlementMerchantAccountId:reference("acct"),
   providerApiVersion:z.literal("2026-10-28.endive"),
@@ -32,7 +32,14 @@ export const providerPhaseInventory=z.object({
   endBehavior:z.literal("cancel"),complete:z.literal(true),
   currentPhaseStart:z.iso.datetime().nullable(),
   phases:z.array(providerPhase.extend({providerPriceRef:reference("price")})).min(1).max(10),
-}).strict();
+}).strict().superRefine((value, ctx) => {
+  if (value.status === "active" && (!value.providerSubscriptionRef || !value.currentPhaseStart || !value.phases.some(phase => phase.start === value.currentPhaseStart))) {
+    ctx.addIssue({ code: "custom", message: "An active original schedule requires its actual linked subscription and current phase." });
+  }
+  if (value.status === "not_started" && (value.providerSubscriptionRef !== null || value.currentPhaseStart !== null)) {
+    ctx.addIssue({ code: "custom", message: "An original future schedule cannot invent a linked subscription or started phase." });
+  }
+});
 
 export function exactProviderDate(value:string):Date{
   const date=new Date(value);

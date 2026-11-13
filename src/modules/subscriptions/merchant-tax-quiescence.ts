@@ -22,6 +22,7 @@ import { merchantScheduleCohortInventoryCovers } from "./provider-schedule-cohor
 import buyerErasureServices, { completeBuyerAgreementErasure } from "./buyer-agreement-erasure";
 import { originalScheduleCohortAuthority } from "./provider-schedule-cohort-authority";
 import phaseProductServices from "./provider-phase-products";
+import phaseDispatchServices from "./provider-phase-dispatch";
 
 const JOB = "subscriptions.quiesceMerchantSchedules";
 const jobInput = z.object({ profileId: z.uuid(), requestId: z.uuid(), originalJobId: z.uuid(), cohortId: z.uuid() });
@@ -205,4 +206,4 @@ export const quiesceMerchantSchedules = defineJob({
   },
 });
 registerJob(quiesceMerchantSchedules);
-export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices, ...phaseProductServices];
+export default [prepareMerchantTaxErasure, settleMerchantTaxSchedules, retainMerchantScheduleInventory, ...scheduleCallerServices, ...scheduleErasureServices, ...buyerErasureServices, ...phaseProductServices, ...phaseDispatchServices];
