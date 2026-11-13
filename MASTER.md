@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Prospective controlled cash parent checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): an isolated ordinary evidence reader now checks
+actual retained receipt/origin, resource→parent→canonical locks, exact cash
+remainder after issued credit, original caller/payment/credit/fee debt and
+privacy/table-bound current parent revisions. It supplies no allowed result
+and registers no authority. Fifteen arithmetic controls are prepared and
+UNRUN. Genuine current charge/refund/dispute inspection, Carrier's finite
+prospective proof and same-transaction application evaluator/caller remain
+required, including exact handling of the one unapplied receipt without
+weakening existing principal defaults. The future six models remain outside
+current142 qualification; no SQL/model/journal or stable state changed. See
+`deploy/controlled-cash-application-parent82-source-20261113.md`.
+
 Source-only controlled raw target checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): the isolated future fifteen-family consumer now
 keeps authenticated coverage unchanged while deriving exact original bank
