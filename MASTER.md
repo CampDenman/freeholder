@@ -13907,8 +13907,9 @@ whatever is best for the people using the site.
   cash-locked admission, shared buyer/debt status, four locales and original
   financial merge/privacy witnesses. It refuses RMA ownership and unrelated
   equal-amount refunds. The existing mutable journal carries authenticated
-  evidence; it is not claimed to be DB append-only. This follow-up is unqualified
-  source, with no native, provider or historical-bank proof, and does not change
+  evidence; it is not claimed to be DB append-only. This follow-up at e4a39f30
+  passes full Node22 types, 15-file lint and 63 DB-free proof/private/audit
+  controls, with no native, provider or historical-bank proof, and does not change
   unpublished SQL e783 or the preserved V11 database. See
   `deploy/merchant-bank-replacement-2026-11-12.md`. This does
   not activate the new model or close C12.38. See

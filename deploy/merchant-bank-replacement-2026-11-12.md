@@ -31,8 +31,17 @@ financial dependency fingerprints include journal children for the original
 payment/receipt owners; the source also commits an original-profile repair
 outbox pointer alongside the new causal record.
 
-Qualification is pending: full types, changed-file lint, finite authentication
-and private/audit controls, actual generic replacement and RMA credit/resource
+Source checkpoint `e4a39f30` passes full Node22 types with an 8GB heap, all 15
+changed TypeScript/TSX files' lint and 63 DB-free controls in five files: 18
+causal authentication/rotation/tuple/journal controls, 19 current-read controls,
+14 capacity controls, five private-service controls and seven audit controls.
+All 12 dependency manifests match the existing qualified installation; no
+install occurred. All runners exited successfully; no database was opened.
+Logs are `/tmp/freeholder-bank-replacement80-types-v1.log`,
+`/tmp/freeholder-bank-replacement80-lint-v1.log` and
+`/tmp/freeholder-bank-replacement80-controls-v1.{json,log}`.
+
+Qualification remains pending for actual generic replacement and RMA credit/resource
 convergence, late positives, stale reads, caller barriers and populated history.
 Historical legacy bank recovery is also required and remains unfinished; no
 new platform, request, invoice or causal history is backfilled for old refunds.
