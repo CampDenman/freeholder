@@ -20,6 +20,13 @@ import { stripeMerchantRecovery } from "./stripe-merchant-recovery";
 import { stripeMerchantIntentRecovery } from "./stripe-merchant-intent-recovery";
 import { stripeReturnedCash } from "./stripe-returned-cash";
 import { stripeMerchantRefundRecovery } from "./stripe-merchant-refund-recovery";
+import { stripeControlledCalendarRecovery } from "./stripe-controlled-calendar-recovery";
+import { stripeControlledUpdates } from "./stripe-controlled-update";
+import { stripeControlledDiscovery } from "./stripe-controlled-discovery";
+import { stripeControlledProducts } from "./stripe-controlled-product";
+import { stripeControlledInvoices } from "./stripe-controlled-invoice";
+import { stripeControlledProrationPreview } from "./stripe-controlled-proration-preview";
+import { stripeControlledSubscriptions } from "./stripe-controlled-subscription";
 import { stripeLegacyBankRead } from "./stripe-legacy-bank-read";
 import type {
   CheckoutCaptureResult,
@@ -438,6 +445,13 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     },
     capabilities: () => ({ ...capabilities }),
     platformAccountIdentity,
+    ...stripeControlledSubscriptions(chargeApi),
+    ...stripeControlledProrationPreview(chargeApi),
+    ...stripeControlledInvoices(chargeApi),
+    ...stripeControlledProducts(chargeApi),
+    ...stripeControlledDiscovery(chargeApi),
+    ...stripeControlledUpdates(chargeApi),
+    ...stripeControlledCalendarRecovery(chargeApi),
     ...stripeMerchantFees(chargeApi),
     ...stripeCashAuxiliary(chargeApi),
     ...stripeMerchantRecovery(chargeApi),
