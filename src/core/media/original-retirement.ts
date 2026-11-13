@@ -13,7 +13,7 @@ import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartResources} from "./multipart-schema";
 import {mediaStorageTransferRequestObservations,mediaStorageTransferRequests} from "./transfer-request-schema";
 import {mediaStorageProviderInventories} from "./transfer-inventory-schema";
-import {mediaStorageTransferCalls as calls,mediaStorageTransferObjects as copies,mediaStorageTransferReceipts as members} from "./transfer-schema";
+import {mediaStorageTransferCalls as calls,mediaStorageTransferReviews as reviews,mediaStorageTransferObjects as copies,mediaStorageTransferReceipts as members} from "./transfer-schema";
 import {allowMediaReceiptWrites,lockObjectDigest,objectKeyDigest,storageOperationsHeld} from "./write-ledger";
 import {lockTransferInventory} from "./transfer-authority";
 import {pendingObjectIsOwned} from "./object-ledger";
@@ -36,7 +36,7 @@ async function earlierDeletes(tx:Tx,history:readonly(typeof mediaObjectWrites.$i
   const call=actual[0];if(actual.length!==1||!call||!deletion.writerFinishedAt)transferConflict("Keep the exact prior caller finish; no later invocation can invent it.");
   const physical=await tx.select().from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.callId,call.id));
   const facts=physical.length?await tx.select().from(mediaStorageTransferRequestObservations).where(inArray(mediaStorageTransferRequestObservations.requestId,physical.map(row=>row.id))):[];
-  result.push({...call,requests:physical,facts:facts.map(row=>({requestId:row.requestId,stage:row.facts.stage}))});
+  result.push({...call,requests:physical,facts:facts.map(row=>({requestId:row.requestId,stage:row.facts.stage,status:row.facts.status}))});
  }
  return result;
 }
@@ -109,6 +109,21 @@ async function capture(key:string,expectedBinding?:StorageBinding){
   return{done:false as const,claim,original,deleteCall:{id:call.id,token,runtimeIdentity}};
  });
 }
+async function reviewFinishedAcknowledgedDelete(tx:Tx,claim:Claim,absenceCallId:string,inventoryId:string){
+ const family=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.originalReservationId,claim.reservationId)).for("update"),previous=await earlierDeletes(tx,family);
+ originalDeleteContinuation(previous);
+ const actual=previous.find(row=>row.objectReceiptId===claim.deleteId);
+ if(!actual||actual.state!=="unknown")return;
+ const[caller]=await tx.select().from(calls).where(eq(calls.id,actual.id)).limit(1).for("update");if(!caller)transferConflict();
+ const facts=await tx.select().from(mediaStorageTransferRequestObservations).where(inArray(mediaStorageTransferRequestObservations.requestId,actual.requests.map(row=>row.id)));
+ const originalCallWitness=transferDigest(caller),evidenceDigest=transferDigest({originalReservationId:claim.reservationId,originalCallWitness,physicalDescriptors:actual.requests.map(row=>({id:row.id,digest:row.descriptorDigest})),actualFacts:facts.map(row=>({id:row.id,requestId:row.requestId,digest:row.factsDigest})),absenceCallId,inventoryId}),id=randomUUID(),now=new Date();
+ // Only authentic successful provider ACK plus all ACTUAL local finishes may
+ // reach this branch. The later fresh pinned read/full inventories prove the
+ // original physical bytes gone. First return/failure/ACK are never replaced.
+ await tx.insert(reviews).values({id,objectId:null,objectReceiptId:claim.deleteId,callId:actual.id,originalCallWitness,readCallId:absenceCallId,inventoryId,outcome:"retired",providerEvidenceDigest:evidenceDigest,reviewedBy:"system:media-cleanup"});
+ for(const request of actual.requests)if(request.state==="unknown")await tx.update(mediaStorageTransferRequests).set({state:"stopped",stopReceiptId:id}).where(eq(mediaStorageTransferRequests.id,request.id));
+ await tx.update(calls).set({state:"stopped",stoppedAt:now,stopReceiptId:id,updatedAt:now}).where(eq(calls.id,actual.id));
+}
 async function physical<T>(claim:Claim,kind:"ordinary_recovery_read"|"ordinary_retirement_inventory",operation:()=>Promise<T>,outcome:(value:T)=>OriginalMediaCallerReturn){
  const token=randomUUID()+randomUUID(),runtimeIdentity=await actualStorageCallerRuntimeIdentity();
  const call=await db().transaction(async tx=>{const original=await locked(tx,claim);return admitOriginalMediaCaller(tx,{kind,objectReceiptId:claim.originalId,token,runtimeIdentity,...(kind==="ordinary_recovery_read"?{expectedRevision:original.receipt.providerRevision!}:{})},SYSTEM);});
@@ -161,6 +176,7 @@ export async function retireOriginalMediaObject(key:string,expectedBinding?:Stor
   const complete=await completeInventory(claim,store,absence.id,"retirement");
   await db().transaction(async tx=>{
    const current=await locked(tx,claim);
+   await reviewFinishedAcknowledgedDelete(tx,claim,absence.id,complete.id);
    const proof=await tx.execute<{proven:boolean}>(sql`select freeholder_media_ordinary_retirement_proven(${claim.reservationId}::uuid) as proven`);if(proof[0]?.proven!==true||complete.state!=="complete")transferConflict("The complete original physical retirement proof is not intact.");
    await releaseRetiredOriginalQuota(tx,current.caller,current.receipt.bytes!);
    const now=new Date(),deletions=await tx.select().from(mediaObjectWrites).where(and(eq(mediaObjectWrites.originalReservationId,claim.reservationId),eq(mediaObjectWrites.operation,"delete")));

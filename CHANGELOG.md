@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Prepare verification-only recovery of an acknowledged, actually finished DELETE whose local result commit failed. Preserve its first failure/ACK, require fresh complete physical absence proof and append a separate review without replaying DELETE. Capability and qualification remain open.
+
 - Require transfer mutations to belong to the actual current namespace controller and phase; genuine old ancestry cannot bypass another source claim or later drain. Keep additional executor recovery association, multipart part authority and all qualification open.
 
 - Prepare person-only applied recovery of an independently stopped original PUT through its exact executor record, original request nonce and fresh byte/inventory proof. Preserve missing actual returns/finishes and add optional stop-receipt guidance in four locales; absence, physical cleanup, final SDK and acceptance remain pending.

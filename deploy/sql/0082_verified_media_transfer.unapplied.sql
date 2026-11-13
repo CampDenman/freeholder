@@ -842,7 +842,7 @@ ALTER TABLE media_storage_transfer_reviews ADD CONSTRAINT media_storage_transfer
 ALTER TABLE media_storage_transfer_reviews ADD CONSTRAINT media_storage_transfer_review_inventory_fk FOREIGN KEY(inventory_id) REFERENCES media_storage_provider_inventories(id) ON DELETE RESTRICT;
 --> statement-breakpoint
 CREATE FUNCTION freeholder_media_original_review_context_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE caller media_storage_transfer_calls; proof media_storage_transfer_calls; inventory media_storage_provider_inventories;
+DECLARE caller media_storage_transfer_calls; proof media_storage_transfer_calls; inventory media_storage_provider_inventories; deletion media_object_writes; original media_object_writes;
 BEGIN
  IF NEW.object_id IS NOT NULL THEN
   IF NEW.inventory_id IS NOT NULL THEN RAISE EXCEPTION 'Original transfer review cannot borrow an ordinary inventory' USING ERRCODE='23514'; END IF;
@@ -851,6 +851,21 @@ BEGIN
  SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=NEW.call_id;
  SELECT * INTO proof FROM media_storage_transfer_calls WHERE id=NEW.read_call_id;
  SELECT * INTO inventory FROM media_storage_provider_inventories WHERE id=NEW.inventory_id;
+ IF caller.kind='ordinary_delete' THEN
+  SELECT * INTO deletion FROM media_object_writes WHERE id=caller.object_receipt_id;
+  SELECT * INTO original FROM media_object_writes WHERE original_reservation_id=deletion.original_reservation_id AND operation_kind='put';
+  IF NEW.object_receipt_id IS DISTINCT FROM deletion.id OR NEW.multipart_operation_id IS NOT NULL OR NEW.stop_drain_id IS NOT NULL OR NEW.permits_retry OR NEW.outcome<>'retired' OR NEW.reviewed_by<>'system:media-cleanup'
+   OR deletion.id IS NULL OR original.id IS NULL OR deletion.original_reservation_id IS NULL OR deletion.writer_finished_at IS NULL OR original.writer_finished_at IS NULL OR original.state<>'accepted' OR original.provider_revision IS NULL OR original.provider_revision_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(original.provider_revision)
+   OR caller.state<>'unknown' OR caller.returned_at IS NULL OR caller.stopped_at IS NOT NULL OR caller.stop_receipt_id IS NOT NULL OR caller.observed_accepted_at IS NULL
+   OR caller.namespace IS DISTINCT FROM original.storage_namespace OR caller.physical_key IS DISTINCT FROM original.object_key OR deletion.key_digest IS DISTINCT FROM original.key_digest OR caller.expected_revision IS DISTINCT FROM original.provider_revision
+   OR caller.result_digest IS NULL OR caller.result_digest NOT IN (freeholder_media_transfer_fact_digest(jsonb_build_object('failed',true)),freeholder_media_transfer_fact_digest(jsonb_build_object('failed',true,'accepted',true)))
+   OR (SELECT count(*) FROM media_storage_transfer_requests WHERE call_id=caller.id)<>1
+   OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=caller.id AND request.descriptor->>'kind'='object.delete' AND request.state IN ('returned','unknown') AND request.returned_at IS NOT NULL AND request.runtime_identity=caller.runtime_identity AND request.descriptor_digest=freeholder_media_transfer_fact_digest(request.descriptor) AND request.descriptor->'expectedRevision'=original.provider_revision AND fact.facts->>'stage'='accepted' AND fact.facts->>'status' ~ '^2[0-9]{2}$')
+   OR proof.id IS NULL OR proof.object_receipt_id IS DISTINCT FROM original.id OR proof.kind<>'ordinary_recovery_read' OR proof.state<>'returned' OR proof.returned_at IS NULL OR proof.result_absent IS NULL OR proof.expected_revision IS DISTINCT FROM original.provider_revision
+   OR inventory.id IS NULL OR inventory.object_receipt_id IS DISTINCT FROM original.id OR inventory.proof_call_id IS DISTINCT FROM proof.id OR inventory.purpose<>'retirement' OR NOT freeholder_media_original_absence_inventory_complete(inventory.id)
+  THEN RAISE EXCEPTION 'A finished failed DELETE review needs its actual successful provider ACK, original pinned absence and complete physical inventory; never replay or invent return' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+ END IF;
  IF NEW.multipart_operation_id IS NOT NULL OR caller.id IS NULL OR caller.kind<>'ordinary_put' OR caller.object_receipt_id IS DISTINCT FROM NEW.object_receipt_id OR NEW.permits_retry OR NEW.outcome<>'applied' THEN RAISE EXCEPTION 'Original review closes only affirmative exact applied PUT proof, never absence/retry/multipart' USING ERRCODE='23514'; END IF;
  IF NEW.stop_drain_id IS NULL THEN
   IF caller.returned_at IS NULL OR caller.result_digest IS NULL OR EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=caller.id AND returned_at IS NULL) THEN RAISE EXCEPTION 'Portable review requires all actual original finishes' USING ERRCODE='23514'; END IF;
@@ -1129,12 +1144,12 @@ CREATE FUNCTION freeholder_media_ordinary_retirement_proven(reservation uuid) RE
  AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN callers ON callers.id=request.call_id WHERE request.state IN ('admitted','unknown') OR request.returned_at IS NULL)
  AND EXISTS(SELECT 1 FROM original JOIN callers writer ON writer.object_receipt_id=original.id AND writer.kind='ordinary_put' WHERE writer.returned_at IS NOT NULL AND writer.state='returned' AND writer.observed_accepted_at IS NOT NULL AND EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=writer.id))
  AND NOT EXISTS(SELECT 1 FROM family deletion JOIN original ON true WHERE deletion.operation_kind='delete' AND NOT EXISTS(
-  SELECT 1 FROM callers actual WHERE actual.object_receipt_id=deletion.id AND actual.kind='ordinary_delete' AND actual.state='returned' AND actual.returned_at IS NOT NULL
+  SELECT 1 FROM callers actual WHERE actual.object_receipt_id=deletion.id AND actual.kind='ordinary_delete' AND actual.returned_at IS NOT NULL AND (actual.state='returned' OR actual.state='stopped' AND EXISTS(SELECT 1 FROM media_storage_transfer_reviews reviewed WHERE reviewed.id=actual.stop_receipt_id AND reviewed.call_id=actual.id AND reviewed.object_receipt_id=deletion.id AND reviewed.outcome='retired' AND reviewed.stop_drain_id IS NULL))
    AND (actual.redacted_at IS NOT NULL OR freeholder_media_transfer_fact_digest(actual.expected_revision)=original.provider_revision_digest)
    AND (
     actual.result_digest=freeholder_media_transfer_fact_digest(jsonb_build_object('notAttempted',true)) AND actual.observed_accepted_at IS NULL
      AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=actual.id AND (NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='not_attempted') OR EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'<>'not_attempted')))
-    OR actual.result_digest=freeholder_media_transfer_fact_digest(jsonb_build_object('accepted',true)) AND actual.observed_accepted_at IS NOT NULL
+    OR (actual.result_digest=freeholder_media_transfer_fact_digest(jsonb_build_object('accepted',true)) OR actual.state='stopped' AND actual.result_digest IN (freeholder_media_transfer_fact_digest(jsonb_build_object('failed',true)),freeholder_media_transfer_fact_digest(jsonb_build_object('failed',true,'accepted',true)))) AND actual.observed_accepted_at IS NOT NULL
      AND (SELECT count(*) FROM media_storage_transfer_requests WHERE call_id=actual.id)=1
      AND EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=actual.id AND request.descriptor->>'kind'='object.delete' AND request.returned_at IS NOT NULL AND fact.facts->>'stage'='accepted')
    )))

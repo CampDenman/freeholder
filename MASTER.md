@@ -4099,6 +4099,14 @@ reading chat logs.
   prepared/unrun. Additional crashed-executor association/release and browser
   multipart part issuance remain required; capability is still unpublished.
   See `deploy/media-transfer-controller-fence-source-2026-11-13.md`.
+  Finished acknowledged DELETE source2026-11-13: an actual successful provider
+  ACK plus real original caller/request finishes can proceed to fresh proof
+  only after failed local result retention. No second DELETE is dispatched;
+  the first failure/ACK remain immutable and a separate review requires pinned
+  absence/full physical inventory. Seven pure and one native regression are
+  prepared/unrun. Unknown outcomes without ACK, stopped-origin retirement,
+  multipart/quota/cutover and all acceptance remain open. See
+  `deploy/media-finished-delete-recovery-source-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;
