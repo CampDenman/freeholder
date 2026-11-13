@@ -14297,6 +14297,16 @@ whatever is best for the people using the site.
   lost-recipient,unassigned,managed}-native-v6-20261113 (-ledger-v6.json).
   These are synthetic-provider component checks, not independent stopped-read
   recovery, full positive collection, provider-account or stable acceptance.
+  Related external-money alias audit2026-11-13: source review found the same
+  trigger OLD collision in all three owned guard_commercial_attestation bodies
+  (commercial attestation, agreement fee and gross proration). Signed af8c4b77
+  changes only payments old to prior_payment and its field references. Root
+  replaces each complete owned fragment exactly once in unpublished SQL80,
+  preserving the entire397928-byte prefix and every original condition/fee
+  epoch. SQL80 is605453 bytes/SHA931337667425e57f4fa9e25288109a07be4c0be86630ab8f3323efdc9dc268ee;
+  0–79/81/82 and all142 models remain unchanged. Fresh normal migration, strict
+  installed-body parity and the existing real shared-service offline-payment
+  and gross-proration native journeys are required; no acceptance is claimed.
   Controlled origin SQL correction2026-11-13: after the fixture availability
   correction, the original interruption/recovery journey reached its actual
   cash receipt and caught PostgreSQL42703. The origin trigger used table alias

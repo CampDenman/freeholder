@@ -421,18 +421,18 @@ BEGIN
    OR EXISTS(SELECT 1 FROM merchant_agreement_payment_routes WHERE payment_id=p.id) OR EXISTS(SELECT 1 FROM merchant_payment_routes WHERE payment_id=p.id)
    OR EXISTS(SELECT 1 FROM merchant_invoice_payment_routes WHERE payment_id=p.id) OR EXISTS(SELECT 1 FROM payment_merchant_routes WHERE payment_id=p.id)
    OR EXISTS(SELECT 1 FROM payments other WHERE other.invoice_id=i.id AND other.id<>p.id AND other.status IN('created','processing'))
-   OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments old ON old.id=o.payment_id WHERE old.invoice_id=i.id AND o.status='succeeded'
-    AND(old.status<>'succeeded' OR o.amount_minor<>old.amount_minor OR o.currency<>old.currency OR(o.provider_ref IS DISTINCT FROM old.provider_ref AND o.provider_ref IS DISTINCT FROM old.provider_checkout_ref)))
-   OR EXISTS(SELECT 1 FROM merchant_payment_dispatches d JOIN payments old ON old.id=d.payment_id
-      WHERE old.invoice_id=i.id AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_finishes f WHERE f.dispatch_id=d.id) AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_stops s WHERE s.dispatch_id=d.id)) THEN
+   OR EXISTS(SELECT 1 FROM merchant_payment_observations o JOIN payments prior_payment ON prior_payment.id=o.payment_id WHERE prior_payment.invoice_id=i.id AND o.status='succeeded'
+    AND(prior_payment.status<>'succeeded' OR o.amount_minor<>prior_payment.amount_minor OR o.currency<>prior_payment.currency OR(o.provider_ref IS DISTINCT FROM prior_payment.provider_ref AND o.provider_ref IS DISTINCT FROM prior_payment.provider_checkout_ref)))
+   OR EXISTS(SELECT 1 FROM merchant_payment_dispatches d JOIN payments prior_payment ON prior_payment.id=d.payment_id
+      WHERE prior_payment.invoice_id=i.id AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_finishes f WHERE f.dispatch_id=d.id) AND NOT EXISTS(SELECT 1 FROM merchant_payment_dispatch_stops s WHERE s.dispatch_id=d.id)) THEN
    RAISE EXCEPTION 'Retain exactly one real external origin with its original declared merchant, amount, evidence and quiesced competing callers' USING ERRCODE='23514'; END IF;
-  SELECT coalesce(sum(old.amount_minor),0),coalesce(sum(coalesce(a.fee_owed_minor,g.application_fee_minor,l.application_fee_minor)),0)
-   INTO previous_cash,previous_fee FROM payments old
-   LEFT JOIN commercial_payment_attestations a ON a.payment_id=old.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=old.id LEFT JOIN payment_merchant_routes l ON l.payment_id=old.id
-   WHERE old.invoice_id=i.id AND old.id<>p.id AND old.status='succeeded';
-  IF i.total_minor<=0 OR previous_cash<>i.paid_minor OR EXISTS(SELECT 1 FROM payments old
-   LEFT JOIN commercial_payment_attestations a ON a.payment_id=old.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=old.id LEFT JOIN payment_merchant_routes l ON l.payment_id=old.id
-   WHERE old.invoice_id=i.id AND old.id<>p.id AND old.status='succeeded' AND ((a.payment_id IS NOT NULL)::integer+(g.payment_id IS NOT NULL)::integer+(l.payment_id IS NOT NULL)::integer<>1 OR old.refunded_minor<>0)) THEN
+  SELECT coalesce(sum(prior_payment.amount_minor),0),coalesce(sum(coalesce(a.fee_owed_minor,g.application_fee_minor,l.application_fee_minor)),0)
+   INTO previous_cash,previous_fee FROM payments prior_payment
+   LEFT JOIN commercial_payment_attestations a ON a.payment_id=prior_payment.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=prior_payment.id LEFT JOIN payment_merchant_routes l ON l.payment_id=prior_payment.id
+   WHERE prior_payment.invoice_id=i.id AND prior_payment.id<>p.id AND prior_payment.status='succeeded';
+  IF i.total_minor<=0 OR previous_cash<>i.paid_minor OR EXISTS(SELECT 1 FROM payments prior_payment
+   LEFT JOIN commercial_payment_attestations a ON a.payment_id=prior_payment.id LEFT JOIN merchant_agreement_payment_routes g ON g.payment_id=prior_payment.id LEFT JOIN payment_merchant_routes l ON l.payment_id=prior_payment.id
+   WHERE prior_payment.invoice_id=i.id AND prior_payment.id<>p.id AND prior_payment.status='succeeded' AND ((a.payment_id IS NOT NULL)::integer+(g.payment_id IS NOT NULL)::integer+(l.payment_id IS NOT NULL)::integer<>1 OR prior_payment.refunded_minor<>0)) THEN
    RAISE EXCEPTION 'Restore the complete original cash and exactly one fee owner before a new external record' USING ERRCODE='23514'; END IF;
   SELECT coalesce(sum(a.fee_obligation_minor),0) INTO carried_fee FROM invoice_credit_applications a WHERE a.invoice_id=i.id;
   IF EXISTS(SELECT 1 FROM invoice_credit_applications a WHERE a.invoice_id=i.id AND a.fee_evidence_digest IS NULL)
