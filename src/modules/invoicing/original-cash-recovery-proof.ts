@@ -25,5 +25,5 @@ export function remainingOriginalCashAuxiliary(original: number | null, returned
 }
 export function exactCashResourceRefs(facts: readonly { kind: string; evidence: Record<string, unknown> }[]) {
   const refs = [...new Set(facts.filter(fact => fact.kind === "ack").map(fact => fact.evidence.providerRef))];
-  return refs.every(ref => typeof ref === "string") ? refs as string[] : null;
+  return refs.every(ref => typeof ref === "string") ? refs : null;
 }

@@ -16,7 +16,9 @@ describe("actual original partial auxiliary generations", () => {
       if (url.pathname === "/v1/account") return Response.json({ id: "acct_Original" });
       if (url.pathname.endsWith(parentRef)) return Response.json({ id: parentRef, amount: 7, amount_refunded: returned, amount_reversed: returned, currency: "cad", account: "acct_Seller", destination: "acct_Seller", originating_transaction: "ch_Actual", source_transaction: "ch_Actual" });
       if (init.method === "POST") {
-        const body = new URLSearchParams(String(init.body)), operationId = body.get("metadata[freeholder_cash_auxiliary_id]");
+        const body = init.body instanceof URLSearchParams ? init.body : typeof init.body === "string" ? new URLSearchParams(init.body) : undefined;
+        if(!body)throw new Error("The actual partial auxiliary POST must carry its original form body.");
+        const operationId = body.get("metadata[freeholder_cash_auxiliary_id]");
         expect(init.body).toBe(merchantCashAuxiliaryBody(operationId!, 2)); posts++; returned += 2;
         const row = { id: `${kind === "fee" ? "fr" : "trr"}_Actual${posts}`, [kind === "fee" ? "fee" : "transfer"]: parentRef, amount: 2, currency: "cad", metadata: { freeholder_cash_auxiliary_id: operationId } }; rows.push(row);
         return posts === 2 ? new Response("{", { headers: { "content-type": "application/json" } }) : Response.json(row);

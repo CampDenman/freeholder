@@ -225,3 +225,30 @@ suppression was introduced. The type worker drained. Renewed full types,
 whole lint, selected tests and source gates await the exact baseline integration
 direction; none is claimed to pass. No native, PG, migration, build, model/journal
 assembly, server or provider account I/O ran.
+
+
+## Resumed bounded NoDB source corrections
+
+Root identified the exact inherited import error: the real schedule models
+already exist in `subscriptions/provider-schedule-schema.ts`; the central
+privacy file now imports them from that real module, with its financial
+behavior unchanged. Exact existing245e2146 supplies runtime UUID parsing and
+object narrowing for the two original RMA metadata accesses. These corrections
+were frozen before renewal. Full Node22 TypeScript then passed on f135b66f
+with the complete verified descriptor-matching donor and an 8 GB heap; the
+empty diagnostics log is `/tmp/freeholder-f135-nodb-types-20261113.log`.
+
+Whole-project ESLint then stopped with17 diagnostics and drained; its original
+log is `/tmp/freeholder-f135-nodb-lint-20261113.log`. Narrow source repairs use
+named type imports, the already-inferred string-array narrowing, explicit
+actual form-body discrimination, wrappers preserving the actual factory
+receiver, and separate duplicate-review assertions with the same expectations.
+Existing legacy form guards match the already-qualified parent source. Exact
+existingd2d9e6b4 preserves typed Errors after raw intake and wraps only an
+unknown thrown value with its original cause. No financial guard or oracle is
+removed, and the parent's newer typed ACK continuation is not overwritten.
+No test assertion was relaxed; only actual transport body/receiver typing in
+prior native fixtures changed. SQL fragments and financial row bodies remain
+unchanged. Renewed lint/tests/gates await root's lane handoff after its actual
+PG run; no CPU, PG, native, model/journal assembly or provider I/O ran during
+these source repairs.

@@ -45,7 +45,9 @@ describe.runIf(hasDatabase)("authentic legacy bank current money80", { timeout: 
       paths.push(`${init.method} ${url.pathname}`); expect(new Headers(init.headers).get("stripe-account")).toBeNull();
       if (url.pathname === "/v1/account") return Response.json({ id: "acct_CurrentLegacyReadOnly" });
       if (url.pathname === "/v1/refunds" && init.method === "POST") {
-        const form = new URLSearchParams(String(init.body)); expect(form.get("payment_intent")).toBe("pi_OriginalLegacyCurrent"); expect(form.get("amount")).toBe("400");
+        const form = init.body instanceof URLSearchParams ? init.body : typeof init.body === "string" ? new URLSearchParams(init.body) : undefined;
+        if (!form) throw new Error("The actual refund POST must carry a form body.");
+        expect(form.get("payment_intent")).toBe("pi_OriginalLegacyCurrent"); expect(form.get("amount")).toBe("400");
         posts.push(new Headers(init.headers).get("idempotency-key")!); const actual = resource(); entered.resolve(); if (pausePost) await release.promise;
         return Response.json(actual);
       }

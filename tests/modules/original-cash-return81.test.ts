@@ -83,7 +83,7 @@ async function fixture(options: { unapplied?: boolean; unreadableFee?: boolean; 
     throw Error(`Unexpected original cash transport ${init.method} ${url.pathname}`);
   });
   const actual = createStripePayments({ secretKey: "sk_cash_fixture_only", fetch: fetcher });
-  base.stripe.inspectMerchantReturnedCash = actual.inspectMerchantReturnedCash; base.stripe.createMerchantCashAuxiliary = actual.createMerchantCashAuxiliary; base.stripe.recoverMerchantCashAuxiliary = actual.recoverMerchantCashAuxiliary;
+  base.stripe.inspectMerchantReturnedCash = request => actual.inspectMerchantReturnedCash!(request); base.stripe.createMerchantCashAuxiliary = request => actual.createMerchantCashAuxiliary!(request); base.stripe.recoverMerchantCashAuxiliary = request => actual.recoverMerchantCashAuxiliary!(request);
   return { base, source, posts, entered, release, amount, paymentId: begun.payment.id, invoiceId: placed.order.invoiceId!, run: () => returnOriginalCash.call({ source, confirmation: ORIGINAL_CASH_RETURN_CONFIRMATION }, OWNER) };
   } catch (error) { base.cleanup(); throw error; }
 }

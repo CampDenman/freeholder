@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Provider-neutral payment boundary (MASTER.md §12, C5.01).
 
+import type { MerchantCashAuxiliaryRequest, MerchantCashAuxiliaryEvidence } from "./merchant-cash-auxiliary-types";
 import type { MerchantReturnedCashEvidence } from "./merchant-returned-cash-types";
 import type { AdapterStatus, RawProviderRequest } from "../types";
 
@@ -602,8 +603,8 @@ export interface PaymentAdapter {
   capabilities(): PaymentAdapterCapabilities;
   /** Provider read outside business transactions; never an owner attestation. */
   platformAccountIdentity?(): Promise<{ providerPlatformAccountId: string }>;
-  createMerchantCashAuxiliary?(request: import("./merchant-cash-auxiliary-types").MerchantCashAuxiliaryRequest): Promise<import("./merchant-cash-auxiliary-types").MerchantCashAuxiliaryEvidence>;
-  recoverMerchantCashAuxiliary?(request: import("./merchant-cash-auxiliary-types").MerchantCashAuxiliaryRequest): Promise<import("./merchant-cash-auxiliary-types").MerchantCashAuxiliaryEvidence | null>;
+  createMerchantCashAuxiliary?(request: MerchantCashAuxiliaryRequest): Promise<MerchantCashAuxiliaryEvidence>;
+  recoverMerchantCashAuxiliary?(request: MerchantCashAuxiliaryRequest): Promise<MerchantCashAuxiliaryEvidence | null>;
   refundMerchantFee?(request: MerchantFeeRefundRequest): Promise<MerchantFeeRefundResult>;
   /** A missing lookup is unresolved, never evidence that a timed-out refund did not happen. */
   recoverMerchantFeeRefund?(request: MerchantFeeRefundRequest): Promise<MerchantFeeRefundResult | null>;
