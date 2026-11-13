@@ -38,3 +38,14 @@ the corrected source remain PREPARED/UNRUN.
 No compiler/lint/test/runtime import/PG/native/provider operation ran in this
 worktree. Whitespace was inspected only. Root owns renewal and qualification;
 MASTER §43 stays authoritative and no feature/stable/security gate closes.
+
+## Relation-token correction
+
+The renewed first eight controls pass before the routed-payment case exposes
+a test parser bug: the relation-name regex reads the operator phrase
+`IS NOT DISTINCT FROM cash.charge_account_id` as another physical FROM table.
+The original eight-table assertion remains unchanged. Relation names now
+require a complete word not followed by a qualifying dot, so a column reference
+cannot masquerade as a table. No product query, ownership predicate, raw row,
+amount, count, fingerprint or old expected value changes. The v7 failure is
+preserved; the complete fifteen-case file must execute before qualification.

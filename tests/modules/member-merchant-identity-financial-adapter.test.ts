@@ -89,7 +89,7 @@ function reader(data: Data, inspect?: (table: string, query: string, params: unk
         // Existing order fixtures have no agreement/controlled aliases. Check
         // the real bounded original-PI/FK selector before returning that fact.
         expect(query.trimEnd()).toMatch(/limit 5001$/);expect(params.length).toBeGreaterThan(0);
-        expect([...query.matchAll(/\b(?:from|join)\s+([a-z_]+)/gi)].map(match => match[1])).toEqual([
+        expect([...query.matchAll(/\b(?:from|join)\s+([a-z_]+)\b(?!\.)/gi)].map(match => match[1])).toEqual([
           "merchant_agreement_payment_routes", "payments", "subscription_provider_charge_receipts", "merchant_payment_observations", "payments", "subscription_events", "subscription_prorations", "invoices",
         ]);
         expect(params.every(value => (data.routes ?? []).some(route => route.paymentId === value))).toBe(true);
