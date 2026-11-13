@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C1.08: late physical facts reopen their original erasure, not a new owner.
+import {originalMediaScope,originalMediaDescendant,originalMediaScopePending} from "./original-erasure-scope";
 import {originalProviderEvidencePending,originalProviderEvidenceVersion} from "./original-provider-privacy";
 import {and,asc,eq,inArray,or,isNotNull,isNull,gt} from "drizzle-orm";
 import {db} from "@/core/db";
@@ -12,6 +13,9 @@ import {mediaMultipartOperations,mediaMultipartResources} from "./multipart-sche
 import {allowMediaReceiptWrites} from "./write-ledger";
 export async function captureMediaErasureCohort(tx:Tx,requestId:string,scope:"media.storageOperations"|"media.multipartOperations",ids:string[],resourceIds:string[]=[]):Promise<void>{
  await allowMediaReceiptWrites(tx);
+ const first=await originalMediaScope(tx,requestId,scope);
+ for(const receiptId of ids)if(!await originalMediaDescendant(tx,first.membership,{receiptId}))throw new Error("A current generation cannot expand the immutable original media erasure capture.");
+ for(const resourceId of resourceIds)if(!await originalMediaDescendant(tx,first.membership,{resourceId}))throw new Error("A new multipart session cannot expand the immutable original media erasure capture.");
  if(ids.length)await tx.insert(mediaErasureCohorts).values(ids.map(objectReceiptId=>({requestId,scope,objectReceiptId}))).onConflictDoNothing();
  if(resourceIds.length)await tx.insert(mediaErasureCohorts).values(resourceIds.map(multipartResourceId=>({requestId,scope,multipartResourceId}))).onConflictDoNothing();
 }
@@ -60,6 +64,9 @@ export async function originalMediaErasureRequests(tx:Tx,ids:string[],resourceId
 }
 export async function objectCohortIds(tx:Tx,requestId:string,scope:string){return(await tx.select({id:mediaErasureCohorts.objectReceiptId}).from(mediaErasureCohorts).where(and(eq(mediaErasureCohorts.requestId,requestId),eq(mediaErasureCohorts.scope,scope)))).flatMap(row=>row.id?[row.id]:[]);}
 export async function mediaCohortPending(tx:Tx,requestId:string,scope:string):Promise<boolean>{
+ if(scope!=="media.storageOperations"&&scope!=="media.multipartOperations")throw new Error("Unknown original media scope.");
+ const[request]=await tx.select().from(dataRequests).where(eq(dataRequests.id,requestId)).limit(1);if(!request)throw new Error("Original media erasure request missing.");
+ if(await originalMediaScopePending(tx,requestId,scope,request.contactId))return true;
  const pending=await tx.select({id:mediaErasureCohorts.id}).from(mediaErasureCohorts)
   .leftJoin(mediaObjectWrites,eq(mediaObjectWrites.id,mediaErasureCohorts.objectReceiptId))
   .leftJoin(mediaMultipartResources,eq(mediaMultipartResources.id,mediaErasureCohorts.multipartResourceId))

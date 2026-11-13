@@ -4057,6 +4057,10 @@ reading chat logs.
 - [ ] **C1.12** Complete media support for video, audio and documents,
   resumable/presigned direct uploads, validation, malware scanning seam,
   metadata/provenance, focal points, lifecycle and orphan cleanup.
+  Immutable first media scopes and original birth/locator retirement source are
+  prepared but unrun;16 models/owned UNAPPLIED82 stay inactive, and physical
+  retirement/multipart/crash/cutover implementation and actual acceptance remain
+  required. See `deploy/media-original-first-capture-source-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;
@@ -11844,6 +11848,16 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.08** Prove both fresh install → role-guided productive demo and
   WordPress/generic-site crawl → staged/reconciled imported site → full export
   → restore on another Tier-1 target → signed update → failed-update rollback.
+  Original first-capture/minimization source continuation 2026-11-13 prepares
+  a sealed16th media scope model, NULL-preserving original reservation birth,
+  exact queued worker tuple/immutable first membership and retirement-gated
+  original provider/quota locator minimization.11 pure and3 native declarations
+  remain entirely unrun. Owned82 is UNAPPLIED and the complete capability stays
+  unpublished. Standalone physical retirement, tracked stop, multipart session/
+  pinned completion, quota initialization, chained/cutover and full qualification
+  remain unfinished. Root integrates and qualifies this finite baseline before
+  further source expansion. See
+  `deploy/media-original-first-capture-source-2026-11-13.md`. No item closes.
   Original provider privacy/quota-debt source continuation 2026-11-13 prepares
   exact original parent/cohort exports, captured-ID worker containment, immutable
   physical observation versions and original-token late quota charge restoration
@@ -15101,14 +15115,17 @@ whatever is best for the people using the site.
   Root media/storage corrections and full renewed qualification remain required;
   no schema, SQL, activation, item or stable gate changes. See
   `deploy/commercial-lint82-source-20261113.md`.
-  Combined83 source assembly 2026-11-13 (C1.12/C11.08/C12.38): frozen
-  media checkpoint76f supplies SQL82/db89 and one new journal entry after
-  unchanged0–81. Its15 media models plus nine controlled/commercial families
-  form the current source baseline; immutable first-scope16 continuation is
-  still separate required implementation. Nothing is applied to a database by
-  this assembly, and the media request capability remains unpublished. A new
-  ordinary database and exact current-model parity are required before native
-  execution; changed unapplied82 must never be installed into an older proof DB.
+  Combined83 source assembly 2026-11-13 (C1.12/C11.08/C12.38): signed
+  first-scope checkpoint3a96 supplies SQL82/a092 (115604bytes), including16
+  owned media models and NULL-preserving original reservation identity. The
+  existing cohort model will also receive full parity, giving142 model targets
+  with the commercial/controlled baseline. All83 journal entries retain their
+  identities; SQL80/1c2e and81/438 are unchanged. No83 database has been created
+  or migrated yet. The media request capability remains unpublished; standalone
+  retirement, crash/multipart recovery and cutover remain required work. New
+  source checks, a fresh ordinary database and strict model/guard/function
+  parity are required before actual native acceptance. Earlier313 source test
+  passes remain component proofs of the preceding138-model source baseline.
   Controlled assembly checkpoint 2026-11-13 (C12.38): the frozen ee87
   nine-family provider tail now follows the six commercial tails in SQL80/1c2e
   (603826bytes), retaining both entire earlier cf1e and0cff prefixes. It adds

@@ -180,6 +180,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   media_uploads:"Original reservations survive unresolved physical work; guarded lifecycle and subject erasure own retirement.",
   media_objects:"Original object ownership survives unknown writes; guarded physical cleanup and privacy jobs remove it.",
   media_multipart_resources:"Original multipart resources survive timers; explicit original-provider retirement and subject erasure own cleanup.",
+  media_original_erasure_scopes:"Immutable first original media membership/digests, including empty captures and explicit legacy birth debt, remain minimal erasure authority; physical/locator cleanup never replaces them with current ownership.",
   media_object_writes: "Original physical-operation and retired-key receipts are not a TTL store. Privacy minimizes personal fields only after settled original cleanup; unresolved work keeps its erasure receipt pending.",
   import_crawl_sources: "Original HTTP lifecycle and reader erasure minimize payload only after actual physical settlement and current holds. Immutable generation/receipt witnesses have no generic table TTL.",
   import_crawl_requests: "Original HTTP lifecycle and reader erasure minimize payload only after actual physical settlement and current holds. Immutable generation/receipt witnesses have no generic table TTL.",

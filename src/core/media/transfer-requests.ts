@@ -77,7 +77,7 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
     const[resource]=await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.id,parent.resourceId)).limit(1).for("update");if(!resource||resource.providerUploadId&&resource.providerUploadId!==facts.uploadId||parent.observedProviderUploadId&&parent.observedProviderUploadId!==facts.uploadId)transferConflict("The first actual original session ACK cannot be rebound.");
     const now=new Date();await tx.update(mediaMultipartOperations).set({observedProviderUploadId:facts.uploadId,...(facts.stage==="accepted"&&!parent.providerAcceptedAt?{providerAcceptedAt:now}:{}),...(late?{state:"unknown" as const}:{}),updatedAt:now}).where(eq(mediaMultipartOperations.id,parent.id));
     await tx.update(mediaMultipartResources).set({providerUploadId:facts.uploadId,...(late?{state:"unknown" as const,retiredAt:null}:{}),updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
-    if(late)await tx.insert(mediaObjects).values({key:call.physicalKey,uploadId:resource.uploadId,role:"staged",state:"pending",contentType:resource.contentType,bytes:resource.expectedBytes}).onConflictDoNothing();
+    if(late&&resource.originalReservationId)await tx.insert(mediaObjects).values({reservationId:resource.originalReservationId,key:call.physicalKey,uploadId:resource.uploadId,role:"staged",state:"pending",contentType:resource.contentType,bytes:resource.expectedBytes}).onConflictDoNothing();
     scope.multipartOperationIds.add(parent.id);
    }
   }
@@ -86,9 +86,12 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
   await tx.update(mediaStorageTransferRequests).set({observationCount:ordinal,...(late?{state:"unknown" as const}:{})}).where(eq(mediaStorageTransferRequests.id,id));
   if(facts.stage==="metadata"&&facts.revision&&request.descriptor.kind==="object.put"&&call.physicalReceiptId){
    const[receipt]=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,call.physicalReceiptId)).limit(1).for("update");if(!receipt)transferConflict();
-   const digest=transferDigest(facts.revision);if(receipt.providerRevisionDigest&&receipt.providerRevisionDigest!==digest)transferConflict("The original target PUT revision cannot be replaced by a later current generation.");
-   const now=new Date();await tx.update(mediaObjectWrites).set({providerRevision:facts.revision,providerRevisionDigest:digest,...(late?{deletedAt:null,state:"unknown" as const}:{}),updatedAt:now}).where(eq(mediaObjectWrites.id,receipt.id));
-   if(late&&!call.objectId&&call.objectReceiptId){await tx.insert(mediaObjects).values({key:facts.revision.key,role:"original",state:"pending",bytes:receipt.bytes??0,contentType:receipt.contentType}).onConflictDoNothing();scope.receiptIds.add(receipt.id);}
+   const digest=transferDigest(facts.revision),conflicting=Boolean(receipt.providerRevisionDigest&&receipt.providerRevisionDigest!==digest),now=new Date();
+   // An actual conflicting positive fact is retained as debt. It cannot
+   // replace the first provider result or be discarded with a local rollback.
+   await tx.update(mediaObjectWrites).set({...(!conflicting?{providerRevision:facts.revision,providerRevisionDigest:digest}:{}),...(late||conflicting?{deletedAt:null,state:"unknown" as const}:{}),updatedAt:now}).where(eq(mediaObjectWrites.id,receipt.id));
+   if(conflicting){await tx.update(mediaStorageTransferCalls).set({state:"unknown",updatedAt:now}).where(eq(mediaStorageTransferCalls.id,call.id));await tx.update(mediaStorageTransferRequests).set({state:"unknown"}).where(eq(mediaStorageTransferRequests.id,id));scope.receiptIds.add(receipt.id);}
+   if(late&&!call.objectId&&call.objectReceiptId&&receipt.originalReservationId){await tx.insert(mediaObjects).values({reservationId:receipt.originalReservationId,key:facts.revision.key,role:"original",state:"pending",bytes:receipt.bytes??0,contentType:receipt.contentType}).onConflictDoNothing();scope.receiptIds.add(receipt.id);}
   }
   if(facts.stage==="accepted"&&mutation(request.descriptor)){
    const now=new Date();await tx.update(mediaStorageTransferCalls).set({...(call.observedAcceptedAt?{}:{observedAcceptedAt:now}),...(late?{state:"unknown" as const}:{}),updatedAt:now}).where(eq(mediaStorageTransferCalls.id,call.id));
@@ -98,13 +101,13 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
     if(late&&request.descriptor.kind==="object.put"){
      if(call.objectId){
       const[object]=await tx.select().from(mediaStorageTransferObjects).where(eq(mediaStorageTransferObjects.id,call.objectId)).limit(1).for("update");if(!object)transferConflict();
-      await tx.insert(mediaObjects).values({key:transferTargetKey(object.planId,object.keyDigest),role:"staged",state:"pending",bytes:object.bytes,contentType:object.contentType}).onConflictDoNothing();
+      if(receipt.originalReservationId)await tx.insert(mediaObjects).values({reservationId:receipt.originalReservationId,key:transferTargetKey(object.planId,object.keyDigest),role:"staged",state:"pending",bytes:object.bytes,contentType:object.contentType}).onConflictDoNothing();
       const originals=await tx.select().from(mediaStorageTransferReceipts).where(eq(mediaStorageTransferReceipts.objectId,object.id));
       if(originals.length)await tx.update(mediaObjectWrites).set({deletedAt:null,updatedAt:now}).where(inArray(mediaObjectWrites.id,originals.map(row=>row.receiptId)));
-     }else if(call.objectReceiptId&&facts.revision){
+     }else if(call.objectReceiptId&&facts.revision&&receipt.originalReservationId){
       // An actual late original result restores only its physical pointer.
       // No owner/contact identity or unrelated generation is reconstructed.
-      await tx.insert(mediaObjects).values({key:facts.revision.key,role:"original",state:"pending",bytes:receipt.bytes??0,contentType:receipt.contentType}).onConflictDoNothing();
+      await tx.insert(mediaObjects).values({reservationId:receipt.originalReservationId,key:facts.revision.key,role:"original",state:"pending",bytes:receipt.bytes??0,contentType:receipt.contentType}).onConflictDoNothing();
      }
     }
    }

@@ -20,7 +20,8 @@ import {eraseStorageTransferLineage} from "./transfer-erasure";
 import {transferConflict,transferDigest} from "./transfer-proof";
 import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
 import {mediaStorageProviderInventories,mediaStorageProviderInventoryPages,mediaStorageProviderInventoryEntries} from "./transfer-inventory-schema";
-import {originalQuotaProof,originalQuotaLocatorPending} from "./original-quota-evidence";
+import {minimizeOriginalProviderReservation} from "./original-provider-minimization";
+import {originalQuotaProof} from "./original-quota-evidence";
 import {transferRequestsDrained} from "./transfer-requests";
 export const TRANSFER_PRIVACY_SCOPE="media.storageTransfers";
 export const TRANSFER_ERASURE_JOB="core.eraseMediaStorageTransfer";
@@ -51,13 +52,14 @@ export async function minimizeTransferredObjects(tx:Tx,ids:string[]):Promise<num
   const subjects=await tx.select().from(mediaStorageTransferSubjects).where(eq(mediaStorageTransferSubjects.objectId,id));
   if(await storageOperationsHeld(tx,subjects.map(row=>row.contactId)))continue;
   const calls=await tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.objectId,id));
-  if(calls.some(row=>["admitted","unknown"].includes(row.state))||!await transferRequestsDrained(tx,calls.map(row=>row.id))||await originalQuotaLocatorPending(tx,calls))continue;
+  if(calls.some(row=>["admitted","unknown"].includes(row.state))||!await transferRequestsDrained(tx,calls.map(row=>row.id)))continue;
   const membership=await tx.select().from(mediaStorageTransferReceipts).where(eq(mediaStorageTransferReceipts.objectId,id));
   const physicalIds=[...new Set([...membership.map(row=>row.receiptId),...calls.flatMap(row=>row.physicalReceiptId?[row.physicalReceiptId]:[])])];
   const writes=physicalIds.length?await tx.select().from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,physicalIds)):[];
   if(!writes.length||writes.some(row=>!row.deletedAt||!["accepted","confirmed_absent"].includes(row.state)))continue;
   const complete=await tx.execute<{retired:boolean}>(sql`select freeholder_media_transfer_object_retired(${object.id}::uuid) as retired`);
   if(complete[0]?.retired!==true)continue;
+  let originalsReady=true;for(const reservationId of [...new Set(writes.map(row=>row.originalReservationId))])if(!await minimizeOriginalProviderReservation(tx,reservationId)){originalsReady=false;break;}if(!originalsReady)continue;
   const now=new Date();
   // This exact captured lineage has both complete physical inventory proofs.
   // Ordinary legacy minimization remains independently blocked.
