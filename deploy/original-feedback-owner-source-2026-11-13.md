@@ -18,6 +18,18 @@ no-provider-POST assertion remains. It tests repair of a retained historical raw
 receipt; it does not claim the current webhook selects legacy retention. The
 corrected body remains unrun until its new database qualification.
 
+At 8f278611, a fresh ordinary V6 database migrated 0–81 in 6.152 seconds with
+all 82 journal hashes verified. The corrected historical raw-payment control
+passed in 9.715 seconds; the unchanged contradictory-PI control passed in
+9.779 seconds, and the unchanged NULL-payment receipt control passed in
+9.215 seconds. Each passed alone and received an independent read-only proof
+of actual money/receipt counts, table digests, journal/profile and drained
+clients before the next reset. The last case retains one authentic provider
+cash receipt with zero canonical payments, invoices or refunds. These are
+synthetic provider-boundary component tests, not actual account acceptance.
+V6 is now preserved for the later unrelated HTTP null-result failure described
+in `http-null-results-2026-11-13.md`.
+
 Separately, combined c96cd325 passes full types, affected model lint and metadata
 renewal. Read-only schema parity passes all 86 models and all 82 migration
 identities, including source-backed unnamed CHECK groupings and the explicitly

@@ -72,7 +72,7 @@ export function serviceRoute<In extends z.ZodType, Out>(
 
       const result = await service.call(input, actor);
       const presented = options.present?.(result) ?? { body: result };
-      return json(presented.body ?? { ok: true }, presented.status ?? 200, {
+      return json(presented.body === undefined ? { ok: true } : presented.body, presented.status ?? 200, {
         headers: presented.headers,
         cookies: presented.cookies,
       });
