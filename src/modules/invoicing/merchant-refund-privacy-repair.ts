@@ -16,6 +16,8 @@ import { legacyBankFeedback } from "./legacy-bank-feedback-schema";
 import { originalBankFeedbackOwner, originalFeedbackMatchesFrozenSource, type OriginalFeedbackOwner } from "./original-cash-feedback-owner";
 import { verifyLegacyReplacementJournalRow } from "./legacy-bank-replacement-store";
 import { verifyBankReplacementJournalRow } from "./merchant-bank-replacement-store";
+import { cashInspectionStops } from "./merchant-cash-inspection-stops";
+import { merchantCashReturnInspections } from "./merchant-refund-schema";
 import { originalCashRecoveryOwner, originalCashRecoveryFinancialWitness } from "./original-cash-recovery-store";
 
 export const ORIGINAL_REFUND_EVIDENCE_EVENT = "invoicing.originalRefundEvidenceRetained";
@@ -41,11 +43,12 @@ const factTypes = {
   refund_retirement: ["merchant_refund_reservation_retirements", "request_id"],
   cash_primary: ["merchant_cash_return_primary_observations", "id"],
   cash_state: ["merchant_cash_return_observations", "id"],
+  cash_stop: ["merchant_cash_return_inspection_stops", "inspection_id"],
   cash_finish: ["merchant_cash_return_inspection_finishes", "inspection_id"],
   cash_resolution: ["merchant_unapplied_charge_resolutions", "id"],
 } as const;
 export const originalRefundRepairPointer = z.object({
-  kind: z.enum(["original_cash_owner", "original_cash_operation", "original_cash_fact", "original_cash_closure", "legacy_bank_feedback", "legacy_bank_replacement", "legacy_bank_stop", "legacy_bank_current", "legacy_bank_read", "legacy_bank_fact", "legacy_bank_finish", "request", "refund_observation", "refund_capture", "refund_current", "bank_replacement", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_resolution"]),
+  kind: z.enum(["original_cash_owner", "original_cash_operation", "original_cash_fact", "original_cash_closure", "legacy_bank_feedback", "legacy_bank_replacement", "legacy_bank_stop", "legacy_bank_current", "legacy_bank_read", "legacy_bank_fact", "legacy_bank_finish", "request", "refund_observation", "refund_capture", "refund_current", "bank_replacement", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_stop", "cash_resolution"]),
   id: z.uuid(),
 }).strict();
 type Pointer = z.infer<typeof originalRefundRepairPointer>;
@@ -119,8 +122,12 @@ export const originalMerchantRefundRepairSource = defineService({
       owner = await factRow(ctx, "merchant_refund_requests", "id", restoredId(dispatch.request_id));
     } else if (pointer.kind === "refund_ack" || pointer.kind === "refund_retirement") {
       owner = await factRow(ctx, "merchant_refund_requests", "id", restoredId(fact.request_id));
-    } else if (["cash_primary", "cash_state", "cash_finish"].includes(pointer.kind)) {
+    } else if (["cash_primary", "cash_state", "cash_finish", "cash_stop"].includes(pointer.kind)) {
       owner = await factRow(ctx, "merchant_cash_return_inspections", "id", restoredId(fact.inspection_id));
+    }
+    if(pointer.kind==="cash_stop"){
+      const[admission]=await ctx.tx.select().from(merchantCashReturnInspections).where(eq(merchantCashReturnInspections.id,pointer.id));
+      if(!admission||(await cashInspectionStops(ctx.tx,[admission])).length!==1)throw new ServiceError("conflict","Restore the authentic exact stopped-inspection receipt before privacy repair.");
     }
     const paymentId = owner.payment_id === null ? null : restoredId(owner.payment_id), receiptId = owner.subscription_charge_receipt_id === null ? null : restoredId(owner.subscription_charge_receipt_id);
     if ((paymentId === null) === (receiptId === null)) throw new ServiceError("conflict", "Restore the one actual original financial owner before erasure repair.");

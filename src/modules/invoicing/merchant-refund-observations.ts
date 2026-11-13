@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: actual refund facts commit before policy or invoice application.
+import { merchantCashReturnInspectionStops } from "./merchant-cash-inspection-stop-schema";
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { randomUUID } from "node:crypto";
@@ -35,9 +36,14 @@ export const recordMerchantRefundObservation = defineService({
   handler: async ({ source, requestId, inspectionId, evidence, captureKey }, ctx) => {
     const paymentId = source.kind === "payment" ? source.paymentId : null, subscriptionChargeReceiptId = source.kind === "subscription" ? source.receiptId : null;
     const [original] = requestId ? await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, requestId)) : [];
+    if(inspectionId)await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`merchant-return-read:${inspectionId}`}))`);
     const [inspection] = inspectionId ? await ctx.tx.select().from(merchantCashReturnInspections).where(eq(merchantCashReturnInspections.id, inspectionId)) : [];
     const originalOwner = original && original.paymentId === paymentId && original.subscriptionChargeReceiptId === subscriptionChargeReceiptId;
-    const inspectionBound = inspection && inspection.paymentId === paymentId && inspection.subscriptionChargeReceiptId === subscriptionChargeReceiptId;
+    const[stoppedInspection]=inspectionId?await ctx.tx.select().from(merchantCashReturnInspectionStops).where(eq(merchantCashReturnInspectionStops.inspectionId,inspectionId)).limit(1):[];
+    // Actual authenticated refund ingress is retained even after a late holder
+    // callback. Its claimed original inspection stays explicit; a stopped
+    // caller can never append to that inspection's authenticated evidence.
+    const inspectionBound = inspection && !stoppedInspection && inspection.paymentId === paymentId && inspection.subscriptionChargeReceiptId === subscriptionChargeReceiptId;
     if (paymentId) {
       const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, paymentId));
       if (!payment || payment.provider !== "stripe" || !originalOwner && !inspectionBound && !(await routingForPayment(ctx, paymentId)).providerPlatformAccountId) throw new ServiceError("conflict", "Restore the actual original merchant payment before associating refund evidence.");
