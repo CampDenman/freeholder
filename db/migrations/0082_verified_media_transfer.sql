@@ -331,7 +331,20 @@ CREATE TRIGGER transfer_erasure_member_evidence BEFORE INSERT OR UPDATE OR DELET
 CREATE FUNCTION freeholder_media_transfer_erasure_capture_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE original_contact uuid; expected text;
 BEGIN
- IF current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' OR TG_OP='DELETE' THEN RAISE EXCEPTION 'Original transfer erasure capture requires its guarded writer' USING ERRCODE='23514'; END IF;
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Original transfer erasure capture requires its guarded writer' USING ERRCODE='23514'; END IF;
+ IF current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' THEN
+  PERFORM pg_advisory_xact_lock(1691709,82);
+  IF TG_TABLE_NAME='media_storage_transfer_erasure_scopes' THEN
+   IF current_setting('freeholder.media_empty_scope_request_v1',true) IS DISTINCT FROM NEW.request_id::text
+    OR current_setting('freeholder.media_empty_scope_name_v1',true) IS DISTINCT FROM 'media.storageTransfers'
+    OR NOT EXISTS(SELECT 1 FROM data_requests request WHERE request.id=NEW.request_id AND request.kind='erasure' AND request.contact_id::text=current_setting('freeholder.media_empty_scope_contact_v1',true))
+    OR NEW.object_count<>0 OR NEW.capture_digest<>freeholder_media_transfer_fact_digest('[]'::jsonb)
+    OR NOT freeholder_media_empty_scope_graph_v1(NEW.request_id,'media.storageTransfers')
+    OR TG_OP='INSERT' AND EXISTS(SELECT 1 FROM data_request_artifacts WHERE data_request_id=NEW.request_id)
+   THEN RAISE EXCEPTION 'Empty transfer capture needs its exact actual request/contact and fenced empty graph; no provider privilege or old receipt refill' USING ERRCODE='23514'; END IF;
+  ELSE RAISE EXCEPTION 'An empty metadata writer cannot acquire physical transfer members' USING ERRCODE='23514';
+  END IF;
+ END IF;
  IF TG_TABLE_NAME='media_storage_transfer_erasure_scopes' THEN
   IF TG_OP='UPDATE' AND (OLD.complete OR NOT NEW.complete OR (to_jsonb(NEW)-'complete') IS DISTINCT FROM (to_jsonb(OLD)-'complete')) THEN RAISE EXCEPTION 'The complete first transfer erasure capture is immutable' USING ERRCODE='23514'; END IF;
   IF NEW.complete THEN
@@ -865,7 +878,19 @@ $$;
 CREATE FUNCTION freeholder_media_original_scope_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE first_media media_original_erasure_scopes;
 BEGIN
- IF TG_OP='DELETE' OR current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Keep complete first original media scope through its shared writer' USING ERRCODE='23514'; END IF;
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Keep complete first original media scope through its shared writer' USING ERRCODE='23514'; END IF;
+ IF current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' THEN
+  PERFORM pg_advisory_xact_lock(1691709,82);
+  IF TG_TABLE_NAME='media_original_erasure_scopes' THEN
+   IF current_setting('freeholder.media_empty_scope_request_v1',true) IS DISTINCT FROM NEW.request_id::text
+    OR current_setting('freeholder.media_empty_scope_name_v1',true) IS DISTINCT FROM NEW.scope
+    OR NOT EXISTS(SELECT 1 FROM data_requests request WHERE request.id=NEW.request_id AND request.kind='erasure' AND request.contact_id::text=current_setting('freeholder.media_empty_scope_contact_v1',true))
+    OR NEW.membership<>'{"format":"freeholder.original-media-erasure/v1","legacyScopes":[],"receipts":[],"resources":[],"uploads":[],"reservations":[],"legacyReservations":[]}'::jsonb
+    OR NOT freeholder_media_empty_scope_graph_v1(NEW.request_id,NEW.scope)
+   THEN RAISE EXCEPTION 'Empty original capture needs its exact actual request/scope/contact and complete fenced empty ancestry; no birth or provider privilege can be inferred' USING ERRCODE='23514'; END IF;
+  ELSE RAISE EXCEPTION 'Empty metadata authority cannot acquire original physical erasure cohort members' USING ERRCODE='23514';
+  END IF;
+ END IF;
  IF TG_TABLE_NAME='media_original_erasure_scopes' THEN
   IF TG_OP='INSERT' THEN
    IF NEW.complete OR NEW.capture_digest<>freeholder_media_transfer_fact_digest(NEW.membership) OR NEW.membership->>'format' IS DISTINCT FROM 'freeholder.original-media-erasure/v1' OR EXISTS(SELECT name FROM unnest(ARRAY['legacyScopes','receipts','resources','uploads','reservations','legacyReservations']) name WHERE jsonb_typeof(NEW.membership->name) IS DISTINCT FROM 'array') OR NOT EXISTS(SELECT 1 FROM data_requests WHERE id=NEW.request_id AND kind='erasure') OR EXISTS(SELECT 1 FROM data_request_artifacts WHERE data_request_id=NEW.request_id) THEN RAISE EXCEPTION 'Capture the complete original source once before first erasure; an old receipt cannot acquire a new first snapshot' USING ERRCODE='23514'; END IF;
@@ -1000,3 +1025,70 @@ BEGIN
 END $$;
 --> statement-breakpoint
 CREATE TRIGGER media_original_quota_retirement BEFORE DELETE ON storage_quota_objects FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_quota_retirement_guard();
+
+--> statement-breakpoint
+-- Metadata-only first empty captures. The full provider/request capability
+-- remains deliberately unpublished; this function never sets its writer tag.
+CREATE FUNCTION freeholder_media_empty_scope_graph_v1(capturing_request uuid,capturing_scope text) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT NOT EXISTS(SELECT 1 FROM assets)
+ AND NOT EXISTS(SELECT 1 FROM media_capture_sessions)
+ AND NOT EXISTS(SELECT 1 FROM media_capture_chunks)
+ AND NOT EXISTS(SELECT 1 FROM media_capture_items)
+ AND NOT EXISTS(SELECT 1 FROM media_objects)
+ AND NOT EXISTS(SELECT 1 FROM media_uploads)
+ AND NOT EXISTS(SELECT 1 FROM media_object_writes)
+ AND NOT EXISTS(SELECT 1 FROM media_multipart_resources)
+ AND NOT EXISTS(SELECT 1 FROM media_multipart_operations)
+ AND NOT EXISTS(SELECT 1 FROM storage_quota_state)
+ AND NOT EXISTS(SELECT 1 FROM storage_quota_objects)
+ AND NOT EXISTS(SELECT 1 FROM media_erasure_cohorts)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_objects)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_receipts)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_subjects)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_writer_drains)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_reviews)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_jobs)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_provider_inventories)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_entries)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_erasure_members)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_erasure_scopes first_scope WHERE
+  first_scope.object_count<>0 OR first_scope.capture_digest<>freeholder_media_transfer_fact_digest('[]'::jsonb)
+  OR NOT EXISTS(SELECT 1 FROM data_requests request WHERE request.id=first_scope.request_id AND request.kind='erasure')
+  OR NOT first_scope.complete AND NOT(first_scope.created_at=transaction_timestamp() AND first_scope.request_id IS NOT DISTINCT FROM capturing_request AND capturing_scope IS NOT DISTINCT FROM 'media.storageTransfers'))
+ AND NOT EXISTS(SELECT 1 FROM media_original_erasure_scopes first_scope WHERE
+  first_scope.membership<>'{"format":"freeholder.original-media-erasure/v1","legacyScopes":[],"receipts":[],"resources":[],"uploads":[],"reservations":[],"legacyReservations":[]}'::jsonb
+  OR first_scope.capture_digest<>freeholder_media_transfer_fact_digest(first_scope.membership)
+  OR NOT EXISTS(SELECT 1 FROM data_requests request WHERE request.id=first_scope.request_id AND request.kind='erasure')
+  OR NOT first_scope.complete AND NOT(first_scope.created_at=transaction_timestamp() AND first_scope.request_id IS NOT DISTINCT FROM capturing_request AND first_scope.scope IS NOT DISTINCT FROM capturing_scope))
+ -- Retained historical membership is birth debt even when live rows vanished.
+ AND NOT EXISTS(SELECT 1 FROM privacy_retention_source_members WHERE source_scope IN('media.storageTransfers','media.storageOperations','media.multipartOperations'))
+ AND NOT EXISTS(SELECT 1 FROM privacy_retention_source_snapshots WHERE source_scope IN('media.storageTransfers','media.storageOperations','media.multipartOperations') AND member_count<>0)
+ AND NOT EXISTS(SELECT 1 FROM privacy_retention_exceptions hold WHERE hold.scope IN('media.storageTransfers','media.storageOperations','media.multipartOperations','members')
+  AND hold.data_request_id IS DISTINCT FROM capturing_request
+  AND (NOT EXISTS(SELECT 1 FROM media_storage_transfer_erasure_scopes first_scope WHERE first_scope.request_id=hold.data_request_id AND first_scope.complete AND first_scope.object_count=0)
+   OR (SELECT count(*) FROM media_original_erasure_scopes first_scope WHERE first_scope.request_id=hold.data_request_id AND first_scope.complete AND first_scope.scope IN('media.storageOperations','media.multipartOperations'))<>2))
+ -- An old media outcome without its actual immutable first header is unknown,
+ -- including an old claimed-empty receipt. It cannot acquire a new header now.
+ AND NOT EXISTS(SELECT 1 FROM data_request_artifacts artifact JOIN data_requests request ON request.id=artifact.data_request_id
+  WHERE request.kind='erasure' AND
+   (NOT EXISTS(SELECT 1 FROM media_storage_transfer_erasure_scopes first_scope WHERE first_scope.request_id=request.id AND first_scope.complete AND first_scope.object_count=0)
+    OR (SELECT count(*) FROM media_original_erasure_scopes first_scope WHERE first_scope.request_id=request.id AND first_scope.complete AND first_scope.scope IN('media.storageOperations','media.multipartOperations'))<>2))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_empty_scope_writer_v1(capture_request uuid,capture_scope text,capture_contact uuid) RETURNS boolean LANGUAGE plpgsql VOLATILE AS $$
+BEGIN
+ IF current_setting('freeholder.media_original_scope_runtime_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Empty capture requires the actual original scope runtime; no historical writer birth or finish can be minted' USING ERRCODE='23514'; END IF;
+ PERFORM pg_advisory_xact_lock(1691709,82);
+ IF coalesce(capture_scope,'') NOT IN('media.storageTransfers','media.storageOperations','media.multipartOperations')
+  OR NOT EXISTS(SELECT 1 FROM data_requests request WHERE request.id=capture_request AND request.kind='erasure' AND request.contact_id=capture_contact)
+  OR NOT freeholder_media_empty_scope_graph_v1(capture_request,capture_scope) THEN RETURN false; END IF;
+ PERFORM set_config('freeholder.media_empty_scope_request_v1',capture_request::text,true);
+ PERFORM set_config('freeholder.media_empty_scope_name_v1',capture_scope,true);
+ PERFORM set_config('freeholder.media_empty_scope_contact_v1',capture_contact::text,true);
+ RETURN true;
+END $$;

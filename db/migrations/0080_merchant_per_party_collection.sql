@@ -6430,8 +6430,8 @@ BEGIN
   OR EXISTS(SELECT 1 FROM subscription_provider_generations g WHERE g.subscription_id=r.subscription_id AND g.provider_subscription_ref=receipt.provider_subscription_ref)
   OR EXISTS(SELECT 1 FROM subscription_provider_invoice_observations v WHERE v.subscription_id=r.subscription_id AND v.provider_subscription_ref=receipt.provider_subscription_ref
    AND v.provider_invoice_ref=receipt.provider_invoice_ref AND v.provider_operation_id IS NOT NULL)
-  OR EXISTS(SELECT 1 FROM subscription_provider_schedule_operations old CROSS JOIN LATERAL jsonb_array_elements(coalesce(old.provider_observation->'history','[]'::jsonb)) h
-   WHERE old.subscription_id=r.subscription_id AND h->>'providerSubscriptionRef'=receipt.provider_subscription_ref AND h->>'source'='authenticated_invoice_payment') THEN
+  OR EXISTS(SELECT 1 FROM subscription_provider_schedule_operations prior_schedule CROSS JOIN LATERAL jsonb_array_elements(coalesce(prior_schedule.provider_observation->'history','[]'::jsonb)) h
+   WHERE prior_schedule.subscription_id=r.subscription_id AND h->>'providerSubscriptionRef'=receipt.provider_subscription_ref AND h->>'source'='authenticated_invoice_payment') THEN
   RAISE EXCEPTION 'Only the exact actual original controlled caller/fact can bind the SAME canonical cash receipt; pre-existing old phase/generation ownership is never adopted' USING ERRCODE='23514';END IF;
  RETURN NEW;
 END $$;

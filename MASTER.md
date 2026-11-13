@@ -3624,7 +3624,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-13 checkpoint. Protected main remainsfe2645dc after HTTP null-result PR698 and audit nonce-redaction PR699, both through the normal protected queue. Draft PR701 is an exact-tree signed review snapshot of integrationf12dff09; DCO passed without bypassing checks, and application/test CI is pending. Original PR700 and all detailed source history remain preserved. Real scalar CASE migration errors and two invoice credited-amount CHECK mismatches are repaired in owned fragments and unpublished SQL80/82. NEW V3 normally applied all83 migrations in6.651s. Strict read-only parity atf12d then passed all142 full model comparisons,282 installed guards,225 installed required function bodies and2084 unfiltered expression comparisons in3354 queries/11.629s; all83 journal hashes, UTC/read-only/fsyncON/jitOFF/no-recovery settings and independent empty client inventory matched. Failed V1/V2/v14 and prior component failures remain preserved. This is schema evidence, not business or provider acceptance. Current source additionally retains raw positive/unsettled controlled bank occurrences before cash bridging; its new controls and current full source checks are pending. Earlier313 source cases and component import/financial/recovery evidence remain scoped historical proof. CI at845a21 passed whole lint, full types and package verification, then production TypeScript exhausted its default4GiB heap. The build now allows8GiB with type checking enabled; local attempts stopped on an outside-root dependency-loader path, so no build pass is claimed. Complete positive controlled collection, standalone media retirement/crash/multipart/quota/cutover and actual native acceptance remain open. Actual providers/platforms, final-candidate object-byte recovery, independent C11.10 report and C11.17 signature remain absent. No deployment, announcement, tag or stable version advanced. |
+| Latest launch audit | 2026-11-13 checkpoint. Protected main remains fe2645dc after HTTP null-result PR698 and audit nonce-redaction PR699; no deployment or stable version advanced. Draft PR701 review commit 5b504abb exactly matches integration 27c0eda4, with full signed history preserved separately and DCO passed. At that source, full types, whole lint, 336 actual cases in 56 complete changed test files, and license/notes/plan gates passed; 60 database cases were explicitly skipped. NEW V5 normally applied all 83 migrations in 6.799s. Strict read-only v16 then passed the 142-model cohort, 282 guards, both new empty-scope functions and required function bodies, exact journal/settings and independent client drain. Four actual empty-media service controls and the historical import-upgrade control passed individually with independent metadata/journal/profile/drain proofs; upgrade rollback also restored all four guard functions and three modern FK definitions exactly. SDK generation and non-update verification each passed eight live-registry cases. Cumulative partial returns and lost-response recovery passed; failed V3/V4 datasets remain preserved. The original unassigned-feedback fixture correctly took managed retention, so its raw-path expectation failed. A genuine charge-only ownership repair and nullable-PI controls are now integrated, with new source/native qualification pending. Current CI still requires a complete green run; enabled ordinary media I/O remains blocked on the unfinished full protocol. Positive controlled collection and media retirement/crash/multipart/quota/cutover remain implementation work. Actual provider/platform acceptance, final object-byte recovery, Tony's independent C11.10 report and exact C11.17 signature remain absent. No live checklist item closes from this checkpoint. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -12645,6 +12645,17 @@ schema they inherit reads as a designed thing rather than an excavation.
 - [ ] **C11.14** Verify every user-owned record participates correctly in
   search, permissions, audit, export, restore, retention, erasure and contact
   merge; there are no orphan or shadow stores.
+  Empty first media scope metadata source continuation2026-11-13 separates
+  exact request/scope/contact-bound empty header authority from provider I/O.
+  The original ABI and inventory fence recheck the complete empty ordinary,
+  transfer, quota/session and legacy/held ancestry graph; only intact sealed
+  empty headers may coexist. No full provider writer tag, caller privilege or
+  capability publication is granted; old unknown captures cannot be refilled.
+  Two owned82 metadata functions/guard continuation and4 actual-service native
+  controls remain entirely unrun. No model/published journal/original oracle
+  changes; root reviews/assembles new82 and qualifies a genuinely new database.
+  Physical producers/full source/business/provider/security/stable gates remain
+  open. See `deploy/media-empty-first-scope82-source-20261113.md`.
   Empty transfer ownership merge scope source repair2026-11-13: actual CI701
   original merge/outbox controls reached the deliberately inactive media
   capability before checking for any scoped transfer subject. The shared
@@ -14287,8 +14298,36 @@ whatever is best for the people using the site.
   jsonb_build_object key had no inferable type even with WHERE false. That exact
   whitelisted key now has an explicit text cast; no identities, membership or
   money policy changed. Failed V5 and its independent journal/profile/drain
-  proof are preserved. Fresh V6 and the unchanged native receipt assertions
-  remain required before acceptance.
+  proof are preserved. Fresh V6 normally applied all83 entries in6.998s.
+  The unchanged actual NULL-payment receipt journey then passed in10.078s,
+  including genuine charge-only feedback, original privacy/export/undo
+  footprints and retained cash with zero canonical payments/invoices/refunds.
+  Independent read-only proof verified receipt1, authenticated feedback, all83
+  journal hashes, UTC/fsync/jit profile and zero clients. The two complete
+  affected witness suites also passed12 actual controls with no skips.
+  Evidence: /tmp/freeholder-current-full82-feedback-receipt-native-v2-20261113
+  (-result.json and -ledger-v2.json),
+  /tmp/freeholder-financial-json-key-source-v1-20261113-result.json.
+  This component proof supplies no provider-account or stable acceptance.
+  Controlled raw-finance native preparation2026-11-13: the first newly
+  executed positive-intent interruption control stopped before controlled
+  provider admission because its synthetic Stripe edge supplied a secret but
+  omitted webhook configuration, making the real adapter unavailable. Failed
+  V6 is preserved with zero controlled resources/facts and canonical money,
+  exact83-entry journal/profile and drained clients. The fixture now explicitly
+  supplies its own fictional webhook secret instead of depending on inherited
+  process configuration. No production availability guard changed. Both actual
+  raw-finance controls still require a fresh database and original assertions.
+  Controlled origin SQL correction2026-11-13: after the fixture availability
+  correction, the original interruption/recovery journey reached its actual
+  cash receipt and caught PostgreSQL42703. The origin trigger used table alias
+  old, which PL/pgSQL resolved as its trigger OLD record, lacking the schedule
+  provider_observation field. The owned unpublished fragment and its identical
+  assembled SQL80 body now use prior_schedule. Every original ownership
+  exclusion stays intact; the entire old397928-byte prefix and0–79/81/82 are
+  unchanged. Failed V7 and all independently verified journal/profile/drain
+  evidence remain preserved. Fresh migration, strict parity and the unchanged
+  business journey remain required.
   Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
   parity stopped at the first genuine model/source mismatch in the named
   nonnegative invoice amount CHECK after125 complete models. The unchanged
