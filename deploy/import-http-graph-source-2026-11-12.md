@@ -346,3 +346,46 @@ The genuine c623/v6 BEFORE and its populated19-table/schema-matching clone
 remain unchanged. Held/late-positive/old-runtime/empty/recovery/expiry boundaries,
 above500-entry shared-media lifecycle, owner UI/SDK and normal81 qualification
 remain required. No C3.47, provider, cutover or stable sign-off is supplied.
+
+## Actual old80 compatibility and first empty-capture controls
+
+Two test-only fixtures preserve actual full application source: producer5d0f2576
+is product/SQL-identical to e498, while consumer54cec1ac is product/SQL-identical
+to old84705f24. Both pass full Node22 types and fixture lint. Initial consumer
+lint found one redundant non-null assertion; only that assertion was removed
+and lint passed. No oracle, product or deadline changed.
+
+The real TCP producer passed12.53s on v7 and left2 accepted live PUTs,2 original
+reservations and one submitted erasure request without an artifact or inferred
+capture. Its actual server and every client drained before the old consumer.
+Using the SAME storage root/namespace and a mode600 synthetic receipt, with NO
+intervening reset, old847 passed its populated refusal control6.52s: exact
+SQL55000 complete-capture refusal; verified request/artifact0; actual original
+page bytes/digest/normalized rows unchanged;2 live PUTs/2 reservations/DELETE0.
+The receipt retains only synthetic IDs, key/namespace/digest/bytes, no owner
+credentials.
+
+A separately granted true-empty old847 control passed8.21s with zero actual
+sources, responses, writes, reservations or capture rows. Its actual verified
+request could not falsely complete without a known-empty capture witness.
+
+Current7890005c (test-only, product-identical to e5) then reused that EXACT
+old-refused verified request with NO reset. A fresh real synthetic owner session
+performed its first successful fulfillment; it passed7.74s and produced actual
+immutable v1 capture0/0, complete=true, empty normalized members and an intact
+checksummed artifact/completed raw-erased receipt/pending0. This is a new actual
+first capture, not an inferred reconstruction of old completed history. No
+server/provider operation or physical write occurred in this current-empty
+control.
+
+Each separately granted case stopped after its first result; TCP closure where
+applicable, all runner/client exits and independent PostgreSQL ALL-client[]
+checks passed. Journal81/max60 and jitoff/fsyncon/recoveryfalse stayed unchanged.
+Reports: `/tmp/freeholder-crawl-old80-{setup,populated,empty}-v7-classification-20261112.json`
+and `/tmp/freeholder-crawl-current-empty-v7-classification-20261112.json`.
+
+The preserved false-completed c623 golden clone has NOT been changed or migrated.
+Its separately prepared historical recovery review remains unrun, as do the
+held/late/expiry matrix and full above500-entry owner acceptance. Old native
+application-source refusal supplies no new production-artifact, ordinary81,
+provider or stable sign-off. C3.47 remains open.

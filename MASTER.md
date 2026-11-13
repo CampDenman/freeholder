@@ -6511,6 +6511,14 @@ deployments are portable, testable and incapable of silently forking the truth.
   registered bodies used actual durable payloads. Old-runtime/held/late/recovery/
   expiry and full501 acceptance remain required. Preserved v6/c623 and its
   actual false-completed clone are untouched;81 remains unregistered.
+  Actual old847 native application-source refusal now passes on new v7: real
+  e498 TCP setup12.53s, populated missing-capture refusal6.52s with unchanged
+  bytes/rows and no intervening reset, then true-empty refusal8.21s. Current
+  callback789/e5 reuses that actual verified empty request without reset and
+  passes7.74s with real first immutable0/0 capture and intact completed receipt.
+  Independent TCP/runner/client drain and the ordinary80 journal are unchanged.
+  This is not historical-completion reconstruction or production-artifact
+  acceptance; the untouched false-completed golden still needs reviewed recovery.
   No ordinary81, above500-entry or privacy-completion claim is made; this item
   remains open. See `deploy/import-http-graph-source-2026-11-12.md`.
   Original-hold snapshot source increment 2026-11-12: an actual new HTTP-crawl
