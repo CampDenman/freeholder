@@ -90,7 +90,7 @@ async function collect(prorationId: string, caller: Actor) {
       actual = await paymentAdapter("stripe").chargeSavedMethod(request);
       // Real positive principal is committed before the caller-finish write or
       // any later domain/access/fee failure. No synthetic settlement is added.
-      await recordMerchantPaymentObservation.call({ paymentId: claimed.paymentId!, providerEventRef: merchantObservationRef(actual), evidence: actual }, system);
+      await recordMerchantPaymentObservation.call({ paymentId: claimed.paymentId, providerEventRef: merchantObservationRef(actual), evidence: actual }, system);
       return actual;
     });
   } catch (error) {

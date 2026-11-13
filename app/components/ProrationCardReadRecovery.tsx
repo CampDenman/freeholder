@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { translator } from "@/core/i18n";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill } from "@/ui/primitives";
-import { PRORATION_READ_STOP_CONFIRMATION, prorationPaymentReadRecoveryPlan } from "@/modules/subscriptions/proration-card-read-recovery";
+import { PRORATION_READ_STOP_CONFIRMATION, type prorationPaymentReadRecoveryPlan } from "@/modules/subscriptions/proration-card-read-recovery";
 import { reviewProrationPaymentReadStoppedAction } from "../proration-card-read-actions";
 type Rows = Awaited<ReturnType<typeof prorationPaymentReadRecoveryPlan.call>>;
 export function ProrationCardReadRecovery({ rows, locale }: { rows: Rows; locale: string }) {

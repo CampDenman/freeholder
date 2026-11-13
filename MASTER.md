@@ -15047,6 +15047,15 @@ whatever is best for the people using the site.
   Root media repairs and full renewed qualification remain required; no SQL,
   activation, item or stable gate changes. See
   `deploy/commercial-types82-source-20261113.md`.
+  Full82 commercial lint source correction (same date/items): the first actual
+  whole lint failed41 diagnostics in24 files; its failure remains preserved.
+  Three type-only import bindings and18 control-flow-redundant assertions now
+  address the21 assigned commercial diagnostics by source inspection. Runtime
+  guards, amounts, output contracts and all original/prepared native oracles
+  remain unchanged; no renewed lint/compiler/test/database/native/provider ran.
+  Root media/storage corrections and full renewed qualification remain required;
+  no schema, SQL, activation, item or stable gate changes. See
+  `deploy/commercial-lint82-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the

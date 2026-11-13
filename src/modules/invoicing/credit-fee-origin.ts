@@ -47,9 +47,9 @@ export async function originalCreditFeeAllocation(ctx: ServiceContext, paymentId
       && observation.settlementMerchantAccountId === (routing.settlementMerchantAccountId ?? routing.providerAccountId ?? null) && observation.amountMinor === payment.amountMinor && observation.currency === payment.currency && observation.applicationFeeCurrency === payment.currency
       && observation.observedApplicationFeeMinor !== null && observation.observedFeeRefundedMinor !== null;
     state = "review";
-    if (!unsettled && feeKnown && observation!.observedApplicationFeeMinor === originalFeeMinor && observation!.observedFeeRefundedMinor === 0
-      && (originalFeeMinor === 0 ? !observation!.applicationFeeRef : Boolean(observation!.applicationFeeRef))) state = originalFeeMinor === 0 ? "not_due" : "verified_collected";
-    else if (!unsettled && feeKnown && Boolean(observation!.applicationFeeRef) && observation!.observedApplicationFeeMinor! >= 0 && observation!.observedApplicationFeeMinor! < originalFeeMinor && observation!.observedFeeRefundedMinor === 0) state = "owed";
+    if (!unsettled && feeKnown && observation.observedApplicationFeeMinor === originalFeeMinor && observation.observedFeeRefundedMinor === 0
+      && (originalFeeMinor === 0 ? !observation.applicationFeeRef : Boolean(observation.applicationFeeRef))) state = originalFeeMinor === 0 ? "not_due" : "verified_collected";
+    else if (!unsettled && feeKnown && Boolean(observation.applicationFeeRef) && observation.observedApplicationFeeMinor! >= 0 && observation.observedApplicationFeeMinor! < originalFeeMinor && observation.observedFeeRefundedMinor === 0) state = "owed";
     unexpectedFee = Boolean(observation && (observation.observedApplicationFeeMinor !== null && observation.observedApplicationFeeMinor > originalFeeMinor
       || observation.observedFeeRefundedMinor !== null && observation.observedFeeRefundedMinor > 0 || observation.applicationFeeCurrency !== null && observation.applicationFeeCurrency !== payment.currency));
     proof = { origin: "provider", routing, observation, operations };

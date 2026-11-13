@@ -14,6 +14,6 @@ describe("recorded external commercial money preserves the original nonallocatio
     expect(recordedCommercialFeeTarget(9007199254740991, 9007199254740990, 1)).toBe(9007199254740989);
   });
   it.each([[0, 0, 0], [1, 2, 0], [1, 0, 2], [10, -1, 0], [10, 1, -1], [1.1, 0, 0], [Number.MAX_SAFE_INTEGER + 1, 0, 0]])("refuses impossible or inexact original principal/fee facts %j", (amount, fee, returned) => {
-    expect(() => recordedCommercialFeeTarget(amount!, fee!, returned!)).toThrow(RangeError);
+    expect(() => recordedCommercialFeeTarget(amount, fee, returned)).toThrow(RangeError);
   });
 });

@@ -128,7 +128,7 @@ export const commercialPrincipalState = defineService({ name: "invoicing.commerc
     const principalReview = overflow || disputed.length > 0 || !payment || payment.provider !== "manual" || payment.status !== "succeeded" || payment.amountMinor !== record.amountMinor || payment.currency !== record.currency
       || returned.some(row => ["created", "processing"].includes(row.status) || row.status === "succeeded" && !recordedRefunds.some(proof => proof.refundId === row.id && proof.amountMinor === row.amountMinor && proof.currency === row.currency))
       || returnedMinor !== BigInt(payment?.refundedMinor ?? 0);
-    const feeOwedMinor = principalReview ? record.feeOwedMinor : recordedCommercialFeeTarget(record.amountMinor, record.feeOwedMinor, payment!.refundedMinor);
+    const feeOwedMinor = principalReview ? record.feeOwedMinor : recordedCommercialFeeTarget(record.amountMinor, record.feeOwedMinor, payment.refundedMinor);
     const feeReview = feeRecordedMinor < 0n || feeRecordedMinor > BigInt(feeOwedMinor) || fees.some(row => row.direction === "returned" && !fees.some(original => original.id === row.originalRemittanceId && original.direction === "remitted" && original.paymentId === row.paymentId))
       || fees.filter(row => row.direction === "remitted").some(original => fees.filter(row => row.originalRemittanceId === original.id).reduce((sum, row) => sum + BigInt(row.amountMinor), 0n) > BigInt(original.amountMinor));
     return { recorded: true, principalSafe: !principalReview, feeOwedMinor, feeRecordedMinor: Number(feeRecordedMinor), reviewRequired: principalReview || feeReview };

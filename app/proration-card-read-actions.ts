@@ -8,7 +8,7 @@ import { SESSION_COOKIE } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { requestMetadataFromHeaders } from "@/core/http/request-metadata";
 import { ServiceError } from "@/core/service";
-import { reviewProrationPaymentReadStopped, PRORATION_READ_STOP_CONFIRMATION } from "@/modules/subscriptions/proration-card-read-recovery";
+import { reviewProrationPaymentReadStopped, type PRORATION_READ_STOP_CONFIRMATION } from "@/modules/subscriptions/proration-card-read-recovery";
 function text(form: FormData, key: string) { const value = form.get(key); return typeof value === "string" ? value.trim() : ""; }
 export async function reviewProrationPaymentReadStoppedAction(form: FormData) {
   const paymentId = text(form, "paymentId");
