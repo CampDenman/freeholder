@@ -15199,6 +15199,21 @@ whatever is best for the people using the site.
   the existing exact schema before constructing the provider request; invalid
   legacy/API epochs refuse explicitly. No cast invents a current protocol.
   Renewed source and actual provider acceptance remain open.
+  Controlled raw financial review source correction (2026-11-13, same items):
+  the nine-family zero-only protocol now retains review debt from actual raw
+  positive intent/invoice/payment evidence even when cash_observed/receipt
+  bridging never ran. Nonzero unpaid/pending invoices/intents/lines/recurring
+  resources also require review; status/amount alone never becomes canonical
+  cash. Original bootstrap/discovery ancestry is preserved, unrelated discovery
+  results and nonpayable previews are not adopted, and a newer zero read cannot
+  release an older actual caller or erase an earlier positive occurrence.
+  Both actual coverage and receipt namespace consume the same ordinary helper.
+  Eight signed-caller controls and two actual shared-service/HTTP native fault/
+  recovery controls are PREPARED/UNRUN. Source only: no SQL/model/guard epoch,
+  compiler/lint/test/PG/provider operation or stable/acceptance closure here.
+  Future positive-protocol target/disposition and complete current principal
+  authority remain required; owned nonpayable drafts must be proved exactly,
+  never blanket-clear cash debt. See deploy/controlled-raw-financial9-source-20261113.md.
   Controlled provider transport source checkpoint (2026-11-13, same items):
   actual zero-NET bootstrap, independent pause readback, original-resource
   discovery, exact calendar cancellation/readback and complete invoice/payment
