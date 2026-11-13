@@ -8,6 +8,7 @@ import { env } from "@/core/env";
 import { number, object, paymentFetch, providerJson, text } from "./http";
 import { applyDestinationCharge, assertMerchantAttempt, assertMerchantIntent, merchantAttemptMetadata, merchantChargeScope, merchantIntentEvidence, validateMerchantChargeScope } from "./stripe-merchant-scope";
 import { stripeMerchantFees } from "./stripe-merchant-fees";
+import { stripeCashAuxiliary } from "./stripe-cash-auxiliary";
 import { stripeCheckoutEvidence } from "./stripe-merchant-capture";
 import { proveStripeSubscriptionPayment } from "./stripe-subscription-origin";
 import { collectOriginalStripeSubscriptionCash, originalSubscriptionInvoiceMetadata } from "./stripe-subscription-cash";
@@ -438,6 +439,7 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     capabilities: () => ({ ...capabilities }),
     platformAccountIdentity,
     ...stripeMerchantFees(chargeApi),
+    ...stripeCashAuxiliary(chargeApi),
     ...stripeMerchantRecovery(chargeApi),
     ...stripeMerchantIntentRecovery(chargeApi),
     ...stripeMerchantRefundRecovery(chargeApi),

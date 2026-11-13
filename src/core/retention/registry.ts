@@ -93,6 +93,10 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+  original_cash_recoveries: "Original financial cash-return owner and source observation; immutable financial proof, no age purge.",
+  original_cash_recovery_operations: "Original admitted refund/fee/recipient read and write caller proof; no clock can erase its recovery debt.",
+  original_cash_recovery_facts: "Private minimal authenticated financial callbacks, actual finishes and hosting reviews remain with original money.",
+  original_cash_recovery_closures: "Historical complete cash-return proof remains immutable when newer evidence invalidates its freshness.",
   merchant_payment_dispatch_finishes: "Immutable actual original caller completion; money outcome remains independent and is reconciled through the original invoice.",
   merchant_payment_dispatch_stops: "Exact original hosting stop reviews; private operational proof cannot be an age sweep or contact search.",
   merchant_payment_resource_bindings: "Original physical acknowledgements or explicit provider request-log review, retained with the existing invoice owner. Not a second contact identity.",

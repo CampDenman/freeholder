@@ -16,9 +16,14 @@ import { legacyBankFeedback } from "./legacy-bank-feedback-schema";
 import { legacyBankFeedbackPaymentOwner } from "./legacy-bank-feedback-store";
 import { verifyLegacyReplacementJournalRow } from "./legacy-bank-replacement-store";
 import { verifyBankReplacementJournalRow } from "./merchant-bank-replacement-store";
+import { originalCashRecoveryOwner, originalCashRecoveryFinancialWitness } from "./original-cash-recovery-store";
 
 export const ORIGINAL_REFUND_EVIDENCE_EVENT = "invoicing.originalRefundEvidenceRetained";
 const factTypes = {
+  original_cash_owner: ["original_cash_recoveries", "id"],
+  original_cash_operation: ["original_cash_recovery_operations", "id"],
+  original_cash_fact: ["original_cash_recovery_facts", "id"],
+  original_cash_closure: ["original_cash_recovery_closures", "id"],
   legacy_bank_feedback: ["legacy_bank_feedback", "id"],
   legacy_bank_replacement: ["money_state_events", "id"],
   legacy_bank_stop: ["legacy_bank_read_stops", "read_id"],
@@ -40,7 +45,7 @@ const factTypes = {
   cash_resolution: ["merchant_unapplied_charge_resolutions", "id"],
 } as const;
 export const originalRefundRepairPointer = z.object({
-  kind: z.enum(["legacy_bank_feedback", "legacy_bank_replacement", "legacy_bank_stop", "legacy_bank_current", "legacy_bank_read", "legacy_bank_fact", "legacy_bank_finish", "request", "refund_observation", "refund_capture", "refund_current", "bank_replacement", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_resolution"]),
+  kind: z.enum(["original_cash_owner", "original_cash_operation", "original_cash_fact", "original_cash_closure", "legacy_bank_feedback", "legacy_bank_replacement", "legacy_bank_stop", "legacy_bank_current", "legacy_bank_read", "legacy_bank_fact", "legacy_bank_finish", "request", "refund_observation", "refund_capture", "refund_current", "bank_replacement", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_resolution"]),
   id: z.uuid(),
 }).strict();
 type Pointer = z.infer<typeof originalRefundRepairPointer>;
@@ -73,7 +78,13 @@ export const originalMerchantRefundRepairSource = defineService({
     const [table, column] = factTypes[pointer.kind];
     const fact = await factRow(ctx, table, column, pointer.id);
     let owner = fact;
-    if (pointer.kind === "legacy_bank_feedback") {
+    if (pointer.kind.startsWith("original_cash_")) {
+      const original = await originalCashRecoveryOwner(ctx.tx, pointer.kind === "original_cash_owner" ? pointer.id : restoredId(fact.recovery_id));
+      // Validate the entire bounded source-owned set before private financial
+      // privacy repair. Corruption is observable outbox debt after fact commit.
+      await originalCashRecoveryFinancialWitness(ctx.tx, original.paymentId ? [original.paymentId] : [], original.subscriptionChargeReceiptId ? [original.subscriptionChargeReceiptId] : []);
+      owner = { payment_id: original.paymentId, subscription_charge_receipt_id: original.subscriptionChargeReceiptId };
+    } else if (pointer.kind === "legacy_bank_feedback") {
       const [raw] = await ctx.tx.select().from(legacyBankFeedback).where(eq(legacyBankFeedback.id, pointer.id));
       if (!raw) throw new ServiceError("conflict", "Restore the authentic original raw bank-feedback receipt before privacy repair.");
       owner = { payment_id: await legacyBankFeedbackPaymentOwner(ctx.tx, raw), subscription_charge_receipt_id: null };

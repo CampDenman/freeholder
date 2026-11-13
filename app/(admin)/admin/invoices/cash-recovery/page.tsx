@@ -1,0 +1,35 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// C12.38: actual original cash, explicit human money and hosting review.
+import { hasModuleAccess } from "@/core/service";
+import { originalCashReturnRecovery } from "@/modules/invoicing/original-cash-recovery-read";
+import { ORIGINAL_CASH_RETURN_CONFIRMATION, ORIGINAL_CASH_STOP_CONFIRMATION } from "@/modules/invoicing/original-cash-recovery-proof";
+import { Button, Callout, Card, CardBody, Field } from "@/ui/primitives";
+import { getT } from "../../../../i18n";
+import { requireStaffActor } from "../../guard";
+import { money } from "../format";
+import { originalCashRecoveryAction } from "./actions";
+export const dynamic = "force-dynamic";
+export default async function OriginalCashRecoveryPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
+  const actor = await requireStaffActor("invoicing"), [rows, t, query] = await Promise.all([originalCashReturnRecovery.call({}, actor), getT(), searchParams]);
+  const manage = hasModuleAccess(actor, "invoicing", "manage"), human = manage && actor.kind === "user" && !actor.keyScopes;
+  return <div className="grid gap-6"><a href="/admin/invoices" className="underline">{t("cashRecovery.back")}</a>
+    <h1 className="text-xl font-semibold">{t("cashRecovery.title")}</h1><p>{t("cashRecovery.help")}</p>
+    {query.error ? <Callout tone="danger">{t("cashRecovery.error")}</Callout> : null}{query.saved ? <Callout tone="success">{t("cashRecovery.saved")}</Callout> : null}
+    {!rows.length ? <p>{t("cashRecovery.empty")}</p> : rows.map(row => {
+      const sourceId = row.source.kind === "subscription" ? row.source.receiptId : row.source.paymentId;
+      return <Card key={row.recoveryId ?? `${sourceId}:${row.source.observationId ?? "original"}`}><CardBody><div className="grid gap-4">
+        <h2 className="font-semibold">{money(row.amountMinor, row.currency)} · <bdi>{sourceId}</bdi></h2><p>{t(row.closed ? "cashRecovery.closed" : "cashRecovery.pending")}</p>
+        {manage && row.recoveryId ? <form action={originalCashRecoveryAction}><input type="hidden" name="intent" value="inspect"/><input type="hidden" name="recoveryId" value={row.recoveryId}/><Button type="submit">{t("cashRecovery.inspect")}</Button></form> : null}
+        {human && !row.closed ? <form action={originalCashRecoveryAction} className="grid gap-3"><input type="hidden" name="intent" value="return"/><input type="hidden" name="sourceKind" value={row.source.kind}/><input type="hidden" name="sourceId" value={sourceId}/><input type="hidden" name="observationId" value={row.source.observationId ?? ""}/>
+          <label className="flex items-start gap-2"><input type="checkbox" name="confirmation" value={ORIGINAL_CASH_RETURN_CONFIRMATION} required/><span>{t("cashRecovery.confirmReturn")}</span></label><Button type="submit">{t("cashRecovery.return")}</Button></form> : null}
+        {row.callers.map(caller => <section key={caller.operationId} className="grid gap-3 rounded border border-rule p-3"><h3>{t("cashRecovery.caller", { host: caller.host, pid: caller.pid })}</h3>
+          {caller.liveness === "live" ? <Callout tone="warning">{t("cashRecovery.live")}</Callout> : human ? <form action={originalCashRecoveryAction} className="grid gap-3"><input type="hidden" name="intent" value="stop"/><input type="hidden" name="operationId" value={caller.operationId}/><input type="hidden" name="callerId" value={caller.callerId}/><input type="hidden" name="expectedDigest" value={caller.digest}/>
+            <Field htmlFor={`cash-stop-${caller.operationId}`} label={t("cashRecovery.evidence")}><textarea id={`cash-stop-${caller.operationId}`} name="hostingEvidence" required minLength={30} maxLength={2000} className="w-full rounded border border-rule bg-surface p-2 text-ink"/></Field>
+            <label className="flex items-start gap-2"><input type="checkbox" name="confirmation" value={ORIGINAL_CASH_STOP_CONFIRMATION} required/><span>{t("cashRecovery.confirmStop")}</span></label><Button type="submit">{t("cashRecovery.reviewStop")}</Button></form> : null}</section>)}
+        {human && row.recoveryId ? row.legacyFees.map(fee => <form key={fee.id} action={originalCashRecoveryAction} className="grid gap-3 rounded border border-rule p-3"><p>{t("cashRecovery.oldFeeHelp")}</p><input type="hidden" name="intent" value="legacyFeeStop"/><input type="hidden" name="recoveryId" value={row.recoveryId!}/><input type="hidden" name="feeOperationId" value={fee.id}/><input type="hidden" name="expectedDigest" value={fee.digest}/>
+          <Field htmlFor={`cash-fee-stop-${fee.id}`} label={t("cashRecovery.evidence")}><textarea id={`cash-fee-stop-${fee.id}`} name="hostingEvidence" required minLength={30} maxLength={2000} className="w-full rounded border border-rule bg-surface p-2 text-ink"/></Field>
+          <label className="flex items-start gap-2"><input type="checkbox" name="confirmation" value={ORIGINAL_CASH_STOP_CONFIRMATION} required/><span>{t("cashRecovery.confirmStop")}</span></label><Button type="submit">{t("cashRecovery.reviewStop")}</Button></form>) : null}
+      </div></CardBody></Card>;
+    })}</div>;
+}

@@ -646,6 +646,8 @@ export interface PaymentAdapter {
   capabilities(): PaymentAdapterCapabilities;
   /** Provider read outside business transactions; never an owner attestation. */
   platformAccountIdentity?(): Promise<{ providerPlatformAccountId: string }>;
+  createMerchantCashAuxiliary?(request: import("./merchant-cash-auxiliary-types").MerchantCashAuxiliaryRequest): Promise<import("./merchant-cash-auxiliary-types").MerchantCashAuxiliaryEvidence>;
+  recoverMerchantCashAuxiliary?(request: import("./merchant-cash-auxiliary-types").MerchantCashAuxiliaryRequest): Promise<import("./merchant-cash-auxiliary-types").MerchantCashAuxiliaryEvidence | null>;
   refundMerchantFee?(request: MerchantFeeRefundRequest): Promise<MerchantFeeRefundResult>;
   /** A missing lookup is unresolved, never evidence that a timed-out refund did not happen. */
   recoverMerchantFeeRefund?(request: MerchantFeeRefundRequest): Promise<MerchantFeeRefundResult | null>;

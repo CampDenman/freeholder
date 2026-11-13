@@ -9141,5 +9141,22 @@
   "subscriptions.reader.confirm": "Type the confirmation shown below",
   "subscriptions.reader.review": "Record the original runtime stop",
   "subscriptions.reader.saved": "Recovery evidence saved. Review the current state before the next action.",
-  "subscriptions.reader.failed": "Recovery could not proceed. Reload the original evidence and verify your sign-in again if needed."
+  "subscriptions.reader.failed": "Recovery could not proceed. Reload the original evidence and verify your sign-in again if needed.",
+  "cashRecovery.title": "Original cash recovery",
+  "cashRecovery.back": "Back to invoices",
+  "cashRecovery.help": "Review retained original cash and return it only to its original payer. The existing invoice, payment and credit stay intact. Check the bank before trying another action.",
+  "cashRecovery.empty": "There is no retained cash awaiting recovery.",
+  "cashRecovery.pending": "The original cash return remains open.",
+  "cashRecovery.closed": "The complete original cash return is confirmed.",
+  "cashRecovery.inspect": "Check original bank resources",
+  "cashRecovery.confirmReturn": "I authorize returning only this original cash, its site fee and its original recipient transfer.",
+  "cashRecovery.return": "Return original cash",
+  "cashRecovery.error": "This action needs review. Earlier bank facts remain retained. Check the original resources and any unfinished caller.",
+  "cashRecovery.saved": "The recovery action finished. Check the current result below.",
+  "cashRecovery.caller": "Original caller: {host}, process {pid}",
+  "cashRecovery.live": "The original process is still running. Finish or stop it before hosting review.",
+  "cashRecovery.evidence": "Hosting stop evidence",
+  "cashRecovery.confirmStop": "I verified that the exact original operation has stopped on its host.",
+  "cashRecovery.reviewStop": "Record hosting review",
+  "cashRecovery.oldFeeHelp": "This older fee journal has no original process-birth record. Verify that its exact original operation has stopped before recording a new review. This does not create a historical finish or prove a bank outcome."
 }
