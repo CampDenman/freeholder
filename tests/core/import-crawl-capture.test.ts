@@ -6,7 +6,7 @@ import { writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { importSourceEntries, importSourceGraphs } from "@/core/plugins/schema";
+import { importSourceBatches, importSourceEntries, importSourceGraphs, importSourceMedia } from "@/core/plugins/schema";
 import { importCrawlEntryOriginals, importCrawlGraphs } from "@/core/import/crawl-graph-schema";
 import { resetStorageForTests, storage } from "@/adapters/storage";
 import { db } from "@/core/db";
@@ -23,6 +23,7 @@ import { privacyRetentionSourceMembers, privacyRetentionSourceSnapshots } from "
 import { retireExpiredCrawls } from "@/core/import/crawl-retirement";
 import { deleteCaptureObjects } from "@/core/media/capture";
 import { mediaObjectWrites } from "@/core/media/write-schema";
+import { assets } from "@/core/media/schema";
 import { ready } from "@/core/runtime";
 import { advanceCrawl } from "@/core/import/crawl-advance";
 import { initializeCrawl } from "@/core/import/crawl-capture";
@@ -203,6 +204,51 @@ describe.runIf(hasDatabase)("actual saved HTTP response capture (C3.47)", () => 
     const indexed = await db().select({ metadata: importSourceEntries.metadata }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graph!.id));
     expect(retiredGraph?.state).toBe("invalidated");
     expect(JSON.stringify({ header: retiredGraph!.headerMetadata, catalog: retiredGraph!.planMetadata, entries: indexed })).not.toContain(privateMarker);
+  });
+
+  it("minimizes the actual unaccepted image URL key after original HTTP privacy cleanup", async () => {
+    const privateMarker = "fictional-private-media-reader@example.test";
+    const owner = await actualOwner(), site = await actualOriginalServer(undefined, `<title>Actual original image reference</title><main>Unaccepted source input.<img src="/${privateMarker}.png" alt="Actual original reference"></main>`);
+    const run = await startImport.call({ origin: site, kind: "html" }, owner);
+    await initializeCrawl.call({ id: run.id, url: `${site}original` }, owner);
+    const [source] = await db().select().from(importCrawlSources).where(eq(importCrawlSources.runId, run.id));
+    for (let phase = 0; phase < 6; phase++) await advanceCrawl.call({ id: run.id, generation: source!.generation }, owner);
+    const [graph] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.runId, run.id));
+    expect(graph?.planDigest).toBeNull();
+    expect(await db().select().from(importSourceBatches).where(eq(importSourceBatches.graphId, graph!.id))).toEqual([]);
+    expect(await db().select().from(assets)).toEqual([]);
+    const originalMedia = await db().select().from(importSourceMedia).where(eq(importSourceMedia.graphId, graph!.id));
+    expect(originalMedia).toHaveLength(1); expect(originalMedia[0]?.assetId).toBeNull();
+    expect(JSON.stringify(originalMedia)).toContain(privateMarker);
+    expect(observed.map(request => request.path)).toEqual(["/robots.txt", "/original"]);
+    const reader = (await resolveContact.call({ email: privateMarker }, owner)).contact;
+    const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, owner);
+    await verifyDataRequest.call({ id: request.id, method: "Synthetic actual unaccepted original URL subject verification" }, owner);
+    await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, owner);
+    for (let phase = 0; phase < 16; phase++) {
+      const [artifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
+      const receipt = artifact!.body as { outcomes: Array<{ scope: string; pendingJobs?: string[] }> };
+      const pending = receipt.outcomes.find(outcome => outcome.scope === CRAWL_ERASURE_SCOPE)?.pendingJobs ?? [];
+      if (!pending.length) break;
+      const job = await getJob(CRAWL_ERASURE_JOB, pending[0]!);
+      if (!job?.data) throw new Error("The actual original HTTP privacy job is missing.");
+      await eraseCrawlOriginals(job.data);
+    }
+    const [artifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
+    const receipt = artifact!.body as { status: string; outcomes: Array<{ scope: string; outcome: string; pendingJobs?: string[] }> };
+    expect(receipt.status).toBe("completed");
+    expect(receipt.outcomes.find(outcome => outcome.scope === CRAWL_ERASURE_SCOPE)).toMatchObject({ outcome: "erased" });
+    expect(receipt.outcomes.find(outcome => outcome.scope === CRAWL_ERASURE_SCOPE)?.pendingJobs ?? []).toEqual([]);
+    for (const response of await db().select().from(importCrawlResponses)) {
+      expect(response.redactedAt).toBeInstanceOf(Date);
+      expect(await storage().get(response.storageKey!)).toBeUndefined();
+    }
+    const [retiredGraph] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.id, graph!.id));
+    const entries = await db().select({ metadata: importSourceEntries.metadata }).from(importSourceEntries).where(eq(importSourceEntries.graphId, graph!.id));
+    const media = await db().select({ id: importSourceMedia.id, key: importSourceMedia.key, planned: importSourceMedia.planned, assetId: importSourceMedia.assetId, error: importSourceMedia.error }).from(importSourceMedia).where(eq(importSourceMedia.graphId, graph!.id));
+    expect(await db().select().from(importSourceBatches).where(eq(importSourceBatches.graphId, graph!.id))).toEqual([]);
+    expect(await db().select().from(assets)).toEqual([]);
+    expect(JSON.stringify({ header: retiredGraph!.headerMetadata, catalog: retiredGraph!.planMetadata, entries, media })).not.toContain(privateMarker);
   });
 
 });
