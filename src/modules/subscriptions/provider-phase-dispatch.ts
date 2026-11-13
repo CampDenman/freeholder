@@ -4,7 +4,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { paymentAdapter, type MerchantPhaseScheduleAcknowledgment, type MerchantPhaseScheduleInventory, type MerchantPhaseScheduleRequest, type MerchantPhaseScheduleUpdateRequest } from "@/adapters/payments";
+import { paymentAdapter, type MerchantPhaseScheduleAcknowledgment, type MerchantPhaseScheduleInventory } from "@/adapters/payments";
 import { stripeMerchantPhaseBody } from "@/adapters/payments/stripe-subscription-phases";
 import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { defineOrchestratedService, defineService, getService, ServiceError, type ServiceContext } from "@/core/service";
@@ -211,10 +211,10 @@ export const admitMerchantProviderPhases = defineOrchestratedService({
       };
       if (claimed.request.providerScheduleRef) {
         if (!adapter.updateMerchantPhaseSchedule || !claimed.request.previous) throw new ServiceError("conflict", "Restore the original phase update adapter and retained previous inventory.");
-        local.result = await adapter.updateMerchantPhaseSchedule({ ...claimed.request, providerScheduleRef: claimed.request.providerScheduleRef, previous: claimed.request.previous, onResourceAcknowledged } as MerchantPhaseScheduleUpdateRequest);
+        local.result = await adapter.updateMerchantPhaseSchedule({ ...claimed.request, providerScheduleRef: claimed.request.providerScheduleRef, previous: claimed.request.previous, onResourceAcknowledged });
       } else {
         if (!adapter.createMerchantPhaseSchedule) throw new ServiceError("conflict", "Restore the original phase creation adapter.");
-        local.result = await adapter.createMerchantPhaseSchedule({ ...claimed.request, onResourceAcknowledged } as MerchantPhaseScheduleRequest);
+        local.result = await adapter.createMerchantPhaseSchedule({ ...claimed.request, onResourceAcknowledged });
       }
       local.outcome = "returned";
     } catch (error) { local.outcome = "threw"; throw error; }
