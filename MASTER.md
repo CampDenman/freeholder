@@ -14107,6 +14107,13 @@ whatever is best for the people using the site.
   including late resumption; see
   `deploy/full82-commercial-function-review-2026-11-13.md`.
   Full types pass at6ddf7b50; migration/parity/business gates remain open.
+  Private financial inventory checkpoint 2026-11-13 (C3.47/C12.38): renewed
+  full types and all21 reported lint locations pass atf9e923de; the42-file
+  source-contract run then stops on20 missing registered system-helper names.
+  Exact declarations and real collectors were reviewed;30 financial/controlled
+  system phases and one authenticated private own-card authorization are now
+  listed explicitly. All HTTP/OpenAPI/MCP exclusion assertions remain. See
+  `deploy/commercial-private-inventory-2026-11-13.md`; renewed tests are pending.
   Full integration wiring 2026-11-13 (C1.08/C12.38): buyer, frozen merchant
   profile and subscription merge evidence now select the exact24-family
   commercial/card footprint, including cashless/trial history. Existing evidence
