@@ -4,8 +4,9 @@
 This is a bounded SOURCE ONLY, UNQUALIFIED increment for MASTER §43 C12.38,
 C5.19 and C1.08, based on frozen917760c4. It does not close a checklist item,
 activate models, sign off a payment flow, or establish stable readiness.
-No compiler, lint, build, install, test, database, native or provider request
-ran for this increment. Prepared control bodies below are UNRUN.
+At the initial source freeze, no compiler, lint, build, install, test, database,
+native or provider request ran. Prepared control bodies below remain UNRUN.
+The subsequent bounded NoDB qualification attempt is recorded below.
 
 ## Exact original money and policy
 
@@ -59,7 +60,9 @@ UUIDs, then original cash namespace. The source calls the canonical private
 `invoicing.creditNoteDisposition` query under those locks. An RMA note must
 report `reservedForReturns:true`, zero applied and transferable available
 money, no review debt, and reservation equal to the **whole original note**.
-Its exact revision and receipt fingerprints join the source digest. Cash
+Additive locked credit must be zero and its source restriction null when those
+fields are present; a future conflicting disposition cannot hide behind an
+older response shape. Its exact revision and receipt fingerprints join the source digest. Cash
 already returned never makes that same RMA credit transferable to another
 invoice. The query is read-only and must not add locks. Its absence or a
 conflicting disposition keeps the partial target in review.
@@ -198,3 +201,27 @@ rollback, source-bound financial merge/export controls, SDK/browser/customer
 journeys, actual provider acceptance and independent review remain required.
 Prepared cases supply no actual qualification. No feature is permanently
 deferred and no stable sign-off is supplied.
+
+
+## First bounded NoDB qualification attempt
+
+All 12 dependency descriptors exactly matched frozen917760c4 and the existing
+main donor. No installation ran. The first full Node22 TypeScript attempt used
+an 8 GB heap and stopped with 15 diagnostics; its original log is preserved at
+`/tmp/freeholder-ce9f-nodb-types-20261113.log`. One new source diagnostic came
+from an inferred randomUUID template default; both exported fact/admission UUID
+parameters now explicitly accept the already-validated string UUID contract.
+That narrow repair is not a test pass.
+
+The first donor's installed tree lacked packages despite exact descriptors.
+A complete existing donor at `/tmp/freeholder-refund-ledger80-20261112` also
+exactly matched all 12 descriptors; only the temporary dependency symlink was
+changed, without an install. Remaining inherited9177 source blockers are the
+central merchant privacy import/use of schedule operation/resource models not
+present in this isolated schema and unknown metadata accesses in unchanged RMA
+native assertions (lines53 and138). Root owns their real integration source.
+No fake schema export, removed privacy witness, altered RMA oracle or compiler
+suppression was introduced. The type worker drained. Renewed full types,
+whole lint, selected tests and source gates await the exact baseline integration
+direction; none is claimed to pass. No native, PG, migration, build, model/journal
+assembly, server or provider account I/O ran.

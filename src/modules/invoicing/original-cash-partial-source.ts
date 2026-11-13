@@ -14,7 +14,7 @@ import { returnItems,returnRequests,orderItems } from "@/modules/catalog/schema"
 import { QUANTITY_SCALE } from "./money";
 import { merchantTaxDigest } from "./merchant-tax-store";
 const disposition = z.object({ reservedForReturns: z.boolean(), appliedMinor: z.number().int().min(0), reservedMinor: z.number().int().min(0),
-  availableMinor: z.number().int().min(0), reviewRequired: z.boolean(), revision: z.string().regex(/^[a-f0-9]{64}$/), receiptFingerprints: z.array(z.unknown()) });
+  availableMinor: z.number().int().min(0), lockedMinor:z.number().int().min(0).optional(),restrictedToSourceId:z.uuid().nullable().optional(), reviewRequired: z.boolean(), revision: z.string().regex(/^[a-f0-9]{64}$/), receiptFingerprints: z.array(z.unknown()) });
 /** Existing mutation ordering: original payment, invoice, then exact credit.
  * Never acquire an order row or another payment after its canonical cash lock. */
 export async function lockOriginalPartialCashSource(ctx: ServiceContext, paymentId: string, lock = true) {
@@ -64,7 +64,7 @@ export async function originalPartialCashSource(ctx: ServiceContext, paymentId: 
   const capacities = [];
   for (const creditNoteId of creditIds) {
     const actual = disposition.parse(await ctx.callAsSystem(creditService, { creditNoteId }));
-    if (!actual.reservedForReturns || actual.appliedMinor !== 0 || actual.reservedMinor !== notes.find(note => note.id === creditNoteId)?.totalMinor || actual.availableMinor !== 0 || actual.reviewRequired) throw new ServiceError("conflict", "This original return credit has conflicting application or reservation evidence. Preserve the whole refund promise; it cannot also pay another invoice.");
+    if (!actual.reservedForReturns || actual.appliedMinor !== 0 || actual.reservedMinor !== notes.find(note => note.id === creditNoteId)?.totalMinor || actual.availableMinor !== 0 || actual.lockedMinor!==undefined&&actual.lockedMinor!==0 || actual.restrictedToSourceId!==undefined&&actual.restrictedToSourceId!==null || actual.reviewRequired) throw new ServiceError("conflict", "This original return credit has conflicting application or reservation evidence. Preserve the whole refund promise; it cannot also pay another invoice.");
     capacities.push({ creditNoteId, ...actual, receiptFingerprints: [...actual.receiptFingerprints].sort((a,b) => merchantTaxDigest(a).localeCompare(merchantTaxDigest(b))) });
   }
   const originalReturns = returns.map(returned => ({ returnId: returned.returnId, creditNoteId: returned.creditNoteId, items: [...returned.items].sort((a,b) => a.invoiceLineId.localeCompare(b.invoiceLineId)),

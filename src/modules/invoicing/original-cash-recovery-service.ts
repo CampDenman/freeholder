@@ -42,7 +42,7 @@ async function write(ctx: ServiceContext) {
   await ctx.tx.execute(sql`select set_config('freeholder.original_cash_recovery_v1','1',true)`);
   await ctx.tx.execute(sql`select set_config('freeholder.original_cash_recovery_v2','1',true)`);
 }
-export async function appendOriginalCashFact(ctx: ServiceContext, recoveryId: string, operationId: string | null, kind: FactKind, evidence: Record<string, unknown>, factId = randomUUID()) {
+export async function appendOriginalCashFact(ctx: ServiceContext, recoveryId: string, operationId: string | null, kind: FactKind, evidence: Record<string, unknown>, factId: string = randomUUID()) {
   const [prior] = await ctx.tx.select().from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.id, factId));
   const [last] = prior ? [] : await ctx.tx.select({ sequence: originalCashRecoveryFacts.sequence }).from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.recoveryId, recoveryId)).orderBy(desc(originalCashRecoveryFacts.sequence)).limit(1);
   const sequence = prior?.sequence ?? (last?.sequence ?? 0) + 1;
@@ -52,7 +52,7 @@ export async function appendOriginalCashFact(ctx: ServiceContext, recoveryId: st
   await write(ctx); await ctx.tx.insert(originalCashRecoveryFacts).values(row);
   queueOriginalMerchantRefundRepair(ctx, { kind: "original_cash_fact", id: factId });
 }
-export async function admitOriginalCashOperation(ctx: ServiceContext, recoveryId: string, kind: "inspection" | "fee" | "recipient", request: Record<string, unknown>, operationId = randomUUID()) {
+export async function admitOriginalCashOperation(ctx: ServiceContext, recoveryId: string, kind: "inspection" | "fee" | "recipient", request: Record<string, unknown>, operationId: string = randomUUID()) {
   const nonce = randomBytes(32).toString("base64url"), createdAt = new Date(), caller = merchantPhysicalCaller();
   const body = { recoveryId, kind, request: json(request), caller, nonceHash: hash(nonce) }, digest = merchantTaxDigest(body);
   await write(ctx); await ctx.tx.insert(originalCashRecoveryOperations).values({ id: operationId, ...body, digest, createdAt,
