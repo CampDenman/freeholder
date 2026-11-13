@@ -14268,6 +14268,16 @@ whatever is best for the people using the site.
   supplies its own fictional webhook secret instead of depending on inherited
   process configuration. No production availability guard changed. Both actual
   raw-finance controls still require a fresh database and original assertions.
+  Controlled origin SQL correction2026-11-13: after the fixture availability
+  correction, the original interruption/recovery journey reached its actual
+  cash receipt and caught PostgreSQL42703. The origin trigger used table alias
+  old, which PL/pgSQL resolved as its trigger OLD record, lacking the schedule
+  provider_observation field. The owned unpublished fragment and its identical
+  assembled SQL80 body now use prior_schedule. Every original ownership
+  exclusion stays intact; the entire old397928-byte prefix and0–79/81/82 are
+  unchanged. Failed V7 and all independently verified journal/profile/drain
+  evidence remain preserved. Fresh migration, strict parity and the unchanged
+  business journey remain required.
   Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
   parity stopped at the first genuine model/source mismatch in the named
   nonnegative invoice amount CHECK after125 complete models. The unchanged
