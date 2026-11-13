@@ -65,10 +65,10 @@ describe.runIf(hasDatabase)("actual original raw feedback privacy owner81",{time
     expect(await db().select().from(payments)).toEqual(before);expect(paymentSource.posts).toEqual(["customer"]);
   });
   it("repairs actual NULL-payment receipt feedback after real signed paid cash survives a later canonical line rejection",async()=>{
-    let observed:{phase:z.infer<typeof phaseSchema>;amount:number;fee:number;invoice:Record<string,unknown>}|undefined;
+    const observationState:{value?:{phase:z.infer<typeof phaseSchema>;amount:number;fee:number;invoice:Record<string,unknown>}}={};
     subscriptionSource=await seedActualProviderSubscription80({extra:async url=>{
-      if(!observed)throw new Error("Create the actual admitted original phase before its paid receipt.");
-      const {phase,amount,fee,invoice}=observed;
+      if(!observationState.value)throw new Error("Create the actual admitted original phase before its paid receipt.");
+      const {phase,amount,fee,invoice}=observationState.value;
       if(url.pathname==="/v1/invoices/in_feedbackOwner")return Response.json(invoice);
       if(url.pathname==="/v1/invoice_payments")return Response.json({data:[{id:"inpay_feedbackOwner",invoice:"in_feedbackOwner",status:"paid",amount_paid:amount,amount_requested:amount,currency:"cad",payment:{type:"payment_intent",payment_intent:"pi_feedbackOwner"}}],has_more:false});
       if(url.pathname==="/v1/payment_intents/pi_feedbackOwner")return Response.json({id:"pi_feedbackOwner",object:"payment_intent",status:"succeeded",amount_received:amount,amount_capturable:0,amount,currency:"cad",customer:"cus_actualProducer",latest_charge:"ch_feedbackOwner",application_fee_amount:fee,transfer_data:{destination:"acct_fixtureSeller0"},on_behalf_of:"acct_fixtureSeller0"});
@@ -84,7 +84,7 @@ describe.runIf(hasDatabase)("actual original raw feedback privacy owner81",{time
     const operation=(await subscriptionSource.operations()).find(row=>row.kind==="create");if(!operation)throw new Error("The real original schedule has no admitted create operation.");
     const fee=z.object({phases:z.array(z.object({applicationFeeMinor:z.number()})).min(1)}).parse(operation.originalRequest).phases[0]!.applicationFeeMinor;
     const invoice={id:"in_feedbackOwner",object:"invoice",customer:"cus_actualProducer",status:"paid",paid_out_of_band:false,currency:"cad",subtotal:amount,total:amount,amount_paid:amount,amount_remaining:0,collection_method:"charge_automatically",automatic_tax:{enabled:false},starting_balance:0,ending_balance:0,amount_shipping:0,pre_payment_credit_notes_amount:0,post_payment_credit_notes_amount:0,discounts:[],total_discount_amounts:[],total_taxes:[],parent:{type:"subscription_details",subscription_details:{subscription:"sub_actualProducer",metadata:phase.metadata}},lines:{has_more:false,data:[{type:"subscription",period:{start:phase.start_date,end:phase.end_date}}]}};
-    observed={phase,amount,fee,invoice};subscriptionSource.remote.activate();
+    observationState.value={phase,amount,fee,invoice};subscriptionSource.remote.activate();
     const timestamp=Math.floor(Date.now()/1000),body=JSON.stringify({id:"evt_feedbackOwnerCash",type:"invoice.paid",created:timestamp,data:{object:invoice}}),signature=createHmac("sha256","whsec_actual_producer_fixture").update(`${timestamp}.${body}`).digest("hex");
     const response=await paymentWebhookRoute("stripe")(new Request("https://freeholder.example.test/api/webhooks/payments/stripe",{method:"POST",headers:{"stripe-signature":`t=${timestamp},v1=${signature}`,"content-type":"application/json"},body}));
     expect(response.status).toBe(503);expect(await db().select().from(payments)).toHaveLength(0);expect(await db().select().from(invoices)).toHaveLength(0);

@@ -138,7 +138,7 @@ export const originalMerchantRefundRepairSource = defineService({
     } else {
       const rows = await ctx.tx.select({ profileId: subscriptionMerchantScopes.taxProfileId,platform:subscriptionMerchantScopes.providerPlatformAccountId,account:subscriptionMerchantScopes.chargeAccountId,receiptPlatform:subscriptionProviderChargeReceipts.providerPlatformAccountId,receiptAccount:subscriptionProviderChargeReceipts.chargeAccountId }).from(subscriptionProviderChargeReceipts)
         .innerJoin(subscriptionMerchantScopes, eq(subscriptionMerchantScopes.subscriptionId, subscriptionProviderChargeReceipts.subscriptionId))
-        .where(and(eq(subscriptionProviderChargeReceipts.id, receiptId!))).limit(2);
+        .where(and(eq(subscriptionProviderChargeReceipts.id, receiptId))).limit(2);
       if(originalFeedbackNamespace&&rows.some(source=>!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace!,source)
         ||!originalFeedbackMatchesFrozenSource(originalFeedbackNamespace!,{platform:source.receiptPlatform,account:source.receiptAccount})))throw new ServiceError("conflict","Restore the exact receipt's frozen original merchant scope before privacy repair; a different platform/account remains debt.");
       profiles.push(...rows.map(row => row.profileId));
