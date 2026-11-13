@@ -9,6 +9,7 @@ import { subscriptionControlledResources } from "./controlled-provider-schema";
 import { controlledProviderJournal } from "./controlled-provider-proof";
 import { controlledProviderWitnesses } from "./controlled-provider-witnesses";
 import { controlledCashEvidence,readOriginalControlledChargeAuthority } from "./controlled-provider-cash-origin";
+import { controlledRawFinancialReview,type ControlledRawFinancialFact } from "./controlled-provider-raw-financial-review";
 import { controlledZeroTransportProof } from "./controlled-provider-zero-policy";
 function refuse():never{throw new ServiceError("conflict","Restore complete authentic controlled resource/caller/raw/cash-origin coverage. Only the exact same owned latest planned operation with zero actual children may be excluded before physical admission.");}
 /** No parent/resource lock is acquired and no service is called. The caller
@@ -20,7 +21,7 @@ export async function controlledProviderCoverage(tx:Tx,input:{subscriptionId:str
  const resources=await tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.subscriptionId,input.subscriptionId)).orderBy(subscriptionControlledResources.generation).limit(5001);
  if(resources.length>5000)refuse();
  const witness=await controlledProviderWitnesses(tx,{subscriptionIds:[input.subscriptionId]});if(witness.incomplete||witness.resources.length!==resources.length)refuse();
- const journals=[];let count=0,excluded=false;const unfinishedCalls:Array<{resourceId:string;operationId:string;callId:string;kind:string}>=[],rawCashReviewFactIds:string[]=[],receiptIds:string[]=[];
+ const journals=[];let count=0,excluded=false;const unfinishedCalls:Array<{resourceId:string;operationId:string;callId:string;kind:string}>=[],rawCashReviewFactIds:string[]=[],rawFinancialFacts:ControlledRawFinancialFact[]=[],receiptIds:string[]=[];
  for(const resource of resources){
   const[terms]=await tx.select().from(subscriptionCommercialTerms).where(eq(subscriptionCommercialTerms.id,resource.termsId)).limit(1);
   if(!terms||terms.subscriptionId!==input.subscriptionId||resource.originalScope.subscriptionId!==resource.subscriptionId||resource.originalScope.termsId!==terms.id||resource.originalScope.generation!==resource.generation)refuse();
@@ -43,13 +44,11 @@ export async function controlledProviderCoverage(tx:Tx,input:{subscriptionId:str
     ||receipt.providerInvoiceRef!==cash.data.providerInvoiceRef||receipt.providerPaymentIntentRef!==cash.data.providerPaymentIntentRef||receipt.amountMinor!==cash.data.amountMinor||receipt.currency!==cash.data.currency)refuse();
    receiptIds.push(receipt.id);
   }
-  for(const fact of history.facts){if(fact.actual.kind!=="cash_observed")continue;const actual=controlledCashEvidence.safeParse(fact.actual.raw.cash);
-   // Equal amounts cannot select an owner. Exact original PI/account and all
-   // original subscription/invoice facts must agree with an already bound receipt.
-   const receipt=actual.success?canonical.find(row=>row.providerPlatformAccountId===actual.data.providerPlatformAccountId&&row.chargeAccountId===(actual.data.providerAccountId??null)&&row.providerPaymentIntentRef===actual.data.providerPaymentIntentRef):null;
-   if(!actual.success||!receipt||receipt.providerSubscriptionRef!==actual.data.providerSubscriptionRef||receipt.providerInvoiceRef!==actual.data.providerInvoiceRef
-    ||receipt.amountMinor!==actual.data.amountMinor||receipt.currency!==actual.data.currency||receipt.providerChargeRef&&actual.data.providerChargeRef&&receipt.providerChargeRef!==actual.data.providerChargeRef)rawCashReviewFactIds.push(fact.id);
-  }
+  // The zero-only protocol has no admitted positive collection. Actual raw
+  // intent/invoice/payment/recurring facts remain review even if the SDK died
+  // before cash_observed or its bridge. A later read cannot erase occurrence.
+  const rawReview=controlledRawFinancialReview(resource,history);
+  rawCashReviewFactIds.push(...rawReview.factIds);rawFinancialFacts.push(...rawReview.facts);
   let operations=history.operations;
   if(input.excludeUnadmittedOperationId){const own=history.operations.find(row=>row.id===input.excludeUnadmittedOperationId);
    if(own){
@@ -66,5 +65,5 @@ export async function controlledProviderCoverage(tx:Tx,input:{subscriptionId:str
  if(input.excludeUnadmittedOperationId&&!excluded)refuse();
  const selected={...witness,operations:witness.operations.filter(row=>row.id!==input.excludeUnadmittedOperationId)};
  return{complete:true as const,revision:merchantTaxDigest({witness:selected,journals}),inventoryCount:count-(excluded?1:0),excludedOperationId:excluded?input.excludeUnadmittedOperationId!:null,
-  resourceIds:resources.map(row=>row.id),receiptIds,unfinishedCalls,rawCashReviewFactIds,witness:selected};
+  resourceIds:resources.map(row=>row.id),receiptIds,unfinishedCalls,rawCashReviewFactIds,rawFinancialFacts,witness:selected};
 }
