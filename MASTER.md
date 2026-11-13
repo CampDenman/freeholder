@@ -14174,6 +14174,15 @@ whatever is best for the people using the site.
   acceptance. Exact recovery qualification and complete phase/amendment/cash
   integration remain required; see
   `deploy/subscription-phase-product80-source-20261113.md`.
+  Dated trial tax repair in progress (2026-11-13, C12.38): an actual
+  seven-day manual-trial acceptance retained4500 as its first-paid total
+  although the buyer's current exemption had a known one-day expiry. The
+  actual tax preview at its real trial end returned225 tax and4725 total;
+  the unchanged native oracle failed5.600s. A20-table/schema/journal-matched
+  populated BEFORE golden is preserved. The narrow source repair quotes known
+  trial/renewal boundaries with the existing UTC billing calendar, without
+  rewriting accepted history. Source/native AFTER qualification is pending;
+  see `deploy/subscription-trial-tax-calendar-2026-11-13.md`. C12.38 stays open.
   Provider lifecycle protocol work uses Stripe's actual flexible-subscription
   pause endpoint, with2026-10-28.endive frozen only on new scope/charge
   receipts. Legacy operations keep their original version. Sixteen bounded
