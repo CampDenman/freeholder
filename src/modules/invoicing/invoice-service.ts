@@ -16,6 +16,7 @@ import { assertOriginalMerchantRefundResult, assertOriginalMerchantRefundStart, 
 import { queueMerchantFeeReconciliation } from "./merchant-fee-service";
 import { reserveMerchantCharge } from "./merchant-charge";
 import { commercialPaymentRecorded, commercialRefundRecorded } from "./commercial-attestations";
+import { exportControlledFinancialHistory } from "./controlled-provider-financial-witness";
 import { exportProrationMoney } from "./proration-money-export";
 import { exportProrationCardHistory, subscriptionProrationCardWitnesses } from "@/modules/subscriptions/proration-card-witnesses";
 import { assertFinancialExportBound } from "./financial-export-bound";
@@ -324,7 +325,9 @@ registerContactPrivacySource({
     const bundles = await Promise.all(ids.map((id) => invoiceBundle(tx, id)));
     const card = await subscriptionProrationCardWitnesses(tx, ids);
     if (card.incomplete) throw new ServiceError("conflict", "Restore the complete bounded original payment-caller history before issuing the subject archive.");
+    const controlled = await exportControlledFinancialHistory(tx, { invoiceIds: ids });
     const families = {
+      ...(controlled.selected.entries.length ? { originalControlledProvider: controlled.exported } : {}),
       merchantRecovery: await exportMerchantRecoveryHistory(tx, ids),
       originalCreditAndExternalMoney: await exportProrationMoney(tx, ids),
       originalCommissionAssignments: await exportAgreementFeeHistory(tx, ids),

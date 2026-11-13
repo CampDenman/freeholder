@@ -19,6 +19,8 @@ import { originalCashFullReturnCurrent } from "./original-cash-recovery-current"
 import { originalCashPartialReturnCurrent } from "./original-cash-partial-current";
 import { agreementFeePaymentDebt, agreementFeeProfileDebt } from "./agreement-fee-state";
 import { commercialPrincipalState } from "./commercial-attestations";
+import { controlledCashFinancialHistory, controlledFinancialWitness } from "./controlled-provider-financial-witness";
+import { controlledProviderCoverage } from "@/modules/subscriptions/controlled-provider-coverage";
 import { commercialPaymentAttestations } from "./commercial-attestation-schema";
 
 const reason = z.enum(["original_scope", "unknown_payment", "unapplied_money", "provider_settlement", "commission", "refund", "dispute"]);
@@ -37,6 +39,13 @@ export const merchantPaymentRecoveryDebt = defineService({
       return { pending: recordedReasons.length > 0, reasons: recordedReasons };
     }
     const routing = await routingForPayment(ctx, paymentId), reasons = new Set<z.infer<typeof reason>>();
+    const controlledAliases = await ctx.tx.select({ id: merchantAgreementPaymentRoutes.originalChargeReceiptId }).from(merchantAgreementPaymentRoutes)
+      .where(eq(merchantAgreementPaymentRoutes.paymentId, paymentId)).limit(2);
+    const controlledRows = await controlledFinancialWitness(ctx.tx, { paymentIds: [paymentId] });
+    const controlled = await controlledCashFinancialHistory(ctx.tx, [...new Set([...controlledAliases.flatMap(row => row.id ? [row.id] : []), ...controlledRows.receiptIds])], controlledRows.history.resources.map(row => row.subscriptionId));
+    if (controlledAliases.length > 1 || controlled.incomplete || controlledRows.incomplete) reasons.add("original_scope");
+    if (controlled.principalCallerDebt) reasons.add("unknown_payment");
+    if (controlled.financialCallerDebt) reasons.add("commission");
     if (!routing.providerPlatformAccountId || routing.applicationFeeMinor === undefined || !Number.isSafeInteger(payment.amountMinor) || payment.amountMinor <= 0
       || !Number.isSafeInteger(payment.refundedMinor) || payment.refundedMinor < 0 || payment.refundedMinor > payment.amountMinor
       || !Number.isSafeInteger(routing.applicationFeeMinor) || routing.applicationFeeMinor < 0 || routing.applicationFeeMinor > payment.amountMinor) return { pending: true, reasons: ["original_scope" as const] };
@@ -138,7 +147,22 @@ export const merchantTaxPaymentDebt = defineService({
       }
     }
     const fee = await agreementFeeProfileDebt(ctx, profileId);
-    return { pending: pending || fee.pending, hasHistory: paymentIds.length > 0 || incomplete || fee.hasHistory, paymentIds, incomplete: incomplete || fee.incomplete };
+    const controlled = await controlledFinancialWitness(ctx.tx, { profileIds: [profileId] });
+    if (controlled.incomplete || controlled.entries.length + rows.length + quotes.length > 5000) incomplete = true;
+    // A paused zero calendar is still ACTIVE. Privacy quiescence requires its
+    // separate authenticated terminal closure; coverage alone cannot erase it.
+    let controlledPending = controlled.incomplete;
+    for (const subscriptionId of [...new Set(controlled.history.resources.map(row => row.subscriptionId))]) {
+      try {
+        const coverage = await controlledProviderCoverage(ctx.tx, { subscriptionId });
+        controlledPending ||= coverage.unfinishedCalls.length > 0 || coverage.rawCashReviewFactIds.length > 0
+          || coverage.witness.resources.some(resource => !coverage.witness.closures.some(closure => closure.id === resource.id));
+      } catch (error) {
+        if (!(error instanceof ServiceError) || !["conflict", "not_found", "permission", "validation"].includes(error.code)) throw error;
+        controlledPending = true; incomplete = true;
+      }
+    }
+    return { pending: pending || fee.pending || controlledPending || incomplete, hasHistory: paymentIds.length > 0 || incomplete || fee.hasHistory || controlled.entries.length > 0, paymentIds, incomplete: incomplete || fee.incomplete };
   },
 });
 

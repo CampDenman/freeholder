@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: bounded child-effect fingerprints follow the invoice's real owner.
 import { and, asc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { z } from "zod";
 import { ServiceError, type Tx } from "@/core/service";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
@@ -13,14 +14,22 @@ import { merchantRefundDependencyFingerprints } from "./merchant-refund-dependen
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { exportOriginalCashHistory, originalCashForInvoice, originalCashInvoiceHistory } from "./original-cash-invoice-history";
 import { invoices, paymentDisputes, payments, refunds } from "./schema";
+import { controlledFinancialTables, controlledFinancialWitness, type ControlledFinancialEntry } from "./controlled-provider-financial-witness";
 import { prorationFinancialWitness } from "./proration-financial-witness";
 
 /** NULL makes the existing parent merge explicitly non-undoable.
  * The default is the buyer's complete invoice. A seller caller must derive
  * originalPaymentIds from its actual frozen routes, never a caller's filter.
  */
-export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: readonly string[], originalPaymentIds?: readonly string[], additionalWitnessCount = 0): Promise<Map<string, string> | null> {
+export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: readonly string[], originalPaymentIds?: readonly string[], additionalWitnessCount = 0, additionalControlledEntries: readonly ControlledFinancialEntry[] = []): Promise<Map<string, string> | null> {
   if (!Number.isSafeInteger(additionalWitnessCount) || additionalWitnessCount < 0 || additionalWitnessCount > 5000 || invoiceIds.length > 5000) return null;
+  const externalControlled = new Map<string, string>();
+  for (const row of additionalControlledEntries) {
+    if (!z.uuid().safeParse(row.id).success || !Object.values(controlledFinancialTables).some(table => table === row.table) || !/^[a-f0-9]{64}$/.test(row.fingerprint)) return null;
+    const key = `${row.table}:${row.id}`, previous = externalControlled.get(key);
+    if (previous && previous !== row.fingerprint) return null; externalControlled.set(key, row.fingerprint);
+  }
+  if (externalControlled.size > additionalWitnessCount) return null;
   if (!invoiceIds.length) return new Map();
   if (originalPaymentIds && originalPaymentIds.length > 5000) return null;
   if (originalPaymentIds && !originalPaymentIds.length) return new Map();
@@ -32,7 +41,12 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
     ? await prorationFinancialWitness(tx, { kind: "invoice", ids: invoiceIds })
     : { version: 1 as const, entries: [], incomplete: false };
   if (prorationFinancial.incomplete) return null;
-  let additionalCount = additionalWitnessCount + prorationFinancial.entries.length;
+  const controlledFinancial = originalPaymentIds === undefined
+    ? await controlledFinancialWitness(tx, { invoiceIds })
+    : { entries: [], incomplete: false };
+  if (controlledFinancial.incomplete) return null;
+  if (controlledFinancial.entries.some(row => externalControlled.has(`${row.table}:${row.id}`) && externalControlled.get(`${row.table}:${row.id}`) !== row.fingerprint)) return null;
+  let additionalCount = additionalWitnessCount + prorationFinancial.entries.length + controlledFinancial.entries.filter(row => !externalControlled.has(`${row.table}:${row.id}`)).length;
   let prorationInvoiceIds: string[] = [];
   const originalCash = await originalCashInvoiceHistory(tx, invoiceIds, originalPaymentIds);
   const cashCount = Object.values(originalCash.witness).reduce((sum, rows) => sum + rows.length, 0);
@@ -68,7 +82,7 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
     const legacy = legacyFinancial.get(invoiceId);
     legacyFinancial.set(invoiceId, merchantTaxDigest({ ...(legacy ? { legacy } : {}), originalCash: cash }));
   }
-  if (prorationFinancial.entries.length) {
+  if (prorationFinancial.entries.length || controlledFinancial.entries.length) {
     // These actual invoices form one merge cohort, including linked original
     // credit ancestry. Fold its complete table-bound rows before the no-route
     // exit; an empty addition preserves historical fingerprints exactly.
@@ -78,7 +92,7 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
     prorationInvoiceIds = originalInvoices.map(row => row.id);
     for (const invoiceId of prorationInvoiceIds) {
       const original = legacyFinancial.get(invoiceId);
-      legacyFinancial.set(invoiceId, merchantTaxDigest({ ...(original ? { original } : {}), prorationFinancial }));
+      legacyFinancial.set(invoiceId, merchantTaxDigest({ ...(original ? { original } : {}), ...(prorationFinancial.entries.length ? { prorationFinancial } : {}), ...(controlledFinancial.entries.length ? { controlledFinancial } : {}) }));
     }
   }
   const owned = await tx.select({ payment: payments, orderRoute: merchantPaymentRoutes, singleRoute: merchantInvoicePaymentRoutes, agreementRoute: merchantAgreementPaymentRoutes }).from(payments)
@@ -117,7 +131,10 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   // the existing invoice reference receipt.
   const refundChildren = await merchantRefundDependencyFingerprints(tx, { paymentIds,
     subscriptionChargeReceiptIds: scoped.map(row => row.agreementRoute?.originalChargeReceiptId).filter((id): id is string => Boolean(id)) });
-  if (refundChildren.incomplete || count + cashCount + legacyCount + additionalCount + refundChildren.entries.length > 5000) return null;
+  const controlledKeys = new Set([...externalControlled.keys(), ...controlledFinancial.entries.map(row => `${row.table}:${row.id}`)]);
+  if (refundChildren.entries.some(row => externalControlled.has(`${row.table}:${row.id}`) && externalControlled.get(`${row.table}:${row.id}`) !== row.fingerprint)) return null;
+  const distinctRefundChildren = refundChildren.entries.filter(row => !controlledKeys.has(`${row.table}:${row.id}`));
+  if (refundChildren.incomplete || count + cashCount + legacyCount + additionalCount + distinctRefundChildren.length > 5000) return null;
   const result = new Map(parent.map(invoice => {
     const money = scoped.filter(row => row.payment.invoiceId === invoice.id), ids = new Set(money.map(row => row.payment.id));
     const sends = dispatches.filter(row => ids.has(row.paymentId)), sendIds = new Set(sends.map(row => row.id));
