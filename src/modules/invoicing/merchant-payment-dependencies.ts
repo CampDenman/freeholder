@@ -7,6 +7,8 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
 import { merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
 import { merchantPaymentCreationRefusals, merchantPaymentDispatches, merchantPaymentDispatchFinishes, merchantPaymentDispatchStops, merchantPaymentResourceBindings, merchantPaymentRequests, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts } from "./merchant-payment-recovery-schema";
+import { legacyBankReads } from "./legacy-bank-read-schema";
+import { legacyBankReadFinancialWitness } from "./legacy-bank-read-witness";
 import { merchantRefundDependencyFingerprints } from "./merchant-refund-dependencies";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { invoices, paymentDisputes, payments, refunds } from "./schema";
@@ -19,6 +21,24 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   if (!invoiceIds.length) return new Map();
   if (originalPaymentIds && originalPaymentIds.length > 5000) return null;
   if (originalPaymentIds && !originalPaymentIds.length) return new Map();
+  // New authenticated legacy read children also belong to ordinary invoices
+  // that have no new-model route. Existing history with no such read keeps
+  // its prior undo contract. Seller callers retain their exact payment filter.
+  const legacyReferences = await tx.select({ refundId: refunds.id, invoiceId: payments.invoiceId }).from(legacyBankReads)
+    .innerJoin(refunds, eq(refunds.id, legacyBankReads.refundId)).innerJoin(payments, eq(payments.id, refunds.paymentId))
+    .where(and(inArray(payments.invoiceId, [...invoiceIds]), originalPaymentIds ? inArray(payments.id, [...originalPaymentIds]) : undefined))
+    .orderBy(asc(payments.invoiceId), asc(refunds.id)).limit(5001);
+  if (legacyReferences.length > 5000) return null;
+  const legacyFinancial = new Map<string, string>();
+  if (legacyReferences.length) {
+    const history = await legacyBankReadFinancialWitness(tx, legacyReferences.map(row => row.refundId));
+    if (history.reads.length + history.facts.length + history.finishes.length > 5000) return null;
+    for (const invoiceId of [...new Set(legacyReferences.map(row => row.invoiceId))]) {
+      const refundIds = new Set(legacyReferences.filter(row => row.invoiceId === invoiceId).map(row => row.refundId));
+      const reads = history.reads.filter(row => refundIds.has(row.refundId)), readIds = new Set(reads.map(row => row.id));
+      legacyFinancial.set(invoiceId, merchantTaxDigest({ reads, facts: history.facts.filter(row => readIds.has(row.readId)), finishes: history.finishes.filter(row => readIds.has(row.readId)) }));
+    }
+  }
   const owned = await tx.select({ payment: payments, orderRoute: merchantPaymentRoutes, singleRoute: merchantInvoicePaymentRoutes, agreementRoute: merchantAgreementPaymentRoutes }).from(payments)
     .leftJoin(merchantPaymentRoutes, eq(merchantPaymentRoutes.paymentId, payments.id)).leftJoin(merchantInvoicePaymentRoutes, eq(merchantInvoicePaymentRoutes.paymentId, payments.id))
     .leftJoin(merchantAgreementPaymentRoutes, eq(merchantAgreementPaymentRoutes.paymentId, payments.id))
@@ -27,7 +47,7 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   // Ordinary legacy invoice history retains its existing undo contract.
   const scoped = owned.filter(row => row.orderRoute || row.singleRoute || row.agreementRoute);
   if (owned.length > 5000) return null;
-  if (!scoped.length) return new Map();
+  if (!scoped.length) return legacyFinancial;
   const paymentIds = scoped.map(row => row.payment.id), scopedInvoiceIds = [...new Set(scoped.map(row => row.payment.invoiceId))];
   const parent = await tx.select().from(invoices).where(inArray(invoices.id, scopedInvoiceIds)).orderBy(asc(invoices.id));
   const requests = await tx.select().from(merchantPaymentRequests).where(inArray(merchantPaymentRequests.paymentId, paymentIds)).orderBy(asc(merchantPaymentRequests.paymentId)).limit(5001);
@@ -53,7 +73,7 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   const refundChildren = await merchantRefundDependencyFingerprints(tx, { paymentIds,
     subscriptionChargeReceiptIds: scoped.map(row => row.agreementRoute?.originalChargeReceiptId).filter((id): id is string => Boolean(id)) });
   if (refundChildren.incomplete || count + refundChildren.entries.length > 5000) return null;
-  return new Map(parent.map(invoice => {
+  const result = new Map(parent.map(invoice => {
     const money = scoped.filter(row => row.payment.invoiceId === invoice.id), ids = new Set(money.map(row => row.payment.id));
     const sends = dispatches.filter(row => ids.has(row.paymentId)), sendIds = new Set(sends.map(row => row.id));
     const fees = feeOperations.filter(row => ids.has(row.paymentId)), feeIds = new Set(fees.map(row => row.id));
@@ -65,6 +85,11 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
       observed: observed.filter(row => ids.has(row.paymentId)), fees, feeAcks: feeAcks.filter(row => feeIds.has(row.operationId)),
       customerRefunds: customerRefunds.filter(row => ids.has(row.paymentId)), disputes: disputes.filter(row => ids.has(row.paymentId)) })];
   }));
+  for (const [invoiceId, legacy] of legacyFinancial) {
+    const current = result.get(invoiceId);
+    result.set(invoiceId, current ? merchantTaxDigest({ financial: current, legacy }) : legacy);
+  }
+  return result;
 }
 
 /** The privacy parent already proved ownership through invoices.contact_id. */

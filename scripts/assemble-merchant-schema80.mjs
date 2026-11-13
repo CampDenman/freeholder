@@ -18,6 +18,8 @@ const fragments = [
   "deploy/merchant-line-fee80.fragment.sql",
   "deploy/subscription-commercial-terms80.fragment.sql",
   "deploy/merchant-refund-current-state80.fragment.sql",
+  "deploy/subscription-phase-admission80.fragment.sql",
+  "deploy/legacy-bank-read80.fragment.sql",
 ];
 const header = `-- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0

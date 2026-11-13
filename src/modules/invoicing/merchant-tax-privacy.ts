@@ -15,7 +15,7 @@ import {invoiceMerchantTaxQuotes} from "./merchant-tax-schema";
 import {invoiceMerchantCollections,merchantPaymentRoutes} from "./merchant-collection-schema";
 import {invoiceMerchantScopes,merchantInvoicePaymentRoutes} from "./merchant-invoice-scope-schema";
 import {merchantAgreementPaymentRoutes} from "./merchant-agreement-schema";
-import {subscriptionCommercialTerms,subscriptionMerchantScopes,subscriptionProviderChargeReceipts} from "@/modules/subscriptions/schema";
+import {subscriptionCommercialTerms,subscriptionMerchantScopes,subscriptionProviderChargeReceipts,subscriptionProviderScheduleOperations,subscriptionProviderScheduleResources} from "@/modules/subscriptions/schema";
 import {merchantRefundDependencyFingerprints} from "./merchant-refund-dependencies";
 
 const scope="commerce.merchantTax";
@@ -40,6 +40,22 @@ async function snapshot(tx:Tx,ids:string[]){
  }).from(subscriptionCommercialTerms).where(inArray(subscriptionCommercialTerms.profileId,profileIds))
   .orderBy(subscriptionCommercialTerms.profileId,subscriptionCommercialTerms.id).limit(5001);
  if(acceptedTerms.length>5000)return null;
+ // Auxiliary products and original provider callers are financial children
+ // even before a charge exists. Join through the frozen profile scope, not a
+ // buyer's current contact, today's account or another seller's invoice.
+ const providerScopes=await tx.select({id:subscriptionMerchantScopes.subscriptionId,profileId:subscriptionMerchantScopes.taxProfileId,
+  fingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionMerchantScopes})::text,'UTF8')),'hex')`,
+ }).from(subscriptionMerchantScopes).where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds))
+  .orderBy(subscriptionMerchantScopes.taxProfileId,subscriptionMerchantScopes.subscriptionId).limit(5001);
+ const providerOperations=await tx.select({id:subscriptionProviderScheduleOperations.id,profileId:subscriptionMerchantScopes.taxProfileId,
+  fingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionProviderScheduleOperations})::text,'UTF8')),'hex')`,
+ }).from(subscriptionProviderScheduleOperations).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptionProviderScheduleOperations.subscriptionId))
+  .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).orderBy(subscriptionMerchantScopes.taxProfileId,subscriptionProviderScheduleOperations.id).limit(5001);
+ const providerResources=await tx.select({id:subscriptionProviderScheduleResources.subscriptionId,profileId:subscriptionMerchantScopes.taxProfileId,
+  fingerprint:sql<string>`encode(sha256(convert_to((to_jsonb(${subscriptionProviderScheduleResources})-'updated_at')::text,'UTF8')),'hex')`,
+ }).from(subscriptionProviderScheduleResources).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptionProviderScheduleResources.subscriptionId))
+  .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).orderBy(subscriptionMerchantScopes.taxProfileId,subscriptionProviderScheduleResources.subscriptionId).limit(5001);
+ if(rows.length+acceptedTerms.length+providerScopes.length+providerOperations.length+providerResources.length>5000)return null;
  // Anchor each charge to the original profile's allocation/single-source
  // route. Selecting every payment on a mixed invoice would attach another
  // seller's refund history to this subject.
@@ -66,7 +82,7 @@ async function snapshot(tx:Tx,ids:string[]){
  if(children.incomplete)return null;
  // The immutable child set belongs to this entire merge pair. Folding it
  // inside the existing fingerprint keeps its retained JSON shape unchanged.
- return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
+ return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,providerScopes,providerOperations,providerResources,cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
 }
 registerContactReference({
  table:"merchant_tax_profiles",
