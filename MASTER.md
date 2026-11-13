@@ -6463,8 +6463,10 @@ deployments are portable, testable and incapable of silently forking the truth.
   receipt when its initial capture is missing. It preserves exact task keys
   and truthful recovery without adopting current graphs, backfilling capture
   or bypassing physical admission. Periodic/committed-observation entry points
-  and a NEW actual old79->81 populated fixture are prepared, not run. SQL955
-  remains unchanged; qualification and actual upgrade acceptance remain open.
+  and a NEW actual old79->81 populated fixture are prepared. Source586e passes
+  full Node22 types, whole lint,384 contracts and9 focused assertions;26 contract
+  and9 focused native/upgrade skips are explicit. SQL955 remains unchanged;
+  the actual populated upgrade/current-flow acceptance have not run.
   See `deploy/import-uploaded-history-recovery-2026-11-13.md`.
   Canonical original-retention draft 2026-11-12: a second actual control on
   protected main reproduced the same pre-verification hold gap for uploaded

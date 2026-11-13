@@ -5,9 +5,10 @@ C1.08/C3.47/C11.14 remain open. Frozen acbb/SQL955 passed fresh ordinary0–81,
 22-model/guard checks, the unchanged original501-WXR full-erasure AFTER, the
 unchanged b716 URL-key AFTER and the held-upload boundary. Those finite proofs
 do not cover an older79 receipt that already claimed completion while retaining
-private normalized input. This new historical-recovery source is unqualified.
-No compiler, lint, tests, database, migration or native execution was performed
-for it. SQL81 remains byte-identical955a04d2; SQL80 remains3a686245.
+private normalized input. This historical-recovery source passed the bounded
+NoDB checks below on586e644d. Its actual populated upgrade and current-flow
+regression have not run. No database, migration, provider or native execution
+was performed for it. SQL81 remains byte-identical955a04d2; SQL80 remains3a686245.
 
 A retained self-bound `core.eraseImportSourceObjects` task identifies its exact
 request and original chunk keys. Reconciliation requires the verified original
@@ -69,7 +70,7 @@ HEAD, `FREEHOLDER_HISTORY_BEFORE_SOURCE` pointing at the pinned old worktree,
 opens any prior failure/golden database. The first unexpected failure preserves
 its new database, filesystem and logs and stops the pipeline.
 
-Four meaningful task-evidence/source controls are also prepared in
+Four meaningful task-evidence/source controls passed in
 `tests/core/import-uploaded-history-contract.test.ts`. They cover exact retained
 identity/keys, different request/task refusals, malformed/empty/excessive keys,
 and the shared idempotent recovery path without current graph or capture writes.
@@ -80,3 +81,31 @@ populated fixture, current-flow regression after callback registration, admitted
 content and later-generation boundaries, public HTTP and independent-process501
 lifecycle, old-image recovery, owner/provider acceptance and independent review.
 MASTER.md §43 is the only status authority; no item is checked by this source.
+
+
+Source qualification on586e644d (2026-11-13):
+
+- All12 dependency descriptors matched the qualified acbb donor before reuse;
+  no install was performed. Database environment and fixture opt-in flags were
+  absent, and both `.env`/`.env.local` were absent.
+- Node22 full nonincremental types passed with an8GB cap in56.947s. Whole-tree
+  lint passed in107.832s. No source correction or excluded path was needed.
+- All44 required contract files completed with actual assertions:384 passed,
+  26 explicit database skips, no pending/failed assertions and no empty files.
+- Six focused files completed: four new historical task/source assertions plus
+  five fixed digest/source assertions passed; nine native/upgrade cases were
+  explicitly gated off. The populated old79 fixture was not executed.
+- Canonical generation produced637 notes for unchanged0.2.0-beta.6. License
+  headers(2914 sources/8 manifests/8 license texts), changelog and plan gates
+  passed. The plan remains373 IDs:323 checked/50 open.
+- Owned compiler/lint/test runners exited and drained. This final evidence and
+  generated-note commit changes no validated product, test, controller or SQL
+  source. The original f1, b716 and three ownership-oracle files and all82
+  migration identities remain byte-preserved.
+
+Durable reports:
+`/tmp/freeholder-uploaded-history-586-qualifier-20261113-result.json`,
+`/tmp/freeholder-uploaded-history-586-contracts-20261113-result.json`, and
+`/tmp/freeholder-uploaded-history-586-actual-evidence-20261113.json`.
+The actual fresh populated upgrade and current-flow callbacks still require a
+separate native lane grant. No stable or launch sign-off follows from this pass.
