@@ -78,11 +78,11 @@ describe.runIf(hasDatabase)("authentic legacy bank read lifecycle80", { timeout:
       expect(actual.paths).toHaveLength(before); actual.release.resolve();
       expect(await pending).toHaveProperty("value");
       const answer = await pending; if (!("value" in answer)) throw answer.error;
-      expect(answer.value).toMatchObject({ providerStatus: "failed", originalBindingVerified: true, cashInventoryComplete: true, unassignedRefunds: 1, requiresReview: true, factCount: 5 });
+      expect(answer.value).toMatchObject({ providerStatus: "failed", originalBindingVerified: true, cashInventoryComplete: true, unassignedRefunds: 1, requiresReview: true, factCount: 9 });
       const [read] = await db().select().from(legacyBankReads);
       expect(read?.original).toMatchObject({ refundId: actual.refund.id, originalRefundRef: "pyr_OriginalLegacyBankRead",
         originalCreatePlatformAccountId: null, originalCreateProtocolVersion: null });
-      expect((await db().select().from(legacyBankReadFinishes))[0]).toMatchObject({ readId: read!.id, outcome: "returned", factCount: 5 });
+      expect((await db().select().from(legacyBankReadFinishes))[0]).toMatchObject({ readId: read!.id, outcome: "returned", factCount: 9 });
       expect((await db().select().from(refunds))[0]).toMatchObject({ id: actual.refund.id, status: "succeeded", amountMinor: 1000 });
       expect((await db().select().from(payments).where(eq(payments.id, actual.payment.id)))[0]?.refundedMinor).toBe(1000);
       expect(await db().select().from(merchantRefundRequests)).toHaveLength(0); expect(actual.posts).toHaveLength(1);
@@ -94,8 +94,10 @@ describe.runIf(hasDatabase)("authentic legacy bank read lifecycle80", { timeout:
     await expect(inspectLegacyBankRefund.call({ refundId: actual.refund.id }, OWNER)).rejects.toThrow();
     const facts = await db().select().from(legacyBankReadFacts);
     expect(facts.map(fact => fact.kind)).toEqual(expect.arrayContaining(["exact_refund", "primary_cash", "inventory_refund"]));
-    expect(facts).toHaveLength(4); expect(facts.filter(fact => fact.kind === "cash_inventory")).toHaveLength(0);
-    expect((await db().select().from(legacyBankReadFinishes))[0]).toMatchObject({ outcome: "threw", factCount: 4 });
+    expect(facts).toHaveLength(7);
+    const snapshots = facts.filter(fact => fact.kind === "cash_inventory"); expect(snapshots).toHaveLength(3);
+    expect(snapshots.every(fact => (fact.evidence.actual as Record<string, unknown>).refundsComplete === false)).toBe(true);
+    expect((await db().select().from(legacyBankReadFinishes))[0]).toMatchObject({ outcome: "threw", factCount: 7 });
     expect(await db().select().from(merchantRefundRequests)).toHaveLength(0); expect(actual.posts).toHaveLength(1);
   });
 
@@ -114,10 +116,10 @@ describe.runIf(hasDatabase)("authentic legacy bank read lifecycle80", { timeout:
     const actual = await setup();
     const failed = vi.spyOn(finishLegacyBankRead, "call").mockRejectedValueOnce(new Error("Synthetic finished-read persistence outage"));
     await expect(inspectLegacyBankRefund.call({ refundId: actual.refund.id }, OWNER)).rejects.toThrow(/persistence outage/);
-    expect(await db().select().from(legacyBankReadFacts)).toHaveLength(5); expect(await db().select().from(legacyBankReadFinishes)).toHaveLength(0);
+    expect(await db().select().from(legacyBankReadFacts)).toHaveLength(9); expect(await db().select().from(legacyBankReadFinishes)).toHaveLength(0);
     failed.mockRestore(); const before = actual.paths.length;
     await flushLocalLegacyBankReadFinishes(actual.refund.id);
-    expect(actual.paths).toHaveLength(before); expect((await db().select().from(legacyBankReadFinishes))[0]).toMatchObject({ outcome: "returned", factCount: 5 });
+    expect(actual.paths).toHaveLength(before); expect((await db().select().from(legacyBankReadFinishes))[0]).toMatchObject({ outcome: "returned", factCount: 9 });
     expect(actual.posts).toHaveLength(1); expect(await db().select().from(merchantRefundRequests)).toHaveLength(0);
   });
 });
