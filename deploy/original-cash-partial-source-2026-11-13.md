@@ -252,3 +252,45 @@ prior native fixtures changed. SQL fragments and financial row bodies remain
 unchanged. Renewed lint/tests/gates await root's lane handoff after its actual
 PG run; no CPU, PG, native, model/journal assembly or provider I/O ran during
 these source repairs.
+
+
+## Actual bounded NoDB qualification on cacb80bd
+
+Full Node22 TypeScript and whole-project ESLint passed on the exact frozen
+cacb80bd source with the granted 8 GB cap and one active worker. Logs are
+`/tmp/freeholder-cacb-nodb-types-20261113.log` and
+`/tmp/freeholder-cacb-nodb-lint-20261113.log`; both contain no diagnostics.
+The25-file Vitest run explicitly removed DATABASE_URL, TEST_DATABASE_URL and CI;
+this worktree has no `.env`. Decoded JSON reports success, **276 total,
+246 passed, zero failed,30 skipped**, in29.46s. Preserve
+`/tmp/freeholder-cacb-nodb-tests-20261113.json` and its sibling `.log`.
+
+Passing file counts are: original proof19, original contract13, original
+auxiliary adapter7, partial amounts/capacity13, partial contract9, partial
+actual-factory generation adapter2, existing refund capacity14, returned-cash
+proof10, fee amounts10, Stripe fee factory17, registry2, private boundaries5,
+service composition5, record participation8, merge completeness7, retention
+source controls3, i18n gate60, i18n28, and locale quality14. Database-backed
+collection explicitly skipped original full cash4, new partial cash3, original
+RMA5, and retention18. These skips are not native acceptance. No actual bank,
+receipt-only subscription or canonical Carrier credit flow ran.
+
+License, notes, plan and whitespace gates passed. License reports2914 source
+files/eight manifests/eight license texts; notes finds the changeset and
+unchanged0.2.0-beta.6 changelog; plan reports373 unique IDs/323 checked/50 open.
+The first license invocation hit sandbox `spawnSync git EPERM` without a source
+diagnostic; its original log remains. The unchanged read-only gate passed when
+that subprocess restriction was lifted. No gate or source assertion was edited
+to obtain the pass. Logs use the same `/tmp/freeholder-cacb-nodb-` prefix with
+`license-retry`, `notes`, `plan`, and `whitespace` suffixes. The temporary
+verified dependency symlink was removed after all workers drained.
+
+This qualifies the isolated source/NoDB increment only. Root's newer central
+five-array composition and combined SQL are separate source and still need
+combined qualification. Carrier's real credit-disposition integration, all
+new cash native journeys, independent database ledgers, late feedback and
+concurrency, populated upgrades/rollback, SDK/browser/customer journeys,
+actual provider acceptance and independent security review remain open.
+Nothing ran in PG, native, a server or a provider account for this checkpoint.
+No schema/journal was assembled, no model was activated and no C-item or stable
+sign-off is supplied. Earlier failed logs and frozen fragments remain unchanged.

@@ -14156,6 +14156,13 @@ whatever is best for the people using the site.
   independent review remain required. No new deferral, destination-debt waiver,
   model activation or stable sign-off is supplied. See
   `deploy/original-cash-partial-source-2026-11-13.md`.
+  Subsequent isolated partial source NoDB qualification on cacb80bd: full
+  Node22 types/whole lint PASS;25-file JSON246PASS/30explicitDBSKIP/0FAIL,
+  including new pure/adapter/contracts and registry/internal/composition/
+  retention/merge/four-locale gates. License/notes/plan/whitespace PASS.
+  Earlier source/type/lint failures remain preserved. New cash natives,
+  Carrier canonical-credit integration, root's newer five-array composition,
+  combined SQL, actual provider acceptance and stable sign-off remain open.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original
