@@ -14,6 +14,7 @@ import {mediaUploads,mediaObjects} from "./schema";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartOperations,mediaMultipartResources,MULTIPART_STATES} from "./multipart-schema";
 import {allowMediaReceiptWrites,deleteWithReceipt,lockObjectDigest,storageOperationsHeld,objectKeyDigest} from "./write-ledger";
+import {withOriginalMultipartInvocation} from "./provider-callers";
 import {abortOriginalMultipart,claimMultipartAbort} from "./multipart-operations";
 import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 
@@ -131,7 +132,7 @@ const claimMultipartCleanup=defineService({
 });
 export const reconcileMultipartOperation=defineOrchestratedService({
  name:"media.reconcileMultipartOperation",summary:"Verify an original upload resource and record a fresh person's provider evidence.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,auditInputFields:["resourceId","action"],input:confirmation,output:z.object({ok:z.literal(true),needsCleanup:z.boolean()}),
- handler:async(input,actor)=>{
+ handler:async(input,actor)=>withOriginalMultipartInvocation(async()=>{
   const original=await claimMultipartRecovery.call(input,actor);requireDurableMediaRetirementProof();const captured=await boundStorage();
   const key=input.originalKey??original.resource.key;
   if(captured.binding.namespace!==input.originalNamespace||(original.resource.namespace&&original.resource.namespace!==captured.binding.namespace)||!captured.store.directMultipart?.inspect)throw new ServiceError("conflict","Restore the exact original private multipart resource before verification.");
@@ -165,6 +166,6 @@ export const reconcileMultipartOperation=defineOrchestratedService({
   if(verified.state==="absent")await assertPhysicalStorageAbsence(captured.store,key);
   const result=await applyMultipartRecovery.call({...input,proof:verified,storageKind:captured.binding.kind,storageLocation:{...captured.binding.location}},actor);
   await reconcileMediaErasureCohorts({multipartResourceId:input.resourceId}).catch(()=>{});return result;
- },
+ }),
 });
 export default[listMultipartOperations,claimMultipartRecovery,applyMultipartRecovery,claimMultipartCleanup,reconcileMultipartOperation];

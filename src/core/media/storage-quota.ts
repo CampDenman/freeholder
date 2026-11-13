@@ -21,6 +21,7 @@ export function postgresStorageQuota(namespace: string, maxBytes: number): Stora
   return {
     async reserve(key, bytes, token) {
       await db().transaction(async tx => {
+        await (await import("./transfer-requests")).bindOriginalMediaQuotaReservation(tx,{namespace,key,bytes,token});
         // The one namespace row serializes reservations across processes. No
         // provider call occurs while this row lock or transaction is open.
         const state = await tx.execute<{ max_bytes: string }>(sql`SELECT max_bytes::text FROM storage_quota_state WHERE namespace=${namespace} FOR UPDATE`);

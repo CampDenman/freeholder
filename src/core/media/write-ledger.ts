@@ -12,7 +12,9 @@ import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { dataRequests, privacyRetentionExceptions } from "@/core/privacy/schema";
 import { actorString, ServiceError, type Actor, type Tx } from "@/core/service";
 import { assets, mediaObjects, mediaUploads } from "./schema";
-import {mediaWriterRuntimeId} from "./physical-caller-runtime";
+import {mediaWriterRuntimeId,actualStorageCallerRuntimeIdentity} from "./physical-caller-runtime";
+import {admitOriginalMediaCaller,retainOriginalMediaCallerReturn} from "./provider-callers";
+import {observeTransferRequest,withTransferRequestScope} from "./transfer-requests";
 import { mediaObjectWrites } from "./write-schema";
 import { pendingObjectIsOwned } from "./object-ledger";
 import {mediaMultipartResources} from "./multipart-schema";
@@ -95,7 +97,7 @@ export async function originalStoredObject(key:string):Promise<CapturedStorage&{
 export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:CapturedStorage): Promise<void> {
   const body=new Uint8Array(input.body);
   const { store, binding } = captured??await boundStorage();
-  const sha256 = createHash("sha256").update(body).digest("hex");
+  const sha256 = createHash("sha256").update(body).digest("hex"),token=randomUUID()+randomUUID(),runtimeIdentity=await actualStorageCallerRuntimeIdentity();
   const admission = await db().transaction(async tx => {
     await lockContactIdentityForRead(tx);
     await assertMediaActorLive(tx,actor);
@@ -138,22 +140,24 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:C
       storageLocation: binding.location, sha256, bytes: body.byteLength, contentType: input.contentType, actor: actorString(actor), contactId, state: "started",writerRuntimeId:mediaWriterRuntimeId,writerProtocol:store.writeProtocol??null });
     await tx.insert(mediaObjects).values({ key: input.key, contentType: input.contentType, role: input.role, bytes: body.byteLength, uploadId: input.uploadId,ownerContactId:contactId, state: "pending" })
       .onConflictDoUpdate({ target: mediaObjects.key, set: { contentType: input.contentType, role: input.role, bytes: body.byteLength, updatedAt: new Date() } });
-    return { reused: false as const, id };
+    const caller=await admitOriginalMediaCaller(tx,{kind:"ordinary_put",objectReceiptId:id,token,runtimeIdentity},actor);
+    return { reused: false as const, id,callerId:caller.id };
   });
   if (admission.reused) return;
-  let providerAccepted = false;
+  let providerAccepted = false,callerReturned=false;
   try {
-    await store.put(input.key, body, input.contentType, { onAccepted: async result => {
+    await withTransferRequestScope({callId:admission.callerId,token,runtimeIdentity},()=>store.put(input.key, body, input.contentType, { request:observeTransferRequest,onAccepted: async result => {
       providerAccepted = true;
       await observeStorageOperation(admission.id, true, false,result?.revision);
-    } });
+    } }));
     providerAccepted = true;
-    await finishActualMediaWriter(admission.id);
+    const retained=await retainOriginalMediaCallerReturn(admission.callerId,token,{accepted:true});callerReturned=true;
+    if(!retained.settled)throw new ServiceError("conflict","The original physical caller or request needs recovery before this upload can finish.");
     await observeStorageOperation(admission.id, true);
   } catch (error) {
     // Even if outcome recording itself failed, the original started row still
     // protects this key. No elapsed-time rule converts it into absence.
-    await finishActualMediaWriter(admission.id).catch(()=>{});
+    if(!callerReturned)await retainOriginalMediaCallerReturn(admission.callerId,token,{failed:true,...(providerAccepted?{accepted:true}:{})}).catch(()=>{});
     await observeStorageOperation(admission.id, providerAccepted, false).catch(() => {});
     throw error;
   }

@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import {currentStorageCallerRuntimeSchema,originalLinuxCallerIdentity} from "./physical-caller-runtime";
 // C1.12/C11.08: fresh human evidence appends; actual return facts never change.
 import {createHash,randomUUID} from "node:crypto";
 import {and,asc,eq,inArray} from "drizzle-orm";
@@ -28,7 +29,8 @@ async function originalReview(tx:Tx,input:z.infer<typeof inputSchema>){
  if(!call.returnedAt){
   const[drain]=input.stopDrainId?await tx.select().from(mediaStorageWriterDrains).where(eq(mediaStorageWriterDrains.id,input.stopDrainId)).limit(1):[];
   const snapshot=z.object({format:z.literal("freeholder.media-writer-drain/v1"),boot:z.string(),processes:z.array(z.object({pid:z.number().int(),startTicks:z.string()}))}).safeParse(drain?.originalProcesses);
-  if(!drain||drain.state!=="verified"||!drain.verifiedAt||!drain.stopProofDigest||!snapshot.success||snapshot.data.boot!==call.runtimeIdentity.boot||!snapshot.data.processes.some(row=>row.pid===call.runtimeIdentity.pid&&row.startTicks===call.runtimeIdentity.startTicks))transferConflict("The actual original caller has not returned and its exact process has not been proven stopped.");
+  const originalKernel=originalLinuxCallerIdentity(call.runtimeIdentity);
+  if(!originalKernel||!drain||drain.state!=="verified"||!drain.verifiedAt||!drain.stopProofDigest||!snapshot.success||snapshot.data.boot!==originalKernel.boot||!snapshot.data.processes.some(row=>row.pid===originalKernel.pid&&row.startTicks===originalKernel.startTicks))transferConflict("The actual original caller has not returned and its exact process has not been proven stopped.");
   stopDrainId=drain.id;
  }
  if(input.retryOriginal){if(input.outcome!=="not_applied")transferConflict();await assertTransferOwners(tx,[object]);}
@@ -42,7 +44,7 @@ async function originalReview(tx:Tx,input:z.infer<typeof inputSchema>){
 }
 type Review=Awaited<ReturnType<typeof originalReview>>;
 const capture=defineMediaService({name:"media.captureTransferReview",summary:"Capture an unchanged original caller and its actual return or stopped-process proof.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,external:false,orchestratedBy:"media.reviewStorageTransferCall",input:inputSchema,output:z.custom<Review>(),auditInputFields:["callId","outcome","retryOriginal"],handler:async(input,ctx)=>{human(ctx.actor);return originalReview(ctx.tx,input);}});
-const admitRead=defineMediaService({name:"media.admitTransferReviewRead",summary:"Commit one exact original-provider recovery read without retrying the unresolved write.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,external:false,orchestratedBy:"media.reviewStorageTransferCall",input:inputSchema.extend({token:z.string().min(36),runtimeIdentity:z.object({boot:z.string(),pid:z.number().int(),startTicks:z.string()}),resource:z.enum(["caller","original_source"]).default("caller")}),output:z.object({id:z.uuid()}),auditInputFields:["callId","outcome"],handler:async(input,ctx)=>{
+const admitRead=defineMediaService({name:"media.admitTransferReviewRead",summary:"Commit one exact original-provider recovery read without retrying the unresolved write.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,external:false,orchestratedBy:"media.reviewStorageTransferCall",input:inputSchema.extend({token:z.string().min(36),runtimeIdentity:currentStorageCallerRuntimeSchema,resource:z.enum(["caller","original_source"]).default("caller")}),output:z.object({id:z.uuid()}),auditInputFields:["callId","outcome"],handler:async(input,ctx)=>{
  human(ctx.actor);const original=await originalReview(ctx.tx,input),id=randomUUID(),key=input.resource==="original_source"?input.originalSourceKey:original.key,namespace=input.resource==="original_source"?original.plan.sourceNamespace:original.call.namespace;
  if(!key||input.resource==="original_source"&&objectKeyDigest(key)!==original.object.keyDigest)transferConflict("The supplied original source key does not match its immutable digest.");
  await ctx.tx.insert(mediaStorageTransferCalls).values({id,objectId:original.object.id,kind:"recovery_read",namespace,physicalKey:key,requestDigest:transferDigest({originalCallId:original.call.id,originalCallWitness:input.expectedWitness,key,namespace}),callerTokenDigest:transferDigest(input.token),runtimeId:transferRuntimeId,runtimeIdentity:input.runtimeIdentity});

@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import type {StorageCallerRuntimeIdentity} from "./physical-caller-runtime";
 // C1.12/C11.08: immutable admissions and observations per provider request.
 import {sql} from "drizzle-orm";
 import {bigint,check,index,integer,jsonb,pgTable,text,timestamp,uniqueIndex,uuid} from "drizzle-orm/pg-core";
@@ -11,7 +12,7 @@ export const mediaStorageTransferRequests=pgTable("media_storage_transfer_reques
  keyDigest:text("key_digest"),redactedAt:timestamp("redacted_at",{withTimezone:true}),
  descriptor:jsonb("descriptor").$type<TransferRequestDescriptor>().notNull(),descriptorDigest:text("descriptor_digest").notNull(),
  tokenDigest:text("token_digest").notNull(),state:text("state",{enum:["admitted","returned","failed","unknown","stopped"]}).notNull().default("admitted"),
- runtimeIdentity:jsonb("runtime_identity").$type<{boot:string;pid:number;startTicks:string}>().notNull(),
+ runtimeIdentity:jsonb("runtime_identity").$type<StorageCallerRuntimeIdentity>().notNull(),
  returnedAt:timestamp("returned_at",{withTimezone:true}),stopReceiptId:uuid("stop_receipt_id").references(()=>mediaStorageTransferReviews.id,{onDelete:"restrict"}),
  observationCount:integer("observation_count").notNull().default(0),
  createdAt:createdAtColumn(),

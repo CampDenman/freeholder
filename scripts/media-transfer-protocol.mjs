@@ -16,6 +16,12 @@ function revision(binding,key,value,versionId){
  return{kind:binding.kind==="s3"?"etag":"generation",key,namespace:binding.namespace,value,...(versionId!==undefined?{versionId:opaque(versionId)}:{})};
 }
 function exactRevision(input,binding,key){const checked=revision(binding,key,input?.value,input?.versionId);if(input?.kind!==checked.kind||input?.namespace!==checked.namespace||input?.key!==key)failure();return checked;}
+function originalRequestProof(id,token){
+ if(id===undefined&&token===undefined)return undefined;
+ if(typeof id!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)||typeof token!=="string"||token.length<36||token.length>200||/[\u0000-\u001f\u007f]/.test(token))failure();
+ return{id,tokenDigest:createHash("sha256").update("freeholder:verified-storage-transfer:v1\0").update(JSON.stringify(token)).digest("hex")};
+}
+function originalRequestHeaders(identity){return identity?{"x-amz-meta-freeholder-original-request":identity.id,"x-amz-meta-freeholder-original-token":identity.token}:{};}
 async function observed(observer,descriptor,operation){return observer?observer(descriptor,operation):operation(async()=>{});}
 async function xml(response,notify){
  if(!response.ok||!response.body)failure();const reader=response.body.getReader(),chunks=[];let bytes=0;
@@ -56,14 +62,14 @@ export function createS3TransferProtocol({client,url,binding,observer}){
   const response=await client.fetch(target,{redirect:"error",headers:{"accept-encoding":"identity",...(pinned?{"if-match":pinned.value}:{})}});
   await notify({stage:"response",status:response.status,detailDigest:digest({etag:response.headers.get("etag"),versionId:response.headers.get("x-amz-version-id"),bytes:response.headers.get("content-length")})});
   if(response.status===404){await notify({stage:"absence",status:404});return undefined;}if(!response.ok)failure();
-  const rev=revision(binding,key,response.headers.get("etag"),response.headers.get("x-amz-version-id")??undefined);
-  await notify({stage:"metadata",status:response.status,revision:rev});const body=new Uint8Array(await response.arrayBuffer());
-  await notify({stage:"body",status:response.status,revision:rev,sha256:digest(body),bytes:body.byteLength});return{body,contentType:response.headers.get("content-type")??"application/octet-stream",revision:rev};
+  const rev=revision(binding,key,response.headers.get("etag"),response.headers.get("x-amz-version-id")??undefined),requestProof=originalRequestProof(response.headers.get("x-amz-meta-freeholder-original-request")??undefined,response.headers.get("x-amz-meta-freeholder-original-token")??undefined);
+  await notify({stage:"metadata",status:response.status,revision:rev,...(requestProof?{requestProof}:{})});const body=new Uint8Array(await response.arrayBuffer());
+  await notify({stage:"body",status:response.status,revision:rev,sha256:digest(body),bytes:body.byteLength});return{body,contentType:response.headers.get("content-type")??"application/octet-stream",revision:rev,...(requestProof?{requestProof}:{})};
  });}
  return{binding,readVersioned,
   async get(key){return(await readVersioned(key))?.body;},
-  async put(key,body,contentType){objectKey(key);return observed(observer,{kind:"object.put",binding,key,createOnly:true,sha256:digest(body),bytes:body.byteLength},async notify=>{
-   const response=await client.fetch(url(key),{method:"PUT",redirect:"error",body:new Blob([body],{type:contentType}),headers:{"content-length":String(body.byteLength),"if-none-match":"*"}});
+  async put(key,body,contentType){objectKey(key);return observed(observer,{kind:"object.put",binding,key,createOnly:true,sha256:digest(body),bytes:body.byteLength},async(notify,identity)=>{
+   const response=await client.fetch(url(key),{method:"PUT",redirect:"error",body:new Blob([body],{type:contentType}),headers:{"content-length":String(body.byteLength),"if-none-match":"*",...originalRequestHeaders(identity)}});
    await notify({stage:"response",status:response.status});if(!response.ok)failure();await notify({stage:"accepted",status:response.status});const written=revision(binding,key,response.headers.get("etag"),response.headers.get("x-amz-version-id")??undefined);await notify({stage:"metadata",status:response.status,revision:written});
   });},
   async deleteVersioned(key,input){const rev=exactRevision(input,binding,key),target=new URL(url(key));if(rev.versionId!==undefined)target.searchParams.set("versionId",rev.versionId);
@@ -86,7 +92,7 @@ export function createS3TransferProtocol({client,url,binding,observer}){
 function replitObject(metadata,key,binding){
  if(!metadata||metadata.name!==key||metadata.bucket!==binding.location.bucket)failure();
  if(typeof metadata.generation!=="string")failure();
- return{bytes:size(String(metadata.size??"")),contentType:typeof metadata.contentType==="string"?metadata.contentType:"application/octet-stream",revision:revision(binding,key,metadata.generation)};
+ const requestProof=originalRequestProof(metadata.metadata?.freeholderOriginalRequest,metadata.metadata?.freeholderOriginalToken);return{bytes:size(String(metadata.size??"")),contentType:typeof metadata.contentType==="string"?metadata.contentType:"application/octet-stream",revision:revision(binding,key,metadata.generation),...(requestProof?{requestProof}:{})};
 }
 export function createReplitTransferProtocol({destination,binding,requireOriginalEndpoint,observer}){
  async function metadata(key,expected){objectKey(key);const pinned=expected?exactRevision(expected,binding,key):undefined;return observed(observer,{kind:"object.metadata",binding,key,...(pinned?{expectedRevision:pinned}:{})},async notify=>{
@@ -95,11 +101,11 @@ export function createReplitTransferProtocol({destination,binding,requireOrigina
  });}
  async function readVersioned(key,expected){const original=await metadata(key,expected);if(!original)return undefined;return observed(observer,{kind:"object.body",binding,key,expectedRevision:original.revision},async notify=>{
   requireOriginalEndpoint();let body;try{[body]=await(await destination()).file(key,{generation:original.revision.value}).download({validation:false,decompress:false});}catch(error){const code=error&&typeof error==="object"&&"code"in error?error.code:undefined;await notify({stage:"response",status:httpStatus(code)});throw Error("The exact original pinned Replit body request failed.");}
-  const bytes=new Uint8Array(body);await notify({stage:"body",status:null,revision:original.revision,sha256:digest(bytes),bytes:bytes.byteLength});if(bytes.byteLength!==original.bytes)failure();return{body:bytes,contentType:original.contentType,revision:original.revision};
+  const bytes=new Uint8Array(body);await notify({stage:"body",status:null,revision:original.revision,sha256:digest(bytes),bytes:bytes.byteLength});if(bytes.byteLength!==original.bytes)failure();return{body:bytes,contentType:original.contentType,revision:original.revision,...(original.requestProof?{requestProof:original.requestProof}:{})};
  });}
  return{binding,readVersioned,async get(key){return(await readVersioned(key))?.body;},
-  async put(key,body,contentType){objectKey(key);return observed(observer,{kind:"object.put",binding,key,createOnly:true,sha256:digest(body),bytes:body.byteLength},async notify=>{
-   requireOriginalEndpoint();const file=(await destination()).file(key);try{await file.save(Buffer.from(body),{resumable:false,validation:false,preconditionOpts:{ifGenerationMatch:0},metadata:{contentType}});}catch(error){const code=error&&typeof error==="object"&&"code"in error?error.code:undefined;await notify({stage:"response",status:httpStatus(code)});throw Error("The original non-resumable create-only Replit upload failed.");}await notify({stage:"accepted",status:null,detailDigest:digest(file.metadata??null)});const written=replitObject(file.metadata,key,binding);await notify({stage:"metadata",status:null,revision:written.revision,bytes:written.bytes});if(written.bytes!==body.byteLength)failure();
+  async put(key,body,contentType){objectKey(key);return observed(observer,{kind:"object.put",binding,key,createOnly:true,sha256:digest(body),bytes:body.byteLength},async(notify,identity)=>{
+   requireOriginalEndpoint();const file=(await destination()).file(key);try{await file.save(Buffer.from(body),{resumable:false,validation:false,preconditionOpts:{ifGenerationMatch:0},metadata:{contentType,...(identity?{metadata:{freeholderOriginalRequest:identity.id,freeholderOriginalToken:identity.token}}:{})}});}catch(error){const code=error&&typeof error==="object"&&"code"in error?error.code:undefined;await notify({stage:"response",status:httpStatus(code)});throw Error("The original non-resumable create-only Replit upload failed.");}await notify({stage:"accepted",status:null,detailDigest:digest(file.metadata??null)});const written=replitObject(file.metadata,key,binding);await notify({stage:"metadata",status:null,revision:written.revision,bytes:written.bytes,...(written.requestProof?{requestProof:written.requestProof}:{})});if(written.bytes!==body.byteLength)failure();
   });},
   async deleteVersioned(key,input){const rev=exactRevision(input,binding,key);return observed(observer,{kind:"object.delete",binding,key,expectedRevision:rev},async notify=>{
    requireOriginalEndpoint();try{await(await destination()).file(key,{generation:rev.value}).delete({ifGenerationMatch:rev.value});}catch(error){const code=error&&typeof error==="object"&&"code"in error?error.code:undefined;await notify({stage:"response",status:httpStatus(code)});throw Error("The original conditional Replit deletion failed.");}await notify({stage:"accepted",status:null});

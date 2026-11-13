@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import {currentStorageCallerRuntimeSchema} from "./physical-caller-runtime";
 // C1.12/C11.08: one shared transfer lifecycle for UI, HTTP and MCP.
 import {createHash,randomUUID} from "node:crypto";
 import {asc,eq,inArray} from "drizzle-orm";
@@ -43,7 +44,7 @@ const captureWork=defineMediaService({
  name:"media.captureStorageTransferWork",summary:"Read the unchanged original plan before bounded physical transfer work.",kind:"query",permission:"scoped",external:false,orchestratedBy:"media.advanceStorageTransfer",input:z.object({id:z.uuid()}),output:z.custom<Work>(),
  handler:async(input,ctx)=>readWork(ctx.tx,input.id),
 });
-const callInput=z.object({planId:z.uuid(),objectId:z.uuid(),kind:z.enum(STORAGE_TRANSFER_CALL_KINDS),token:z.string().min(36),runtimeIdentity:z.object({boot:z.string(),pid:z.number().int().positive(),startTicks:z.string()}),expectedRevision:revision.optional()});
+const callInput=z.object({planId:z.uuid(),objectId:z.uuid(),kind:z.enum(STORAGE_TRANSFER_CALL_KINDS),token:z.string().min(36),runtimeIdentity:currentStorageCallerRuntimeSchema,expectedRevision:revision.optional()});
 const captureCall=defineMediaService({
  name:"media.admitStorageTransferCall",summary:"Commit one exact original physical caller before provider I/O.",kind:"mutation",permission:"scoped",external:false,orchestratedBy:"media.advanceStorageTransfer",input:callInput,output:z.object({id:z.uuid(),requestDigest:digest,binding:transferBindingSchema,key:z.string(),receiptId:z.uuid().nullable()}),auditInputFields:["planId","objectId","kind"],
  handler:async(input,ctx)=>admitTransferCall(ctx.tx,input,ctx.actor),

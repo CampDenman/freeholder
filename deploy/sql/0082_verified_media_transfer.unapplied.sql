@@ -77,10 +77,11 @@ CREATE INDEX media_storage_transfer_subjects_contact_idx ON media_storage_transf
 CREATE INDEX media_storage_transfer_subjects_owner_idx ON media_storage_transfer_subjects(contact_id);
 --> statement-breakpoint
 CREATE TABLE media_storage_transfer_calls (
- id uuid PRIMARY KEY DEFAULT gen_random_uuid(),object_id uuid NOT NULL REFERENCES media_storage_transfer_objects(id) ON DELETE RESTRICT,
- kind text NOT NULL,namespace text NOT NULL,physical_key text NOT NULL,request_digest text NOT NULL,caller_token_digest text NOT NULL,
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),object_id uuid REFERENCES media_storage_transfer_objects(id) ON DELETE RESTRICT,
+ object_receipt_id uuid REFERENCES media_object_writes(id) ON DELETE RESTRICT,multipart_operation_id uuid REFERENCES media_multipart_operations(id) ON DELETE RESTRICT,
+ kind text NOT NULL,namespace text NOT NULL,physical_key text NOT NULL,quota_token uuid,request_digest text NOT NULL,caller_token_digest text NOT NULL,
  physical_receipt_id uuid REFERENCES media_object_writes(id) ON DELETE RESTRICT,runtime_id uuid NOT NULL,runtime_identity jsonb NOT NULL,expected_revision jsonb,state text NOT NULL DEFAULT 'admitted',
- observed_accepted_at timestamptz,returned_at timestamptz,stopped_at timestamptz,result_digest text,result_revision jsonb,result_sha256 text,result_bytes bigint,result_absent timestamptz,stop_receipt_id uuid,
+ observed_accepted_at timestamptz,returned_at timestamptz,stopped_at timestamptz,result_request_proof jsonb,result_digest text,result_revision jsonb,result_sha256 text,result_bytes bigint,result_absent timestamptz,stop_receipt_id uuid,
  created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
  CONSTRAINT media_storage_transfer_calls_kind CHECK(kind IN ('source_read','target_probe','target_put','target_verify','target_current','source_delete','source_absence','privacy_read','privacy_delete','privacy_absence','privacy_source_read','privacy_source_delete','privacy_source_absence')),
  CONSTRAINT media_storage_transfer_calls_state CHECK(state IN ('admitted','returned','unknown','stopped')),
@@ -297,7 +298,7 @@ BEGIN
    IF ROW(NEW.id,NEW.object_id,NEW.kind,NEW.namespace,NEW.request_digest,NEW.caller_token_digest,NEW.runtime_id,NEW.runtime_identity,NEW.physical_receipt_id,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.object_id,OLD.kind,OLD.namespace,OLD.request_digest,OLD.caller_token_digest,OLD.runtime_id,OLD.runtime_identity,OLD.physical_receipt_id,OLD.created_at)
     OR ROW(NEW.physical_key,NEW.expected_revision,NEW.redacted_at) IS DISTINCT FROM ROW(OLD.physical_key,OLD.expected_revision,OLD.redacted_at) AND NOT minimizing THEN RAISE EXCEPTION 'Original physical caller admission is immutable' USING ERRCODE='23514'; END IF;
    IF OLD.observed_accepted_at IS NOT NULL AND NEW.observed_accepted_at IS DISTINCT FROM OLD.observed_accepted_at THEN RAISE EXCEPTION 'A positive original provider fact cannot be erased' USING ERRCODE='23514'; END IF;
-   IF OLD.result_digest IS NOT NULL AND (ROW(NEW.returned_at,NEW.result_digest,NEW.result_sha256,NEW.result_bytes,NEW.result_absent) IS DISTINCT FROM ROW(OLD.returned_at,OLD.result_digest,OLD.result_sha256,OLD.result_bytes,OLD.result_absent) OR NEW.result_revision IS DISTINCT FROM OLD.result_revision AND NOT minimizing) THEN RAISE EXCEPTION 'Actual original physical return cannot be replaced' USING ERRCODE='23514'; END IF;
+   IF OLD.result_digest IS NOT NULL AND (ROW(NEW.returned_at,NEW.result_digest,NEW.result_sha256,NEW.result_bytes,NEW.result_absent,NEW.result_request_proof) IS DISTINCT FROM ROW(OLD.returned_at,OLD.result_digest,OLD.result_sha256,OLD.result_bytes,OLD.result_absent,OLD.result_request_proof) OR NEW.result_revision IS DISTINCT FROM OLD.result_revision AND NOT minimizing) THEN RAISE EXCEPTION 'Actual original physical return cannot be replaced' USING ERRCODE='23514'; END IF;
    IF NEW.state='stopped' AND OLD.state<>'stopped' AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=NEW.stop_receipt_id AND review.call_id=OLD.id AND review.object_id=OLD.object_id) THEN RAISE EXCEPTION 'Actual caller stop requires its exact original review receipt' USING ERRCODE='23514'; END IF;
   ELSIF TG_TABLE_NAME='media_storage_transfer_subjects' THEN
    IF ROW(NEW.id,NEW.object_id,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.object_id,OLD.created_at) OR OLD.redacted_at IS NOT NULL AND ROW(NEW.contact_id,NEW.redacted_at) IS DISTINCT FROM ROW(OLD.contact_id,OLD.redacted_at) OR NEW.redacted_at IS NOT NULL AND OLD.redacted_at IS NULL AND (NEW.contact_id IS NOT NULL OR NOT freeholder_media_transfer_object_retired(OLD.object_id)) THEN RAISE EXCEPTION 'Original subject membership cannot be rebound or erased before physical retirement' USING ERRCODE='23514'; END IF;
@@ -612,3 +613,73 @@ BEGIN
 END $$;
 -- The complete request capability remains UNPUBLISHED. Do not activate this
 -- intermediate source by adding an alias/placeholder capability function.
+
+--> statement-breakpoint
+-- Ordinary/multipart callers use the same actual request ledger, with one
+-- immutable original context. No fake transfer object is created for them.
+ALTER TABLE media_storage_transfer_calls DROP CONSTRAINT media_storage_transfer_calls_kind;
+--> statement-breakpoint
+ALTER TABLE media_storage_transfer_calls ADD CONSTRAINT media_storage_transfer_calls_kind CHECK(kind IN ('source_read','target_probe','target_put','target_verify','target_current','source_delete','source_absence','privacy_read','privacy_delete','privacy_absence','privacy_source_read','privacy_source_delete','privacy_source_absence','recovery_read','source_inventory','target_inventory','source_retirement_inventory','target_erasure_inventory','source_erasure_inventory','ordinary_put','ordinary_delete','multipart_create','multipart_complete','multipart_abort','ordinary_recovery_read','multipart_recovery_inspect','ordinary_retirement_inventory','multipart_retirement_inventory'));
+--> statement-breakpoint
+ALTER TABLE media_storage_transfer_calls ADD CONSTRAINT media_storage_calls_original_parent CHECK(num_nonnulls(object_id,object_receipt_id,multipart_operation_id)=1);
+--> statement-breakpoint
+CREATE INDEX media_storage_calls_receipt_idx ON media_storage_transfer_calls(object_receipt_id,created_at,id);
+--> statement-breakpoint
+CREATE INDEX media_storage_calls_multipart_idx ON media_storage_transfer_calls(multipart_operation_id,created_at,id);
+--> statement-breakpoint
+CREATE UNIQUE INDEX media_storage_calls_original_write_idx ON media_storage_transfer_calls(object_receipt_id) WHERE kind IN ('ordinary_put','ordinary_delete');
+--> statement-breakpoint
+CREATE UNIQUE INDEX media_storage_calls_original_multipart_idx ON media_storage_transfer_calls(multipart_operation_id) WHERE kind IN ('multipart_create','multipart_complete','multipart_abort');
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_original_caller_context_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE receipt media_object_writes; operation media_multipart_operations; resource media_multipart_resources;
+BEGIN
+ IF current_setting('freeholder.media_transfer_requests_runtime_v1',true) IS DISTINCT FROM '1' OR current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Original physical callers require the current shared request writer' USING ERRCODE='23514'; END IF;
+ IF TG_OP='UPDATE' THEN
+  IF ROW(NEW.object_id,NEW.object_receipt_id,NEW.multipart_operation_id) IS DISTINCT FROM ROW(OLD.object_id,OLD.object_receipt_id,OLD.multipart_operation_id) OR OLD.quota_token IS NOT NULL AND NEW.quota_token IS DISTINCT FROM OLD.quota_token THEN RAISE EXCEPTION 'An original caller cannot change its captured resource context' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+ END IF;
+ IF coalesce(NEW.runtime_identity->>'kind','') NOT IN ('linux','node') OR NEW.runtime_identity->>'instance' IS DISTINCT FROM NEW.runtime_id::text OR NEW.runtime_id::text IS DISTINCT FROM current_setting('freeholder.media_caller_runtime_uuid',true) OR coalesce(NEW.runtime_identity->>'pid','') !~ '^[1-9][0-9]*$' THEN RAISE EXCEPTION 'New caller identity must come from its actual server runtime, not a historical birth' USING ERRCODE='23514'; END IF;
+ IF NEW.object_receipt_id IS NOT NULL THEN
+  SELECT * INTO receipt FROM media_object_writes WHERE id=NEW.object_receipt_id;
+  IF receipt.id IS NULL OR NEW.namespace IS DISTINCT FROM receipt.storage_namespace OR encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(NEW.physical_key,'UTF8')),'hex') IS DISTINCT FROM receipt.key_digest OR NEW.kind NOT IN ('ordinary_put','ordinary_delete','ordinary_recovery_read','ordinary_retirement_inventory') THEN RAISE EXCEPTION 'Ordinary caller must name its exact captured original receipt' USING ERRCODE='23514'; END IF;
+  IF NEW.kind IN ('ordinary_put','ordinary_delete') AND (receipt.created_at<>transaction_timestamp() OR receipt.writer_runtime_id IS DISTINCT FROM NEW.runtime_id OR receipt.state<>'started' OR NEW.physical_receipt_id IS DISTINCT FROM receipt.id OR NEW.kind IS DISTINCT FROM CASE WHEN receipt.operation_kind='put' THEN 'ordinary_put' ELSE 'ordinary_delete' END) THEN RAISE EXCEPTION 'An earlier intent cannot acquire a new original dispatch admission' USING ERRCODE='23514'; END IF;
+ ELSIF NEW.multipart_operation_id IS NOT NULL THEN
+  SELECT * INTO operation FROM media_multipart_operations WHERE id=NEW.multipart_operation_id;
+  SELECT * INTO resource FROM media_multipart_resources WHERE id=operation.resource_id;
+  IF operation.id IS NULL OR resource.id IS NULL OR NEW.namespace IS DISTINCT FROM resource.storage_namespace OR encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(NEW.physical_key,'UTF8')),'hex') IS DISTINCT FROM resource.key_digest OR NEW.kind NOT IN ('multipart_create','multipart_complete','multipart_abort','multipart_recovery_inspect','multipart_retirement_inventory') THEN RAISE EXCEPTION 'Multipart caller must name its exact original operation and namespace' USING ERRCODE='23514'; END IF;
+  IF NEW.kind IN ('multipart_create','multipart_complete','multipart_abort') AND (operation.created_at<>transaction_timestamp() OR operation.writer_runtime_id IS DISTINCT FROM NEW.runtime_id OR operation.state<>'started' OR NEW.kind IS DISTINCT FROM 'multipart_'||operation.operation_kind) THEN RAISE EXCEPTION 'An earlier multipart intent cannot acquire a new original caller birth' USING ERRCODE='23514'; END IF;
+ ELSIF NEW.kind IN ('ordinary_put','ordinary_delete','ordinary_recovery_read','ordinary_retirement_inventory','multipart_create','multipart_complete','multipart_abort','multipart_recovery_inspect','multipart_retirement_inventory') THEN RAISE EXCEPTION 'Ordinary work cannot borrow a transfer context' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_original_caller_context BEFORE INSERT OR UPDATE ON media_storage_transfer_calls FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_caller_context_guard();
+-- Request capability remains unpublished until ordinary/multipart recovery,
+-- exact stop review and physical retirement/minimization are fully integrated.
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_transfer_runtime_fence() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF (current_setting('freeholder.media_transfer_runtime_v1',true) IS DISTINCT FROM '1'
+  OR current_setting('freeholder.media_transfer_requests_runtime_v1',true) IS DISTINCT FROM '1'
+  OR coalesce(current_setting('freeholder.media_caller_runtime_uuid',true),'') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+  AND current_setting('freeholder.media_transfer_operator_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Original media requires its verified original request writer' USING ERRCODE='23514';
+ END IF;
+ PERFORM pg_advisory_xact_lock_shared(1691709,82);
+ RETURN NULL;
+END $$;
+-- No completed request capability is published by this continuation.
+
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_original_quota_reservation_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF OLD.quota_token IS NULL AND NEW.quota_token IS NOT NULL THEN
+  IF NEW.kind<>'ordinary_put' OR NEW.state<>'admitted' OR NOT EXISTS(SELECT 1 FROM storage_quota_objects quota JOIN media_object_writes receipt ON receipt.id=NEW.object_receipt_id WHERE quota.namespace=NEW.namespace AND quota.object_key=NEW.physical_key AND quota.pending_token=NEW.quota_token AND quota.bytes>=receipt.bytes) THEN RAISE EXCEPTION 'Quota and its exact original caller reservation must commit together' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE CONSTRAINT TRIGGER media_original_quota_reservation AFTER UPDATE ON media_storage_transfer_calls DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_quota_reservation_guard();
+-- Full semantics are still unfinished. No request capability is published.
