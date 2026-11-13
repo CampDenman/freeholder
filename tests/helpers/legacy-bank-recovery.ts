@@ -39,7 +39,8 @@ export async function legacyRecoveryFixture() {
     expect(url.origin).toBe("https://api.stripe.com"); expect(new Headers(init.headers).get("stripe-account")).toBeNull();
     if (url.pathname === "/v1/account") return Response.json({ id: "acct_LegacyRecoveryRead" });
     if (url.pathname === "/v1/refunds" && init.method === "POST") {
-      const form = init.body instanceof URLSearchParams ? init.body : new URLSearchParams(String(init.body));
+      const form = init.body instanceof URLSearchParams ? init.body : typeof init.body === "string" ? new URLSearchParams(init.body) : undefined;
+      if (!form) throw new Error("The actual legacy refund POST must carry a form body.");
       expect(form.get("payment_intent")).toBe(paymentRef); const key = new Headers(init.headers).get("idempotency-key"); if (!key) throw Error("The actual legacy POST has no original key.");
       posts.push(key); let id = keys.get(key);
       if (!id) { id = `pyr_LegacyRecovery_${resources.size + 1}`; keys.set(key, id); resources.set(id, { id, amount: Number(form.get("amount")), status: "succeeded" }); }

@@ -11,14 +11,18 @@ import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
+import { createContact, mergeContacts, undoContactMerge } from "@/core/contacts/service";
+import { contacts } from "@/core/contacts/schema";
 import { stopJobs, reconcileJobDeploymentAdmission } from "@/core/jobs";
 import { legacyBankReaderRecoveryPlan, reviewLegacyBankReaderStopped, LEGACY_READER_STOP_CONFIRMATION } from "@/modules/invoicing/legacy-bank-reader-recovery";
 import { LEGACY_REPLACEMENT_CONFIRMATION, LEGACY_REPLACEMENT_PROTOCOL } from "@/modules/invoicing/legacy-bank-replacement-proof";
-import { replaceLegacyReturnedBankRefund } from "@/modules/invoicing/legacy-bank-replacement-service";
+import { claimLegacyBankReplacement, replaceLegacyReturnedBankRefund } from "@/modules/invoicing/legacy-bank-replacement-service";
+import { invoiceMerchantDependencyFingerprints } from "@/modules/invoicing/merchant-payment-dependencies";
+import { merchantRefundDependencyFingerprints } from "@/modules/invoicing/merchant-refund-dependencies";
 import { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBankReadStops, legacyBankCurrentReceipts } from "@/modules/invoicing/legacy-bank-read-schema";
 import { merchantRefundRequests } from "@/modules/invoicing/merchant-refund-schema";
 import { invoiceRefundStates } from "@/modules/invoicing/merchant-refund-bank-state-service";
-import { moneyStateEvents, refunds } from "@/modules/invoicing/schema";
+import { invoices, moneyStateEvents, refunds } from "@/modules/invoicing/schema";
 import { legacyRecoveryFixture } from "../helpers/legacy-bank-recovery";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 async function drain() { await stopJobs(); await reconcileJobDeploymentAdmission(); await closeDb(); }
@@ -44,6 +48,39 @@ describe.runIf(hasDatabase)("authentic legacy bank recovery80", { timeout: 60000
       originalCreatePlatformAccountId: null, originalCreateProtocolVersion: null });
     expect(await db().select().from(merchantRefundRequests)).toHaveLength(0);
     for (const read of await db().select().from(legacyBankReads)) expect(read.original).toMatchObject({ originalCreatePlatformAccountId: null, originalCreateProtocolVersion: null });
+  });
+  it("blocks undo when an authentic owned replacement reservation arrives after its finished original reads", async () => {
+    const actual = await legacyRecoveryFixture();
+    actual.status(actual.original.providerRef!, "failed");
+    expect(await actual.recover()).toMatchObject({ status: "failed", applied: true }); await actual.balances(0);
+    const buyerId = actual.invoice.contactId;
+    if (!buyerId) throw new Error("The actual original invoice must retain its buyer before merge.");
+    const alias = await createContact.call({ name: "Original legacy replacement buyer alias", email: "fictional-legacy-replacement-alias@example.test" }, OWNER);
+    const merge = await mergeContacts.call({ survivingId: alias.id, duplicateId: buyerId }, OWNER);
+    const [canonicalInvoice] = await db().select().from(invoices).where(eq(invoices.id, actual.invoice.id));
+    const [canonicalContact] = await db().select().from(contacts).where(eq(contacts.id, alias.id));
+    const before = await db().transaction(async tx => ({
+      invoice: await invoiceMerchantDependencyFingerprints(tx, [actual.invoice.id]),
+      refund: await merchantRefundDependencyFingerprints(tx, { paymentIds: [actual.payment.id], subscriptionChargeReceiptIds: [] }),
+    }));
+    const paths = actual.paths.length;
+    const claim = await claimLegacyBankReplacement.call({ refundId: actual.original.id, authorizedBy: OWNER.userId }, { kind: "system" });
+    expect(claim.state).toBe("ready"); expect(claim.refund).toMatchObject({ status: "created", providerRef: null });
+    expect(actual.paths).toHaveLength(paths); expect(actual.posts).toHaveLength(1);
+    const after = await db().transaction(async tx => ({
+      invoice: await invoiceMerchantDependencyFingerprints(tx, [actual.invoice.id]),
+      refund: await merchantRefundDependencyFingerprints(tx, { paymentIds: [actual.payment.id], subscriptionChargeReceiptIds: [] }),
+    }));
+    expect(before.invoice?.has(actual.invoice.id)).toBe(true);
+    expect(after.invoice?.get(actual.invoice.id)).not.toBe(before.invoice?.get(actual.invoice.id));
+    expect(after.refund.incomplete).toBe(false);
+    const replacements = after.refund.entries.filter(entry => entry.table === "money_state_events.legacy_bank_replacements");
+    expect(replacements).toHaveLength(1);
+    expect(after.refund.entries.filter(entry => entry.table !== "money_state_events.legacy_bank_replacements")).toEqual(before.refund.entries);
+    expect(await failure(undoContactMerge.call({ operationId: merge.mergeOperationId }, OWNER))).toMatchObject({ code: "conflict" });
+    expect((await db().select().from(invoices).where(eq(invoices.id, actual.invoice.id)))[0]).toEqual(canonicalInvoice);
+    expect((await db().select().from(contacts).where(eq(contacts.id, alias.id)))[0]).toEqual(canonicalContact);
+    await actual.balances(0); expect(await db().select().from(merchantRefundRequests)).toHaveLength(0);
   });
   it("cannot settle the original cash inventory while another actual accepted refund caller is still paused", async () => {
     const actual = await legacyRecoveryFixture(), paused = actual.pauseNextSubmission();

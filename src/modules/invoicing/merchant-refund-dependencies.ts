@@ -9,7 +9,8 @@ import * as tables from "./merchant-refund-schema";
 import { merchantRefundCurrentReceipts, merchantRefundObservationCaptures, merchantRefundStateReadFinishes, merchantRefundStateReads } from "./merchant-refund-current-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { moneyStateEvents, refunds } from "./schema";
-import { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBankCurrentReceipts } from "./legacy-bank-read-schema";
+import { legacyBankReads, legacyBankReadFacts, legacyBankReadFinishes, legacyBankCurrentReceipts, legacyBankReadStops } from "./legacy-bank-read-schema";
+import { LEGACY_REPLACEMENT_PROTOCOL, LEGACY_REPLACEMENT_REASON, LEGACY_REPLACEMENT_STATE } from "./legacy-bank-replacement-proof";
 import { BANK_REPLACEMENT_PROTOCOL, BANK_REPLACEMENT_REASON, BANK_REPLACEMENT_STATE } from "./merchant-bank-replacement-proof";
 export interface MerchantRefundDependencyReceipt { version: 1; entries: Array<{ table: string; id: string; fingerprint: string }>; incomplete: boolean }
 const MAX = 5000;
@@ -63,6 +64,9 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
   await read("legacy_bank_read_facts", legacyBankReadFacts, ids("read_id", rowIds(legacyReads)));
   await read("legacy_bank_read_finishes", legacyBankReadFinishes, ids("read_id", rowIds(legacyReads)));
   await read("legacy_bank_current_receipts", legacyBankCurrentReceipts, ids("read_id", rowIds(legacyReads)));
+  await read("legacy_bank_read_stops", legacyBankReadStops, ids("read_id", rowIds(legacyReads)));
+  await read("money_state_events.legacy_bank_replacements", moneyStateEvents, sql`${ids("subject_id", refundIds)} and r.subject_type='refund' and
+    (r.reason=${LEGACY_REPLACEMENT_REASON} or r.to_state=${LEGACY_REPLACEMENT_STATE} or r.metadata->>'protocol'=${LEGACY_REPLACEMENT_PROTOCOL})`);
   await read("money_state_events.bank_replacements", moneyStateEvents, sql`${ids("subject_id", refundIds)} and r.subject_type='refund' and
     (r.reason=${BANK_REPLACEMENT_REASON} or r.to_state=${BANK_REPLACEMENT_STATE} or r.metadata->>'protocol'=${BANK_REPLACEMENT_PROTOCOL})`);
   const dispatches = await read("merchant_refund_dispatches", tables.merchantRefundDispatches, ids("request_id", requestIds));

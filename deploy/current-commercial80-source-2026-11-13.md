@@ -150,3 +150,35 @@ digests, complete81-entry journal and zero financial counts recheck unchanged.
 This proves the real producer consumes its real adapter DTO. Actual account
 acceptance, phase-stop/recovery cash-fault controls, amendments and future
 invoice lineage remain required; stable and C12.38 remain open.
+
+## Next recovery composition: source only
+
+A separate integration now composes a8281b63 schedule GET and unpaid PI/void
+caller recovery,8f0e2dfd supported subscription draft finalization, and28da3dd2
+legacy stopped-reader/causal replacement onto the proved producer checkpoint.
+The only merge conflicts were equivalent explicit type imports and fixture
+narrowing. The real producer version repair and existing five lifecycle/four
+current-state fixtures are preserved.
+
+Root financial witnesses now include actual read-stop children through their
+exact read IDs and signed replacement journals through original refund IDs;
+both invoice and central refund paths include all six history arrays in their
+bounded inventories. Empty new child sets preserve existing fingerprints.
+A sixth actual legacy recovery control is prepared: after finished original
+reads and a contact merge, only the actual signed replacement reservation is
+added; it must change the owned financial fingerprint, refuse undo without
+changing canonical ownership, and create no provider call or cash. It is unrun.
+The original five source controls are also unrun at this next composition.
+
+The assembler appends the two owned recovery suffixes after complete c189.
+New unpublished80 SHA-256 is
+2100aa769636b26667ad9a715cc4cefffae60144f711d43b2fcf0592e83827f9.
+Prior published0–79, journal entries and the complete c189 byte prefix stay
+exact. The stop-recovery tail SHAea555f14 and legacy-recovery tail SHAd4ae54e3
+remain their owners' exact bytes. No database has been migrated to2100.
+The new source is UNQUALIFIED. It needs full bounded NoDB qualification and a
+NEW normal0–80 database before its actual controls, populated-upgrade, SDK,
+browser and provider proof. V14/V15 failures, V16 producer success and every
+earlier prototype/golden stay untouched. This checkpoint supplies no enabled
+model, C-item closure or stable sign-off; amendments/future-invoice lineage and
+exact legacy RMA integration remain required source work.

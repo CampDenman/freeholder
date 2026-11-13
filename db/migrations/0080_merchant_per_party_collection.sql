@@ -3320,3 +3320,222 @@ END $$;
 --> statement-breakpoint
 CREATE CONSTRAINT TRIGGER legacy_bank_current_balances AFTER UPDATE ON refunds DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
  WHEN(OLD.status IS DISTINCT FROM NEW.status) EXECUTE FUNCTION freeholder_guard_legacy_bank_balances();
+--> statement-breakpoint
+-- Source: deploy/subscription-phase-recovery80.fragment.sql
+-- SHA256: fd66384362848794cca4150ad2c86c94f8683fb7333d6415095ef07dcbbe9a7b
+-- Copyright (C) 2026 Tony Aly
+-- SPDX-License-Identifier: Apache-2.0
+-- C12.38/C1.08: UNAPPLIED owned suffix AFTER subscription-phase-stop80.fragment.sql
+-- SHA173898e837f2678d14b4d077aa22be263dbcc9496172b51073b1f14139656eba.
+-- Retains actual original caller finish plus the separately admitted returned GET.
+-- Never apply to preserved prototypes/goldens; root assembles a NEW80 hash/DB.
+CREATE OR REPLACE FUNCTION freeholder_phase_schedule_stop_covers(target uuid, proof jsonb) RETURNS boolean LANGUAGE plpgsql STABLE AS $$
+DECLARE item jsonb; operation subscription_provider_schedule_operations%ROWTYPE; actual jsonb; schedule_count integer; seen text[]='{}'; linked jsonb; creator subscription_provider_schedule_operations%ROWTYPE;
+BEGIN
+ IF proof IS NULL OR jsonb_typeof(proof->'phaseSchedules') IS DISTINCT FROM 'array' OR jsonb_array_length(proof->'phaseSchedules')=0
+  OR jsonb_typeof(proof->'resources') IS DISTINCT FROM 'array' THEN RETURN false; END IF;
+ IF EXISTS(SELECT 1 FROM subscription_provider_schedule_operations o WHERE o.subscription_id=target AND o.original_request->>'resourceKind'='phase_schedule'
+  AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(o.provider_observation->'history','[]'::jsonb)) h(value)
+   WHERE h.value->>'operationId'=o.id::text AND h.value->>'requestDigest'=o.request_digest
+    AND h.value->>'source' IN('phase_schedule_ack','phase_schedule_read_verified','phase_schedule_read_stale')
+    AND coalesce(h.value->>'providerScheduleRef' ~ '^sub_sched_[A-Za-z0-9]{1,195}$',false))) THEN RETURN false; END IF;
+ SELECT count(DISTINCT h.value->>'providerScheduleRef') INTO schedule_count
+ FROM subscription_provider_schedule_operations o CROSS JOIN LATERAL jsonb_array_elements(coalesce(o.provider_observation->'history','[]'::jsonb)) h(value)
+ WHERE o.subscription_id=target AND o.original_request->>'resourceKind' IN('phase_schedule','phase_schedule_stop')
+  AND h.value->>'operationId'=o.id::text AND h.value->>'requestDigest'=o.request_digest
+  AND h.value->>'source' IN('phase_schedule_ack','phase_schedule_read_verified','phase_schedule_read_stale','phase_schedule_stop_ack');
+ IF schedule_count<>jsonb_array_length(proof->'phaseSchedules') THEN RETURN false; END IF;
+ FOR item IN SELECT value FROM jsonb_array_elements(proof->'phaseSchedules') LOOP
+  IF NOT coalesce(item->>'providerScheduleRef' ~ '^sub_sched_[A-Za-z0-9]{1,195}$',false)
+   OR item->>'providerScheduleRef'=ANY(seen) OR NOT coalesce(item->>'stopOperationId' ~ '^[a-f0-9-]{36}$',false)
+   OR NOT coalesce(item->>'stopEvidenceDigest' ~ '^[a-f0-9]{64}$',false) OR jsonb_typeof(item->'linkedSubscriptionRefs') IS DISTINCT FROM 'array' THEN RETURN false; END IF;
+  seen=array_append(seen,item->>'providerScheduleRef');
+  SELECT * INTO operation FROM subscription_provider_schedule_operations WHERE id=(item->>'stopOperationId')::uuid AND subscription_id=target;
+  IF operation.id IS NULL OR operation.kind<>'cancel' OR operation.state<>'confirmed' OR operation.original_request->>'resourceKind'<>'phase_schedule_stop'
+   OR operation.original_request->>'providerScheduleRef' IS DISTINCT FROM item->>'providerScheduleRef'
+   OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(operation.provider_observation->'history','[]'::jsonb)) h(value)
+    WHERE h.value->>'source'='physical_caller_finished' AND h.value->>'operationId'=operation.id::text AND h.value->>'requestDigest'=operation.request_digest
+     AND h.value->>'completionDigest'=operation.original_request->>'callerCompletionDigest' AND h.value->>'outcome' IN('returned','threw')) THEN RETURN false; END IF;
+  SELECT h.value->'actual' INTO actual FROM jsonb_array_elements(coalesce(operation.provider_observation->'history','[]'::jsonb)) WITH ORDINALITY h(value,position)
+   WHERE h.value->>'source'='phase_schedule_stop_ack' AND h.value->>'operationId'=operation.id::text AND h.value->>'requestDigest'=operation.request_digest
+    AND h.value->>'actualDigest'=item->>'stopEvidenceDigest' ORDER BY h.position DESC LIMIT 1;
+  IF actual IS NULL OR actual->>'providerScheduleRef' IS DISTINCT FROM item->>'providerScheduleRef' OR actual->>'linkedInventoryComplete' IS DISTINCT FROM 'true'
+   OR actual->>'state' IS DISTINCT FROM item->>'state' OR NOT coalesce(actual->>'state' IN('canceled','completed','released'),false)
+   OR jsonb_typeof(actual->'providerSubscriptionRefs') IS DISTINCT FROM 'array' THEN RETURN false; END IF;
+  -- A lost original response may converge only through its own actual GET.
+  -- Its nonce never substitutes for the earlier physical mutation's nonce.
+  IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(operation.provider_observation->'history','[]'::jsonb)) h(value)
+   WHERE h.value->>'source'='physical_caller_finished' AND h.value->>'operationId'=operation.id::text AND h.value->>'requestDigest'=operation.request_digest
+    AND h.value->>'completionDigest'=operation.original_request->>'callerCompletionDigest' AND h.value->>'outcome'='returned')
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(operation.provider_observation->'history','[]'::jsonb)) ack(value)
+    JOIN LATERAL jsonb_array_elements(coalesce(operation.provider_observation->'history','[]'::jsonb)) admission(value) ON admission.value->>'readId'=ack.value->>'readId'
+    JOIN LATERAL jsonb_array_elements(coalesce(operation.provider_observation->'history','[]'::jsonb)) finish(value) ON finish.value->>'readId'=admission.value->>'readId'
+    WHERE ack.value->>'source'='phase_schedule_stop_ack' AND ack.value->>'operationId'=operation.id::text AND ack.value->>'requestDigest'=operation.request_digest
+     AND ack.value->>'actualDigest'=item->>'stopEvidenceDigest' AND admission.value->>'source'='schedule_read_admitted' AND admission.value->>'kind'='phase_stop'
+     AND admission.value->>'operationId'=operation.id::text AND admission.value->>'requestDigest'=operation.request_digest
+     AND admission.value->'request'->>'providerScheduleRef'=item->>'providerScheduleRef'
+     AND coalesce(admission.value->>'completionDigest' ~ '^[a-f0-9]{64}$',false)
+     AND admission.value->>'completionDigest'<>operation.original_request->>'callerCompletionDigest'
+     AND finish.value->>'source'='schedule_read_finished' AND finish.value->>'operationId'=operation.id::text AND finish.value->>'requestDigest'=operation.request_digest
+     AND finish.value->>'completionDigest'=admission.value->>'completionDigest' AND finish.value->>'outcome'='returned' AND finish.value->'verified'='true'::jsonb
+     AND finish.value->>'actualDigest'=ack.value->>'actualDigest') THEN RETURN false; END IF;
+  SELECT coalesce(jsonb_agg(to_jsonb(source.ref) ORDER BY source.ref COLLATE "C"),'[]'::jsonb) INTO linked FROM (
+   SELECT h.value->>'providerSubscriptionRef' ref FROM subscription_provider_schedule_operations o
+    CROSS JOIN LATERAL jsonb_array_elements(coalesce(o.provider_observation->'history','[]'::jsonb)) h(value)
+    WHERE o.subscription_id=target AND h.value->>'providerScheduleRef'=item->>'providerScheduleRef'
+     AND h.value->>'operationId'=o.id::text AND h.value->>'requestDigest'=o.request_digest
+     AND h.value->>'source' IN('phase_schedule_ack','phase_schedule_read_verified','phase_schedule_read_stale') AND h.value->>'providerSubscriptionRef' IS NOT NULL
+   UNION
+   SELECT h.value->>'providerSubscriptionRef' ref FROM subscription_provider_schedule_operations o
+    CROSS JOIN LATERAL jsonb_array_elements(coalesce(o.provider_observation->'history','[]'::jsonb)) h(value)
+    WHERE o.subscription_id=target AND o.original_request->>'resourceKind'='phase_schedule' AND h.value->>'source'='authenticated_invoice_payment'
+     AND h.value->>'providerSubscriptionRef' IS NOT NULL
+     AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(o.provider_observation->'history','[]'::jsonb)) primary_fact(value)
+      WHERE primary_fact.value->>'providerScheduleRef'=item->>'providerScheduleRef' AND primary_fact.value->>'operationId'=o.id::text
+       AND primary_fact.value->>'requestDigest'=o.request_digest AND primary_fact.value->>'source' IN('phase_schedule_ack','phase_schedule_read_verified','phase_schedule_read_stale'))
+   UNION
+   SELECT r.ref FROM subscription_provider_schedule_operations o
+    CROSS JOIN LATERAL jsonb_array_elements(coalesce(o.provider_observation->'history','[]'::jsonb)) h(value)
+    CROSS JOIN LATERAL jsonb_array_elements_text(coalesce(h.value->'actual'->'providerSubscriptionRefs','[]'::jsonb)) r(ref)
+    WHERE o.subscription_id=target AND h.value->>'providerScheduleRef'=item->>'providerScheduleRef'
+     AND h.value->>'operationId'=o.id::text AND h.value->>'requestDigest'=o.request_digest AND h.value->>'source'='phase_schedule_stop_ack'
+  ) source;
+  IF linked IS DISTINCT FROM item->'linkedSubscriptionRefs' THEN RETURN false; END IF;
+  FOR creator IN SELECT o.* FROM subscription_provider_schedule_operations o WHERE o.subscription_id=target AND o.original_request->>'resourceKind'='phase_schedule'
+   AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(o.provider_observation->'history','[]'::jsonb)) h(value) WHERE h.value->>'providerScheduleRef'=item->>'providerScheduleRef'
+    AND h.value->>'operationId'=o.id::text AND h.value->>'requestDigest'=o.request_digest AND h.value->>'source' IN('phase_schedule_ack','phase_schedule_read_verified','phase_schedule_read_stale')) LOOP
+   IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(creator.provider_observation->'history','[]'::jsonb)) h(value)
+    WHERE h.value->>'source'='physical_caller_finished' AND h.value->>'operationId'=creator.id::text AND h.value->>'requestDigest'=creator.request_digest
+     AND h.value->>'completionDigest'=creator.original_request->>'callerCompletionDigest' AND h.value->>'outcome' IN('returned','threw')) THEN RETURN false; END IF;
+  END LOOP;
+  IF NOT EXISTS(SELECT 1 FROM subscription_provider_schedule_operations o WHERE o.subscription_id=target AND o.original_request->>'resourceKind'='phase_schedule'
+   AND EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(o.provider_observation->'history','[]'::jsonb)) h(value) WHERE h.value->>'providerScheduleRef'=item->>'providerScheduleRef'
+    AND h.value->>'operationId'=o.id::text AND h.value->>'requestDigest'=o.request_digest AND h.value->>'source' IN('phase_schedule_ack','phase_schedule_read_verified','phase_schedule_read_stale'))) THEN RETURN false; END IF;
+  IF jsonb_array_length(linked)=0 THEN
+   IF actual->>'state' IS DISTINCT FROM 'canceled' OR jsonb_typeof(actual->'neverStartedProof') IS DISTINCT FROM 'object'
+    OR actual->'neverStartedProof' IS DISTINCT FROM item->'neverStartedProof'
+    OR actual->'neverStartedProof'->>'originalFirstPhaseStart' IS DISTINCT FROM operation.original_request->>'originalFirstPhaseStart'
+    OR actual->'neverStartedProof'->>'providerCanceledAt' IS NULL OR actual->'neverStartedProof'->>'originalFirstPhaseStart' IS NULL OR actual->'neverStartedProof'->>'providerCreatedAt' IS NULL
+    OR (actual->'neverStartedProof'->>'providerCanceledAt')::timestamptz < (actual->'neverStartedProof'->>'providerCreatedAt')::timestamptz
+    OR extract(epoch FROM (actual->'neverStartedProof'->>'providerCreatedAt')::timestamptz)<0
+    OR extract(epoch FROM (actual->'neverStartedProof'->>'providerCanceledAt')::timestamptz)<0
+    OR (actual->'neverStartedProof'->>'providerCanceledAt')::timestamptz >= (actual->'neverStartedProof'->>'originalFirstPhaseStart')::timestamptz THEN RETURN false; END IF;
+  ELSE
+   IF EXISTS(SELECT 1 FROM jsonb_array_elements_text(linked) r(ref) WHERE NOT coalesce(r.ref ~ '^sub_[A-Za-z0-9]{1,195}$',false)
+    OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(proof->'resources') resource(value) WHERE resource.value->>'providerSubscriptionRef'=r.ref)) THEN RETURN false; END IF;
+  END IF;
+ END LOOP;
+ RETURN true;
+EXCEPTION WHEN invalid_text_representation OR datetime_field_overflow OR invalid_datetime_format OR invalid_parameter_value THEN RETURN false;
+END $$;
+--> statement-breakpoint
+-- Source: deploy/legacy-bank-recovery80.fragment.sql
+-- SHA256: 5fadf47df429a91674c9ab75025ad53dae3e86c8187768488eec91247551974b
+-- Copyright (C) 2026 Tony Aly
+-- SPDX-License-Identifier: Apache-2.0
+-- C5.19/C12.38/C1.08: UNASSEMBLED suffix AFTER unchanged 9b7 current proof.
+CREATE TABLE legacy_bank_read_stops (
+ read_id uuid PRIMARY KEY REFERENCES legacy_bank_reads(id) ON DELETE RESTRICT,
+ caller_instance_id uuid NOT NULL, original_digest text NOT NULL, source_revision text NOT NULL,
+ mechanical_check text NOT NULL, hosting_evidence_digest text NOT NULL, reviewed_by text NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ CONSTRAINT legacy_bank_read_stops_digests CHECK(original_digest ~ '^[a-f0-9]{64}$' AND source_revision ~ '^[a-f0-9]{64}$' AND hosting_evidence_digest ~ '^[a-f0-9]{64}$'),
+ CONSTRAINT legacy_bank_read_stops_kind CHECK(mechanical_check IN('original_process_absent','unobservable_host_review')),
+ CONSTRAINT legacy_bank_read_stops_reviewer CHECK(reviewed_by ~ '^user:[0-9a-f-]{36}$')
+);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_legacy_bank_reader_stop() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original_read legacy_bank_reads;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.legacy_bank_reader_stop_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Original legacy reader stop review is immutable and requires its human-authorized shared service' USING ERRCODE='55000';
+ END IF;
+ SELECT * INTO original_read FROM legacy_bank_reads WHERE id=NEW.read_id FOR UPDATE;
+ IF original_read.id IS NULL OR NEW.caller_instance_id IS DISTINCT FROM (original_read.caller->>'id')::uuid
+  OR NEW.original_digest IS DISTINCT FROM original_read.original_digest OR NEW.source_revision IS DISTINCT FROM original_read.source_revision
+  OR EXISTS(SELECT 1 FROM legacy_bank_read_finishes WHERE read_id=NEW.read_id) THEN
+  RAISE EXCEPTION 'Review the exact unresolved original caller without inventing its returned or thrown finish' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER legacy_bank_read_stops_guard BEFORE INSERT OR UPDATE OR DELETE ON legacy_bank_read_stops FOR EACH ROW EXECUTE FUNCTION freeholder_guard_legacy_bank_reader_stop();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_legacy_bank_recovered_read() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ PERFORM 1 FROM legacy_bank_reads WHERE id=NEW.read_id FOR UPDATE;
+ IF EXISTS(SELECT 1 FROM legacy_bank_read_stops WHERE read_id=NEW.read_id) THEN
+  RAISE EXCEPTION 'A reviewed stopped legacy read cannot append late callbacks or fabricate a real wrapper finish' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER legacy_bank_recovered_read_guard BEFORE INSERT ON legacy_bank_read_facts FOR EACH ROW EXECUTE FUNCTION freeholder_guard_legacy_bank_recovered_read();
+--> statement-breakpoint
+CREATE TRIGGER legacy_bank_recovered_read_guard BEFORE INSERT ON legacy_bank_read_finishes FOR EACH ROW EXECUTE FUNCTION freeholder_guard_legacy_bank_recovered_read();
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_legacy_bank_revision(target_refund uuid, exclude_read uuid DEFAULT NULL)
+RETURNS TABLE(revision text,incomplete boolean) LANGUAGE sql STABLE SET TimeZone='UTC' AS $$
+ WITH original AS (SELECT r.* FROM refunds r WHERE r.id=target_refund),
+ reads AS (SELECT r.* FROM legacy_bank_reads r WHERE r.refund_id=target_refund AND r.id IS DISTINCT FROM exclude_read LIMIT 5001),
+ facts AS (
+  -- The original identity and HMAC physical journal are stable across logical
+  -- cash projection and free-text privacy minimization. No current account or
+  -- same-amount resource is adopted into the old create protocol.
+  SELECT 'original' domain,r.id::text identity,jsonb_build_object('id',r.id,'payment_id',r.payment_id,'invoice_id',r.invoice_id,
+   'provider',r.provider,'provider_ref',r.provider_ref,'amount_minor',r.amount_minor,'currency',r.currency,
+   'idempotency_key',r.idempotency_key,'request_hash',r.request_hash) body FROM original r
+  UNION ALL SELECT 'payment',p.id::text,jsonb_build_object('id',p.id,'invoice_id',p.invoice_id,'provider',p.provider,
+   'provider_ref',p.provider_ref,'amount_minor',p.amount_minor,'currency',p.currency,'request_hash',p.request_hash)
+   FROM payments p,original r WHERE p.id=r.payment_id
+  UNION ALL SELECT 'route',p.payment_id::text,to_jsonb(p) FROM payment_merchant_routes p,original r WHERE p.payment_id=r.payment_id
+  UNION ALL SELECT 'physical',e.id::text,to_jsonb(e) FROM money_state_events e WHERE e.subject_type='refund' AND e.subject_id IN(SELECT rr.id FROM refunds rr,original r WHERE rr.payment_id=r.payment_id)
+   AND e.metadata->>'protocol'='freeholder.refund-physical.v1'
+   AND (e.subject_id=target_refund OR e.metadata->>'physicalState' IS DISTINCT FROM 'unsubmitted')
+  UNION ALL SELECT 'signed_event',e.id::text,to_jsonb(e) FROM payment_provider_events e,original r JOIN payments p ON p.id=r.payment_id
+   WHERE e.provider=r.provider AND (e.provider_object_ref=p.provider_ref OR e.provider_object_ref IN(SELECT rr.provider_ref FROM refunds rr WHERE rr.payment_id=r.payment_id))
+  UNION ALL SELECT 'read',r.id::text,to_jsonb(r) FROM reads r
+  UNION ALL SELECT 'read_fact',f.id::text,to_jsonb(f) FROM legacy_bank_read_facts f WHERE f.read_id IN(SELECT id FROM reads)
+  UNION ALL SELECT 'read_finish',f.read_id::text,to_jsonb(f) FROM legacy_bank_read_finishes f WHERE f.read_id IN(SELECT id FROM reads)
+  UNION ALL SELECT 'read_stop',f.read_id::text,to_jsonb(f) FROM legacy_bank_read_stops f WHERE f.read_id IN(SELECT id FROM reads)
+ ), bounded AS(SELECT * FROM facts LIMIT 5001)
+ SELECT encode(sha256(convert_to(coalesce(string_agg(domain||':'||identity||':'||body::text,E'\n' ORDER BY domain,identity),''),'UTF8')),'hex'),
+  count(*)>5000 OR NOT EXISTS(SELECT 1 FROM original) FROM bounded
+$$;
+--> statement-breakpoint
+ALTER TABLE legacy_bank_current_receipts ADD COLUMN replacement_eligible boolean NOT NULL DEFAULT false;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_guard_legacy_bank_refund_capacity() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NOT freeholder_legacy_bank_refund_capacity(NEW.payment_id)
+  AND current_setting('freeholder.legacy_bank_capacity_payment',true) IS DISTINCT FROM NEW.payment_id::text THEN
+  RAISE EXCEPTION 'Original legacy bank debt requires exact authenticated causal reconciliation before a new refund intent' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+-- Signed feedback is retained in a short transaction before processing it.
+-- Serialize its original payment inventory against current-proof admission.
+CREATE FUNCTION freeholder_lock_legacy_bank_signed_event() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE payment_id uuid;
+BEGIN
+ FOR payment_id IN SELECT DISTINCT p.id FROM payments p WHERE p.provider=NEW.provider
+  AND (p.provider_ref=NEW.provider_object_ref OR EXISTS(SELECT 1 FROM refunds r WHERE r.payment_id=p.id AND r.provider_ref=NEW.provider_object_ref)) ORDER BY p.id LOOP
+  PERFORM pg_advisory_xact_lock(hashtext('payment:'||payment_id::text));
+ END LOOP;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER legacy_bank_signed_event_lock BEFORE INSERT ON payment_provider_events FOR EACH ROW EXECUTE FUNCTION freeholder_lock_legacy_bank_signed_event();
+--> statement-breakpoint
+CREATE FUNCTION freeholder_lock_legacy_bank_physical_event() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE payment_id uuid;
+BEGIN
+ IF NEW.subject_type='refund' AND NEW.metadata->>'protocol'='freeholder.refund-physical.v1' THEN
+  SELECT r.payment_id INTO payment_id FROM refunds r WHERE r.id=NEW.subject_id;
+  IF payment_id IS NOT NULL THEN PERFORM pg_advisory_xact_lock(hashtext('payment:'||payment_id::text)); END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER legacy_bank_physical_event_lock BEFORE INSERT ON money_state_events FOR EACH ROW EXECUTE FUNCTION freeholder_lock_legacy_bank_physical_event();

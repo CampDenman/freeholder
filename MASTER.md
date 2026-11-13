@@ -13970,6 +13970,16 @@ whatever is best for the people using the site.
   upgrade/SDK/browser/provider acceptance remain required; model admission is
   still closed. Exact limits:
   `deploy/current-commercial80-source-2026-11-13.md`.
+  Next recovery composition 2026-11-13 (C1.08/C12.38): isolated source
+  composes a828 schedule GET/PI-void recovery,8f0 supported draft finalization
+  and28da stopped legacy readers/causal replacements. Root witnesses include
+  exact stop and signed lineage children with complete six-array bounds.
+  Unpublished80 SHA2100aa76 appends exact owned recovery tails after the whole
+  c189 prefix; published0–79 and journal remain byte exact. It is UNQUALIFIED
+  and UNAPPLIED; no prototype/golden has been migrated. Prepared actual
+  current-only-lineage merge-undo control, full source/native/new-DB/upgrade/
+  SDK/browser/provider and remaining RMA/amendment/future-lineage work are
+  still required. No model admission or live C-item is closed.
   Actual phase-producer repair 2026-11-13 (C12.38): test-only3ea on c189
   genuinely failed5.776s after an actual original schedule ACK and returned
   caller, because the real adapter DTO lacks the core projection version.

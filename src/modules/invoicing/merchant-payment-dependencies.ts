@@ -32,13 +32,14 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   const legacyFinancial = new Map<string, string>();
   if (legacyReferences.length) {
     const history = await legacyBankReadFinancialWitness(tx, legacyReferences.map(row => row.refundId));
-    if (history.reads.length + history.facts.length + history.finishes.length + history.current.length > 5000) return null;
+    if (history.reads.length + history.facts.length + history.finishes.length + history.current.length + history.stops.length + history.replacements.length > 5000) return null;
     for (const invoiceId of [...new Set(legacyReferences.map(row => row.invoiceId))]) {
       const refundIds = new Set(legacyReferences.filter(row => row.invoiceId === invoiceId).map(row => row.refundId));
       const reads = history.reads.filter(row => refundIds.has(row.refundId)), readIds = new Set(reads.map(row => row.id));
       const current = history.current.filter(row => readIds.has(row.readId));
+      const stops = history.stops.filter(row => readIds.has(row.readId)), replacements = history.replacements.filter(row => refundIds.has(row.subjectId));
       legacyFinancial.set(invoiceId, merchantTaxDigest({ reads, facts: history.facts.filter(row => readIds.has(row.readId)), finishes: history.finishes.filter(row => readIds.has(row.readId)),
-        ...(current.length ? { current } : {}) }));
+        ...(current.length ? { current } : {}), ...(stops.length ? { stops } : {}), ...(replacements.length ? { replacements } : {}) }));
     }
   }
   const owned = await tx.select({ payment: payments, orderRoute: merchantPaymentRoutes, singleRoute: merchantInvoicePaymentRoutes, agreementRoute: merchantAgreementPaymentRoutes }).from(payments)
