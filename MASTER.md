@@ -3564,6 +3564,20 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Genuine current-bank SQL source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): four NEW UNAPPLIED functions independently resolve
+actual controlled receipt/origin/accepted-target lineage and latest receipt-owned
+RETURNED inspection with contiguous complete state and actual fee/recipient
+facts. The bank policy has genuine positive paths; it is separate from parent
+application authority. Every selected raw row remains in current PG-SHA
+witnesses; immutable bank facts are distinguished from complete-current namespace
+and opaque admitted JS source digest. Signed143stop source is carried; no
+qualification is inferred. All38 prepared SQL controls are UNRUN, and full
+native authentication, actual observation/context, parent/batch proof and old
+route/period composition remain required. Existing424 refusal guards are
+unchanged; no root assembly/model/journal/activation or stable state moves. See
+`deploy/controlled-current-bank-predicate82-source-20261113.md`.
+
 Controlled cash alternate-writer source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): a NEW UNAPPLIED additive fragment checks actual
 receipt/origin/accepted-target and conserved cash/credit identities at three
