@@ -6468,6 +6468,13 @@ deployments are portable, testable and incapable of silently forking the truth.
   and9 focused native/upgrade skips are explicit. SQL955 remains unchanged;
   the actual populated upgrade/current-flow acceptance have not run.
   See `deploy/import-uploaded-history-recovery-2026-11-13.md`.
+  Historical synthetic v1 then reproduced the exact old79 final-marker bug
+  and passed ordinary80/81, but its new one-item later-upload fixture stopped
+  before reconciliation because finite previews intentionally have no graph.
+  V1 is preserved; task/receipt/capture0 and zero reopen writes were inspected.
+  Test-only78af uses an actual501-item later graph, keeps every original oracle,
+  and passes types/changed lint/four pures/metadata. NEWv2 historical native
+  execution remains required; no product recovery result is claimed yet.
   Canonical original-retention draft 2026-11-12: a second actual control on
   protected main reproduced the same pre-verification hold gap for uploaded
   WXR bytes. New unpublished80 capture receipts and immutable source/generation

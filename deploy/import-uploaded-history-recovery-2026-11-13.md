@@ -6,9 +6,11 @@ C1.08/C3.47/C11.14 remain open. Frozen acbb/SQL955 passed fresh ordinary0–81,
 unchanged b716 URL-key AFTER and the held-upload boundary. Those finite proofs
 do not cover an older79 receipt that already claimed completion while retaining
 private normalized input. This historical-recovery source passed the bounded
-NoDB checks below on586e644d. Its actual populated upgrade and current-flow
-regression have not run. No database, migration, provider or native execution
-was performed for it. SQL81 remains byte-identical955a04d2; SQL80 remains3a686245.
+NoDB checks below on586e644d. The first synthetic controller subsequently reproduced the exact old79 bug
+and passed ordinary80/81 upgrade, then stopped on a later-upload fixture setup
+error before historical recovery was exercised. Its new corrected fixture is
+NoDB-qualified; current historical recovery remains unproven. No provider
+acceptance follows from this work. SQL81 remains byte-identical955a04d2; SQL80 remains3a686245.
 
 A retained self-bound `core.eraseImportSourceObjects` task identifies its exact
 request and original chunk keys. Reconciliation requires the verified original
@@ -109,3 +111,40 @@ Durable reports:
 `/tmp/freeholder-uploaded-history-586-actual-evidence-20261113.json`.
 The actual fresh populated upgrade and current-flow callbacks still require a
 separate native lane grant. No stable or launch sign-off follows from this pass.
+
+
+First populated controller and test-only correction (2026-11-13):
+
+- NEW `freeholder_uploaded_history_upgrade_v1_test_20261113` alone was created.
+  The stricter operational controller required exactly the unchanged f1 final
+  marker assertion at source line88 to fail, plus independently verified
+  completed/erased/intact original task, private501 index, accepted physical
+  deletion and raw ENOENT, before ordinary80/81. All82 journal identities and
+  initial-capture tables remaining empty passed. No prior failure/golden DB
+  was opened, cloned, exported or altered.
+- Current-stage execution stopped at new fixture line62 before old-task replay:
+  the later upload had one item and correctly used the ordinary finite preview
+  path below the500-item limit, so it had no normalized graph. Independent
+  read-only counters show zero reopening/reconciliation actions or claims,
+  intact original task/receipt, capture0 and original private index retained.
+  The failed v1 DB remains untouched. This is a fixture setup failure; it does
+  not qualify or disprove the unexecuted historical reconciliation behavior.
+- Test-only78af9d91 generates an actual501-item later WXR and requires its501
+  entries/private marker before proceeding. All existing original-marker,
+  exact task/verification, recovery, idempotency, no-adoption, snapshot/bytes
+  and no-DELETE assertions remain. Product code, source controller, SQL955,
+  full journal and original f1/b716/847 oracle files are byte-preserved.
+- All12 dependency descriptors matched before reuse. Node22 incremental types
+  passed65.232s (8GB), changed-fixture lint6.475s, four recovery pure assertions
+  passed2.719s and one actual upgrade case was explicitly gated off. No44-file
+  or whole-lint repeat was needed. Canonical637 notes, licensing2914+8+8,
+  changelog and plan373/323/50 gates passed; all runners drained.
+- A different NEWv2 synthetic controller DB and fresh private filesystem are
+  required for the next separately granted run. The operational copy retains
+  the stronger exact-final-marker gate; the qualified source controller is
+  preserved. Never replay, reset or finish the failed v1 fixture in place.
+
+Correction evidence:
+`/tmp/freeholder-uploaded-history-later78af-qualifier-20261113-result.json`,
+`/tmp/freeholder-uploaded-history-later78af-qualifier-20261113-test-evidence.json`,
+and `/tmp/freeholder-uploaded-history-upgrade-v1-20261113/readonly-classification.json`.
