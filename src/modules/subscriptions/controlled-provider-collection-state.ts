@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Real accepted canonical target and immutable bank creator/observation ancestry.
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { ServiceError,type Tx } from "@/core/service";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { subscriptionCommercialTerms,subscriptionMarketPolicies,subscriptions } from "./schema";
@@ -12,6 +13,7 @@ import { controlledCollectionManifest } from "./controlled-provider-adapter-cont
 import { controlledProviderJournal } from "./controlled-provider-proof";
 import { authenticatedControlledQuote } from "./controlled-provider-quote-proof";
 import { controlledCanonicalTarget } from "./controlled-provider-canonical-target";
+import { assertControlledInvoiceOrigin,assertControlledComponentLine } from "./controlled-provider-collection-origin";
 function refuse():never{throw new ServiceError("conflict","Restore the whole exact accepted canonical target, dated tax, original fee/credit epochs and genuine bank creator/caller/fact lineage before another collection operation.");}
 const ref=(value:unknown)=>typeof value==="string"?value:value&&typeof value==="object"&&"id"in value&&typeof value.id==="string"?value.id:null;
 /** Pure read, with no service call and no lock-order reversal. This validates
@@ -78,14 +80,21 @@ export async function controlledCollectionState(tx:Tx,collectionId:string){
   if(binding.resourceId!==resource.id||!creator||!history.calls.some(row=>row.operationId===creator.id)||!["controlled_draft_created","invoice_read","invoice_list_read"].includes(source.fact.actual.kind))refuse();
   const rows=source.fact.actual.kind==="invoice_list_read"?source.fact.actual.raw.data:[source.fact.actual.raw];
   if(!Array.isArray(rows)||!rows.some(row=>ref(row)===binding.providerInvoiceRef)||binding.originalEvidenceDigest!==merchantTaxDigest({collectionId:collection.id,creator,operation:source.operation,call:source.call,fact:source.fact,providerInvoiceRef:binding.providerInvoiceRef}))refuse();
+  const raw=rows.find(row=>ref(row)===binding.providerInvoiceRef);
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))refuse();
+  assertControlledInvoiceOrigin({resource,manifest,review,history,binding},binding.originKind,creator,source.operation,z.record(z.string(),z.unknown()).parse(raw));
  }
  for(const item of itemReceipts){const source=actual(item.operationId,item.callId,item.factId),creator=history.operations.find(row=>row.id===item.creatorOperationId);
   if(item.resourceId!==resource.id||!binding||!creator||!history.calls.some(row=>row.operationId===creator.id)||source.fact.actual.kind!=="invoice_lines_read"||!Array.isArray(source.fact.actual.raw.data)
    ||!source.fact.actual.raw.data.some(row=>ref(row)===item.providerInvoiceLineRef)||item.originalEvidenceDigest!==merchantTaxDigest({componentId:item.componentId,creator,operation:source.operation,call:source.call,fact:source.fact,
     providerInvoiceRef:binding.providerInvoiceRef,providerInvoiceItemRef:item.providerInvoiceItemRef,providerInvoiceLineRef:item.providerInvoiceLineRef,providerPriceRef:item.providerPriceRef}))refuse();
+  const component=components.find(row=>row.id===item.componentId),raw=source.fact.actual.raw.data.find(row=>ref(row)===item.providerInvoiceLineRef);
+  if(!component||!raw||typeof raw!=="object"||Array.isArray(raw))refuse();
+  const lineage=assertControlledComponentLine({resource,manifest,review,history,binding},component,creator,source.operation,z.record(z.string(),z.unknown()).parse(raw));
+  if(lineage.originKind!==item.originKind||lineage.providerInvoiceItemRef!==item.providerInvoiceItemRef||lineage.providerPriceRef!==item.providerPriceRef)refuse();
  }
  for(const proof of proofs){const operation=history.operations.find(row=>row.id===proof.operationId),verification=history.verifications.find(row=>row.operationId===proof.operationId&&row.callId===proof.callId);
   if(!binding||!operation||operation.kind!=="read_manifest"||!verification||verification.actualResult.providerInvoiceRef!==binding.providerInvoiceRef||verification.actualResult.exactManifest!==true
-   ||proof.resultDigest!==verification.actualResultDigest||proof.canonicalTargetDigest!==canonical.digest||proof.customerFinancialDigest!==verification.actualResult.customerFinancialDigest)refuse();}
+   ||verification.actualResult.manifestDigest!==merchantTaxDigest(manifest)||proof.resultDigest!==verification.actualResultDigest||proof.canonicalTargetDigest!==canonical.digest||proof.customerFinancialDigest!==verification.actualResult.customerFinancialDigest)refuse();}
  return{collection,quote,resource,parent,terms,review,history,canonical,components,binding:binding??null,itemReceipts,proofs,manifest};
 }

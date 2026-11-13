@@ -18,7 +18,7 @@ export interface MerchantControlledCollectionRequest extends MerchantControlledS
  manifest:MerchantControlledCollectionManifest;calendar:MerchantControlledProrationPreviewRequest;
  /** Server-owned original creator admission and exact retained line receipts.
   * These cannot be selected by total, current account or a later ACK. */
- invoiceOrigin:{kind:"created_draft"|"update_generated"|"calendar_generated";creatorOperationId:string;creatorRequestDigest:string};
+ invoiceOrigin:{kind:"created_draft"|"update_generated"|"calendar_generated";creatorOperationId:string;creatorRequestDigest:string;priceEpochCollectionId?:string;priceEpochAcceptedQuoteDigest?:string};
  lineBindings:Array<{componentId:string;providerInvoiceLineRef:string;providerInvoiceItemRef:string|null;providerPriceRef:string|null}>;
 }
 export interface MerchantControlledDraftRequest extends MerchantControlledCollectionRequest {

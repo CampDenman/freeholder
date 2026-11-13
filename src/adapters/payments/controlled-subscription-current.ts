@@ -26,6 +26,7 @@ export function assertControlledCurrent(request:Omit<MerchantControlledProration
   const item=items.data.map(object).find(value=>ref(value?.id)===expected.subscriptionItemRef),price=object(item?.price);
   if(expected.kind!=="principal"||componentIds.has(expected.subscriptionItemRef)||!item||!price||item.quantity!==1||ref(price.id)!==expected.providerPriceRef
    ||price.unit_amount!==expected.amountMinor||ref(price.product)!==expected.providerProductRef||price.currency!==request.currency.toLowerCase()
+   ||(expected.interval!==undefined||expected.intervalCount!==undefined)&&(object(price.recurring)?.interval!==expected.interval||object(price.recurring)?.interval_count!==expected.intervalCount)
    ||time(item.current_period_start)!==expected.actualPeriodStart||time(item.current_period_end)!==expected.actualPeriodEnd
    ||expected.actualPeriodStart!==request.originalPeriodStart||expected.actualPeriodEnd!==request.originalPeriodEnd)unproven();
   componentIds.add(expected.subscriptionItemRef);
