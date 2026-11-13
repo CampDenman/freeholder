@@ -601,9 +601,9 @@ export async function retainPaymentProviderEvidence(providerId: z.infer<typeof p
     try {
       const event = await retainSubscriptionProviderEvidence(providerId, original);
       if (["refund_processing", "refund_succeeded", "refund_failed"].includes(event.kind)) {
-        let managed = false, scopedError: unknown;
+        let managed = false, scopedError: Error | undefined;
         try { managed = (await retainOriginalMerchantRefundEvent.call({ provider: providerId, event: originalRefundProviderEvent.parse(event) }, { kind: "system" })).managed; }
-        catch (error) { scopedError = error; }
+        catch (error) { scopedError = error instanceof Error ? error : new Error("Original scoped refund evidence could not be retained.", { cause: error }); }
         // A current original-request receipt already has its own committed
         // capture. Legacy or unassigned facts get a separate raw receipt even
         // when that scoped retention policy could not accept the event.
