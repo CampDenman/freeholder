@@ -155,3 +155,22 @@ gates, a new ordinary database, strict final-source/model/catalog parity and
 actual financial/native execution remain open. Standalone media retirement,
 crash/multipart recovery, initialization/cutover and controlled positive NET/
 gross collection are still required implementation work.
+
+
+## Actual143-model child startup failure (C12.38/C11.08)
+
+At ff375972, source gates pass382 actual controls in65 complete files, with103
+explicit native skips; fresh normal V11 passes all84 migration identities and
+strict v20 passes143 models/287 guards/229 function bodies. All clients drain.
+The first actual independent-stop journey fails before its admission barrier:
+the real tsx/CommonJS child loader imports media-transfer.mjs and refuses its
+CLI-only top-level await. No stop, bank read or financial application is proved.
+
+The original failed report/log, independent table hashes, all84 journal hashes
+and drained-client proof remain at
+/tmp/freeholder-current-full83-inspection-stop-native-v1-20261113*.
+The failed database freeholder_current_full83_normal_v11_test_20261113 is
+preserved and will not be reset. The CLI entry now invokes the same async main
+and catches errors through its promise, preserving exitCode1 and diagnostics
+without top-level await. No oracle, service, schema, SQL or capability changes.
+Fresh execution is required; this source repair supplies no native acceptance.
