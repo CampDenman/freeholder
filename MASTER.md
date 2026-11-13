@@ -14188,6 +14188,16 @@ whatever is best for the people using the site.
   unchanged BEFORE golden/current schema/journal with drained clients. Exact
   recovery-native and complete phase/amendment/cash acceptance remain required;
   see `deploy/subscription-trial-tax-calendar-2026-11-13.md`. C12.38 stays open.
+  Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
+  shared phases now freeze the complete reviewed horizon and exact physical
+  request, retain actual schedule ACKs before price reads, and finish only the
+  original caller with an unchanged resource/journal read revision. Actual
+  not-started inventory may have no linked subscription. Shared original cash
+  disposition and payment debt are required before more billing. This source
+  is unqualified, enables no admission and changes no assembled SQL. Native
+  fault/recovery, schedule-only cancellation, complete invoice/fee quiescence
+  and explicit amendments remain required; see
+  `deploy/subscription-phase-dispatch80-source-20261113.md`.
   Provider lifecycle protocol work uses Stripe's actual flexible-subscription
   pause endpoint, with2026-10-28.endive frozen only on new scope/charge
   receipts. Legacy operations keep their original version. Sixteen bounded
