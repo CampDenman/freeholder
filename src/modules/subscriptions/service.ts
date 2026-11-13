@@ -1845,7 +1845,7 @@ import publicMembershipServices, { activatePaidSignup } from "./public-signup";
 import setupErasureServices from "./setup-erasure";
 import setupDispatchServices from "./setup-dispatch";
 import setupReconciliationServices from "./setup-reconciliation";
-import providerChargeReceiptServices from "./provider-charge-receipts";
+import providerChargeReceiptServices from "./provider-charge-services";
 import commercialAmendmentServices from "./commercial-amendments";
 import providerReaderRecoveryServices from "./provider-reader-recovery";
 import { subscriptionProviderReadTickets, subscriptionProviderReadFinishes, subscriptionProviderReadStops } from "./provider-read-ownership-schema";

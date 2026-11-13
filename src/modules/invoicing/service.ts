@@ -38,7 +38,7 @@ import merchantPaymentRecoveryServices from "./merchant-payment-recovery";
 import merchantPaymentRequestServices from "./merchant-payment-request";
 import merchantPaymentDebtServices from "./merchant-payment-debt";
 import merchantSubscriptionApplicationServices from "./merchant-subscription-application";
-import originalSubscriptionCashServices from "@/modules/subscriptions/provider-charge-receipts";
+import originalSubscriptionCashServices from "@/modules/subscriptions/provider-charge-services";
 import originalSubscriptionScopeServices from "@/modules/subscriptions/provider-webhook-scope";
 import merchantTaxQuiescenceServices from "@/modules/subscriptions/merchant-tax-quiescence";
 import merchantFeeServices from "./merchant-fee-service";
