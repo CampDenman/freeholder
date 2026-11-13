@@ -13901,7 +13901,16 @@ whatever is best for the people using the site.
   independent backend[] drain. This is schema structure only, not populated
   upgrade, actual bank state/credit/native or provider acceptance. Prior
   databases/clones stay unchanged; final gates remain required. Generic/manual
-  causal discharge and legacy bank recovery remain unfinished work. This does
+  causal discharge and legacy bank recovery remain unfinished work. An isolated
+  follow-up now drafts a fresh-human-confirmed generic refund replacement:
+  exact current failed resources, finished callers, one signed causal chain,
+  cash-locked admission, shared buyer/debt status, four locales and original
+  financial merge/privacy witnesses. It refuses RMA ownership and unrelated
+  equal-amount refunds. The existing mutable journal carries authenticated
+  evidence; it is not claimed to be DB append-only. This follow-up is unqualified
+  source, with no native, provider or historical-bank proof, and does not change
+  unpublished SQL e783 or the preserved V11 database. See
+  `deploy/merchant-bank-replacement-2026-11-12.md`. This does
   not activate the new model or close C12.38. See
   `deploy/merchant-refund-current-state-2026-11-12.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts

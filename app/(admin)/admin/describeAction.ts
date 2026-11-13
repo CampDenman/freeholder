@@ -334,6 +334,8 @@ export const OWNER_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "invoicing.completeMerchantRefundCurrentRead": "audit.invoicing.confirmedCurrentRefundState",
   "invoicing.applyCurrentMerchantRefundState": "audit.invoicing.confirmedCurrentRefundState",
   "invoicing.reconcileMerchantRefundCurrentState": "admin.activity.refundUpdated",
+  "invoicing.claimMerchantBankReplacement": "admin.activity.refundUpdated",
+  "invoicing.replaceReturnedBankRefund": "admin.activity.refundUpdated",
   "invoicing.prepareMerchantCashReturnInspection": "audit.invoicing.preparedOriginalCashReturn",
   "invoicing.recordCashReturnPrimaryObservation": "audit.invoicing.recordedOriginalProviderCash",
   "invoicing.recordCashReturnObservation": "audit.invoicing.recordedOriginalCashReturnEvidence",

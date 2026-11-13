@@ -4,9 +4,10 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import { getService, type ServiceContext } from "@/core/service";
 import { merchantReturnFeeSourceResult } from "@/modules/catalog/merchant-return-fee-contract";
-import { merchantRefundObservations, merchantRefundRequests, merchantRefundResourceBindings } from "./merchant-refund-schema";
+import { merchantRefundDispatches, merchantRefundObservations, merchantRefundRequests, merchantRefundResourceBindings, merchantRefundReservationRetirements } from "./merchant-refund-schema";
 import { originalMerchantRefundCurrentStates, refundObservationHasCurrentBinding } from "./merchant-refund-current-state";
 import { payments, refunds } from "./schema";
+import { bankReplacementFinancialState, bankReplacementPromiseState, readBankReplacementChain } from "./merchant-bank-replacement-store";
 
 /** A returned bank payment does not cancel the accepted refund promise. Only
  * the original frozen source can prove a replacement discharged that promise;
@@ -39,6 +40,30 @@ async function returnedPromiseDischarged(ctx: ServiceContext, request: { refundI
     && actual.reduce((sum, row) => sum + BigInt(row.refund.amountMinor), 0n) === BigInt(part.amountMinor);
 }
 
+/** Shared by financial debt and authorized masked customer/owner projections.
+ * A failed resource never waives its promise. Only exact source-part lineage
+ * or an authenticated replacement chain can discharge another request. */
+export async function originalRefundPromiseState(ctx: ServiceContext, requestId: string) {
+  const [request] = await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, requestId));
+  if (!request?.refundId || !request.paymentId) return { owed: true, review: true, replaced: false, canReplace: false };
+  const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, request.refundId));
+  if (!refund) return { owed: true, review: true, replaced: false, canReplace: false };
+  const [proof] = await ctx.tx.execute<{ success: boolean }>(sql`select freeholder_original_refund_resolved(${request.id}::uuid,'succeeded',${refund.providerRef}) as success`);
+  const chain = await bankReplacementPromiseState(ctx, request);
+  if (chain.hasChain) return { owed: !chain.fulfilled && proof?.success !== true, review: chain.review,
+    replaced: chain.fulfilled && chain.fulfilledRequestId !== request.id, canReplace: chain.canReplace && chain.rootRequestId === request.id };
+  if (proof?.success === true && refund.status === "succeeded") return { owed: false, review: false, replaced: false, canReplace: false };
+  const [retired] = await ctx.tx.select().from(merchantRefundReservationRetirements).where(eq(merchantRefundReservationRetirements.requestId, request.id));
+  const [dispatch] = await ctx.tx.select({ id: merchantRefundDispatches.id }).from(merchantRefundDispatches).where(eq(merchantRefundDispatches.requestId, request.id)).limit(1);
+  if (retired?.requestDigest === request.requestDigest && !dispatch) return { owed: false, review: false, replaced: false, canReplace: false };
+  if (await returnedPromiseDischarged(ctx, request)) return { owed: false, review: false, replaced: true, canReplace: false };
+  const [prepared] = await ctx.tx.execute<{ prepared: boolean }>(sql`select freeholder_refund_is_prepared_return(${refund.id}::uuid) as prepared`);
+  const current = await originalMerchantRefundCurrentStates(ctx, [request.id]);
+  const terminal = current.states[0];
+  return { owed: true, review: refund.status !== "created", replaced: false,
+    canReplace: !prepared?.prepared && refund.status === "failed" && terminal !== undefined && ["failed", "canceled"].includes(terminal.status ?? "unknown") };
+}
+
 export async function originalMerchantRefundDebt(ctx: ServiceContext, paymentId: string): Promise<boolean> {
   const requests = await ctx.tx.select({ id: merchantRefundRequests.id, purpose: merchantRefundRequests.purpose,
     refundId: merchantRefundRequests.refundId, paymentId: merchantRefundRequests.paymentId, idempotencyKey: merchantRefundRequests.idempotencyKey,
@@ -62,10 +87,17 @@ export async function originalMerchantRefundDebt(ctx: ServiceContext, paymentId:
   const current = await originalMerchantRefundCurrentStates(ctx, [...ids]);
   if (current.unresolvedRequestIds.length) return true;
   for (const request of requests) {
-    const state = current.states.find(row => row.requestId === request.id);
-    const priorSuccess = state && observations.some(row => row.status === "succeeded" && refundObservationHasCurrentBinding(row, state));
-    if (priorSuccess && state && (state.status === "failed" || state.status === "canceled")
-      && !await returnedPromiseDischarged(ctx, request)) return true;
+    const [original] = await ctx.tx.select().from(merchantRefundRequests).where(eq(merchantRefundRequests.id, request.id));
+    if (!original) return true;
+    const chain = await readBankReplacementChain(ctx.tx, original);
+    if (chain.incomplete) return true;
+    if (chain.links.length) {
+      const state = await bankReplacementFinancialState(ctx, chain);
+      if (!state.fulfilled) return true; // Also retains an actual over-return debt.
+    } else if (request.status === "failed") {
+      const promise = await originalRefundPromiseState(ctx, request.id);
+      if (promise.owed || promise.review) return true;
+    }
   }
   if (observations.some(row => {
     const proof = current.states.find(state => refundObservationHasCurrentBinding(row, state));

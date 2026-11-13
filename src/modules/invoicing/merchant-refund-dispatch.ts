@@ -13,6 +13,7 @@ import { lockMerchantRefundCash } from "./merchant-refund-origin";
 import { merchantRefundCapacity } from "./merchant-refund-capacity";
 import { originalMerchantRefundCurrentStates, refundObservationHasCurrentBinding } from "./merchant-refund-current-state";
 import { STRIPE_REFUND_REFERENCE } from "@/adapters/payments/stripe-refund-reference";
+import { assertBankReplacementDispatch } from "./merchant-bank-replacement-store";
 import { merchantRefundCreationRefusals, merchantRefundDispatches, merchantRefundDispatchFinishes, merchantRefundDispatchStops, merchantRefundObservations, merchantRefundRequests, merchantRefundReservationRetirements, merchantRefundResourceBindings, merchantRefundTerminalReceipts } from "./merchant-refund-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -84,6 +85,7 @@ export const claimMerchantRefundDispatch = defineService({
         return proof.length === 1 ? { ...row, requestId: proof[0]!.requestId, bindingVerified: true } : row;
       }), currentStates: current.states, unresolvedCurrentRequests: current.unresolvedRequestIds });
     if (capacity.availableMinor === null || capacity.availableMinor < 0 || capacity.debt.length) throw new ServiceError("conflict", "Actual unknown, unapplied or contradictory refund money must be reconciled before another dispatch.");
+    await assertBankReplacementDispatch(ctx, original);
     const completionNonce = randomBytes(32).toString("base64url");
     await ctx.tx.execute(sql`select set_config('freeholder.merchant_refund_v1','1',true)`);
     const [dispatch] = await ctx.tx.insert(merchantRefundDispatches).values({ requestId, ordinal: 1, requestDigest: original.requestDigest,

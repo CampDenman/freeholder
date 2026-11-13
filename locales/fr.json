@@ -9073,5 +9073,9 @@
   "refundStatus.stillOwed": "Ce remboursement reste dû ou doit être vérifié. Ne payez pas de nouveau la facture pour le recevoir.",
   "refundStatus.check": "Vérifier le remboursement initial de {amount}",
   "catalog.notifications.return.refundNeedsAttention.title": "Votre remboursement demande une intervention",
-  "catalog.notifications.return.refundNeedsAttention.body": "Votre avoir initial est conservé pendant que l’entreprise vérifie le remboursement bancaire."
+  "catalog.notifications.return.refundNeedsAttention.body": "Votre avoir initial est conservé pendant que l’entreprise vérifie le remboursement bancaire.",
+  "refundStatus.promiseFulfilled": "Ce remboursement initial a été effectué par son remplacement vérifié.",
+  "refundStatus.review": "L’historique du remboursement doit être vérifié avant un nouvel envoi.",
+  "refundStatus.replaceConfirmation": "Je confirme le remplacement du remboursement initial de {amount} après vérification de son état bancaire actuel.",
+  "refundStatus.replace": "Remplacer le remboursement initial de {amount}"
 }

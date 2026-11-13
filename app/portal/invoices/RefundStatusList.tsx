@@ -16,6 +16,8 @@ export function RefundStatusList({ refunds, t, locale }: {
         <p className="font-medium">{formatMoney(refund.amountMinor, refund.currency, locale)} · {t(`refundStatus.${refund.status}`)}</p>
         {refund.status === "requires_action" ? <p className="mt-1 text-sm">{t("refundStatus.actionHint")}</p> : null}
         {refund.refundPromiseOpen ? <p className="mt-1 text-sm text-ink-muted">{t("refundStatus.stillOwed")}</p> : null}
+        {refund.promiseFulfilledElsewhere ? <p className="mt-1 text-sm">{t("refundStatus.promiseFulfilled")}</p> : null}
+        {refund.reviewRequired && !refund.refundPromiseOpen ? <p className="mt-1 text-sm">{t("refundStatus.review")}</p> : null}
       </li>)}
     </ul>
   </section>;

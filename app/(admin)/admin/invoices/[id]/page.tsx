@@ -27,6 +27,7 @@ import { getPaymentPlan } from "@/modules/invoicing/advanced-money-service";
 import { listInvoiceMerchantPayments } from "@/modules/invoicing/merchant-payment-review";
 import { invoiceRefundStates } from "@/modules/invoicing/merchant-refund-bank-state-service";
 import { RefundStatusList } from "../../../../portal/invoices/RefundStatusList";
+import { BANK_REPLACEMENT_CONFIRMATION } from "@/modules/invoicing/merchant-bank-replacement-proof";
 import { requireStaffActor } from "../../guard";
 import { formatPpm, invoiceLineAmounts, invoiceTone, money, quantityFromMicros } from "../format";
 import { domainOrNull } from "../../../read-helpers";
@@ -124,6 +125,16 @@ export default async function InvoiceDetailPage({
           <input type="hidden" name="id" value={invoice.id} />
           <input type="hidden" name="requestId" value={refund.requestId!} />
           <Button type="submit">{t("refundStatus.check", { amount: money(refund.amountMinor, refund.currency) })}</Button>
+        </form>
+      )) : null}
+      {canManage && stepUpValid ? refundStates.filter(refund => refund.requestId && refund.canReplace).map(refund => (
+        <form key={`replacement:${refund.id}`} action={invoiceAction} className="grid justify-items-start gap-2">
+          <input type="hidden" name="intent" value="replaceReturnedBankRefund" />
+          <input type="hidden" name="id" value={invoice.id} />
+          <input type="hidden" name="requestId" value={refund.requestId!} />
+          <label className="flex items-start gap-2"><input type="checkbox" name="confirmation" value={BANK_REPLACEMENT_CONFIRMATION} required />
+            <span>{t("refundStatus.replaceConfirmation", { amount: money(refund.amountMinor, refund.currency) })}</span></label>
+          <Button type="submit">{t("refundStatus.replace", { amount: money(refund.amountMinor, refund.currency) })}</Button>
         </form>
       )) : null}
       <Card>

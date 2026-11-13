@@ -8,6 +8,8 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import * as tables from "./merchant-refund-schema";
 import { merchantRefundCurrentReceipts, merchantRefundObservationCaptures, merchantRefundStateReadFinishes, merchantRefundStateReads } from "./merchant-refund-current-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import { moneyStateEvents } from "./schema";
+import { BANK_REPLACEMENT_PROTOCOL, BANK_REPLACEMENT_REASON, BANK_REPLACEMENT_STATE } from "./merchant-bank-replacement-proof";
 export interface MerchantRefundDependencyReceipt { version: 1; entries: Array<{ table: string; id: string; fingerprint: string }>; incomplete: boolean }
 const MAX = 5000;
 const ids = (column: string, values: readonly string[]): SQL => values.length
@@ -46,6 +48,9 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
   if (overflow) return incomplete();
   const rowIds = (rows: Record<string, unknown>[]) => rows.map(row => row.id).filter((id): id is string => typeof id === "string");
   const requestIds = rowIds(requests), inspectionIds = rowIds(inspections), resolutionIds = rowIds(resolutions);
+  const refundIds = requests.map(row => row.refund_id).filter((id): id is string => typeof id === "string");
+  await read("money_state_events.bank_replacements", moneyStateEvents, sql`${ids("subject_id", refundIds)} and r.subject_type='refund' and
+    (r.reason=${BANK_REPLACEMENT_REASON} or r.to_state=${BANK_REPLACEMENT_STATE} or r.metadata->>'protocol'=${BANK_REPLACEMENT_PROTOCOL})`);
   const dispatches = await read("merchant_refund_dispatches", tables.merchantRefundDispatches, ids("request_id", requestIds));
   if (overflow) return incomplete();
   const dispatchIds = rowIds(dispatches);

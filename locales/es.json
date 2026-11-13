@@ -9073,5 +9073,9 @@
   "refundStatus.stillOwed": "Este reembolso sigue pendiente o requiere revisión. No vuelvas a pagar la factura para recibirlo.",
   "refundStatus.check": "Consultar el reembolso original de {amount}",
   "catalog.notifications.return.refundNeedsAttention.title": "Tu reembolso necesita atención",
-  "catalog.notifications.return.refundNeedsAttention.body": "Tu abono original por la devolución se mantiene mientras el negocio comprueba el reembolso bancario."
+  "catalog.notifications.return.refundNeedsAttention.body": "Tu abono original por la devolución se mantiene mientras el negocio comprueba el reembolso bancario.",
+  "refundStatus.promiseFulfilled": "El reembolso original se completó mediante su sustitución verificada.",
+  "refundStatus.review": "Hay que revisar el historial del reembolso antes de enviar otro.",
+  "refundStatus.replaceConfirmation": "Confirmo la sustitución del reembolso original de {amount} tras comprobar su estado bancario actual.",
+  "refundStatus.replace": "Sustituir el reembolso original de {amount}"
 }

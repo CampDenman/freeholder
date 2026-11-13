@@ -9073,5 +9073,9 @@
   "refundStatus.stillOwed": "This refund is still owed or needs review. Do not pay the invoice again to receive it.",
   "refundStatus.check": "Check original {amount} refund",
   "catalog.notifications.return.refundNeedsAttention.title": "Your refund needs attention",
-  "catalog.notifications.return.refundNeedsAttention.body": "Your original return credit remains in place while the business checks your bank refund."
+  "catalog.notifications.return.refundNeedsAttention.body": "Your original return credit remains in place while the business checks your bank refund.",
+  "refundStatus.promiseFulfilled": "This original refund was fulfilled by its verified replacement.",
+  "refundStatus.review": "The refund history needs review before another return can be sent.",
+  "refundStatus.replaceConfirmation": "I confirm a replacement of the original {amount} refund after checking its current bank status.",
+  "refundStatus.replace": "Replace original {amount} refund"
 }

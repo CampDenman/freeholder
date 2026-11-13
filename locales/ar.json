@@ -9073,5 +9073,9 @@
   "refundStatus.stillOwed": "لا يزال هذا المبلغ مستحق الاسترداد أو يحتاج إلى المراجعة. لا تدفع الفاتورة مرة أخرى لاستلامه.",
   "refundStatus.check": "التحقق من الاسترداد الأصلي بقيمة {amount}",
   "catalog.notifications.return.refundNeedsAttention.title": "المبلغ المسترد يحتاج إلى متابعة",
-  "catalog.notifications.return.refundNeedsAttention.body": "يبقى إشعار الدائن الأصلي لإرجاعك محفوظًا بينما يتحقق النشاط التجاري من الاسترداد المصرفي."
+  "catalog.notifications.return.refundNeedsAttention.body": "يبقى إشعار الدائن الأصلي لإرجاعك محفوظًا بينما يتحقق النشاط التجاري من الاسترداد المصرفي.",
+  "refundStatus.promiseFulfilled": "تم الوفاء بالمبلغ المسترد الأصلي من خلال البديل الذي تم التحقق منه.",
+  "refundStatus.review": "يلزم مراجعة سجل الاسترداد قبل إرسال مبلغ آخر.",
+  "refundStatus.replaceConfirmation": "أؤكد استبدال المبلغ المسترد الأصلي البالغ {amount} بعد التحقق من حالته المصرفية الحالية.",
+  "refundStatus.replace": "استبدال المبلغ المسترد الأصلي البالغ {amount}"
 }
