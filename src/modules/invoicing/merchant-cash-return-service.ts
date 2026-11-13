@@ -9,6 +9,7 @@ import { z } from "zod";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { merchantPaymentEvidence } from "./merchant-payment-observations";
+import { merchantCashReturnInspectionStops } from "./merchant-cash-inspection-stop-schema";
 import { merchantPhysicalCaller } from "./merchant-physical-caller";
 import { merchantRefundCashHistory } from "./merchant-refund-history";
 import { lockMerchantRefundCash, merchantRefundSource, originalMerchantRefundCash, type MerchantRefundCashOrigin } from "./merchant-refund-origin";
@@ -33,6 +34,8 @@ async function originalInspection(ctx: ServiceContext, inspectionId: string) {
 async function callerForInspection(ctx: ServiceContext, inspectionId: string, completionNonce: string, finishing=false) {
   await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`merchant-return-read:${inspectionId}`}))`);
   const row = await originalInspection(ctx, inspectionId), caller = merchantPhysicalCaller();
+  const[stop]=await ctx.tx.select().from(merchantCashReturnInspectionStops).where(eq(merchantCashReturnInspectionStops.inspectionId,inspectionId)).limit(1);
+  if(stop)throw new ServiceError("conflict","This original caller has an independent stopped-process receipt; a late callback or invented wrapper finish cannot change its evidence.");
   if (row.caller.id !== caller.id || row.completionNonceHash !== hash(completionNonce)) throw new ServiceError("permission", "Only this exact original admitted inspection caller can submit its private physical evidence.");
   const[finish]=await ctx.tx.select().from(merchantCashReturnInspectionFinishes).where(eq(merchantCashReturnInspectionFinishes.inspectionId,inspectionId)).limit(1);
   if(finish&&!finishing)throw new ServiceError("conflict","This exact original inspection already finished; a late callback cannot change its evidence or supersede a later actual read.");
