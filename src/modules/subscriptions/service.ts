@@ -39,6 +39,8 @@ import { registerContactReference } from "@/core/contacts/service";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { prepareBuyerAgreementErasure, minimizeBuyerAgreements } from "./buyer-agreement-erasure";
 import { syncSubscriptionAccess } from "@/core/entitlements/service";
+import { subscriptionProrationCardWitnesses, exportProrationCardHistory } from "./proration-card-witnesses";
+import prorationCardServices from "./proration-card-service";
 import grossProrationQuotes from "./proration-quote";
 import grossProrationServices, { completePaidGrossProration } from "./proration-service";
 import prorationCreditOwnerServices from "./proration-credit-owner";
@@ -1745,7 +1747,7 @@ registerContactReference({
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
   tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines", "subscription_provider_read_tickets", "subscription_provider_read_finishes", "subscription_provider_read_stops",
-    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses", "subscription_proration_cash_confirmations", "subscription_proration_credit_confirmations"],
+    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses", "subscription_proration_cash_confirmations", "subscription_proration_credit_confirmations", "subscription_proration_payment_protocols", "subscription_proration_card_mandates", "subscription_proration_card_attempts", "subscription_proration_card_jobs", "subscription_proration_card_reads", "subscription_proration_card_read_finishes", "subscription_proration_card_read_stops"],
   retentionScopes: ["commerce.money"],
   exportData: async (tx: Tx, contactId: string) => {
     const rows = await tx
@@ -1809,9 +1811,13 @@ registerContactPrivacySource({
       retainedAt: subscriptionProrationCashConfirmations.retainedAt }).from(subscriptionProrationCashConfirmations).where(inArray(subscriptionProrationCashConfirmations.prorationId, prorationIds)).limit(5001) : [];
     const creditBoundary = prorationIds.length ? await tx.select({ prorationId: subscriptionProrationCreditConfirmations.prorationId, applicationId: subscriptionProrationCreditConfirmations.applicationId,
       retainedAt: subscriptionProrationCreditConfirmations.retainedAt }).from(subscriptionProrationCreditConfirmations).where(inArray(subscriptionProrationCreditConfirmations.prorationId, prorationIds)).limit(5001) : [];
+    const cardWitness = await subscriptionProrationCardWitnesses(tx, prorations.flatMap(row => row.debitInvoiceId ? [row.debitInvoiceId] : []));
+    if (cardWitness.incomplete) throw new ServiceError("conflict", "Restore the complete original stored-method/reader inventory before export.");
+    const cardHistory = exportProrationCardHistory(cardWitness);
+    const cardCount = Object.values(cardHistory).reduce((total, family) => total + family.length, 0);
     const originalCash = await originalCashRecoveryFinancialWitness(tx, [], charges.map(row => row.id));
     const aggregate = rows.length + charges.length + accepted.length + amendments.length + resumptions.length + periodInvoices.length + readerTickets.length + readerStops.length
-      + prorations.length + prorationPrincipal.length + prorationCredits.length + cashBoundary.length + creditBoundary.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length;
+      + cardCount + prorations.length + prorationPrincipal.length + prorationCredits.length + cashBoundary.length + creditBoundary.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length;
     if (aggregate > 5000) throw new ServiceError("conflict", "Restore a bounded complete original subscription subject export; receipt-only cash and its authentic children cannot be truncated.");
     const cashHistory = exportOriginalCashHistory(originalCash);
     const cashFor = (subscriptionId: string) => {
@@ -1825,6 +1831,7 @@ registerContactPrivacySource({
       providerReaderHistory: readerTickets.filter(value => value.subscriptionId === row.id), providerReaderRuntimeStops: readerStops.filter(value => value.subscriptionId === row.id),
       originalReceiptCashHistory: cashFor(row.id), acceptedGrossProrations: prorations.filter(value => value.subscriptionId === row.id).map(value => ({ ...value,
         originalPrincipal: prorationPrincipal.filter(principal => principal.prorationId === value.id), acceptedCreditUse: prorationCredits.filter(credit => credit.prorationId === value.id),
+        originalCardPaymentHistory: Object.fromEntries(Object.entries(cardHistory).map(([key, family]) => [key, family.filter(entry => entry.invoiceId === value.debitInvoiceId)])),
         actualCashRetention: cashBoundary.filter(receipt => receipt.prorationId === value.id), actualCreditRetention: creditBoundary.filter(receipt => receipt.prorationId === value.id) })) }));
   },
   erase: async (tx: Tx, contactId: string, context) => {
@@ -1881,6 +1888,7 @@ import { subscriptionCommercialResumptions } from "./commercial-resumption-schem
 import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
 
 export default [
+  ...prorationCardServices,
   ...grossProrationQuotes,
   ...grossProrationServices,
   ...prorationCreditOwnerServices,

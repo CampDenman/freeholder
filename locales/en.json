@@ -9288,5 +9288,11 @@
   "media.transfer.operation.privacy_source_read": "Read source for erasure",
   "media.transfer.operation.privacy_source_delete": "Erase original source",
   "media.transfer.operation.privacy_source_absence": "Confirm erased source absence",
-  "media.transfer.operation.recovery_read": "Read original resource for recovery"
+  "media.transfer.operation.recovery_read": "Read original resource for recovery",
+  "subscriptions.proration.cardNotice": "Accepting authorizes one automatic payment of the reviewed remaining amount using {method}. Its original uncertain charge must be recovered before another attempt; it does not change renewal dates or grant unpaid access.",
+  "subscriptions.proration.cardMethod": "Stored payment method: {method} · {last4}",
+  "subscriptions.proration.cardCollect": "Collect or recover original payment",
+  "subscriptions.proration.cardReaderTitle": "Original changed-price bank readers",
+  "subscriptions.proration.cardReaderIntro": "Every original bank verification must actually finish or have an independently reviewed runtime stop. A later successful read cannot replace a lost caller; a stop review does not prove whether money moved.",
+  "subscriptions.proration.cardReaderRecover": "The original runtime stop is recorded. Use the original payment inspection above to make a newly admitted bank read."
 }

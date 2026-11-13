@@ -12,6 +12,8 @@ import originalCashUnassignedServices from "./original-cash-unassigned-service";
 import legacyBankReplacementServices from "./legacy-bank-replacement-service";
 import legacyBankReaderRecoveryServices from "./legacy-bank-reader-recovery";
 import legacyBankCurrentServices from "./legacy-bank-current-service";
+import prorationPaymentReadServices from "@/modules/subscriptions/proration-card-read-runtime";
+import prorationPaymentReadRecoveryServices from "@/modules/subscriptions/proration-card-read-recovery";
 import legacyBankReadServices from "./legacy-bank-read-service";
 import creditDispositionServices from "./credit-disposition";
 import creditApplicationServices from "./credit-application-service";
@@ -79,6 +81,8 @@ export default [
   ...originalCashPartialPhases,
   ...originalCashPartialServices,
   ...originalCashUnassignedServices,
+  ...prorationPaymentReadServices,
+  ...prorationPaymentReadRecoveryServices,
   ...commercialAttestationServices,
   ...principalAuthorityServices,
   ...agreementFeeServices,

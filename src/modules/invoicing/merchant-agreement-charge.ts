@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.26/C12.38: original agreement routes compose through the money services.
+import { originalProrationPaymentProtocol } from "@/modules/subscriptions/proration-payment-protocol";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, type MerchantChargeScope } from "@/adapters/payments";
@@ -58,7 +59,8 @@ export async function reserveAgreementCharge(ctx: ServiceContext, invoice: typeo
 export async function agreementRoutingForPayment(ctx: ServiceContext, paymentId: string) {
   const [agreement] = await ctx.tx.select().from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.paymentId, paymentId));
   if (!agreement) return null;
-  return { providerApiVersion: agreement.providerApiVersion ?? undefined, providerPlatformAccountId: agreement.providerPlatformAccountId, providerAccountId: agreement.chargeAccountId ?? undefined,
+  const prorationProtocol = await originalProrationPaymentProtocol(ctx, paymentId);
+  return { providerApiVersion: agreement.providerApiVersion ?? prorationProtocol, providerPlatformAccountId: agreement.providerPlatformAccountId, providerAccountId: agreement.chargeAccountId ?? undefined,
     ...(agreement.collectionKind === "destination" ? { destinationAccountId: agreement.recipientAccountId, settlementMerchantAccountId: agreement.settlementMerchantAccountId } : {}),
     applicationFeeMinor: agreement.applicationFeeMinor, agreementSubscriptionId: agreement.subscriptionId,
     providerSubscriptionRef: agreement.providerSubscriptionRef ?? undefined, providerInvoiceRef: agreement.providerInvoiceRef ?? undefined, providerPaymentIntentRef: agreement.providerPaymentIntentRef ?? undefined, providerChargeRef: agreement.providerChargeRef ?? undefined, originalChargeReceiptId: agreement.originalChargeReceiptId ?? undefined };

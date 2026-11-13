@@ -9288,5 +9288,11 @@
   "media.transfer.operation.privacy_source_read": "قراءة المصدر للمحو",
   "media.transfer.operation.privacy_source_delete": "محو المصدر الأصلي",
   "media.transfer.operation.privacy_source_absence": "تأكيد غياب المصدر الممحو",
-  "media.transfer.operation.recovery_read": "قراءة المورد الأصلي للاسترداد"
+  "media.transfer.operation.recovery_read": "قراءة المورد الأصلي للاسترداد",
+  "subscriptions.proration.cardNotice": "تسمح الموافقة بدفعة تلقائية واحدة للمبلغ المتبقي الذي راجعته باستخدام {method}. يجب استعادة نتيجة الخصم الأصلي غير المؤكد قبل أي محاولة أخرى؛ ولا يغيّر ذلك مواعيد التجديد أو يمنح وصولًا قبل الدفع.",
+  "subscriptions.proration.cardMethod": "وسيلة الدفع المحفوظة: {method} · {last4}",
+  "subscriptions.proration.cardCollect": "تحصيل الدفعة الأصلية أو استعادة نتيجتها",
+  "subscriptions.proration.cardReaderTitle": "قراءات البنك الأصلية لتغيير السعر",
+  "subscriptions.proration.cardReaderIntro": "يجب أن تنتهي كل عملية تحقق بنكية أصلية فعليًا أو أن يُراجع توقف العملية مراجعة مستقلة. لا تستبدل قراءة ناجحة لاحقة اتصالًا مفقودًا؛ ولا تثبت مراجعة التوقف ما إذا كانت الأموال قد تحركت.",
+  "subscriptions.proration.cardReaderRecover": "سُجل توقف العملية الأصلية. استخدم فحص الدفعة الأصلية أعلاه لإجراء قراءة بنكية جديدة مصرح بها."
 }

@@ -7,6 +7,8 @@ import { z } from "zod";
 import { actorString, defineService, ServiceError, type ServiceContext } from "@/core/service";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { contacts } from "@/core/contacts/schema";
+import { captureProrationPaymentProtocol } from "@/modules/subscriptions/proration-payment-protocol";
+import { assertProrationCardReadsQuiesced } from "@/modules/subscriptions/proration-card-read-proof";
 import { invoices, payments } from "./schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { merchantPaymentCreationRefusals, merchantPaymentDispatches, merchantPaymentDispatchFinishes, merchantPaymentDispatchStops, merchantPaymentRequests, merchantPaymentResourceBindings, merchantPaymentTerminalReceipts } from "./merchant-payment-recovery-schema";
@@ -27,6 +29,7 @@ export async function assertMerchantCreatorsQuiesced(ctx: ServiceContext, paymen
     .leftJoin(merchantPaymentDispatchStops, eq(merchantPaymentDispatchStops.dispatchId, merchantPaymentDispatches.id))
     .where(and(eq(merchantPaymentDispatches.paymentId, paymentId), isNull(merchantPaymentDispatchFinishes.dispatchId), isNull(merchantPaymentDispatchStops.dispatchId))).limit(1);
   if (unfinished.length) throw new ServiceError("conflict", "An original payment creator still needs actual completion or verified hosting stop evidence before releasing another attempt.");
+  await assertProrationCardReadsQuiesced(ctx.tx, [paymentId]);
 }
 
 export async function assertInvoiceMerchantCreatorsQuiesced(ctx: ServiceContext, invoiceId: string): Promise<void> {
@@ -36,6 +39,9 @@ export async function assertInvoiceMerchantCreatorsQuiesced(ctx: ServiceContext,
     .leftJoin(merchantPaymentDispatchStops, eq(merchantPaymentDispatchStops.dispatchId, merchantPaymentDispatches.id))
     .where(and(eq(payments.invoiceId, invoiceId), isNull(merchantPaymentDispatchFinishes.dispatchId), isNull(merchantPaymentDispatchStops.dispatchId))).limit(1);
   if (unfinished.length) throw new ServiceError("conflict", "Finish or verify the actual original payment creator before collecting another invoice portion.");
+  const originalPayments = await ctx.tx.select({ id: payments.id }).from(payments).where(eq(payments.invoiceId, invoiceId)).limit(5001);
+  if (originalPayments.length > 5000) throw new ServiceError("conflict", "Restore the complete bounded original invoice caller inventory before another collection.");
+  await assertProrationCardReadsQuiesced(ctx.tx, originalPayments.map(row => row.id));
 }
 
 export const finishMerchantPaymentDispatch = defineService({
@@ -131,6 +137,7 @@ export async function captureMerchantPaymentRequest(ctx: ServiceContext, payment
   const values = { paymentId: payment.id, providerInvoiceRef: invoice.id, providerContactRef: invoice.contactId,
     requestDigest: merchantTaxDigest({ paymentId: payment.id, provider: payment.provider, method: payment.method, amountMinor: payment.amountMinor, currency: payment.currency, idempotencyKey: payment.idempotencyKey, invoiceId: invoice.id, contactId: invoice.contactId, createdAt: payment.createdAt, routing }) };
   await ctx.tx.insert(merchantPaymentRequests).values(values);
+  await captureProrationPaymentProtocol(ctx, payment, invoice, routing);
 }
 
 export const claimMerchantPaymentDispatch = defineService({

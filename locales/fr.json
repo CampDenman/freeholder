@@ -9288,5 +9288,11 @@
   "media.transfer.operation.privacy_source_read": "Lire la source avant effacement",
   "media.transfer.operation.privacy_source_delete": "Effacer la source originale",
   "media.transfer.operation.privacy_source_absence": "Confirmer l’absence de la source effacée",
-  "media.transfer.operation.recovery_read": "Lire la ressource originale pour récupération"
+  "media.transfer.operation.recovery_read": "Lire la ressource originale pour récupération",
+  "subscriptions.proration.cardNotice": "Votre acceptation autorise un seul paiement automatique du solde examiné avec {method}. Tout débit initial incertain doit être récupéré avant une autre tentative ; cela ne modifie ni les dates de renouvellement ni les droits avant paiement.",
+  "subscriptions.proration.cardMethod": "Moyen de paiement enregistré : {method} · {last4}",
+  "subscriptions.proration.cardCollect": "Encaisser ou récupérer le paiement initial",
+  "subscriptions.proration.cardReaderTitle": "Lectures bancaires initiales du changement de prix",
+  "subscriptions.proration.cardReaderIntro": "Chaque vérification bancaire initiale doit réellement se terminer ou disposer d’un arrêt du processus examiné indépendamment. Une lecture ultérieure réussie ne remplace pas un appel perdu ; un examen d’arrêt ne prouve pas si des fonds ont été déplacés.",
+  "subscriptions.proration.cardReaderRecover": "L’arrêt du processus initial est enregistré. Utilisez l’inspection du paiement initial ci-dessus pour une nouvelle lecture bancaire autorisée."
 }

@@ -9288,5 +9288,11 @@
   "media.transfer.operation.privacy_source_read": "Leer origen para borrado",
   "media.transfer.operation.privacy_source_delete": "Borrar origen original",
   "media.transfer.operation.privacy_source_absence": "Confirmar ausencia del origen borrado",
-  "media.transfer.operation.recovery_read": "Leer recurso original para recuperación"
+  "media.transfer.operation.recovery_read": "Leer recurso original para recuperación",
+  "subscriptions.proration.cardNotice": "Al aceptar, autoriza un único pago automático del saldo revisado mediante {method}. Un cargo original incierto debe recuperarse antes de otro intento; esto no cambia las fechas de renovación ni concede acceso sin pagar.",
+  "subscriptions.proration.cardMethod": "Método de pago guardado: {method} · {last4}",
+  "subscriptions.proration.cardCollect": "Cobrar o recuperar el pago original",
+  "subscriptions.proration.cardReaderTitle": "Lecturas bancarias originales del cambio de precio",
+  "subscriptions.proration.cardReaderIntro": "Cada verificación bancaria original debe terminar realmente o contar con una revisión independiente de la detención del proceso. Una lectura posterior correcta no sustituye una llamada perdida; revisar una detención no prueba si se movió dinero.",
+  "subscriptions.proration.cardReaderRecover": "Se registró la detención del proceso original. Use la inspección del pago original de arriba para realizar una nueva lectura bancaria autorizada."
 }

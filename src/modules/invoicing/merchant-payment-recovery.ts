@@ -3,12 +3,13 @@
 // C12.38: read/cancel exact original resources; no human absence or new charge.
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { withProrationPaymentRecovery, type ProrationRecoveryObserver } from "@/modules/subscriptions/proration-card-read-runtime";
 import { paymentAdapter, type MerchantIntentRecoveryRequest, type MerchantPaymentRecoveryRequest } from "@/adapters/payments";
 import { actorString, defineOrchestratedService, defineService, ServiceError, type Actor } from "@/core/service";
 import { paymentRow } from "./contract";
 import { assertChargeEvidence, paymentRouting, routingForPayment, verifiedCheckoutSession } from "./merchant-charge";
 import { merchantPaymentObservations } from "./merchant-collection-schema";
-import { merchantObservationRef, merchantPaymentEvidence, recordMerchantPaymentObservation } from "./merchant-payment-observations";
+import { merchantObservationRef, merchantPaymentEvidence } from "./merchant-payment-observations";
 import { merchantPaymentRequests, merchantPaymentResourceBindings, merchantPaymentRetirementAcks, merchantPaymentTerminalReceipts } from "./merchant-payment-recovery-schema";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { applyPaymentCheckout, recordProviderPaymentResult } from "./payment-provider-service";
@@ -76,6 +77,9 @@ export const applyMerchantTerminalReceipt = defineService({
 
 type RecoveryInput = { paymentId: string; action: "inspect" | "retire"; checkoutRef?: string; paymentRef?: string };
 async function reconcileOriginalMerchantResource(input: RecoveryInput, caller: Actor) {
+  return withProrationPaymentRecovery(input, caller, observer => reconcileOriginalMerchantResourceBody(input, caller, observer));
+}
+async function reconcileOriginalMerchantResourceBody(input: RecoveryInput, caller: Actor, observer: ProrationRecoveryObserver) {
     const system = { kind: "system", request: caller.request } as const;
     await flushLocalMerchantPaymentDispatchFinishes(input.paymentId);
     const source = await merchantPaymentRecoverySource.call({ paymentId: input.paymentId }, system);
@@ -91,7 +95,8 @@ async function reconcileOriginalMerchantResource(input: RecoveryInput, caller: A
     if (input.action === "retire" && (!original || !source.originalResourceRefs.includes(original))) throw new ServiceError("conflict", "Inspect this resource and verify its actual original provider request before canceling it. A metadata match alone cannot supply that provenance.");
     let current = source.payment, unapplied = false;
     const observe: NonNullable<MerchantIntentRecoveryRequest["onPaymentObserved"]> = async evidence => {
-      await recordMerchantPaymentObservation.call({ paymentId: current.id, providerEventRef: merchantObservationRef(evidence), evidence }, system);
+      await observer.observe();
+      await observer.retainObservation({ paymentId: current.id, providerEventRef: merchantObservationRef(evidence), evidence });
       if (evidence.status !== "succeeded") return;
       try {
         if (current.amountMinor !== evidence.amountMinor || current.currency !== evidence.currency) throw new ServiceError("conflict", "The provider's actual money differs from this original payment amount.");
@@ -110,8 +115,9 @@ async function reconcileOriginalMerchantResource(input: RecoveryInput, caller: A
       const intentRequest: MerchantIntentRecoveryRequest = { ...routing, providerPlatformAccountId: routing.providerPlatformAccountId!, paymentAttemptId: current.id,
         invoiceId: source.providerInvoiceRef, contactId: source.providerContactRef, amountMinor: current.amountMinor, currency: current.currency,
         createdAt: current.createdAt.toISOString(), idempotencyKey: current.idempotencyKey, paymentRef: original,
-        onPaymentObserved: observe, onRetirementAcknowledged: async proof => { await retainMerchantRetirementAck.call({ paymentId: current.id, ...proof }, system); } };
+        onPaymentObserved: observe, onRetirementAcknowledged: async proof => { await observer.observe(); await observer.retainRetirement({ paymentId: current.id, ...proof }); } };
       const result = input.action === "retire" ? await adapter.retireMerchantIntent!(intentRequest) : await adapter.recoverMerchantIntent!(intentRequest);
+      await observer.returned(result);
       if (result.state === "paid" || result.state === "pending") await observe(result.evidence);
       else if (result.state === "not_paid" && source.originalResourceRefs.includes(result.paymentRef)) current = await applyMerchantTerminalReceipt.call({ paymentId: current.id, initiatedBy: actorString(caller), ...terminal.parse(result) }, system);
       return { payment: current, state: result.state === "not_paid" && !source.originalResourceRefs.includes(result.paymentRef) ? "unresolved" as const : result.state, paymentRef: "paymentRef" in result ? result.paymentRef : undefined, unapplied };
@@ -119,12 +125,13 @@ async function reconcileOriginalMerchantResource(input: RecoveryInput, caller: A
     const request: MerchantPaymentRecoveryRequest = { ...routing, providerPlatformAccountId: routing.providerPlatformAccountId!, paymentAttemptId: current.id,
       invoiceId: source.providerInvoiceRef, contactId: source.providerContactRef, amountMinor: current.amountMinor, currency: current.currency,
       createdAt: current.createdAt.toISOString(), idempotencyKey: current.idempotencyKey, checkoutRef: original,
-      onPaymentObserved: (_checkoutRef, evidence) => observe(evidence), onRetirementAcknowledged: async proof => { await retainMerchantRetirementAck.call({ paymentId: current.id, ...proof }, system); } };
+      onPaymentObserved: (_checkoutRef, evidence) => observe(evidence), onRetirementAcknowledged: async proof => { await observer.observe(); await observer.retainRetirement({ paymentId: current.id, ...proof }); } };
     const result = input.action === "retire" ? await adapter.retireMerchantPayment!(request) : await adapter.recoverMerchantPayment!(request);
+    await observer.returned(result);
     if (result.state === "paid") await observe(result.evidence);
     else if (result.state === "open" && source.originalResourceRefs.includes(result.checkout.providerRef)) current = await applyPaymentCheckout.call({ paymentId: current.id, checkout: verifiedCheckoutSession.parse(result.checkout), initiatedBy: actorString(caller) }, system);
     else if (result.state === "not_paid" && source.originalResourceRefs.includes(result.checkoutRef)) current = await applyMerchantTerminalReceipt.call({ paymentId: current.id, initiatedBy: actorString(caller), ...terminal.parse(result) }, system);
-    else if (result.state === "pending") await recordMerchantPaymentObservation.call({ paymentId: current.id, providerEventRef: merchantObservationRef(result.evidence), evidence: merchantPaymentEvidence.parse(result.evidence) }, system);
+    else if (result.state === "pending") await observer.retainObservation({ paymentId: current.id, providerEventRef: merchantObservationRef(result.evidence), evidence: merchantPaymentEvidence.parse(result.evidence) });
     const boundOpen = result.state === "open" && source.originalResourceRefs.includes(result.checkout.providerRef);
     const unboundTerminal = result.state === "not_paid" && !source.originalResourceRefs.includes(result.checkoutRef);
     return { payment: current, state: result.state === "open" && !boundOpen || unboundTerminal ? "unresolved" as const : result.state,
