@@ -24,6 +24,7 @@ import { savePlan, subscribe } from "@/modules/subscriptions/service";
 import { quoteGrossProration } from "@/modules/subscriptions/proration-quote";
 import { acceptGrossProration, applyGrossProrationTask } from "@/modules/subscriptions/proration-service";
 import { collectProrationCard, collectProrationCardTask } from "@/modules/subscriptions/proration-card-service";
+import { PRORATION_CARD_JOB } from "@/modules/subscriptions/proration-card-contract";
 import { subscriptionProrations } from "@/modules/subscriptions/proration-schema";
 import { subscriptionProrationCardJobs, subscriptionProrationCardReads, subscriptionProrationCardReadFinishes, subscriptionProrationPaymentProtocols } from "@/modules/subscriptions/proration-card-schema";
 import { subscriptionProrationCardWitnesses, exportProrationCardHistory } from "@/modules/subscriptions/proration-card-witnesses";
@@ -82,7 +83,9 @@ describe.runIf(hasDatabase)("actual accepted original gross stored-method collec
     // Legitimate authorized external principal, never a synthetic Stripe cash row.
     await recordOfflinePayment.call({ invoiceId: joined.invoiceId, method: "bank_transfer", amountMinor: 4200, reference: "fictional-old-card-period",
       evidence: "Synthetic recorded original external principal; not independent bank verification", idempotencyKey: "original-card-period" }, OWNER);
-    const listing = await createListing.call({ title: "Actual card target", kind: "digital", price: "100", acceptPolicy: true }, fixture.sellers[0]);
+    const seller = fixture.sellers[0];
+    if (!seller) throw new Error("The actual original card fixture must provide its seller before creating a target.");
+    const listing = await createListing.call({ title: "Actual card target", kind: "digital", price: "100", acceptPolicy: true }, seller);
     const variant = (await getProductVariants.call({ productId: listing.productId }, OWNER)).variants[0]!;
     const target = await savePlan.call({ productId: listing.productId, name: "Actual target paid card day", interval: "day", intervalCount: 2, billingMode: "platform", proration: "create_prorations", status: "active" }, OWNER);
     vi.useRealTimers();
@@ -92,7 +95,7 @@ describe.runIf(hasDatabase)("actual accepted original gross stored-method collec
     const accepted = await acceptGrossProration.call({ ...input, previousTermsId: review.previousTermsId, acceptedQuoteDigest: review.quoteDigest, confirm: true }, OWNER);
     const [job] = await db().select().from(subscriptionProrationCardJobs).where(eq(subscriptionProrationCardJobs.prorationId, accepted.prorationId));
     if (!job) throw new Error("The actual accepted transaction must retain its original worker body.");
-    expect((await getJob(job.jobId))?.data).toEqual(job.originalTask);
+    expect((await getJob(PRORATION_CARD_JOB, job.jobId))?.data).toEqual(job.originalTask);
     await collectProrationCardTask.call(job.originalTask, { kind: "system" });
     expect((await failure(collectProrationCardTask.call({ ...job.originalTask, originalJobId: joined.subscription.id }, { kind: "system" }))).code).toBe("permission");
     return { remote, joined, target, accepted, effectiveAt };

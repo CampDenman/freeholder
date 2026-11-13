@@ -75,7 +75,7 @@ const publicResult = z.object({ prorationId: z.uuid(), invoiceId: z.uuid().nulla
 async function collect(prorationId: string, caller: Actor) {
   const system = { kind: "system", request: caller.request } as const;
   const claimed = await claimProrationCardCharge.call({ prorationId }, system);
-  if (!claimed.paymentId || !claimed.invoiceId || claimed.mode === "skip") return { prorationId, invoiceId: claimed.invoiceId, paymentId: claimed.paymentId, collectionState: "skipped" as const, applied: false };
+  if (claimed.mode === "skip" || !claimed.paymentId || !claimed.invoiceId) return { prorationId, invoiceId: claimed.invoiceId, paymentId: claimed.paymentId, collectionState: "skipped" as const, applied: false };
   const base = { prorationId, invoiceId: claimed.invoiceId, paymentId: claimed.paymentId };
   if (claimed.mode === "closed") return { ...base, collectionState: "needs_review" as const, applied: false };
   if (claimed.mode === "inspect") {

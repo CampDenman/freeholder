@@ -15024,6 +15024,17 @@ whatever is best for the people using the site.
   cases) are UNRUN; no compiler, lint, database, native or provider ran. No
   SQL, activation, item or stable gate changes. See
   `deploy/merchant-identity-financial81-source-20261113.md`.
+  Full82 commercial source correction (same date/items): the first actual
+  full type check failed15 diagnostics; its failure remains preserved. Source
+  changes address the seven commercial/subscription diagnostics: actual safe
+  applied credit now reaches the authorized customer invoice DTO/balance,
+  principal review reuses its concrete Zod schema, card skip narrowing retains
+  all guards, and prepared fixtures use real seller actors and original queue
+  names. Actual customer-output partial-credit assertions are PREPARED/UNRUN;
+  no compiler, lint, tests, database, native or provider ran in this slice.
+  Root media repairs and full renewed qualification remain required; no SQL,
+  activation, item or stable gate changes. See
+  `deploy/commercial-types82-source-20261113.md`.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the
