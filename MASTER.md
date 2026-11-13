@@ -14242,6 +14242,14 @@ whatever is best for the people using the site.
   hashes and all three validated FK definitions, with empty import/financial
   rows, exact83-entry journal/profile and no clients. This is not a complete
   populated-site update/rollback qualification.
+  Real SQL typing correction2026-11-13: the renewed NULL-payment receipt
+  control retained its actual paid cash and original feedback, then stopped
+  with PostgreSQL42P18 in the agreement-fee financial witness. A parameterized
+  jsonb_build_object key had no inferable type even with WHERE false. That exact
+  whitelisted key now has an explicit text cast; no identities, membership or
+  money policy changed. Failed V5 and its independent journal/profile/drain
+  proof are preserved. Fresh V6 and the unchanged native receipt assertions
+  remain required before acceptance.
   Invoice applied-credit CHECK source correction2026-11-13: strict v14 schema
   parity stopped at the first genuine model/source mismatch in the named
   nonnegative invoice amount CHECK after125 complete models. The unchanged
