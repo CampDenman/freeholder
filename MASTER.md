@@ -10697,6 +10697,20 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `billing.ts`. **F09** Apache-2.0 SPDX on the new files. **F12** live
   provider settlement is C11.05, same honesty as C5.25 — user-facing copy
   is changeset `subscription-billing.md`. EN/FR/ES.)
+  Paid-access repair 2026-11-13 (C9.33/C11.10): unchanged published-main
+  product source reproduced an owner upgrade that activated the new plan and
+  grant while its4500 difference invoice remained unpaid. The same financial
+  oracle passes after requiring exact full issued-invoice payment before a
+  non-provider plan switch; partial payment preserves original access and
+  calendar. Seven existing plan-change regressions also pass. Full types,
+  whole lint,47 nonempty source files/398 actual assertions and84 explicit
+  database skips pass; independent after-ledger verifies two paid invoices,
+  three payments and an active upgraded grant, all80 published journal hashes,
+  unchanged eight-table BEFORE digests and drained clients. Owner UI has a
+  translated pending-payment notice and exact invoice link in all four locales.
+  This bounded repair changes no schema and does not supply full commercial
+  proration/provider, browser, independent-review or stable acceptance. See
+  `deploy/subscription-paid-access-2026-11-13.md`.
 - [x] **C10.01** Enforce customization seams—database, plugins, configuration,
   uploads—and detect unsupported live core-file modifications.
   (`src/core/update/seams.ts` names the four owner seams; core paths are
