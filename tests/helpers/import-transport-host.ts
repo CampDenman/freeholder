@@ -30,7 +30,10 @@ export async function importTransportHost() {
       }
       const chunks: Buffer[] = []; let size = 0;
       for await (const chunk of incoming) {
-        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk); size += bytes.byteLength;
+        const input: unknown = chunk;
+        const bytes = typeof input === "string" ? Buffer.from(input) : input instanceof Uint8Array ? Buffer.from(input) : null;
+        if (!bytes) throw new Error("The actual TCP stream did not supply bytes or text.");
+        size += bytes.byteLength;
         if (size > 4 * 1024 * 1024 + 65_536) { outgoing.writeHead(413); outgoing.end(); return; }
         chunks.push(bytes);
       }

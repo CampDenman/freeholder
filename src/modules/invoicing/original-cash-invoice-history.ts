@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C1.08: exact original invoice ownership, including pre-GET feedback.
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, inArray } from "drizzle-orm";
 import { ServiceError, type Tx } from "@/core/service";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { originalCashRecoveryFinancialWitness } from "./original-cash-recovery-store";

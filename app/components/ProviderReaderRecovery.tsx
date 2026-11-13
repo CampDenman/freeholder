@@ -3,7 +3,7 @@
 // C12.38/C1.08: observable birth, exact reviewed evidence, independent next GET.
 import { translator } from "@/core/i18n";
 import { Button, Card, CardBody, CardHeader, Field, Input, Pill } from "@/ui/primitives";
-import { PROVIDER_READER_STOP_CONFIRMATION, providerReaderRecoveryPlan } from "@/modules/subscriptions/provider-reader-recovery";
+import { PROVIDER_READER_STOP_CONFIRMATION, type providerReaderRecoveryPlan } from "@/modules/subscriptions/provider-reader-recovery";
 import { recoverProviderReaderAction, reviewProviderReaderStoppedAction } from "../provider-reader-actions";
 type Rows = Awaited<ReturnType<typeof providerReaderRecoveryPlan.call>>;
 export function ProviderReaderRecovery({ subscriptionId, rows, locale }: { subscriptionId: string; rows: Rows; locale: string }) {
