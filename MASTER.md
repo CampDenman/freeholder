@@ -3564,6 +3564,18 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled cash alternate-writer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): a NEW UNAPPLIED additive fragment checks actual
+receipt/origin/accepted-target and conserved cash/credit identities at three
+deferred canonical boundaries, without replacing existing guards. Its final
+money verifier deliberately refuses until a genuine finished original bank and
+complete parent/batch SQL proof exists; a marker/manifest is insufficient.
+Four source security controls are prepared and UNRUN. Actual proof, exact old
+gross-route composition, lock/revision/callback fence and genuine positive/
+partial/rollback/negative/default native controls remain required. No current142
+or published SQL identity, model/journal, readiness, activation or stable state
+changed. See `deploy/controlled-cash-application-guards82-source-20261113.md`.
+
 Controlled current-bank consumer source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): the isolated future writer now consumes genuine
 ec57 latest receipt-owned finished inspection plus authenticated original
