@@ -6494,6 +6494,16 @@ deployments are portable, testable and incapable of silently forking the truth.
   unparsed source from recreating an erased person. Prove a real source above
   500 entries through review, interrupted resume, publication and rollback;
   parser-only counts or a larger synchronous limit do not complete this item.
+  Transport acceptance controls prepared2026-11-13 (SOURCE ONLY): actual
+  incoming TCP routes with fresh synthetic owner-issued keys, normal typedSDK
+  fetch and MCP JSON-RPC cover501 WXR,501 real REST, bounded review/resume,
+  draft/publication/rollback, private-helper/uploader/scope/revocation refusal,
+  exact private originals, actual cleanup payloads and audit identity. Existing
+  direct-service/two-index-process controls stay unchanged. Frozen738 SDK lacks
+  public advanceCrawl/crawlProgress wrappers; the parent must regenerate the
+  final combined catalog before types/native qualification. All new controls
+  remain UNRUN; no C-item/provider/stable acceptance follows. See
+  `deploy/import-transport-acceptance-2026-11-13.md`.
   This splits a required delivery portion from C3.22; both remain open until
   their complete source and acceptance criteria pass. Migration 73 follows
   merged mail recovery 72 in the contiguous journal.
