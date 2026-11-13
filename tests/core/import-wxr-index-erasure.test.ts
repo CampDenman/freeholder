@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // C1.08/C3.47/C11.14: real published-main WXR originals and unaccepted graph copies.
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
@@ -8,9 +8,10 @@ import { users, totpFactors } from "@/core/auth/schema";
 import { createSession } from "@/core/auth/sessions";
 import { actorFromToken } from "@/core/http/actor";
 import { resolveContact } from "@/core/contacts/service";
+import { mediaObjectWrites } from "@/core/media/write-schema";
 import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
 import { createDataRequest, verifyDataRequest, fulfillDataRequest } from "@/core/privacy/service";
-import { importSourceGraphs, importSourceEntries, importSourceMedia, importSourceBatches } from "@/core/plugins/schema";
+import { importRuns, importSourceGraphs, importSourceEntries, importSourceMedia, importSourceBatches } from "@/core/plugins/schema";
 import { startImport } from "@/core/import/service";
 import { beginSourceUpload, uploadSourceChunk, previewFromUpload } from "@/core/import/source-upload";
 import { IMPORT_SOURCE_ERASURE_SCOPE } from "@/core/import/source-erasure";
@@ -29,6 +30,7 @@ function context(id: string): JobExecutionContext { return { id, name: eraseImpo
 describe.runIf(hasDatabase)("actual unaccepted WXR index privacy (C1.08/C3.47/C11.14)", { timeout: 60_000 }, () => {
   beforeAll(ready, 60_000);
   beforeEach(async () => { await truncateSpine(); resetStorageForTests(); });
+  afterEach(() => { vi.useRealTimers(); });
   afterAll(async () => { await stopJobs(); await closeDb(); });
   it("removes private indexed copies after the actual original reader erasure jobs retire WXR chunks", async () => {
     await db().insert(users).values({ id: OWNER.userId, email: "fictional-wxr-index-owner@example.test", role: "owner" });
@@ -50,10 +52,23 @@ describe.runIf(hasDatabase)("actual unaccepted WXR index privacy (C1.08/C3.47/C1
     expect(await db().select().from(importSourceBatches).where(eq(importSourceBatches.graphId, graph.id))).toHaveLength(0);
     const initial = await db().select().from(importSourceEntries).where(eq(importSourceEntries.graphId, graph.id));
     expect(initial).toHaveLength(501); expect(JSON.stringify(initial).includes(marker)).toBe(true);
+    const [originalRun] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
+    const window = z.object({ sourceUpload: z.object({ expiresAt: z.iso.datetime() }).passthrough().optional(), retainedSource: z.object({ expiresAt: z.iso.datetime() }).passthrough().optional() }).passthrough().parse(originalRun?.checkpoint);
+    const expiries = [window.sourceUpload?.expiresAt, window.retainedSource?.expiresAt].filter((value): value is string => value !== undefined).map(value => Date.parse(value));
+    expect(expiries.length).toBeGreaterThan(0);
+    const writes = await db().select().from(mediaObjectWrites);
+    expect(writes).toHaveLength(upload.chunkCount);
+    expect(writes.every(write => write.operation === "put" && write.state === "accepted")).toBe(true);
     const person = (await resolveContact.call({ email: marker, name: "Original private reader" }, owner)).contact;
     const request = await createDataRequest.call({ contactId: person.id, request: { kind: "erasure" } }, owner);
     await verifyDataRequest.call({ id: request.id, method: "Synthetic original WXR reader verified for actual unaccepted input cleanup" }, owner);
     await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, owner);
+    // The existing published contract retains its ordinary private window.
+    // Model only passage beyond the actual captured expiry; real timers and
+    // physical I/O remain real, and every original PUT is already settled.
+    // Time is not used as evidence that a provider caller finished.
+    vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(Math.max(...expiries) + 1);
+
     for (let phase = 0; phase < 16; phase++) {
       const [artifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
       const pending = outcomes.parse(artifact?.body).outcomes.find(value => value.scope === IMPORT_SOURCE_ERASURE_SCOPE)?.pendingJobs ?? [];
