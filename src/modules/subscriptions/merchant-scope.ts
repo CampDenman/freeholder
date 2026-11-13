@@ -13,6 +13,7 @@ import { invoiceMerchantDependencyFingerprints } from "@/modules/invoicing/merch
 import { merchantRefundDependencyFingerprints } from "@/modules/invoicing/merchant-refund-dependencies";
 import { prorationFinancialWitness } from "@/modules/invoicing/proration-financial-witness";
 import { subscriptionCommercialResumptions } from "./commercial-resumption-schema";
+import { controlledProviderWitnesses } from "./controlled-provider-witnesses";
 import { subscriptionProviderReadWitnesses } from "./provider-read-witness";
 import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
 import { subscriptionProviderGenerations } from "./provider-generation-schema";
@@ -79,6 +80,11 @@ export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[])
     .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialResumptions.termsId).limit(5001 - evidence.length - prorationCount);
   if (resumptions.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...resumptions.map(row => fingerprint(row, "commercial_resumption")));
+  const controlled=await controlledProviderWitnesses(tx,{subscriptionIds:readParents.map(row=>row.id)});
+  const controlledFamilies=[controlled.resources,controlled.operations,controlled.calls,controlled.facts,controlled.finishes,controlled.stops,controlled.verifications,controlled.chargeOrigins,controlled.closures];
+  if(controlled.incomplete||controlledFamilies.reduce((total,rows)=>total+rows.length,evidence.length+prorationCount)>5000)return{evidence:[],overflow:true};
+  for(const[family,rows]of controlledFamilies.entries())for(const row of rows)evidence.push({kind:"controlled_financial",id:row.id,
+    fingerprint:createHash("sha256").update(JSON.stringify([family,row.fingerprint])).digest("hex")});
   const reads = await subscriptionProviderReadWitnesses(tx, readParents.map(row => row.id));
   if (reads.incomplete || reads.tickets.length + reads.finishes.length + reads.stops.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...reads.tickets.map(row => ({ kind: "provider_read_ticket" as const, id: row.id, fingerprint: row.fingerprint })),

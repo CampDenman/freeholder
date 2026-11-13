@@ -13,3 +13,5 @@ export * from "./provider-read-ownership-schema";
 export * from "./proration-schema";
 export * from "./proration-boundary-schema";
 export * from "./proration-card-schema";
+
+export * from "./controlled-provider-schema";
