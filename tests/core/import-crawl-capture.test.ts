@@ -281,4 +281,36 @@ describe.runIf(hasDatabase)("actual saved HTTP response capture (C3.47)", () => 
     expect((await db().select().from(mediaObjectWrites)).some(row => row.operation === "delete")).toBe(false);
   });
 
+  it("retains an actual held admitted image batch without demanding deletion or URL rekeying", async () => {
+    const privateMarker = "fictional-held-admitted-reader@example.test";
+    const owner = await actualOwner(), site = await actualOriginalServer(undefined, `<main>Actual held file.<img src="/${privateMarker}.png"></main>`);
+    const run = await startImport.call({ origin: site, kind: "html" }, owner);
+    await initializeCrawl.call({ id: run.id, url: `${site}original` }, owner);
+    const [source] = await db().select().from(importCrawlSources).where(eq(importCrawlSources.runId, run.id));
+    for (let phase = 0; phase < 6; phase++) await advanceCrawl.call({ id: run.id, generation: source!.generation }, owner);
+    const [graph] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.runId, run.id));
+    await Promise.allSettled([commitImport.call({ id: run.id, graph: { generation: graph!.generation, sourceRevision: graph!.sourceRevision, planRevision: graph!.planRevision } }, owner)]);
+    const [admitted] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.id, graph!.id));
+    expect(admitted?.planDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(await db().select().from(importSourceBatches).where(eq(importSourceBatches.graphId, graph!.id))).toHaveLength(1);
+    const mediaBefore = await db().select().from(importSourceMedia).where(eq(importSourceMedia.graphId, graph!.id));
+    expect(mediaBefore).toHaveLength(1); expect(mediaBefore[0]?.key).toContain(privateMarker);
+    const reader = (await resolveContact.call({ email: privateMarker }, owner)).contact;
+    const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, owner);
+    const hold = await addRetentionException.call({ dataRequestId: request.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Synthetic actual admitted-media generation legal hold" }, owner);
+    const headers = await db().select().from(privacyRetentionSourceSnapshots).where(eq(privacyRetentionSourceSnapshots.exceptionId, hold.id));
+    const members = await db().select().from(privacyRetentionSourceMembers).where(eq(privacyRetentionSourceMembers.exceptionId, hold.id));
+    expect(members).toMatchObject([{ sourceId: source!.id, generation: source!.generation }]);
+    await verifyDataRequest.call({ id: request.id, method: "Synthetic actual held admitted-media subject verification" }, owner);
+    expect((await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, owner)).request.status).toBe("partially_completed");
+    const [artifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
+    const outcome = (artifact!.body as { outcomes: Array<{ scope: string; outcome: string; pendingJobs?: string[] }> }).outcomes.find(row => row.scope === CRAWL_ERASURE_SCOPE);
+    expect(outcome).toMatchObject({ outcome: "retained" }); expect(outcome?.pendingJobs ?? []).toEqual([]);
+    expect(await db().select().from(importSourceMedia).where(eq(importSourceMedia.graphId, graph!.id))).toEqual(mediaBefore);
+    expect(await db().select().from(privacyRetentionSourceSnapshots).where(eq(privacyRetentionSourceSnapshots.exceptionId, hold.id))).toEqual(headers);
+    expect(await db().select().from(privacyRetentionSourceMembers).where(eq(privacyRetentionSourceMembers.exceptionId, hold.id))).toEqual(members);
+    for (const response of await db().select().from(importCrawlResponses)) expect(await storage().get(response.storageKey!)).toBeDefined();
+    expect((await db().select().from(mediaObjectWrites)).some(row => row.operation === "delete")).toBe(false);
+  });
+
 });
