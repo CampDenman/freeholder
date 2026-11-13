@@ -14484,6 +14484,31 @@ whatever is best for the people using the site.
   14nonempty files and25explicitDBskips. Fulltypes/focusedlint/metadata pass
   and processes drain. Actual AFTER remains UNRUN pending freshV22; no
   C-item/stable completion follows.
+  Cumulative-original-partial cash source checkpoint 2026-11-13
+  (C12.38/C5.19/C1.08): a separate UNQUALIFIED bounded increment derives
+  cumulative fee/recipient targets from exact original principal, completed
+  return allocation/issued-credit lines, current actual refund resources and
+  original versioned fee authority. Accepted order v1 per-line floors remain
+  distinct from booking/subscription v0 aggregate floors; BigInt residuals
+  retain actual original line/resource ownership. Whole RMA credits remain
+  reserved through the canonical credit-disposition query, never transferable
+  after the same cash refund. Actual finished/stop-reviewed callers and
+  original ACK/metadata GET recovery precede new target generations; unknown
+  outcomes cannot obtain another POST. Fresh human review of an actual
+  unassigned raw receipt permits only its original unapplied remainder without
+  inventing a payment, logical refund, old caller or amount-based association.
+  The same four models now expose five bounded financial witness arrays,
+  including authenticated original feedback before any cash owner or first
+  read. Root central merge/export/bounds integration remains required. Shared
+  services/owner recovery/audit/four locales and13 pure/two adapter/nine
+  contract/three native controls are prepared, UNRUN. No compiler, lint, build,
+  tests, migration, database or provider request ran; the new separate suffix
+  is unassembled/unapplied and prior SQL/test bodies/evidence are unchanged.
+  Combined qualification, concurrent/late-feedback/NULL-payment subscription
+  acceptance, populated upgrades, browser/SDK/customer/provider journeys and
+  independent review remain required. No new deferral, destination-debt waiver,
+  model activation or stable sign-off is supplied. See
+  `deploy/original-cash-partial-source-2026-11-13.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

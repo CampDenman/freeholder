@@ -6,6 +6,9 @@ import legacyBankFeedbackServices from "./legacy-bank-feedback-service";
 import originalCashRecoveryPhases from "./original-cash-recovery-service";
 import originalCashRecoveryServices from "./original-cash-recovery";
 import originalCashRecoveryRead from "./original-cash-recovery-read";
+import originalCashPartialPhases from "./original-cash-partial-service";
+import originalCashPartialServices from "./original-cash-partial";
+import originalCashUnassignedServices from "./original-cash-unassigned-service";
 import legacyBankReplacementServices from "./legacy-bank-replacement-service";
 import legacyBankReaderRecoveryServices from "./legacy-bank-reader-recovery";
 import legacyBankCurrentServices from "./legacy-bank-current-service";
@@ -68,6 +71,9 @@ export default [
   ...originalCashRecoveryPhases,
   ...originalCashRecoveryServices,
   ...originalCashRecoveryRead,
+  ...originalCashPartialPhases,
+  ...originalCashPartialServices,
+  ...originalCashUnassignedServices,
   ...legacyBankReadServices,
   ...legacyBankCurrentServices,
   ...legacyBankReaderRecoveryServices,

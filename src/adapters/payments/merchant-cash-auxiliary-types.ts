@@ -11,6 +11,7 @@ export interface MerchantCashAuxiliaryRequest {
   originalChargeRef: string; originalAccountId: string; parentRef: string;
   originalAmountMinor: number; alreadyReturnedMinor: number; amountMinor: number; currency: string;
   idempotencyKey: string; frozenBody: string; originalResourceRef?: string;
+  targetFactId?: string;
   onResourceAcknowledged: (providerRef: string) => Promise<void>;
   onResourceObserved: (evidence: MerchantCashAuxiliaryEvidence) => Promise<void>;
   onParentObserved: (evidence: { providerRef: string | null; chargeRef: string | null; accountId: string | null; amountMinor: number | null; returnedMinor: number | null; currency: string | null }) => Promise<void>;
