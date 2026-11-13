@@ -31,3 +31,15 @@ Preserved actual failure/result prefix:
 `/tmp/freeholder-current-full82-source-v1-20261113`.
 Independent declaration/path/line/file-hash review:
 `/tmp/freeholder-current-full82-private-inventory-source-review-v1-20261113.json`.
+
+## Renewed complete boundary proof
+
+At94190601461263cc6551a77600ee0196eaaed0ff the complete core service and
+private-boundary files pass34 actual assertions in4.602seconds, no skips and
+no database. The strict system/external:false inventories, all generated
+projection exclusions and wildcard name probes remain intact. Raw audit
+nonces are redacted and original input/identities remain unchanged.
+Actual report/result prefix:
+`/tmp/freeholder-audit-full82-private-boundary-v2-20261113`.
+This is source-contract proof, not an actual new provider/HTTP acceptance or
+independent security review.

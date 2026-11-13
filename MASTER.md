@@ -14118,8 +14118,11 @@ whatever is best for the people using the site.
   source-contract run then stops on20 missing registered system-helper names.
   Exact declarations and real collectors were reviewed;30 financial/controlled
   system phases and one authenticated private own-card authorization are now
-  listed explicitly. All HTTP/OpenAPI/MCP exclusion assertions remain. See
-  `deploy/commercial-private-inventory-2026-11-13.md`; renewed tests are pending.
+  listed explicitly. At94190601 the complete core and private-boundary files
+  pass34 actual assertions with no database, including all literal inventories
+  and HTTP/OpenAPI/MCP projection exclusions. See
+  `deploy/commercial-private-inventory-2026-11-13.md`; broader renewed gates
+  and actual transport/provider acceptance remain open.
   Full integration wiring 2026-11-13 (C1.08/C12.38): buyer, frozen merchant
   profile and subscription merge evidence now select the exact24-family
   commercial/card footprint, including cashless/trial history. Existing evidence
