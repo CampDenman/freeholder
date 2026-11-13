@@ -14222,6 +14222,16 @@ whatever is best for the people using the site.
   draft deletion remains pending supported resolution, alongside amendments,
   future-invoice lineage and complete actual acceptance; none is deferred.
   See `deploy/subscription-phase-recovery80-source-20261113.md`; no item closes.
+  Supported subscription-draft source checkpoint (2026-11-13,
+  C12.38/C1.08): a separately admitted original finalize operation freezes
+  `auto_advance=false` and verifies the actual draft against its admitted
+  phase/price before mutation. Complete actual PI enumeration and durable
+  cash callbacks precede later checks; the flag supplies no no-charge proof.
+  Each later PI cancellation, invoice void and GET remains a distinct original
+  lifecycle. Four additional HTTP controls are prepared and unrun, with no SQL
+  change or activation. Amendments/generations and future invoice lineage
+  remain source work. See
+  `deploy/subscription-draft-finalization80-source-20261113.md`; no item closes.
   Provider lifecycle protocol work uses Stripe's actual flexible-subscription
   pause endpoint, with2026-10-28.endive frozen only on new scope/charge
   receipts. Legacy operations keep their original version. Sixteen bounded

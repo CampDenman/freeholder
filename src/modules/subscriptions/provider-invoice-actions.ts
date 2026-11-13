@@ -10,6 +10,7 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { merchantPhysicalCaller } from "@/modules/invoicing/merchant-physical-caller";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { originalScheduleErasureAction } from "./provider-phase-stop";
+import { providerPhaseInventory } from "./provider-phase-contract";
 import { originalPhaseResources, closedOriginalPhaseSchedules } from "./provider-phase-resources";
 import { scheduleCallerHasStopped } from "./provider-schedule-proof";
 import { invoiceActionRequest, invoiceActionAcknowledgment, originalProviderInvoiceInventory, invoiceStopAction } from "./provider-invoice-action-contract";
@@ -67,17 +68,26 @@ export const claimMerchantInvoiceStop = defineService({
     const frozen = subscriptionMerchantScope.parse(scope), operationId = randomUUID(), nonce = randomBytes(32).toString("base64url");
     const origins = [...primary.values()].filter(value => value.providerSubscriptionRefs.has(input.providerSubscriptionRef));
     const creatorIds = new Set(origins.flatMap(value => [...value.creationOperationIds]).filter(id => operations.some(operation => operation.id === id && operation.kind === "create")));
+    const admitted = operations.flatMap(operation => {
+      const inventory = providerPhaseInventory.safeParse(operation.providerObservation.phaseInventory);
+      if (!inventory.success || inventory.data.operationId !== operation.id || inventory.data.requestDigest !== operation.requestDigest
+        || !origins.some(origin => origin.providerScheduleRef === inventory.data.providerScheduleRef)) return [];
+      return inventory.data.phases.filter(phase => phase.start === invoice.periodStart && phase.totalMinor === invoice.totalMinor && phase.currency === invoice.currency);
+    });
+    const phaseDigests = new Set(admitted.map(phase => merchantTaxDigest(phase)));
+    const admittedPhase = phaseDigests.size === 1 ? admitted[0] : undefined;
+    if (action.action === "finalize_draft" && !admittedPhase) return { mode: "recover" as const };
     const providerRequest = invoiceActionRequest.parse({ ...subscriptionChargeScope(frozen), providerPlatformAccountId: frozen.providerPlatformAccountId,
       providerScheduleApiVersion: frozen.providerScheduleApiVersion, subscriptionId: parent.id, providerCustomerRef: resource.providerCustomerRef,
-      providerSubscriptionRef: input.providerSubscriptionRef, providerInvoiceRef: input.providerInvoiceRef, ...action, providerScheduleRefs: [...primary.keys()].sort(),
+      providerSubscriptionRef: input.providerSubscriptionRef, providerInvoiceRef: input.providerInvoiceRef, ...action, ...(admittedPhase ? { admittedPhase } : {}), providerScheduleRefs: [...primary.keys()].sort(),
       ...(creatorIds.size === 1 ? { providerScheduleOperationId: [...creatorIds][0] } : {}) });
-    const physical = { method: "POST", path: action.action === "cancel_intent" ? `/v1/payment_intents/${action.providerPaymentIntentRef}/cancel` : `/v1/invoices/${input.providerInvoiceRef}/void`, body: {} };
+    const physical = { method: "POST", path: action.action === "cancel_intent" ? `/v1/payment_intents/${action.providerPaymentIntentRef}/cancel` : `/v1/invoices/${input.providerInvoiceRef}/${action.action === "finalize_draft" ? "finalize" : "void"}`, body: action.action === "finalize_draft" ? { auto_advance: "false" } : {} };
     const originalRequest = { ...providerRequest, resourceKind: "invoice_stop", physical, inventoryDigest: retained.inventoryDigest, originalCancellationId: cancellation.id,
       originalInvoice: invoice, requestId: input.requestId, cohortId: input.cohortId, caller: merchantPhysicalCaller(), callerCompletionDigest: hash(nonce) };
     await ctx.tx.execute(sql`select set_config('freeholder.subscription_schedule_v1','1',true)`);
     await ctx.tx.update(subscriptionProviderScheduleResources).set({ operationRevision: resource.operationRevision + 1, state: "quiescing", recoveryPending: true, stoppedProof: null, updatedAt: new Date() }).where(eq(subscriptionProviderScheduleResources.subscriptionId, parent.id));
     await ctx.tx.insert(subscriptionProviderScheduleOperations).values({ id: operationId, subscriptionId: parent.id, operationRevision: resource.operationRevision + 1,
-      kind: action.action === "cancel_intent" ? "cancel" : "void_invoice", providerApiVersion: frozen.providerScheduleApiVersion, originalRequest,
+      kind: action.action === "cancel_intent" ? "cancel" : action.action === "finalize_draft" ? "update" : "void_invoice", providerApiVersion: frozen.providerScheduleApiVersion, originalRequest,
       requestDigest: merchantTaxDigest(originalRequest), idempotencyKey: `invoice-stop:${operationId}` });
     callers.set(operationId, { subscriptionId: parent.id, nonce, invoked: false, outcome: null, positives: [] });
     ctx.setSubject("subscription", parent.id); return { mode: "dispatch" as const, operationId, completionNonce: nonce, request: providerRequest };

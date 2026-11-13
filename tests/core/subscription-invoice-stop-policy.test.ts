@@ -16,7 +16,8 @@ describe("original invoice stop policy", () => {
   });
   it("does not invent invoice-payment absence, duplicate a PI or delete subscription drafts", () => {
     expect(invoiceStopAction({ ...original, paymentIntents: [original.paymentIntents[0]!, original.paymentIntents[0]!] })).toBeNull();
-    expect(invoiceStopAction({ ...original, state: "draft" })).toBeNull();
+    expect(invoiceStopAction({ ...original, state: "draft" })).toEqual({ action: "cancel_intent", providerPaymentIntentRef: "pi_original" });
+    expect(invoiceStopAction({ ...original, state: "draft", paymentIntents: [] })).toEqual({ action: "finalize_draft" });
     expect(invoiceStopAction({ ...original, paymentIntents: [{ ...original.paymentIntents[0]!, state: "succeeded" }] })).toBeNull();
   });
 });

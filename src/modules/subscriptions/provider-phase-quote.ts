@@ -101,7 +101,7 @@ export const quoteMerchantProviderHorizon=defineService({
       if(resource.state!=="active"||resource.recoveryPending||!resource.providerSubscriptionRef||parent.providerRef!==resource.providerSubscriptionRef)throw new ServiceError("conflict","Recover the actual original schedule and its logical linkage before extending its horizon.");
       const known=scheduleKnownResources(resource,operations);
       if(!known||known.size!==1||!known.has(resource.providerSubscriptionRef))throw new ServiceError("conflict","Reconcile every retained original remote resource before extending one of them.");
-      const last=[...operations].reverse().find(operation=>operation.kind==="create"||operation.kind==="update");
+      const last=[...operations].reverse().find(operation=>operation.originalRequest.resourceKind==="phase_schedule"&&(operation.kind==="create"||operation.kind==="update"));
       const inventory=providerPhaseInventory.safeParse(last?.providerObservation.phaseInventory);
       if(!last||last.state!=="confirmed"||!inventory.success||inventory.data.operationId!==last.id||inventory.data.requestDigest!==last.requestDigest
         ||inventory.data.providerSubscriptionRef!==resource.providerSubscriptionRef||inventory.data.providerPlatformAccountId!==scope.providerPlatformAccountId
