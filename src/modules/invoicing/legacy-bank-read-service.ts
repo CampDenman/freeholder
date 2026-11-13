@@ -25,7 +25,7 @@ const processState = globalThis as typeof globalThis & { [slot]?: Map<string, Lo
 const localReads = processState[slot] ??= new Map<string, LocalRead>();
 
 async function schemaReady(ctx: ServiceContext) {
-  const [result] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=12 as ready from pg_trigger where not tgisinternal
+  const [result] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=13 and to_regprocedure('public.freeholder_legacy_bank_feedback_review(uuid)') is not null as ready from pg_trigger where not tgisinternal
     and (tgrelid,tgname) in ((to_regclass('public.legacy_bank_reads'),'legacy_bank_reads_guard'),
       (to_regclass('public.legacy_bank_read_facts'),'legacy_bank_read_facts_guard'),
       (to_regclass('public.legacy_bank_read_finishes'),'legacy_bank_read_finishes_guard'),
@@ -37,7 +37,8 @@ async function schemaReady(ctx: ServiceContext) {
       (to_regclass('public.legacy_bank_read_facts'),'legacy_bank_recovered_read_guard'),
       (to_regclass('public.legacy_bank_read_finishes'),'legacy_bank_recovered_read_guard'),
       (to_regclass('public.payment_provider_events'),'legacy_bank_signed_event_lock'),
-      (to_regclass('public.money_state_events'),'legacy_bank_physical_event_lock')) and tgenabled in ('O','A')`);
+      (to_regclass('public.money_state_events'),'legacy_bank_physical_event_lock'),
+      (to_regclass('public.legacy_bank_feedback'),'legacy_bank_feedback_guard')) and tgenabled in ('O','A')`);
   if (result?.ready !== true) throw new ServiceError("conflict", "Install the complete guarded legacy bank-read schema before inspecting original money.");
 }
 async function allowWrites(ctx: ServiceContext) {

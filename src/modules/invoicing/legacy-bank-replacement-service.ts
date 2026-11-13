@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { defineOrchestratedService, defineService, ServiceError } from "@/core/service";
+import { defineOrchestratedService, defineService, ServiceError, type Actor } from "@/core/service";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { routingForPayment } from "./merchant-charge";
 import { createRefund } from "./invoice-service";
@@ -15,8 +15,8 @@ import { reconcileLegacyBankRefund } from "./legacy-bank-current-service";
 import { submitProviderRefund } from "./payment-provider-service";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
-import { assertLegacyBankRecoveryGuards, readLegacyReplacementChain, legacyReplacementFinancialState, legacyReplacementSigningKey } from "./legacy-bank-replacement-store";
-import { LEGACY_REPLACEMENT_CONFIRMATION, LEGACY_REPLACEMENT_PROTOCOL, LEGACY_REPLACEMENT_STATE, LEGACY_REPLACEMENT_REASON, legacyReplacementKey, legacyReplacementReason, signLegacyReplacement } from "./legacy-bank-replacement-proof";
+import { assertLegacyBankRecoveryGuards, legacyBankReturnOwner, legacyBankInspectionRefundIds, readLegacyReplacementChain, legacyReplacementFinancialState, legacyReplacementSigningKey } from "./legacy-bank-replacement-store";
+import { LEGACY_REPLACEMENT_CONFIRMATION, LEGACY_REPLACEMENT_PROTOCOL, LEGACY_REPLACEMENT_STATE, LEGACY_REPLACEMENT_REASON, legacyReplacementKey, legacyReplacementParentId, legacyReplacementReason, signLegacyReplacement } from "./legacy-bank-replacement-proof";
 const id = z.object({ refundId: z.uuid() }).strict();
 export const legacyBankReplacementPlan = defineService({
   name: "invoicing.legacyBankReplacementPlan", summary: "Read actual original legacy refund lineage before fresh inspection, never synthesize an original request.",
@@ -25,28 +25,27 @@ export const legacyBankReplacementPlan = defineService({
   handler: async ({ refundId }, ctx) => {
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, refundId));
     if (!refund) throw new ServiceError("conflict", "Restore this original legacy refund before replacement review.");
-    const chain = await readLegacyReplacementChain(ctx.tx, refund);
+    const chain = await readLegacyReplacementChain(ctx, refund);
     if (chain.incomplete) throw new ServiceError("conflict", "Restore every original legacy replacement receipt; unsigned or unrelated refunds cannot fulfill it.");
     await originalLegacyBankRefund(ctx.tx, chain.root);
-    for (const node of chain.nodes) {
-      const [rma] = await ctx.tx.execute<{ bound: boolean }>(sql`select freeholder_refund_is_prepared_return(${node.id}::uuid) bound`);
-      if (rma?.bound) throw new ServiceError("conflict", "Use the original return's exact frozen payment part and issued credit. Generic replacement cannot adopt it.");
-    }
-    return { rootRefundId: chain.root.id, inspectRefundIds: chain.nodes.filter(node => node.providerRef).map(node => node.id) };
+    const ownership = await legacyBankReturnOwner(ctx, chain.root.id);
+    for (const node of chain.nodes) if (merchantTaxDigest((await legacyBankReturnOwner(ctx, node.id)).owner) !== merchantTaxDigest(ownership.owner)) throw new ServiceError("conflict", "Restore this chain's one actual original return part and existing credit before another refund.");
+    return { rootRefundId: chain.root.id, inspectRefundIds: await legacyBankInspectionRefundIds(ctx, chain) };
   },
 });
 export const claimLegacyBankReplacement = defineService({
   name: "invoicing.claimLegacyBankReplacement", summary: "Reserve one signed deterministic original legacy bank replacement after exact current failure and real caller completion.",
-  kind: "mutation", permission: "system", external: false, writeClass: "money", auditInputFields: ["refundId", "authorizedBy"],
-  input: id.extend({ authorizedBy: z.uuid() }), output: z.object({ state: z.enum(["ready", "fulfilled", "pending", "review"]), refund: refundRow }),
-  handler: async ({ refundId, authorizedBy }, ctx) => {
+  kind: "mutation", permission: "system", external: false, writeClass: "money", auditInputFields: ["refundId", "authorizedBy", "expectedReturnId"],
+  input: id.extend({ authorizedBy: z.uuid(), expectedReturnId: z.uuid().optional() }), output: z.object({ state: z.enum(["ready", "fulfilled", "pending", "review"]), refund: refundRow }),
+  handler: async ({ refundId, authorizedBy, expectedReturnId }, ctx) => {
     await assertLegacyBankRecoveryGuards(ctx);
     await lockContactIdentityForRead(ctx.tx);
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, refundId));
     if (!refund) throw new ServiceError("conflict", "Restore the original legacy refund before reserving a replacement.");
-    const initial = await readLegacyReplacementChain(ctx.tx, refund);
+    const initial = await readLegacyReplacementChain(ctx, refund);
     if (initial.incomplete) throw new ServiceError("conflict", "Restore the complete original legacy causal journal before changing money.");
-    const leaf = initial.nodes.at(-1)!, key = legacyReplacementKey(leaf.id);
+    const initialOwnership = await legacyBankReturnOwner(ctx, initial.root.id);
+    const leaf = initial.nodes.at(-1)!, key = legacyReplacementKey(leaf.id, initialOwnership.owner);
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`legacy-bank-family:${refund.paymentId}`}))`);
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`refund-idempotency:${key}`}))`);
     for (const node of [...initial.nodes].sort((a, b) => a.id.localeCompare(b.id))) await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`refund:${node.id}`}))`);
@@ -54,15 +53,18 @@ export const claimLegacyBankReplacement = defineService({
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, refund.paymentId));
     if (!payment) throw new ServiceError("conflict", "Restore this original legacy payment before replacement.");
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`invoice:${payment.invoiceId}`}))`);
-    const chain = await readLegacyReplacementChain(ctx.tx, refund);
+    const chain = await readLegacyReplacementChain(ctx, refund);
     if (chain.incomplete || merchantTaxDigest(chain.nodes.map(node => node.id)) !== merchantTaxDigest(initial.nodes.map(node => node.id))) throw new ServiceError("conflict", "The original legacy chain changed; reload it before authorizing another exact operation.");
-    for (const node of chain.nodes) {
-      const [rma] = await ctx.tx.execute<{ bound: boolean }>(sql`select freeholder_refund_is_prepared_return(${node.id}::uuid) bound`);
-      if (rma?.bound) throw new ServiceError("conflict", "Use this refund's original return and frozen payment part; generic replacement cannot own its issued credit.");
-    }
+    const ownership = await legacyBankReturnOwner(ctx, chain.root.id);
+    if (expectedReturnId && ownership.owner?.returnId !== expectedReturnId) throw new ServiceError("conflict", "This actual refund belongs to another original return; an equal amount cannot select its credit or part.");
+    if (merchantTaxDigest(ownership.owner) !== merchantTaxDigest(initialOwnership.owner)) throw new ServiceError("conflict", "The original return allocation or existing credit changed; restore its actual ownership before another refund.");
     const state = await legacyReplacementFinancialState(ctx, chain);
     const currentLeaf = chain.nodes.at(-1)!;
-    if (state.fulfilled) return { state: "fulfilled" as const, refund: state.states.find(row => row.state === "returned")!.refund };
+    if (state.fulfilled) {
+      const [actual] = state.fulfilledRefundId ? await ctx.tx.select().from(refunds).where(eq(refunds.id, state.fulfilledRefundId)) : [];
+      if (!actual) throw new ServiceError("conflict", "Restore the actual original return-part cash before reporting its promise fulfilled.");
+      return { state: "fulfilled" as const, refund: actual };
+    }
     if (state.review || state.overReturned || (state.returnedMinor ?? 0) > 0) return { state: "review" as const, refund: currentLeaf };
     if (chain.links.length && state.states.at(-1)?.state === "unsubmitted" && state.states.slice(0, -1).every(row => row.state === "failed")) return { state: "ready" as const, refund: currentLeaf };
     if (!state.canReplace) return { state: "pending" as const, refund: currentLeaf };
@@ -79,7 +81,7 @@ export const claimLegacyBankReplacement = defineService({
       replacementRefundId: child.id, replacementRequestHash: child.requestHash, paymentId: payment.id, invoiceId: payment.invoiceId,
       originalPaymentRef: rootOriginal.originalPaymentRef, originalChargeAccountId: rootOriginal.originalChargeAccountId,
       originalCreatePlatformAccountId: null, originalCreateProtocolVersion: null, amountMinor: chain.root.amountMinor, currency: chain.root.currency,
-      terminalReads: state.terminalReads, authorizedBy: `user:${authorizedBy}`, authorizedAt: now.toISOString() }, legacyReplacementSigningKey());
+      ...(ownership.owner ? { returnPart: ownership.owner } : {}), terminalReads: state.terminalReads, authorizedBy: `user:${authorizedBy}`, authorizedAt: now.toISOString() }, legacyReplacementSigningKey());
     await ctx.tx.insert(moneyStateEvents).values({ id: evidenceId, subjectType: "refund", subjectId: currentLeaf.id, fromState: null, toState: LEGACY_REPLACEMENT_STATE,
       reason: LEGACY_REPLACEMENT_REASON, actor: `user:${authorizedBy}`, metadata, occurredAt: now });
     queueOriginalMerchantRefundRepair(ctx, { kind: "legacy_bank_replacement", id: evidenceId });
@@ -93,25 +95,22 @@ export const legacyBankReplacementOutcome = defineService({
   handler: async ({ refundId, replacementRefundId }, ctx) => {
     const [original] = await ctx.tx.select().from(refunds).where(eq(refunds.id, refundId)), [replacement] = await ctx.tx.select().from(refunds).where(eq(refunds.id, replacementRefundId));
     if (!original || !replacement) throw new ServiceError("conflict", "Restore the actual original and replacement before reporting their outcome.");
-    const chain = await readLegacyReplacementChain(ctx.tx, original);
+    const chain = await readLegacyReplacementChain(ctx, original);
     if (chain.incomplete || !chain.nodes.some(node => node.id === replacement.id)) return { state: "review" as const, refund: replacement };
     const state = await legacyReplacementFinancialState(ctx, chain);
     return { state: state.fulfilled ? "fulfilled" as const : state.review ? "review" as const : "pending" as const, refund: replacement };
   },
 });
-export const replaceLegacyReturnedBankRefund = defineOrchestratedService({
-  name: "invoicing.replaceLegacyReturnedBankRefund", summary: "Authorize one exact causal replacement of a bank-returned legacy refund while preserving the original charge and every earlier fact.",
-  kind: "mutation", permission: "scoped", agentCallable: false, stepUp: true, writeClass: "money",
-  input: id.extend({ confirmation: z.literal(LEGACY_REPLACEMENT_CONFIRMATION) }).strict(), output: z.object({ state: z.enum(["fulfilled", "pending", "review"]), refund: refundRow }),
-  handler: async ({ refundId }, caller) => {
-    if (caller.kind !== "user" || caller.keyScopes) throw new ServiceError("permission", "A freshly verified signed-in person must authorize the exact original legacy replacement.");
+export async function replaceOriginalLegacyBankRefund(input: { refundId: string; authorizedBy: string; expectedReturnId?: string; dispatchActor: Actor }) {
+  const caller = input.dispatchActor;
     const system = { kind: "system", request: caller.request } as const;
-    const plan = await legacyBankReplacementPlan.call({ refundId }, system), errors: unknown[] = [];
+    const plan = await legacyBankReplacementPlan.call({ refundId: input.refundId }, system), errors: unknown[] = [];
     for (const id of plan.inspectRefundIds) { try { await reconcileLegacyBankRefund.call({ refundId: id }, caller); } catch (error) { errors.push(error); } }
     if (errors.length) throw errors[0];
-    const claim = await claimLegacyBankReplacement.call({ refundId: plan.rootRefundId, authorizedBy: caller.userId }, system);
+    const claim = await claimLegacyBankReplacement.call({ refundId: plan.rootRefundId, authorizedBy: input.authorizedBy, ...(input.expectedReturnId ? { expectedReturnId: input.expectedReturnId } : {}) }, system);
     if (claim.state !== "ready") return claim;
-    const prefix = "legacy-bank-replacement:v1:", parentId = claim.refund.idempotencyKey.slice(prefix.length);
+    const parentId = legacyReplacementParentId(claim.refund.idempotencyKey);
+    if (!parentId) throw new ServiceError("conflict", "Restore the actual original parent-bound replacement key before physical dispatch.");
     const actual = await submitProviderRefund.call({ paymentId: claim.refund.paymentId, amountMinor: claim.refund.amountMinor,
       reason: legacyReplacementReason(parentId), idempotencyKey: claim.refund.idempotencyKey }, caller);
     // The newly admitted caller invalidates earlier cash-inventory receipts.
@@ -121,6 +120,14 @@ export const replaceLegacyReturnedBankRefund = defineOrchestratedService({
     for (const id of completionPlan.inspectRefundIds) { try { await reconcileLegacyBankRefund.call({ refundId: id }, caller); } catch (error) { completionErrors.push(error); } }
     if (completionErrors.length) throw completionErrors[0];
     return legacyBankReplacementOutcome.call({ refundId: plan.rootRefundId, replacementRefundId: actual.id }, system);
+}
+export const replaceLegacyReturnedBankRefund = defineOrchestratedService({
+  name: "invoicing.replaceLegacyReturnedBankRefund", summary: "Authorize one exact causal replacement of a bank-returned legacy refund while preserving the original charge and every earlier fact.",
+  kind: "mutation", permission: "scoped", agentCallable: false, stepUp: true, writeClass: "money",
+  input: id.extend({ confirmation: z.literal(LEGACY_REPLACEMENT_CONFIRMATION) }).strict(), output: z.object({ state: z.enum(["fulfilled", "pending", "review"]), refund: refundRow }),
+  handler: async ({ refundId }, caller) => {
+    if (caller.kind !== "user" || caller.keyScopes) throw new ServiceError("permission", "A freshly verified signed-in person must authorize the exact original legacy replacement.");
+    return replaceOriginalLegacyBankRefund({ refundId, authorizedBy: caller.userId, dispatchActor: caller });
   },
 });
 export const legacyBankCurrentReadFamily = defineService({
@@ -130,8 +137,10 @@ export const legacyBankCurrentReadFamily = defineService({
     const [refund] = await ctx.tx.select().from(refunds).where(eq(refunds.id, refundId));
     if (!refund) throw new ServiceError("conflict", "Restore the actual original legacy refund before inspecting its bank family.");
     await originalLegacyBankRefund(ctx.tx, refund);
-    const chain = await readLegacyReplacementChain(ctx.tx, refund);
-    return { inspectRefundIds: chain.incomplete ? [refund.id] : chain.nodes.filter(node => node.providerRef).map(node => node.id) };
+    const chain = await readLegacyReplacementChain(ctx, refund);
+    if (chain.incomplete) return { inspectRefundIds: [refund.id] };
+    try { return { inspectRefundIds: await legacyBankInspectionRefundIds(ctx, chain) }; }
+    catch (error) { if (!(error instanceof ServiceError)) throw error; return { inspectRefundIds: [refund.id] }; }
   },
 });
 export const recoverLegacyBankRefund = defineOrchestratedService({

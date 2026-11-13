@@ -9084,5 +9084,12 @@
   "refundRecovery.live": "لا تزال العملية الأصلية قيد التشغيل. أكملها أو أوقفها قبل المراجعة.",
   "refundRecovery.evidence": "دليل التوقف في الاستضافة",
   "refundRecovery.stopConfirmation": "تحققت من توقف العملية الأصلية لفحص الاسترداد.",
-  "refundRecovery.recordStop": "تسجيل مراجعة التوقف"
+  "refundRecovery.recordStop": "تسجيل مراجعة التوقف",
+  "catalog.returns.bankReviewHelp": "غيّر البنك حالة استرداد أصلي للإرجاع أو لم يؤكده. تحقّق من الدفعات الأصلية قبل إغلاق الإرجاع. احتفظ بالإشعار الدائن الحالي ولا تخصم من المشتري مرة أخرى.",
+  "catalog.returns.checkBankRefunds": "التحقّق من الاستردادات البنكية الأصلية",
+  "catalog.returns.replaceBankConfirmation": "أوافق على استبدال الاستردادات الأصلية التي تم التحقق من فشلها فقط.",
+  "catalog.returns.replaceBankRefunds": "استبدال الاستردادات الأصلية الفاشلة",
+  "catalog.saved.recoverReturnBankRefunds": "تم التحقّق من الاستردادات البنكية. يظل الإرجاع مفتوحًا حتى تأكيد كل جزء.",
+  "catalog.saved.replaceReturnBankRefunds": "تم التحقّق من الاستردادات الفاشلة وإرسال البدائل المصرح بها.",
+  "catalog.customerReturns.bankReviewHelp": "تظل دفعتك الأصلية مدفوعة ويُحتفظ بإشعارك الدائن الحالي. نتحقّق من الاسترداد مع البنك. يرجى عدم الدفع مرة أخرى."
 }

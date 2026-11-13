@@ -14150,6 +14150,25 @@ whatever is best for the people using the site.
   recovery, RMA issued-credit integration, populated upgrades, SDK/browser and
   real provider acceptance remain required. No completion, activation or
   stable sign-off is supplied. See `deploy/legacy-bank-recovery-2026-11-13.md`.
+  Legacy RMA/raw-feedback source checkpoint 2026-11-13 (C5.19/C12.38/C1.08):
+  an isolated UNQUALIFIED increment proves existing return allocation, original
+  payment and credit-line ownership before signed parent/child legacy bank
+  replacement. It retains the same credit and original payment principal,
+  keeps unknown/action/failed parts open, and shares owner/customer recovery
+  and generated API contracts. A sixth legacy immutable raw-feedback model
+  commits normalized authenticated financial facts before applying policy,
+  including genuine unassigned callbacks and feedback before the first GET.
+  Unknown original create metadata remains null; actual retained creator ACKs
+  cannot stand in for fresh current proof or an unknown creator finish. Seven
+  bounded financial child arrays are supplied; root-owned central/invoice
+  before-first-read feedback composition remains required. A separate unapplied
+  suffix needs new combined SQL/parity/new databases. Prior fragments and
+  lifecycle/current/recovery fixture bodies remain unchanged.38 pure/five
+  contract/five native controls are prepared, not run; no CPU qualification,
+  migration or provider I/O ran for this increment. Populated upgrades,
+  integrated financial witnesses, UI/API/SDK journeys, actual acceptance and
+  independent review remain required. No stable or model activation sign-off
+  is supplied. See `deploy/legacy-bank-rma-2026-11-13.md`.
   Refund erasure-outbox isolated draft 2026-11-12: primary financial facts
   carry a pointer in the existing transactional outbox; original owner/profile
   resolution and erasure receipt repair run only after commit. Raw original

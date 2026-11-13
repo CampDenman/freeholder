@@ -9084,5 +9084,12 @@
   "refundRecovery.live": "El proceso original sigue en ejecución. Finalízalo o detenlo antes de revisarlo.",
   "refundRecovery.evidence": "Prueba de detención en el alojamiento",
   "refundRecovery.stopConfirmation": "He verificado que el proceso original de comprobación del reembolso se ha detenido.",
-  "refundRecovery.recordStop": "Registrar revisión de detención"
+  "refundRecovery.recordStop": "Registrar revisión de detención",
+  "catalog.returns.bankReviewHelp": "El banco ha cambiado o no ha confirmado un reembolso original de la devolución. Compruebe los pagos originales antes de cerrarla. Conserve el abono existente y no vuelva a cobrar al comprador.",
+  "catalog.returns.checkBankRefunds": "Comprobar reembolsos bancarios originales",
+  "catalog.returns.replaceBankConfirmation": "Autorizo reemplazar solo los reembolsos originales cuyo fallo se ha verificado.",
+  "catalog.returns.replaceBankRefunds": "Reemplazar reembolsos originales fallidos",
+  "catalog.saved.recoverReturnBankRefunds": "Reembolsos bancarios comprobados. La devolución queda abierta hasta confirmar cada parte.",
+  "catalog.saved.replaceReturnBankRefunds": "Reembolsos fallidos comprobados y reemplazos autorizados enviados.",
+  "catalog.customerReturns.bankReviewHelp": "Su pago original sigue pagado y su abono se conserva. Estamos comprobando el reembolso con el banco. No vuelva a pagar."
 }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // One registry export for the convergent money module (C5.02-C5.05).
 
+import legacyBankFeedbackServices from "./legacy-bank-feedback-service";
 import legacyBankReplacementServices from "./legacy-bank-replacement-service";
 import legacyBankReaderRecoveryServices from "./legacy-bank-reader-recovery";
 import legacyBankCurrentServices from "./legacy-bank-current-service";
@@ -65,6 +66,7 @@ export default [
   ...legacyBankCurrentServices,
   ...legacyBankReaderRecoveryServices,
   ...legacyBankReplacementServices,
+  ...legacyBankFeedbackServices,
   ...buyerMoneyErasureServices,
   ...originalRefundRepairServices,
   ...merchantRefundBasisServices,

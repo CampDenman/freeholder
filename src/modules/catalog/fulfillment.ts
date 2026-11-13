@@ -7,7 +7,7 @@
 // Digital lines never enter a carton. Returns restock through the ledger and
 // refund through the existing invoice.
 
-import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { registerContactReference } from "@/core/contacts/service";
@@ -15,6 +15,8 @@ import { registerContactPrivacySource } from "@/core/privacy/service";
 import {notifyCommerceContact} from "./return-notifications";
 import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
 import refundServices from "./return-refunds";
+import {legacyReturnBankPlan} from "./legacy-return-bank-recovery";
+export {recoverReturnBankRefunds,replaceReturnBankRefunds} from "./legacy-return-bank-recovery";
 import {returnDetail,returnRequestRow} from "./return-contract";
 export {refundReturn,submitReturnProviderRefund,prepareReturnRefund,getReturnRefundPlan,claimReturnProviderRefund,reconcileReturnProviderRefunds,onReturnRefundSucceeded,onReturnBankRefundStateChanged} from "./return-refunds";
 import {
@@ -663,7 +665,8 @@ export const getReturn = defineService({
     const [row] = await ctx.tx.select().from(returnRequests).where(eq(returnRequests.id, input.id)).limit(1);
     if (!row) throw new ServiceError("not_found", "That return is not here.");
     const items = await ctx.tx.select().from(returnItems).where(eq(returnItems.returnId, row.id));
-    return { return: row, items };
+    const bank = row.status === "refunded" ? await ctx.callAsSystem(legacyReturnBankPlan, { id: row.id }) : null;
+    return { return: bank?.participating && bank.needsReview ? { ...row, status: "received" as const } : row, items };
   },
 });
 
@@ -677,17 +680,19 @@ export const listReturns = defineService({
     status: z.enum(["requested", "approved", "received", "refunded", "rejected"]).optional(),
   }),
   output: listed(returnRequestRow),
-  handler: (input, ctx) => {
+  handler: async (input, ctx) => {
     const filters = [
       input.orderId ? eq(returnRequests.orderId, input.orderId) : undefined,
-      input.status ? eq(returnRequests.status, input.status) : undefined,
+      input.status ? input.status === "received" ? or(eq(returnRequests.status,"received"),eq(returnRequests.status,"refunded")) : eq(returnRequests.status, input.status) : undefined,
     ].filter((value): value is NonNullable<typeof value> => Boolean(value));
-    return ctx.tx
-      .select()
-      .from(returnRequests)
-      .where(filters.length ? and(...filters) : undefined)
-      .orderBy(desc(returnRequests.createdAt))
-      .limit(200);
+    const rows = await ctx.tx.select().from(returnRequests).where(filters.length ? and(...filters) : undefined).orderBy(desc(returnRequests.createdAt)).limit(200);
+    const result = [];
+    for (const row of rows) {
+      const bank = row.status === "refunded" ? await ctx.callAsSystem(legacyReturnBankPlan, { id: row.id }) : null;
+      const current = bank?.participating && bank.needsReview ? { ...row, status: "received" as const } : row;
+      if (!input.status || current.status === input.status) result.push(current);
+    }
+    return result;
   },
 });
 

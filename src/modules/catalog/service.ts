@@ -1048,12 +1048,14 @@ registerSearchSource({
 });
 
 import publicBookingServices from "./public-booking";
+import {legacyReturnBankRefundOwner} from "./legacy-return-bank-owner";
 import {originalMerchantReturnFeeSource} from "./merchant-return-fee-source";
 import customerReturnServices from "./customer-returns";
 export {myOrderReturns,requestMyReturn} from "./customer-returns";
 
 export default [
   originalMerchantReturnFeeSource,
+  legacyReturnBankRefundOwner,
   ...bookingCommercialSourceServices,
   ...marketServices,
   ...orderCommercialServices,
@@ -1091,4 +1093,5 @@ export default [
   ...storefrontServices,
 ];
 
+export { recoverReturnBankRefunds,replaceReturnBankRefunds } from "./legacy-return-bank-recovery";
 export { onReturnRefundSucceeded, onReturnBankRefundStateChanged } from "./fulfillment";

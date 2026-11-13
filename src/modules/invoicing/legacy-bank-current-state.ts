@@ -9,6 +9,8 @@ import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { refunds } from "./schema";
 import { legacyBankKnownRefundResources, originalLegacyBankRefund } from "./legacy-refund-dispatch";
 import { legacyBankCurrentReceipts, legacyBankReadFacts, legacyBankReadFinishes, legacyBankReads } from "./legacy-bank-read-schema";
+import { legacyBankFeedbackFinancialWitness } from "./legacy-bank-feedback-store";
+import { legacyBankFeedbackMatchesInventory } from "./legacy-bank-feedback-proof";
 import { legacyBankReplacementCapacity } from "./legacy-bank-replacement-store";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { legacyBankCurrentVerdict, type LegacyBankStatus } from "./legacy-bank-current-proof";
@@ -42,10 +44,19 @@ export const completeLegacyBankCurrentRead = defineService({
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment:${refund.paymentId}`}))`);
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`invoice:${refund.invoiceId}`}))`);
     const original = await originalLegacyBankRefund(ctx.tx, refund);
+    const feedback = await legacyBankFeedbackFinancialWitness(ctx.tx, [refund.id]);
     const [finish] = await ctx.tx.select().from(legacyBankReadFinishes).where(eq(legacyBankReadFinishes.readId, read.id));
     const facts = await ctx.tx.select().from(legacyBankReadFacts).where(eq(legacyBankReadFacts.readId, read.id)).orderBy(asc(legacyBankReadFacts.sequence)).limit(5006);
     const digest = createHash("sha256").update(facts.map(fact => fact.evidenceDigest).join(",")).digest("hex");
     const authenticFacts = facts.every(fact => merchantTaxDigest({ kind: fact.kind, value: fact.evidence }) === fact.evidenceDigest);
+    const finalCash = facts.filter(fact => fact.kind === "cash_inventory").at(-1)?.evidence.actual;
+    for (const entry of feedback) {
+      if (!legacyBankFeedbackMatchesInventory(entry.feedback.evidence, { originalPaymentRef: original.originalPaymentRef,
+        originalChargeAccountId: original.originalChargeAccountId,
+        readPlatformAccountId: facts.find(fact => fact.kind === "exact_refund")?.evidence.readProviderPlatformAccountId, cash: finalCash })) {
+        throw new ServiceError("conflict", "Retain the contradictory or not-yet-inventoried original signed feedback and restore its exact namespace/resource identity before current money; a fresh account or equal amount cannot adopt it.");
+      }
+    }
     const prior = await legacyBankCurrentRevision(ctx, refund.id, read.id);
     const inventory = await legacyBankKnownRefundResources(ctx.tx, refund.paymentId, original);
     const verdict = legacyBankCurrentVerdict({ original, knownRefunds: inventory.resources, allOriginalCallersFinished: inventory.allCallersFinished, authenticOriginal: authenticFacts && merchantTaxDigest(original) === read.originalDigest
@@ -72,7 +83,11 @@ export const completeLegacyBankCurrentRead = defineService({
  * logical succeeded row cannot stand in for an actual current bank receipt. */
 export async function legacyRefundBankState(ctx: ServiceContext, refundId: string) {
   const [read] = await ctx.tx.select({ id: legacyBankReads.id }).from(legacyBankReads).where(eq(legacyBankReads.refundId, refundId)).limit(1);
-  const empty = { hasRead: Boolean(read), verified: false, receiptId: null as string | null, status: null as LegacyBankStatus, requiresReview: Boolean(read), replacementEligible: false };
+  const [support] = await ctx.tx.execute<{ ready: boolean }>(sql`select to_regprocedure('public.freeholder_legacy_bank_feedback_review(uuid)') is not null ready`);
+  if (!support?.ready) throw new ServiceError("conflict", "Install the complete original RMA bank-feedback guard before reading current refund promises.");
+  const [feedback] = await ctx.tx.execute<{ active: boolean }>(sql`select freeholder_legacy_bank_feedback_review(${refundId}::uuid) active`);
+  const participates = Boolean(read) || feedback?.active === true;
+  const empty = { hasRead: Boolean(read), participates, verified: false, receiptId: null as string | null, status: null as LegacyBankStatus, requiresReview: participates, replacementEligible: false };
   if (!read) return empty;
   const [current] = await ctx.tx.execute<{ receipt_id: string; status: LegacyBankStatus; requires_review: boolean }>(sql`select * from freeholder_legacy_bank_current(${refundId}::uuid)`);
   if (!current) return empty;
@@ -87,5 +102,5 @@ export async function legacyRefundBankState(ctx: ServiceContext, refundId: strin
     if (error instanceof z.ZodError || error instanceof ServiceError && ["conflict", "not_found"].includes(error.code)) return empty;
     throw error;
   }
-  return { hasRead: true, verified: true, receiptId: current.receipt_id, status: current.status, requiresReview: current.requires_review, replacementEligible: receipt?.replacementEligible === true };
+  return { hasRead: true, participates: true, verified: true, receiptId: current.receipt_id, status: current.status, requiresReview: current.requires_review, replacementEligible: receipt?.replacementEligible === true };
 }

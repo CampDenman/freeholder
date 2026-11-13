@@ -1415,7 +1415,11 @@ async function projectVerifiedOriginalRefundBankState(ctx: ServiceContext, refun
 }) {
   const receiptId = state.receiptId;
   // An unknown status does not prove that earlier positive money came back.
-  if (state.status === null) return { applied: false, requiresReview: true, refundId: refund.id };
+  if (state.status === null) {
+    ctx.queueEvent("refund.bankStateChanged", { refundId: refund.id, paymentId: refund.paymentId, invoiceId: refund.invoiceId, receiptId, status: null });
+    ctx.setSubject("refund", refund.id);
+    return { applied: false, requiresReview: true, refundId: refund.id };
+  }
   const target = state.status === "succeeded" ? "succeeded" as const : state.status === "failed" || state.status === "canceled" ? "failed" as const : "processing" as const;
   await lock(ctx.tx, "payment", refund.paymentId);
   await lock(ctx.tx, "invoice", refund.invoiceId);

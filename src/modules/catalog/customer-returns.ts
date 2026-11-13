@@ -18,7 +18,7 @@ async function ownOrder(ctx:ServiceContext,orderId:string){
  return order;
 }
 const item=z.object({id,description:z.string(),quantity:z.number().int(),available:z.number().int().min(0)});
-const detail=z.object({id,status:z.enum(RETURN_STATUSES),reason:z.string(),labelUrl:z.string().nullable(),items:z.array(z.object({orderItemId:id,quantity:z.number().int()})),refund:z.object({amountMinor:z.number().int(),confirmedMinor:z.number().int(),currency:z.string()})});
+const detail=z.object({id,status:z.enum(RETURN_STATUSES),reason:z.string(),labelUrl:z.string().nullable(),items:z.array(z.object({orderItemId:id,quantity:z.number().int()})),refund:z.object({amountMinor:z.number().int(),confirmedMinor:z.number().int(),currency:z.string(),needsReview:z.boolean()})});
 export const myOrderReturns=defineService({
  name:"catalog.myOrderReturns",summary:"Your own order's returnable lines and return progress, without payment routing or other customers' data.",kind:"query",permission:"authenticated",input,
  output:z.object({orderId:id,canRequest:z.boolean(),items:z.array(item),returns:z.array(detail)}),
@@ -33,7 +33,7 @@ export const myOrderReturns=defineService({
    const plan=await ctx.callAsSystem(getReturnRefundPlan,{id:request.id});
    let labelUrl:string|null=null;
    if(request.labelUrl){try{const url=new URL(request.labelUrl);if(["https:","http:"].includes(url.protocol)&&!url.username&&!url.password)labelUrl=url.href;}catch{/* An unsafe historical label is never a customer link. */}}
-   result.push({id:request.id,status:request.status,reason:request.reason,labelUrl,items,refund:{amountMinor:plan.amountMinor,confirmedMinor:plan.offlineConfirmedMinor+plan.onlineConfirmedMinor,currency:order.currency}});
+   result.push({id:request.id,status:request.status==="refunded"&&plan.bankReview ? "received" as const : request.status,reason:request.reason,labelUrl,items,refund:{amountMinor:plan.amountMinor,confirmedMinor:plan.offlineConfirmedMinor+plan.onlineConfirmedMinor,currency:order.currency,needsReview:plan.bankReview}});
   }
   return {orderId:order.id,canRequest:["paid","fulfilling","fulfilled"].includes(order.status),items:lines.map(line=>({id:line.id,description:typeof line.snapshot.productName==="string"?line.snapshot.productName:line.variantId.slice(0,8),quantity:line.quantity,available:Math.max(0,line.quantity-allocated.filter(row=>row.orderItemId===line.id).reduce((n,row)=>n+row.quantity,0))})),returns:result};
  },

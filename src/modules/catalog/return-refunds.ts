@@ -1,6 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C5.19: immutable original-tender plans, actual provider refunds and human offline attestations.
+import legacyReturnBankServices, {legacyReturnBankPlan,recoverReturnBankRefunds} from "./legacy-return-bank-recovery";
+import {refundIsProvenUnsubmitted} from "@/modules/invoicing/legacy-refund-dispatch";
 import {createHash} from "node:crypto";
 import {and,eq,inArray,ne,sql} from "drizzle-orm";
 import {z} from "zod";
@@ -194,17 +196,18 @@ async function freeze(ctx:ServiceContext,input:z.infer<typeof operation>,lockFor
  return {...state,request:{...request,creditNoteId:credit.id},allocations,invoice:await ctx.callAsSystem(getInvoice,{id:invoice.invoice.id})};
 }
 
-export const refundPlanSummary=z.object({prepared:z.boolean(),available:z.boolean(),currency:z.string(),amountMinor:money,offlineMinor:money,onlineMinor:money,offlineConfirmedMinor:money,onlineConfirmedMinor:money});
+export const refundPlanSummary=z.object({prepared:z.boolean(),available:z.boolean(),currency:z.string(),amountMinor:money,offlineMinor:money,onlineMinor:money,offlineConfirmedMinor:money,onlineConfirmedMinor:money,bankReview:z.boolean(),canCheckBankRefunds:z.boolean(),canReplaceBankRefunds:z.boolean(),canResumeOriginalRefunds:z.boolean()});
 export const getReturnRefundPlan=defineService({
  name:"catalog.getReturnRefundPlan",summary:"Read masked original-payment totals for one return.",kind:"query",permission:"scoped",input:z.object({id}),output:refundPlanSummary,
  handler:async(input,ctx)=>{
   const {request,invoice}=await context(ctx,input.id);
   const allocations=await ctx.tx.select().from(returnRefundAllocations).where(eq(returnRefundAllocations.returnId,request.id));
   const credit=invoice.creditNotes.find(note=>note.id===request.creditNoteId);
-  const summary={prepared:allocations.length>0,available:request.status==="received" || request.status==="refunded",currency:invoice.invoice.currency,amountMinor:credit?.totalMinor??0,offlineMinor:0,onlineMinor:0,offlineConfirmedMinor:0,onlineConfirmedMinor:0};
+  const bank=await ctx.callAsSystem(legacyReturnBankPlan,{id:request.id});
+  const summary={bankReview:bank.participating&&bank.needsReview,canCheckBankRefunds:bank.canInspect,canReplaceBankRefunds:bank.replaceRefundIds.length>0,canResumeOriginalRefunds:bank.canResumeOriginal,prepared:allocations.length>0,available:request.status==="received" || request.status==="refunded",currency:invoice.invoice.currency,amountMinor:credit?.totalMinor??0,offlineMinor:0,onlineMinor:0,offlineConfirmedMinor:0,onlineConfirmedMinor:0};
   if(!allocations.length) return summary;
   for(const allocation of allocations){
-   const amount=total(assigned(invoice,request,allocation),refund=>refund.status==="succeeded");
+   const amount=bank.participating&&allocation.provider==="stripe" ? bank.parts.find(part=>part.allocationId===allocation.id)?.confirmedMinor??0 : total(assigned(invoice,request,allocation),refund=>refund.status==="succeeded");
    if(allocation.provider==="manual"){summary.offlineMinor+=allocation.amountMinor;summary.offlineConfirmedMinor+=amount;}
    else{summary.onlineMinor+=allocation.amountMinor;summary.onlineConfirmedMinor+=amount;}
   }
@@ -242,9 +245,13 @@ export const claimReturnProviderRefund=defineService({
  input:operation,output:z.object({invoiceId:id,attempts:z.array(attempt)}),
  handler:async(input,ctx)=>{
   const {request,invoice,allocations}=await freeze(ctx,input);
+  const bank=await ctx.callAsSystem(legacyReturnBankPlan,{id:request.id});
   const attempts: z.infer<typeof attempt>[]=[];
   if(request.status!=="refunded") for(const allocation of allocations.filter(part=>part.provider!=="manual")){
-   for(const refund of assigned(invoice,request,allocation).filter(row=>reserved(row.status))) attempts.push({paymentId:refund.paymentId,amountMinor:refund.amountMinor,reason:refund.reason??request.reason,idempotencyKey:refund.idempotencyKey,provider:allocation.provider,providerAccountId:allocation.providerAccountId,applicationFeeMinor:allocation.applicationFeeMinor,currency:allocation.currency});
+   for(const refund of assigned(invoice,request,allocation).filter(row=>reserved(row.status))){
+    if(bank.participating && !await refundIsProvenUnsubmitted(ctx.tx,refund)) continue;
+    attempts.push({paymentId:refund.paymentId,amountMinor:refund.amountMinor,reason:refund.reason??request.reason,idempotencyKey:refund.idempotencyKey,provider:allocation.provider,providerAccountId:allocation.providerAccountId,applicationFeeMinor:allocation.applicationFeeMinor,currency:allocation.currency});
+   }
   }
   return {invoiceId:invoice.invoice.id,attempts};
  },
@@ -262,6 +269,8 @@ export const reconcileReturnProviderRefunds=defineService({
    const credit=invoice.creditNotes.find(note=>note.id===request.creditNoteId);
    if(!credit || credit.status==="void") throw new ServiceError("conflict","The return credit needs reconciliation before it can close.");
    const allocations=await ctx.tx.select().from(returnRefundAllocations).where(eq(returnRefundAllocations.returnId,request.id));
+   const bank=await ctx.callAsSystem(legacyReturnBankPlan,{id:request.id});
+   if(bank.participating&&bank.needsReview) continue;
    if(!allocations.length){
     for(const part of legacyPlan(request,invoice,credit.totalMinor)){
      const source=await original(ctx,invoice,part.paymentId);
@@ -300,6 +309,8 @@ export const submitReturnProviderRefund=defineOrchestratedService({
  name:"catalog.submitReturnProviderRefund",summary:"Refund only the frozen original online portions of a received return.",kind:"mutation",permission:"scoped",stepUp:true,agentCallable:false,writeClass:"money",input:operation,output:returnDetail,
  handler:async(input,caller)=>{
   const system={kind:"system",request:caller.request} as const;
+  const bank=await legacyReturnBankPlan.call({id:input.id},system);
+  if(bank.participating&&bank.needsReview&&!bank.canResumeOriginal) throw new ServiceError("conflict","Check the exact original bank refunds and explicitly confirm any original-part replacements; do not create another return credit or ordinary refund generation.");
   const claimed=await claimReturnProviderRefund.call(input,caller);
   for(const attempt of claimed.attempts){
    const source=await providerPaymentSource.call({paymentId:attempt.paymentId},system);
@@ -308,6 +319,7 @@ export const submitReturnProviderRefund=defineOrchestratedService({
    if(attempt.provider==="balance") await refundCustomerBalancePayment.call(request,system);
    else await submitProviderRefund.call(request,system);
   }
+  if(bank.participating) return recoverReturnBankRefunds.call({id:input.id},caller);
   await reconcileReturnProviderRefunds.call({invoiceId:claimed.invoiceId},system);
   return getReturn.call({id:input.id},system);
  },
@@ -343,5 +355,5 @@ export const reconcileReturnBankRefundState=defineService({
  },
 });
 export async function onReturnBankRefundStateChanged(payload:unknown):Promise<void>{const input=z.object({invoiceId:id,refundId:id}).parse(payload);await reconcileReturnBankRefundState.call(input,{kind:"system"});}
-export default [getReturnRefundPlan,prepareReturnRefund,refundReturn,claimReturnProviderRefund,reconcileReturnProviderRefunds,submitReturnProviderRefund,reconcileReturnBankRefundState];
+export default [getReturnRefundPlan,prepareReturnRefund,refundReturn,claimReturnProviderRefund,reconcileReturnProviderRefunds,submitReturnProviderRefund,reconcileReturnBankRefundState,...legacyReturnBankServices];
 

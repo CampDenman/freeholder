@@ -27,7 +27,7 @@ export function paymentWebhookRoute(provider: HostedPaymentProviderId) {
         resolveSubscriptionScope: (input: SubscriptionProviderScopeInput) => resolveSubscriptionProviderScope(provider, input),
         onSubscriptionChargeObserved: (event: PaymentProviderEvent) => observeSubscriptionProviderCharge(provider, event) };
       const verified = await paymentAdapter(provider).verifyWebhook(verificationRequest);
-      const events = await retainPaymentProviderEvidence(provider, verified);
+      const events = await retainPaymentProviderEvidence(provider, verified, { rawBodySha256: createHash("sha256").update(body).digest("hex"), receivedAt });
       const result = await processPaymentProviderEvents.call(
         {
           provider,
