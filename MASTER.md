@@ -3923,8 +3923,9 @@ reading chat logs.
   rollback cases now pass on ce/955: both late-reader controls complete and
   minimize500 entries; both named-hold controls protect and then delete raw
   originals. Held final receipts remain retained/partial with500 unminimized
-  entries/one marker and no task after release; same-request resume and its
-  final index/receipt completion remain open. Remaining public authority/cancellation/recovery, live
+  entries/one marker and no task after release. Those old partial receipts
+  remain terminal; the actual new-request evidence below finishes cleanup
+  while preserving them. Remaining public authority/cancellation/recovery, live
   API/MCP/SDK/browser/provider and wider privacy/restore acceptance remain open;
   no account or stable sign-off follows.
 
@@ -3946,8 +3947,11 @@ reading chat logs.
   original500minimized, oldpartial/intactretainedreceipt unchanged, new exact
   capture/job/completedreceipt, later501+bytes unchanged and no second DELETE;
   UTC/fsyncON/jitOFF/journal/PGclient drain pass after each. Four prepared
-  negative cases and final combined/API/MCP/SDK/browser/provider acceptance
-  remain UNRUN; no C-item/stable completion claim follows. See
+  other-subject/corrupted-receipt negatives now also pass individually for
+  WXR/ZIP (7.383/7.505/7.326/7.083s), preserving exact oldartifact/capture,
+  private500 and newcapture/task/artifact0 with independent full82/profile/
+  drain after each. Final combined/API/MCP/SDK/browser/provider acceptance
+  remains UNRUN; no C-item/stable completion claim follows. See
   `deploy/import-held-original-new-request-2026-11-13.md`.
 
   Reopened 2026-11-12 (C1.08/C3.47): an actual current270 control
