@@ -9,7 +9,7 @@ import type { MerchantControlledProrationPreviewRequest } from "./merchant-contr
 const ref=(value:unknown)=>text(value)??text(object(value)?.id);
 function unproven():never{throw new AdapterError("payments","stripe","provider_failure","The actual original paused provider calendar, component price or current read changed. Retain its facts and review fresh consent before mutating or collecting.",true);}
 const time=(value:unknown)=>typeof value==="number"&&Number.isSafeInteger(value)&&value>=0&&value<=8640000000000?new Date(value*1000).toISOString():null;
-export function assertControlledCurrent(request:MerchantControlledProrationPreviewRequest,current:Record<string,unknown>){
+export function assertControlledCurrent(request:Omit<MerchantControlledProrationPreviewRequest,"onObserved">,current:Record<string,unknown>){
  assertMerchantIntent(request,current);
  const tag=object(current.metadata),items=object(current.items),trial=current.trial_end===null?null:time(current.trial_end);
  if(!["active","trialing"].includes(String(current.status))||current.schedule!==null||current.cancel_at!==null||current.cancel_at_period_end!==false

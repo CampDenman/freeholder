@@ -13,7 +13,7 @@ import { subscriptionControlledResources,subscriptionControlledOperations,subscr
 import { controlledProviderJournal } from "./controlled-provider-proof";
 import { controlledFinancialReadiness,controlledWorkNeedsParentReadiness } from "./controlled-provider-readiness";
 import { requireControlledProviderSchema } from "./controlled-provider-source";
-const kind=z.enum(["bootstrap","discover_bootstrap","read_bootstrap","pause_drafts","read_invoice","list_invoices","read_calendar","cancel_calendar","create_product","read_product"]);
+const kind=z.enum(["bootstrap","discover_bootstrap","read_bootstrap","pause_drafts","read_invoice","read_customer_financials","list_invoices","read_calendar","cancel_calendar","create_product","read_product"]);
 const input=z.object({resourceId:z.uuid(),kind,providerInvoiceRef:z.string().regex(/^in_[A-Za-z0-9_]+$/).max(200).optional()}).strict();
 const ref=(value:unknown)=>typeof value==="string"?value:value&&typeof value==="object"&&"id"in value&&typeof value.id==="string"?value.id:undefined;
 export const planControlledProviderOperation=defineService({name:"subscriptions.planControlledProviderOperation",summary:"Freeze a next exact zero-only preparation or independent financial read from genuine original resource facts before its actual caller is admitted.",
@@ -78,7 +78,7 @@ export const planControlledProviderOperation=defineService({name:"subscriptions.
   if(history.count>=5000)throw new ServiceError("conflict","The complete original controlled history exceeds its bounded admission capacity.");
   const id=randomUUID(),ordinal=(history.operations.at(-1)?.ordinal??0)+1,idempotencyKey=request.kind==="bootstrap"?`controlled:${resource.id}:bootstrap`:`controlled:${resource.id}:${request.kind}:${id}`;
   const parentReadiness=controlledWorkNeedsParentReadiness(request.kind)?await controlledFinancialReadiness(ctx,resource.subscriptionId):null;
-  const originalRequest=JSON.parse(JSON.stringify({scopeDigest:merchantTaxDigest(resource.originalScope),payload,parentFinancialRevision:parentReadiness?.revision??null}));
+  const originalRequest=z.record(z.string(),z.unknown()).parse(JSON.parse(JSON.stringify({scopeDigest:merchantTaxDigest(resource.originalScope),payload,parentFinancialRevision:parentReadiness?.revision??null})));
   await ctx.tx.execute(sql`select set_config('freeholder.controlled_provider_v1','1',true)`);
   await ctx.tx.insert(subscriptionControlledOperations).values({id,resourceId:resource.id,kind:request.kind,ordinal,originalRequest,requestDigest:merchantTaxDigest(originalRequest),idempotencyKey,
    previousEvidenceRevision:history.revision,acceptedQuoteDigest:terms.acceptedQuoteDigest});

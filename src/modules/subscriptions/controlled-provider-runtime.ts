@@ -13,11 +13,13 @@ import { controlledCashEvidence } from "./controlled-provider-cash-origin";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { subscriptionControlledResources,subscriptionControlledOperations,subscriptionControlledCalls,subscriptionControlledFacts,subscriptionControlledFinishes,subscriptionControlledStops } from "./controlled-provider-schema";
 import { controlledProviderJournal,CONTROLLED_CALL_PURPOSE,originalControlledCall,finishedControlledCall } from "./controlled-provider-proof";
-import { controlledFinancialReadiness,controlledWorkNeedsParentReadiness } from "./controlled-provider-readiness";
+import { controlledFinancialReadiness,controlledWorkNeedsParentReadiness,controlledCollectionReadiness,controlledWorkNeedsCollectionReadiness } from "./controlled-provider-readiness";
 import { requireControlledProviderSchema } from "./controlled-provider-source";
+import { controlledTargetFinancialAuthority,controlledTargetOperationKind } from "./controlled-provider-target-authority";
 import { signProviderReadProof } from "./provider-read-signatures";
 const digest=(nonce:string)=>createHash("sha256").update(nonce).digest("hex");
 type Actual=MerchantControlledObservation;
+function isOriginalRecord(value:unknown):value is Record<string,unknown>{return value!==null&&typeof value==="object"&&!Array.isArray(value);}
 type Held={operationId:string;nonce:string;invoked:boolean;completed:boolean;actualResult?:Record<string,unknown>;facts:Map<number,{id:string;actual:Actual}>};
 const slot=Symbol.for("freeholder.controlled-provider.original-callers.v1");
 const runtime=globalThis as typeof globalThis&{[slot]?:Map<string,Held>};
@@ -52,9 +54,18 @@ export const claimControlledProviderCall=defineService({name:"subscriptions.clai
   if(history.closures.length||!last||last.id!==source.operation.id||history.unfinished.length||history.calls.some(call=>call.operationId===source.operation.id))throw new ServiceError("conflict","Recover every actual original caller and its bank result first. A stale operation or previously admitted physical invocation cannot be dispatched again.");
   const before={operations:history.operations.filter(row=>row.id!==source.operation.id),calls:history.calls,facts:history.facts,finishes:history.finishes,stops:history.stops,verifications:history.verifications,chargeOrigins:history.chargeOrigins,closures:history.closures};
   if(merchantTaxDigest(before)!==source.operation.previousEvidenceRevision)throw new ServiceError("conflict","The exact original money/caller observation revision changed before admission. Review its actual current source.");
-  if(controlledWorkNeedsParentReadiness(source.operation.kind)){
-   const parent=await controlledFinancialReadiness(ctx,source.resource.subscriptionId,source.operation.id);
+  if(controlledWorkNeedsCollectionReadiness(source.operation.kind)&&source.operation.originalRequest.requiredProtocol!=="controlled_net_gross.v1")throw new ServiceError("conflict","The controlled canonical-target request must bind its exact expanded financial protocol before admission.");
+  if(controlledWorkNeedsParentReadiness(source.operation.kind)||controlledWorkNeedsCollectionReadiness(source.operation.kind)){
+   const parent=controlledWorkNeedsCollectionReadiness(source.operation.kind)?await controlledCollectionReadiness(ctx,source.resource.subscriptionId,source.operation.id):await controlledFinancialReadiness(ctx,source.resource.subscriptionId,source.operation.id);
    if(parent.revision!==source.operation.originalRequest.parentFinancialRevision)throw new ServiceError("conflict","The original parent financial namespace or complete witness changed before physical admission. Retain the old intent and review its actual current source.");
+  }
+  const targetKind=controlledTargetOperationKind.safeParse(source.operation.kind);
+  if(targetKind.success){
+   const payload=z.record(z.string(),z.unknown()).parse(source.operation.originalRequest.payload),manifest=z.object({collectionId:z.uuid()}).safeParse(payload.manifest);
+   const collectionId=source.operation.kind==="update_calendar"?z.uuid().parse(payload.collectionId):manifest.success?manifest.data.collectionId:null;
+   if(!collectionId)throw new ServiceError("conflict","Bind this physical operation to its exact immutable canonical collection, never an arbitrary provider payload.");
+   const target=await controlledTargetFinancialAuthority(ctx,collectionId,targetKind.data,source.operation.id);
+   if(target.revision!==source.operation.originalRequest.targetFinancialRevision)throw new ServiceError("conflict","The complete original target money/caller/disposition changed before actual admission; retain and freshly review its current source.");
   }
   const[allowed]=await ctx.tx.execute<{allowed:boolean}>(sql`select freeholder_controlled_operation_admissible(${source.operation.id}::uuid) as allowed`);
   if(allowed?.allowed!==true)throw new ServiceError("conflict","This actual original controlled operation lacks its required current consent, deadline, cash disposition or prior bank proof.");
@@ -121,7 +132,9 @@ export async function withControlledProviderCall<T>(operationId:string,actor:Act
  await flushControlledProviderFinishes(operationId);
  const system={kind:"system",request:actor.request} as const,claim=await claimControlledProviderCall.call({operationId},system);
  const local:Held={operationId,nonce:claim.nonce,invoked:true,completed:false,facts:new Map()};held.set(claim.callId,local);
- const observe=async(actual:Actual)=>{const ordinal=local.facts.size+1;local.facts.set(ordinal,{id:randomUUID(),actual:JSON.parse(JSON.stringify(actual))});
+ const observe=async(actual:Actual)=>{const ordinal=local.facts.size+1,snapshot:unknown=JSON.parse(JSON.stringify(actual));
+  if(!isOriginalRecord(snapshot)||snapshot.kind!==actual.kind||!isOriginalRecord(snapshot.raw))throw new ServiceError("conflict","Preserve this original SDK observation as its complete unchanged JSON object.");
+  const retained:Actual={...snapshot,kind:actual.kind,raw:snapshot.raw};local.facts.set(ordinal,{id:randomUUID(),actual:retained});
   await retainControlledProviderFact.call({callId:claim.callId,nonce:claim.nonce,ordinal},system);
   // A separate committed transaction deliberately follows the raw occurrence.
   // Bridge/domain refusal cannot roll that authentic positive fact back.

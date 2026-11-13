@@ -11,7 +11,7 @@ function scope(){return{providerApiVersion:"2026-10-28.endive" as const,provider
 describe("birth-safe controlled provider transport",()=>{
  it("creates only an explicit zero item with atomic default_incomplete, retaining real ACK before interpretation and never rewriting accepted trial/anchor",async()=>{
   let form:URLSearchParams|undefined;const observed:unknown[]=[];
-  const fetcher=vi.fn<typeof fetch>(async(input,init={})=>{const url=new URL(String(input));expect(url.origin).toBe("https://stripe.example.test");
+  const fetcher=vi.fn<typeof fetch>(async(input,init={})=>{const url=new URL(input instanceof Request?input.url:input instanceof URL?input.href:input);expect(url.origin).toBe("https://stripe.example.test");
    if(url.pathname==="/v1/account")return Response.json({id:"acct_originalPlatform"});
    expect(new Headers(init.headers).get("stripe-version")).toBe("2026-10-28.endive");expect(new Headers(init.headers).has("stripe-account")).toBe(false);
    expect(url.pathname).toBe("/v1/subscriptions");expect(init.method).toBe("POST");form=new URLSearchParams(init.body as URLSearchParams);
@@ -33,7 +33,7 @@ describe("birth-safe controlled provider transport",()=>{
    transfer_data:{destination:accepted.destinationAccountId},on_behalf_of:accepted.settlementMerchantAccountId,
    items:{has_more:false,data:[{id:"si_originalControlled",quantity:1,tax_rates:[],current_period_start:1793491200,current_period_end:1796083200,
     price:{id:"price_originalZero",product:accepted.providerProductRef,currency:"cad",unit_amount:0,unit_amount_decimal:"0",billing_scheme:"per_unit",type:"recurring",transform_quantity:null,tax_behavior:"exclusive",recurring:{interval:"month",interval_count:1,usage_type:"licensed"}}}]}};
-  const fetcher=vi.fn<typeof fetch>(async(input,init={})=>{const url=new URL(String(input));if(url.pathname==="/v1/account")return Response.json({id:accepted.providerPlatformAccountId});
+  const fetcher=vi.fn<typeof fetch>(async(input,init={})=>{const url=new URL(input instanceof Request?input.url:input instanceof URL?input.href:input);if(url.pathname==="/v1/account")return Response.json({id:accepted.providerPlatformAccountId});
    if(init.method==="POST"){expect(new URLSearchParams(init.body as URLSearchParams).get("pause_collection[behavior]")).toBe("keep_as_draft");return Response.json({...value,pause_collection:{behavior:"keep_as_draft",resumes_at:null}});}
    return Response.json(value);});
   const provider=createStripePayments({secretKey:"sk_declared_controlled_fixture",apiBase:"https://stripe.example.test",fetch:fetcher});
@@ -44,7 +44,7 @@ describe("birth-safe controlled provider transport",()=>{
   expect(observed).toHaveLength(2);expect(observed[0]).toMatchObject({kind:"pause_subscription"});expect(observed[1]).toMatchObject({kind:"subscription_read",raw:{pause_collection:null}});
  });
  it("retains an unexpected positive raw bootstrap response before refusing its unproved identity",async()=>{
-  const retained:unknown[]=[];const fetcher=vi.fn<typeof fetch>(async input=>new URL(String(input)).pathname==="/v1/account"?Response.json({id:"acct_originalPlatform"}):Response.json({id:"unexpected-resource",latest_invoice:{id:"in_actualUnexpected",total:500,status:"open",auto_advance:false}}));
+  const retained:unknown[]=[];const fetcher=vi.fn<typeof fetch>(async input=>new URL(input instanceof Request?input.url:input instanceof URL?input.href:input).pathname==="/v1/account"?Response.json({id:"acct_originalPlatform"}):Response.json({id:"unexpected-resource",latest_invoice:{id:"in_actualUnexpected",total:500,status:"open",auto_advance:false}}));
   const provider=createStripePayments({secretKey:"sk_declared_controlled_fixture",apiBase:"https://stripe.example.test",fetch:fetcher});
   await expect(provider.createMerchantControlledBootstrap!({...scope(),operationId:randomUUID(),requestDigest:"c".repeat(64),idempotencyKey:"declared-original-bootstrap",onObserved:async actual=>{retained.push(actual);}})).rejects.toThrow();
   expect(retained).toMatchObject([{kind:"bootstrap_subscription",raw:{latest_invoice:{total:500,auto_advance:false}}}]);

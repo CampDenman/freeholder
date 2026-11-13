@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 import { translator } from "@/core/i18n";
 import { Button,Card,CardBody,CardHeader,Field,Input,Pill } from "@/ui/primitives";
-import { controlledProviderRecoveryPlan,controlledProviderResourceStatus,CONTROLLED_PROVIDER_STOP_CONFIRMATION } from "@/modules/subscriptions/controlled-provider-stop";
+import { type controlledProviderRecoveryPlan,type controlledProviderResourceStatus,CONTROLLED_PROVIDER_STOP_CONFIRMATION } from "@/modules/subscriptions/controlled-provider-stop";
 import { reviewControlledProviderStopAction,recoverControlledProviderOperationAction,recoverControlledProviderCalendarAction,stopControlledProviderCalendarAction,closeControlledZeroProviderResourceAction } from "../controlled-provider-actions";
 type Calls=Awaited<ReturnType<typeof controlledProviderRecoveryPlan.call>>;
 type Resources=Awaited<ReturnType<typeof controlledProviderResourceStatus.call>>;
-const recoverable=new Set(["bootstrap","discover_bootstrap","read_bootstrap","pause_drafts","read_invoice","read_calendar","cancel_calendar","list_invoices"]);
+const recoverable=new Set(["bootstrap","discover_bootstrap","read_bootstrap","pause_drafts","read_invoice","read_customer_financials","read_calendar","cancel_calendar","list_invoices"]);
 export function ControlledProviderRecovery({subscriptionId,calls,resources,locale,moneyRecovery=false}:{subscriptionId:string;calls:Calls;resources:Resources;locale:string;moneyRecovery?:boolean}){
  const t=translator(locale);if(!resources.length)return null;const closedIds=new Set(resources.filter(row=>row.closed).map(row=>row.resourceId));
  return <Card><CardHeader title={t("subscriptions.controlled.title")}/><CardBody><p className="mb-4 text-sm text-ink-muted">{t("subscriptions.controlled.intro")}</p>

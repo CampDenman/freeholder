@@ -5,12 +5,22 @@ import type { controlledProviderJournal } from "./controlled-provider-proof";
 type Journal=Awaited<ReturnType<typeof controlledProviderJournal>>;
 const record=(value:unknown):Record<string,unknown>|null=>value!==null&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:null;
 const ref=(value:unknown)=>typeof value==="string"?value:typeof record(value)?.id==="string"?String(record(value)!.id):null;
-const safeKinds=new Set(["bootstrap","discover_bootstrap","read_bootstrap","pause_drafts","read_invoice","read_calendar","list_invoices","cancel_calendar","create_product","read_product"]);
+const safeKinds=new Set(["bootstrap","discover_bootstrap","read_bootstrap","pause_drafts","read_invoice","read_customer_financials","preview_proration","preview_update","read_calendar","list_invoices","cancel_calendar","create_product","read_product"]);
 /** This bounded policy closes only a genuinely canceled ZERO transport. It is
  * deliberately not the later positive-money applied/returned closure policy. */
-export function controlledZeroTransportProof(history:Journal,currency:string){
+export function controlledZeroTransportProof(history:Journal,currency:string,originalCustomerRef?:string){
  if(history.unfinished.length||history.closures.length||history.chargeOrigins.length||history.operations.some(row=>!safeKinds.has(row.kind))||history.operations.filter(row=>row.kind==="bootstrap").length!==1)return null;
  const operation=(id:string)=>history.operations.find(row=>row.id===id);
+ const customerReads=history.operations.filter(row=>row.kind==="read_customer_financials");
+ if(customerReads.length&&(!originalCustomerRef||!history.verifications.some(row=>operation(row.operationId)?.kind==="read_customer_financials"&&row.actualResult.balanceState==="known_zero"&&row.actualResult.completeCreditNotes===true)))return null;
+ for(const fact of history.facts){const raw=fact.actual.raw;
+  if(fact.actual.kind==="customer_financial_read"){
+   const cash=record(raw.cash_balance),available=record(cash?.available),credit=record(raw.invoice_credit_balance);
+   if(raw.id!==originalCustomerRef||raw.currency!==null&&raw.currency!==currency.toLowerCase()||raw.balance!==0||!credit||Object.values(credit).some(value=>value!==0)
+    ||raw.cash_balance!==null&&(!cash||ref(cash.customer)!==originalCustomerRef||!available||Object.values(available).some(value=>value!==0)))return null;
+  }
+  if(fact.actual.kind==="customer_credit_notes_read"&&(!Array.isArray(raw.data)||raw.data.some(value=>{const note=record(value);return!note||note.status==="issued"&&note.amount!==0;})))return null;
+ }
  const read=history.verifications.filter(row=>operation(row.operationId)?.kind==="read_calendar"&&row.actualResult.calendarCanceled===true).at(-1);
  const list=history.verifications.filter(row=>operation(row.operationId)?.kind==="list_invoices").at(-1);
  if(!read||!list||operation(list.operationId)!.ordinal<=operation(read.operationId)!.ordinal||list.actualResult.complete!==true

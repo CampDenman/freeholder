@@ -20,6 +20,8 @@ import { stripeMerchantRecovery } from "./stripe-merchant-recovery";
 import { stripeMerchantIntentRecovery } from "./stripe-merchant-intent-recovery";
 import { stripeReturnedCash } from "./stripe-returned-cash";
 import { stripeMerchantRefundRecovery } from "./stripe-merchant-refund-recovery";
+import { stripeControlledCollections } from "./stripe-controlled-collection";
+import { stripeControlledCustomerFinancials } from "./stripe-controlled-customer-financials";
 import { stripeControlledCalendarRecovery } from "./stripe-controlled-calendar-recovery";
 import { stripeControlledUpdates } from "./stripe-controlled-update";
 import { stripeControlledDiscovery } from "./stripe-controlled-discovery";
@@ -452,6 +454,8 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     ...stripeControlledDiscovery(chargeApi),
     ...stripeControlledUpdates(chargeApi),
     ...stripeControlledCalendarRecovery(chargeApi),
+    ...stripeControlledCustomerFinancials(chargeApi),
+    ...stripeControlledCollections(chargeApi),
     ...stripeMerchantFees(chargeApi),
     ...stripeCashAuxiliary(chargeApi),
     ...stripeMerchantRecovery(chargeApi),

@@ -28,7 +28,7 @@ export async function controlledProviderCoverage(tx:Tx,input:{subscriptionId:str
   for(const operation of history.operations)if(operation.acceptedQuoteDigest!==terms.acceptedQuoteDigest||operation.originalRequest.scopeDigest!==merchantTaxDigest(resource.originalScope))refuse();
   for(const closure of history.closures){
    const previous={...history,closures:[],count:history.count-history.closures.length,revision:merchantTaxDigest({operations:history.operations,calls:history.calls,facts:history.facts,finishes:history.finishes,stops:history.stops,verifications:history.verifications,chargeOrigins:history.chargeOrigins,closures:[]})};
-   const actual=controlledZeroTransportProof(previous,resource.originalScope.currency);
+   const actual=controlledZeroTransportProof(previous,resource.originalScope.currency,resource.originalScope.providerCustomerRef);
    if(!actual||closure.kind!=="zero_transport"||closure.originalEvidenceRevision!==previous.revision||merchantTaxDigest(actual)!==closure.proofDigest)refuse();
   }
   for(const call of history.calls)if(history.unfinished.includes(call.id)){const operation=history.operations.find(row=>row.id===call.operationId);if(!operation)refuse();unfinishedCalls.push({resourceId:resource.id,operationId:operation.id,callId:call.id,kind:operation.kind});}
