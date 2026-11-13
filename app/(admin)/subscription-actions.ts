@@ -108,11 +108,16 @@ export async function subscribeAction(form: FormData): Promise<void> {
 
 export async function changePlanAction(form: FormData): Promise<void> {
   const caller = await actor();
+  let awaitingPayment = false;
+  let invoiceId: string | null = null;
   try {
-    await changePlan.call({ id: text(form, "id"), planId: text(form, "planId") }, caller);
+    const result = await changePlan.call({ id: text(form, "id"), planId: text(form, "planId") }, caller);
+    awaitingPayment = result.awaitingPayment;
+    invoiceId = result.invoiceId;
   } catch (error) {
     done(error);
   }
+  if (awaitingPayment) redirect(`/admin/subscriptions?awaiting=1${invoiceId ? `&invoice=${encodeURIComponent(invoiceId)}` : ""}`);
   done(undefined, "changed");
 }
 

@@ -6113,6 +6113,8 @@
   "subscriptions.changePlan.choose": "Passer à un autre forfait",
   "subscriptions.changePlan.pending": "Passe à {plan} en fin de période",
   "subscriptions.changed": "Forfait mis à jour.",
+  "subscriptions.awaitingPayment": "Le changement d’offre attend le paiement intégral. La période déjà payée ne change pas.",
+  "subscriptions.prorationInvoice": "Voir la facture du changement d’offre",
   "subscriptions.confirmCancel": "Oui, résilier cet abonnement.",
   "subscriptions.dunning.accessUntil": "Accès jusqu’au {date}",
   "subscriptions.dunning.action.cancel": "Le résilier tout de suite",

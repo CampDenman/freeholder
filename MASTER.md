@@ -4760,6 +4760,19 @@ project without silent telemetry, and ready to carry money.
   inside the seed scope runs outside it; fails without the change),
   `tests/core/audit-labels.test.ts` (hidden-row break, "+" at the limit).
 
+  Fixture target-switch proof 2026-11-13: an actual resident producer poll
+  reopened the old cached database target while the test helper awaited pool
+  close. A deterministic CREATE-only nonce probe on0e/888 failed15.289s at
+  runtime namespace selection; direct physical production contained zero
+  visitor graffiti. The helper now stops the producer, joins reconciliation
+  and closes before synchronously changing env/cache. The byte-identical
+  probe first passes12.747s on new targets; independent post-cleanup11-table
+  hashes/full journals/schema prove both BEFORE targets unchanged and all
+  clients drained. This qualifies fixture lifecycle, not a production leak
+  claim, independent review or stable sign-off. Exact evidence and limits:
+  `deploy/playground-database-switch-2026-11-13.md`.
+
+
 - [x] **C1.39** Simplify owner protection and assistant authorization: private
   fragment claim links, passkey-first enrollment within setup, downloadable
   recovery codes, passwordless passkey sign-in with a separate once-only
@@ -10978,6 +10991,20 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   `billing.ts`. **F09** Apache-2.0 SPDX on the new files. **F12** live
   provider settlement is C11.05, same honesty as C5.25 — user-facing copy
   is changeset `subscription-billing.md`. EN/FR/ES.)
+  Paid-access repair 2026-11-13 (C9.33/C11.10): unchanged published-main
+  product source reproduced an owner upgrade that activated the new plan and
+  grant while its4500 difference invoice remained unpaid. The same financial
+  oracle passes after requiring exact full issued-invoice payment before a
+  non-provider plan switch; partial payment preserves original access and
+  calendar. Seven existing plan-change regressions also pass. Full types,
+  whole lint,47 nonempty source files/398 actual assertions and84 explicit
+  database skips pass; independent after-ledger verifies two paid invoices,
+  three payments and an active upgraded grant, all80 published journal hashes,
+  unchanged eight-table BEFORE digests and drained clients. Owner UI has a
+  translated pending-payment notice and exact invoice link in all four locales.
+  This bounded repair changes no schema and does not supply full commercial
+  proration/provider, browser, independent-review or stable acceptance. See
+  `deploy/subscription-paid-access-2026-11-13.md`.
 - [x] **C10.01** Enforce customization seams—database, plugins, configuration,
   uploads—and detect unsupported live core-file modifications.
   (`src/core/update/seams.ts` names the four owner seams; core paths are

@@ -4,6 +4,9 @@
 // that the disposable playground is separated from a production database by
 // construction, and that the hourly reset recovers a clean, signed-out,
 // reseeded playground.
+import { randomUUID } from "node:crypto";
+import * as coreDatabase from "@/core/db";
+import { reconcileJobDeploymentAdmission, startJobProducer, stopJobs } from "@/core/jobs";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
@@ -612,11 +615,27 @@ describe.runIf(hasDatabase)("disposable playground", () => {
 const originalDatabaseUrl = process.env.DATABASE_URL ?? "";
 const clusterAdminUrl = originalDatabaseUrl.replace(/\/[^/]+$/, "/postgres");
 
+// Each separation run owns fresh names; preserved earlier proof databases
+// are never dropped or reused by this test's setup or cleanup.
+const separationNonce = randomUUID().replaceAll("-", "").slice(0, 12);
+const separationDatabases = {
+  prod: `playground_sep_prod_c138_${separationNonce}`,
+  play: `playground_sep_play_c138_${separationNonce}`,
+  reset: `playground_sep_reset_c138_${separationNonce}`,
+};
+const createdSeparationDatabases = new Set<string>();
+function assertSeparationDatabase(name: string): void {
+  if (!Object.values(separationDatabases).includes(name)) throw new Error("Use only this run's owned separation database names.");
+}
+
 async function freshDatabase(name: string): Promise<string> {
+  assertSeparationDatabase(name);
   const admin = postgres(clusterAdminUrl, { max: 1, onnotice: () => {} });
   try {
-    await admin.unsafe(`drop database if exists ${name} with (force)`);
+    const existing = await admin`select datname from pg_database where datname=${name}`;
+    if (existing.length) throw new Error("Preserve an existing separation database; setup must create a fresh target.");
     await admin.unsafe(`create database ${name}`);
+    createdSeparationDatabases.add(name);
   } finally {
     await admin.end();
   }
@@ -631,9 +650,12 @@ async function freshDatabase(name: string): Promise<string> {
 }
 
 async function dropDatabase(name: string): Promise<void> {
+  assertSeparationDatabase(name);
+  if (!createdSeparationDatabases.has(name)) return;
   const admin = postgres(clusterAdminUrl, { max: 1, onnotice: () => {} });
   try {
     await admin.unsafe(`drop database if exists ${name} with (force)`);
+    createdSeparationDatabases.delete(name);
   } finally {
     await admin.end();
   }
@@ -641,8 +663,10 @@ async function dropDatabase(name: string): Promise<void> {
 
 /** Point the runtime's lazy database singleton at another database. */
 async function pointAt(url: string): Promise<void> {
-  process.env.DATABASE_URL = url;
+  await stopJobs();
+  await reconcileJobDeploymentAdmission();
   await closeDb();
+  process.env.DATABASE_URL = url;
   resetEnvForTests();
 }
 
@@ -662,17 +686,17 @@ describe.runIf(hasDatabase)("playground separation and reset recovery", () => {
   afterAll(async () => {
     vi.unstubAllEnvs();
     await pointAt(originalDatabaseUrl);
-    await dropDatabase("playground_sep_prod_c138");
-    await dropDatabase("playground_sep_play_c138");
-    await dropDatabase("playground_sep_reset_c138");
+    await dropDatabase(separationDatabases.prod);
+    await dropDatabase(separationDatabases.play);
+    await dropDatabase(separationDatabases.reset);
     await closeSpineDb();
   }, 120_000);
 
   it("runs on its own database and never converts or sees production data", async () => {
     vi.stubEnv("FREEHOLDER_PLAYGROUND", "1");
     resetEnvForTests();
-    const prodUrl = await freshDatabase("playground_sep_prod_c138");
-    const playUrl = await freshDatabase("playground_sep_play_c138");
+    const prodUrl = await freshDatabase(separationDatabases.prod);
+    const playUrl = await freshDatabase(separationDatabases.play);
     expect(playUrl).not.toBe(prodUrl);
 
     // A production-shaped database: a real owner account and real content.
@@ -715,7 +739,7 @@ describe.runIf(hasDatabase)("playground separation and reset recovery", () => {
     vi.stubEnv("FREEHOLDER_PLAYGROUND", "1");
     vi.stubEnv("FREEHOLDER_SEED_DEMO", "1");
     resetEnvForTests();
-    const playUrl = await freshDatabase("playground_sep_reset_c138");
+    const playUrl = await freshDatabase(separationDatabases.reset);
     await pointAt(playUrl);
     await initializePlayground();
     const seeded = await seedDemoIfRequested();
@@ -734,9 +758,11 @@ describe.runIf(hasDatabase)("playground separation and reset recovery", () => {
     // The reset job (deploy/docker-selfhost/playground/reset.sh, hourly via
     // systemd timer) recreates the disposable database and lets the ordinary
     // boot phases re-run. Simulate that cycle against a fresh database.
+    await stopJobs();
+    await reconcileJobDeploymentAdmission();
     await closeDb();
-    await dropDatabase("playground_sep_reset_c138");
-    const resetUrl = await freshDatabase("playground_sep_reset_c138");
+    await dropDatabase(separationDatabases.reset);
+    const resetUrl = await freshDatabase(separationDatabases.reset);
     await pointAt(resetUrl);
     await initializePlayground();
     const reseeded = await seedDemoIfRequested();
@@ -757,4 +783,101 @@ describe.runIf(hasDatabase)("playground separation and reset recovery", () => {
     // after the reset like everything else.
     expect(reseeded.status === "installed" && reseeded.busy?.crm?.contacts).toBeGreaterThanOrEqual(150);
   }, 300_000);
+});
+
+
+// C1.38: deterministic fixture-target probe. Every database below is new and
+// nonce-named; preserved historical playground_sep_* databases are untouched.
+// The close spy gates the actual operation and returns no fabricated DB value.
+describe.runIf(hasDatabase)("actual playground producer poll target switch", () => {
+  it("keeps the requested database through an actual producer poll during close", async () => {
+    const nonce = randomUUID().replaceAll("-", "").slice(0, 12);
+    const prodName = `freeholder_switch_prod79_${nonce}`, playName = `freeholder_switch_play79_${nonce}`;
+    const urls: string[] = [];
+    let prodClient: ReturnType<typeof postgres> | undefined, playClient: ReturnType<typeof postgres> | undefined;
+    let releaseClose: (() => void) | undefined, switching: Promise<void> | undefined;
+    const actualClose = coreDatabase.closeDb;
+    const createNew = async (name: string) => {
+      if (!/^freeholder_switch_(prod|play)79_[a-f0-9]{12}$/.test(name)) throw new Error("Use only a new nonce-named switch-probe database.");
+      const admin = postgres(clusterAdminUrl, { max: 1, onnotice: () => {} });
+      try {
+        const existing = await admin`select datname from pg_database where datname=${name}`;
+        if (existing.length) throw new Error("A switch-probe target already exists; preserve it without drop, reset or reuse.");
+        await admin.unsafe(`CREATE DATABASE "${name}"`);
+      } finally { await admin.end(); }
+      const url = originalDatabaseUrl.replace(/\/[^/]+$/, `/${name}`); urls.push(url);
+      const client = postgres(url, { max: 1, onnotice: () => {}, connection: { TimeZone: "UTC" } });
+      try { await migrate(drizzle(client), { migrationsFolder: "db/migrations" }); }
+      finally { await client.end(); }
+      return url;
+    };
+    try {
+      await ready();
+      // Initial setup drains the actual producer before selecting this probe's
+      // play database. This setup is not the original pointAt under test.
+      await stopJobs(); await reconcileJobDeploymentAdmission(); await actualClose();
+      const prodUrl = await createNew(prodName), playUrl = await createNew(playName);
+      prodClient = postgres(prodUrl, { max: 1, onnotice: () => {}, connection: { TimeZone: "UTC" } });
+      playClient = postgres(playUrl, { max: 1, onnotice: () => {}, connection: { TimeZone: "UTC" } });
+      const production = drizzle(prodClient);
+      await production.insert(users).values({ email: "fictional-switch-owner@example.test", role: "owner", passwordHash: "synthetic-owner-fixture" });
+      const [sentinel] = await production.insert(pages).values({ slug: "original-production-sentinel", title: "Original production sentinel" }).returning({ id: pages.id });
+      process.env.DATABASE_URL = playUrl; vi.stubEnv("FREEHOLDER_PLAYGROUND", "1"); resetEnvForTests();
+      await initializePlayground();
+      const issued = await enterPlayground.call({}, ANONYMOUS);
+      const session = await db().transaction(tx => validateSession(tx, issued.token));
+      if (!session) throw new Error("The actual playground visitor session is unavailable.");
+      const visitor = { kind: "user" as const, userId: session.userId, role: session.role, grants: session.grants };
+      const graffiti = await createPage.call({ slug: "actual-switch-visitor-graffiti", title: "Actual switch visitor graffiti" }, visitor);
+      expect((await db().execute<{ name: string }>(sql`select current_database() name`))[0]?.name).toBe(playName);
+      expect(await startJobProducer()).toBeDefined();
+      // Every mutation actually started the producer. dispatchNow has already
+      // drained; the separate deployment poll/heartbeat remain resident.
+      let closed!: () => void;
+      const closeReached = new Promise<void>(resolve => { closed = resolve; });
+      const resume = new Promise<void>(resolve => { releaseClose = resolve; });
+      vi.spyOn(coreDatabase, "closeDb").mockImplementation(async () => {
+        await actualClose(); closed(); await resume;
+      });
+      switching = pointAt(prodUrl);
+      expect(await Promise.race([closeReached.then(() => "closed"), switching.then(() => "ended")])).toBe("closed");
+      // Join a possible already-running poll, then force one fresh real poll.
+      // With the safe helper, producer shutdown makes both calls no-ops.
+      // With the old helper, cached old env can reopen the old core pool.
+      await reconcileJobDeploymentAdmission(); await reconcileJobDeploymentAdmission();
+      if (!releaseClose) throw new Error("The actual completed-close gate is unavailable.");
+      releaseClose(); await switching;
+      const coreSelected = (await db().execute<{ name: string }>(sql`select current_database() name`))[0]?.name;
+      const coreGraffiti = await db().select({ id: pages.id }).from(pages).where(eq(pages.id, graffiti.id));
+      const directProd = await prodClient`select current_database() name,count(*)::int pages,count(*) filter(where id=${graffiti.id}::uuid)::int graffiti,count(*) filter(where id=${sentinel!.id}::uuid)::int sentinel from pages`;
+      const directPlay = await playClient`select current_database() name,count(*)::int pages,count(*) filter(where id=${graffiti.id}::uuid)::int graffiti,count(*) filter(where id=${sentinel!.id}::uuid)::int sentinel from pages`;
+      const prodJournal = await prodClient`select count(*)::int entries,max(created_at)::text latest from drizzle.__drizzle_migrations`;
+      const playJournal = await playClient`select count(*)::int entries,max(created_at)::text latest from drizzle.__drizzle_migrations`;
+      const evidence = { prodName, playName, coreSelected, coreGraffitiCount: coreGraffiti.length, directProd, directPlay, prodJournal, playJournal,
+        gate: "actual core close completed; actual deployment reconcile forced before original helper continued", preserved: "both new populated databases; no drop or reset" };
+      console.log("PLAYGROUND_SWITCH_PROBE_EVIDENCE", JSON.stringify(evidence));
+      // These assertions distinguish the runtime pool target from actual
+      // physical cross-database writes. No product-leak inference is assumed.
+      expect(directProd[0]).toMatchObject({ name: prodName, pages: 1, graffiti: 0, sentinel: 1 });
+      expect(directPlay[0]).toMatchObject({ name: playName, pages: 1, graffiti: 1, sentinel: 0 });
+      expect(prodJournal).toMatchObject([{ entries: 80, latest: "1793310000059" }]);
+      expect(playJournal).toMatchObject([{ entries: 80, latest: "1793310000059" }]);
+      expect(coreSelected).toBe(prodName); expect(coreGraffiti).toHaveLength(0);
+    } finally {
+      releaseClose?.(); await switching?.catch(() => {}); vi.restoreAllMocks();
+      // Close the actual runtime against its current target before restoring
+      // the harness env; do not move an old runtime's last pulse to another DB.
+      await stopJobs(); await reconcileJobDeploymentAdmission(); await actualClose();
+      await prodClient?.end(); await playClient?.end();
+      vi.unstubAllEnvs(); process.env.DATABASE_URL = originalDatabaseUrl; resetEnvForTests();
+      // The direct post-cleanup stamp is intentionally later than the forced
+      // interleaving. It proves final client drain, not that earlier timing.
+      const admin = postgres(clusterAdminUrl, { max: 1, onnotice: () => {} });
+      try {
+        const active = await admin`select datname,state from pg_stat_activity where datname in (${prodName},${playName})`;
+        console.log("PLAYGROUND_SWITCH_PROBE_FINAL_DRAIN", JSON.stringify({ prodName, playName, created: urls.length, active }));
+        expect(active).toHaveLength(0);
+      } finally { await admin.end(); }
+    }
+  }, 60000);
 });
