@@ -13970,6 +13970,17 @@ whatever is best for the people using the site.
   upgrade/SDK/browser/provider acceptance remain required; model admission is
   still closed. Exact limits:
   `deploy/current-commercial80-source-2026-11-13.md`.
+  Actual phase-producer repair 2026-11-13 (C12.38): test-only3ea on c189
+  genuinely failed5.776s after an actual original schedule ACK and returned
+  caller, because the real adapter DTO lacks the core projection version.
+  Source135f normalizes version1 internally; actual fixture and SQL stay byte
+  unchanged. Types/lint/38 affected phase assertions plus one explicit native
+  skip and metadata gates pass. NEW V16 normal0–80 passes6.028s/all81 hashes;
+  unchanged producer oracle passes7.144s. Independent active-resource/caller/
+  inventory and zero-cash checks pass, with NULL linked subscription preserved.
+  Original failed V15 operation/resource digests and full journal recheck
+  unchanged. Actual account/stop/recovery/amendment/future-invoice acceptance
+  remain required; model admission and stable remain closed.
   Original bank-refund current-state isolated draft 2026-11-12: source now
   retains repeated capture occurrences, exact original-resource read/finish
   receipts, nullable/action/failure-balance facts and current cash projections.

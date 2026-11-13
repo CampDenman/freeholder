@@ -119,3 +119,34 @@ amendments, future invoice lineage, SDK/browser/populated upgrade and actual
 provider acceptance remain required. Old V12/V13/V14 and all populated/golden
 databases are preserved. No model admission, stable release or C-item closure
 is supplied by these bounded source/migration/native proofs.
+
+## Actual provider phase producer: unchanged failure and repair
+
+C12.38 source review found that the actual Stripe adapter inventory has no
+internal projection version, while the retained core schema requires version1.
+Test-only66149178 was composed on current financial3ea01742 with producer
+teardown joined before pool closure. It calls actual quote, subscribe, product
+and phase services and the real HTTP factory. Synthetic responses derive from
+actual POST forms; no subscription, terms, operation, nonce or money history is
+fabricated, and the adapter result never adds version1.
+
+The unchanged verified=true oracle genuinely failed5.776s on V15/c189.
+Independent read-only checks confirm one confirmed product, one original
+schedule ACK and actual returned caller, no verified inventory, unknown
+resource/recovery=true and zero invoices/payments/refunds/charge receipts.
+Failed V15 remains preserved; no database clone or full-row export exists.
+
+The sole product correction normalizes the internal version before parsing
+the actual result. Source135f47d7 passes full types, affected lint,38 phase
+assertions and one explicit native skip, plus license/notes/plan; changelog631.
+The original native fixture and all migration bytes remain unchanged.
+NEW V16 ordinary0–80 passes6.028s with all81 source journal hashes and UTC,
+fsync-on/jit-off. The UNCHANGED oracle then passes7.144s (10.580s runner).
+Independent checks confirm actual ACK/returned finish/retained inventory and
+active resource, preserving its original customer and NULL linked subscription
+without inventing cash. All clients drain. Original V15 operation/resource
+digests, complete81-entry journal and zero financial counts recheck unchanged.
+
+This proves the real producer consumes its real adapter DTO. Actual account
+acceptance, phase-stop/recovery cash-fault controls, amendments and future
+invoice lineage remain required; stable and C12.38 remain open.
