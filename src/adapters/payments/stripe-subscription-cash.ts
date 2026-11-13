@@ -96,7 +96,8 @@ export async function collectOriginalStripeSubscriptionCash(api: StripeSubscript
     if (zeroInvoice && allocationProven) {
       if (!scope.providerScheduleOperationId) return [];
       const evidence = await inspectStripeSubscriptionPeriod(api, scope, invoice, originalSubscriptionInvoiceMetadata(invoice));
-      return [{ ...base, ...scope, kind: "subscription_period_paid", amountMinor: 0, currency: text(invoice.currency)?.toUpperCase(), paymentProviderRef: undefined,
+      const { paymentProviderRef: _paymentProviderRef, subscriptionChargeReceiptId: _subscriptionChargeReceiptId, ...zeroInvoiceBase } = base;
+      return [{ ...zeroInvoiceBase, ...scope, kind: "subscription_period_paid", amountMinor: 0, currency: text(invoice.currency)?.toUpperCase(),
         subscriptionInvoiceEvidence: evidence, ...(evidence.lines.length === 1 && evidence.lines[0]?.periodStart && evidence.lines[0].periodEnd ? { periodStart: evidence.lines[0].periodStart, periodEnd: evidence.lines[0].periodEnd } : {}) }];
     }
     if (base.kind === "subscription_period_failed") return [{ ...base, ...scope, ...period(invoice) }];

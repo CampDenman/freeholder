@@ -26,7 +26,7 @@ import { merchantAgreementScheduleState } from "./merchant-agreement-schedule-st
 import { invoices } from "@/modules/invoicing/schema";
 import { originalQuiescenceMembers } from "./provider-quiescence-authority";
 import { assertOriginalPhaseFinancials } from "./provider-phase-dispatch";
-import { selfServePlans, planSeller } from "./service";
+import { selfServePlans, planSeller } from "./plan-access";
 
 export const AMENDMENT_JOB = "subscriptions.activateMerchantAmendment";
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
