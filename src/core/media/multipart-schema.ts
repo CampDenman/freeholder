@@ -6,6 +6,7 @@ import {bigint,check,index,jsonb,pgTable,text,timestamp,uniqueIndex,uuid} from "
 import {contacts} from "@/core/contacts/schema";
 import {createdAtColumn,updatedAtColumn} from "@/core/db/columns";
 import type {MultipartPart} from "@/adapters/storage/types";
+import type {MultipartCreateBaseline} from "./multipart-create-baseline-proof";
 import {mediaObjectWrites} from "./write-schema";
 
 export const MULTIPART_STATES=["unverified","creating","open","completing","completed","aborting","aborted","unknown"]as const;
@@ -40,6 +41,8 @@ export const mediaMultipartOperations=pgTable("media_multipart_operations",{
  writerRuntimeId:uuid("writer_runtime_id"),writerFinishedAt:timestamp("writer_finished_at",{withTimezone:true}),
  providerAcceptedAt:timestamp("provider_accepted_at",{withTimezone:true}),verifiedAt:timestamp("verified_at",{withTimezone:true}),
  observedProviderUploadId:text("observed_provider_upload_id"),
+ // No default/backfill: legacy CREATEs never acquire a present-day baseline.
+ createBaseline:jsonb("create_baseline").$type<MultipartCreateBaseline>(),
  reviewedAt:timestamp("reviewed_at",{withTimezone:true}),reviewedBy:text("reviewed_by"),evidenceDigest:text("evidence_digest"),
  createdAt:createdAtColumn(),updatedAt:updatedAtColumn(),
 },t=>[
@@ -48,4 +51,5 @@ export const mediaMultipartOperations=pgTable("media_multipart_operations",{
  check("media_multipart_operation_kind",sql`${t.kind} in ('create','complete','abort')`),
  check("media_multipart_operation_state",sql`${t.state} in ('started','accepted','unknown','not_applied')`),
  check("media_multipart_parts_digest",sql`${t.partsDigest} is null or ${t.partsDigest} ~ '^[a-f0-9]{64}$'`),
+ check("media_multipart_create_baseline",sql`${t.createBaseline} is null or (${t.kind} = 'create' and jsonb_typeof(${t.createBaseline}) = 'object' and ${t.createBaseline}->>'format' = 'original-multipart-create-baseline/v1' and ${t.createBaseline}->>'state' in ('capturing','complete') and jsonb_typeof(${t.createBaseline}->'pages') = 'array') is true`),
 ]);

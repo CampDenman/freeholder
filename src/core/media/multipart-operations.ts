@@ -21,6 +21,8 @@ import {mediaMultipartOperations,mediaMultipartResources} from "./multipart-sche
 import {allowMediaReceiptWrites,lockObjectDigest,objectKeyDigest,storageOperationsHeld} from "./write-ledger";
 import {captureMediaErasureCohort,originalMediaErasureRequests} from "./erasure-cohorts";
 import {assertOriginalUploadWritable} from "./upload-ownership";
+import {newMultipartCreateBaseline} from "./multipart-create-baseline-proof";
+import {captureMultipartCreateBaseline} from "./multipart-create-baseline";
 
 type Resource=typeof mediaMultipartResources.$inferSelect;
 type Upload=typeof mediaUploads.$inferSelect;
@@ -37,7 +39,8 @@ export async function reserveMultipart(ctx:ServiceContext,upload:Upload,binding:
  if(!pointer?.reservationId||pointer.uploadId!==upload.id)conflict("The exact new multipart reservation has no original birth witness.");
  const[resource]=await ctx.tx.insert(mediaMultipartResources).values({originalReservationId:pointer.reservationId,uploadId:upload.id,key:upload.storageKey,keyDigest:objectKeyDigest(upload.storageKey),namespace:binding.namespace,storageKind:binding.kind,storageLocation:{...binding.location},contentType:upload.declaredMime,expectedBytes:upload.expectedBytes,actor:actorString(ctx.actor),contactId:upload.ownerContactId,state:"creating"}).returning();
  const[operation]=await ctx.tx.insert(mediaMultipartOperations).values({resourceId:resource!.id,kind:"create",state:"started",writerRuntimeId:mediaWriterRuntimeId,actor:actorString(ctx.actor)}).returning();
- await admitOriginalMultipartCaller(ctx.tx,operation!.id,"multipart_create",ctx.actor);
+ const caller=await admitOriginalMultipartCaller(ctx.tx,operation!.id,"multipart_create",ctx.actor);
+ await ctx.tx.update(mediaMultipartOperations).set({createBaseline:newMultipartCreateBaseline({callId:caller.id,namespace:binding.namespace,keyDigest:resource!.keyDigest})}).where(eq(mediaMultipartOperations.id,operation!.id));
  return operation!.id;
 }
 
@@ -120,6 +123,7 @@ export async function createOriginalMultipart(uploadId:string,operationId:string
  try{captured=await originalMultipart(uploadId);}catch(error){await retainOriginalMediaCallerReturn(caller.id,caller.token,{notAttempted:true});await notAttempted(operationId);throw error;}
  let acknowledged=false,observedId:string|undefined;
  try{
+  await captureMultipartCreateBaseline(operationId,captured.binding);
   const result=await withTransferRequestScope({callId:caller.id,token:caller.token,runtimeIdentity:caller.runtimeIdentity},()=>captured.store.directMultipart!.create(captured.resource.key,captured.resource.contentType,{request:observeTransferRequest,onAccepted:async result=>{acknowledged=true;observedId=result?.uploadId;if(!observedId)conflict();await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,uploadId:observedId});}}));
   acknowledged=true;observedId=result.uploadId;
   if(!(await retainOriginalMediaCallerReturn(caller.id,caller.token,{accepted:true,providerUploadId:observedId})).settled)conflict();

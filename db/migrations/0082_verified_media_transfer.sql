@@ -1842,3 +1842,77 @@ BEGIN
 END $$;
 --> statement-breakpoint
 CREATE TRIGGER member_sealed_original BEFORE INSERT OR UPDATE OR DELETE ON member_sealed_blobs FOR EACH ROW EXECUTE FUNCTION freeholder_member_sealed_original_guard();
+--> statement-breakpoint
+-- C1.12/C11.08: NEW tracked CREATE pre-dispatch baseline only. Nullable and no
+-- DEFAULT: populated legacy admissions retain NULL forever, even on update.
+ALTER TABLE media_multipart_operations ADD COLUMN create_baseline jsonb;
+--> statement-breakpoint
+ALTER TABLE media_multipart_operations ADD CONSTRAINT media_multipart_create_baseline CHECK(create_baseline IS NULL OR (operation_kind='create' AND jsonb_typeof(create_baseline)='object' AND create_baseline->>'format'='original-multipart-create-baseline/v1' AND create_baseline->>'state' IN ('capturing','complete') AND jsonb_typeof(create_baseline->'pages')='array') IS TRUE);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_baseline_next(baseline jsonb) RETURNS jsonb LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE pass_number integer; page_kind text; last_page jsonb;
+BEGIN
+ FOR pass_number IN 0..1 LOOP
+  FOREACH page_kind IN ARRAY ARRAY['configuration','objects','versions','sessions'] LOOP
+   SELECT page INTO last_page FROM jsonb_array_elements(baseline->'pages') WITH ORDINALITY AS entry(page,ordinal) WHERE page->>'pass'=pass_number::text AND page->>'kind'=page_kind ORDER BY ordinal DESC LIMIT 1;
+   IF last_page IS NULL THEN RETURN jsonb_build_object('pass',pass_number,'kind',page_kind,'cursorDigest',freeholder_media_transfer_fact_digest('null'::jsonb)); END IF;
+   IF last_page->'nextCursorDigest'<>'null'::jsonb THEN RETURN jsonb_build_object('pass',pass_number,'kind',page_kind,'cursorDigest',last_page->'nextCursorDigest'); END IF;
+  END LOOP;
+ END LOOP;
+ RETURN NULL;
+END $$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_baseline_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE baseline jsonb; original_baseline jsonb; actual media_storage_transfer_calls; resource media_multipart_resources; physical media_storage_transfer_requests; page jsonb; expected jsonb; result_text text; result jsonb; old_count integer; new_count integer;
+BEGIN
+ IF TG_TABLE_NAME='media_storage_transfer_requests' THEN
+  SELECT * INTO actual FROM media_storage_transfer_calls WHERE id=NEW.call_id;
+  IF actual.kind<>'multipart_create' AND NEW.descriptor->>'kind'<>'multipart.create' THEN RETURN NEW; END IF;
+  SELECT operation.create_baseline INTO baseline FROM media_multipart_operations operation WHERE operation.id=actual.multipart_operation_id AND operation.operation_kind='create';
+  SELECT * INTO resource FROM media_multipart_resources WHERE id=(SELECT resource_id FROM media_multipart_operations WHERE id=actual.multipart_operation_id);
+  IF NEW.descriptor->>'kind' IN ('bucket.metadata','inventory.objects','inventory.versions','inventory.sessions','inventory.retained') THEN
+   expected:=freeholder_media_multipart_baseline_next(baseline);
+   IF baseline IS NULL OR baseline->>'state'<>'capturing' OR baseline->>'callId' IS DISTINCT FROM actual.id::text OR expected IS NULL OR NEW.descriptor->>'kind' IS DISTINCT FROM (CASE WHEN expected->>'kind'='configuration' THEN 'bucket.metadata' ELSE 'inventory.'||(expected->>'kind') END) OR to_jsonb(freeholder_media_transfer_fact_digest(coalesce(NEW.descriptor->'cursor','null'::jsonb))) IS DISTINCT FROM expected->'cursorDigest' OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=actual.id AND (request.descriptor->>'kind' IN ('object.put','object.delete','multipart.create','multipart.complete','multipart.abort') OR request.descriptor->>'kind'=NEW.descriptor->>'kind' AND coalesce(request.descriptor->'cursor','null'::jsonb)=coalesce(NEW.descriptor->'cursor','null'::jsonb) AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(baseline->'pages') prior WHERE prior->>'requestId'=request.id::text))) THEN RAISE EXCEPTION 'Only the exact next original first-baseline page may dispatch, once before CREATE' USING ERRCODE='23514'; END IF;
+   RETURN NEW;
+  END IF;
+  IF NEW.descriptor->>'kind'<>'multipart.create' THEN RETURN NEW; END IF;
+  IF actual.kind<>'multipart_create' OR actual.state<>'admitted' OR baseline IS NULL OR baseline->>'state'<>'complete' OR baseline->>'callId' IS DISTINCT FROM actual.id::text OR baseline->>'namespace' IS DISTINCT FROM actual.namespace OR baseline->>'keyDigest' IS DISTINCT FROM resource.key_digest OR freeholder_media_multipart_baseline_next(baseline) IS NOT NULL THEN RAISE EXCEPTION 'The single actual original CREATE requires its exact complete first baseline' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+ END IF;
+ IF TG_OP='INSERT' THEN
+  IF NEW.create_baseline IS NOT NULL THEN RAISE EXCEPTION 'Original baseline binds only after its genuine same-transaction caller admission' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+ END IF;
+ IF NEW.create_baseline IS NOT DISTINCT FROM OLD.create_baseline THEN RETURN NEW; END IF;
+ baseline:=NEW.create_baseline; original_baseline:=OLD.create_baseline;
+ SELECT * INTO resource FROM media_multipart_resources WHERE id=NEW.resource_id;
+ SELECT * INTO actual FROM media_storage_transfer_calls WHERE multipart_operation_id=NEW.id AND kind='multipart_create';
+ IF baseline IS NULL OR NEW.operation_kind<>'create' OR actual.id IS NULL OR actual.state<>'admitted' OR actual.returned_at IS NOT NULL OR NEW.writer_finished_at IS NOT NULL OR resource.original_reservation_id IS NULL OR resource.redacted_at IS NOT NULL OR actual.namespace IS DISTINCT FROM resource.storage_namespace OR baseline->>'callId' IS DISTINCT FROM actual.id::text OR baseline->>'namespace' IS DISTINCT FROM actual.namespace OR baseline->>'keyDigest' IS DISTINCT FROM resource.key_digest OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=actual.id AND request.descriptor->>'kind' IN ('object.put','object.delete','multipart.create','multipart.complete','multipart.abort')) THEN RAISE EXCEPTION 'An earlier or dispatched CREATE cannot acquire, replace or refill a first baseline' USING ERRCODE='23514'; END IF;
+ IF original_baseline IS NULL THEN
+  IF NEW.created_at<>transaction_timestamp() OR actual.created_at<>transaction_timestamp() OR NEW.state<>'started' OR NEW.provider_accepted_at IS NOT NULL OR baseline IS DISTINCT FROM jsonb_build_object('format','original-multipart-create-baseline/v1','callId',actual.id,'namespace',actual.namespace,'keyDigest',resource.key_digest,'state','capturing','pages','[]'::jsonb) THEN RAISE EXCEPTION 'Never backfill historical multipart birth from current inventory' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+ END IF;
+ IF original_baseline->>'state'<>'capturing' OR (baseline-'pages'-'state') IS DISTINCT FROM (original_baseline-'pages'-'state') THEN RAISE EXCEPTION 'The first complete baseline and its original identity are immutable' USING ERRCODE='23514'; END IF;
+ old_count:=jsonb_array_length(original_baseline->'pages');new_count:=jsonb_array_length(baseline->'pages');expected:=freeholder_media_multipart_baseline_next(original_baseline);
+ IF baseline->>'state'='complete' THEN
+  IF expected IS NOT NULL OR baseline->'pages' IS DISTINCT FROM original_baseline->'pages' THEN RAISE EXCEPTION 'Both complete original provider passes must precede baseline seal' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+ END IF;
+ IF baseline->>'state'<>'capturing' OR new_count<>old_count+1 OR new_count>8000 OR (baseline->'pages'-(new_count-1)) IS DISTINCT FROM original_baseline->'pages' OR expected IS NULL THEN RAISE EXCEPTION 'Append each exact original pre-dispatch page once in order' USING ERRCODE='23514'; END IF;
+ page:=baseline->'pages'->(new_count-1);
+ IF jsonb_build_object('pass',page->'pass','kind',page->'kind','cursorDigest',page->'cursorDigest') IS DISTINCT FROM expected OR (page-ARRAY['pass','kind','cursorDigest','nextCursorDigest','requestId','resultDigest','count','configuration'])<>'{}'::jsonb OR jsonb_typeof(page->'count') IS DISTINCT FROM 'number' OR coalesce(page->>'resultDigest','') !~ '^[a-f0-9]{64}$' OR coalesce(page->>'count','') !~ '^[0-9]+$' OR EXISTS(SELECT 1 FROM jsonb_array_elements(original_baseline->'pages') prior WHERE prior->>'requestId'=page->>'requestId') THEN RAISE EXCEPTION 'Original page cursor, role and physical request identity must match' USING ERRCODE='23514'; END IF;
+ SELECT * INTO physical FROM media_storage_transfer_requests WHERE id=(page->>'requestId')::uuid;
+ result_text:=current_setting('freeholder.media_multipart_baseline_result_v1',true);
+ IF physical.id IS NULL OR physical.call_id<>actual.id OR physical.state<>'returned' OR physical.returned_at IS NULL OR physical.descriptor->'binding'->>'namespace'<>actual.namespace OR physical.descriptor->>'kind' IS DISTINCT FROM (CASE WHEN page->>'kind'='configuration' THEN 'bucket.metadata' ELSE 'inventory.'||(page->>'kind') END) OR to_jsonb(freeholder_media_transfer_fact_digest(coalesce(physical.descriptor->'cursor','null'::jsonb))) IS DISTINCT FROM page->'cursorDigest' OR result_text IS NULL OR octet_length(result_text)>4194304 OR encode(sha256(convert_to(result_text,'UTF8')),'hex')<>page->>'resultDigest' OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=physical.id AND fact.facts->>'stage'=(CASE WHEN page->>'kind'='configuration' THEN 'configuration' ELSE 'inventory' END) AND fact.facts->>'detailDigest'=page->>'resultDigest') OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=physical.id AND fact.facts->>'stage'='inventory_raw' AND fact.facts->>'detailDigest' ~ '^[a-f0-9]{64}$') THEN RAISE EXCEPTION 'Retain the actual finished original page and its exact parsed result before first-baseline application' USING ERRCODE='23514'; END IF;
+ result:=result_text::jsonb;
+ IF page->>'kind'='configuration' THEN
+  IF result IS DISTINCT FROM page->'configuration' OR coalesce(result->>'versioning','') NOT IN ('disabled','Enabled','Suspended') OR coalesce(result->>'softDeleteSeconds','') !~ '^[0-9]+$' OR coalesce(result->>'retentionSeconds','') !~ '^[0-9]+$' OR page->'nextCursorDigest' IS DISTINCT FROM 'null'::jsonb OR page->>'count'<>'0' OR page->>'pass'='1' AND result IS DISTINCT FROM original_baseline->'pages'->0->'configuration' THEN RAISE EXCEPTION 'Both complete first-baseline passes need the same actual namespace policy' USING ERRCODE='23514'; END IF;
+ ELSE
+  IF jsonb_typeof(result->'entries') IS DISTINCT FROM 'array' OR jsonb_array_length(result->'entries')<>(page->>'count')::integer OR (page->>'count')::integer>1000 OR (CASE WHEN result->'next'='null'::jsonb THEN 'null'::jsonb ELSE to_jsonb(freeholder_media_transfer_fact_digest(result->'next')) END) IS DISTINCT FROM page->'nextCursorDigest' OR page ? 'configuration' OR EXISTS(SELECT 1 FROM jsonb_array_elements(result->'entries') entry WHERE entry->>'key'=resource.object_key OR entry->>'key' IS NULL OR coalesce(entry->>'bytes','') !~ '^[0-9]+$' OR coalesce(entry->>'kind','') NOT IN ((CASE WHEN page->>'kind'='objects' THEN 'object' WHEN page->>'kind'='sessions' THEN 'session' ELSE 'version' END),(CASE WHEN page->>'kind'='versions' THEN 'delete_marker' ELSE '' END))) OR page->'nextCursorDigest'<>'null'::jsonb AND ((page->>'count')::integer=0 OR page->'nextCursorDigest'=page->'cursorDigest' OR EXISTS(SELECT 1 FROM jsonb_array_elements(original_baseline->'pages') prior WHERE prior->'pass'=page->'pass' AND prior->'kind'=page->'kind' AND prior->'cursorDigest'=page->'nextCursorDigest')) THEN RAISE EXCEPTION 'Existing original bytes, retained versions, sessions or incomplete cursors forbid a new CREATE over that key' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_create_baseline BEFORE INSERT OR UPDATE ON media_multipart_operations FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_baseline_guard();
+--> statement-breakpoint
+CREATE TRIGGER media_physical_create_baseline BEFORE INSERT ON media_storage_transfer_requests FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_baseline_guard();
