@@ -14,6 +14,7 @@ import { readFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isPinned, resolveEdgeImage } from "./image.js";
+import { namespaceOriginInstallation } from "./namespace-origin.js";
 import { SpacesClient } from "./s3.js";
 import { claimLink, generateSecrets, Redactor } from "./secrets.js";
 import { readEnv, readState, siteDirectory, writeEnv, writeState } from "./state.js";
@@ -138,7 +139,7 @@ export async function runLaunch(options: LaunchOptions, deps: LaunchDeps): Promi
     }
     await finish("secrets", `Secrets generated and written to ${envPath} (mode 600).`);
 
-    if (pending("spaces")) await deps.provider.storage(options, state, save);
+    if (pending("spaces")) await deps.provider.storage(options, state, save, join(dir, "namespace-origin"));
     await finish("spaces", `Storage ready: ${state.buckets!.media} and ${state.buckets!.backups} (versioned), with a key scoped to just those two.`);
 
     const userData = await readFile(join(recipeDirectory(), "cloud-init.yml"), "utf8");
@@ -161,6 +162,19 @@ export async function runLaunch(options: LaunchOptions, deps: LaunchDeps): Promi
       const recipe = recipeDirectory();
       await remote.upload(["compose.yml", "Caddyfile", "backup.sh"].map((f) => ({ local: join(recipe, f), remote: `/opt/freeholder/${f}` })));
       await remote.writeFile("/opt/freeholder/.env", (await readFile(envPath, "utf8")), "600");
+      if (state.namespaceOrigin) {
+        const origin = await namespaceOriginInstallation(join(dir, "namespace-origin"), state.dropletId!);
+        // Private independent trust, never owner claim/API/CREDENTIAL keys.
+        // Prepare before app startup. The consuming initialization/write fence
+        // must be completed before activating the full storage protocol.
+        const prepared = await remote.run("install -d -m 750 -o root -g 1001 /opt/freeholder/namespace-origin && install -d -m 700 -o 1001 -g 1001 /opt/freeholder/namespace-origin-state");
+        if (prepared.code !== 0) throw new LaunchFailure("The storage recovery records could not be installed.", "Keep the launch records and check server permissions before starting the site.", LAUNCH_EXIT.failed);
+        await remote.writeFile("/opt/freeholder/namespace-origin/public.pem", origin.publicKey, "640");
+        await remote.writeFile("/opt/freeholder/namespace-origin/receipt.json", origin.receipt, "640");
+        await remote.writeFile("/opt/freeholder/namespace-origin/installation.json", origin.installation, "640");
+        const secured = await remote.run("chown root:1001 /opt/freeholder/namespace-origin/public.pem /opt/freeholder/namespace-origin/receipt.json /opt/freeholder/namespace-origin/installation.json && chmod 640 /opt/freeholder/namespace-origin/public.pem /opt/freeholder/namespace-origin/receipt.json /opt/freeholder/namespace-origin/installation.json");
+        if (secured.code !== 0) throw new LaunchFailure("The storage recovery record permissions could not be secured.", "Keep the launch records and check server permissions before starting the site.", LAUNCH_EXIT.failed);
+      }
       const started = await remote.run("cd /opt/freeholder && chmod +x backup.sh && docker compose pull --quiet && docker compose up -d");
       if (started.code !== 0) throw new LaunchFailure("The site did not start on the server.", `Look at \`ssh root@${state.ip} 'cd /opt/freeholder && docker compose logs --tail 50'\`, then run the same command again.`, LAUNCH_EXIT.failed);
     }
@@ -231,7 +245,7 @@ function printPlan(options: LaunchOptions, state: LaunchState | null, envPath: s
     preflight: "check the account, SSH key, region and size",
     image: options.image ? `pin ${options.image}` : "pin the current edge build's linux/amd64 digest",
     secrets: `generate BOOTSTRAP_SECRET, SESSION_SECRET, CREDENTIAL_KEY and POSTGRES_PASSWORD into ${envPath}`,
-    spaces: `create ${options.name}-media and ${options.name}-backups (versioned) in ${options.region}, and a key scoped to both`,
+    spaces: `create ${state?.buckets?.media ?? "a private media bucket with a new random suffix"} and ${state?.buckets?.backups ?? `${options.name}-backups`} (backups versioned) in ${options.region}, and a key scoped to both`,
     droplet: `create droplet ${options.name} (${options.size}, ${options.region}, Ubuntu 24.04, monitoring on)`,
     "cloud-init": "wait for the server to finish setting itself up",
     host: options.temporaryHost ? "use a temporary <ip>.sslip.io address" : `serve ${options.domain} if it already points at the server, otherwise a temporary <ip>.sslip.io address`,

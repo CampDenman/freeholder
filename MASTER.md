@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+  New-launch origin precursor 2026-11-14 is SOURCE ONLY: the real DigitalOcean
+  CLI path prepares a durable128-bit random admission, one actual media create,
+  independent response/return/metadata receipts and private read-only delivery
+  to the UID1001 application. Old/existing/ambiguous origins cannot be adopted
+  or replayed. Twelve source controls and one fictional TCP producer/delivery
+  control remain entirely UNRUN. Quota initialization, its real installed
+  first-writer fence and durable replay consumer remain unimplemented; no
+  capability, usable initializer or provider/stable acceptance is claimed.
+  See `deploy/media-namespace-origin-source-2026-11-14.md`. All rows stay open.
+
+
 Current causal/media161 ROOT checkpoint2026-11-14 (C12.38/C1.12/C11.08/C1.08/
 C9.33): exact8df9e847 current SQL sourceV97 passes1497/240 complete selected
 files/524 explicit DB skips; unchanged TS/lint fullV95 reused through finite

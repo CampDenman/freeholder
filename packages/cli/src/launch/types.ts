@@ -40,6 +40,8 @@ export interface LaunchState {
   done: Step[];
   image?: string;
   buckets?: { media: string; backups: string };
+  /** A genuine new-launch one-shot origin; never added to an old bucket. */
+  namespaceOrigin?: { version: 1; bucket: string };
   /** The permanent, bucket-scoped Spaces key (its id only; the secret is in the env file). */
   spacesKeyId?: string;
   /** A short-lived key whose deletion failed; deleted first on the next run. */
@@ -63,7 +65,7 @@ export interface LaunchCost {
 export interface LaunchProvider {
   id: string;
   preflight(options: LaunchOptions, state: LaunchState | null): Promise<{ sshKeyId: number; notes: string[]; cost?: LaunchCost }>;
-  storage(options: LaunchOptions, state: LaunchState, save: (patch: Partial<LaunchState>, env?: Record<string, string>) => Promise<void>): Promise<void>;
+  storage(options: LaunchOptions, state: LaunchState, save: (patch: Partial<LaunchState>, env?: Record<string, string>) => Promise<void>, originDirectory?: string): Promise<void>;
   server(options: LaunchOptions, state: LaunchState, userData: string, save: (patch: Partial<LaunchState>) => Promise<void>): Promise<{ id: number; ip: string }>;
   destroy(state: LaunchState, log: (line: string) => void): Promise<void>;
   /** The object-storage endpoint and region the env file names. */

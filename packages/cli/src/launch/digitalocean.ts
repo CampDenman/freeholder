@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { SpacesClient } from "./s3.js";
+import { createNamespaceOrigin, requireReturnedNamespaceOrigin } from "./namespace-origin.js";
 import { LaunchFailure, type LaunchOptions, type LaunchProvider, type LaunchState } from "./types.js";
 
 const API = "https://api.digitalocean.com";
@@ -50,6 +51,7 @@ export async function digitalOceanToken(context?: string, env: Record<string, st
 }
 
 export function digitalOcean(token: string, fetcher: typeof fetch = fetch, sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))): LaunchProvider {
+  let actualAccountId: string | null = null;
   async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
     let response: Response;
     try {
@@ -78,7 +80,8 @@ export function digitalOcean(token: string, fetcher: typeof fetch = fetch, sleep
 
     async preflight(options, state) {
       const notes: string[] = [];
-      await api<{ account: { status: string } }>("GET", "/v2/account");
+      const { account } = await api<{ account: { status: string; uuid?: string } }>("GET", "/v2/account");
+      actualAccountId = typeof account.uuid === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(account.uuid) ? account.uuid : null;
       const { ssh_keys: keys } = await api<{ ssh_keys: { id: number; fingerprint: string; name: string }[] }>("GET", "/v2/account/keys?per_page=200");
       const key = options.sshKey ? keys.find((k) => String(k.id) === options.sshKey || k.fingerprint === options.sshKey) : keys.length === 1 ? keys[0] : undefined;
       if (!key) {
@@ -103,19 +106,28 @@ export function digitalOcean(token: string, fetcher: typeof fetch = fetch, sleep
       return { sshKeyId: key.id, notes, cost: { serverMonthlyUsd: typeof price === "number" ? price : null, storageMonthlyUsd: SPACES_MONTHLY_MINIMUM_USD } };
     },
 
-    async storage(options, state, save) {
+    async storage(options, state, save, originDirectory) {
       const { endpoint, region } = spacesEndpoint(options.region);
-      const buckets = { media: `${options.name}-media`, backups: `${options.name}-backups` };
+      const buckets = state.buckets ?? { media: `${options.name}-media`, backups: `${options.name}-backups` };
       if (state.orphanTemporaryKeyId) {
         await deleteKey(state.orphanTemporaryKeyId).catch(() => undefined);
         await save({ orphanTemporaryKeyId: undefined });
       }
       if (state.spacesKeyId && state.buckets) return;
+      // Old/resumed launches retain their actual existing names and behavior.
+      // Only a genuinely new launch can acquire this nonce-origin admission.
+      if (state.namespaceOrigin) {
+        if (!originDirectory || !actualAccountId || state.namespaceOrigin.bucket !== buckets.media) throw new LaunchFailure("The original storage creation needs recovery.", "Keep the original launch records. Do not recreate the bucket or replace its first origin receipt.", EXIT_FAILED);
+        await requireReturnedNamespaceOrigin(originDirectory, buckets.media, { accountId: actualAccountId, endpoint, region });
+      }
+      const resumedOrigin = Boolean(state.namespaceOrigin);
+      const origin = originDirectory && actualAccountId && !state.buckets ? await createNamespaceOrigin(originDirectory, { siteName: options.name, accountId: actualAccountId, endpoint, region }) : null;
+      if (origin) { buckets.media = origin.bucket; await save({ buckets, namespaceOrigin: { version: 1, bucket: origin.bucket } }); }
       const temporary = await createKey(`${options.name}-launch-temporary`, [{ bucket: "", permission: "fullaccess" }]);
       await save({ orphanTemporaryKeyId: temporary.access_key });
       try {
         const spaces = new SpacesClient(endpoint, region, { accessKeyId: temporary.access_key, secretAccessKey: temporary.secret_key }, fetcher);
-        await spaces.createBucket(buckets.media);
+        if (origin) await origin.create(spaces); else if (!resumedOrigin) await spaces.createBucket(buckets.media);
         await spaces.createBucket(buckets.backups);
         await spaces.enableVersioning(buckets.backups);
         await save({ buckets });
