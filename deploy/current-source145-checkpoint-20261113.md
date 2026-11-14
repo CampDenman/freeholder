@@ -65,7 +65,7 @@ and the LinkedIn announcement remain pending.
 The next source checkpoint is `aa941edcd3b6f3cfbc54c72dda99e76097f3b655`,
 including genuine first CREATE baseline source `b8f9480b`. Source v37 passes751
 actual assertions in130 complete files, with319 explicit database skips, full
-TypeScript,121-file affected lint and metadata. The v36 compiler-only loop
+TypeScript,128-file affected lint and metadata. The v36 compiler-only loop
 inference failure remains preserved; an explicit actual configuration/page union
 fixes it without runtime or original-assertion changes. New lifecycle controls
 remain unrun until the complete request protocol is implemented. No fixture
