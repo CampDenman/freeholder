@@ -3564,6 +3564,30 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+
+Original fee-native checkpoint and own pre-POST repair2026-11-14
+(C12.38/C1.08/C11.10): exact53cfd sourceV103 fulltypes/lint and1575actual/
+250wholefiles/540explicit DB skips PASS. FreshV62/V63 ordinary86/strict161/
+365guards/416fullfunctions andSDK40/41 actual8 PASS. Original whole positive
+feeV12 PASS136.00s; original whole counterV5 PASS126.20s. CounterV5 aggregate
+postcheck fails ONLY its copied one-preflight expectation; preserved first
+report plus corrected READONLY V6 proves actual two preflights/one refused POST/
+one real recoveryGET and full596/j86/sequence invariance. All six actual caller
+HMACs independently authenticated; no original oracle or180s changed.
+Auxiliary positiveV1/V2/V3 still FAIL132.47/147.36/140.41s before POST; all three
+failed DBs preserved. V2 real raw classification61calls has no unresolved facts.
+V3 same REAL before-POST TX proves actual nonce/one parent/current target/latest
+bank state match, one own unfinished caller, but generic bank reader returns0
+because its own active caller must remain debt. NEW dedicated pre-POST reader
+inherits/reverses the ENTIRE generic bank body; only its authenticated exact
+live fee caller can continue. All other callers and every whole PG row remain;
+generic reader/ordinary TS/whole original native unchanged. One new function,
+two full successors/readiness pin; whole973557 SQL prefix retained. Fresh full
+source/schema/SDK/original auxiliary acceptance is REQUIRED/UNRUN. No C/stable
+closure. See `deploy/atomic-fee-original-native-checkpoint-20261114.json` and
+`deploy/atomic-auxiliary-fee-prepost-bank85.manifest.json`.
+
+
 Signature-work ROOT performance repair2026-11-14 (C12.38/C1.08/C11.10):
 exact1f89 sourceV102 fulltypes/lint/1554actual/249files/540explicit skips PASS;
 freshV60/V61 ordinary86/strict161models/365guards/416fullfunctions/4143queries
