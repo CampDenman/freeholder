@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled application admission source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): the isolated future branch normally carries the real
+bank batch reader and adds three immutable exact-FK original batch/receipt/
+actual-payment-link models. NEW UNAPPLIED SQL checks complete PG parent preimages,
+real bank inventory/partial consideration, original credit and cumulative fee
+ownership, actual held prefix and real first payment UUID birth. Full internal
+PG row SHA, exact-owner safe exports and explicit private/noTTL metadata remain
+separate. Sixteen pure and four source controls are PREPARED/UNRUN; no execution
+or current-root/journal mutation occurred. Subsequent receipt births still
+mechanically refuse until full actual own-canonical staged normalization,
+deferred conservation, prospective parent context and genuine alternate writer
+integration are complete. Application remains unregistered/unactivated; all
+native/security/provider acceptance, full specification, C-items and stable
+remain open. See `deploy/controlled-cash-application-protocol84-source-20261113.md`.
+
 Controlled bank-order source correction 2026-11-13 (C12.38/C1.08/C9.33):
 isolated source carries the ONE signed actual admission-lineage child and its
 real producer/own-ancestry hook. A NEW UNAPPLIED bank suffix replaces only the
