@@ -10,6 +10,7 @@ export { CONTROLLED_CASH_BATCH_MARKER,controlledCashBatchPointer } from "./contr
 export type ControlledSubscriptionCashPlan = {
   batchId: string; collectionId: string; receiptId: string; admissionDigest: string;
   amountMinor: number; currency: string; feeMinor: number; priorCashMinor: number; priorAllocatedFeeMinor: number;
+  applicationProtocol:string;
 };
 function refuse(): never { throw new ServiceError("conflict", "Restore the genuine same-transaction batch, original receipt and current bank/parent stage before creating its canonical payment. A pointer cannot grant money authority."); }
 
@@ -33,7 +34,7 @@ export async function controlledSubscriptionCashRoute(ctx: ServiceContext, input
     || origin.callId !== proof.originCallId || origin.factId !== proof.originFactId
     || stage.links.some(link => link.receiptId === input.receiptId) || stage.evidence.paymentId !== null) refuse();
   return { ...pointer, amountMinor: proof.amountMinor, currency: proof.currency, feeMinor: proof.feeMinor,
-    priorCashMinor: proof.priorCashMinor, priorAllocatedFeeMinor: proof.priorAllocatedFeeMinor };
+    priorCashMinor: proof.priorCashMinor, priorAllocatedFeeMinor: proof.priorAllocatedFeeMinor,applicationProtocol:stage.batch.protocol };
 }
 
 /** Re-read the actual whole stage after the unchanged shared fee/history
@@ -43,5 +44,5 @@ export async function recheckControlledSubscriptionCashRoute(ctx: ServiceContext
   const plan = input.plan;
   if (current.batchId !== plan.batchId || current.collectionId !== plan.collectionId || current.receiptId !== plan.receiptId || current.admissionDigest !== plan.admissionDigest
     || current.amountMinor !== plan.amountMinor || current.currency !== plan.currency || current.feeMinor !== plan.feeMinor
-    || current.priorCashMinor !== plan.priorCashMinor || current.priorAllocatedFeeMinor !== plan.priorAllocatedFeeMinor) refuse();
+    || current.priorCashMinor !== plan.priorCashMinor || current.priorAllocatedFeeMinor !== plan.priorAllocatedFeeMinor||current.applicationProtocol!==plan.applicationProtocol) refuse();
 }

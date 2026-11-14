@@ -5,11 +5,11 @@ import { describe,expect,it } from "vitest";
 const read=(path:string)=>readFileSync(new URL(`../../${path}`,import.meta.url),"utf8"),context=read("src/modules/invoicing/controlled-cash-prospective-context.ts"),policy=read("src/modules/invoicing/controlled-target-raw-policy.ts");
 describe("genuine private retained-unapplied prospective source",()=>{
  it("installs context only from the actual real-context bank reader, with no caller proof/flag/session setter",()=>{
-  expect(context).toContain("const active=new WeakMap<Tx,ControlledCashProspectiveProjection>()");expect(context).toContain("const proof=await readControlledCollectionCashAuthority(ctx,request)");
+  expect(context).toContain("const active=new WeakMap<Tx,ControlledCashProspectiveProjection>()");expect(context).toContain("const proof=await readControlledAtomicCollectionCashAuthority(ctx,request)");
   expect(context).toContain("active.set(ctx.tx,projection)");expect(context).toContain("finally{active.delete(ctx.tx);}");expect(context).not.toContain("current_setting(");expect(context).not.toContain("ctx.metadata");expect(context).not.toContain("export function set");
  });
  it("keeps actual full bank and complete PG parent evidence fresh across read-only evaluation",()=>{
-  expect(context).toContain("physical.get(`${row.table}:${row.id}`)!==row.fingerprint");expect(context).toContain("const afterProof=await readControlledCollectionCashAuthority(ctx,request)");
+  expect(context).toContain("physical.get(`${row.table}:${row.id}`)!==row.fingerprint");expect(context).toContain("const afterProof=await readControlledAtomicCollectionCashAuthority(ctx,request)");
   expect(context).toContain("merchantTaxDigest(afterProof)!==merchantTaxDigest(proof)");expect(context).toContain("after.revision!==before.revision");expect(context).toContain("JSON.stringify(after.entries)!==JSON.stringify(before.entries)");
  });
  it("avoids eager service import cycles and represents retained receipts without a fictional payment UUID",()=>{

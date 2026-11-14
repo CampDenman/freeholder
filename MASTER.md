@@ -3589,6 +3589,35 @@ is preserved with no next reset. Fresh normal/schema/original native and all
 provider/paid/recovery/stable acceptance remain pending. See
 `deploy/controlled-collection-inventory-local84.manifest.json`.
 
+Controlled activated-amendment date source checkpoint 2026-11-13
+(C12.38/C9.38/C9.33/C1.08): a genuine original-period factory can select a
+later explicitly accepted start through existing activated amendment terms,
+while the parent previously admitted only unchanged parentStart/End. A new
+ordinary actual calendar/terms/FK reader now supplies that exact narrow later
+start at both parent date boundaries and rechecks its full actual row revision.
+Original parent windows, trial, zero-credit, source, money/privacy/fee/caller and
+whole raw/PG checks remain; ordinary empty histories and observational GET
+behavior are unchanged. Pure/source controls are PREPARED/UNRUN; no execution,
+schema/SQL/root reader change or acceptance claim occurred. The real complete
+late-amendment native/provider/effect journey and all full-scope acceptance
+remain required. See `deploy/controlled-late-period-authority84-source-20261113.md`.
+
+Controlled atomic actual-fee source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08/C9.38): target/bank protocol stays v1, while a distinct
+signed application batch version binds each actual original bank charge's fee
+and the complete original cumulative endpoint. Real earlier canonical prefixes
+must exist before later receipts; every receipt settles in one TX or all
+canonical/core3 writes roll back. Existing default prefix floors and original
+per-payment refund/credit epochs remain unchanged. The new owned UNAPPLIED
+suffix preserves full old route/fee guards and all current raw/parent/bank
+evidence; no model is added and root's18-family footprint remains required.
+Strict amount/signature/source controls and four additional genuine desired
+natives are PREPARED/UNRUN, with no SQL/parser/compiler/test execution or root
+migration edit. Actual integration, currency/overage, refund/fee/paid effects,
+provider/security and all remaining full-scope acceptance remain required; no
+activation, C-item closure or stable claim. See
+`deploy/controlled-cash-atomic-fee84-source-20261113.md`.
+
 Controlled genuine staged writer source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): genuine repeated initial parent/bank evidence now
 produces actual immutable HMAC admissions immediately before canonical writes.

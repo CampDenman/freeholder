@@ -4,6 +4,7 @@ import type { controlledCashApplicationBatches,controlledCashApplicationReceipts
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { originalCashEvidenceKeys,originalCashSigningKey } from "./original-cash-recovery-store";
 import { signOriginalCashRecovery,verifyOriginalCashRecovery } from "./original-cash-recovery-proof";
+import { isControlledCashApplicationProtocol } from "./controlled-cash-application-protocol";
 type Batch=typeof controlledCashApplicationBatches.$inferSelect;
 type Receipt=typeof controlledCashApplicationReceipts.$inferSelect;
 const BATCH="controlled_cash_application_batch.v1",RECEIPT="controlled_cash_application_receipt.v1";
@@ -25,5 +26,5 @@ export function controlledCashReceiptBody(row:Omit<Receipt,"digest"|"authenticat
 };}
 export function signControlledCashBatch(row:Omit<Batch,"digest"|"authentication">){const digest=merchantTaxDigest(controlledCashBatchBody(row));return{digest,authentication:signOriginalCashRecovery(BATCH,{id:row.id,createdAt:row.createdAt,digest},originalCashSigningKey())};}
 export function signControlledCashReceipt(row:Omit<Receipt,"digest"|"authentication">){const digest=merchantTaxDigest(controlledCashReceiptBody(row));return{digest,authentication:signOriginalCashRecovery(RECEIPT,{id:row.id,createdAt:row.createdAt,digest},originalCashSigningKey())};}
-export function verifiedControlledCashBatch(row:Batch){return verifyOriginalCashRecovery(BATCH,row,controlledCashBatchBody(row),originalCashEvidenceKeys());}
+export function verifiedControlledCashBatch(row:Batch){return isControlledCashApplicationProtocol(row.protocol)&&verifyOriginalCashRecovery(BATCH,row,controlledCashBatchBody(row),originalCashEvidenceKeys());}
 export function verifiedControlledCashReceipt(row:Receipt){return verifyOriginalCashRecovery(RECEIPT,row,controlledCashReceiptBody(row),originalCashEvidenceKeys());}

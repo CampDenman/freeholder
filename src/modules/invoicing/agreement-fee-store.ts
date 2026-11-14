@@ -87,10 +87,12 @@ export async function captureAgreementFeeCashAssignment(ctx: ServiceContext, pay
     .leftJoin(agreementFeeCashAssignments, eq(agreementFeeCashAssignments.paymentId, payments.id)).where(eq(payments.invoiceId, invoice.id)).limit(1001);
   const successful = prior.filter(row => row.payment.id !== paymentId && row.payment.status === "succeeded");
   const priorCash = successful.reduce((sum, row) => sum + BigInt(row.payment.amountMinor), 0n), priorFee = successful.reduce((sum, row) => sum + BigInt(row.assignment?.feeObligationMinor ?? 0), 0n);
+  const{controlledAtomicPaymentFee}=await import("./controlled-cash-atomic-fee-stage");
+  const atomicFee=route?await controlledAtomicPaymentFee(ctx,{paymentId,invoice,originalFeeMinor:duty.targetFeeMinor,priorCashMinor:Number(priorCash),priorAllocatedFeeMinor:Number(priorFee)}):null;
   if (prior.length > 1000 || duty.cashPrincipalMinor <= 0 || successful.some(row => !row.assignment || row.payment.refundedMinor !== 0)
     || prior.some(row => row.payment.id !== paymentId && ["created", "processing"].includes(row.payment.status))
     || priorCash !== BigInt(invoice.paidMinor) || priorCash + BigInt(payment.amountMinor) > BigInt(duty.cashPrincipalMinor)
-    || BigInt(feeObligationMinor) !== BigInt(duty.cashFeeTargetMinor) * (priorCash + BigInt(payment.amountMinor)) / BigInt(duty.cashPrincipalMinor) - priorFee)
+    || (atomicFee===null?BigInt(feeObligationMinor) !== BigInt(duty.cashFeeTargetMinor) * (priorCash + BigInt(payment.amountMinor)) / BigInt(duty.cashPrincipalMinor) - priorFee:feeObligationMinor!==atomicFee))
     throw new ServiceError("conflict", "Restore every original target cash assignment and its cumulative frozen fee residual before admitting another caller.");
   await ctx.tx.insert(agreementFeeCashAssignments).values({ paymentId, invoiceId: invoice.id, amountMinor: payment.amountMinor, feeObligationMinor,
     origin: record ? "recorded_external" : "provider", originalEvidenceDigest });

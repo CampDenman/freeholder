@@ -23,6 +23,7 @@ import { parentFinancialGraph,lockControlledParentMoney } from "./controlled-pro
 import { CONTROLLED_FINANCIAL_PROTOCOL,requireControlledFinancialProtocol } from "./controlled-provider-financial-protocol";
 import { controlledTargetRawClassification } from "./controlled-target-raw-classification";
 import { controlledPeriodAdmission,controlledReviewedPeriodWindow } from "./controlled-target-financial-policy";
+import { readControlledPeriodAmendment } from "./controlled-period-amendment-parent";
 function refuse():never{throw new ServiceError("conflict","Recover this exact accepted target's actual original principal, bank callers, tax/credit/fee disposition and current accepted calendar before another collection. Coverage or an equal amount cannot authorize its money.");}
 const sha=z.string().regex(/^[a-f0-9]{64}$/);
 const record=z.record(z.string(),z.unknown());
@@ -54,6 +55,7 @@ export const controlledProviderCollectionAuthority=defineService({
    if(!own||own.kind!==input.kind||!payload.success||(input.kind==="update_calendar"?payload.data.collectionId:manifest?.success?manifest.data.collectionId:null)!==collection.id)refuse();
   }
   const observing=input.kind==="read_manifest",currentProofs:unknown[]=[];
+  let periodAmendment:Awaited<ReturnType<typeof readControlledPeriodAmendment>>=null;
   if(!observing){
    const raw=await controlledTargetRawClassification(ctx.tx,parent.id,coverage,graph);if(raw.unresolvedFactIds.length)refuse();currentProofs.push({rawClassificationRevision:raw.revision});
    const[enabled]=await ctx.tx.select({enabled:moduleSettings.enabled}).from(moduleSettings).where(eq(moduleSettings.module,"subscriptions")).limit(1);
@@ -73,9 +75,10 @@ export const controlledProviderCollectionAuthority=defineService({
    if(!customer||customer.actualResult.providerCustomerRef!==resource.originalScope.providerCustomerRef||customer.actualResult.balanceState!=="known_zero"||customer.actualResult.completeCreditNotes!==true)refuse();
    currentProofs.push({customerOperationId:customer.operationId,customerResultDigest:customer.actualResultDigest});
    if(collection.kind==="period"){
+    periodAmendment=await readControlledPeriodAmendment(ctx,source);if(periodAmendment)currentProofs.push({activatedPeriodAmendment:periodAmendment});
     if(!controlledPeriodAdmission({subscriptionId:parent.id,sourceId:canonical.invoice.sourceId??"",now:new Date(),pay:["finalize_invoice","pay_invoice"].includes(input.kind),parentStart:parent.currentPeriodStart.toISOString(),parentEnd:parent.currentPeriodEnd.toISOString(),trialEnd:parent.trialEndsAt?.toISOString()??null,
      originalStart:review.calendar.originalApplicationPeriodStart,originalEnd:review.calendar.originalApplicationPeriodEnd,originalTrialEnd:review.calendar.originalTrialEndsAt,periodStart:review.calendar.proposedPeriodStart,periodEnd:review.calendar.proposedPeriodEnd,
-     credits:[review.creditNetMinor,review.creditTaxMinor,review.creditAppliedMinor,review.residualCreditMinor]})
+     credits:[review.creditNetMinor,review.creditTaxMinor,review.creditAppliedMinor,review.residualCreditMinor],governingTermsId:source.terms.id,governingAcceptedQuoteDigest:source.terms.acceptedQuoteDigest,pendingPlanId:parent.pendingPlanId,...(periodAmendment?{activatedAmendment:periodAmendment.evidence}:{})})
      ||canonical.lines.some(line=>{const snapshot=record.safeParse(line.snapshot);return line.sourceType!=="subscription"||line.sourceId!==parent.id||!snapshot.success||snapshot.data.subscriptionTermsId!==source.terms.id
       ||snapshot.data.subscriptionPeriodStart!==review.calendar.proposedPeriodStart||snapshot.data.subscriptionPeriodEnd!==review.calendar.proposedPeriodEnd;}))refuse();
    }else{
@@ -134,10 +137,11 @@ export const controlledProviderCollectionAuthority=defineService({
   if(after.revision!==coverage.revision||merchantTaxDigest(current)!==merchantTaxDigest(graph)||merchantTaxDigest(currentTarget)!==merchantTaxDigest(source))refuse();
   if(!observing){
    if(collection.kind==="period"){
+    const currentAmendment=await readControlledPeriodAmendment(ctx,currentTarget);if(merchantTaxDigest(currentAmendment)!==merchantTaxDigest(periodAmendment))refuse();
     if(!controlledPeriodAdmission({subscriptionId:parent.id,sourceId:canonical.invoice.sourceId??"",now:new Date(),pay:["finalize_invoice","pay_invoice"].includes(input.kind),
      parentStart:parent.currentPeriodStart.toISOString(),parentEnd:parent.currentPeriodEnd.toISOString(),trialEnd:parent.trialEndsAt?.toISOString()??null,
      originalStart:review.calendar.originalApplicationPeriodStart,originalEnd:review.calendar.originalApplicationPeriodEnd,originalTrialEnd:review.calendar.originalTrialEndsAt,
-     periodStart:review.calendar.proposedPeriodStart,periodEnd:review.calendar.proposedPeriodEnd,credits:[review.creditNetMinor,review.creditTaxMinor,review.creditAppliedMinor,review.residualCreditMinor]}))refuse();
+     periodStart:review.calendar.proposedPeriodStart,periodEnd:review.calendar.proposedPeriodEnd,credits:[review.creditNetMinor,review.creditTaxMinor,review.creditAppliedMinor,review.residualCreditMinor],governingTermsId:source.terms.id,governingAcceptedQuoteDigest:source.terms.acceptedQuoteDigest,pendingPlanId:parent.pendingPlanId,...(currentAmendment?{activatedAmendment:currentAmendment.evidence}:{})}))refuse();
    }else if(Date.now()>=Date.parse(review.effectiveAt))refuse();
   }
   ctx.setSubject("subscription",parent.id);

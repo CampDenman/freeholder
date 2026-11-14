@@ -19,6 +19,7 @@ import { inspectControlledCashReceipt } from "@/modules/invoicing/controlled-cas
 import { applyControlledCashReceipts } from "@/modules/invoicing/controlled-cash-application-service";
 import { controlledCashApplicationBatches,controlledCashApplicationReceipts,controlledCashApplicationLinks } from "@/modules/invoicing/controlled-cash-application-protocol-schema";
 import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agreement-schema";
+import { CONTROLLED_CASH_ATOMIC_PROTOCOL } from "@/modules/invoicing/controlled-cash-application-protocol";
 import { actualControlledPeriod84 } from "../helpers/actual-controlled-period84";
 import { actualControlledOpenInvoice84 } from "../helpers/actual-controlled-open-invoice84";
 import { closeDb,hasDatabase,OWNER,truncateSpine } from "../helpers/spine";
@@ -83,12 +84,31 @@ describe.runIf(hasDatabase)("genuine signed admission and staged canonical recei
   const receipts=await retained();expect(receipts).toHaveLength(2);const actual=await noNewBankCall(()=>atomic.call(input(receipts.map(row=>row.id)),system));expect(actual.outstandingMinor).toBe(0);expect(new Set(actual.payments.map(row=>row.receiptId)).size).toBe(2);expect(new Set(actual.payments.map(row=>row.paymentId)).size).toBe(2);
   expect((await db().select().from(invoices).where(eq(invoices.id,f.target.invoiceId)))[0]).toMatchObject({paidMinor:4200,creditedMinor:0,status:"paid"});
  });
+ it.each([[1,0,4199,400],[4199,400,1,0]])("applies genuine uneven bank captures %i/%i then %i/%i with their original fees in one atomic batch",async(amount,fee,later,laterFee)=>{
+  f=await actualControlledPeriod84();const open=await actualControlledOpenInvoice84(f);f.remote.externallyAttachPayment(open.providerInvoiceRef,amount,fee);f.remote.externallyAttachPayment(open.providerInvoiceRef,later,laterFee);
+  const receipts=await retained(),before=await snapshot();expect(receipts).toHaveLength(2);
+  const actual=await noNewBankCall(()=>atomic.call(input(receipts.map(row=>row.id)),system));expect(actual.outstandingMinor).toBe(0);
+  const[batch]=await db().select().from(controlledCashApplicationBatches).where(eq(controlledCashApplicationBatches.id,actual.batchId));expect(batch).toMatchObject({protocol:CONTROLLED_CASH_ATOMIC_PROTOCOL,expectedCashMinor:4200,expectedFeeMinor:400});
+  const targetPayments=await db().select().from(payments).where(eq(payments.invoiceId,f.target.invoiceId));expect(targetPayments).toHaveLength(2);
+  const routes=await db().select().from(merchantAgreementPaymentRoutes).where(inArray(merchantAgreementPaymentRoutes.paymentId,targetPayments.map(row=>row.id)));
+  for(const payment of targetPayments){const route=routes.find(row=>row.paymentId===payment.id),original=receipts.find(row=>row.id===route?.originalChargeReceiptId);expect(original).toBeDefined();expect(payment).toMatchObject({amountMinor:original?.amountMinor,providerRef:original?.providerPaymentIntentRef,status:"succeeded"});expect(route?.applicationFeeMinor).toBe(payment.amountMinor===1?0:400);}
+  expect(await db().select().from(subscriptionProviderChargeReceipts).orderBy(subscriptionProviderChargeReceipts.id)).toEqual(before.receipts);
+ });
+ it("retains every real bank receipt but refuses an incorrect atomic fee endpoint before core3 or canonical writes",async()=>{
+  f=await actualControlledPeriod84();const open=await actualControlledOpenInvoice84(f);f.remote.externallyAttachPayment(open.providerInvoiceRef,4199,399);f.remote.externallyAttachPayment(open.providerInvoiceRef,1,0);
+  const receipts=await retained(),before=await snapshot(),counts=f.remote.counts();expect(receipts).toHaveLength(2);await expect(atomic.call(input(receipts.map(row=>row.id)),system)).rejects.toMatchObject({code:"conflict"});expect(await snapshot()).toEqual(before);expect(f.remote.counts()).toEqual(counts);
+ });
  it("rolls back the genuinely settled first receipt and all core3/events/access if the second actual SQL insert refuses",async()=>{
   f=await actualControlledPeriod84();const open=await actualControlledOpenInvoice84(f);f.remote.externallyAttachPayment(open.providerInvoiceRef,2100,200);f.remote.externallyAttachPayment(open.providerInvoiceRef,2100,200);
   const receipts=await retained(),before=await snapshot(),counts=f.remote.counts();expect(receipts).toHaveLength(2);
   await expect(atomic.call({...input(receipts.map(row=>row.id)),refuseLater:true},system)).rejects.toThrow("Reject actual later receipt after real earlier settlement");
   expect(await snapshot()).toEqual(before);expect(f.remote.counts()).toEqual(counts);expect(f.remote.externalAttachments()).toBe(2);
   expect((await db().execute<{absent:boolean}>(sql`select not exists(select 1 from pg_trigger where tgname='zz_test_refuse_actual_later_receipt84') as absent`))[0]?.absent).toBe(true);
+ });
+ it("cannot commit an uneven intermediate fee prefix when the later real receipt fails",async()=>{
+  f=await actualControlledPeriod84();const open=await actualControlledOpenInvoice84(f);f.remote.externallyAttachPayment(open.providerInvoiceRef,4199,400);f.remote.externallyAttachPayment(open.providerInvoiceRef,1,0);
+  const receipts=await retained(),before=await snapshot(),counts=f.remote.counts();expect(receipts).toHaveLength(2);await expect(atomic.call({...input(receipts.map(row=>row.id)),refuseLater:true},system)).rejects.toThrow("Reject actual later receipt after real earlier settlement");
+  expect(await snapshot()).toEqual(before);expect(f.remote.externalAttachments()).toBe(2);expect(f.remote.counts()).toEqual(counts);
  });
  it.each(["duplicate","foreign"] as const)("refuses %s receipt membership before canonical writes while retaining genuine raw cash",async change=>{
   f=await actualControlledPeriod84();const receipts=await retained(),first=receipts[0];if(!first)throw Error("Use the actual retained receipt.");const before=await snapshot();await expect(atomic.call(input(change==="duplicate"?[first.id,first.id]:[randomUUID()]),system)).rejects.toMatchObject({code:"conflict"});expect(await snapshot()).toEqual(before);
