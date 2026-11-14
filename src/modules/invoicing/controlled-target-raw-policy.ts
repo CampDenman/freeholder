@@ -232,6 +232,87 @@ function exactLine(target:ControlledRawTarget,line:Record<string,unknown>,observ
   &&tag.data.freeholder_controlled_component_digest===component.provenanceDigest&&tag.data.freeholder_canonical_target_digest===target.manifest.canonicalTargetDigest;
  return component.kind==="net"&&parent.success&&parent.data.type==="subscription_item_details"&&si?.success&&si.data.proration===false;
 }
+/** Existing signed invoice_read facts are real inventory starts. A pay call
+ * performs one complete preflight GET, its real POST/ACK, then a second GET.
+ * These are NOT one paginated list. No new pass ID, value deduplication or
+ * retroactive row annotation is introduced by this derived evidence. */
+export type ControlledPayInventoryCohortProof={kind:"original_pay_inventory_cohort";collectionId:string;operationId:string;callId:string;
+ invoiceFactId:string;payFactId:string;phase:"before_pay"|"after_pay";paymentPageFactIds:string[];linePageFactIds:string[];priceFactIds:string[];intentFactIds:string[];cashFactIds:string[];receiptIds:string[]};
+function payInventoryCohorts(target:ControlledRawTarget,current:NonNullable<ReturnType<typeof currentProof>>,operation:History["operations"][number]){
+ const binding=target.binding,canonicalCount=target.canonicalCount;
+ if(operation.kind!=="pay_invoice"||!binding||!safeMinor(canonicalCount))return null;
+ const payload=controlledCollectionPayload.safeParse(operation.originalRequest.payload),calls=target.history.calls.filter(row=>row.operationId===operation.id),call=calls[0];
+ if(!payload.success||calls.length!==1||!call||payload.data.providerInvoiceRef!==binding.providerInvoiceRef
+  ||merchantTaxDigest(payload.data.manifest)!==merchantTaxDigest(target.manifest))return null;
+ const facts=target.history.facts.filter(row=>row.callId===call.id).sort((a,b)=>a.ordinal-b.ordinal),anchors=facts.filter(row=>row.actual.kind==="invoice_read"),acks=facts.filter(row=>row.actual.kind==="controlled_invoice_paid");
+ const before=anchors[0],after=anchors[1],ack=acks[0];
+ if(anchors.length!==2||acks.length!==1||!before||!after||!ack||before.ordinal>=ack.ordinal||ack.ordinal>=after.ordinal
+  ||facts.some(row=>["controlled_draft_created","controlled_item_created","controlled_invoice_updated","controlled_invoice_finalized","controlled_invoice_voided","controlled_invoice_deleted"].includes(row.actual.kind)))return null;
+ const exactInvoice=(raw:Record<string,unknown>)=>{
+  const money=z.object({total:minor,subtotal:minor,amount_due:minor,amount_paid:minor,amount_remaining:minor,status:z.enum(["open","paid"]),application_fee_amount:minor.nullable().optional()}).safeParse(raw);
+  if(!money.success)return false;const value=money.data;
+  return originalInvoice(target,raw,operation.id)&&financialFields(raw)&&value.total===target.manifest.cashDueMinor
+   &&value.subtotal===value.total&&value.amount_due===value.total&&(value.application_fee_amount??0)===target.manifest.applicationFeeMinor
+   &&value.amount_remaining===value.total-value.amount_paid&&(value.status!=="paid"||value.amount_paid===value.total&&value.amount_remaining===0);
+ };
+ if(!exactInvoice(before.actual.raw)||before.actual.raw.status!=="open"||before.actual.raw.amount_paid!==0
+  ||!exactInvoice(after.actual.raw)||!exactInvoice(ack.actual.raw)
+  ||["id","currency","status","total","subtotal","amount_due","amount_paid","amount_remaining","application_fee_amount"].some(key=>merchantTaxDigest(ack.actual.raw[key])!==merchantTaxDigest(after.actual.raw[key])))return null;
+ const relevant=new Set(["invoice_payments_read","invoice_lines_read","price_read","intent_read","cash_observed"]);
+ if(facts.some(row=>relevant.has(row.actual.kind)&&!(row.ordinal>before.ordinal&&row.ordinal<ack.ordinal||row.ordinal>after.ordinal)))return null;
+ const cohorts:Array<{evidence:ControlledPayInventoryCohortProof;pageIds:Set<string>}>=[];let budget=target.history.count+canonicalCount;
+ for(const [index,anchor]of [before,after].entries()){
+  const own=facts.filter(row=>row.ordinal>anchor.ordinal&&(index!==0||row.ordinal<ack.ordinal));
+  function pages(kind:"invoice_payments_read"|"invoice_lines_read"){
+   const selected=own.filter(row=>row.actual.kind===kind);if(!selected.length||selected.length>20||selected.some((row,i)=>!Array.isArray(row.actual.raw.data)||row.actual.raw.has_more!==(i<selected.length-1)))return null;
+   const parsed=records.safeParse(selected.flatMap(row=>Array.isArray(row.actual.raw.data)?row.actual.raw.data:[]));if(!parsed.success)return null;
+   const ids=parsed.data.map(row=>ref(row.id));if(ids.some(id=>id===null)||new Set(ids).size!==ids.length)return null;
+   return{facts:selected,rows:parsed.data};
+  }
+  const payments=pages("invoice_payments_read"),lines=pages("invoice_lines_read");if(!payments||!lines)return null;
+  const firstLine=lines.facts[0];if(!firstLine||payments.facts.some(row=>row.ordinal>=firstLine.ordinal)||own.some(row=>["intent_read","cash_observed"].includes(row.actual.kind)&&row.ordinal>=firstLine.ordinal))return null;
+  const prices=own.filter(row=>row.actual.kind==="price_read"),intents=own.filter(row=>row.actual.kind==="intent_read"),cash=own.filter(row=>row.actual.kind==="cash_observed");
+  budget+=payments.rows.length+lines.rows.length+prices.length+intents.length+cash.length;if(budget>5000)return null;
+  if(lines.rows.length!==target.manifest.components.length||lines.rows.length!==target.itemReceipts.length
+   ||!lines.rows.every(line=>exactLine(target,line,operation.id)&&current.inventory.actualLines.some(actual=>merchantTaxDigest(actual)===merchantTaxDigest(line))))return null;
+  const priceIds=prices.map(row=>ref(row.actual.raw.id)),expectedPrices=[...new Set(target.itemReceipts.flatMap(row=>row.providerPriceRef?[row.providerPriceRef]:[]))];
+  if(priceIds.some(id=>id===null)||new Set(priceIds).size!==priceIds.length||priceIds.length!==expectedPrices.length||expectedPrices.some(id=>!priceIds.includes(id))
+   ||prices.some(row=>{const raw=row.actual.raw,actual=current.inventory.actualPrices.find(value=>ref(value.id)===ref(raw.id));
+    const owningPage=lines.facts.find(page=>Array.isArray(page.actual.raw.data)&&page.actual.raw.data.some(value=>{const line=object.safeParse(value),pricing=line.success?object.safeParse(line.data.pricing):null,details=pricing?.success?object.safeParse(pricing.data.price_details):null;return details?.success&&ref(details.data.price)===ref(raw.id);}));
+    return !actual||!owningPage||row.ordinal<=owningPage.ordinal||raw.unit_amount!==actual.unit_amount||raw.currency!==actual.currency||ref(raw.product)!==ref(actual.product)
+     ||merchantTaxDigest(raw.recurring??null)!==merchantTaxDigest(actual.recurring??null)||raw.unit_amount_decimal!==actual.unit_amount_decimal; }))return null;
+  if(new Set(intents.map(row=>ref(row.actual.raw.id))).size!==intents.length||intents.length!==payments.rows.length)return null;
+  let paid=0n;const receiptIds:string[]=[];const usedCash=new Set<string>();
+  for(const payment of payments.rows){
+   const relation=object.safeParse(payment.payment),pi=relation.success?ref(relation.data.payment_intent):null,intent=intents.find(row=>ref(row.actual.raw.id)===pi)?.actual.raw;
+   const actual=current.inventory.actualPayments.find(row=>ref(row.id)===ref(payment.id)),actualRelation=actual?object.safeParse(actual.payment):null;
+   if(!relation.success||relation.data.type!=="payment_intent"||!pi||!intent||!actual||!actualRelation?.success||actualRelation.data.type!=="payment_intent"
+    ||ref(payment.invoice)!==binding.providerInvoiceRef||ref(actualRelation.data.payment_intent)!==pi||payment.amount_requested!==actual.amount_requested
+    ||payment.currency!==undefined&&(typeof payment.currency!=="string"||payment.currency.toUpperCase()!==target.manifest.currency)
+    ||!safeMinor(payment.amount_paid)||payment.amount_paid!==intent.amount_received||payment.amount_requested!==intent.amount
+    ||intent.amount_capturable!==0||!exactIntentSnapshot(target,current,intent))return null;
+   if(intent.amount_received===0){if(!["open","canceled"].includes(String(payment.status))||!["requires_payment_method","requires_confirmation","canceled"].includes(String(intent.status)))return null;continue;}
+   const owners=cashOwners(target).filter(row=>row.providerIntentRef===pi&&row.providerInvoiceRef===binding.providerInvoiceRef&&row.canonicalInvoiceId===target.manifest.canonicalInvoiceId);
+   const owner=owners[0],occurrences=cash.filter(row=>{const value=object.safeParse(row.actual.raw.cash);return value.success&&value.data.providerPaymentIntentRef===pi;});
+   const occurrence=occurrences[0],value=occurrence?controlledCashEvidence.safeParse(occurrence.actual.raw.cash):null;
+   if(owners.length!==1||!owner||occurrences.length!==1||!occurrence||!value?.success||payment.status!=="paid"||intent.status!=="succeeded"
+    ||payment.amount_paid!==actual.amount_paid||owner.amountMinor!==intent.amount_received||owner.providerChargeRef!==ref(intent.latest_charge)
+    ||value.data.subscriptionId!==target.resource.subscriptionId||value.data.providerSubscriptionRef!==tagSubscription(target)||value.data.providerInvoiceRef!==binding.providerInvoiceRef
+    ||value.data.providerCustomerRef!==target.resource.originalScope.providerCustomerRef||value.data.providerPlatformAccountId!==target.resource.originalScope.providerPlatformAccountId
+    ||(value.data.providerAccountId??null)!==(target.resource.originalScope.providerAccountId??null)||value.data.amountMinor!==owner.amountMinor||value.data.currency!==target.manifest.currency
+    ||value.data.providerChargeRef!==owner.providerChargeRef||!value.data.customerChargeVerified||!value.data.merchantRouteVerified
+    ||merchantTaxDigest(occurrence.actual.raw.invoice)!==merchantTaxDigest(anchor.actual.raw)||merchantTaxDigest(occurrence.actual.raw.intent)!==merchantTaxDigest(intent)
+    ||merchantTaxDigest(occurrence.actual.raw.invoicePayment)!==merchantTaxDigest(payment))return null;
+   usedCash.add(occurrence.id);paid+=BigInt(owner.amountMinor);receiptIds.push(owner.receiptId);
+  }
+  const reportedPaid=minor.safeParse(anchor.actual.raw.amount_paid);
+  if(!reportedPaid.success||cash.length!==usedCash.size||new Set(receiptIds).size!==receiptIds.length||paid!==BigInt(reportedPaid.data)||index===0&&(paid!==0n||cash.length))return null;
+  cohorts.push({evidence:{kind:"original_pay_inventory_cohort",collectionId:target.manifest.collectionId,operationId:operation.id,callId:call.id,invoiceFactId:anchor.id,payFactId:ack.id,
+   phase:index===0?"before_pay":"after_pay",paymentPageFactIds:payments.facts.map(row=>row.id),linePageFactIds:lines.facts.map(row=>row.id),priceFactIds:prices.map(row=>row.id),intentFactIds:intents.map(row=>row.id),cashFactIds:cash.map(row=>row.id),receiptIds:receiptIds.sort()},
+   pageIds:new Set([...payments.facts,...lines.facts].map(row=>row.id))});
+ }
+ return cohorts;
+}
 type ControlledHistoricalPaidProof={collectionId:string;operationId:string;callId:string;resultDigest:string;receiptIds:string[]};
 type ControlledHistoricalNonpayableProof={kind:"historical_nonpayable_subset";collectionId:string;listOperationId:string;listCallId:string;listResultDigest:string;readOperationId:string;readCallId:string;readResultDigest:string;nextMutationOperationId:string;componentIds:string[];lineIds:string[]};
 /** A list has no line/payment pages of its own. Its exact original draft can
@@ -402,7 +483,7 @@ function exactCalendarSnapshot(target:ControlledRawTarget,raw:Record<string,unkn
  }else if(raw.latest_invoice!==null)return false;
  return true;
 }
-type ControlledRawResolutionCommon={factId:string;disposition:"owned_nonautomatic_obligation"|"canonical_cash"|"retained_unapplied_cash";receiptIds:string[];preparationProofs?:ControlledBootstrapZeroProof[];historicalPaidProofs?:ControlledHistoricalPaidProof[];nonpayableSubsetProofs?:ControlledHistoricalNonpayableProof[];bankProofs:Array<{collectionId:string;operationId:string;callId:string}>};
+type ControlledRawResolutionCommon={factId:string;disposition:"owned_nonautomatic_obligation"|"canonical_cash"|"retained_unapplied_cash";receiptIds:string[];preparationProofs?:ControlledBootstrapZeroProof[];historicalPaidProofs?:ControlledHistoricalPaidProof[];nonpayableSubsetProofs?:ControlledHistoricalNonpayableProof[];inventoryCohortProofs?:ControlledPayInventoryCohortProof[];bankProofs:Array<{collectionId:string;operationId:string;callId:string}>};
 export type ControlledRawResolution=ControlledRawResolutionCommon&({collectionId:string;proofOperationId:string;proofCallId:string;canonicalRefundedMinor:number}
  |{collectionId:null;collectionIds:string[];proofOperationId:null;proofCallId:null;canonicalRefundedMinor:null;canonicalRefunds:Array<{collectionId:string;amountMinor:number}>});
 /** Returns derived resolutions only; every original fact/reason/row SHA remains
@@ -417,11 +498,13 @@ export function classifyControlledTargetRawFacts(targets:readonly ControlledRawT
  for(const target of targets){const review=controlledRawFinancialReview(target.resource,target.history);for(const fact of review.facts)unresolved.add(fact.factId);for(const id of controlledCustomerRawReview(target.resource,target.history))unresolved.add(id);}
  for(const target of targets){const proof=proofFor(target),calendar=calendarRead(target);if(proof&&!proof.inventory.actualLines.every(line=>exactLine(target,line,proof.operation.id)))continue;
   if(!proof&&!calendar)continue;
-  const review=controlledRawFinancialReview(target.resource,target.history);
+  const review=controlledRawFinancialReview(target.resource,target.history),payCohorts=new Map<string,ReturnType<typeof payInventoryCohorts>>();
   for(const financial of review.facts){const fact=target.history.facts.find(row=>row.id===financial.factId),operation=target.history.operations.find(row=>row.id===financial.operationId);if(!fact||!operation)continue;
    const raw=fact.actual.raw;let owned=false;const calendarFact=["subscription_read","calendar_updated","pause_subscription","bootstrap_subscription"].includes(fact.actual.kind);
-   function bankFact(proof:NonNullable<ReturnType<typeof currentProof>>,fact:History["facts"][number],operation:History["operations"][number]):{owned:boolean;listOwners:ControlledRawTarget[]|null;preparationProofs:ControlledBootstrapZeroProof[];historicalPaidProofs:ControlledHistoricalPaidProof[];nonpayableSubsetProofs:ControlledHistoricalNonpayableProof[]}{
-    let owned=false;let listOwners:ControlledRawTarget[]|null=null;const preparationProofs:ControlledBootstrapZeroProof[]=[],historicalPaidProofs:ControlledHistoricalPaidProof[]=[],nonpayableSubsetProofs:ControlledHistoricalNonpayableProof[]=[];
+   function bankFact(proof:NonNullable<ReturnType<typeof currentProof>>,fact:History["facts"][number],operation:History["operations"][number]):{owned:boolean;listOwners:ControlledRawTarget[]|null;preparationProofs:ControlledBootstrapZeroProof[];historicalPaidProofs:ControlledHistoricalPaidProof[];nonpayableSubsetProofs:ControlledHistoricalNonpayableProof[];inventoryCohortProofs:ControlledPayInventoryCohortProof[]}{
+    let owned=false;let listOwners:ControlledRawTarget[]|null=null;const preparationProofs:ControlledBootstrapZeroProof[]=[],historicalPaidProofs:ControlledHistoricalPaidProof[]=[],nonpayableSubsetProofs:ControlledHistoricalNonpayableProof[]=[],inventoryCohortProofs:ControlledPayInventoryCohortProof[]=[];
+    const multiPay=operation.kind==="pay_invoice"&&target.history.facts.filter(row=>row.callId===fact.callId&&row.actual.kind==="invoice_read").length>1;
+    const pageCohort=()=>{if(!payCohorts.has(operation.id))payCohorts.set(operation.id,payInventoryCohorts(target,proof,operation));return payCohorts.get(operation.id)?.find(row=>row.pageIds.has(fact.id));};
     switch(fact.actual.kind){
     case"invoice_list_read":{
      const pages=completePages(target.history,fact.callId,"invoice_list_read"),owners:ControlledRawTarget[]=[];
@@ -446,16 +529,16 @@ export function classifyControlledTargetRawFacts(targets:readonly ControlledRawT
       &&cashOwners(target).some(row=>row.providerIntentRef===data.providerPaymentIntentRef&&row.amountMinor===data.amountMinor&&row.currency===data.currency);
      break;
     }
-    case"invoice_lines_read":owned=completePages(target.history,fact.callId,"invoice_lines_read")!==null&&Array.isArray(raw.data)&&raw.data.every(value=>{const line=object.safeParse(value);if(!line.success)return false;const data=line.data;
+    case"invoice_lines_read":if(multiPay){const cohort=pageCohort();owned=!!cohort;if(cohort)inventoryCohortProofs.push(cohort.evidence);break;}owned=completePages(target.history,fact.callId,"invoice_lines_read")!==null&&Array.isArray(raw.data)&&raw.data.every(value=>{const line=object.safeParse(value);if(!line.success)return false;const data=line.data;
       return exactLine(target,data,operation.id)&&proof.inventory.actualLines.some(actual=>merchantTaxDigest(actual)===merchantTaxDigest(data));});break;
     case"controlled_item_created":owned=exactItemSnapshot(target,raw,operation.id);break;
-    case"invoice_payments_read":owned=completePages(target.history,fact.callId,"invoice_payments_read")!==null&&Array.isArray(raw.data)&&raw.data.every(value=>{const payment=object.safeParse(value);if(!payment.success)return false;const data=payment.data;
+    case"invoice_payments_read":if(multiPay){const cohort=pageCohort();owned=!!cohort;if(cohort)inventoryCohortProofs.push(cohort.evidence);break;}owned=completePages(target.history,fact.callId,"invoice_payments_read")!==null&&Array.isArray(raw.data)&&raw.data.every(value=>{const payment=object.safeParse(value);if(!payment.success)return false;const data=payment.data;
       const actual=proof.inventory.actualPayments.find(row=>ref(row.id)===ref(data.id)),relation=object.safeParse(data.payment),currentRelation=actual?object.safeParse(actual.payment):null;
       return !!actual&&relation.success&&currentRelation?.success===true&&ref(data.invoice)===target.binding?.providerInvoiceRef
        &&relation.data.type==="payment_intent"&&currentRelation.data.type==="payment_intent"&&ref(relation.data.payment_intent)===ref(currentRelation.data.payment_intent)&&data.amount_requested===actual.amount_requested
        &&(data.amount_paid===0||data.amount_paid===actual.amount_paid);});break;
     default:break;
-    }return{owned,listOwners,preparationProofs,historicalPaidProofs,nonpayableSubsetProofs};
+    }return{owned,listOwners,preparationProofs,historicalPaidProofs,nonpayableSubsetProofs,inventoryCohortProofs};
    }
    const bankResult=!calendarFact&&proof?bankFact(proof,fact,operation):null,listOwners=bankResult?.listOwners??null,calendarHistorical:ControlledHistoricalPaidProof[]=[];
    owned=calendarFact?exactCalendarSnapshot(target,raw,targets,proofFor,preparations.get(target)??null,calendarHistorical):bankResult?.owned??false;
@@ -469,10 +552,10 @@ export function classifyControlledTargetRawFacts(targets:readonly ControlledRawT
    const historicalPaidProofs=calendarFact?calendarHistorical:bankResult?.historicalPaidProofs??[];
    const factCash=(listOwners??targets).flatMap(candidate=>{const past=historicalPaidProofs.filter(row=>row.collectionId===candidate.manifest.collectionId),known=new Set(past.flatMap(row=>row.receiptIds));return cashOwners(candidate).filter(row=>!past.length||known.has(row.receiptId));}).filter(row=>row.resourceId===target.resource.id&&(financial.providerIntentRefs.length?financial.providerIntentRefs.includes(row.providerIntentRef):financial.providerInvoiceRefs.includes(row.providerInvoiceRef)));
    const common:ControlledRawResolutionCommon={factId:fact.id,bankProofs:bankOwners.map(({candidate,current})=>({collectionId:candidate.manifest.collectionId,operationId:current.operation.id,callId:current.proof.callId})),
-    ...(bankResult?.preparationProofs.length?{preparationProofs:bankResult.preparationProofs}:{}),...(historicalPaidProofs.length?{historicalPaidProofs}:{}),...(bankResult?.nonpayableSubsetProofs.length?{nonpayableSubsetProofs:bankResult.nonpayableSubsetProofs}:{}),
+    ...(bankResult?.preparationProofs.length?{preparationProofs:bankResult.preparationProofs}:{}),...(historicalPaidProofs.length?{historicalPaidProofs}:{}),...(bankResult?.nonpayableSubsetProofs.length?{nonpayableSubsetProofs:bankResult.nonpayableSubsetProofs}:{}),...(bankResult?.inventoryCohortProofs.length?{inventoryCohortProofs:bankResult.inventoryCohortProofs}:{}),
     disposition:financial.reportedPositiveMoney?factCash.some(row=>"kind"in row)?"retained_unapplied_cash":"canonical_cash":"owned_nonautomatic_obligation",receiptIds:financial.reportedPositiveMoney?[...new Set(factCash.map(row=>row.receiptId))].sort():[]};
    const next:ControlledRawResolution=listOwners&&listOwners.length!==1?{...common,collectionId:null,collectionIds:listOwners.map(owner=>owner.manifest.collectionId),proofOperationId:null,proofCallId:null,canonicalRefundedMinor:null,canonicalRefunds:listOwners.map(owner=>({collectionId:owner.manifest.collectionId,amountMinor:owner.canonicalRefundedMinor}))}
-    :{factId:common.factId,collectionId:resolutionTarget.manifest.collectionId,proofOperationId:proofIdentity.operationId,proofCallId:proofIdentity.callId,canonicalRefundedMinor:resolutionTarget.canonicalRefundedMinor,bankProofs:common.bankProofs,disposition:common.disposition,receiptIds:common.receiptIds,...(common.preparationProofs?{preparationProofs:common.preparationProofs}:{}),...(common.historicalPaidProofs?{historicalPaidProofs:common.historicalPaidProofs}:{}),...(common.nonpayableSubsetProofs?{nonpayableSubsetProofs:common.nonpayableSubsetProofs}:{})};
+    :{factId:common.factId,collectionId:resolutionTarget.manifest.collectionId,proofOperationId:proofIdentity.operationId,proofCallId:proofIdentity.callId,canonicalRefundedMinor:resolutionTarget.canonicalRefundedMinor,bankProofs:common.bankProofs,disposition:common.disposition,receiptIds:common.receiptIds,...(common.preparationProofs?{preparationProofs:common.preparationProofs}:{}),...(common.historicalPaidProofs?{historicalPaidProofs:common.historicalPaidProofs}:{}),...(common.nonpayableSubsetProofs?{nonpayableSubsetProofs:common.nonpayableSubsetProofs}:{}),...(common.inventoryCohortProofs?{inventoryCohortProofs:common.inventoryCohortProofs}:{})};
    const prior=resolutions.get(fact.id);if(prior&&(prior.collectionId!==next.collectionId||prior.collectionId===null&&merchantTaxDigest(prior)!==merchantTaxDigest(next))){resolutions.delete(fact.id);unresolved.add(fact.id);ambiguous.add(fact.id);continue;}
    resolutions.set(fact.id,next);
    unresolved.delete(fact.id);

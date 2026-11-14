@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Original pay-caller inventory cohort source correction 2026-11-14
+(C12.38/C9.33/C1.08): actual V28 retained4200 safely, then prospective application
+refused only three line/payment page facts from pay39. Its genuine caller performs
+an open preflight inventory, the real pay POST/ACK and another inventory; global
+same-caller pagination incorrectly joined the two terminal page runs. A bounded
+consumer now derives each run from existing signed invoice_read anchors and the
+actual intervening controlled_invoice_paid fact. Complete original caller/request,
+exact target/component/price/PI/cash ownership and an independent full CURRENT
+manifest remain mandatory. Every original occurrence is retained; no invented
+pass ID, annotation, amount-based adoption, page value deduplication or blanket
+pay exemption. Default completePages/currentProof remain byte-unchanged. Sixteen
+new chronological signed-raw controls are PREPARED/UNRUN; the original real native
+oracle remains unchanged and must qualify. No SQL/model/permission/provider or
+stable claim. See `deploy/controlled-pay-inventory-cohorts84-source-20261114.md`.
+
 Actual application witness correction 2026-11-13 (C12.38/C9.33/C1.08):
 V27 with the genuine fresh paid manifest passes the earlier freshness boundary,
 then refuses before admission with BigInt JSON serialization in the derived
