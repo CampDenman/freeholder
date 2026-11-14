@@ -6,6 +6,7 @@ import {randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,sql} from "drizzle-orm";
 import type {TransferRequestDescriptor,TransferRequestObservation,TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
 import {db} from "@/core/db";
+import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {actorString,type Actor,type Tx} from "@/core/service";
 import {assertMediaActorLive} from "./upload-ownership";
 import {mediaObjectWrites} from "./write-schema";
@@ -42,6 +43,7 @@ async function locked(tx:Tx,scope:Scope){
 function mutation(descriptor:TransferRequestDescriptor){return ["object.put","object.delete","multipart.create","multipart.complete","multipart.abort","multipart.sign"].includes(descriptor.kind);}
 async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:string){
  await checkStorageTransferJob();return db().transaction(async tx=>{
+  await lockContactIdentityForRead(tx);
   const call=await locked(tx,scope);
   if(call.kind==="multipart_sign"){if(!scope.actor)transferConflict("The actual local signer needs its owning server-resolved principal.");await assertMediaActorLive(tx,scope.actor);}
   if(!scope.active||call.state!=="admitted"||descriptor.binding.namespace!==call.namespace||descriptor.key&&descriptor.key!==call.physicalKey)transferConflict("The physical request does not belong to its exact original logical caller.");
@@ -85,6 +87,7 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
    if(!parent||parent.kind!=="complete"||descriptor.partsDigest!==parent.partsDigest)transferConflict("The original completed file read must retain every original part boundary and checksum.");
   }
   if(descriptor.kind==="object.delete"&&(!["source_delete","privacy_delete","privacy_source_delete","ordinary_delete"].includes(call.kind)||!call.expectedRevision||transferDigest(descriptor.expectedRevision)!==transferDigest(call.expectedRevision)))transferConflict();
+  if(descriptor.kind==="multipart.abort")await(await import("./multipart-idle-retirement-context")).assertIdleOriginalMultipartAbortRequest(tx,call,descriptor);
   if(descriptor.kind==="object.delete"&&call.kind==="ordinary_delete")await(await import("./original-retirement")).assertOrdinaryRetirementRequest(tx,call,descriptor);
   if(descriptor.kind==="object.body"){
    if(!descriptor.expectedRevision)transferConflict();

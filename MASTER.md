@@ -16102,3 +16102,21 @@ host action or C closure. Unknown/legacy/terminal/session/capture/quota/cutover,
 full qualification, actual provider/operator/platform acceptance, independent
 review and stable sign-offs remain open. See
 `deploy/media-multipart-known-create-recovery-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the existing authorized
+owner/expiry/verified-first-scope cleanup has a genuine idle original multipart
+ABORT path. Exact known CREATE and every unused/withheld issuer must close;
+exposed/unknown URLs, holds, foreign generations and unbound charges refuse.
+A permanent original namespace/key admission fence precedes one real ABORT.
+Actual ACK/FIN, fresh accounted exact-session/object absence and two complete
+immutable physical inventories precede retirement of only that original pending
+pointer. No TTL/logical404/browser callback, quota release, global legacy gate
+or remote issued-link closure is inferred. Never-dispatched CREATE has its own
+strict real original proof; lost/failed ABORT stays pending without replay.
+Seven proof/seven genuine service/SDK/fictional TCP controls are PREPARED/UNRUN;
+all prior oracle bodies remain intact. Six functions/three continuations/three
+mandatory guards append after the intact known-CREATE owned82 prefix, with no
+model/column/journal/capability change. No child execution/provider/host action
+or C closure. Unknown/terminal/legacy/session/capture/quota/cutover work, all
+qualification/external/platform/independent review and stable gates remain
+open. See `deploy/media-multipart-idle-retirement-source-2026-11-13.md`.

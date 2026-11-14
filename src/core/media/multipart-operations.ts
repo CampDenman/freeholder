@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import {admitOriginalMediaCaller,admitOriginalMultipartCaller,originalMultipartCaller,retainOriginalMediaCallerReturn,withOriginalMultipartInvocation} from "./provider-callers";
 import {observeTransferRequest,withTransferRequestScope,TransferRequestNotAttemptedError} from "./transfer-requests";
-import {assertPhysicalStorageAbsence} from "./physical-absence";
 import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C11.08: commit original intent, call its provider, then record facts.
 import {createHash,randomUUID} from "node:crypto";
@@ -28,6 +27,9 @@ import {requireOriginalMultipartCompletedBody,type OriginalMultipartCreateProof}
 import {mediaStorageTransferReviews} from "./transfer-schema";
 import {mediaStorageTransferCalls} from "./transfer-schema";
 import {retainedKnownCreateReview} from "./multipart-known-create-review";
+import {lockedIdleOriginalMultipart} from "./multipart-idle-retirement-context";
+import {finishIdleOriginalMultipartRetirement} from "./multipart-idle-retirement";
+import {lockTransferInventory} from "./transfer-authority";
 import {originalMultipartCompleteManifest} from "./multipart-complete-manifest";
 import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
 
@@ -245,14 +247,20 @@ export async function adoptCompletedMultipart(uploadId:string,operationId:string
 }
 
 export async function claimMultipartAbort(ctx:Pick<ServiceContext,"tx"|"actor">,uploadId:string,allowMinimized=false):Promise<{operationId:string;terminal:boolean}>{
+ await lockTransferInventory(ctx.tx);
+ const[unattempted]=await ctx.tx.execute<{id:string}>(sql`select id from media_multipart_resources where upload_id=${uploadId}::uuid and state='aborted' and retired_at is not null and freeholder_media_multipart_unattempted_retirement(id)`);if(unattempted)return{operationId:unattempted.id,terminal:true};
  const{resource,upload}=await lockMultipartUpload(ctx.tx,uploadId,allowMinimized);
  if(upload.state==="complete")return{operationId:resource.id,terminal:true};
  if(["completing","completed","aborting"].includes(resource.state))conflict("Finish or recover the original active operation before aborting this upload.");
  if(await storageOperationsHeld(ctx.tx,[resource.contactId]))conflict("A named hold preserves this original multipart resource.");
  const outstanding=await ctx.tx.select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,resource.id),inArray(mediaMultipartOperations.state,uncertain))).limit(1);
  if(outstanding.length)conflict();
- requireDurableMediaRetirementProof();
- if(resource.state==="aborted"&&resource.retiredAt)return{operationId:resource.id,terminal:true};
+ if(resource.state==="aborted"&&resource.retiredAt){const[retired]=await ctx.tx.execute<{retired:boolean}>(sql`select exists(select 1 from media_multipart_operations operation join media_storage_provider_inventories inventory on inventory.multipart_operation_id=operation.id where operation.resource_id=${resource.id}::uuid and freeholder_media_multipart_idle_retirement(operation.id,inventory.id)) as retired`);if(retired?.retired!==true)conflict("Keep the original session until its complete physical retirement proof is restored.");return{operationId:resource.id,terminal:true};}
+ await lockedIdleOriginalMultipart(ctx.tx,resource.id);
+ if(ctx.actor.kind==="system"&&upload.expiresAt>new Date()){
+  const[erasure]=await ctx.tx.execute<{verified:boolean}>(sql`select exists(select 1 from media_erasure_cohorts cohort join data_requests request on request.id=cohort.request_id join media_original_erasure_scopes first_scope on first_scope.request_id=request.id and first_scope.scope=cohort.scope where cohort.multipart_resource_id=${resource.id}::uuid and request.kind='erasure' and request.verified_at is not null and request.status in ('verified','in_progress','completed','partially_completed') and first_scope.complete and first_scope.capture_digest=freeholder_media_transfer_fact_digest(first_scope.membership) and exists(select 1 from jsonb_array_elements(first_scope.membership->'resources') member where member->>'id'=${resource.id} and member->>'reservationId'=${resource.originalReservationId})) as verified`);
+  if(erasure?.verified!==true)conflict("A live original upload can be aborted only by its authorized owner or its exact verified first erasure scope; cleanup timing alone grants no authority.");
+ }
  const[operation]=await ctx.tx.insert(mediaMultipartOperations).values({resourceId:resource.id,kind:"abort",state:"started",writerRuntimeId:mediaWriterRuntimeId,providerUploadId:resource.providerUploadId,actor:actorString(ctx.actor)}).returning();
  await ctx.tx.update(mediaMultipartResources).set({state:"aborting",updatedAt:new Date()}).where(eq(mediaMultipartResources.id,resource.id));
  await ctx.tx.update(mediaUploads).set({state:"aborted",completedAt:new Date(),updatedAt:new Date()}).where(eq(mediaUploads.id,uploadId));
@@ -260,36 +268,22 @@ export async function claimMultipartAbort(ctx:Pick<ServiceContext,"tx"|"actor">,
  return{operationId:operation!.id,terminal:false};
 }
 export async function abortOriginalMultipart(uploadId:string,operationId:string):Promise<void>{
- requireDurableMediaRetirementProof();
  const caller=originalMultipartCaller(operationId);
  let captured:BoundMultipart;
  try{captured=await originalMultipart(uploadId);}catch(error){await retainOriginalMediaCallerReturn(caller.id,caller.token,{notAttempted:true});await notAttempted(operationId);throw error;}
- let acknowledged=false;
+ let acknowledged=false,returned=false;
  try{
   await withTransferRequestScope({callId:caller.id,token:caller.token,runtimeIdentity:caller.runtimeIdentity},()=>captured.store.directMultipart!.abort(captured.resource.key,captured.resource.providerUploadId!,{request:observeTransferRequest,onAccepted:async()=>{acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}}));
   if(!(await retainOriginalMediaCallerReturn(caller.id,caller.token,{accepted:true,providerUploadId:captured.resource.providerUploadId!})).settled)conflict();
-  acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,finished:true});
-  if(!captured.store.directMultipart!.inspect)conflict("The original provider cannot verify multipart retirement.");
-  const inspection=await captured.store.directMultipart!.inspect(captured.resource.key,captured.resource.providerUploadId!);
-  if(inspection.state!=="absent")conflict("The original multipart resource remains open after its abort acknowledgement; keep this receipt for recovery.");
-  // An ABORT acknowledgement says nothing about a separately completed object.
-  await assertPhysicalStorageAbsence(captured.store,captured.resource.key);
-  await db().transaction(async tx=>{
-   await lockContactIdentityForRead(tx);const{resource,operation}=await lockedOperation(tx,operationId,true),now=new Date();
-   if(operation.kind!=="abort"||resource.uploadId!==uploadId)conflict();
-   await tx.update(mediaMultipartOperations).set({state:"accepted",verifiedAt:now,updatedAt:now}).where(eq(mediaMultipartOperations.id,operation.id));
-   await tx.update(mediaMultipartResources).set({state:"aborted",retiredAt:now,updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
-   const unsettled=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.keyDigest,resource.keyDigest),isNull(mediaObjectWrites.deletedAt))).limit(1);
-   if(!unsettled.length)await tx.delete(mediaObjects).where(and(eq(mediaObjects.key,captured.resource.key),eq(mediaObjects.state,"pending")));
-  });
- }catch(error){await retainOriginalMediaCallerReturn(caller.id,caller.token,error instanceof TransferRequestNotAttemptedError?{notAttempted:true}:{failed:true}).catch(()=>{});await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true,finished:true}).catch(()=>{});throw error;}
+  returned=true;acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,finished:true});
+  await finishIdleOriginalMultipartRetirement(captured.resource.id,operationId);
+ }catch(error){if(!returned)await retainOriginalMediaCallerReturn(caller.id,caller.token,error instanceof TransferRequestNotAttemptedError?{notAttempted:true}:{failed:true}).catch(()=>{});await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true,finished:true}).catch(()=>{});throw error;}
 }
 /** Existing expiry/erasure authority may retire a known, idle original upload. */
 export async function retireKnownMultipart(uploadId:string):Promise<boolean>{
  return withOriginalMultipartInvocation(async()=>{try{
   const captured=await originalMultipart(uploadId);
-  requireDurableMediaRetirementProof();
-  if(captured.resource.retiredAt)return true;
+  if(captured.resource.retiredAt){const[proven]=await db().execute<{retired:boolean}>(sql`select freeholder_media_multipart_unattempted_retirement(${captured.resource.id}::uuid) or exists(select 1 from media_multipart_operations operation join media_storage_provider_inventories inventory on inventory.multipart_operation_id=operation.id where operation.resource_id=${captured.resource.id}::uuid and freeholder_media_multipart_idle_retirement(operation.id,inventory.id)) as retired`);return proven?.retired===true;}
   if(captured.resource.state!=="open")return false;
   const claim=await db().transaction(async tx=>claimMultipartAbort({tx,actor:{kind:"system"}},uploadId,Boolean(captured.resource.redactedAt)));
   if(claim.terminal)return true;
