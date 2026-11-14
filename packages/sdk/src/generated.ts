@@ -6077,7 +6077,7 @@ export interface ServiceCatalog {
   };
   "media.listMultipartOperations": {
     input: { limit?: number };
-    output: { rows: { resource: { id: string; uploadId: string; key: string; namespace: string | null; providerUploadId: string | null; state: "unverified" | "creating" | "open" | "completing" | "completed" | "aborting" | "aborted" | "unknown"; expectedBytes: number; contentType: string; objectReceiptId: string | null; retiredAt: string | null; updatedAt: string }; operation: { id: string; kind: "create" | "complete" | "abort" | "sign"; state: string; providerAcceptedAt: string | null; updatedAt: string } | null; witness: string; sha256: string | null; bytes: number | null }[] };
+    output: { rows: { resource: { id: string; uploadId: string; key: string; namespace: string | null; providerUploadId: string | null; state: "unverified" | "creating" | "open" | "completing" | "completed" | "aborting" | "aborted" | "unknown"; expectedBytes: number; contentType: string; objectReceiptId: string | null; retiredAt: string | null; updatedAt: string }; operation: { id: string; kind: "create" | "complete" | "abort" | "sign"; state: string; providerAcceptedAt: string | null; updatedAt: string } | null; withheld: boolean; witness: string; sha256: string | null; bytes: number | null }[] };
   };
   "media.listStorageOperations": {
     input: { limit?: number };
@@ -6108,7 +6108,7 @@ export interface ServiceCatalog {
     output: { id: string; jobId: string };
   };
   "media.reconcileMultipartOperation": {
-    input: { resourceId: string; operationId?: string; expectedWitness: string; originalNamespace: string; providerUploadId?: string; originalKey?: string; action: "verify_original" | "applied" | "not_applied" | "cleanup"; sha256?: string; bytes?: number; providerFinalReference: string; providerEvidence: string; stoppedWriterEvidence: string; confirmation: "ORIGINAL MULTIPART RESOURCE CONFIRMED" };
+    input: { resourceId: string; operationId?: string; expectedWitness: string; originalNamespace: string; providerUploadId?: string; stopDrainId?: string; originalKey?: string; action: "verify_original" | "applied" | "not_applied" | "cleanup"; sha256?: string; bytes?: number; providerFinalReference: string; providerEvidence: string; stoppedWriterEvidence: string; confirmation: "ORIGINAL MULTIPART RESOURCE CONFIRMED" };
     output: { ok: true; needsCleanup: boolean };
   };
   "media.reconcileStorageOperation": {
