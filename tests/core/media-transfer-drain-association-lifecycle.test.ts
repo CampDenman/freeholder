@@ -41,7 +41,7 @@ describe.runIf(hasDatabase)("exact current transfer drain association refuses fa
  },60000);
  it("refuses an already captured, verified or released birth instead of accepting a fabricated terminal operator state",async()=>{
   const{source}=await configuredTransferStores(),before=await db().select().from(mediaObjectWrites),count=provider.calls.length;
-  for(const state of ["captured","verified","released"]as const){const refused=await failure(db().transaction(async tx=>{await tx.execute(sql`select set_config('freeholder.media_transfer_operator_v1','1',true)`);return tx.insert(drains).values({namespace:source.binding.namespace,state,sourceRevision:"e".repeat(40),executorIdentity:"synthetic-forged-birth:NO-kernel-proof"});}));expect(refused).toMatchObject({cause:{code:"23514",message:expect.stringContaining("born capturing")}});}
+  for(const state of ["captured","verified","released"]as const){const refused=await failure(db().transaction(async tx=>{await tx.execute(sql`select set_config('freeholder.media_transfer_operator_v1','1',true)`);return tx.insert(drains).values({namespace:source.binding.namespace,state,sourceRevision:"e".repeat(40),executorIdentity:"synthetic-forged-birth:NO-kernel-proof"});}));expect(refused).toMatchObject({cause:{code:"23514",message:expect.stringContaining("born capturing") as unknown}});}
   expect(await db().select().from(drains)).toEqual([]);expect(await db().select().from(mediaObjectWrites)).toEqual(before);expect(provider.calls.length).toBe(count);
  },60000);
  it("keeps an authentic pre-admitted target PUT fenced even when the later capture names its exact current plan",async()=>{

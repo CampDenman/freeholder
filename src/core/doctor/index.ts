@@ -22,6 +22,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { readdir } from "node:fs/promises";
 import { env } from "@/core/env";
 import { db } from "@/core/db";
+import type {Actor} from "@/core/service";
 import { isTimezone } from "@/core/i18n/zoned";
 import { PLATFORM_VERSION } from "@/core/platform";
 import { updateCheckEnabled, updateFeedUrl } from "@/core/update/check";
@@ -224,7 +225,7 @@ async function checkDatabase(): Promise<Check[]> {
   return checks;
 }
 
-async function checkStorage(actor:import("@/core/service").Actor={kind:"system"}): Promise<Check> {
+async function checkStorage(actor:Actor={kind:"system"}): Promise<Check> {
   // A real round trip. Credentials that parse and a bucket that refuses writes
   // look identical from the outside until an owner uploads a photograph.
   const probe = `doctor/${Date.now()}-${Math.random().toString(36).slice(2)}.txt`;
@@ -1234,7 +1235,7 @@ async function checkZoneData(): Promise<Check[]> {
   }
 }
 
-export async function runDoctor(actor:import("@/core/service").Actor={kind:"system"}): Promise<DoctorReport> {
+export async function runDoctor(actor:Actor={kind:"system"}): Promise<DoctorReport> {
   const checks: Check[] = [
     ...(await checkEnvironment()),
     ...(await checkDatabase()),

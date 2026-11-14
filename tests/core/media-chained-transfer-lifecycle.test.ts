@@ -16,7 +16,7 @@ import {adoptedPhysicalObject} from "@/core/media/transfer-resolver";
 import {mediaStorageTransferReceipts as members} from "@/core/media/transfer-schema";
 import {putWithReceipt} from "@/core/media/write-ledger";
 import {mediaObjectWrites} from "@/core/media/write-schema";
-import {mediaStorageTransferCalls as calls,mediaStorageTransferObjects as objects,mediaStorageTransferPlans as plans} from "@/core/media/transfer-schema";
+import {mediaStorageTransferObjects as objects,mediaStorageTransferPlans as plans} from "@/core/media/transfer-schema";
 import {lockTransferInventory} from "@/core/media/transfer-authority";
 import {planStorageTransfer,advanceStorageTransfer} from "@/core/media/transfer-service";
 import {chainedMediaRetirementProvider} from "../helpers/media-chained-retirement-provider";
@@ -32,7 +32,7 @@ describe.runIf(hasDatabase)("immutable chained physical transfer lineage (comple
  const nextResource=()=>{vi.stubEnv("S3_BUCKET","target");vi.stubEnv("MEDIA_TRANSFER_TARGET_S3_BUCKET","third");resetEnvForTests();resetStorageForTests();};
  it("moves two actual physical generations and reads the original logical alias through exact original receipt ancestry",async()=>{
   const first=await plan();await advance(first.id);const[ancestor]=await db().select().from(objects).where(eq(objects.planId,first.id));if(!ancestor?.targetReceiptId)throw Error("Actual first target receipt missing");const before=await db().select().from(mediaObjectWrites),firstMembers=await db().select().from(members).where(eq(members.objectId,ancestor.id));nextResource();const second=await plan(),[child]=await db().select().from(objects).where(eq(objects.planId,second.id));expect(child?.key).toBe(ancestor.targetKey);expect((await db().select().from(members).where(eq(members.objectId,child!.id))).map(row=>row.receiptId)).toContain(ancestor.targetReceiptId);await advance(second.id);
-  expect(provider.calls.filter(row=>row.method==="PUT")).toHaveLength(3);expect(provider.calls.filter(row=>row.method==="DELETE")).toHaveLength(2);expect(provider.objects.has(`/source/${key}`)).toBe(false);expect(provider.objects.has(`/target/${ancestor.targetKey}`)).toBe(false);expect(provider.objects.get(`/third/${child!.targetKey}`)?.body).toEqual(body);expect((await adoptedPhysicalObject(key))?.key).toBe(child!.targetKey);expect(await(await storage()).get(key)).toEqual(body);
+  expect(provider.calls.filter(row=>row.method==="PUT")).toHaveLength(3);expect(provider.calls.filter(row=>row.method==="DELETE")).toHaveLength(2);expect(provider.objects.has(`/source/${key}`)).toBe(false);expect(provider.objects.has(`/target/${ancestor.targetKey}`)).toBe(false);expect(provider.objects.get(`/third/${child!.targetKey}`)?.body).toEqual(body);expect((await adoptedPhysicalObject(key))?.key).toBe(child!.targetKey);expect(await storage().get(key)).toEqual(body);
   for(const original of before.filter(row=>row.operation==="put"))expect((await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,original.id)))[0]).toEqual(original);expect(await db().select().from(members).where(eq(members.objectId,ancestor.id))).toEqual(firstMembers);
  },60000);
  it("refuses another source claim while a real original multipart session remains in the current source inventory",async()=>{

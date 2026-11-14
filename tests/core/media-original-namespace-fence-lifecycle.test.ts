@@ -5,7 +5,7 @@
 // Full real capability is required; tests never publish a fixture capability.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {randomUUID} from "node:crypto";
-import {eq,sql} from "drizzle-orm";
+import {sql} from "drizzle-orm";
 import {boundStorage,resetStorageForTests} from "@/adapters/storage";
 import {db} from "@/core/db";
 import {users} from "@/core/auth/schema";
