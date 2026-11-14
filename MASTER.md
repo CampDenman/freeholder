@@ -3564,6 +3564,20 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled bank-order source correction 2026-11-13 (C12.38/C1.08/C9.33):
+isolated source carries the ONE signed actual admission-lineage child and its
+real producer/own-ancestry hook. A NEW UNAPPLIED bank suffix replaces only the
+unsafe transaction-start timestamp selection with actual namespace-locked
+sequence/predecessor/closed-history selection. Full old source predicates remain;
+lineage enters immutable bank and complete-current PG fingerprints. Unknown or
+later unsequenced reads refuse stale bank data. The parent current graph keeps
+all lineage and permits only exact authenticated own birth in historical causal
+comparison. Four source and two pure controls are PREPARED/UNRUN; no parser,
+compiler/database/provider/native ran. Real transaction-order/negative-bank and
+all protocol/batch/native/security/provider acceptance remain required. Current
+root143 qualification, all C-items and stable stay unchanged. See
+`deploy/controlled-bank-read-order84-source-20261113.md`.
+
 Controlled bank consumer source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): isolated source normally carries the actuale3
 observational producer and consumes its distinct genuine returned bank context,

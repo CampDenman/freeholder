@@ -13,6 +13,7 @@ import { controlledProviderJournal } from "@/modules/subscriptions/controlled-pr
 import { authenticatedControlledQuote } from "@/modules/subscriptions/controlled-provider-quote-proof";
 import { readControlledCashObservationSource } from "@/modules/subscriptions/controlled-provider-cash-observation-source";
 import { readControlledCashInspectionAncestry } from "@/modules/subscriptions/controlled-provider-cash-inspection-ancestry";
+import { controlledCashInspectionLineageWitness } from "@/modules/subscriptions/controlled-cash-inspection-lineage";
 import { subscriptionProviderScheduleOperations } from "@/modules/subscriptions/provider-schedule-schema";
 import { scheduleCallerHasStopped } from "@/modules/subscriptions/provider-schedule-proof";
 import { originalProviderReadsFinished } from "@/modules/subscriptions/provider-schedule-read-proof";
@@ -189,9 +190,10 @@ async function snapshot(ctx:ServiceContext,input:ControlledCashObservationInput,
  order by 1,2 limit 5001`);
  if(extra.length>5000||!extra.some(row=>row.table==="contacts"&&row.id===parent.contactId))refuse();
  const own=input.inspectionId?await readControlledCashInspectionAncestry(ctx.tx,{...input,inspectionId:input.inspectionId}):undefined;
+ const lineages=await controlledCashInspectionLineageWitness(ctx.tx,{paymentIds:graph.money.map(row=>row.id),receiptIds:graph.receipts.map(row=>row.id),resourceIds});
  const rows:ObservationFingerprint[]=[...graph.physical.map(row=>({...row,domain:row.table==="subscription_provider_schedule_resources"?"schedule_stable" as const:"postgres_row" as const})),
   ...graph.children.entries.map(row=>({...row,domain:row.table.startsWith("subscription_controlled_")||row.table==="merchant_cash_return_inspection_stops"?"postgres_row" as const:"dependency_canonical" as const})),
-  ...[...graph.proration.entries,...graph.controlled.entries,...financial.entries,...transports.flatMap(row=>controlledFinancialEntries(row.coverage.witness)),...extra].map(row=>({...row,domain:"postgres_row" as const}))];
+  ...[...graph.proration.entries,...graph.controlled.entries,...financial.entries,...transports.flatMap(row=>controlledFinancialEntries(row.coverage.witness)),...lineages.entries,...extra].map(row=>({...row,domain:"postgres_row" as const}))];
  const entries=controlledObservationEntries(rows,own),body={protocol:CONTROLLED_COLLECTION_PROTOCOL,collectionId:input.collectionId,receiptId:input.receiptId,source,transport:transports.map(row=>({subscriptionId:row.subscriptionId,revision:row.coverage.revision,rawFacts:row.coverage.rawFinancialFacts})),quoteEvidence};
  const revision=merchantTaxDigest({...body,entries:entries.full}),causalSourceRevision=merchantTaxDigest({...body,entries:entries.causal});
  if(own&&(own.sourceRevision!==source.sourceRevision||own.parentPreAdmissionRevision!==causalSourceRevision))refuse();

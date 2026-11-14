@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Future controlled bank evidence now follows authenticated actual admission order, retaining raw and current history; application and qualification remain separately required.
+
 - Prospective controlled cash consumption now uses its distinct genuine receipt-owned bank context, preserving known and unknown original charge facts and actual fee/recipient checks; payment and batch qualification remain pending.
 
 - Source-only controlled bank observation now has distinct complete coverage and actual caller checks, retaining raw money debt and exact returned-own history; application and qualification remain separately required.
