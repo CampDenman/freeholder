@@ -27,6 +27,7 @@ import { controlledPaidPeriodWitnesses, exportControlledPaidPeriodHistory } from
 import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
 import { actualControlledPeriod84 } from "../helpers/actual-controlled-period84";
 import { actualControlledOpenInvoice84 } from "../helpers/actual-controlled-open-invoice84";
+import { retainActualControlledManifest84 } from "../helpers/actual-controlled-current-manifest84";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const batch = z.object({ invoiceId: z.uuid(), batchId: z.uuid(), payments: z.array(z.object({ receiptId: z.uuid(), paymentId: z.uuid() }).strict()),
@@ -57,6 +58,7 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
   async function retained() {
     if (!f) throw Error("Create the real original accepted target first.");
     expect(await collectControlledCollection.call({ collectionId: f.target.collectionId }, OWNER)).toMatchObject({ state: "money_retained", applied: false });
+    await retainActualControlledManifest84(f);
     const rows = await db().select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId, f.parent.id));
     expect(rows).toHaveLength(1); const receipt = rows[0]; if (!receipt) throw Error("Retain real positive provider cash first.");
     expect(await inspectControlledCashReceipt.call({ collectionId: f.target.collectionId, receiptId: receipt.id }, OWNER)).toMatchObject({ bankReadReturned: true, completeInventory: true });
