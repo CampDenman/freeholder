@@ -16,6 +16,7 @@ import { subscriptionProviderChargeReceipts } from "@/modules/subscriptions/sche
 import { invoices, payments } from "@/modules/invoicing/schema";
 import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
 import { actualControlledPeriod84 } from "../helpers/actual-controlled-period84";
+import { retainActualControlledManifest84 } from "../helpers/actual-controlled-current-manifest84";
 import { actualControlledOpenInvoice84 } from "../helpers/actual-controlled-open-invoice84";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 const batch = z.object({ invoiceId: z.uuid(), batchId: z.uuid(), payments: z.array(z.object({ receiptId: z.uuid(), paymentId: z.uuid() }).strict()),
@@ -37,6 +38,7 @@ describe.runIf(hasDatabase)("current canonical controlled bank principal84", { t
     fixture = await actualControlledPeriod84(); const current = fixture, open = await actualControlledOpenInvoice84(current);
     current.remote.externallyAttachPayment(open.providerInvoiceRef, 1, 0);
     await collectControlledCollection.call({ collectionId: current.target.collectionId }, OWNER);
+    await retainActualControlledManifest84(current);
     const rows = await db().select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId, current.parent.id));
     expect(rows).toHaveLength(1); const receipt = rows[0]; if (!receipt) throw Error("Retain the genuine original positive receipt.");
     expect(await inspectControlledCashReceipt.call({ collectionId: current.target.collectionId, receiptId: receipt.id }, OWNER)).toMatchObject({ bankReadReturned: true, completeInventory: true });

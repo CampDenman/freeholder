@@ -15,7 +15,7 @@ import { originalMerchantRefundCash, type MerchantRefundCashOrigin } from "./mer
 import { originalMerchantFeeTarget } from "./merchant-line-fee-target";
 import { routingForPayment } from "./merchant-charge";
 import { currentBankPrincipalMatches } from "./original-bank-principal-policy";
-import { controlledCanonicalBankReview, controlledPrincipalPhysicalUnion } from "./controlled-canonical-bank-policy";
+import { controlledCanonicalBankReview, controlledPrincipalPhysicalUnion, controlledCanonicalLegacyEmpty } from "./controlled-canonical-bank-policy";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import type { payments } from "./schema";
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
@@ -45,9 +45,19 @@ export async function readControlledCanonicalBankPrincipal(ctx: ServiceContext, 
     eq(subscriptionProviderChargeReceipts.providerPaymentIntentRef, cash.providerRef))).limit(2);
   const namespaces = [];
   for (const receipt of receipts) namespaces.push({ receipt, namespace: await readControlledReceiptNamespace(ctx.tx, receipt.id) });
-  const links = await ctx.tx.select().from(controlledCashApplicationLinks).where(eq(controlledCashApplicationLinks.paymentId, payment.id)).limit(2);
   const candidates = namespaces.filter(row => row.namespace.applies);
-  if (!links.length && !candidates.length) return { applies: false as const };
+  const routes = await ctx.tx.select().from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.paymentId, payment.id)).limit(2);
+  // Read only existing source/receipt/route evidence first. A real controlled
+  // birth necessarily retains its exact reserved key AND immutable receipt
+  // alias; neither a missing alias nor zero namespace receipts alone suffices.
+  if (controlledCanonicalLegacyEmpty({ paymentMethod: payment.method, paymentIdempotencyKey: payment.idempotencyKey,
+    receiptIds: receipts.map(row => row.id), controlledReceiptIds: candidates.map(row => row.receipt.id),
+    routes: routes.map(row => ({ originKind: row.originKind, receiptId: row.originalChargeReceiptId })) })) return { applies: false as const };
+  const links = await ctx.tx.select().from(controlledCashApplicationLinks).where(eq(controlledCashApplicationLinks.paymentId, payment.id)).limit(2);
+  if (!links.length && !candidates.length) {
+    if(payment.idempotencyKey.startsWith("controlled-receipt:"))refuse();
+    return { applies: false as const };
+  }
   const selected = candidates[0], link = links[0];
   if (receipts.length !== 1 || candidates.length !== 1 || links.length !== 1 || !selected || !link || !selected.namespace.verified || !selected.namespace.resourceId
     || selected.namespace.principalCallerDebt || link.receiptId !== selected.receipt.id) refuse();
@@ -55,7 +65,7 @@ export async function readControlledCanonicalBankPrincipal(ctx: ServiceContext, 
   const [proof] = await ctx.tx.select().from(controlledCashApplicationReceipts).where(eq(controlledCashApplicationReceipts.id, link.receiptProofId)).limit(1);
   const [batch] = await ctx.tx.select().from(controlledCashApplicationBatches).where(eq(controlledCashApplicationBatches.id, link.batchId)).limit(1);
   const [origin] = await ctx.tx.select().from(subscriptionControlledChargeOrigins).where(eq(subscriptionControlledChargeOrigins.receiptId, receipt.id)).limit(1);
-  const routes = await ctx.tx.select().from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.paymentId, payment.id)).limit(2), route = routes[0];
+  const route = routes[0];
   if (!proof || !batch || !origin || !route || routes.length !== 1 || !verifiedControlledCashBatch(batch) || !verifiedControlledCashReceipt(proof)
     || proof.batchId !== batch.id || link.batchId !== batch.id || proof.receiptId !== receipt.id || origin.resourceId !== namespace.resourceId
     || proof.originOperationId !== origin.operationId || proof.originCallId !== origin.callId || proof.originFactId !== origin.factId

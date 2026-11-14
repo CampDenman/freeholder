@@ -29,3 +29,18 @@ export function controlledPrincipalPhysicalUnion(groups: readonly (readonly Cont
   }
   return [...entries.values()].sort((a, b) => a.table.localeCompare(b.table) || a.id.localeCompare(b.id));
 }
+
+/** Read-surface selection only. This never proves money or principal. The
+ * reserved key is a NECESSARY immutable real-birth property in BOTH signed
+ * protocols, not an owner selected by prefix. Unknown/known controlled rows
+ * must still take the complete actual FK/HMAC/current-bank reader. */
+export function controlledCanonicalLegacyEmpty(input: { paymentMethod: string; paymentIdempotencyKey: string; receiptIds: readonly string[];
+  controlledReceiptIds: readonly string[]; routes: readonly { originKind: "attempt" | "provider_schedule"; receiptId: string | null }[] }) {
+  if (input.routes.length > 1 || input.paymentMethod === "provider_schedule" && input.routes.length !== 1 || new Set(input.receiptIds).size !== input.receiptIds.length || new Set(input.controlledReceiptIds).size !== input.controlledReceiptIds.length
+    || input.controlledReceiptIds.some(id => !input.receiptIds.includes(id))) throw new ServiceError("conflict", "Restore the exact existing original receipt and immutable route before selecting the legacy bank read surface.");
+  for (const route of input.routes) if ((route.originKind === "provider_schedule") !== (input.paymentMethod === "provider_schedule")
+    || route.originKind === "attempt" && (route.receiptId !== null || !["hosted_checkout", "saved_method"].includes(input.paymentMethod)) || route.originKind === "provider_schedule" && (route.receiptId === null || !input.receiptIds.includes(route.receiptId)))
+    throw new ServiceError("conflict", "Retain missing or foreign original schedule receipt ownership; it cannot become an empty legacy source.");
+  return input.receiptIds.length === 0 && input.controlledReceiptIds.length === 0 && input.routes.every(row => row.receiptId === null)
+    && input.paymentMethod !== "provider_schedule" && !input.paymentIdempotencyKey.startsWith("controlled-receipt:");
+}
