@@ -16795,3 +16795,11 @@ All four are UNRUN; no source/native/live acceptance is claimed. Actual integrat
 staged money application, separate paid effects and full lifecycle/privacy/provider/
 security work remain REQUIRED. See
 `deploy/controlled-positive-bank-native84-prepared-20261113.md`.
+
+Ordering oracle source migration 2026-11-13 (C9.33/C9.38/C12.38/C1.08): the
+ORIGINAL desired positive admission-order case now uses the genuine accepted target
+and controlled observation producer, preserving ordering/no-new-money/bank/old-read
+assertions. Its old actual current9 generic guard refusal is a separate exact
+negative; duplicate newly prepared positive is consolidated into the original
+file. Five total next-suite actual-service native cases remain UNRUN. No guard or
+acceptance is weakened. See `deploy/controlled-order-oracle84-migration-20261113.md`.
