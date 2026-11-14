@@ -8,6 +8,7 @@ import type {TransferRequestDescriptor,TransferRequestObservation,TransferReques
 import {db} from "@/core/db";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {actorString,type Actor,type Tx} from "@/core/service";
+import {projectOriginalMultipartSessionObservation,reconcileOriginalMultipartPositivePointer,originalSessionObservationDecision} from "./multipart-session-observation";
 import {assertMediaActorLive} from "./upload-ownership";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaStorageTransferCalls,mediaStorageTransferObjects,mediaStorageTransferReceipts} from "./transfer-schema";
@@ -125,20 +126,18 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
   // Genuine old/partial body facts without this new certificate stay retained
   // as debt. Adoption independently requires exact complete part readback.
   if(facts.requestProof&&request.descriptor.kind==="object.put"&&(facts.requestProof.id!==request.id||facts.requestProof.tokenDigest!==request.tokenDigest))transferConflict("The actual original upload returned another request identity.");
+  let positiveSession=false;
   if(facts.uploadId){
-   if(typeof facts.uploadId!=="string"||!facts.uploadId||facts.uploadId.length>4096||/[\u0000-\u001f]/.test(facts.uploadId)||!request.descriptor.kind.startsWith("multipart.")||request.descriptor.kind!=="multipart.create"&&facts.uploadId!==request.descriptor.uploadId)transferConflict("The provider fact names a different original session.");
-   if(call.multipartOperationId&&["accepted","session"].includes(facts.stage)){
-    const[parent]=await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1).for("update");if(!parent)transferConflict();
-    const[resource]=await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.id,parent.resourceId)).limit(1).for("update");if(!resource||resource.providerUploadId&&resource.providerUploadId!==facts.uploadId||parent.observedProviderUploadId&&parent.observedProviderUploadId!==facts.uploadId)transferConflict("The first actual original session ACK cannot be rebound.");
-    const now=new Date();await tx.update(mediaMultipartOperations).set({observedProviderUploadId:facts.uploadId,...(facts.stage==="accepted"&&!parent.providerAcceptedAt?{providerAcceptedAt:now}:{}),...(late?{state:"unknown" as const}:{}),updatedAt:now}).where(eq(mediaMultipartOperations.id,parent.id));
-    await tx.update(mediaMultipartResources).set({providerUploadId:facts.uploadId,...(late?{state:"unknown" as const,retiredAt:null}:{}),updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
-    if(late&&resource.originalReservationId)await tx.insert(mediaObjects).values({reservationId:resource.originalReservationId,key:call.physicalKey,uploadId:resource.uploadId,role:"staged",state:"pending",contentType:resource.contentType,bytes:resource.expectedBytes}).onConflictDoNothing();
-    scope.multipartOperationIds.add(parent.id);
-   }
+   positiveSession=Boolean(call.multipartOperationId&&["accepted","session"].includes(facts.stage));
+   if(positiveSession)originalSessionObservationDecision({descriptor:request.descriptor,fact:facts,canonicalUploadId:null,observedUploadId:null});
+   else if(typeof facts.uploadId!=="string"||!facts.uploadId||facts.uploadId.length>4096||/[\u0000-\u001f]/.test(facts.uploadId)||!request.descriptor.kind.startsWith("multipart.")||request.descriptor.kind!=="multipart.create"&&facts.uploadId!==request.descriptor.uploadId)transferConflict("The provider fact names a different original session.");
   }
+
   const ordinal=request.observationCount+1;
   await tx.insert(mediaStorageTransferRequestObservations).values({requestId:id,ordinal,facts,factsDigest:transferDigest(facts),bytes:facts.bytes});
   await tx.update(mediaStorageTransferRequests).set({observationCount:ordinal,...(late?{state:"unknown" as const}:{})}).where(eq(mediaStorageTransferRequests.id,id));
+  if(positiveSession&&call.multipartOperationId){await projectOriginalMultipartSessionObservation(tx,{operationId:call.multipartOperationId,callId:call.id,requestId:id,fact:facts,late});scope.multipartOperationIds.add(call.multipartOperationId);}
+
   if(late&&facts.stage==="capability"&&call.multipartOperationId){
    // Retain the actual positive fact FIRST. A later contradictory mint cannot
    // be rejected merely because an earlier private disposition was closed.
@@ -182,7 +181,7 @@ async function finish(scope:Scope,id:string,token:string,failed:boolean){
 }
 async function reconcileRetainedRequestFacts(scope:Scope):Promise<void>{
  const ids=[...scope.receiptIds],multipartIds=[...scope.multipartOperationIds];scope.receiptIds.clear();scope.multipartOperationIds.clear();const failures:unknown[]=[];
- for(const id of multipartIds){try{await reconcileMediaErasureCohorts({multipartOperationId:id});}catch(error){failures.push(error);}}
+ for(const id of multipartIds){try{if(!await reconcileOriginalMultipartPositivePointer(id))failures.push(new Error("The original positive session fact is retained; its conflicting or unavailable original pointer remains recovery debt."));}catch(error){failures.push(error);}try{await reconcileMediaErasureCohorts({multipartOperationId:id});}catch(error){failures.push(error);}}
  for(const id of ids){try{if(!await(await import("./original-quota-evidence")).reconcileActualOriginalQuota(id))failures.push(new Error("The actual original physical facts are retained; conflicting quota provenance freezes this namespace until exact recovery."));}catch(error){failures.push(error);}try{await reconcileMediaErasureCohorts({objectReceiptId:id});}catch(error){failures.push(error);}try{await reconcileCommittedStorageObservation(id);}catch(error){failures.push(error);}}
  if(failures.length)throw new AggregateError(failures,"The original provider facts and finish are retained; dependent erasure recovery remains pending.");
 }

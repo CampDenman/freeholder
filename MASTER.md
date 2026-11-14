@@ -16137,3 +16137,20 @@ UNRUN, all prior oracle bodies intact. No child execution/provider/host action
 or C closure. Remote authority/unknown/legacy/certificate/quota/capture/cutover,
 full qualification and external/platform/independent security/stable gates
 remain open. See `deploy/media-multipart-abort-recovery-source-2026-11-14.md`.
+
+Source continuation 2026-11-14 (C1.12/C11.08/C3.22): the real original physical
+observer now appends structurally valid conflicting multipart accepted/session
+facts before identity projection. It preserves first canonical UploadId/parent
+ACK/FIN/results and reopens the same original resource/caller/request debt,
+without adopting or deleting the conflicting session. Pointer restoration is
+a separate post-commit exact-original operation; unavailable/redacted/foreign
+pointers cannot roll back positive evidence, and the original erasure outbox
+still runs. This is a source finding, not an observed provider incident. No
+SQL/model/API/capability changes; all prior oracle bodies and owned82 bytes
+remain intact. Seven pure/four real-original-ledger controls with explicitly
+scripted additional facts are PREPARED/UNRUN and do not claim actual additional
+provider ACK/account acceptance. No child execution/provider/host action or
+C closure. Late-terminal/conflicting recovery, certificates/quota/remote part
+terminal/capture/cutover and all qualification/external/security/stable gates
+remain open. See
+`deploy/media-multipart-conflicting-session-facts-source-2026-11-14.md`.
