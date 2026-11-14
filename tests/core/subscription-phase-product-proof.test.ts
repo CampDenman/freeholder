@@ -62,7 +62,7 @@ describe("existing controlled product ancestry keeps raw legacy debt",()=>{
  it("refuses any legacy billing identity, stop, incomplete journal, unfinished or nonproduct work",()=>{
   const{operation,resource}=history(),unknown={...resource,state:"unknown" as const,recoveryPending:true};
   for(const changed of [{...unknown,providerSubscriptionRef:"sub_legacy"},{...unknown,providerCustomerRef:"cus_legacy"},{...unknown,operationRevision:2},{...unknown,recoveryPending:false},{...unknown,state:"quiescing" as const}])expect(verifiedControlledPhaseProductAncestry(changed,[operation],controlled())).toBe(false);
-  for(const changed of [{...operation,state:"unknown" as const},{...operation,kind:"create"},{...operation,operationRevision:2}])expect(verifiedControlledPhaseProductAncestry(unknown,[changed],controlled())).toBe(false);
+  for(const changed of [{...operation,state:"unknown" as const},{...operation,kind:"create" as const},{...operation,operationRevision:2}])expect(verifiedControlledPhaseProductAncestry(unknown,[changed],controlled())).toBe(false);
   expect(verifiedControlledPhaseProductAncestry(unknown,[],controlled())).toBe(false);
  });
  it("requires the exact stored controlled subscription, terms, generation and original verified product",()=>{
