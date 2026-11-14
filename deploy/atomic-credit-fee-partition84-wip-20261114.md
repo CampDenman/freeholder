@@ -120,3 +120,32 @@ and no same-amount/current-account relation is introduced. This private WIP
 checkpoint is NOT suitable for root integration: legacy SQL root continuation,
 five genuine trigger/readiness bodies, three complete old successors, exact
 deferred typed-delta conservation and financial/privacy leaf remain required.
+
+Further private source now includes the SQL positive old-application candidate
+and absolute-root continuation. It binds the actual old application/reservation/
+funding, accepted quote/proration/issued single note line and unique original
+principal, preserves the old application as its own original epoch and proves
+the global original payment capacity independently. It does not create a
+payment-coordinate offset. Known declared B sources cannot enter that branch.
+
+The funding-purpose BEFORE function is now genuine source: exact immutable
+actual parent PG SHA and same transaction, declared actual quote/principal/note
+birth, current bank/fee tuple, already-held full resource/canonical/callback
+prefix and PG source preimage reconstructed by removing ONLY that exact actual
+newborn parent. No other current row or callback is projected away. It is NOT
+enabled or sufficient alone: independent mandatory deferred birth/final typed
+delta remains unfinished. Four of the seven new function bodies plus the
+three full old successors and enabled-trigger/readiness pins remain required.
+
+New ordinary `atomic-credit-fee-financial.ts` selects only real funding or
+reservation IDs supplied by the parent financial graph. Profile is an AND
+restriction through the exact accepted quote. Child MAC/actual parent PG/root/
+route/receipt/inspection/observation links are checked; actual full row SHA
+entries and separate parent/root physical dependencies count by table+UUID
+within one 5000 union. It does not call principal/bank authority or mutate
+collectors. Root must union these actual dependencies with existing credit/
+source families, preserve empty histories and fold them before no-route exits.
+New explicit safe archive excludes private fee coordinates for buyers and all
+MAC/preimage/provider/hosting payloads. Merchant fee/interval fields require an
+exact owned profile scope. Four nested-private-canary controls PREPARED/UNRUN.
+These helpers are not registered/composed into root and grant no authority.

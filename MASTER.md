@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+B private SQL/footprint SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08): actual
+legacy-application positive ancestry and original absolute-root candidates now
+exist in the isolated tail, plus genuine funding-purpose BEFORE preimage/birth/
+held-prefix/current-bank checks. Four remaining new function bodies, complete
+deferred final conservation, old successors and readiness/trigger pins are NOT
+complete or enabled. Collector-free exact-parent fullPG/MAC witnesses and safe
+buyer/owned-profile merchant archive helpers now exist; four private-canary
+controls PREPARED/UNRUN. No root collector/SQL assembly or execution changed.
+Private WIP remains unsuitable for integration or any qualification/stable
+claim; required full current physical/caller/loan conservation is not waived.
+
 B private persistence SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08): signed private
 stored-review declaration now binds server-planned funding/proration and exact
 actual accepted source ancestry without changing public DTOs or asserting an
