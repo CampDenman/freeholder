@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Ordinary shared gross-proration DTOs; unchanged shapes, no collector import.
 import { z } from "zod";
-import { feeCollectionState } from "@/modules/invoicing/credit-fee-origin";
+import { feeCollectionState } from "@/modules/invoicing/credit-fee-contract";
 import { subscriptionTaxDestination } from "./merchant-scope-contract";
 import { prorationCardSummary } from "./proration-card-contract";
 import { publicMerchantTermsQuote } from "./merchant-terms-quote-contract";

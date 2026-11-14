@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import bPrivacy from "../../deploy/atomic-credit-subscription-privacy-root-continuation-20261114.json";
 const read=(path:string)=>readFileSync(new URL(`../../${path}`,import.meta.url),"utf8");
 const sha=(value:string)=>createHash("sha256").update(value).digest("hex");
 const manifest=z.object({
@@ -53,6 +54,11 @@ describe("financial contact undo preimage preservation",()=>{
   expect(sha(read(manifest.sourcePatch.path))).toBe(manifest.sourcePatch.sha256);
   for(const file of manifest.files){
    let source=read(file.path);
+   if(file.path===bPrivacy.path){
+    expect(sha(source)).toBe(bPrivacy.afterSha256);
+    for(const edit of [...bPrivacy.finiteDelta].reverse()){expect(source.split(edit.after)).toHaveLength(2);source=source.replace(edit.after,()=>edit.before);}
+    expect(source).toBe(bPrivacy.beforeWholeFile);expect(sha(source)).toBe(bPrivacy.beforeSha256);
+   }
    if(file.path==="src/core/contacts/service.ts"){
     // Only the two independently pinned privacy fences outside merge/undo may
     // be reversed; the entire original contacts service must still match.

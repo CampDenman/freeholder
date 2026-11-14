@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // C9.33/C12.38: a carried obligation is never evidence of a collected commission.
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { z } from "zod";
+import {creditFeeAllocation,type FeeCollectionState} from "./credit-fee-contract";
+export {creditFeeAllocation,feeCollectionState} from "./credit-fee-contract";
+export type {FeeCollectionState} from "./credit-fee-contract";
 import type { ServiceContext } from "@/core/service";
 import { ServiceError } from "@/core/service";
 import { invoices, payments } from "./schema";
@@ -13,10 +15,7 @@ import { invoiceCreditApplications, invoiceCreditFunding, invoiceCreditReservati
 import { routingForPayment } from "./merchant-charge";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { proportionalFeeCarry } from "./credit-fee-amounts";
-export const feeCollectionState = z.enum(["not_due", "owed", "recorded_remitted", "verified_collected", "review"]);
-export type FeeCollectionState = z.infer<typeof feeCollectionState>;
-export const creditFeeAllocation = z.object({ feeObligationMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), provenCollectedMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  collectionState: feeCollectionState, unexpectedFee: z.boolean(), evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/) });
+
 
 /** The caller already holds original payment locks before committing a new
  * allocation. Reads retain actual immutable original resource/receipt IDs. */
@@ -30,7 +29,7 @@ export async function originalCreditFeeAllocation(ctx: ServiceContext, paymentId
     const partition=await controlledAtomicCreditFeePartition(ctx,{paymentId,sourceApplicationId,takeMinor});
     if(partition)return creditFeeAllocation.parse(partition.allocation);
   }
-  let originalFeeMinor: number, state: z.infer<typeof feeCollectionState>, proof: unknown, unexpectedFee = false, sourceRows = 0;
+  let originalFeeMinor: number, state: FeeCollectionState, proof: unknown, unexpectedFee = false, sourceRows = 0;
   if (routing.moneyOrigin === "recorded_external") {
     const receipt = await commercialPaymentRecorded(ctx, paymentId), current = await ctx.callAsSystem(commercialPrincipalState, { paymentId });
     const actual = await ctx.tx.select().from(commercialFeeAttestations).where(eq(commercialFeeAttestations.paymentId, paymentId)).orderBy(commercialFeeAttestations.id).limit(5001);
