@@ -8819,6 +8819,8 @@
   "media.recovery.cleanup": "Clean up original resource",
   "media.recovery.complete": "Complete resumable upload",
   "media.recovery.create": "Start resumable upload",
+  "media.recovery.sign": "Upload link issuance",
+  "media.recovery.signingReview": "This upload link may still allow writing. Keep the upload while its original issuance and storage outcome are reviewed. Expiry or a browser response does not complete recovery.",
   "media.recovery.multipart": "Original resumable upload",
   "media.recovery.multipartConfirm": "I confirm the original multipart resource and that its prior writers have stopped.",
   "media.recovery.providerUploadId": "Original provider upload ID (if known)",

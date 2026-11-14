@@ -42,16 +42,17 @@ export function copyManifestObjects(options: {
 }): Promise<{ objects: number; bytes: number; dryRun: boolean; skipped: number }>;
 
 export interface TransferRequestDescriptor {
- kind:"object.read"|"object.metadata"|"object.body"|"object.put"|"object.delete"|"bucket.metadata"|"inventory.objects"|"inventory.versions"|"inventory.sessions"|"inventory.retained"|"multipart.create"|"multipart.inspect"|"multipart.complete"|"multipart.abort";
+ kind:"object.read"|"object.metadata"|"object.body"|"object.put"|"object.delete"|"bucket.metadata"|"inventory.objects"|"inventory.versions"|"inventory.sessions"|"inventory.retained"|"multipart.create"|"multipart.inspect"|"multipart.complete"|"multipart.abort"|"multipart.sign";
  binding:VersionedTransferStore["binding"];key?:string;expectedRevision?:TransferRevision;
  createOnly?:boolean;sha256?:string;bytes?:number;cursor?:Record<string,string>|null;
- uploadId?:string;partsDigest?:string;contentType?:string;
+ uploadId?:string;partsDigest?:string;contentType?:string;partNumber?:number;expiresAt?:string;
 }
 export interface OriginalProviderRequestProof {id:string;tokenDigest:string}
 export interface TransferRequestIdentity {id:string;token:string}
 export interface TransferRequestObservation {
- stage:"response"|"metadata"|"body"|"accepted"|"absence"|"inventory"|"configuration"|"not_attempted"|"inventory_raw"|"session"|"response_body";
- status:number|null;uploadId?:string;requestProof?:OriginalProviderRequestProof;detailDigest?:string;revision?:TransferRevision;sha256?:string;bytes?:number;count?:number;
+ stage:"response"|"metadata"|"body"|"accepted"|"absence"|"inventory"|"configuration"|"not_attempted"|"inventory_raw"|"session"|"response_body"|"capability";
+ status:number|null;uploadId?:string;requestProof?:OriginalProviderRequestProof;detailDigest?:string;revision?:TransferRevision;sha256?:string;bytes?:number;count?:number;expiresAt?:string;
+ capabilityProof?:import('./media-part-capability.mjs').OriginalPartCapabilityProof;
 }
 export type TransferRequestObserver=<T>(descriptor:TransferRequestDescriptor,operation:(notify:(facts:TransferRequestObservation)=>Promise<void>,identity?:TransferRequestIdentity)=>Promise<T>)=>Promise<T>;
 export interface TransferInventoryEntry {

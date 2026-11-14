@@ -11,6 +11,7 @@
 // or a small droplet (§14).
 import { AwsClient } from "aws4fetch";
 import {createS3MultipartProtocol} from "../../../scripts/media-multipart-protocol.mjs";
+import {createS3MultipartPartIssuer} from "../../../scripts/media-part-capability.mjs";
 import {createS3TransferProtocol} from "../../../scripts/media-transfer-protocol.mjs";
 import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
 import {verifyS3PhysicalAbsence} from "./physical-absence";
@@ -153,7 +154,8 @@ export function createS3Storage(config: S3Config): StorageAdapter {
         return { uploadId };
       },
 
-      async signPart(key, uploadId, partNumber, expiresIn) {
+      async signPart(key, uploadId, partNumber, expiresIn, observation) {
+        if(observation?.request)return createS3MultipartPartIssuer({client,binding:{kind:"s3",namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer:observation.request})({key,uploadId,partNumber,sha256:observation.sha256,bytes:observation.bytes,expiresAt:observation.expiresAt});
         const target = multipartUrl(key, uploadId, partNumber);
         target.searchParams.set(
           "X-Amz-Expires",

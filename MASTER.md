@@ -15988,3 +15988,21 @@ signer/request/part capability is enabled. Actual issuer/part/consumption,
 unknown recovery, capture/quota/cutover and all qualification/acceptance remain
 open. No execution/provider/host actions or C-item closure. See
 `deploy/media-multipart-part-bodies-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): genuine local multipart
+issuance now uses per-attempt original operation/caller/request nonce and actual
+local FIN, exact immutable file-part body/session/deadline, managed facade and
+independent SQL namespace/hold/privacy/controller constraints. The real SDK
+signature binds body checksum/SHA/size/public nonce; only URL/header digests are
+retained, with no provider ACK, received bytes or terminal outcome invented.
+All sibling attempts drain before return. Issued authority stays pending after
+local FIN/expiry and blocks capture/cutover until genuine consumption proof.
+A TX-local current issuer ABI and mandatory future capability runtime predicate
+close the historical tagged-function gate path; actual old/untracked executor
+closure remains separate. No full request or part capability is published.
+English/French/Spanish/Arabic owner guidance preserves issued-link review debt.
+Ten crypto/wire and six real-service/TCP controls are PREPARED/UNRUN, all old
+oracles preserved. No execution/provider/host actions or C-item closure. Actual
+part/consumption, stopped/legacy recovery, capture/quota/cutover and every
+qualification/acceptance remain open. See
+`deploy/media-multipart-local-issuance-source-2026-11-13.md`.

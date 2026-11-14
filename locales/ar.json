@@ -8819,6 +8819,8 @@
   "media.recovery.cleanup": "تنظيف المورد الأصلي",
   "media.recovery.complete": "إكمال التحميل القابل للاستئناف",
   "media.recovery.create": "بدء تحميل قابل للاستئناف",
+  "media.recovery.sign": "إصدار رابط التحميل",
+  "media.recovery.signingReview": "قد يظل رابط التحميل يسمح بالكتابة. احتفظ بالتحميل أثناء مراجعة إصداره الأصلي ونتيجة التخزين. انتهاء الصلاحية أو استجابة المتصفح لا يُكملان الاسترداد.",
   "media.recovery.multipart": "التحميل الأصلي القابل للاستئناف",
   "media.recovery.multipartConfirm": "أؤكد المورد الأصلي متعدد الأجزاء وتوقف جميع عمليات الكتابة السابقة عليه.",
   "media.recovery.providerUploadId": "معرّف التحميل لدى المزوّد الأصلي (إن كان معروفًا)",
