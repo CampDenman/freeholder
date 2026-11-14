@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // PREPARED/UNRUN. Genuine producer/bank/private writer; no inserted proof/money.
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/core/db";
@@ -25,8 +25,11 @@ import { completePaidControlledPeriod } from "@/modules/subscriptions/controlled
 import { subscriptionControlledPaidPeriodReceipts } from "@/modules/subscriptions/controlled-provider-paid-period-schema";
 import { controlledPaidPeriodWitnesses, exportControlledPaidPeriodHistory } from "@/modules/subscriptions/controlled-provider-paid-period-witnesses";
 import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
+import { carts } from "@/modules/catalog/schema";
+import { actualCartlessControlledPeriod84 } from "../helpers/actual-cartless-controlled-period84";
 import { actualControlledPeriod84 } from "../helpers/actual-controlled-period84";
 import { actualControlledOpenInvoice84 } from "../helpers/actual-controlled-open-invoice84";
+import { retainActualControlledManifest84 } from "../helpers/actual-controlled-current-manifest84";
 import { closeDb, failure, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
 
 const batch = z.object({ invoiceId: z.uuid(), batchId: z.uuid(), payments: z.array(z.object({ receiptId: z.uuid(), paymentId: z.uuid() }).strict()),
@@ -50,13 +53,14 @@ const captureMoney = defineService({
 });
 
 describe.runIf(hasDatabase)("actual independent controlled paid-period effect155", { timeout: 180000 }, () => {
-  let f: Awaited<ReturnType<typeof actualControlledPeriod84>> | undefined;
+  let f: Awaited<ReturnType<typeof actualControlledPeriod84>> | Awaited<ReturnType<typeof actualCartlessControlledPeriod84>> | undefined;
   beforeAll(ready, 60000); beforeEach(truncateSpine);
   afterEach(() => { vi.useRealTimers(); f?.cleanup(); f = undefined; vi.restoreAllMocks(); });
   afterAll(async () => { await stopJobs(); await closeDb(); });
   async function retained() {
     if (!f) throw Error("Create the real original accepted target first.");
     expect(await collectControlledCollection.call({ collectionId: f.target.collectionId }, OWNER)).toMatchObject({ state: "money_retained", applied: false });
+    await retainActualControlledManifest84(f);
     const rows = await db().select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId, f.parent.id));
     expect(rows).toHaveLength(1); const receipt = rows[0]; if (!receipt) throw Error("Retain real positive provider cash first.");
     expect(await inspectControlledCashReceipt.call({ collectionId: f.target.collectionId, receiptId: receipt.id }, OWNER)).toMatchObject({ bankReadReturned: true, completeInventory: true });
@@ -70,7 +74,7 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
     return result.money;
   }
   it("commits actual full money before an independent effect, keeps old windows/usage, creates fresh IDs, refuses overlap, repeats exactly and preserves merge/undo/export ancestry", async () => {
-    f = await actualControlledPeriod84(); const fixture = f; const receipt = await retained(), applied = await moneyOnly(receipt.id);
+    f = await actualCartlessControlledPeriod84(); const fixture = f; const receipt = await retained(), applied = await moneyOnly(receipt.id);
     expect(applied.outstandingMinor).toBe(0);
     // Exercise the actual post-commit event hook, not a native-only activation path.
     await onInvoicePaid({ invoiceId: applied.invoiceId });
@@ -80,8 +84,19 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
     if (!effect) throw Error("A real independent immutable effect receipt is required.");
     expect(effect).toMatchObject({ invoiceId: applied.invoiceId, collectionId: f.target.collectionId, periodStart: new Date(f.target.periodStart), periodEnd: new Date(f.target.periodEnd) });
     const current = await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id);
-    for (const old of f.grants) expect(current.find(row => row.id === old.id)).toEqual({ ...old, status: "expired" });
     const fresh = current.filter(row => !f!.grants.some(old => old.id === row.id));
+    const firstFresh = fresh[0]; if (!firstFresh) throw Error("Retain the actual new grant birth before checking retirement timestamps.");
+    for (const old of f.grants) expect(current.find(row => row.id === old.id)).toEqual({ ...old, status: "expired", updatedAt: firstFresh.createdAt });
+    // updatedAt records the actual retirement. Full microsecond SQL equality
+    // and actual row transaction identities keep this stronger than anyDate.
+    const [retirementStamp] = await db().execute<{ count: number; exact_time: boolean; actual_effect_tx: boolean }>(sql`select count(*)::integer as count,
+      bool_and(retired.updated_at=fresh.created_at) as exact_time,
+      bool_and(retired.xmin::text::bigint=(effect.admission_transaction_id::bigint%4294967296)
+        and fresh.xmin::text::bigint=(effect.admission_transaction_id::bigint%4294967296)) as actual_effect_tx
+      from entitlement_grants retired join subscription_controlled_paid_period_receipts effect on effect.id=${effect.id}::uuid
+      join entitlement_grants fresh on fresh.id=${firstFresh.id}::uuid and fresh.source_subscription_id=effect.subscription_id
+      where retired.source_subscription_id=effect.subscription_id and retired.id in(${sql.join(f.grants.map(row => sql`${row.id}::uuid`), sql`,`)})`);
+    expect(retirementStamp).toEqual({ count: f.grants.length, exact_time: true, actual_effect_tx: true });
     expect(fresh.map(row => row.entitlementId).sort()).toEqual(f.grants.map(row => row.entitlementId).sort());
     for (const grant of fresh) expect(grant).toMatchObject({ startsAt: effect.effectAt, endsAt: effect.periodEnd, used: 0, status: "active" });
     expect(await advanceSubscriptionPeriod.call({ subscriptionId: f.parent.id, contactId: f.parent.contactId, planId: effect.planId,
@@ -112,9 +127,17 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
       return invoiceHistory;
     });
     const survivor = await createContact.call({ name: "Actual paid-period buyer alias", email: "paid-period-alias@example.test" }, OWNER);
+    expect(await db().select({ id: carts.id, contactId: carts.contactId, status: carts.status, kind: carts.kind }).from(carts).where(inArray(carts.contactId, [survivor.id, f.parent.contactId]))).toEqual([]);
     const merge = await mergeContacts.call({ survivingId: survivor.id, duplicateId: f.parent.contactId }, OWNER);
     const moved = await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id);
-    expect(moved).toEqual(current.map(row => ({ ...row, contactId: survivor.id })));
+    const [mergeStamp] = await db().execute<{ stamp: string; count: number; stamp_count: number; actual_tx: boolean }>(sql`select min(g.updated_at)::text as stamp,
+      count(*)::integer as count,count(distinct g.updated_at)::integer as stamp_count,
+      bool_and(g.xmin=operation.xmin and g.updated_at<=operation.merged_at) as actual_tx
+      from entitlement_grants g join contact_merge_operations operation on operation.id=${merge.mergeOperationId}::uuid
+      where g.id in(${sql.join(current.map(row => sql`${row.id}::uuid`), sql`,`)})`);
+    expect(mergeStamp).toMatchObject({ count: current.length, stamp_count: 1, actual_tx: true });
+    const mergedUpdatedAt = z.coerce.date().parse(mergeStamp?.stamp);
+    expect(moved).toEqual(current.map(row => ({ ...row, contactId: survivor.id, updatedAt: mergedUpdatedAt })));
     await db().transaction(async tx => {
       expect((await controlledPaidPeriodWitnesses(tx, { subscriptionIds: [fixture.parent.id] })).entries).toHaveLength(1);
       expect((await controlledFinancialWitness(tx, { invoiceIds: [applied.invoiceId] })).paid?.entries).toEqual(invoiceHistory.paid?.entries);
@@ -122,7 +145,15 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
       expect(exported.receipts).toHaveLength(1); expect(JSON.stringify(exported.receipts)).not.toMatch(/authentication|beforeEntries|beforeParentFields|bankRevisions|admissionTransaction|nonce/);
     });
     await undoContactMerge.call({ operationId: merge.mergeOperationId }, OWNER);
-    expect(await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id)).toEqual(current);
+    const restored = await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id);
+    const [undoStamp] = await db().execute<{ stamp: string; count: number; stamp_count: number; actual_tx: boolean }>(sql`select min(g.updated_at)::text as stamp,
+      count(*)::integer as count,count(distinct g.updated_at)::integer as stamp_count,
+      bool_and(g.xmin=operation.xmin and operation.undone_at is not null and g.updated_at>operation.merged_at and g.updated_at<=operation.undone_at) as actual_tx
+      from entitlement_grants g join contact_merge_operations operation on operation.id=${merge.mergeOperationId}::uuid
+      where g.id in(${sql.join(current.map(row => sql`${row.id}::uuid`), sql`,`)})`);
+    expect(undoStamp).toMatchObject({ count: current.length, stamp_count: 1, actual_tx: true });
+    const restoredUpdatedAt = z.coerce.date().parse(undoStamp?.stamp);
+    expect(restored).toEqual(current.map(row => ({ ...row, updatedAt: restoredUpdatedAt })));
   });
   it("applies only the authentic tiny receipt, preserves4199 unpaid and all original access, and creates no paid effect", async () => {
     f = await actualControlledPeriod84(); const open = await actualControlledOpenInvoice84(f);

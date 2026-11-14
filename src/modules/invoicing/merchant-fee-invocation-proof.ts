@@ -14,10 +14,13 @@ export function signMerchantFeeInvocationProof(row:Invocation,kind:"first_result
  const digest=merchantTaxDigest(body);return{body,digest,authentication:signOriginalCashRecovery(`merchant_fee_invocation_${kind}.v1`,{id:row.id,createdAt:row.createdAt,digest},key)};
 }
 export function verifiedMerchantFeeInvocationAdmission(row:Invocation,keys:readonly string[]){
+ const platform=row.request.providerPlatformAccountId,account=row.request.providerAccountId,providerRef=row.request.providerRef;
+ // Do not let signed malformed JSON acquire a namespace through JS coercion.
+ if(typeof platform!=="string"||typeof providerRef!=="string"||(account!==null&&account!==undefined&&typeof account!=="string"))return false;
  if(!z.uuid().safeParse(row.paymentId).success||!z.uuid().safeParse(row.originalChargeReceiptId).success||!row.namespaceKey
   ||!z.enum(["source_inspect","post","recover_get"]).safeParse(row.kind).success||!Number.isSafeInteger(row.ordinal)||row.ordinal<1||row.ordinal>5000
   ||row.request.paymentId!==row.paymentId||row.request.originalChargeReceiptId!==row.originalChargeReceiptId
-  ||row.namespaceKey!==`${row.request.providerPlatformAccountId}:${row.request.providerAccountId??""}:${row.request.providerRef}`
+  ||row.namespaceKey!==`${platform}:${account??""}:${providerRef}`
   ||(row.kind==="source_inspect"&&!z.enum(["payment_source","fee_preflight"]).safeParse(row.request.readKind).success)
   ||(row.kind==="source_inspect"?(row.feeOperationId!==null||row.feeOperationFingerprint!==null):(!z.uuid().safeParse(row.feeOperationId).success||!sha.safeParse(row.feeOperationFingerprint).success)))return false;
  return verifyOriginalCashRecovery("merchant_fee_invocation.v1",row,merchantFeeInvocationBody(row),keys);

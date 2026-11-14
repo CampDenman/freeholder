@@ -1,0 +1,21 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.08",
+    "C9.33",
+    "C12.38"
+  ],
+  "status": "SOURCE_PIN_COMPOSITION_PREPARED_UNRUN",
+  "source": "tests/core/cartless-paid-merge155.test.ts",
+  "beforeSha256": "6d869b00327d5b2b01f7ea460b498fd0cb890ec4ff16e810fba8894e7625b31d",
+  "afterSha256": "3919956284889d3e4b8286e4a34ca7e8e364a82a1e382190e4e77490def932f3",
+  "finiteDelta": {
+    "before": "    for (const file of manifest.unchangedRuntime) expect(hash(read(file.path))).toBe(file.sha256);",
+    "after": "    for (const file of manifest.unchangedRuntime) {\n      let source = read(file.path);\n      if (file.path === \"src/modules/subscriptions/controlled-provider-paid-period.ts\") {\n        // Preserve the entire original money/access body after reversing only\n        // the independently pinned privacy import and target-derived gate.\n        for (const insertion of [\n          'import { controlledTargetPrivacyReady } from \"./controlled-target-privacy\";\\n',\n          '    if (!await controlledTargetPrivacyReady(ctx.tx, target.collection.id)) return { handled: true, state: \"review_required\" as const, financialReviewPending: true };\\n',\n        ]) { expect(source.split(insertion)).toHaveLength(2); source = source.replace(insertion, \"\"); }\n      }\n      expect(hash(source)).toBe(file.sha256);\n    }"
+  },
+  "entireFileReversesExactly": true,
+  "oldManifestUnchanged": true,
+  "productionAndOriginalNativeUnchanged": true,
+  "scope": "Reverse ONLY the two literal unique paid-privacy import/gate additions for the exact handler path before requiring entire original handler SHA. All cart/constructor/paid/native/undo oracles stay exact; privacy source contracts independently pin complete current handler.",
+  "preservedFailedSourceGate": "/tmp/freeholder-current-full86-privacy160-source-v88-20261114-result.json"
+}

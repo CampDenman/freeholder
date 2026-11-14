@@ -1,0 +1,18 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "MATERIALIZED_PREPARED_UNRUN",
+  "normalPath": "db/migrations/0082_verified_media_transfer.sql",
+  "ownedPath": "deploy/sql/0082_verified_media_transfer.unapplied.sql",
+  "previous": {
+    "sha256": "fb7d956b86ae61e0e20e7ece6c6d42c02278125fd815d5486b7d9984f3c5936d",
+    "bytes": 488021,
+    "entirePrefixPreserved": true
+  },
+  "current": {
+    "sha256": "e704e568c20499f9452542d21b05fcce489b29d236bedaec0bf67e64f6817cb5",
+    "bytes": 649575
+  },
+  "modelsAdded": 0,
+  "capabilitiesPublished": false,
+  "freshQualification": "PENDING; no schema/native/provider/stable acceptance transfers from previous488021-byte source"
+}

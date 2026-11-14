@@ -1,0 +1,21 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.08",
+    "C9.33",
+    "C12.38"
+  ],
+  "status": "SOURCE_PIN_COMPOSITION_PREPARED_UNRUN",
+  "source": "tests/core/verified-financial-contact-undo.test.ts",
+  "beforeSha256": "766b300a8ebcee5122689b05f6c6237f2d7459b9a10694d9890a6126b2a496f3",
+  "afterSha256": "7e36eb2b559423bbcf574d302a5bb09f4b34aa42bd296e43f6e948dd4a5b9abf",
+  "finiteDelta": {
+    "before": "  for(const file of manifest.files)expect(sha(read(file.path))).toBe(file.afterSha256);",
+    "after": "  for(const file of manifest.files){\n   let source=read(file.path);\n   if(file.path===\"src/core/contacts/service.ts\"){\n    // Only the two independently pinned privacy fences outside merge/undo may\n    // be reversed; the entire original contacts service must still match.\n    for(const insertion of [\n     '    if (input.source === \"privacy-erasure\") await lockContactIdentity(ctx.tx);\\n',\n     '    if (requested.source === \"privacy-erasure\") await lockContactIdentity(ctx.tx);\\n',\n    ]){expect(source.split(insertion)).toHaveLength(2);source=source.replace(insertion,\"\");}\n   }\n   expect(sha(source)).toBe(file.afterSha256);\n  }"
+  },
+  "entireFileReversesExactly": true,
+  "oldManifestUnchanged": true,
+  "productionAndOriginalNativeUnchanged": true,
+  "scope": "Only reverse the two unique exact conditional identity-lock lines in resolveContact/updateContact before the original whole contacts-service SHA; every other source byte, original inverse/order/native oracle remains pinned. New paid-privacy contracts independently require complete current files and both exact additions.",
+  "preservedFailedSourceGate": "/tmp/freeholder-current-full86-privacy160-source-v87-20261114-result.json"
+}

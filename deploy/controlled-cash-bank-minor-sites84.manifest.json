@@ -1,0 +1,72 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "MATERIALIZED_PREPARED_UNRUN",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "prefix": {
+    "bytes": 592389,
+    "sha256": "a08e341f47991f76e57395ac4991e5e9834efbd45aeb711570e3654bf0db01ff",
+    "entirePrefixPreserved": true
+  },
+  "assembled": {
+    "bytes": 614412,
+    "sha256": "007a545f3daf5e32fe3effe2b83125c7b0bca1d70b9981d05cb909835a52438c"
+  },
+  "fragment": {
+    "path": "deploy/controlled-cash-bank-minor-sites84.fragment.sql",
+    "sha256": "490ec0f082b74be7b431308c77b175a0cd42a81e6635e1f17dce582edeecde67"
+  },
+  "bankFunction": {
+    "originalBodySha256": "60e57f32a601d9ae42901b91bd5469ae50c3ca3a04ea546c381a23b5cc143a56",
+    "afterBodySha256": "ea997a78b7a85655575edcc669ecbb41c4a6caee608f357696d164657e9dc48f",
+    "singlePassReversePattern": "\\(CASE WHEN freeholder_controlled_bank_minor\\((\\w+->'\\w+'),false\\) THEN \\(\\1 #>> '\\{\\}'\\)::bigint ELSE NULL END\\)",
+    "finiteReplacements": [
+      {
+        "ordinal": 1,
+        "before": "freeholder_controlled_bank_minor(actual_inventory->'totalMinor',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(actual_inventory->'totalMinor',false) THEN (actual_inventory->'totalMinor' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "ordinal": 2,
+        "before": "freeholder_controlled_bank_minor(actual_inventory->'paidMinor',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(actual_inventory->'paidMinor',false) THEN (actual_inventory->'paidMinor' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "ordinal": 3,
+        "before": "freeholder_controlled_bank_minor(actual_inventory->'remainingMinor',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(actual_inventory->'remainingMinor',false) THEN (actual_inventory->'remainingMinor' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "ordinal": 4,
+        "before": "freeholder_controlled_bank_minor(actual_manifest->'cashDueMinor',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(actual_manifest->'cashDueMinor',false) THEN (actual_manifest->'cashDueMinor' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "ordinal": 5,
+        "before": "freeholder_controlled_bank_minor(intent_atom->'amount_received',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(intent_atom->'amount_received',false) THEN (intent_atom->'amount_received' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "ordinal": 6,
+        "before": "freeholder_controlled_bank_minor(payment_atom->'amount_paid',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(payment_atom->'amount_paid',false) THEN (payment_atom->'amount_paid' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "ordinal": 7,
+        "before": "freeholder_controlled_bank_minor(payment_atom->'amount_paid',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(payment_atom->'amount_paid',false) THEN (payment_atom->'amount_paid' #>> '{}')::bigint ELSE NULL END)"
+      }
+    ],
+    "singlePassWholeFunctionReverseExact": true
+  },
+  "validatorBodySha256": "05d891ce5a52f018a9c5b6f21d9c3ae43f68d7abd7e831fb2cf512cff476a68e",
+  "failure": "/tmp/freeholder-current-full86-application-full-native-v6-20261114-result.json",
+  "reason": "First patch repeated string replacement reentered a newly inserted CASE at repeated payment amount sites. One-pass replacement and one-pass full reverse preserve every other original bank predicate. V30 preserved; no payment/admission committed.",
+  "newModels": 0,
+  "newFunctions": 0,
+  "journalCount": 86,
+  "acceptance": "Pending source, fresh normal/schema, complete-function site and real native qualification; earlier standalone112checks did not qualify whole-function composition."
+}

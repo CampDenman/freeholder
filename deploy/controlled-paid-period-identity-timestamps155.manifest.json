@@ -1,0 +1,22 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "ORACLE_CORRECTION_PREPARED_UNRUN",
+  "source": "tests/modules/controlled-paid-period155.test.ts",
+  "beforeSha256": "b84ea2282ca5638227511058c9e8b840d2545a8b64e89e6263c55cbe45f087ad",
+  "afterSha256": "02fb13b2dfbe4bcc90c2cfe1f9c4c3548f765c20035453c3a3553126819e055b",
+  "finiteDelta": [
+    {
+      "before": "    expect(moved).toEqual(current.map(row => ({ ...row, contactId: survivor.id })));",
+      "after": "    const [mergeStamp] = await db().execute<{ stamp: string; count: number; stamp_count: number; actual_tx: boolean }>(sql`select min(g.updated_at)::text as stamp,\n      count(*)::integer as count,count(distinct g.updated_at)::integer as stamp_count,\n      bool_and(g.xmin=operation.xmin and g.updated_at<=operation.merged_at) as actual_tx\n      from entitlement_grants g join contact_merge_operations operation on operation.id=${merge.mergeOperationId}::uuid\n      where g.id in(${sql.join(current.map(row => sql`${row.id}::uuid`), sql`,`)})`);\n    expect(mergeStamp).toMatchObject({ count: current.length, stamp_count: 1, actual_tx: true });\n    const mergedUpdatedAt = z.coerce.date().parse(mergeStamp?.stamp);\n    expect(moved).toEqual(current.map(row => ({ ...row, contactId: survivor.id, updatedAt: mergedUpdatedAt })));"
+    },
+    {
+      "before": "    expect(await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id)).toEqual(current);\n  });\n  it(\"applies only the authentic tiny receipt",
+      "after": "    const restored = await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id);\n    const [undoStamp] = await db().execute<{ stamp: string; count: number; stamp_count: number; actual_tx: boolean }>(sql`select min(g.updated_at)::text as stamp,\n      count(*)::integer as count,count(distinct g.updated_at)::integer as stamp_count,\n      bool_and(g.xmin=operation.xmin and operation.undone_at is not null and g.updated_at>operation.merged_at and g.updated_at<=operation.undone_at) as actual_tx\n      from entitlement_grants g join contact_merge_operations operation on operation.id=${merge.mergeOperationId}::uuid\n      where g.id in(${sql.join(current.map(row => sql`${row.id}::uuid`), sql`,`)})`);\n    expect(undoStamp).toMatchObject({ count: current.length, stamp_count: 1, actual_tx: true });\n    const restoredUpdatedAt = z.coerce.date().parse(undoStamp?.stamp);\n    expect(restored).toEqual(current.map(row => ({ ...row, updatedAt: restoredUpdatedAt })));\n  });\n  it(\"applies only the authentic tiny receipt"
+    }
+  ],
+  "wholeFileReverseExact": true,
+  "productRuntimeUnchanged": true,
+  "requirement": "Actual entitlement_grants registered merge/repoint and undo use Drizzle update, so mandatory updatedAtColumn SQLnow advances on both real transitions. Preserve full exact expected row identity/contact/window/used/createdAt while verifying one exact PG timestamp per actual operation transaction and row-XID match; no anyDate or scalar money waiver.",
+  "priorRetirementCorrection": "deploy/controlled-paid-period-updated-at-oracle155.manifest.json",
+  "nativeAcceptance": "Pending complete fresh original scenario. Merge/undo assertions were not reached in failed V35; source contradiction identified from actual registered handlers, not claimed as executed."
+}

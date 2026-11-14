@@ -10,6 +10,7 @@ import {z} from "zod";
 import {db} from "@/core/db";
 import {lockContactIdentity} from "@/core/contacts/identity-lock";
 import {enqueueJob} from "@/core/jobs";
+import type {JobExecutionContext} from "@/core/jobs";
 import {completeErasureJob,erasureArtifactIsIntact,registerContactPrivacySource} from "@/core/privacy/service";
 import {dataRequestArtifacts,dataRequests} from "@/core/privacy/schema";
 import type {Tx} from "@/core/service";
@@ -21,6 +22,8 @@ import {allowMediaReceiptWrites,deleteWithReceipt,MEDIA_WRITES_SCOPE,objectKeyDi
 import {minimizeMediaStorageOperations} from "./write-privacy";
 import {retireKnownMultipart} from "./multipart-operations";
 import {objectCohortIds,mediaCohortPending} from "./erasure-cohorts";
+import {minimizeIdleOriginalMultipart} from "./multipart-idle-minimization";
+import {minimizeOriginalUpload} from "./original-upload-privacy";
 
 export const MULTIPART_PRIVACY_SCOPE="media.multipartOperations";
 export const MULTIPART_ERASURE_JOB="core.eraseMediaMultipartOperations";
@@ -43,7 +46,7 @@ async function retireOwnedCapturePointers(tx:Tx,keys:string[],knownActors:Set<st
 }
 
 async function minimizeOwned(tx:Tx,contactId:string,requestId:string):Promise<void>{
- const first=await originalMediaScopeMembers(tx,requestId,MULTIPART_PRIVACY_SCOPE);if(first.birthDebt)return;const originalIds=first.receiptIds,reservationIds=[...new Set([...first.membership.reservations.map(row=>row.id),...first.membership.receipts.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.resources.flatMap(row=>row.reservationId?[row.reservationId]:[])])];
+ const first=await originalMediaScopeMembers(tx,requestId,MULTIPART_PRIVACY_SCOPE);if(first.birthDebt)return;const originalIds=first.receiptIds,reservationIds=[...new Set([...first.membership.reservations.map(row=>row.id),...first.membership.receipts.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.resources.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.uploads.flatMap(row=>row.reservationId?[row.reservationId]:row.legacyAnchor?[row.legacyAnchor.reservationId]:[])])];
  async function scopedWrites(keyDigest:string){const history=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,keyDigest));return{writes:history.filter(row=>originalIds.includes(row.id)),foreign:history.some(row=>!originalIds.includes(row.id))};}
  await allowMediaReceiptWrites(tx);
  if(await storageOperationsHeld(tx,[contactId]))return;
@@ -61,6 +64,9 @@ async function minimizeOwned(tx:Tx,contactId:string,requestId:string):Promise<vo
  }
  const objects=reservationIds.length?await tx.select().from(mediaObjects).where(inArray(mediaObjects.reservationId,reservationIds)).orderBy(asc(mediaObjects.key)).for("update"):[];
  for(const object of objects){
+  // Upload-owned pointers are reduced only by their exact durable upload
+  // consumer, never by this legacy current-key fallback.
+  if(object.uploadId&&first.membership.uploads.some(upload=>upload.id===object.uploadId))continue;
   const digest=objectKeyDigest(object.key),{writes,foreign}=await scopedWrites(digest);if(foreign)continue;
   const active=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.keyDigest,digest),isNull(mediaMultipartResources.retiredAt))).limit(1);
   if(writes.length&&!hasDurableOriginalMediaCallerProof())continue;
@@ -70,15 +76,7 @@ async function minimizeOwned(tx:Tx,contactId:string,requestId:string):Promise<vo
   // it is a permanent admission refusal for a request still scanning bytes.
   await tx.delete(mediaObjects).where(eq(mediaObjects.key,object.key));
  }
- const uploadIds=first.membership.uploads.map(row=>row.id),uploads=uploadIds.length?await tx.select().from(mediaUploads).where(inArray(mediaUploads.id,uploadIds)).orderBy(asc(mediaUploads.id)).for("update"):[];
- for(const upload of uploads){
-  const{writes,foreign}=await scopedWrites(objectKeyDigest(upload.storageKey));if(foreign)continue;
-  const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.uploadId,upload.id),isNull(mediaMultipartResources.redactedAt))).limit(1);
-  if(writes.length&&!hasDurableOriginalMediaCallerProof())continue;
-  if(multipart.length||writes.some(row=>!row.deletedAt||["unverified","started","unknown"].includes(row.state)))continue;
-  await minimizeMediaStorageOperations(tx,writes.map(row=>row.id));
-  await tx.update(mediaUploads).set({filename:"[erased]",uploadedBy:"erased",ownerContactId:null,storageKey:`retained:${objectKeyDigest(upload.storageKey)}`,provenance:{},mediaMetadata:{},failureReason:null,state:upload.state==="complete"?"complete":"aborted",completedAt:upload.completedAt??new Date(),updatedAt:new Date()}).where(eq(mediaUploads.id,upload.id));
- }
+ for(const upload of first.membership.uploads)await minimizeOriginalUpload(tx,requestId,upload.id);
 }
 async function personalRows(tx:Tx,contactId:string){
  const resources=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.contactId,contactId),isNull(mediaMultipartResources.redactedAt))).orderBy(asc(mediaMultipartResources.id));
@@ -112,7 +110,7 @@ registerContactPrivacySource({
  },
 });
 
-export async function eraseMultipartOperations(data:Record<string,unknown>):Promise<{erased:number}>{
+export async function eraseMultipartOperations(data:Record<string,unknown>,context?:JobExecutionContext):Promise<{erased:number}>{
  const input=payload.parse(data);
  const captured=await db().transaction(async tx=>{
   await lockContactIdentity(tx);
@@ -129,14 +127,19 @@ export async function eraseMultipartOperations(data:Record<string,unknown>):Prom
   const keys=[...new Set([...resources.filter(row=>!row.redactedAt).map(row=>row.key),...uploads.filter(row=>row.ownerContactId).map(row=>row.storageKey),...objects.filter(row=>input.keyDigests.includes(objectKeyDigest(row.key))).map(row=>row.key)])];
   const originalIds=await objectCohortIds(tx,input.requestId,MULTIPART_PRIVACY_SCOPE);
   for(const key of keys){const foreign=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.keyDigest,objectKeyDigest(key)),originalIds.length?notInArray(mediaObjectWrites.id,originalIds):undefined)).limit(1);if(foreign.length)throw new Error("A physical receipt outside this immutable original erasure scope shares its key; keep both generations for recovery without adopting or deleting either.");}
-  return{contactId:request.contactId,keys,resources};
+  // A no-object multipart cohort is retired only by its own exact ABORT +
+  // full inventories. Routing it to ordinary deleteWithReceipt would create
+  // another original DELETE (or dispatch a retained placeholder) and destroy
+  // the no-object proof rather than finishing its metadata erasure.
+  const idleDigests=new Set(resources.filter(row=>row.objectReceiptId===null).map(row=>row.keyDigest));
+  return{contactId:request.contactId,keys:keys.filter(key=>!key.startsWith("retained:")&&!idleDigests.has(objectKeyDigest(key))),resources};
  });
  if(!captured)return{erased:0};
  // Unknown multipart calls are never replayed merely to satisfy an erasure.
  // Human recovery first establishes their exact original physical outcome.
  for(const resource of captured.resources)if(!resource.retiredAt&&resource.state==="open")await retireKnownMultipart(resource.uploadId);
  for(const key of captured.keys)await deleteWithReceipt(key);
- const pending=await db().transaction(async tx=>{await lockContactIdentity(tx);await minimizeOwned(tx,captured.contactId,input.requestId);const cohortIds=await objectCohortIds(tx,input.requestId,MULTIPART_PRIVACY_SCOPE);await minimizeMediaStorageOperations(tx,cohortIds);const rows=await personalRows(tx,captured.contactId);return rows.resourceIds.length+rows.uploadIds.length+rows.keyDigests.length+Number(await mediaCohortPending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE))+Number(await originalProviderEvidencePending(tx,{receiptIds:cohortIds,resourceIds:captured.resources.map(row=>row.id)}))+Number(await originalMediaScopePending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE,captured.contactId));});
+ const pending=await db().transaction(async tx=>{await lockContactIdentity(tx);if(context)for(const resource of captured.resources)if(resource.objectReceiptId===null)await minimizeIdleOriginalMultipart(tx,input,resource.id,context);await minimizeOwned(tx,captured.contactId,input.requestId);const cohortIds=await objectCohortIds(tx,input.requestId,MULTIPART_PRIVACY_SCOPE);await minimizeMediaStorageOperations(tx,cohortIds);const rows=await personalRows(tx,captured.contactId);return rows.resourceIds.length+rows.uploadIds.length+rows.keyDigests.length+Number(await mediaCohortPending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE))+Number(await originalProviderEvidencePending(tx,{receiptIds:cohortIds,resourceIds:captured.resources.map(row=>row.id)}))+Number(await originalMediaScopePending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE,captured.contactId));});
  if(pending)throw new Error("Original upload ownership, a named hold or unresolved provider work keeps this erasure pending.");
  await completeErasureJob.call({requestId:input.requestId,scope:MULTIPART_PRIVACY_SCOPE,jobId:input.originalJobId},{kind:"system"});
  return{erased:captured.keys.length};

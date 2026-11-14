@@ -35,7 +35,8 @@ import {
   type ServiceContext,
   type Tx,
 } from "@/core/service";
-import { registerContactReference } from "@/core/contacts/service";
+import { registerContactReference, type ContactReference } from "@/core/contacts/service";
+import { lockContactFinancialUndo } from "@/modules/invoicing/contact-undo-financial-lock";
 import { registerContactPrivacySource } from "@/core/privacy/service";
 import { prepareBuyerAgreementErasure, minimizeBuyerAgreements } from "./buyer-agreement-erasure";
 import { buyerAcceptedProration } from "./proration-buyer-export";
@@ -1578,6 +1579,26 @@ export const cancelMySubscription = defineService({
 
 // §4.1: a table with a `contact_id` repoints on merge, or the first merge
 // orphans it. A subscription is a standing agreement, so it moves wholesale.
+const prepareSubscriptionUndo: NonNullable<ContactReference["prepareUndo"]> = async (tx, before, after, duplicateId, survivingId) => {
+    const original = await subscriptionOriginalEvidence(tx, [duplicateId, survivingId]);
+    const modern = !Array.isArray(before) ? merchantSubscriptionUndo.parse(before) : null;
+    if (modern) {
+      const expected = merchantSubscriptionUndo.parse(after);
+      if (original.overflow || JSON.stringify(original.evidence) !== JSON.stringify(expected.originalEvidence)) throw new ServiceError("conflict", "Original subscription scope or observed money changed after the merge. Reconcile it before separating ownership.");
+    } else if (original.overflow || original.evidence.length) throw new ServiceError("conflict", "This historical merge did not record the new original subscription evidence. Restore the pre-upgrade snapshot to separate it safely.");
+    const ids = (modern?.movedIds ?? (Array.isArray(before) ? before : [])).filter(
+      (each): each is string => typeof each === "string",
+    );
+
+    return async () => {
+      if (ids.length === 0) return;
+      await tx
+        .update(subscriptions)
+        .set({ contactId: duplicateId })
+        .where(inArray(subscriptions.id, ids));
+    };
+};
+
 registerContactReference({
   table: "subscriptions",
   repoint: async (tx, duplicateId, survivingId) => {
@@ -1598,21 +1619,11 @@ registerContactReference({
     const movedIds = moved.map(each => each.id);
     return { state: original.evidence.length ? { movedIds, originalEvidence: original.evidence } : movedIds, undoable: true };
   },
+  lockForUndo: lockContactFinancialUndo,
+  prepareUndo: prepareSubscriptionUndo,
   restoreAfterUndo: async (tx, before, after, duplicateId, survivingId) => {
-    const original = await subscriptionOriginalEvidence(tx, [duplicateId, survivingId]);
-    const modern = !Array.isArray(before) ? merchantSubscriptionUndo.parse(before) : null;
-    if (modern) {
-      const expected = merchantSubscriptionUndo.parse(after);
-      if (original.overflow || JSON.stringify(original.evidence) !== JSON.stringify(expected.originalEvidence)) throw new ServiceError("conflict", "Original subscription scope or observed money changed after the merge. Reconcile it before separating ownership.");
-    } else if (original.overflow || original.evidence.length) throw new ServiceError("conflict", "This historical merge did not record the new original subscription evidence. Restore the pre-upgrade snapshot to separate it safely.");
-    const ids = (modern?.movedIds ?? (Array.isArray(before) ? before : [])).filter(
-      (each): each is string => typeof each === "string",
-    );
-    if (ids.length === 0) return;
-    await tx
-      .update(subscriptions)
-      .set({ contactId: duplicateId })
-      .where(inArray(subscriptions.id, ids));
+    await lockContactFinancialUndo(tx, duplicateId, survivingId);
+    await (await prepareSubscriptionUndo(tx, before, after, duplicateId, survivingId))();
   },
 });
 

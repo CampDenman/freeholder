@@ -1,0 +1,231 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "freeholder.original-cash-inventory-causal.v2",
+  "baseHead": "b5c0f3a9842ab37246c781c7f38af23d2e91f85a",
+  "status": "SOURCE ONLY; every compiler/lint/pure/native/database/SDK/provider control UNRUN for this leaf",
+  "newModels": [],
+  "sqlChanges": [],
+  "newRegistryServices": [],
+  "unchanged": [
+    {
+      "path": "src/modules/invoicing/original-cash-recovery-proof.ts",
+      "sha256": "5d6cd36f514e98fac33962575998cd9ea302032e3cd21b4439657f3f2c3a9d80"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-recovery-store.ts",
+      "sha256": "bea01595e55232af1b8aadf19b247ad1b36fa9e87164e2afab3259ee14df68b4"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-recovery-schema.ts",
+      "sha256": "a5fde2a371e83d93d70e07cf919f40db95caa0bd84576f404b446015c68b03e9"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-invoice-history.ts",
+      "sha256": "58638ebceb6f2cc4fe4adf96af417a75ebf8e1ab79a19328c381d5ba692bd491"
+    },
+    {
+      "path": "src/modules/invoicing/controlled-target-raw-policy.ts",
+      "sha256": "c0d975005debcf93e48cb6889c350442dfca57f6014ec621ed7f084520a404f7"
+    },
+    {
+      "path": "src/modules/invoicing/controlled-target-raw-classification.ts",
+      "sha256": "9a0252edd0e65c9b6cba8432551f1b6a93a0cedbf1d5420a1b3c6afa3c0f359f"
+    },
+    {
+      "path": "tests/modules/controlled-atomic-refund-residual84.test.ts",
+      "sha256": "c627b8fb89a1cefbab815727157a16a430472733474a1eb1ff7971c32a21332f"
+    },
+    {
+      "path": "tests/modules/original-cash-return81.test.ts",
+      "sha256": "1439a00122f37287ed1d80282fb1dd0726c63ba43cb54885c25df4105b5f3bc4"
+    },
+    {
+      "path": "tests/modules/original-cash-partial81.test.ts",
+      "sha256": "8d30ad41ff8886fcb64fff789a4b625a0cc7f9f765044990162cddba8c90dbb6"
+    },
+    {
+      "path": "src/modules/invoicing/merchant-tax-store.ts",
+      "sha256": "53e53dfbd4cb3f5abe71991f262fad935fdfee9774b14d6d18c62c44d5c6e51b"
+    },
+    {
+      "path": "src/modules/invoicing/controlled-canonical-bank-principal.ts",
+      "sha256": "7f4fbfa95a550fb3b5ce20c99ce04a00f8fd89c660ed4898670a3e8c057e6d6b"
+    },
+    {
+      "path": "src/modules/invoicing/original-bank-principal-policy.ts",
+      "sha256": "d43fbabc1a15194a08e14d11a4a43eddfb45f838a7e8aba3dee13f3f605ff3ae"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-partial-source.ts",
+      "sha256": "8a9fd38cfeaa254e88c725daa0a75006797971e61a12019bc5e12048fb607562"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-partial-policy.ts",
+      "sha256": "4a8ea4c6ccdea1d65a40bef8d0d59f5cab36d29f4358bf8f33e84dc371a2ce67"
+    },
+    {
+      "path": "src/modules/invoicing/controlled-atomic-refund-amounts.ts",
+      "sha256": "129ddfc54962aad238dc0c98d576d186a5ce5718b5fccb8f8f7cb053795d30ed"
+    }
+  ],
+  "unchangedPrefixes": [
+    {
+      "path": "src/modules/invoicing/merchant-refund-dependencies.ts",
+      "bytes": 12051,
+      "sha256": "9053d7de9ca97dfb781e64487ca95b13d864a2ba2424631f689294418b962616"
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-financial-parent.ts",
+      "bytes": 16533,
+      "sha256": "c719ce5ca1fb18f766459958749a6c6f3638eafcd6ad90fd464dc314b2f9931a"
+    }
+  ],
+  "protectedDefaultDigestExpressions": [
+    {
+      "path": "src/modules/invoicing/merchant-refund-history.ts",
+      "literal": "  const inventory = { requests, retirements, observations, observationCaptures, dispatches, finishes, stops, refusals, terminals, bindings, paymentCash, subscriptionCash, receiptRows, aliases, fees, feeObservations, otherPrimary, otherReturns,",
+      "sha256": "461b5b4a50b5ad1c8e67f8094832b0de8e63ad2557d2163f509140d3aa427ea6"
+    },
+    {
+      "path": "src/modules/invoicing/merchant-refund-history.ts",
+      "literal": "  return { ...(controlledScope?{physicalIdentities:[...physicalIdentities.values()].sort((a,b)=>a.table.localeCompare(b.table)||a.id.localeCompare(b.id))}:{}),refundRequests, inventoryCount, principalCreatorsQuiesced, digest: merchantTaxDigest({ ...Object.fromEntries(Object.entries(inventory).map(([key, rows]) => [key, sorted(rows)])), ...(controlled.entries.length || controlled.namespaces.some(row => row.applies) ? { controlledCoverage: controlled.coverage.map(row => row.revision), controlledNamespaces: controlled.namespaces, ...(controlled.targetCoverage ? { controlledTargetCoverage: controlled.targetCoverage.map(row => row.revision),controlledRawResolution:controlled.rawClassifications?.map(row=>row.revision) } : {}) } : {}) }), incomplete, creatorsQuiesced, feeDebt };",
+      "sha256": "dac169affc78c1a7c478a64adccf55fa837ce018a5b82074dea4e89bcc7692db"
+    }
+  ],
+  "admission": {
+    "storedIn": "original_cash_recovery_operations.request.inventoryComparison",
+    "existingHmacBody": "recoveryOperationBody: recoveryId,kind,request,caller,nonceHash",
+    "onlyNewControlledCollectionInspection": true,
+    "noHistoricalUpgrade": true
+  },
+  "hashDomains": {
+    "postgres_row": "actual SQL encode(sha256(convert_to(to_jsonb(actual row)::text,UTF8)),hex), independently read for exact own ancestry",
+    "dependency_canonical": "merchantTaxDigest of the actual Drizzle row, matching unchanged RF builder",
+    "history_canonical": "merchantTaxDigest of sorted named history contribution digests for one actual physical identity; never claimed to be a PG row SHA"
+  },
+  "comparisonContexts": {
+    "inspection": [
+      "original_cash_recovery_operations:exact operation UUID",
+      "original_cash_recovery_facts:only exact nonce-bound operation facts, all packets and unique last returned FIN"
+    ],
+    "closure": [
+      "original_cash_recovery_closures:only exact authenticated own closure UUID; all GET/facts/feedback/other closures retained"
+    ],
+    "partialClosure": [
+      "original_cash_recovery_facts:ONLY exact authenticated partial_closure UUID, evidence.originalInventoryOperationId to actual v2 returned GET and same-owner genuine partial_target; no whole/principal authority; target/GET/all other facts/feedback retained"
+    ]
+  },
+  "bounds": "Full current physical union <=5000 before any projection; logical feedback namespace hashes remain complete contributions, actual feedback UUID counted once",
+  "lockScope": "GET admission/observation is optimistic with complete before/after rechecks and exact later refusal. V2 money/closure mutation entries first acquire shared identity -> sorted complete FK-connected resources -> parents -> payment/invoice/note -> exact namespaces; nonblocking actual inspection and fee callback fences; complete rediscovery; no late earlier-category acquisition. Legacy v1 returns without new locks.",
+  "safeExport": "Existing exportOriginalCashHistory explicit operation whitelist excludes request,nonce,caller,authentication and full preimage; unchanged source pinned",
+  "preparedControls": {
+    "pure": 12,
+    "source": 9,
+    "native": 5,
+    "originalNativeFilesUnchanged": 3,
+    "registry": 3
+  },
+  "mutationEntries": [
+    "invoicing.claimOriginalCashAuxiliary",
+    "invoicing.claimOriginalUnappliedCashRefund",
+    "invoicing.finalizeOriginalCashRecovery",
+    "invoicing.retainOriginalPartialCashTarget",
+    "invoicing.claimOriginalPartialCashAuxiliary",
+    "invoicing.finalizeOriginalPartialCashTarget",
+    "invoicing.reviewOriginalUnassignedCash"
+  ],
+  "futureComposition": {
+    "atomicAuxiliaryFeeService": "After normal merge with frozen af221, call lockOriginalInventoryPrefix(ctx,{recoveryId:input.recoveryId,operationId:input.operationId}) at three handler entries before ready/basis/phase dispatch, preserving all old source/nonce/current-bank predicates. That file is absent in this b5 base and remains unchanged in frozen A."
+  },
+  "protectedLegacyBlocks": [
+    {
+      "path": "src/modules/invoicing/original-cash-principal.ts",
+      "literal": "      const reads = witness.operations.filter(row => row.recoveryId === owners[0]!.id && row.kind === \"inspection\" && !row.request.auxiliaryOperationId)\n        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id));\n      const latest = reads[0];\n      if (!latest) reviewRequired = true;\n      else {\n        try {\n          const current = await currentOriginalCashInventory(ctx, owners[0]!.id, latest.id);\n          if (current.history.incomplete || current.history.inventoryCount > 5000 || !current.history.principalCreatorsQuiesced || !payment\n            || !currentBankPrincipalMatches({ amountMinor: payment.amountMinor, currency: payment.currency, refundedMinor: payment.refundedMinor,\n              apiVersion: cash.providerApiVersion, platform: cash.providerPlatformAccountId, account: cash.chargeAccountId, paymentRef: cash.providerRef, chargeRef: cash.originalChargeRef }, current.evidence)) reviewRequired = true;\n          bankEvidenceDigest = merchantTaxDigest({ operationId: latest.id, currentRevision: current.revision, evidence: current.evidence });\n        } catch (error) { if (error instanceof ServiceError && [\"conflict\", \"permission\", \"not_found\", \"validation\"].includes(error.code)) reviewRequired = true; else throw error; }\n      }",
+      "sha256": "d3c066928382cbf60c37389bc0a8031f5da648e65161bb1d14a49c930c0fa143"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-partial-current.ts",
+      "literal": "    const current = await originalCashRecoveryRevision(ctx, owner.id);\n    let source:Awaited<ReturnType<typeof originalPartialCashSource>>;\n    try { source = await originalPartialCashSource(ctx, paymentId, false); }\n    catch (error) { if (error instanceof ServiceError && error.code === \"conflict\") return null; throw error; }\n    for (const closure of closures) {\n      const actual = witness.facts.find(fact => fact.id === closure.evidence.targetFactId && fact.kind === \"partial_target\" && fact.recoveryId === owner.id);\n      if (!actual || closure.evidence.revision !== current.revision || closure.evidence.sourceDigest !== source.sourceDigest) continue;\n      const target = originalPartialTarget.parse(actual.evidence);\n      if (target.paymentId !== paymentId || target.customerReturnedMinor !== source.customerReturnedMinor || target.sourceDigest !== source.sourceDigest\n        || target.acceptedFeeMinor !== source.acceptedFeeMinor || target.acceptedFeeRetainedMinor !== source.acceptedFeeRetainedMinor) continue;\n      return { targetFactId: actual.id, customerReturnedMinor: target.customerReturnedMinor, acceptedFeeRetainedMinor: target.acceptedFeeRetainedMinor,\n        feeTargetMinor: target.feeTargetMinor, recipientTargetMinor: target.recipientTargetMinor };\n    }\n  }\n  return null;\n}\n",
+      "sha256": "6305faa5467e500bdfc85e7281eb68cfcd7e99120eea7830f5d0ce41705d6e82"
+    }
+  ],
+  "principalBranch": "Only canonical succeeded+fully refunded+cash.applied with exactly one independently current authentic owned v2 WHOLE closure. Existing review flags/currentBankPrincipalMatches/controlled bank, raw/current caller/credit/fee/budget and final rechecks remain. No known v2 downgrade or partial/fee closure upgrade.",
+  "partialTargetRefresh": "Only a NEW server-authenticated v2 partial_target birth returns requiresFreshInventory:true; one genuine GET before claims; existing target/v1 shape and sequence unchanged. No typed declaration subtraction.",
+  "partialSourceEconomicDomain": {
+    "newOrdinaryHelper": "originalPartialCashSourceV2(real ServiceContext,paymentId,lock)",
+    "selector": "actual authenticated target.originalInventoryOperationId request.inventoryComparison v2; historical v1 selects complete unchanged original source",
+    "protocol": "freeholder.original-cash-partial-source.v2",
+    "economicDescriptorFields": [
+      "all original source fields except its old sourceDigest",
+      "all original invoiceFeePolicy fields except its combined atomicRefundRevision",
+      "original principal/fee/remaining cash/whole target/unassigned duty",
+      "per-resource actual receiptId/paymentId/amountMinor/refundedMinor/Fi/original nominal retained target/exact retained target"
+    ],
+    "notEconomic": [
+      "actual returned-fee counter",
+      "old opaque combined atomicRefundRevision",
+      "derived still-to-return residual counter"
+    ],
+    "fullCurrentRetained": [
+      "entire original source and currentSourceRevision=its actual old sourceDigest",
+      "complete original bank/caller/raw/fee/credit physical parent graph",
+      "fresh full currentSourceRevision rechecked with before/after full history"
+    ],
+    "noRepricingOrForgiveness": true,
+    "noWholeOrPrincipalAuthority": true
+  },
+  "nativeSequence": "Actual post-refund controlled source GET precedes original whole return/closure for independent principal consistency. Ordinary evidence readers perform no provider IO/new GET. Changed full parent invalidates old closure; a new actual original GET+new closure may seal it without further controlled GET or POST.",
+  "newHelperSourceHashes": [
+    {
+      "path": "src/modules/invoicing/original-cash-closure-current.ts",
+      "sha256": "ae2e547b40b7d92090a3291cfa4fb73f82ee7d52dcdb6d0e815b9fa8a9bf4972"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-inventory-causal-contract.ts",
+      "sha256": "32a3a7e6fb3419ffd79cf8f0067cc4c646bbd79277273f6f84ce80b5851022b7"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-inventory-causal-policy.ts",
+      "sha256": "3351b2ea834910642a0ab62a6f142315c288e18d5a2825ea2b92eb0cc7cb853f"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-inventory-causal-proof.ts",
+      "sha256": "bf27dd941aaf714ac39896859c4487e9dda63c2454c664ec2b6d599911ecd2e7"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-inventory-causal.ts",
+      "sha256": "ff8acc59f60a5cf03423058c77e1d852cc819e7817f3a52eee1fefb5be33a1ef"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-inventory-prefix.ts",
+      "sha256": "ba2e9bfc8e89792ad64f02ce53ae2fc6f01fe53128e267c0dffcd372e47eeab5"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-inventory-preimage.ts",
+      "sha256": "3f405ce0648fc718d2acc35c3820a2818056cc8294f0a99ea715a6ef9dd759d3"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-partial-closure-current.ts",
+      "sha256": "28791e06568f3f6aa15ff7a05271d00977bf180f53c1ddd73aceb0225d260d23"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-partial-source-v2-policy.ts",
+      "sha256": "7e64b9e5c3af90cbaf02ed8fde56654b0a6eec33a4db9dbcf73734bce2fc40e4"
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-partial-source-v2.ts",
+      "sha256": "55e71475025e7040090eeaa86e75fe7b552ad28f8c4d880ca543e067305353d2"
+    }
+  ],
+  "sourceOnlyExecution": {
+    "compiler": "UNRUN",
+    "lint": "UNRUN",
+    "pures": "UNRUN",
+    "registry": "UNRUN",
+    "native": "UNRUN",
+    "database": "UNRUN",
+    "SDK": "UNRUN",
+    "provider": "UNRUN",
+    "whitespace": "git diff --check only"
+  }
+}

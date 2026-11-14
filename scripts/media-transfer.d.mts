@@ -64,6 +64,7 @@ export interface TransferInventoryEntry {
 export interface TransferInventoryPage {entries:TransferInventoryEntry[];next:Record<string,string>|null}
 export interface TransferInventoryConfiguration {versioning:"disabled"|"Enabled"|"Suspended";softDeleteSeconds:number;retentionSeconds:number}
 export interface AccountedTransferStore extends VersionedTransferStore {
+ inspectMultipart?(key:string,uploadId:string):Promise<{state:"open";parts:import("./media-multipart-readback.mjs").OriginalMultipartReadbackPart[]}|{state:"absent"}>;
  metadataVersioned?(key:string,expectedRevision?:TransferRevision):Promise<{revision:TransferRevision;bytes:number;contentType:string;requestProof?:OriginalProviderRequestProof}|undefined>;
  /** A complete original pinned body is hashed with bounded memory. This is
   * read evidence, never completion/consumption or original caller FIN. */

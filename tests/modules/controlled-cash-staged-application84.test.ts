@@ -11,8 +11,8 @@ import { stopJobs } from "@/core/jobs";
 import { entitlementGrants } from "@/core/entitlements/schema";
 import { invoices,payments,moneyStateEvents } from "@/modules/invoicing/schema";
 import { subscriptions,subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
-import { subscriptionControlledCollections,subscriptionControlledQuotes } from "@/modules/subscriptions/controlled-provider-collection-schema";
-import { subscriptionControlledResources } from "@/modules/subscriptions/controlled-provider-schema";
+import { subscriptionControlledCollections,subscriptionControlledQuotes,subscriptionControlledInvoiceProofs } from "@/modules/subscriptions/controlled-provider-collection-schema";
+import { subscriptionControlledResources,subscriptionControlledOperations } from "@/modules/subscriptions/controlled-provider-schema";
 import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
 import { collectControlledCollection } from "@/modules/subscriptions/controlled-provider-collection-orchestration";
 import { inspectControlledCashReceipt } from "@/modules/invoicing/controlled-cash-inspection-service";
@@ -22,6 +22,7 @@ import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agr
 import { CONTROLLED_CASH_ATOMIC_PROTOCOL } from "@/modules/invoicing/controlled-cash-application-protocol";
 import { actualControlledPeriod84 } from "../helpers/actual-controlled-period84";
 import { actualControlledOpenInvoice84 } from "../helpers/actual-controlled-open-invoice84";
+import { retainActualControlledManifest84 } from "../helpers/actual-controlled-current-manifest84";
 import { closeDb,hasDatabase,OWNER,truncateSpine } from "../helpers/spine";
 const system={kind:"system"} as const;
 const atomic=defineService({name:"invoicing.testControlledCashBatchAtomic84",summary:"Verify real writer access isolation and refusal-only later SQL failure in one actual transaction.",kind:"mutation",permission:"system",external:false,writeClass:"money",auditInputFields:["collectionId","receiptIds"],
@@ -53,6 +54,7 @@ describe.runIf(hasDatabase)("genuine signed admission and staged canonical recei
  beforeAll(ready,60000);beforeEach(truncateSpine);afterEach(()=>{vi.useRealTimers();f?.cleanup();f=undefined;vi.restoreAllMocks();});afterAll(async()=>{await stopJobs();await closeDb();});
  async function retained(){const fixture=f;if(!fixture)throw Error("Use the actual accepted target first.");
   expect(await collectControlledCollection.call({collectionId:fixture.target.collectionId},OWNER)).toMatchObject({state:"money_retained",applied:false});
+  await retainActualControlledManifest84(fixture);
   const receipts=await db().select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId,fixture.parent.id)).orderBy(subscriptionProviderChargeReceipts.id);
   for(const receipt of receipts)expect(await inspectControlledCashReceipt.call({collectionId:fixture.target.collectionId,receiptId:receipt.id},OWNER)).toMatchObject({bankReadReturned:true,completeInventory:true,suppliesMoneyAuthority:false});
   return receipts;
@@ -69,6 +71,25 @@ describe.runIf(hasDatabase)("genuine signed admission and staged canonical recei
   const links=await db().select().from(controlledCashApplicationLinks).where(eq(controlledCashApplicationLinks.batchId,actual.batchId));expect(links.map(row=>({receiptId:row.receiptId,paymentId:row.paymentId}))).toEqual(actual.payments);
   expect(await db().select().from(subscriptionProviderChargeReceipts).orderBy(subscriptionProviderChargeReceipts.id)).toEqual(before.receipts);
   const repeated=await snapshot();await expect(atomic.call(input(receipts.map(row=>row.id)),system)).rejects.toMatchObject({code:"conflict"});const afterRetry=await snapshot();for(const family of ["invoices","payments","events","batches","receiptProofs","links","receipts"] as const)expect(afterRetry[family]).toEqual(repeated[family]);
+ });
+ it("refuses the genuinely stale pre-pay manifest without writes, then retains a new actual GET before applying the same cash",async()=>{
+  f=await actualControlledPeriod84();const fixture=f;
+  expect(await collectControlledCollection.call({collectionId:fixture.target.collectionId},OWNER)).toMatchObject({state:"money_retained",applied:false});
+  const receipts=await db().select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId,fixture.parent.id));expect(receipts).toHaveLength(1);
+  const receipt=receipts[0];if(!receipt)throw Error("Retain the actual original positive receipt.");
+  const operations=await db().select().from(subscriptionControlledOperations).where(eq(subscriptionControlledOperations.resourceId,fixture.review.controlled.resourceId)).orderBy(subscriptionControlledOperations.ordinal);
+  const proofs=await db().select().from(subscriptionControlledInvoiceProofs).where(eq(subscriptionControlledInvoiceProofs.collectionId,fixture.target.collectionId));
+  const old=operations.filter(row=>row.kind==="read_manifest"&&proofs.some(proof=>proof.operationId===row.id)).at(-1),pay=operations.find(row=>row.kind==="pay_invoice");
+  if(!old||!pay)throw Error("The actual retained pre-pay manifest and original bank pay must exist.");expect(old.ordinal).toBeLessThan(pay.ordinal);
+  expect(await inspectControlledCashReceipt.call({collectionId:fixture.target.collectionId,receiptId:receipt.id},OWNER)).toMatchObject({bankReadReturned:true,completeInventory:true});
+  const before=await snapshot(),counts=fixture.remote.counts();
+  await expect(atomic.call(input([receipt.id]),system)).rejects.toMatchObject({code:"conflict"});expect(await snapshot()).toEqual(before);expect(fixture.remote.counts()).toEqual(counts);
+  const fresh=await retainActualControlledManifest84(fixture);
+  const[newRead]=await db().select().from(subscriptionControlledOperations).where(eq(subscriptionControlledOperations.id,fresh.operationId));expect(newRead?.ordinal).toBeGreaterThan(pay.ordinal);
+  const retainedProofs=await db().select().from(subscriptionControlledInvoiceProofs).where(eq(subscriptionControlledInvoiceProofs.collectionId,fixture.target.collectionId));
+  expect(retainedProofs).toContainEqual(expect.objectContaining({id:fresh.proofId,operationId:fresh.operationId}));for(const original of proofs)expect(retainedProofs).toContainEqual(original);
+  expect(await inspectControlledCashReceipt.call({collectionId:fixture.target.collectionId,receiptId:receipt.id},OWNER)).toMatchObject({bankReadReturned:true,completeInventory:true});
+  expect(await noNewBankCall(()=>atomic.call(input([receipt.id]),system))).toMatchObject({outstandingMinor:0,suppliesAccessAuthority:false});expect(fixture.remote.counts().payPosts).toBe(1);
  });
  it("keeps a real one-minor partial unpaid, then applies genuine later4199 with exact fee residual across commits",async()=>{
   f=await actualControlledPeriod84();const open=await actualControlledOpenInvoice84(f);f.remote.externallyAttachPayment(open.providerInvoiceRef,1,0);
@@ -101,13 +122,13 @@ describe.runIf(hasDatabase)("genuine signed admission and staged canonical recei
  it("rolls back the genuinely settled first receipt and all core3/events/access if the second actual SQL insert refuses",async()=>{
   f=await actualControlledPeriod84();const open=await actualControlledOpenInvoice84(f);f.remote.externallyAttachPayment(open.providerInvoiceRef,2100,200);f.remote.externallyAttachPayment(open.providerInvoiceRef,2100,200);
   const receipts=await retained(),before=await snapshot(),counts=f.remote.counts();expect(receipts).toHaveLength(2);
-  await expect(atomic.call({...input(receipts.map(row=>row.id)),refuseLater:true},system)).rejects.toThrow("Reject actual later receipt after real earlier settlement");
+  await expect(atomic.call({...input(receipts.map(row=>row.id)),refuseLater:true},system)).rejects.toMatchObject({cause:{code:"23514",message:"Reject actual later receipt after real earlier settlement"}});
   expect(await snapshot()).toEqual(before);expect(f.remote.counts()).toEqual(counts);expect(f.remote.externalAttachments()).toBe(2);
   expect((await db().execute<{absent:boolean}>(sql`select not exists(select 1 from pg_trigger where tgname='zz_test_refuse_actual_later_receipt84') as absent`))[0]?.absent).toBe(true);
  });
  it("cannot commit an uneven intermediate fee prefix when the later real receipt fails",async()=>{
   f=await actualControlledPeriod84();const open=await actualControlledOpenInvoice84(f);f.remote.externallyAttachPayment(open.providerInvoiceRef,4199,400);f.remote.externallyAttachPayment(open.providerInvoiceRef,1,0);
-  const receipts=await retained(),before=await snapshot(),counts=f.remote.counts();expect(receipts).toHaveLength(2);await expect(atomic.call({...input(receipts.map(row=>row.id)),refuseLater:true},system)).rejects.toThrow("Reject actual later receipt after real earlier settlement");
+  const receipts=await retained(),before=await snapshot(),counts=f.remote.counts();expect(receipts).toHaveLength(2);await expect(atomic.call({...input(receipts.map(row=>row.id)),refuseLater:true},system)).rejects.toMatchObject({cause:{code:"23514",message:"Reject actual later receipt after real earlier settlement"}});
   expect(await snapshot()).toEqual(before);expect(f.remote.externalAttachments()).toBe(2);expect(f.remote.counts()).toEqual(counts);
  });
  it.each(["duplicate","foreign"] as const)("refuses %s receipt membership before canonical writes while retaining genuine raw cash",async change=>{

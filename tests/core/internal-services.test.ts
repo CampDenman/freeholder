@@ -16,6 +16,17 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "invoicing.retainAtomicAuxiliaryFeeTarget",
+  "invoicing.claimAtomicAuxiliaryFeeReturn",
+  "invoicing.finalizeAtomicAuxiliaryFeeReturn",
+  "invoicing.atomicFeeBankSource",
+  "invoicing.recordMerchantFeeInvocationObservation",
+  "invoicing.persistMerchantFeeInvocation",
+  "invoicing.assertMerchantFeePostPreflight",
+  "invoicing.prepareMerchantFeePreflight",
+  "invoicing.assertMerchantFeeInvocation",
+  "invoicing.prepareMerchantFeeDispatchInvocation",
+  "invoicing.prepareMerchantFeeSourceInvocation",
   "entitlements.advanceSubscriptionPeriod",
   "subscriptions.completePaidControlledPeriod",
   "subscriptions.pendingPaidControlledPeriods",
@@ -73,6 +84,7 @@ const INTERNAL = [
   "subscriptions.retainControlledProrationQuote",
   "subscriptions.assertControlledProrationPreviewSource",
   // C1.12/C11.08: exact original transfer/request/recovery phases stay private.
+  "media.sealOriginalMultipartRetirement",
   "media.captureTransferErasure",
   "media.admitTransferErasureCall",
   "media.finishTransferErasure",
@@ -457,6 +469,21 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "invoicing.retainAtomicAuxiliaryFeeTarget",
+  "invoicing.claimAtomicAuxiliaryFeeReturn",
+  "invoicing.finalizeAtomicAuxiliaryFeeReturn",
+  "invoicing.atomicFeeBankSource",
+  "invoicing.recordMerchantFeeInvocationObservation",
+  "invoicing.persistMerchantFeeInvocation",
+  "invoicing.assertMerchantFeePostPreflight",
+  "invoicing.prepareMerchantFeePreflight",
+  "invoicing.assertMerchantFeeInvocation",
+  "invoicing.prepareMerchantFeeDispatchInvocation",
+  "invoicing.prepareMerchantFeeSourceInvocation",
+  // C9.33/C12.38: independently guarded original paid/access phases stay private.
+  "entitlements.advanceSubscriptionPeriod",
+  "subscriptions.completePaidControlledPeriod",
+  "subscriptions.pendingPaidControlledPeriods",
   // C12.38/C1.08: the genuine staged receipt command remains private.
   "invoicing.applyControlledReceiptBatch",
   // C12.38/C9.33/C9.38: all reviewed original target factory/GET phases remain private.
@@ -753,6 +780,7 @@ const CALLER_AUTHORIZED_PHASES = [
   "catalog.anonymizeSellerOrderReceipts",
   "catalog.orderInvoiceRevenue",
   "media.retireOwnedAssetsForErasure",
+  "media.sealOriginalMultipartRetirement",
   "media.reserveProxyObject",
   "catalog.orderInvoiceLineOwners",
   "subscriptions.claimTrialCardSetup",

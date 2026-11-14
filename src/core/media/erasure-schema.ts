@@ -21,12 +21,13 @@ export const mediaErasureCohorts=pgTable("media_erasure_cohorts",{
 
 /** First observed membership is immutable, including a truly empty capture.
  * Missing legacy birth stays a separately recorded debt, never a new UUID. */
+export interface OriginalUploadLegacyAnchor{requestId:string;captureDigest:string;reservationId:string;keyDigest:string;pointerWitness:string;uploadWitness:string}
 export interface OriginalMediaErasureMembership{
  format:"freeholder.original-media-erasure/v1";
  legacyScopes:Array<{requestId:string;scope:string;artifactDigest:string|null}>;
  receipts:Array<{id:string;reservationId:string|null;witness:string}>;
  resources:Array<{id:string;reservationId:string|null;witness:string}>;
- uploads:Array<{id:string;witness:string}>;
+ uploads:Array<{id:string;reservationId?:string|null;keyDigest?:string;legacyAnchor?:OriginalUploadLegacyAnchor;witness:string}>;
  reservations:Array<{id:string;keyDigest:string;witness:string}>;
  legacyReservations:Array<{keyDigest:string;witness:string}>;
 }

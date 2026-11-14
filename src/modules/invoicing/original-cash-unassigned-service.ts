@@ -5,6 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { actorString, defineService, ServiceError } from "@/core/service";
 import { currentOriginalCashInventory, appendOriginalCashFact } from "./original-cash-recovery-service";
+import { lockOriginalInventoryPrefix } from "./original-cash-inventory-prefix";
 import { originalCashRecoveryCashWitness } from "./original-cash-recovery-store";
 import { merchantRefundObservations, merchantRefundResourceBindings, merchantRefundRequests } from "./merchant-refund-schema";
 import { ORIGINAL_UNASSIGNED_CASH_CONFIRMATION } from "./original-cash-partial-contract";
@@ -17,6 +18,7 @@ export const reviewOriginalUnassignedCash = defineService({
   output: z.object({ reviewed: z.literal(true) }),
   handler: async ({ recoveryId, operationId, rawFactId }, ctx) => {
     if (ctx.actor.kind !== "user" || ctx.actor.keyScopes) throw new ServiceError("permission", "A freshly verified signed-in person must review this actual original resource.");
+    await lockOriginalInventoryPrefix(ctx,{recoveryId,operationId});
     const current = await currentOriginalCashInventory(ctx, recoveryId, operationId), witness = await originalCashRecoveryCashWitness(ctx.tx, current.cash);
     const raw = witness.facts.find(fact => fact.id === rawFactId && fact.operationId === operationId && fact.kind === "refund");
     const actual = raw ? current.evidence.refunds.find(resource => resource.providerRef === raw.evidence.providerRef) : null;

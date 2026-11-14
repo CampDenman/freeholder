@@ -8,6 +8,7 @@ import {originalCashRecoveryCashWitness} from "./original-cash-recovery-store";
 import {appendOriginalCashFact,admitOriginalCashOperation,auxiliaryFactsResolved} from "./original-cash-recovery-service";
 import {merchantCashAuxiliaryBody} from "@/adapters/payments/stripe-cash-auxiliary";
 import {atomicAuxiliaryFeeBasis} from "./atomic-auxiliary-fee-target";
+import {lockOriginalInventoryPrefix} from "./original-cash-inventory-prefix";
 import {ATOMIC_AUXILIARY_FEE_CLOSURE,atomicAuxiliaryFeeTarget,atomicAuxiliaryFeeClosure} from "./atomic-auxiliary-fee-contract";
 import {controlledAtomicRefundFeeState} from "./controlled-atomic-refund-target";
 import {merchantTaxDigest} from "./merchant-tax-store";
@@ -20,6 +21,7 @@ async function ready(ctx:ServiceContext){
  const[valid]=await ctx.tx.execute<{ready:boolean}>(sql`select freeholder_atomic_auxiliary_fee_ready() as ready`);if(valid?.ready!==true)throw new ServiceError("conflict","Restore every exact atomic fee lifecycle guard, index and original bank prerequisite.");
 }
 export const retainAtomicAuxiliaryFeeTarget=defineService({name:"invoicing.retainAtomicAuxiliaryFeeTarget",summary:"Freeze an exact fee-only atomic target in its genuine existing original auxiliary owner, without a customer or recipient waiver.",kind:"mutation",permission:"system",external:false,writeClass:"money",input:selection,output:z.object({targetFactId:z.uuid().nullable(),pendingTargetFactIds:z.array(z.uuid()).max(5000)}),handler:async(input,ctx)=>{
+ await lockOriginalInventoryPrefix(ctx,{recoveryId:input.recoveryId,operationId:input.operationId});
  await ready(ctx);const basis=await atomicAuxiliaryFeeBasis(ctx,input);ctx.setSubject("payment",basis.union.binding.payment.id);
  const witness=await originalCashRecoveryCashWitness(ctx.tx,basis.current.cash),existing=witness.facts.filter(row=>row.kind==="atomic_fee_target"&&row.evidence.targetKey===basis.targetKey);
  const pendingTargetFactIds=existing.filter(row=>!witness.facts.some(closure=>closure.kind==="atomic_fee_closure"&&closure.evidence.targetFactId===row.id)).map(row=>row.id);
@@ -30,6 +32,7 @@ export const retainAtomicAuxiliaryFeeTarget=defineService({name:"invoicing.retai
  const id=randomUUID();await appendOriginalCashFact(ctx,input.recoveryId,null,"atomic_fee_target",basis.body,id);return{targetFactId:id,pendingTargetFactIds:[id]};
 }});
 export const claimAtomicAuxiliaryFeeReturn=defineService({name:"invoicing.claimAtomicAuxiliaryFeeReturn",summary:"Admit only one actual original fee return against a retained atomic target under the same existing owner and full current locks.",kind:"mutation",permission:"system",external:false,writeClass:"money",auditInputFields:["recoveryId","operationId","targetFactId","phase","actualOperationId"],input:claimInput,output:z.object({recoveryId:z.uuid(),operationId:z.uuid(),nonce:z.string(),request:z.record(z.string(),z.unknown())}).nullable(),handler:async(input,ctx)=>{
+ await lockOriginalInventoryPrefix(ctx,{recoveryId:input.recoveryId,operationId:input.operationId});
  await ready(ctx);if(input.phase==="before_post"){const{assertAtomicAuxiliaryFeeBeforePost}=await import("./atomic-auxiliary-fee-before-post");await assertAtomicAuxiliaryFeeBeforePost(ctx,input);return null;}
  const basis=await atomicAuxiliaryFeeBasis(ctx,input),witness=await originalCashRecoveryCashWitness(ctx.tx,basis.current.cash);ctx.setSubject("payment",basis.union.binding.payment.id);
  const fact=witness.facts.find(row=>row.id===input.targetFactId&&row.kind==="atomic_fee_target");if(!fact)throw new ServiceError("conflict","Restore this exact retained atomic fee target.");const frozen=atomicAuxiliaryFeeTarget.parse(fact.evidence);
@@ -41,6 +44,7 @@ export const claimAtomicAuxiliaryFeeReturn=defineService({name:"invoicing.claimA
   idempotencyKey:`original-cash-atomic-fee:${fact.id}`,frozenBody:merchantCashAuxiliaryBody(id,frozen.amountMinor)},id);
 }});
 export const finalizeAtomicAuxiliaryFeeReturn=defineService({name:"invoicing.finalizeAtomicAuxiliaryFeeReturn",summary:"Retain only exact actual accepted fee return plus fresh current bank closure; original principal and recipient duties remain separate.",kind:"mutation",permission:"system",external:false,writeClass:"money",input:selectedTarget,output:z.object({closureFactId:z.uuid()}),handler:async(input,ctx)=>{
+ await lockOriginalInventoryPrefix(ctx,{recoveryId:input.recoveryId,operationId:input.operationId});
  await ready(ctx);const basis=await atomicAuxiliaryFeeBasis(ctx,input),witness=await originalCashRecoveryCashWitness(ctx.tx,basis.current.cash),fact=witness.facts.find(row=>row.id===input.targetFactId&&row.kind==="atomic_fee_target");
  ctx.setSubject("payment",basis.union.binding.payment.id);
  const frozen=fact?atomicAuxiliaryFeeTarget.parse(fact.evidence):null,state=await controlledAtomicRefundFeeState(ctx,basis.union.binding.payment.id);

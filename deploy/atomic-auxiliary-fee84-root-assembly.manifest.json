@@ -1,0 +1,81 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "ROOT_SOURCE_ASSEMBLED_UNRUN",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08",
+    "C11.08"
+  ],
+  "frozenLeaf": "af221ea3bc9dd71d301a9dfecfd8094712ec8540",
+  "rootMerge": "ca87524fd6298fca8754147ff3198768c52bc9fb",
+  "qualifiedPrivacyPredecessor": "ee7b4a39e3f1f9d3b0ea833374c4511d49e640ff",
+  "priorWholePrefix": {
+    "bytes": 758024,
+    "sha256": "9425c8e2c57b25e149566f3b40283e3b1ccb122dde1e153ddd7183bcc5703a20"
+  },
+  "tail": {
+    "path": "deploy/atomic-auxiliary-fee84.fragment.sql",
+    "sha256": "ee68ae91ef0d1a52166fe0cd7fc3dab63b14d05e1b95b7eb7ed118bcc5785c58",
+    "bytes": 74684
+  },
+  "normal85": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "ownedPath": "deploy/sql/0085_controlled_collection_application.unapplied.sql",
+    "bytes": 832734,
+    "sha256": "86e09cd11268730c289f0d06f9977fe7650700e0e135ad1136fbdc7c7d0c172e"
+  },
+  "newModels": 0,
+  "newColumns": 0,
+  "newTriggers": 0,
+  "newFunctions": [
+    "freeholder_atomic_fee_return_resources(uuid)",
+    "freeholder_atomic_auxiliary_fee_target_valid(jsonb)",
+    "freeholder_atomic_auxiliary_fee_operation_valid(jsonb)",
+    "freeholder_atomic_auxiliary_fee_closure_valid(jsonb)",
+    "freeholder_atomic_auxiliary_fee_ready()"
+  ],
+  "fourWholeSuccessorsReverseExactly": true,
+  "oldFactKindsPreservedInOrder": 13,
+  "newFactKinds": {
+    "atomic_fee_target": "freeholder.original-cash-atomic-fee-target.v1",
+    "atomic_fee_closure": "freeholder.original-cash-atomic-fee-closure.v1"
+  },
+  "newIndexes": [
+    {
+      "table": "original_cash_recovery_facts",
+      "name": "original_cash_atomic_fee_target",
+      "unique": true,
+      "keys": [
+        "recovery_id",
+        "(evidence->>'targetKey')"
+      ],
+      "where": "kind='atomic_fee_target'"
+    },
+    {
+      "table": "original_cash_recovery_facts",
+      "name": "original_cash_atomic_fee_closure",
+      "unique": true,
+      "keys": [
+        "recovery_id",
+        "(evidence->>'targetFactId')",
+        "(evidence->>'revision')"
+      ],
+      "where": "kind='atomic_fee_closure'"
+    }
+  ],
+  "privateInventory": {
+    "path": "tests/core/internal-services.test.ts",
+    "beforeSha256": "c647562674a1ac9f83676ab25fabe92c7761992a4e4e8ccad2e59c1d2437cd77",
+    "afterSha256": "7c82c9d4f2eec209149e4effa1b9563aa9b05c206ee6b41201e7732353d791de",
+    "exactBothLiteralInsertions": "  \"invoicing.retainAtomicAuxiliaryFeeTarget\",\n  \"invoicing.claimAtomicAuxiliaryFeeReturn\",\n  \"invoicing.finalizeAtomicAuxiliaryFeeReturn\",\n",
+    "names": [
+      "invoicing.retainAtomicAuxiliaryFeeTarget",
+      "invoicing.claimAtomicAuxiliaryFeeReturn",
+      "invoicing.finalizeAtomicAuxiliaryFeeReturn"
+    ]
+  },
+  "originalFullFeePaidPrivacyNativesUnchanged": true,
+  "rootCentralFourSelectSameExistingOriginalCashFamilies": true,
+  "sourceSchemaSdkNativeProviderStableAcceptance": false
+}

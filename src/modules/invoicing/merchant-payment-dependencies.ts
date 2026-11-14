@@ -17,6 +17,7 @@ import { invoices, paymentDisputes, payments, refunds } from "./schema";
 import { controlledFinancialTables, controlledFinancialWitness, type ControlledFinancialEntry } from "./controlled-provider-financial-witness";
 import { prorationFinancialWitness } from "./proration-financial-witness";
 import { cashInspectionFinancialWitness, exportCashInspectionStops, exportControlledCashInspectionLineages } from "./merchant-cash-inspection-financial";
+import { merchantFeeInvocationFinancialWitness, exportMerchantFeeInvocationHistory } from "./merchant-fee-invocation-witnesses";
 
 /** NULL makes the existing parent merge explicitly non-undoable.
  * The default is the buyer's complete invoice. A seller caller must derive
@@ -52,6 +53,12 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   let additionalCount = additionalWitnessCount + prorationFinancial.entries.length + controlledFinancial.entries.filter(row => !externalControlled.has(`${row.table}:${row.id}`)).length;
   let prorationInvoiceIds: string[] = [];
   const originalCash = await originalCashInvoiceHistory(tx, invoiceIds, originalPaymentIds);
+  const feeInvocations = await merchantFeeInvocationFinancialWitness(tx, originalPaymentIds === undefined ? { invoiceIds } : { paymentIds: originalPaymentIds });
+  if (feeInvocations.entries.some(row => !invoiceIds.includes(row.parents.invoiceId)
+    || externalControlled.has(`${row.table}:${row.id}`) && externalControlled.get(`${row.table}:${row.id}`) !== row.fingerprint)) return null;
+  const feeEntries = feeInvocations.entries.map(({table,id,fingerprint}) => ({table,id,fingerprint}));
+  const feeKeys = new Set(feeEntries.map(row => `${row.table}:${row.id}`));
+  additionalCount += feeEntries.filter(row => !externalControlled.has(`${row.table}:${row.id}`)).length;
   const inspectionStops = await cashInspectionFinancialWitness(tx, {
     paymentIds: originalCash.references.map(row => row.id),
     receiptIds: originalCash.receiptReferences.map(row => row.receiptId).filter((id): id is string => id !== null),
@@ -81,7 +88,7 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
     ...originalCash.witness.feedback.map(row => `original_cash_feedback:${merchantTaxDigest(row.namespace)}:${row.feedback.id}`),
   ]);
   const existingControlledKeys = new Set([...externalControlled.keys(), ...controlledFinancial.entries.map(row => `${row.table}:${row.id}`),
-    ...inspectionHistoryKeys, ...cashKeys]);
+    ...inspectionHistoryKeys, ...cashKeys, ...feeKeys]);
   additionalCount += controlledCashChildren.entries.filter(row => !existingControlledKeys.has(`${row.table}:${row.id}`)).length;
   if (cashCount + additionalCount > 5000) return null;
   // Authentic feedback creates financial debt before the first GET. Select
@@ -129,6 +136,12 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
       legacyFinancial.set(invoiceId, merchantTaxDigest({ ...(legacy ? { legacy } : {}), ...(entries.length ? { originalCashInspectionStops: entries } : {}),
         ...(lineageEntries.length ? { originalCashInspectionLineages: lineageEntries } : {}) }));
     }
+  }
+  // Include source GETs even before an old fee operation or route shortcut.
+  for (const invoiceId of [...new Set(feeInvocations.entries.map(row => row.parents.invoiceId))]) {
+    const original = legacyFinancial.get(invoiceId);
+    const entries = feeInvocations.entries.filter(row => row.parents.invoiceId === invoiceId).map(({table,id,fingerprint}) => ({table,id,fingerprint}));
+    legacyFinancial.set(invoiceId, merchantTaxDigest({ ...(original ? { original } : {}), originalFeeInvocations: entries }));
   }
   if (prorationFinancial.entries.length || controlledFinancial.entries.length) {
     // These actual invoices form one merge cohort, including linked original
@@ -182,7 +195,7 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   const refundChildren = await merchantRefundDependencyFingerprints(tx, { paymentIds,
     subscriptionChargeReceiptIds: scoped.map(row => row.agreementRoute?.originalChargeReceiptId).filter((id): id is string => Boolean(id)) });
   const controlledKeys = new Set([...externalControlled.keys(), ...controlledFinancial.entries.map(row => `${row.table}:${row.id}`), ...inspectionHistoryKeys,
-    ...controlledCashChildren.entries.map(row => `${row.table}:${row.id}`)]);
+    ...controlledCashChildren.entries.map(row => `${row.table}:${row.id}`), ...feeKeys]);
   if (refundChildren.entries.some(row => externalControlled.has(`${row.table}:${row.id}`) && externalControlled.get(`${row.table}:${row.id}`) !== row.fingerprint)) return null;
   const distinctRefundChildren = refundChildren.entries.filter(row => !controlledKeys.has(`${row.table}:${row.id}`));
   if (refundChildren.incomplete || count + cashCount + legacyCount + additionalCount + distinctRefundChildren.length > 5000) return null;
@@ -231,10 +244,13 @@ export async function exportMerchantRecoveryHistory(tx: Tx, invoiceIds: readonly
     feeOperations: await tx.select().from(merchantFeeRefunds).where(inArray(merchantFeeRefunds.paymentId, ownedPayments)).orderBy(asc(merchantFeeRefunds.id)).limit(5001),
     feeAcknowledgements: await tx.select().from(merchantFeeObservations).where(inArray(merchantFeeObservations.operationId, ownedFees)).orderBy(asc(merchantFeeObservations.id)).limit(5001),
   };
-  if (Object.values(history).reduce((sum, rows) => sum + rows.length, 0) + Object.values(originalCash.witness).reduce((sum, rows) => sum + rows.length, 0)
-    + inspectionStops.admissions.length + inspectionStops.stops.length + inspectionStops.lineages.length > 5000)
+  const existingRows = Object.values(history).reduce((sum, rows) => sum + rows.length, 0) + Object.values(originalCash.witness).reduce((sum, rows) => sum + rows.length, 0)
+    + inspectionStops.admissions.length + inspectionStops.stops.length + inspectionStops.lineages.length;
+  if (existingRows > 5000)
     throw new ServiceError("conflict", "Restore the complete bounded original financial export before issuing the subject archive.");
+  const feeInvocations = await exportMerchantFeeInvocationHistory(tx, { invoiceIds }, { existingRows });
   return { ...history, originalCash: exportOriginalCashHistory(originalCash.witness),
+    ...(feeInvocations.exported.length ? { originalFeeInvocations: feeInvocations.exported } : {}),
     ...(inspectionStops.stops.length ? { originalCashInspectionStops: exportCashInspectionStops(inspectionStops.stops) } : {}),
     ...(inspectionStops.lineages.length ? { originalCashInspectionLineages: exportControlledCashInspectionLineages(inspectionStops.lineages) } : {}) };
 }

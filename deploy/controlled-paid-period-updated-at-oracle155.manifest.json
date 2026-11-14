@@ -1,0 +1,24 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "ORACLE_CORRECTION_PREPARED_UNRUN",
+  "source": "tests/modules/controlled-paid-period155.test.ts",
+  "beforeSha256": "127dbdaf6e41842596749d13faaf1c09360977c8faa9f9ab04773f7093871e6e",
+  "afterSha256": "b84ea2282ca5638227511058c9e8b840d2545a8b64e89e6263c55cbe45f087ad",
+  "finiteDelta": [
+    {
+      "before": "import { eq } from \"drizzle-orm\";",
+      "after": "import { eq, sql } from \"drizzle-orm\";"
+    },
+    {
+      "before": "    for (const old of f.grants) expect(current.find(row => row.id === old.id)).toEqual({ ...old, status: \"expired\" });\n    const fresh = current.filter(row => !f!.grants.some(old => old.id === row.id));",
+      "after": "    const fresh = current.filter(row => !f!.grants.some(old => old.id === row.id));\n    const firstFresh = fresh[0]; if (!firstFresh) throw Error(\"Retain the actual new grant birth before checking retirement timestamps.\");\n    for (const old of f.grants) expect(current.find(row => row.id === old.id)).toEqual({ ...old, status: \"expired\", updatedAt: firstFresh.createdAt });\n    // updatedAt records the actual retirement. Full microsecond SQL equality\n    // and actual row transaction identities keep this stronger than anyDate.\n    const [retirementStamp] = await db().execute<{ count: number; exact_time: boolean; actual_effect_tx: boolean }>(sql`select count(*)::integer as count,\n      bool_and(retired.updated_at=fresh.created_at) as exact_time,\n      bool_and(retired.xmin::text::bigint=(effect.admission_transaction_id::bigint%4294967296)\n        and fresh.xmin::text::bigint=(effect.admission_transaction_id::bigint%4294967296)) as actual_effect_tx\n      from entitlement_grants retired join subscription_controlled_paid_period_receipts effect on effect.id=${effect.id}::uuid\n      join entitlement_grants fresh on fresh.id=${firstFresh.id}::uuid and fresh.source_subscription_id=effect.subscription_id\n      where retired.source_subscription_id=effect.subscription_id and retired.id in(${sql.join(f.grants.map(row => sql`${row.id}::uuid`), sql`,`)})`);\n    expect(retirementStamp).toEqual({ count: f.grants.length, exact_time: true, actual_effect_tx: true });"
+    }
+  ],
+  "wholeFileReverseExact": true,
+  "productRuntimeUnchanged": true,
+  "requirement": "MASTER principle12 and core/db/columns.ts mandatory updatedAtColumn.$onUpdate SQLnow. All original ID/contact/source/entitlement/window/usage/createdAt equality remains, only updatedAt equals actual fresh grant birth plus independently full PostgreSQL timestamp and actual effect row-XID identity. No anyDate, grace/window/usage waiver or synthetic context.",
+  "failedOriginalNative": "/tmp/freeholder-current-full86-paid-period-full-native-v4-20261114-result.json",
+  "sameSourceReadonlyDiagnosis": "/tmp/freeholder-current-full86-native-v35-grant-retirement-v1-20261114-result.json",
+  "diagnosis": "Actual independent effect1, old expired2/fresh active2; all4 row XIDs actual effect TX, retired updated_at exactly equals fresh SQL created_at, effectTX differs moneyTX; all595 whole hashes/all86journal/sequence unchanged/drain0. Original native remains failed before later idempotency/merge/export assertions.",
+  "freshNativeRequired": true
+}

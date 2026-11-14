@@ -492,8 +492,8 @@ export async function advanceSubscriptionPeriod(
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`entitlement-period:${input.subscriptionId}`}))`);
   const catalogue = await subscriptionCatalogue(tx, input);
   const observed = await tx.select({ grant: entitlementGrants,
-    exactWindow: sql<boolean>`coalesce(${entitlementGrants.startsAt}=${input.startsAt} and ${entitlementGrants.endsAt}=${input.endsAt},false)`,
-    overlaps: sql<boolean>`${entitlementGrants.endsAt} is null or ${entitlementGrants.endsAt}>${input.startsAt}`,
+    exactWindow: sql<boolean>`coalesce(${entitlementGrants.startsAt}=${input.startsAt.toISOString()}::timestamptz and ${entitlementGrants.endsAt}=${input.endsAt.toISOString()}::timestamptz,false)`,
+    overlaps: sql<boolean>`${entitlementGrants.endsAt} is null or ${entitlementGrants.endsAt}>${input.startsAt.toISOString()}::timestamptz`,
   }).from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, input.subscriptionId)).limit(5001);
   const previous = observed.map(row => row.grant);
   if (previous.length + catalogue.length > 5000 || !catalogue.length || catalogue.length > 1000 || previous.some(row => row.contactId !== input.contactId))

@@ -1,0 +1,74 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.12",
+    "C11.08"
+  ],
+  "status": "SOURCE_CORRECTION_PREPARED_UNRUN",
+  "preservedFailure": "/tmp/freeholder-current-full86-media161-source-v92-20261114-result.json",
+  "scope": "Strict empty JSON object check safely accepts existing{} records; arrays/null/scalars cannot satisfy erased metadata. Same original SQL/ownership/physical guards remain; no type cast, historical hash rewrite or input/capability relaxation. Remove one exact duplicate import while retaining combined required reader/candidate import.",
+  "files": [
+    {
+      "path": "src/core/media/original-erasure-proof.ts",
+      "beforeSha256": "a61530756a025f86472453ace17a1d30a33b88f698f67241daa6450885888d91",
+      "afterSha256": "e226a1169325a3328003e4a4a0f80cfd8ca43b20cca213971bdf975175790f17",
+      "exactAppendOnly": "\n/** Empty erasure metadata is a JSON object; arrays/null/scalars retain debt. */\nexport function originalUploadMetadataIsEmpty(value:unknown):boolean{\n return value!==null&&typeof value===\"object\"&&!Array.isArray(value)&&Object.keys(value).length===0;\n}\n"
+    },
+    {
+      "path": "src/core/media/original-erasure-scope.ts",
+      "beforeSha256": "16f8664c012e354c8103d11ffb48c42cf85a4364406df2cbdbeb63830572fdb3",
+      "afterSha256": "aeaf974be0b4369f1cdd20a90c903b454ce2a13e295b641744dfca0a4b6971a0",
+      "finiteDelta": [
+        {
+          "before": "import {firstOriginalMediaMembership,",
+          "after": "import {originalUploadMetadataIsEmpty,firstOriginalMediaMembership,",
+          "occurrences": 1
+        },
+        {
+          "before": "Object.keys(upload.provenance).length",
+          "after": "!originalUploadMetadataIsEmpty(upload.provenance)",
+          "occurrences": 2
+        },
+        {
+          "before": "Object.keys(upload.mediaMetadata).length",
+          "after": "!originalUploadMetadataIsEmpty(upload.mediaMetadata)",
+          "occurrences": 2
+        }
+      ]
+    },
+    {
+      "path": "src/core/media/original-upload-retention.ts",
+      "beforeSha256": "7f9320e64f9b16838d399a160cafa8a71d034892ceefaed64e328523ffc5d75c",
+      "afterSha256": "2d21ed87fab55e1831cb1da59d6a140e2d98034a819d125026e01299d935046d",
+      "finiteDelta": [
+        {
+          "before": "import {mediaUploads} from \"./schema\";",
+          "after": "import {mediaUploads} from \"./schema\";\nimport {originalUploadMetadataIsEmpty} from \"./original-erasure-proof\";",
+          "occurrences": 1
+        },
+        {
+          "before": "Object.keys(upload.provenance).length===0",
+          "after": "originalUploadMetadataIsEmpty(upload.provenance)",
+          "occurrences": 1
+        },
+        {
+          "before": "Object.keys(upload.mediaMetadata).length===0",
+          "after": "originalUploadMetadataIsEmpty(upload.mediaMetadata)",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "src/core/media/transfer-requests.ts",
+      "beforeSha256": "6d562f53167d592f77168f4eb24c7adf24f00971e4ee40fc73c7a6cfcf534361",
+      "afterSha256": "fb6270658e9f38d4bf7d9056df71ac5d36a9a6cda3bfef0e24f9a8877c2325ab",
+      "finiteDelta": [
+        {
+          "before": "import {readRetainedOriginalMultipartIdentity} from \"./multipart-retained-identity\";\n",
+          "after": "",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C1.08",
+    "C11.10"
+  ],
+  "status": "TYPES_CORRECTION_PREPARED_UNRUN",
+  "preservedFailure": "/tmp/freeholder-current-full86-auxiliary160-source-v90-20261114-result.json",
+  "scope": "Audit field keys distribute over validated input variants; actualOperationId remains audited and nonce stays excluded. Runtime parsed-input Object.hasOwn selection/redaction/permissions/transactions unchanged. Native spies use the actual existing strict input parser before forwarding exactly the same values/reading typed fields; fault injection stays after the same real commits. No money/SQL/business oracle change.",
+  "files": [
+    {
+      "path": "src/core/service.ts",
+      "beforeSha256": "429dbe4ea7e9aaa8c3a0255e18d422b5aa01e6c96ab973840ba423209196a22f",
+      "afterSha256": "86deaf51170881f037418022217a3e069a96a736ba52b713114672da9967bdc8",
+      "finiteDelta": [
+        {
+          "before": "export interface ServiceDef<In extends z.ZodType, Out> {",
+          "after": "// C12.38: validated union variants may have their own audited identity fields.\n// Runtime still includes a field only when it exists on the actual parsed input.\ntype AuditInputKey<Value> = Value extends unknown ? Extract<keyof Value, string> : never;\n\nexport interface ServiceDef<In extends z.ZodType, Out> {"
+        },
+        {
+          "before": "auditInputFields?: readonly (keyof z.output<In> & string)[];",
+          "after": "auditInputFields?: readonly AuditInputKey<z.output<In>>[];"
+        }
+      ],
+      "runtimeJavaScriptChange": false
+    },
+    {
+      "path": "tests/modules/atomic-auxiliary-fee84.test.ts",
+      "beforeSha256": "ef54406e011977affdc8d727e93cee80645e64c1ded4a5a9fa08812b4aef96c8",
+      "afterSha256": "c1339a7ef5fb7a0a71237773b7f983495acdede62ff64f397f440d0f23a1fa61",
+      "finiteDelta": [
+        {
+          "before": "const actual=await call(input,actor,options);const[row]=await db().select().from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.id,input.factId));",
+          "after": "const parsed=recordOriginalCashFact.def.input.parse(input),actual=await call(parsed,actor,options);const[row]=await db().select().from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.id,parsed.factId));"
+        },
+        {
+          "before": "const actual=await call(input,actor,options);if(input.phase===\"admit\"&&actual)f.remote.externallyReturnFee(providerRef,1);",
+          "after": "const parsed=claimAtomicAuxiliaryFeeReturn.def.input.parse(input),actual=await call(parsed,actor,options);if(parsed.phase===\"admit\"&&actual)f.remote.externallyReturnFee(providerRef,1);"
+        }
+      ],
+      "allOriginalMoneyAndFailureOraclesUnchanged": true
+    }
+  ]
+}

@@ -83,7 +83,7 @@ const finish=defineMediaService({name:"media.finishTransferErasure",summary:"Ret
  }
  if(members.length)await ctx.tx.update(mediaObjectWrites).set({deletedAt:now,updatedAt:now}).where(inArray(mediaObjectWrites.id,members.map(row=>row.receiptId)));
  await ctx.tx.delete(mediaObjects).where(and(inArray(mediaObjects.key,[object.key,object.targetKey]),eq(mediaObjects.state,"pending")));
- await releaseTransferQuota(ctx.tx,plan.sourceNamespace,object.key);await releaseTransferQuota(ctx.tx,plan.targetNamespace,object.targetKey);
+ await releaseTransferQuota(ctx.tx,{objectId:object.id,side:"source"});await releaseTransferQuota(ctx.tx,{objectId:object.id,side:"target"});
  ctx.setSubject("media_storage_transfer",plan.id);return{ok:true as const};
 }});
 const beginErasureInventory=defineMediaService({name:"media.captureProviderTransferErasureInventory",summary:"Capture immutable physical-version inventory under original erasure authority.",kind:"mutation",permission:"system",external:false,input:z.object({planId:z.uuid(),objectId:z.uuid(),side:z.enum(["source","target"]),anchorCallId:z.uuid()}),output:z.custom<Awaited<ReturnType<typeof captureProviderInventory>>>(),auditInputFields:["planId","objectId","side","anchorCallId"],handler:async(input,ctx)=>{await erasureWork(ctx.tx,input.planId,input.objectId);return captureProviderInventory(ctx.tx,{...input,purpose:"erasure"},ctx.actor);}});

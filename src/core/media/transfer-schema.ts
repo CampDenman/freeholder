@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import type {OriginalProviderRequestProof} from "../../../scripts/media-transfer.mjs";
+import type {OriginalMultipartRetirementProof} from "./multipart-retirement-certificate-proof";
 import type {StorageCallerRuntimeIdentity} from "./physical-caller-runtime";
 // C1.12/C11.08: explicit verified transfer keeps original storage facts intact.
 // Runtime use requires the separately assembled verified-transfer capability.
@@ -167,6 +168,8 @@ export const mediaStorageTransferReviews=pgTable("media_storage_transfer_reviews
  readCallId:uuid("read_call_id").notNull().references(()=>mediaStorageTransferCalls.id,{onDelete:"restrict"}),
  outcome:text("outcome",{enum:["applied","not_applied","retired"]}).notNull(),
  providerEvidenceDigest:text("provider_evidence_digest").notNull(),
+ // New immutable system seals only. Historical NULL remains NULL forever.
+ retirementProof:jsonb("retirement_proof").$type<OriginalMultipartRetirementProof>(),
  stopDrainId:uuid("stop_drain_id").references(()=>mediaStorageWriterDrains.id,{onDelete:"restrict"}),
  permitsRetry:boolean("permits_retry").notNull().default(false),
  reviewedBy:text("reviewed_by").notNull(),createdAt:createdAtColumn(),
@@ -175,6 +178,7 @@ export const mediaStorageTransferReviews=pgTable("media_storage_transfer_reviews
  index("media_storage_transfer_reviews_call_idx").on(t.callId,t.createdAt),
  check("media_storage_transfer_reviews_outcome",sql`${t.outcome} in ('applied','not_applied','retired')`),
  check("media_storage_transfer_reviews_digests",sql`${t.originalCallWitness} ~ '^[a-f0-9]{64}$' and ${t.providerEvidenceDigest} ~ '^[a-f0-9]{64}$'`),
+ check("media_storage_transfer_review_retirement_proof",sql`${t.retirementProof} is null or (${t.multipartOperationId} is not null and ${t.objectId} is null and ${t.objectReceiptId} is null and ${t.outcome}='retired' and not ${t.permitsRetry} and ${t.reviewedBy}='system:media-retirement' and jsonb_typeof(${t.retirementProof})='object' and ${t.retirementProof}->>'format'='freeholder.original-multipart-retirement/v1' and ${t.providerEvidenceDigest}=freeholder_media_transfer_fact_digest(${t.retirementProof})) is true`),
  check("media_storage_transfer_reviews_retry",sql`not ${t.permitsRetry} or ${t.outcome}='not_applied'`),
 ]);
 

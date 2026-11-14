@@ -6,7 +6,9 @@ import {randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,sql} from "drizzle-orm";
 import type {TransferRequestDescriptor,TransferRequestObservation,TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
 import {db} from "@/core/db";
+import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {actorString,type Actor,type Tx} from "@/core/service";
+import {projectOriginalMultipartSessionObservation,reconcileOriginalMultipartPositivePointer,originalSessionObservationDecision} from "./multipart-session-observation";
 import {assertMediaActorLive} from "./upload-ownership";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaStorageTransferCalls,mediaStorageTransferObjects,mediaStorageTransferReceipts} from "./transfer-schema";
@@ -20,6 +22,7 @@ import {assertTransferNamespaceMutation} from "./transfer-namespace-control";
 import {assertOriginalKeyCreator} from "./original-key-tombstone";
 import {assertOriginalNamespaceMutation} from "./original-namespace-fence";
 import {requireTransferCapability} from "./transfer-authority";
+import {readRetainedOriginalMultipartIdentity,requireRetainedMultipartCandidate} from "./multipart-retained-identity";
 import {transferConflict,transferDigest,transferTargetKey} from "./transfer-proof";
 import {checkStorageTransferJob} from "./transfer-job-scope";
 import type {StorageCallerRuntimeIdentity} from "./physical-caller-runtime";
@@ -42,6 +45,7 @@ async function locked(tx:Tx,scope:Scope){
 function mutation(descriptor:TransferRequestDescriptor){return ["object.put","object.delete","multipart.create","multipart.complete","multipart.abort","multipart.sign"].includes(descriptor.kind);}
 async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:string){
  await checkStorageTransferJob();return db().transaction(async tx=>{
+  await lockContactIdentityForRead(tx);
   const call=await locked(tx,scope);
   if(call.kind==="multipart_sign"){if(!scope.actor)transferConflict("The actual local signer needs its owning server-resolved principal.");await assertMediaActorLive(tx,scope.actor);}
   if(!scope.active||call.state!=="admitted"||descriptor.binding.namespace!==call.namespace||descriptor.key&&descriptor.key!==call.physicalKey)transferConflict("The physical request does not belong to its exact original logical caller.");
@@ -77,7 +81,11 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
    if(descriptor.kind==="multipart.complete"){const[proof]=await tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_verified_parts(${parent.id}::uuid) as proven`);if(proof?.proven!==true)transferConflict("Verify every original uploaded part before assembling this upload.");}
    if(descriptor.kind==="multipart.inspect"){
     if(call.kind==="multipart_complete"&&descriptor.partsDigest!==parent.partsDigest)transferConflict("The original completion may inspect only its immutable declared manifest.");
-    if(!["multipart_recovery_inspect","multipart_create","multipart_complete","multipart_abort"].includes(call.kind)||!descriptor.uploadId||descriptor.uploadId!==(parent.providerUploadId??parent.observedProviderUploadId??resource.providerUploadId))transferConflict("Inspect only the original provider-acknowledged session.");
+    if(resource.redactedAt){
+     const first=await readRetainedOriginalMultipartIdentity(tx,resource.id);
+     if(first.state!=="proven"||call.kind!=="multipart_recovery_inspect"||parent.kind!=="abort"||!descriptor.uploadId||!descriptor.key)transferConflict("A minimized original upload permits only its exact fresh recovery read.");
+     requireRetainedMultipartCandidate(first.identity,{namespace:descriptor.binding.namespace,key:descriptor.key,uploadId:descriptor.uploadId,binding:descriptor.binding});
+    }else if(!["multipart_recovery_inspect","multipart_create","multipart_complete","multipart_abort"].includes(call.kind)||!descriptor.uploadId||descriptor.uploadId!==(parent.providerUploadId??parent.observedProviderUploadId??resource.providerUploadId))transferConflict("Inspect only the original provider-acknowledged session.");
    }else if(call.kind!==descriptor.kind.replace(".","_")||descriptor.kind==="multipart.create"&&descriptor.contentType!==resource.contentType||descriptor.kind!=="multipart.create"&&(descriptor.uploadId!==parent.providerUploadId||descriptor.uploadId!==resource.providerUploadId)||descriptor.kind==="multipart.complete"&&(!descriptor.createOnly||descriptor.partsDigest!==parent.partsDigest))transferConflict("The actual multipart request differs from its immutable original session or manifest.");
   }
   if(descriptor.kind==="object.read"&&["multipart_complete","multipart_recovery_inspect"].includes(call.kind)){
@@ -85,6 +93,7 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
    if(!parent||parent.kind!=="complete"||descriptor.partsDigest!==parent.partsDigest)transferConflict("The original completed file read must retain every original part boundary and checksum.");
   }
   if(descriptor.kind==="object.delete"&&(!["source_delete","privacy_delete","privacy_source_delete","ordinary_delete"].includes(call.kind)||!call.expectedRevision||transferDigest(descriptor.expectedRevision)!==transferDigest(call.expectedRevision)))transferConflict();
+  if(descriptor.kind==="multipart.abort")await(await import("./multipart-idle-retirement-context")).assertIdleOriginalMultipartAbortRequest(tx,call,descriptor);
   if(descriptor.kind==="object.delete"&&call.kind==="ordinary_delete")await(await import("./original-retirement")).assertOrdinaryRetirementRequest(tx,call,descriptor);
   if(descriptor.kind==="object.body"){
    if(!descriptor.expectedRevision)transferConflict();
@@ -99,7 +108,8 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
  await db().transaction(async tx=>{
   const call=await locked(tx,scope),[request]=await tx.select().from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.id,id)).limit(1).for("update");
   if(!request||request.callId!==call.id||request.tokenDigest!==transferDigest(token)||request.observationCount>=16)transferConflict();
-  if(facts.revision&&(facts.revision.namespace!==call.namespace||objectKeyDigest(facts.revision.key)!==request.keyDigest))transferConflict();
+  const originalSessionFact=Boolean(call.multipartOperationId&&facts.uploadId&&["accepted","session"].includes(facts.stage));
+  if(facts.revision&&(facts.revision.namespace!==call.namespace||objectKeyDigest(facts.revision.key)!==request.keyDigest)&&!originalSessionFact)transferConflict();
   const late=request.state!=="admitted"||call.state!=="admitted";
   if(late&&!["accepted","metadata","body","response","session","response_body","capability"].includes(facts.stage))transferConflict("Only an actual late positive original provider fact can supersede a retired request.");
   if(request.descriptor.kind==="multipart.sign"){
@@ -122,20 +132,18 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
   // Genuine old/partial body facts without this new certificate stay retained
   // as debt. Adoption independently requires exact complete part readback.
   if(facts.requestProof&&request.descriptor.kind==="object.put"&&(facts.requestProof.id!==request.id||facts.requestProof.tokenDigest!==request.tokenDigest))transferConflict("The actual original upload returned another request identity.");
+  let positiveSession=false;
   if(facts.uploadId){
-   if(typeof facts.uploadId!=="string"||!facts.uploadId||facts.uploadId.length>4096||/[\u0000-\u001f]/.test(facts.uploadId)||!request.descriptor.kind.startsWith("multipart.")||request.descriptor.kind!=="multipart.create"&&facts.uploadId!==request.descriptor.uploadId)transferConflict("The provider fact names a different original session.");
-   if(call.multipartOperationId&&["accepted","session"].includes(facts.stage)){
-    const[parent]=await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1).for("update");if(!parent)transferConflict();
-    const[resource]=await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.id,parent.resourceId)).limit(1).for("update");if(!resource||resource.providerUploadId&&resource.providerUploadId!==facts.uploadId||parent.observedProviderUploadId&&parent.observedProviderUploadId!==facts.uploadId)transferConflict("The first actual original session ACK cannot be rebound.");
-    const now=new Date();await tx.update(mediaMultipartOperations).set({observedProviderUploadId:facts.uploadId,...(facts.stage==="accepted"&&!parent.providerAcceptedAt?{providerAcceptedAt:now}:{}),...(late?{state:"unknown" as const}:{}),updatedAt:now}).where(eq(mediaMultipartOperations.id,parent.id));
-    await tx.update(mediaMultipartResources).set({providerUploadId:facts.uploadId,...(late?{state:"unknown" as const,retiredAt:null}:{}),updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
-    if(late&&resource.originalReservationId)await tx.insert(mediaObjects).values({reservationId:resource.originalReservationId,key:call.physicalKey,uploadId:resource.uploadId,role:"staged",state:"pending",contentType:resource.contentType,bytes:resource.expectedBytes}).onConflictDoNothing();
-    scope.multipartOperationIds.add(parent.id);
-   }
+   positiveSession=Boolean(call.multipartOperationId&&["accepted","session"].includes(facts.stage));
+   if(positiveSession)originalSessionObservationDecision({descriptor:request.descriptor,fact:facts,canonicalUploadId:null,observedUploadId:null});
+   else if(typeof facts.uploadId!=="string"||!facts.uploadId||facts.uploadId.length>4096||/[\u0000-\u001f]/.test(facts.uploadId)||!request.descriptor.kind.startsWith("multipart.")||request.descriptor.kind!=="multipart.create"&&facts.uploadId!==request.descriptor.uploadId)transferConflict("The provider fact names a different original session.");
   }
+
   const ordinal=request.observationCount+1;
   await tx.insert(mediaStorageTransferRequestObservations).values({requestId:id,ordinal,facts,factsDigest:transferDigest(facts),bytes:facts.bytes});
   await tx.update(mediaStorageTransferRequests).set({observationCount:ordinal,...(late?{state:"unknown" as const}:{})}).where(eq(mediaStorageTransferRequests.id,id));
+  if(positiveSession&&call.multipartOperationId){await projectOriginalMultipartSessionObservation(tx,{operationId:call.multipartOperationId,callId:call.id,requestId:id,fact:facts,late});scope.multipartOperationIds.add(call.multipartOperationId);}
+
   if(late&&facts.stage==="capability"&&call.multipartOperationId){
    // Retain the actual positive fact FIRST. A later contradictory mint cannot
    // be rejected merely because an earlier private disposition was closed.
@@ -153,7 +161,7 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
    if(late&&!call.objectId&&call.objectReceiptId&&receipt.originalReservationId){await tx.insert(mediaObjects).values({reservationId:receipt.originalReservationId,key:facts.revision.key,role:"original",state:"pending",bytes:receipt.bytes??0,contentType:receipt.contentType}).onConflictDoNothing();scope.receiptIds.add(receipt.id);}
   }
   if(facts.stage==="accepted"&&mutation(request.descriptor)){
-   const now=new Date();await tx.update(mediaStorageTransferCalls).set({...(call.observedAcceptedAt?{}:{observedAcceptedAt:now}),...(late?{state:"unknown" as const}:{}),updatedAt:now}).where(eq(mediaStorageTransferCalls.id,call.id));
+   const now=new Date(),first=call.multipartOperationId?(await tx.select({resourceId:mediaMultipartOperations.resourceId}).from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1))[0]:null,retained=first?await readRetainedOriginalMultipartIdentity(tx,first.resourceId):null,preserveFirst=retained&&retained.state!=="absent";await tx.update(mediaStorageTransferCalls).set({...(call.observedAcceptedAt||preserveFirst?{}:{observedAcceptedAt:now}),...(late?{state:"unknown" as const}:{}),updatedAt:now}).where(eq(mediaStorageTransferCalls.id,call.id));
    if(call.physicalReceiptId){
     const[receipt]=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,call.physicalReceiptId)).limit(1).for("update");if(!receipt)transferConflict();receiptId=receipt.id;
     await tx.update(mediaObjectWrites).set({state:"unknown",...(receipt.observedAcceptedAt?{}:{observedAcceptedAt:now}),...(late?{deletedAt:null}:{}),updatedAt:now}).where(eq(mediaObjectWrites.id,receipt.id));
@@ -179,7 +187,7 @@ async function finish(scope:Scope,id:string,token:string,failed:boolean){
 }
 async function reconcileRetainedRequestFacts(scope:Scope):Promise<void>{
  const ids=[...scope.receiptIds],multipartIds=[...scope.multipartOperationIds];scope.receiptIds.clear();scope.multipartOperationIds.clear();const failures:unknown[]=[];
- for(const id of multipartIds){try{await reconcileMediaErasureCohorts({multipartOperationId:id});}catch(error){failures.push(error);}}
+ for(const id of multipartIds){try{if(!await reconcileOriginalMultipartPositivePointer(id))failures.push(new Error("The original positive session fact is retained; its conflicting or unavailable original pointer remains recovery debt."));}catch(error){failures.push(error);}try{await reconcileMediaErasureCohorts({multipartOperationId:id});}catch(error){failures.push(error);}}
  for(const id of ids){try{if(!await(await import("./original-quota-evidence")).reconcileActualOriginalQuota(id))failures.push(new Error("The actual original physical facts are retained; conflicting quota provenance freezes this namespace until exact recovery."));}catch(error){failures.push(error);}try{await reconcileMediaErasureCohorts({objectReceiptId:id});}catch(error){failures.push(error);}try{await reconcileCommittedStorageObservation(id);}catch(error){failures.push(error);}}
  if(failures.length)throw new AggregateError(failures,"The original provider facts and finish are retained; dependent erasure recovery remains pending.");
 }

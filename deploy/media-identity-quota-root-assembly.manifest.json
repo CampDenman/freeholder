@@ -1,0 +1,100 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "ROOT_SOURCE_ASSEMBLED_UNRUN",
+  "checklist": [
+    "C1.12",
+    "C11.08",
+    "C10.32",
+    "C1.08"
+  ],
+  "frozenLeaves": [
+    "0ca7c3eef88ef9c993dbde60c77f3d260fbf6dd0",
+    "72bb97f69f87aab628d17712ccd8bda82a982fd6",
+    "361611af587bef47238b51bccf6c641478e2773f",
+    "1b8fe5168fe59fcfe0c792ffaa94f9c8801b1ee5",
+    "e3f558dc25910e7d646cbb6c2f994ad7284a9629"
+  ],
+  "rootMerges": [
+    "bd1d68f4",
+    "674d1459"
+  ],
+  "previousQualifiedAuxiliary": "b40c8658cda4c61fe2e480780fd21249ce5f9ad8",
+  "normal82": {
+    "path": "db/migrations/0082_verified_media_transfer.sql",
+    "ownedPath": "deploy/sql/0082_verified_media_transfer.unapplied.sql",
+    "bytes": 1017370,
+    "sha256": "7a592c66857d36e733869fd0b7acf9c9fdab35ea73ea2396b2f886432ed41aa3",
+    "allPriorWholePrefixes": [
+      {
+        "bytes": 749050,
+        "sha256": "a52d8e615b41f22588c3bdd5b8462511ea8e5830c3ae231b4d9f497a65e767cc"
+      },
+      {
+        "bytes": 897790,
+        "sha256": "ffddf416edcf0294965f4fef067e21dfca20abfd4f8d920afbed0ca7eb9f3fab"
+      },
+      {
+        "bytes": 942079,
+        "sha256": "18ab087c57280f32ad27e93307c67cfbf9d79588eae5280cc59d40b7009fdd25"
+      },
+      {
+        "bytes": 997946,
+        "sha256": "88a1bbb8dec01e4be61bb9bc7fbfe366123fbd5dacd3deec847112fccb908ff2"
+      }
+    ]
+  },
+  "normal85Unchanged": {
+    "bytes": 832734,
+    "sha256": "86e09cd11268730c289f0d06f9977fe7650700e0e135ad1136fbdc7c7d0c172e"
+  },
+  "rootPreservationPatch": {
+    "path": "deploy/media-identity-quota-root-continuation.patch",
+    "sha256": "9ff1fabe5a3ca7ba80e5f123896269b3aa0673046a1dd52bfa3c12cc0b59a9ea",
+    "reverseCheckExact": true,
+    "scope": "Qualified namespace narrowing/type-only imports/baseline type/binding validation/part issuance guard and all financial noTTL reasons preserved; compact fields and exact fixture additions retained."
+  },
+  "sourceFreezes": [
+    {
+      "path": "/tmp/freeholder-media-idle-compact82-source-freeze-20261114.json",
+      "sha256": "29616b9074a52190fc367c3eb79e65a9d270ffe7957d9360af43290ebe07fe4c"
+    },
+    {
+      "path": "/tmp/freeholder-media-idle-compact-fixture-source-freeze-20261114.json",
+      "sha256": "2ec06a37ae2665c3aa167f768d42b437979dc2c57ff9a87ce62787b4f091cb74"
+    },
+    {
+      "path": "/tmp/freeholder-media-upload-reservation82-source-freeze-20261114.json",
+      "sha256": "021e876efd9d64772d1b05929e4011fd41bcee20bc2d5d7827823778bf0191b9"
+    },
+    {
+      "path": "/tmp/freeholder-media-legacy-upload-anchor82-source-freeze-20261114.json",
+      "sha256": "1ca53c27fdfcb7da8f607a0d256a9f9eb57e5caf6f1c575158117fce0c48c521"
+    },
+    {
+      "path": "/tmp/freeholder-media-transfer-quota-role82-source-freeze-20261114.json",
+      "sha256": "1635e269ebb09c79e73ac1fec847963d17b21fba9289057e22549e1ac6df8c6a"
+    }
+  ],
+  "existingUploadModelDelta": {
+    "table": "media_uploads",
+    "column": "original_reservation_id",
+    "nullable": true,
+    "default": false,
+    "backfill": false,
+    "foreignKey": false,
+    "partialUniqueIndexes": 1,
+    "newGuards": 2,
+    "newTables": 0
+  },
+  "sourceParserPreparation": {
+    "path": "/tmp/freeholder-current-full86-parity160-media-v63-sql-20261114.mjs",
+    "sha256": "0dfcb5c0cff0280aafe0f91434b71b5d41d248bc026709fde67ddbf15da4650d",
+    "controls": "/tmp/freeholder-current-full86-parser160-media-composites-controls-v1-20261114-result.json",
+    "meaningfulControlsPassed": 8,
+    "scope": "Only exact scalar calls+requests row args; no arrays/qualification/unknown type fallback; full future schema unrun"
+  },
+  "allProtectedOldNativesAndFixtureOraclesPreserved": true,
+  "privateCapabilitiesPublished": false,
+  "sourceSchemaSdkNativeProviderStableAcceptance": false,
+  "pending": "Genuine original protocol/request ABI, issued authority terminal, exact initialization provenance, physical custody/capture/quota/cutover and actual upgrade/native/provider acceptance remain required."
+}

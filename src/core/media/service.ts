@@ -41,6 +41,7 @@ import {ORIGINAL_MULTIPART_PART_BYTES} from "./multipart-part-bodies-proof";
 import {claimOriginalPartIssuance,finishUnattemptedPartIssuance,issueOriginalMultipartPart} from "./multipart-part-issuance";
 import {transferDigest} from "./transfer-proof";
 import {withOriginalMultipartInvocation} from "./provider-callers";
+import {originalMultipartRetirementAdmission,sealOriginalMultipartRetirement} from "./multipart-retirement-certificate";
 import {reserveMultipart,createOriginalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
 import {
   storageKey,
@@ -924,9 +925,12 @@ const beginUploadApply = defineService({
     await checkCaptureUpload(ctx.tx, ctx.actor, input.provenance);
     const uploadedBy=input.provenance.captureToken?`capture:${input.provenance.captureToken}`:actorString(ctx.actor);
     const ownerContactId=await originalUploadContact(ctx.tx,uploadedBy);
+    await assertOriginalUploadWritable(ctx.tx,ownerContactId,uploadedBy);
+    const originalReservationId=randomUUID();
     const [session] = await ctx.tx
       .insert(mediaUploads)
       .values({
+        originalReservationId,
         strategy: input.strategy,
         storageKey: input.key,
         filename: input.filename,
@@ -941,6 +945,7 @@ const beginUploadApply = defineService({
       })
       .returning();
     await ctx.tx.insert(mediaObjects).values({
+      reservationId:originalReservationId,
       key: input.key,
       uploadId: session!.id,
       role: "staged",
@@ -1708,11 +1713,12 @@ const abortUploadApply = defineService({
   permission: "public",
   external: false,
   writeClass: "write",
-  input: z.object({ id: z.string().uuid(), storageKey: z.string().min(1) }),
+  input: z.object({ id: z.string().uuid(), storageKey: z.string().min(1), retirementAdmission:originalMultipartRetirementAdmission.optional() }),
   output: okResult,
   handler: async (input, ctx) => {
     const remaining = await ctx.tx.select({ key: mediaObjects.key }).from(mediaObjects).where(eq(mediaObjects.key, input.storageKey)).limit(1);
     if (remaining.length) throw new ServiceError("conflict", "The upload is stopped, but its original storage cleanup still needs recovery.");
+    if(input.retirementAdmission){if(input.retirementAdmission.uploadId!==input.id||input.retirementAdmission.keyDigest!==objectKeyDigest(input.storageKey))throw new ServiceError("conflict","Keep the exact original upload retirement receipt for review.");await ctx.callAsSystem(sealOriginalMultipartRetirement,input.retirementAdmission);}
     ctx.setSubject("mediaUpload", input.id);
     return { ok: true };
   },
@@ -1729,7 +1735,7 @@ export const abortUpload = defineOrchestratedService({
   handler: async (input, actor) => withOriginalMultipartInvocation(async()=>{
     const claimed = await abortUploadClaim.call(input, actor);
     if (claimed.alreadyTerminal) return { ok: true };
-    if(claimed.operationId){await abortOriginalMultipart(input.id,claimed.operationId);return abortUploadApply.call({id:input.id,storageKey:claimed.storageKey},actor);}
+    if(claimed.operationId){const retirementAdmission=await abortOriginalMultipart(input.id,claimed.operationId);return abortUploadApply.call({id:input.id,storageKey:claimed.storageKey,retirementAdmission},actor);}
     if (claimed.providerUploadId) throw new ServiceError("conflict", "Confirm this multipart upload's original storage resource before aborting it.");
     if (!await discardUnwrittenProxyReservation(input.id, claimed.storageKey) && !await deleteWithReceipt(claimed.storageKey)) throw new ServiceError("conflict", "The upload is stopped, but its original storage operation remains unresolved.");
     return abortUploadApply.call(
@@ -3417,23 +3423,14 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
     if (await pendingObjectIsOwned(object.key, now)) continue;
     if (await deleteWithReceipt(object.key)) orphanedObjects += 1;
   }
-  const terminalCutoff = new Date(now.getTime() - TRASH_RETENTION_MS);
-  const pruned = await db().transaction(async tx=>{
-    await allowMediaReceiptWrites(tx);
-    return tx.delete(mediaUploads)
-    .where(
-      and(
-        inArray(mediaUploads.state, ["complete", "failed", "aborted", "expired"]),
-        lt(mediaUploads.updatedAt, terminalCutoff),
-        sql`not exists(select 1 from media_multipart_resources resource where resource.upload_id=${mediaUploads.id} and resource.retired_at is null)`,
-        sql`not exists(select 1 from media_object_writes receipt where receipt.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(${mediaUploads.storageKey},'UTF8')),'hex') and receipt.state in('unverified','started','unknown'))`,
-      ),
-    )
-    .returning({ id: mediaUploads.id });});
+  // Thirty-day session pruning now removes only redundant metadata after
+  // real custody/retirement proof; its durable UUID record remains. Unknown
+  // legacy locators are retained as explicit recovery debt, never TTL absence.
+  const prunedSessions=await db().transaction(async tx=>(await import("./original-upload-retention")).reduceTerminalUploadMetadata(tx,now));
   return {
     expiredUploads,
     orphanedObjects,
-    prunedSessions: pruned.length,
+    prunedSessions,
   };
 }
 

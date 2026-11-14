@@ -1,0 +1,91 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "ROOT_SOURCE_ASSEMBLED_UNRUN",
+  "checklist": [
+    "C1.08",
+    "C9.33",
+    "C12.38"
+  ],
+  "frozenLeaf": "269f1e9f3451bd655196d473068918340774ce9c",
+  "qualifiedPredecessorSource": "c12dff93d45c3a3a526aaa92b2a00641b8c6b3cd",
+  "rootMerge": "c750c0a8f5d2580a1413e470acd3412967deb27b",
+  "priorWholePrefix": {
+    "bytes": 729144,
+    "sha256": "842f6d55c642ab790eeeffa4b42cb0b8e4f4e4c06c16a1a324e3dc21c63d41c7"
+  },
+  "ownedTail": {
+    "path": "deploy/controlled-paid-privacy85.fragment.sql",
+    "bytes": 28854,
+    "sha256": "ec0a463b30f54aab51829dba2c39e0999dc97b24d042aa5c043bc11bb5fd3670"
+  },
+  "normal85": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "ownedPath": "deploy/sql/0085_controlled_collection_application.unapplied.sql",
+    "bytes": 758024,
+    "sha256": "9425c8e2c57b25e149566f3b40283e3b1ccb122dde1e153ddd7183bcc5703a20"
+  },
+  "newModels": 0,
+  "newColumns": 0,
+  "newFunctions": [
+    {
+      "signature": "freeholder_identity_privacy_exclusive()",
+      "bodySha256": "c394daf1829aeae00529cc9ffdb1a4c95a7c70f05894b630ff1a844be062d6d9"
+    },
+    {
+      "signature": "freeholder_controlled_target_privacy_ready(uuid)",
+      "bodySha256": "d0711747f403327e5c0b1773783fbe857458439803e77d286b7e817f78caa4b0"
+    },
+    {
+      "signature": "guard_controlled_privacy_request_identity()",
+      "bodySha256": "504a6709bcb8867231a7b0e10d07dcca179e4e5e19a1d3ef1336f7d220a83887"
+    },
+    {
+      "signature": "guard_controlled_privacy_hold_identity()",
+      "bodySha256": "b130e239f2293983bf3128d0b40730a67bebafb3c8e030cdbdc28c6d47bc25b0"
+    },
+    {
+      "signature": "guard_controlled_privacy_contact_identity()",
+      "bodySha256": "28e135a1e082559ef33e35bdbe798c53402a2b503e788131fdbc7968c8ea4919"
+    }
+  ],
+  "newGuards": [
+    {
+      "name": "controlled_privacy_request_identity",
+      "table": "data_requests",
+      "eventBits": 23,
+      "function": "guard_controlled_privacy_request_identity()",
+      "deferrable": false
+    },
+    {
+      "name": "controlled_privacy_hold_identity",
+      "table": "privacy_retention_exceptions",
+      "eventBits": 23,
+      "function": "guard_controlled_privacy_hold_identity()",
+      "deferrable": false
+    },
+    {
+      "name": "controlled_privacy_contact_identity",
+      "table": "contacts",
+      "eventBits": 19,
+      "function": "guard_controlled_privacy_contact_identity()",
+      "deferrable": false
+    }
+  ],
+  "successors": [
+    {
+      "signature": "freeholder_controlled_paid_period_source(uuid)",
+      "beforeBodySha256": "141237d07f913e05a883519797ad64b4541f3e440e42c4d51a70a873dad33c9c",
+      "afterBodySha256": "79e38fd129088bc9bbbdc67c0e163b02a9297c51a0104434c8c4af21477d9916",
+      "reverseExactInsertion": "\n IF NOT freeholder_controlled_target_privacy_ready(effect_row.collection_id) THEN RETURN false;END IF;"
+    },
+    {
+      "signature": "freeholder_controlled_paid_period_ready()",
+      "beforeBodySha256": "0e7309fc0e09b8cd2348331236d10839bbc914f6a7755fb3c4261353b9658339",
+      "afterBodySha256": "7f856d1879d2b1b809ab7b4e8ac8b2e72b11754a51086d154b701c681b512224",
+      "preservesAllPriorPins": true
+    }
+  ],
+  "feeInvocationGuardsAndRefundTimestampGuardUnchanged": true,
+  "originalFullPaidAndFeeNativeFilesUnchanged": true,
+  "sourceSchemaNativeProviderStableAcceptance": false
+}

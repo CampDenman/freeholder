@@ -34,9 +34,11 @@ async function evidence(tx:Tx,parent:OriginalProviderParents){
  if(headers.length>50000)transferConflict("The complete original provider inventory privacy proof exceeds this bounded capture.");
  const headerIds=headers.map(row=>row.id),pageProofs=headerIds.length?await tx.select().from(pages).where(inArray(pages.inventoryId,headerIds)).orderBy(asc(pages.id)).limit(50001):[];
  if(pageProofs.length>50000)transferConflict("The complete original provider page privacy proof exceeds this bounded capture.");
+ const entryRows=headerIds.length?await tx.select().from(entries).where(inArray(entries.inventoryId,headerIds)).orderBy(asc(entries.id)).limit(50001):[];
+ if(entryRows.length>50000)transferConflict("The complete original provider entry privacy proof exceeds this bounded capture.");
  const reviewRows=callIds.length?await tx.select().from(reviews).where(and(isNull(reviews.objectId),inArray(reviews.callId,callIds))).orderBy(asc(reviews.id)).limit(50001):[];
  if(reviewRows.length>50000)transferConflict("The complete original provider review privacy proof exceeds this bounded capture.");
- return{originals,resources,operations,callers,physical,observed,headers,pageProofs,reviews:reviewRows};
+ return{originals,resources,operations,callers,physical,observed,headers,pageProofs,entryRows,reviews:reviewRows};
 }
 export async function originalProviderParentsForContact(tx:Tx,contactId:string):Promise<OriginalProviderParents>{
  const originals=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(eq(mediaObjectWrites.contactId,contactId)),resources=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(eq(mediaMultipartResources.contactId,contactId));
@@ -67,14 +69,16 @@ export async function exportOriginalProviderEvidence(tx:Tx,parent:OriginalProvid
   inventories:captured.headers.map(row=>({id:row.id,objectReceiptId:row.objectReceiptId,multipartOperationId:row.multipartOperationId,anchorCallId:row.anchorCallId,proofCallId:row.proofCallId,originalWitness:row.originalWitness,state:row.state,purpose:row.purpose,firstDigest:row.firstDigest,confirmedDigest:row.confirmedDigest,createdAt:row.createdAt})),
   pages:captured.pageProofs.map(row=>({id:row.id,inventoryId:row.inventoryId,callId:row.callId,pass:row.pass,kind:row.kind,pageDigest:row.pageDigest,membershipDigest:row.membershipDigest,createdAt:row.createdAt})),resources:scopedResources,
   quota:await originalQuotaProof(tx,captured.callers),
-  reviews:captured.reviews.map(row=>({id:row.id,callId:row.callId,readCallId:row.readCallId,inventoryId:row.inventoryId,originalCallWitness:row.originalCallWitness,outcome:row.outcome,providerEvidenceDigest:row.providerEvidenceDigest,createdAt:row.createdAt})),
+  reviews:captured.reviews.map(row=>({id:row.id,callId:row.callId,readCallId:row.readCallId,inventoryId:row.inventoryId,originalCallWitness:row.originalCallWitness,outcome:row.outcome,providerEvidenceDigest:row.providerEvidenceDigest,retirementProof:row.retirementProof,createdAt:row.createdAt})),
  };
 }
 /** Until exact physical retirement/minimization is implemented, retained raw
  * locator/fact rows remain explicit debt even if their parent is minimized.
  * These checks do not equate returned reads with original writer quiescence. */
 export async function originalProviderEvidencePending(tx:Tx,parent:OriginalProviderParents):Promise<boolean>{
- const rows=await evidence(tx,parent);if(rows&&await originalQuotaLocatorPending(tx,rows.callers))return true;return Boolean(rows&&(rows.callers.some(row=>!row.redactedAt||row.expectedRevision||row.resultRevision||["admitted","unknown"].includes(row.state))||rows.physical.some(row=>!row.redactedAt||["admitted","unknown"].includes(row.state))||rows.observed.some(row=>!row.redactedAt)||rows.headers.some(row=>!row.redactedAt)||rows.pageProofs.some(row=>!row.redactedAt&&(row.cursor!==null||row.nextCursor!==null))));
+ const rows=await evidence(tx,parent);if(!rows)return false;if(await originalQuotaLocatorPending(tx,rows.callers))return true;
+ const entryPending=rows.entryRows.some(row=>{if(row.redactedAt)return false;const header=rows.headers.find(value=>value.id===row.inventoryId);return Boolean(header?.multipartOperationId||header?.objectReceiptId&&rows.originals.some(original=>original.id===header.objectReceiptId&&original.keyDigest===row.keyDigest));});
+ return rows.callers.some(row=>!row.redactedAt||row.expectedRevision||row.resultRevision||["admitted","unknown"].includes(row.state))||rows.physical.some(row=>!row.redactedAt||["admitted","unknown"].includes(row.state))||rows.observed.some(row=>!row.redactedAt)||rows.headers.some(row=>!row.redactedAt)||rows.pageProofs.some(row=>!row.redactedAt&&(row.cursor!==null||row.nextCursor!==null))||entryPending;
 }
 /** New actual immutable observations change the reopen evidence version even
  * when the first positive ACK timestamp was already recorded long ago. */

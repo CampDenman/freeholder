@@ -324,6 +324,7 @@ export const resolveContact = defineService({
   }),
   output: resolvedContact,
   handler: async (input, ctx) => {
+    if (input.source === "privacy-erasure") await lockContactIdentity(ctx.tx);
     await ensureOrganization(ctx.tx, input.orgId);
     const resolvedInput: ResolveInput = {
       ...input,
@@ -456,6 +457,19 @@ export interface ContactReference {
     duplicateId: string,
     survivingId: string,
   ) => Promise<{ state: unknown; undoable: boolean; blocker?: string }>;
+  /** Shared providers are invoked once, before any verification or inverse.
+   * Discover and lock the whole pair's financial graph, never one reference's
+   * canonical rows before another reference's resource/parent prefix. */
+  lockForUndo?: (tx: Tx, duplicateId: string, survivingId: string) => Promise<void>;
+  /** Verify the fully merged preimage now; return only its exact inverse.
+   * The closure stays in this transaction and is never public authority. */
+  prepareUndo?: (
+    tx: Tx,
+    before: unknown,
+    after: unknown,
+    duplicateId: string,
+    survivingId: string,
+  ) => Promise<() => Promise<void>>;
   /** Restore `before` after verifying the table still matches `after`. */
   restoreAfterUndo: (
     tx: Tx,
@@ -1117,6 +1131,25 @@ export const undoContactMerge = defineService({
       );
     }
 
+    const undoReferences = storedReferenceStateSchema.parse(operation.referenceState).map((state) => {
+      const reference = contactReferences().find((item) => item.table === state.table);
+      if (!reference) {
+        throw new ServiceError(
+          "conflict",
+          `${state.table} is not available, so its merge changes cannot be restored.`,
+        );
+      }
+      return { state, reference };
+    });
+    const lockProviders = new Set(undoReferences.flatMap(({ reference }) => reference.lockForUndo ? [reference.lockForUndo] : []));
+    for (const lock of lockProviders) await lock(ctx.tx, duplicateBefore.id, survivorBefore.id);
+    const inverses: Array<() => Promise<void>> = [];
+    for (const { state, reference } of undoReferences) {
+      inverses.push(reference.prepareUndo
+        ? await reference.prepareUndo(ctx.tx, state.before, state.after, duplicateBefore.id, survivorBefore.id)
+        : () => reference.restoreAfterUndo(ctx.tx, state.before, state.after, duplicateBefore.id, survivorBefore.id));
+    }
+
     const { id: _survivorId, ...survivorValues } =
       contactSnapshotValues(survivorBefore);
     await ctx.tx
@@ -1125,22 +1158,7 @@ export const undoContactMerge = defineService({
       .where(eq(contacts.id, survivorBefore.id));
     await ctx.tx.insert(contacts).values(contactSnapshotValues(duplicateBefore));
 
-    for (const state of storedReferenceStateSchema.parse(operation.referenceState)) {
-      const reference = contactReferences().find((item) => item.table === state.table);
-      if (!reference) {
-        throw new ServiceError(
-          "conflict",
-          `${state.table} is not available, so its merge changes cannot be restored.`,
-        );
-      }
-      await reference.restoreAfterUndo(
-        ctx.tx,
-        state.before,
-        state.after,
-        duplicateBefore.id,
-        survivorBefore.id,
-      );
-    }
+    for (const inverse of inverses) await inverse();
 
     if (operation.candidateId) {
       const pair = [survivorBefore.id, duplicateBefore.id].sort();
@@ -1196,6 +1214,7 @@ export const updateContact = defineService({
   output: contactRow,
   handler: async (input, ctx) => {
     const { id, ...requested } = input;
+    if (requested.source === "privacy-erasure") await lockContactIdentity(ctx.tx);
     if (Object.keys(requested).length === 0) {
       throw new ServiceError("validation", "Choose something to change.");
     }

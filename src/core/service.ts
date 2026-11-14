@@ -367,6 +367,10 @@ export const WRITE_CLASSES = [
 ] as const;
 export type WriteClass = (typeof WRITE_CLASSES)[number];
 
+// C12.38: validated union variants may have their own audited identity fields.
+// Runtime still includes a field only when it exists on the actual parsed input.
+type AuditInputKey<Value> = Value extends unknown ? Extract<keyof Value, string> : never;
+
 export interface ServiceDef<In extends z.ZodType, Out> {
   /** Dotted "<module>.<verb>": "contacts.create", "auth.login"… */
   name: string;
@@ -376,7 +380,7 @@ export interface ServiceDef<In extends z.ZodType, Out> {
   input: In;
   /** Keep raw files/private text out of audit inputs; identity/action/subject
    * still come from the same authorized mutation and cannot be projected. */
-  auditInputFields?: readonly (keyof z.output<In> & string)[];
+  auditInputFields?: readonly AuditInputKey<z.output<In>>[];
   /**
    * C4.03: how `agents.proposeWrite` treats this mutation. Undeclared
    * mutations fail closed — they queue for owner approval whatever the

@@ -23,7 +23,7 @@ export const controlledTransportTables = {
 } as const;
 export type ControlledFinancialHistory = Awaited<ReturnType<typeof controlledProviderWitnesses>>;
 export type ControlledFinancialEntry = { table: string; id: string; fingerprint: string };
-export const controlledFinancialTables = { ...controlledTransportTables, ...controlledTargetTables, ...controlledCashApplicationTables, paidPeriods: "subscription_controlled_paid_period_receipts" };
+export const controlledFinancialTables = { ...controlledTransportTables, ...controlledTargetTables, ...controlledCashApplicationTables, paidPeriods: "subscription_controlled_paid_period_receipts", feeInvocations: "merchant_fee_refund_invocations" };
 const families = Object.keys(controlledTransportTables) as Array<keyof typeof controlledTransportTables>;
 export function controlledFinancialEntries(history: ControlledFinancialHistory): ControlledFinancialEntry[] {
  return families.flatMap(family => history[family].map(row => ({ table: controlledTransportTables[family], id: row.id, fingerprint: row.fingerprint })))
@@ -113,6 +113,13 @@ export async function controlledFinancialWitness(tx: Tx, scope: ControlledFinanc
  * controlled bridge must remain applies=true debt, never a legacy fallback. */
 const primaryControlledKinds=new Set(["read_customer_financials","create_draft","add_invoice_component","read_manifest","bootstrap","discover_bootstrap","pause_drafts","read_bootstrap","list_invoices","create_schedule","read_calendar","update_calendar","read_invoice","finalize_invoice","pay_invoice","cancel_calendar","void_invoice","delete_draft"]);
 export async function controlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[] = []){
+ return readControlledCashFinancialHistory(tx,receiptIds,subscriptionIds);
+}
+/** Internal historical-comparison companion. All normal consumers stay full. */
+export async function controlledCashFinancialHistoryForOriginalInventory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context:import("./original-cash-inventory-causal-proof").OriginalInventoryProjectionContext){
+ return readControlledCashFinancialHistory(tx,receiptIds,subscriptionIds,context);
+}
+async function readControlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context?:import("./original-cash-inventory-causal-proof").OriginalInventoryProjectionContext){
  let witness=await controlledFinancialWitness(tx,{receiptIds,subscriptionIds});
  const actualSubscriptions=[...new Set(witness.history.resources.map(row=>row.subscriptionId))];
  if(witness.targets&&actualSubscriptions.some(id=>!subscriptionIds.includes(id)))witness=await controlledFinancialWitness(tx,{receiptIds,subscriptionIds:actualSubscriptions});
@@ -122,7 +129,11 @@ export async function controlledCashFinancialHistory(tx:Tx,receiptIds:readonly s
  const coverage:Awaited<ReturnType<typeof controlledProviderCoverage>>[]=[];for(const id of [...new Set(witness.history.resources.map(row=>row.subscriptionId))].sort())coverage.push(await controlledProviderCoverage(tx,{subscriptionId:id}));
  const rawClassifications=[];
  for(const actual of targetCoverage){const subscriptions=[...new Set(actual.witness.quotes.map(row=>row.subscriptionId))];if(subscriptions.length!==1)throw new ServiceError("conflict","Restore the exact controlled target subscription before classifying its raw facts.");
-  rawClassifications.push(await controlledTargetRawClassification(tx,subscriptions[0]!,actual));
+  if(context){
+   const {parentFinancialGraphForOriginalInventory}=await import("./controlled-provider-financial-parent");
+   const graph=await parentFinancialGraphForOriginalInventory(tx,subscriptions[0]!,context);
+   rawClassifications.push(await controlledTargetRawClassification(tx,subscriptions[0]!,actual,graph));
+  }else rawClassifications.push(await controlledTargetRawClassification(tx,subscriptions[0]!,actual));
  }
  const resolvedFacts=new Set(rawClassifications.flatMap(actual=>actual.resolutions.map(row=>row.factId)));
  const unresolvedRawFacts=[...coverage.flatMap(actual=>actual.rawCashReviewFactIds.filter(id=>!resolvedFacts.has(id))),...rawClassifications.flatMap(actual=>actual.unresolvedFactIds)];
