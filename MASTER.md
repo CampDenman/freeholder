@@ -16061,3 +16061,23 @@ consumption. Unknown/legacy recovery, certificate minimization, session/
 capture/quota/cutover and all qualification/external/independent/stable gates
 remain open. No child execution/provider/host actions or C-item closure. See
 `deploy/media-multipart-stored-part-readback-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the genuine human shared
+multipart recovery service now handles a tracked unknown COMPLETE through its
+immutable first CREATE/body declaration/preflight and original local finishes
+or exact independently verified stop. Fresh actual metadata and bounded full
+part readback pin any retained first revision; two complete original provider
+inventories precede immutable applied review/private descendant receipt. Normal
+completion can consume only that guarded proof without another POST. Original
+first results, ACKs and actual/NULL FINs remain unchanged; ownership/erasure,
+nonce, namespace and first-capture lineage stay authoritative. A real multipart
+inventory guard owns this producer; no metadata exemption/model/column or
+capability is added. Existing four-locale stop guidance and UI use the same
+shared audit/step-up/key refusal; root final SDK qualification is required.
+Thirteen proof, six wire and five genuine-service/SDK/TCP controls are PREPARED/
+UNRUN, with a concrete separately unrun actual Linux acceptance plan. All old
+oracles and predecessor owned SQL remain intact. No child execution/provider/
+host actions or C-item closure. Remote terminal consumption, unknown CREATE/
+legacy issuer recovery, certificate minimization, full session/capture/quota/
+cutover and every qualification/external/independent/stable gate remain open.
+See `deploy/media-multipart-applied-complete-recovery-source-2026-11-13.md`.

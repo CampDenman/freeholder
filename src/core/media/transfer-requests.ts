@@ -80,7 +80,7 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
     if(!["multipart_recovery_inspect","multipart_create","multipart_complete","multipart_abort"].includes(call.kind)||!descriptor.uploadId||descriptor.uploadId!==(parent.providerUploadId??parent.observedProviderUploadId??resource.providerUploadId))transferConflict("Inspect only the original provider-acknowledged session.");
    }else if(call.kind!==descriptor.kind.replace(".","_")||descriptor.kind==="multipart.create"&&descriptor.contentType!==resource.contentType||descriptor.kind!=="multipart.create"&&(descriptor.uploadId!==parent.providerUploadId||descriptor.uploadId!==resource.providerUploadId)||descriptor.kind==="multipart.complete"&&(!descriptor.createOnly||descriptor.partsDigest!==parent.partsDigest))transferConflict("The actual multipart request differs from its immutable original session or manifest.");
   }
-  if(descriptor.kind==="object.read"&&call.kind==="multipart_complete"){
+  if(descriptor.kind==="object.read"&&["multipart_complete","multipart_recovery_inspect"].includes(call.kind)){
    const[parent]=call.multipartOperationId?await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1):[];
    if(!parent||parent.kind!=="complete"||descriptor.partsDigest!==parent.partsDigest)transferConflict("The original completed file read must retain every original part boundary and checksum.");
   }

@@ -63,6 +63,16 @@ export function createS3TransferProtocol({client,url,binding,observer}){
   await notify({stage:"body",status:response.status,revision:rev,sha256:digest(body),bytes:body.byteLength});return{body,contentType:response.headers.get("content-type")??"application/octet-stream",revision:rev,...(requestProof?{requestProof}:{})};
  });}
  return{binding,readVersioned,
+  async metadataVersioned(key,input){
+   objectKey(key);const pinned=input?exactRevision(input,binding,key):undefined,target=new URL(url(key));if(pinned?.versionId!==undefined)target.searchParams.set("versionId",pinned.versionId);
+   return observed(observer,{kind:"object.metadata",binding,key,...(pinned?{expectedRevision:pinned}:{})},async notify=>{
+    const response=await client.fetch(target,{method:"HEAD",redirect:"error",headers:{"accept-encoding":"identity",...(pinned?{"if-match":pinned.value}:{})}});await notify({stage:"response",status:response.status});
+    if(response.status===404){await notify({stage:"absence",status:404});return undefined;}if(!response.ok)failure();
+    const actual=revision(binding,key,response.headers.get("etag"),response.headers.get("x-amz-version-id")??undefined);if(pinned&&JSON.stringify(actual)!==JSON.stringify(pinned))failure();
+    const bytes=size(response.headers.get("content-length")),requestProof=originalRequestProof(response.headers.get("x-amz-meta-freeholder-original-request")??undefined,response.headers.get("x-amz-meta-freeholder-original-token")??undefined);
+    await notify({stage:"metadata",status:response.status,revision:actual,bytes,...(requestProof?{requestProof}:{})});return{revision:actual,bytes,contentType:response.headers.get("content-type")??"application/octet-stream",...(requestProof?{requestProof}:{})};
+   });
+  },
   async readDigestVersioned(key,input,maxBytes,originalParts){
    const partReadback=originalParts===undefined?undefined:originalMultipartReadback(originalParts,maxBytes);
    const pinned=exactRevision(input,binding,key);if(!Number.isSafeInteger(maxBytes)||maxBytes<0)failure();const target=new URL(url(key));if(pinned.versionId!==undefined)target.searchParams.set("versionId",pinned.versionId);

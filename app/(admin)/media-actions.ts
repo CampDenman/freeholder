@@ -35,6 +35,7 @@ export async function reconcileMultipartAction(_previous: MediaActionState, form
     await reconcileMultipartOperation.call({resourceId:text(form,"resourceId"),operationId:text(form,"operationId")||undefined,
       expectedWitness:text(form,"expectedWitness"),originalNamespace:text(form,"originalNamespace"),originalKey:text(form,"originalKey")||undefined,providerUploadId:text(form,"providerUploadId")||undefined,
       action:text(form,"action"),sha256:text(form,"sha256")||undefined,bytes:text(form,"bytes")?Number(text(form,"bytes")):undefined,
+      stopDrainId:text(form,"stopDrainId")||undefined,
       providerFinalReference:text(form,"providerFinalReference"),providerEvidence:text(form,"providerEvidence"),stoppedWriterEvidence:text(form,"stoppedWriterEvidence"),confirmation:text(form,"confirmation")},actor);
     revalidatePath("/admin/media/recovery"); return {saved:true};
   } catch { return {error:t("media.recovery.failed")}; }
