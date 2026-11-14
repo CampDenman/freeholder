@@ -3564,6 +3564,15 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Fresh migration failure 2026-11-13 (C1.12/C11.08): ordinaryV19 stops in new
+media82 at one unmatched closing parenthesis in the issued-authority closure SQL
+function. The failed database/result are preserved and drained; no schema or
+native pass is claimed. Exactly that syntax character is removed, preserving
+every predicate and the full277201-byte ad46 prefix; source/whole-file before/after
+identities are recorded in `deploy/sql/0082_multipart_issuer_parenthesis-correction.manifest.json`.
+Fresh migration/schema/native/SDK and all application/recovery/provider/security
+acceptance remain pending. Both storage capabilities remain absent.
+
 Forward migration materialization 2026-11-13 (C12.38/C1.08/C9.33/C9.38):
 source221a883a passes1,103 actual assertions/173 complete selected files,394
 explicit DB skips, exact full types/lint and license/notes/plan checks. The genuine

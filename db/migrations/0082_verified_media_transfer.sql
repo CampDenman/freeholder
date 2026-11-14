@@ -2524,7 +2524,7 @@ CREATE FUNCTION freeholder_media_multipart_issued_authorities_closed(original_na
   SELECT 1 FROM media_multipart_operations operation JOIN media_multipart_resources resource ON resource.id=operation.resource_id
   WHERE resource.storage_namespace=original_namespace AND operation.operation_kind='sign' AND NOT(
    operation.state='not_applied' AND operation.writer_finished_at IS NOT NULL AND EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE caller.multipart_operation_id=operation.id AND caller.kind='multipart_sign' AND caller.state='returned' AND caller.returned_at=operation.writer_finished_at AND caller.result_digest=freeholder_media_transfer_fact_digest('{"notAttempted":true}'::jsonb)
-    AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='not_attempted')))))
+    AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='not_attempted'))))
  )
 $$;
 --> statement-breakpoint
