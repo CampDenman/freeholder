@@ -57,7 +57,7 @@ describe.runIf(hasDatabase)("actual controlled cash ordering is admission order,
    onOriginalCashObserved:async evidence=>{await recordCashReturnPrimaryObservation.call({...claim,evidence:merchantPaymentEvidence.extend({amountMinor:z.number().int().nonnegative(),currency:z.string().regex(/^[A-Z]{3}$/)}).parse(evidence)},system);},
    onRefundObserved:async evidence=>{await recordMerchantRefundObservation.call({source,inspectionId:claim.inspectionId,evidence:{...evidence,providerApiVersion:evidence.providerApiVersion??null,status:evidence.providerStatus??null}},system);},
    onReturnStateObserved:async evidence=>{await recordCashReturnObservation.call({...claim,evidence},system);}}));}
-  const attempt=delayed.call({source},system),outcome=attempt.then(value=>({ok:true as const,value}),error=>({ok:false as const,error}));
+  const attempt=delayed.call({source},system),outcome=attempt.then(value=>({ok:true as const,value}),(error:unknown)=>({ok:false as const,error}));
   try{
    const aStarted=await started.promise;
    // DO NOT catch/reinterpret a genuine current9 raw-debt refusal here. It
