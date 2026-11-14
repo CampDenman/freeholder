@@ -16,6 +16,13 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  // C1.08/C12.38: exact controlled target and original observation phases stay private.
+  "invoicing.controlledProviderCashObservationAuthority",
+  "invoicing.controlledProviderCollectionAuthority",
+  "subscriptions.planControlledCollectionOperation",
+  "subscriptions.retainControlledInvoiceBinding",
+  "subscriptions.retainControlledInvoiceProof",
+  "subscriptions.retainControlledItemReceipt",
   // C1.12/C11.08: only the gallery worker can reserve its archive generation.
   "galleries.claimArchiveObject",
   // C12.38: authenticated parent coverage; internal queries do not admit positive collection.
@@ -445,6 +452,13 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // C1.08/C12.38: exact controlled target and original observation phases stay private.
+  "invoicing.controlledProviderCashObservationAuthority",
+  "invoicing.controlledProviderCollectionAuthority",
+  "subscriptions.planControlledCollectionOperation",
+  "subscriptions.retainControlledInvoiceBinding",
+  "subscriptions.retainControlledInvoiceProof",
+  "subscriptions.retainControlledItemReceipt",
   // C1.12/C11.08: reviewed original-byte and gallery phases stay private.
   "galleries.claimArchiveObject",
   "media.captureOriginalDeleteRecovery",
