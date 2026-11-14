@@ -498,6 +498,14 @@ export interface MerchantFeeObservation {
 }
 
 export interface MerchantFeeRefundRequest extends MerchantChargeScope {
+  /** Private original source counters checked again by a NEW POST's actual
+   * bank preflight. They never waive recovery or supply money authority. */
+  expectedOriginalFeeMinor?: number;
+  expectedFeeRefundedMinor?: number;
+  /** Internal real caller wrapper. The SDK supplies the actual bank GET;
+   * shared-service DTOs never accept a function or substitute bank response. */
+  performFeeSourceRead?: (read:()=>Promise<Record<string,unknown>>)=>Promise<Record<string,unknown>>;
+  beforeFeePost?: ()=>Promise<void>;
   onFeeRefundObserved?: (observation: MerchantFeeObservation) => Promise<void>;
   providerPlatformAccountId: string;
   applicationFeeRef: string;

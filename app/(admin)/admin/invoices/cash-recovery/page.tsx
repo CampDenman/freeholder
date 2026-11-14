@@ -12,8 +12,10 @@ import { originalCashRecoveryAction } from "./actions";
 import { ORIGINAL_PARTIAL_CASH_CONFIRMATION, ORIGINAL_UNASSIGNED_CASH_CONFIRMATION } from "@/modules/invoicing/original-cash-partial-contract";
 import { cashInspectionRecoveryList, cashInspectionRecoveryPlan } from "@/modules/invoicing/merchant-cash-inspection-stop-service";
 import { CashInspectionRecovery } from "../../../../components/CashInspectionRecovery";
+import {merchantFeeInvocationRecoveryList,merchantFeeInvocationStopPlan} from "@/modules/invoicing/merchant-fee-invocation-recovery";
+import {MerchantFeeInvocationRecovery} from "../../../../components/MerchantFeeInvocationRecovery";
 export const dynamic = "force-dynamic";
-export default async function OriginalCashRecoveryPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; inspection?: string }> }) {
+export default async function OriginalCashRecoveryPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; inspection?: string;feeCaller?:string }> }) {
   const actor = await requireStaffActor("invoicing"), [rows, t, query] = await Promise.all([originalCashReturnRecovery.call({}, actor), getT(), searchParams]);
   const manage = hasModuleAccess(actor, "invoicing", "manage"), human = manage && actor.kind === "user" && !actor.keyScopes;
   const inspections = human ? await cashInspectionRecoveryList.call({}, actor) : [];
@@ -23,10 +25,15 @@ export default async function OriginalCashRecoveryPage({ searchParams }: { searc
     else try { inspectionPlan = await cashInspectionRecoveryPlan.call({ inspectionId: query.inspection }, actor); }
     catch (error) { if (error instanceof ServiceError && error.code === "conflict") changed = true; else throw error; }
   }
+  const feeCallers=human?await merchantFeeInvocationRecoveryList.call({},actor):[];
+  let feePlan:Awaited<ReturnType<typeof merchantFeeInvocationStopPlan.call>>|null=null,feeChanged=false;
+  if(human&&query.feeCaller){const actual=feeCallers.find(row=>row.invocationId===query.feeCaller);if(!actual)feeChanged=true;
+    else try{feePlan=await merchantFeeInvocationStopPlan.call({paymentId:actual.paymentId,invocationId:actual.invocationId},actor);}catch(error){if(error instanceof ServiceError&&error.code==="conflict")feeChanged=true;else throw error;}}
   return <div className="grid gap-6"><a href="/admin/invoices" className="underline">{t("cashRecovery.back")}</a>
     <h1 className="text-xl font-semibold">{t("cashRecovery.title")}</h1><p>{t("cashRecovery.help")}</p>
     {query.error ? <Callout tone="danger">{t("cashRecovery.error")}</Callout> : null}{query.saved ? <Callout tone="success">{t("cashRecovery.saved")}</Callout> : null}
     {human ? <CashInspectionRecovery rows={inspections} plan={inspectionPlan} changed={changed} t={t}/> : null}
+    {human&&(feeCallers.length>0||feeChanged)?<MerchantFeeInvocationRecovery rows={feeCallers} plan={feePlan} changed={feeChanged} t={t}/>:null}
     {!rows.length ? <p>{t("cashRecovery.empty")}</p> : rows.map(row => {
       const sourceId = row.source.kind === "subscription" ? row.source.receiptId : row.source.paymentId;
       return <Card key={row.recoveryId ?? `${sourceId}:${row.source.observationId ?? "original"}`}><CardBody><div className="grid gap-4">

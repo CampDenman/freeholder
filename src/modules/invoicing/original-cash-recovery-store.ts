@@ -9,6 +9,7 @@ import { cashNamespaceKey, verifyOriginalCashRecovery } from "./original-cash-re
 import type { MerchantRefundCashOrigin } from "./merchant-refund-origin";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { originalCashFeedbackFinancialWitness } from "./original-cash-feedback-witness";
+import {merchantAgreementPaymentRoutes} from "./merchant-agreement-schema";
 export function originalCashEvidenceKeys() { const e = env(); return [...new Set([e.CREDENTIAL_KEY, e.CREDENTIAL_KEY_PREVIOUS, e.SESSION_SECRET].filter((key): key is string => Boolean(key)))]; }
 export function originalCashSigningKey() { const e = env(), key = e.CREDENTIAL_KEY ?? e.SESSION_SECRET; if (!key) throw new ServiceError("conflict", "Restore the original financial evidence key."); return key; }
 export function recoveryOwnerBody(row: typeof originalCashRecoveries.$inferSelect) { return { namespaceKey: row.namespaceKey, paymentId: row.paymentId, subscriptionChargeReceiptId: row.subscriptionChargeReceiptId, owner: row.owner }; }
@@ -46,9 +47,19 @@ export function originalCashCallersFinished(witness: Pick<Awaited<ReturnType<typ
     && fact.evidence.callerInstanceId === operation.caller.id || fact.kind === "stop" && fact.evidence.operationDigest === operation.digest)));
 }
 export async function originalCashHistoricalFeesQuiesced(tx: Tx, cash: MerchantRefundCashOrigin, fees: readonly { id: string }[]) {
+  const aliases=cash.subscriptionChargeReceiptId?await tx.select({paymentId:merchantAgreementPaymentRoutes.paymentId}).from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.originalChargeReceiptId,cash.subscriptionChargeReceiptId)).limit(2):[];
+  if(aliases.length>1||cash.paymentId&&aliases.some(row=>row.paymentId!==cash.paymentId))return false;
+  const actualPaymentIds=[...new Set([...(cash.paymentId?[cash.paymentId]:[]),...aliases.map(row=>row.paymentId)])];
+  const{merchantFeeInvocationPaymentCallers}=await import("./merchant-fee-invocation-store");
+  for(const paymentId of actualPaymentIds)if((await merchantFeeInvocationPaymentCallers(tx,paymentId)).unfinishedIds.length)return false;
   if (!fees.length) return true;
   const witness = await originalCashRecoveryCashWitness(tx, cash);
-  return fees.every(fee => witness.facts.some(fact => fact.kind === "legacy_fee_stop" && fact.evidence.originalFeeOperationId === fee.id && fact.evidence.originalFeeDigest === merchantTaxDigest(fee)));
+  for(const fee of fees){
+    if(witness.facts.some(fact => fact.kind === "legacy_fee_stop" && fact.evidence.originalFeeOperationId === fee.id && fact.evidence.originalFeeDigest === merchantTaxDigest(fee)))continue;
+    const{merchantFeeInvocationCallersClosed}=await import("./merchant-fee-invocation-store");
+    if(!await merchantFeeInvocationCallersClosed(tx,fee.id))return false;
+  }
+  return true;
 }
 export async function originalCashRecoveryOwner(tx: Tx, id: string) {
   const [row] = await tx.select().from(originalCashRecoveries).where(eq(originalCashRecoveries.id, id));

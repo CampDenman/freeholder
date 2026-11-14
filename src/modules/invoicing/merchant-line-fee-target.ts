@@ -17,6 +17,11 @@ export async function originalMerchantFeeTarget(ctx: ServiceContext, payment: ty
   const fee = routing.applicationFeeMinor;
   if (fee === undefined || !Number.isSafeInteger(fee) || fee < 0 || !Number.isSafeInteger(payment.amountMinor) || payment.amountMinor <= 0
     || !Number.isSafeInteger(payment.refundedMinor) || payment.refundedMinor < 0 || payment.refundedMinor > payment.amountMinor) return null;
+  if(routing.originalChargeReceiptId){
+    const {controlledAtomicRefundTarget}=await import("./controlled-atomic-refund-target");
+    const atomic=await controlledAtomicRefundTarget(ctx,payment.id);
+    if(atomic)return atomic.target;
+  }
   const prior = Number(BigInt(fee) * BigInt(payment.amountMinor - payment.refundedMinor) / BigInt(payment.amountMinor));
   if (!routing.merchantAllocationId) return prior;
   const [allocation] = await ctx.tx.select().from(invoiceMerchantAllocations).where(and(eq(invoiceMerchantAllocations.id, routing.merchantAllocationId), eq(invoiceMerchantAllocations.invoiceId, payment.invoiceId)));

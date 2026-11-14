@@ -65,3 +65,4 @@ export * from "./agreement-fee-schema";
 export * from "./controlled-cash-application-protocol-schema";
 
 export { merchantCashReturnInspectionStops } from "./merchant-cash-inspection-stop-schema";
+export { merchantFeeRefundInvocations } from "./merchant-fee-invocation-schema";

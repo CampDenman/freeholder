@@ -118,6 +118,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   merchant_payment_observations: "Append-only actual provider financial evidence, retained with original money and never deleted by an age sweep.",
   merchant_payment_event_receipts: "Private immutable authenticated financial facts, including unmatched provider attempts; retained for reconciliation and never included in content search.",
   merchant_fee_refunds: "Original commission refund money and unknown provider outcomes require explicit reconciliation, never timed deletion.",
+  merchant_fee_refund_invocations: "Original fee POST/GET admission, actual caller/result/finish and independent stop proof has no TTL; time cannot clear financial or hosting debt.",
   merchant_fee_observations: "Immutable actual commission-refund financial acknowledgements, retained separately from logical reconciliation and excluded from content search.",
   merchant_refund_observation_captures: "Original financial occurrence evidence survives repeated state; no age purge may invalidate refund or erasure debt.",
   merchant_refund_state_reads: "Original bank-read and caller proof remains with its money; no TTL or elapsed-time absence inference.",

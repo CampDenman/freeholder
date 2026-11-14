@@ -94,6 +94,7 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   merchant_payment_observations: "Append-only provider financial evidence, not searchable personal content.",
   merchant_payment_event_receipts: "Private immutable authenticated financial facts, including unmatched provider attempts; retained for reconciliation and never included in content search.",
   merchant_fee_refunds: "Original provider commission refund operations; scoped money recovery only.",
+  merchant_fee_refund_invocations: "Private original fee caller, nonce, signed result and hosting-stop evidence is excluded from content search.",
   merchant_fee_observations: "Immutable actual commission-refund financial acknowledgements, retained separately from logical reconciliation and excluded from content search.",
   merchant_refund_observation_captures: "Private authenticated refund occurrences; original financial services own access and repeated state is never a public search hit.",
   merchant_refund_state_reads: "Private original bank-read admission and caller capability hashes; excluded from content search.",

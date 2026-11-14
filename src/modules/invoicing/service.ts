@@ -54,7 +54,10 @@ import merchantSubscriptionApplicationServices from "./merchant-subscription-app
 import originalSubscriptionCashServices from "@/modules/subscriptions/provider-charge-services";
 import originalSubscriptionScopeServices from "@/modules/subscriptions/provider-webhook-scope";
 import merchantTaxQuiescenceServices from "@/modules/subscriptions/merchant-tax-quiescence-services";
+import atomicFeeReviewServices from "./controlled-atomic-fee-review";
 import merchantFeeServices from "./merchant-fee-service";
+import merchantFeeInvocationRuntimeServices from "./merchant-fee-invocation-runtime";
+import merchantFeeInvocationRecoveryServices from "./merchant-fee-invocation-recovery";
 import {siteMerchantTaxServices} from "./merchant-tax-profiles";
 import {siteMerchantTaxThresholds} from "./merchant-tax-thresholds";
 import {siteMerchantTaxExemptionServices} from "./merchant-tax-exemptions";
@@ -122,6 +125,9 @@ export default [
   ...merchantCollectionServices,
   ...merchantPaymentObservationServices,
   ...merchantFeeServices,
+  ...atomicFeeReviewServices,
+  ...merchantFeeInvocationRuntimeServices,
+  ...merchantFeeInvocationRecoveryServices,
   ...merchantPaymentReviewServices,
   ...merchantPaymentRecoveryServices,
   ...merchantPaymentRequestServices,

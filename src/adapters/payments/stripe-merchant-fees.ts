@@ -35,7 +35,7 @@ function refundEvidence(request: MerchantFeeRefundRequest, value: Record<string,
 }
 
 export function stripeMerchantFees(api: Api) {
-  async function prepare(request: MerchantFeeRefundRequest) {
+  async function prepare(request: MerchantFeeRefundRequest, dispatch = false) {
     validateMerchantChargeScope(request);
     if (!request.providerPlatformAccountId || !(request.providerAccountId || request.destinationAccountId)
       || !/^fee_[A-Za-z0-9]+$/.test(request.applicationFeeRef) || request.applicationFeeRef.length > 200
@@ -48,13 +48,21 @@ export function stripeMerchantFees(api: Api) {
     // Retain the seller account above for evidence, but never send its header.
     const scope = { providerPlatformAccountId: request.providerPlatformAccountId, ...(request.providerApiVersion ? { providerApiVersion: request.providerApiVersion } : {}) };
     const path = `/v1/application_fees/${encodeURIComponent(request.applicationFeeRef)}`;
-    originalFee(request, await api(path, { method: "GET" }, scope));
+    const read=()=>api(path, { method: "GET" }, scope);
+    const actual=request.performFeeSourceRead?await request.performFeeSourceRead(read):await read();
+    originalFee(request,actual);
+    if(dispatch&&(request.expectedOriginalFeeMinor!==undefined||request.expectedFeeRefundedMinor!==undefined)){
+      const original=request.expectedOriginalFeeMinor,returned=request.expectedFeeRefundedMinor;
+      if(original===undefined||returned===undefined||!Number.isSafeInteger(original)||!Number.isSafeInteger(returned)||original<0||returned<0||returned>original
+        ||original-returned<request.amountMinor||actual.amount!==original||actual.amount_refunded!==returned)throw unresolved();
+    }
     return { scope, path };
   }
 
   return {
     async refundMerchantFee(request: MerchantFeeRefundRequest): Promise<MerchantFeeRefundResult> {
-      const { scope, path } = await prepare(request);
+      const { scope, path } = await prepare(request,true);
+      await request.beforeFeePost?.();
       const form = new URLSearchParams({ amount: String(request.amountMinor), "metadata[freeholder_fee_refund_id]": request.operationId });
       const result = await api(`${path}/refunds`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "idempotency-key": request.idempotencyKey }, body: form }, scope);
       const observed = physicalRefund(request, result);

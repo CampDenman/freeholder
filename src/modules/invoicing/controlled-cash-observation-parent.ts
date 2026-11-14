@@ -50,7 +50,7 @@ function namespaceMember(graph:CallerGraph,platform:SQL,account:SQL,ref:SQL){ret
   and original.provider_platform_account_id=${platform} and original.charge_account_id is not distinct from ${account} and original.provider_ref=${ref}))`;}
 
 export async function readControlledOriginalCallers(ctx:ServiceContext,graph:CallerGraph,subscriptionIds:string[]){
- const unfinished:Array<{kind:"legacy_schedule"|"legacy_read"|"payment_dispatch"|"card_read"|"original_cash"|"historical_fee"|"cash_inspection"|"refund_dispatch"|"refund_read";id:string}>=[];
+ const unfinished:Array<{kind:"legacy_schedule"|"legacy_read"|"payment_dispatch"|"card_read"|"original_cash"|"historical_fee"|"fee_invocation"|"cash_inspection"|"refund_dispatch"|"refund_read";id:string}>=[];
  const operations=await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(inArray(subscriptionProviderScheduleOperations.subscriptionId,subscriptionIds)).limit(5001);
  if(operations.length>5000||operations.some(row=>merchantTaxDigest(row.originalRequest)!==row.requestDigest))refuse();
  for(const row of operations)if(!scheduleCallerHasStopped(row)||!originalProviderReadsFinished(row))unfinished.push({kind:"legacy_schedule",id:row.id});
@@ -90,7 +90,13 @@ export async function readControlledOriginalCallers(ctx:ServiceContext,graph:Cal
  if(recovery.operations.some(operation=>recovery.facts.some(f=>f.operationId===operation.id&&f.kind==="finish")&&recovery.facts.some(f=>f.operationId===operation.id&&f.kind==="stop")))refuse();
  for(const operation of recovery.operations)if(!originalCashCallersFinished({operations:[operation],facts:recovery.facts}))unfinished.push({kind:"original_cash",id:operation.id});
  const feeOperations=graph.money.length||graph.receipts.length?await ctx.tx.select().from(merchantFeeRefunds).where(sql`(${merchantFeeRefunds.paymentId} in(${ids(graph.money.map(row=>row.id))}) or ${merchantFeeRefunds.originalChargeReceiptId} in(${ids(graph.receipts.map(row=>row.id))}))`).limit(5001):[];
- if(feeOperations.length>5000)refuse();for(const fee of feeOperations)if(!recovery.facts.some(f=>f.kind==="legacy_fee_stop"&&f.evidence.originalFeeOperationId===fee.id&&f.evidence.originalFeeDigest===merchantTaxDigest(fee)))unfinished.push({kind:"historical_fee",id:fee.id});
+ const{merchantFeeInvocationPaymentCallers}=await import("./merchant-fee-invocation-store");
+ for(const payment of graph.money){const callers=await merchantFeeInvocationPaymentCallers(ctx.tx,payment.id);unfinished.push(...callers.unfinishedIds.map(id=>({kind:"fee_invocation" as const,id})));}
+ if(feeOperations.length>5000)refuse();for(const fee of feeOperations)if(!recovery.facts.some(f=>f.kind==="legacy_fee_stop"&&f.evidence.originalFeeOperationId===fee.id&&f.evidence.originalFeeDigest===merchantTaxDigest(fee))){
+  const{merchantFeeInvocationCallers}=await import("./merchant-fee-invocation-store");
+  const callers=await merchantFeeInvocationCallers(ctx.tx,fee.id);
+  if(!callers.applies)unfinished.push({kind:"historical_fee",id:fee.id});
+ }
  const inspectionScope=namespaceMember(graph,sql`${merchantCashReturnInspections.providerPlatformAccountId}`,sql`${merchantCashReturnInspections.chargeAccountId}`,sql`${merchantCashReturnInspections.originalPaymentRef}`);
  const inspections=await ctx.tx.select().from(merchantCashReturnInspections).where(inspectionScope).limit(5001);
  const inspectionFinishes=inspections.length?await ctx.tx.select().from(merchantCashReturnInspectionFinishes).where(inArray(merchantCashReturnInspectionFinishes.inspectionId,inspections.map(row=>row.id))).limit(5001):[];
@@ -193,7 +199,7 @@ async function snapshot(ctx:ServiceContext,input:ControlledCashObservationInput,
  const own=input.inspectionId?await readControlledCashInspectionAncestry(ctx.tx,{...input,inspectionId:input.inspectionId}):undefined;
  const lineages=await controlledCashInspectionLineageWitness(ctx.tx,{paymentIds:graph.money.map(row=>row.id),receiptIds:graph.receipts.map(row=>row.id),resourceIds});
  const rows:ObservationFingerprint[]=[...graph.physical.map(row=>({...row,domain:row.table==="subscription_provider_schedule_resources"?"schedule_stable" as const:"postgres_row" as const})),
-  ...graph.children.entries.map(row=>({...row,domain:row.table.startsWith("subscription_controlled_")||row.table==="merchant_cash_return_inspection_stops"?"postgres_row" as const:"dependency_canonical" as const})),
+  ...graph.children.entries.map(row=>({...row,domain:row.table.startsWith("subscription_controlled_")||row.table==="merchant_cash_return_inspection_stops"||row.table==="merchant_fee_refund_invocations"?"postgres_row" as const:"dependency_canonical" as const})),
   ...[...graph.proration.entries,...graph.controlled.entries,...financial.entries,...transports.flatMap(row=>controlledFinancialEntries(row.coverage.witness)),...lineages.entries,...extra].map(row=>({...row,domain:"postgres_row" as const}))];
  const entries=controlledObservationEntries(rows,own),body={protocol:CONTROLLED_COLLECTION_PROTOCOL,collectionId:input.collectionId,receiptId:input.receiptId,source,transport:transports.map(row=>({subscriptionId:row.subscriptionId,revision:row.coverage.revision,rawFacts:row.coverage.rawFinancialFacts})),quoteEvidence};
  const revision=merchantTaxDigest({...body,entries:entries.full}),causalSourceRevision=merchantTaxDigest({...body,entries:entries.causal});

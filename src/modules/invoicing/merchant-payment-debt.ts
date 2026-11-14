@@ -53,6 +53,9 @@ export const merchantPaymentRecoveryDebt = defineService({
     const fullOriginalReturn = payment.refundedMinor === payment.amountMinor && await originalCashFullReturnCurrent(ctx, paymentId);
     const partialOriginalReturn = await originalCashPartialReturnCurrent(ctx, paymentId);
     const auxiliaryReturnCurrent = fullOriginalReturn || partialOriginalReturn !== null;
+    const{controlledAtomicRefundFeeState}=await import("./controlled-atomic-refund-target");
+    const atomicFee=routing.originalChargeReceiptId?await controlledAtomicRefundFeeState(ctx,paymentId):null;
+    const currentAtomicFee=atomicFee?.pending===false?atomicFee.proof:null;
     try { await assertNoUnappliedMerchantCharge(ctx, payment.invoiceId); }
     catch (error) { if (error instanceof ServiceError && error.code === "conflict") reasons.add("unapplied_money"); else throw error; }
     if (["created", "processing"].includes(payment.status)) reasons.add("unknown_payment");
@@ -80,20 +83,26 @@ export const merchantPaymentRecoveryDebt = defineService({
         .orderBy(desc(merchantPaymentObservations.observedAt), desc(merchantPaymentObservations.id)).limit(1);
       if (!proof || !proof.customerChargeVerified || proof.amountMinor !== payment.amountMinor || proof.currency !== payment.currency
         || proof.providerPlatformAccountId !== routing.providerPlatformAccountId || proof.chargeAccountId !== (routing.providerAccountId ?? null)) reasons.add("unapplied_money");
-      if (!proof?.routeVerified || !proof.settlementVerified) reasons.add("provider_settlement");
+      if (!proof?.routeVerified || !proof.settlementVerified&&!(currentAtomicFee&&auxiliaryReturnCurrent)) reasons.add("provider_settlement");
       const returned = BigInt(feeState?.returned ?? "0");
-      const mismatchedOriginalFee = await ctx.tx.select({ id: merchantFeeRefunds.id }).from(merchantFeeRefunds).where(and(eq(merchantFeeRefunds.paymentId, paymentId), eq(merchantFeeRefunds.status, "accepted"), sql`${merchantFeeRefunds.applicationFeeRef} is distinct from ${proof?.applicationFeeRef ?? null}`)).limit(1);
+      const originalFeeRef=currentAtomicFee?currentAtomicFee.originalFeeRef:proof?.applicationFeeRef??null;
+      const mismatchedOriginalFee = await ctx.tx.select({ id: merchantFeeRefunds.id }).from(merchantFeeRefunds).where(and(eq(merchantFeeRefunds.paymentId, paymentId), eq(merchantFeeRefunds.status, "accepted"), sql`${merchantFeeRefunds.applicationFeeRef} is distinct from ${originalFeeRef}`)).limit(1);
       if (!auxiliaryReturnCurrent && mismatchedOriginalFee.length) reasons.add("commission");
       const target = await originalMerchantFeeTarget(ctx, payment, routing);
       if (!auxiliaryReturnCurrent && target === null) reasons.add("commission");
       const zeroFee = proof?.settlementVerified && proof.applicationFeeMinor === 0 && routing.applicationFeeMinor === 0 && !proof.applicationFeeRef && returned === 0n;
-      if (!auxiliaryReturnCurrent && !zeroFee && (!proof?.applicationFeeRef || proof.observedApplicationFeeMinor === null || proof.observedFeeRefundedMinor === null || !Number.isSafeInteger(proof.observedApplicationFeeMinor) || !Number.isSafeInteger(proof.observedFeeRefundedMinor) || proof.applicationFeeCurrency !== payment.currency
+      if(currentAtomicFee){
+        if(currentAtomicFee.paymentId!==payment.id||currentAtomicFee.originalFeeMinor!==routing.applicationFeeMinor||BigInt(currentAtomicFee.acceptedReturnedFeeMinor)!==returned
+          ||currentAtomicFee.actualRetainedFeeMinor!==target||currentAtomicFee.targetRetainedFeeMinor!==target
+          ||BigInt(currentAtomicFee.originalFeeMinor)-returned!==BigInt(currentAtomicFee.actualRetainedFeeMinor))reasons.add("commission");
+      }else if (!auxiliaryReturnCurrent && !zeroFee && (!proof?.applicationFeeRef || proof.observedApplicationFeeMinor === null || proof.observedFeeRefundedMinor === null || !Number.isSafeInteger(proof.observedApplicationFeeMinor) || !Number.isSafeInteger(proof.observedFeeRefundedMinor) || proof.applicationFeeCurrency !== payment.currency
         || BigInt(proof.observedFeeRefundedMinor) !== returned || target === null || BigInt(proof.observedApplicationFeeMinor) - returned !== BigInt(target))) reasons.add("commission");
       // Destination refund/debit closure needs an actual reversal witness.
       // The current capture-only proof deliberately refuses to infer it.
       if (routing.destinationAccountId && payment.refundedMinor > 0 && !auxiliaryReturnCurrent) reasons.add("refund");
     }
     if (await agreementFeePaymentDebt(ctx, paymentId)) reasons.add("commission");
+    if(atomicFee?.pending)reasons.add("commission");
     return { pending: reasons.size > 0, reasons: [...reasons] };
   },
 });

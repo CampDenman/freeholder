@@ -13,6 +13,7 @@ import { originalMerchantFeeTarget } from "./merchant-line-fee-target";
 import { merchantObservationRef, recordMerchantPaymentObservation } from "./merchant-payment-observations";
 import { paymentRow } from "./contract";
 import { payments } from "./schema";
+import {merchantFeeInvocationClaim} from "./merchant-fee-invocation-contract";
 
 const reference = z.string().min(1).max(500);
 const minor = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -37,6 +38,8 @@ export const claimMerchantFeeReconciliation = defineService({
   kind: "mutation", permission: "system", external: false, writeClass: "money",
   input: z.object({ paymentId: z.uuid(), initiatedBy: z.string().min(1).max(300) }), output: claim,
   handler: async ({ paymentId }, ctx) => {
+    const {lockControlledAtomicRefundTarget}=await import("./controlled-atomic-refund-target");
+    await lockControlledAtomicRefundTarget(ctx,paymentId);
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, paymentId)).for("update");
     if (!payment) throw new ServiceError("not_found", "That original payment is not here.");
     const routing = await routingForPayment(ctx, paymentId);
@@ -53,9 +56,17 @@ export const claimMerchantFeeReconciliation = defineService({
       .innerJoin(merchantFeeRefunds, eq(merchantFeeRefunds.id, merchantFeeObservations.operationId))
       .where(and(eq(merchantFeeRefunds.paymentId, paymentId), sql`${merchantFeeRefunds.status} <> 'accepted'`)).limit(1);
     if (unapplied) return { state: "review" as const, operation: null, routing };
-    const [proof] = await ctx.tx.select().from(merchantPaymentObservations).where(and(eq(merchantPaymentObservations.paymentId, paymentId), eq(merchantPaymentObservations.customerChargeVerified, true), eq(merchantPaymentObservations.routeVerified, true)))
+    const{controlledAtomicFeeOwner}=await import("./controlled-atomic-refund-target");
+    const atomicOwner=await controlledAtomicFeeOwner(ctx,paymentId);
+    const actualSource=atomicOwner?await(await import("./merchant-fee-invocation-store")).returnedMerchantFeeSource(ctx.tx,paymentId):null;
+    const [proof] = await ctx.tx.select().from(merchantPaymentObservations).where(and(eq(merchantPaymentObservations.paymentId, paymentId), eq(merchantPaymentObservations.customerChargeVerified, true), eq(merchantPaymentObservations.routeVerified, true),
+      ...(actualSource?[eq(merchantPaymentObservations.providerEventRef,merchantObservationRef(actualSource.evidence))]:[])))
       .orderBy(desc(merchantPaymentObservations.observedAt), desc(merchantPaymentObservations.id)).limit(1);
     if (!proof) return { state: "review" as const, operation: null, routing };
+    if(atomicOwner&&routing.applicationFeeMinor===0&&targetRetainedFeeMinor===0){
+      const{controlledAtomicRefundFeeState}=await import("./controlled-atomic-refund-target");const actual=await controlledAtomicRefundFeeState(ctx,paymentId);
+      if(actual?.pending===false&&actual.proof.originalFeeMinor===0&&actual.proof.acceptedReturnedFeeMinor===0&&actual.actualRetainedFeeMinor===0)return{state:"satisfied" as const,operation:null,routing};
+    }
     if (!proof.applicationFeeRef && proof.applicationFeeMinor === 0 && routing.applicationFeeMinor === 0 && proof.settlementVerified) return { state: "satisfied" as const, operation: null, routing };
     if (!proof.providerChargeRef || !proof.applicationFeeRef || proof.observedApplicationFeeMinor === null || proof.applicationFeeCurrency !== payment.currency || proof.observedFeeRefundedMinor === null) return { state: "review" as const, operation: null, routing };
     const history = operations.filter(row => row.applicationFeeRef === proof.applicationFeeRef);
@@ -96,6 +107,12 @@ export const applyMerchantFeeResult = defineService({
   kind: "mutation", permission: "system", external: false, writeClass: "money",
   input: z.object({ operationId: z.uuid(), outcome: z.enum(["dispatching", "accepted", "unknown", "refused"]), providerRef: reference.optional() }), output: operation,
   handler: async ({ operationId, outcome, providerRef }, ctx) => {
+    const [selected] = await ctx.tx.select().from(merchantFeeRefunds).where(eq(merchantFeeRefunds.id, operationId));
+    if (!selected) throw new ServiceError("not_found", "That original fee operation is not here.");
+    // The resource/parent/canonical prefix precedes the actual fee row latch.
+    // Recording a genuine earlier result never requires fresh dispatch safety.
+    const {lockControlledAtomicRefundEvidence}=await import("./controlled-atomic-refund-target");
+    await lockControlledAtomicRefundEvidence(ctx,selected.paymentId);
     const [original] = await ctx.tx.select().from(merchantFeeRefunds).where(eq(merchantFeeRefunds.id, operationId)).for("update");
     if (!original) throw new ServiceError("not_found", "That original fee operation is not here.");
     // A terminal result is idempotent for reconciliation, but cannot grant
@@ -103,6 +120,8 @@ export const applyMerchantFeeResult = defineService({
     if (outcome === "dispatching" && original.status !== "reserved") throw new ServiceError("conflict", "Reconcile the original fee operation without dispatching it again.");
     if (original.status === "accepted" || original.status === "refused") return original;
     if (outcome === "dispatching") {
+      const {lockControlledAtomicRefundTarget}=await import("./controlled-atomic-refund-target");
+      await lockControlledAtomicRefundTarget(ctx,original.paymentId);
       const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, original.paymentId));
       const target = payment ? await originalMerchantFeeTarget(ctx, payment, await routingForPayment(ctx, payment.id)) : null;
       if (target === null || target !== original.targetRetainedFeeMinor) throw new ServiceError("conflict", "The original line commission changed before dispatch. Keep this reservation for review without sending it.");
@@ -115,29 +134,64 @@ export const applyMerchantFeeResult = defineService({
   },
 });
 
+export const prepareMerchantFeeSourceInvocation=defineService({
+  name:"invoicing.prepareMerchantFeeSourceInvocation",summary:"Durably admit the actual original atomic fee source GET before SDK I/O, including satisfied/no-operation histories.",
+  kind:"mutation",permission:"system",external:false,writeClass:"money",input:z.object({paymentId:z.uuid()}).strict(),output:merchantFeeInvocationClaim.nullable(),
+  handler:async({paymentId},ctx)=>{
+    const{controlledAtomicFeeOwner}=await import("./controlled-atomic-refund-target");if(!await controlledAtomicFeeOwner(ctx,paymentId))return null;
+    const{admitMerchantFeeInvocation}=await import("./merchant-fee-invocation-store");
+    return admitMerchantFeeInvocation(ctx,{paymentId,feeOperationId:null,kind:"source_inspect"});
+  },
+});
+export const prepareMerchantFeeDispatchInvocation=defineService({
+  name:"invoicing.prepareMerchantFeeDispatchInvocation",summary:"Reserve the genuine original fee and its unique physical caller in one transaction after the actual returned source GET.",
+  kind:"mutation",permission:"system",external:false,writeClass:"money",input:z.object({paymentId:z.uuid(),initiatedBy:z.string().min(1).max(300)}).strict(),output:z.object({reserved:claim,invocation:merchantFeeInvocationClaim.nullable()}),
+  handler:async(input,ctx)=>{
+    const{controlledAtomicFeeOwner}=await import("./controlled-atomic-refund-target");const owner=await controlledAtomicFeeOwner(ctx,input.paymentId);
+    const reserved=await ctx.callAsSystem(claimMerchantFeeReconciliation,input);if(!owner||!reserved.operation)return{reserved,invocation:null};
+    const{admitMerchantFeeInvocation}=await import("./merchant-fee-invocation-store");
+    const dispatch=reserved.operation.status==="reserved";
+    const invocation=await admitMerchantFeeInvocation(ctx,{paymentId:input.paymentId,feeOperationId:reserved.operation.id,kind:dispatch?"post":"recover_get"});
+    const operation=dispatch?await ctx.callAsSystem(applyMerchantFeeResult,{operationId:reserved.operation.id,outcome:"dispatching"}):reserved.operation;
+    return{reserved:{...reserved,operation},invocation};
+  },
+});
+
 export const reconcileMerchantApplicationFee = defineOrchestratedService({
   name: "invoicing.reconcileMerchantApplicationFee", summary: "Verify and refund only remaining original commission, independently of customer payment and refund outcomes.",
   kind: "mutation", permission: "scoped", stepUp: true, writeClass: "money", input: z.object({ paymentId: z.uuid() }).strict(), output: claim,
   handler: async ({ paymentId }, caller) => {
     const system = { kind: "system", request: caller.request } as const;
+    const{performMerchantFeeInvocation,flushMerchantFeeInvocationFinishes,performMerchantFeePreflight,assertMerchantFeePostPreflight,recordMerchantFeeInvocationObservation}=await import("./merchant-fee-invocation-runtime");
+    await flushMerchantFeeInvocationFinishes(paymentId);
     const source = await merchantFeeSource.call({ paymentId }, system);
     const adapter = paymentAdapter(source.payment.provider);
     if (!adapter.inspectMerchantPayment || !adapter.refundMerchantFee || !adapter.recoverMerchantFeeRefund || !source.payment.providerRef) throw new ServiceError("conflict", "The original provider cannot yet reconcile this fee.");
     const { routing } = source;
     const subscriptionOrigin = routing.originalChargeReceiptId ? { providerApiVersion: routing.providerApiVersion as "2026-10-28.endive", providerSubscriptionRef: routing.providerSubscriptionRef!, providerInvoiceRef: routing.providerInvoiceRef!, providerPaymentIntentRef: routing.providerPaymentIntentRef! } : undefined;
-    await adapter.inspectMerchantPayment({ ...routing, providerPlatformAccountId: routing.providerPlatformAccountId!, providerRef: source.payment.providerRef,
+    const sourceInvocation=await prepareMerchantFeeSourceInvocation.call({paymentId},system);
+    const inspect=async(retain?:(value:unknown)=>Promise<void>)=>adapter.inspectMerchantPayment!({ ...routing, providerPlatformAccountId: routing.providerPlatformAccountId!, providerRef: source.payment.providerRef!,
       ...(subscriptionOrigin ? { subscriptionOrigin } : { paymentAttemptId: paymentId }),
-      onPaymentObserved: async evidence => { await recordMerchantPaymentObservation.call({ paymentId, providerEventRef: merchantObservationRef(evidence), evidence }, system); } });
-    const reserved = await claimMerchantFeeReconciliation.call({ paymentId, initiatedBy: actorString(caller) }, system);
+      onPaymentObserved: async evidence => { if(sourceInvocation)await recordMerchantFeeInvocationObservation.call({invocation:sourceInvocation,paymentEvidence:evidence},system);else await recordMerchantPaymentObservation.call({ paymentId, providerEventRef: merchantObservationRef(evidence), evidence }, system);await retain?.(evidence); } });
+    const observed=sourceInvocation?await performMerchantFeeInvocation(sourceInvocation,inspect):await inspect();
+    const prepared=await prepareMerchantFeeDispatchInvocation.call({paymentId,initiatedBy:actorString(caller)},system),reserved=prepared.reserved;
     if (!reserved.operation) return reserved;
     const original = reserved.operation;
+    const invocation=prepared.invocation;
     const request = { ...reserved.routing, providerPlatformAccountId: reserved.routing.providerPlatformAccountId!, operationId: original.id,
+      ...(invocation?.kind==="post"?{expectedOriginalFeeMinor:observed.observedApplicationFeeMinor,expectedFeeRefundedMinor:observed.observedFeeRefundedMinor}:{}),
+      ...(invocation?{performFeeSourceRead:(read:()=>Promise<Record<string,unknown>>)=>performMerchantFeePreflight(invocation,read),
+        ...(invocation.kind==="post"?{beforeFeePost:async()=>{await assertMerchantFeePostPreflight.call(invocation,system);}}:{})}:{}),
       applicationFeeRef: original.applicationFeeRef, providerChargeRef: original.providerChargeRef, amountMinor: original.amountMinor, currency: original.currency, idempotencyKey: original.idempotencyKey,
-      onFeeRefundObserved: async (observation: z.infer<typeof physicalFee>) => { await recordMerchantFeeObservation.call({ operationId: original.id, observation }, system); } };
-    const dispatch = original.status === "reserved";
-    if (dispatch) await applyMerchantFeeResult.call({ operationId: original.id, outcome: "dispatching" }, system);
+      onFeeRefundObserved: async (observation: z.infer<typeof physicalFee>) => { if(invocation)await recordMerchantFeeInvocationObservation.call({invocation,feeObservation:observation},system);else await recordMerchantFeeObservation.call({ operationId: original.id, observation }, system); } };
+    const dispatch = prepared.invocation?prepared.invocation.kind==="post":original.status === "reserved";
+    if (dispatch&&!prepared.invocation) await applyMerchantFeeResult.call({ operationId: original.id, outcome: "dispatching" }, system);
     try {
-      const actual = dispatch ? await adapter.refundMerchantFee(request) : await adapter.recoverMerchantFeeRefund(request);
+      const perform=async(retain?:(value:unknown)=>Promise<void>)=>{
+        const actualRequest={...request,onFeeRefundObserved:async(observation:z.infer<typeof physicalFee>)=>{await request.onFeeRefundObserved(observation);await retain?.(observation);}};
+        return dispatch?adapter.refundMerchantFee!(actualRequest):adapter.recoverMerchantFeeRefund!(actualRequest);
+      };
+      const actual=prepared.invocation?await performMerchantFeeInvocation(prepared.invocation,perform):await perform();
       if (!actual) {
         const unknown = await applyMerchantFeeResult.call({ operationId: original.id, outcome: "unknown" }, system);
         return { ...reserved, state: "pending" as const, operation: unknown };
@@ -163,6 +217,9 @@ export const reconcileOriginalMerchantFeeJob = defineJob({
     const { paymentId } = z.object({ paymentId: z.uuid() }).parse(data);
     const result = await reconcileMerchantApplicationFee.call({ paymentId }, { kind: "system" });
     if (result.state !== "satisfied") throw new Error(result.state === "review" ? "Original commission evidence needs owner review; the customer outcome remains recorded." : "Original commission reconciliation is pending its verified provider outcome.");
+    const{refreshAtomicFeeBankEvidence}=await import("./controlled-atomic-fee-review");
+    const bank=await refreshAtomicFeeBankEvidence.call({paymentId},{kind:"system"});
+    if(bank.handled&&bank.feeReconciled!==true)throw new Error("The real original fee outcome is retained; fresh complete bank evidence still requires reconciliation.");
     return { reconciled: true };
   },
 });
@@ -174,6 +231,17 @@ export async function queueMerchantFeeReconciliation(ctx: ServiceContext, paymen
   const [payment] = await ctx.tx.select({ refundedMinor: payments.refundedMinor }).from(payments).where(eq(payments.id, paymentId));
   if (!payment) throw new ServiceError("conflict", "The original fee source payment is missing.");
   await enqueueJob(ctx.tx, reconcileOriginalMerchantFeeJob.name, { paymentId }, { idempotencyKey: `merchant-fee:${paymentId}:${payment.refundedMinor}`, startAfter: 5 });
+  // A real refund of the tiny receipt can move the WHOLE original atomic fee
+  // target on its actual sibling. Queue that exact FK-owned source, never
+  // reassign the fee to the refunded equal-value payment or guess chronology.
+  const[installed]=await ctx.tx.execute<{present:boolean}>(sql`select to_regclass('controlled_cash_application_batches') is not null as present`);if(!installed?.present)return;
+  const siblings=await ctx.tx.execute<{paymentId:string;invoiceReturnedMinor:number}>(sql`select sibling.id::text as "paymentId",i.refunded_minor::float8 as "invoiceReturnedMinor" from payments original
+   join invoices i on i.id=original.invoice_id join payments sibling on sibling.invoice_id=i.id
+   join controlled_cash_application_links l on l.payment_id=sibling.id join controlled_cash_application_batches b on b.id=l.batch_id and b.invoice_id=i.id
+   where original.id=${paymentId}::uuid and i.refunded_minor>0 and sibling.id<>original.id and exists(select 1 from controlled_cash_application_batches atomic_epoch where atomic_epoch.invoice_id=i.id and atomic_epoch.protocol='controlled_cash_atomic.v1')
+   order by sibling.id limit 5001`);
+  if(siblings.length>5000)throw new ServiceError("conflict","Restore every exact original atomic fee sibling before scheduling bounded reconciliation.");
+  for(const sibling of siblings)await enqueueJob(ctx.tx,reconcileOriginalMerchantFeeJob.name,{paymentId:sibling.paymentId},{idempotencyKey:`merchant-fee:${sibling.paymentId}:atomic:${sibling.invoiceReturnedMinor}`,startAfter:5});
 }
 
-export default [merchantFeeSource, claimMerchantFeeReconciliation, recordMerchantFeeObservation, applyMerchantFeeResult, reconcileMerchantApplicationFee];
+export default [merchantFeeSource, claimMerchantFeeReconciliation, recordMerchantFeeObservation, applyMerchantFeeResult,prepareMerchantFeeSourceInvocation,prepareMerchantFeeDispatchInvocation,reconcileMerchantApplicationFee];
