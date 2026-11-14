@@ -3564,6 +3564,50 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Signature-work ROOT performance repair2026-11-14 (C12.38/C1.08/C11.10):
+exact1f89 sourceV102 fulltypes/lint/1554actual/249files/540explicit skips PASS;
+freshV60/V61 ordinary86/strict161models/365guards/416fullfunctions/4143queries
+andSDKV38/V39 actual8 PASS. V60 nine actual SQL correlation controls PASS;
+all596 rows/j86/seq unchanged. Original whole feeV10 reaches actual accepted
+1-cent return but TIMEOUT180s; observational freshV11 also times out, after
+realapply53.92s/originalreturn54.45s/fee22.69s. FailedV60/V61 preserved.
+CPUprofile measures54.60s Ed25519verify,43.88s canonicalization,5.32s public-key
+creation; PGmetadata shows no blocking. NEW finite primitive-only512-entry
+memo stores hashes of exact publickey/signature/FRESH canonical message tuple.
+Schema/domain/size/currentpayloaddigest and every original caller/source/owner/
+nonce/liveness/PG/bank/raw/current-money check remain unconditional. No money
+or current-state authority cached; no input payload/key/signature retained.
+Five warmed-mutation/key/domain/size/source/eviction controls added; all old
+signer/reader/stop/default/native19097bytes/180s bodies preserved. Full current
+source/schema/SDK/original native/performance acceptance remains UNRUN. See
+`deploy/provider-read-signature-work-root-continuation.manifest.json`.
+
+Required generic provider-retention audit2026-11-14 (C11.10/C1.08): source
+invoice/intent/expandedcharge and customer/credit-note callbacks/results retain
+whole provider JSON. A new safe-producer projection/version/consumer inventory
+is assigned; malformed financial maps must become authenticated unknown debt,
+never filtered knownzero or retained secretbytes. Held terminal-only aef source
+does not close this generic registered-path finding. No source repair/security
+signature/provider acceptance inferred. See
+`deploy/provider-response-retention-audit-20261114.json`.
+
+Exact approved BACKUP completed2026-11-14: owner explicitly approvedb5c0f3a9
+to existing integrate/current-full82-signed-history-20261113. Verified remote
+fastforward7322c43f→b5c0f3a9842ab37246c781c7f38af23d2e91f85a after push.
+Previous automatic-review trust rejection resolved by actualownerapproval;
+newer local repairs were not included in that exact authorized checkpoint.
+No release/deployment/LinkedIn action. See
+`deploy/approved-checkpoint-backup-20261114.json`.
+
+Launch-image isolated source qualification2026-11-14 (C1.12/C3.28/C11.08):
+frozen418/d1a89172 passes fulltypes64.97s, actualCLI packaging build/all6 copied
+recipe/companion/declaration bytes exact, lint/93actual/10files/17explicit
+prerequisite skips. Isolated evidence commitacb15932 remains uncomposed here;
+actual compatible signed image/new-originTCP/owner/provider/recovery acceptance
+remain required. Media initializer64a9e7cb and terminal/C0aef are SOURCEONLY
+held/unqualified, not activated. Full B/C/media/spec gates remain open.
+
+
 Fee acknowledgement correlation ROOT repair2026-11-14 (C12.38/C1.08):
 exacte56 sourceV100 fulltypes/lint/1553actual/248files/532explicit skips,
 ordinaryV58/strict161models/365guards/416fullfunctions andSDKV36 actual8 PASS.
@@ -5226,7 +5270,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-14. Protected main last verified fdba2817(PR702); PR701 older/unqualified. Exacte56 sourceV100 fulltypes/lint/1553actual/248files/532explicit DB skips, freshV58 ordinary86/strict161models/365guards/416fullfunctions/4143queries andSDKV36 actual8 PASS. Original feeV8 reaches genuine accepted1-cent fee return/current bank399/pendingfalse but fails final unchanged commission-debt assertion186.89s. Readonly actual SQL proves correlated ACK columns lose outer qualification; finite shared SQL correction is source-only pending fresh qualification. Failed V52/V53/V55/V57/V58 databases preserved. Negative/A/bank/causal natives remain unrun; historical privacy evidence stays explicitly predecessor-only. Credit/proration/media/full-spec/provider/platform/build/browser/CI/recovery/security/signature gates remain required. Version0.2.0-beta.6; no stable/deployment/LinkedIn closure. Remote backup awaits explicit authorization after auto-review rejection. |
+| Latest launch audit | 2026-11-14. Protected main last verified fdba2817(PR702); PR701 older/unqualified. Exact1f89 sourceV102 fulltypes/lint/1554actual/249files/540explicit DB skips, freshV60/V61 ordinary86/strict161models/365guards/416fullfunctions/4143queries andSDKV38/V39 actual8 PASS; V60 nine real correlation controls PASS/all596+j86+seq invariant. Original whole feeV10 and observational V11 TIMEOUT unchanged180s after actual accepted1-cent return. CPU measured54.60s signature verification; finite primitive-only performance repair remains source-only pending fresh qualification. Failed databases preserved. Exact owner-approved b5c0f3a9 backup pushed/remote SHA verified; newer work local. Isolated image93 source/CLI checks pass; initializer64a/terminalaef unqualified. B/C/media/full-spec/provider/platform/build/browser/CI/recovery, generic provider-response retention repair, independent security and final signature remain open. Version0.2.0-beta.6; no stable/deployment/LinkedIn closure. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |

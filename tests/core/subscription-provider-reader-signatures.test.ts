@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C1.08: actual signatures and exact read authority; no database/provider work.
 import { describe, expect, it } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { originalProviderReadAdmission, providerReaderStopVerdict, signProviderReadProof, stoppedProviderRead, verifiedProviderReadProof } from "@/modules/subscriptions/provider-read-signatures";
 import { originalProviderReadsFinished, verifiedScheduleRead } from "@/modules/subscriptions/provider-schedule-read-proof";
@@ -30,6 +31,46 @@ describe("signed original provider reader proof", () => {
     const proof = signProviderReadProof("admission", { readId });
     expect(verifiedProviderReadProof({ ...proof, kind: "finish" }, "finish")).toBeNull();
     expect(verifiedProviderReadProof({ ...proof, publicKey: "untrusted malformed public key" }, "admission")).toBeNull();
+  });
+  it("rechecks nested content after a successful verification of the same object", () => {
+    const proof = signProviderReadProof("admission", { readId, nested: { operationId } });
+    expect(verifiedProviderReadProof(proof, "admission")).not.toBeNull();
+    (proof.payload.nested as { operationId: string }).operationId = readId;
+    expect(verifiedProviderReadProof(proof, "admission")).toBeNull();
+    (proof.payload.nested as { operationId: string }).operationId = operationId;
+    expect(verifiedProviderReadProof(proof, "admission")).not.toBeNull();
+  });
+  it("refuses another actual public key, changed signature and changed signing domain after a warm verification", () => {
+    const proof = signProviderReadProof("admission", { readId });
+    expect(verifiedProviderReadProof(proof, "admission")).not.toBeNull();
+    const otherKey = generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString();
+    expect(verifiedProviderReadProof({ ...proof, publicKey: otherKey }, "admission")).toBeNull();
+    const signature = `${proof.signature[0] === "A" ? "B" : "A"}${proof.signature.slice(1)}`;
+    expect(verifiedProviderReadProof({ ...proof, signature }, "admission")).toBeNull();
+    expect(verifiedProviderReadProof({ ...proof, kind: "finish" }, "finish")).toBeNull();
+    expect(verifiedProviderReadProof({ ...proof, version: 2 }, "admission")).toBeNull();
+  });
+  it("checks the current payload size even after an earlier valid proof", () => {
+    const proof = signProviderReadProof("admission", { readId });
+    expect(verifiedProviderReadProof(proof, "admission")).not.toBeNull();
+    proof.payload.extra = "x".repeat(256001);
+    expect(verifiedProviderReadProof(proof, "admission")).toBeNull();
+  });
+  it("retains original caller and source checks after signature verification is warm", () => {
+    const { admission } = original();
+    expect(originalProviderReadAdmission(admission)).toBe(true);
+    expect(originalProviderReadAdmission({ ...admission, callerId: readId })).toBe(false);
+    const stop = stopped(admission);
+    expect(stoppedProviderRead(admission, stop, subscriptionId)).toBe(true);
+    expect(stoppedProviderRead({ ...admission, completionDigest: "f".repeat(64) }, stop, subscriptionId)).toBe(false);
+    expect(stoppedProviderRead(admission, stop, operationId)).toBe(false);
+  });
+  it("continues to verify original receipts after many unrelated proofs without accepting a later mutation", () => {
+    const proof = signProviderReadProof("admission", { readId });
+    expect(verifiedProviderReadProof(proof, "admission")).not.toBeNull();
+    for (let nonce = 0; nonce < 600; nonce++) expect(verifiedProviderReadProof(signProviderReadProof("finish", { nonce }), "finish")).not.toBeNull();
+    expect(verifiedProviderReadProof(JSON.parse(JSON.stringify(proof)), "admission")).not.toBeNull();
+    expect(verifiedProviderReadProof({ ...proof, payload: { readId: operationId } }, "admission")).toBeNull();
   });
   it("binds the actual signed admission to its original caller, nonce and operation", () => {
     const { admission } = original(); expect(originalProviderReadAdmission(admission)).toBe(true);

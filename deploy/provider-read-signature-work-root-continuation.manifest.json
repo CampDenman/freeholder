@@ -1,0 +1,194 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C1.08",
+    "C11.10"
+  ],
+  "status": "SOURCE_ONLY_UNQUALIFIED_PERFORMANCE_REPAIR",
+  "base": "1f89a8eca61e2e286ee225ee49c8b3748c150e28",
+  "files": [
+    {
+      "path": "src/modules/subscriptions/provider-read-signatures.ts",
+      "beforeSha256": "9abd437c7d7ce7a2aafb6196f3b080a32ddd04baf7e706007a9730d3fe0decda",
+      "afterSha256": "33141d3859fdf3072629dc28ecc2abd3dfbe4ddde56bbbc47b6a3cd1072a9464",
+      "finiteDelta": [
+        {
+          "before": "import { createPublicKey, generateKeyPairSync, sign, verify, type KeyObject }",
+          "after": "import { createHash, createPublicKey, generateKeyPairSync, sign, verify, type KeyObject }",
+          "count": 1
+        },
+        {
+          "before": "export function verifiedProviderReadProof(value: unknown, kind: ProviderReadSignedProof[\"kind\"]): ProviderReadSignedProof | null {\n  const proof = providerReadSignedProof.safeParse(value);\n  if (!proof.success || proof.data.kind !== kind || Buffer.byteLength(JSON.stringify(proof.data.payload)) > 256000) return null;\n  try { const key = createPublicKey(proof.data.publicKey); return key.asymmetricKeyType === \"ed25519\" && verify(null, message(kind, proof.data.payload), key, Buffer.from(proof.data.signature, \"base64url\")) ? proof.data : null; } catch { return null; }\n}\n",
+          "after": "// Only mathematical signature validity is memoized. No payload, row identity,\n// ownership, current state, caller liveness or business authority is retained.\n// The bounded set contains only hashes, never the input key/signature bytes.\n// Recompute the message from the freshly parsed payload on every invocation.\nconst verifiedSignatures = new Set<string>();\nconst verifiedSignatureLimit = 512;\nexport function verifiedProviderReadProof(value: unknown, kind: ProviderReadSignedProof[\"kind\"]): ProviderReadSignedProof | null {\n  const proof = providerReadSignedProof.safeParse(value);\n  if (!proof.success || proof.data.kind !== kind || Buffer.byteLength(JSON.stringify(proof.data.payload)) > 256000) return null;\n  try {\n    const bytes = message(kind, proof.data.payload);\n    const exactSignature = createHash(\"sha256\").update(JSON.stringify([proof.data.publicKey, proof.data.signature, bytes.toString(\"base64url\")])).digest(\"hex\");\n    if (!verifiedSignatures.has(exactSignature)) {\n      const key = createPublicKey(proof.data.publicKey);\n      if (key.asymmetricKeyType !== \"ed25519\" || !verify(null, bytes, key, Buffer.from(proof.data.signature, \"base64url\"))) return null;\n      if (verifiedSignatures.size >= verifiedSignatureLimit) {\n        const oldest = verifiedSignatures.values().next().value;\n        if (oldest !== undefined) verifiedSignatures.delete(oldest);\n      }\n      verifiedSignatures.add(exactSignature);\n    }\n    return proof.data;\n  } catch { return null; }\n}\n",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "path": "tests/core/subscription-provider-reader-signatures.test.ts",
+      "beforeSha256": "27f5fd43a43f7a6cfd4e3c4baa9c41e64ed2d29c1023b392fcc252ec4a0a790e",
+      "afterSha256": "63fc0e159bf32e7839e729141f5e65c49cfaec7072b13fc6867e64dbe461fd1f",
+      "finiteDelta": [
+        {
+          "before": "import { merchantTaxDigest }",
+          "after": "import { generateKeyPairSync } from \"node:crypto\";\nimport { merchantTaxDigest }",
+          "count": 1
+        },
+        {
+          "before": "  it(\"binds the actual signed admission to its original caller, nonce and operation\", () => {",
+          "after": "  it(\"rechecks nested content after a successful verification of the same object\", () => {\n    const proof = signProviderReadProof(\"admission\", { readId, nested: { operationId } });\n    expect(verifiedProviderReadProof(proof, \"admission\")).not.toBeNull();\n    (proof.payload.nested as { operationId: string }).operationId = readId;\n    expect(verifiedProviderReadProof(proof, \"admission\")).toBeNull();\n    (proof.payload.nested as { operationId: string }).operationId = operationId;\n    expect(verifiedProviderReadProof(proof, \"admission\")).not.toBeNull();\n  });\n  it(\"refuses another actual public key, changed signature and changed signing domain after a warm verification\", () => {\n    const proof = signProviderReadProof(\"admission\", { readId });\n    expect(verifiedProviderReadProof(proof, \"admission\")).not.toBeNull();\n    const otherKey = generateKeyPairSync(\"ed25519\").publicKey.export({ type: \"spki\", format: \"pem\" }).toString();\n    expect(verifiedProviderReadProof({ ...proof, publicKey: otherKey }, \"admission\")).toBeNull();\n    const signature = `${proof.signature[0] === \"A\" ? \"B\" : \"A\"}${proof.signature.slice(1)}`;\n    expect(verifiedProviderReadProof({ ...proof, signature }, \"admission\")).toBeNull();\n    expect(verifiedProviderReadProof({ ...proof, kind: \"finish\" }, \"finish\")).toBeNull();\n    expect(verifiedProviderReadProof({ ...proof, version: 2 }, \"admission\")).toBeNull();\n  });\n  it(\"checks the current payload size even after an earlier valid proof\", () => {\n    const proof = signProviderReadProof(\"admission\", { readId });\n    expect(verifiedProviderReadProof(proof, \"admission\")).not.toBeNull();\n    proof.payload.extra = \"x\".repeat(256001);\n    expect(verifiedProviderReadProof(proof, \"admission\")).toBeNull();\n  });\n  it(\"retains original caller and source checks after signature verification is warm\", () => {\n    const { admission } = original();\n    expect(originalProviderReadAdmission(admission)).toBe(true);\n    expect(originalProviderReadAdmission({ ...admission, callerId: readId })).toBe(false);\n    const stop = stopped(admission);\n    expect(stoppedProviderRead(admission, stop, subscriptionId)).toBe(true);\n    expect(stoppedProviderRead({ ...admission, completionDigest: \"f\".repeat(64) }, stop, subscriptionId)).toBe(false);\n    expect(stoppedProviderRead(admission, stop, operationId)).toBe(false);\n  });\n  it(\"continues to verify original receipts after many unrelated proofs without accepting a later mutation\", () => {\n    const proof = signProviderReadProof(\"admission\", { readId });\n    expect(verifiedProviderReadProof(proof, \"admission\")).not.toBeNull();\n    for (let nonce = 0; nonce < 600; nonce++) expect(verifiedProviderReadProof(signProviderReadProof(\"finish\", { nonce }), \"finish\")).not.toBeNull();\n    expect(verifiedProviderReadProof(JSON.parse(JSON.stringify(proof)), \"admission\")).not.toBeNull();\n    expect(verifiedProviderReadProof({ ...proof, payload: { readId: operationId } }, \"admission\")).toBeNull();\n  });\n  it(\"binds the actual signed admission to its original caller, nonce and operation\", () => {",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "memoLimit": 512,
+  "memoContents": "SHA256 of exact tuple(publicKey,signature,fresh canonical message bytes); no raw payload/key/signature retained",
+  "everyInvocationStillChecks": [
+    "strict version/schema",
+    "requested signing domain",
+    "current payload byte limit",
+    "fresh complete canonical payload digest",
+    "all original caller/source/nonce/request/ownership/liveness/receipt checks in unchanged consumers"
+  ],
+  "neverMemoized": [
+    "current principal/balance",
+    "money authority",
+    "bank state",
+    "raw feedback",
+    "caller completion",
+    "namespace membership",
+    "current PG witness",
+    "permission or step-up",
+    "key trust/revocation policy"
+  ],
+  "schemaModelsServicesAndOriginalNativeUnchanged": true,
+  "originalNative": {
+    "bytes": 19097,
+    "sha256": "c627b8fb89a1cefbab815727157a16a430472733474a1eb1ff7971c32a21332f",
+    "timeoutSourceMilliseconds": 180000
+  },
+  "profileBefore": {
+    "sourceHead": "1f89a8eca61e2e286ee225ee49c8b3748c150e28",
+    "path": "/tmp/freeholder-atomic-refund-cpu-v11-20261114/CPU.20261114.110747.2060685.0.001.cpuprofile",
+    "sha256": "f4c8dccaa9700294b97ee8711a14d8771b4b4c594aa83b1741661ee3196d35e1",
+    "result": "/tmp/freeholder-current-full86-fee161-residual-native-v11-20261114-result.json",
+    "phases": "/tmp/freeholder-current-full86-fee161-residual-native-v11-20261114-phases.jsonl",
+    "pgMetadata": "/tmp/freeholder-current-full86-fee161-residual-native-v11-20261114-pg-activity.json",
+    "cpuLeafMilliseconds": [
+      {
+        "function": "verifyOneShot",
+        "url": "node:internal/crypto/sig",
+        "ms": 54603.521
+      },
+      {
+        "function": "(idle)",
+        "url": "",
+        "ms": 43179.716
+      },
+      {
+        "function": "canonical",
+        "url": "file:///tmp/freeholder-current-full82-combined-v1-20261113/src/modules/invoicing/merchant-tax-store.ts",
+        "ms": 30610.542
+      },
+      {
+        "function": "",
+        "url": "file:///tmp/freeholder-current-full82-combined-v1-20261113/src/modules/invoicing/merchant-tax-store.ts",
+        "ms": 13269.132
+      },
+      {
+        "function": "(garbage collector)",
+        "url": "",
+        "ms": 9274.475
+      },
+      {
+        "function": "update",
+        "url": "node:internal/crypto/hash",
+        "ms": 5896.546
+      },
+      {
+        "function": "createPublicKey",
+        "url": "node:internal/crypto/keys",
+        "ms": 5324.654
+      },
+      {
+        "function": "parse",
+        "url": "file:///tmp/freeholder-current-full82-combined-v1-20261113/node_modules/.pnpm/postgres@3.4.9/node_modules/postgres/src/types.js",
+        "ms": 3860.156
+      },
+      {
+        "function": "is",
+        "url": "file:///tmp/freeholder-current-full82-combined-v1-20261113/node_modules/.pnpm/drizzle-orm@0.45.4_@opentelemetry+api@1.9.1_pg@8.23.1_postgres@3.4.9/node_modules/drizzle-orm/entity.js",
+        "ms": 2300.02
+      },
+      {
+        "function": "inst._zod.parse",
+        "url": "file:///tmp/freeholder-current-full82-combined-v1-20261113/node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.js",
+        "ms": 1563.496
+      },
+      {
+        "function": "writeBuffer",
+        "url": "",
+        "ms": 1370.173
+      },
+      {
+        "function": "verifiedProviderReadProof",
+        "url": "file:///tmp/freeholder-current-full82-combined-v1-20261113/src/modules/subscriptions/provider-read-signatures.ts",
+        "ms": 964.691
+      }
+    ],
+    "completedPhaseSeconds": [
+      {
+        "label": "returnOriginalCash",
+        "seconds": 54.44937809499999
+      },
+      {
+        "label": "applyControlledCashReceipts",
+        "seconds": 53.915674094
+      },
+      {
+        "label": "reconcileMerchantApplicationFee",
+        "seconds": 22.694220350000016
+      },
+      {
+        "label": "actualOpenInvoice",
+        "seconds": 16.285282696
+      },
+      {
+        "label": "reconcileMerchantApplicationFee",
+        "seconds": 3.508549834999998
+      },
+      {
+        "label": "actualCurrentManifest",
+        "seconds": 3.4685318830000034
+      },
+      {
+        "label": "actualPeriodFactory",
+        "seconds": 3.391500403000002
+      },
+      {
+        "label": "submitProviderRefund",
+        "seconds": 2.811120913999999
+      },
+      {
+        "label": "collectControlledCollection",
+        "seconds": 2.783051827999996
+      },
+      {
+        "label": "inspectControlledCashReceipt",
+        "seconds": 2.488406646999996
+      },
+      {
+        "label": "inspectControlledCashReceipt",
+        "seconds": 2.4850535519999974
+      },
+      {
+        "label": "inspectControlledCashReceipt",
+        "seconds": 2.3265320730000023
+      }
+    ],
+    "timeoutCensoredUnfinishedPhases": true
+  },
+  "newQualification": "UNRUN full current source/types/lint/schema/SDK/original money native/performance; no C/stable acceptance"
+}

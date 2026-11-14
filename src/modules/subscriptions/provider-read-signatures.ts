@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C1.08: an original process can sign its own admission/finish, never a successor's.
-import { createPublicKey, generateKeyPairSync, sign, verify, type KeyObject } from "node:crypto";
+import { createHash, createPublicKey, generateKeyPairSync, sign, verify, type KeyObject } from "node:crypto";
 import { z } from "zod";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 export const providerReadSignedProof = z.object({ version: z.literal(1), kind: z.enum(["admission", "finish", "stop_review"]),
@@ -26,10 +26,29 @@ export function signProviderReadProof(kind: ProviderReadSignedProof["kind"], pay
   const key = runtime[slot];
   return { version: 1, kind, payload, publicKey: key.publicKey, signature: sign(null, message(kind, payload), key.privateKey).toString("base64url") };
 }
+// Only mathematical signature validity is memoized. No payload, row identity,
+// ownership, current state, caller liveness or business authority is retained.
+// The bounded set contains only hashes, never the input key/signature bytes.
+// Recompute the message from the freshly parsed payload on every invocation.
+const verifiedSignatures = new Set<string>();
+const verifiedSignatureLimit = 512;
 export function verifiedProviderReadProof(value: unknown, kind: ProviderReadSignedProof["kind"]): ProviderReadSignedProof | null {
   const proof = providerReadSignedProof.safeParse(value);
   if (!proof.success || proof.data.kind !== kind || Buffer.byteLength(JSON.stringify(proof.data.payload)) > 256000) return null;
-  try { const key = createPublicKey(proof.data.publicKey); return key.asymmetricKeyType === "ed25519" && verify(null, message(kind, proof.data.payload), key, Buffer.from(proof.data.signature, "base64url")) ? proof.data : null; } catch { return null; }
+  try {
+    const bytes = message(kind, proof.data.payload);
+    const exactSignature = createHash("sha256").update(JSON.stringify([proof.data.publicKey, proof.data.signature, bytes.toString("base64url")])).digest("hex");
+    if (!verifiedSignatures.has(exactSignature)) {
+      const key = createPublicKey(proof.data.publicKey);
+      if (key.asymmetricKeyType !== "ed25519" || !verify(null, bytes, key, Buffer.from(proof.data.signature, "base64url"))) return null;
+      if (verifiedSignatures.size >= verifiedSignatureLimit) {
+        const oldest = verifiedSignatures.values().next().value;
+        if (oldest !== undefined) verifiedSignatures.delete(oldest);
+      }
+      verifiedSignatures.add(exactSignature);
+    }
+    return proof.data;
+  } catch { return null; }
 }
 export function originalProviderReadAdmission(entry: Record<string, unknown>) {
   if (!["schedule_read_admitted", "phase_product_read_admitted"].includes(String(entry.source))) return false;
