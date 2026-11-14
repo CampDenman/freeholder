@@ -265,7 +265,7 @@ function payInventoryCohorts(target:ControlledRawTarget,current:NonNullable<Retu
   const own=facts.filter(row=>row.ordinal>anchor.ordinal&&(index!==0||row.ordinal<ack.ordinal));
   function pages(kind:"invoice_payments_read"|"invoice_lines_read"){
    const selected=own.filter(row=>row.actual.kind===kind);if(!selected.length||selected.length>20||selected.some((row,i)=>!Array.isArray(row.actual.raw.data)||row.actual.raw.has_more!==(i<selected.length-1)))return null;
-   const parsed=records.safeParse(selected.flatMap(row=>Array.isArray(row.actual.raw.data)?row.actual.raw.data:[]));if(!parsed.success)return null;
+   const parsed=records.safeParse(selected.flatMap(row=>z.array(z.unknown()).parse(row.actual.raw.data)));if(!parsed.success)return null;
    const ids=parsed.data.map(row=>ref(row.id));if(ids.some(id=>id===null)||new Set(ids).size!==ids.length)return null;
    return{facts:selected,rows:parsed.data};
   }
