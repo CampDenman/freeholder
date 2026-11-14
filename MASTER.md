@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Fee160 verifier source correction2026-11-14 (C12.38/C1.08): V84 fulltypes
+PASS5.322s; lint stops on an inline type import and implicit string coercion of
+unknown JSON namespace fields. The function reference is now imported type-only;
+signed admission verification explicitly requires actual string platform/PI and
+string/null/absent account before forming the same namespace. No string coercion
+can give malformed object/array/numeric atoms a namespace. A genuine crypto
+negative re-signs those malformed inputs and requires refusal; all valid hash
+domains and original cases stay unchanged. Complete source/schema/SDK/native
+qualification remains required; no financial/provider/stable closure.
+
+
 Fee160 source type correction2026-11-14 (C12.38/C9.33/C1.08): V83 full
 TypeScript stops on the new fictional bank refund handler assigning actual
 POST metadata to a narrowly inferred response object. Its existing local

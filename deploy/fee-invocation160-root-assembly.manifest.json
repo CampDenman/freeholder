@@ -121,5 +121,24 @@
     "reason": "The actual fictional refund response is a provider record with metadata populated from the actual POST; annotate the existing variable without runtime changes",
     "sourceV83": "/tmp/freeholder-current-full86-financial160-source-v83-20261114-result.json",
     "sourceV83StoppedAtTypes": true
+  },
+  "verifierTypeContinuation": {
+    "sourceV84": "/tmp/freeholder-current-full86-financial160-source-v84-20261114-result.json",
+    "fullTypesPassed": true,
+    "lintStoppedBeforeContracts": true,
+    "files": [
+      {
+        "path": "src/modules/invoicing/controlled-atomic-refund-target.ts",
+        "beforeSha256": "2eb32eb5a26c34fc2a68cbf1311010dde38ca6e336c3f931cbab118af8cdf93f",
+        "afterSha256": "5fa484c3e44588b44dfc77399d78ca5a572f220bff3dba45356f78d91322f086"
+      },
+      {
+        "path": "src/modules/invoicing/merchant-fee-invocation-proof.ts",
+        "beforeSha256": "258fa71c4f933563196a71c0df59b2bc277e6629cb407197c9fadfde3072fddb",
+        "afterSha256": "42a1ddee9e783c432e58d0bf0719bc21b2bb3e78c9366699316f4097e4308c00"
+      }
+    ],
+    "policy": "Explicit type-only function import; genuine namespace atoms must be strings or nullable/absent account, never object/array/numeric implicit coercion. Existing valid signed admissions and all hash domains unchanged.",
+    "newMeaningfulPureCase": "Re-sign malformed namespace atoms with genuine fictional crypto key and prove refusal even when coerced namespace text matches."
   }
 }

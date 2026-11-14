@@ -12,6 +12,13 @@ function admission():Row{
 }
 function finish(row:Row,outcome:"returned"|"threw"){return signMerchantFeeInvocationProof(row,"finish",{invocationId:row.id,admissionDigest:row.digest,callerInstanceId:row.caller.id,outcome,firstResultDigest:row.firstResult?.digest??null,returnedResult:null,postDispatchReleased:row.kind==="post"?outcome==="returned":null,finishedAt:"2026-11-14T00:00:01.000Z"},key);}
 describe("genuine original fee invocation signatures",()=>{
+ it("refuses authentic but malformed JSON namespace atoms instead of implicit string coercion",()=>{
+  const row=admission();
+  for(const[field,value,namespaceKey]of [["providerPlatformAccountId",42,"42::pi_original"],["providerAccountId",{},"acct_platform:[object Object]:pi_original"],["providerRef",["pi_original"],"acct_platform::pi_original"]]as const){
+   const body={...row,request:{...row.request,[field]:value},namespaceKey};
+   expect(verifiedMerchantFeeInvocation({...body,...signMerchantFeeInvocation(body,key)},[key])).toBe(false);
+  }
+ });
  it("authenticates the exact original fee/PI/account/body and leaves an admitted caller open",()=>{
   const row=admission();expect(verifiedMerchantFeeInvocation(row,["rotated",key])).toBe(true);expect(merchantFeeInvocationCallerClosed(row,[key])).toBe(false);
   for(const changed of [{...row,paymentId:"00000000-0000-4000-8000-000000000008"},{...row,originalChargeReceiptId:"00000000-0000-4000-8000-000000000008"},{...row,namespaceKey:"acct_other::pi_original"},{...row,feeOperationId:"00000000-0000-4000-8000-000000000004"},{...row,feeOperationFingerprint:"c".repeat(64)},{...row,request:{...row.request,providerRef:"pi_other"}},{...row,request:{...row.request,recipientAccountId:"acct_other"}},{...row,nonceHash:"d".repeat(64)}])expect(verifiedMerchantFeeInvocation(changed,[key])).toBe(false);

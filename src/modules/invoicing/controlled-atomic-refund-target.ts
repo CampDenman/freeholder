@@ -8,6 +8,7 @@ import { verifiedControlledCashBatch,verifiedControlledCashReceipt } from "./con
 import { CONTROLLED_CASH_ATOMIC_PROTOCOL } from "./controlled-cash-application-protocol";
 import { controlledAtomicRefundAmounts,type AtomicRefundResource } from "./controlled-atomic-refund-amounts";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import type { latestControlledCashInspectionLineage } from "@/modules/subscriptions/controlled-cash-inspection-lineage";
 export type ControlledAtomicRefundTarget={applies:true;target:number|null;revision:string|null;resources:AtomicRefundResource[];unassignedDutyMinor:number|null};
 export type ControlledAtomicRefundFeeProof={paymentId:string;receiptId:string;inspectionId:string;bankObservationId:string;bankNamespaceRevision:string;namespaceKey:string;originalFeeRef:string|null;originalFeeMinor:number;acceptedReturnedFeeMinor:number;targetRetainedFeeMinor:number;actualRetainedFeeMinor:number;feeOperationIds:string[];invocationIds:string[];revision:string};
 export type ControlledAtomicRefundFeeState={pending:true;actualRetainedFeeMinor:number|null;proof:null}|{pending:false;actualRetainedFeeMinor:number;proof:ControlledAtomicRefundFeeProof};
@@ -139,7 +140,7 @@ export async function controlledAtomicRefundFeeState(ctx:ServiceContext,paymentI
  const target=await controlledAtomicRefundTarget(ctx,paymentId);if(!target)return null;
  if(target.target===null)return{pending:true,actualRetainedFeeMinor:null,proof:null};
  const[state]=await ctx.tx.execute<SqlFeeState>(sql`select * from freeholder_controlled_atomic_refund_fee_state(${paymentId}::uuid)`);
- let authenticBank:Awaited<ReturnType<typeof import("@/modules/subscriptions/controlled-cash-inspection-lineage").latestControlledCashInspectionLineage>>|null=null;
+ let authenticBank:Awaited<ReturnType<typeof latestControlledCashInspectionLineage>>|null=null;
  if(state?.reconciled===true&&state.inspection_id){
   const{latestControlledCashInspectionLineage}=await import("@/modules/subscriptions/controlled-cash-inspection-lineage");
   try{const latest=await latestControlledCashInspectionLineage(ctx.tx,state.receipt_id);if(latest.inspection.id===state.inspection_id)authenticBank=latest;}catch(error){if(!(error instanceof ServiceError)||!["conflict","not_found","validation"].includes(error.code))throw error;authenticBank=null;}
