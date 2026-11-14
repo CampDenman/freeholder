@@ -96,5 +96,18 @@
     "all unchecked MASTER43 acceptance/independent review/final stable signature"
   ],
   "providerAcceptance": false,
-  "stableAcceptance": false
+  "stableAcceptance": false,
+  "typeOnlyContinuation": {
+    "path": "src/core/media/multipart-repeat-abort-context.ts",
+    "beforeSha256": "a048c51df6ffe155d8939893b5055fc06dfa581a4dfedd4aef90a7a463a20b64",
+    "afterSha256": "39be05a71c52922dfff2ab2b9b05faec609d9d333e9878e4950162c821784a19",
+    "before": "import {capture} from \"./multipart-recovery-context\";",
+    "after": "import type {capture} from \"./multipart-recovery-context\";",
+    "entireFileReverseExact": true,
+    "reason": "capture is referenced only in Awaited<ReturnType<typeof capture>>; consistent-type-imports is required",
+    "preservedSourceGateV80": "/tmp/freeholder-current-full86-financial159-source-v80-20261114-result.json",
+    "fullTypesPassed": true,
+    "lintFailedOnlyThisTypeImport": true,
+    "noSQLOrRuntimeBehaviorChange": true
+  }
 }

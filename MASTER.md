@@ -3564,6 +3564,16 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Media composed source correction2026-11-14 (C1.12/C11.08): V80 full types
+PASS70.080s; affected lint stops on one capture helper imported as runtime when
+used only by ReturnType. Exactly that import is now type-only, preserving all
+function bodies and SQL. No database/native started on V80; complete selected
+contracts/metadata remain UNRUN. The earlier suspected redaction-field issue
+was checked against the complete actual CTE: resource.redacted_at is explicitly
+projected and valid, so no SQL or predicate was changed. Fresh source/schema/
+SDK/media/native/worker and all acceptance remain required; no C closure.
+
+
 Media retirement SOURCE assembly2026-11-14 (C1.12/C11.08): frozen000d/7396/
 be87/b72b now compose with the qualified financial source, preserving entire
 current status text plus only53 new agent evidence lines and root type/lint

@@ -4,7 +4,7 @@
 import {and,eq,inArray,sql} from "drizzle-orm";
 import type {Tx} from "@/core/service";
 import type {MultipartRecoveryConfirmation} from "./multipart-recovery-context";
-import {capture} from "./multipart-recovery-context";
+import type {capture} from "./multipart-recovery-context";
 import {lockedIdleOriginalMultipart} from "./multipart-idle-retirement-context";
 import {mediaMultipartOperations as operations} from "./multipart-schema";
 import {mediaStorageTransferCalls as calls,mediaStorageWriterDrains as drains} from "./transfer-schema";
