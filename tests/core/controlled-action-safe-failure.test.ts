@@ -6,7 +6,7 @@ import { ServiceError } from "@/core/service";
 const seam=vi.hoisted(()=>({call:vi.fn(),redirect:vi.fn()}));
 vi.mock("next/headers",()=>({cookies:async()=>({get:()=>undefined}),headers:async()=>new Headers()}));
 vi.mock("next/cache",()=>({revalidatePath:()=>undefined}));
-vi.mock("next/navigation",()=>({redirect:(value:string)=>seam.redirect(value)}));
+vi.mock("next/navigation",()=>({redirect:(value:string)=>{seam.redirect(value);}}));
 vi.mock("@/core/http/actor",()=>({actorFromToken:async()=>({kind:"anonymous"})}));
 vi.mock("@/modules/subscriptions/controlled-provider-stop",()=>({reviewControlledProviderCallerStopped:{call:seam.call}}));
 vi.mock("@/modules/subscriptions/controlled-provider-execution",()=>({recoverControlledProviderOperation:{call:seam.call},recoverControlledProviderCalendar:{call:seam.call},stopControlledProviderCalendar:{call:seam.call}}));

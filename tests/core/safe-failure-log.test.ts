@@ -1,12 +1,13 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // C11.10/C1.08: actual HTTP and MCP unknown-error boundaries never inspect error properties.
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type * as NodeCrypto from "node:crypto";
 import { errorResponse } from "@/core/http/respond";
 import { z } from "zod";
 import { ServiceError } from "@/core/service";
 import { logUnhandledFailure } from "@/core/safe-failure-log";
 const seam=vi.hoisted(():{call:ReturnType<typeof vi.fn>;uuid?:string}=>({call:vi.fn()}));
-vi.mock("node:crypto",async original=>{const actual=await original<typeof import("node:crypto")>();return{...actual,randomUUID:()=>seam.uuid??actual.randomUUID()};});
+vi.mock("node:crypto",async original=>{const actual=await original<typeof NodeCrypto>();return{...actual,randomUUID:()=>seam.uuid??actual.randomUUID()};});
 vi.mock("@/core/runtime",()=>({ready:async()=>undefined}));
 vi.mock("@/core/http/actor",()=>({actorFromRequest:async()=>({kind:"anonymous"})}));
 vi.mock("@/mcp/tools",()=>({hiddenFromMcp:()=>false,toolsFor:()=>[],serviceForTool:()=>({def:{name:"canary.tool"},call:seam.call})}));

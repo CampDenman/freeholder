@@ -3584,8 +3584,10 @@ See `deploy/atomic-auxiliary-six-native-checkpoint-20261114.json`.
 
 Current ROOT now composes qualified-isolated image admission acb15932 and SOURCE-
 ONLY fixed error-log precursor5d147d11. Entire current82/85 and generatedSDK
-remain BYTE-EXACT; original fee/money predicates unchanged. Fresh combined source,
-CLI packaging and actual logger canaries are REQUIRED/UNRUN. This precursor is
+remain BYTE-EXACT; original fee/money predicates unchanged. Combined V112 focused136actual/16files, fulltypes9.08s and actualCLI emit/copy/
+all6packaged bytes PASS; affected lint stops only on two NEW test type/mock
+conventions. Exact test-only lint continuation changes no assertions or production
+behavior; full combined qualification remains REQUIRED. This precursor is
 not full S0 provider-response projection or S1, which remain unfinished.
 
 Required delivery groups remain the existing open §43 items (no scope change):
