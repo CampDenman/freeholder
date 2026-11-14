@@ -3574,7 +3574,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-13 checkpoint. Protected main is fdba2817 after signing containment PR702, with44 PR checks and43 protected merge-group jobs passed. Broader draft PR701 remains an older candidate and its CI is not green. Current ff375972 source passed types, affected lint,382 actual controls in65 complete files and license/notes/plan (103 native cases explicitly skipped). Fresh V11 applied all84 migrations and strict v20 passed143 models/287 guards/229 function bodies. The first actual new stop journey failed before its admission barrier because an imported CLI used top-level await under the real child CommonJS loader; its84-migration dataset, financial hashes and drained clients are preserved. A source-only CLI entry repair now retains the same asynchronous failure behavior without top-level await; renewed source/native qualification remains pending. Actual offline/gross-proration and earlier cash-return component proofs remain historical evidence. Positive controlled collection, media recovery/multipart/quota/cutover, current-source green CI, provider/platform acceptance, final byte recovery, Tony’s C11.10 report and exact C11.17 signature remain open. No live item closes from this checkpoint. |
+| Latest launch audit | 2026-11-13 checkpoint. Protected main is fdba2817 after signing containment PR702, with44 PR checks and43 protected merge-group jobs passed. Broader draft PR701 remains older and its CI is not green. Current1bf950f7 source qualifies411 deduplicated actual controls across70 complete files,103 explicit native skips, types/affected lint and license/notes/plan. Fresh V12 applies all84 migrations; strict v21 passes143 models/287 guards/229 function bodies. All nine actual stop/capture/current-reader/original-cash journeys now pass individually with independent financial/table SHA, all84 journal identities, settings and drained-client proof. Live-registry SDK generation and non-update verification pass8+8 and preserve all component hashes. FailedV11 and earlier datasets/logs remain preserved. Positive controlled collection and full media recovery/multipart/quota/cutover remain implementation work. Current-source green CI, owner recovery UI, provider/platform acceptance, final byte recovery, Tony’s C11.10 report and exact C11.17 signature remain open. No live item closes from this checkpoint. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -15818,6 +15818,21 @@ whatever is best for the people using the site.
   calls the same async main/error handler without top-level await. No service,
   test oracle, provider authority, schema or migration identity changes; renewed
   execution remains required and no native stop proof is claimed.
+  Renewed actual component qualification 2026-11-13 (C12.38/C1.08/C11.08):
+  the same unchanged original stop oracle now passes at1bf950f7 after the narrow
+  CLI import repair. A real live child commits admission before its blocked
+  bank GET; live/key/stale review refuses, SIGKILL and actual exit precede
+  independent stop, old admission/NULL finish remain unchanged, and only a NEW
+  completed GET supplies bank evidence. Actual parent merge fingerprints change
+  on the authentic stop, refund dependency hashes match and subject export
+  includes only the safe stop projection. SQL late-finish/deletion refuse.
+  The held callback, three current readers and all four original cash-return
+  journeys also pass independently on fresh V12 with all84 journal hashes and
+  drained clients. SDK generation/verification pass8+8 from the live registry.
+  Source qualification is411 deduplicated actual controls/70 whole files with
+  103 explicit native skips. These synthetic provider-edge component proofs
+  are distinct from real provider/platform acceptance and independent review.
+  Shared owner recovery UI and full controlled application remain required.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;

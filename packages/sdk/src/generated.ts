@@ -958,6 +958,7 @@ export const SERVICE_NAMES = [
   "invoicing.requestMerchantTaxExemption",
   "invoicing.returnOriginalCash",
   "invoicing.reviewAgreementFee",
+  "invoicing.reviewCashInspectionCallerStopped",
   "invoicing.reviewCommercialPayment",
   "invoicing.reviewControlledProviderCallerStopped",
   "invoicing.reviewLegacyBankReaderStopped",
@@ -5545,6 +5546,10 @@ export interface ServiceCatalog {
     input: { invoiceId: string };
     output: { invoiceId: string; currency: string; eligible: boolean; expectedReceivableMinor: number; owedMinor: number | null; recordedMinor: number | null; returnDueMinor: number | null; originalSourceExcessMinor: number | null; reviewRequired: boolean; pending: boolean; receipts: { id: string; amountMinor: number; direction: "remitted" | "returned"; originalRemittanceId: string | null; recordedBy: string; createdAt: string }[] };
   };
+  "invoicing.reviewCashInspectionCallerStopped": {
+    input: { inspectionId: string; expectedCallerId: string; expectedAdmissionDigest: string; expectedSourceRevision: string; hostingEvidence: string; confirmation: "ORIGINAL CASH INSPECTION CALLER STOP VERIFIED" };
+    output: { reviewed: true; mechanicalCheck: "original_process_absent" };
+  };
   "invoicing.reviewCommercialPayment": {
     input: { paymentId: string };
     output: { recorded: boolean; principalSafe: boolean; feeOwedMinor: number; feeRecordedMinor: number; reviewRequired: boolean; paymentId: string; invoiceId: string; currency: string; amountMinor: number; receipts: { id: string; direction: "remitted" | "returned"; originalRemittanceId: string | null; amountMinor: number; recordedBy: string; createdAt: string }[] };
@@ -9661,6 +9666,7 @@ export interface FreeholderApi {
     requestMerchantTaxExemption: (input: ServiceCatalog["invoicing.requestMerchantTaxExemption"]["input"]) => Promise<ServiceCatalog["invoicing.requestMerchantTaxExemption"]["output"]>;
     returnOriginalCash: (input: ServiceCatalog["invoicing.returnOriginalCash"]["input"]) => Promise<ServiceCatalog["invoicing.returnOriginalCash"]["output"]>;
     reviewAgreementFee: (input: ServiceCatalog["invoicing.reviewAgreementFee"]["input"]) => Promise<ServiceCatalog["invoicing.reviewAgreementFee"]["output"]>;
+    reviewCashInspectionCallerStopped: (input: ServiceCatalog["invoicing.reviewCashInspectionCallerStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewCashInspectionCallerStopped"]["output"]>;
     reviewCommercialPayment: (input: ServiceCatalog["invoicing.reviewCommercialPayment"]["input"]) => Promise<ServiceCatalog["invoicing.reviewCommercialPayment"]["output"]>;
     reviewControlledProviderCallerStopped: (input: ServiceCatalog["invoicing.reviewControlledProviderCallerStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewControlledProviderCallerStopped"]["output"]>;
     reviewLegacyBankReaderStopped: (input: ServiceCatalog["invoicing.reviewLegacyBankReaderStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewLegacyBankReaderStopped"]["output"]>;

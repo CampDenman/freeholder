@@ -51,6 +51,29 @@ one.
 Prepared 2026-09-12 from the tree at this change. Threat surfaces, existing
 tests, and known residuals only — no claim that the list is empty.
 
+## 2026-11-13 actual original inspection stop component
+
+Protected main fdba2817 contains the multipart part-signing containment (#702),
+with44 PR checks and43 merge-group jobs passed. The broader current candidate
+1bf950f7 has a new separate immutable inspection-stop model. Review exact
+whole-row admission binding, process birth/actual death checks, fresh-person
+step-up and refusal of keys/agents, SQL late-finish/observation refusal, private
+HMAC receipts and safe financial/export/privacy composition. A stopped caller
+never means a returned bank read. Only a new genuinely completed read supplies
+current bank evidence. The public SDK includes the human review operation;
+its recovery-plan helper stays private.
+
+All nine local actual stop/capture/current-bank/original-cash journeys and
+independent ledger/journal/profile/client-drain checks pass; see
+`deploy/current-full82-integration-2026-11-13.md`. Original process death is
+real and local; provider HTTP is synthetic. The failed startup dataset and
+logs are preserved. Current source has411 distinct controls in70 complete
+files; source-only native skips are explicit. Fresh84 migration and strict143
+model checks pass. Actual owner UI, positive controlled money application,
+full media protocol/recovery, real provider/platform acceptance and final
+byte recovery remain open; these component proofs are not independent review
+or the final candidate signature.
+
 ## 2026-11-10 review assignment and alert remediation
 
 Tony Aly selected himself to perform the review and requested completion of
