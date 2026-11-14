@@ -1,0 +1,19 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "ORACLE_CORRECTION_PREPARED_UNRUN",
+  "source": "tests/modules/controlled-cash-staged-application84.test.ts",
+  "beforeSha256": "ebb0e1b1ec34ec73cbbebf2de9a157907ba4b86fd7a5b6e841c6ad3d53cb5c18",
+  "afterSha256": "bb71b4f25968b3cf28bf0a19b79652a8c63bcbf63c5b9c8ba7302906205988b2",
+  "finiteDelta": {
+    "before": ".rejects.toThrow(\"Reject actual later receipt after real earlier settlement\")",
+    "after": ".rejects.toMatchObject({cause:{code:\"23514\",message:\"Reject actual later receipt after real earlier settlement\"}})",
+    "occurrences": 2
+  },
+  "wholeFileReverseExact": true,
+  "productRuntimeUnchanged": true,
+  "injectedTriggerUnchanged": true,
+  "triggerContract": "Actual second controlled receipt INSERT is rejected only after an actual first linked payment is succeeded; exact SQL23514 and original message now matched under actual Drizzle Error.cause, not generic outer query text. First-never-settled error or any other DB refusal cannot satisfy this exact cause.",
+  "failedNative": "/tmp/freeholder-current-full86-atomic-rollback-native-v1-20261114-result.json",
+  "preservedDatabase": "freeholder_current_full86_financial159_normal_v41_test_20261114",
+  "observedAfter": "No canonical target payment or core3/application rows, raw receipts2 retain4200, all595 aftersnapshotdrain0. Original native failed before later snapshot equality assertions; exact injection still requires fresh complete native acceptance."
+}

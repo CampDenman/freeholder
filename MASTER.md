@@ -3564,6 +3564,25 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Actual partial/refund/atomic checkpoint 2026-11-14 (C12.38/C9.33/C1.08):
+original tiny-partial V37 PASSES48.995s (paid1/outstanding4199/no paid effect);
+original newest-refund V38 PASSES67.473s (canonicalpaid4200 but actual latest
+refund1 refuses access); original uneven two-receipt V40 PASSES96.932s with
+actual1/F0+4199/F400, distinct2payments/receipts/links and one complete batch.
+Each has independent595 snapshots, exact86 journal/caps and drain0. Original
+rollback V41 FAILS58.105s because its assertion looks for the injection text
+in Drizzle's outer query message. Afterstate is canonicalpaid0/payments0/core3
+zero with2raw receipts retaining4200, but exact cause and later internal snapshot
+assertions are not yet qualified. ONLY2 negative matcher expressions now require
+actual Error.cause SQL23514 AND exact original injection message; the real SQL
+trigger/first-succeeded predicate and every other native byte stay unchanged.
+Fresh complete rollback acceptance remains required. V39 full paid cart-free
+native also remains failed at inverse ordering; genuine same-source readonly
+framework diagnosis proves370/370 current entries EXACTLY match stored merged
+afterstate before inverse writes, all595 hashes/journal/sequence unchanged.
+No original financial evidence may be waived. All full-spec/provider/security/
+final stable gates stay open. See `deploy/controlled-atomic-rollback-cause84.manifest.json`.
+
 Paid-period merge fixture SOURCE correction2026-11-14 (C9.33/C12.38/C1.08):
 actual V36 reached genuine paid effect/history/export/merge, then undo correctly
 refused the unrelated original checkout setup cart. Cart undo captures every

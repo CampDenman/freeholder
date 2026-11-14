@@ -122,13 +122,13 @@ describe.runIf(hasDatabase)("genuine signed admission and staged canonical recei
  it("rolls back the genuinely settled first receipt and all core3/events/access if the second actual SQL insert refuses",async()=>{
   f=await actualControlledPeriod84();const open=await actualControlledOpenInvoice84(f);f.remote.externallyAttachPayment(open.providerInvoiceRef,2100,200);f.remote.externallyAttachPayment(open.providerInvoiceRef,2100,200);
   const receipts=await retained(),before=await snapshot(),counts=f.remote.counts();expect(receipts).toHaveLength(2);
-  await expect(atomic.call({...input(receipts.map(row=>row.id)),refuseLater:true},system)).rejects.toThrow("Reject actual later receipt after real earlier settlement");
+  await expect(atomic.call({...input(receipts.map(row=>row.id)),refuseLater:true},system)).rejects.toMatchObject({cause:{code:"23514",message:"Reject actual later receipt after real earlier settlement"}});
   expect(await snapshot()).toEqual(before);expect(f.remote.counts()).toEqual(counts);expect(f.remote.externalAttachments()).toBe(2);
   expect((await db().execute<{absent:boolean}>(sql`select not exists(select 1 from pg_trigger where tgname='zz_test_refuse_actual_later_receipt84') as absent`))[0]?.absent).toBe(true);
  });
  it("cannot commit an uneven intermediate fee prefix when the later real receipt fails",async()=>{
   f=await actualControlledPeriod84();const open=await actualControlledOpenInvoice84(f);f.remote.externallyAttachPayment(open.providerInvoiceRef,4199,400);f.remote.externallyAttachPayment(open.providerInvoiceRef,1,0);
-  const receipts=await retained(),before=await snapshot(),counts=f.remote.counts();expect(receipts).toHaveLength(2);await expect(atomic.call({...input(receipts.map(row=>row.id)),refuseLater:true},system)).rejects.toThrow("Reject actual later receipt after real earlier settlement");
+  const receipts=await retained(),before=await snapshot(),counts=f.remote.counts();expect(receipts).toHaveLength(2);await expect(atomic.call({...input(receipts.map(row=>row.id)),refuseLater:true},system)).rejects.toMatchObject({cause:{code:"23514",message:"Reject actual later receipt after real earlier settlement"}});
   expect(await snapshot()).toEqual(before);expect(f.remote.externalAttachments()).toBe(2);expect(f.remote.counts()).toEqual(counts);
  });
  it.each(["duplicate","foreign"] as const)("refuses %s receipt membership before canonical writes while retaining genuine raw cash",async change=>{
