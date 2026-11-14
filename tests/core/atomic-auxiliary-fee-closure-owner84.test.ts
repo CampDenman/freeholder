@@ -3,6 +3,7 @@
 import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {describe,expect,it} from "vitest";
+import readyContinuation from "../../deploy/atomic-credit-fee-ready-identity85.manifest.json";
 import bAssembly from "../../deploy/atomic-credit-fee-root-assembly-20261114.json";
 import manifest from "../../deploy/atomic-auxiliary-fee-closure-owner85.manifest.json";
 const read=(path:string)=>readFileSync(new URL("../../"+path,import.meta.url));
@@ -20,7 +21,10 @@ describe("whole auxiliary closure and original-owner continuation",()=>{
   expect(actual).toBe(entry.beforeStatement);
  });
  it("retains the complete prior migration and every current owned statement",()=>{
-  const combined=read(manifest.normal85.path),owned=read(manifest.normal85.ownedPath),b=bAssembly.normal85;
+  const current=read(manifest.normal85.path),currentOwned=read(manifest.normal85.ownedPath),extension=readyContinuation;
+  expect(current).toEqual(currentOwned);expect(current.length).toBe(extension.normal85.bytes);expect(hash(current)).toBe(extension.normal85.sha256);
+  expect(current.subarray(extension.priorWholePrefix.bytes)).toEqual(Buffer.concat([Buffer.from("\n--> statement-breakpoint\n"),read(extension.tail.path)]));
+  const combined=current.subarray(0,extension.priorWholePrefix.bytes),owned=currentOwned.subarray(0,extension.priorWholePrefix.bytes),b=bAssembly.normal85;
   expect(combined).toEqual(owned);expect(combined.length).toBe(b.afterBytes);expect(hash(combined)).toBe(b.afterSha256);
   expect(b.beforeBytes).toBe(manifest.normal85.bytes);expect(b.beforeSha256).toBe(manifest.normal85.sha256);
   expect(combined.subarray(b.beforeBytes)).toEqual(Buffer.concat([Buffer.from(b.separator),read("deploy/atomic-credit-fee-partition84.fragment.sql")]));

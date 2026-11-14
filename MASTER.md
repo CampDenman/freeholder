@@ -3565,6 +3565,21 @@ open the admin until Thursday still needs to know about Monday.
 ## 43. Product Completion Plan — the live checklist
 
 
+B readiness source continuation2026-11-14 (C12.38/C9.33): sourceV118 at83349d19
+PASSES types/lint/CLI/1679actual/267files/546explicitDBskips; fresh normal78,
+strict163/369guards/424wholefunctions/4215queries/actualSDK8 PASS. An ACTUAL
+readonly readiness call then fails42601: a procedure identity incorrectly
+includes DEFAULT. Two exact CHECK metadata strings also differ from the frozen
+source/model constraints already independently proved by full PG EXPLAIN plans.
+New full ready successor corrects ONLY procedure identity, explicitly pins its
+original arguments/default, and uses those two exact source-proven grouped
+BETWEEN/bigint representations. No constraint or business predicate changes.
+Readonly candidate TRUE/all598whole rows/j86/sequence unchanged; frozen complete
+1302078-byte prefix remains exact. Source/fresh-schema/SDK/B native qualification
+of this successor is REQUIRED; no B capability or stable closure claimed. See
+`deploy/atomic-credit-fee-ready-identity85.manifest.json`.
+
+
 B isolated ROOT source composition2026-11-14 (C12.38/C9.33/C1.08): frozen
 a39244d7 is combined with qualified root5f647179 in a separate review checkout.
 The WHOLE1063073-byte85 prefix is preserved before its exact238979-byte owned
