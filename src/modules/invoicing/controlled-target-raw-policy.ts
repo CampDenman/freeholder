@@ -123,7 +123,7 @@ function completePages(history:History,callId:string,kind:string){
  if(!pages.length||pages.length>20||pages.some((fact,index)=>!Array.isArray(fact.actual.raw.data)||typeof fact.actual.raw.has_more!=="boolean"||fact.actual.raw.has_more!==(index<pages.length-1)))return null;
  const parsed=records.safeParse(pages.flatMap(fact=>z.array(z.unknown()).parse(fact.actual.raw.data)));return parsed.success?parsed.data:null;
 }
-function sameRows(left:Record<string,unknown>[],right:Record<string,unknown>[]){return left.length===right.length&&merchantTaxDigest(left)===merchantTaxDigest(right);}
+function sameRows(first:Record<string,unknown>[],second:Record<string,unknown>[]){return first.length===second.length&&merchantTaxDigest(first)===merchantTaxDigest(second);}
 /** Exact current independent proof, after every actual mutation of this invoice.
  * No original raw fact, live caller, own quote or admitted read is excluded. */
 function currentProof(target:ControlledRawTarget){
