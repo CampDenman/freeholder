@@ -1,0 +1,74 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "MATERIALIZED_PREPARED_UNRUN",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "failure": {
+    "result": "/tmp/freeholder-current-full86-application-full-native-v5-20261114-result.json",
+    "database": "freeholder_current_full86_financial159_normal_v29_test_20261113",
+    "sqlState": "22P02",
+    "reason": "Existing boolean validation result assigned to bigint in exact bank invoice reader; no admission/payment committed."
+  },
+  "prefix": {
+    "bytes": 570287,
+    "sha256": "1ea95389c2b254bf1f3548e672020da37d42d99bf5f8454b5b252d7d9e947a85",
+    "entirePrefixPreserved": true
+  },
+  "assembled": {
+    "bytes": 592389,
+    "sha256": "a08e341f47991f76e57395ac4991e5e9834efbd45aeb711570e3654bf0db01ff"
+  },
+  "fragment": {
+    "path": "deploy/controlled-cash-bank-minor-value84.fragment.sql",
+    "sha256": "c47a3e77d4e917f7b9d4f69527baceed6b4cb0abfeb3e3a5ed25103c7b21db3f"
+  },
+  "bankFunction": {
+    "beforeBodySha256": "60e57f32a601d9ae42901b91bd5469ae50c3ca3a04ea546c381a23b5cc143a56",
+    "afterBodySha256": "1b96091d976df227613ae991a849d840f06b48ed713dafecaea36b4d2872f478",
+    "finiteReplacements": [
+      {
+        "before": "freeholder_controlled_bank_minor(actual_inventory->'totalMinor',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(actual_inventory->'totalMinor',false) THEN (actual_inventory->'totalMinor' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "before": "freeholder_controlled_bank_minor(actual_inventory->'paidMinor',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(actual_inventory->'paidMinor',false) THEN (actual_inventory->'paidMinor' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "before": "freeholder_controlled_bank_minor(actual_inventory->'remainingMinor',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(actual_inventory->'remainingMinor',false) THEN (actual_inventory->'remainingMinor' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "before": "freeholder_controlled_bank_minor(actual_manifest->'cashDueMinor',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(actual_manifest->'cashDueMinor',false) THEN (actual_manifest->'cashDueMinor' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "before": "freeholder_controlled_bank_minor(intent_atom->'amount_received',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(intent_atom->'amount_received',false) THEN (intent_atom->'amount_received' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "before": "freeholder_controlled_bank_minor(payment_atom->'amount_paid',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(payment_atom->'amount_paid',false) THEN (payment_atom->'amount_paid' #>> '{}')::bigint ELSE NULL END)"
+      },
+      {
+        "before": "freeholder_controlled_bank_minor(payment_atom->'amount_paid',false)",
+        "after": "(CASE WHEN freeholder_controlled_bank_minor(payment_atom->'amount_paid',false) THEN (payment_atom->'amount_paid' #>> '{}')::bigint ELSE NULL END)"
+      }
+    ],
+    "allOtherBytesPreserved": true
+  },
+  "readyFunction": {
+    "beforeSha256": "cd9f85b3dd9dcdf0a29b1b3b1f4320a4a21d5ba41d4217ebd2d8e736b0389254",
+    "afterSha256": "36ca64434fd32b51456b719200c76d00667d47250f89c601ed5055d712151430",
+    "twoMandatoryAdditionalBodyPins": true
+  },
+  "validatorUnchanged": true,
+  "journalCount": 86,
+  "newModels": 0,
+  "newFunctions": 0,
+  "acceptance": "Pending fresh migrations, strict full-body schema, exact numerical negative controls and original actual payment/access natives; no provider/stable acceptance.",
+  "validatorBodySha256": "05d891ce5a52f018a9c5b6f21d9c3ae43f68d7abd7e831fb2cf512cff476a68e"
+}

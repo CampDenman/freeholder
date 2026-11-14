@@ -3564,6 +3564,24 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Actual application checkpoint 2026-11-14 (C12.38/C9.33/C1.08/C11.08):
+f38 source passes1302 assertions/205 selected files with454 explicit DB skips;
+fresh V29 applies86 ordinary migrations, then strict159 passes356 guards/367
+complete SQL function bodies, including the independently inventoried numeric
+helper. Real SDK generation8 plus verification8 passes unchanged. The original
+full local application clears its prior page-cohort refusal but FAILS at batch
+INSERT: the exact bank reader assigns an existing boolean minor-value validator
+to bigint. No admission/payment is committed; original4200 CAD minor cash stays
+retained, core batch/receipt/link each0. Independent all595 snapshots and drain0
+are preserved. A finite seven-expression successor validates first, then reads
+the exact JSON integer (invalid input remains NULL/refusal), preserving every
+other ownership/identity/conservation predicate and the entire570287-byte SQL85
+prefix. Existing boolean validator stays unchanged; ready guard additionally
+pins the entire corrected bank body. This new SQL source is PREPARED/UNRUN;
+fresh migration/schema/numerical/native qualification is required. Payment/access,
+full specification, actual provider/platform/recovery, independent/final sign-off
+and stable remain open. See `deploy/controlled-cash-bank-minor-value84.manifest.json`.
+
 Original pay-caller inventory cohort source correction 2026-11-14
 (C12.38/C9.33/C1.08): actual V28 retained4200 safely, then prospective application
 refused only three line/payment page facts from pay39. Its genuine caller performs
