@@ -15890,3 +15890,13 @@ access. Genuine proper-target native/ordering, generated draft disposition, stag
 application/routing, partial remainder recovery, separate paid effects and full
 UI/privacy/live/security acceptance remain REQUIRED.
 See `deploy/controlled-collection-orchestration84-source-20261113.md`.
+
+Prepared positive-bank control checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08):
+four actual-service desired native journeys now use a real accepted normal-period
+canonical target, real HTTP adapter and fictional bank, covering original bank
+collection/raw-first failure/lost replies and genuine controlled inspection
+admission order. No fake money/admission rows or relaxed legacy generic guard.
+All four are UNRUN; no source/native/live acceptance is claimed. Actual integration,
+staged money application, separate paid effects and full lifecycle/privacy/provider/
+security work remain REQUIRED. See
+`deploy/controlled-positive-bank-native84-prepared-20261113.md`.
