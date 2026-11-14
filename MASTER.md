@@ -3564,6 +3564,18 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Actual controlled inventory failure 2026-11-13 (C12.38/C9.33/C1.08): V22
+passes real catalogue setup and creates its canonical4200 target, then SQL42702
+refuses BEFORE a bank charge because local actual collides with facts.actual.
+A NEW full-function successor renames only that local variable; both qualified
+fact.actual column references and every predicate remain byte-equivalent after
+reversal. Frozen orchestration84 source and the entire443235-byte normal85 prefix
+remain unchanged. All594 public-table hashes/all86 journals/drain are captured;
+actual target paid0, payment0, receipt0 and unconsumed sequence remain. Failed V22
+is preserved with no next reset. Fresh normal/schema/original native and all
+provider/paid/recovery/stable acceptance remain pending. See
+`deploy/controlled-collection-inventory-local84.manifest.json`.
+
 Controlled genuine staged writer source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): genuine repeated initial parent/bank evidence now
 produces actual immutable HMAC admissions immediately before canonical writes.
