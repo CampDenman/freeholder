@@ -2,9 +2,11 @@
 // C12.38/C9.33: immutable economics and genuine current evidence stay separate.
 import {z} from "zod";
 import {ATOMIC_CREDIT_FEE_PROTOCOL} from "./atomic-credit-fee-protocol";
+import {atomicCreditFeeSegment} from "./atomic-credit-reservation-contract";
 const minor=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),uuid=z.uuid(),sha=z.string().regex(/^[a-f0-9]{64}$/);
 export const atomicCreditFeeEconomicPlan=z.object({
  protocol:z.literal(ATOMIC_CREDIT_FEE_PROTOCOL),epochKind:z.enum(["direct","inherited"]),sourcePaymentId:uuid,sourceApplicationId:uuid.nullable(),parentFundingId:uuid.nullable(),sourceCollectionId:uuid,sourceResourceId:uuid,
+ rootFundingId:uuid.nullable(),rootEconomicRevision:sha.nullable(),originalRootPrincipalMinor:minor.positive(),originalRootFeeMinor:minor,sourceSegments:z.array(atomicCreditFeeSegment).max(5000),takeSegments:z.array(atomicCreditFeeSegment).max(5000),
  originalPaymentFeeMinor:minor,originalResourceRetiredFeeMinor:minor,
  originalPrincipalMinor:minor.positive(),originalFeeMinor:minor,acceptedRetiredFeeMinor:minor,actualCollectedFeeMinor:minor,
  allocatedPrincipalMinor:minor,allocatedNominalFeeMinor:minor,allocatedRetiredFeeMinor:minor,allocatedAssignedFeeMinor:minor,declaredProvenFeeMinor:minor,

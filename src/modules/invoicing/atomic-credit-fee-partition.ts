@@ -6,6 +6,8 @@ import {getService,ServiceError,type ServiceContext} from "@/core/service";
 import {ATOMIC_CREDIT_FEE_PROTOCOL} from "./atomic-credit-fee-protocol";
 import {atomicCreditFeeEconomicPlan,atomicCreditFeeStoredEconomics} from "./atomic-credit-fee-partition-contract";
 import {atomicCreditFeeCapacities,type AtomicCreditFeeCapacityInput} from "./atomic-credit-fee-amounts";
+import {selectAtomicCreditFeeSegments} from "./atomic-credit-reservation-segments";
+import type {AtomicCreditFeeSegment} from "./atomic-credit-reservation-contract";
 import {readAtomicCreditFeeAncestry} from "./atomic-credit-fee-ancestry";
 import {assertAtomicCreditSourcePrefix} from "./atomic-credit-source-prefix";
 import {controlledAtomicFeeOwner,controlledAtomicRefundFeeState,controlledAtomicRefundTarget} from "./controlled-atomic-refund-target";
@@ -49,18 +51,35 @@ export async function controlledAtomicCreditFeePartition(ctx:ServiceContext,inpu
  const retired=returns.returnedMinor,collected=state&&!state.pending?state.actualRetainedFeeMinor:routing.applicationFeeMinor;
  if(collected+retired!==routing.applicationFeeMinor)refuse();
  const visiting=new Set<string>();
- const capacity=(sourceApplicationId:string|null,takeMinor:number):ReturnType<typeof atomicCreditFeeCapacities>=>{
+ type Capacity={amounts:ReturnType<typeof atomicCreditFeeCapacities>;rootFundingId:string|null;rootEconomicRevision:string|null;originalRootPrincipalMinor:number;originalRootFeeMinor:number;sourceSegments:AtomicCreditFeeSegment[];takeSegments:AtomicCreditFeeSegment[]};
+ const capacity=(sourceApplicationId:string|null,takeMinor:number):Capacity=>{
   const key=sourceApplicationId??"direct";if(visiting.has(key))refuse();visiting.add(key);
-  let originalPrincipalMinor=payment.amountMinor,originalFeeMinor=routing.applicationFeeMinor,acceptedRetiredFeeMinor=retired,actualCollectedFeeMinor=collected;
+  const originalPrincipalMinor=payment.amountMinor,originalFeeMinor=routing.applicationFeeMinor,acceptedRetiredFeeMinor=retired,actualCollectedFeeMinor=collected;
   if(sourceApplicationId){
    const application=ancestry.applications.find(row=>row.reservationId===sourceApplicationId),reservation=ancestry.reservations.find(row=>row.id===sourceApplicationId),parent=reservation&&ancestry.funding.find(row=>row.id===reservation.fundingId);
    if(!application||!reservation||!parent||parent.sourcePaymentId!==payment.id||application.feeUnexpected||reservation.feeUnexpected||parent.feeUnexpected
     ||!["not_due","recorded_remitted","verified_collected"].includes(application.feeCollectionState)||application.feeProvenCollectedMinor!==application.feeObligationMinor)refuse();
-   const root=capacity(parent.sourceApplicationId,0);
+   const root=capacity(parent.sourceApplicationId,0),reservationChild=ancestry.reservationPartitions.find(row=>row.reservationId===sourceApplicationId);
    // An inherited promise is usable only while its ORIGINAL entire assigned
    // source prefix is actually covered. No later partial rebasing at399/4199.
-   if(root.currentOwedAssignedFeeMinor!==0||root.declaredProvenFeeMinor<parent.feeProvenCollectedMinor)refuse();
-   originalPrincipalMinor=reservation.amountMinor;originalFeeMinor=application.feeObligationMinor;acceptedRetiredFeeMinor=0;actualCollectedFeeMinor=application.feeProvenCollectedMinor;
+   if(root.amounts.currentOwedAssignedFeeMinor!==0||root.amounts.declaredProvenFeeMinor<parent.feeProvenCollectedMinor||!reservationChild)refuse();
+   const economic=reservationChild.economics,sourceSegments=economic.segments,existing=ancestry.funding.filter(row=>row.sourceApplicationId===sourceApplicationId);
+   const occupied=existing.map(row=>{
+    const child=ancestry.partitions.find(value=>value.fundingId===row.id);if(!child||child.economics.plan.rootFundingId!==economic.rootFundingId
+     ||child.economics.plan.rootEconomicRevision!==economic.rootEconomicRevision||merchantTaxDigest(child.economics.plan.sourceSegments)!==merchantTaxDigest(sourceSegments))refuse();
+    return{reservationId:row.id,segments:child.economics.plan.takeSegments};
+   });
+   const selected=selectAtomicCreditFeeSegments({originalPrincipalMinor:economic.originalPrincipalMinor,originalFeeMinor:economic.originalFeeMinor,sourceSegments,occupied,takeMinor});
+   const declaredProven=existing.reduce((sum,row)=>sum+BigInt(row.feeProvenCollectedMinor),0n);
+   if(selected.whole.amountMinor!==reservation.amountMinor||selected.whole.assignedFeeMinor!==application.feeObligationMinor||selected.whole.provenCollectedMinor!==application.feeProvenCollectedMinor
+    ||declaredProven!==BigInt(selected.occupied.provenCollectedMinor))refuse();
+   const amounts={originalPrincipalMinor:reservation.amountMinor,originalFeeMinor:selected.whole.nominalFeeMinor,acceptedRetiredFeeMinor:selected.whole.retiredFeeMinor,actualCollectedFeeMinor:selected.whole.provenCollectedMinor,
+    allocatedPrincipalMinor:selected.occupied.amountMinor,allocatedNominalFeeMinor:selected.occupied.nominalFeeMinor,allocatedRetiredFeeMinor:selected.occupied.retiredFeeMinor,allocatedAssignedFeeMinor:selected.occupied.assignedFeeMinor,declaredProvenFeeMinor:selected.occupied.provenCollectedMinor,
+    currentCoveredAssignedFeeMinor:selected.occupied.provenCollectedMinor,currentOwedAssignedFeeMinor:selected.occupied.owedFeeMinor,availablePrincipalMinor:selected.available.amountMinor,availableActualFeeMinor:selected.available.assignedFeeMinor,
+    takePrincipalMinor:selected.selected.amountMinor,takeNominalFeeMinor:selected.selected.nominalFeeMinor,takeRetiredFeeMinor:selected.selected.retiredFeeMinor,takeAssignedFeeMinor:selected.selected.assignedFeeMinor,takeProvenCollectedMinor:selected.selected.provenCollectedMinor,takeOwedFeeMinor:selected.selected.owedFeeMinor,
+    afterPrincipalMinor:selected.occupied.amountMinor+selected.selected.amountMinor,afterNominalFeeMinor:selected.occupied.nominalFeeMinor+selected.selected.nominalFeeMinor,afterAssignedFeeMinor:selected.occupied.assignedFeeMinor+selected.selected.assignedFeeMinor,
+    remainingPrincipalMinor:selected.remaining.amountMinor,remainingActualFeeMinor:selected.remaining.assignedFeeMinor,priorFundingIds:existing.map(row=>row.id).sort()};
+   visiting.delete(key);return{amounts,rootFundingId:economic.rootFundingId,rootEconomicRevision:economic.rootEconomicRevision,originalRootPrincipalMinor:economic.originalPrincipalMinor,originalRootFeeMinor:economic.originalFeeMinor,sourceSegments:[...sourceSegments],takeSegments:selected.segments};
   }
   const loans:AtomicCreditFeeCapacityInput["loans"]=ancestry.funding.filter(row=>row.sourceApplicationId===sourceApplicationId).map(row=>{
    if(row.feeUnexpected||!["not_due","recorded_remitted","verified_collected"].includes(row.feeCollectionState))refuse();
@@ -72,15 +91,15 @@ export async function controlledAtomicCreditFeePartition(ctx:ServiceContext,inpu
    return{kind:"atomic",fundingId:row.id,principalMinor:row.amountMinor,assignedFeeMinor:row.feeObligationMinor,provenCollectedMinor:row.feeProvenCollectedMinor,
     nominalFeeMinor:plan.takeNominalFeeMinor,retiredShareMinor:plan.takeRetiredFeeMinor,retiredAtBirthMinor:plan.acceptedRetiredFeeMinor,priorFundingIds:plan.priorFundingIds};
   });
-  const result=atomicCreditFeeCapacities({originalPrincipalMinor,originalFeeMinor,acceptedRetiredFeeMinor,actualCollectedFeeMinor,loans,takeMinor});visiting.delete(key);return result;
+  const result=atomicCreditFeeCapacities({originalPrincipalMinor,originalFeeMinor,acceptedRetiredFeeMinor,actualCollectedFeeMinor,loans,takeMinor});visiting.delete(key);return{amounts:result,rootFundingId:null,rootEconomicRevision:null,originalRootPrincipalMinor:originalPrincipalMinor,originalRootFeeMinor:originalFeeMinor,sourceSegments:[],takeSegments:[]};
  };
- const amounts=capacity(input.sourceApplicationId,input.takeMinor),parentApplication=input.sourceApplicationId?ancestry.applications.find(row=>row.reservationId===input.sourceApplicationId):null;
+ const selectedCapacity=capacity(input.sourceApplicationId,input.takeMinor),{amounts,...rootEconomics}=selectedCapacity,parentApplication=input.sourceApplicationId?ancestry.applications.find(row=>row.reservationId===input.sourceApplicationId):null;
  const parentReservation=parentApplication?ancestry.reservations.find(row=>row.id===parentApplication.reservationId):null;
  const parentFunding=parentReservation?ancestry.funding.find(row=>row.id===parentReservation.fundingId):null;
  const source=prefix.sources.find(row=>row.paymentId===payment.id);if(!source||source.receiptId!==owner.receiptId)refuse();
  const retiredResources=returns.resources.map(row=>({ledger:row.ledger,operationId:row.operationId,providerRef:row.providerRef,feeRef:row.feeRef,amountMinor:row.amountMinor,currency:row.currency}));
  const economics={protocol:ATOMIC_CREDIT_FEE_PROTOCOL,epochKind:input.sourceApplicationId?"inherited" as const:"direct" as const,sourcePaymentId:payment.id,sourceApplicationId:input.sourceApplicationId,parentFundingId:parentFunding?.id??null,
-  sourceCollectionId:owner.collectionId,sourceResourceId:source.resourceId,originalPaymentFeeMinor:routing.applicationFeeMinor,originalResourceRetiredFeeMinor:retired,...amounts,retiredResources};
+  sourceCollectionId:owner.collectionId,sourceResourceId:source.resourceId,originalPaymentFeeMinor:routing.applicationFeeMinor,originalResourceRetiredFeeMinor:retired,...amounts,...rootEconomics,retiredResources};
  const plan=atomicCreditFeeEconomicPlan.parse({...economics,economicRevision:merchantTaxDigest(economics)});
  const currentEntries=async()=>{
   const actualAncestry=await readAtomicCreditFeeAncestry(ctx.tx,payment.id),actualBank=await readControlledCanonicalBankPrincipal(ctx,payment,originalCash);

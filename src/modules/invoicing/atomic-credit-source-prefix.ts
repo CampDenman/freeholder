@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // C12.38: discover genuine source resources BEFORE the outer target prefix.
-import {eq} from "drizzle-orm";
+import {eq,sql} from "drizzle-orm";
 import {z} from "zod";
 import {ServiceError,type ServiceContext,type Tx} from "@/core/service";
 import {payments} from "./schema";
@@ -12,6 +12,7 @@ import {requireHeldControlledCashResource} from "./controlled-cash-inspection-ob
 import {merchantTaxDigest} from "./merchant-tax-store";
 import {atomicCreditFinancialScope} from "./atomic-credit-financial-scope";
 import {controlledFinancialWitness} from "./controlled-provider-financial-witness";
+import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 function refuse():never{throw new ServiceError("conflict","Restore every exact original controlled credit source and its authentic applied receipt before choosing the complete resource/parent prefix; a missing bridge cannot fall through to a legacy source.");}
 /** Pure read against a REAL Tx. No principal/debt-safe flag or lock is granted.
  * Callers discover this before any target resource/parent/canonical lock. */
@@ -44,5 +45,24 @@ export async function atomicCreditSourceResourceIds(tx:Tx,actualPaymentIds:reado
 export async function assertAtomicCreditSourcePrefix(ctx:ServiceContext,actualPaymentIds:readonly string[]){
  const before=await atomicCreditSourceResourceIds(ctx.tx,actualPaymentIds);
  for(const resourceId of before.resourceIds)await requireHeldControlledCashResource(ctx,resourceId);
+ const after=await atomicCreditSourceResourceIds(ctx.tx,actualPaymentIds);if(after.revision!==before.revision)refuse();return after;
+}
+/** Actual OUTER entry only, before target/canonical locks. Nested quote/accept
+ * consumers use assertAtomicCreditSourcePrefix and never acquire a missing
+ * foreign resource after their target prefix. New rediscovered edges refuse. */
+export async function lockAtomicCreditMutationPrefix(ctx:ServiceContext,actualPaymentIds:readonly string[]){
+ await lockContactIdentityForRead(ctx.tx);
+ const before=await atomicCreditSourceResourceIds(ctx.tx,actualPaymentIds);
+ for(const id of before.resourceIds){
+  await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`controlled-provider:${id}`}))`);
+  await ctx.tx.execute(sql`select actual_resource.id from subscription_controlled_resources actual_resource where actual_resource.id=${id}::uuid for update`);
+ }
+ for(const id of before.subscriptionIds)await ctx.tx.execute(sql`select actual_parent.id from subscriptions actual_parent where actual_parent.id=${id}::uuid for update`);
+ for(const [ids,prefix] of [[before.scope.paymentIds,"payment"],[before.scope.invoiceIds,"invoice"],[before.scope.noteIds,"credit-note"]] as const)
+  for(const id of ids)await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${prefix}:${id}`}))`);
+ for(const key of [...new Set(before.scope.namespaces.map(row=>`subscription-cash:${row.platform}:${row.account??""}:${row.intent}`))].sort())
+  await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
+ for(const id of before.scope.inspectionIds){const[row]=await ctx.tx.execute<{locked:boolean}>(sql`select pg_try_advisory_xact_lock(hashtext(${`merchant-return-read:${id}`})) as locked`);if(row?.locked!==true)refuse();}
+ for(const id of before.scope.paymentIds){const[row]=await ctx.tx.execute<{locked:boolean}>(sql`select pg_try_advisory_xact_lock(hashtext(${`merchant-fee-invocation:${id}`})) as locked`);if(row?.locked!==true)refuse();}
  const after=await atomicCreditSourceResourceIds(ctx.tx,actualPaymentIds);if(after.revision!==before.revision)refuse();return after;
 }

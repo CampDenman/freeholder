@@ -40,3 +40,23 @@ receipt is inventoried separately and awaits review before implementation;
 current inherited allocation code must not be qualified as complete until that
 original interval propagation is implemented. None of these private helpers is
 registered or wired into the old selectors.
+
+Further private continuation preserves original-root segments through actual
+funding -> reservation -> application ancestry. Real-Tx historical reading
+authenticates actual child MACs and complete parent PG rows; new funding and
+reservation retain helpers select the ACTUAL inserted parent, its PG SHA and
+same transaction before signing/inserting the purpose child. Neither helper is
+yet called by the existing writer. The independent SQL candidate/BEFORE and
+deferred complete typed-delta guards are still required; no orphan can be
+accepted by an unfinished isolated feature. The shared outer source-prefix
+helper now acquires identity/resources/parents/canonical/cash and nonblocking
+callback fences with full rediscovery; nested consumers assert the held prefix.
+
+`credit-fee-origin.ts` has only a new exact branch for original invoices with
+actual refunded principal: an authentic atomic source uses its current typed
+partition; ordinary sources retain the complete old allocation expression and
+hash domain. Missing known atomic proof refuses. Old quote/source-selection
+and matchingParties invoice-wide continuations are not yet edited. SQL and all
+source/native qualification remain UNRUN. The required SQL PG preimage domain
+and exact final application/projection/assignment/target delta are distinct
+from canonical JS and bank namespace revisions, never interchangeable.
