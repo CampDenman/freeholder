@@ -22,6 +22,7 @@ describe.skipIf(!enabled)("genuine fictional TCP namespace birth and bootstrap d
     const root = await mkdtemp(join(tmpdir(), "freeholder-fictional-launch-origin-"));
     const calls: { method: string; path: string }[] = [], files = new Map<string, string>(), keys = new Map<string, string>(), buckets = new Set<string>();
     let droplet = false, backup = false, keyCount = 0, failure: Error | null = null;
+    const recordedFailure = (): Error | null => failure;
     const server = createServer((request, response) => { void (async () => {
       const parts: Buffer[] = [];
       for await (const part of request) { const value: unknown = part; if (typeof value === "string") parts.push(Buffer.from(value)); else if (value instanceof Uint8Array) parts.push(Buffer.from(value)); else throw new Error("Unexpected actual TCP request body chunk"); }
@@ -83,7 +84,7 @@ describe.skipIf(!enabled)("genuine fictional TCP namespace birth and bootstrap d
     try {
       const options = parseLaunchArgs(["launch", "--domain", "fictional.example", "--no-open", "--image", `ghcr.io/campdenman/freeholder@sha256:${"a".repeat(64)}`], {});
       expect(await runLaunch(options, { provider: digitalOcean("fictional-owner-provider-token", fetcher, async () => undefined), remote: () => remote, fetcher, sleep: async () => undefined, resolve4: async () => [], configRoot: root, out: { log() {}, error() {} } })).toBe(0);
-      if (failure) throw failure;
+      const error = recordedFailure(); if (error) throw error;
       expect(droplet).toBe(true);
       const media = [...buckets].find(bucket => /-media-[a-f0-9]{32}$/.test(bucket)); if (!media) throw new Error("The actual original nonce namespace was not created");
       expect(calls.filter(call => call.method === "PUT" && call.path === `/spaces/${media}`)).toHaveLength(1);

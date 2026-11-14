@@ -1,0 +1,25 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.12",
+    "C10.32",
+    "C11.08"
+  ],
+  "status": "ISOLATED_TEST_TYPING_CORRECTION_PREPARED_UNRUN",
+  "failure": "/tmp/freeholder-media-origin-isolated-source-v1-20261114-result.json",
+  "path": "tests/core/media-quota-namespace-origin-tcp.native.test.ts",
+  "beforeSha256": "4dbd78356bd36440430f3d0c1c9fe37e16e7845106aa13cf7dea9311c52b4d3a",
+  "afterSha256": "18f827d9f85871ef705778ef68c75489497dcef44eab09d1d27f3fa2f61f0f99",
+  "finiteDelta": [
+    {
+      "before": "    let droplet = false, backup = false, keyCount = 0, failure: Error | null = null;",
+      "after": "    let droplet = false, backup = false, keyCount = 0, failure: Error | null = null;\n    const recordedFailure = (): Error | null => failure;"
+    },
+    {
+      "before": "      if (failure) throw failure;",
+      "after": "      const error = recordedFailure(); if (error) throw error;"
+    }
+  ],
+  "scope": "Typed getter reads the exact asynchronously recorded Error after actual launch, retaining same object/truthiness/throw timing and all original wire/bootstrap oracles. No production/runtime/authority change. CLI lint follows its actual standalone tsc script because root ESLint deliberately ignores packages.",
+  "sourceRootAndSqlUnchanged": true
+}

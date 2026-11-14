@@ -3564,6 +3564,16 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Isolated origin source qualification2026-11-14 (C1.12/C10.32/C11.08):
+root+8dc14979838 fulltypes PASS62.07s, then root lint stops on asynchronously
+assigned Error inferred never in the new fictional TCP control. Typed getter
+retains exact recorded error/object/throw and every original wire oracle; full
+reversal recorded. CLI has its own standalone tsc lint; root ESLint intentionally
+ignores packages. All focused/runtime tests still UNRUN; primary integration
+WT unchanged. No initializer/write fence/capability/provider/stable acceptance.
+See `deploy/media-origin-tcp-typing-root-continuation.manifest.json`.
+
+
   New-launch origin precursor 2026-11-14 is SOURCE ONLY: the real DigitalOcean
   CLI path prepares a durable128-bit random admission, one actual media create,
   independent response/return/metadata receipts and private read-only delivery
