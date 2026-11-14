@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Actual application retry 2026-11-14 (C12.38/C9.33/C1.08): cb2 source
+passes1302/205/454 explicit skips; fresh V30 normal86, strict159/356guards/
+367completefunctions, SDK16 and112 standalone amount expressions pass. Original
+native V6 then refuses batch INSERT with SQL42804: root patch generator reentered
+a newly inserted CASE at repeated payment amount sites, nesting one extraction
+while leaving a later boolean use. Earlier numerical checks qualified individual
+expressions, not their complete function composition. V30 is preserved with no
+admission/payment; independent595 snapshots/drain0 remain. A new single-pass
+seven-site whole-function replacement plus single-pass exact reversal preserves
+all original bank predicates and the entire592389-byte prior SQL85 prefix; its
+new complete body remains pinned alongside the original boolean validator.
+This correction is PREPARED/UNRUN and requires renewed genuine native acceptance;
+all payment/access/full-spec/provider/security/final stable gates stay open.
+See `deploy/controlled-cash-bank-minor-sites84.manifest.json`.
+
 Actual application checkpoint 2026-11-14 (C12.38/C9.33/C1.08/C11.08):
 f38 source passes1302 assertions/205 selected files with454 explicit DB skips;
 fresh V29 applies86 ordinary migrations, then strict159 passes356 guards/367
