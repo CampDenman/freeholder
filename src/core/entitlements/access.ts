@@ -8,7 +8,7 @@
 // grant in the same mutation that moved the money — a listener that ran after
 // commit would leave a window where somebody had paid and could not get in.
 import { and, eq, inArray, sql } from "drizzle-orm";
-import type { Tx } from "@/core/service";
+import { ServiceError, type Tx } from "@/core/service";
 import {
   contentUnlocks,
   entitlementGrants,
@@ -211,18 +211,7 @@ export async function setSubscriptionGrantStatus(
   return rows.length;
 }
 
-export async function syncSubscriptionAccess(
-  tx: Tx,
-  input: {
-    subscriptionId: string;
-    contactId: string;
-    planId: string;
-    planName: string;
-    startsAt: Date;
-    endsAt: Date;
-    status: "active" | "paused" | "expired" | "revoked";
-  },
-): Promise<void> {
+async function subscriptionCatalogue(tx: Tx, input: { planId: string; planName: string }) {
   const defined = await tx
     .select()
     .from(entitlements)
@@ -233,8 +222,7 @@ export async function syncSubscriptionAccess(
         eq(entitlements.status, "active"),
       ),
     );
-  const catalogue =
-    defined.length > 0
+  return defined.length > 0
       ? defined
       : [
           await (async () => {
@@ -251,6 +239,21 @@ export async function syncSubscriptionAccess(
             return row!;
           })(),
         ];
+}
+
+export async function syncSubscriptionAccess(
+  tx: Tx,
+  input: {
+    subscriptionId: string;
+    contactId: string;
+    planId: string;
+    planName: string;
+    startsAt: Date;
+    endsAt: Date;
+    status: "active" | "paused" | "expired" | "revoked";
+  },
+): Promise<void> {
+  const catalogue = await subscriptionCatalogue(tx, input);
 
   if (input.status === "expired" || input.status === "revoked") {
     await setSubscriptionGrantStatus(tx, input.subscriptionId, input.status, input.endsAt);
@@ -475,4 +478,38 @@ export async function spendPassPunch(
       .where(eq(entitlementGrants.id, grant.id));
   }
   return { remaining };
+}
+
+/** A new genuine period receives new grant identities. Historical windows and
+ * used counters never reset. The partial live unique index remains unchanged;
+ * an overlapping/grace window is review debt rather than silently truncated.
+ * Same exact source/window/catalogue retries return actual original IDs. */
+export async function advanceSubscriptionPeriod(
+  tx: Tx, input: { subscriptionId: string; contactId: string; planId: string; planName: string; startsAt: Date; endsAt: Date },
+): Promise<{ grantIds: string[]; alreadyGranted: boolean }> {
+  if (!Number.isFinite(input.startsAt.getTime()) || !Number.isFinite(input.endsAt.getTime()) || input.endsAt <= input.startsAt)
+    throw new ServiceError("validation", "A subscription period needs its actual complete positive grant window.");
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`entitlement-period:${input.subscriptionId}`}))`);
+  const catalogue = await subscriptionCatalogue(tx, input);
+  const observed = await tx.select({ grant: entitlementGrants,
+    exactWindow: sql<boolean>`coalesce(${entitlementGrants.startsAt}=${input.startsAt} and ${entitlementGrants.endsAt}=${input.endsAt},false)`,
+    overlaps: sql<boolean>`${entitlementGrants.endsAt} is null or ${entitlementGrants.endsAt}>${input.startsAt}`,
+  }).from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, input.subscriptionId)).limit(5001);
+  const previous = observed.map(row => row.grant);
+  if (previous.length + catalogue.length > 5000 || !catalogue.length || catalogue.length > 1000 || previous.some(row => row.contactId !== input.contactId))
+    throw new ServiceError("conflict", "Restore the complete original subscription/contact grant history before advancing its period.");
+  const exact = observed.filter(row => row.exactWindow).map(row => row.grant);
+  if (exact.length) {
+    if (exact.length !== catalogue.length || catalogue.some(item => exact.filter(row => row.entitlementId === item.id).length !== 1))
+      throw new ServiceError("conflict", "The actual period already owns a different or incomplete entitlement catalogue; retain every original grant and its usage.");
+    return { grantIds: exact.map(row => row.id).sort(), alreadyGranted: true };
+  }
+  const live = observed.filter(row => row.grant.status === "active" || row.grant.status === "paused");
+  if (live.some(row => row.overlaps))
+    throw new ServiceError("conflict", "The original live subscription grant overlaps this period. Preserve its accepted window, grace and usage before starting another grant.");
+  for (const row of live) await tx.update(entitlementGrants).set({ status: "expired" }).where(eq(entitlementGrants.id, row.grant.id));
+  const created = await tx.insert(entitlementGrants).values(catalogue.map(item => ({ contactId: input.contactId, entitlementId: item.id,
+    sourceSubscriptionId: input.subscriptionId, startsAt: input.startsAt, endsAt: input.endsAt, status: "active" as const }))).returning({ id: entitlementGrants.id });
+  if (created.length !== catalogue.length) throw new ServiceError("conflict", "Keep the full genuine new-period grant set in one transaction.");
+  return { grantIds: created.map(row => row.id).sort(), alreadyGranted: false };
 }

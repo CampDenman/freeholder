@@ -16,6 +16,9 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "entitlements.advanceSubscriptionPeriod",
+  "subscriptions.completePaidControlledPeriod",
+  "subscriptions.pendingPaidControlledPeriods",
   // C12.38/C1.08: the genuine staged receipt command remains private.
   "invoicing.applyControlledReceiptBatch",
   // C1.08/C12.38: exact controlled target and original observation phases stay private.
