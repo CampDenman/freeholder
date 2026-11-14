@@ -67,3 +67,40 @@ export async function seedMerchantCheckout80(collectionKind: "direct" | "destina
     return { sellers, profiles, zone, rate, buyer, cart, stripe, quoteInput, review, checkout, cleanup };
   } catch (error) { cleanup(); throw error; }
 }
+
+/** Actual catalogue/merchant/customer setup only; no cart is born or moved.
+ * Original checkout constructor above remains unchanged. */
+export async function seedMerchantCatalogue80(collectionKind: "direct" | "destination" = "direct", sellerCount: 1 | 2 = 1) {
+  const previous = payoutAdapters().find(adapter => adapter.id === "stripe_connect")!;
+  registerPayoutAdapter({ ...previous, models: [...previous.models, "seller_merchant"] });
+  const manual = paymentAdapters.createManualPayments();
+  const stripe: paymentAdapters.PaymentAdapter = { ...manual, id: "stripe", status: { ...manual.status, id: "stripe", available: true },
+    capabilities: () => ({ ...manual.capabilities(), sellerMerchantCharges: true, destinationMerchantCharges: true, savedMethods: true }),
+    platformAccountIdentity: async () => ({ providerPlatformAccountId: "acct_fixturePlatform" }) };
+  const adapterSpy = vi.spyOn(paymentAdapters, "paymentAdapter").mockReturnValue(stripe);
+  const cleanup = () => { adapterSpy.mockRestore(); registerPayoutAdapter(previous); };
+  try {
+    const sellers = MERCHANT_FIXTURE_SELLERS.slice(0, sellerCount);
+    await db().insert(users).values([{ id: OWNER.userId, email: "merchant-fixture-owner@example.test", role: "owner" }, ...sellers.map((seller, index) => ({ id: seller.userId, email: `merchant-fixture-seller-${index}@example.test`, role: "customer" }))]);
+    await updateBusiness.call({ name: "Synthetic current merchant checkout", country: "CA", baseCurrency: "CAD", timezone: "UTC" }, OWNER);
+    await updateMembershipRules.call({ marketplaceEnabled: true, listingReview: false, payoutAdapter: "stripe_connect", payoutModel: "seller_merchant", siteFeeBps: 1000 }, OWNER);
+    await configureMerchantCollection.call({ collectionKind }, OWNER);
+    const zone = await createTaxZone.call({ name: "Fixture merchant jurisdiction", country: "CA", regions: ["BC"], basis: "destination", pricesIncludeTax: false, roundingScope: "line", roundingMode: "half_up" }, OWNER);
+    const rate = await addTaxRate.call({ zoneId: zone.id, name: "Fixture business tax", jurisdiction: "Synthetic fixture jurisdiction", ratePpm: 50000, appliesToShipping: true }, OWNER);
+    const buyer = (await resolveContact.call({ email: MERCHANT_FIXTURE_BUYER_EMAIL, name: "Fixture buyer" }, OWNER)).contact;
+    const profiles = [];
+    const variants: Array<Awaited<ReturnType<typeof getProductVariants.call>>["variants"][number]> = [];
+    for (const [index, seller] of sellers.entries()) {
+      await joinSite.call({ handle: `merchant_fixture_${index}`, displayName: `Original merchant ${index}`, meetsMinimumAge: true, isAdult: true }, seller);
+      await db().insert(memberPayoutAccounts).values({ userId: seller.userId, adapter: "stripe_connect", externalAccountId: `acct_fixtureSeller${index}`, status: "ready", chargesReady: true,
+        merchantName: `Original merchant ${index}`, merchantSupport: { email: `support-${index}@merchant.example`, phone: null, url: null, address: null } });
+      const configuration = await merchantTaxZoneConfiguration.call({ zoneId: zone.id }, seller);
+      const profile = await saveMyMerchantTaxProfile.call({ expectedVersion: 0, idempotencyKey: randomUUID(), acceptPolicy: true, liability: "seller", origin: MERCHANT_FIXTURE_DESTINATION, collectionStatus: "registered", registrations: [{ zoneId: zone.id, number: `FIXTURE-TAX-${index}`, rateIds: [rate.id], configurationDigest: configuration.configurationDigest, status: "active" }] }, seller);
+      profiles.push(profile);
+      const listing = await createListing.call({ title: `Original merchant download ${index}`, kind: "digital", price: index === 0 ? "40" : "10", acceptPolicy: true }, seller);
+      const variant = (await getProductVariants.call({ productId: listing.productId }, OWNER)).variants[0]!;
+      variants.push(variant);
+    }
+    return { sellers, profiles, zone, rate, buyer, variants, stripe, cleanup };
+  } catch (error) { cleanup(); throw error; }
+}

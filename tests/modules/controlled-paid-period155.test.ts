@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // PREPARED/UNRUN. Genuine producer/bank/private writer; no inserted proof/money.
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/core/db";
@@ -25,6 +25,8 @@ import { completePaidControlledPeriod } from "@/modules/subscriptions/controlled
 import { subscriptionControlledPaidPeriodReceipts } from "@/modules/subscriptions/controlled-provider-paid-period-schema";
 import { controlledPaidPeriodWitnesses, exportControlledPaidPeriodHistory } from "@/modules/subscriptions/controlled-provider-paid-period-witnesses";
 import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
+import { carts } from "@/modules/catalog/schema";
+import { actualCartlessControlledPeriod84 } from "../helpers/actual-cartless-controlled-period84";
 import { actualControlledPeriod84 } from "../helpers/actual-controlled-period84";
 import { actualControlledOpenInvoice84 } from "../helpers/actual-controlled-open-invoice84";
 import { retainActualControlledManifest84 } from "../helpers/actual-controlled-current-manifest84";
@@ -51,7 +53,7 @@ const captureMoney = defineService({
 });
 
 describe.runIf(hasDatabase)("actual independent controlled paid-period effect155", { timeout: 180000 }, () => {
-  let f: Awaited<ReturnType<typeof actualControlledPeriod84>> | undefined;
+  let f: Awaited<ReturnType<typeof actualControlledPeriod84>> | Awaited<ReturnType<typeof actualCartlessControlledPeriod84>> | undefined;
   beforeAll(ready, 60000); beforeEach(truncateSpine);
   afterEach(() => { vi.useRealTimers(); f?.cleanup(); f = undefined; vi.restoreAllMocks(); });
   afterAll(async () => { await stopJobs(); await closeDb(); });
@@ -72,7 +74,7 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
     return result.money;
   }
   it("commits actual full money before an independent effect, keeps old windows/usage, creates fresh IDs, refuses overlap, repeats exactly and preserves merge/undo/export ancestry", async () => {
-    f = await actualControlledPeriod84(); const fixture = f; const receipt = await retained(), applied = await moneyOnly(receipt.id);
+    f = await actualCartlessControlledPeriod84(); const fixture = f; const receipt = await retained(), applied = await moneyOnly(receipt.id);
     expect(applied.outstandingMinor).toBe(0);
     // Exercise the actual post-commit event hook, not a native-only activation path.
     await onInvoicePaid({ invoiceId: applied.invoiceId });
@@ -125,6 +127,7 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
       return invoiceHistory;
     });
     const survivor = await createContact.call({ name: "Actual paid-period buyer alias", email: "paid-period-alias@example.test" }, OWNER);
+    expect(await db().select({ id: carts.id, contactId: carts.contactId, status: carts.status, kind: carts.kind }).from(carts).where(inArray(carts.contactId, [survivor.id, f.parent.contactId]))).toEqual([]);
     const merge = await mergeContacts.call({ survivingId: survivor.id, duplicateId: f.parent.contactId }, OWNER);
     const moved = await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id);
     const [mergeStamp] = await db().execute<{ stamp: string; count: number; stamp_count: number; actual_tx: boolean }>(sql`select min(g.updated_at)::text as stamp,

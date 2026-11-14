@@ -1,0 +1,136 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SOURCE_ONLY_PREPARED_UNRUN",
+  "base": "5aaf7ae1",
+  "checklist": [
+    "C9.33",
+    "C12.38",
+    "C1.08"
+  ],
+  "defaultCheckout": {
+    "path": "tests/helpers/merchant-checkout80.ts",
+    "name": "seedMerchantCheckout80",
+    "bodySha256": "084d571c3c1758b2e0da88b22306c22b7ad27d56627570b5323b4e57ff6001fe",
+    "byteIdentical": true
+  },
+  "defaultProvider": {
+    "path": "tests/helpers/merchant-subscription80.ts",
+    "name": "seedActualProviderSubscription80",
+    "bodySha256": "11ff4eeabce4689b767dbd47d1cd26ad1fa8d39acf29c316556936906bf7d0dd",
+    "byteIdentical": true
+  },
+  "defaultPeriod": {
+    "path": "tests/helpers/actual-controlled-period84.ts",
+    "sha256": "4d448cb8f404fec98c493b8114606ec9f86ef4279538b4ef18fc0d595826a77d",
+    "byteIdentical": true
+  },
+  "newProvider": {
+    "path": "tests/helpers/merchant-subscription80.ts",
+    "name": "seedActualProviderSubscriptionWithoutCart80",
+    "sha256": "9534888ae8abaeda1ff535cf3cf586dfa632adfcced35db192695b2242bd99dd",
+    "wholeBodyReverseExact": true,
+    "reverseSteps": [
+      {
+        "before": "seedActualProviderSubscriptionWithoutCart80(",
+        "after": "seedActualProviderSubscription80("
+      },
+      {
+        "before": "await seedMerchantCatalogue80(\"destination\", 1)",
+        "after": "await seedMerchantCheckout80(\"destination\", 1)"
+      },
+      {
+        "before": "    const variant = fixture.variants[0];",
+        "after": "    const [item] = await db().select({ variant: productVariants }).from(cartItems).innerJoin(productVariants, eq(productVariants.id, cartItems.variantId)).where(eq(cartItems.cartId, fixture.cart.id)).limit(1);"
+      },
+      {
+        "before": "if (!variant || !saved[0])",
+        "after": "if (!item || !saved[0])"
+      },
+      {
+        "before": "variant.productId",
+        "after": "item.variant.productId"
+      },
+      {
+        "before": "variant.id",
+        "after": "item.variant.id"
+      }
+    ]
+  },
+  "newPeriod": {
+    "path": "tests/helpers/actual-cartless-controlled-period84.ts",
+    "sha256": "c637cc1725aa64bac13d39d905a5182f752e937f8ed7c8ccac0cdc8d0666ab75",
+    "wholeBodyReverseExact": true,
+    "reverseSteps": [
+      {
+        "before": "import { carts } from \"@/modules/catalog/schema\";\n",
+        "after": ""
+      },
+      {
+        "before": "actualCartlessControlledPeriod84",
+        "after": "actualControlledPeriod84"
+      },
+      {
+        "before": " const unrelatedCarts=await db().select({id:carts.id}).from(carts).where(eq(carts.contactId,original.fixture.buyer.id));\n if(unrelatedCarts.length)throw Error(\"The genuine cartless catalogue/agreement precondition cannot create or relocate a buyer cart.\");\n",
+        "after": ""
+      }
+    ],
+    "reverseSeedName": {
+      "before": "seedActualProviderSubscriptionWithoutCart80",
+      "after": "seedActualProviderSubscription80"
+    }
+  },
+  "native": {
+    "path": "tests/modules/controlled-paid-period155.test.ts",
+    "beforeSha256": "02fb13b2dfbe4bcc90c2cfe1f9c4c3548f765c20035453c3a3553126819e055b",
+    "afterSha256": "355f24d53f0be7ae837fadd0a34767322fdf8365d0fa0bf7e64814d2a00ffac9",
+    "wholeFileReverseExact": true,
+    "reverseSteps": [
+      {
+        "before": "import { eq, inArray, sql }",
+        "after": "import { eq, sql }"
+      },
+      {
+        "before": "import { carts } from \"@/modules/catalog/schema\";\n",
+        "after": ""
+      },
+      {
+        "before": "import { actualCartlessControlledPeriod84 } from \"../helpers/actual-cartless-controlled-period84\";\n",
+        "after": ""
+      },
+      {
+        "before": " | Awaited<ReturnType<typeof actualCartlessControlledPeriod84>>",
+        "after": ""
+      },
+      {
+        "before": "f = await actualCartlessControlledPeriod84();",
+        "after": "f = await actualControlledPeriod84();"
+      },
+      {
+        "before": "    expect(await db().select({ id: carts.id, contactId: carts.contactId, status: carts.status, kind: carts.kind }).from(carts).where(inArray(carts.contactId, [survivor.id, f.parent.contactId]))).toEqual([]);\n",
+        "after": ""
+      }
+    ]
+  },
+  "sharedManifestHelper": {
+    "path": "tests/helpers/actual-controlled-current-manifest84.ts",
+    "onlyParameterNarrowsToActuallyUsedFields": true,
+    "beforeSha256": "18d06b0a5d4b8eee7dbce8ac1205f1d3a1ca000c5b7388bccd2c531e24d63cdc",
+    "afterSha256": "fdd4df90cdcadff7b080728c733581fb74a7a7ef8ea283d89d810447b02371d6"
+  },
+  "unchangedRuntime": [
+    {
+      "path": "src/modules/catalog/cart.ts",
+      "sha256": "e5baf83d264003d98dc077afd02711dd672908d668751e7a434fd6d21b51c10e"
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-paid-period.ts",
+      "sha256": "58ee83e86992cb4cd1bc3d7d786061e77a504d2429e7dfac3db641a79025e306"
+    },
+    {
+      "path": "src/core/entitlements/access.ts",
+      "sha256": "58265ebb68f39ed14ef298ece54dfb2ea6ca1d73ea3ceccc087a33a906246072"
+    }
+  ],
+  "executed": false,
+  "acceptance": "Root source/fresh actual full paid merge/undo run required. All existing money/access/timestamp/XID/export/undo oracles remain; no cart policy/guard relaxation or raw cart mutation."
+}

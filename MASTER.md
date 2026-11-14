@@ -3564,6 +3564,18 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Paid-period merge fixture SOURCE correction2026-11-14 (C9.33/C12.38/C1.08):
+actual V36 reached genuine paid effect/history/export/merge, then undo correctly
+refused the unrelated original checkout setup cart. Cart undo captures every
+contact cart regardless of status; no guard or cart state is relaxed. A separate
+actual catalogue→agreement→controlled-period fixture now creates NO cart and is
+used ONLY by the full paid merge/undo scenario, which proves both real contacts
+cart-free before merge. Original checkout/provider/default period constructors
+remain byte-identical; full native reversal retains every business/timestamp/XID/
+undo/export oracle. Source controls PREPARED/UNRUN; root fresh qualification is
+required. No product/SQL/provider changes, C-item or stable closure. See
+`deploy/cartless-paid-merge155-source-20261114.md`.
+
 Paid native identity timestamp continuation 2026-11-14 (C12.38/C9.33/C1.08):
 complete source V74 passes1310/207/454 skips after the retirement timestamp
 oracle correction. Read-only source review identifies the same mandatory

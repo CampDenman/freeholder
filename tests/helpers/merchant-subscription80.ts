@@ -18,7 +18,7 @@ import { admitMerchantProviderPhases } from "@/modules/subscriptions/provider-ph
 import { quoteMerchantProviderHorizon } from "@/modules/subscriptions/provider-phase-quote";
 import { subscriptionProviderScheduleOperations } from "@/modules/subscriptions/provider-schedule-schema";
 import { savePlan, subscribe } from "@/modules/subscriptions/service";
-import { seedMerchantCheckout80 } from "./merchant-checkout80";
+import { seedMerchantCheckout80, seedMerchantCatalogue80 } from "./merchant-checkout80";
 import { OWNER } from "./spine";
 
 function metadata(form: URLSearchParams, prefix: string) {
@@ -130,6 +130,46 @@ export async function seedActualProviderSubscription80(options: Parameters<typeo
     const plan = await savePlan.call({ productId: item.variant.productId, name: options.paidProrationDay?"Actual original provider paid day":"Actual original provider trial", interval: options.paidProrationDay?"day":"month", trialDays: options.paidProrationDay?0:7, trialRequiresCard: !options.paidProrationDay, setupFeeMinor: options.paidProrationDay?0:500,
       billingMode: "provider", cancelBehaviour: "period_end", proration: options.paidProrationDay?"create_prorations":"none", status: "active" }, OWNER);
     const input = { planId: plan.id, productVariantId: item.variant.id, contactId: fixture.buyer.id, paymentMethodId: saved[0].id, currency: "CAD", taxDestination: { country: "CA", region: "BC" } };
+    const quote = await quoteNewAgreement.call(input, OWNER); if (!quote) throw new Error("The real provider quote unexpectedly selected legacy terms.");
+    const accepted = await subscribe.call({ ...input, commercialTerms: { quoteDigest: quote.quoteDigest, locale: "en", source: "owner_subscription" } }, OWNER);
+    if(options.paidProrationDay){
+      if(!accepted.invoiceId)throw new Error("The actual original paid provider period needs its ordinary issued invoice.");
+      const payment=await recordOfflinePayment.call({invoiceId:accepted.invoiceId,method:"bank_transfer",amountMinor:4200,reference:"fictional-controlled-original-principal",evidence:"Explicit fictional external original principal attestation; never bank verification",idempotencyKey:"controlled-original-principal"},OWNER);
+      await recordCommercialFee.call({paymentId:payment.id,amountMinor:400,reference:"fictional-controlled-original-fee",evidence:"Explicit fictional external original fee remittance attestation",idempotencyKey:"controlled-original-fee"},OWNER);
+      expect(accepted.subscription.status).toBe("active");
+    }else{expect(accepted.invoiceId).toBeNull(); expect(accepted.subscription.status).toBe("trialing");}
+    await createMerchantPhaseProduct.call({ subscriptionId: accepted.subscription.id }, { kind: "system" });
+    const horizon = await quoteMerchantProviderHorizon.call({ subscriptionId: accepted.subscription.id, additionalPeriods: 1 }, { kind: "system" });
+    const create = () => admitMerchantProviderPhases.call({ subscriptionId: accepted.subscription.id, additionalPeriods: 1, expectedHorizonDigest: horizon.horizonDigest }, { kind: "system" });
+    const operations = () => db().select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId, accepted.subscription.id)).orderBy(subscriptionProviderScheduleOperations.operationRevision);
+    return { fixture, plan, input, remote, accepted, create, operations };
+    } catch (error) { fixture.cleanup(); throw error; }
+  }
+
+/** Same real provider producer with a genuine catalogue-only precondition.
+ * No original caller substitutes a fake cart or changes its default fixture. */
+export async function seedActualProviderSubscriptionWithoutCart80(options: Parameters<typeof merchantPhaseEdge80>[0] & {
+  /** Explicit actual shared-money test variant; default historical trial unchanged. */
+  paidProrationDay?:true;
+} = {}) {
+    const fixture = await seedMerchantCatalogue80("destination", 1);
+    try {
+    const remote = merchantPhaseEdge80(options), { provider } = remote; vi.spyOn(paymentAdapters, "paymentAdapter").mockReturnValue(provider);
+    await setModuleEnabled.call({ module: "subscriptions", enabled: true }, OWNER);
+    const receivedAt = new Date().toISOString(), timestamp = Math.floor(Date.parse(receivedAt) / 1000);
+    const body = Buffer.from(JSON.stringify({ id: "evt_actualProducerMethod", type: "payment_method.attached", created: timestamp, data: { object: {
+      id: "pm_actualProducer", object: "payment_method", type: "card", customer: "cus_actualProducer", card: { brand: "visa", last4: "4242", exp_month: 12, exp_year: 2030 },
+      metadata: { freeholder_contact_id: fixture.buyer.id, freeholder_platform_account_id: "acct_fixturePlatform" } } } }));
+    const signature = createHmac("sha256", "whsec_actual_producer_fixture").update(`${timestamp}.`).update(body).digest("hex");
+    const events = await provider.verifyWebhook({ body, receivedAt, headers: { "stripe-signature": `t=${timestamp},v1=${signature}` } });
+    expect(events).toHaveLength(1);
+    await processPaymentProviderEvents.call({ provider: "stripe", bodySha256: createHash("sha256").update(body).digest("hex"), receivedAt, events: [...events] }, { kind: "system" });
+    const saved = await listSavedPaymentMethods.call({ contactId: fixture.buyer.id }, OWNER); expect(saved).toHaveLength(1);
+    const variant = fixture.variants[0];
+    if (!variant || !saved[0]) throw new Error("The actual original fixture has no variant or saved method.");
+    const plan = await savePlan.call({ productId: variant.productId, name: options.paidProrationDay?"Actual original provider paid day":"Actual original provider trial", interval: options.paidProrationDay?"day":"month", trialDays: options.paidProrationDay?0:7, trialRequiresCard: !options.paidProrationDay, setupFeeMinor: options.paidProrationDay?0:500,
+      billingMode: "provider", cancelBehaviour: "period_end", proration: options.paidProrationDay?"create_prorations":"none", status: "active" }, OWNER);
+    const input = { planId: plan.id, productVariantId: variant.id, contactId: fixture.buyer.id, paymentMethodId: saved[0].id, currency: "CAD", taxDestination: { country: "CA", region: "BC" } };
     const quote = await quoteNewAgreement.call(input, OWNER); if (!quote) throw new Error("The real provider quote unexpectedly selected legacy terms.");
     const accepted = await subscribe.call({ ...input, commercialTerms: { quoteDigest: quote.quoteDigest, locale: "en", source: "owner_subscription" } }, OWNER);
     if(options.paidProrationDay){
