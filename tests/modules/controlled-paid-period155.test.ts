@@ -35,7 +35,7 @@ const batch = z.object({ invoiceId: z.uuid(), batchId: z.uuid(), payments: z.arr
  * so ordinary paid-outbox timing cannot weaken the old-access oracle. No fake
  * ServiceContext, supplied proof, planned UUID or private override is created. */
 const captureMoney = defineService({
-  name: "subscriptions.controlledMoneySnapshotForNative", kind: "mutation", permission: "system", external: false,
+  name: "subscriptions.controlledMoneySnapshotForNative", summary: "Capture actual shared money settlement and unchanged access inside its genuine outer transaction before commit.", kind: "mutation", permission: "system", external: false,
   input: z.object({ collectionId: z.uuid(), receiptIds: z.array(z.uuid()).min(1), subscriptionId: z.uuid() }).strict(),
   output: z.object({ money: batch, parent: z.unknown(), grants: z.array(z.unknown()), effectCount: z.number().int() }),
   handler: async (input, ctx) => {
@@ -70,7 +70,7 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
     return result.money;
   }
   it("commits actual full money before an independent effect, keeps old windows/usage, creates fresh IDs, refuses overlap, repeats exactly and preserves merge/undo/export ancestry", async () => {
-    f = await actualControlledPeriod84(); const receipt = await retained(), applied = await moneyOnly(receipt.id);
+    f = await actualControlledPeriod84(); const fixture = f; const receipt = await retained(), applied = await moneyOnly(receipt.id);
     expect(applied.outstandingMinor).toBe(0);
     // Exercise the actual post-commit event hook, not a native-only activation path.
     await onInvoicePaid({ invoiceId: applied.invoiceId });
@@ -90,32 +90,37 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
       planName: f.original.plan.name, startsAt: new Date(effect.effectAt.getTime() + 1), endsAt: new Date(effect.periodEnd.getTime() + 1) }, { kind: "system" }))).code).toBe("conflict");
     expect(await completePaidControlledPeriod.call({ invoiceId: applied.invoiceId }, { kind: "system" })).toMatchObject({ state: "already_applied", financialReviewPending: null });
     expect(await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id)).toEqual(current);
-    const invoiceHistory = await controlledFinancialWitness(db(), { invoiceIds: [applied.invoiceId] });
-    expect(invoiceHistory.incomplete).toBe(false);
-    const paidEntries = invoiceHistory.entries.filter(row => row.table === "subscription_controlled_paid_period_receipts");
-    expect(paidEntries.map(row => row.id)).toEqual([effect.id]);
-    expect(new Set(invoiceHistory.entries.map(row => `${row.table}:${row.id}`)).size).toBe(invoiceHistory.entries.length);
-    const subjectHistory = await controlledFinancialWitness(db(), { subscriptionIds: [f.parent.id] });
-    expect(subjectHistory.paid?.entries).toEqual(invoiceHistory.paid?.entries);
-    const cashHistory = await merchantRefundDependencyFingerprints(db(), { paymentIds: applied.payments.map(row => row.paymentId), subscriptionChargeReceiptIds: [receipt.id] });
-    expect(cashHistory.incomplete).toBe(false); expect(cashHistory.entries.filter(row => row.table === "subscription_controlled_paid_period_receipts").map(({ table, id, fingerprint }) => ({ table, id, fingerprint }))).toEqual(paidEntries.map(({ table, id, fingerprint }) => ({ table, id, fingerprint })));
-    const invoiceFootprint = await invoiceMerchantDependencyFingerprints(db(), [applied.invoiceId]);
-    expect(invoiceFootprint?.has(applied.invoiceId)).toBe(true);
-    const buyerArchive = await exportControlledFinancialHistory(db(), { invoiceIds: [applied.invoiceId] });
-    expect(buyerArchive.exported.originalPaidPeriods?.receipts.map(row => row.id)).toEqual([effect.id]);
-    expect(JSON.stringify(buyerArchive.exported.originalPaidPeriods)).not.toMatch(/financialReview|authentication|beforeEntries|beforeParentFields|bankRevisions|admissionTransaction|nonce/);
-    const ownerProfile = invoiceHistory.paid?.entries[0]?.parents.profileId;
-    if (!ownerProfile) throw Error("Retain the actual original accepted quote profile.");
-    const merchantArchive = await exportControlledFinancialHistory(db(), { profileIds: [ownerProfile] });
-    expect(merchantArchive.exported.originalPaidPeriods?.receipts).toEqual([expect.objectContaining({ id: effect.id, financialReviewPendingAtActivation: effect.financialReviewPending })]);
+    const invoiceHistory = await db().transaction(async tx => {
+      const invoiceHistory = await controlledFinancialWitness(tx, { invoiceIds: [applied.invoiceId] });
+      expect(invoiceHistory.incomplete).toBe(false);
+      const paidEntries = invoiceHistory.entries.filter(row => row.table === "subscription_controlled_paid_period_receipts");
+      expect(paidEntries.map(row => row.id)).toEqual([effect.id]);
+      expect(new Set(invoiceHistory.entries.map(row => `${row.table}:${row.id}`)).size).toBe(invoiceHistory.entries.length);
+      const subjectHistory = await controlledFinancialWitness(tx, { subscriptionIds: [fixture.parent.id] });
+      expect(subjectHistory.paid?.entries).toEqual(invoiceHistory.paid?.entries);
+      const cashHistory = await merchantRefundDependencyFingerprints(tx, { paymentIds: applied.payments.map(row => row.paymentId), subscriptionChargeReceiptIds: [receipt.id] });
+      expect(cashHistory.incomplete).toBe(false); expect(cashHistory.entries.filter(row => row.table === "subscription_controlled_paid_period_receipts").map(({ table, id, fingerprint }) => ({ table, id, fingerprint }))).toEqual(paidEntries.map(({ table, id, fingerprint }) => ({ table, id, fingerprint })));
+      const invoiceFootprint = await invoiceMerchantDependencyFingerprints(tx, [applied.invoiceId]);
+      expect(invoiceFootprint?.has(applied.invoiceId)).toBe(true);
+      const buyerArchive = await exportControlledFinancialHistory(tx, { invoiceIds: [applied.invoiceId] });
+      expect(buyerArchive.exported.originalPaidPeriods?.receipts.map(row => row.id)).toEqual([effect.id]);
+      expect(JSON.stringify(buyerArchive.exported.originalPaidPeriods)).not.toMatch(/financialReview|authentication|beforeEntries|beforeParentFields|bankRevisions|admissionTransaction|nonce/);
+      const ownerProfile = invoiceHistory.paid?.entries[0]?.parents.profileId;
+      if (!ownerProfile) throw Error("Retain the actual original accepted quote profile.");
+      const merchantArchive = await exportControlledFinancialHistory(tx, { profileIds: [ownerProfile] });
+      expect(merchantArchive.exported.originalPaidPeriods?.receipts).toEqual([expect.objectContaining({ id: effect.id, financialReviewPendingAtActivation: effect.financialReviewPending })]);
+      return invoiceHistory;
+    });
     const survivor = await createContact.call({ name: "Actual paid-period buyer alias", email: "paid-period-alias@example.test" }, OWNER);
     const merge = await mergeContacts.call({ survivingId: survivor.id, duplicateId: f.parent.contactId }, OWNER);
     const moved = await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id);
     expect(moved).toEqual(current.map(row => ({ ...row, contactId: survivor.id })));
-    expect((await controlledPaidPeriodWitnesses(db(), { subscriptionIds: [f.parent.id] })).entries).toHaveLength(1);
-    expect((await controlledFinancialWitness(db(), { invoiceIds: [applied.invoiceId] })).paid?.entries).toEqual(invoiceHistory.paid?.entries);
-    const exported = await exportControlledPaidPeriodHistory(db(), { subscriptionIds: [f.parent.id] }, { merchant: false });
-    expect(exported.receipts).toHaveLength(1); expect(JSON.stringify(exported.receipts)).not.toMatch(/authentication|beforeEntries|beforeParentFields|bankRevisions|admissionTransaction|nonce/);
+    await db().transaction(async tx => {
+      expect((await controlledPaidPeriodWitnesses(tx, { subscriptionIds: [fixture.parent.id] })).entries).toHaveLength(1);
+      expect((await controlledFinancialWitness(tx, { invoiceIds: [applied.invoiceId] })).paid?.entries).toEqual(invoiceHistory.paid?.entries);
+      const exported = await exportControlledPaidPeriodHistory(tx, { subscriptionIds: [fixture.parent.id] }, { merchant: false });
+      expect(exported.receipts).toHaveLength(1); expect(JSON.stringify(exported.receipts)).not.toMatch(/authentication|beforeEntries|beforeParentFields|bankRevisions|admissionTransaction|nonce/);
+    });
     await undoContactMerge.call({ operationId: merge.mergeOperationId }, OWNER);
     expect(await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id)).toEqual(current);
   });
