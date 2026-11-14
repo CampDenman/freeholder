@@ -1,0 +1,26 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.08",
+    "C12.38"
+  ],
+  "source": "tests/modules/verified-financial-contact-undo.test.ts",
+  "base": "c6c7d449c77119c1aae99cccb3e0090727662747",
+  "beforeSha256": "4f04f6dd875496b2896569b8b07fdd1e8139f8d5fd8b549e413025a81869cb49",
+  "afterSha256": "b8292e7c437fa105394255e26f776e07fd832f9e0b23e59180043002be0a52f0",
+  "finiteDelta": [
+    {
+      "before": "import { stopJobs } from \"@/core/jobs\";",
+      "after": "import { prepareServiceJobRuntime, stopJobs } from \"@/core/jobs\";"
+    },
+    {
+      "before": "  await stopJobs();\n  return {fixture:f,receipt,survivor,merged};",
+      "after": "  await stopJobs();\n  // Mutation admission prepares the real producer before its business TX.\n  // Finish those durable runtime births before the entire-table rollback oracle.\n  await prepareServiceJobRuntime();\n  return {fixture:f,receipt,survivor,merged};"
+    }
+  ],
+  "execution": "PREPARED_UNRUN_HARNESS_ONLY",
+  "productRuntimeUnchanged": true,
+  "allFourCaseBodiesAndAll595TableOracleUnchanged": true,
+  "reason": "The real mutation boundary starts a producer outside the business transaction. The fixture had shut it down immediately before the snapshot. Prepare that actual producer before snapshot; no runtime table exclusions, mocks, altered business permissions or rollback waivers.",
+  "failedOriginal": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v1-20261114-result.json"
+}

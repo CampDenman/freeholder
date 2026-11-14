@@ -1,6 +1,38 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # Current 159-model payment checkpoint
 
+Current continuation 2026-11-14, source `c6c7d449`: source V78 passes 1,321
+actual assertions across 210 complete selected files, with 458 explicit database
+skips. Full types, affected lint and all metadata gates pass. Fresh V42 applies
+all 86 ordinary migrations; strict V53 passes 159 models, 356 enabled guards,
+367 complete function bodies, 2,415 expressions and 3,995 queries. The genuine
+read-only undo-lock schema check and actual SDK generation/verification (8+8)
+pass. Both media capabilities stay absent.
+
+The original full paid155 journey PASSES in 68.831s on that exact source:
+actual payment4200, separate committed access-effect transaction, unchanged old
+windows/usage, fresh grant IDs, overlap refusal, exact repeat, export and actual
+contact merge/undo ancestry. Dedicated clean undo PASSES69.183s; newer real
+financial read PASSES75.350s and a newer actual bank refund PASSES71.739s, each
+refusing undo with the full 595-table comparison unchanged. Every run has
+independent before/after595 inventories, all159 affected models,86 journal
+entries, absent capabilities and zero remaining clients. These are genuine
+local shared-service journeys against the fictional provider, not provider-account
+acceptance.
+
+The dedicated injected-after-grant-inverse rollback native FAILS62.813s on its
+final full595 comparison. The exact injected error and one actual inverse call
+were reached. Its diff shows only new deployment/runtime heartbeat rows: the
+fixture stopped the real producer, and the normal mutation admission restarts
+it outside the business transaction. V42 and all evidence are preserved; no
+reset or subsequent native runs there. A finite two-edit fixture correction
+prepares the genuine producer before measuring rollback. All four case bodies,
+the injected inverse and the all595-table oracle remain unchanged, with no
+runtime mocks or table exclusions. Fresh source/database qualification and the
+complete rollback rerun remain required. No checklist row, stable release or
+LinkedIn publication is closed. The original checkpoint follows unchanged.
+
+
 C12.38/C9.33/C1.08/C1.12/C11.08. `MASTER.md` §43 remains the sole status
 authority. This is bounded qualification evidence, not stable sign-off.
 

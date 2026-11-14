@@ -5,7 +5,7 @@ import { z } from "zod";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
-import { stopJobs } from "@/core/jobs";
+import { prepareServiceJobRuntime, stopJobs } from "@/core/jobs";
 import { getService } from "@/core/service";
 import { contactReferences, createContact, mergeContacts, undoContactMerge } from "@/core/contacts/service";
 import { contactMergeOperations } from "@/core/contacts/schema";
@@ -63,6 +63,9 @@ describe.runIf(hasDatabase)("verified financial contact undo", {timeout: 180000}
   expect(await db().select().from(carts).where(eq(carts.contactId,survivor.id))).toEqual([]);
   const merged=await mergeContacts.call({survivingId:survivor.id,duplicateId:f.parent.contactId},OWNER);
   await stopJobs();
+  // Mutation admission prepares the real producer before its business TX.
+  // Finish those durable runtime births before the entire-table rollback oracle.
+  await prepareServiceJobRuntime();
   return {fixture:f,receipt,survivor,merged};
  }
  it("verifies the clean complete merged graph before inverse writes and restores actual ownership",async()=>{

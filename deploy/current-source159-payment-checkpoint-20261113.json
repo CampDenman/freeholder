@@ -64,5 +64,164 @@
   "enabledGuards": 353,
   "fullFunctionBodies": 351,
   "providerAccountAcceptance": false,
-  "stableAcceptance": false
+  "stableAcceptance": false,
+  "continuation20261114": {
+    "sourceHead": "c6c7d449c77119c1aae99cccb3e0090727662747",
+    "status": "FULL_LOCAL_PAID_ACCESS_MERGE_UNDO_AND_TWO_FOREIGN_ACTIVITY_REFUSALS_PASS; INJECTED_ROLLBACK_ORACLE_FAILED_ON_RUNTIME_BIRTHS; FRESH_HARNESS_RERUN_REQUIRED",
+    "sourceActualAssertions": 1321,
+    "sourceCompleteSelectedFiles": 210,
+    "explicitDatabaseSkips": 458,
+    "affectedModels": 159,
+    "enabledGuards": 356,
+    "fullFunctionBodies": 367,
+    "explainExpressions": 2415,
+    "strictQueryCount": 3995,
+    "proofs": {
+      "sourceV78": {
+        "path": "/tmp/freeholder-current-full86-financial159-source-v78-20261114-result.json",
+        "sha256": "5aa3358db5e3a49d5500b66e01da314271e4f113abc1bfeb584dceb7c2923281",
+        "passed": true
+      },
+      "normalV42": {
+        "path": "/tmp/freeholder-current-full86-normal-v42-result-20261113.json",
+        "sha256": "ed6f78b36e8d5c948aaad67456d2f89b9b74aa7df6bd797cbca49256f363a0af",
+        "passed": true
+      },
+      "strictV53": {
+        "path": "/tmp/freeholder-current-full86-parity159-v53-result-20261113.json",
+        "sha256": "87c4c47e489a4958aea1ba7b9a2582aa7c941b904731cbb1317cc47fbb5b523e",
+        "passed": true
+      },
+      "sqlSchemaOnly": {
+        "path": "/tmp/freeholder-current-full86-v42-lock-schema-v1-20261114-result.json",
+        "sha256": "2e89ef90d22fdf8f6f73782d14291d57dfc0ab4c184500c50b979aa073f6ec58",
+        "passed": true
+      },
+      "sdkV23": {
+        "path": "/tmp/freeholder-current-full86-sdk-generation-v23-20261114-result.json",
+        "sha256": "deb07a8467844791b6f51ef0398f365429386bdcaf0b76e82db001c0f0c6f176",
+        "passed": true
+      },
+      "fullPaid-result.json": {
+        "path": "/tmp/freeholder-current-full86-paid-period-full-native-v7-20261114-result.json",
+        "sha256": "f8e2f4a1b8827aafcf32ee37854283c80ea50457ef2d8c0bd917311c9a1e788e",
+        "passed": true
+      },
+      "fullPaid-before.json": {
+        "path": "/tmp/freeholder-current-full86-paid-period-full-native-v7-20261114-before.json",
+        "sha256": "5f995915d6b48982158de6b2a62be3fadc07c8c2a00d18a58874800ebc626443",
+        "passed": true
+      },
+      "fullPaid-after.json": {
+        "path": "/tmp/freeholder-current-full86-paid-period-full-native-v7-20261114-after.json",
+        "sha256": "4439fbbaec5dc7e8bd32e5cd28e4c455a6768c9b29c010094e245169fb75ee08",
+        "passed": true
+      },
+      "fullPaid-config.json": {
+        "path": "/tmp/freeholder-current-full86-paid-period-full-native-v7-20261114-config.json",
+        "sha256": "ba395f6a4dac22aa7182d366e439836f70846287624cc6451a5f0d8d99073269"
+      },
+      "fullPaid.json": {
+        "path": "/tmp/freeholder-current-full86-paid-period-full-native-v7-20261114.json",
+        "sha256": "5f0a8db9b690ead27eb742311154bdbec23124b964f602bf59114ac1b2adaa4b"
+      },
+      "cleanUndo-result.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-clean-native-v1-20261114-result.json",
+        "sha256": "2ba6a534706e962f84cc38687ea67df9f8256a60c89a68200a4c304b20df21a0",
+        "passed": true
+      },
+      "cleanUndo-before.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-clean-native-v1-20261114-before.json",
+        "sha256": "183b87a46c4416fa92f653dc5be97cf5a2b9d24b0ece195b51e7dd1d43c9a122",
+        "passed": true
+      },
+      "cleanUndo-after.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-clean-native-v1-20261114-after.json",
+        "sha256": "69d0b6c413226063a5a885b2d5b0cbb61b182081157c460da2dde0381b930273",
+        "passed": true
+      },
+      "cleanUndo-config.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-clean-native-v1-20261114-config.json",
+        "sha256": "57d85317c1b48322b1a81168a8a6052500468a0a9e8df91ef1aebc2beb1fd350"
+      },
+      "cleanUndo.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-clean-native-v1-20261114.json",
+        "sha256": "c6035e9d05882a11bc6a721bb7980914ae08493f7f80d5d911286a540836ee25"
+      },
+      "newReadRefusal-result.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-newread-native-v1-20261114-result.json",
+        "sha256": "722fd6cd2b9a9717979bb829f013ffd7b69e2ed871eab42a091330d5238dcaad",
+        "passed": true
+      },
+      "newReadRefusal-before.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-newread-native-v1-20261114-before.json",
+        "sha256": "86f974de40322eb79c70181bd4813d732ba91182bbfca28d6e6ee369b9d00282",
+        "passed": true
+      },
+      "newReadRefusal-after.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-newread-native-v1-20261114-after.json",
+        "sha256": "ea31ece03bb149dde9fb763aed98d1b8d529bb55bf0225b3efe955d3d809b41c",
+        "passed": true
+      },
+      "newReadRefusal-config.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-newread-native-v1-20261114-config.json",
+        "sha256": "3c9d5b1e24f73511c466abe3e8e989d24894fc3216a356257bdcc01b4e70ef30"
+      },
+      "newReadRefusal.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-newread-native-v1-20261114.json",
+        "sha256": "ed6f2ad8b07a1a65e706b858174388fe26435c3cd921c1eca220337b085130f7"
+      },
+      "newRefundRefusal-result.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-refund-native-v1-20261114-result.json",
+        "sha256": "124bbff68e73b27b6039b50f3f85bb8ccb8aa993430a0ec1ddac0198918708e3",
+        "passed": true
+      },
+      "newRefundRefusal-before.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-refund-native-v1-20261114-before.json",
+        "sha256": "d4575afda2c78ab6958670bdc28944be492f449f55e355d2d83fa70c14be9408",
+        "passed": true
+      },
+      "newRefundRefusal-after.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-refund-native-v1-20261114-after.json",
+        "sha256": "7f4c1e7fcff1ac8de97278e4b350369bdf7aea79418e43380c8147a76e6e2529",
+        "passed": true
+      },
+      "newRefundRefusal-config.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-refund-native-v1-20261114-config.json",
+        "sha256": "72b140e8e02a26e3d0a3fa326bc3799ec657c64bbffb36b283b1fb5d0766e1e9"
+      },
+      "newRefundRefusal.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-refund-native-v1-20261114.json",
+        "sha256": "d3e282850dc8967693cdcc6a406eb0c42355696197a7c8a1973195c91203ffff"
+      },
+      "failedRollback-result.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v1-20261114-result.json",
+        "sha256": "0e99d856b25d7956dad8045569f0739fb3201d38b4129ac6e2824a1763342875",
+        "passed": false
+      },
+      "failedRollback-before.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v1-20261114-before.json",
+        "sha256": "df9d440b49c755b3037c419fee9e80b7c0be613710985815a4a5b67a34b1dd0e",
+        "passed": true
+      },
+      "failedRollback-after.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v1-20261114-after.json",
+        "sha256": "2120c1271617663f0e954ae2c00328b099af6eec50108a1e35ee3f9d163580f0",
+        "passed": true
+      },
+      "failedRollback-config.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v1-20261114-config.json",
+        "sha256": "2b8ff5ea610200d0e66530bcf7bd41f252991fd6d28db340a9baba8184a8389a"
+      },
+      "failedRollback.json": {
+        "path": "/tmp/freeholder-current-full86-financial-undo-rollback-native-v1-20261114.json",
+        "sha256": "33896739f93b26cd40151bb5d7cfe79513cf13dff87cec342fe7cbd53d956e9a"
+      }
+    },
+    "preserveFailedDatabase": "freeholder_current_full86_financial159_normal_v42_test_20261114",
+    "preparedHarnessCorrection": "deploy/verified-financial-contact-undo-runtime84.manifest.json",
+    "noProductRuntimeDelta": true,
+    "providerAccountAcceptance": false,
+    "stableAcceptance": false
+  }
 }
