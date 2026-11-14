@@ -8,6 +8,7 @@ import {atomicCreditFeeEconomicPlan,atomicCreditFeeStoredEconomics} from "./atom
 import {atomicCreditFeeCapacities,type AtomicCreditFeeCapacityInput} from "./atomic-credit-fee-amounts";
 import {selectAtomicCreditFeeSegments} from "./atomic-credit-reservation-segments";
 import type {AtomicCreditFeeSegment} from "./atomic-credit-reservation-contract";
+import {captureAtomicCreditInvoiceProjections} from "./atomic-credit-before-image";
 import {readAtomicCreditFeeAncestry} from "./atomic-credit-fee-ancestry";
 import {assertAtomicCreditSourcePrefix} from "./atomic-credit-source-prefix";
 import {controlledAtomicFeeOwner,controlledAtomicRefundFeeState,controlledAtomicRefundTarget} from "./controlled-atomic-refund-target";
@@ -125,10 +126,25 @@ export async function controlledAtomicCreditFeePartition(ctx:ServiceContext,inpu
  };
  const bankNamespaceRevision=await readBankRevision();
  if(state&&!state.pending&&state.proof.bankNamespaceRevision!==bankNamespaceRevision)refuse();
- const storedEconomics=atomicCreditFeeStoredEconomics.parse({plan,currentParentRevision,currentFeeProofRevision,bankNamespaceRevision,sourceGraphRevision:prefix.revision,feeEvidenceDigest});
+ const sqlCandidate=async()=>{
+  const rows=await ctx.tx.execute<{known:boolean;principal_minor:number;original_fee_minor:number;retired_fee_minor:number;allocated_principal_minor:number;allocated_nominal_fee_minor:number;allocated_assigned_fee_minor:number;allocated_retired_fee_minor:number;take_nominal_fee_minor:number;take_retired_fee_minor:number;take_assigned_fee_minor:number;take_collected_fee_minor:number;take_owed_fee_minor:number;remaining_principal_minor:number;remaining_actual_fee_minor:number;source_receipt_id:string;bank_inspection_id:string;bank_observation_id:string;bank_namespace_revision:string;evidence_fingerprint:string}>(sql`
+   select candidate.known,candidate.principal_minor::float8,candidate.original_fee_minor::float8,candidate.retired_fee_minor::float8,
+    candidate.allocated_principal_minor::float8,candidate.allocated_nominal_fee_minor::float8,candidate.allocated_assigned_fee_minor::float8,candidate.allocated_retired_fee_minor::float8,
+    candidate.take_nominal_fee_minor::float8,candidate.take_retired_fee_minor::float8,candidate.take_assigned_fee_minor::float8,candidate.take_collected_fee_minor::float8,candidate.take_owed_fee_minor::float8,
+    candidate.remaining_principal_minor::float8,candidate.remaining_actual_fee_minor::float8,candidate.source_receipt_id::text,candidate.bank_inspection_id::text,candidate.bank_observation_id::text,candidate.bank_namespace_revision,candidate.evidence_fingerprint
+   from freeholder_atomic_credit_fee_partition(${payment.id}::uuid,${input.sourceApplicationId}::uuid,${input.takeMinor}::bigint) candidate`);
+  const actual=rows[0];if(rows.length!==1||!actual||actual.known!==true||actual.source_receipt_id!==owner.receiptId||actual.bank_inspection_id!==bank.inspectionId||actual.bank_observation_id!==bank.observationId
+   ||actual.bank_namespace_revision!==bankNamespaceRevision||!/^[a-f0-9]{64}$/.test(actual.evidence_fingerprint)
+   ||actual.principal_minor!==plan.originalPrincipalMinor||actual.original_fee_minor!==plan.originalFeeMinor||actual.retired_fee_minor!==plan.acceptedRetiredFeeMinor
+   ||actual.allocated_principal_minor!==plan.allocatedPrincipalMinor||actual.allocated_nominal_fee_minor!==plan.allocatedNominalFeeMinor||actual.allocated_assigned_fee_minor!==plan.allocatedAssignedFeeMinor||actual.allocated_retired_fee_minor!==plan.allocatedRetiredFeeMinor
+   ||actual.take_nominal_fee_minor!==plan.takeNominalFeeMinor||actual.take_retired_fee_minor!==plan.takeRetiredFeeMinor||actual.take_assigned_fee_minor!==plan.takeAssignedFeeMinor||actual.take_collected_fee_minor!==plan.takeProvenCollectedMinor||actual.take_owed_fee_minor!==plan.takeOwedFeeMinor
+   ||actual.remaining_principal_minor!==plan.remainingPrincipalMinor||actual.remaining_actual_fee_minor!==plan.remainingActualFeeMinor)refuse();return actual;
+ };
+ const actualSql=await sqlCandidate(),postgresSourceRevision=actualSql.evidence_fingerprint,beforeInvoiceProjections=await captureAtomicCreditInvoiceProjections(ctx.tx,beforeEntries);
+ const storedEconomics=atomicCreditFeeStoredEconomics.parse({plan,currentParentRevision,postgresSourceRevision,beforeInvoiceProjections,currentFeeProofRevision,bankNamespaceRevision,sourceGraphRevision:prefix.revision,feeEvidenceDigest});
  const afterPrefix=await assertAtomicCreditSourcePrefix(ctx,[payment.id]),afterOwner=await controlledAtomicFeeOwner(ctx,payment.id),afterReturns=await readAtomicFeeReturnResources(ctx,payment.id);
  if(afterPrefix.revision!==prefix.revision||!afterOwner||afterOwner.revision!==owner.revision||!afterReturns||afterReturns.revision!==returns.revision
-  ||await readBankRevision()!==bankNamespaceRevision||merchantTaxDigest(await currentEntries())!==currentParentRevision)refuse();
+  ||await readBankRevision()!==bankNamespaceRevision||merchantTaxDigest(await currentEntries())!==currentParentRevision||merchantTaxDigest(await sqlCandidate())!==merchantTaxDigest(actualSql))refuse();
  return{kind:"atomic_partition" as const,requiresChild:retired>0||ancestry.originalInvoice.refundedMinor>0,owner,bank,principal,ancestry,plan,storedEconomics,beforeEntries,
   allocation:{feeObligationMinor:plan.takeAssignedFeeMinor,provenCollectedMinor:plan.takeProvenCollectedMinor,collectionState:plan.takeAssignedFeeMinor===0?"not_due" as const:plan.takeOwedFeeMinor===0?"verified_collected" as const:"owed" as const,unexpectedFee:false,evidenceDigest:feeEvidenceDigest},
   revision:merchantTaxDigest({storedEconomics,beforeEntries,bankRevision:bank.revision,principal,sourceOwner:owner.revision,physicalReturns:returns.revision})};

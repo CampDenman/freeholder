@@ -60,3 +60,16 @@ and matchingParties invoice-wide continuations are not yet edited. SQL and all
 source/native qualification remain UNRUN. The required SQL PG preimage domain
 and exact final application/projection/assignment/target delta are distinct
 from canonical JS and bank namespace revisions, never interchangeable.
+
+The new private JSON contract now names `postgresSourceRevision` separately
+from every JS/bank digest. Exact before-invoice projection fields are captured
+from real rows only when their complete PG hashes equal the current internal
+entry; these are the bounded original credited/status/paidAt/updatedAt fields
+needed to authenticate a later exact own application delta. Nothing in this
+contract authorizes a generic field drop, transaction-wide exclusion or old
+batch subtraction. The actual SQL candidate/guard implementations still must
+produce and independently verify this domain. A private UNFINISHED SQL tail
+currently contains only the approved exact two child tables/FKs/CHECKs/indexes;
+it is NOT ready for root assembly. Seven genuine candidate/trigger/readiness
+bodies, exact final typed application/projection/assignment/target delta and
+all narrow old-body-preserving successors remain required before integration.

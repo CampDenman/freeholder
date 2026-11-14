@@ -16,6 +16,9 @@ export function verifiedAtomicCreditFeePartition(row:Partition,keys:readonly str
   ||![row.fundingId,row.sourcePaymentId,row.sourceInvoiceId,row.creditNoteId,row.creditNoteLineId,row.originalChargeReceiptId,row.bankInspectionId,row.bankObservationId].every(id=>z.uuid().safeParse(id).success)
   ||row.sourceApplicationId!==null&&!z.uuid().safeParse(row.sourceApplicationId).success||new Set(entries.data.map(entry=>entry.key)).size!==entries.data.length)return false;
  const plan=economics.data.plan;
+ if(entries.data.some(entry=>entry.key===`invoice_credit_funding:${row.fundingId}`||entry.key===`invoice_credit_funding_atomic_fee_partitions:${row.fundingId}`)
+  ||new Set(economics.data.beforeInvoiceProjections.map(value=>value.invoiceId)).size!==economics.data.beforeInvoiceProjections.length
+  ||economics.data.beforeInvoiceProjections.some(value=>!entries.data.some(entry=>entry.key===`invoices:${value.invoiceId}`&&entry.postgres_row)))return false;
  if(plan.sourcePaymentId!==row.sourcePaymentId||plan.sourceApplicationId!==row.sourceApplicationId||plan.takePrincipalMinor<=0||plan.originalFeeMinor>plan.originalPrincipalMinor||plan.takeNominalFeeMinor!==plan.takeRetiredFeeMinor+plan.takeAssignedFeeMinor||plan.takeAssignedFeeMinor!==plan.takeProvenCollectedMinor+plan.takeOwedFeeMinor
   ||plan.epochKind==="direct"&&(plan.sourceApplicationId!==null||plan.parentFundingId!==null||plan.rootFundingId!==null||plan.rootEconomicRevision!==null||plan.sourceSegments.length!==0||plan.takeSegments.length!==0||plan.originalRootPrincipalMinor!==plan.originalPrincipalMinor||plan.originalRootFeeMinor!==plan.originalFeeMinor)
   ||plan.epochKind==="inherited"&&(plan.sourceApplicationId===null||plan.parentFundingId===null||plan.rootFundingId===null||plan.rootEconomicRevision===null||plan.sourceSegments.length===0||plan.takeSegments.length===0))return false;

@@ -13,6 +13,7 @@ import {readAtomicCreditFeeAncestry} from "./atomic-credit-fee-ancestry";
 import {signAtomicCreditReservation,verifiedAtomicCreditReservation} from "./atomic-credit-reservation-proof";
 import {originalCashEvidenceKeys} from "./original-cash-recovery-store";
 import {merchantTaxDigest} from "./merchant-tax-store";
+import {captureAtomicCreditInvoiceProjections} from "./atomic-credit-before-image";
 function refuse():never{throw new ServiceError("conflict","Restore the exact current B funding, original interval/caps, every application/release and real same-transaction reservation birth before consuming its fee capacity.");}
 /** Ordinary private reader. The real outer writer already holds the complete
  * discovered source/target prefix. No lock is acquired late and no provider I/O
@@ -33,11 +34,20 @@ export async function readAtomicCreditReservationPartition(ctx:ServiceContext,in
  const selected=selectAtomicCreditFeeSegments({originalPrincipalMinor:rootPlan.originalPrincipalMinor,originalFeeMinor:rootPlan.originalFeeMinor,sourceSegments,occupied,takeMinor:input.amountMinor});
  if(selected.whole.amountMinor!==funding.amountMinor||selected.whole.assignedFeeMinor!==funding.feeObligationMinor||selected.whole.provenCollectedMinor!==funding.feeProvenCollectedMinor)refuse();
  const beforeEntries=current.beforeEntries,currentSourceRevision=merchantTaxDigest({current:current.revision,ancestry:ancestry.revision,fundingId:funding.id,sourceSegments,activeReservationIds:active.map(row=>row.id).sort(),releasedReservationIds:released.map(row=>row.reservationId).sort()});
+ const sqlRows=await ctx.tx.execute<{known:boolean;funding_id:string;root_funding_id:string;source_payment_id:string;source_application_id:string|null;principal_minor:number;nominal_fee_minor:number;retired_fee_minor:number;assigned_fee_minor:number;collected_fee_minor:number;owed_fee_minor:number;segments:unknown;active_reservation_ids:string[];released_reservation_ids:string[];funding_partition_fingerprint:string;evidence_fingerprint:string}>(sql`
+  select candidate.known,candidate.funding_id::text,candidate.root_funding_id::text,candidate.source_payment_id::text,candidate.source_application_id::text,
+   candidate.principal_minor::float8,candidate.nominal_fee_minor::float8,candidate.retired_fee_minor::float8,candidate.assigned_fee_minor::float8,candidate.collected_fee_minor::float8,candidate.owed_fee_minor::float8,
+   candidate.segments,candidate.active_reservation_ids::text[],candidate.released_reservation_ids::text[],candidate.funding_partition_fingerprint,candidate.evidence_fingerprint
+  from freeholder_atomic_credit_reservation_partition(${funding.id}::uuid,${input.amountMinor}::bigint) candidate`);
+ const actual=sqlRows[0],beforeInvoiceProjections=await captureAtomicCreditInvoiceProjections(ctx.tx,beforeEntries);
+ if(sqlRows.length!==1||!actual||actual.known!==true||actual.funding_id!==funding.id||actual.root_funding_id!==root.fundingId||actual.source_payment_id!==funding.sourcePaymentId||actual.source_application_id!==funding.sourceApplicationId
+  ||actual.principal_minor!==selected.selected.amountMinor||actual.nominal_fee_minor!==selected.selected.nominalFeeMinor||actual.retired_fee_minor!==selected.selected.retiredFeeMinor||actual.assigned_fee_minor!==selected.selected.assignedFeeMinor||actual.collected_fee_minor!==selected.selected.provenCollectedMinor||actual.owed_fee_minor!==selected.selected.owedFeeMinor
+  ||merchantTaxDigest(actual.segments)!==merchantTaxDigest(selected.segments)||merchantTaxDigest(actual.active_reservation_ids)!==merchantTaxDigest(active.map(row=>row.id).sort())||merchantTaxDigest(actual.released_reservation_ids)!==merchantTaxDigest(released.map(row=>row.reservationId).sort())||!/^[a-f0-9]{64}$/.test(actual.evidence_fingerprint))refuse();
  const body={protocol:ATOMIC_CREDIT_RESERVATION_PROTOCOL,rootFundingId:root.fundingId,sourcePaymentId:funding.sourcePaymentId,originalPrincipalMinor:rootPlan.originalPrincipalMinor,originalFeeMinor:rootPlan.originalFeeMinor,rootEconomicRevision:rootPlan.economicRevision,
   fundingId:funding.id,sourceApplicationId:funding.sourceApplicationId,fundingEconomicRevision:plan.economicRevision,fundingNominalFeeMinor:selected.whole.nominalFeeMinor,fundingRetiredFeeMinor:selected.whole.retiredFeeMinor,fundingAssignedFeeMinor:selected.whole.assignedFeeMinor,fundingProvenCollectedMinor:selected.whole.provenCollectedMinor,fundingOwedFeeMinor:selected.whole.owedFeeMinor,
-  segments:selected.segments,...selected.selected,activeReservationIds:active.map(row=>row.id).sort(),releasedReservationIds:released.map(row=>row.reservationId).sort(),currentSourceRevision};
+  segments:selected.segments,...selected.selected,activeReservationIds:active.map(row=>row.id).sort(),releasedReservationIds:released.map(row=>row.reservationId).sort(),currentSourceRevision,postgresSourceRevision:actual.evidence_fingerprint,beforeInvoiceProjections};
  const economics=atomicCreditReservationEconomics.parse({...body,economicRevision:merchantTaxDigest(body)});
- const fingerprint=ancestry.physical.find(row=>row.table==="invoice_credit_funding_atomic_fee_partitions"&&row.id===funding.id)?.fingerprint;if(!fingerprint)refuse();
+ const fingerprint=ancestry.physical.find(row=>row.table==="invoice_credit_funding_atomic_fee_partitions"&&row.id===funding.id)?.fingerprint;if(!fingerprint||actual.funding_partition_fingerprint!==fingerprint)refuse();
  const after=await readAtomicCreditFeeAncestry(ctx.tx,funding.sourcePaymentId);if(after.revision!==ancestry.revision)refuse();
  const feeEvidenceDigest=merchantTaxDigest({protocol:ATOMIC_CREDIT_RESERVATION_PROTOCOL,economics,sourceFeeDigest:funding.feeEvidenceDigest});
  return{funding,child,root,economics,beforeEntries,fundingPartitionFingerprint:fingerprint,feeEvidenceDigest,current,suppliesCurrentMoneyAuthority:false as const};

@@ -3,6 +3,7 @@
 import {z} from "zod";
 import {ATOMIC_CREDIT_FEE_PROTOCOL} from "./atomic-credit-fee-protocol";
 import {atomicCreditFeeSegment} from "./atomic-credit-reservation-contract";
+import {atomicCreditInvoiceProjection} from "./atomic-credit-before-image-contract";
 const minor=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),uuid=z.uuid(),sha=z.string().regex(/^[a-f0-9]{64}$/);
 export const atomicCreditFeeEconomicPlan=z.object({
  protocol:z.literal(ATOMIC_CREDIT_FEE_PROTOCOL),epochKind:z.enum(["direct","inherited"]),sourcePaymentId:uuid,sourceApplicationId:uuid.nullable(),parentFundingId:uuid.nullable(),sourceCollectionId:uuid,sourceResourceId:uuid,
@@ -16,7 +17,7 @@ export const atomicCreditFeeEconomicPlan=z.object({
  retiredResources:z.array(z.object({ledger:z.enum(["merchant_fee","original_auxiliary"]),operationId:uuid,providerRef:z.string(),feeRef:z.string(),amountMinor:minor.positive(),currency:z.string().regex(/^[A-Z]{3}$/)}).strict()).max(5000),economicRevision:sha,
 }).strict();
 export type AtomicCreditFeeEconomicPlan=z.infer<typeof atomicCreditFeeEconomicPlan>;
-export const atomicCreditFeeStoredEconomics=z.object({plan:atomicCreditFeeEconomicPlan,currentParentRevision:sha,currentFeeProofRevision:sha,bankNamespaceRevision:sha,sourceGraphRevision:sha,feeEvidenceDigest:sha}).strict();
+export const atomicCreditFeeStoredEconomics=z.object({plan:atomicCreditFeeEconomicPlan,currentParentRevision:sha,postgresSourceRevision:sha,beforeInvoiceProjections:z.array(atomicCreditInvoiceProjection).max(5000),currentFeeProofRevision:sha,bankNamespaceRevision:sha,sourceGraphRevision:sha,feeEvidenceDigest:sha}).strict();
 export type AtomicCreditFeeStoredEconomics=z.infer<typeof atomicCreditFeeStoredEconomics>;
 export const atomicCreditFeePhysicalEntry=z.object({table:z.string().min(1),id:z.string().min(1),fingerprint:sha,hashDomain:z.literal("postgres_row")}).strict();
 export type AtomicCreditFeePhysicalEntry=z.infer<typeof atomicCreditFeePhysicalEntry>;
