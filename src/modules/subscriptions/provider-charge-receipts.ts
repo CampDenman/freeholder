@@ -3,6 +3,8 @@
 // C12.38: preserve authenticated scheduled cash before applying its invoice.
 import { controlledCashOrigin, controlledCashEvidence, originalControlledChargeAuthority, retainControlledChargeOrigin } from "./controlled-provider-cash-origin";
 import { retainGenerationCashLink } from "./provider-generations";
+import { subscriptionControlledChargeOrigins } from "./controlled-provider-schema";
+import { controlledSubscriptionCashRoute } from "./controlled-provider-payment-route";
 import { createHash } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -212,6 +214,13 @@ registerSubscriptionInvoiceRouting(async (ctx, input) => {
   if (!receipt || receipt.subscriptionId !== subscriptionId || receipt.currency !== invoice.currency
     || receipt.providerPlatformAccountId !== original.scope.providerPlatformAccountId || receipt.chargeAccountId !== original.scope.chargeAccountId) throw new ServiceError("conflict", "This renewal receipt belongs to another original agreement or account.");
   if (!receipt.providerChargeRef) throw new ServiceError("conflict", "The original paid intent is retained; complete its actual charge reference before invoice application.");
+  const [controlledOrigin] = await ctx.tx.select().from(subscriptionControlledChargeOrigins).where(eq(subscriptionControlledChargeOrigins.receiptId, receipt.id)).limit(1);
+  if (controlledOrigin) {
+    const controlledCashPlan = await controlledSubscriptionCashRoute(ctx, { receiptId: receipt.id, invoiceId: invoice.id, subscriptionId });
+    return { ...routing, controlledCashPlan, providerOrigin: { receiptId: receipt.id, providerApiVersion: subscriptionMerchantScope.parse(original.scope).providerScheduleApiVersion,
+      providerSubscriptionRef: receipt.providerSubscriptionRef, providerInvoiceRef: receipt.providerInvoiceRef,
+      providerPaymentIntentRef: receipt.providerPaymentIntentRef, providerChargeRef: receipt.providerChargeRef } };
+  }
   const [period] = await ctx.tx.select().from(subscriptionProviderInvoiceObservations).where(and(eq(subscriptionProviderInvoiceObservations.subscriptionId, subscriptionId),
     eq(subscriptionProviderInvoiceObservations.providerInvoiceRef, receipt.providerInvoiceRef))).orderBy(desc(subscriptionProviderInvoiceObservations.evidenceRevision)).limit(1);
   const [operation] = period?.providerOperationId ? await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.id, period.providerOperationId)).limit(1) : [];

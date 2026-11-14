@@ -9,9 +9,10 @@ const object=(value:unknown):Record<string,unknown>=>value&&typeof value==="obje
 const tag=(form:URLSearchParams)=>Object.fromEntries([...form].filter(([key])=>key.startsWith("metadata[")).map(([key,value])=>[key.slice(9,-1),value]));
 export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDraftReply?:true;failAfterPositiveCash?:true}={}){
  let current:()=>Record<string,unknown>|undefined=()=>undefined,zero:()=>Record<string,unknown>=()=>{throw Error("The actual bootstrap must exist first.");};
- let originalZero:Record<string,unknown>|null=null,updatePosts=0,draftPosts=0,itemPosts=0,feePosts=0,finalizePosts=0,payPosts=0,cashGets=0;
+ let originalZero:Record<string,unknown>|null=null,updatePosts=0,draftPosts=0,itemPosts=0,feePosts=0,finalizePosts=0,payPosts=0,cashGets=0,externalAttachments=0;
  let lostUpdate=false,lostDraft=false,failedCash=false;
  const bankInvoices=new Map<string,Record<string,unknown>>(),bankLines=new Map<string,Array<Record<string,unknown>>>(),prices=new Map<string,Record<string,unknown>>(),intents=new Map<string,Record<string,unknown>>();
+ const intentInvoices=new Map<string,string>();
  const forms:Array<{path:string;form:URLSearchParams}>=[];
  const edge=controlledPeriodEdge84({atProviderStart:true,extra:async(url,init)=>{
   const subscription=current();if(!subscription)return null;
@@ -57,14 +58,15 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
   if(invoice&&url.pathname===`/v1/invoices/${invoiceId}/pay`&&init.method==="POST"){
    payPosts++;expect(form().get("off_session")).toBe("true");expect(invoice.status).toBe("open");const id=`pi_actualPeriodTarget${payPosts}`;
    const intent={id,object:"payment_intent",status:"succeeded",customer:subscription.customer,payment_method:subscription.default_payment_method,amount:invoice.total,amount_received:invoice.total,amount_capturable:0,currency:invoice.currency,latest_charge:`ch_actualPeriodTarget${payPosts}`,transfer_data:subscription.transfer_data,on_behalf_of:subscription.on_behalf_of,application_fee_amount:invoice.application_fee_amount};
-   intents.set(invoiceId,intent);invoice.status="paid";invoice.amount_paid=invoice.total;invoice.amount_remaining=0;return Response.json(invoice);
+   intents.set(id,intent);intentInvoices.set(id,invoiceId);invoice.status="paid";invoice.amount_paid=invoice.total;invoice.amount_remaining=0;return Response.json(invoice);
   }
   if(url.pathname==="/v1/invoices"&&init.method==="GET")return Response.json({data:[originalZero,...bankInvoices.values()],has_more:false});
   if(url.pathname===`/v1/invoices/${bankRef(originalZero.id)}`&&init.method==="GET")return Response.json(originalZero);
   if(invoice&&url.pathname===`/v1/invoices/${invoiceId}`&&init.method==="GET")return Response.json(invoice);
   if(invoice&&url.pathname===`/v1/invoices/${invoiceId}/lines`&&init.method==="GET")return Response.json({data:bankLines.get(invoiceId),has_more:false});
   if(url.pathname==="/v1/invoice_payments"&&init.method==="GET"&&bankInvoices.has(String(url.searchParams.get("invoice")))){
-   const selected=String(url.searchParams.get("invoice")),intent=intents.get(selected);return Response.json({data:intent?[{id:`inpay_${bankRef(intent.id)}`,invoice:selected,status:"paid",amount_paid:intent.amount_received,amount_requested:intent.amount,currency:intent.currency,payment:{type:"payment_intent",payment_intent:intent.id}}]:[],has_more:false});
+   const selected=String(url.searchParams.get("invoice")),matches=[...intents.values()].filter(intent=>intentInvoices.get(bankRef(intent.id))===selected);
+   return Response.json({data:matches.map(intent=>({id:`inpay_${bankRef(intent.id)}`,invoice:selected,status:"paid",amount_paid:intent.amount_received,amount_requested:intent.amount,currency:intent.currency,payment:{type:"payment_intent",payment_intent:intent.id}})),has_more:false});
   }
   const intent=[...intents.values()].find(row=>url.pathname===`/v1/payment_intents/${bankRef(row.id)}`);
   if(intent&&init.method==="GET"){cashGets++;return Response.json(intent);}
@@ -82,5 +84,15 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
   return null;
  }});
  current=edge.currentSubscription;zero=edge.currentZeroInvoice;
- return{...edge,forms,invoices:()=>[...bankInvoices.values()],intents:()=>[...intents.values()],counts:()=>({updatePosts,draftPosts,itemPosts,feePosts,finalizePosts,payPosts,cashGets})};
+ function externallyAttachPayment(providerInvoiceRef:string,amountMinor:number,feeMinor=0){
+  const invoice=bankInvoices.get(providerInvoiceRef),subscription=current();
+  if(!invoice||!subscription||invoice.status!=="open"||!Number.isSafeInteger(amountMinor)||amountMinor<=0||amountMinor>Number(invoice.amount_remaining)
+   ||!Number.isSafeInteger(feeMinor)||feeMinor<0||feeMinor>amountMinor)throw Error("An actual OPEN original invoice and exact real external principal/fee are required; never clip or invent an invoice.");
+  externalAttachments++;const id=`pi_actualPeriodExternal${externalAttachments}`;
+  const intent={id,object:"payment_intent",status:"succeeded",customer:subscription.customer,payment_method:subscription.default_payment_method,amount:amountMinor,amount_received:amountMinor,amount_capturable:0,currency:invoice.currency,
+   latest_charge:`ch_actualPeriodExternal${externalAttachments}`,transfer_data:subscription.transfer_data,on_behalf_of:subscription.on_behalf_of,application_fee_amount:feeMinor};
+  intents.set(id,intent);intentInvoices.set(id,providerInvoiceRef);invoice.amount_paid=Number(invoice.amount_paid)+amountMinor;invoice.amount_remaining=Number(invoice.total)-Number(invoice.amount_paid);invoice.status=invoice.amount_remaining===0?"paid":"open";
+  return{providerInvoiceRef,providerPaymentIntentRef:id,amountMinor,feeMinor};
+ }
+ return{...edge,forms,externallyAttachPayment,externalAttachments:()=>externalAttachments,invoices:()=>[...bankInvoices.values()],intents:()=>[...intents.values()],counts:()=>({updatePosts,draftPosts,itemPosts,feePosts,finalizePosts,payPosts,cashGets})};
 }
