@@ -17,6 +17,7 @@ function reverse(statement:string,changes:readonly {before:string;after:string}[
 describe("actual own auxiliary pre-POST bank preservation",()=>{
  it("inherits every complete generic bank predicate and full physical witness",()=>{
   const entry=manifest.newFunctions[0];
+  if(!entry)throw new Error("Preserve the one purpose-specific bank reader.");
   expect(hash(body(entry.beforeStatement))).toBe(entry.beforeBodySha256);
   expect(hash(body(entry.afterStatement))).toBe(entry.afterBodySha256);
   expect(reverse(entry.afterStatement,entry.reversal)).toBe(entry.beforeStatement);

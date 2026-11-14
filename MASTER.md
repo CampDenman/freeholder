@@ -3587,6 +3587,12 @@ source/schema/SDK/original auxiliary acceptance is REQUIRED/UNRUN. No C/stable
 closure. See `deploy/atomic-fee-original-native-checkpoint-20261114.json` and
 `deploy/atomic-auxiliary-fee-prepost-bank85.manifest.json`.
 
+Strict test typing continuation2026-11-14 (C12.38): sourceV104 focused contracts
+PASS, then tsc refuses unchecked manifest array indexing in the NEW preservation
+test. Add an explicit missing-entry failure before reading it; no SQL, original
+native, production predicate or assertion changes. V104 failure retained; full
+fresh qualification remains required.
+
 
 Signature-work ROOT performance repair2026-11-14 (C12.38/C1.08/C11.10):
 exact1f89 sourceV102 fulltypes/lint/1554actual/249files/540explicit skips PASS;
