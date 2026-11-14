@@ -12,7 +12,7 @@ import {OWNER} from "./spine";
 /** The public producer deliberately returns retained money without application.
  * Its pre-pay manifest authorizes that one bank write; application independently
  * needs a complete actual manifest AFTER the last real bank mutation. */
-export async function retainActualControlledManifest84(f:Awaited<ReturnType<typeof actualControlledPeriod84>>){
+export async function retainActualControlledManifest84(f:Pick<Awaited<ReturnType<typeof actualControlledPeriod84>>, "target"|"remote">){
  const beforeInvoice=await db().select().from(invoices).where(eq(invoices.id,f.target.invoiceId));
  const beforePayments=await db().select().from(payments).where(eq(payments.invoiceId,f.target.invoiceId)).orderBy(payments.id);
  const beforeBank=f.remote.counts(),system={kind:"system"} as const;
