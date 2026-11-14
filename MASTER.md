@@ -3564,6 +3564,33 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Atomic bank alias ROOT assembly2026-11-14 (C12.38/C9.33/C1.08):
+exact24aa sourceV99 fulltypes/lint and1550actual/247files/532explicit skips
+PASS. FreshnormalV57 ordinary86, strict161models/365guards/416fullfunctions/
+4143queries/2495expressions andSDKV35 actual8 PASS; generatedSDK unchanged,
+all11private phases hidden. ORIGINAL whole feeV7 FAIL155.44s before feePOST:
+actual42702 actual_refund record/table alias collision in bankhelperline173.
+ALL596tables/j86/sequence retained, clients drained, V57 preserved without
+reset/migration/new native. Frozen77f full helper/Aready successors append AFTER
+WHOLE93557185 prefix; ONLY nested alias/reference and helper body pin change.
+No model/column/signature/guard/index/service/economic/test-oracle change.
+Full fresh source/schema/SDK/original180s native remain required. No C/stable
+closure; B/C/media/provider/recovery/security/signature gates stay open. See
+`deploy/atomic-refund-bank-alias161-root-assembly.manifest.json`.
+
+
+Atomic bank record-alias SOURCE successor2026-11-14 (C12.38/C9.33/C1.08):
+independent source audit finds one nested JSON alias actual_refund colliding
+with the function's refunds%ROWTYPE local. NEW owned UNAPPLIED complete helper
+successor renames ONLY nested alias/reference to current_refund_atom; complete
+Aready changes ONLY corresponding bodySHA literal. Frozen dd3/all predicates,
+types/physical rows/callers/5000 and original whole fee native180s remain exact.
+Three full-source/native-preservation controls PREPARED, ALL UNRUN. No actual
+SQL failure, compile/PG/native/readiness/closure/stable acceptance is claimed;
+root owns assembly/qualification. See
+`deploy/controlled-atomic-refund-bank-record-alias84-source-20261114.md`.
+
+
 Atomic bank causal-fence ROOT assembly2026-11-14 (C12.38/C9.33/C1.08):
 frozendd3 follows wholecurrent45/83; entire MASTER+only22newleaflines retained.
 Whole89757985 prefix followed by TWO exact full helper/Aready successors;

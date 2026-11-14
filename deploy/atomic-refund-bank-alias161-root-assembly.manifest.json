@@ -1,0 +1,59 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "status": "ROOT_SOURCE_ASSEMBLED_UNRUN",
+  "rootBeforeMerge": "24aa2b7676be92077acf4eaa9a3999a2f6b4f2fd",
+  "frozenLeaf": "77f2c8183e2707ee8db67d9174542ea90b73fb37",
+  "leafManifest": {
+    "path": "deploy/controlled-atomic-refund-bank-record-alias84.manifest.json",
+    "sha256": "4e6b75294f8cd7e77a8bd12d3f514ff3d1d049deaf8bf1e63628be67770f9dda"
+  },
+  "priorWholePrefix": {
+    "file": "db/migrations/0085_controlled_collection_application.sql",
+    "bytes": 935571,
+    "sha256": "9af79c2c1a301d3a0bda3d920ef180bf2619b1d9e1093422cbe434a3962b4f30"
+  },
+  "tail": {
+    "path": "deploy/controlled-atomic-refund-bank-record-alias84.fragment.sql",
+    "bytes": 37960,
+    "sha256": "e4dab23bf49135e6718182d564635d47c94b721a777dd51a2bf3b060afa90f06"
+  },
+  "normal85": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "ownedPath": "deploy/sql/0085_controlled_collection_application.unapplied.sql",
+    "bytes": 973557,
+    "sha256": "08a2c1d37e6156c6e61413678c80bdf0a1e8ca9e6862ec964155aa77d33f3414"
+  },
+  "normal82Unchanged": {
+    "bytes": 1017398,
+    "sha256": "4e6c7c96fc76325b3787f55db698f09e93cf52e070360af254bbb4438c1409c4"
+  },
+  "successors": [
+    {
+      "signature": "freeholder_controlled_atomic_refund_bank_state(uuid)",
+      "beforeBodySha256": "c793259d4dd2949f650d6ae9bfaebb562816f27faedc356640f9436fcf2ccc8d",
+      "afterBodySha256": "e79e9ded007256dc64ebfe80a2e19c2e93b20dd47c0b137f1b51d7467ba54f59"
+    },
+    {
+      "signature": "freeholder_atomic_auxiliary_fee_ready()",
+      "beforeBodySha256": "72b64098e82e4a9673a5cad9def58835965e15fa1030101b72e561fbbe1408ac",
+      "afterBodySha256": "9d26f7be06fe0a7c819a9b8cc2729114dbc62fe45ad1645ab9e0d36586fa8d2e"
+    }
+  ],
+  "fullStatementReversalsExact": true,
+  "allProtectedFilesExact": true,
+  "wholeRootMasterPreserved": true,
+  "newLeafMasterLines": 11,
+  "originalV7FailurePreserved": {
+    "head": "24aa2b7676be92077acf4eaa9a3999a2f6b4f2fd",
+    "database": "freeholder_current_full86_causal_media161_normal_v57_test_20261114",
+    "code": "42702",
+    "seconds": 155.4409842819441
+  },
+  "noNewSignaturesModelsColumnsKindsServicesGuardsIndexes": true,
+  "currentSourceSchemaSdkOriginalNativeProviderStableAcceptance": false
+}
