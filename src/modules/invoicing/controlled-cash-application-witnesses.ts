@@ -18,7 +18,7 @@ export async function controlledCashApplicationWitnesses(tx:Tx,input:ControlledC
  const scope={subscriptionIds:[...new Set(input.subscriptionIds??[])].sort(),invoiceIds:[...new Set(input.invoiceIds??[])].sort(),receiptIds:[...new Set(input.receiptIds??[])].sort()};
  const collectionIds=input.collectionIds===undefined?undefined:[...new Set(input.collectionIds)].sort();
  const requested=Object.values(scope).flat();if(requested.length+(collectionIds?.length??0)>5000||collectionIds?.some(id=>!z.uuid().safeParse(id).success)||requested.some(id=>!z.uuid().safeParse(id).success)||input.profileId&&!z.uuid().safeParse(input.profileId).success)refuse();
- if(!requested.length){if(input.profileId||collectionIds?.length)refuse();return{version:1 as const,entries:[] as ControlledCashApplicationWitnessEntry[],incomplete:false};}
+ if(!requested.length){if(input.profileId)refuse();if(collectionIds?.length)refuse();return{version:1 as const,entries:[] as ControlledCashApplicationWitnessEntry[],incomplete:false};}
  const[ownership]=await tx.execute<{complete:boolean}>(sql`with candidates as(
   select batch_row.* from controlled_cash_application_batches batch_row where(batch_row.subscription_id in(${list(scope.subscriptionIds)}) or batch_row.invoice_id in(${list(scope.invoiceIds)})
    or exists(select 1 from controlled_cash_application_receipts receipt_proof where receipt_proof.batch_id=batch_row.id and receipt_proof.receipt_id in(${list(scope.receiptIds)})))
