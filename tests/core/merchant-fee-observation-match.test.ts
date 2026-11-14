@@ -8,7 +8,7 @@ import { merchantFeeRefunds } from "@/modules/invoicing/merchant-collection-sche
 import { merchantFeeObservationMatchesRefund } from "@/modules/invoicing/merchant-fee-observation-match";
 
 const query = () => drizzle.mock().select({
-  unmatched: sql<boolean>`coalesce(bool_or(${merchantFeeRefunds.status}='accepted' and not ${merchantFeeObservationMatchesRefund()}),false)`,
+  unmatched: sql<boolean>`coalesce(bool_or(${merchantFeeRefunds.status}='accepted' and not ${merchantFeeObservationMatchesRefund()}),false)`.as("unmatched"),
 }).from(merchantFeeRefunds).toSQL();
 
 it("preserves outer refund identity through the real single-table SQL compiler", () => {

@@ -1,0 +1,18 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C1.08"
+  ],
+  "status": "TEST_SQL_COLUMN_ALIAS_ONLY",
+  "base": "e4a5aad54712a05f4710458fa2f429b11596c0e5",
+  "path": "tests/core/merchant-fee-observation-match.test.ts",
+  "beforeSha256": "af5b6262e2ac67f51f7a3f40e9ec1fdc0d84c11e454fd4bad46ae9c3e36cc208",
+  "afterSha256": "e8e9106e28d208404cb4efc4e2765645d58aece360e91466eb4d8d5ec71b28e2",
+  "before": "),false)`,\n}).from(merchantFeeRefunds).toSQL();",
+  "after": "),false)`.as(\"unmatched\"),\n}).from(merchantFeeRefunds).toSQL();",
+  "cause": "The actual SQL CTE control executes compiled SQL raw; it requires an explicit result-column alias unlike normal Drizzle selection mapping. First actual CTE failure had undefined unmatched column, no product failure/data changes. Preserve all expected booleans/cases and production helper.",
+  "firstFailure": "/tmp/freeholder-current-full86-fee-ack-ctes-v2-20261114-result.json",
+  "all596TablesJournalSequenceUnchangedInBeforeFailure": true,
+  "productionSchemaOriginalNativeAndOraclesUnchanged": true
+}
