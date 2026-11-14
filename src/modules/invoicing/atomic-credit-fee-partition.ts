@@ -38,6 +38,7 @@ export async function controlledAtomicCreditFeePartition(ctx:ServiceContext,inpu
  if(payment.refundedMinor!==0||payment.status!=="succeeded"||payment.invoiceId!==owner.invoiceId)refuse();
  const routing=await routingForPayment(ctx,payment.id);
  if(routing.originalChargeReceiptId!==owner.receiptId||routing.applicationFeeMinor===undefined)refuse();
+ const frozenOriginalPaymentFeeMinor=routing.applicationFeeMinor;
  const originalCash=await originalMerchantRefundCash(ctx,{kind:"payment",paymentId:payment.id});
  const bank=await readControlledCanonicalBankPrincipal(ctx,payment,originalCash);
  if(!bank.applies||!bank.principalMatches||bank.ancillaryDebtPending||bank.receiptId!==owner.receiptId||bank.collectionId!==owner.collectionId)refuse();
@@ -60,7 +61,7 @@ export async function controlledAtomicCreditFeePartition(ctx:ServiceContext,inpu
    ||source.note.id!==row.creditNoteId||source.line.id!==row.creditNoteLineId||source.accepted.sourceRevision!==row.originalEvidenceDigest||principal.amountMinor!==row.amountMinor||principal.feeObligationMinor!==row.feeObligationMinor||principal.feeProvenCollectedMinor!==row.feeProvenCollectedMinor||principal.feeEvidenceDigest!==row.feeEvidenceDigest)refuse();};
  const capacity=async(sourceApplicationId:string|null,takeMinor:number):Promise<Capacity>=>{
   const key=sourceApplicationId??"direct";if(visiting.has(key))refuse();visiting.add(key);
-  const originalPrincipalMinor=payment.amountMinor,originalFeeMinor=routing.applicationFeeMinor,acceptedRetiredFeeMinor=retired,actualCollectedFeeMinor=collected;
+  const originalPrincipalMinor=payment.amountMinor,originalFeeMinor=frozenOriginalPaymentFeeMinor,acceptedRetiredFeeMinor=retired,actualCollectedFeeMinor=collected;
   if(sourceApplicationId){
    const application=ancestry.applications.find(row=>row.reservationId===sourceApplicationId),reservation=ancestry.reservations.find(row=>row.id===sourceApplicationId),parent=reservation&&ancestry.funding.find(row=>row.id===reservation.fundingId);
    if(!application||!reservation||!parent||parent.sourcePaymentId!==payment.id||application.feeUnexpected||reservation.feeUnexpected||parent.feeUnexpected

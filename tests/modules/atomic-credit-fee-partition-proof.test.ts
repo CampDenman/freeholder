@@ -1,14 +1,15 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // PREPARED/UNRUN. MAC/epoch controls supply no current source or bank authority.
 import {describe,expect,it} from "vitest";
+import type {AtomicCreditFeeEconomicPlan} from "@/modules/invoicing/atomic-credit-fee-partition-contract";
 import {atomicCreditFeeCapacities} from "@/modules/invoicing/atomic-credit-fee-amounts";
 import {signAtomicCreditFeePartition,verifiedAtomicCreditFeePartition} from "@/modules/invoicing/atomic-credit-fee-partition-proof";
 import {ATOMIC_CREDIT_FEE_PROTOCOL} from "@/modules/invoicing/atomic-credit-fee-protocol";
 import {merchantTaxDigest} from "@/modules/invoicing/merchant-tax-store";
 const id=(n:number)=>`00000000-0000-4000-8000-${n.toString().padStart(12,"0")}`,sha="a".repeat(64),key="fictional-original-credit-purpose-key";
-function original(){
+function original():Parameters<typeof signAtomicCreditFeePartition>[0]{
  const amounts=atomicCreditFeeCapacities({originalPrincipalMinor:4199,originalFeeMinor:400,acceptedRetiredFeeMinor:1,actualCollectedFeeMinor:399,loans:[],takeMinor:4199});
- const economic={protocol:ATOMIC_CREDIT_FEE_PROTOCOL,epochKind:"direct" as const,sourcePaymentId:id(2),sourceApplicationId:null,parentFundingId:null,sourceCollectionId:id(3),sourceResourceId:id(4),rootKind:"payment" as const,rootApplicationId:null,legacyApplicationRevision:null,legacyApplicationProof:null,rootFundingId:null,rootEconomicRevision:null,originalRootPrincipalMinor:4199,originalRootFeeMinor:400,sourceSegments:[],takeSegments:[],originalPaymentFeeMinor:400,originalResourceRetiredFeeMinor:1,...amounts,retiredResources:[]};
+ const economic:Omit<AtomicCreditFeeEconomicPlan,"economicRevision">={protocol:ATOMIC_CREDIT_FEE_PROTOCOL,epochKind:"direct" as const,sourcePaymentId:id(2),sourceApplicationId:null,parentFundingId:null,sourceCollectionId:id(3),sourceResourceId:id(4),rootKind:"payment" as const,rootApplicationId:null,legacyApplicationRevision:null,legacyApplicationProof:null,rootFundingId:null,rootEconomicRevision:null,originalRootPrincipalMinor:4199,originalRootFeeMinor:400,sourceSegments:[],takeSegments:[],originalPaymentFeeMinor:400,originalResourceRetiredFeeMinor:1,...amounts,retiredResources:[]};
  const plan={...economic,economicRevision:merchantTaxDigest(economic)};
  return{fundingId:id(1),sourcePaymentId:id(2),sourceApplicationId:null,sourceInvoiceId:id(5),creditNoteId:id(6),creditNoteLineId:id(7),originalChargeReceiptId:id(8),bankInspectionId:id(9),bankObservationId:id(10),protocol:ATOMIC_CREDIT_FEE_PROTOCOL,parentFingerprint:sha,
   economics:{plan,currentParentRevision:sha,postgresSourceRevision:sha,beforeInvoiceProjections:[],beforeProrationProjections:[],beforeSubscriptionProjections:[],currentFeeProofRevision:sha,bankNamespaceRevision:sha,sourceGraphRevision:sha,feeEvidenceDigest:sha,

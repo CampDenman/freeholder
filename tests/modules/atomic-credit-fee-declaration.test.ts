@@ -1,11 +1,12 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // PREPARED/UNRUN: a planned UUID is authenticated evidence, never row birth.
 import {describe,expect,it} from "vitest";
+import type {AtomicCreditFeeDeclaration} from "@/modules/invoicing/atomic-credit-fee-declaration-contract";
 import {ATOMIC_CREDIT_FEE_DECLARATION_PROTOCOL} from "@/modules/invoicing/atomic-credit-fee-protocol";
 import {signAtomicCreditFeeDeclaration,verifiedAtomicCreditFeeDeclaration} from "@/modules/invoicing/atomic-credit-fee-declaration-proof";
 const id=(n:number)=>`00000000-0000-4000-8000-${n.toString().padStart(12,"0")}`;
 const createdAt=new Date("2026-11-14T00:00:00Z"),key="fictional-private-B-declaration-key",sha="a".repeat(64);
-function body(){return{protocol:ATOMIC_CREDIT_FEE_DECLARATION_PROTOCOL,quoteId:id(1),resourceId:id(2),subscriptionId:id(3),plannedProrationId:id(4),originalInvoiceId:id(5),originalInvoiceLineId:id(6),
+function body():Omit<AtomicCreditFeeDeclaration,"digest"|"authentication">{return{protocol:ATOMIC_CREDIT_FEE_DECLARATION_PROTOCOL,quoteId:id(1),resourceId:id(2),subscriptionId:id(3),plannedProrationId:id(4),originalInvoiceId:id(5),originalInvoiceLineId:id(6),
  fundings:[{fundingId:id(7),sourcePaymentId:id(8),sourceApplicationId:null,amountMinor:4199,feeEvidenceDigest:sha}]};}
 describe("private signed planned B funding declaration",()=>{
  it("binds the exact server plan and permits original credential rotation",()=>{const row=signAtomicCreditFeeDeclaration(body(),createdAt,key);expect(verifiedAtomicCreditFeeDeclaration(row,createdAt,["previous-unrelated-key",key])).toBe(true);});

@@ -34,7 +34,7 @@ export async function readAtomicCreditAcceptedQuoteSource(tx:Tx,prorationId:stri
  const line=lines[0];if(!line)refuse();
  const physicalIdentities=[`subscription_controlled_resources:${resource.id}`,`subscription_controlled_quotes:${quote.id}`,`subscription_prorations:${accepted.id}`,`credit_notes:${note.id}`,`credit_note_lines:${line.id}`,
   ...principal.map(row=>`subscription_proration_principal:${row.id}`),...history.operations.map(row=>`subscription_controlled_operations:${row.id}`),...history.calls.map(row=>`subscription_controlled_calls:${row.id}`),...history.facts.map(row=>`subscription_controlled_facts:${row.id}`),
-  ...history.finishes.map(row=>`subscription_controlled_finishes:${row.callId}`),...history.stops.map(row=>`subscription_controlled_stops:${row.callId}`),...history.verifications.map(row=>`subscription_controlled_verifications:${row.operationId}`),...history.chargeOrigins.map(row=>`subscription_controlled_charge_origins:${row.receiptId}`),...history.closures.map(row=>`subscription_controlled_closures:${row.id}`)];
+  ...history.finishes.map(row=>`subscription_controlled_finishes:${row.callId}`),...history.stops.map(row=>`subscription_controlled_stops:${row.callId}`),...history.verifications.map(row=>`subscription_controlled_verifications:${row.operationId}`),...history.chargeOrigins.map(row=>`subscription_controlled_charge_origins:${row.receiptId}`),...history.closures.map(row=>`subscription_controlled_closures:${row.resourceId}`)];
  if(new Set(physicalIdentities).size>5000)refuse();
  return{declaration,review,quote,quoteFingerprint:selected.fingerprint,accepted,note,line,principal,physicalIdentities,suppliesCurrentMoneyAuthority:false as const};
 }
