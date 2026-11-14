@@ -74,6 +74,19 @@ full media protocol/recovery, real provider/platform acceptance and final
 byte recovery remain open; these component proofs are not independent review
 or the final candidate signature.
 
+Owner recovery UI follow-up (2026-11-14 UTC):4349a5a9 additionally passes the
+actual standalone production build/scrub and four en/es/fr/ar owner browser
+journeys in both themes at320px with keyboard, zero Axe violations and Arabic
+RTL. Each genuine child admission/death is reviewed through the actual shared
+owner action. All27 financial/admission/finish table hashes stay unchanged;
+NULL original finish remains NULL, one authentic stop and minimized audit are
+proved independently alongside all84 journal hashes and drained clients. The
+fresh sign-in factor is an explicit fictional fixture, and no actual bank or
+external provider is called. Review the private pending-list aggregate bounds,
+stop authentication, current plan/stale revision, live/unobservable refusal and
+server action service boundary. Full C12.38, provider/cross-host recovery,
+independent review and final owner signature remain open.
+
 ## 2026-11-10 review assignment and alert remediation
 
 Tony Aly selected himself to perform the review and requested completion of

@@ -3574,7 +3574,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-13 checkpoint. Protected main is fdba2817 after signing containment PR702, with44 PR checks and43 protected merge-group jobs passed. Broader draft PR701 remains older and its CI is not green. Current1bf950f7 source qualifies411 deduplicated actual controls across70 complete files,103 explicit native skips, types/affected lint and license/notes/plan. Fresh V12 applies all84 migrations; strict v21 passes143 models/287 guards/229 function bodies. All nine actual stop/capture/current-reader/original-cash journeys now pass individually with independent financial/table SHA, all84 journal identities, settings and drained-client proof. Live-registry SDK generation and non-update verification pass8+8 and preserve all component hashes. FailedV11 and earlier datasets/logs remain preserved. Positive controlled collection and full media recovery/multipart/quota/cutover remain implementation work. Current-source green CI, owner recovery UI, provider/platform acceptance, final byte recovery, Tony’s C11.10 report and exact C11.17 signature remain open. No live item closes from this checkpoint. |
+| Latest launch audit | 2026-11-13/14 checkpoint. Protected main is fdba2817 after containment PR702 (44 PR and43 merge-group checks passed); broader PR701 is older and not green. Current4349a5a9 source qualifies429 actual controls/70 complete files with103 explicit native skips, plus separate locale/fee117/5 files with9 skips; types/affected lint and metadata pass. Fresh V13 applies all84 migrations and strict v22 passes143 models/287 guards/229 function bodies. V14 repeats all84 unchanged identities for browser qualification. All nine earlier actual stop/capture/current-reader/original-cash journeys pass at1bf950f7; the extended owner-inventory stop test passes at8d5cc948, and current SDK non-update verification passes8. Current production build passes97.387s and artifact scrub24142 files/369684959 bytes. Four actual owner browser journeys pass in en/es/fr/ar at320px in both themes with keyboard, zero Axe violations, unchanged financial/admission/finish hashes, authentic stop/audit and drained clients. Failed source/native/browser datasets/logs remain preserved. Positive controlled collection and full media recovery/multipart/quota/cutover remain implementation; current-source green CI, real provider/platform and cross-host byte recovery, Tony’s C11.10 report and exact C11.17 signature remain open. No live C-item closes. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -15855,6 +15855,21 @@ whatever is best for the people using the site.
   failed gate. Renaming only the comparator arguments/locals to first/second
   preserves its exact ordering and leaves the unchanged RTL oracle intact.
   Locale/fee renewal and actual owner browser/a11y remain pending.
+  Actual owner browser component acceptance 2026-11-14 UTC (C12.38/C11.08):
+  current4349a5a9 production build passes97.387s and standalone scrub verifies
+  24142 files/369684959 bytes without source/environment leakage. Each of
+  four en/es/fr/ar journeys creates genuine original cash through shared
+  services, observes a real child GET admission, kills and awaits that process,
+  then uses the production owner page and keyboard to submit the shared review.
+  Both themes at320px pass Axe, control/page bounds and Arabic RTL. Independent
+  readback proves one exact authenticated stop and human audit/payment subject,
+  no raw hosting evidence in audit, all27 financial/admission/finish table SHA
+  unchanged, all84 journal hashes and no clients left open. The sign-in is an
+  explicitly fictional fresh-factor fixture, not first-boot/OTP/passkey proof.
+  Failed alias-loader V13 is preserved; the alias-only driver repair changes
+  no product bytes and succeeds on fresh V14. Local OS death and synthetic
+  provider edges do not supply cross-host/provider acceptance or C11 sign-off.
+  Positive controlled application and full C12.38 remain open.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;
