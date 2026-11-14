@@ -9302,5 +9302,20 @@
   "subscriptions.proration.cardCollect": "Collect or recover original payment",
   "subscriptions.proration.cardReaderTitle": "Original changed-price bank readers",
   "subscriptions.proration.cardReaderIntro": "Every original bank verification must actually finish or have an independently reviewed runtime stop. A later successful read cannot replace a lost caller; a stop review does not prove whether money moved.",
-  "subscriptions.proration.cardReaderRecover": "The original runtime stop is recorded. Use the original payment inspection above to make a newly admitted bank read."
+  "subscriptions.proration.cardReaderRecover": "The original runtime stop is recorded. Use the original payment inspection above to make a newly admitted bank read.",
+  "cashInspection.title": "Interrupted bank inspections",
+  "cashInspection.help": "Review a bank inspection that stopped before it returned. This review does not record a bank result or move money.",
+  "cashInspection.empty": "No unfinished bank inspections need review.",
+  "cashInspection.caller": "Inspection on {host}, process {pid}",
+  "cashInspection.open": "Open review",
+  "cashInspection.live": "Original process is running",
+  "cashInspection.absent": "Original process has stopped",
+  "cashInspection.unobservable": "Original process cannot be verified here",
+  "cashInspection.changed": "The inspection changed or has already finished. Reload this page before reviewing it.",
+  "cashInspection.liveHelp": "Let the original inspection finish, or stop that exact process in your hosting account before reviewing its stop.",
+  "cashInspection.unobservableHelp": "This site cannot verify that the original process stopped. Use the original host with its process records available; keep this inspection pending until its stop can be verified.",
+  "cashInspection.reviewHelp": "Describe how you verified that this exact original process stopped. After review, retry the bank inspection from the original payment or recovery action.",
+  "cashInspection.evidence": "Hosting evidence",
+  "cashInspection.confirm": "I verified that this original inspection process stopped. I understand that a new completed bank inspection is still required.",
+  "cashInspection.review": "Record verified stop"
 }

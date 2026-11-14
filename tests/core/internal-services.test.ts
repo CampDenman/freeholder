@@ -654,6 +654,7 @@ const CALLER_AUTHORIZED_PHASES = [
   "invoicing.recordCashReturnObservation",
   "invoicing.assertMerchantCashInspectionInvocation",
   "invoicing.cashInspectionRecoveryPlan",
+  "invoicing.cashInspectionRecoveryList",
   "invoicing.finishMerchantCashReturnInspection",
   "invoicing.finalizeUnappliedCashReturn",
   "invoicing.subscriptionChargeDisposition",

@@ -9302,5 +9302,20 @@
   "subscriptions.proration.cardCollect": "Cobrar o recuperar el pago original",
   "subscriptions.proration.cardReaderTitle": "Lecturas bancarias originales del cambio de precio",
   "subscriptions.proration.cardReaderIntro": "Cada verificación bancaria original debe terminar realmente o contar con una revisión independiente de la detención del proceso. Una lectura posterior correcta no sustituye una llamada perdida; revisar una detención no prueba si se movió dinero.",
-  "subscriptions.proration.cardReaderRecover": "Se registró la detención del proceso original. Use la inspección del pago original de arriba para realizar una nueva lectura bancaria autorizada."
+  "subscriptions.proration.cardReaderRecover": "Se registró la detención del proceso original. Use la inspección del pago original de arriba para realizar una nueva lectura bancaria autorizada.",
+  "cashInspection.title": "Inspecciones bancarias interrumpidas",
+  "cashInspection.help": "Revise una inspección bancaria que se detuvo antes de finalizar. Esta revisión no registra un resultado bancario ni mueve dinero.",
+  "cashInspection.empty": "No hay inspecciones bancarias sin finalizar que requieran revisión.",
+  "cashInspection.caller": "Inspección en {host}, proceso {pid}",
+  "cashInspection.open": "Abrir revisión",
+  "cashInspection.live": "El proceso original está en ejecución",
+  "cashInspection.absent": "El proceso original se ha detenido",
+  "cashInspection.unobservable": "El proceso original no se puede verificar aquí",
+  "cashInspection.changed": "La inspección ha cambiado o ya ha finalizado. Vuelva a cargar esta página antes de revisarla.",
+  "cashInspection.liveHelp": "Deje que termine la inspección original o detenga ese proceso exacto en su cuenta de alojamiento antes de revisar su detención.",
+  "cashInspection.unobservableHelp": "Este sitio no puede verificar que el proceso original se haya detenido. Use el servidor original con sus registros de procesos disponibles; mantenga esta inspección pendiente hasta poder verificar su detención.",
+  "cashInspection.reviewHelp": "Describa cómo verificó que este proceso original exacto se detuvo. Tras la revisión, vuelva a intentar la inspección bancaria desde el pago original o la acción de recuperación.",
+  "cashInspection.evidence": "Pruebas del alojamiento",
+  "cashInspection.confirm": "Verifiqué que este proceso de inspección original se detuvo. Entiendo que aún se requiere una nueva inspección bancaria completada.",
+  "cashInspection.review": "Registrar detención verificada"
 }

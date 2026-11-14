@@ -181,3 +181,21 @@ absent. No hand-written SDK change. No stable version, completed independent
 review, owner signature or provider/platform acceptance is supplied. Shared
 owner recovery UI, full positive controlled collection and the remaining media
 protocol/cutover/byte recovery continue as required implementation.
+
+
+## Owner recovery UI source increment (C12.38/C11.08)
+
+The shared cash-recovery page now lists unfinished inspection callers through
+a private scoped, signed-in-person query. It selects all unfinished admissions
+under an aggregate5000 bound, authenticates all retained stop receipts and
+refuses more than200 pending rows rather than showing a partial prefix. Its
+projection omits request/nonce, bank evidence, HMACs and review authority.
+The page opens one exact current recovery plan; only a mechanically absent
+known original process offers the existing fresh-human, step-up review form.
+Live/unknown birth/cross-host states retain pending guidance. The action calls
+the shared service, so posted identities/revisions cannot bypass validation.
+No SQL/model, provider action or public API signature changes. Four locale
+strings use shared semantic components. The existing native stop test retains
+all original assertions and additionally checks the real private list, actor
+refusal, safe field inventory and convergence after real stop and finish.
+Source/native renewal and actual owner browser/a11y acceptance are pending.

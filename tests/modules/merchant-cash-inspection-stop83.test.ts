@@ -14,7 +14,7 @@ import { ready } from "@/core/runtime";
 import { stopJobs } from "@/core/jobs";
 import { defineService } from "@/core/service";
 import { prepareMerchantCashReturnInspection,performMerchantCashReturnInspection,recordCashReturnPrimaryObservation,recordCashReturnObservation,finishMerchantCashReturnInspection } from "@/modules/invoicing/merchant-cash-return-service";
-import { cashInspectionRecoveryPlan,reviewCashInspectionCallerStopped } from "@/modules/invoicing/merchant-cash-inspection-stop-service";
+import { cashInspectionRecoveryList,cashInspectionRecoveryPlan,reviewCashInspectionCallerStopped } from "@/modules/invoicing/merchant-cash-inspection-stop-service";
 import { CASH_INSPECTION_STOP_CONFIRMATION } from "@/modules/invoicing/merchant-cash-inspection-stop-proof";
 import { cashInspectionStopFinancialWitness,exportCashInspectionStops } from "@/modules/invoicing/merchant-cash-inspection-stops";
 import { invoiceMerchantDependencyFingerprints,exportMerchantRecoveryHistory } from "@/modules/invoicing/merchant-payment-dependencies";
@@ -42,6 +42,9 @@ describe.runIf(hasDatabase)("authentic original cash inspection independent stop
     child.once("message",message=>{clearTimeout(timeout);const parsed=z.object({inspectionId:z.uuid()}).safeParse(message);if(parsed.success)resolve(parsed.data);else{const error=z.object({error:z.string()}).safeParse(message);reject(Error(error.success?error.data.error:diagnostics));}});child.once("error",error=>{clearTimeout(timeout);reject(error);});child.once("exit",code=>{clearTimeout(timeout);reject(Error(`Child exited ${code} before GET barrier: ${diagnostics}`));});});
    const[before]=await db().select().from(merchantCashReturnInspections).where(eq(merchantCashReturnInspections.id,ticket.inspectionId));if(!before)throw Error("The actual original admission must exist.");
    const plan=await cashInspectionRecoveryPlan.call(ticket,OWNER);expect(plan).toMatchObject({inspectionId:ticket.inspectionId,liveness:"live",originalBirthKnown:true,finished:false,reviewed:false});
+   const pending=await cashInspectionRecoveryList.call({},OWNER);expect(pending).toHaveLength(1);expect(pending[0]).toMatchObject({inspectionId:ticket.inspectionId,callerId:plan.callerId,liveness:"live",originalBirthKnown:true});
+   expect(Object.keys(pending[0]!).sort()).toEqual(["callerId","createdAt","host","inspectionId","liveness","originalBirthKnown","pid","startedAt"]);
+   await expect(cashInspectionRecoveryList.call({},{...OWNER,keyScopes:["invoicing.cashInspectionRecoveryList"]})).rejects.toMatchObject({code:"permission"});await expect(cashInspectionRecoveryList.call({},system)).rejects.toMatchObject({code:"permission"});
    expect(await db().select().from(merchantCashReturnPrimaryObservations)).toHaveLength(0);expect(await db().select().from(merchantCashReturnObservations)).toHaveLength(0);
    const review={inspectionId:plan.inspectionId,expectedCallerId:plan.callerId,expectedAdmissionDigest:plan.admissionDigest,expectedSourceRevision:plan.sourceRevision,hostingEvidence:"Synthetic independent hosting review for this exact original child's actual exit, not a timeout or a successor read.",confirmation:CASH_INSPECTION_STOP_CONFIRMATION};
    await expect(reviewCashInspectionCallerStopped.call(review,OWNER)).rejects.toMatchObject({code:"conflict"});await expect(reviewCashInspectionCallerStopped.call(review,{...OWNER,keyScopes:["invoicing.reviewCashInspectionCallerStopped"]})).rejects.toMatchObject({code:"permission"});
@@ -50,6 +53,7 @@ describe.runIf(hasDatabase)("authentic original cash inspection independent stop
    await expect(reviewCashInspectionCallerStopped.call({...review,expectedSourceRevision:"f".repeat(64)},OWNER)).rejects.toMatchObject({code:"conflict"});
    const mergeBeforeStop=await db().transaction(tx=>invoiceMerchantDependencyFingerprints(tx,[f.invoiceId]));expect(mergeBeforeStop?.get(f.invoiceId)).toMatch(/^[a-f0-9]{64}$/);
    expect(await reviewCashInspectionCallerStopped.call(review,OWNER)).toEqual({reviewed:true,mechanicalCheck:"original_process_absent"});
+   expect(await cashInspectionRecoveryList.call({},OWNER)).toEqual([]);
    const mergeAfterStop=await db().transaction(tx=>invoiceMerchantDependencyFingerprints(tx,[f.invoiceId]));expect(mergeAfterStop?.get(f.invoiceId)).toMatch(/^[a-f0-9]{64}$/);expect(mergeAfterStop?.get(f.invoiceId)).not.toBe(mergeBeforeStop?.get(f.invoiceId));
    expect(await db().select().from(merchantCashReturnInspections).where(eq(merchantCashReturnInspections.id,before.id))).toEqual([before]);expect(await db().select().from(merchantCashReturnInspectionFinishes)).toHaveLength(0);expect(await current.call(ticket,system)).toBe(false);
    await expect(finishMerchantCashReturnInspection.call({inspectionId:before.id,completionNonce:"A".repeat(43)},system)).rejects.toMatchObject({code:"conflict"});
@@ -65,6 +69,7 @@ describe.runIf(hasDatabase)("authentic original cash inspection independent stop
     onRefundObserved:async evidence=>{await recordMerchantRefundObservation.call({source:f.source,inspectionId:claim.inspectionId,evidence:{...evidence,providerApiVersion:evidence.providerApiVersion??null,status:evidence.providerStatus??null}},system);},
     onReturnStateObserved:async evidence=>{await recordCashReturnObservation.call({...claim,evidence},system);}}));
    expect(await current.call({inspectionId:claim.inspectionId},system)).toBe(true);expect(await db().select().from(merchantCashReturnInspectionFinishes)).toMatchObject([{inspectionId:claim.inspectionId,outcome:"returned"}]);expect(await db().select().from(merchantCashReturnInspectionStops)).toHaveLength(1);expect(f.posts).toEqual([]);
+   expect(await cashInspectionRecoveryList.call({},OWNER)).toEqual([]);
    const[latest]=await db().select().from(merchantCashReturnObservations).where(eq(merchantCashReturnObservations.inspectionId,claim.inspectionId)).orderBy(merchantCashReturnObservations.sequence);if(!latest)throw Error("The new actual bank read must retain its own evidence.");
    const retainedStates=await db().select().from(merchantCashReturnObservations);
    await expect(recordCashReturnObservation.call({inspectionId:before.id,completionNonce:"A".repeat(43),evidence:latest.evidence},system)).rejects.toMatchObject({code:"conflict"});expect(await db().select().from(merchantCashReturnObservations)).toEqual(retainedStates);

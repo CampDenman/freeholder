@@ -15833,6 +15833,18 @@ whatever is best for the people using the site.
   103 explicit native skips. These synthetic provider-edge component proofs
   are distinct from real provider/platform acceptance and independent review.
   Shared owner recovery UI and full controlled application remain required.
+  Owner recovery UI SOURCE increment 2026-11-13 (C12.38/C11.08):
+  the cash-recovery page discovers the complete bounded unfinished inspection
+  list through a private person-only shared query, authenticating every retained
+  stop rather than hiding unauthenticated rows. It selects one current plan
+  and submits the existing fresh-human/step-up review service. Live and unknown
+  process states have guidance without an approval form. English, Spanish,
+  French and Arabic strings use the existing semantic theme components. The
+  original real-child oracle retains all assertions and adds bounded private
+  list projection, API-key/system refusal and genuine-stop/finish convergence.
+  No SQL/model, authority, SDK public method or provider action changes. Source
+  gates, renewed native list proof and actual browser/accessibility acceptance
+  remain pending; no C-item closes.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;

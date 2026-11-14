@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: actual original cash, explicit human money and hosting review.
-import { hasModuleAccess } from "@/core/service";
+import { hasModuleAccess, ServiceError } from "@/core/service";
 import { originalCashReturnRecovery } from "@/modules/invoicing/original-cash-recovery-read";
 import { ORIGINAL_CASH_RETURN_CONFIRMATION, ORIGINAL_CASH_STOP_CONFIRMATION } from "@/modules/invoicing/original-cash-recovery-proof";
 import { Button, Callout, Card, CardBody, Field } from "@/ui/primitives";
@@ -10,13 +10,23 @@ import { requireStaffActor } from "../../guard";
 import { money } from "../format";
 import { originalCashRecoveryAction } from "./actions";
 import { ORIGINAL_PARTIAL_CASH_CONFIRMATION, ORIGINAL_UNASSIGNED_CASH_CONFIRMATION } from "@/modules/invoicing/original-cash-partial-contract";
+import { cashInspectionRecoveryList, cashInspectionRecoveryPlan } from "@/modules/invoicing/merchant-cash-inspection-stop-service";
+import { CashInspectionRecovery } from "../../../../components/CashInspectionRecovery";
 export const dynamic = "force-dynamic";
-export default async function OriginalCashRecoveryPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string }> }) {
+export default async function OriginalCashRecoveryPage({ searchParams }: { searchParams: Promise<{ error?: string; saved?: string; inspection?: string }> }) {
   const actor = await requireStaffActor("invoicing"), [rows, t, query] = await Promise.all([originalCashReturnRecovery.call({}, actor), getT(), searchParams]);
   const manage = hasModuleAccess(actor, "invoicing", "manage"), human = manage && actor.kind === "user" && !actor.keyScopes;
+  const inspections = human ? await cashInspectionRecoveryList.call({}, actor) : [];
+  let inspectionPlan: Awaited<ReturnType<typeof cashInspectionRecoveryPlan.call>> | null = null, changed = false;
+  if (human && query.inspection) {
+    if (!inspections.some(row => row.inspectionId === query.inspection)) changed = true;
+    else try { inspectionPlan = await cashInspectionRecoveryPlan.call({ inspectionId: query.inspection }, actor); }
+    catch (error) { if (error instanceof ServiceError && error.code === "conflict") changed = true; else throw error; }
+  }
   return <div className="grid gap-6"><a href="/admin/invoices" className="underline">{t("cashRecovery.back")}</a>
     <h1 className="text-xl font-semibold">{t("cashRecovery.title")}</h1><p>{t("cashRecovery.help")}</p>
     {query.error ? <Callout tone="danger">{t("cashRecovery.error")}</Callout> : null}{query.saved ? <Callout tone="success">{t("cashRecovery.saved")}</Callout> : null}
+    {human ? <CashInspectionRecovery rows={inspections} plan={inspectionPlan} changed={changed} t={t}/> : null}
     {!rows.length ? <p>{t("cashRecovery.empty")}</p> : rows.map(row => {
       const sourceId = row.source.kind === "subscription" ? row.source.receiptId : row.source.paymentId;
       return <Card key={row.recoveryId ?? `${sourceId}:${row.source.observationId ?? "original"}`}><CardBody><div className="grid gap-4">

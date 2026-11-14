@@ -9302,5 +9302,20 @@
   "subscriptions.proration.cardCollect": "Encaisser ou récupérer le paiement initial",
   "subscriptions.proration.cardReaderTitle": "Lectures bancaires initiales du changement de prix",
   "subscriptions.proration.cardReaderIntro": "Chaque vérification bancaire initiale doit réellement se terminer ou disposer d’un arrêt du processus examiné indépendamment. Une lecture ultérieure réussie ne remplace pas un appel perdu ; un examen d’arrêt ne prouve pas si des fonds ont été déplacés.",
-  "subscriptions.proration.cardReaderRecover": "L’arrêt du processus initial est enregistré. Utilisez l’inspection du paiement initial ci-dessus pour une nouvelle lecture bancaire autorisée."
+  "subscriptions.proration.cardReaderRecover": "L’arrêt du processus initial est enregistré. Utilisez l’inspection du paiement initial ci-dessus pour une nouvelle lecture bancaire autorisée.",
+  "cashInspection.title": "Vérifications bancaires interrompues",
+  "cashInspection.help": "Examinez une vérification bancaire interrompue avant son retour. Cet examen ne consigne aucun résultat bancaire et ne déplace aucun argent.",
+  "cashInspection.empty": "Aucune vérification bancaire inachevée ne nécessite un examen.",
+  "cashInspection.caller": "Vérification sur {host}, processus {pid}",
+  "cashInspection.open": "Ouvrir l’examen",
+  "cashInspection.live": "Le processus d’origine est en cours",
+  "cashInspection.absent": "Le processus d’origine est arrêté",
+  "cashInspection.unobservable": "Le processus d’origine ne peut pas être vérifié ici",
+  "cashInspection.changed": "La vérification a changé ou est déjà terminée. Rechargez cette page avant de l’examiner.",
+  "cashInspection.liveHelp": "Laissez la vérification d’origine se terminer ou arrêtez ce processus précis dans votre compte d’hébergement avant d’examiner son arrêt.",
+  "cashInspection.unobservableHelp": "Ce site ne peut pas vérifier l’arrêt du processus d’origine. Utilisez le serveur d’origine avec ses données de processus disponibles ; gardez cette vérification en attente jusqu’à ce que son arrêt puisse être vérifié.",
+  "cashInspection.reviewHelp": "Décrivez comment vous avez vérifié l’arrêt de ce processus d’origine précis. Après l’examen, relancez la vérification bancaire depuis le paiement d’origine ou l’action de récupération.",
+  "cashInspection.evidence": "Preuves d’hébergement",
+  "cashInspection.confirm": "J’ai vérifié l’arrêt de ce processus de vérification d’origine. Je comprends qu’une nouvelle vérification bancaire terminée reste nécessaire.",
+  "cashInspection.review": "Consigner l’arrêt vérifié"
 }

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C1.08/C11.10: independent human review releases only a real old caller.
-import { and,eq,sql } from "drizzle-orm";
+import { and,asc,eq,isNull,sql } from "drizzle-orm";
 import { z } from "zod";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { actorString,defineService,ServiceError,type ServiceContext } from "@/core/service";
@@ -34,6 +34,19 @@ async function original(ctx:ServiceContext,inspectionId:string){
 export const cashInspectionRecoveryPlan=defineService({name:"invoicing.cashInspectionRecoveryPlan",summary:"Read one exact original cash inspection's caller and current immutable review revision without exposing its completion nonce.",kind:"query",permission:"scoped",agentCallable:false,external:false,auditInputFields:["inspectionId"],
  input:z.object({inspectionId:z.uuid()}).strict(),output:z.object({inspectionId:z.uuid(),callerId:z.uuid(),admissionDigest:digest,sourceRevision:digest,host:z.string(),pid:z.number().int(),startedAt:z.string(),bootId:z.string().nullable(),pidNamespace:z.string().nullable(),startTicks:z.string().nullable(),originalBirthKnown:z.boolean(),liveness:z.enum(["live","absent","unobservable"]),finished:z.boolean(),reviewed:z.boolean()}),
  handler:async({inspectionId},ctx)=>{human(ctx);const current=await original(ctx,inspectionId),caller=current.inspection.caller;return{inspectionId,callerId:caller.id,admissionDigest:current.admissionDigest,sourceRevision:current.sourceRevision,host:caller.host,pid:caller.pid,startedAt:caller.startedAt,bootId:caller.bootId,pidNamespace:caller.pidNamespace,startTicks:caller.startTicks,originalBirthKnown:observableCashInspectionBirth(caller),liveness:merchantCallerLiveness(caller),finished:!!current.finish,reviewed:!!current.stop};}});
+export const cashInspectionRecoveryList=defineService({name:"invoicing.cashInspectionRecoveryList",summary:"List the complete bounded unfinished inspection review inventory for a signed-in person without exposing bank evidence or completion nonces.",kind:"query",permission:"scoped",agentCallable:false,external:false,
+ input:z.object({}).strict(),output:z.array(z.object({inspectionId:z.uuid(),callerId:z.uuid(),createdAt:z.date(),host:z.string(),pid:z.number().int(),startedAt:z.string(),originalBirthKnown:z.boolean(),liveness:z.enum(["live","absent","unobservable"])})).max(200),handler:async(_input,ctx)=>{
+ human(ctx);
+ const rows=await ctx.tx.select({inspection:merchantCashReturnInspections}).from(merchantCashReturnInspections)
+  .leftJoin(merchantCashReturnInspectionFinishes,eq(merchantCashReturnInspectionFinishes.inspectionId,merchantCashReturnInspections.id))
+  .where(isNull(merchantCashReturnInspectionFinishes.inspectionId)).orderBy(asc(merchantCashReturnInspections.createdAt),asc(merchantCashReturnInspections.id)).limit(5001);
+ if(rows.length>5000)throw new ServiceError("conflict","Restore a complete bounded original inspection inventory before reviewing callers.");
+ const admissions=rows.map(row=>row.inspection),stops=await cashInspectionStops(ctx.tx,admissions);
+ if(admissions.length+stops.length>5000)throw new ServiceError("conflict","Restore the complete original inspection and authenticated stop inventory before review.");
+ const stopped=new Set(stops.map(row=>row.inspectionId)),pending=admissions.filter(row=>!stopped.has(row.id));
+ if(pending.length>200)throw new ServiceError("conflict","The complete pending inspection review exceeds its safe window. Restore a bounded original review inventory.");
+ return pending.map(row=>({inspectionId:row.id,callerId:row.caller.id,createdAt:row.createdAt,host:row.caller.host,pid:row.caller.pid,startedAt:row.caller.startedAt,originalBirthKnown:observableCashInspectionBirth(row.caller),liveness:merchantCallerLiveness(row.caller)}));
+ }});
 export const reviewCashInspectionCallerStopped=defineService({name:"invoicing.reviewCashInspectionCallerStopped",summary:"Record an independent verified original-process stop without inventing a returned bank inspection, payment or refund.",kind:"mutation",permission:"scoped",stepUp:true,agentCallable:false,writeClass:"money",auditInputFields:["inspectionId","expectedCallerId","expectedAdmissionDigest","expectedSourceRevision"],
  input:z.object({inspectionId:z.uuid(),expectedCallerId:z.uuid(),expectedAdmissionDigest:digest,expectedSourceRevision:digest,hostingEvidence:z.string().trim().min(30).max(2000),confirmation:z.literal(CASH_INSPECTION_STOP_CONFIRMATION)}).strict(),output:z.object({reviewed:z.literal(true),mechanicalCheck:z.literal("original_process_absent")}),handler:async(input,ctx)=>{
  const reviewedBy=human(ctx),current=await original(ctx,input.inspectionId),{inspection}=current;
@@ -46,4 +59,4 @@ export const reviewCashInspectionCallerStopped=defineService({name:"invoicing.re
  await ctx.tx.insert(merchantCashReturnInspectionStops).values({...retained,authentication});
  const[saved]=await ctx.tx.select().from(merchantCashReturnInspectionStops).where(and(eq(merchantCashReturnInspectionStops.inspectionId,inspection.id),eq(merchantCashReturnInspectionStops.digest,retained.digest)));if(!saved)throw new ServiceError("conflict","Retain the exact original stop receipt before releasing caller debt.");
  ctx.setSubject(inspection.paymentId?"payment":"subscription_provider_charge",inspection.paymentId??inspection.subscriptionChargeReceiptId!);queueOriginalMerchantRefundRepair(ctx,{kind:"cash_stop",id:inspection.id});return{reviewed:true as const,mechanicalCheck:verdict};}});
-export default[cashInspectionRecoveryPlan,reviewCashInspectionCallerStopped];
+export default[cashInspectionRecoveryPlan,cashInspectionRecoveryList,reviewCashInspectionCallerStopped];
