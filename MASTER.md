@@ -3564,6 +3564,24 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Media identity/quota ROOT assembly2026-11-14 (C1.12/C11.08/C10.32/C1.08):
+frozen compact+72bb genuine fixture, ordinary361, legacy1b8 and quotae3f source
+now follow qualified auxiliaryb40. Full current MASTER plus only32+41newleaflines
+retained. New compact/session fields compose with qualified namespace narrowing;
+all baseline/binding/part authority/type fixes and financial noTTL reasons stay.
+Owned/normal82 exact1017370/7a592c66 preserves WHOLE749050,897790,942079,997946
+prefixes; normal85 remains832734/86e09cd1. ONE existing upload model adds nullable
+no-default/no-backfill/noFK UUID+partialunique+2guards; no new table/service/job/
+capability. Exact first membership/legacy anchors and physical-role quota proof
+remain independent of empty listing or equal key. Full current source/schema/
+SDK/business qualification UNRUN. Finite source parser adds ONLY scalar calls/
+requests args;8controls preserve all443current functions and strict negatives.
+Both request/part capabilities stay unpublished. Genuine initialization/original
+ABI/issued terminal/capture/custody/quota/cutover/upgrade/provider/fullspec and
+financial causal/proration/credit/security acceptance remain required. No C
+closure/stable/post. See `deploy/media-identity-quota-root-assembly.manifest.json`.
+
+
 Source-only continuation, 2026-11-14 (C1.12/C11.08): new ordinary upload births
 now explicitly bind one immutable upload/reservation UUID in the genuine shared
 same-TX producer, with deferred cross-row validation and no historical NULL

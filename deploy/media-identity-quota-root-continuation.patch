@@ -1,0 +1,153 @@
+diff --git a/src/core/media/multipart-abort-recovery-context.ts b/src/core/media/multipart-abort-recovery-context.ts
+index 0768431f..03b92238 100644
+--- a/src/core/media/multipart-abort-recovery-context.ts
++++ b/src/core/media/multipart-abort-recovery-context.ts
+@@ -20,9 +20,9 @@ export async function captureIdleMultipartAbortRecovery(tx:Tx,input:MultipartRec
+  const current=await lockedIdleOriginalMultipart(tx,base.resource.id,base.operation.id),operation=current.operation;if(!operation||current.resource.retiredAt)transferConflict("Keep the exact unresolved original ABORT; an existing retirement cannot be rebound to a new review.");
+  const original=await tx.select().from(calls).where(and(eq(calls.multipartOperationId,operation.id),eq(calls.kind,"multipart_abort"))).limit(2).for("update"),caller=original[0];if(original.length!==1||!caller||!["admitted","unknown","returned"].includes(caller.state)||caller.namespace!==current.resource.namespace||caller.physicalKey!==current.resource.key||caller.runtimeId!==operation.writerRuntimeId||caller.stopReceiptId)transferConflict();
+  const physical=await tx.select().from(requests).where(eq(requests.callId,caller.id)),facts=physical.length?await tx.select().from(observations).where(inArray(observations.requestId,physical.map(row=>row.id))):[],[stop]=input.stopDrainId?await tx.select().from(drains).where(eq(drains.id,input.stopDrainId)).limit(1):[];
+- const closed=requireLocallyClosedOriginalMultipartAbort({caller,requests:physical,namespace:current.resource.namespace!,key:current.resource.key,uploadId:current.resource.providerUploadId!,writerFinishedAt:operation.writerFinishedAt,stop:stop??null}),[proven]=await tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_abort_local_closed(${operation.id}::uuid,${closed.stop?.id??null}::uuid) as proven`);if(proven?.proven!==true)transferConflict("Every original creator must independently close before verification-only monotonic session removal.");
++ const closed=requireLocallyClosedOriginalMultipartAbort({caller,requests:physical,namespace:current.resource.namespace,key:current.resource.key,uploadId:current.resource.providerUploadId!,writerFinishedAt:operation.writerFinishedAt,stop:stop??null}),[proven]=await tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_abort_local_closed(${operation.id}::uuid,${closed.stop?.id??null}::uuid) as proven`);if(proven?.proven!==true)transferConflict("Every original creator must independently close before verification-only monotonic session removal.");
+  const[creation]=await tx.select().from(operations).where(and(eq(operations.resourceId,current.resource.id),eq(operations.kind,"create"))).limit(1),[creator]=creation?await tx.select().from(calls).where(and(eq(calls.multipartOperationId,creation.id),eq(calls.kind,"multipart_create"))).limit(1):[];if(!creation||!creator)transferConflict();
+  const births=await tx.select().from(requests).where(eq(requests.callId,creator.id)),birth=births.find(row=>row.descriptor.kind==="multipart.create");if(!birth)transferConflict();const review=creator.state==="stopped"?await retainedKnownCreateReview(tx,creation.id):undefined;
+  const issuers=await tx.select().from(operations).where(and(eq(operations.resourceId,current.resource.id),eq(operations.kind,"sign"))).limit(50001);if(issuers.length>50000)transferConflict();
+- return{...base,...current,kind:"abort"as const,repeat:false as const,compact:false as const,sessionId:current.resource.providerUploadId!,operation,caller,physical,facts,creation,creator,creationProof:{...birth,observedUploadId:current.resource.providerUploadId!,...(review?{review}:{})},binding:{kind:"s3"as const,namespace:current.resource.namespace!,location:current.resource.storageLocation},expectedRevision:undefined,issuers,stop:closed.stop,witness:transferDigest({resource:current.resource,operation,caller,physical,issuers,stop:closed.stop})};
++ return{...base,...current,kind:"abort"as const,repeat:false as const,compact:false as const,sessionId:current.resource.providerUploadId!,operation,caller,physical,facts,creation,creator,creationProof:{...birth,observedUploadId:current.resource.providerUploadId!,...(review?{review}:{})},binding:{kind:"s3"as const,namespace:current.resource.namespace,location:current.resource.storageLocation},expectedRevision:undefined,issuers,stop:closed.stop,witness:transferDigest({resource:current.resource,operation,caller,physical,issuers,stop:closed.stop})};
+ }
+diff --git a/src/core/media/multipart-create-baseline.ts b/src/core/media/multipart-create-baseline.ts
+index 53edab83..76eae08b 100644
+--- a/src/core/media/multipart-create-baseline.ts
++++ b/src/core/media/multipart-create-baseline.ts
+@@ -15,6 +15,7 @@ import {lockTransferInventory} from "./transfer-authority";
+ import {assertOriginalNamespaceMutation} from "./original-namespace-fence";
+ import {transferConflict,transferDigest} from "./transfer-proof";
+ import type {StorageBinding} from "@/adapters/storage/types";
++import type {TransferInventoryConfiguration,TransferInventoryPage} from "../../../scripts/media-transfer.mjs";
+ import {appendMultipartCreateBaseline,finishMultipartCreateBaseline,multipartBaselineResultDigest,nextMultipartBaselinePage,type MultipartCreateBaselinePage} from "./multipart-create-baseline-proof";
+ 
+ export async function captureMultipartCreateBaseline(operationId:string,binding:StorageBinding):Promise<void>{
+@@ -36,7 +37,7 @@ export async function captureMultipartCreateBaseline(operationId:string,binding:
+    }
+    if(next.cursorDigest!==transferDigest(cursor))transferConflict("An earlier partial scan cannot be resumed from a reconstructed current cursor.");
+    // The configured account is resolved above, never from a public host/key.
+-   const result=next.kind==="configuration"?await store.inventoryConfiguration():await store.inventoryPage(next.kind,cursor),digest=multipartBaselineResultDigest(result);
++   const result:TransferInventoryConfiguration|TransferInventoryPage=next.kind==="configuration"?await store.inventoryConfiguration():await store.inventoryPage(next.kind,cursor),digest=multipartBaselineResultDigest(result);
+    await db().transaction(async tx=>{
+     await lockTransferInventory(tx);await lockObjectDigest(tx,baseline.keyDigest);
+     const[current]=await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,operationId)).limit(1).for("update");
+diff --git a/src/core/media/multipart-idle-retirement-context.ts b/src/core/media/multipart-idle-retirement-context.ts
+index de4772c6..75af3398 100644
+--- a/src/core/media/multipart-idle-retirement-context.ts
++++ b/src/core/media/multipart-idle-retirement-context.ts
+@@ -7,7 +7,8 @@ import type {TransferRequestDescriptor} from "../../../scripts/media-transfer.mj
+ import {mediaMultipartOperations as operations,mediaMultipartResources as resources} from "./multipart-schema";
+ import {mediaUploads,mediaObjects} from "./schema";
+ import {mediaObjectWrites} from "./write-schema";
+-import {mediaStorageTransferCalls as calls,mediaStorageTransferObjects as copies} from "./transfer-schema";
++import type {mediaStorageTransferCalls as calls} from "./transfer-schema";
++import {mediaStorageTransferObjects as copies} from "./transfer-schema";
+ import {mediaStorageTransferRequests as requests} from "./transfer-request-schema";
+ import {storageQuotaObjects} from "./storage-quota-schema";
+ import {lockTransferInventory} from "./transfer-authority";
+diff --git a/src/core/media/multipart-operations.ts b/src/core/media/multipart-operations.ts
+index 10f7aee5..ed0c8dcf 100644
+--- a/src/core/media/multipart-operations.ts
++++ b/src/core/media/multipart-operations.ts
+@@ -8,7 +8,7 @@ import {observeTransferRequest,withTransferRequestScope,TransferRequestNotAttemp
+ import {requireDurableMediaRetirementProof} from "./retirement-authority";
+ // C1.12/C11.08: commit original intent, call its provider, then record facts.
+ import {createHash,randomUUID} from "node:crypto";
+-import {and,asc,eq,inArray,isNull,sql} from "drizzle-orm";
++import {and,asc,eq,inArray,sql} from "drizzle-orm";
+ import {boundStorage} from "@/adapters/storage";
+ import type {StorageTransferRevision} from "./transfer-schema";
+ import type {MultipartPart,StorageBinding} from "@/adapters/storage/types";
+diff --git a/src/core/media/multipart-repeat-abort-context.ts b/src/core/media/multipart-repeat-abort-context.ts
+index bb9e90a8..78c6ead0 100644
+--- a/src/core/media/multipart-repeat-abort-context.ts
++++ b/src/core/media/multipart-repeat-abort-context.ts
+@@ -4,7 +4,7 @@
+ import {and,eq,inArray,sql} from "drizzle-orm";
+ import type {Tx} from "@/core/service";
+ import type {MultipartRecoveryConfirmation} from "./multipart-recovery-context";
+-import {capture} from "./multipart-recovery-context";
++import type {capture} from "./multipart-recovery-context";
+ import {lockedIdleOriginalMultipart} from "./multipart-idle-retirement-context";
+ import {mediaMultipartOperations as operations} from "./multipart-schema";
+ import {mediaStorageTransferCalls as calls,mediaStorageWriterDrains as drains} from "./transfer-schema";
+diff --git a/src/core/media/service.ts b/src/core/media/service.ts
+index 6f05a338..e74dcdee 100644
+--- a/src/core/media/service.ts
++++ b/src/core/media/service.ts
+@@ -5,6 +5,7 @@
+ // The only door to the asset library. Reserve physical-operation ownership
+ // before storage I/O; attach a library asset only after accepted bytes and
+ // validation. Failed acknowledgements keep their original pending witnesses.
++import {assertDurableMultipartPartIssuance} from "./multipart-part-authority";
+ import { z } from "zod";
+ import { and, count, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
+ import { createHash, randomUUID } from "node:crypto";
+@@ -38,11 +39,10 @@ import {originalUploadContact,assertOriginalUploadWritable} from "./upload-owner
+ import {declareOriginalMultipartPartBodies} from "./multipart-part-bodies";
+ import {ORIGINAL_MULTIPART_PART_BYTES} from "./multipart-part-bodies-proof";
+ import {claimOriginalPartIssuance,finishUnattemptedPartIssuance,issueOriginalMultipartPart} from "./multipart-part-issuance";
+-import {assertDurableMultipartPartIssuance} from "./multipart-part-authority";
+ import {transferDigest} from "./transfer-proof";
+ import {withOriginalMultipartInvocation} from "./provider-callers";
+ import {originalMultipartRetirementAdmission,sealOriginalMultipartRetirement} from "./multipart-retirement-certificate";
+-import {reserveMultipart,createOriginalMultipart,originalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
++import {reserveMultipart,createOriginalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
+ import {
+   storageKey,
+   type MultipartPart,
+@@ -1216,6 +1216,7 @@ const signUploadClaim = defineService({
+     if (partNumbers.some((part) => part > partCount)) {
+       throw new ServiceError("validation", "A requested upload part is outside the file.");
+     }
++    await assertDurableMultipartPartIssuance(ctx.tx);
+     // A metadata-only upload birth never bypasses the exact resource key fence.
+     await(await import("./original-key-tombstone")).assertOriginalKeyCreator(ctx.tx,{namespace:resource.namespace,key:resource.key,role:"multipart_part"});
+     const issuances:Array<{operationId:string;partNumber:number}>=[];for(const partNumber of partNumbers)issuances.push(await claimOriginalPartIssuance(ctx,session.id,partNumber));
+diff --git a/src/core/media/transfer-witness.ts b/src/core/media/transfer-witness.ts
+index e04cecd3..2bd21fbf 100644
+--- a/src/core/media/transfer-witness.ts
++++ b/src/core/media/transfer-witness.ts
+@@ -13,7 +13,7 @@ export const transferBindingSchema=z.discriminatedUnion("kind",[
+  z.object({kind:z.literal("s3"),namespace:digest,location:z.object({endpoint:z.string().url(),bucket:z.string().min(1).max(1024)}).strict()}).strict(),
+  z.object({kind:z.literal("replit"),namespace:digest,location:z.object({bucket:z.string().min(1).max(1024)}).strict()}).strict(),
+ ]);
+-export function checkedTransferBinding(input:StorageBinding):StorageBinding{
++export function checkedTransferBinding(input:unknown):z.infer<typeof transferBindingSchema>{
+  const parsed=transferBindingSchema.safeParse(input);
+  if(!parsed.success)throw new ServiceError("validation","Choose an explicit S3 or Replit storage resource without credentials or extra fields.");
+  const binding=parsed.data;
+diff --git a/src/core/retention/registry.ts b/src/core/retention/registry.ts
+index 5c8e11da..0e9b52fc 100644
+--- a/src/core/retention/registry.ts
++++ b/src/core/retention/registry.ts
+@@ -118,6 +118,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+   merchant_payment_observations: "Append-only actual provider financial evidence, retained with original money and never deleted by an age sweep.",
+   merchant_payment_event_receipts: "Private immutable authenticated financial facts, including unmatched provider attempts; retained for reconciliation and never included in content search.",
+   merchant_fee_refunds: "Original commission refund money and unknown provider outcomes require explicit reconciliation, never timed deletion.",
++  merchant_fee_refund_invocations: "Original fee POST/GET admission, actual caller/result/finish and independent stop proof has no TTL; time cannot clear financial or hosting debt.",
+   merchant_fee_observations: "Immutable actual commission-refund financial acknowledgements, retained separately from logical reconciliation and excluded from content search.",
+   merchant_refund_observation_captures: "Original financial occurrence evidence survives repeated state; no age purge may invalidate refund or erasure debt.",
+   merchant_refund_state_reads: "Original bank-read and caller proof remains with its money; no TTL or elapsed-time absence inference.",
+@@ -137,6 +138,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+   subscription_commercial_amendments: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
+   subscription_commercial_resumptions: "Immutable fresh calendar consent has no TTL; original agreement privacy, financial duties and legal holds govern minimization.",
+   subscription_proration_payment_protocols: "Immutable original financial consent, attempts and actual caller receipts have no TTL; financial/privacy holds govern retention.",
++  subscription_controlled_paid_period_receipts: "Immutable original paid-period effect receipts and actual financial/access history have no TTL; financial/privacy holds govern retention.",
+   subscription_controlled_resources: "Immutable original controlled financial resources, actual callers and cash-origin/closure receipts have no TTL; financial/privacy holds govern retention.",
+   subscription_controlled_operations: "Immutable original controlled financial resources, actual callers and cash-origin/closure receipts have no TTL; financial/privacy holds govern retention.",
+   subscription_controlled_calls: "Immutable original controlled financial resources, actual callers and cash-origin/closure receipts have no TTL; financial/privacy holds govern retention.",
+@@ -162,6 +164,9 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
+   invoice_credit_applications: "Immutable noncash invoice consideration has no TTL; original invoice/legal holds govern retention.",
+   invoice_credit_releases: "Immutable unused target release has no TTL; releasing a target never deletes an issued customer credit promise.",
+   agreement_fee_duties: "Immutable original commission and attested remittance receipts have no TTL; financial and privacy holds own retention.",
++  controlled_cash_application_batches: "Immutable original parent/bank application preimages have no TTL; original financial/privacy holds govern retention.",
++  controlled_cash_application_receipts: "Immutable exact original receipt application admissions have no TTL; original financial/privacy holds govern retention.",
++  controlled_cash_application_links: "Lifetime actual receipt/payment uniqueness evidence has no TTL; deleting a link cannot replenish original money capacity.",
+   agreement_fee_credit_assignments: "Immutable original commission and attested remittance receipts have no TTL; financial and privacy holds own retention.",
+   agreement_fee_cash_assignments: "Immutable original commission and attested remittance receipts have no TTL; financial and privacy holds own retention.",
+   agreement_fee_eligibility: "Immutable original commission and attested remittance receipts have no TTL; financial and privacy holds own retention.",
