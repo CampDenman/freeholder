@@ -3564,6 +3564,18 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Causal source typing correction2026-11-14 (C12.38/C9.33/C1.08): V93 fulltypes
+stops before lint/DB on optional true refresh property across inferred existing/
+new target union and optional registry output metadata. Production now checks
+actual property membership before the SAME genuine fresh-GET condition; no
+caller flag/default or old sequence change. Registry control requires the real
+explicit output schema before unchanged legacy/true/false refusal assertions.
+All original whole native/source economics/MAC/SQL/model bodies stay; exact
+reversals and V93 failure retained. Complete fresh current qualification and
+business natives still required; no C/stable closure. See
+`deploy/original-inventory-causal84-type-continuation.manifest.json`.
+
+
 Original inventory causal ROOT composition2026-11-14 (C12.38/C9.33/C1.08/
 C11.08): frozen6522685b merged atop exact media200/327 and qualified auxiliaryb40;
 entire current MASTER plus only34newleaflines preserved. Actual A holder/oneway

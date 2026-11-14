@@ -1,0 +1,43 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "status": "SOURCE_TYPING_CORRECTION_PREPARED_UNRUN",
+  "preservedFailure": "/tmp/freeholder-current-full86-causal-media161-source-v93-20261114-result.json",
+  "files": [
+    {
+      "path": "src/modules/invoicing/original-cash-partial.ts",
+      "beforeSha256": "760423f54061566237e922904fc0c0c9fac9573b566c8ea3f97a71b55d2987c8",
+      "afterSha256": "67e1c45d32d37d7cad318614b7ad65503644d17161740eca08a0ff849f19dccb",
+      "finiteDelta": [
+        {
+          "before": "    const { targetFactId, requiresFreshInventory } = await retainOriginalPartialCashTarget.call({ recoveryId, operationId, authorizedBy: `user:${actor.userId}` }, system);",
+          "after": "    const target = await retainOriginalPartialCashTarget.call({ recoveryId, operationId, authorizedBy: `user:${actor.userId}` }, system);\n    const { targetFactId } = target, requiresFreshInventory = \"requiresFreshInventory\" in target && target.requiresFreshInventory;"
+        }
+      ],
+      "scope": "Actual returned object discriminates optional true property; no caller option/default added and exact fresh-GET condition/body unchanged."
+    },
+    {
+      "path": "tests/core/original-cash-inventory-causal-service-contract.test.ts",
+      "beforeSha256": "d6235052b84e1bab3938e7ee1f83f38020e2bfb79f776acafccf21577d65f87f",
+      "afterSha256": "b4689a269e488c86b27e2c9ecdfb3061b5f0e34336fa08c43cfe3b53f03c9582",
+      "finiteDelta": [
+        {
+          "before": "const service=getService(\"invoicing.retainOriginalPartialCashTarget\");",
+          "after": "const service=getService(\"invoicing.retainOriginalPartialCashTarget\");const output=service.def.output;if(!output)throw Error(\"Retain the actual explicit partial-target output boundary.\");"
+        },
+        {
+          "before": "service.def.output.",
+          "after": "output.",
+          "occurrences": 3
+        }
+      ],
+      "scope": "Require real output schema before unchanged legacy/true/false boundary assertions."
+    }
+  ],
+  "originalWholeBusinessNativeFilesUnchanged": true,
+  "sqlModelsAndHashDomainsUnchanged": true
+}

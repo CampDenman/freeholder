@@ -52,7 +52,8 @@ export const reconcileOriginalPartialCashReturn = defineOrchestratedService({
     const initial = await originalCashRecoveryPhase.call({ recoveryId }, system);
     for (const operationId of initial.auxiliaryIds) await recoverOriginalCashAuxiliary(recoveryId, operationId, actor);
     let operationId = await inspectOriginalCashInventory(recoveryId, actor);
-    const { targetFactId, requiresFreshInventory } = await retainOriginalPartialCashTarget.call({ recoveryId, operationId, authorizedBy: `user:${actor.userId}` }, system);
+    const target = await retainOriginalPartialCashTarget.call({ recoveryId, operationId, authorizedBy: `user:${actor.userId}` }, system);
+    const { targetFactId } = target, requiresFreshInventory = "requiresFreshInventory" in target && target.requiresFreshInventory;
     // Only a genuine new v2 declaration changes the controlled full graph.
     // Retain it, then perform ONE new actual GET; never hide its row from the
     // historical read or turn a public option into permission.
