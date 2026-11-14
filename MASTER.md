@@ -3564,6 +3564,28 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Atomic bank late-evidence SOURCE continuation2026-11-14 (C12.38/C9.33/C1.08):
+frozenfd preserved. New bank owner check uses original cashNamespaceKey SHA,
+never controlled literal namespace bytes. Signed original-v2 admission preimage
+membership of selected lineage UUID establishes causal AFTER edge, invalidating
+older bank proof without time/row subtraction. Each prior GET's OWN actual
+packets/unique last FIN are independently covered; older rows require exact
+prior-preimage coverage. Causally maximal complete original GET states/packets
+must agree with current bank; unknown/concurrent changed state stays review,
+older genuinely covered transfer0→1 history retained. Raw signed feedback must
+match exact current original resource/status; detached late pending stays debt.
+Full current PG/caller/budget/hash domains preserved, no generic resolver or
+old MAC rewrite. Root genuine V55 readonly QUERY proves old positive own8/FIN
+ordering/maximal policy reachable/all596rows+j86+seq unchanged, NOT successor
+qualification. Metadata-only fd descriptor consumes one final newline after
+V98 preserved source failure; old beforeSHA/product source unchanged. NEW
+UNAPPLIED suffix only existing helper+one Aready body-pin successor; no new
+signatures/models/columns/kinds/services. Ten pure/six source/three additional
+actual desired natives PREPARED, ALL UNRUN; original whole fee180s exact.
+Full root source/schema/native/SDK and B/C/full-spec remain open; no C/stable
+acceptance. See `deploy/controlled-atomic-refund-bank-fence84-source-20261114.md`.
+
+
 Atomic current refund bank SOURCE continuation2026-11-14 (C12.38/C9.33/C1.08):
 actual preserved V55 proves newer genuine refund captures stale the old generic
 current receipt while independently authenticated current controlled bank rows

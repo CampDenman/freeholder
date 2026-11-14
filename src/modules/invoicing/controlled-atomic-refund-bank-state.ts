@@ -13,7 +13,9 @@ import {originalCashInspectionBankFacts} from "./merchant-cash-inspection-bank-f
 import {latestControlledCashInspectionLineage} from "@/modules/subscriptions/controlled-cash-inspection-lineage";
 import {verifiedControlledCashInspectionLineage} from "@/modules/subscriptions/controlled-cash-inspection-lineage-proof";
 import {verifiedCashInspectionRefundCapture} from "./merchant-cash-inspection-refund-capture";
-import {controlledAtomicRefundBankPolicy,type AtomicRefundBankObservation,type AtomicRefundBankRequest} from "./controlled-atomic-refund-bank-policy";
+import {controlledAtomicRefundBankPolicy,controlledAtomicRefundOriginalReadOrder,type AtomicRefundBankObservation,type AtomicRefundBankRequest} from "./controlled-atomic-refund-bank-policy";
+import {legacyBankFeedbackEvidence,legacyBankFeedbackMatchesInventory} from "./legacy-bank-feedback-proof";
+import {controlledAtomicRefundMaximalInventories} from "./controlled-atomic-refund-bank-maximal";
 import {originalCashCallersFinished,originalCashEvidenceKeys,originalCashRecoveryFinancialWitness} from "./original-cash-recovery-store";
 import {merchantFeeInvocationFinancialWitness} from "./merchant-fee-invocation-witnesses";
 import {merchantFeeInvocationPaymentCallers} from "./merchant-fee-invocation-store";
@@ -93,7 +95,14 @@ export async function readControlledAtomicRefundBankState(ctx:ServiceContext,pay
  const policy=controlledAtomicRefundBankPolicy({payment:{id:payment.id,providerRef:payment.providerRef,chargeRef,platform:cash.providerPlatformAccountId,account:cash.chargeAccountId,apiVersion:cash.providerApiVersion,amountMinor:payment.amountMinor,refundedMinor:payment.refundedMinor,currency:payment.currency},
   bank:bank.evidence,requests:actualRequests,observations:actualObservations,latest:{inspectionId:latest.inspection.id,admissionSequence:latest.lineage.admissionSequence,closedInspectionIds:latest.lineage.closedInspectionIds}});
  if(policy.returnedMinor!==before.refunded_minor)refuse();
- const original=await originalCashRecoveryFinancialWitness(ctx.tx,[payment.id],[owner.receiptId]);if(!originalCashCallersFinished(original)||original.owners.some(row=>row.namespaceKey!==owner.namespaceKey))refuse();
+ const original=await originalCashRecoveryFinancialWitness(ctx.tx,[payment.id],[owner.receiptId]);if(!originalCashCallersFinished(original))refuse();
+ const originalReadOrder=controlledAtomicRefundOriginalReadOrder({cash,currentBank:bank.evidence,lineageInspectionId:latest.inspection.id,original});
+ const maximalOriginalInventories=controlledAtomicRefundMaximalInventories({cash,currentBank:bank.evidence,lineageInspectionId:latest.inspection.id,original},originalReadOrder);
+ for(const row of original.feedback){
+  const feedback=legacyBankFeedbackEvidence.parse(row.feedback.evidence),resource=bank.evidence.refunds.find(refund=>refund.providerRef===feedback.observedRefundRef);
+  if(!legacyBankFeedbackMatchesInventory(feedback,{originalPaymentRef:cash.providerRef,originalChargeAccountId:cash.chargeAccountId,readPlatformAccountId:cash.providerPlatformAccountId,cash:bank.evidence})
+   ||!resource||feedback.status===null||feedback.status!==resource.status)refuse();
+ }
  const fee=await merchantFeeInvocationFinancialWitness(ctx.tx,{paymentIds:[payment.id]}),feeCallers=await merchantFeeInvocationPaymentCallers(ctx.tx,payment.id);
  const physicalRows=new Map(before.physical_witness.map(row=>[`${row.table}:${row.id}`,row.fingerprint]));
  for(const row of fee.entries){const previous=physicalRows.get(`${row.table}:${row.id}`);if(previous&&previous!==row.fingerprint)refuse();physicalRows.set(`${row.table}:${row.id}`,row.fingerprint);}
@@ -109,5 +118,5 @@ export async function readControlledAtomicRefundBankState(ctx:ServiceContext,pay
  const after=await snapshot(ctx,payment.id);if(merchantTaxDigest(before)!==merchantTaxDigest(after))refuse();
  return{paymentId:payment.id,receiptId:owner.receiptId,inspectionId:bank.inspection.id,observationId:bank.observation.id,refundedMinor:policy.returnedMinor,bankNamespaceRevision:after.namespace_revision,
   physicalEntries:[...physicalRows].sort(([a],[b])=>a.localeCompare(b)).map(([key,fingerprint])=>{const colon=key.indexOf(":");return{table:key.slice(0,colon),id:key.slice(colon+1),fingerprint,hashDomain:"postgres_row" as const};}),
-  unfinishedFeeInvocationIds:feeCallers.unfinishedIds,suppliesDispatchAuthority:false as const,revision:merchantTaxDigest({owner,bank:after,latest,policy,original,fee,feeCallers})};
+  unfinishedFeeInvocationIds:feeCallers.unfinishedIds,suppliesDispatchAuthority:false as const,revision:merchantTaxDigest({owner,bank:after,latest,policy,original,originalReadOrder,maximalOriginalInventories,fee,feeCallers})};
 }
