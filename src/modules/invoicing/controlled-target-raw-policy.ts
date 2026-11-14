@@ -260,7 +260,7 @@ function historicalPaidProof(target:ControlledRawTarget,proof:NonNullable<Return
   let amount=0n;const paid=new Set<string>(),receiptIds:string[]=[];let valid=true;
   for(const payment of inventory.actualPayments){const relation=object.safeParse(payment.payment),pi=relation.success?ref(relation.data.payment_intent):null,intents=inventory.actualIntents.filter(intent=>ref(intent.id)===pi);
    if(!relation.success||relation.data.type!=="payment_intent"||!pi||paid.has(pi)||intents.length!==1||ref(payment.invoice)!==inventory.providerInvoiceRef){valid=false;break;}paid.add(pi);
-   const intent=intents[0];if(!intent||!safeMinor(intent.amount_received)||intent.amount_capturable!==0||!safeMinor(payment.amount_requested)||payment.amount_requested!==intent.amount||payment.currency!==undefined&&String(payment.currency).toUpperCase()!==target.manifest.currency||!safeMinor(payment.amount_paid)||payment.amount_paid!==intent.amount_received
+   const intent=intents[0];if(!intent||!safeMinor(intent.amount_received)||intent.amount_capturable!==0||!safeMinor(payment.amount_requested)||payment.amount_requested!==intent.amount||payment.currency!==undefined&&(typeof payment.currency!=="string"||payment.currency.toUpperCase()!==target.manifest.currency)||!safeMinor(payment.amount_paid)||payment.amount_paid!==intent.amount_received
     ||!exactIntentSnapshot(target,proof,intent)){valid=false;break;}
    if(intent.amount_received===0){if(!["canceled","requires_payment_method"].includes(String(intent.status))){valid=false;break;}continue;}
    const owners=cashOwners(target).filter(owner=>owner.providerIntentRef===pi&&owner.providerInvoiceRef===inventory.providerInvoiceRef),owner=owners[0],cash=inventory.actualCash.filter(row=>row.providerPaymentIntentRef===pi);
