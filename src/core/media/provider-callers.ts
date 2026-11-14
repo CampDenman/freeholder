@@ -80,6 +80,7 @@ export async function admitOriginalMultipartCaller(tx:Tx,operationId:string,kind
  const token=randomUUID()+randomUUID(),runtimeIdentity=scope.runtimeIdentity;
  const call=await admitOriginalMediaCaller(tx,{kind,multipartOperationId:operationId,token,runtimeIdentity},actor);
  scope.callers.set(operationId,{id:call.id,token,runtimeIdentity});
+ return call;
 }
 export function originalMultipartCaller(operationId:string){
  const scope=multipartInvocation.getStore(),call=scope?.callers.get(operationId);

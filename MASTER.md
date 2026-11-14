@@ -15945,3 +15945,17 @@ part capability/body receipts and selected-provider consumption proof, capture,
 quota/cutover and all qualification/acceptance remain open. No full request/part
 capability or C-item closure advances. See
 `deploy/media-multipart-wire-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): NEW multipart CREATE operations
+bind a nullable/no-default first-baseline header to their actual same-TX caller.
+Both complete pre-dispatch policy/object/version/session passes and SQL-verified
+physical result/cursor digests precede the single CREATE. Old NULLs never gain a
+current baseline; complete headers cannot refill/rebind. Only digests/counts are
+retained there, including private cursor digests. Logical404 with retained
+versions/sessions refuses creation. A lost or paused CREATE never gains a session
+or caller FIN from its negative baseline or equal current key. Twelve pure and
+five real shared-service/fictional TCP controls are PREPARED/UNRUN; original
+oracles remain intact. No execution/provider/host action or request/part
+capability publication occurred. Part authority/consumption, legacy creator
+closure, capture/quota/cutover and all qualification/external acceptance remain
+open. See `deploy/media-multipart-create-baseline-source-2026-11-13.md`.
