@@ -23,7 +23,8 @@ export async function claimOriginalPartIssuance(ctx:ServiceContext,uploadId:stri
  const creation=await ctx.tx.select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,resource.id),eq(mediaMultipartOperations.kind,"create"))).limit(2).for("update"),parent=creation[0];
  const[proof]=parent?await ctx.tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_part_body_context(${parent.id}::uuid) as proven`):[];
  const body=parent?.partBodies?.parts.find(part=>part.partNumber===partNumber);
- if(creation.length!==1||!parent?.partBodies||proof?.proven!==true||!body||!resource.providerUploadId)transferConflict("Select and verify the same complete original file before requesting upload links.");
+ const[birth]=await ctx.tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_checksum_birth(${resource.id}::uuid) as proven`);
+ if(birth?.proven!==true||creation.length!==1||!parent?.partBodies||proof?.proven!==true||!body||!resource.providerUploadId)transferConflict("Select and verify the same complete original file before requesting upload links.");
  const previous=await ctx.tx.select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,resource.id),eq(mediaMultipartOperations.kind,"sign"))).limit(50001).for("update");
  if(previous.length>50000||previous.some(row=>row.partIssue?.partNumber===partNumber&&["started","unknown"].includes(row.state)))transferConflict("A previous upload link still needs its original recovery evidence before another can be issued.");
  const expiresAt=new Date(Math.min(upload.expiresAt.getTime(),Date.now()+300000)).toISOString();

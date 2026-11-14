@@ -51,9 +51,13 @@ export interface MultipartPart {
   partNumber: number;
   etag: string;
   bytes?: number;
+  /** Actual SHA256 returned for this part, base64; never an object ETag. */
+  checksumSha256?:string;
 }
 export type MultipartInspection = { state: "open"; parts: MultipartPart[] } | { state: "absent" };
 export interface MultipartObservation {
+  /** Only the original COMPLETE caller may verify its immutable manifest. */
+  expectedParts?:MultipartPart[];
   request?:TransferRequestObserver;
   /** Commit the positive provider fact before subsequent inspection can fail. */
   onAccepted?: (result?: { uploadId: string;revision?:StoredObjectRevision }) => Promise<void>;

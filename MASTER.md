@@ -3564,6 +3564,26 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): new managed multipart
+CREATE records explicit SHA256/COMPOSITE provenance. New COMPLETE keeps the
+original browser receipts and derives fixed byte/checksum limits from the
+immutable file declaration; all local issuer returns must be genuine. Its
+actual original caller verifies every provider ListParts page before one
+conditional COMPLETE, retaining complete XML/page identities and an independent
+verified-parts fact. Shared services and SQL enforce matching original birth,
+manifest, namespace/drain/tombstone/privacy/hold authority. Existing full pinned
+object readback remains required. Successful verification/completion does not
+retire issued links or sessions, invent remote ACK/FIN, or permit cutover.
+Eight manifest, twelve wire and five real-service/TCP controls are PREPARED/
+UNRUN; all earlier oracles remain unchanged. Six functions/three guards add no
+models/columns or capability definition. Source also carries root's exact
+655 SQL parenthesis correction and the source-inspected missing sign-role
+whitelist entry; no production incident is claimed. Consumption, unknown and
+legacy recovery, capture/quota/cutover, qualification/provider/platform and
+independent review/stable gates remain open. No child execution/provider/host
+actions or C-item closure. See
+`deploy/media-multipart-part-verification-source-2026-11-13.md`.
+
 Actual proper-target native checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08):
 the first real service journey stops BEFORE controlled target birth because its
 fixture assumed one grant. Actual paid subscription already owns its genuine site
