@@ -15,6 +15,9 @@ import {reconcileMediaErasureCohorts} from "./erasure-cohorts";
 import {reconcileCommittedStorageObservation} from "./observation-hooks";
 import {objectKeyDigest} from "./write-ledger";
 import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
+import {assertTransferNamespaceMutation} from "./transfer-namespace-control";
+import {assertOriginalKeyCreator} from "./original-key-tombstone";
+import {assertOriginalNamespaceMutation} from "./original-namespace-fence";
 import {requireTransferCapability} from "./transfer-authority";
 import {transferConflict,transferDigest,transferTargetKey} from "./transfer-proof";
 import {checkStorageTransferJob} from "./transfer-job-scope";
@@ -23,6 +26,13 @@ interface Scope {callId:string;token:string;runtimeIdentity:StorageCallerRuntime
 const invocation=new AsyncLocalStorage<Scope>();
 export class TransferRequestNotAttemptedError extends Error{constructor(readonly logicalCallId:string,cause:unknown){super("The original provider request was not attempted.",{cause});this.name="TransferRequestNotAttemptedError";}}
 export async function withTransferRequestScope<T>(scope:Omit<Scope,"active"|"receiptIds"|"multipartOperationIds">,operation:()=>Promise<T>):Promise<T>{const current={...scope,active:true,receiptIds:new Set<string>(),multipartOperationIds:new Set<string>()};try{return await invocation.run(current,operation);}finally{current.active=false;}}
+/** Last application-adapter fence. Possessing a function or a generic writer
+ * flag is insufficient: the real observer, live scope and committed original
+ * token/role/key must all match before the adapter can dispatch anything. */
+export async function requireActualStorageMutation(observer:unknown,key:string,kind:"object.put"|"multipart.create"|"multipart.complete"|"multipart.abort"):Promise<void>{
+ const scope=invocation.getStore();if(observer!==observeTransferRequest||!scope?.active)transferConflict("Start storage work through its shared upload or recovery service; no original caller is active.");
+ await db().transaction(async tx=>{const caller=await locked(tx,scope),kinds=kind==="object.put"?["ordinary_put","target_put"]:[kind.replace(".","_")];if(!scope.active||caller.state!=="admitted"||caller.physicalKey!==key||!kinds.includes(caller.kind))transferConflict("The storage operation does not belong to its genuine original caller, role and file key.");});
+}
 async function locked(tx:Tx,scope:Scope){
  await requireTransferCapability(tx);await tx.execute(sql`select pg_advisory_xact_lock(1691709,82)`);
  const[call]=await tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.id,scope.callId)).limit(1).for("update");
@@ -33,6 +43,9 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
  await checkStorageTransferJob();return db().transaction(async tx=>{
   const call=await locked(tx,scope);
   if(!scope.active||call.state!=="admitted"||descriptor.binding.namespace!==call.namespace||descriptor.key&&descriptor.key!==call.physicalKey)transferConflict("The physical request does not belong to its exact original logical caller.");
+  if(call.objectId===null&&mutation(descriptor))await assertOriginalNamespaceMutation(tx,call.namespace);
+  if(call.objectId!==null&&mutation(descriptor))await assertTransferNamespaceMutation(tx,call.objectId,call.namespace,call.kind);
+  if(["object.put","multipart.create","multipart.complete"].includes(descriptor.kind))await assertOriginalKeyCreator(tx,{namespace:descriptor.binding.namespace,key:descriptor.key??"",role:descriptor.kind==="object.put"?(call.kind==="target_put"?"target_put":"ordinary_put"):descriptor.kind==="multipart.create"?"multipart_create":"multipart_complete"});
   const inventory=descriptor.kind.startsWith("inventory.")||descriptor.kind==="bucket.metadata";
   if(inventory&&!["source_inventory","target_inventory","source_retirement_inventory","target_erasure_inventory","source_erasure_inventory","ordinary_retirement_inventory","multipart_retirement_inventory","multipart_recovery_inspect"].includes(call.kind))transferConflict();
   if(descriptor.expectedRevision&&descriptor.kind!=="object.body"&&(!call.expectedRevision||transferDigest(descriptor.expectedRevision)!==transferDigest(call.expectedRevision))){
@@ -53,6 +66,7 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
    }else if(call.kind!==descriptor.kind.replace(".","_")||descriptor.kind==="multipart.create"&&descriptor.contentType!==resource.contentType||descriptor.kind!=="multipart.create"&&(descriptor.uploadId!==parent.providerUploadId||descriptor.uploadId!==resource.providerUploadId)||descriptor.kind==="multipart.complete"&&(!descriptor.createOnly||descriptor.partsDigest!==parent.partsDigest))transferConflict("The actual multipart request differs from its immutable original session or manifest.");
   }
   if(descriptor.kind==="object.delete"&&(!["source_delete","privacy_delete","privacy_source_delete","ordinary_delete"].includes(call.kind)||!call.expectedRevision||transferDigest(descriptor.expectedRevision)!==transferDigest(call.expectedRevision)))transferConflict();
+  if(descriptor.kind==="object.delete"&&call.kind==="ordinary_delete")await(await import("./original-retirement")).assertOrdinaryRetirementRequest(tx,call,descriptor);
   if(descriptor.kind==="object.body"){
    if(!descriptor.expectedRevision)transferConflict();
    const previous=await tx.select({request:mediaStorageTransferRequests,observation:mediaStorageTransferRequestObservations}).from(mediaStorageTransferRequests).innerJoin(mediaStorageTransferRequestObservations,eq(mediaStorageTransferRequestObservations.requestId,mediaStorageTransferRequests.id)).where(and(eq(mediaStorageTransferRequests.callId,call.id),eq(mediaStorageTransferRequests.state,"returned"))).orderBy(asc(mediaStorageTransferRequests.createdAt));

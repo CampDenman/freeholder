@@ -9,26 +9,11 @@
 // Owner-only, because the report names which adapters are configured and how
 // they are failing — precisely the reconnaissance somebody probing an instance
 // would like. `/api/health` stays public and stays shallow.
-import { actorFromRequest } from "@/core/http/actor";
-import { doctor } from "@/core/doctor/service";
-import { ServiceError } from "@/core/service";
-
-export const dynamic = "force-dynamic";
-
-export async function GET(request: Request): Promise<Response> {
-  try {
-    // actorFromRequest rather than the cookie alone: a monitor watching this
-    // endpoint should be able to hold a scoped key instead of a human session,
-    // which is the entire point of §17 calling doctor a contract.
-    const actor = await actorFromRequest(request);
-    const report = await doctor.call({}, actor);
-    // The HTTP status carries the verdict as well as the body, so a monitor
-    // that only reads status codes still learns something true.
-    return Response.json(report, { status: report.verdict === "fail" ? 503 : 200 });
-  } catch (error) {
-    if (error instanceof ServiceError && error.code === "permission") {
-      return Response.json({ error: error.message }, { status: 403 });
-    }
-    throw error;
-  }
-}
+import {doctor,doctorStatus} from "@/core/doctor/service";
+import {serviceRoute} from "@/core/http/route";
+export const dynamic="force-dynamic";
+// GET has no physical side effects. POST requires explicit probe scope/manage
+// permission and the same CSRF/service/audit boundary as every other mutation.
+const present=(report:Awaited<ReturnType<typeof doctor.call>>)=>({body:report,status:report.verdict==="fail"?503:200,headers:{"cache-control":"no-store"}});
+export const GET=serviceRoute(doctorStatus,{present});
+export const POST=serviceRoute(doctor,{present});

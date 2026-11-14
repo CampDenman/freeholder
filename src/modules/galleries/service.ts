@@ -7,7 +7,7 @@
 // through the spine. Per-asset flags are a ceiling: a guest overlay cannot
 // grant more than the item allows.
 import { z } from "zod";
-import { createHash } from "node:crypto";
+import { createHash,randomUUID } from "node:crypto";
 import { and, asc, desc, eq, exists, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { contactForActor } from "@/core/portal/service";
 import { registerPortalSection } from "@/core/portal/sections";
@@ -25,7 +25,11 @@ import {
 import { sendMail } from "@/core/mail/service";
 import { businessProfile } from "@/core/settings/schema";
 import { env } from "@/core/env";
-import { assets } from "@/core/media/schema";
+import { assets,mediaObjects } from "@/core/media/schema";
+import {putWithReceipt} from "@/core/media/write-ledger";
+import {reservePendingMediaObject,registerPendingObjectOwner} from "@/core/media/object-ledger";
+import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
+import {requireManagedOriginalObject} from "@/core/media/managed-object-proof";
 import {
   isRasterImage,
   pickRendition,
@@ -2262,6 +2266,26 @@ const buildArchiveSource = defineService({
   },
 });
 
+// Business delivery work remains business-owned under the existing galleries
+// privacy policy. Do not adopt its bytes as the current customer's resource.
+registerPendingObjectOwner("gallery-archives/",async(key,_now,tx)=>{
+ const galleryId=key.split("/")[1];if(!galleryId||!/^[a-f0-9-]{36}$/.test(galleryId))return false;
+ const executor=tx??db(),[archive]=await executor.select().from(galleryArchives).where(eq(galleryArchives.galleryId,galleryId)).limit(1);
+ return Boolean(archive&&(archive.state==="building"||archive.storageKey===key));
+});
+const claimArchiveObject=defineService({
+ name:"galleries.claimArchiveObject",summary:"Reserve the exact immutable physical generation for this authorized gallery package.",kind:"mutation",permission:"system",external:false,writeClass:"write",
+ input:z.object({galleryId:id,deliveryHash:z.string().regex(/^[a-f0-9]{64}$/),sha256:z.string().regex(/^[a-f0-9]{64}$/),bytes:z.number().int().nonnegative()}),output:z.object({key:z.string(),reservationId:uuid}),
+ handler:async(input,ctx)=>{
+  requireSystem(ctx.actor);await lockContactIdentityForRead(ctx.tx);const gallery=await loadGallery(ctx,input.galleryId,true),current=await archiveContents(ctx,gallery);
+  if(current.deliveryHash!==input.deliveryHash||!current.deliverable.length)throw new ServiceError("conflict","The gallery changed before its original file reservation. Request a new archive.");
+  const prefix=`gallery-archives/${gallery.id}/${input.deliveryHash}/${input.sha256}/`,prior=await ctx.tx.select().from(mediaObjects).where(sql`${mediaObjects.key} like ${prefix+"%"}`).limit(2).for("update");
+  if(prior.length>1)throw new ServiceError("conflict","Recover the conflicting original archive reservations before rebuilding this package.");
+  if(prior[0]){const original=prior[0];if(!original.reservationId||original.ownerContactId!==null||original.state!=="pending"||original.bytes!==input.bytes||original.contentType!=="application/zip")throw new ServiceError("conflict","Restore the original archive reservation; a current key cannot supply missing birth or byte evidence.");return{key:original.key,reservationId:original.reservationId};}
+  const key=`${prefix}${randomUUID()}.zip`,birth=await reservePendingMediaObject(ctx,{key,role:"staged",contentType:"application/zip",bytes:input.bytes,requireNewBirth:true});if(!birth.reservationId)throw new ServiceError("conflict","The new archive reservation is missing.");ctx.setSubject("gallery",gallery.id);return{key,reservationId:birth.reservationId};
+ },
+});
+
 const buildArchiveFail = defineService({
   name: "galleries.buildArchiveFail",
   summary: "Record why a gallery could not be packaged.",
@@ -2288,6 +2312,7 @@ const buildArchiveApply = defineService({
     galleryId: id,
     deliveryHash: z.string(),
     key: z.string().min(1).max(500),
+    reservationId:uuid,
     bytes: z.number().int().nonnegative(),
     fileCount: z.number().int().nonnegative(),
     sha256: z.string(),
@@ -2295,11 +2320,14 @@ const buildArchiveApply = defineService({
   output: z.object({ stale: z.boolean(), archive: archiveRow.nullable() }),
   handler: async (input, ctx) => {
     requireSystem(ctx.actor);
+    await lockContactIdentityForRead(ctx.tx);
     const gallery = await loadGallery(ctx, input.galleryId, true);
     // The package is only right if it was built from what is deliverable
     // now; a restriction made while the bytes were read must not ship.
     const { deliveryHash } = await archiveContents(ctx, gallery);
     if (deliveryHash !== input.deliveryHash) return { stale: true, archive: null };
+    if(!input.key.startsWith(`gallery-archives/${gallery.id}/${input.deliveryHash}/${input.sha256}/`))throw new ServiceError("conflict","The stored archive belongs to another original package claim.");
+    await requireManagedOriginalObject(ctx.tx,{key:input.key,reservationId:input.reservationId,bytes:input.bytes,sha256:input.sha256,actor:"system"});
     const [ready] = await ctx.tx
       .update(galleryArchives)
       .set({
@@ -2373,13 +2401,13 @@ export const buildGalleryArchive = defineOrchestratedService({
     }
 
     const zip = buildZip(entries);
-    const key = `${source.slug}-${zip.sha256.slice(0, 12)}.zip`;
-    await store.put(key, zip.body, "application/zip");
+    const claimed=await claimArchiveObject.call({galleryId:source.galleryId,deliveryHash:source.deliveryHash,sha256:zip.sha256,bytes:zip.bytes},actor),key=claimed.key;
+    await putWithReceipt({key,body:zip.body,contentType:"application/zip",role:"staged",requiresReservation:true},actor);
     const applied = await buildArchiveApply.call(
       {
         galleryId: source.galleryId,
         deliveryHash: source.deliveryHash,
-        key,
+        key,reservationId:claimed.reservationId,
         bytes: zip.bytes,
         fileCount: zip.entries,
         sha256: zip.sha256,
@@ -2387,8 +2415,8 @@ export const buildGalleryArchive = defineOrchestratedService({
       actor,
     );
     if (applied.archive) return applied.archive;
-    // Stale: the key is content-addressed, so a still-current package with
-    // the same bytes may share it; leave the object to the next build.
+    // Stale physical generations keep their original tracked reservation.
+    // The shared orphan cleanup can retire them after their real callers close.
     const [current] = await db()
       .select()
       .from(galleryArchives)
@@ -3075,6 +3103,7 @@ export default [
   requestGalleryArchive,
   buildGalleryArchive,
   buildArchiveSource,
+  claimArchiveObject,
   buildArchiveFail,
   buildArchiveApply,
   galleryArchiveState,

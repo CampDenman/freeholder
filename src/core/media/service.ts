@@ -1190,6 +1190,8 @@ const signUploadClaim = defineService({
       throw new ServiceError("validation", "A requested upload part is outside the file.");
     }
     await assertDurableMultipartPartIssuance(ctx.tx);
+    // A metadata-only upload birth never bypasses the exact resource key fence.
+    await(await import("./original-key-tombstone")).assertOriginalKeyCreator(ctx.tx,{namespace:resource.namespace,key:resource.key,role:"multipart_part"});
     if (session.state === "created") {
       await ctx.tx
         .update(mediaUploads)
@@ -1233,6 +1235,7 @@ export const signUploadParts = defineOrchestratedService({
     if (!multipart) {
       throw new ServiceError("conflict", "Direct uploads are unavailable.");
     }
+    await db().transaction(async tx=>{const{resource}=await lockMultipartUpload(tx,input.id);await(await import("./original-key-tombstone")).assertOriginalKeyCreator(tx,{namespace:resource.namespace,key:resource.key,role:"multipart_part"});});
     const signed = await Promise.all(
       claimed.partNumbers.map(async (partNumber) => ({
         partNumber,

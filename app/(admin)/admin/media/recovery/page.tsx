@@ -15,8 +15,8 @@ export default async function StorageRecoveryPage() {
   const actor = await requireStaffActor("media", "manage");
   const [t, { rows }, multipart] = await Promise.all([getT(), listStorageOperations.call({}, actor),listMultipartOperations.call({},actor)]);
   const labels: RecoveryLabels = { namespace: t("media.recovery.namespace"), originalKey:t("media.recovery.originalKey"),sha256: t("media.recovery.sha256"), bytes: t("media.recovery.bytes"), outcome: t("media.recovery.outcome"),
-    applied: t("media.recovery.applied"), notApplied: t("media.recovery.notApplied"), reference: t("media.recovery.reference"), evidence: t("media.recovery.evidence"),
-    stopped: t("media.recovery.stopped"), confirm: t("media.recovery.confirm"), submit: t("media.recovery.submit"), saved: t("media.recovery.saved") };
+    retireOriginal:t("media.recovery.retireOriginal"),monotonicHint:t("media.recovery.monotonicHint"),applied: t("media.recovery.applied"), notApplied: t("media.recovery.notApplied"), reference: t("media.recovery.reference"), evidence: t("media.recovery.evidence"),
+    stopDrainId:t("media.recovery.stopDrainId"),stopDrainHint:t("media.recovery.stopDrainHint"),stopped: t("media.recovery.stopped"), confirm: t("media.recovery.confirm"), submit: t("media.recovery.submit"), saved: t("media.recovery.saved") };
   const multipartLabels:MultipartRecoveryLabels={...labels,providerUploadId:t("media.recovery.providerUploadId"),verifyOriginal:t("media.recovery.verifyOriginal"),cleanup:t("media.recovery.cleanup"),multipartConfirm:t("media.recovery.multipartConfirm")};
   const needsStepUp = actor.kind === "user" && actor.security !== undefined && !actor.security.stepUpValid;
   return <div className="grid min-w-0 gap-6">
@@ -31,7 +31,7 @@ export default async function StorageRecoveryPage() {
         <dt className="font-semibold">{t("media.recovery.object")}</dt><dd className="break-all font-mono" dir="ltr">{row.key}</dd>
         <dt className="font-semibold">{t("media.recovery.receipt")}</dt><dd className="break-all font-mono" dir="ltr">{row.id}</dd></dl>
       {row.observedAcceptedAt ? <Callout>{t("media.recovery.acknowledged")}</Callout> : null}
-      {!needsStepUp ? <RecoveryForm id={row.id} updatedAt={new Date(row.updatedAt).toISOString()} namespace={row.namespace} sha256={row.sha256} bytes={row.bytes} labels={labels} originalKeyRequired={row.key.startsWith("retained:")} /> : null}
+      {!needsStepUp ? <RecoveryForm operation={row.operation} id={row.id} updatedAt={new Date(row.updatedAt).toISOString()} namespace={row.namespace} sha256={row.sha256} bytes={row.bytes} labels={labels} originalKeyRequired={row.key.startsWith("retained:")} /> : null}
     </Card>)}
     {multipart.rows.map(row=><Card key={`${row.resource.id}:${row.operation?.id??"resource"}`} className="grid min-w-0 gap-4">
       <dl className="grid min-w-0 gap-2 text-sm"><dt className="font-semibold">{t("media.recovery.operation")}</dt><dd>{t(row.operation?.kind==="create"?"media.recovery.create":row.operation?.kind==="complete"?"media.recovery.complete":row.operation?.kind==="abort"?"media.recovery.abort":"media.recovery.multipart")}</dd>

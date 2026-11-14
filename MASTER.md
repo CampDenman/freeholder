@@ -3574,7 +3574,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-14 checkpoint. Protected main remains fdba2817 (PR702:44 PR/43 merge-group checks); broader PR701 is older and not green. Source11fe3a5f qualifies549 actual controls/76 complete files,113 explicit native skips, types/affected lint and metadata. Fresh V15 applies85 migrations, preserving every previous84 identity; strict v23 passes144 models/289 guards/233 function bodies/3426 read-only queries, including exact sequence ownership/state and unchanged old controls. Ten actual stop/callback/current-bank/partial-return/legacy-no-adoption journeys pass independently with all85 hashes, whole-component SHA, settings and drained clients; no controlled lineage is fabricated in legacy cases. Prior4349a5a9 production build/scrub and four en/es/fr/ar owner browser journeys remain historical qualified product proof. NEW genuine current9 transaction-order test is prepared/unrun; actual controlled latest/batch/application and media recovery/multipart/quota/cutover remain implementation/qualification. Current-source green CI/build/browser, real provider/platform/cross-host byte recovery, Tony’s C11.10 report and C11.17 signature remain open. No C-item closes. Corrected ordering retry6a9b197a reaches a genuine strict original-money/caller refusal before GET; V15/V16 failures remain preserved and positive ordering still requires the proper accepted-target producer. |
+| Latest launch audit | 2026-11-14 checkpoint. Protected main remains fdba2817 (PR702:44 PR/43 merge-group checks); broader PR701 is older and not green. Source11fe3a5f qualifies549 actual controls/76 complete files,113 explicit native skips, types/affected lint and metadata. Fresh V15 applies85 migrations, preserving every previous84 identity; strict v23 passes144 models/289 guards/233 function bodies/3426 read-only queries, including exact sequence ownership/state and unchanged old controls. Ten actual stop/callback/current-bank/partial-return/legacy-no-adoption journeys pass independently with all85 hashes, whole-component SHA, settings and drained clients; no controlled lineage is fabricated in legacy cases. Prior4349a5a9 production build/scrub and four en/es/fr/ar owner browser journeys remain historical qualified product proof. NEW genuine current9 transaction-order test is prepared/unrun; actual controlled latest/batch/application and media recovery/multipart/quota/cutover remain implementation/qualification. Current-source green CI/build/browser, real provider/platform/cross-host byte recovery, Tony’s C11.10 report and C11.17 signature remain open. No C-item closes. Corrected ordering retry6a9b197a reaches a genuine strict original-money/caller refusal before GET; V15/V16 failures remain preserved and positive ordering still requires the proper accepted-target producer. NEW8777873a media source adds managed producers/recovery and changes existing sealed-blob model (affected target145); source145/schema/native/SDK/Doctor probe transport qualification is pending and all request/part capabilities remain unpublished. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -4077,6 +4077,52 @@ reading chat logs.
   retains all assembly/receipt/idempotency assertions. Full per-part recovery,
   old-runtime/issued-URL retirement, full-protocol/provider acceptance and this
   C item remain open. See `deploy/media-part-signing-containment-2026-11-13.md`.
+  Ordinary retirement source checkpoint2026-11-13: the existing cleanup path
+  now prepares exact original-UUID conditional deletion, retained actual caller
+  returns, fresh pinned absence and complete two-pass physical-version/session
+  proof before retiring its two exact receipts and releasing only the original
+  quota token. Four new owned82 functions/two guards add no models or published
+  capability; all16 pure and six native declarations are unrun. Crash/stop,
+  failed/unattempted admission recovery, multipart, quota initialization,
+  cutover, translated recovery and actual acceptance remain required. See
+  `deploy/media-original-retirement-source-2026-11-13.md`. No C row closes.
+  Source-only continuation: a genuine finished unattempted preflight can admit
+  a separately born caller; unknown or acknowledged physical DELETEs cannot be
+  replayed. The exact original family retains prior returns and first digests.
+  Thirteen additional pure cases and one added native leaf remain unrun; no
+  request capability or completion status advances. See
+  `deploy/media-original-delete-continuation-source-2026-11-13.md`.
+  Pre-enable namespace fence source repair2026-11-13: shared full-writer tags
+  cannot authorize ordinary logical or physical mutations through a captured
+  drain/active source claim. Two new owned82 functions/three guards require
+  exact genuine transfer caller ancestry for the narrow exception and keep GET
+  recovery distinct. Six native controls are prepared/unrun; no production
+  incident, capability publication or C completion is claimed. See
+  `deploy/media-original-namespace-fence-source-2026-11-13.md`.
+  Stopped original PUT source slice2026-11-13: the existing person-only
+  recovery flow accepts an optional exact independently verified executor stop
+  ID, requires fresh original nonce/body and complete agreeing inventory for
+  affirmative applied recovery, and preserves NULL actual returns/finishes.
+  Four-locale UI guidance and14 pure controls are prepared/unrun. Linux is an
+  optional actual executor path; portable actual finishes need no Linux proof.
+  Stopped-caller absence/retirement, other executor adapters, final SDK
+  regeneration and all native/provider qualification remain open. See
+  `deploy/media-original-stopped-put-source-2026-11-13.md`.
+  Current-controller correction source2026-11-13: genuine old transfer ancestry
+  cannot cross another live source claim or an unrelated/later executor drain.
+  Shared logical/physical admission and SQL independently require exact current
+  plan/phase/original stop digest. Twelve pure and two native controls are
+  prepared/unrun. Additional crashed-executor association/release and browser
+  multipart part issuance remain required; capability is still unpublished.
+  See `deploy/media-transfer-controller-fence-source-2026-11-13.md`.
+  Finished acknowledged DELETE source2026-11-13: an actual successful provider
+  ACK plus real original caller/request finishes can proceed to fresh proof
+  only after failed local result retention. No second DELETE is dispatched;
+  the first failure/ACK remain immutable and a separate review requires pinned
+  absence/full physical inventory. Seven pure and one native regression are
+  prepared/unrun. Unknown outcomes without ACK, stopped-origin retirement,
+  multipart/quota/cutover and all acceptance remain open. See
+  `deploy/media-finished-delete-recovery-source-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;
@@ -16184,3 +16230,97 @@ requires an empty fifth dependency array and adds one strict nine-empty-family/
 unknown-parent control. Root's v6 first failure is preserved; the corrected15
 controls are UNRUN. No product behavior or database changed. See
 `deploy/member-controlled-financial-driver82-source-20261113.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated ordinary retirement
+slice now consumes the exact guarded affirmative original PUT review, retained
+nonce/full-byte/two-pass positive inventory and actual finishes or independent
+executor stop. It preserves missing actual return/writer-finish values and still
+requires fresh pinned original revision reads, conditional DELETE and complete
+physical absence inventories before retirement/minimization. Nine pure and three
+native controls are PREPARED/UNRUN; real stopped-runtime acceptance remains open.
+The provider COMPLETE/in-flight multipart authority guarantee is explicitly
+unproven, and both full request and dedicated part capabilities remain
+unpublished. No execution/account/host actions or C-item closure occurred. See
+`deploy/media-applied-put-retirement-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated additional transfer
+executor-drain slice records an immutable exact current-plan/digest-only mutation
+cohort before actual operator stop. Only unchanged complete actual logical and
+physical finishes plus real stop verification permit its separate release;
+sourceDrainId and all active-drain mutation fences remain unchanged. Captured
+→ released shortcuts and terminal drain births now refuse. Ten pure and four
+native negative controls are PREPARED/UNRUN, with no synthetic verified stop or
+capability publication. Truly unfinished/stopped-applied target callers still
+require exact original nonce/full-byte/complete-inventory review and physical
+settlement; actual operator/provider/platform acceptance remains open. No
+execution/host/account actions or C-item closure occurred. See
+`deploy/media-transfer-crash-drain-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated transfer read slice
+retains actual provider nonce/token proof in the existing first logical read
+return and independently checks exact original create-only lineage through
+shared TS/SQL before copy verification, adoption and source retirement. Adoption
+now obtains new full-byte source/target reads outside transactions before its
+atomic exact membership apply; known revision reads/absence stay pinned. Old
+first returns/captures are preserved, not augmented from current metadata.
+Seven pure and four native controls are PREPARED/UNRUN. Full request/part flags,
+stopped-target review, remaining recovery/cutover and actual operator/provider/
+platform acceptance remain open. No execution/account/host actions or C-item
+closure occurred. See `deploy/media-transfer-read-provenance-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated original target PUT
+review producer now reuses the exact receipt-parent nonce/full-byte/two-pass
+inventory ledger with genuine target-plan ancestry and actual finish or verified
+stop. A separate immutable positive review closes physical debt without filling
+NULL first return/result/writer fields or replaying PUT. Shared reads, cleanup,
+retirement/minimization and the SAME captured plan/drain consume that review;
+active drains still refuse mutation. Four scoped pure and six portable native
+controls are PREPARED/UNRUN; actual stopped-runtime/operator acceptance remains
+required. Full request/part flags, tracked stopped-source chained eligibility,
+unknown DELETE, multipart, quota/cutover and actual provider/platform gates stay
+open. No execution/account/host actions or C-item closure occurred. See
+`deploy/media-target-put-review-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): NEW stopped-source claims retain
+an exact affirmative review/actual executor-stop projection in their immutable
+first receipt capture; NULL actual FINs and old captures are never filled.
+Chained physical inventory, reads and adoption follow bounded exact prior
+receipt-to-captured-membership edges; only exact full conditional source
+retirement proof excludes physically retired ancestors, while original privacy
+lineage remains live. Five pure and three native TCP controls are PREPARED/UNRUN.
+No execution/provider/host actions occurred. Request/part capabilities, unknown
+DELETE monotonic-removal fences, multipart/quota/cutover and actual acceptance
+remain open. See `deploy/media-stopped-source-chain-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated monotonic-removal
+prerequisite leaf adds permanent namespace/key-digest creator fences and a
+separate exact local-finish/independent-stop conditional DELETE review. Fresh
+pinned absence plus complete inventories never invent remote ACKs, NULL FINs,
+first results or replay. All other creators/session/capture/transfer ancestry
+remain explicit debt. The existing fresh-human shared recovery/UI/audit path
+now selects the exact DELETE for verification; ordinary drain release requires
+whole-cohort closure. Ten pure and six native controls are PREPARED/UNRUN.
+Source inspection found genuine raw sealed-blob, gallery archive and doctor
+producers still requiring authentic original admissions and a final adapter
+boundary fence; full request capability cannot be published before they and
+multipart/capture/quota/cutover are completed and qualified. No execution,
+provider/host actions, production incident claim or C-item closure occurred.
+See `deploy/media-monotonic-delete-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C12.36/C8.07): the isolated managed
+producer leaf migrates encrypted attachments, gallery archives and diagnostic
+roundtrips to real shared original reservation/caller/nonce/FIN admission and
+verified retirement. A nullable/no-default sealed-file birth column, unique index
+and SQL guard prevent historical backfill/ready-without-proof/early forget;
+legacy NULL-birth personal files refuse completed erasure rather than vanish.
+Business gallery work retains its existing ownership policy. The application
+adapter adds a final missing-context mutation/signing refusal. Doctor GET/SSR
+and old health scopes stay passive; NEW platform.probeDoctor is an explicitly
+authorized/audited mutation outside service TX, with POST/CSRF, CLI/admin submit
+and four-locale guidance. Four pures and six native TCP/MLS controls are
+PREPARED/UNRUN. Root final SDK regeneration, schema/model/function/guard parity,
+all source/native gates and actual provider/operator/platform acceptance remain
+required. Full request/part flags and multipart/capture/quota/cutover/legacy
+recovery completion remain open. No execution/provider/host actions, production
+incident claim or C-item closure occurred. See
+`deploy/media-managed-producers-source-2026-11-13.md`.

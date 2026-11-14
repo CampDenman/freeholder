@@ -17,3 +17,14 @@ export async function settleRecoveredOriginalQuota(tx:Tx,original:{namespace:str
  if(originalQuotaSettlement(original.quotaToken,row,bytes)==="already_settled")return;
  const changed=await tx.execute(sql`update storage_quota_objects set bytes=${bytes},pending_token=null,last_settled_token=${original.quotaToken}::uuid where namespace=${original.namespace} and object_key=${original.physicalKey} and pending_token=${original.quotaToken}::uuid returning object_key`);if(changed.length!==1)transferConflict();
 }
+
+/** Actual all-version/session retirement has already been proved under the
+ * original fence. Release only this caller's original quota token; retain the
+ * token and locator until the separate privacy minimization phase succeeds. */
+export async function releaseRetiredOriginalQuota(tx:Tx,original:{namespace:string;physicalKey:string;quotaToken:string|null},bytes:number):Promise<void>{
+ await tx.execute(sql`select namespace from storage_quota_state where namespace=${original.namespace} for update`);
+ const rows=await tx.execute<{bytes:string;pendingToken:string|null;settledToken:string|null}>(sql`select bytes::text,pending_token as "pendingToken",last_settled_token as "settledToken" from storage_quota_objects where namespace=${original.namespace} and object_key=${original.physicalKey} for update`),row=rows[0];
+ if(!original.quotaToken){if(row)transferConflict("An unbound current quota charge cannot be released by an equal key.");return;}
+ if(!row||row.pendingToken!==null&&row.pendingToken!==original.quotaToken||row.settledToken!==null&&row.settledToken!==original.quotaToken||row.pendingToken===null&&row.settledToken!==original.quotaToken||!Number.isSafeInteger(bytes)||bytes<0||BigInt(row.bytes)<BigInt(bytes)&&BigInt(row.bytes)!==0n)transferConflict("Keep the exact original quota token debt; another reservation cannot be released by this retirement.");
+ await tx.execute(sql`update storage_quota_objects set bytes=0,pending_token=null,last_settled_token=${original.quotaToken}::uuid where namespace=${original.namespace} and object_key=${original.physicalKey}`);
+}
