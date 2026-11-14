@@ -38,7 +38,7 @@ export async function atomicCreditFeePartitionWitnesses(tx:Tx,input:AtomicCredit
     or actual_inspection.id is null or(actual_inspection.payment_id is distinct from actual_child.source_payment_id and actual_inspection.subscription_charge_receipt_id is distinct from actual_child.original_charge_receipt_id)
     or actual_bank.inspection_id is distinct from actual_child.bank_inspection_id)) as complete`);
  if(ownership?.complete!==true)refuse();
- const parents=await tx.execute<Parents&{fundingFingerprint:string;declaration:unknown;quoteCreatedAt:Date}>(sql`select actual_funding.id::text as "fundingId",null::text as "reservationId",null::text as "rootFundingId",
+ const parents=await tx.execute<Parents&{fundingFingerprint:string;declaration:unknown;quoteCreatedAt:unknown}>(sql`select actual_funding.id::text as "fundingId",null::text as "reservationId",null::text as "rootFundingId",
   actual_funding.source_payment_id::text as "sourcePaymentId",actual_funding.source_application_id::text as "sourceApplicationId",actual_funding.source_invoice_id::text as "sourceInvoiceId",actual_funding.credit_note_id::text as "creditNoteId",actual_funding.credit_note_line_id::text as "creditNoteLineId",actual_funding.proration_id::text as "prorationId",
   actual_quote.id::text as "quoteId",actual_quote.profile_id::text as "profileId",actual_quote.profile_version as "profileVersion",accepted.subscription_id::text as "subscriptionId",source_invoice.currency,
   encode(sha256(convert_to(to_jsonb(actual_funding)::text,'UTF8')),'hex') as "fundingFingerprint",actual_quote.review->'atomicCreditFeeDeclaration' as declaration,actual_quote.created_at as "quoteCreatedAt"
@@ -54,14 +54,35 @@ export async function atomicCreditFeePartitionWitnesses(tx:Tx,input:AtomicCredit
  const reservations=parentIds.length?await tx.select().from(invoiceCreditReservationAtomicFeePartitions).where(inArray(invoiceCreditReservationAtomicFeePartitions.fundingId,parentIds)).limit(5001):[];
  const keys=originalCashEvidenceKeys();
  for(const parent of parents){const child=fundings.find(row=>row.fundingId===parent.fundingId);
-  if(parent.declaration!==null&&parent.declaration!==undefined){if(!verifiedAtomicCreditFeeDeclaration(parent.declaration,new Date(parent.quoteCreatedAt),keys))refuse();
+  if(parent.declaration!==null&&parent.declaration!==undefined){const birth=z.coerce.date().safeParse(parent.quoteCreatedAt);if(!birth.success||!verifiedAtomicCreditFeeDeclaration(parent.declaration,birth.data,keys))refuse();
    const{atomicCreditFeeDeclaration}=await import("./atomic-credit-fee-declaration-contract"),declared=atomicCreditFeeDeclaration.parse(parent.declaration);
    if(declared.quoteId!==parent.quoteId||declared.plannedProrationId!==parent.prorationId||declared.subscriptionId!==parent.subscriptionId)refuse();
    if(declared.fundings.some(row=>row.fundingId===parent.fundingId||row.sourcePaymentId===parent.sourcePaymentId&&row.sourceApplicationId===parent.sourceApplicationId)&&!child)refuse();}
   if(child&&(!verifiedAtomicCreditFeePartition(child,keys)||child.parentFingerprint!==parent.fundingFingerprint||child.sourcePaymentId!==parent.sourcePaymentId||child.sourceApplicationId!==parent.sourceApplicationId||child.sourceInvoiceId!==parent.sourceInvoiceId||child.creditNoteId!==parent.creditNoteId||child.creditNoteLineId!==parent.creditNoteLineId
    ||child.economics.birthDeclaration?.quoteId!==parent.quoteId||child.economics.birthDeclaration?.prorationId!==parent.prorationId))refuse();
  }
- const rootIds=[...new Set(reservations.map(row=>row.rootFundingId))],roots=rootIds.length?await tx.select().from(invoiceCreditFundingAtomicFeePartitions).where(inArray(invoiceCreditFundingAtomicFeePartitions.fundingId,rootIds)).limit(5001):[];
+ if(!fundings.length&&!reservations.length)return{entries:[] as AtomicCreditFeeWitnessEntry[],dependencies:[] as Array<{table:string;id:string;fingerprint:string}>,incomplete:false};
+ // Discover only actual original funding -> application -> reservation ->
+ // funding FKs. Ancestors are internal dependencies, never new export owners.
+ const ancestorRows=await tx.execute<{id:string;sourceApplicationId:string|null;parentFundingId:string|null}>(sql`with recursive actual_ancestors(id) as(
+  select actual_funding.id from invoice_credit_funding actual_funding where actual_funding.id in(${list(parentIds)})
+  union select original_reservation.funding_id from actual_ancestors owned join invoice_credit_funding actual_funding on actual_funding.id=owned.id
+   join invoice_credit_applications original_application on original_application.reservation_id=actual_funding.source_application_id join invoice_credit_reservations original_reservation on original_reservation.id=original_application.reservation_id
+ ) select actual_funding.id::text as id,actual_funding.source_application_id::text as "sourceApplicationId",original_reservation.funding_id::text as "parentFundingId"
+  from actual_ancestors owned join invoice_credit_funding actual_funding on actual_funding.id=owned.id left join invoice_credit_applications original_application on original_application.reservation_id=actual_funding.source_application_id
+   left join invoice_credit_reservations original_reservation on original_reservation.id=original_application.reservation_id limit 5001`);
+ if(ancestorRows.length>5000)refuse();
+ const byAncestor=new Map(ancestorRows.map(row=>[row.id,row]));
+ for(const start of ancestorRows){const seen=new Set<string>();let cursor:typeof start|undefined=start;
+  while(cursor){if(seen.has(cursor.id))refuse();seen.add(cursor.id);if(cursor.sourceApplicationId===null)break;if(!cursor.parentFundingId)refuse();cursor=byAncestor.get(cursor.parentFundingId);if(!cursor)refuse();}}
+ const ancestorFundingIds=ancestorRows.map(row=>row.id),sourceApplicationIds=[...new Set(ancestorRows.flatMap(row=>row.sourceApplicationId?[row.sourceApplicationId]:[]))];
+ const ancestorPurposes=ancestorFundingIds.length?await tx.select().from(invoiceCreditFundingAtomicFeePartitions).where(inArray(invoiceCreditFundingAtomicFeePartitions.fundingId,ancestorFundingIds)).limit(5001):[];
+ const sourcePurposes=sourceApplicationIds.length?await tx.select().from(invoiceCreditReservationAtomicFeePartitions).where(inArray(invoiceCreditReservationAtomicFeePartitions.reservationId,sourceApplicationIds)).limit(5001):[];
+ if(ancestorPurposes.some(row=>!verifiedAtomicCreditFeePartition(row,keys))||sourcePurposes.some(row=>!verifiedAtomicCreditReservation(row,keys)))refuse();
+ for(const child of ancestorPurposes){const plan=child.economics.plan;if(child.sourceApplicationId===null)continue;const source=sourcePurposes.find(row=>row.reservationId===child.sourceApplicationId);
+  if(plan.rootFundingId!==null&&(!source||source.rootFundingId!==plan.rootFundingId||source.economics.rootEconomicRevision!==plan.rootEconomicRevision))refuse();
+  if(plan.rootFundingId===null&&(plan.rootKind!=="legacy_application"||source||plan.rootApplicationId!==child.sourceApplicationId))refuse();}
+ const rootIds=[...new Set([...reservations.map(row=>row.rootFundingId),...sourcePurposes.map(row=>row.rootFundingId),...ancestorPurposes.flatMap(row=>row.economics.plan.rootFundingId?[row.economics.plan.rootFundingId]:[])])],roots=rootIds.length?await tx.select().from(invoiceCreditFundingAtomicFeePartitions).where(inArray(invoiceCreditFundingAtomicFeePartitions.fundingId,rootIds)).limit(5001):[];
  if(roots.length!==rootIds.length||roots.some(row=>!verifiedAtomicCreditFeePartition(row,keys)))refuse();
  const actualReservations=parentIds.length?await tx.execute<{id:string;fundingId:string;fingerprint:string}>(sql`select actual_reservation.id::text as id,actual_reservation.funding_id::text as "fundingId",encode(sha256(convert_to(to_jsonb(actual_reservation)::text,'UTF8')),'hex') as fingerprint
   from invoice_credit_reservations actual_reservation where actual_reservation.funding_id in(${list(parentIds)}) order by actual_reservation.id limit 5001`):[];
@@ -78,11 +99,20 @@ export async function atomicCreditFeePartitionWitnesses(tx:Tx,input:AtomicCredit
   from invoice_credit_reservation_atomic_fee_partitions actual_child join invoice_credit_funding actual_parent on actual_parent.id=actual_child.funding_id join invoice_credit_funding_atomic_fee_partitions funding_child on funding_child.funding_id=actual_child.funding_id join subscription_prorations accepted on accepted.id=actual_parent.proration_id join invoices source_invoice on source_invoice.id=actual_parent.source_invoice_id
   where actual_child.funding_id in(${list(parentIds)}) order by 1,2 limit 5001`);
  if(rows.length!==fundings.length+reservations.length||rows.length>5000)refuse();
- const dependencies=await tx.execute<{table:string;id:string;fingerprint:string}>(sql`select 'invoice_credit_funding'::text as table,actual_parent.id::text as id,encode(sha256(convert_to(to_jsonb(actual_parent)::text,'UTF8')),'hex') as fingerprint from invoice_credit_funding actual_parent where actual_parent.id in(${list([...parentIds,...rootIds])})
-  union select 'invoice_credit_reservations',actual_parent.id::text,encode(sha256(convert_to(to_jsonb(actual_parent)::text,'UTF8')),'hex') from invoice_credit_reservations actual_parent where actual_parent.id in(${list(actualReservations.map(row=>row.id))})
-  union select 'invoice_credit_funding_atomic_fee_partitions',actual_root.funding_id::text,encode(sha256(convert_to(to_jsonb(actual_root)::text,'UTF8')),'hex') from invoice_credit_funding_atomic_fee_partitions actual_root where actual_root.funding_id in(${list(rootIds)}) order by 1,2 limit 5001`);
+ const dependencies=await tx.execute<{table:string;id:string;fingerprint:string}>(sql`select 'invoice_credit_funding'::text as table,actual_parent.id::text as id,encode(sha256(convert_to(to_jsonb(actual_parent)::text,'UTF8')),'hex') as fingerprint from invoice_credit_funding actual_parent where actual_parent.id in(${list([...ancestorFundingIds,...rootIds])})
+  union select 'invoice_credit_reservations',actual_parent.id::text,encode(sha256(convert_to(to_jsonb(actual_parent)::text,'UTF8')),'hex') from invoice_credit_reservations actual_parent where actual_parent.id in(${list([...actualReservations.map(row=>row.id),...sourceApplicationIds])})
+  union select 'invoice_credit_applications',actual_parent.reservation_id::text,encode(sha256(convert_to(to_jsonb(actual_parent)::text,'UTF8')),'hex') from invoice_credit_applications actual_parent where actual_parent.reservation_id in(${list(sourceApplicationIds)})
+  union select 'invoice_credit_funding_atomic_fee_partitions',actual_root.funding_id::text,encode(sha256(convert_to(to_jsonb(actual_root)::text,'UTF8')),'hex') from invoice_credit_funding_atomic_fee_partitions actual_root where actual_root.funding_id in(${list([...rootIds,...ancestorFundingIds])})
+  union select 'invoice_credit_reservation_atomic_fee_partitions',actual_root.reservation_id::text,encode(sha256(convert_to(to_jsonb(actual_root)::text,'UTF8')),'hex') from invoice_credit_reservation_atomic_fee_partitions actual_root where actual_root.reservation_id in(${list(sourceApplicationIds)}) order by 1,2 limit 5001`);
  const identities=new Map<string,string>();for(const row of [...rows,...dependencies]){const key=`${row.table}:${row.id}`,previous=identities.get(key);if(!z.uuid().safeParse(row.id).success||!/^[a-f0-9]{64}$/.test(row.fingerprint)||previous&&previous!==row.fingerprint)refuse();identities.set(key,row.fingerprint);}
  for(const root of roots)if(root.parentFingerprint!==identities.get(`invoice_credit_funding:${root.fundingId}`))refuse();
+ for(const row of ancestorPurposes)if(row.parentFingerprint!==identities.get(`invoice_credit_funding:${row.fundingId}`))refuse();
+ for(const row of ancestorPurposes)if(row.economics.plan.rootKind==="legacy_application"&&row.economics.plan.rootFundingId===null){const proof=row.economics.plan.legacyApplicationProof,source=byAncestor.get(row.fundingId);
+  if(!proof||!source?.parentFundingId||proof.applicationFingerprint!==identities.get(`invoice_credit_applications:${row.sourceApplicationId}`)||proof.reservationFingerprint!==identities.get(`invoice_credit_reservations:${row.sourceApplicationId}`)||proof.fundingFingerprint!==identities.get(`invoice_credit_funding:${source.parentFundingId}`))refuse();}
+ for(const row of sourcePurposes){const funding=ancestorPurposes.find(value=>value.fundingId===row.fundingId),root=roots.find(value=>value.fundingId===row.rootFundingId);
+  if(!funding||!root||row.parentFingerprint!==identities.get(`invoice_credit_reservations:${row.reservationId}`)||row.fundingPartitionFingerprint!==identities.get(`invoice_credit_funding_atomic_fee_partitions:${row.fundingId}`)
+   ||funding.sourcePaymentId!==row.sourcePaymentId||root.sourcePaymentId!==row.sourcePaymentId||funding.economics.plan.economicRevision!==row.economics.fundingEconomicRevision||root.economics.plan.economicRevision!==row.economics.rootEconomicRevision
+   ||root.economics.plan.rootFundingId!==null||root.economics.plan.originalRootPrincipalMinor!==row.economics.originalPrincipalMinor||root.economics.plan.originalRootFeeMinor!==row.economics.originalFeeMinor)refuse();}
  for(const row of reservations)if(row.fundingPartitionFingerprint!==identities.get(`invoice_credit_funding_atomic_fee_partitions:${row.fundingId}`))refuse();
  if(identities.size>5000)refuse();return{entries:[...rows],dependencies:[...dependencies],incomplete:false};
 }

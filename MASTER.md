@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+B private final-delta/consumer SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08):
+both deferred final-conservation bodies and six new function bodies now exist
+as isolated UNRUN source; no readiness/trigger enabled. Actual shared central
+financial witness and invoice/merchant/subscription safe archives now consume
+exact B child/source ancestors conditionally, preserving old parent counts and
+empty shapes. Two original full successors have exact old literal reversals;
+two remaining successors, readiness/enabled pins and actual native controls
+remain unfinished. Root approved only the additional narrow original invoice
+refund birth gate for authentic NEW B/current whole sibling proof. No root
+edits, execution, qualification, B acceptance or stable claim here.
+
 B private owner-delta SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08): reservation
 purpose BEFORE source now independently checks actual newborn parent/root,
 held complete callback/canonical prefix/current source and only-own-parent PG

@@ -3,11 +3,8 @@
 import {atomicCreditFeeDeclaration,type AtomicCreditFeeDeclaration} from "./atomic-credit-fee-declaration-contract";
 import {merchantTaxDigest} from "./merchant-tax-store";
 import {signOriginalCashRecovery,verifyOriginalCashRecovery} from "./original-cash-recovery-proof";
-import {env} from "@/core/env";
+export {originalCashEvidenceKeys as atomicCreditFeeDeclarationKeys,originalCashSigningKey as atomicCreditFeeDeclarationSigningKey} from "./original-cash-recovery-store";
 type Body=Omit<AtomicCreditFeeDeclaration,"digest"|"authentication">;
-/** Same original financial rotation keys; keep the synchronous quote verifier
- * independent of service/model/financial-reader barrels at initialization. */
-export function atomicCreditFeeDeclarationKeys(){const value=env();return[...new Set([value.CREDENTIAL_KEY,value.CREDENTIAL_KEY_PREVIOUS,value.SESSION_SECRET].filter((key):key is string=>Boolean(key)))];}
 export function signAtomicCreditFeeDeclaration(body:Body,quoteCreatedAt:Date,key:string){const digest=merchantTaxDigest(body);return{...body,digest,authentication:signOriginalCashRecovery("atomic_credit_fee_declaration.v1",{id:body.quoteId,createdAt:quoteCreatedAt,digest},key)};}
 export function verifiedAtomicCreditFeeDeclaration(value:unknown,quoteCreatedAt:Date,keys:readonly string[]){
  const parsed=atomicCreditFeeDeclaration.safeParse(value);if(!parsed.success)return false;

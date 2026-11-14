@@ -202,8 +202,11 @@
   "successorFunctions": [
     "freeholder_credit_fee_receipt()",
     "freeholder_credit_fee_is_collected(uuid,text)",
-    "freeholder_guard_invoice_credit()"
+    "freeholder_guard_invoice_credit()",
+    "freeholder_subscription_proration_receipt()"
   ],
+  "additionalSuccessorApproval": "Root approved the complete latest proration receipt successor with ONLY the invoice-wide source.refunded_minor birth gate continued for an authentic NEW B private quote/current complete sibling disposition. Validate actual NEW against the real stored quote; never query a not-yet-born proration. Own source refunded0 and all original line/period/tax/rounding/RMA/caller/loan checks remain. Preserve future effect/default branches and exact before/after reversal; readiness pins actual composed body.",
+  "privateOwnerPreimages": "Root approved NEW B-only beforeProrationProjections(originalJobId/jobClaimDigest/originalTask/state) and beforeSubscriptionProjections(pendingPlanId/PG-exact updatedAt). Capture only after original full PG hash verification; normalize only exact actual bound owner rows after genuine enqueue/task/accepted-q/new-plan checks. Actual same-TX q-planned collection/components may be removed only if absent from original beforeEntries and independently complete/valid. No new model/column/header or generic transaction exclusion.",
   "triggers": [
     {
       "name": "credit_atomic_fee_partition_guard",

@@ -8,7 +8,7 @@ import {invoiceCreditFundingAtomicFeePartitions} from "./atomic-credit-fee-parti
 import {ATOMIC_CREDIT_FEE_PROTOCOL} from "./atomic-credit-fee-protocol";
 import type {controlledAtomicCreditFeePartition} from "./atomic-credit-fee-partition";
 import {signAtomicCreditFeePartition,verifiedAtomicCreditFeePartition} from "./atomic-credit-fee-partition-proof";
-import {originalCashEvidenceKeys} from "./original-cash-recovery-store";
+import {originalCashEvidenceKeys,originalCashSigningKey} from "./original-cash-recovery-store";
 import {readAtomicCreditFeeDeclarationForProration} from "./atomic-credit-fee-declaration-reader";
 type Candidate=NonNullable<Awaited<ReturnType<typeof controlledAtomicCreditFeePartition>>>;
 function refuse():never{throw new ServiceError("conflict","Retain the exact actual inserted funding, same-transaction original fee partition and signed pre-insert current source graph; a planned or orphaned parent is not an original credit loan.");}
@@ -23,7 +23,7 @@ export async function retainAtomicCreditFundingPartition(ctx:ServiceContext,inpu
   ||parent.row.feeObligationMinor!==plan.takeAssignedFeeMinor||parent.row.feeProvenCollectedMinor!==plan.takeProvenCollectedMinor||parent.row.feeEvidenceDigest!==candidate.allocation.evidenceDigest
   ||parent.row.feeCollectionState!==candidate.allocation.collectionState||parent.row.feeUnexpected!==candidate.allocation.unexpectedFee
   ||candidate.beforeEntries.some(entry=>entry.key===`invoice_credit_funding:${parent.row.id}`||entry.key===`invoice_credit_funding_atomic_fee_partitions:${parent.row.id}`))refuse();
- const[transaction]=await ctx.tx.execute<{id:string}>(sql`select pg_current_xact_id()::text as id`),keys=originalCashEvidenceKeys(),key=keys[0];if(!transaction||!key)refuse();
+ const[transaction]=await ctx.tx.execute<{id:string}>(sql`select pg_current_xact_id()::text as id`),keys=originalCashEvidenceKeys(),key=originalCashSigningKey();if(!transaction)refuse();
  const source=await readAtomicCreditFeeDeclarationForProration(ctx.tx,parent.row.prorationId);
  const declared=source?.declaration.fundings.find(row=>row.fundingId===parent.row.id),principal=source?.principal.find(row=>row.sourcePaymentId===parent.row.sourcePaymentId&&row.sourceApplicationId===parent.row.sourceApplicationId);
  if(!source||!declared||!principal||declared.sourcePaymentId!==parent.row.sourcePaymentId||declared.sourceApplicationId!==parent.row.sourceApplicationId||declared.amountMinor!==parent.row.amountMinor||declared.feeEvidenceDigest!==parent.row.feeEvidenceDigest

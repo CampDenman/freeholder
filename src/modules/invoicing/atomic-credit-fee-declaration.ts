@@ -7,7 +7,7 @@ import {invoices,payments} from "./schema";
 import {ATOMIC_CREDIT_FEE_DECLARATION_PROTOCOL} from "./atomic-credit-fee-protocol";
 import type {AtomicCreditFeeDeclaration} from "./atomic-credit-fee-declaration-contract";
 import {controlledAtomicCreditFeePartition} from "./atomic-credit-fee-partition";
-import {atomicCreditFeeDeclarationKeys,signAtomicCreditFeeDeclaration,verifiedAtomicCreditFeeDeclaration} from "./atomic-credit-fee-declaration-proof";
+import {atomicCreditFeeDeclarationKeys,atomicCreditFeeDeclarationSigningKey,signAtomicCreditFeeDeclaration,verifiedAtomicCreditFeeDeclaration} from "./atomic-credit-fee-declaration-proof";
 type Principal={sourcePaymentId:string;sourceApplicationId:string|null;amountMinor:number;feeObligationMinor:number;feeProvenCollectedMinor:number;feeCollectionState:string;feeEvidenceDigest:string;feeUnexpected:boolean};
 function refuse():never{throw new ServiceError("conflict","Restore the real unchanged original credit source and exact mandatory B funding plan before retaining this quote; an uncreated funding UUID supplies no money authority.");}
 async function currentSources(ctx:ServiceContext,principal:readonly Principal[]){
@@ -26,7 +26,7 @@ async function currentSources(ctx:ServiceContext,principal:readonly Principal[])
 export async function prepareAtomicCreditFeeDeclaration(ctx:ServiceContext,input:{quoteId:string;resourceId:string;subscriptionId:string;plannedProrationId:string;originalInvoiceId:string|null;originalInvoiceLineId:string|null;principal:readonly Principal[];quoteCreatedAt:Date}){
  const fundings=(await currentSources(ctx,input.principal)).map(source=>({fundingId:randomUUID(),...source}));
  if(!fundings.length)return null;
- if(!input.originalInvoiceId||!input.originalInvoiceLineId)refuse();const keys=atomicCreditFeeDeclarationKeys(),key=keys[0];if(!key)refuse();
+ if(!input.originalInvoiceId||!input.originalInvoiceLineId)refuse();const keys=atomicCreditFeeDeclarationKeys(),key=atomicCreditFeeDeclarationSigningKey();if(!key)refuse();
  const body:Omit<AtomicCreditFeeDeclaration,"digest"|"authentication">={protocol:ATOMIC_CREDIT_FEE_DECLARATION_PROTOCOL,quoteId:input.quoteId,resourceId:input.resourceId,subscriptionId:input.subscriptionId,plannedProrationId:input.plannedProrationId,originalInvoiceId:input.originalInvoiceId,originalInvoiceLineId:input.originalInvoiceLineId,fundings};
  const declaration=signAtomicCreditFeeDeclaration(body,input.quoteCreatedAt,key);if(!verifiedAtomicCreditFeeDeclaration(declaration,input.quoteCreatedAt,keys))refuse();return declaration;
 }

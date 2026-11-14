@@ -164,3 +164,47 @@ enqueue/task/accepted-q/new-plan proof. Timeline emits only a separate timeline
 row; no contact update was found in that actual shared helper. Provider I/O or
 money/access effects remain absent from this acceptance transaction. Four
 preimage contract controls PREPARED/UNRUN; no broader field subtraction exists.
+
+Both mandatory deferred birth/final-delta bodies now exist as private source.
+They independently retain the full current PG namespace/count and exact actual
+current source capacity/bank proof, reconstruct only typed actual same-quote
+canonical credit births plus the approved real shared-writer owner/invoice
+changes, and compare the whole separate PG source revision. All other rows,
+callbacks, bank facts, timestamps outside listed fields and hash domains remain
+full; no generic current-transaction subtraction is used. These bodies are
+UNRUN and not enabled. Readiness and FOUR original complete-body successors
+remain required; root approved the additional proration receipt birth gate
+only for genuine NEW B quote/current whole sibling proof. Actual NEW must be
+validated without querying a not-yet-inserted proration. Future paid-effect
+branches must be composed, never overwritten by this full body.
+
+Financial dependency reading now follows actual funding->application->
+reservation->funding ancestors with explicit cycle/bound refusal. It retains
+full current parent/root/reservation/application PG fingerprints and verifies
+purpose MAC links without adopting ancestors as new archive owners. Old empty
+purpose histories return no new entries OR dependencies. Returned siblings
+explicitly require the strong actual current namespace-bank proof (a null
+proof cannot be replaced by generic bank flags). New retainers sign through
+the original CURRENT-or-SESSION key rule, independently of the full rotation
+verification list; root/Carrier own the exact acyclic key-leaf extraction.
+
+Actual central consumption is now SOURCE-WIP wired through the shared
+controlled financial witness used by invoice, merchant profile and refund
+parent/undo readers before their route exits. Exact original input IDs and
+already-owned target quote IDs select actual funding; original invoice/payment/
+receipt and target-application FKs remain explicit. Profile restricts those
+actual owners. New B ancestor purposes enter the same table/UUID full-PG union;
+old funding/reservation/application parents remain dependencies and are not
+counted a second time as new controlled families. Generic invoice/merchant and
+per-subscription buyer exports consume the explicit safe archive; B fields are
+conditional/nonempty. No collector/current-money authority is called by this
+ordinary witness. These new consumer paths and all native controls are UNRUN.
+
+Two of the four complete original successors are now rendered with complete
+before/after statement bytes and literal reversals: fee receipt preserves the
+whole old branch and adds only actual typed B/current capacity; collected
+proof preserves its whole old expression and adds exact retained399 evidence.
+Source-only baseline extraction comes from actual root journal files, never
+live expected names/bodies. Both remaining old successors, readiness, exact
+enabling trigger/pin closure and prepared whole actual B natives remain
+unfinished. No root SQL assembly or activation is authorized by this WIP.

@@ -486,6 +486,7 @@ CREATE FUNCTION freeholder_guard_credit_atomic_fee_partition() RETURNS trigger L
 DECLARE actual_parent invoice_credit_funding%ROWTYPE;actual_quote subscription_controlled_quotes%ROWTYPE;accepted subscription_prorations%ROWTYPE;actual_principal subscription_proration_principal%ROWTYPE;
  actual_link controlled_cash_application_links%ROWTYPE;actual_batch controlled_cash_application_batches%ROWTYPE;bank_state record;fee_state record;
  parent_xid text;plan jsonb;birth jsonb;scope jsonb;physical_count bigint;physical_revision text;conflicting_physical boolean;required_resource uuid;required_key text;declared_count bigint;
+ original_application invoice_credit_applications%ROWTYPE;original_reservation invoice_credit_reservations%ROWTYPE;inherited_purpose invoice_credit_reservation_atomic_fee_partitions%ROWTYPE;
 BEGIN
  IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Original credit fee purposes are immutable' USING ERRCODE='23514';END IF;
  IF NOT freeholder_credit_atomic_fee_ready() OR NEW.protocol IS DISTINCT FROM 'freeholder.atomic-credit-fee-partition.v1'
@@ -506,6 +507,33 @@ BEGIN
   OR birth->>'creditNoteId' IS DISTINCT FROM NEW.credit_note_id::text OR birth->>'creditNoteLineId' IS DISTINCT FROM NEW.credit_note_line_id::text
   OR EXISTS(SELECT 1 FROM jsonb_array_elements(NEW.before_entries) prior_entry(value) WHERE prior_entry.value->>'key' IN('invoice_credit_funding:'||NEW.funding_id::text,'invoice_credit_funding_atomic_fee_partitions:'||NEW.funding_id::text)) THEN
   RAISE EXCEPTION 'The signed exact pre-birth plan cannot contain its own parent or change the actual frozen principal/fee' USING ERRCODE='23514';END IF;
+ IF NEW.source_application_id IS NULL THEN
+  IF plan->>'epochKind' IS DISTINCT FROM 'direct' OR plan->>'rootKind' IS DISTINCT FROM 'payment' OR plan->>'parentFundingId' IS NOT NULL OR plan->>'rootFundingId' IS NOT NULL OR plan->>'rootEconomicRevision' IS NOT NULL
+   OR plan->>'rootApplicationId' IS NOT NULL OR plan->>'legacyApplicationRevision' IS NOT NULL OR plan->>'legacyApplicationProof' IS NOT NULL
+   OR plan->>'originalRootPrincipalMinor' IS DISTINCT FROM plan->>'originalPrincipalMinor' OR plan->>'originalRootFeeMinor' IS DISTINCT FROM plan->>'originalFeeMinor'
+   OR plan->'sourceSegments' IS DISTINCT FROM '[]'::jsonb OR plan->'takeSegments' IS DISTINCT FROM '[]'::jsonb THEN RAISE EXCEPTION 'A direct B root retains the exact original payment coordinate and epoch' USING ERRCODE='23514';END IF;
+ ELSE
+  SELECT original_row.* INTO original_application FROM invoice_credit_applications original_row WHERE original_row.reservation_id=NEW.source_application_id;
+  SELECT original_row.* INTO original_reservation FROM invoice_credit_reservations original_row WHERE original_row.id=NEW.source_application_id;
+  SELECT original_row.* INTO inherited_purpose FROM invoice_credit_reservation_atomic_fee_partitions original_row WHERE original_row.reservation_id=NEW.source_application_id;
+  IF original_application.reservation_id IS NULL OR original_reservation.id IS NULL OR plan->>'epochKind' IS DISTINCT FROM 'inherited' OR plan->>'parentFundingId' IS DISTINCT FROM original_reservation.funding_id::text THEN
+   RAISE EXCEPTION 'An inherited B root requires its actual original application/reservation FK' USING ERRCODE='23514';END IF;
+  IF inherited_purpose.reservation_id IS NULL THEN
+   IF plan->>'rootKind' IS DISTINCT FROM 'legacy_application' OR plan->>'rootApplicationId' IS DISTINCT FROM NEW.source_application_id::text OR plan->>'rootFundingId' IS NOT NULL OR plan->>'rootEconomicRevision' IS NOT NULL
+    OR plan->>'originalRootPrincipalMinor' IS DISTINCT FROM original_reservation.amount_minor::text OR plan->>'originalRootFeeMinor' IS DISTINCT FROM original_application.fee_obligation_minor::text
+    OR plan->>'originalPrincipalMinor' IS DISTINCT FROM original_reservation.amount_minor::text OR plan->>'originalFeeMinor' IS DISTINCT FROM original_application.fee_obligation_minor::text
+    OR plan->>'acceptedRetiredFeeMinor' IS DISTINCT FROM '0' OR plan->'sourceSegments' IS DISTINCT FROM '[]'::jsonb OR plan->'takeSegments' IS DISTINCT FROM '[]'::jsonb
+    OR plan->'legacyApplicationProof'->>'applicationId' IS DISTINCT FROM NEW.source_application_id::text
+    OR plan->'legacyApplicationProof'->>'applicationFingerprint' IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(original_application)::text,'UTF8')),'hex')
+    OR plan->'legacyApplicationProof'->>'reservationFingerprint' IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(original_reservation)::text,'UTF8')),'hex') THEN
+    RAISE EXCEPTION 'A positively proved old application is its own original epoch, never an invented payment offset' USING ERRCODE='23514';END IF;
+  ELSIF plan->>'rootFundingId' IS DISTINCT FROM inherited_purpose.root_funding_id::text OR plan->>'rootEconomicRevision' IS DISTINCT FROM inherited_purpose.economics->>'rootEconomicRevision'
+   OR plan->>'rootKind' IS DISTINCT FROM inherited_purpose.economics->>'rootKind' OR plan->>'rootApplicationId' IS DISTINCT FROM inherited_purpose.economics->>'rootApplicationId'
+   OR plan->>'legacyApplicationRevision' IS DISTINCT FROM inherited_purpose.economics->>'legacyApplicationRevision'
+   OR plan->>'originalRootPrincipalMinor' IS DISTINCT FROM inherited_purpose.economics->>'originalPrincipalMinor' OR plan->>'originalRootFeeMinor' IS DISTINCT FROM inherited_purpose.economics->>'originalFeeMinor'
+   OR plan->'sourceSegments' IS DISTINCT FROM inherited_purpose.economics->'segments' THEN
+   RAISE EXCEPTION 'A known B application must carry its exact original absolute segments and cannot downgrade to an old epoch' USING ERRCODE='23514';END IF;
+ END IF;
  SELECT original_acceptance.* INTO accepted FROM subscription_prorations original_acceptance WHERE original_acceptance.id=actual_parent.proration_id;
  SELECT original_quote.* INTO actual_quote FROM subscription_controlled_quotes original_quote WHERE original_quote.id::text=birth->>'quoteId';
  SELECT original_principal.* INTO actual_principal FROM subscription_proration_principal original_principal WHERE original_principal.id::text=birth->>'sourcePrincipalId';
@@ -551,6 +579,9 @@ BEGIN
   OR bank_state.bank_fingerprint IS DISTINCT FROM NEW.economics->>'bankNamespaceRevision' OR fee_state.known IS DISTINCT FROM true OR fee_state.reconciled IS DISTINCT FROM true
   OR fee_state.inspection_id IS DISTINCT FROM NEW.bank_inspection_id OR fee_state.observation_id IS DISTINCT FROM NEW.bank_observation_id OR fee_state.bank_namespace_revision IS DISTINCT FROM bank_state.bank_fingerprint THEN
   RAISE EXCEPTION 'A purpose needs actual independently current original bank/retired fee evidence, never a planned collection' USING ERRCODE='23514';END IF;
+ IF plan->>'originalPaymentFeeMinor' IS DISTINCT FROM freeholder_original_payment_fee(NEW.source_payment_id)::text
+  OR(plan->>'originalResourceRetiredFeeMinor')::numeric IS DISTINCT FROM freeholder_original_payment_fee(NEW.source_payment_id)-fee_state.actual_retained_fee_minor THEN
+  RAISE EXCEPTION 'The whole actual original Fi/current retired capacity remains distinct from each inherited economic epoch' USING ERRCODE='23514';END IF;
  WITH physical AS(
   SELECT current_entry.family,current_entry.identity,current_entry.fingerprint FROM freeholder_controlled_cash_parent_entries(actual_batch.collection_id) current_entry
    WHERE NOT(current_entry.family='invoice_credit_funding' AND current_entry.identity=NEW.funding_id::text)
@@ -623,5 +654,513 @@ BEGIN
   EXISTS(SELECT 1 FROM physical GROUP BY physical.family,physical.identity HAVING count(DISTINCT physical.fingerprint)<>1) INTO physical_count,physical_revision,conflicting_physical FROM actual_rows;
  IF physical_count NOT BETWEEN 1 AND 5000 OR conflicting_physical OR physical_revision IS DISTINCT FROM economics->>'postgresSourceRevision' THEN
   RAISE EXCEPTION 'Only the exact newborn reservation may be reconstructed; every other current physical row stays full' USING ERRCODE='23514';END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_credit_atomic_fee_birth_guard() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $$
+DECLARE purpose invoice_credit_funding_atomic_fee_partitions%ROWTYPE;actual_funding invoice_credit_funding%ROWTYPE;actual_quote subscription_controlled_quotes%ROWTYPE;accepted subscription_prorations%ROWTYPE;
+ source_capacity record;physical_row record;actual_invoice invoices%ROWTYPE;actual_subscription subscriptions%ROWTYPE;current_scope jsonb;physical_count bigint;conflicting_physical boolean;
+ before_entry jsonb;projection jsonb;normalized jsonb:='[]'::jsonb;normalized_row jsonb;normalized_hash text;final_revision text;source_collection uuid;owner_quote uuid;owner_proration uuid;owner_subscription uuid;target_invoice uuid;
+ is_declared boolean;requires_atomic boolean;allowed_birth boolean;application_delta numeric;target_credited numeric;required_resource uuid;
+BEGIN
+ SELECT original_funding.* INTO actual_funding FROM invoice_credit_funding original_funding WHERE original_funding.id=NEW.id;
+ SELECT original_acceptance.* INTO accepted FROM subscription_prorations original_acceptance WHERE original_acceptance.id=actual_funding.proration_id;
+ SELECT original_quote.* INTO actual_quote FROM subscription_controlled_quotes original_quote WHERE original_quote.planned_proration_id=accepted.id AND original_quote.quote_digest=accepted.accepted_quote_digest;
+ SELECT actual_purpose.* INTO purpose FROM invoice_credit_funding_atomic_fee_partitions actual_purpose WHERE actual_purpose.funding_id=NEW.id;
+ SELECT EXISTS(SELECT 1 FROM jsonb_array_elements(actual_quote.review->'atomicCreditFeeDeclaration'->'fundings') declared_source(value)
+  WHERE declared_source.value->>'fundingId'=NEW.id::text OR(declared_source.value->>'sourcePaymentId'=NEW.source_payment_id::text AND declared_source.value->>'sourceApplicationId' IS NOT DISTINCT FROM NEW.source_application_id::text)) INTO is_declared;
+ SELECT EXISTS(SELECT 1 FROM payments original_payment JOIN invoices original_invoice ON original_invoice.id=original_payment.invoice_id
+  JOIN controlled_cash_application_links original_link ON original_link.payment_id=original_payment.id
+  WHERE original_payment.id=NEW.source_payment_id AND original_invoice.refunded_minor>0
+   AND EXISTS(SELECT 1 FROM controlled_cash_application_batches atomic_epoch WHERE atomic_epoch.invoice_id=original_invoice.id AND atomic_epoch.protocol='controlled_cash_atomic.v1')) INTO requires_atomic;
+ IF purpose.funding_id IS NULL THEN
+  IF is_declared OR requires_atomic THEN RAISE EXCEPTION 'Every genuine atomic-retired funding requires its actual same-transaction purpose, even when the legacy scalar fee coincides' USING ERRCODE='23514';END IF;
+  RETURN NEW;
+ END IF;
+ IF NOT freeholder_credit_atomic_fee_ready() OR purpose.admission_transaction_id IS DISTINCT FROM pg_current_xact_id()::text OR actual_quote.id IS NULL OR accepted.id IS NULL
+  OR NOT is_declared OR purpose.economics->'birthDeclaration'->>'quoteId' IS DISTINCT FROM actual_quote.id::text
+  OR purpose.economics->'birthDeclaration'->>'prorationId' IS DISTINCT FROM accepted.id::text
+  OR purpose.parent_fingerprint IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(actual_funding)::text,'UTF8')),'hex') THEN
+  RAISE EXCEPTION 'The complete final B funding must retain its genuine exact quote, actual parent and birth transaction' USING ERRCODE='23514';END IF;
+ owner_quote:=actual_quote.id;owner_proration:=accepted.id;owner_subscription:=accepted.subscription_id;target_invoice:=accepted.debit_invoice_id;source_collection:=(purpose.economics->'plan'->>'sourceCollectionId')::uuid;
+ SELECT current_capacity.* INTO source_capacity FROM freeholder_atomic_credit_fee_partition(purpose.source_payment_id,purpose.source_application_id,0) current_capacity;
+ IF source_capacity.known IS DISTINCT FROM true OR source_capacity.bank_inspection_id IS DISTINCT FROM purpose.bank_inspection_id OR source_capacity.bank_observation_id IS DISTINCT FROM purpose.bank_observation_id
+  OR source_capacity.bank_namespace_revision IS DISTINCT FROM purpose.economics->>'bankNamespaceRevision' THEN
+  RAISE EXCEPTION 'Final original fee/principal loans and current bank/caller evidence must remain independently complete' USING ERRCODE='23514';END IF;
+ current_scope:=freeholder_controlled_cash_scope(source_collection);
+ FOR required_resource IN SELECT actual_resource_id FROM unnest(freeholder_controlled_cash_scope_ids(current_scope,'resources')) actual_resource_id LOOP PERFORM freeholder_controlled_cash_require_prefix(required_resource);END LOOP;
+ WITH physical AS(
+  SELECT current_entry.family,current_entry.identity,current_entry.fingerprint FROM freeholder_controlled_cash_parent_entries(source_collection) current_entry
+  UNION ALL SELECT 'invoice_credit_funding_atomic_fee_partitions',actual_purpose.funding_id::text,encode(sha256(convert_to(to_jsonb(actual_purpose)::text,'UTF8')),'hex') FROM invoice_credit_funding_atomic_fee_partitions actual_purpose WHERE actual_purpose.source_payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+  UNION ALL SELECT 'invoice_credit_reservation_atomic_fee_partitions',actual_purpose.reservation_id::text,encode(sha256(convert_to(to_jsonb(actual_purpose)::text,'UTF8')),'hex') FROM invoice_credit_reservation_atomic_fee_partitions actual_purpose WHERE actual_purpose.source_payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+  UNION ALL SELECT 'merchant_fee_refund_invocations',actual_invocation.id::text,encode(sha256(convert_to(to_jsonb(actual_invocation)::text,'UTF8')),'hex') FROM merchant_fee_refund_invocations actual_invocation WHERE actual_invocation.payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+ ) SELECT count(*),EXISTS(SELECT 1 FROM physical GROUP BY physical.family,physical.identity HAVING count(DISTINCT physical.fingerprint)<>1) INTO physical_count,conflicting_physical FROM(SELECT DISTINCT physical.family,physical.identity FROM physical) actual_identities;
+ IF physical_count NOT BETWEEN 1 AND 5000 OR conflicting_physical THEN RAISE EXCEPTION 'Retain the whole bounded final physical namespace without hash-domain collisions' USING ERRCODE='23514';END IF;
+ FOR physical_row IN WITH physical AS(
+  SELECT current_entry.family,current_entry.identity,current_entry.fingerprint FROM freeholder_controlled_cash_parent_entries(source_collection) current_entry
+  UNION ALL SELECT 'invoice_credit_funding_atomic_fee_partitions',actual_purpose.funding_id::text,encode(sha256(convert_to(to_jsonb(actual_purpose)::text,'UTF8')),'hex') FROM invoice_credit_funding_atomic_fee_partitions actual_purpose WHERE actual_purpose.source_payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+  UNION ALL SELECT 'invoice_credit_reservation_atomic_fee_partitions',actual_purpose.reservation_id::text,encode(sha256(convert_to(to_jsonb(actual_purpose)::text,'UTF8')),'hex') FROM invoice_credit_reservation_atomic_fee_partitions actual_purpose WHERE actual_purpose.source_payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+  UNION ALL SELECT 'merchant_fee_refund_invocations',actual_invocation.id::text,encode(sha256(convert_to(to_jsonb(actual_invocation)::text,'UTF8')),'hex') FROM merchant_fee_refund_invocations actual_invocation WHERE actual_invocation.payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+ ) SELECT physical.family,physical.identity,min(physical.fingerprint) AS fingerprint FROM physical GROUP BY physical.family,physical.identity ORDER BY physical.family,physical.identity LOOP
+  SELECT original_entry.value INTO before_entry FROM jsonb_array_elements(purpose.before_entries) original_entry(value) WHERE original_entry.value->>'key'=physical_row.family||':'||physical_row.identity;
+  allowed_birth:=false;
+  IF before_entry IS NULL THEN
+   IF physical_row.family IN('invoice_credit_funding','invoice_credit_funding_atomic_fee_partitions') THEN
+    SELECT EXISTS(SELECT 1 FROM invoice_credit_funding original_funding LEFT JOIN invoice_credit_funding_atomic_fee_partitions original_purpose ON original_purpose.funding_id=original_funding.id
+     WHERE original_funding.id::text=physical_row.identity AND original_funding.proration_id=owner_proration AND original_funding.credit_note_id=accepted.credit_note_id
+      AND original_funding.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text
+      AND EXISTS(SELECT 1 FROM subscription_proration_principal original_principal WHERE original_principal.proration_id=owner_proration AND original_principal.source_payment_id=original_funding.source_payment_id
+       AND original_principal.source_application_id IS NOT DISTINCT FROM original_funding.source_application_id AND original_principal.amount_minor=original_funding.amount_minor AND original_principal.fee_obligation_minor=original_funding.fee_obligation_minor
+       AND original_principal.fee_proven_collected_minor=original_funding.fee_proven_collected_minor AND original_principal.fee_evidence_digest=original_funding.fee_evidence_digest AND original_principal.original_evidence_digest=original_funding.original_evidence_digest)
+      AND(original_purpose.funding_id IS NOT NULL AND original_purpose.admission_transaction_id=pg_current_xact_id()::text AND original_purpose.economics->'birthDeclaration'->>'quoteId'=owner_quote::text
+        AND original_purpose.parent_fingerprint=encode(sha256(convert_to(to_jsonb(original_funding)::text,'UTF8')),'hex')
+       OR physical_row.family='invoice_credit_funding' AND original_purpose.funding_id IS NULL AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(actual_quote.review->'atomicCreditFeeDeclaration'->'fundings') declared_source(value)
+        WHERE declared_source.value->>'fundingId'=original_funding.id::text OR(declared_source.value->>'sourcePaymentId'=original_funding.source_payment_id::text AND declared_source.value->>'sourceApplicationId' IS NOT DISTINCT FROM original_funding.source_application_id::text)))) INTO allowed_birth;
+   ELSIF physical_row.family IN('invoice_credit_reservations','invoice_credit_reservation_atomic_fee_partitions') THEN
+    SELECT EXISTS(SELECT 1 FROM invoice_credit_reservations original_reservation LEFT JOIN invoice_credit_reservation_atomic_fee_partitions original_purpose ON original_purpose.reservation_id=original_reservation.id
+     JOIN invoice_credit_funding original_funding ON original_funding.id=original_reservation.funding_id
+     LEFT JOIN invoice_credit_funding_atomic_fee_partitions original_funding_purpose ON original_funding_purpose.funding_id=original_funding.id
+     WHERE original_reservation.id::text=physical_row.identity AND original_funding.proration_id=owner_proration AND original_funding.credit_note_id=accepted.credit_note_id
+      AND original_reservation.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text
+      AND(original_purpose.reservation_id IS NOT NULL AND original_purpose.admission_transaction_id=pg_current_xact_id()::text AND original_purpose.parent_fingerprint=encode(sha256(convert_to(to_jsonb(original_reservation)::text,'UTF8')),'hex')
+       OR physical_row.family='invoice_credit_reservations' AND original_purpose.reservation_id IS NULL AND original_funding_purpose.funding_id IS NULL
+        AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(actual_quote.review->'atomicCreditFeeDeclaration'->'fundings') declared_source(value)
+         WHERE declared_source.value->>'fundingId'=original_funding.id::text OR(declared_source.value->>'sourcePaymentId'=original_funding.source_payment_id::text AND declared_source.value->>'sourceApplicationId' IS NOT DISTINCT FROM original_funding.source_application_id::text)))) INTO allowed_birth;
+   ELSIF physical_row.family IN('invoice_credit_applications','agreement_fee_credit_assignments') THEN
+    SELECT EXISTS(SELECT 1 FROM invoice_credit_applications original_application JOIN invoice_credit_reservations original_reservation ON original_reservation.id=original_application.reservation_id
+     JOIN invoice_credit_funding original_funding ON original_funding.id=original_reservation.funding_id
+     WHERE original_application.reservation_id::text=physical_row.identity AND original_application.invoice_id=target_invoice AND original_funding.proration_id=owner_proration AND original_funding.credit_note_id=accepted.credit_note_id
+      AND original_application.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text
+      AND original_application.fee_obligation_minor=original_reservation.fee_obligation_minor AND original_application.fee_proven_collected_minor=original_reservation.fee_proven_collected_minor
+      AND NOT EXISTS(SELECT 1 FROM invoice_credit_releases actual_release WHERE actual_release.reservation_id=original_reservation.id)
+      AND(physical_row.family='invoice_credit_applications' OR EXISTS(SELECT 1 FROM agreement_fee_credit_assignments actual_assignment WHERE actual_assignment.application_id=original_application.reservation_id AND actual_assignment.invoice_id=target_invoice
+       AND actual_assignment.amount_minor=original_reservation.amount_minor AND actual_assignment.fee_obligation_minor=original_application.fee_obligation_minor AND actual_assignment.proven_collected_minor=original_application.fee_proven_collected_minor
+       AND actual_assignment.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text))) INTO allowed_birth;
+   ELSIF physical_row.family='subscription_proration_credit_uses' THEN
+    SELECT EXISTS(SELECT 1 FROM subscription_proration_credit_uses actual_use WHERE actual_use.id::text=physical_row.identity AND actual_use.proration_id=owner_proration AND actual_use.credit_note_id=accepted.credit_note_id
+     AND actual_use.amount_minor::text=actual_quote.review->>'creditAppliedMinor' AND actual_use.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text) INTO allowed_birth;
+   ELSIF physical_row.family='agreement_fee_duties' THEN
+    SELECT EXISTS(SELECT 1 FROM agreement_fee_duties actual_duty WHERE actual_duty.invoice_id::text=physical_row.identity AND actual_duty.invoice_id=target_invoice AND actual_duty.acceptance_id=owner_proration
+     AND actual_duty.accepted_quote_digest=actual_quote.quote_digest AND actual_duty.merchant_profile_id=actual_quote.profile_id AND actual_duty.profile_version=actual_quote.profile_version
+     AND actual_duty.target_fee_minor=accepted.debit_fee_obligation_minor AND actual_duty.carried_fee_minor=accepted.applied_fee_obligation_minor
+     AND actual_duty.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text) INTO allowed_birth;
+   ELSIF physical_row.family IN('subscription_controlled_collections','subscription_controlled_components') THEN
+    SELECT EXISTS(SELECT 1 FROM subscription_controlled_collections actual_collection WHERE actual_collection.id=actual_quote.planned_collection_id AND actual_collection.quote_id=owner_quote AND actual_collection.proration_id=owner_proration
+     AND actual_collection.invoice_id IS NOT DISTINCT FROM target_invoice AND actual_collection.credit_note_id IS NOT DISTINCT FROM accepted.credit_note_id
+     AND actual_collection.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text AND freeholder_controlled_collection_valid(actual_collection.id)
+     AND(physical_row.family='subscription_controlled_collections' AND actual_collection.id::text=physical_row.identity
+      OR physical_row.family='subscription_controlled_components' AND EXISTS(SELECT 1 FROM subscription_controlled_components actual_component WHERE actual_component.id::text=physical_row.identity AND actual_component.collection_id=actual_collection.id
+       AND actual_component.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text))) INTO allowed_birth;
+   END IF;
+   IF allowed_birth THEN CONTINUE;END IF;
+  END IF;
+  normalized_hash:=physical_row.fingerprint;
+  IF physical_row.family='invoices' AND physical_row.identity=target_invoice::text AND before_entry->>'postgres_row' IS DISTINCT FROM physical_row.fingerprint THEN
+   SELECT original_projection.value INTO projection FROM jsonb_array_elements(purpose.economics->'beforeInvoiceProjections') original_projection(value) WHERE original_projection.value->>'invoiceId'=physical_row.identity;
+   SELECT original_invoice.* INTO actual_invoice FROM invoices original_invoice WHERE original_invoice.id=target_invoice;
+   SELECT coalesce(sum(original_reservation.amount_minor),0) INTO application_delta FROM invoice_credit_applications original_application JOIN invoice_credit_reservations original_reservation ON original_reservation.id=original_application.reservation_id JOIN invoice_credit_funding original_funding ON original_funding.id=original_reservation.funding_id
+    WHERE original_application.invoice_id=target_invoice AND original_funding.proration_id=owner_proration AND original_funding.credit_note_id=accepted.credit_note_id
+     AND original_application.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text
+     AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(purpose.before_entries) prior_application(value) WHERE prior_application.value->>'key'='invoice_credit_applications:'||original_application.reservation_id::text);
+   target_credited:=(projection->>'creditedMinor')::numeric+application_delta;
+   IF projection IS NULL OR before_entry->>'postgres_row' IS NULL OR application_delta<=0 OR actual_invoice.credited_minor IS DISTINCT FROM target_credited
+    OR actual_invoice.status IS DISTINCT FROM(CASE WHEN actual_invoice.paid_minor+actual_invoice.credited_minor>=actual_invoice.total_minor-actual_invoice.refunded_minor THEN 'paid' ELSE 'partially_paid' END) THEN
+    RAISE EXCEPTION 'Only the exact actual original noncash application may change its canonical invoice projection' USING ERRCODE='23514';END IF;
+   normalized_row:=to_jsonb(actual_invoice)||jsonb_build_object('credited_minor',(projection->>'creditedMinor')::bigint,'status',projection->>'status','paid_at',(projection->>'paidAt')::timestamptz,'updated_at',(projection->>'updatedAt')::timestamptz);
+   normalized_hash:=encode(sha256(convert_to(normalized_row::text,'UTF8')),'hex');IF normalized_hash IS DISTINCT FROM before_entry->>'postgres_row' THEN RAISE EXCEPTION 'An unlisted invoice field changed during credit application' USING ERRCODE='23514';END IF;
+  ELSIF physical_row.family='subscription_prorations' AND physical_row.identity=owner_proration::text AND before_entry->>'postgres_row' IS DISTINCT FROM physical_row.fingerprint THEN
+   SELECT original_projection.value INTO projection FROM jsonb_array_elements(purpose.economics->'beforeProrationProjections') original_projection(value) WHERE original_projection.value->>'prorationId'=physical_row.identity;
+   IF projection IS NULL OR before_entry->>'postgres_row' IS NULL OR projection->>'state' IS DISTINCT FROM 'accepted' OR projection->>'originalJobId' IS NOT NULL OR projection->>'jobClaimDigest' IS NOT NULL OR projection->>'originalTask' IS NOT NULL
+    OR accepted.original_job_id IS NULL OR accepted.original_task->>'prorationId' IS DISTINCT FROM accepted.id::text OR accepted.original_task->>'subscriptionId' IS DISTINCT FROM accepted.subscription_id::text
+    OR accepted.original_task->>'originalJobId' IS DISTINCT FROM accepted.original_job_id::text OR accepted.original_task->>'acceptedQuoteDigest' IS DISTINCT FROM accepted.accepted_quote_digest
+    OR NOT EXISTS(SELECT 1 FROM job_idempotency_keys original_claim JOIN pgboss.job original_job ON original_job.id=original_claim.job_id AND original_job.name=original_claim.job_name
+     WHERE original_claim.job_id=accepted.original_job_id AND original_claim.job_name='subscriptions.applyGrossProration' AND original_claim.payload_hash=accepted.job_claim_digest AND original_job.data=accepted.original_task)
+    OR accepted.state IS DISTINCT FROM(CASE WHEN target_invoice IS NULL OR EXISTS(SELECT 1 FROM invoices actual_target WHERE actual_target.id=target_invoice AND actual_target.status='paid' AND actual_target.paid_minor+actual_target.credited_minor>=actual_target.total_minor-actual_target.refunded_minor) THEN 'awaiting_effective' ELSE 'awaiting_payment' END) THEN
+    RAISE EXCEPTION 'Only the genuine shared original enqueue/task/state continuation can change this accepted proration' USING ERRCODE='23514';END IF;
+   normalized_row:=to_jsonb(accepted)||jsonb_build_object('original_job_id',projection->'originalJobId','job_claim_digest',projection->'jobClaimDigest','original_task',projection->'originalTask','state',projection->'state');
+   normalized_hash:=encode(sha256(convert_to(normalized_row::text,'UTF8')),'hex');IF normalized_hash IS DISTINCT FROM before_entry->>'postgres_row' THEN RAISE EXCEPTION 'An unlisted accepted proration field changed' USING ERRCODE='23514';END IF;
+  ELSIF physical_row.family='subscriptions' AND physical_row.identity=owner_subscription::text AND before_entry->>'postgres_row' IS DISTINCT FROM physical_row.fingerprint THEN
+   SELECT original_projection.value INTO projection FROM jsonb_array_elements(purpose.economics->'beforeSubscriptionProjections') original_projection(value) WHERE original_projection.value->>'subscriptionId'=physical_row.identity;
+   SELECT original_parent.* INTO actual_subscription FROM subscriptions original_parent WHERE original_parent.id=owner_subscription;
+   IF projection IS NULL OR before_entry->>'postgres_row' IS NULL OR projection->>'pendingPlanId' IS NOT NULL OR actual_subscription.pending_plan_id IS DISTINCT FROM accepted.plan_id THEN
+    RAISE EXCEPTION 'Only the exact newly accepted pending plan may continue this real parent' USING ERRCODE='23514';END IF;
+   normalized_row:=to_jsonb(actual_subscription)||jsonb_build_object('pending_plan_id',projection->'pendingPlanId','updated_at',(projection->>'updatedAt')::timestamptz);
+   normalized_hash:=encode(sha256(convert_to(normalized_row::text,'UTF8')),'hex');IF normalized_hash IS DISTINCT FROM before_entry->>'postgres_row' THEN RAISE EXCEPTION 'An unlisted original subscription field changed' USING ERRCODE='23514';END IF;
+  END IF;
+  normalized:=normalized||jsonb_build_array(jsonb_build_object('table',physical_row.family,'id',physical_row.identity,'fingerprint',normalized_hash));
+ END LOOP;
+ SELECT encode(sha256(convert_to(string_agg(actual_entry.value->>'table'||':'||(actual_entry.value->>'id')||':'||(actual_entry.value->>'fingerprint'),E'\n' ORDER BY actual_entry.value->>'table',actual_entry.value->>'id'),'UTF8')),'hex') INTO final_revision FROM jsonb_array_elements(normalized) actual_entry(value);
+ IF final_revision IS DISTINCT FROM purpose.economics->>'postgresSourceRevision' THEN RAISE EXCEPTION 'Final actual current physical history differs beyond the exact authenticated canonical credit delta' USING ERRCODE='23514';END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_credit_atomic_reservation_birth_guard() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $$
+DECLARE purpose invoice_credit_reservation_atomic_fee_partitions%ROWTYPE;funding_purpose invoice_credit_funding_atomic_fee_partitions%ROWTYPE;actual_parent invoice_credit_reservations%ROWTYPE;actual_funding invoice_credit_funding%ROWTYPE;actual_quote subscription_controlled_quotes%ROWTYPE;accepted subscription_prorations%ROWTYPE;
+ source_capacity record;physical_row record;actual_invoice invoices%ROWTYPE;actual_subscription subscriptions%ROWTYPE;current_scope jsonb;physical_count bigint;conflicting_physical boolean;
+ before_entry jsonb;projection jsonb;normalized jsonb:='[]'::jsonb;normalized_row jsonb;normalized_hash text;final_revision text;source_collection uuid;owner_quote uuid;owner_proration uuid;owner_subscription uuid;target_invoice uuid;
+ is_declared boolean;requires_atomic boolean;allowed_birth boolean;application_delta numeric;target_credited numeric;required_resource uuid;
+BEGIN
+ SELECT original_parent.* INTO actual_parent FROM invoice_credit_reservations original_parent WHERE original_parent.id=NEW.id;
+ SELECT original_funding.* INTO actual_funding FROM invoice_credit_funding original_funding WHERE original_funding.id=actual_parent.funding_id;
+ SELECT original_acceptance.* INTO accepted FROM subscription_prorations original_acceptance WHERE original_acceptance.id=actual_funding.proration_id;
+ SELECT original_quote.* INTO actual_quote FROM subscription_controlled_quotes original_quote WHERE original_quote.planned_proration_id=accepted.id AND original_quote.quote_digest=accepted.accepted_quote_digest;
+ SELECT actual_purpose.* INTO purpose FROM invoice_credit_reservation_atomic_fee_partitions actual_purpose WHERE actual_purpose.reservation_id=NEW.id;
+ SELECT actual_purpose.* INTO funding_purpose FROM invoice_credit_funding_atomic_fee_partitions actual_purpose WHERE actual_purpose.funding_id=actual_funding.id;
+ SELECT EXISTS(SELECT 1 FROM jsonb_array_elements(actual_quote.review->'atomicCreditFeeDeclaration'->'fundings') declared_source(value)
+  WHERE declared_source.value->>'fundingId'=actual_funding.id::text OR(declared_source.value->>'sourcePaymentId'=actual_funding.source_payment_id::text AND declared_source.value->>'sourceApplicationId' IS NOT DISTINCT FROM actual_funding.source_application_id::text)) INTO is_declared;
+ IF purpose.reservation_id IS NULL THEN
+  IF funding_purpose.funding_id IS NOT NULL OR is_declared THEN RAISE EXCEPTION 'Every actual B reservation requires its same-transaction immutable original interval receipt, even a numeric coincidence' USING ERRCODE='23514';END IF;
+  RETURN NEW;
+ END IF;
+ IF NOT freeholder_credit_atomic_fee_ready() OR purpose.admission_transaction_id IS DISTINCT FROM pg_current_xact_id()::text OR actual_quote.id IS NULL OR accepted.id IS NULL
+  OR funding_purpose.funding_id IS NULL OR NOT is_declared OR purpose.funding_id IS DISTINCT FROM actual_funding.id
+  OR funding_purpose.economics->'birthDeclaration'->>'quoteId' IS DISTINCT FROM actual_quote.id::text OR funding_purpose.economics->'birthDeclaration'->>'prorationId' IS DISTINCT FROM accepted.id::text
+  OR purpose.parent_fingerprint IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(actual_parent)::text,'UTF8')),'hex')
+  OR funding_purpose.parent_fingerprint IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(actual_funding)::text,'UTF8')),'hex')
+  OR purpose.funding_partition_fingerprint IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(funding_purpose)::text,'UTF8')),'hex') THEN
+  RAISE EXCEPTION 'The complete final B reservation must retain its exact actual parent, original root and birth transaction' USING ERRCODE='23514';END IF;
+ owner_quote:=actual_quote.id;owner_proration:=accepted.id;owner_subscription:=accepted.subscription_id;target_invoice:=accepted.debit_invoice_id;source_collection:=(funding_purpose.economics->'plan'->>'sourceCollectionId')::uuid;
+ SELECT current_capacity.* INTO source_capacity FROM freeholder_atomic_credit_fee_partition(purpose.source_payment_id,purpose.source_application_id,0) current_capacity;
+ IF source_capacity.known IS DISTINCT FROM true THEN RAISE EXCEPTION 'Every current original loan, bank/fee/refund/caller and retained source must remain complete' USING ERRCODE='23514';END IF;
+ SELECT current_interval.* INTO source_capacity FROM freeholder_atomic_credit_reservation_partition(actual_funding.id,0) current_interval;
+ IF source_capacity.known IS DISTINCT FROM true OR source_capacity.root_funding_id IS DISTINCT FROM purpose.root_funding_id
+  OR source_capacity.funding_partition_fingerprint IS DISTINCT FROM purpose.funding_partition_fingerprint THEN
+  RAISE EXCEPTION 'Every actual final original interval, application and release must conserve its immutable original root/caps' USING ERRCODE='23514';END IF;
+ current_scope:=freeholder_controlled_cash_scope(source_collection);
+ FOR required_resource IN SELECT actual_resource_id FROM unnest(freeholder_controlled_cash_scope_ids(current_scope,'resources')) actual_resource_id LOOP PERFORM freeholder_controlled_cash_require_prefix(required_resource);END LOOP;
+ WITH physical AS(
+  SELECT current_entry.family,current_entry.identity,current_entry.fingerprint FROM freeholder_controlled_cash_parent_entries(source_collection) current_entry
+  UNION ALL SELECT 'invoice_credit_funding_atomic_fee_partitions',actual_purpose.funding_id::text,encode(sha256(convert_to(to_jsonb(actual_purpose)::text,'UTF8')),'hex') FROM invoice_credit_funding_atomic_fee_partitions actual_purpose WHERE actual_purpose.source_payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+  UNION ALL SELECT 'invoice_credit_reservation_atomic_fee_partitions',actual_purpose.reservation_id::text,encode(sha256(convert_to(to_jsonb(actual_purpose)::text,'UTF8')),'hex') FROM invoice_credit_reservation_atomic_fee_partitions actual_purpose WHERE actual_purpose.source_payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+  UNION ALL SELECT 'merchant_fee_refund_invocations',actual_invocation.id::text,encode(sha256(convert_to(to_jsonb(actual_invocation)::text,'UTF8')),'hex') FROM merchant_fee_refund_invocations actual_invocation WHERE actual_invocation.payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+ ) SELECT count(*),EXISTS(SELECT 1 FROM physical GROUP BY physical.family,physical.identity HAVING count(DISTINCT physical.fingerprint)<>1) INTO physical_count,conflicting_physical FROM(SELECT DISTINCT physical.family,physical.identity FROM physical) actual_identities;
+ IF physical_count NOT BETWEEN 1 AND 5000 OR conflicting_physical THEN RAISE EXCEPTION 'Retain the whole bounded final physical namespace without hash-domain collisions' USING ERRCODE='23514';END IF;
+ FOR physical_row IN WITH physical AS(
+  SELECT current_entry.family,current_entry.identity,current_entry.fingerprint FROM freeholder_controlled_cash_parent_entries(source_collection) current_entry
+  UNION ALL SELECT 'invoice_credit_funding_atomic_fee_partitions',actual_purpose.funding_id::text,encode(sha256(convert_to(to_jsonb(actual_purpose)::text,'UTF8')),'hex') FROM invoice_credit_funding_atomic_fee_partitions actual_purpose WHERE actual_purpose.source_payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+  UNION ALL SELECT 'invoice_credit_reservation_atomic_fee_partitions',actual_purpose.reservation_id::text,encode(sha256(convert_to(to_jsonb(actual_purpose)::text,'UTF8')),'hex') FROM invoice_credit_reservation_atomic_fee_partitions actual_purpose WHERE actual_purpose.source_payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+  UNION ALL SELECT 'merchant_fee_refund_invocations',actual_invocation.id::text,encode(sha256(convert_to(to_jsonb(actual_invocation)::text,'UTF8')),'hex') FROM merchant_fee_refund_invocations actual_invocation WHERE actual_invocation.payment_id=ANY(freeholder_controlled_cash_scope_ids(current_scope,'payments'))
+ ) SELECT physical.family,physical.identity,min(physical.fingerprint) AS fingerprint FROM physical GROUP BY physical.family,physical.identity ORDER BY physical.family,physical.identity LOOP
+  SELECT original_entry.value INTO before_entry FROM jsonb_array_elements(purpose.before_entries) original_entry(value) WHERE original_entry.value->>'key'=physical_row.family||':'||physical_row.identity;
+  allowed_birth:=false;
+  IF before_entry IS NULL THEN
+   IF physical_row.family IN('invoice_credit_funding','invoice_credit_funding_atomic_fee_partitions') THEN
+    SELECT EXISTS(SELECT 1 FROM invoice_credit_funding original_funding LEFT JOIN invoice_credit_funding_atomic_fee_partitions original_purpose ON original_purpose.funding_id=original_funding.id
+     WHERE original_funding.id::text=physical_row.identity AND original_funding.proration_id=owner_proration AND original_funding.credit_note_id=accepted.credit_note_id
+      AND original_funding.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text
+      AND EXISTS(SELECT 1 FROM subscription_proration_principal original_principal WHERE original_principal.proration_id=owner_proration AND original_principal.source_payment_id=original_funding.source_payment_id
+       AND original_principal.source_application_id IS NOT DISTINCT FROM original_funding.source_application_id AND original_principal.amount_minor=original_funding.amount_minor AND original_principal.fee_obligation_minor=original_funding.fee_obligation_minor
+       AND original_principal.fee_proven_collected_minor=original_funding.fee_proven_collected_minor AND original_principal.fee_evidence_digest=original_funding.fee_evidence_digest AND original_principal.original_evidence_digest=original_funding.original_evidence_digest)
+      AND(original_purpose.funding_id IS NOT NULL AND original_purpose.admission_transaction_id=pg_current_xact_id()::text AND original_purpose.economics->'birthDeclaration'->>'quoteId'=owner_quote::text
+        AND original_purpose.parent_fingerprint=encode(sha256(convert_to(to_jsonb(original_funding)::text,'UTF8')),'hex')
+       OR physical_row.family='invoice_credit_funding' AND original_purpose.funding_id IS NULL AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(actual_quote.review->'atomicCreditFeeDeclaration'->'fundings') declared_source(value)
+        WHERE declared_source.value->>'fundingId'=original_funding.id::text OR(declared_source.value->>'sourcePaymentId'=original_funding.source_payment_id::text AND declared_source.value->>'sourceApplicationId' IS NOT DISTINCT FROM original_funding.source_application_id::text)))) INTO allowed_birth;
+   ELSIF physical_row.family IN('invoice_credit_reservations','invoice_credit_reservation_atomic_fee_partitions') THEN
+    SELECT EXISTS(SELECT 1 FROM invoice_credit_reservations original_reservation LEFT JOIN invoice_credit_reservation_atomic_fee_partitions original_purpose ON original_purpose.reservation_id=original_reservation.id
+     JOIN invoice_credit_funding original_funding ON original_funding.id=original_reservation.funding_id
+     LEFT JOIN invoice_credit_funding_atomic_fee_partitions original_funding_purpose ON original_funding_purpose.funding_id=original_funding.id
+     WHERE original_reservation.id::text=physical_row.identity AND original_funding.proration_id=owner_proration AND original_funding.credit_note_id=accepted.credit_note_id
+      AND original_reservation.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text
+      AND(original_purpose.reservation_id IS NOT NULL AND original_purpose.admission_transaction_id=pg_current_xact_id()::text AND original_purpose.parent_fingerprint=encode(sha256(convert_to(to_jsonb(original_reservation)::text,'UTF8')),'hex')
+       OR physical_row.family='invoice_credit_reservations' AND original_purpose.reservation_id IS NULL AND original_funding_purpose.funding_id IS NULL
+        AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(actual_quote.review->'atomicCreditFeeDeclaration'->'fundings') declared_source(value)
+         WHERE declared_source.value->>'fundingId'=original_funding.id::text OR(declared_source.value->>'sourcePaymentId'=original_funding.source_payment_id::text AND declared_source.value->>'sourceApplicationId' IS NOT DISTINCT FROM original_funding.source_application_id::text)))) INTO allowed_birth;
+   ELSIF physical_row.family IN('invoice_credit_applications','agreement_fee_credit_assignments') THEN
+    SELECT EXISTS(SELECT 1 FROM invoice_credit_applications original_application JOIN invoice_credit_reservations original_reservation ON original_reservation.id=original_application.reservation_id
+     JOIN invoice_credit_funding original_funding ON original_funding.id=original_reservation.funding_id
+     WHERE original_application.reservation_id::text=physical_row.identity AND original_application.invoice_id=target_invoice AND original_funding.proration_id=owner_proration AND original_funding.credit_note_id=accepted.credit_note_id
+      AND original_application.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text
+      AND original_application.fee_obligation_minor=original_reservation.fee_obligation_minor AND original_application.fee_proven_collected_minor=original_reservation.fee_proven_collected_minor
+      AND NOT EXISTS(SELECT 1 FROM invoice_credit_releases actual_release WHERE actual_release.reservation_id=original_reservation.id)
+      AND(physical_row.family='invoice_credit_applications' OR EXISTS(SELECT 1 FROM agreement_fee_credit_assignments actual_assignment WHERE actual_assignment.application_id=original_application.reservation_id AND actual_assignment.invoice_id=target_invoice
+       AND actual_assignment.amount_minor=original_reservation.amount_minor AND actual_assignment.fee_obligation_minor=original_application.fee_obligation_minor AND actual_assignment.proven_collected_minor=original_application.fee_proven_collected_minor
+       AND actual_assignment.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text))) INTO allowed_birth;
+   ELSIF physical_row.family='subscription_proration_credit_uses' THEN
+    SELECT EXISTS(SELECT 1 FROM subscription_proration_credit_uses actual_use WHERE actual_use.id::text=physical_row.identity AND actual_use.proration_id=owner_proration AND actual_use.credit_note_id=accepted.credit_note_id
+     AND actual_use.amount_minor::text=actual_quote.review->>'creditAppliedMinor' AND actual_use.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text) INTO allowed_birth;
+   ELSIF physical_row.family='agreement_fee_duties' THEN
+    SELECT EXISTS(SELECT 1 FROM agreement_fee_duties actual_duty WHERE actual_duty.invoice_id::text=physical_row.identity AND actual_duty.invoice_id=target_invoice AND actual_duty.acceptance_id=owner_proration
+     AND actual_duty.accepted_quote_digest=actual_quote.quote_digest AND actual_duty.merchant_profile_id=actual_quote.profile_id AND actual_duty.profile_version=actual_quote.profile_version
+     AND actual_duty.target_fee_minor=accepted.debit_fee_obligation_minor AND actual_duty.carried_fee_minor=accepted.applied_fee_obligation_minor
+     AND actual_duty.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text) INTO allowed_birth;
+   ELSIF physical_row.family IN('subscription_controlled_collections','subscription_controlled_components') THEN
+    SELECT EXISTS(SELECT 1 FROM subscription_controlled_collections actual_collection WHERE actual_collection.id=actual_quote.planned_collection_id AND actual_collection.quote_id=owner_quote AND actual_collection.proration_id=owner_proration
+     AND actual_collection.invoice_id IS NOT DISTINCT FROM target_invoice AND actual_collection.credit_note_id IS NOT DISTINCT FROM accepted.credit_note_id
+     AND actual_collection.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text AND freeholder_controlled_collection_valid(actual_collection.id)
+     AND(physical_row.family='subscription_controlled_collections' AND actual_collection.id::text=physical_row.identity
+      OR physical_row.family='subscription_controlled_components' AND EXISTS(SELECT 1 FROM subscription_controlled_components actual_component WHERE actual_component.id::text=physical_row.identity AND actual_component.collection_id=actual_collection.id
+       AND actual_component.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text))) INTO allowed_birth;
+   END IF;
+   IF allowed_birth THEN CONTINUE;END IF;
+  END IF;
+  normalized_hash:=physical_row.fingerprint;
+  IF physical_row.family='invoices' AND physical_row.identity=target_invoice::text AND before_entry->>'postgres_row' IS DISTINCT FROM physical_row.fingerprint THEN
+   SELECT original_projection.value INTO projection FROM jsonb_array_elements(purpose.economics->'beforeInvoiceProjections') original_projection(value) WHERE original_projection.value->>'invoiceId'=physical_row.identity;
+   SELECT original_invoice.* INTO actual_invoice FROM invoices original_invoice WHERE original_invoice.id=target_invoice;
+   SELECT coalesce(sum(original_reservation.amount_minor),0) INTO application_delta FROM invoice_credit_applications original_application JOIN invoice_credit_reservations original_reservation ON original_reservation.id=original_application.reservation_id JOIN invoice_credit_funding original_funding ON original_funding.id=original_reservation.funding_id
+    WHERE original_application.invoice_id=target_invoice AND original_funding.proration_id=owner_proration AND original_funding.credit_note_id=accepted.credit_note_id
+     AND original_application.xmin::text=mod(pg_current_xact_id()::text::numeric,4294967296)::text
+     AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(purpose.before_entries) prior_application(value) WHERE prior_application.value->>'key'='invoice_credit_applications:'||original_application.reservation_id::text);
+   target_credited:=(projection->>'creditedMinor')::numeric+application_delta;
+   IF projection IS NULL OR before_entry->>'postgres_row' IS NULL OR application_delta<=0 OR actual_invoice.credited_minor IS DISTINCT FROM target_credited
+    OR actual_invoice.status IS DISTINCT FROM(CASE WHEN actual_invoice.paid_minor+actual_invoice.credited_minor>=actual_invoice.total_minor-actual_invoice.refunded_minor THEN 'paid' ELSE 'partially_paid' END) THEN
+    RAISE EXCEPTION 'Only the exact actual original noncash application may change its canonical invoice projection' USING ERRCODE='23514';END IF;
+   normalized_row:=to_jsonb(actual_invoice)||jsonb_build_object('credited_minor',(projection->>'creditedMinor')::bigint,'status',projection->>'status','paid_at',(projection->>'paidAt')::timestamptz,'updated_at',(projection->>'updatedAt')::timestamptz);
+   normalized_hash:=encode(sha256(convert_to(normalized_row::text,'UTF8')),'hex');IF normalized_hash IS DISTINCT FROM before_entry->>'postgres_row' THEN RAISE EXCEPTION 'An unlisted invoice field changed during credit application' USING ERRCODE='23514';END IF;
+  ELSIF physical_row.family='subscription_prorations' AND physical_row.identity=owner_proration::text AND before_entry->>'postgres_row' IS DISTINCT FROM physical_row.fingerprint THEN
+   SELECT original_projection.value INTO projection FROM jsonb_array_elements(purpose.economics->'beforeProrationProjections') original_projection(value) WHERE original_projection.value->>'prorationId'=physical_row.identity;
+   IF projection IS NULL OR before_entry->>'postgres_row' IS NULL OR projection->>'state' IS DISTINCT FROM 'accepted' OR projection->>'originalJobId' IS NOT NULL OR projection->>'jobClaimDigest' IS NOT NULL OR projection->>'originalTask' IS NOT NULL
+    OR accepted.original_job_id IS NULL OR accepted.original_task->>'prorationId' IS DISTINCT FROM accepted.id::text OR accepted.original_task->>'subscriptionId' IS DISTINCT FROM accepted.subscription_id::text
+    OR accepted.original_task->>'originalJobId' IS DISTINCT FROM accepted.original_job_id::text OR accepted.original_task->>'acceptedQuoteDigest' IS DISTINCT FROM accepted.accepted_quote_digest
+    OR NOT EXISTS(SELECT 1 FROM job_idempotency_keys original_claim JOIN pgboss.job original_job ON original_job.id=original_claim.job_id AND original_job.name=original_claim.job_name
+     WHERE original_claim.job_id=accepted.original_job_id AND original_claim.job_name='subscriptions.applyGrossProration' AND original_claim.payload_hash=accepted.job_claim_digest AND original_job.data=accepted.original_task)
+    OR accepted.state IS DISTINCT FROM(CASE WHEN target_invoice IS NULL OR EXISTS(SELECT 1 FROM invoices actual_target WHERE actual_target.id=target_invoice AND actual_target.status='paid' AND actual_target.paid_minor+actual_target.credited_minor>=actual_target.total_minor-actual_target.refunded_minor) THEN 'awaiting_effective' ELSE 'awaiting_payment' END) THEN
+    RAISE EXCEPTION 'Only the genuine shared original enqueue/task/state continuation can change this accepted proration' USING ERRCODE='23514';END IF;
+   normalized_row:=to_jsonb(accepted)||jsonb_build_object('original_job_id',projection->'originalJobId','job_claim_digest',projection->'jobClaimDigest','original_task',projection->'originalTask','state',projection->'state');
+   normalized_hash:=encode(sha256(convert_to(normalized_row::text,'UTF8')),'hex');IF normalized_hash IS DISTINCT FROM before_entry->>'postgres_row' THEN RAISE EXCEPTION 'An unlisted accepted proration field changed' USING ERRCODE='23514';END IF;
+  ELSIF physical_row.family='subscriptions' AND physical_row.identity=owner_subscription::text AND before_entry->>'postgres_row' IS DISTINCT FROM physical_row.fingerprint THEN
+   SELECT original_projection.value INTO projection FROM jsonb_array_elements(purpose.economics->'beforeSubscriptionProjections') original_projection(value) WHERE original_projection.value->>'subscriptionId'=physical_row.identity;
+   SELECT original_parent.* INTO actual_subscription FROM subscriptions original_parent WHERE original_parent.id=owner_subscription;
+   IF projection IS NULL OR before_entry->>'postgres_row' IS NULL OR projection->>'pendingPlanId' IS NOT NULL OR actual_subscription.pending_plan_id IS DISTINCT FROM accepted.plan_id THEN
+    RAISE EXCEPTION 'Only the exact newly accepted pending plan may continue this real parent' USING ERRCODE='23514';END IF;
+   normalized_row:=to_jsonb(actual_subscription)||jsonb_build_object('pending_plan_id',projection->'pendingPlanId','updated_at',(projection->>'updatedAt')::timestamptz);
+   normalized_hash:=encode(sha256(convert_to(normalized_row::text,'UTF8')),'hex');IF normalized_hash IS DISTINCT FROM before_entry->>'postgres_row' THEN RAISE EXCEPTION 'An unlisted original subscription field changed' USING ERRCODE='23514';END IF;
+  END IF;
+  normalized:=normalized||jsonb_build_array(jsonb_build_object('table',physical_row.family,'id',physical_row.identity,'fingerprint',normalized_hash));
+ END LOOP;
+ SELECT encode(sha256(convert_to(string_agg(actual_entry.value->>'table'||':'||(actual_entry.value->>'id')||':'||(actual_entry.value->>'fingerprint'),E'\n' ORDER BY actual_entry.value->>'table',actual_entry.value->>'id'),'UTF8')),'hex') INTO final_revision FROM jsonb_array_elements(normalized) actual_entry(value);
+ IF final_revision IS DISTINCT FROM purpose.economics->>'postgresSourceRevision' THEN RAISE EXCEPTION 'Final actual current physical history differs beyond the exact authenticated canonical credit delta' USING ERRCODE='23514';END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_credit_fee_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE funding invoice_credit_funding%ROWTYPE;reservation invoice_credit_reservations%ROWTYPE;payment payments%ROWTYPE;parent invoice_credit_applications%ROWTYPE;parent_r invoice_credit_reservations%ROWTYPE;
+ total_principal numeric;total_fee numeric;prior_principal numeric;prior_fee numeric;prior_proven numeric;expected_fee numeric;expected_proven numeric;
+ atomic_known boolean;atomic_candidate record;atomic_interval record;atomic_funding_parent invoice_credit_funding%ROWTYPE;atomic_reservation_parent invoice_credit_reservations%ROWTYPE;atomic_funding_purpose invoice_credit_funding_atomic_fee_partitions%ROWTYPE;atomic_reservation_purpose invoice_credit_reservation_atomic_fee_partitions%ROWTYPE;atomic_scope jsonb;atomic_required_resource uuid;atomic_required_key text;
+BEGIN
+ IF current_setting('freeholder.invoice_credit_v1',true)IS DISTINCT FROM '1' OR NEW.fee_evidence_digest IS NULL OR NEW.fee_evidence_digest !~ '^[a-f0-9]{64}$' THEN RAISE EXCEPTION 'Retain the exact original fee obligation and actual collection evidence before new credit disposition' USING ERRCODE='23514'; END IF;
+ -- Exact NEW B branches retain the complete old non-B body below.
+ IF TG_TABLE_NAME='invoice_credit_funding' THEN
+  SELECT EXISTS(SELECT 1 FROM payments original_payment JOIN invoices original_invoice ON original_invoice.id=original_payment.invoice_id JOIN controlled_cash_application_links original_link ON original_link.payment_id=original_payment.id
+   WHERE original_payment.id=NEW.source_payment_id AND original_invoice.refunded_minor>0 AND EXISTS(SELECT 1 FROM controlled_cash_application_batches atomic_epoch WHERE atomic_epoch.invoice_id=original_invoice.id AND atomic_epoch.protocol='controlled_cash_atomic.v1'))
+   OR EXISTS(SELECT 1 FROM subscription_controlled_quotes actual_quote CROSS JOIN LATERAL jsonb_array_elements(actual_quote.review->'atomicCreditFeeDeclaration'->'fundings') declared_source(value)
+    WHERE actual_quote.planned_proration_id=NEW.proration_id AND(declared_source.value->>'fundingId'=NEW.id::text OR(declared_source.value->>'sourcePaymentId'=NEW.source_payment_id::text AND declared_source.value->>'sourceApplicationId' IS NOT DISTINCT FROM NEW.source_application_id::text))) INTO atomic_known;
+  IF atomic_known THEN
+   SELECT freeholder_controlled_cash_scope(original_batch.collection_id) INTO atomic_scope FROM controlled_cash_application_links original_link JOIN controlled_cash_application_batches original_batch ON original_batch.id=original_link.batch_id WHERE original_link.payment_id=NEW.source_payment_id;
+   IF atomic_scope IS NULL OR cardinality(freeholder_controlled_cash_scope_ids(atomic_scope,'resources'))=0 THEN RAISE EXCEPTION 'Restore the real complete original controlled source prefix before the first credit mutation' USING ERRCODE='23514';END IF;
+   FOR atomic_required_resource IN SELECT original_resource FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'resources')) original_resource LOOP PERFORM freeholder_controlled_cash_require_prefix(atomic_required_resource);END LOOP;
+   FOR atomic_required_key IN SELECT 'payment:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'payments')) actual_id
+    UNION SELECT 'invoice:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'invoices')) actual_id
+    UNION SELECT 'credit-note:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'notes')) actual_id
+    UNION SELECT 'merchant-return-read:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'inspections')) actual_id
+    UNION SELECT 'merchant-fee-invocation:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'payments')) actual_id
+    UNION SELECT 'subscription-cash:'||(actual_namespace->>'platform')||':'||coalesce(actual_namespace->>'account','')||':'||(actual_namespace->>'intent') FROM jsonb_array_elements(atomic_scope->'namespaces') actual_namespace LOOP
+    IF atomic_required_key IS NULL OR NOT EXISTS(SELECT 1 FROM pg_locks actual_lock WHERE actual_lock.pid=pg_backend_pid() AND actual_lock.locktype='advisory' AND actual_lock.granted
+     AND actual_lock.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND actual_lock.mode='ExclusiveLock' AND actual_lock.objsubid=1
+     AND actual_lock.classid::bigint=(CASE WHEN hashtext(atomic_required_key)<0 THEN 4294967295::bigint ELSE 0::bigint END) AND actual_lock.objid::bigint=(hashtext(atomic_required_key)::bigint & 4294967295::bigint)) THEN
+     RAISE EXCEPTION 'All genuine original canonical/cash/callback locks must already be held before typed credit; no late prefix acquisition' USING ERRCODE='23514';END IF;
+   END LOOP;
+   SELECT current_candidate.* INTO atomic_candidate FROM freeholder_atomic_credit_fee_partition(NEW.source_payment_id,NEW.source_application_id,NEW.amount_minor) current_candidate;
+   IF atomic_candidate.known IS DISTINCT FROM true OR NEW.fee_obligation_minor IS DISTINCT FROM atomic_candidate.take_assigned_fee_minor OR NEW.fee_proven_collected_minor IS DISTINCT FROM atomic_candidate.take_collected_fee_minor OR NEW.fee_unexpected
+    OR NEW.fee_collection_state IS DISTINCT FROM(CASE WHEN atomic_candidate.take_assigned_fee_minor=0 THEN 'not_due' WHEN atomic_candidate.take_owed_fee_minor=0 THEN 'verified_collected' ELSE 'owed' END)
+    OR NOT EXISTS(SELECT 1 FROM subscription_proration_principal original_principal WHERE original_principal.proration_id=NEW.proration_id AND original_principal.source_payment_id=NEW.source_payment_id AND original_principal.source_application_id IS NOT DISTINCT FROM NEW.source_application_id
+     AND original_principal.amount_minor=NEW.amount_minor AND original_principal.fee_obligation_minor=NEW.fee_obligation_minor AND original_principal.fee_proven_collected_minor=NEW.fee_proven_collected_minor
+     AND original_principal.fee_collection_state=NEW.fee_collection_state AND original_principal.fee_evidence_digest=NEW.fee_evidence_digest AND original_principal.fee_unexpected=NEW.fee_unexpected)
+    OR NOT EXISTS(SELECT 1 FROM subscription_controlled_quotes actual_quote JOIN subscription_prorations accepted ON accepted.id=actual_quote.planned_proration_id AND accepted.accepted_quote_digest=actual_quote.quote_digest
+     CROSS JOIN LATERAL jsonb_array_elements(actual_quote.review->'atomicCreditFeeDeclaration'->'fundings') declared_source(value)
+     WHERE accepted.id=NEW.proration_id AND actual_quote.review->'atomicCreditFeeDeclaration'->>'protocol'='freeholder.atomic-credit-fee-declaration.v1'
+      AND declared_source.value->>'fundingId'=NEW.id::text AND declared_source.value->>'sourcePaymentId'=NEW.source_payment_id::text AND declared_source.value->>'sourceApplicationId' IS NOT DISTINCT FROM NEW.source_application_id::text
+      AND declared_source.value->>'amountMinor'=NEW.amount_minor::text AND declared_source.value->>'feeEvidenceDigest'=NEW.fee_evidence_digest) THEN
+    RAISE EXCEPTION 'New B funding needs its actual current original epoch, exact accepted principal/fee and genuine private planned UUID; no legacy coincidence fallback' USING ERRCODE='23514';END IF;
+   RETURN NEW;
+  END IF;
+ ELSE
+  IF TG_TABLE_NAME='invoice_credit_reservations' THEN
+   SELECT original_funding.* INTO atomic_funding_parent FROM invoice_credit_funding original_funding WHERE original_funding.id=NEW.funding_id;
+  ELSE
+   SELECT original_reservation.* INTO atomic_reservation_parent FROM invoice_credit_reservations original_reservation WHERE original_reservation.id=NEW.reservation_id;
+   SELECT original_funding.* INTO atomic_funding_parent FROM invoice_credit_funding original_funding WHERE original_funding.id=atomic_reservation_parent.funding_id;
+  END IF;
+  SELECT original_purpose.* INTO atomic_funding_purpose FROM invoice_credit_funding_atomic_fee_partitions original_purpose WHERE original_purpose.funding_id=atomic_funding_parent.id;
+  SELECT atomic_funding_purpose.funding_id IS NOT NULL OR EXISTS(SELECT 1 FROM payments original_payment JOIN invoices original_invoice ON original_invoice.id=original_payment.invoice_id JOIN controlled_cash_application_links original_link ON original_link.payment_id=original_payment.id
+   WHERE original_payment.id=atomic_funding_parent.source_payment_id AND original_invoice.refunded_minor>0 AND EXISTS(SELECT 1 FROM controlled_cash_application_batches atomic_epoch WHERE atomic_epoch.invoice_id=original_invoice.id AND atomic_epoch.protocol='controlled_cash_atomic.v1')) INTO atomic_known;
+  IF atomic_known THEN
+   SELECT freeholder_controlled_cash_scope(original_batch.collection_id) INTO atomic_scope FROM controlled_cash_application_links original_link JOIN controlled_cash_application_batches original_batch ON original_batch.id=original_link.batch_id WHERE original_link.payment_id=atomic_funding_parent.source_payment_id;
+   IF atomic_scope IS NULL OR cardinality(freeholder_controlled_cash_scope_ids(atomic_scope,'resources'))=0 THEN RAISE EXCEPTION 'Restore the real complete original controlled source prefix before the first credit mutation' USING ERRCODE='23514';END IF;
+   FOR atomic_required_resource IN SELECT original_resource FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'resources')) original_resource LOOP PERFORM freeholder_controlled_cash_require_prefix(atomic_required_resource);END LOOP;
+   FOR atomic_required_key IN SELECT 'payment:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'payments')) actual_id
+    UNION SELECT 'invoice:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'invoices')) actual_id
+    UNION SELECT 'credit-note:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'notes')) actual_id
+    UNION SELECT 'merchant-return-read:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'inspections')) actual_id
+    UNION SELECT 'merchant-fee-invocation:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(atomic_scope,'payments')) actual_id
+    UNION SELECT 'subscription-cash:'||(actual_namespace->>'platform')||':'||coalesce(actual_namespace->>'account','')||':'||(actual_namespace->>'intent') FROM jsonb_array_elements(atomic_scope->'namespaces') actual_namespace LOOP
+    IF atomic_required_key IS NULL OR NOT EXISTS(SELECT 1 FROM pg_locks actual_lock WHERE actual_lock.pid=pg_backend_pid() AND actual_lock.locktype='advisory' AND actual_lock.granted
+     AND actual_lock.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND actual_lock.mode='ExclusiveLock' AND actual_lock.objsubid=1
+     AND actual_lock.classid::bigint=(CASE WHEN hashtext(atomic_required_key)<0 THEN 4294967295::bigint ELSE 0::bigint END) AND actual_lock.objid::bigint=(hashtext(atomic_required_key)::bigint & 4294967295::bigint)) THEN
+     RAISE EXCEPTION 'All genuine original canonical/cash/callback locks must already be held before typed credit; no late prefix acquisition' USING ERRCODE='23514';END IF;
+   END LOOP;
+   SELECT current_candidate.* INTO atomic_candidate FROM freeholder_atomic_credit_fee_partition(atomic_funding_parent.source_payment_id,atomic_funding_parent.source_application_id,0) current_candidate;
+   IF atomic_candidate.known IS DISTINCT FROM true THEN RAISE EXCEPTION 'An old loan cannot continue beyond genuine current original retained fee/principal capacity' USING ERRCODE='23514';END IF;
+   IF atomic_funding_purpose.funding_id IS NOT NULL THEN
+    IF TG_TABLE_NAME='invoice_credit_reservations' THEN
+     SELECT current_interval.* INTO atomic_interval FROM freeholder_atomic_credit_reservation_partition(atomic_funding_parent.id,NEW.amount_minor) current_interval;
+    ELSE
+     SELECT current_interval.* INTO atomic_interval FROM freeholder_atomic_credit_reservation_partition(atomic_funding_parent.id,0) current_interval;
+    END IF;
+    IF atomic_interval.known IS DISTINCT FROM true THEN RAISE EXCEPTION 'Retain every actual original B interval, source and current bank/caller before new disposition' USING ERRCODE='23514';END IF;
+    IF TG_TABLE_NAME='invoice_credit_reservations' THEN
+     IF NEW.fee_obligation_minor IS DISTINCT FROM atomic_interval.assigned_fee_minor OR NEW.fee_proven_collected_minor IS DISTINCT FROM atomic_interval.collected_fee_minor
+      OR NEW.fee_collection_state IS DISTINCT FROM atomic_funding_parent.fee_collection_state OR NEW.fee_unexpected IS DISTINCT FROM atomic_funding_parent.fee_unexpected THEN
+      RAISE EXCEPTION 'A B reservation consumes exact original absolute interval/caps, never a repriced assigned/principal fraction' USING ERRCODE='23514';END IF;
+     RETURN NEW;
+    ELSE
+     SELECT original_purpose.* INTO atomic_reservation_purpose FROM invoice_credit_reservation_atomic_fee_partitions original_purpose WHERE original_purpose.reservation_id=NEW.reservation_id;
+     IF atomic_reservation_purpose.reservation_id IS NULL OR atomic_reservation_purpose.funding_id IS DISTINCT FROM atomic_funding_parent.id
+      OR atomic_reservation_purpose.parent_fingerprint IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(atomic_reservation_parent)::text,'UTF8')),'hex')
+      OR atomic_reservation_purpose.funding_partition_fingerprint IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(atomic_funding_purpose)::text,'UTF8')),'hex') THEN
+      RAISE EXCEPTION 'An actual B application derives exactly its immutable reservation PK/FK and current complete source; no new loan or old-child fallback' USING ERRCODE='23514';END IF;
+    END IF;
+   END IF;
+  END IF;
+ END IF;
+ IF TG_TABLE_NAME='invoice_credit_funding' THEN
+  SELECT * INTO payment FROM payments WHERE id=NEW.source_payment_id;
+  IF NEW.source_application_id IS NULL THEN total_principal:=payment.amount_minor;total_fee:=freeholder_original_payment_fee(payment.id);
+  ELSE SELECT * INTO parent FROM invoice_credit_applications WHERE reservation_id=NEW.source_application_id;SELECT * INTO parent_r FROM invoice_credit_reservations WHERE id=parent.reservation_id;
+   total_principal:=parent_r.amount_minor;total_fee:=parent.fee_obligation_minor;
+   IF parent.fee_evidence_digest IS NULL THEN RAISE EXCEPTION 'An inherited applied credit requires its real original fee disposition' USING ERRCODE='23514';END IF;
+  END IF;
+  SELECT coalesce(sum(f.amount_minor),0),coalesce(sum(f.fee_obligation_minor),0) INTO prior_principal,prior_fee FROM invoice_credit_funding f JOIN credit_notes n ON n.id=f.credit_note_id
+   WHERE f.source_payment_id=payment.id AND f.source_application_id IS NOT DISTINCT FROM NEW.source_application_id AND n.status='issued';
+  IF payment.id IS NULL OR payment.refunded_minor<>0 OR total_principal IS NULL OR total_principal<=0 OR total_fee IS NULL OR prior_fee<>floor(total_fee*prior_principal/total_principal) THEN
+   RAISE EXCEPTION 'Restore the complete original fee epoch and cumulative allocation; never reprice it at a later bps' USING ERRCODE='23514';END IF;
+  expected_fee:=floor(total_fee*(prior_principal+NEW.amount_minor)/total_principal)-prior_fee;
+  IF NEW.fee_obligation_minor<>expected_fee OR NOT EXISTS(SELECT 1 FROM subscription_proration_principal s WHERE s.proration_id=NEW.proration_id AND s.source_payment_id=NEW.source_payment_id AND s.source_application_id IS NOT DISTINCT FROM NEW.source_application_id
+   AND s.amount_minor=NEW.amount_minor AND s.fee_obligation_minor=NEW.fee_obligation_minor AND s.fee_proven_collected_minor=NEW.fee_proven_collected_minor AND s.fee_collection_state=NEW.fee_collection_state AND s.fee_evidence_digest=NEW.fee_evidence_digest AND s.fee_unexpected=NEW.fee_unexpected) THEN
+   RAISE EXCEPTION 'The issued credit must reproduce its exact accepted principal/fee source receipt' USING ERRCODE='23514';END IF;
+  IF NEW.fee_collection_state IN('recorded_remitted','verified_collected','not_due') AND NOT freeholder_credit_fee_is_collected(payment.id,NEW.fee_collection_state)
+   OR NEW.fee_proven_collected_minor<>(CASE WHEN NEW.fee_collection_state IN('recorded_remitted','verified_collected') THEN NEW.fee_obligation_minor ELSE 0 END) THEN
+   RAISE EXCEPTION 'An expected carried fee is not a collected commission; preserve owed or review until actual original proof exists' USING ERRCODE='23514';END IF;
+ ELSIF TG_TABLE_NAME='invoice_credit_reservations' THEN
+  SELECT * INTO funding FROM invoice_credit_funding WHERE id=NEW.funding_id;
+  SELECT coalesce(sum(r.amount_minor),0),coalesce(sum(r.fee_obligation_minor),0),coalesce(sum(r.fee_proven_collected_minor),0) INTO prior_principal,prior_fee,prior_proven
+   FROM invoice_credit_reservations r LEFT JOIN invoice_credit_applications a ON a.reservation_id=r.id LEFT JOIN invoice_credit_releases l ON l.reservation_id=r.id WHERE r.funding_id=funding.id AND(a.reservation_id IS NOT NULL OR l.reservation_id IS NULL);
+  expected_fee:=floor(funding.fee_obligation_minor::numeric*(prior_principal+NEW.amount_minor)/funding.amount_minor)-prior_fee;
+  expected_proven:=floor(funding.fee_proven_collected_minor::numeric*(prior_principal+NEW.amount_minor)/funding.amount_minor)-prior_proven;
+  IF funding.fee_evidence_digest IS NULL OR NEW.fee_obligation_minor<>expected_fee OR NEW.fee_proven_collected_minor<>expected_proven OR NEW.fee_collection_state<>funding.fee_collection_state OR NEW.fee_unexpected<>funding.fee_unexpected THEN
+   RAISE EXCEPTION 'Reserve the same original fee epoch with deterministic residual ownership, separately from proven collection' USING ERRCODE='23514';END IF;
+ ELSE SELECT * INTO reservation FROM invoice_credit_reservations WHERE id=NEW.reservation_id;
+  IF reservation.fee_evidence_digest IS NULL OR NEW.fee_obligation_minor<>reservation.fee_obligation_minor OR NEW.fee_proven_collected_minor<>reservation.fee_proven_collected_minor OR NEW.fee_collection_state<>reservation.fee_collection_state OR NEW.fee_unexpected<>reservation.fee_unexpected THEN
+   RAISE EXCEPTION 'An actual credit application cannot invent or lose its original fee obligation or collection state' USING ERRCODE='23514';END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_credit_fee_is_collected(target uuid,kind text) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT (CASE WHEN kind='recorded_remitted' THEN EXISTS(SELECT 1 FROM commercial_payment_attestations a JOIN payments p ON p.id=a.payment_id WHERE a.payment_id=target AND p.status='succeeded' AND p.refunded_minor=0
+  AND coalesce((SELECT sum(CASE WHEN f.direction='returned' THEN -f.amount_minor ELSE f.amount_minor END)FROM commercial_fee_attestations f WHERE f.payment_id=p.id),0)=a.fee_owed_minor)
+ WHEN kind IN('verified_collected','not_due') THEN EXISTS(SELECT 1 FROM payments p JOIN LATERAL(SELECT * FROM merchant_payment_observations o WHERE o.payment_id=p.id AND o.provider_ref=p.provider_ref AND o.status='succeeded' ORDER BY o.observed_at DESC,o.id DESC LIMIT 1)o ON true
+  WHERE p.id=target AND p.status='succeeded' AND p.refunded_minor=0 AND o.customer_charge_verified AND o.route_verified AND o.amount_minor=p.amount_minor AND o.currency=p.currency
+  AND o.application_fee_currency=p.currency AND o.observed_application_fee_minor=freeholder_original_payment_fee(p.id)AND o.observed_fee_refunded_minor=0
+  AND(kind='not_due' AND freeholder_original_payment_fee(p.id)=0 AND o.application_fee_ref IS NULL OR kind='verified_collected' AND o.application_fee_ref IS NOT NULL)
+  AND NOT EXISTS(SELECT 1 FROM merchant_fee_refunds f WHERE f.payment_id=p.id AND f.status IN('reserved','dispatching','unknown')))
+  OR(kind='not_due'AND EXISTS(SELECT 1 FROM commercial_payment_attestations a WHERE a.payment_id=target AND a.fee_owed_minor=0)) ELSE false END) OR EXISTS(
+  SELECT 1 FROM payments original_payment JOIN invoices original_invoice ON original_invoice.id=original_payment.invoice_id
+   JOIN controlled_cash_application_links original_link ON original_link.payment_id=original_payment.id
+   JOIN LATERAL freeholder_atomic_credit_fee_partition(original_payment.id,NULL,0) current_capacity ON current_capacity.known
+   JOIN LATERAL freeholder_controlled_atomic_refund_fee_state(original_payment.id) current_fee ON current_fee.known AND current_fee.reconciled
+  WHERE kind IN('verified_collected','not_due') AND original_payment.id=target AND original_payment.status='succeeded' AND original_payment.refunded_minor=0 AND original_invoice.refunded_minor>0
+   AND current_capacity.source_receipt_id=original_link.receipt_id AND current_fee.receipt_id=original_link.receipt_id
+   AND current_capacity.bank_inspection_id=current_fee.inspection_id AND current_capacity.bank_observation_id=current_fee.observation_id AND current_capacity.bank_namespace_revision=current_fee.bank_namespace_revision
+   AND current_fee.actual_retained_fee_minor=current_capacity.original_fee_minor-current_capacity.retired_fee_minor
+   AND(kind='not_due' AND current_capacity.original_fee_minor=0 OR kind='verified_collected' AND current_capacity.original_fee_minor>0)
+ )
+$$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_guard_invoice_credit() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE funding invoice_credit_funding%ROWTYPE; reservation invoice_credit_reservations%ROWTYPE; note credit_notes%ROWTYPE; line credit_note_lines%ROWTYPE;
+ source invoices%ROWTYPE; target invoices%ROWTYPE; payment payments%ROWTYPE; used bigint; parent_application invoice_credit_applications%ROWTYPE; parent_reservation invoice_credit_reservations%ROWTYPE; parent_funding invoice_credit_funding%ROWTYPE;
+ atomic_siblings_ok boolean:=false;atomic_candidate record;atomic_reservation_purpose invoice_credit_reservation_atomic_fee_partitions%ROWTYPE;atomic_funding_purpose invoice_credit_funding_atomic_fee_partitions%ROWTYPE;
+BEGIN
+ IF TG_OP<>'INSERT' OR current_setting('freeholder.invoice_credit_v1',true) IS DISTINCT FROM '1' THEN
+  RAISE EXCEPTION 'Original noncash credit funding/reservations/applications/releases are immutable through their guarded exact writer' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='invoice_credit_funding' THEN
+  SELECT * INTO note FROM credit_notes WHERE id=NEW.credit_note_id;
+  SELECT * INTO line FROM credit_note_lines WHERE id=NEW.credit_note_line_id;
+  SELECT * INTO payment FROM payments WHERE id=NEW.source_payment_id;
+  SELECT * INTO source FROM invoices WHERE id=NEW.source_invoice_id;
+  IF NEW.source_application_id IS NOT NULL THEN
+   SELECT * INTO parent_application FROM invoice_credit_applications WHERE reservation_id=NEW.source_application_id;
+   SELECT * INTO parent_reservation FROM invoice_credit_reservations WHERE id=parent_application.reservation_id;
+   SELECT * INTO parent_funding FROM invoice_credit_funding WHERE id=parent_reservation.funding_id;
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtext('payment:'||NEW.source_payment_id::text));
+  PERFORM pg_advisory_xact_lock(hashtext('invoice:'||NEW.source_invoice_id::text));
+  PERFORM pg_advisory_xact_lock(hashtext('credit-note:'||NEW.credit_note_id::text));
+  IF note.id IS NULL OR note.status<>'issued' OR note.invoice_id IS DISTINCT FROM source.id OR line.credit_note_id IS DISTINCT FROM note.id
+   OR payment.status<>'succeeded' OR payment.currency IS DISTINCT FROM note.currency OR source.currency IS DISTINCT FROM note.currency
+   OR(NEW.source_application_id IS NULL AND payment.invoice_id IS DISTINCT FROM source.id)
+   OR(NEW.source_application_id IS NOT NULL AND(parent_application.invoice_id IS DISTINCT FROM source.id OR parent_funding.source_payment_id IS DISTINCT FROM payment.id OR parent_reservation.id IS NULL))
+   OR NOT EXISTS(SELECT 1 FROM invoice_lines original WHERE original.id=line.invoice_line_id AND original.invoice_id=source.id)
+   OR EXISTS(SELECT 1 FROM return_requests r WHERE r.credit_note_id=note.id)
+   OR(NEW.source_application_id IS NULL AND NOT freeholder_refund_amount_available(payment.id,'invoice-credit-funding:'||NEW.id::text,freeholder_credit_principal_reserved(payment.id)+NEW.amount_minor))
+   OR NOT freeholder_subscription_proration_credit_owner(NEW.proration_id,note.id,line.id,payment.id,NEW.amount_minor,NEW.original_evidence_digest) THEN
+   RAISE EXCEPTION 'Credit needs exact original issued lines, successful principal, current refund capacity and causal accepted proration ownership' USING ERRCODE='23514'; END IF;
+  SELECT coalesce(sum(f.amount_minor),0) INTO used FROM invoice_credit_funding f WHERE f.credit_note_line_id=line.id;
+  IF used+NEW.amount_minor>line.total_minor THEN RAISE EXCEPTION 'Credit line funding cannot borrow another original line principal' USING ERRCODE='23514'; END IF;
+  IF NEW.source_application_id IS NOT NULL THEN
+   SELECT coalesce(sum(f.amount_minor),0) INTO used FROM invoice_credit_funding f JOIN credit_notes c ON c.id=f.credit_note_id WHERE f.source_application_id=NEW.source_application_id AND c.status='issued';
+   IF used+NEW.amount_minor>parent_reservation.amount_minor THEN RAISE EXCEPTION 'Original applied credit principal cannot fund multiple successor promises beyond its exact own amount' USING ERRCODE='23514'; END IF;
+  END IF;
+ ELSE
+  IF TG_TABLE_NAME='invoice_credit_reservations' THEN SELECT * INTO funding FROM invoice_credit_funding WHERE id=NEW.funding_id;
+  ELSE SELECT * INTO reservation FROM invoice_credit_reservations WHERE id=NEW.reservation_id; SELECT * INTO funding FROM invoice_credit_funding WHERE id=reservation.funding_id; END IF;
+  SELECT * INTO note FROM credit_notes WHERE id=funding.credit_note_id;
+  IF funding.id IS NULL OR note.id IS NULL OR note.status<>'issued' OR EXISTS(SELECT 1 FROM return_requests WHERE credit_note_id=note.id) THEN
+   RAISE EXCEPTION 'Original issued credit ownership changed or already backs a whole return/refund promise' USING ERRCODE='23514'; END IF;
+  PERFORM pg_advisory_xact_lock(hashtext('payment:'||funding.source_payment_id::text));
+  PERFORM pg_advisory_xact_lock(hashtext('invoice:'||funding.source_invoice_id::text));
+  PERFORM pg_advisory_xact_lock(hashtext('credit-note:'||note.id::text));
+  IF TG_TABLE_NAME='invoice_credit_reservations' THEN
+   SELECT coalesce(sum(r.amount_minor),0) INTO used FROM invoice_credit_reservations r LEFT JOIN invoice_credit_releases released ON released.reservation_id=r.id WHERE r.funding_id=funding.id AND released.reservation_id IS NULL;
+   IF used+NEW.amount_minor>funding.amount_minor OR NOT freeholder_subscription_proration_credit_target(funding.proration_id,NEW.target_source_id) THEN
+    RAISE EXCEPTION 'Reserve only actual available original credit for its exact accepted proration target' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='invoice_credit_applications' THEN
+   SELECT * INTO source FROM invoices WHERE id=funding.source_invoice_id;
+   SELECT * INTO target FROM invoices WHERE id=NEW.invoice_id FOR UPDATE;
+   IF source.refunded_minor<>0 THEN
+    SELECT actual_purpose.* INTO atomic_reservation_purpose FROM invoice_credit_reservation_atomic_fee_partitions actual_purpose WHERE actual_purpose.reservation_id=reservation.id;
+    SELECT actual_purpose.* INTO atomic_funding_purpose FROM invoice_credit_funding_atomic_fee_partitions actual_purpose WHERE actual_purpose.funding_id=funding.id;
+    IF atomic_reservation_purpose.reservation_id IS NOT NULL AND atomic_funding_purpose.funding_id IS NOT NULL THEN
+     PERFORM freeholder_controlled_cash_require_prefix((atomic_funding_purpose.economics->'plan'->>'sourceResourceId')::uuid);
+     SELECT current_capacity.* INTO atomic_candidate FROM freeholder_atomic_credit_fee_partition(funding.source_payment_id,funding.source_application_id,0) current_capacity;
+     SELECT atomic_candidate.known IS TRUE
+      AND atomic_reservation_purpose.funding_id=funding.id AND atomic_reservation_purpose.source_payment_id=funding.source_payment_id AND atomic_reservation_purpose.source_application_id IS NOT DISTINCT FROM funding.source_application_id
+      AND atomic_reservation_purpose.parent_fingerprint=encode(sha256(convert_to(to_jsonb(reservation)::text,'UTF8')),'hex')
+      AND atomic_funding_purpose.parent_fingerprint=encode(sha256(convert_to(to_jsonb(funding)::text,'UTF8')),'hex')
+      AND atomic_reservation_purpose.funding_partition_fingerprint=encode(sha256(convert_to(to_jsonb(atomic_funding_purpose)::text,'UTF8')),'hex')
+      AND NOT EXISTS(SELECT 1 FROM payments original_payment WHERE original_payment.invoice_id=source.id AND original_payment.status IN('created','processing'))
+      AND(select coalesce(sum(original_payment.amount_minor),0) from payments original_payment where original_payment.invoice_id=source.id and original_payment.status='succeeded')=source.paid_minor
+      AND(select coalesce(sum(original_payment.refunded_minor),0) from payments original_payment where original_payment.invoice_id=source.id and original_payment.status='succeeded')=source.refunded_minor
+      AND(select count(*) from freeholder_controlled_atomic_refund_targets(source.id) original_target where original_target.known)=(select count(*) from payments original_payment where original_payment.invoice_id=source.id and original_payment.status='succeeded')
+      AND NOT EXISTS(SELECT 1 FROM payments original_payment LEFT JOIN LATERAL freeholder_controlled_atomic_refund_bank_state(original_payment.id) original_bank ON true
+       LEFT JOIN LATERAL freeholder_controlled_atomic_refund_fee_state(original_payment.id) original_fee ON true
+       WHERE original_payment.invoice_id=source.id AND original_payment.status='succeeded' AND(original_bank.known IS DISTINCT FROM true OR original_bank.refunded_minor IS DISTINCT FROM original_payment.refunded_minor::float8
+        OR original_fee.known IS DISTINCT FROM true OR original_fee.reconciled IS DISTINCT FROM true
+        OR EXISTS(SELECT 1 FROM freeholder_atomic_fee_return_resources(original_payment.id) actual_return WHERE NOT actual_return.known OR actual_return.pending)
+        OR original_payment.refunded_minor>0 AND EXISTS(SELECT 1 FROM invoice_credit_funding original_loan WHERE original_loan.source_payment_id=original_payment.id))) INTO atomic_siblings_ok;
+    END IF;
+   END IF;
+   IF reservation.id IS NULL OR target.id IS NULL OR target.source_type<>'subscription' OR target.source_id IS DISTINCT FROM reservation.target_source_id
+    OR target.contact_id IS DISTINCT FROM source.contact_id OR target.currency IS DISTINCT FROM source.currency OR(source.refunded_minor<>0 AND atomic_siblings_ok IS DISTINCT FROM true)
+    OR target.issued_at IS NULL OR target.status NOT IN('sent','viewed','partially_paid','overdue') OR target.total_minor-target.paid_minor-target.credited_minor<reservation.amount_minor
+    OR EXISTS(SELECT 1 FROM invoice_credit_releases WHERE reservation_id=reservation.id)
+    OR EXISTS(SELECT 1 FROM payments p WHERE p.invoice_id=target.id AND p.status IN('created','processing')) THEN
+    RAISE EXCEPTION 'Apply the exact unused credit to its actual original issued buyer/currency/target after every original target caller is resolved' USING ERRCODE='23514'; END IF;
+  ELSIF EXISTS(SELECT 1 FROM invoice_credit_applications WHERE reservation_id=reservation.id)
+   OR NOT freeholder_subscription_proration_credit_release(funding.proration_id,reservation.id) THEN
+   RAISE EXCEPTION 'The whole original proration promise or actual applied credit still owns this reservation' USING ERRCODE='23514';
+  END IF;
+ END IF;
  RETURN NEW;
 END $$;

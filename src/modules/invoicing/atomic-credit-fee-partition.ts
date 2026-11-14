@@ -127,7 +127,7 @@ export async function controlledAtomicCreditFeePartition(ctx:ServiceContext,inpu
   for(const subscriptionId of prefix.subscriptionIds){
    const graph=await parentFinancialGraphForTx(ctx.tx,subscriptionId);
    entries.push(...graph.physical.map(row=>({...row,domain:row.table==="subscription_provider_schedule_resources"?"schedule_stable" as const:"postgres_row" as const})),
-    ...graph.children.entries.map(row=>({...row,domain:row.table.startsWith("subscription_controlled_")||["merchant_cash_return_inspection_stops","merchant_fee_refund_invocations"].includes(row.table)?"postgres_row" as const:"dependency_canonical" as const})),
+    ...graph.children.entries.map(row=>({...row,domain:row.table.startsWith("subscription_controlled_")||["controlled_cash_application_batches","controlled_cash_application_receipts","controlled_cash_application_links","invoice_credit_funding_atomic_fee_partitions","invoice_credit_reservation_atomic_fee_partitions","merchant_cash_return_inspection_stops","merchant_fee_refund_invocations"].includes(row.table)?"postgres_row" as const:"dependency_canonical" as const})),
     ...[...graph.proration.entries,...graph.controlled.entries].map(row=>({...row,domain:"postgres_row" as const})));
   }
   return controlledObservationEntries(entries).full;

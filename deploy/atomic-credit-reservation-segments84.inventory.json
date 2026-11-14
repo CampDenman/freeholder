@@ -13,7 +13,7 @@
     "fields": {
       "reservation_id": "uuid NOT NULL; exact actual inserted reservation PK",
       "funding_id": "uuid NOT NULL; exact B funding-purpose child PK",
-      "root_funding_id": "uuid NOT NULL; actual direct B funding-purpose ancestor, never guessed from amount/order",
+      "root_funding_id": "uuid NOT NULL; actual original B funding-purpose ancestor for a payment epoch OR a positively proved legacy application-as-own-epoch, never guessed from amount/order",
       "source_payment_id": "uuid NOT NULL; immutable original successful unreturned payment",
       "source_application_id": "uuid NULL; exactly funding.source_application_id",
       "protocol": "text NOT NULL",
@@ -44,9 +44,9 @@
   }],
   "economics": {
     "name": "AtomicCreditReservationEconomics",
-    "root": ["rootFundingId:uuid", "sourcePaymentId:uuid", "originalPrincipalMinor:safe positive integer", "originalFeeMinor:safe nonnegative integer", "rootEconomicRevision:sha256"],
+    "root": ["rootKind:payment|legacy_application", "rootApplicationId:uuid|null", "legacyApplicationRevision:sha256|null", "rootFundingId:uuid", "sourcePaymentId:uuid", "originalPrincipalMinor:safe positive integer", "originalFeeMinor:safe nonnegative integer", "rootEconomicRevision:sha256"],
     "funding": ["fundingId:uuid", "sourceApplicationId:uuid|null", "fundingEconomicRevision:sha256", "fundingNominalFeeMinor", "fundingRetiredFeeMinor", "fundingAssignedFeeMinor", "fundingProvenCollectedMinor", "fundingOwedFeeMinor"],
-    "segments": "ordered strict nonoverlapping half-open ABSOLUTE intervals in the ORIGINAL payment principal coordinate; each {epochFundingId,epochStartMinor,epochEndMinor,epochAssignedFeeMinor,epochProvenCollectedMinor,startMinor,endMinor,nominalFeeMinor,retiredFeeMinor,assignedFeeMinor,provenCollectedMinor,owedFeeMinor}; original epoch/caps remain unchanged through nested slices; count bounded within complete 5000 identity/segment inventory",
+    "segments": "ordered strict nonoverlapping half-open ABSOLUTE intervals in the ORIGINAL root coordinate (actual payment, or positively proved existing old application-as-own-epoch; never an invented payment offset); each {epochFundingId,epochStartMinor,epochEndMinor,epochAssignedFeeMinor,epochProvenCollectedMinor,startMinor,endMinor,nominalFeeMinor,retiredFeeMinor,assignedFeeMinor,provenCollectedMinor,owedFeeMinor}; original epoch/caps remain unchanged through nested slices; count bounded within complete 5000 identity/segment inventory",
     "reservation": ["amountMinor", "nominalFeeMinor", "retiredFeeMinor", "assignedFeeMinor", "provenCollectedMinor", "owedFeeMinor", "activeReservationIds:uuid[]", "releasedReservationIds:uuid[]", "currentSourceRevision:sha256", "economicRevision:sha256"],
     "ordering": "Economic coordinates are durable allocation proof, never alleged provider capture chronology. Actual authenticated predecessor membership and exact FK parent segment containment establish them; never timestamp/UUID/equal amount inference.",
     "conservation": "For each exact parent segment: nominal=retired+assigned; assigned=proven+owed. Disjoint child intervals sum to their exact original cumulative-floor deltas. Every original nominal/retired/assigned/proven/owed unit remains in applied, reserved, genuinely released/unassigned or explicitly successor-locked capacity exactly once.",

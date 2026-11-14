@@ -12,7 +12,7 @@ import {originalAtomicCreditFeeSegment,selectAtomicCreditFeeSegments} from "./at
 import {controlledAtomicCreditFeePartition} from "./atomic-credit-fee-partition";
 import {readAtomicCreditFeeAncestry} from "./atomic-credit-fee-ancestry";
 import {signAtomicCreditReservation,verifiedAtomicCreditReservation} from "./atomic-credit-reservation-proof";
-import {originalCashEvidenceKeys} from "./original-cash-recovery-store";
+import {originalCashEvidenceKeys,originalCashSigningKey} from "./original-cash-recovery-store";
 import {merchantTaxDigest} from "./merchant-tax-store";
 import {captureAtomicCreditInvoiceProjections,captureAtomicCreditOwnerProjections} from "./atomic-credit-before-image";
 function refuse():never{throw new ServiceError("conflict","Restore the exact current B funding, original interval/caps, every application/release and real same-transaction reservation birth before consuming its fee capacity.");}
@@ -74,7 +74,7 @@ export async function retainAtomicCreditReservationPartition(ctx:ServiceContext,
   ||parent.row.feeObligationMinor!==plan.economics.assignedFeeMinor||parent.row.feeProvenCollectedMinor!==plan.economics.provenCollectedMinor||parent.row.feeEvidenceDigest!==plan.feeEvidenceDigest
   ||parent.row.feeCollectionState!==plan.funding.feeCollectionState||parent.row.feeUnexpected!==plan.funding.feeUnexpected
   ||plan.beforeEntries.some(entry=>entry.key===`invoice_credit_reservations:${parent.row.id}`||entry.key===`invoice_credit_reservation_atomic_fee_partitions:${parent.row.id}`))refuse();
- const keys=originalCashEvidenceKeys(),key=keys[0];if(!key)refuse();
+ const keys=originalCashEvidenceKeys(),key=originalCashSigningKey();
  const row={reservationId:parent.row.id,fundingId:plan.funding.id,rootFundingId:plan.root.fundingId,sourcePaymentId:plan.funding.sourcePaymentId,sourceApplicationId:plan.funding.sourceApplicationId,
   protocol:ATOMIC_CREDIT_RESERVATION_PROTOCOL,parentFingerprint:parent.fingerprint,fundingPartitionFingerprint:transaction.fingerprint,economics:plan.economics,beforeEntries:plan.beforeEntries,admissionTransactionId:transaction.id,createdAt:new Date()};
  const signed={...row,...signAtomicCreditReservation(row,key)};if(!verifiedAtomicCreditReservation(signed,keys))refuse();
