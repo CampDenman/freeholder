@@ -6,7 +6,7 @@ import {randomUUID} from "node:crypto";
 import {eq} from "drizzle-orm";
 import {z} from "zod";
 import {actorString,type Actor} from "@/core/service";
-import type {AccountedTransferStore} from "../../../scripts/media-transfer.mjs";
+import type {AccountedTransferStore,TransferInventoryPage} from "../../../scripts/media-transfer.mjs";
 import {defineMediaService} from "./guarded-service";
 import {confirmation,human,type MultipartRecoveryConfirmation} from "./multipart-recovery-context";
 import {captureAppliedMultipartContext} from "./multipart-applied-recovery-context";
@@ -61,7 +61,7 @@ async function originalRead<T>(input:z.infer<typeof bound>,actor:Actor,work:(sto
  catch(error){await retainOriginalMediaCallerReturn(read.id,token,{failed:true}).catch(()=>{});throw error;}
  finally{await reconcileMediaErasureCohorts({multipartResourceId:input.resourceId}).catch(()=>{});}
 }
-async function pageRequest<T>(input:z.infer<typeof bound>&{inventoryId:string},actor:Actor,work:()=>Promise<T>,result:(value:T)=>OriginalMediaCallerReturn){
+async function pageRequest<T>(input:z.infer<typeof bound>&{inventoryId:string},actor:Actor,work:()=>Promise<T>,result:(value:T)=>OriginalMediaCallerReturn):Promise<{id:string;value:T}>{
  const token=randomUUID()+randomUUID(),runtimeIdentity=await actualStorageCallerRuntimeIdentity(),call=await admitPage.call({...input,token,runtimeIdentity},actor);
  try{const value=await withTransferRequestScope({callId:call.id,token,runtimeIdentity},work);if(!(await retainOriginalMediaCallerReturn(call.id,token,result(value))).settled)transferConflict();return{id:call.id,value};}
  catch(error){await retainOriginalMediaCallerReturn(call.id,token,{failed:true}).catch(()=>{});throw error;}
@@ -72,7 +72,7 @@ async function collectInventory(input:z.infer<typeof bound>&{inventoryId:string}
  for(const pass of [0,1]as const){
   const config=await pageRequest(input,actor,()=>store.inventoryConfiguration(),value=>({configurationDigest:transferDigest(value)}));await appendPage.call({...input,callId:config.id,pass,kind:"configuration",cursor:null,configuration:config.value},actor);
   for(const kind of ["objects","versions","sessions"]as const){let cursor:Record<string,string>|null=null;
-   for(let count=0;;count++){if(count>=200)transferConflict("The complete original provider inventory exceeds its bounded recovery; no subset may be adopted.");const requestCursor=cursor,actual=await pageRequest(input,actor,()=>store.inventoryPage(kind,requestCursor),value=>({inventoryDigest:transferDigest(value),inventoryCount:value.entries.length}));await appendPage.call({...input,callId:actual.id,pass,kind,cursor:requestCursor,page:actual.value},actor);cursor=actual.value.next;if(cursor===null)break;}
+   for(let count=0;;count++){if(count>=200)transferConflict("The complete original provider inventory exceeds its bounded recovery; no subset may be adopted.");const requestCursor:Record<string,string>|null=cursor;const actual:{id:string;value:TransferInventoryPage}=await pageRequest<TransferInventoryPage>(input,actor,():Promise<TransferInventoryPage>=>store.inventoryPage(kind,requestCursor),(value:TransferInventoryPage)=>({inventoryDigest:transferDigest(value),inventoryCount:value.entries.length}));await appendPage.call({...input,callId:actual.id,pass,kind,cursor:requestCursor,page:actual.value},actor);cursor=actual.value.next;if(cursor===null)break;}
   }
   captured=await progress.call(input,actor);if(captured.inventory.state!=="capturing")transferConflict();
  }
