@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Current source lint correction2026-11-14 (C12.38/C1.12/C11.08): V94 fulltypes
+passes, then affected lint stops on four forbidden inline type imports and two
+unsafe Vitest matcher assignments. Explicit type-only imports follow the exact
+preserved whole reader prefixes; unknown-typed matcher locals retain identical
+asymmetric predicates and native assertions. No cast, SQL/model/capability or
+production runtime change. Full-file finite reversals recorded and V94 failure
+preserved. Complete current source/schema/SDK/original business qualification
+remains required; no C/stable closure. See
+`deploy/current-media-causal-lint-root-continuation.manifest.json`.
+
+
 Causal source typing correction2026-11-14 (C12.38/C9.33/C1.08): V93 fulltypes
 stops before lint/DB on optional true refresh property across inferred existing/
 new target union and optional registry output metadata. Production now checks

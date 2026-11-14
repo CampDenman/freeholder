@@ -131,11 +131,13 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
   return { version: 1, entries: entries.toSorted((a, b) => a.table.localeCompare(b.table) || a.id.localeCompare(b.id)), incomplete: false };
 }
 
+import type { OriginalInventoryProjectionContext } from "./original-cash-inventory-causal-proof";
+
 /** Historical comparison companion ONLY. The ordinary reader above retains
  * its exact full-row inventory, bounds and legacy digest domains. */
 export async function merchantRefundDependencyFingerprintsForOriginalInventory(
   tx: Tx, input: { paymentIds: readonly string[]; subscriptionChargeReceiptIds: readonly string[] },
-  context: import("./original-cash-inventory-causal-proof").OriginalInventoryProjectionContext,
+  context: OriginalInventoryProjectionContext,
   knownFull?: MerchantRefundDependencyReceipt,
 ): Promise<MerchantRefundDependencyReceipt> {
   const { requireOriginalInventoryCausalContext, originalInventoryCausalFeedback, originalInventoryCausalRefusal, assertOriginalInventoryOwnRowsCurrent } = await import("./original-cash-inventory-causal-proof");

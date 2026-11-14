@@ -115,11 +115,13 @@ const primaryControlledKinds=new Set(["read_customer_financials","create_draft",
 export async function controlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[] = []){
  return readControlledCashFinancialHistory(tx,receiptIds,subscriptionIds);
 }
+import type { OriginalInventoryProjectionContext } from "./original-cash-inventory-causal-proof";
+
 /** Internal historical-comparison companion. All normal consumers stay full. */
-export async function controlledCashFinancialHistoryForOriginalInventory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context:import("./original-cash-inventory-causal-proof").OriginalInventoryProjectionContext){
+export async function controlledCashFinancialHistoryForOriginalInventory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context:OriginalInventoryProjectionContext){
  return readControlledCashFinancialHistory(tx,receiptIds,subscriptionIds,context);
 }
-async function readControlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context?:import("./original-cash-inventory-causal-proof").OriginalInventoryProjectionContext){
+async function readControlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context?:OriginalInventoryProjectionContext){
  let witness=await controlledFinancialWitness(tx,{receiptIds,subscriptionIds});
  const actualSubscriptions=[...new Set(witness.history.resources.map(row=>row.subscriptionId))];
  if(witness.targets&&actualSubscriptions.some(id=>!subscriptionIds.includes(id)))witness=await controlledFinancialWitness(tx,{receiptIds,subscriptionIds:actualSubscriptions});
