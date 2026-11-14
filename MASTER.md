@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled activated-amendment date source checkpoint 2026-11-13
+(C12.38/C9.38/C9.33/C1.08): a genuine original-period factory can select a
+later explicitly accepted start through existing activated amendment terms,
+while the parent previously admitted only unchanged parentStart/End. A new
+ordinary actual calendar/terms/FK reader now supplies that exact narrow later
+start at both parent date boundaries and rechecks its full actual row revision.
+Original parent windows, trial, zero-credit, source, money/privacy/fee/caller and
+whole raw/PG checks remain; ordinary empty histories and observational GET
+behavior are unchanged. Pure/source controls are PREPARED/UNRUN; no execution,
+schema/SQL/root reader change or acceptance claim occurred. The real complete
+late-amendment native/provider/effect journey and all full-scope acceptance
+remain required. See `deploy/controlled-late-period-authority84-source-20261113.md`.
+
 Controlled atomic actual-fee source checkpoint 2026-11-13
 (C12.38/C9.33/C1.08/C9.38): target/bank protocol stays v1, while a distinct
 signed application batch version binds each actual original bank charge's fee
