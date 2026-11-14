@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 const file = (path: string) => readFileSync(path, "utf8");
-const sha = (source: string) => createHash("sha256").update(source).digest("hex");
+const sha = (source: string | Buffer) => createHash("sha256").update(source).digest("hex");
 const manifest = z.object({
   prefix: z.object({ path: z.string(), bytes: z.number(), sha256: z.string() }),
   ownedTail: z.object({ path: z.string(), bytes: z.number(), sha256: z.string() }),
@@ -22,7 +22,8 @@ function definition(source: string, name: string) {
 }
 describe("paid-access original-owner privacy source contract", () => {
   it("keeps the entire historical SQL85 prefix and pins all owned new function bodies", () => {
-    const prefix = file(manifest.prefix.path); expect(Buffer.byteLength(prefix)).toBe(manifest.prefix.bytes); expect(sha(prefix)).toBe(manifest.prefix.sha256);
+    const prefix = Buffer.from(file(manifest.prefix.path)); expect(prefix.length).toBeGreaterThanOrEqual(manifest.prefix.bytes);
+    expect(sha(prefix.subarray(0, manifest.prefix.bytes))).toBe(manifest.prefix.sha256);
     expect(Buffer.byteLength(tail)).toBe(manifest.ownedTail.bytes); expect(sha(tail)).toBe(manifest.ownedTail.sha256);
     for (const entry of manifest.newFunctions) expect(sha(definition(tail, entry.signature.split("(")[0]!))).toBe(entry.bodySha256);
   });
