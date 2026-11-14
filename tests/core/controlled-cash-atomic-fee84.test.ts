@@ -48,7 +48,7 @@ describe("distinct signed atomic application policy",()=>{
   expect(hash(owned)).toBe(manifest.replacementSha256);
   for(const row of manifest.functions){const current=statement(row.name);expect(hash(current)).toBe(row.afterStatementSha256);
    if(typeof row.changes==="string"){expect(row.name).toBe("freeholder_controlled_subscription_route_ready");continue;}
-   let original=current;for(const delta of [...row.changes].reverse()){expect(original.split(delta.after)).toHaveLength(2);original=original.replace(delta.after,delta.before);}
+   let original=current;for(const delta of [...row.changes].reverse()){expect(original.split(delta.after)).toHaveLength(2);original=original.replace(delta.after,()=>delta.before);}
    if(row.originalCreateOrReplace===false)original=original.replace("CREATE OR REPLACE FUNCTION","CREATE FUNCTION");expect(hash(original)).toBe(row.beforeStatementSha256);
   }
  });
