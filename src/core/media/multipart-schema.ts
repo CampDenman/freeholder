@@ -7,6 +7,7 @@ import {contacts} from "@/core/contacts/schema";
 import {createdAtColumn,updatedAtColumn} from "@/core/db/columns";
 import type {MultipartPart} from "@/adapters/storage/types";
 import type {MultipartCreateBaseline} from "./multipart-create-baseline-proof";
+import type {OriginalMultipartPartBodies} from "./multipart-part-bodies-proof";
 import {mediaObjectWrites} from "./write-schema";
 
 export const MULTIPART_STATES=["unverified","creating","open","completing","completed","aborting","aborted","unknown"]as const;
@@ -43,6 +44,9 @@ export const mediaMultipartOperations=pgTable("media_multipart_operations",{
  observedProviderUploadId:text("observed_provider_upload_id"),
  // No default/backfill: legacy CREATEs never acquire a present-day baseline.
  createBaseline:jsonb("create_baseline").$type<MultipartCreateBaseline>(),
+ // A declaration limits future issuer authority. It does not attest receipt
+ // of any bytes or retire any old/issued capability. Legacy NULL stays debt.
+ partBodies:jsonb("part_bodies").$type<OriginalMultipartPartBodies>(),
  reviewedAt:timestamp("reviewed_at",{withTimezone:true}),reviewedBy:text("reviewed_by"),evidenceDigest:text("evidence_digest"),
  createdAt:createdAtColumn(),updatedAt:updatedAtColumn(),
 },t=>[
@@ -52,4 +56,5 @@ export const mediaMultipartOperations=pgTable("media_multipart_operations",{
  check("media_multipart_operation_state",sql`${t.state} in ('started','accepted','unknown','not_applied')`),
  check("media_multipart_parts_digest",sql`${t.partsDigest} is null or ${t.partsDigest} ~ '^[a-f0-9]{64}$'`),
  check("media_multipart_create_baseline",sql`${t.createBaseline} is null or (${t.kind} = 'create' and jsonb_typeof(${t.createBaseline}) = 'object' and ${t.createBaseline}->>'format' = 'original-multipart-create-baseline/v1' and ${t.createBaseline}->>'state' in ('capturing','complete') and jsonb_typeof(${t.createBaseline}->'pages') = 'array') is true`),
+ check("media_multipart_part_bodies",sql`${t.partBodies} is null or (${t.kind} = 'create' and jsonb_typeof(${t.partBodies}) = 'object' and ${t.partBodies}->>'format' = 'original-multipart-part-bodies/v1' and jsonb_typeof(${t.partBodies}->'parts') = 'array') is true`),
 ]);

@@ -15973,3 +15973,18 @@ provider/host action, new model/journal, capability publication or C-item closur
 Part issuance/consumption, unknown recovery, capture/quota/cutover and all
 qualification/acceptance remain open. See
 `deploy/media-multipart-completed-object-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the shared audited upload
+service/HTTP route now declares the whole selected file's exact ordered part
+sizes and SHA256 values against its genuine original CREATE/session/baseline.
+The browser declares every bounded part before remote resume progress or any
+signing request; a same-size different file cannot replace its first header.
+The existing operation model gains nullable/no-default part_bodies JSONB, with
+no legacy birth/backfill or raw key/URL/token/owner copied into the header.
+App/SQL retain namespace/tombstone/drain/privacy/hold constraints. Eight pure and
+five actual-service/fictional TCP controls are PREPARED/UNRUN; originals remain
+unchanged. Declarations do not prove received bytes, FIN or consumption, and no
+signer/request/part capability is enabled. Actual issuer/part/consumption,
+unknown recovery, capture/quota/cutover and all qualification/acceptance remain
+open. No execution/provider/host actions or C-item closure. See
+`deploy/media-multipart-part-bodies-source-2026-11-13.md`.
