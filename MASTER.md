@@ -3564,6 +3564,22 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled refund timestamp repair2026-11-14 (C12.38/C9.33/C1.08): original
+fee160 V46 native FAILS96.829s at deferred cash guard after genuine customer
+refund ACK+FIN committed. Readonly actual metadata proves retained processing
+refund1 with returned physical ACK/FIN; full596 rows/86journal/sequence unchanged.
+The old guard ignores refunded/failure fields but omits the ordinary canonical
+updated_at=now() delta, so it wrongly asks a committed old batch for new cash
+admission. One appended complete successor preserves entire old body and adds
+ONLY timestamp-qualified equality over the same old mutable fields+updated_at.
+Principal/status/provider/invoice/origin remain immutable; no old bank or batch
+is reused. Entire725367 priorSQLprefix/oldshape/stage/ready/refundguards and
+original complete fee natives unchanged. V45/V46 retained; prepared V47negative
+was never run. Source/schema/SDK and fresh original full natives remain required;
+no C closure, actual provider or stable acceptance. See
+`deploy/controlled-cash-refund-transition85.manifest.json`.
+
+
 Fee160 original native/fixture checkpoint2026-11-14 (C12.38/C9.33/C1.08):
 actualV45 positive fee journey FAILS97.070s on the customer refund transport.
 Two real payments/core3 retain4200 and one genuine initial source GET+result+

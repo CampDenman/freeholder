@@ -1,0 +1,43 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "status": "SOURCE_PREPARED_UNRUN",
+  "baseSource": "3c20bb0b117b16449a565ef33ec72c0f798f0824",
+  "prefix": {
+    "bytes": 725367,
+    "sha256": "d3cf5038787eff2ecf5f9c223fe7214bdb1314f658018f2c19fb39c56c497948"
+  },
+  "tail": {
+    "path": "deploy/controlled-cash-refund-transition85.fragment.sql",
+    "bytes": 3751,
+    "sha256": "358a583d40006c3f9c1bdea7834d98ee2ccce873e848e2ee16d0d11b187cd8c4"
+  },
+  "normal85": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "ownedPath": "deploy/sql/0085_controlled_collection_application.unapplied.sql",
+    "bytes": 729144,
+    "sha256": "842f6d55c642ab790eeeffa4b42cb0b8e4f4e4c06c16a1a324e3dc21c63d41c7"
+  },
+  "successor": {
+    "signature": "freeholder_controlled_cash_application_guard()",
+    "beforeBodySha256": "1f1f8539ee546eabc92cbfd7f018e4ff7997ec562a107d0f7e3101a3fb1d5ff6",
+    "afterBodySha256": "5e22c18571298ca13f83eedec5ddd8c657e3116a5a64e1ab28542269f04db499",
+    "exactInsertedBranch": "\n  -- A genuine ordinary refund also carries the canonical database-TX timestamp.\n  -- This branch grants no refund authority and cannot change cash/origin identity.\n  IF TG_OP='UPDATE' AND NEW.updated_at=now()\n   AND(before_row-ARRAY['refunded_minor','failure_code','failure_message','updated_at'])=(after_row-ARRAY['refunded_minor','failure_code','failure_message','updated_at']) THEN RETURN NEW;END IF;",
+    "entireOldBodyReversesExactly": true
+  },
+  "preservedFailedNative": "/tmp/freeholder-current-full86-fee160-residual-native-v2-20261114-result.json",
+  "readOnlyDiagnosis": {
+    "path": "/tmp/freeholder-current-full86-native-v46-refund-transition-v1-20261114-result.json",
+    "sha256": "3d8a77dd8a4087ef6aed47e875953afe69917283266822acd73dda1513cc3347",
+    "all596WholeRowsJournalsSequenceUnchanged": true
+  },
+  "newModels": 0,
+  "newFunctions": 0,
+  "newTriggers": 0,
+  "originalNativeWholeFileUnchanged": true,
+  "scope": "Retain old early return byteexact. Extra branch requires exact database transaction timestamp and whole OLD/NEW equality except the same three preexisting mutable refund/failure fields plus updated_at. Every status, principal, provider, invoice, route, request and receipt field remains equal. No old application proof, historical bank observation or batch is reused as new authority. All original refund/counter guards, full shape/stage and ready pins remain byteexact."
+}
