@@ -8791,6 +8791,8 @@
   "media.recovery.reference": "Referencia del resultado final del proveedor",
   "media.recovery.evidence": "¿Cómo confirmó el proveedor original este resultado exacto?",
   "media.recovery.stopDrainId": "Identificador del recibo de detención verificada del ejecutor (opcional)",
+  "media.recovery.retireOriginal": "Verificar que los bytes originales ya no están",
+  "media.recovery.monotonicHint": "Esta comprobación revisa el archivo original sin enviar otra solicitud de eliminación. Las cargas anteriores deben haber terminado o haberse detenido de forma independiente, y las nuevas cargas no pueden reutilizar esta clave. Las versiones conservadas, las sesiones, las llamadas desconocidas o una retención mantienen la recuperación pendiente. Una declaración escrita no confirma la eliminación.",
   "media.recovery.stopDrainHint": "Déjalo vacío si se conservan las finalizaciones reales de las llamadas. Para un proceso Linux interrumpido, usa solo el recibo exacto de detención verificada de forma independiente en el servidor original. Una declaración escrita o una respuesta 404 no demuestra la detención ni el borrado; recuperar los bytes aplicados mantiene pendiente la limpieza física.",
   "media.recovery.stopped": "¿Cómo demostraste que todos los procesos de escritura originales se detuvieron?",
   "media.recovery.confirm": "Verifiqué el recurso original, el resultado final del proveedor y la detención de los procesos de escritura.",

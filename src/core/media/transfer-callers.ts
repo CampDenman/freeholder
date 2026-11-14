@@ -18,6 +18,7 @@ import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaEra
 import {reconcileCommittedStorageObservation} from "./observation-hooks";
 
 import {assertExactTransferRead} from "./transfer-read-provenance";
+import {assertOriginalKeyCreator} from "./original-key-tombstone";
 import {originalTransferReservation} from "./transfer-original-revision";
 import {transferCallRetryPermitted} from "./transfer-reviewed-call";
 import {assertTransferNamespaceMutation} from "./transfer-namespace-control";
@@ -40,6 +41,7 @@ export async function admitTransferCall(tx:Tx,input:TransferCallAdmission,actor:
  const binding=target?plan.originalTarget:plan.originalSource;let key=target?object.targetKey:object.key;
  if(["target_put","source_delete","privacy_delete","privacy_source_delete"].includes(input.kind))await assertTransferNamespaceMutation(tx,object.id,binding.namespace,input.kind);
  if(input.physicalKey){if(!privacy||objectKeyDigest(input.physicalKey)!==(target?object.targetKeyDigest:object.keyDigest))transferConflict("The private cleanup witness does not identify this exact original physical key.");key=input.physicalKey;}
+ if(input.kind==="target_put")await assertOriginalKeyCreator(tx,{namespace:binding.namespace,key,role:"target_put"});
  if(input.kind==="target_put"){
   if(!["planned","copying"].includes(plan.state)||!["planned","copying"].includes(object.state))transferConflict();
   const previous=await tx.select().from(mediaStorageTransferCalls).where(and(eq(mediaStorageTransferCalls.objectId,object.id),eq(mediaStorageTransferCalls.kind,"target_put")));

@@ -8791,6 +8791,8 @@
   "media.recovery.reference": "Provider final-outcome reference",
   "media.recovery.evidence": "How did the original provider confirm this exact outcome?",
   "media.recovery.stopDrainId": "Verified executor stop receipt ID (optional)",
+  "media.recovery.retireOriginal": "Verify original bytes are gone",
+  "media.recovery.monotonicHint": "This checks the original file without sending another removal request. Earlier uploads must be finished or independently stopped, and new uploads cannot reuse this file key. Retained versions, sessions, unknown callers or a preservation hold keep recovery pending. A written statement does not confirm removal.",
   "media.recovery.stopDrainHint": "Leave blank when actual caller finishes are retained. For a crashed Linux writer, use only the exact independently verified original-host stop receipt. A written statement or 404 proves neither stop nor erasure; applied-byte recovery keeps physical cleanup pending.",
   "media.recovery.stopped": "How did you prove every original writer has stopped?",
   "media.recovery.confirm": "I verified the original resource, final provider outcome and stopped writers.",

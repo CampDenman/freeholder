@@ -27,13 +27,19 @@ function time(value:Date|null):number{return value?.getTime()??NaN;}
  */
 export function requireQuiescentOriginalPut(caller:OriginalQuiescentCaller,requests:readonly OriginalQuiescentRequest[],stop:OriginalExecutorStop|null){
  if(caller.returnedAt&&requests.every(row=>row.returnedAt))return{write:requireFinishedOriginalPut(caller,requests),mode:"actual_finish"as const,stop:null};
+ requireOriginalExecutorStop(caller,requests,stop);
+ const writes=requests.filter(row=>row.descriptor.kind==="object.put");
+ if(writes.length!==1||!writes[0]!.descriptor.createOnly||!writes[0]!.descriptor.key||!writes[0]!.descriptor.sha256||writes[0]!.descriptor.bytes===undefined||time(writes[0]!.createdAt)>time(stop.createdAt)||requests.some(row=>["object.delete","multipart.create","multipart.complete","multipart.abort"].includes(row.descriptor.kind)))transferConflict("Stopped original applied recovery requires one exact pre-fence create-only PUT; ambiguous retries or other mutations remain debt.");
+ return{write:writes[0]!,mode:"independent_stop"as const,stop};
+}
+
+/** Shared exact LOCAL executor witness. This proves no future local dispatch;
+ * it never proves a request already accepted remotely has finished. */
+export function requireOriginalExecutorStop(caller:OriginalQuiescentCaller,requests:readonly OriginalQuiescentRequest[],stop:OriginalExecutorStop|null):asserts stop is OriginalExecutorStop{
  if(!stop||!["verified","released"].includes(stop.state)||stop.state==="verified"&&stop.releasedAt!==null||stop.state==="released"&&(!Number.isFinite(time(stop.releasedAt))||time(stop.releasedAt)<time(stop.verifiedAt))||stop.namespace!==caller.namespace||!stop.stopProofDigest||!/^[a-f0-9]{64}$/.test(stop.stopProofDigest)||!/^[a-f0-9]{40}$/.test(stop.sourceRevision)||!Number.isFinite(time(stop.createdAt))||!Number.isFinite(time(stop.verifiedAt))||time(stop.verifiedAt)<time(stop.createdAt)||!Number.isFinite(time(caller.createdAt))||time(caller.createdAt)>time(stop.createdAt))transferConflict("An actual unfinished original caller needs its exact independently verified executor stop, not a timeout,404 or written assertion.");
  const parsed=snapshotSchema.safeParse(stop.originalProcesses),runtime=caller.runtimeIdentity;
  if(!parsed.success||!("kind"in runtime)||runtime.kind!=="linux"||runtime.instance!==caller.runtimeId||stop.executorIdentity!==`linux-systemd:${runtime.boot}`||parsed.data.boot!==runtime.boot||new Set(parsed.data.processes.map(row=>row.pid)).size!==parsed.data.processes.length||!parsed.data.processes.some(row=>row.pid===runtime.pid&&row.startTicks===runtime.startTicks))transferConflict("The original runtime birth is not covered by this exact executor process witness. Other platforms need their own authentic executor proof.");
  if(!requests.length||requests.some(row=>row.callId!==caller.id||transferDigest(row.runtimeIdentity)!==transferDigest(runtime)||row.descriptorDigest!==transferDigest(row.descriptor)||row.descriptor.binding.namespace!==caller.namespace||!Number.isFinite(time(row.createdAt))||time(row.createdAt)>time(stop.verifiedAt)))transferConflict("Every exact original physical request must belong to the independently stopped runtime; no historical birth or request may be backfilled.");
- const writes=requests.filter(row=>row.descriptor.kind==="object.put");
- if(writes.length!==1||!writes[0]!.descriptor.createOnly||!writes[0]!.descriptor.key||!writes[0]!.descriptor.sha256||writes[0]!.descriptor.bytes===undefined||time(writes[0]!.createdAt)>time(stop.createdAt)||requests.some(row=>["object.delete","multipart.create","multipart.complete","multipart.abort"].includes(row.descriptor.kind)))transferConflict("Stopped original applied recovery requires one exact pre-fence create-only PUT; ambiguous retries or other mutations remain debt.");
- return{write:writes[0]!,mode:"independent_stop"as const,stop};
 }
 
 /** A stop only establishes which local executor cannot issue another request.

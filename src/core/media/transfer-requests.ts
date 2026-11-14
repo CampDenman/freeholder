@@ -16,6 +16,7 @@ import {reconcileCommittedStorageObservation} from "./observation-hooks";
 import {objectKeyDigest} from "./write-ledger";
 import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
 import {assertTransferNamespaceMutation} from "./transfer-namespace-control";
+import {assertOriginalKeyCreator} from "./original-key-tombstone";
 import {assertOriginalNamespaceMutation} from "./original-namespace-fence";
 import {requireTransferCapability} from "./transfer-authority";
 import {transferConflict,transferDigest,transferTargetKey} from "./transfer-proof";
@@ -37,6 +38,7 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
   if(!scope.active||call.state!=="admitted"||descriptor.binding.namespace!==call.namespace||descriptor.key&&descriptor.key!==call.physicalKey)transferConflict("The physical request does not belong to its exact original logical caller.");
   if(call.objectId===null&&mutation(descriptor))await assertOriginalNamespaceMutation(tx,call.namespace);
   if(call.objectId!==null&&mutation(descriptor))await assertTransferNamespaceMutation(tx,call.objectId,call.namespace,call.kind);
+  if(["object.put","multipart.create","multipart.complete"].includes(descriptor.kind))await assertOriginalKeyCreator(tx,{namespace:descriptor.binding.namespace,key:descriptor.key??"",role:descriptor.kind==="object.put"?(call.kind==="target_put"?"target_put":"ordinary_put"):descriptor.kind==="multipart.create"?"multipart_create":"multipart_complete"});
   const inventory=descriptor.kind.startsWith("inventory.")||descriptor.kind==="bucket.metadata";
   if(inventory&&!["source_inventory","target_inventory","source_retirement_inventory","target_erasure_inventory","source_erasure_inventory","ordinary_retirement_inventory","multipart_retirement_inventory","multipart_recovery_inspect"].includes(call.kind))transferConflict();
   if(descriptor.expectedRevision&&descriptor.kind!=="object.body"&&(!call.expectedRevision||transferDigest(descriptor.expectedRevision)!==transferDigest(call.expectedRevision))){

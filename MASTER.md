@@ -15899,3 +15899,18 @@ lineage remains live. Five pure and three native TCP controls are PREPARED/UNRUN
 No execution/provider/host actions occurred. Request/part capabilities, unknown
 DELETE monotonic-removal fences, multipart/quota/cutover and actual acceptance
 remain open. See `deploy/media-stopped-source-chain-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated monotonic-removal
+prerequisite leaf adds permanent namespace/key-digest creator fences and a
+separate exact local-finish/independent-stop conditional DELETE review. Fresh
+pinned absence plus complete inventories never invent remote ACKs, NULL FINs,
+first results or replay. All other creators/session/capture/transfer ancestry
+remain explicit debt. The existing fresh-human shared recovery/UI/audit path
+now selects the exact DELETE for verification; ordinary drain release requires
+whole-cohort closure. Ten pure and six native controls are PREPARED/UNRUN.
+Source inspection found genuine raw sealed-blob, gallery archive and doctor
+producers still requiring authentic original admissions and a final adapter
+boundary fence; full request capability cannot be published before they and
+multipart/capture/quota/cutover are completed and qualified. No execution,
+provider/host actions, production incident claim or C-item closure occurred.
+See `deploy/media-monotonic-delete-source-2026-11-13.md`.

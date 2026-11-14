@@ -72,11 +72,13 @@ export async function runMediaWriterDrain({sql,action,namespace,sourceRevision,i
    await tx`select set_config('freeholder.media_transfer_operator_v1','1',true)`;
    const [original]=await tx`select * from media_storage_writer_drains where id=${id} and namespace=${namespace} and source_revision=${sourceRevision} for update`;
    if(!original||original.state!=="verified"||!original.verified_at||!original.stop_proof_digest)conflict();
-   const active=await tx`select id from media_storage_transfer_plans where (source_namespace=${namespace} or target_namespace=${namespace}) and state<>'cancelled' limit 1`;
+   const active=await tx`select id from media_storage_transfer_plans where (source_namespace=${namespace} or target_namespace=${namespace}) and state not in ('complete','cancelled') limit 1`;
    const uncertain=await tx`select id from media_object_writes where storage_namespace=${namespace} and state in ('unverified','started','unknown') limit 1`;
    const[association]=await tx`select freeholder_media_transfer_recovery_drain_releasable(${id}::uuid) as releasable`;
+   const[ordinary]=await tx`select freeholder_media_original_drain_releasable(${id}::uuid) as releasable`;
    if(original.original_processes?.recovery){const[current]=await tx`select freeholder_media_transfer_recovery_snapshot(${original.original_processes.recovery.planId}::uuid,${namespace}) as snapshot`;requireTransferDrainAssociation(original.original_processes.recovery,{planId,namespace,snapshot:current?.snapshot});}
-   if((active.length||original.original_processes?.recovery)&&!association?.releasable||uncertain.length||planId!==undefined&&original.original_processes?.recovery?.planId!==planId)conflict();
+   if((active.length||original.original_processes?.recovery)?!association?.releasable:!ordinary?.releasable)conflict();
+   if(uncertain.length||planId!==undefined&&original.original_processes?.recovery?.planId!==planId)conflict();
    await tx`update media_storage_writer_drains set state='released',released_at=now(),updated_at=now() where id=${id} and state='verified'`;
   });
   return{drainId:id,state:"released",originalStopWitnessPreserved:true};

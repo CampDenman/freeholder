@@ -337,7 +337,7 @@ BEGIN
   ELSIF TG_TABLE_NAME='media_storage_transfer_subjects' THEN
    IF ROW(NEW.id,NEW.object_id,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.object_id,OLD.created_at) OR OLD.redacted_at IS NOT NULL AND ROW(NEW.contact_id,NEW.redacted_at) IS DISTINCT FROM ROW(OLD.contact_id,OLD.redacted_at) OR NEW.redacted_at IS NOT NULL AND OLD.redacted_at IS NULL AND (NEW.contact_id IS NOT NULL OR NOT freeholder_media_transfer_object_retired(OLD.object_id)) THEN RAISE EXCEPTION 'Original subject membership cannot be rebound or erased before physical retirement' USING ERRCODE='23514'; END IF;
   ELSIF TG_TABLE_NAME='media_storage_writer_drains' THEN
-   IF ROW(NEW.id,NEW.namespace,NEW.source_revision,NEW.executor_identity,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.namespace,OLD.source_revision,OLD.executor_identity,OLD.created_at) OR OLD.state<>'capturing' AND NEW.original_processes IS DISTINCT FROM OLD.original_processes OR OLD.state IN ('verified','released') AND (ROW(NEW.stop_proof_digest,NEW.verified_at) IS DISTINCT FROM ROW(OLD.stop_proof_digest,OLD.verified_at) OR NEW.state<>OLD.state AND NOT(OLD.state='verified' AND NEW.state='released' AND NEW.released_at IS NOT NULL AND (NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans WHERE (source_namespace=OLD.namespace OR target_namespace=OLD.namespace) AND state<>'cancelled') AND OLD.original_processes->'recovery' IS NULL OR freeholder_media_transfer_recovery_drain_releasable(OLD.id)) AND NOT EXISTS(SELECT 1 FROM media_object_writes WHERE storage_namespace=OLD.namespace AND state IN ('unverified','started','unknown')))) THEN RAISE EXCEPTION 'Original captured process and stop witness are immutable' USING ERRCODE='23514'; END IF;
+   IF ROW(NEW.id,NEW.namespace,NEW.source_revision,NEW.executor_identity,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.namespace,OLD.source_revision,OLD.executor_identity,OLD.created_at) OR OLD.state<>'capturing' AND NEW.original_processes IS DISTINCT FROM OLD.original_processes OR OLD.state IN ('verified','released') AND (ROW(NEW.stop_proof_digest,NEW.verified_at) IS DISTINCT FROM ROW(OLD.stop_proof_digest,OLD.verified_at) OR NEW.state<>OLD.state AND NOT(OLD.state='verified' AND NEW.state='released' AND NEW.released_at IS NOT NULL AND (freeholder_media_original_drain_releasable(OLD.id) OR freeholder_media_transfer_recovery_drain_releasable(OLD.id)) AND NOT EXISTS(SELECT 1 FROM media_object_writes WHERE storage_namespace=OLD.namespace AND state IN ('unverified','started','unknown')))) THEN RAISE EXCEPTION 'Original captured process and stop witness are immutable' USING ERRCODE='23514'; END IF;
   END IF;
  END IF;
  RETURN NEW;
@@ -782,6 +782,32 @@ CREATE FUNCTION freeholder_media_original_executor_stopped(original_call uuid, o
  )
 $$;
 --> statement-breakpoint
+-- Exact LOCAL DELETE executor stop only; this never asserts remote completion.
+CREATE FUNCTION freeholder_media_original_delete_executor_stopped(original_call uuid, original_drain uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_storage_transfer_calls caller JOIN media_storage_writer_drains drain ON drain.id=original_drain AND drain.namespace=caller.namespace JOIN media_object_writes deletion ON deletion.id=caller.object_receipt_id
+  WHERE caller.id=original_call AND caller.multipart_operation_id IS NULL AND caller.object_id IS NULL AND caller.object_receipt_id IS NOT NULL AND caller.kind='ordinary_delete'
+   AND drain.state IN ('verified','released') AND drain.verified_at IS NOT NULL AND drain.verified_at>=drain.created_at AND caller.created_at<=drain.created_at
+   AND (drain.state='verified' AND drain.released_at IS NULL OR drain.state='released' AND drain.released_at>=drain.verified_at)
+   AND drain.stop_proof_digest ~ '^[a-f0-9]{64}$' AND drain.source_revision ~ '^[a-f0-9]{40}$'
+   AND caller.runtime_identity->>'kind'='linux' AND caller.runtime_identity->>'instance'=caller.runtime_id::text
+   AND caller.runtime_identity->>'boot' ~ '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$'
+   AND caller.runtime_identity->>'pid' ~ '^[1-9][0-9]*$' AND caller.runtime_identity->>'startTicks' ~ '^[0-9]+$'
+   AND drain.executor_identity='linux-systemd:'||(caller.runtime_identity->>'boot')
+   AND drain.original_processes->>'format'='freeholder.media-writer-drain/v1' AND drain.original_processes->>'boot'=caller.runtime_identity->>'boot'
+   AND drain.original_processes->>'unit'='freeholder.service' AND drain.original_processes->>'invocation' ~ '^[a-f0-9]{32}$'
+   AND drain.original_processes->>'group' ~ '^/[A-Za-z0-9_./-]+$' AND position('..' in drain.original_processes->>'group')=0
+   AND jsonb_typeof(drain.original_processes->'processes')='array'
+   AND jsonb_array_length(drain.original_processes->'processes') BETWEEN 1 AND 4096
+   AND (SELECT count(*) FROM jsonb_array_elements(drain.original_processes->'processes'))=(SELECT count(DISTINCT process->>'pid') FROM jsonb_array_elements(drain.original_processes->'processes') process)
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(drain.original_processes->'processes') process WHERE coalesce(process->>'pid','') !~ '^[1-9][0-9]*$' OR coalesce(process->>'startTicks','') !~ '^[0-9]+$')
+   AND EXISTS(SELECT 1 FROM jsonb_array_elements(drain.original_processes->'processes') process WHERE process->>'pid'=caller.runtime_identity->>'pid' AND process->>'startTicks'=caller.runtime_identity->>'startTicks')
+   AND (SELECT count(*) FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND request.descriptor->>'kind'='object.delete')=1
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND request.descriptor->>'kind'='object.delete' AND request.created_at<=drain.created_at AND request.key_digest=deletion.key_digest AND (request.redacted_at IS NOT NULL AND request.descriptor->>'key'='retained:'||deletion.key_digest OR request.descriptor->>'key'=caller.physical_key AND request.descriptor->'expectedRevision'=caller.expected_revision))
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND (request.created_at>drain.verified_at OR request.runtime_identity IS DISTINCT FROM caller.runtime_identity OR request.redacted_at IS NULL AND request.descriptor_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(request.descriptor) OR request.descriptor->'binding'->>'namespace' IS DISTINCT FROM caller.namespace OR request.descriptor->>'kind' NOT IN ('object.delete')))
+ )
+$$;
+--> statement-breakpoint
 -- A completed affirmative review is a DISTINCT quiescence/identity authority.
 -- It never supplies an actual return/writer finish. Immutable birth, nonce,
 -- reviewed full-byte result and complete original positive pages stay linked.
@@ -951,6 +977,18 @@ BEGIN
  IF caller.kind='ordinary_delete' THEN
   SELECT * INTO deletion FROM media_object_writes WHERE id=caller.object_receipt_id;
   SELECT * INTO original FROM media_object_writes WHERE original_reservation_id=deletion.original_reservation_id AND operation_kind='put';
+  IF NEW.provider_evidence_digest=freeholder_media_original_monotonic_delete_evidence(caller.id,proof.id,inventory.id,NEW.stop_drain_id) THEN
+   IF NEW.object_receipt_id IS DISTINCT FROM deletion.id OR NEW.object_id IS NOT NULL OR NEW.multipart_operation_id IS NOT NULL OR NEW.permits_retry OR NEW.outcome<>'retired' OR NEW.reviewed_by<>'system:media-cleanup' OR caller.state NOT IN('admitted','unknown') OR caller.stop_receipt_id IS NOT NULL OR caller.stopped_at IS NOT NULL
+    OR deletion.id IS NULL OR original.id IS NULL OR deletion.original_reservation_id IS NULL OR original.redacted_at IS NOT NULL OR deletion.redacted_at IS NOT NULL
+    OR NOT freeholder_media_original_delete_local_closed(caller.id,NEW.stop_drain_id) OR NOT freeholder_media_original_single_creator_closed(original.original_reservation_id)
+    OR NEW.original_call_witness !~ '^[a-f0-9]{64}$'
+    OR proof.id IS NULL OR proof.object_receipt_id IS DISTINCT FROM original.id OR proof.kind<>'ordinary_recovery_read' OR proof.namespace IS DISTINCT FROM original.storage_namespace OR proof.physical_key IS DISTINCT FROM original.object_key OR proof.state<>'returned' OR proof.returned_at IS NULL OR proof.result_absent IS NULL OR proof.expected_revision IS DISTINCT FROM original.provider_revision
+    OR proof.created_at<coalesce((SELECT verified_at FROM media_storage_writer_drains WHERE id=NEW.stop_drain_id),caller.returned_at)
+    OR inventory.id IS NULL OR inventory.object_receipt_id IS DISTINCT FROM original.id OR inventory.proof_call_id IS DISTINCT FROM proof.id OR inventory.purpose<>'retirement' OR NOT freeholder_media_original_absence_inventory_complete(inventory.id)
+    OR (SELECT count(*) FROM media_storage_transfer_requests request JOIN media_storage_transfer_calls actual ON actual.id=request.call_id JOIN media_object_writes intent ON intent.id=actual.object_receipt_id WHERE intent.original_reservation_id=original.original_reservation_id AND actual.kind='ordinary_delete' AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='not_attempted'))<>1
+   THEN RAISE EXCEPTION 'Monotonic removal needs permanent original key fencing, every creator closed, exact local finish/stop and fresh full version/session absence; never infer a remote ACK or replay DELETE' USING ERRCODE='23514'; END IF;
+   RETURN NEW;
+  END IF;
   IF NEW.object_receipt_id IS DISTINCT FROM deletion.id OR NEW.multipart_operation_id IS NOT NULL OR NEW.stop_drain_id IS NOT NULL OR NEW.permits_retry OR NEW.outcome<>'retired' OR NEW.reviewed_by<>'system:media-cleanup'
    OR deletion.id IS NULL OR original.id IS NULL OR deletion.original_reservation_id IS NULL OR deletion.writer_finished_at IS NULL OR original.writer_finished_at IS NULL AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls writer WHERE writer.object_receipt_id=original.id AND freeholder_media_original_applied_review(writer.id)) OR original.state<>'accepted' OR original.provider_revision IS NULL OR original.provider_revision_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(original.provider_revision)
    OR caller.state<>'unknown' OR caller.returned_at IS NULL OR caller.stopped_at IS NOT NULL OR caller.stop_receipt_id IS NOT NULL OR caller.observed_accepted_at IS NULL
@@ -1075,6 +1113,57 @@ BEGIN
 END $$;
 --> statement-breakpoint
 CREATE CONSTRAINT TRIGGER media_original_first_scope_complete AFTER INSERT OR UPDATE ON media_original_erasure_scopes DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_scope_complete_guard();
+--> statement-breakpoint
+-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
+CREATE FUNCTION freeholder_media_original_key_recreation_fenced(original_namespace text,original_key_digest text) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT original_namespace IS NULL OR original_namespace !~ '^[a-f0-9]{64}$' OR original_key_digest IS NULL OR original_key_digest !~ '^[a-f0-9]{64}$'
+ OR EXISTS(SELECT 1 FROM media_object_writes intent WHERE intent.operation_kind='delete' AND intent.storage_namespace=original_namespace AND intent.key_digest=original_key_digest)
+$$;
+--> statement-breakpoint
+-- A permanent digest tombstone survives raw key minimization. Metadata-only
+-- reservations remain unbound and convey NO creator authority. Updates/late
+-- authenticated observations are retained: this guard fences NEW dispatch.
+CREATE FUNCTION freeholder_media_original_creator_tombstone_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original_namespace text; original_digest text; role text; caller media_storage_transfer_calls; creating boolean:=false; deleting boolean:=false;
+BEGIN
+ IF TG_TABLE_NAME='media_object_writes' THEN
+  original_namespace:=NEW.storage_namespace; original_digest:=NEW.key_digest; role:=NEW.operation_kind;
+  -- A genuinely admitted multipart completion may retain a late positive FACT.
+  -- Its caller was admitted separately before I/O and its resource remains debt.
+  IF NEW.operation_kind='put' AND NEW.state='accepted' AND NEW.writer_protocol='multipart-receipts-v1' AND NEW.writer_finished_at IS NOT NULL AND EXISTS(
+   SELECT 1 FROM media_multipart_resources resource JOIN media_multipart_operations operation ON operation.resource_id=resource.id JOIN media_storage_transfer_calls actual ON actual.multipart_operation_id=operation.id
+   WHERE resource.original_reservation_id=NEW.original_reservation_id AND resource.key_digest=NEW.key_digest AND resource.storage_namespace=NEW.storage_namespace AND operation.operation_kind='complete' AND operation.writer_runtime_id=NEW.writer_runtime_id AND operation.writer_finished_at=NEW.writer_finished_at AND operation.provider_accepted_at=NEW.observed_accepted_at AND actual.kind='multipart_complete' AND actual.returned_at IS NOT NULL AND actual.observed_accepted_at IS NOT NULL
+  ) THEN RETURN NEW; END IF;
+  creating:=NEW.operation_kind='put'; deleting:=NEW.operation_kind='delete';
+ ELSIF TG_TABLE_NAME='media_multipart_resources' THEN
+  original_namespace:=NEW.storage_namespace; original_digest:=NEW.key_digest; role:='multipart_create'; creating:=true;
+ ELSIF TG_TABLE_NAME='media_storage_transfer_calls' THEN
+  original_namespace:=NEW.namespace; original_digest:=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(NEW.physical_key,'UTF8')),'hex');role:=NEW.kind;
+  creating:=NEW.kind IN ('ordinary_put','target_put','multipart_create','multipart_complete');
+ ELSE
+  SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=NEW.call_id;
+  IF caller.id IS NULL THEN RAISE EXCEPTION 'A physical request needs its exact original caller before recreation fencing' USING ERRCODE='23514'; END IF;
+  original_namespace:=NEW.descriptor->'binding'->>'namespace'; original_digest:=NEW.key_digest;role:=NEW.descriptor->>'kind';
+  IF role IS NULL OR role NOT IN ('object.read','object.metadata','object.body','object.put','object.delete','bucket.metadata','inventory.objects','inventory.versions','inventory.sessions','inventory.retained','multipart.create','multipart.inspect','multipart.complete','multipart.abort') THEN RAISE EXCEPTION 'New physical mutation/part authority requires its complete durable original protocol' USING ERRCODE='23514'; END IF;
+  creating:=role IN ('object.put','multipart.create','multipart.complete');
+  IF creating AND (original_namespace IS DISTINCT FROM caller.namespace OR NEW.descriptor->>'key' IS DISTINCT FROM caller.physical_key OR NEW.key_digest IS DISTINCT FROM encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(caller.physical_key,'UTF8')),'hex')) THEN RAISE EXCEPTION 'A physical creator cannot choose another namespace/key from its authentic caller' USING ERRCODE='23514'; END IF;
+ END IF;
+ IF creating OR deleting THEN
+  PERFORM pg_advisory_xact_lock_shared(1691709,82);
+  PERFORM pg_advisory_xact_lock(hashtext('media-object-write:'||original_digest));
+ END IF;
+ IF creating AND freeholder_media_original_key_recreation_fenced(original_namespace,original_digest) THEN RAISE EXCEPTION 'A permanent original namespace/key retirement intent refuses every new creator independently of flags, reservation ID, TTL or current pointer' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_write_creator_tombstone BEFORE INSERT ON media_object_writes FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_creator_tombstone_guard();
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_creator_tombstone BEFORE INSERT ON media_multipart_resources FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_creator_tombstone_guard();
+--> statement-breakpoint
+CREATE TRIGGER media_logical_creator_tombstone BEFORE INSERT ON media_storage_transfer_calls FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_creator_tombstone_guard();
+--> statement-breakpoint
+CREATE TRIGGER media_physical_creator_tombstone BEFORE INSERT ON media_storage_transfer_requests FOR EACH ROW EXECUTE FUNCTION freeholder_media_original_creator_tombstone_guard();
+
 --> statement-breakpoint
 CREATE FUNCTION freeholder_media_original_reservation_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -1220,6 +1309,62 @@ CREATE FUNCTION freeholder_media_original_absence_inventory_complete(original_in
  AND NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_entries entry JOIN header ON header.id=entry.inventory_id JOIN media_object_writes original ON original.id=header.object_receipt_id WHERE entry.key_digest=original.key_digest)
 $$;
 --> statement-breakpoint
+-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
+-- Ordinary single-create cohorts only. Any capture/multipart/transfer/unknown
+-- creator remains explicit debt until its own complete original protocol.
+CREATE FUNCTION freeholder_media_original_single_creator_closed(reservation uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ WITH original AS(SELECT * FROM media_object_writes WHERE original_reservation_id=reservation AND operation_kind='put'), writer AS(SELECT caller.* FROM media_storage_transfer_calls caller JOIN original ON caller.object_receipt_id=original.id WHERE caller.kind='ordinary_put')
+ SELECT reservation IS NOT NULL AND (SELECT count(*) FROM original)=1 AND (SELECT count(*) FROM writer)=1
+ AND NOT EXISTS(SELECT 1 FROM original WHERE original_reservation_id IS NULL OR writer_runtime_id IS NULL OR storage_namespace IS NULL OR provider_revision_digest IS NULL OR sha256 IS NULL OR bytes IS NULL OR state<>'accepted')
+ AND NOT EXISTS(SELECT 1 FROM writer WHERE NOT(state='returned' AND returned_at IS NOT NULL AND observed_accepted_at IS NOT NULL AND EXISTS(SELECT 1 FROM original WHERE writer_finished_at IS NOT NULL) OR freeholder_media_original_applied_review(id)))
+ AND NOT EXISTS(SELECT 1 FROM writer WHERE NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=writer.id AND request.descriptor->>'kind'='object.put') OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=writer.id AND (request.state NOT IN ('returned','stopped') OR request.returned_at IS NULL AND NOT freeholder_media_original_applied_review(writer.id))))
+ AND NOT EXISTS(SELECT 1 FROM media_object_writes other JOIN original ON other.key_digest=original.key_digest WHERE other.operation_kind='put' AND other.id<>original.id)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls other JOIN original ON other.physical_key=original.object_key WHERE other.kind IN ('ordinary_put','target_put','multipart_create','multipart_complete') AND other.id NOT IN(SELECT id FROM writer))
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_calls other ON other.id=request.call_id JOIN original ON request.key_digest=original.key_digest WHERE request.descriptor->>'kind' IN ('object.put','multipart.create','multipart.complete') AND other.id NOT IN(SELECT id FROM writer))
+ AND NOT EXISTS(SELECT 1 FROM media_multipart_resources resource JOIN original ON resource.key_digest=original.key_digest OR resource.original_reservation_id=reservation)
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_objects copy JOIN original ON original.key_digest IN(copy.key_digest,copy.target_key_digest))
+ AND NOT EXISTS(SELECT 1 FROM media_uploads upload JOIN original ON upload.storage_key=original.object_key WHERE upload.strategy<>'proxy' OR upload.provider_upload_id IS NOT NULL OR upload.state NOT IN('complete','failed','aborted','expired'))
+ AND NOT EXISTS(SELECT 1 FROM media_capture_sessions capture JOIN original ON capture.staged_key=original.object_key)
+ AND NOT EXISTS(SELECT 1 FROM media_capture_chunks chunk JOIN original ON chunk.storage_key=original.object_key)
+ AND NOT EXISTS(SELECT 1 FROM media_capture_items item JOIN original ON item.staged_key=original.object_key)
+ AND NOT EXISTS(SELECT 1 FROM original WHERE NOT freeholder_media_original_key_recreation_fenced(storage_namespace,key_digest))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_original_delete_local_closed(original_call uuid,original_drain uuid DEFAULT NULL) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_storage_transfer_calls caller JOIN media_object_writes deletion ON deletion.id=caller.object_receipt_id JOIN media_object_writes original ON original.original_reservation_id=deletion.original_reservation_id AND original.operation_kind='put'
+  WHERE caller.id=original_call AND caller.kind='ordinary_delete' AND caller.object_id IS NULL AND caller.multipart_operation_id IS NULL AND deletion.operation_kind='delete'
+   AND caller.physical_receipt_id=deletion.id AND deletion.writer_runtime_id=caller.runtime_id AND deletion.original_reservation_id IS NOT NULL AND caller.runtime_identity->>'instance'=caller.runtime_id::text
+   AND caller.namespace=original.storage_namespace AND deletion.storage_namespace=original.storage_namespace AND (caller.physical_key=original.object_key OR caller.redacted_at IS NOT NULL AND caller.physical_key='retained:'||original.key_digest) AND deletion.key_digest=original.key_digest AND (caller.expected_revision=original.provider_revision OR caller.redacted_at IS NOT NULL AND caller.expected_revision IS NULL)
+   AND (SELECT count(*) FROM media_storage_transfer_requests WHERE call_id=caller.id)=1
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND request.descriptor->>'kind'='object.delete' AND request.key_digest=original.key_digest AND request.descriptor->'binding'->>'namespace'=caller.namespace AND (request.redacted_at IS NOT NULL AND request.descriptor->>'key'='retained:'||original.key_digest OR request.descriptor->>'key'=original.object_key AND request.descriptor->'expectedRevision'=original.provider_revision AND request.descriptor_digest=freeholder_media_transfer_fact_digest(request.descriptor)) AND request.runtime_identity=caller.runtime_identity)
+   AND (original_drain IS NULL AND deletion.writer_finished_at IS NOT NULL AND caller.returned_at IS NOT NULL AND caller.result_digest IS NOT NULL AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=caller.id AND returned_at IS NULL)
+    OR original_drain IS NOT NULL AND freeholder_media_original_delete_executor_stopped(caller.id,original_drain))
+ )
+$$;
+--> statement-breakpoint
+-- Canonical evidence binds all original identifiers, the independent local
+-- closure and fresh physical proof. It does NOT include or invent a remote ACK.
+CREATE FUNCTION freeholder_media_original_monotonic_delete_evidence(original_call uuid,absence_call uuid,original_inventory uuid,original_drain uuid) RETURNS text LANGUAGE sql STABLE AS $$
+ SELECT freeholder_media_transfer_fact_digest(jsonb_build_object('method','monotonic-key-tombstone-v1','callId',caller.id,'deleteId',deletion.id,'originalId',original.id,'reservationId',original.original_reservation_id,'namespace',original.storage_namespace,'keyDigest',original.key_digest,'originalRevisionDigest',original.provider_revision_digest,'localClosure',jsonb_build_object('mode',(CASE WHEN original_drain IS NULL THEN 'actual_local_finish' ELSE 'independent_local_stop' END),'stopDrainId',original_drain,'stopProofDigest',stop.stop_proof_digest),'absenceCallId',absence_call,'inventoryId',original_inventory))
+ FROM media_storage_transfer_calls caller JOIN media_object_writes deletion ON deletion.id=caller.object_receipt_id JOIN media_object_writes original ON original.original_reservation_id=deletion.original_reservation_id AND original.operation_kind='put' LEFT JOIN media_storage_writer_drains stop ON stop.id=original_drain WHERE caller.id=original_call
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_original_monotonic_delete_review(original_call uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_storage_transfer_calls caller JOIN media_object_writes deletion ON deletion.id=caller.object_receipt_id JOIN media_object_writes original ON original.original_reservation_id=deletion.original_reservation_id AND original.operation_kind='put'
+  JOIN media_storage_transfer_reviews review ON review.id=caller.stop_receipt_id JOIN media_storage_transfer_calls absence ON absence.id=review.read_call_id JOIN media_storage_provider_inventories inventory ON inventory.id=review.inventory_id
+  WHERE caller.id=original_call AND caller.state='stopped' AND caller.stopped_at IS NOT NULL AND review.call_id=caller.id AND review.object_receipt_id=deletion.id AND review.object_id IS NULL AND review.multipart_operation_id IS NULL AND review.outcome='retired' AND NOT review.permits_retry AND review.reviewed_by='system:media-cleanup'
+   AND review.provider_evidence_digest=freeholder_media_original_monotonic_delete_evidence(caller.id,absence.id,inventory.id,review.stop_drain_id)
+   AND freeholder_media_original_delete_local_closed(caller.id,review.stop_drain_id) AND freeholder_media_original_single_creator_closed(original.original_reservation_id)
+   AND absence.object_receipt_id=original.id AND absence.kind='ordinary_recovery_read' AND absence.namespace=original.storage_namespace AND (absence.physical_key=original.object_key OR absence.redacted_at IS NOT NULL AND absence.physical_key='retained:'||original.key_digest) AND absence.state='returned' AND absence.returned_at IS NOT NULL AND absence.result_absent IS NOT NULL AND (absence.expected_revision=original.provider_revision OR absence.redacted_at IS NOT NULL AND absence.expected_revision IS NULL)
+   AND absence.created_at>=coalesce((SELECT verified_at FROM media_storage_writer_drains WHERE id=review.stop_drain_id),caller.returned_at)
+   AND inventory.object_receipt_id=original.id AND inventory.proof_call_id=absence.id AND inventory.purpose='retirement' AND freeholder_media_original_absence_inventory_complete(inventory.id)
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND request.state='stopped' AND request.stop_receipt_id IS DISTINCT FROM review.id)
+ )
+$$;
+
+--> statement-breakpoint
 CREATE FUNCTION freeholder_media_ordinary_retirement_proven(reservation uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
  WITH original AS (
   SELECT * FROM media_object_writes WHERE original_reservation_id=reservation AND operation_kind='put'
@@ -1229,7 +1374,7 @@ CREATE FUNCTION freeholder_media_ordinary_retirement_proven(reservation uuid) RE
   SELECT * FROM media_storage_transfer_calls WHERE object_receipt_id IN (SELECT id FROM family) OR physical_receipt_id IN (SELECT id FROM family)
  )
  SELECT reservation IS NOT NULL AND (SELECT count(*) FROM original)=1 AND (SELECT count(*) FROM family)>=2
- AND NOT EXISTS(SELECT 1 FROM family item WHERE writer_runtime_id IS NULL OR storage_namespace IS NULL OR writer_finished_at IS NULL AND NOT(item.operation_kind='put' AND EXISTS(SELECT 1 FROM media_storage_transfer_calls writer WHERE writer.object_receipt_id=item.id AND freeholder_media_original_applied_review(writer.id))))
+ AND NOT EXISTS(SELECT 1 FROM family item WHERE writer_runtime_id IS NULL OR storage_namespace IS NULL OR writer_finished_at IS NULL AND NOT(item.operation_kind='put' AND EXISTS(SELECT 1 FROM media_storage_transfer_calls writer WHERE writer.object_receipt_id=item.id AND freeholder_media_original_applied_review(writer.id)) OR item.operation_kind='delete' AND EXISTS(SELECT 1 FROM media_storage_transfer_calls removal WHERE removal.object_receipt_id=item.id AND freeholder_media_original_monotonic_delete_review(removal.id))))
  AND NOT EXISTS(SELECT 1 FROM original WHERE state<>'accepted' OR provider_revision_digest IS NULL OR sha256 IS NULL OR bytes IS NULL OR storage_kind NOT IN ('s3','replit'))
  AND NOT EXISTS(SELECT 1 FROM family item JOIN original ON true WHERE ROW(item.key_digest,item.storage_namespace,item.sha256,item.bytes,item.content_type) IS DISTINCT FROM ROW(original.key_digest,original.storage_namespace,original.sha256,original.bytes,original.content_type))
  AND NOT EXISTS(SELECT 1 FROM media_object_writes other JOIN original ON other.key_digest=original.key_digest WHERE other.original_reservation_id IS DISTINCT FROM reservation)
@@ -1238,11 +1383,11 @@ CREATE FUNCTION freeholder_media_ordinary_retirement_proven(reservation uuid) RE
  AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_objects copy JOIN original ON original.key_digest IN (copy.key_digest,copy.target_key_digest))
  AND NOT EXISTS(SELECT 1 FROM media_objects pointer JOIN original ON pointer.key=original.object_key WHERE pointer.reservation_id IS DISTINCT FROM reservation OR pointer.state='attached')
  AND NOT EXISTS(SELECT 1 FROM privacy_retention_exceptions hold JOIN data_requests request ON request.id=hold.data_request_id WHERE hold.scope IN ('media.storageOperations','media.multipartOperations','media.storageTransfers','members') AND (hold.expires_at IS NULL OR hold.expires_at>clock_timestamp()) AND EXISTS(SELECT 1 FROM family WHERE contact_id IS NULL OR contact_id=request.contact_id))
- AND NOT EXISTS(SELECT 1 FROM callers WHERE state IN ('admitted','unknown') OR returned_at IS NULL AND NOT freeholder_media_original_applied_review(id))
- AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN callers ON callers.id=request.call_id WHERE request.state IN ('admitted','unknown') OR request.returned_at IS NULL AND NOT freeholder_media_original_applied_review(callers.id))
+ AND NOT EXISTS(SELECT 1 FROM callers WHERE state IN ('admitted','unknown') OR returned_at IS NULL AND NOT(freeholder_media_original_applied_review(id) OR freeholder_media_original_monotonic_delete_review(id)))
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN callers ON callers.id=request.call_id WHERE request.state IN ('admitted','unknown') OR request.returned_at IS NULL AND NOT(freeholder_media_original_applied_review(callers.id) OR freeholder_media_original_monotonic_delete_review(callers.id)))
  AND EXISTS(SELECT 1 FROM original JOIN callers writer ON writer.object_receipt_id=original.id AND writer.kind='ordinary_put' WHERE (writer.returned_at IS NOT NULL AND writer.state='returned' AND writer.observed_accepted_at IS NOT NULL OR freeholder_media_original_applied_review(writer.id)) AND EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=writer.id))
  AND NOT EXISTS(SELECT 1 FROM family deletion JOIN original ON true WHERE deletion.operation_kind='delete' AND NOT EXISTS(
-  SELECT 1 FROM callers actual WHERE actual.object_receipt_id=deletion.id AND actual.kind='ordinary_delete' AND actual.returned_at IS NOT NULL AND (actual.state='returned' OR actual.state='stopped' AND EXISTS(SELECT 1 FROM media_storage_transfer_reviews reviewed WHERE reviewed.id=actual.stop_receipt_id AND reviewed.call_id=actual.id AND reviewed.object_receipt_id=deletion.id AND reviewed.outcome='retired' AND reviewed.stop_drain_id IS NULL))
+  SELECT 1 FROM callers actual WHERE actual.object_receipt_id=deletion.id AND actual.kind='ordinary_delete' AND (freeholder_media_original_monotonic_delete_review(actual.id) OR actual.returned_at IS NOT NULL AND (actual.state='returned' OR actual.state='stopped' AND EXISTS(SELECT 1 FROM media_storage_transfer_reviews reviewed WHERE reviewed.id=actual.stop_receipt_id AND reviewed.call_id=actual.id AND reviewed.object_receipt_id=deletion.id AND reviewed.outcome='retired' AND reviewed.stop_drain_id IS NULL))
    AND (actual.redacted_at IS NOT NULL OR freeholder_media_transfer_fact_digest(actual.expected_revision)=original.provider_revision_digest)
    AND (
     actual.result_digest=freeholder_media_transfer_fact_digest(jsonb_build_object('notAttempted',true)) AND actual.observed_accepted_at IS NULL
@@ -1250,9 +1395,9 @@ CREATE FUNCTION freeholder_media_ordinary_retirement_proven(reservation uuid) RE
     OR (actual.result_digest=freeholder_media_transfer_fact_digest(jsonb_build_object('accepted',true)) OR actual.state='stopped' AND actual.result_digest IN (freeholder_media_transfer_fact_digest(jsonb_build_object('failed',true)),freeholder_media_transfer_fact_digest(jsonb_build_object('failed',true,'accepted',true)))) AND actual.observed_accepted_at IS NOT NULL
      AND (SELECT count(*) FROM media_storage_transfer_requests WHERE call_id=actual.id)=1
      AND EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=actual.id AND request.descriptor->>'kind'='object.delete' AND request.returned_at IS NOT NULL AND fact.facts->>'stage'='accepted')
-   )))
+   ))))
  AND (SELECT count(*) FROM media_storage_transfer_requests request JOIN callers caller ON caller.id=request.call_id WHERE caller.kind='ordinary_delete' AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='accepted'))<=1
- AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN callers caller ON caller.id=request.call_id WHERE request.descriptor->>'kind' IN ('object.put','object.delete','multipart.create','multipart.complete','multipart.abort') AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage' IN ('accepted','not_attempted')) AND NOT(request.descriptor->>'kind'='object.put' AND freeholder_media_original_applied_review(caller.id)))
+ AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN callers caller ON caller.id=request.call_id WHERE request.descriptor->>'kind' IN ('object.put','object.delete','multipart.create','multipart.complete','multipart.abort') AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage' IN ('accepted','not_attempted')) AND NOT(request.descriptor->>'kind'='object.put' AND freeholder_media_original_applied_review(caller.id) OR request.descriptor->>'kind'='object.delete' AND freeholder_media_original_monotonic_delete_review(caller.id)))
  AND EXISTS(SELECT 1 FROM original JOIN callers writer ON writer.object_receipt_id=original.id AND writer.kind='ordinary_put'
   JOIN media_storage_provider_inventories inventory ON inventory.object_receipt_id=original.id AND inventory.anchor_call_id=writer.id
   JOIN callers absence ON absence.id=inventory.proof_call_id
@@ -1371,13 +1516,14 @@ CREATE FUNCTION freeholder_media_original_reservation_retired(reservation uuid) 
   SELECT request.* FROM media_storage_transfer_requests request JOIN original_calls caller ON caller.id=request.call_id
  )
  SELECT reservation IS NOT NULL AND EXISTS(SELECT 1 FROM original_writes WHERE operation_kind='put')
- AND NOT EXISTS(SELECT 1 FROM original_writes original WHERE deleted_at IS NULL OR state NOT IN ('accepted','confirmed_absent') OR writer_runtime_id IS NULL OR writer_finished_at IS NULL AND NOT(original.operation_kind='put' AND EXISTS(SELECT 1 FROM media_storage_transfer_calls writer WHERE coalesce(writer.physical_receipt_id,writer.object_receipt_id)=original.id AND (freeholder_media_original_applied_review(writer.id) OR freeholder_media_transfer_applied_put_review(writer.id)))))
- AND NOT EXISTS(SELECT 1 FROM lineage_receipts member LEFT JOIN media_object_writes original ON original.id=member.id WHERE original.id IS NULL OR original.deleted_at IS NULL OR original.state NOT IN ('accepted','confirmed_absent') OR original.writer_runtime_id IS NULL OR original.writer_finished_at IS NULL AND NOT(original.operation_kind='put' AND EXISTS(SELECT 1 FROM media_storage_transfer_calls writer WHERE coalesce(writer.physical_receipt_id,writer.object_receipt_id)=original.id AND (freeholder_media_original_applied_review(writer.id) OR freeholder_media_transfer_applied_put_review(writer.id)))))
+ AND NOT EXISTS(SELECT 1 FROM original_writes original WHERE deleted_at IS NULL OR state NOT IN ('accepted','confirmed_absent') OR writer_runtime_id IS NULL OR writer_finished_at IS NULL AND NOT(original.operation_kind='put' AND EXISTS(SELECT 1 FROM media_storage_transfer_calls writer WHERE coalesce(writer.physical_receipt_id,writer.object_receipt_id)=original.id AND (freeholder_media_original_applied_review(writer.id) OR freeholder_media_transfer_applied_put_review(writer.id))) OR original.operation_kind='delete' AND EXISTS(SELECT 1 FROM media_storage_transfer_calls removal WHERE removal.object_receipt_id=original.id AND freeholder_media_original_monotonic_delete_review(removal.id))))
+ AND NOT EXISTS(SELECT 1 FROM lineage_receipts member LEFT JOIN media_object_writes original ON original.id=member.id WHERE original.id IS NULL OR original.deleted_at IS NULL OR original.state NOT IN ('accepted','confirmed_absent') OR original.writer_runtime_id IS NULL OR original.writer_finished_at IS NULL AND NOT(original.operation_kind='put' AND EXISTS(SELECT 1 FROM media_storage_transfer_calls writer WHERE coalesce(writer.physical_receipt_id,writer.object_receipt_id)=original.id AND (freeholder_media_original_applied_review(writer.id) OR freeholder_media_transfer_applied_put_review(writer.id))) OR original.operation_kind='delete' AND EXISTS(SELECT 1 FROM media_storage_transfer_calls removal WHERE removal.object_receipt_id=original.id AND freeholder_media_original_monotonic_delete_review(removal.id))))
  AND NOT EXISTS(SELECT 1 FROM original_resources WHERE retired_at IS NULL OR state NOT IN ('completed','aborted'))
- AND NOT EXISTS(SELECT 1 FROM original_calls WHERE state IN ('admitted','unknown') OR returned_at IS NULL AND NOT(freeholder_media_original_applied_review(id) OR freeholder_media_transfer_applied_put_review(id)))
- AND NOT EXISTS(SELECT 1 FROM physical WHERE state IN ('admitted','unknown') OR returned_at IS NULL AND NOT(freeholder_media_original_applied_review(call_id) OR freeholder_media_transfer_applied_put_review(call_id)))
+ AND NOT EXISTS(SELECT 1 FROM original_calls WHERE state IN ('admitted','unknown') OR returned_at IS NULL AND NOT(freeholder_media_original_applied_review(id) OR freeholder_media_transfer_applied_put_review(id) OR freeholder_media_original_monotonic_delete_review(id)))
+ AND NOT EXISTS(SELECT 1 FROM physical WHERE state IN ('admitted','unknown') OR returned_at IS NULL AND NOT(freeholder_media_original_applied_review(call_id) OR freeholder_media_transfer_applied_put_review(call_id) OR freeholder_media_original_monotonic_delete_review(call_id)))
  AND NOT EXISTS(SELECT 1 FROM physical request WHERE request.descriptor->>'kind' IN ('object.put','multipart.create','multipart.complete','multipart.abort','object.delete')
   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage' IN ('accepted','not_attempted'))
+  AND NOT(request.descriptor->>'kind'='object.delete' AND freeholder_media_original_monotonic_delete_review(request.call_id))
   AND NOT(request.descriptor->>'kind'='object.put' AND EXISTS(
    SELECT 1 FROM media_storage_transfer_reviews review JOIN media_storage_provider_inventories inventory ON inventory.id=review.inventory_id JOIN media_storage_transfer_calls proof ON proof.id=review.read_call_id
    WHERE review.call_id=request.call_id AND (freeholder_media_original_applied_review(request.call_id) OR freeholder_media_transfer_applied_put_review(request.call_id)) AND review.outcome='applied' AND inventory.state='complete' AND proof.state='returned' AND proof.returned_at IS NOT NULL AND proof.result_request_proof->>'id'=request.id::text AND proof.result_request_proof->>'tokenDigest'=request.token_digest)))
@@ -1503,10 +1649,10 @@ CREATE FUNCTION freeholder_media_transfer_recovery_drain_releasable(original_dra
    AND drain.original_processes->'recovery'->>'namespace'=drain.namespace
    AND coalesce(drain.original_processes->'recovery'->>'planId','') ~ '^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$'
    AND drain.original_processes->'recovery'->'snapshot'=freeholder_media_transfer_recovery_snapshot((CASE WHEN coalesce(drain.original_processes->'recovery'->>'planId','') ~ '^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$' THEN (drain.original_processes->'recovery'->>'planId')::uuid ELSE NULL END),drain.namespace)
-   AND NOT EXISTS(SELECT 1 FROM media_object_writes receipt WHERE receipt.storage_namespace=drain.namespace AND (receipt.writer_runtime_id IS NULL OR receipt.writer_finished_at IS NULL AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls reviewed JOIN media_storage_transfer_reviews review ON review.id=reviewed.stop_receipt_id WHERE coalesce(reviewed.physical_receipt_id,reviewed.object_receipt_id)=receipt.id AND review.stop_drain_id=drain.id AND (freeholder_media_transfer_applied_put_review(reviewed.id) OR freeholder_media_original_applied_review(reviewed.id))) OR receipt.original_reservation_id IS NULL OR receipt.state NOT IN ('accepted','confirmed_absent') OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE coalesce(caller.physical_receipt_id,caller.object_receipt_id)=receipt.id AND caller.kind IN ('ordinary_put','ordinary_delete','target_put','source_delete','privacy_delete','privacy_source_delete') AND caller.runtime_id=receipt.writer_runtime_id)))
+   AND NOT EXISTS(SELECT 1 FROM media_object_writes receipt WHERE receipt.storage_namespace=drain.namespace AND (receipt.writer_runtime_id IS NULL OR receipt.writer_finished_at IS NULL AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls reviewed JOIN media_storage_transfer_reviews review ON review.id=reviewed.stop_receipt_id WHERE coalesce(reviewed.physical_receipt_id,reviewed.object_receipt_id)=receipt.id AND review.stop_drain_id=drain.id AND (freeholder_media_transfer_applied_put_review(reviewed.id) OR freeholder_media_original_applied_review(reviewed.id) OR freeholder_media_original_monotonic_delete_review(reviewed.id))) OR receipt.original_reservation_id IS NULL OR receipt.state NOT IN ('accepted','confirmed_absent') OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE coalesce(caller.physical_receipt_id,caller.object_receipt_id)=receipt.id AND caller.kind IN ('ordinary_put','ordinary_delete','target_put','source_delete','privacy_delete','privacy_source_delete') AND caller.runtime_id=receipt.writer_runtime_id)))
    AND NOT EXISTS(SELECT 1 FROM media_multipart_resources resource WHERE resource.storage_namespace=drain.namespace AND resource.retired_at IS NULL)
-   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE caller.namespace=drain.namespace AND caller.kind IN ('ordinary_put','ordinary_delete','target_put','source_delete','privacy_delete','privacy_source_delete','multipart_create','multipart_complete','multipart_abort') AND ((caller.state<>'returned' OR caller.returned_at IS NULL OR caller.result_digest IS NULL) AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=caller.stop_receipt_id AND (freeholder_media_transfer_applied_put_review(caller.id) OR freeholder_media_original_applied_review(caller.id)) AND (caller.returned_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND request.returned_at IS NULL) OR review.stop_drain_id=drain.id)) OR caller.created_at>drain.created_at OR EXISTS(SELECT 1 FROM media_storage_transfer_objects object JOIN media_storage_transfer_plans other ON other.id=object.plan_id WHERE object.id=caller.object_id AND object.plan_id::text IS DISTINCT FROM drain.original_processes->'recovery'->>'planId' AND other.state NOT IN ('complete','cancelled'))))
-   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_calls caller ON caller.id=request.call_id WHERE caller.namespace=drain.namespace AND request.descriptor->>'kind' IN ('object.put','object.delete','multipart.create','multipart.complete','multipart.abort') AND ((request.state<>'returned' OR request.returned_at IS NULL) AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=caller.stop_receipt_id AND (freeholder_media_transfer_applied_put_review(caller.id) OR freeholder_media_original_applied_review(caller.id)) AND (request.returned_at IS NOT NULL OR review.stop_drain_id=drain.id)) OR request.created_at>drain.created_at OR request.descriptor_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(request.descriptor) OR request.runtime_identity IS DISTINCT FROM caller.runtime_identity OR caller.kind NOT IN ('ordinary_put','ordinary_delete','target_put','source_delete','privacy_delete','privacy_source_delete','multipart_create','multipart_complete','multipart_abort')))
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE caller.namespace=drain.namespace AND caller.kind IN ('ordinary_put','ordinary_delete','target_put','source_delete','privacy_delete','privacy_source_delete','multipart_create','multipart_complete','multipart_abort') AND ((caller.state<>'returned' OR caller.returned_at IS NULL OR caller.result_digest IS NULL) AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=caller.stop_receipt_id AND (freeholder_media_transfer_applied_put_review(caller.id) OR freeholder_media_original_applied_review(caller.id) OR freeholder_media_original_monotonic_delete_review(caller.id)) AND (caller.returned_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND request.returned_at IS NULL) OR review.stop_drain_id=drain.id)) OR caller.created_at>drain.created_at OR EXISTS(SELECT 1 FROM media_storage_transfer_objects object JOIN media_storage_transfer_plans other ON other.id=object.plan_id WHERE object.id=caller.object_id AND object.plan_id::text IS DISTINCT FROM drain.original_processes->'recovery'->>'planId' AND other.state NOT IN ('complete','cancelled'))))
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_calls caller ON caller.id=request.call_id WHERE caller.namespace=drain.namespace AND request.descriptor->>'kind' IN ('object.put','object.delete','multipart.create','multipart.complete','multipart.abort') AND ((request.state<>'returned' OR request.returned_at IS NULL) AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=caller.stop_receipt_id AND (freeholder_media_transfer_applied_put_review(caller.id) OR freeholder_media_original_applied_review(caller.id) OR freeholder_media_original_monotonic_delete_review(caller.id)) AND (request.returned_at IS NOT NULL OR review.stop_drain_id=drain.id)) OR request.created_at>drain.created_at OR request.redacted_at IS NULL AND request.descriptor_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(request.descriptor) OR request.runtime_identity IS DISTINCT FROM caller.runtime_identity OR caller.kind NOT IN ('ordinary_put','ordinary_delete','target_put','source_delete','privacy_delete','privacy_source_delete','multipart_create','multipart_complete','multipart_abort')))
  )
 $$;
 -- This narrow finished-cohort release does not resolve any missing physical
@@ -1635,3 +1781,20 @@ BEGIN
   next_object:=member.object_id;
  END LOOP;
 END $$;
+
+--> statement-breakpoint
+-- Ordinary tracked-cohort release, with no live transfer controller. Completed
+-- historical plans do not rebind a new operator witness to an unrelated plan.
+-- This releases the LOCAL fence only after every original mutation is closed;
+-- it does not undo the permanent per-key tombstones or infer remote ACKs.
+CREATE FUNCTION freeholder_media_original_drain_releasable(original_drain uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM media_storage_writer_drains drain
+  WHERE drain.id=original_drain AND drain.state='verified' AND drain.verified_at IS NOT NULL AND drain.stop_proof_digest ~ '^[a-f0-9]{64}$' AND drain.released_at IS NULL AND drain.original_processes->'recovery' IS NULL
+   AND drain.executor_identity='linux-systemd:'||(drain.original_processes->>'boot') AND drain.original_processes->>'format'='freeholder.media-writer-drain/v1' AND drain.original_processes->>'unit'='freeholder.service'
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans plan WHERE drain.namespace IN(plan.source_namespace,plan.target_namespace) AND plan.state NOT IN('complete','cancelled'))
+   AND NOT EXISTS(SELECT 1 FROM media_object_writes receipt WHERE receipt.storage_namespace IS NULL OR receipt.storage_namespace=drain.namespace AND (receipt.original_reservation_id IS NULL OR receipt.writer_runtime_id IS NULL OR receipt.state NOT IN('accepted','confirmed_absent') OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE coalesce(caller.physical_receipt_id,caller.object_receipt_id)=receipt.id AND caller.runtime_id=receipt.writer_runtime_id AND caller.runtime_identity->>'instance'=caller.runtime_id::text AND (receipt.writer_finished_at IS NOT NULL AND caller.returned_at IS NOT NULL OR EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=caller.stop_receipt_id AND review.stop_drain_id=drain.id AND (freeholder_media_original_applied_review(caller.id) OR freeholder_media_transfer_applied_put_review(caller.id) OR freeholder_media_original_monotonic_delete_review(caller.id)))))))
+   AND NOT EXISTS(SELECT 1 FROM media_multipart_resources resource WHERE resource.storage_namespace IS NULL OR resource.storage_namespace=drain.namespace AND resource.retired_at IS NULL)
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE caller.namespace=drain.namespace AND caller.kind IN('ordinary_put','ordinary_delete','target_put','source_delete','privacy_delete','privacy_source_delete','multipart_create','multipart_complete','multipart_abort') AND (caller.created_at>drain.created_at OR NOT(caller.state='returned' AND caller.returned_at IS NOT NULL AND caller.result_digest IS NOT NULL OR EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=caller.stop_receipt_id AND review.stop_drain_id=drain.id AND (freeholder_media_original_applied_review(caller.id) OR freeholder_media_transfer_applied_put_review(caller.id) OR freeholder_media_original_monotonic_delete_review(caller.id))))))
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_calls caller ON caller.id=request.call_id WHERE caller.namespace=drain.namespace AND request.descriptor->>'kind' IN('object.put','object.delete','multipart.create','multipart.complete','multipart.abort') AND (request.created_at>drain.created_at OR request.runtime_identity IS DISTINCT FROM caller.runtime_identity OR request.redacted_at IS NULL AND request.descriptor_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(request.descriptor) OR NOT(request.state='returned' AND request.returned_at IS NOT NULL OR EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=request.stop_receipt_id AND review.call_id=caller.id AND review.stop_drain_id=drain.id AND (freeholder_media_original_applied_review(caller.id) OR freeholder_media_transfer_applied_put_review(caller.id) OR freeholder_media_original_monotonic_delete_review(caller.id))))))
+ )
+$$;

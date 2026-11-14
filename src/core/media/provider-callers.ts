@@ -12,6 +12,7 @@ import { mediaObjectWrites } from "./write-schema";
 import { mediaMultipartOperations, mediaMultipartResources } from "./multipart-schema";
 import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
 import { mediaStorageTransferCalls, type StorageTransferRevision } from "./transfer-schema";
+import {assertOriginalKeyCreator} from "./original-key-tombstone";
 import {assertOriginalNamespaceMutation} from "./original-namespace-fence";
 import { requireTransferCapability } from "./transfer-authority";
 import { lockObjectDigest } from "./write-ledger";
@@ -59,6 +60,7 @@ export async function admitOriginalMediaCaller(tx:Tx,input:OriginalMediaCallerAd
   const exact=input.objectReceiptId?await tx.execute<{born:boolean}>(sql`select exists(select 1 from media_object_writes where id=${input.objectReceiptId}::uuid and created_at=transaction_timestamp()) as born`):await tx.execute<{born:boolean}>(sql`select exists(select 1 from media_multipart_operations where id=${input.multipartOperationId}::uuid and created_at=transaction_timestamp()) as born`);
   if(originalRuntime!==mediaWriterRuntimeId||parentState!=="started"||exact[0]?.born!==true)transferConflict("An earlier admission cannot acquire a new writer birth or token. Retain its original recovery debt.");
  }
+ if(["ordinary_put","multipart_create","multipart_complete"].includes(input.kind))await assertOriginalKeyCreator(tx,{namespace,key,role:input.kind as "ordinary_put"|"multipart_create"|"multipart_complete"});
  const id=randomUUID(),requestDigest=transferDigest({id,kind:input.kind,objectReceiptId:input.objectReceiptId??null,multipartOperationId:input.multipartOperationId??null,key,namespace,runtimeIdentity:input.runtimeIdentity,expectedRevision:input.expectedRevision??null});
  await tx.insert(mediaStorageTransferCalls).values({id,objectId:null,objectReceiptId:input.objectReceiptId??null,multipartOperationId:input.multipartOperationId??null,kind:input.kind,namespace,physicalKey:key,requestDigest,callerTokenDigest:transferDigest(input.token),physicalReceiptId,runtimeId:mediaWriterRuntimeId,runtimeIdentity:input.runtimeIdentity,expectedRevision:input.expectedRevision});
  return{id,requestDigest,key,namespace};
