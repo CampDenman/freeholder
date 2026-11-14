@@ -34,3 +34,8 @@ export function intactOriginalMediaMembership(value:unknown,captureDigest:string
 }
 export function originalMediaBirthDebt(value:OriginalMediaErasureMembership):boolean{return Boolean(value.legacyScopes.length||value.legacyReservations.length||value.receipts.some(row=>!row.reservationId)||value.resources.some(row=>!row.reservationId));}
 export function originalMediaReservationCaptured(value:OriginalMediaErasureMembership,reservationId:string):boolean{return value.reservations.some(row=>row.id===reservationId)||value.receipts.some(row=>row.reservationId===reservationId)||value.resources.some(row=>row.reservationId===reservationId)||value.uploads.some(row=>row.reservationId===reservationId||row.legacyAnchor?.reservationId===reservationId);}
+
+/** Empty erasure metadata is a JSON object; arrays/null/scalars retain debt. */
+export function originalUploadMetadataIsEmpty(value:unknown):boolean{
+ return value!==null&&typeof value==="object"&&!Array.isArray(value)&&Object.keys(value).length===0;
+}

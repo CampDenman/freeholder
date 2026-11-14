@@ -15,7 +15,7 @@ import {mediaMultipartResources} from "./multipart-schema";
 import {mediaErasureCohorts,mediaOriginalErasureScopes,type OriginalMediaErasureMembership,type OriginalUploadLegacyAnchor} from "./erasure-schema";
 import {lockOriginalMediaScopeCapture} from "./empty-scope-authority";
 import {transferConflict,transferDigest} from "./transfer-proof";
-import {firstOriginalMediaMembership,intactOriginalMediaMembership,originalMediaBirthDebt,originalMediaReservationCaptured} from "./original-erasure-proof";
+import {originalUploadMetadataIsEmpty,firstOriginalMediaMembership,intactOriginalMediaMembership,originalMediaBirthDebt,originalMediaReservationCaptured} from "./original-erasure-proof";
 import {mediaStorageTransferCalls,mediaStorageTransferReceipts} from "./transfer-schema";
 import {readOriginalMultipartCertificateCoverage} from "./multipart-certificate-coverage";
 export type OriginalMediaScope="media.storageOperations"|"media.multipartOperations";
@@ -127,10 +127,10 @@ export async function originalMediaScopePending(tx:Tx,requestId:string,scope:Ori
   for(const upload of uploads){
    if(resources.some(resource=>resource.uploadId===upload.id&&resource.objectReceiptId===null&&resource.redactedAt))continue;
    const evidence=await(await import("./original-upload-evidence")).readOriginalUploadEvidence(tx,first.membership,upload.id);
-   if(evidence.state!=="proven"||!["new_birth","legacy_anchor"].includes(evidence.basis)||upload.storageKey!==`retained:${evidence.keyDigest}`||upload.providerUploadId!==null||!["complete","aborted"].includes(upload.state)||Object.keys(upload.provenance).length||Object.keys(upload.mediaMetadata).length||upload.failureReason!==null)return true;
+   if(evidence.state!=="proven"||!["new_birth","legacy_anchor"].includes(evidence.basis)||upload.storageKey!==`retained:${evidence.keyDigest}`||upload.providerUploadId!==null||!["complete","aborted"].includes(upload.state)||!originalUploadMetadataIsEmpty(upload.provenance)||!originalUploadMetadataIsEmpty(upload.mediaMetadata)||upload.failureReason!==null)return true;
    const[proof]=await tx.execute<{ready:boolean}>(sql`select freeholder_media_upload_original_erasure_ready(${upload.id}::uuid,${requestId}::uuid) as ready`);if(proof?.ready!==true)return true;
   }
-  for(const resource of resources)if(resource.redactedAt&&resource.objectReceiptId===null){const upload=uploads.find(row=>row.id===resource.uploadId);if(!upload||upload.storageKey!==`retained:${resource.keyDigest}`||upload.providerUploadId!==null||upload.state!=="aborted"||Object.keys(upload.provenance).length||Object.keys(upload.mediaMetadata).length||upload.failureReason!==null)return true;}
+  for(const resource of resources)if(resource.redactedAt&&resource.objectReceiptId===null){const upload=uploads.find(row=>row.id===resource.uploadId);if(!upload||upload.storageKey!==`retained:${resource.keyDigest}`||upload.providerUploadId!==null||upload.state!=="aborted"||!originalUploadMetadataIsEmpty(upload.provenance)||!originalUploadMetadataIsEmpty(upload.mediaMetadata)||upload.failureReason!==null)return true;}
  }
  return(await import("./original-provider-privacy")).originalProviderEvidencePending(tx,{receiptIds:first.receiptIds,resourceIds:first.resourceIds});
 }

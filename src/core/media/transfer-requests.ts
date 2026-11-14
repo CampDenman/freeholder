@@ -8,7 +8,6 @@ import type {TransferRequestDescriptor,TransferRequestObservation,TransferReques
 import {db} from "@/core/db";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {actorString,type Actor,type Tx} from "@/core/service";
-import {readRetainedOriginalMultipartIdentity} from "./multipart-retained-identity";
 import {projectOriginalMultipartSessionObservation,reconcileOriginalMultipartPositivePointer,originalSessionObservationDecision} from "./multipart-session-observation";
 import {assertMediaActorLive} from "./upload-ownership";
 import {mediaObjectWrites} from "./write-schema";

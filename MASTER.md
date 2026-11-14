@@ -3564,6 +3564,18 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Media source type correction2026-11-14 (C1.12/C11.08): V92 fulltypes stops
+before lint/DB on unknown JSON metadata passed to Object.keys and one duplicate
+retained-identity import. A shared pure empty-record predicate now requires a
+real nonNULL nonarray object, agreeing with independent SQL{} checks; valid{}
+behavior stays, malformed metadata retains debt. No cast, HMAC/first-scope
+change, ownership/physical waiver or capability. Duplicate import removed only,
+combined required reader/candidate import retained. Exact complete source
+reversals recorded; V92 preserved. Full fresh source/schema/SDK/native/provider
+qualification remains required; no C closure/stable. See
+`deploy/media-unknown-metadata-root-continuation.manifest.json`.
+
+
 Media identity/quota ROOT assembly2026-11-14 (C1.12/C11.08/C10.32/C1.08):
 frozen compact+72bb genuine fixture, ordinary361, legacy1b8 and quotae3f source
 now follow qualified auxiliaryb40. Full current MASTER plus only32+41newleaflines
