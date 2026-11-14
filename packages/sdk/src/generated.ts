@@ -6181,7 +6181,7 @@ export interface ServiceCatalog {
   };
   "media.uploadStatus": {
     input: { id: string };
-    output: { id: string; strategy: "direct_multipart" | "proxy"; state: "created" | "uploading" | "uploaded" | "processing" | "complete" | "failed" | "aborted" | "expired"; filename: string; contentType: string; expectedBytes: number; partSize: number | null; partCount: number | null; parts: { partNumber: number; etag: string; bytes?: number }[]; assetId: string | null; failureReason: string | null; expiresAt: string };
+    output: { id: string; strategy: "direct_multipart" | "proxy"; state: "created" | "uploading" | "uploaded" | "processing" | "complete" | "failed" | "aborted" | "expired"; filename: string; contentType: string; expectedBytes: number; partSize: number | null; partCount: number | null; parts: { partNumber: number; etag: string; bytes?: number; checksumSha256?: string }[]; assetId: string | null; failureReason: string | null; expiresAt: string };
   };
   "media.usage": {
     input: { id: string };
