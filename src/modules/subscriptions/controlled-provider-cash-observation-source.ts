@@ -13,7 +13,7 @@ import { controlledProviderJournal } from "./controlled-provider-proof";
 import { assertControlledOriginalConsent } from "./controlled-provider-original-consent";
 import { authenticatedControlledQuote } from "./controlled-provider-quote-proof";
 import { controlledRawFinancialReview } from "./controlled-provider-raw-financial-review";
-import { CONTROLLED_COLLECTION_PROTOCOL,CONTROLLED_COLLECTION_POLICY } from "./controlled-provider-collection-contract";
+import { CONTROLLED_COLLECTION_PROTOCOL,CONTROLLED_COLLECTION_POLICY } from "./controlled-provider-collection-protocol";
 const sha=z.string().regex(/^[a-f0-9]{64}$/),reference=z.string().min(1).max(200);
 export const controlledCashObservationProof=z.object({
  protocol:z.literal(CONTROLLED_COLLECTION_PROTOCOL),collectionId:z.uuid(),quoteId:z.uuid(),resourceId:z.uuid(),subscriptionId:z.uuid(),invoiceId:z.uuid(),receiptId:z.uuid(),observationId:z.uuid(),

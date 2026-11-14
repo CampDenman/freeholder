@@ -3564,6 +3564,16 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled protocol initialization correction 2026-11-13 (C12.38/C1.08):
+source v49 passes full types and affected lint, then the unchanged positive
+inspection ancestry control exposes an initialization cycle: the protocol literal
+was captured as undefined before its importing contract finished loading. An
+independent diagnostic reproduces that exact invalid-value issue. Both unchanged
+protocol/policy constants now live in a dependency-free leaf; all runtime users
+import it directly and the existing contract reexports preserve its public ABI.
+The original positive and negative assertions remain unchanged. Renewed source,
+schema/native/provider qualification and stable sign-off remain pending.
+
 Controlled original-receipt routing source checkpoint 2026-11-13
 (C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
 canonical receipt's real controlled-origin child, authenticates its genuine
