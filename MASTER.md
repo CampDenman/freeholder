@@ -3626,6 +3626,17 @@ closure. Root qualification and full late-evidence/minimization/catch-up,
 issued-authority terminal, quota/capture/cutover/provider acceptance remain open.
 See `deploy/media-multipart-retirement-certificate-source-2026-11-14.md`.
 
+Source-only continuation, 2026-11-14 (C1.12/C11.08): exact-admission certificate
+catch-up now queues the fixed safe proof through the original retirement TX's
+existing outbox primitive. Owner and actual worker use the same private system
+service; full proof/holds/frontier and original queue/claim/runtime identity
+precede dedup. Only resource retirement uses DB transaction time; actual original
+ACK/FIN remain unchanged. Five structural and six genuine service/TCP/worker
+controls are prepared, all UNRUN. No schema, flag, raw minimization, erasure
+acknowledgement or C closure. Consumers/late-identity/re-review, quota/capture/
+cutover and genuine provider acceptance remain required before publication.
+See `deploy/media-multipart-retirement-catchup-source-2026-11-14.md`.
+
 ### 43.2 Definition of done for every feature
 
 Every feature checkbox below inherits this checklist. If a line does not

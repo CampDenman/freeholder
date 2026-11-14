@@ -3,7 +3,7 @@
 // Fresh human shared phases only. Provider I/O never occurs in a transaction;
 // actual first ACK/FIN/results of the unknown original are never replaced.
 import {randomUUID} from "node:crypto";
-import {and,eq} from "drizzle-orm";
+import {and,eq,sql} from "drizzle-orm";
 import {z} from "zod";
 import {actorString,type Actor} from "@/core/service";
 import type {AccountedTransferStore,TransferInventoryPage} from "../../../scripts/media-transfer.mjs";
@@ -53,7 +53,7 @@ const apply=defineMediaService({name:"media.applyOriginalMultipartCompleteReview
   await ctx.tx.update(calls).set({state:"stopped",stoppedAt:caller.stoppedAt??now,stopReceiptId:reviewId,updatedAt:now}).where(eq(calls.id,caller.id));
   // No ACK, return, runtime, nonce or actual/missing FIN is supplied by review.
   await ctx.tx.update(operations).set({state:"accepted",verifiedAt:now,reviewedAt:now,reviewedBy:actorString(ctx.actor),evidenceDigest,updatedAt:now}).where(eq(operations.id,operation.id));
-  await ctx.tx.update(resources).set({state:"aborted",retiredAt:now,reviewedAt:now,reviewedBy:actorString(ctx.actor),evidenceDigest,updatedAt:now}).where(eq(resources.id,resource.id));
+  await ctx.tx.update(resources).set({state:"aborted",retiredAt:sql`transaction_timestamp()`,reviewedAt:now,reviewedBy:actorString(ctx.actor),evidenceDigest,updatedAt:now}).where(eq(resources.id,resource.id));
   await ctx.tx.delete(mediaObjects).where(and(eq(mediaObjects.reservationId,resource.originalReservationId!),eq(mediaObjects.key,resource.key),eq(mediaObjects.uploadId,resource.uploadId),eq(mediaObjects.state,"pending")));const admission=await captureOriginalMultipartRetirementAdmission(ctx.tx,resource.id,resource.uploadId,resource.keyDigest,operation.id,inventory.id);await ctx.callAsSystem(sealOriginalMultipartRetirement,admission);ctx.setSubject("media_multipart_resource",resource.id);return{ok:true as const,needsCleanup:true as const};
  }
  if(original.kind==="create"){

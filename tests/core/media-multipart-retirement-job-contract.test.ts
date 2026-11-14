@@ -1,0 +1,17 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// PREPARED / UNRUN. Synthetic scope units only; genuine pg-boss execution is
+// separately exercised by the native service/TCP/worker controls.
+import {describe,expect,it} from "vitest";
+import type {JobExecutionContext} from "@/core/jobs";
+import {actualWorkerExecution,requireActualWorkerExecution,withActualWorkerExecution} from "@/core/jobs/execution-scope";
+import {originalMultipartRetirementAdmission,originalMultipartRetirementJobKey,ORIGINAL_MULTIPART_RETIREMENT_JOB} from "@/core/media/multipart-retirement-admission";
+const id="00000000-0000-4000-8000-000000000001",admission={resourceId:id,uploadId:id,keyDigest:"a".repeat(64),operationId:id,inventoryId:id,proofDigest:"b".repeat(64)};
+function scope():JobExecutionContext{return{id,name:ORIGINAL_MULTIPART_RETIREMENT_JOB,attempt:1,signal:new AbortController().signal,leaseSeconds:60,heartbeat:async()=>true,isCancelled:async()=>false,throwIfCancelled:async()=>{}};}
+describe("original retirement job payload and installed execution identity",()=>{
+ it("keeps the exact safe fixed admission and rejects raw provider fields or missing full frontier",()=>{expect(originalMultipartRetirementAdmission.parse(admission)).toEqual(admission);expect(()=>originalMultipartRetirementAdmission.parse({...admission,providerUploadId:"private-original-session"})).toThrow();expect(()=>originalMultipartRetirementAdmission.parse({...admission,key:"private/original"})).toThrow();const{proofDigest,...missing}=admission;expect(proofDigest).toBe("b".repeat(64));expect(()=>originalMultipartRetirementAdmission.parse(missing)).toThrow();});
+ it("distinguishes full captured proof/frontier and original operation in the durable key",()=>{const key=originalMultipartRetirementJobKey(admission);expect(key.length).toBeLessThanOrEqual(200);expect(originalMultipartRetirementJobKey({...admission,proofDigest:"c".repeat(64)})).not.toBe(key);expect(originalMultipartRetirementJobKey({...admission,operationId:"00000000-0000-4000-8000-000000000002"})).not.toBe(key);});
+ it("refuses an uninstalled caller-supplied lookalike and an equal-valued clone inside a synthetic installed scope",async()=>{const context=scope();expect(actualWorkerExecution()).toBeUndefined();await expect(requireActualWorkerExecution(context)).rejects.toThrow("actual installed");await withActualWorkerExecution(context,async()=>{expect(actualWorkerExecution()).toBe(context);await expect(requireActualWorkerExecution({...context})).rejects.toThrow("actual installed");await requireActualWorkerExecution(context);});expect(actualWorkerExecution()).toBeUndefined();});
+ it("does not let detached old scope work reuse the finished execution",async()=>{const context=scope();let release:()=>void=()=>{},detached:Promise<void>=Promise.resolve();const gate=new Promise<void>(resolve=>{release=resolve;});await withActualWorkerExecution(context,async()=>{detached=(async()=>{await gate;await requireActualWorkerExecution(context);})();});const rejected=expect(detached).rejects.toThrow("execution ended");release();await rejected;});
+ it("retains actual installed cancellation instead of substituting ID/name or a supplied boolean",async()=>{const context=scope();context.throwIfCancelled=async()=>{throw Error("synthetic actual scope cancelled");};await withActualWorkerExecution(context,async()=>{await expect(requireActualWorkerExecution(context)).rejects.toThrow("scope cancelled");});});
+});

@@ -10,9 +10,10 @@ import {lockTransferInventory} from "./transfer-authority";
 import {mediaStorageTransferReviews as reviews} from "./transfer-schema";
 import {requireOriginalMultipartRetirementProof,type OriginalMultipartRetirementProof} from "./multipart-retirement-certificate-proof";
 import {transferConflict,transferDigest} from "./transfer-proof";
+import {originalMultipartRetirementAdmission,type OriginalMultipartRetirementAdmission} from "./multipart-retirement-admission";
+import {queueOriginalMultipartRetirement,assertOriginalMultipartRetirementJob} from "./multipart-retirement-job";
+export {originalMultipartRetirementAdmission,type OriginalMultipartRetirementAdmission} from "./multipart-retirement-admission";
 const digest=z.string().regex(/^[a-f0-9]{64}$/);
-export const originalMultipartRetirementAdmission=z.object({resourceId:z.uuid(),uploadId:z.uuid(),keyDigest:digest,operationId:z.uuid(),inventoryId:z.uuid(),proofDigest:digest}).strict();
-export type OriginalMultipartRetirementAdmission=z.infer<typeof originalMultipartRetirementAdmission>;
 async function currentProof(tx:Tx,operationId:string,inventoryId:string):Promise<OriginalMultipartRetirementProof>{
  await lockTransferInventory(tx);
  const[row]=await tx.execute<{proof:unknown}>(sql`select freeholder_media_multipart_retirement_payload(${operationId}::uuid,${inventoryId}::uuid) as proof`);
@@ -23,7 +24,7 @@ async function currentProof(tx:Tx,operationId:string,inventoryId:string):Promise
 export async function captureOriginalMultipartRetirementAdmission(tx:Tx,resourceId:string,uploadId:string,keyDigest:string,operationId:string,inventoryId:string):Promise<OriginalMultipartRetirementAdmission>{
  const proof=await currentProof(tx,operationId,inventoryId);
  if(proof.resource.id!==resourceId||proof.resource.uploadId!==uploadId||proof.resource.keyDigest!==keyDigest||proof.retirement.operationId!==operationId||proof.retirement.inventoryId!==inventoryId)transferConflict();
- return{resourceId,uploadId,keyDigest,operationId,inventoryId,proofDigest:transferDigest(proof)};
+ const admission={resourceId,uploadId,keyDigest,operationId,inventoryId,proofDigest:transferDigest(proof)};await queueOriginalMultipartRetirement(tx,admission);return admission;
 }
 export const sealOriginalMultipartRetirement=defineMediaService({
  name:"media.sealOriginalMultipartRetirement",summary:"Seal independently derived original idle-upload retirement evidence without changing its first receipts.",kind:"mutation",permission:"system",external:false,agentCallable:false,
@@ -33,6 +34,7 @@ export const sealOriginalMultipartRetirement=defineMediaService({
   // Revalidate the entire frontier BEFORE dedup. A new hold, caller or fact is
   // debt even when the old historical certificate is still immutable/intact.
   if(proof.resource.id!==input.resourceId||proof.resource.uploadId!==input.uploadId||proof.resource.keyDigest!==input.keyDigest||proofDigest!==input.proofDigest)transferConflict("The original retirement evidence changed. Preserve its first certificate and review the new evidence.");
+  await assertOriginalMultipartRetirementJob(ctx.tx,input);
   const[existing]=await ctx.tx.select().from(reviews).where(and(eq(reviews.multipartOperationId,input.operationId),eq(reviews.providerEvidenceDigest,proofDigest),isNotNull(reviews.retirementProof))).limit(1);
   if(existing){const[current]=await ctx.tx.execute<{current_proof:boolean}>(sql`select freeholder_media_multipart_retirement_certificate_current(${existing.id}::uuid) as current_proof`);if(current?.current_proof!==true||transferDigest(existing.retirementProof)!==proofDigest)transferConflict();ctx.setSubject("media_multipart_resource",input.resourceId);return{id:existing.id,proofDigest};}
   const caller=proof.callers.find(row=>row.id===proof.retirement.callerId);if(!caller)transferConflict();
