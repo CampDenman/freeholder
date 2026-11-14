@@ -3565,6 +3565,25 @@ open the admin until Thursday still needs to know about Monday.
 ## 43. Product Completion Plan — the live checklist
 
 
+Auxiliary closure/owner continuation2026-11-14 (C12.38/C1.08/C11.10): exact
+343851b1 sourceV105 fulltypes/lint/1581actual/251files/540explicitDBskips PASS;
+freshV68 ordinary86/strict161models/365guards/417fullfunctions/4144queries
+and SDK46 actual8 PASS. ORIGINAL auxiliary positiveV5 passes own pre-POST,
+then FAIL143.06s in closure INSERT: actual42702 local evidence variable collides
+with the table evidence column. FailedV68/all596/j86/sequence retained. NEW
+full closure successor renames ONLY its18 local-variable references; JSON keys,
+column fields and every predicate stay exact. New pre-POST successor retains
+both already-supported genuine payment OR original charge-receipt owners using
+actual target payment/route/invoice FKs. All nonce/parent/terminal/caller/full-PG
+checks remain. Complete1,020,501-byte predecessor SQL preserved; three whole
+successors,0newfunctions/models/columns/triggers/services. New receipt-owner
+companion preserves ALL original three180s oracles with genuine receipt/proof/
+original-observation ancestry; all three PREPARED/UNRUN. Fresh qualification and
+all original money/provider/security/full-spec/stable gates remain required.
+See `deploy/atomic-auxiliary-fee-closure-owner85.manifest.json`.
+
+
+
 Original fee-native checkpoint and own pre-POST repair2026-11-14
 (C12.38/C1.08/C11.10): exact53cfd sourceV103 fulltypes/lint and1575actual/
 250wholefiles/540explicit DB skips PASS. FreshV62/V63 ordinary86/strict161/

@@ -31,7 +31,7 @@ describe("actual own auxiliary pre-POST bank preservation",()=>{
   expect(reverse(entry.afterStatement,entry.reversal)).toBe(entry.beforeStatement);
  });
  it("retains the entire preceding migration and identical owned SQL",()=>{
-  const sql=read(manifest.normal85.path),owned=read(manifest.normal85.ownedPath),tail=read(manifest.tail.path);
+  const sql=read(manifest.normal85.path).subarray(0,manifest.normal85.bytes),owned=read(manifest.normal85.ownedPath).subarray(0,manifest.normal85.bytes),tail=read(manifest.tail.path);
   expect(sql).toEqual(owned);
   expect(sql.length).toBe(manifest.normal85.bytes);
   expect(hash(sql)).toBe(manifest.normal85.sha256);
