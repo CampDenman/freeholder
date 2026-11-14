@@ -12,8 +12,8 @@ import {originalCashEvidenceKeys} from "./original-cash-recovery-store";
 import {merchantTaxDigest} from "./merchant-tax-store";
 import type {AtomicCreditFeePhysicalEntry} from "./atomic-credit-fee-partition-contract";
 function refuse():never{throw new ServiceError("conflict","Restore every actual credit source funding, issued note/line, reservation/application/release and fee assignment; incomplete or foreign ancestry cannot supply a new fee capacity.");}
-export async function readAtomicCreditFeeAncestry(tx:Tx,paymentId:string){
- const[payment]=await tx.select().from(payments).where(eq(payments.id,paymentId));if(!payment||payment.status!=="succeeded"||payment.refundedMinor!==0)refuse();
+async function readAncestry(tx:Tx,paymentId:string,requireUnreturned:boolean){
+ const[payment]=await tx.select().from(payments).where(eq(payments.id,paymentId));if(!payment||payment.status!=="succeeded"||requireUnreturned&&payment.refundedMinor!==0)refuse();
  const funding=await tx.select().from(invoiceCreditFunding).where(eq(invoiceCreditFunding.sourcePaymentId,paymentId)).limit(5001),fundingIds=funding.map(row=>row.id);
  const reservations=fundingIds.length?await tx.select().from(invoiceCreditReservations).where(inArray(invoiceCreditReservations.fundingId,fundingIds)).limit(5001):[],reservationIds=reservations.map(row=>row.id);
  const applications=reservationIds.length?await tx.select().from(invoiceCreditApplications).where(inArray(invoiceCreditApplications.reservationId,reservationIds)).limit(5001):[];
@@ -48,3 +48,8 @@ export async function readAtomicCreditFeeAncestry(tx:Tx,paymentId:string){
  for(const child of partitions){const parent=funding.find(row=>row.id===child.fundingId),entry=physical.find(row=>row.table==="invoice_credit_funding"&&row.id===child.fundingId);if(!parent||!entry||child.parentFingerprint!==entry.fingerprint||child.sourcePaymentId!==parent.sourcePaymentId||child.sourceApplicationId!==parent.sourceApplicationId||child.sourceInvoiceId!==parent.sourceInvoiceId||child.creditNoteId!==parent.creditNoteId||child.creditNoteLineId!==parent.creditNoteLineId||child.economics.plan.takePrincipalMinor!==parent.amountMinor||child.economics.plan.takeAssignedFeeMinor!==parent.feeObligationMinor||child.economics.plan.takeProvenCollectedMinor!==parent.feeProvenCollectedMinor||child.economics.feeEvidenceDigest!==parent.feeEvidenceDigest)refuse();}
  return{payment,originalInvoice:original,funding,reservations,applications,releases,assignments,notes,lines,originalLines,invoices:invoiceRows,cashAssignments,duties,remittances,partitions,physical,revision:merchantTaxDigest(physical)};
 }
+/** Actual new funding still requires its OWN unreturned source. */
+export async function readAtomicCreditFeeAncestry(tx:Tx,paymentId:string){return readAncestry(tx,paymentId,true);}
+/** Observation only: preserve returned siblings and all their old loans in
+ * the whole-invoice context. This companion never supplies funding capacity. */
+export async function readAtomicCreditFeeDispositionAncestry(tx:Tx,paymentId:string){return{...await readAncestry(tx,paymentId,false),suppliesFundingAuthority:false as const};}
