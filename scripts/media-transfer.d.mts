@@ -50,7 +50,7 @@ export interface TransferRequestDescriptor {
 export interface OriginalProviderRequestProof {id:string;tokenDigest:string}
 export interface TransferRequestIdentity {id:string;token:string}
 export interface TransferRequestObservation {
- stage:"response"|"metadata"|"body"|"accepted"|"absence"|"inventory"|"configuration"|"not_attempted"|"inventory_raw"|"session";
+ stage:"response"|"metadata"|"body"|"accepted"|"absence"|"inventory"|"configuration"|"not_attempted"|"inventory_raw"|"session"|"response_body";
  status:number|null;uploadId?:string;requestProof?:OriginalProviderRequestProof;detailDigest?:string;revision?:TransferRevision;sha256?:string;bytes?:number;count?:number;
 }
 export type TransferRequestObserver=<T>(descriptor:TransferRequestDescriptor,operation:(notify:(facts:TransferRequestObservation)=>Promise<void>,identity?:TransferRequestIdentity)=>Promise<T>)=>Promise<T>;

@@ -82,7 +82,7 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
   if(!request||request.callId!==call.id||request.tokenDigest!==transferDigest(token)||request.observationCount>=16)transferConflict();
   if(facts.revision&&(facts.revision.namespace!==call.namespace||objectKeyDigest(facts.revision.key)!==request.keyDigest))transferConflict();
   const late=request.state!=="admitted"||call.state!=="admitted";
-  if(late&&!["accepted","metadata","body","response","session"].includes(facts.stage))transferConflict("Only an actual late positive original provider fact can supersede a retired request.");
+  if(late&&!["accepted","metadata","body","response","session","response_body"].includes(facts.stage))transferConflict("Only an actual late positive original provider fact can supersede a retired request.");
   if(facts.requestProof&&request.descriptor.kind==="object.put"&&(facts.requestProof.id!==request.id||facts.requestProof.tokenDigest!==request.tokenDigest))transferConflict("The actual original upload returned another request identity.");
   if(facts.uploadId){
    if(typeof facts.uploadId!=="string"||!facts.uploadId||facts.uploadId.length>4096||/[\u0000-\u001f]/.test(facts.uploadId)||!request.descriptor.kind.startsWith("multipart.")||request.descriptor.kind!=="multipart.create"&&facts.uploadId!==request.descriptor.uploadId)transferConflict("The provider fact names a different original session.");

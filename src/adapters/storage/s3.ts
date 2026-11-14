@@ -105,7 +105,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     return target;
   };
 
-  const accountedMultipart=(observer:TransferRequestObserver)=>createS3MultipartProtocol({client,binding:{kind:"s3",namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer});
+  const accountedMultipart=(observer:TransferRequestObserver)=>createS3MultipartProtocol({client,binding:{kind:"s3",namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer,retainXmlEvidence:true});
   async function inspectMultipart(key: string, uploadId: string, observation?:MultipartObservation): Promise<MultipartInspection> {
     if(observation?.request)return accountedMultipart(observation.request).inspect(key,uploadId);
     const parts: MultipartPart[] = [];

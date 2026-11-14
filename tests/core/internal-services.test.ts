@@ -432,6 +432,9 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // C1.12/C11.08: explicit diagnostic mutations retain the real caller and remain private.
+  "platform.authorizeDoctorProbe",
+  "platform.recordDoctorProbe",
   // C12.38: authenticated parent coverage; internal queries do not admit positive collection.
   "invoicing.controlledProviderFinancialReadiness",
   // C1.08/C12.38: reviewed credit/card and controlled-provider phases.

@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: explicit physical requests; no hidden resumable session/retry.
 import {createHash} from "node:crypto";
-import {XMLParser,XMLValidator} from "fast-xml-parser";
-const MAX_PAGE=250,MAX_XML=2*1024*1024;
+import {readOriginalStorageXml} from "./media-storage-xml.mjs";
+const MAX_PAGE=250;
 const digest=value=>createHash("sha256").update(typeof value==="string"||value instanceof Uint8Array?value:JSON.stringify(value)).digest("hex");
 const httpStatus=value=>/^([1-5][0-9]{2})$/.test(String(value))?Number(value):null;
 const failure=()=>{throw Error("The exact original provider inventory or request result is incomplete.");};
 function objectKey(key){if(typeof key!=="string"||!key||key.length>2048||/[\u0000-\u001f\u007f]/.test(key)||key.split("/").some(part=>part==="."||part===".."))failure();return key;}
 function size(value){if(typeof value!=="string"||! /^(0|[1-9][0-9]*)$/.test(value)||BigInt(value)>BigInt(Number.MAX_SAFE_INTEGER))failure();return Number(value);}
 function opaque(value){if(typeof value!=="string"||!value||value.length>4096||/[\u0000-\u001f\u007f]/.test(value))failure();return value;}
-function entities(value){if(typeof value!=="string")failure();const decoded=value.replace(/&(amp|lt|gt|quot|apos);/g,(_all,key)=>({amp:"&",lt:"<",gt:">",quot:'"',apos:"'"})[key]);if(/&(?:#|[a-zA-Z]+;)/.test(decoded))failure();return decoded;}
+function entities(value){if(typeof value!=="string")failure();return value;}
 function revision(binding,key,value,versionId){
  objectKey(key);if(binding.kind!=="s3"&&versionId!==undefined)failure();if(typeof value!=="string"||(binding.kind==="s3"?!/^"[\x21\x23-\x7e\x80-\xff]+"$/.test(value):!/^[1-9][0-9]{0,19}$/.test(value)))failure();
  return{kind:binding.kind==="s3"?"etag":"generation",key,namespace:binding.namespace,value,...(versionId!==undefined?{versionId:opaque(versionId)}:{})};
@@ -24,12 +24,7 @@ function originalRequestProof(id,token){
 function originalRequestHeaders(identity){return identity?{"x-amz-meta-freeholder-original-request":identity.id,"x-amz-meta-freeholder-original-token":identity.token}:{};}
 async function observed(observer,descriptor,operation){return observer?observer(descriptor,operation):operation(async()=>{});}
 async function xml(response,notify){
- if(!response.ok||!response.body)failure();const reader=response.body.getReader(),chunks=[];let bytes=0;
- try{for(;;){const value=await reader.read();if(value.done)break;bytes+=value.value.byteLength;if(bytes>MAX_XML)failure();chunks.push(value.value);}}finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
- const wire=Buffer.concat(chunks);if(notify)await notify({stage:"inventory_raw",status:response.status,detailDigest:digest(wire),bytes:wire.byteLength});
- const source=new TextDecoder("utf-8",{fatal:true}).decode(wire);if(/<!DOCTYPE|<!ENTITY|<!\[CDATA\[/i.test(source)||XMLValidator.validate(source)!==true)failure();
- const parsed=new XMLParser({ignoreAttributes:true,parseTagValue:false,ignoreDeclaration:true,processEntities:false}).parse(source);
- if(!parsed||typeof parsed!=="object"||Array.isArray(parsed)||Object.keys(parsed).length!==1)failure();return parsed;
+ return readOriginalStorageXml(response,notify,{stage:"inventory_raw",requireSuccess:true});
 }
 function root(document,name,bucket){const value=document[name];if(!value||typeof value!=="object"||Array.isArray(value)||entities(value.Name??value.Bucket)!==bucket)failure();return value;}
 function rows(value){return value===undefined?[]:Array.isArray(value)?value:[value];}
