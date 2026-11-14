@@ -6338,3 +6338,116 @@ BEGIN
  END IF;
  RETURN NEW;
 END $$;
+
+--> statement-breakpoint
+-- C1.12/C10.32/C11.08: accounting an actual accepted payload does not prove
+-- logical caller FIN or remote creator closure. Preserve ACK -> quota -> FIN.
+CREATE FUNCTION freeholder_media_transfer_quota_settlement_proven(original_call uuid,original_token uuid,original_bytes bigint) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_storage_transfer_calls caller JOIN media_object_writes receipt ON receipt.id=coalesce(caller.physical_receipt_id,caller.object_receipt_id)
+  WHERE caller.id=original_call AND original_token IS NOT NULL AND caller.quota_token=original_token AND caller.kind IN ('ordinary_put','target_put')
+   AND receipt.operation_kind='put' AND receipt.original_reservation_id IS NOT NULL AND receipt.writer_runtime_id=caller.runtime_id AND receipt.storage_namespace=caller.namespace AND receipt.bytes=original_bytes AND original_bytes BETWEEN 0 AND 9007199254740991
+   AND receipt.sha256 ~ '^[a-f0-9]{64}$' AND receipt.deleted_at IS NULL AND receipt.redacted_at IS NULL
+   AND (SELECT count(*) FROM media_storage_transfer_calls owner WHERE owner.namespace=caller.namespace AND owner.quota_token=original_token)=1
+   AND (SELECT count(*) FROM media_storage_transfer_requests WHERE call_id=caller.id AND descriptor->>'kind'='object.put')=1
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND (request.descriptor->>'kind'<>'object.put' OR request.runtime_identity IS DISTINCT FROM caller.runtime_identity OR request.key_digest IS DISTINCT FROM receipt.key_digest OR request.descriptor_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(request.descriptor) OR request.descriptor->'createOnly' IS DISTINCT FROM 'true'::jsonb OR request.descriptor->'bytes' IS DISTINCT FROM to_jsonb(receipt.bytes) OR request.descriptor->>'sha256' IS DISTINCT FROM receipt.sha256 OR request.descriptor->'binding' IS DISTINCT FROM jsonb_build_object('kind',receipt.storage_kind,'namespace',receipt.storage_namespace,'location',receipt.storage_location)))
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=caller.id AND (fact.facts_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(fact.facts) OR fact.facts->>'stage'='metadata' AND (fact.facts ? 'revision' AND receipt.provider_revision_digest IS NOT NULL AND freeholder_media_transfer_fact_digest(fact.facts->'revision') IS DISTINCT FROM receipt.provider_revision_digest OR fact.facts ? 'bytes' AND fact.facts->'bytes' IS DISTINCT FROM to_jsonb(receipt.bytes))))
+   AND (
+    -- The physical request really returned, while caller.returned_at may
+    -- still be NULL. No first outer FIN is filled or inferred here.
+    caller.state IN ('admitted','returned') AND caller.observed_accepted_at IS NOT NULL
+     AND EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND request.state='returned' AND request.returned_at IS NOT NULL
+      AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='accepted')
+      AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='metadata' AND fact.facts->'revision'->>'namespace'=caller.namespace AND encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(fact.facts->'revision'->>'key','UTF8')),'hex')=receipt.key_digest AND freeholder_media_transfer_fact_digest(fact.facts->'revision')=receipt.provider_revision_digest))
+    OR EXISTS(SELECT 1 FROM media_storage_provider_inventories inventory JOIN media_storage_transfer_calls proof ON proof.id=inventory.proof_call_id
+     WHERE inventory.object_receipt_id=receipt.id AND inventory.anchor_call_id=caller.id AND inventory.purpose='recovery' AND inventory.namespace=caller.namespace AND inventory.binding=jsonb_build_object('kind',receipt.storage_kind,'namespace',receipt.storage_namespace,'location',receipt.storage_location)
+      AND proof.result_sha256=receipt.sha256 AND proof.result_bytes=receipt.bytes AND proof.result_absent IS NULL AND freeholder_media_original_positive_inventory_complete(inventory.id))
+   )
+ )
+$$;
+--> statement-breakpoint
+-- Original physical-role authority is derived from actual rows. A token,
+-- flag, same key, old review or current 404 alone cannot reduce a charge.
+CREATE FUNCTION freeholder_media_transfer_quota_release_proven(original_object uuid,original_call uuid,original_token uuid,original_side text) RETURNS boolean LANGUAGE plpgsql STABLE AS $$
+DECLARE object media_storage_transfer_objects; plan media_storage_transfer_plans; caller media_storage_transfer_calls; receipt media_object_writes; current_target media_object_writes; quota_namespace text; original_key_digest text; original_binding jsonb; subject_ids uuid[];
+BEGIN
+ IF original_token IS NULL OR original_side IS NULL OR original_side NOT IN ('source','target') THEN RETURN false; END IF;
+ SELECT * INTO object FROM media_storage_transfer_objects WHERE id=original_object;
+ SELECT * INTO plan FROM media_storage_transfer_plans WHERE id=object.plan_id;
+ SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=original_call;
+ SELECT * INTO receipt FROM media_object_writes WHERE id=coalesce(caller.physical_receipt_id,caller.object_receipt_id);
+ IF object.id IS NULL OR plan.id IS NULL OR caller.id IS NULL OR receipt.id IS NULL OR caller.quota_token IS DISTINCT FROM original_token OR caller.kind NOT IN ('ordinary_put','target_put') OR receipt.operation_kind<>'put' OR receipt.original_reservation_id IS NULL OR receipt.writer_runtime_id IS DISTINCT FROM caller.runtime_id OR receipt.sha256 IS DISTINCT FROM object.sha256 OR receipt.bytes IS DISTINCT FROM object.bytes THEN RETURN false; END IF;
+ IF original_side='source' THEN quota_namespace:=plan.source_namespace;original_key_digest:=object.key_digest;original_binding:=plan.original_source;
+ ELSE quota_namespace:=plan.target_namespace;original_key_digest:=object.target_key_digest;original_binding:=plan.original_target; END IF;
+ IF caller.namespace IS DISTINCT FROM quota_namespace OR receipt.storage_namespace IS DISTINCT FROM quota_namespace OR receipt.key_digest IS DISTINCT FROM original_key_digest OR original_binding IS DISTINCT FROM jsonb_build_object('kind',receipt.storage_kind,'namespace',receipt.storage_namespace,'location',receipt.storage_location)
+  OR (SELECT count(*) FROM media_storage_transfer_calls owner WHERE owner.namespace=quota_namespace AND owner.quota_token=original_token)<>1
+  OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=caller.id AND (request.runtime_identity IS DISTINCT FROM caller.runtime_identity OR request.key_digest IS DISTINCT FROM original_key_digest OR fact.facts_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(fact.facts) OR fact.facts->>'stage'='metadata' AND fact.facts ? 'revision' AND receipt.provider_revision_digest IS NOT NULL AND freeholder_media_transfer_fact_digest(fact.facts->'revision') IS DISTINCT FROM receipt.provider_revision_digest)) THEN RETURN false; END IF;
+ SELECT array_agg(contact_id) INTO subject_ids FROM media_storage_transfer_subjects WHERE object_id=object.id;
+ IF EXISTS(SELECT 1 FROM privacy_retention_exceptions hold JOIN data_requests privacy ON privacy.id=hold.data_request_id WHERE hold.scope IN ('media.storageOperations','media.multipartOperations','media.storageTransfers','members') AND (hold.expires_at IS NULL OR hold.expires_at>clock_timestamp()) AND (receipt.contact_id IS NULL OR privacy.contact_id=receipt.contact_id OR privacy.contact_id=ANY(subject_ids))) THEN RETURN false; END IF;
+ IF original_side='target' THEN
+  SELECT * INTO current_target FROM media_object_writes WHERE id=object.target_receipt_id;
+  IF caller.kind<>'target_put' OR caller.object_id IS DISTINCT FROM object.id OR current_target.id IS NULL OR current_target.original_reservation_id IS DISTINCT FROM receipt.original_reservation_id THEN RETURN false; END IF;
+  -- Each former retry token is checked on its OWN genuine immutable FIN and
+  -- all real physical frames. A new pending token cannot borrow that proof.
+  IF caller.state='returned' AND caller.returned_at IS NOT NULL AND caller.observed_accepted_at IS NULL AND caller.result_digest=freeholder_media_transfer_fact_digest(jsonb_build_object('notAttempted',true)) AND receipt.writer_finished_at=caller.returned_at AND receipt.state='confirmed_absent' AND receipt.deleted_at IS NOT NULL
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND (request.returned_at IS NULL OR request.state NOT IN ('returned','failed') OR request.descriptor->>'kind'<>'object.put' OR request.descriptor->'binding' IS DISTINCT FROM original_binding OR request.descriptor->'bytes' IS DISTINCT FROM to_jsonb(object.bytes) OR request.descriptor->>'sha256' IS DISTINCT FROM object.sha256 OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='not_attempted') OR EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'<>'not_attempted')))
+  THEN RETURN true; END IF;
+  IF receipt.id IS DISTINCT FROM object.target_receipt_id THEN RETURN false; END IF;
+ ELSE
+  IF NOT EXISTS(SELECT 1 FROM media_storage_transfer_receipts member WHERE member.object_id=object.id AND member.receipt_id=receipt.id AND member.original_snapshot_digest=freeholder_media_transfer_fact_digest(member.original_snapshot) AND member.original_snapshot->>'id'=receipt.id::text AND member.original_snapshot->>'operation'='put' AND member.original_snapshot->>'namespace'=quota_namespace AND member.original_snapshot->>'keyDigest'=original_key_digest AND member.original_snapshot->>'originalReservationId'=receipt.original_reservation_id::text AND member.original_snapshot->>'writerRuntimeId'=caller.runtime_id::text AND member.original_snapshot->>'providerRevisionDigest'=receipt.provider_revision_digest) THEN RETURN false; END IF;
+ END IF;
+ IF NOT(caller.state='returned' AND caller.returned_at IS NOT NULL OR caller.state='stopped' AND (freeholder_media_original_applied_review(caller.id) OR freeholder_media_transfer_applied_put_review(caller.id)))
+  OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND (request.state IN ('admitted','unknown') OR request.returned_at IS NULL AND NOT(freeholder_media_original_applied_review(caller.id) OR freeholder_media_transfer_applied_put_review(caller.id)) OR request.state='failed' AND NOT(freeholder_media_original_applied_review(caller.id) OR freeholder_media_transfer_applied_put_review(caller.id))))
+  OR EXISTS(SELECT 1 FROM media_storage_transfer_receipts member JOIN media_object_writes ancestor ON ancestor.id=member.receipt_id JOIN media_storage_transfer_calls original ON coalesce(original.physical_receipt_id,original.object_receipt_id)=ancestor.id WHERE member.object_id=object.id AND (ancestor.state NOT IN ('accepted','confirmed_absent') OR original.state IN ('admitted','unknown') OR original.returned_at IS NULL AND NOT(freeholder_media_original_applied_review(original.id) OR freeholder_media_transfer_applied_put_review(original.id) OR freeholder_media_original_monotonic_delete_review(original.id)) OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=original.id AND (request.state IN ('admitted','unknown') OR request.returned_at IS NULL AND NOT(freeholder_media_original_applied_review(original.id) OR freeholder_media_transfer_applied_put_review(original.id) OR freeholder_media_original_monotonic_delete_review(original.id)))))) THEN RETURN false; END IF;
+ IF NOT freeholder_media_original_key_recreation_fenced(quota_namespace,original_key_digest)
+  OR EXISTS(SELECT 1 FROM media_storage_transfer_calls actual WHERE actual.object_id=object.id AND (actual.state IN ('admitted','unknown') OR actual.returned_at IS NULL AND NOT(freeholder_media_original_applied_review(actual.id) OR freeholder_media_transfer_applied_put_review(actual.id) OR freeholder_media_original_monotonic_delete_review(actual.id))))
+  OR EXISTS(SELECT 1 FROM media_storage_transfer_calls actual JOIN media_storage_transfer_requests request ON request.call_id=actual.id WHERE actual.object_id=object.id AND (request.state IN ('admitted','unknown') OR request.returned_at IS NULL AND NOT(freeholder_media_original_applied_review(actual.id) OR freeholder_media_transfer_applied_put_review(actual.id) OR freeholder_media_original_monotonic_delete_review(actual.id)))) THEN RETURN false; END IF;
+ -- Entire lineage erasure requires both actual physical roles to be gone.
+ IF freeholder_media_transfer_object_retired(object.id) AND freeholder_media_original_reservation_retired(receipt.original_reservation_id) THEN RETURN true; END IF;
+ IF original_side<>'source' OR plan.adopted_at IS NULL OR NOT freeholder_media_transfer_source_physically_retired(receipt.id) THEN RETURN false; END IF;
+ SELECT * INTO current_target FROM media_object_writes WHERE id=object.target_receipt_id;
+ IF current_target.id IS NULL OR current_target.deleted_at IS NOT NULL OR current_target.redacted_at IS NOT NULL OR current_target.state<>'accepted' OR current_target.storage_namespace IS DISTINCT FROM plan.target_namespace OR current_target.provider_revision IS DISTINCT FROM object.target_revision OR current_target.bytes IS DISTINCT FROM object.bytes OR current_target.sha256 IS DISTINCT FROM object.sha256
+  OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls target WHERE target.object_id=object.id AND target.kind='target_current' AND target.state='returned' AND target.returned_at IS NOT NULL AND target.result_revision=object.target_revision AND target.result_sha256=object.sha256 AND target.result_bytes=object.bytes AND target.result_absent IS NULL AND target.namespace=plan.target_namespace AND target.created_at>=plan.adopted_at AND freeholder_media_transfer_exact_read_nonce(target.id))
+  OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls target WHERE target.object_id=object.id AND target.kind='target_put' AND target.physical_receipt_id=current_target.id AND (target.quota_token IS NULL AND NOT EXISTS(SELECT 1 FROM storage_quota_objects charge WHERE charge.namespace=plan.target_namespace AND encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(charge.object_key,'UTF8')),'hex')=object.target_key_digest)
+   OR target.quota_token IS NOT NULL AND EXISTS(SELECT 1 FROM storage_quota_objects charge WHERE charge.namespace=plan.target_namespace AND charge.pending_token IS NULL AND charge.last_settled_token=target.quota_token AND charge.bytes>=object.bytes AND encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(charge.object_key,'UTF8')),'hex')=object.target_key_digest))) THEN RETURN false; END IF;
+ RETURN true;
+END $$;
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_original_quota_settlement_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE token uuid; owner media_storage_transfer_calls; original media_object_writes; role record; proven boolean; settlement boolean; current_settlement boolean;
+BEGIN
+ IF TG_OP='INSERT' THEN
+  IF NEW.last_settled_token IS NOT NULL THEN RAISE EXCEPTION 'A historical quota settlement cannot be invented' USING ERRCODE='23514'; END IF;
+ ELSIF NEW.last_settled_token IS DISTINCT FROM OLD.last_settled_token AND (NEW.last_settled_token IS NULL OR NEW.last_settled_token IS DISTINCT FROM OLD.pending_token OR NEW.pending_token IS NOT NULL OR NEW.bytes>OLD.bytes) THEN RAISE EXCEPTION 'Settle only the exact originally reserved quota token and byte bound' USING ERRCODE='23514';
+ END IF;
+
+ IF TG_OP='UPDATE' AND (NEW.bytes<OLD.bytes OR OLD.pending_token IS NOT NULL AND NEW.pending_token IS NULL OR NEW.last_settled_token IS DISTINCT FROM OLD.last_settled_token) THEN
+  -- Every old retained token must remain its own genuine original identity.
+  -- No flag or matching key supplies a release proof for unbound history.
+  IF NEW.namespace IS DISTINCT FROM OLD.namespace OR NEW.object_key IS DISTINCT FROM OLD.object_key OR NEW.last_settled_token IS NULL OR NEW.pending_token IS NOT NULL THEN RAISE EXCEPTION 'Quota settlement/release needs exact original current caller and retained token identity' USING ERRCODE='23514'; END IF;
+  IF OLD.pending_token IS NULL AND OLD.last_settled_token IS NULL THEN RAISE EXCEPTION 'Unbound historical quota cannot be released by equal key or empty inventory' USING ERRCODE='23514'; END IF;
+  SELECT coalesce(bool_or(freeholder_media_transfer_quota_settlement_proven(caller.id,OLD.pending_token,NEW.bytes)),false) INTO current_settlement FROM media_storage_transfer_calls caller WHERE caller.namespace=OLD.namespace AND caller.quota_token=OLD.pending_token;
+  FOREACH token IN ARRAY ARRAY[OLD.pending_token,OLD.last_settled_token] LOOP
+   IF token IS NULL THEN CONTINUE; END IF;
+   SELECT * INTO owner FROM media_storage_transfer_calls caller WHERE caller.namespace=OLD.namespace AND caller.quota_token=token;
+   SELECT * INTO original FROM media_object_writes receipt WHERE receipt.id=coalesce(owner.physical_receipt_id,owner.object_receipt_id);
+   IF owner.id IS NULL OR original.id IS NULL OR (SELECT count(*) FROM media_storage_transfer_calls caller WHERE caller.namespace=OLD.namespace AND caller.quota_token=token)<>1 OR original.storage_namespace IS DISTINCT FROM OLD.namespace OR original.key_digest IS DISTINCT FROM encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(OLD.object_key,'UTF8')),'hex') THEN RAISE EXCEPTION 'The actual quota token/resource ownership is missing or ambiguous' USING ERRCODE='23514'; END IF;
+   settlement:=token=coalesce(OLD.pending_token,OLD.last_settled_token) AND NEW.last_settled_token=token AND freeholder_media_transfer_quota_settlement_proven(owner.id,token,NEW.bytes);
+   IF settlement THEN CONTINUE; END IF;
+   proven:=false;
+   IF NEW.bytes=0 OR current_settlement AND token IS DISTINCT FROM OLD.pending_token THEN
+    FOR role IN SELECT object.id AS object_id,'target'::text AS side FROM media_storage_transfer_objects object WHERE object.id=owner.object_id AND owner.kind='target_put'
+     UNION SELECT member.object_id,'source'::text FROM media_storage_transfer_receipts member WHERE member.receipt_id=original.id
+    LOOP
+     IF freeholder_media_transfer_quota_release_proven(role.object_id,owner.id,token,role.side) THEN proven:=true;EXIT; END IF;
+    END LOOP;
+    -- Unchanged ordinary physical reducer/recovery has its own full original
+    -- proof; no transfer role or fake object is required for the default path.
+    IF owner.kind='ordinary_put' AND freeholder_media_original_reservation_retired(original.original_reservation_id) THEN proven:=true; END IF;
+   END IF;
+   IF NOT proven THEN RAISE EXCEPTION 'An exact original accepted payload or complete current physical-role retirement proof is required before reducing quota' USING ERRCODE='23514'; END IF;
+  END LOOP;
+ END IF;
+ RETURN NEW;
+END $$;

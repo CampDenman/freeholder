@@ -3697,6 +3697,20 @@ hold/terminal-old-receipt reachability must pass first. No provider/security/
 stable/C closure. Issued-authority, capture/quota/cutover and full real acceptance
 remain required. See `deploy/media-legacy-upload-anchor-source-2026-11-14.md`.
 
+Source-only continuation, 2026-11-14 (C1.12/C10.32/C11.08): transfer quota
+settlement/release now follows actual original caller tokens and separate
+source/target physical roles. Real accepted request accounting may precede
+outer FIN; no FIN is invented. Full source retirement releases its capacity
+while target charge and original copied privacy lineage remain live; current
+holds/late caller facts invalidate proof before dedup. Actually unattempted
+same-original retry requires all real FIN/frame evidence; unknown/unbound
+charges remain debt. Two scalar SQL functions/one full existing guard and five
+TS files, zero new model/field/trigger/service/job/capability. Nine pure/nine
+native controls PREPARED/UNRUN; all qualification remains UNRUN in this child.
+Actual namespace initialization, issued-authority closure, capture/cutover,
+external provider/operator/security and final stable gates remain required.
+See `deploy/media-transfer-quota-role-source-2026-11-14.md`.
+
 ### 43.2 Definition of done for every feature
 
 Every feature checkbox below inherits this checklist. If a line does not

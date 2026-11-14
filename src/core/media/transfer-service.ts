@@ -66,7 +66,7 @@ const applyCopy=defineMediaService({
   if(!put||!transferCallApplied(put,reviews)||!object.targetReceiptId)transferConflict("The target needs its exact actual finished create-only PUT receipt.");
   const[receipt]=await ctx.tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,object.targetReceiptId)).limit(1);
   if(!receipt||receipt.state!=="accepted"||receipt.deletedAt||receipt.redactedAt||receipt.namespace!==plan.targetNamespace||receipt.sha256!==object.sha256||receipt.bytes!==object.bytes)transferConflict();
-  await settleTransferQuota(ctx.tx,plan.targetNamespace,object.targetKey,put.id);
+  await settleTransferQuota(ctx.tx,{objectId:object.id,side:"target",callId:put.id});
   await ctx.tx.update(mediaStorageTransferObjects).set({state:"verified",sourceRevision,targetRevision,sourceReadCallerId:source!.id,targetVerifyCallerId:target!.id,updatedAt:sql`transaction_timestamp()`}).where(eq(mediaStorageTransferObjects.id,object.id));
   const verified=objects.every(row=>row.id===object.id||row.state==="verified");
   await ctx.tx.update(mediaStorageTransferPlans).set({state:verified?"verified":"copying",updatedAt:new Date()}).where(eq(mediaStorageTransferPlans.id,plan.id));
@@ -115,10 +115,11 @@ const finishRetirement=defineMediaService({
   if(transferDigest(target)!==transferDigest(object.targetRevision)||!deletion||!transferCallApplied(deletion,reviews)||transferDigest(deletion.expectedRevision)!==transferDigest(object.sourceRevision)||absence?.state!=="returned"||!absence.returnedAt||!absence.resultAbsent||absence.namespace!==plan.sourceNamespace||absence.physicalKey!==object.key)transferConflict();
   await requireCompletePhysicalRetirementInventory(ctx.tx,input.inventoryId,object.id,"source",deletion.id);
   const now=new Date();await ctx.tx.update(mediaObjectWrites).set({state:"accepted",observedAcceptedAt:deletion.observedAcceptedAt,writerFinishedAt:deletion.returnedAt,deletedAt:now,updatedAt:now}).where(eq(mediaObjectWrites.id,object.sourceDeleteReceiptId));
-  await releaseTransferQuota(ctx.tx,plan.sourceNamespace,object.key);
+
   // Do NOT set the original PUT deleted_at: its copied bytes still exist.
   // Existing erasure/restore guards continue to see that original live lineage.
   await ctx.tx.update(mediaStorageTransferObjects).set({state:"complete",updatedAt:now}).where(eq(mediaStorageTransferObjects.id,object.id));
+  await releaseTransferQuota(ctx.tx,{objectId:object.id,side:"source"});
   await ctx.tx.update(mediaStorageTransferPlans).set({state:objects.every(row=>row.id===object.id||row.state==="complete")?"complete":"cleanup_pending",updatedAt:now}).where(eq(mediaStorageTransferPlans.id,plan.id));
   ctx.setSubject("media_storage_transfer",plan.id);return{ok:true as const};
  },
