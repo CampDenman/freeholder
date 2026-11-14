@@ -3670,6 +3670,19 @@ ordinary/legacy/issued-authority/quota/capture/cutover consumers and all real
 acceptance remain required. See
 `deploy/media-multipart-idle-compact-source-2026-11-14.md`.
 
+Source-only fixture continuation, 2026-11-14 (C1.12/C11.08): the eight idle
+compact lifecycle controls now seed a genuine separate CUSTOMER subject for
+actual owned begin/abort, retaining OWNER for verified privacy and fresh human
+recovery. The real privacy call supplies confirmation ERASE. Its hold control
+uses a separate genuinely verified request for that same subject, because the
+existing public guard correctly freezes changes to an applied pending request.
+Source inspection confirms that guard is request-scoped; creating the second
+request is allowed by the existing service. All expected assertions, case names,
+product/SQL/capability source and frozen0ca BEFORE remain unchanged. Whole-file
+fixture reversal is recorded. All execution/qualification remains UNRUN; this
+supplies no native acceptance or C closure. See
+`deploy/media-idle-compact-fixture-source-2026-11-14.md`.
+
 ### 43.2 Definition of done for every feature
 
 Every feature checkbox below inherits this checklist. If a line does not
