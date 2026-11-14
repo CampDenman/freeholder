@@ -29,7 +29,9 @@ import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   registerContactReference,
+  type ContactReference,
 } from "@/core/contacts/service";
+import { lockContactFinancialUndo } from "./contact-undo-financial-lock";
 import { contacts } from "@/core/contacts/schema";
 import {eraseBuyerMoneySource} from "./buyer-money-erasure";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -224,26 +226,21 @@ function registerPointer(
   selectRows: (tx: Tx, ids: string[]) => Promise<PointerRow[] | null>,
   repointRows: (tx: Tx, from: string, to: string) => Promise<unknown>,
 ): void {
-  registerContactReference({
-    table,
-    repoint: repointRows,
-    captureForUndo: async (tx, duplicateId, survivingId) => {
-      const state = await selectRows(tx, [duplicateId, survivingId]);
-      return { state: state ?? [], undoable: state !== null, ...(state === null ? { blocker: "Original invoice financial dependencies exceed the bounded undo limit." } : {}) };
-    },
-    restoreAfterUndo: async (tx, beforeState, afterState, duplicateId, survivingId) => {
-      const schema = z.array(z.object({ id: z.string().uuid(), contactId: z.string().uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional() }));
-      const before = schema.parse(beforeState);
-      const after = schema.parse(afterState);
-      const current = await selectRows(tx, [duplicateId, survivingId]);
-      const currentById = new Map(current?.map((row) => [row.id, row]) ?? []);
-      if (current === null || current.length !== after.length || after.some((row) => currentById.get(row.id)?.contactId !== row.contactId || currentById.get(row.id)?.fingerprint !== row.fingerprint)) {
-        throw new ServiceError(
-          "conflict",
-          `A ${table.replaceAll("_", " ")} record changed after this merge. Leave the merge in place or restore that record first.`,
-        );
-      }
-      const movedIds = before.filter((row) => row.contactId === duplicateId).map((row) => row.id);
+  const prepareUndo: NonNullable<ContactReference["prepareUndo"]> = async (tx, beforeState, afterState, duplicateId, survivingId) => {
+    const schema = z.array(z.object({ id: z.string().uuid(), contactId: z.string().uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional() }));
+    const before = schema.parse(beforeState);
+    const after = schema.parse(afterState);
+    const current = await selectRows(tx, [duplicateId, survivingId]);
+    const currentById = new Map(current?.map((row) => [row.id, row]) ?? []);
+    if (current === null || current.length !== after.length || after.some((row) => currentById.get(row.id)?.contactId !== row.contactId || currentById.get(row.id)?.fingerprint !== row.fingerprint)) {
+      throw new ServiceError(
+        "conflict",
+        `A ${table.replaceAll("_", " ")} record changed after this merge. Leave the merge in place or restore that record first.`,
+      );
+    }
+    const movedIds = before.filter((row) => row.contactId === duplicateId).map((row) => row.id);
+
+    return async () => {
       if (movedIds.length === 0) return;
       if (table === "invoices") {
         await tx.update(invoices).set({ contactId: duplicateId }).where(inArray(invoices.id, movedIds));
@@ -255,6 +252,20 @@ function registerPointer(
       } else {
         await tx.update(paymentMethods).set({ contactId: duplicateId }).where(inArray(paymentMethods.id, movedIds));
       }
+    };
+  };
+  registerContactReference({
+    table,
+    repoint: repointRows,
+    captureForUndo: async (tx, duplicateId, survivingId) => {
+      const state = await selectRows(tx, [duplicateId, survivingId]);
+      return { state: state ?? [], undoable: state !== null, ...(state === null ? { blocker: "Original invoice financial dependencies exceed the bounded undo limit." } : {}) };
+    },
+    lockForUndo: lockContactFinancialUndo,
+    prepareUndo,
+    restoreAfterUndo: async (tx, beforeState, afterState, duplicateId, survivingId) => {
+      await lockContactFinancialUndo(tx, duplicateId, survivingId);
+      await (await prepareUndo(tx, beforeState, afterState, duplicateId, survivingId))();
     },
   });
 }
