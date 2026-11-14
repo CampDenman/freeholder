@@ -116,7 +116,7 @@ describe.runIf(hasDatabase)("actual v2 original inventory and exact closure caus
   await expect(checkOriginalCashInventory.call({...bigOwner,operationId:claim.operationId},system)).rejects.toThrow();
   const foreign=await inspectOriginalCashInventory(bigOwner.recoveryId,OWNER);expect(foreign).not.toBe(claim.operationId);
   await expect(checkOriginalCashInventory.call({...recovery,operationId:claim.operationId},system)).rejects.toThrow();
-  expect(await db().select().from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.operationId,claim.operationId))).toEqual(expect.arrayContaining([expect.objectContaining({kind:"finish",evidence:{callerInstanceId:expect.any(String),outcome:"returned"}})]));expect(await money(f.target.invoiceId,f.parent.id)).toEqual(before);
+  const callerInstanceId:unknown=expect.any(String);expect(await db().select().from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.operationId,claim.operationId))).toEqual(expect.arrayContaining([expect.objectContaining({kind:"finish",evidence:{callerInstanceId,outcome:"returned"}})]));expect(await money(f.target.invoiceId,f.parent.id)).toEqual(before);
  });
  it("repeats only the independently current exact closure and rejects its old proof after a foreign read or genuine second closure",async()=>{
   const{f,tiny,bigOwner}=await paid();const refund=await submitProviderRefund.call({paymentId:tiny.id,amountMinor:1,reason:"Return the genuine tiny receipt",idempotencyKey:`causal-tiny:${tiny.id}`},OWNER);

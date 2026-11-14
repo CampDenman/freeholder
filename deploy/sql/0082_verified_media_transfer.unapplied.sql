@@ -5087,9 +5087,9 @@ CREATE FUNCTION freeholder_media_multipart_idle_minimizable(original_resource uu
    AND NOT EXISTS(SELECT 1 FROM media_original_erasure_scopes other_scope JOIN data_requests other_request ON other_request.id=other_scope.request_id WHERE other_scope.scope='media.multipartOperations' AND other_scope.complete AND other_request.contact_id<>privacy.contact_id AND EXISTS(SELECT 1 FROM jsonb_array_elements(other_scope.membership->'resources') member WHERE member->>'id'=resource.id::text))
    AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(scope.membership->'reservations') member WHERE member->>'id'=resource.original_reservation_id::text AND member->>'keyDigest' IS DISTINCT FROM resource.key_digest)
    AND artifact.body->>'format'='freeholder.erasure-receipt' AND artifact.sha256=encode(sha256(convert_to(freeholder_source_receipt_canonical(artifact.body),'UTF8')),'hex')
-   AND EXISTS(SELECT 1 FROM jsonb_array_elements(artifact.body->'outcomes') outcome CROSS JOIN LATERAL jsonb_array_elements_text(outcome->'pendingJobs') pending(id)
+   AND EXISTS(SELECT 1 FROM jsonb_array_elements(artifact.body->'outcomes') AS outcome(value) CROSS JOIN LATERAL jsonb_array_elements_text(outcome.value->'pendingJobs') pending(id)
     JOIN job_idempotency_keys claim ON claim.job_id::text=pending.id AND claim.job_name='core.eraseMediaMultipartOperations'
-    WHERE outcome->>'scope'='media.multipartOperations' AND outcome->>'outcome'='pending')
+    WHERE outcome.value->>'scope'='media.multipartOperations' AND outcome.value->>'outcome'='pending')
    AND freeholder_media_multipart_closed_original_abort(removal.id)
    AND NOT EXISTS(SELECT 1 FROM media_multipart_operations creator WHERE creator.resource_id=resource.id AND creator.operation_kind IN ('create','sign') AND NOT freeholder_media_multipart_closed_original_creator(resource.id,creator.id))
    AND NOT EXISTS(SELECT 1 FROM media_objects pointer WHERE pointer.reservation_id=resource.original_reservation_id OR encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(pointer.key,'UTF8')),'hex')=resource.key_digest)

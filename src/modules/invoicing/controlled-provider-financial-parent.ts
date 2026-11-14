@@ -105,9 +105,11 @@ export async function lockControlledParentMoney(ctx:ServiceContext,graph:Awaited
 
 }
 
+import type { OriginalInventoryProjectionContext } from "./original-cash-inventory-causal-proof";
+
 /** Explicit comparison-only companion; no default graph is ever projected. */
 export async function parentFinancialGraphForOriginalInventory(tx: Tx, subscriptionId: string,
-  context: import("./original-cash-inventory-causal-proof").OriginalInventoryProjectionContext) {
+  context: OriginalInventoryProjectionContext) {
   const full = await parentFinancialGraphForTx(tx, subscriptionId);
   const { merchantRefundDependencyFingerprintsForOriginalInventory } = await import("./merchant-refund-dependencies");
   const children = await merchantRefundDependencyFingerprintsForOriginalInventory(tx,

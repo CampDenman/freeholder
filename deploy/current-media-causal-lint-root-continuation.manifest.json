@@ -1,0 +1,93 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C1.12",
+    "C11.08"
+  ],
+  "status": "SOURCE_LINT_CORRECTION_PREPARED_UNRUN",
+  "preservedFailure": "/tmp/freeholder-current-full86-causal-media161-source-v94-20261114-result.json",
+  "files": [
+    {
+      "path": "src/modules/invoicing/controlled-provider-financial-parent.ts",
+      "beforeSha256": "f6ca3aea2808fe205c37f676e1ad8c67ea93689e3cbaa73bdfdeac8741dc076e",
+      "afterSha256": "a047098add9aaf4477c993df3ac3dcb5beda8385870c4a4b341606b363fa36b4",
+      "finiteDelta": [
+        {
+          "before": "\n/** Explicit comparison-only companion;",
+          "after": "\nimport type { OriginalInventoryProjectionContext } from \"./original-cash-inventory-causal-proof\";\n\n/** Explicit comparison-only companion;",
+          "occurrences": 1
+        },
+        {
+          "before": "context: import(\"./original-cash-inventory-causal-proof\").OriginalInventoryProjectionContext",
+          "after": "context: OriginalInventoryProjectionContext",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/merchant-refund-dependencies.ts",
+      "beforeSha256": "1c22ad8b17b6f38072b25fc8aeca3a6ab2da7f1e69188f1032ac45c9f4ffc4a2",
+      "afterSha256": "5fc089a5ba0e5faf5a5a73e0f1dd4f6e3cf1f41513b54fc9d9d04d0b03ff5a49",
+      "finiteDelta": [
+        {
+          "before": "\n/** Historical comparison companion ONLY.",
+          "after": "\nimport type { OriginalInventoryProjectionContext } from \"./original-cash-inventory-causal-proof\";\n\n/** Historical comparison companion ONLY.",
+          "occurrences": 1
+        },
+        {
+          "before": "context: import(\"./original-cash-inventory-causal-proof\").OriginalInventoryProjectionContext",
+          "after": "context: OriginalInventoryProjectionContext",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-financial-witness.ts",
+      "beforeSha256": "b71e684fb11cee189ecba8ac1992c235ec38ae2aae69e6b6c683f3a73c035444",
+      "afterSha256": "bcd18ce9b61a87edbbcf429df61d3b441ffe4c8d375af014fc016527c5709e77",
+      "finiteDelta": [
+        {
+          "before": "/** Internal historical-comparison companion.",
+          "after": "import type { OriginalInventoryProjectionContext } from \"./original-cash-inventory-causal-proof\";\n\n/** Internal historical-comparison companion.",
+          "occurrences": 1
+        },
+        {
+          "before": "context:import(\"./original-cash-inventory-causal-proof\").OriginalInventoryProjectionContext",
+          "after": "context:OriginalInventoryProjectionContext",
+          "occurrences": 1
+        },
+        {
+          "before": "context?:import(\"./original-cash-inventory-causal-proof\").OriginalInventoryProjectionContext",
+          "after": "context?:OriginalInventoryProjectionContext",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "tests/core/media-upload-reservation-lifecycle.test.ts",
+      "beforeSha256": "e085363d18fd6a2bf2bfa51804f9d1f31c29ad624070e81a57999fabb4780169",
+      "afterSha256": "47a3be7b56fe8c10b0aefdfe832951b2f934bf4f9a1753aeb7412b793804a194",
+      "finiteDelta": [
+        {
+          "before": " it(\"complete-request-ABI dependent: verified unwritten erasure retains the exact original UUID and first digest without a DELETE\",async()=>{await db().transaction(requireTransferCapability);const before=await reservation();await abortUpload.call({id:before.input.id},CUSTOMER);const{request}=await erase(before.contact.id),[after]=await db().select().from(mediaUploads).where(eq(mediaUploads.id,before.input.id)),[first]=await db().select().from(mediaOriginalErasureScopes).where(and(eq(mediaOriginalErasureScopes.requestId,request.id),eq(mediaOriginalErasureScopes.scope,\"media.multipartOperations\")));expect(after).toMatchObject({originalReservationId:before.upload.originalReservationId,storageKey:`retained:${objectKeyDigest(before.upload.storageKey)}`,ownerContactId:null,uploadedBy:\"erased\",filename:\"[erased]\"});expect(first?.membership.uploads).toContainEqual({id:before.upload.id,reservationId:before.upload.originalReservationId,keyDigest:objectKeyDigest(before.upload.storageKey),witness:expect.stringMatching(/^[a-f0-9]{64}$/)});expect(await db().select().from(mediaObjects)).toEqual([]);expect(provider.calls).toEqual([]);},60000);\n",
+          "after": " it(\"complete-request-ABI dependent: verified unwritten erasure retains the exact original UUID and first digest without a DELETE\",async()=>{await db().transaction(requireTransferCapability);const before=await reservation();await abortUpload.call({id:before.input.id},CUSTOMER);const{request}=await erase(before.contact.id),[after]=await db().select().from(mediaUploads).where(eq(mediaUploads.id,before.input.id)),[first]=await db().select().from(mediaOriginalErasureScopes).where(and(eq(mediaOriginalErasureScopes.requestId,request.id),eq(mediaOriginalErasureScopes.scope,\"media.multipartOperations\")));expect(after).toMatchObject({originalReservationId:before.upload.originalReservationId,storageKey:`retained:${objectKeyDigest(before.upload.storageKey)}`,ownerContactId:null,uploadedBy:\"erased\",filename:\"[erased]\"});const witness:unknown=expect.stringMatching(/^[a-f0-9]{64}$/);expect(first?.membership.uploads).toContainEqual({id:before.upload.id,reservationId:before.upload.originalReservationId,keyDigest:objectKeyDigest(before.upload.storageKey),witness});expect(await db().select().from(mediaObjects)).toEqual([]);expect(provider.calls).toEqual([]);},60000);\n",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "tests/modules/original-cash-inventory-causal84.test.ts",
+      "beforeSha256": "312b0a42c4dadffbf8a0be016368f0bba7ada7ca7f8e5ad151eabb6b9a526064",
+      "afterSha256": "55d6d406d794aa38ce255c04801fb38277f0ecd2c4359590b3d9cebf3bc6a50b",
+      "finiteDelta": [
+        {
+          "before": "  expect(await db().select().from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.operationId,claim.operationId))).toEqual(expect.arrayContaining([expect.objectContaining({kind:\"finish\",evidence:{callerInstanceId:expect.any(String),outcome:\"returned\"}})]));expect(await money(f.target.invoiceId,f.parent.id)).toEqual(before);\n",
+          "after": "  const callerInstanceId:unknown=expect.any(String);expect(await db().select().from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.operationId,claim.operationId))).toEqual(expect.arrayContaining([expect.objectContaining({kind:\"finish\",evidence:{callerInstanceId,outcome:\"returned\"}})]));expect(await money(f.target.invoiceId,f.parent.id)).toEqual(before);\n",
+          "occurrences": 1
+        }
+      ]
+    }
+  ],
+  "scope": "Four type-only imports added after preserved whole reader prefixes. Two Vitest asymmetric matchers receive unknown-typed locals; exact matcher/value/object/statement timing preserved. No type casts, runtime production change, SQL/schema/capability change or business oracle relaxation."
+}

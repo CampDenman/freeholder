@@ -82,11 +82,20 @@ export async function controlledAtomicRefundTarget(ctx:ServiceContext,paymentId:
  const{readAtomicFeeReturnResources}=await import("./atomic-fee-return-resources");
  const physicalReturns:Awaited<ReturnType<typeof readAtomicFeeReturnResources>>[]=[];
  for(const resource of resources){const exact=await readAtomicFeeReturnResources(ctx,resource.paymentId);if(!exact||exact.owner.receiptId!==resource.receiptId||exact.returnedMinor!==resource.feeReturnedMinor)return unavailable;physicalReturns.push(exact);}
+ const{readControlledAtomicRefundBankState}=await import("./controlled-atomic-refund-bank-state");
+ const currentRefundBanks:NonNullable<Awaited<ReturnType<typeof readControlledAtomicRefundBankState>>>[]=[];
+ for(const resource of resources){const current=await readControlledAtomicRefundBankState(ctx,resource.paymentId);if(current){if(current.receiptId!==resource.receiptId||current.refundedMinor!==resource.refundedMinor)return unavailable;currentRefundBanks.push(current);}}
+ if(currentRefundBanks.length){const union=new Set(currentRefundBanks.flatMap(bank=>bank.physicalEntries.map(row=>`${row.table}:${row.id}`)));
+  for(const batch of batches)union.add(`controlled_cash_application_batches:${batch.id}`);for(const proof of proofs)union.add(`controlled_cash_application_receipts:${proof.id}`);
+  for(const row of rows){union.add(`payments:${row.payment_id}`);union.add(`merchant_agreement_payment_routes:${row.payment_id}`);union.add(`subscription_provider_charge_receipts:${row.receipt_id}`);union.add(`controlled_cash_application_links:${row.receipt_id}`);}
+  if(union.size>5000)return unavailable;
+ }
  let amounts:ReturnType<typeof controlledAtomicRefundAmounts>;
  try{amounts=controlledAtomicRefundAmounts({principalMinor:first.principal_minor,feeMinor:first.fee_minor,resources});}catch(error){if(!(error instanceof RangeError))throw error;return unavailable;}
  if(rows.some(row=>row.principal_minor!==first.principal_minor||row.fee_minor!==first.fee_minor||row.revision!==first.revision||amounts.resources.find(resource=>resource.paymentId===row.payment_id)?.targetRetainedFeeMinor!==row.target_retained_fee_minor))return unavailable;
  const selected=amounts.resources.find(row=>row.paymentId===paymentId);
- return{applies:true,target:selected?.targetRetainedFeeMinor??null,resources,unassignedDutyMinor:amounts.unassignedDutyMinor,revision:physicalReturns.some(actual=>actual?.resources.some(resource=>resource.ledger==="original_auxiliary"))?merchantTaxDigest({protocol:"freeholder.atomic-fee-return-union.v1",rows,batches,proofs,physicalReturns}):merchantTaxDigest({rows,batches,proofs})};
+ const originalRevision=physicalReturns.some(actual=>actual?.resources.some(resource=>resource.ledger==="original_auxiliary"))?merchantTaxDigest({protocol:"freeholder.atomic-fee-return-union.v1",rows,batches,proofs,physicalReturns}):merchantTaxDigest({rows,batches,proofs});
+ return{applies:true,target:selected?.targetRetainedFeeMinor??null,resources,unassignedDutyMinor:amounts.unassignedDutyMinor,revision:currentRefundBanks.length?merchantTaxDigest({protocol:"freeholder.atomic-refund-current-bank.v1",originalRevision,currentRefundBanks}):originalRevision};
 }
 
 /** The existing fee claim otherwise locks its selected payment first. Genuine

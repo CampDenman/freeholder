@@ -3564,6 +3564,65 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Atomic current refund bank SOURCE continuation2026-11-14 (C12.38/C9.33/C1.08):
+actual preserved V55 proves newer genuine refund captures stale the old generic
+current receipt while independently authenticated current controlled bank rows
+remain available. ONE new ordinary/SQL per-namespace proof binds exact original
+request/resource/PI/charge/amount/currency, latest actual returned HMAC lineage,
+ALL captures/current callers/fullPG rows under ONE5000; no capture projection,
+old signature rewrite, opaque parent-digest reuse or generic resolver change.
+Historical contradictory status requires EVERY capture authenticate to an
+actually earlier closed returned inspection; detached repeats remain debt.
+Complete target successor adds ONLY exact old resolver OR genuine controlled
+bank proof; old default revision stays exact when unused. Complete160/A readiness
+successors use finite body-pin substitutions/new helper pin, retaining all
+older guards/route/privacy/index/CHECK pins. 0models/columns/kinds/services.
+Twelve pure/thirteen source/four actual desired native controls PREPARED, ALL
+UNRUN; original whole fee native180s/all assertions and generic sources exact.
+Root normal assembly/full source/schema/SDK/native qualification required; no
+C/stable acceptance. B/C/credit-unwind/full-spec requirements remain open. See
+`deploy/controlled-atomic-refund-current-bank84-source-20261114.md` and its
+finite manifest.
+
+
+Actual original fee nativeV5 first failure2026-11-14 (C12.38/C9.33/C1.08):
+current3ba9 source1497/240/524, freshnormalV53 ordinary86/strict161models/
+365guards/415completefunctions/4142queries/2495expressions and actualSDK8 pass.
+Original WHOLE6e positive runs96.10s, real tiny refund succeeds, then first fee
+review stops SQL42702 BEFORE original causal recovery: A resource TABLE output
+payment_id shadows its bare route column. V53 retained/drained, all596 before/
+after snapshots retained; counter negative/A/causal natives remain UNRUN.
+Two full SQL85 successors qualify ONLY route selection and corresponding one
+ready body-hash literal; all fee/evidence/debt predicates otherwise byteexact.
+WHOLE832734 prefix and exact full-body reversals retained. No fixture/global
+variable-conflict setting/amount waiver. Fresh source/schema/SDK and unchanged
+original native must pass before acceptance; no C/stable closure. See
+`deploy/atomic-auxiliary-fee-route-alias85.manifest.json`.
+
+
+Current SQL compilation correction2026-11-14 (C1.12/C11.08): sourceV95 passes
+1497 tests/240 complete files/524 explicit DB skips, fulltypes/lint/metadata.
+Fresh normalV52 then stops SQL42883 in multipart idle minimization: bare outcome
+SRF alias resolves outer certificate.outcome TEXT. Explicit outcome(value) and
+qualified value references retain the exact original artifact/job/scope predicates.
+Owned/normal82 receive identical finite unpublished-source correction; complete
+rewind proves all earlier whole prefix identities. Failed V52 DB retained/drained;
+no SDK/business/native ran on it. No cast/guard waiver/capability or C closure.
+Fresh full qualification and original business tests remain required. See
+`deploy/media-multipart-artifact-alias-root-continuation.manifest.json`.
+
+
+Current source lint correction2026-11-14 (C12.38/C1.12/C11.08): V94 fulltypes
+passes, then affected lint stops on four forbidden inline type imports and two
+unsafe Vitest matcher assignments. Explicit type-only imports follow the exact
+preserved whole reader prefixes; unknown-typed matcher locals retain identical
+asymmetric predicates and native assertions. No cast, SQL/model/capability or
+production runtime change. Full-file finite reversals recorded and V94 failure
+preserved. Complete current source/schema/SDK/original business qualification
+remains required; no C/stable closure. See
+`deploy/current-media-causal-lint-root-continuation.manifest.json`.
+
+
 Causal source typing correction2026-11-14 (C12.38/C9.33/C1.08): V93 fulltypes
 stops before lint/DB on optional true refresh property across inferred existing/
 new target union and optional registry output metadata. Production now checks
