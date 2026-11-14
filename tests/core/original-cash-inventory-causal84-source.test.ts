@@ -4,11 +4,21 @@ import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {describe,expect,it} from "vitest";
 import manifest from "../../deploy/original-cash-inventory-causal84.manifest.json";
+import keyExtraction from "../../deploy/original-cash-key-extraction-root-source-20261114.json";
 const read=(path:string)=>readFileSync(new URL(`../../${path}`,import.meta.url)),hash=(body:Uint8Array|string)=>createHash("sha256").update(body).digest("hex");
 describe("original inventory v2 bounded source preservation",()=>{
  it("preserves the complete old RF and parent readers before additive comparison companions",()=>{for(const row of manifest.unchangedPrefixes)expect(hash(read(row.path).subarray(0,row.bytes))).toBe(row.sha256);});
  it("preserves old HMAC/schema/raw classification/safe export and whole natives through only the exact auxiliary schema additions",()=>{
   for(const row of manifest.unchanged){let source=read(row.path).toString();
+   if(row.path===keyExtraction.storePath){
+    expect(hash(source)).toBe(keyExtraction.storeAfterSha256);
+    expect(read(keyExtraction.leafPath).toString()).toContain(keyExtraction.exactFunctionBlock);
+    expect(hash(keyExtraction.exactFunctionBlock)).toBe(keyExtraction.functionBlockSha256);
+    for(const delta of [...keyExtraction.finiteDelta].reverse()){
+     expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);
+    }
+    expect(hash(source)).toBe(keyExtraction.storeBeforeSha256);
+   }
    if(row.path==="src/modules/invoicing/original-cash-recovery-schema.ts")for(const insertion of [", \"atomic_fee_target\", \"atomic_fee_closure\"", ",'atomic_fee_target','atomic_fee_closure'", "  uniqueIndex(\"original_cash_atomic_fee_target\").on(t.recoveryId, sql`(${t.evidence}->>'targetKey')`).where(sql`${t.kind}='atomic_fee_target'`),\n", "  uniqueIndex(\"original_cash_atomic_fee_closure\").on(t.recoveryId, sql`(${t.evidence}->>'targetFactId')`, sql`(${t.evidence}->>'revision')`).where(sql`${t.kind}='atomic_fee_closure'`),\n"]){
     expect(source.split(insertion)).toHaveLength(2);source=source.replace(insertion,"");
    }

@@ -3565,6 +3565,16 @@ open the admin until Thursday still needs to know about Monday.
 ## 43. Product Completion Plan — the live checklist
 
 
+Key-move preservation-control continuation2026-11-14 (C12.38/C11.10): V110
+focused checks/fulltypes67.82s/lint PASS, then broad contracts stop at the old
+causal manifest's whole-store SHA because identical key functions moved to the
+approved shared leaf. Keep the SAME old full-store hash after exactly reversing
+the two declared import/function-block edits; actual new leaf block must remain
+byte-identical. No key/rotation/money/history/native predicate changes. V110
+failure preserved; full current source and receipt-owner natives still pending.
+
+
+
 Receipt companion preservation-control continuation2026-11-14 (C12.38): V109
 focused source guard correctly refuses the new companion's changed whole-file
 SHA after its explicit real receipt witness scope extension. The historical
