@@ -30,13 +30,21 @@ export const sealOriginalMultipartRetirement=defineMediaService({
  name:"media.sealOriginalMultipartRetirement",summary:"Seal independently derived original idle-upload retirement evidence without changing its first receipts.",kind:"mutation",permission:"system",external:false,agentCallable:false,
  input:originalMultipartRetirementAdmission,output:z.object({id:z.uuid(),proofDigest:digest}),auditInputFields:["resourceId","uploadId","operationId","inventoryId","proofDigest"],
  handler:async(input,ctx)=>{
+  await lockTransferInventory(ctx.tx);
+  const[existing]=await ctx.tx.select().from(reviews).where(and(eq(reviews.multipartOperationId,input.operationId),eq(reviews.providerEvidenceDigest,input.proofDigest),isNotNull(reviews.retirementProof))).limit(1);
+  if(existing){
+   const saved=requireOriginalMultipartRetirementProof(existing.retirementProof),[current]=await ctx.tx.execute<{current_proof:boolean}>(sql`select freeholder_media_multipart_certificate_coverage(${existing.id}::uuid) as current_proof`);
+   // Historical intactness alone cannot deduplicate delivery after a new
+   // caller/fact, hold or resource-state change, even after raw reduction.
+   if(current?.current_proof!==true||transferDigest(saved)!==input.proofDigest||saved.resource.id!==input.resourceId||saved.resource.uploadId!==input.uploadId||saved.resource.keyDigest!==input.keyDigest||saved.retirement.operationId!==input.operationId||saved.retirement.inventoryId!==input.inventoryId)transferConflict("The original retirement frontier changed. Preserve its certificate and review the new evidence.");
+   await assertOriginalMultipartRetirementJob(ctx.tx,input);
+   ctx.setSubject("media_multipart_resource",input.resourceId);return{id:existing.id,proofDigest:input.proofDigest};
+  }
   const proof=await currentProof(ctx.tx,input.operationId,input.inventoryId),proofDigest=transferDigest(proof);
   // Revalidate the entire frontier BEFORE dedup. A new hold, caller or fact is
   // debt even when the old historical certificate is still immutable/intact.
   if(proof.resource.id!==input.resourceId||proof.resource.uploadId!==input.uploadId||proof.resource.keyDigest!==input.keyDigest||proofDigest!==input.proofDigest)transferConflict("The original retirement evidence changed. Preserve its first certificate and review the new evidence.");
   await assertOriginalMultipartRetirementJob(ctx.tx,input);
-  const[existing]=await ctx.tx.select().from(reviews).where(and(eq(reviews.multipartOperationId,input.operationId),eq(reviews.providerEvidenceDigest,proofDigest),isNotNull(reviews.retirementProof))).limit(1);
-  if(existing){const[current]=await ctx.tx.execute<{current_proof:boolean}>(sql`select freeholder_media_multipart_retirement_certificate_current(${existing.id}::uuid) as current_proof`);if(current?.current_proof!==true||transferDigest(existing.retirementProof)!==proofDigest)transferConflict();ctx.setSubject("media_multipart_resource",input.resourceId);return{id:existing.id,proofDigest};}
   const caller=proof.callers.find(row=>row.id===proof.retirement.callerId);if(!caller)transferConflict();
   await ctx.tx.execute(sql`select set_config('freeholder.media_retirement_certificate_v1','derived-idle-retirement-v1',true)`);
   const[created]=await ctx.tx.insert(reviews).values({multipartOperationId:input.operationId,inventoryId:input.inventoryId,callId:proof.retirement.callerId,readCallId:proof.retirement.readCallId,outcome:"retired",permitsRetry:false,stopDrainId:proof.retirement.stopDrainId,originalCallWitness:transferDigest(caller),providerEvidenceDigest:proofDigest,reviewedBy:"system:media-retirement",retirementProof:proof}).returning({id:reviews.id});

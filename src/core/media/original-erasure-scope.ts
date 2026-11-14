@@ -15,6 +15,7 @@ import {lockOriginalMediaScopeCapture} from "./empty-scope-authority";
 import {transferConflict,transferDigest} from "./transfer-proof";
 import {firstOriginalMediaMembership,intactOriginalMediaMembership,originalMediaBirthDebt,originalMediaReservationCaptured} from "./original-erasure-proof";
 import {mediaStorageTransferCalls,mediaStorageTransferReceipts} from "./transfer-schema";
+import {readOriginalMultipartCertificateCoverage} from "./multipart-certificate-coverage";
 export type OriginalMediaScope="media.storageOperations"|"media.multipartOperations";
 const unique=(ids:string[])=>[...new Set(ids)];
 async function priorAuthority(tx:Tx,requestId:string,contactId:string,scope:OriginalMediaScope){
@@ -93,10 +94,16 @@ export async function originalMediaScopePending(tx:Tx,requestId:string,scope:Ori
  const receipts=first.receiptIds.length?await tx.select().from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,first.receiptIds)):[],resources=first.resourceIds.length?await tx.select().from(mediaMultipartResources).where(inArray(mediaMultipartResources.id,first.resourceIds)):[];
  if(receipts.length!==first.receiptIds.length||resources.length!==first.resourceIds.length)transferConflict("Restore missing original physical receipts before acknowledging their immutable scope.");
  if(receipts.some(row=>!row.redactedAt||!row.deletedAt||["unverified","started","unknown"].includes(row.state))||resources.some(row=>!row.redactedAt||!row.retiredAt||row.providerUploadId!==null||!["completed","aborted"].includes(row.state)))return true;
+ for(const resource of resources)if(resource.redactedAt&&resource.objectReceiptId===null&&!await readOriginalMultipartCertificateCoverage(tx,resource.id))return true;
  if(scope==="media.multipartOperations"){
   const ids=first.membership.uploads.map(row=>row.id),uploads=ids.length?await tx.select().from(mediaUploads).where(inArray(mediaUploads.id,ids)):[],reservationIds=unique([...first.membership.reservations.map(row=>row.id),...first.membership.receipts.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.resources.flatMap(row=>row.reservationId?[row.reservationId]:[])]);
   const pointers=reservationIds.length?await tx.select({id:mediaObjects.reservationId}).from(mediaObjects).where(inArray(mediaObjects.reservationId,reservationIds)).limit(1):[];
   if(pointers.length||uploads.some(row=>row.ownerContactId!==null||row.uploadedBy!=="erased"||row.filename!=="[erased]"))return true;
+  // An erased marker/retained prefix is not an immutable upload-to-physical
+  // admission link. This leaf authenticates only its exact idle cohort;
+  // other historical upload locators retain debt until their own proof does.
+  if(uploads.some(upload=>/^retained:[a-f0-9]{64}$/.test(upload.storageKey)&&!resources.some(resource=>resource.uploadId===upload.id&&resource.objectReceiptId===null&&resource.redactedAt)))return true;
+  for(const resource of resources)if(resource.redactedAt&&resource.objectReceiptId===null){const upload=uploads.find(row=>row.id===resource.uploadId);if(!upload||upload.storageKey!==`retained:${resource.keyDigest}`||upload.providerUploadId!==null||upload.state!=="aborted"||Object.keys(upload.provenance).length||Object.keys(upload.mediaMetadata).length||upload.failureReason!==null)return true;}
  }
  return(await import("./original-provider-privacy")).originalProviderEvidencePending(tx,{receiptIds:first.receiptIds,resourceIds:first.resourceIds});
 }

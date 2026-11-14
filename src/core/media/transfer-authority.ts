@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: complete first capture, exact physical lineage and schema gate.
-import {and,asc,eq,inArray,isNull,sql} from "drizzle-orm";
+import {and,asc,eq,inArray,isNull,isNotNull,sql} from "drizzle-orm";
 import type {StorageBinding} from "@/adapters/storage/types";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {actorString,type Actor,type Tx} from "@/core/service";
@@ -62,6 +62,8 @@ async function currentPhysicalKeys(tx:Tx,source:StorageBinding,excludedPlan:stri
  return[...keys].sort((a,b)=>objectKeyDigest(a)<objectKeyDigest(b)?-1:1);
 }
 export async function originalTransferInventory(tx:Tx,source:StorageBinding){
+ const compactOriginals=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.namespace,source.namespace),isNotNull(mediaMultipartResources.redactedAt),isNull(mediaMultipartResources.objectReceiptId)));
+ for(const original of compactOriginals)if(!await(await import("./multipart-certificate-coverage")).readOriginalMultipartCertificateCoverage(tx,original.id))transferConflict("Review new evidence or holds on the original upload before transferring this storage namespace.");
  const keys=await currentPhysicalKeys(tx,source);
  if(!keys.length)transferConflict("There are no proven original objects to transfer.");
  for(const key of keys)await lockObjectDigest(tx,objectKeyDigest(key));

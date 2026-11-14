@@ -3,11 +3,12 @@
 // C1.12/C11.08: real ordinary/multipart admissions reuse the original ledger.
 import {AsyncLocalStorage} from "node:async_hooks";
 import type {OriginalProviderRequestProof} from "../../../scripts/media-transfer.mjs";
+import type {StorageBinding} from "@/adapters/storage/types";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import {db} from "@/core/db";
 import type { Actor, Tx } from "@/core/service";
-import { actorString } from "@/core/service";
+import { actorString,hasModuleAccess } from "@/core/service";
 import { mediaObjectWrites } from "./write-schema";
 import { mediaMultipartOperations, mediaMultipartResources } from "./multipart-schema";
 import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
@@ -18,6 +19,7 @@ import { requireTransferCapability } from "./transfer-authority";
 import { lockObjectDigest } from "./write-ledger";
 import { transferConflict, transferDigest } from "./transfer-proof";
 import {requireOriginalPartWithheldAuthority} from "./multipart-part-disposition";
+import {readRetainedOriginalMultipartIdentity} from "./multipart-retained-identity";
 import {assertMediaActorLive} from "./upload-ownership";
 import { actualStorageCallerRuntimeIdentity, mediaWriterRuntimeId, type CurrentStorageCallerRuntimeIdentity } from "./physical-caller-runtime";
 
@@ -30,6 +32,8 @@ export interface OriginalMediaCallerAdmission {
  token:string;
  runtimeIdentity:CurrentStorageCallerRuntimeIdentity;
  expectedRevision?:StorageTransferRevision;
+ /** Internal ephemeral READ candidate; never a canonical parent update. */
+ recoveryLocator?:{key:string;binding:StorageBinding};
 }
 
 /** The owning real short service has authorized and locked its original
@@ -55,6 +59,12 @@ export async function admitOriginalMediaCaller(tx:Tx,input:OriginalMediaCallerAd
   const[parent]=await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,input.multipartOperationId!)).limit(1).for("update");if(!parent||parent.resourceId!==resource.id)transferConflict();
   if(!input.kind.startsWith("multipart_")||!recovery&&input.kind!==`multipart_${parent.kind}`)transferConflict();
   key=resource.key;namespace=resource.namespace;parentState=parent.state;originalRuntime=parent.writerRuntimeId;
+  if(resource.redactedAt){
+   if(!recovery||!["multipart_recovery_inspect","multipart_retirement_inventory"].includes(input.kind)||!input.recoveryLocator||actor.kind!=="user"||actor.keyScopes||!hasModuleAccess(actor,"media","manage"))transferConflict("A minimized original upload permits only a fresh authorized recovery read.");
+   const first=await readRetainedOriginalMultipartIdentity(tx,resource.id);
+   if(first.state!=="proven"||first.identity.retirement.operationId!==parent.id||input.recoveryLocator.binding.namespace!==namespace||transferDigest(input.recoveryLocator.binding)!==first.identity.resource.bindingDigest)transferConflict();
+   key=input.recoveryLocator.key;
+  }else if(input.recoveryLocator)transferConflict("An intact original upload does not accept a replacement physical locator.");
   if(!recovery&&parent.actor!==actorString(actor))transferConflict("The actual original multipart actor differs from this admission.");
  }
  if(!recovery){

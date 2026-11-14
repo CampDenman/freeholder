@@ -3564,6 +3564,39 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Source-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart
+consumer leaf separates immutable historical first identity, exact current
+whole-frontier coverage and actual original erasure-job entitlement. The genuine
+worker can reduce that verified no-object cohort atomically without another
+DELETE; raw/session locators stay NULL through fresh READ-only same-original
+late-evidence re-review. Existing listing exposes only the exact eligible old
+ABORT while preserving CREATE debt; current classification restores only after
+actual new reads, two full inventories and guarded review. All first ACK/FIN/
+stop/results, safe declarations, certificate/capture bodies and previous native
+oracles stay intact. Seven functions/sixteen full continuations append after the
+whole749050 owned82 prefix, no schema/model/trigger/service/job/flag/capability
+change. Eight genuine service/TCP/actual-worker controls are PREPARED/UNRUN;
+all qualification is UNRUN in this child. Ordinary physical minimizer/write
+proof stays byte-identical; unverified retained upload binding remains pending.
+No C closure, remote terminal, provider/host/security/stable acceptance. Full
+ordinary/legacy/issued-authority/quota/capture/cutover consumers and all real
+acceptance remain required. See
+`deploy/media-multipart-idle-compact-source-2026-11-14.md`.
+
+Source-only fixture continuation, 2026-11-14 (C1.12/C11.08): the eight idle
+compact lifecycle controls now seed a genuine separate CUSTOMER subject for
+actual owned begin/abort, retaining OWNER for verified privacy and fresh human
+recovery. The real privacy call supplies confirmation ERASE. Its hold control
+uses a separate genuinely verified request for that same subject, because the
+existing public guard correctly freezes changes to an applied pending request.
+Source inspection confirms that guard is request-scoped; creating the second
+request is allowed by the existing service. All expected assertions, case names,
+product/SQL/capability source and frozen0ca BEFORE remain unchanged. Whole-file
+fixture reversal is recorded. All execution/qualification remains UNRUN; this
+supplies no native acceptance or C closure. See
+`deploy/media-idle-compact-fixture-source-2026-11-14.md`.
+
+
 Same-owner auxiliary checkpoint2026-11-14 (C12.38/C9.33/C1.08/C11.08):
 exactb40c8658 sourceV91 PASSES1448 assertions/228 complete selected files/490
 explicit DB skips, fulltypes/lint/metadata. FreshV51 ordinary86 +strictV62

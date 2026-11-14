@@ -14,6 +14,20 @@ import {storageNamespace} from "./storage-quota";
 import {storage} from "@/adapters/storage";
 import {transferConflict,transferDigest} from "./transfer-proof";
 
+/** Metadata only: locate a privately configured slot by BOTH immutable first
+ * namespace and binding digest. No caller supplies a host/account and no raw
+ * locator is restored to a canonical database row. Real I/O still resolves
+ * the checked factory outside the service transaction. */
+export function configuredRetainedOriginalBinding(namespace:string,bindingDigest:string):StorageBinding{
+ const e=env();
+ const candidates:StorageBinding[]=[];
+ for(const[endpoint,bucket]of[[e.S3_ENDPOINT,e.S3_BUCKET],[e.MEDIA_TRANSFER_SOURCE_S3_ENDPOINT,e.MEDIA_TRANSFER_SOURCE_S3_BUCKET],[e.MEDIA_TRANSFER_TARGET_S3_ENDPOINT,e.MEDIA_TRANSFER_TARGET_S3_BUCKET]])if(endpoint&&bucket)candidates.push({kind:"s3",namespace:storageNamespace({id:"s3",endpoint,bucket}),location:{endpoint,bucket}});
+ for(const bucket of[e.REPLIT_BUCKET_ID,e.MEDIA_TRANSFER_SOURCE_REPLIT_BUCKET_ID,e.MEDIA_TRANSFER_TARGET_REPLIT_BUCKET_ID])if(bucket)candidates.push({kind:"replit",namespace:storageNamespace({id:"replit",bucket}),location:{bucket}});
+ const matched=candidates.filter(binding=>binding.namespace===namespace&&transferDigest(binding)===bindingDigest);
+ if(!matched.length)transferConflict("Restore the exact original private storage configuration before reviewing this upload.");
+ const binding=matched[0]!;checkedTransferBinding(binding);return binding;
+}
+
 export async function configuredTransferStores():Promise<{source:AccountedTransferStore;target:AccountedTransferStore}> {
  const e=env(),configured=await boundStorage();
  if(configured.store.isPublic||!["s3","replit"].includes(configured.binding.kind))transferConflict("Verified transfer requires the configured original private S3 or Replit storage.");
