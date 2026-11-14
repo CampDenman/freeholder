@@ -16,6 +16,8 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  // C1.12/C11.08: only the gallery worker can reserve its archive generation.
+  "galleries.claimArchiveObject",
   // C12.38: authenticated parent coverage; internal queries do not admit positive collection.
   "invoicing.controlledProviderFinancialReadiness",
   // C1.08/C12.38: reviewed credit/card and controlled-provider phases.
@@ -432,6 +434,14 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // C1.12/C11.08: reviewed original-byte and gallery phases stay private.
+  "galleries.claimArchiveObject",
+  "media.captureOriginalDeleteRecovery",
+  "media.captureTargetPutReviewInventory",
+  "media.readTargetPutReviewInventory",
+  "media.admitTargetPutReviewInventoryRequest",
+  "media.appendTargetPutReviewInventoryPage",
+  "media.finishTargetPutReviewInventory",
   // C1.12/C11.08: explicit diagnostic mutations retain the real caller and remain private.
   "platform.authorizeDoctorProbe",
   "platform.recordDoctorProbe",
