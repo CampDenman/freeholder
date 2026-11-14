@@ -3,9 +3,11 @@
 // First membership is immutable. Late actual descendants follow original
 // reservation/caller lineage; current contact+equal key never adds a member.
 import {z} from "zod";
-import {and,asc,eq,inArray,isNotNull,ne,or} from "drizzle-orm";
+import {and,asc,eq,inArray,isNotNull,ne,or,sql} from "drizzle-orm";
 import type {Tx} from "@/core/service";
 import {erasureArtifactIsIntact} from "@/core/privacy/service";
+import {contactPrivacyIdentity,contactPrivacyHistory,contactHistoryOwnership} from "@/core/privacy/contact-identity";
+import {originalUploadPriorSubject,type RetainedUploadFirstIdentity} from "./original-upload-evidence";
 import {dataRequestArtifacts,dataRequests} from "@/core/privacy/schema";
 import {mediaObjects,mediaUploads} from "./schema";
 import {mediaObjectWrites} from "./write-schema";
@@ -19,23 +21,41 @@ import {readOriginalMultipartCertificateCoverage} from "./multipart-certificate-
 export type OriginalMediaScope="media.storageOperations"|"media.multipartOperations";
 const unique=(ids:string[])=>[...new Set(ids)];
 async function priorAuthority(tx:Tx,requestId:string,contactId:string,scope:OriginalMediaScope){
- const priorRequests=await tx.select().from(dataRequests).where(and(eq(dataRequests.contactId,contactId),eq(dataRequests.kind,"erasure"),isNotNull(dataRequests.verifiedAt),ne(dataRequests.id,requestId))).orderBy(asc(dataRequests.id)).limit(10001);
- if(priorRequests.length>10000)transferConflict("The complete original request ancestry exceeds this bounded proof. No subset can replace the first media capture.");
- const ids=priorRequests.map(row=>row.id),headers=ids.length?await tx.select().from(mediaOriginalErasureScopes).where(and(inArray(mediaOriginalErasureScopes.requestId,ids),eq(mediaOriginalErasureScopes.scope,scope))):[],cohorts=ids.length?await tx.select().from(mediaErasureCohorts).where(and(inArray(mediaErasureCohorts.requestId,ids),eq(mediaErasureCohorts.scope,scope))):[],artifacts=ids.length?await tx.select().from(dataRequestArtifacts).where(inArray(dataRequestArtifacts.dataRequestId,ids)):[];
- const artifactIds:string[]=[],receiptIds:string[]=[],resourceIds:string[]=[],uploadIds:string[]=[],reservationIds:string[]=[],legacyScopes:OriginalMediaErasureMembership["legacyScopes"]=[];
+ const identity=await contactPrivacyIdentity(tx,contactId),history=await contactPrivacyHistory(tx,identity.contactIds);
+ // Connected IDs select candidate metadata, never content authority. Actual
+ // immutable receipt origin/history below must contain ONLY this subject.
+ const candidateRows=await tx.select({request:dataRequests,couldBelong:contactHistoryOwnership(dataRequests.contactId,dataRequests.createdAt,identity.contactIds,"any")}).from(dataRequests).where(and(inArray(dataRequests.contactId,history.contactIds),eq(dataRequests.kind,"erasure"),isNotNull(dataRequests.verifiedAt),ne(dataRequests.id,requestId))).orderBy(asc(dataRequests.id)).limit(10001);
+ if(candidateRows.length>10000)transferConflict("The complete original request ancestry exceeds this bounded proof. No subset can replace the first media capture.");
+ const priorRequests=candidateRows.map(row=>row.request),ids=priorRequests.map(row=>row.id),headers=ids.length?await tx.select().from(mediaOriginalErasureScopes).where(and(inArray(mediaOriginalErasureScopes.requestId,ids),eq(mediaOriginalErasureScopes.scope,scope))):[],cohorts=ids.length?await tx.select().from(mediaErasureCohorts).where(and(inArray(mediaErasureCohorts.requestId,ids),eq(mediaErasureCohorts.scope,scope))):[],artifacts=ids.length?await tx.select().from(dataRequestArtifacts).where(inArray(dataRequestArtifacts.dataRequestId,ids)):[];
+ const artifactIds:string[]=[],receiptIds:string[]=[],resourceIds:string[]=[],uploadIds:string[]=[],reservationIds:string[]=[],legacyScopes:OriginalMediaErasureMembership["legacyScopes"]=[],uploadCandidates=new Map<string,Array<RetainedUploadFirstIdentity|null>>();
  for(const request of priorRequests){
   const header=headers.find(row=>row.requestId===request.id),members=cohorts.filter(row=>row.requestId===request.id),artifact=artifacts.find(row=>row.dataRequestId===request.id);
-  if(header){if(!header.complete)transferConflict("Restore the incomplete original prior media capture.");const first=intactOriginalMediaMembership(header.membership,header.captureDigest);receiptIds.push(...first.receipts.map(row=>row.id));resourceIds.push(...first.resources.map(row=>row.id));uploadIds.push(...first.uploads.map(row=>row.id));reservationIds.push(...first.reservations.map(row=>row.id));legacyScopes.push(...first.legacyScopes);}
   if(artifact&&!erasureArtifactIsIntact(artifact))transferConflict("Restore the intact original prior erasure receipt before using its captured media membership.");
-  const parsed= z.object({outcomes:z.array(z.object({scope:z.string()}))}).safeParse(artifact?.body),known=parsed.success&&parsed.data.outcomes.some(outcome=>outcome.scope===scope);
-  if(artifact&&(header||members.length||known))artifactIds.push(artifact.id);
-  if(!header&&(members.length||known))legacyScopes.push({requestId:request.id,scope,artifactDigest:artifact?.sha256??null});
-  // Exact old captured IDs remain evidence, with missing legacy first-capture
-  // completeness represented as debt. No lookup by a restored current key.
+  const parsed=z.object({outcomes:z.array(z.object({scope:z.string()}))}).safeParse(artifact?.body),known=parsed.success&&parsed.data.outcomes.some(outcome=>outcome.scope===scope);
+  if(!header){if((members.length||known)&&(candidateRows.find(row=>row.request.id===request.id)?.couldBelong||identity.contactIds.includes(request.contactId)))legacyScopes.push({requestId:request.id,scope,artifactDigest:artifact?.sha256??null});continue;}
+  if(!header.complete)transferConflict("Restore the incomplete original prior media capture.");
+  const first=intactOriginalMediaMembership(header.membership,header.captureDigest),ownership=await originalUploadPriorSubject(tx,identity.contactIds,request,header,artifact,scope);
+  if(ownership!=="owned"){
+   if(ownership!=="foreign")for(const upload of first.uploads)uploadCandidates.set(upload.id,[...uploadCandidates.get(upload.id)??[],null]);
+   if(ownership==="mixed"||ownership==="unknown"&&(candidateRows.find(row=>row.request.id===request.id)?.couldBelong||identity.contactIds.includes(request.contactId)))legacyScopes.push({requestId:request.id,scope,artifactDigest:artifact?.sha256??null});
+   continue;
+  }
+  receiptIds.push(...first.receipts.map(row=>row.id));resourceIds.push(...first.resources.map(row=>row.id));uploadIds.push(...first.uploads.map(row=>row.id));reservationIds.push(...first.reservations.map(row=>row.id));legacyScopes.push(...first.legacyScopes);
+  for(const upload of first.uploads)uploadCandidates.set(upload.id,[...uploadCandidates.get(upload.id)??[],upload.reservationId&&upload.keyDigest?{id:upload.id,reservationId:upload.reservationId,keyDigest:upload.keyDigest}:null]);
+  if(artifact)artifactIds.push(artifact.id);
+  // Only exact genuine descendants of these wholly-owned immutable captures
+  // may follow their original source. Equal current keys never add a member.
   receiptIds.push(...members.flatMap(row=>row.objectReceiptId?[row.objectReceiptId]:[]));resourceIds.push(...members.flatMap(row=>row.multipartResourceId?[row.multipartResourceId]:[]));
  }
+ const priorUploadIdentities:RetainedUploadFirstIdentity[]=[];
+ for(const candidates of uploadCandidates.values()){
+  if(candidates.some(row=>row===null))continue;
+  const intact=candidates.filter((row):row is RetainedUploadFirstIdentity=>row!==null),first=intact[0];
+  if(first&&intact.some(row=>row.reservationId!==first.reservationId||row.keyDigest!==first.keyDigest))transferConflict("The authenticated original upload captures disagree; no latest row may choose a replacement identity.");
+  if(first)priorUploadIdentities.push(first);
+ }
  const seen=new Map<string,OriginalMediaErasureMembership["legacyScopes"][number]>();for(const row of legacyScopes){const key=`${row.requestId}:${row.scope}`,previous=seen.get(key);if(previous&&previous.artifactDigest!==row.artifactDigest)transferConflict("The original legacy scope receipts conflict.");seen.set(key,row);}
- return{receiptIds:unique(receiptIds),resourceIds:unique(resourceIds),uploadIds:unique(uploadIds),reservationIds:unique(reservationIds),legacyScopes:[...seen.values()],artifactIds:unique(artifactIds)};
+ return{receiptIds:unique(receiptIds),resourceIds:unique(resourceIds),uploadIds:unique(uploadIds),reservationIds:unique(reservationIds),legacyScopes:[...seen.values()],artifactIds:unique(artifactIds),priorUploadIdentities};
 }
 export async function captureFirstOriginalMediaScope(tx:Tx,requestId:string,contactId:string,scope:OriginalMediaScope){
  const authorityMode=await lockOriginalMediaScopeCapture(tx,{requestId,contactId,scope});
@@ -53,7 +73,8 @@ export async function captureFirstOriginalMediaScope(tx:Tx,requestId:string,cont
  const reservations=scope==="media.multipartOperations"?await tx.select().from(mediaObjects).where(or(eq(mediaObjects.ownerContactId,contactId),authority.reservationIds.length?inArray(mediaObjects.reservationId,authority.reservationIds):undefined)).orderBy(asc(mediaObjects.key)).limit(10001):[];
  if(resources.length>10000||receipts.length>10000||uploads.length>10000||reservations.length>10000)transferConflict("The complete original media scope exceeds its bounded capture. No subset may be acknowledged.");
  if(authority.resourceIds.some(id=>!resources.some(row=>row.id===id)))transferConflict("Restore the exact original multipart/upload scope membership.");
- const membership=firstOriginalMediaMembership({receipts,resources,uploads,reservations,legacyScopes:authority.legacyScopes}),captureDigest=transferDigest(membership);
+ if(authority.uploadIds.some(id=>!uploads.some(row=>row.id===id)))transferConflict("Restore the exact original upload proof row; a new first scope cannot omit or recreate its missing identity.");
+ const membership=firstOriginalMediaMembership({receipts,resources,uploads,reservations,legacyScopes:authority.legacyScopes,priorUploadIdentities:authority.priorUploadIdentities}),captureDigest=transferDigest(membership);
  if(authorityMode==="empty_metadata"&&(membership.receipts.length||membership.resources.length||membership.uploads.length||membership.reservations.length||originalMediaBirthDebt(membership)))transferConflict("Only a genuinely empty first scope can use metadata authority; retain original legacy/birth evidence until the complete protocol is available.");
  const[header]=await tx.insert(mediaOriginalErasureScopes).values({requestId,scope,membership,captureDigest,complete:false}).returning();
  if(receipts.length)await tx.insert(mediaErasureCohorts).values(receipts.map(row=>({requestId,scope,objectReceiptId:row.id}))).onConflictDoNothing();
@@ -96,13 +117,17 @@ export async function originalMediaScopePending(tx:Tx,requestId:string,scope:Ori
  if(receipts.some(row=>!row.redactedAt||!row.deletedAt||["unverified","started","unknown"].includes(row.state))||resources.some(row=>!row.redactedAt||!row.retiredAt||row.providerUploadId!==null||!["completed","aborted"].includes(row.state)))return true;
  for(const resource of resources)if(resource.redactedAt&&resource.objectReceiptId===null&&!await readOriginalMultipartCertificateCoverage(tx,resource.id))return true;
  if(scope==="media.multipartOperations"){
-  const ids=first.membership.uploads.map(row=>row.id),uploads=ids.length?await tx.select().from(mediaUploads).where(inArray(mediaUploads.id,ids)):[],reservationIds=unique([...first.membership.reservations.map(row=>row.id),...first.membership.receipts.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.resources.flatMap(row=>row.reservationId?[row.reservationId]:[])]);
+  const ids=first.membership.uploads.map(row=>row.id),uploads=ids.length?await tx.select().from(mediaUploads).where(inArray(mediaUploads.id,ids)):[],reservationIds=unique([...first.membership.reservations.map(row=>row.id),...first.membership.receipts.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.resources.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.uploads.flatMap(row=>row.reservationId?[row.reservationId]:[])]);
   const pointers=reservationIds.length?await tx.select({id:mediaObjects.reservationId}).from(mediaObjects).where(inArray(mediaObjects.reservationId,reservationIds)).limit(1):[];
-  if(pointers.length||uploads.some(row=>row.ownerContactId!==null||row.uploadedBy!=="erased"||row.filename!=="[erased]"))return true;
-  // An erased marker/retained prefix is not an immutable upload-to-physical
-  // admission link. This leaf authenticates only its exact idle cohort;
-  // other historical upload locators retain debt until their own proof does.
-  if(uploads.some(upload=>/^retained:[a-f0-9]{64}$/.test(upload.storageKey)&&!resources.some(resource=>resource.uploadId===upload.id&&resource.objectReceiptId===null&&resource.redactedAt)))return true;
+  if(uploads.length!==ids.length||pointers.length||uploads.some(row=>row.ownerContactId!==null||row.uploadedBy!=="erased"||row.filename!=="[erased]"))return true;
+  // Both consumers require their exact original first identity and current
+  // physical proof. A retained marker by itself never closes upload debt.
+  for(const upload of uploads){
+   if(resources.some(resource=>resource.uploadId===upload.id&&resource.objectReceiptId===null&&resource.redactedAt))continue;
+   const evidence=await(await import("./original-upload-evidence")).readOriginalUploadEvidence(tx,first.membership,upload.id);
+   if(evidence.state!=="proven"||evidence.basis!=="new_birth"||upload.storageKey!==`retained:${evidence.keyDigest}`||upload.providerUploadId!==null||!["complete","aborted"].includes(upload.state)||Object.keys(upload.provenance).length||Object.keys(upload.mediaMetadata).length||upload.failureReason!==null)return true;
+   const[proof]=await tx.execute<{ready:boolean}>(sql`select freeholder_media_upload_original_erasure_ready(${upload.id}::uuid,${requestId}::uuid) as ready`);if(proof?.ready!==true)return true;
+  }
   for(const resource of resources)if(resource.redactedAt&&resource.objectReceiptId===null){const upload=uploads.find(row=>row.id===resource.uploadId);if(!upload||upload.storageKey!==`retained:${resource.keyDigest}`||upload.providerUploadId!==null||upload.state!=="aborted"||Object.keys(upload.provenance).length||Object.keys(upload.mediaMetadata).length||upload.failureReason!==null)return true;}
  }
  return(await import("./original-provider-privacy")).originalProviderEvidencePending(tx,{receiptIds:first.receiptIds,resourceIds:first.resourceIds});

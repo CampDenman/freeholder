@@ -26,7 +26,7 @@ export interface OriginalMediaErasureMembership{
  legacyScopes:Array<{requestId:string;scope:string;artifactDigest:string|null}>;
  receipts:Array<{id:string;reservationId:string|null;witness:string}>;
  resources:Array<{id:string;reservationId:string|null;witness:string}>;
- uploads:Array<{id:string;witness:string}>;
+ uploads:Array<{id:string;reservationId?:string|null;keyDigest?:string;witness:string}>;
  reservations:Array<{id:string;keyDigest:string;witness:string}>;
  legacyReservations:Array<{keyDigest:string;witness:string}>;
 }

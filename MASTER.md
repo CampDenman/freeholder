@@ -3670,6 +3670,20 @@ ordinary/legacy/issued-authority/quota/capture/cutover consumers and all real
 acceptance remain required. See
 `deploy/media-multipart-idle-compact-source-2026-11-14.md`.
 
+Source-only continuation, 2026-11-14 (C1.12/C11.08): new ordinary upload births
+now explicitly bind one immutable upload/reservation UUID in the genuine shared
+same-TX producer, with deferred cross-row validation and no historical NULL
+fill/default/FK to a temporary pointer. Future first captures retain the exact
+original key digest; repeated requests require agreeing intact captures and
+precise historical subject ownership. Exact ordinary erasure and thirty-day
+redundant metadata custody consumers preserve the UUID and separate derivative
+proofs; unknown/held/legacy evidence remains pending. Four functions/two triggers/
+one index/one nullable column append after the intact owned82 prefix. Eight pure
+and five genuine service/TCP controls are PREPARED, all UNRUN; two require the
+real complete request ABI. No capability, C closure or provider/security/stable
+acceptance. Legacy/issued-authority/quota/capture/cutover and real qualification
+remain required. See `deploy/media-upload-original-reservation-source-2026-11-14.md`.
+
 ### 43.2 Definition of done for every feature
 
 Every feature checkbox below inherits this checklist. If a line does not

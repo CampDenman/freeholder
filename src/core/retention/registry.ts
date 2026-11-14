@@ -176,7 +176,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_provider_invoice_observations: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
   subscription_provider_invoice_lines: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
   media_storage_transfer_subjects: "Original transfer ownership has no generic TTL; shared contact merge, named holds and exact original privacy minimization govern it.",
-  media_uploads:"Original reservations survive unresolved physical work; guarded lifecycle and subject erasure own retirement.",
+  media_uploads:"Keep minimal immutable upload/reservation UUID proof. The 30-day terminal policy reduces redundant intake PII only after actual ordinary proxy custody/retirement; verified erasure needs exact first scope and physical proof. Unknown/held necessary evidence remains explicit review debt; no age-based byte erasure.",
   media_objects:"Original object ownership survives unknown writes; guarded physical cleanup and privacy jobs remove it.",
   media_multipart_resources:"Original multipart resources survive timers; explicit original-provider retirement and subject erasure own cleanup.",
   media_object_writes: "Original physical-operation and retired-key receipts are not a TTL store. Privacy minimizes personal fields only after settled original cleanup; unresolved work keeps its erasure receipt pending.",

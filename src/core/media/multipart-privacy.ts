@@ -23,6 +23,7 @@ import {minimizeMediaStorageOperations} from "./write-privacy";
 import {retireKnownMultipart} from "./multipart-operations";
 import {objectCohortIds,mediaCohortPending} from "./erasure-cohorts";
 import {minimizeIdleOriginalMultipart} from "./multipart-idle-minimization";
+import {minimizeOriginalUpload} from "./original-upload-privacy";
 
 export const MULTIPART_PRIVACY_SCOPE="media.multipartOperations";
 export const MULTIPART_ERASURE_JOB="core.eraseMediaMultipartOperations";
@@ -45,7 +46,7 @@ async function retireOwnedCapturePointers(tx:Tx,keys:string[],knownActors:Set<st
 }
 
 async function minimizeOwned(tx:Tx,contactId:string,requestId:string):Promise<void>{
- const first=await originalMediaScopeMembers(tx,requestId,MULTIPART_PRIVACY_SCOPE);if(first.birthDebt)return;const originalIds=first.receiptIds,reservationIds=[...new Set([...first.membership.reservations.map(row=>row.id),...first.membership.receipts.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.resources.flatMap(row=>row.reservationId?[row.reservationId]:[])])];
+ const first=await originalMediaScopeMembers(tx,requestId,MULTIPART_PRIVACY_SCOPE);if(first.birthDebt)return;const originalIds=first.receiptIds,reservationIds=[...new Set([...first.membership.reservations.map(row=>row.id),...first.membership.receipts.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.resources.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.uploads.flatMap(row=>row.reservationId?[row.reservationId]:[])])];
  async function scopedWrites(keyDigest:string){const history=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,keyDigest));return{writes:history.filter(row=>originalIds.includes(row.id)),foreign:history.some(row=>!originalIds.includes(row.id))};}
  await allowMediaReceiptWrites(tx);
  if(await storageOperationsHeld(tx,[contactId]))return;
@@ -63,6 +64,9 @@ async function minimizeOwned(tx:Tx,contactId:string,requestId:string):Promise<vo
  }
  const objects=reservationIds.length?await tx.select().from(mediaObjects).where(inArray(mediaObjects.reservationId,reservationIds)).orderBy(asc(mediaObjects.key)).for("update"):[];
  for(const object of objects){
+  // Upload-owned pointers are reduced only by their exact durable upload
+  // consumer, never by this legacy current-key fallback.
+  if(object.uploadId&&first.membership.uploads.some(upload=>upload.id===object.uploadId))continue;
   const digest=objectKeyDigest(object.key),{writes,foreign}=await scopedWrites(digest);if(foreign)continue;
   const active=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.keyDigest,digest),isNull(mediaMultipartResources.retiredAt))).limit(1);
   if(writes.length&&!hasDurableOriginalMediaCallerProof())continue;
@@ -72,18 +76,7 @@ async function minimizeOwned(tx:Tx,contactId:string,requestId:string):Promise<vo
   // it is a permanent admission refusal for a request still scanning bytes.
   await tx.delete(mediaObjects).where(eq(mediaObjects.key,object.key));
  }
- const uploadIds=first.membership.uploads.map(row=>row.id),uploads=uploadIds.length?await tx.select().from(mediaUploads).where(inArray(mediaUploads.id,uploadIds)).orderBy(asc(mediaUploads.id)).for("update"):[];
- for(const upload of uploads){
-  // Retained locators already name an immutable first digest. Rehashing one
-  // cannot erase anything further and would replace that original identity.
-  if(upload.uploadedBy==="erased"&&upload.ownerContactId===null&&/^retained:[a-f0-9]{64}$/.test(upload.storageKey))continue;
-  const{writes,foreign}=await scopedWrites(objectKeyDigest(upload.storageKey));if(foreign)continue;
-  const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.uploadId,upload.id),isNull(mediaMultipartResources.redactedAt))).limit(1);
-  if(writes.length&&!hasDurableOriginalMediaCallerProof())continue;
-  if(multipart.length||writes.some(row=>!row.deletedAt||["unverified","started","unknown"].includes(row.state)))continue;
-  await minimizeMediaStorageOperations(tx,writes.map(row=>row.id));
-  await tx.update(mediaUploads).set({filename:"[erased]",uploadedBy:"erased",ownerContactId:null,storageKey:`retained:${objectKeyDigest(upload.storageKey)}`,provenance:{},mediaMetadata:{},failureReason:null,state:upload.state==="complete"?"complete":"aborted",completedAt:upload.completedAt??new Date(),updatedAt:new Date()}).where(eq(mediaUploads.id,upload.id));
- }
+ for(const upload of first.membership.uploads)await minimizeOriginalUpload(tx,requestId,upload.id);
 }
 async function personalRows(tx:Tx,contactId:string){
  const resources=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.contactId,contactId),isNull(mediaMultipartResources.redactedAt))).orderBy(asc(mediaMultipartResources.id));
