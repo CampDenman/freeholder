@@ -1,0 +1,84 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// PREPARED/UNRUN. Real HTTP adapter; fictional bank objects only, never DB rows.
+import { expect } from "vitest";
+import { controlledPeriodEdge84 } from "./merchant-controlled-period84";
+const object=(value:unknown):Record<string,unknown>=>value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:{};
+const tag=(form:URLSearchParams)=>Object.fromEntries([...form].filter(([key])=>key.startsWith("metadata[")).map(([key,value])=>[key.slice(9,-1),value]));
+export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDraftReply?:true;failAfterPositiveCash?:true}={}){
+ let current:()=>Record<string,unknown>|undefined=()=>undefined,zero:()=>Record<string,unknown>=()=>{throw Error("The actual bootstrap must exist first.");};
+ let originalZero:Record<string,unknown>|null=null,updatePosts=0,draftPosts=0,itemPosts=0,feePosts=0,finalizePosts=0,payPosts=0,cashGets=0;
+ let lostUpdate=false,lostDraft=false,failedCash=false;
+ const bankInvoices=new Map<string,Record<string,unknown>>(),bankLines=new Map<string,Array<Record<string,unknown>>>(),prices=new Map<string,Record<string,unknown>>(),intents=new Map<string,Record<string,unknown>>();
+ const forms:Array<{path:string;form:URLSearchParams}>=[];
+ const edge=controlledPeriodEdge84({atProviderStart:true,extra:async(url,init)=>{
+  const subscription=current();if(!subscription)return null;
+  if(!originalZero)originalZero=structuredClone(zero());
+  const form=()=>{const actual=new URLSearchParams(init.body as URLSearchParams);forms.push({path:url.pathname,form:actual});return actual;};
+  const refresh=(id:string)=>{const invoice=bankInvoices.get(id),lines=bankLines.get(id);if(!invoice||!lines)throw Error("A genuine bank invoice and lines must exist.");const total=lines.reduce((n,line)=>n+Number(line.amount),0);invoice.total=total;invoice.subtotal=total;invoice.amount_due=total;invoice.amount_remaining=total-Number(invoice.amount_paid);};
+  if(url.pathname===`/v1/subscriptions/${subscription.id}`&&init.method==="POST"){
+   const actual=new URLSearchParams(init.body as URLSearchParams);if(!actual.has("items[0][price_data][unit_amount]"))return null;
+   updatePosts++;forms.push({path:url.pathname,form:actual});expect(actual.get("proration_behavior")).toBe("none");expect(actual.get("pause_collection[behavior]")).toBe("keep_as_draft");expect(actual.get("billing_cycle_anchor[type]")).toBe("unchanged");
+   const items=object(subscription.items).data;if(!Array.isArray(items)||items.length!==1)throw Error("Use the actual original subscription item.");const item=object(items[0]);expect(actual.get("items[0][id]")).toBe(item.id);
+   const price={...object(item.price),id:`price_actualPeriodEpoch${updatePosts}`,unit_amount:Number(actual.get("items[0][price_data][unit_amount]")),unit_amount_decimal:actual.get("items[0][price_data][unit_amount]"),product:actual.get("items[0][price_data][product]"),
+    currency:actual.get("items[0][price_data][currency]"),recurring:{interval:actual.get("items[0][price_data][recurring][interval]"),interval_count:Number(actual.get("items[0][price_data][recurring][interval_count]")),usage_type:"licensed"}};
+   item.price=price;prices.set(price.id,price);subscription.metadata={...object(subscription.metadata),...tag(actual)};
+   if(actual.has("trial_end")){subscription.trial_end=Number(actual.get("trial_end"));subscription.billing_cycle_anchor=Number(actual.get("trial_end"));item.current_period_end=Number(actual.get("trial_end"));subscription.status="trialing";}
+   if(options.loseUpdateReply&&!lostUpdate){lostUpdate=true;throw Error("Fictional bank accepted the real original update; its response was lost.");}
+   return Response.json(subscription);
+  }
+  if(url.pathname==="/v1/invoices"&&init.method==="POST"){
+   draftPosts++;const actual=form(),id=`in_actualPeriodTarget${draftPosts}`;expect(actual.get("subscription")).toBe(subscription.id);expect(actual.get("auto_advance")).toBe("false");expect(actual.get("pending_invoice_items_behavior")).toBe("exclude");
+   const invoice={id,object:"invoice",subscription:subscription.id,customer:subscription.customer,parent:{type:"subscription_details",subscription_details:{subscription:subscription.id,metadata:{...object(subscription.metadata)}}},
+    metadata:tag(actual),currency:actual.get("currency"),collection_method:actual.get("collection_method"),default_payment_method:actual.get("default_payment_method"),auto_advance:false,status:"draft",total:0,subtotal:0,amount_paid:0,amount_due:0,amount_remaining:0,
+    automatic_tax:{enabled:false},discounts:[],default_tax_rates:[],total_discount_amounts:[],total_taxes:[],starting_balance:0,ending_balance:0,pre_payment_credit_notes_amount:0,post_payment_credit_notes_amount:0,
+    transfer_data:subscription.transfer_data,on_behalf_of:subscription.on_behalf_of,application_fee_amount:null};
+   bankInvoices.set(id,invoice);bankLines.set(id,[]);
+   if(options.loseDraftReply&&!lostDraft){lostDraft=true;throw Error("Fictional bank created the real exact original draft; its response was lost.");}
+   return Response.json(invoice);
+  }
+  if(url.pathname==="/v1/invoiceitems"&&init.method==="POST"){
+   itemPosts++;const actual=form(),invoiceId=String(actual.get("invoice"));if(!bankInvoices.has(invoiceId))throw Error("Attach to a genuine original bank draft.");
+   const id=`ii_actualPeriodComponent${itemPosts}`,lineId=`il_actualPeriodComponent${itemPosts}`,priceId=actual.has("amount")?null:`price_actualPeriodComponent${itemPosts}`,amount=Number(actual.get("amount")??actual.get("price_data[unit_amount]")),metadata=tag(actual);
+   const pricing={type:"price_details",price_details:{price:priceId,product:actual.get("price_data[product]")}},line={id:lineId,amount,currency:actual.get("currency"),quantity:1,period:{start:Number(actual.get("period[start]")),end:Number(actual.get("period[end]"))},metadata,
+    parent:{type:"invoice_item_details",invoice_item_details:{invoice_item:id}},pricing,discount_amounts:[],taxes:[]};
+   bankLines.get(invoiceId)!.push(line);if(priceId)prices.set(priceId,{id:priceId,object:"price",currency:actual.get("currency"),product:actual.get("price_data[product]"),unit_amount:amount,unit_amount_decimal:String(amount),billing_scheme:"per_unit",type:"one_time",tax_behavior:"exclusive",transform_quantity:null});refresh(invoiceId);
+   return Response.json({id,invoice:invoiceId,customer:subscription.customer,amount,currency:actual.get("currency"),metadata,pricing});
+  }
+  const invoiceId=url.pathname.split("/")[3]??"",invoice=bankInvoices.get(invoiceId);
+  if(invoice&&url.pathname===`/v1/invoices/${invoiceId}`&&init.method==="POST"){
+   feePosts++;const actual=form();expect(actual.get("auto_advance")).toBe("false");invoice.application_fee_amount=Number(actual.get("application_fee_amount"));return Response.json(invoice);
+  }
+  if(invoice&&url.pathname===`/v1/invoices/${invoiceId}/finalize`&&init.method==="POST"){
+   finalizePosts++;expect(form().get("auto_advance")).toBe("false");expect(invoice.status).toBe("draft");invoice.status="open";return Response.json(invoice);
+  }
+  if(invoice&&url.pathname===`/v1/invoices/${invoiceId}/pay`&&init.method==="POST"){
+   payPosts++;expect(form().get("off_session")).toBe("true");expect(invoice.status).toBe("open");const id=`pi_actualPeriodTarget${payPosts}`;
+   const intent={id,object:"payment_intent",status:"succeeded",customer:subscription.customer,payment_method:subscription.default_payment_method,amount:invoice.total,amount_received:invoice.total,amount_capturable:0,currency:invoice.currency,latest_charge:`ch_actualPeriodTarget${payPosts}`,transfer_data:subscription.transfer_data,on_behalf_of:subscription.on_behalf_of,application_fee_amount:invoice.application_fee_amount};
+   intents.set(invoiceId,intent);invoice.status="paid";invoice.amount_paid=invoice.total;invoice.amount_remaining=0;return Response.json(invoice);
+  }
+  if(url.pathname==="/v1/invoices"&&init.method==="GET")return Response.json({data:[originalZero,...bankInvoices.values()],has_more:false});
+  if(url.pathname===`/v1/invoices/${originalZero.id}`&&init.method==="GET")return Response.json(originalZero);
+  if(invoice&&url.pathname===`/v1/invoices/${invoiceId}`&&init.method==="GET")return Response.json(invoice);
+  if(invoice&&url.pathname===`/v1/invoices/${invoiceId}/lines`&&init.method==="GET")return Response.json({data:bankLines.get(invoiceId),has_more:false});
+  if(url.pathname==="/v1/invoice_payments"&&init.method==="GET"&&bankInvoices.has(String(url.searchParams.get("invoice")))){
+   const selected=String(url.searchParams.get("invoice")),intent=intents.get(selected);return Response.json({data:intent?[{id:`inpay_${intent.id}`,invoice:selected,status:"paid",amount_paid:intent.amount_received,amount_requested:intent.amount,currency:intent.currency,payment:{type:"payment_intent",payment_intent:intent.id}}]:[],has_more:false});
+  }
+  const intent=[...intents.values()].find(row=>url.pathname===`/v1/payment_intents/${row.id}`);
+  if(intent&&init.method==="GET"){cashGets++;return Response.json(intent);}
+  const chargeIntent=[...intents.values()].find(row=>url.pathname===`/v1/charges/${row.latest_charge}`);
+  if(chargeIntent&&init.method==="GET")return Response.json({id:chargeIntent.latest_charge,payment_intent:chargeIntent.id,amount_captured:chargeIntent.amount_received,currency:chargeIntent.currency,paid:true,captured:true,refunded:false,amount_refunded:0,
+   application_fee:Number(chargeIntent.application_fee_amount)>0?`fee_${chargeIntent.id}`:null,transfer:`tr_${chargeIntent.id}`});
+  const feeIntent=[...intents.values()].find(row=>url.pathname===`/v1/application_fees/fee_${row.id}`);
+  if(feeIntent&&init.method==="GET")return Response.json({id:`fee_${feeIntent.id}`,originating_transaction:feeIntent.latest_charge,charge:feeIntent.latest_charge,account:object(feeIntent.transfer_data).destination,amount:feeIntent.application_fee_amount,amount_refunded:0,currency:feeIntent.currency});
+  const transferIntent=[...intents.values()].find(row=>url.pathname===`/v1/transfers/tr_${row.id}`);
+  if(transferIntent&&init.method==="GET")return Response.json({id:`tr_${transferIntent.id}`,source_transaction:transferIntent.latest_charge,destination:object(transferIntent.transfer_data).destination,amount:transferIntent.amount_received,amount_reversed:0,currency:transferIntent.currency,reversed:false});
+  if((url.pathname==="/v1/refunds"||url.pathname==="/v1/disputes")&&init.method==="GET")return Response.json({data:[],has_more:false});
+  const price=prices.get(url.pathname.slice("/v1/prices/".length));if(price&&init.method==="GET"){
+   if(options.failAfterPositiveCash&&intents.size&&!failedCash){failedCash=true;throw Error("Fictional original price GET failed after actual positive cash occurrence was retained.");}return Response.json(price);
+  }
+  return null;
+ }});
+ current=edge.currentSubscription;zero=edge.currentZeroInvoice;
+ return{...edge,forms,invoices:()=>[...bankInvoices.values()],intents:()=>[...intents.values()],counts:()=>({updatePosts,draftPosts,itemPosts,feePosts,finalizePosts,payPosts,cashGets})};
+}
