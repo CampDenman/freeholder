@@ -44,7 +44,7 @@ describe.runIf(hasDatabase)("actual controlled cash ordering is admission order,
   f=await actualControlledPeriod84();expect(await collectControlledCollection.call({collectionId:f.target.collectionId},OWNER)).toMatchObject({state:"money_retained",applied:false});
   const[receipt]=await db().select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId,f.parent.id));if(!receipt?.providerChargeRef)throw Error("The real original exact-target bank receipt is required.");
   expect(await db().select().from(subscriptionControlledChargeOrigins).where(eq(subscriptionControlledChargeOrigins.receiptId,receipt.id))).toHaveLength(1);
-  const input={collectionId:f.target.collectionId,receiptId:receipt.id},beforePayments=await db().select().from(payments),beforeInvoices=await db().select().from(invoices),beforeCounts=f.remote.counts();
+  const input={collectionId:f.target.collectionId,receiptId:receipt.id},targetInvoiceId=f.target.invoiceId,beforePayments=await db().select().from(payments),beforeInvoices=await db().select().from(invoices),beforeCounts=f.remote.counts();
   const inspect=f.remote.provider.inspectMerchantReturnedCash?.bind(f.remote.provider);if(!inspect)throw Error("Use the real original GET-only Stripe adapter.");
   async function perform(claim:Awaited<ReturnType<typeof prepareControlledCashInspection.call>>){await performMerchantCashReturnInspection(claim,()=>inspect!({providerPlatformAccountId:claim.providerPlatformAccountId,providerApiVersion:claim.providerApiVersion,...(claim.providerAccountId?{providerAccountId:claim.providerAccountId}:{}),paymentProviderRef:claim.paymentProviderRef,
    onOriginalCashObserved:async evidence=>{await recordCashReturnPrimaryObservation.call({...claim,evidence:merchantPaymentEvidence.extend({amountMinor:z.number().int().nonnegative(),currency:z.string().regex(/^[A-Z]{3}$/)}).parse(evidence)},system);},
@@ -67,8 +67,8 @@ describe.runIf(hasDatabase)("actual controlled cash ordering is admission order,
    await perform(a);expect((await db().transaction(tx=>latestControlledCashInspectionLineage(tx,receipt.id))).inspection.id).toBe(a.inspectionId);
    expect((await db().select().from(merchantCashReturnInspections).where(eq(merchantCashReturnInspections.id,b.inspectionId)))[0]).toEqual(admittedB);expect(await db().select().from(merchantCashReturnInspectionFinishes)).toHaveLength(2);
    expect(await db().select().from(payments)).toEqual(beforePayments);expect(await db().select().from(invoices)).toEqual(beforeInvoices);
-   expect(await db().select().from(payments).where(eq(payments.invoiceId,f.target.invoiceId))).toHaveLength(0);
-   expect(beforeInvoices.find(row=>row.id===f.target.invoiceId)?.paidMinor).toBe(0);
+   expect(await db().select().from(payments).where(eq(payments.invoiceId,targetInvoiceId))).toHaveLength(0);
+   expect(beforeInvoices.find(row=>row.id===targetInvoiceId)?.paidMinor).toBe(0);
    expect(await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId,f.parent.id))).toEqual(f.grants);
    expect(f.remote.counts()).toEqual({...beforeCounts,cashGets:beforeCounts.cashGets+2});
   }finally{resume.resolve();await outcome;}
