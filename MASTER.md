@@ -3564,6 +3564,22 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled original-receipt routing source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
+canonical receipt's real controlled-origin child, authenticates its genuine
+same-transaction HMAC batch/current bank/parent stage BEFORE payment UUID birth,
+and compares the unchanged shared cash/fee computation to that exact receipt
+plan. Legacy period/generation routes and all previous cash/return/history guards
+remain intact. A NEW UNAPPLIED suffix preserves the full old route guard with
+only an exact verified controlled-origin alternative to its gross-proration
+attempt condition; independent BEFORE and deferred stage guards remain required.
+The route capability checks actual function-body hashes and enabled trigger
+identities, never a boolean marker. Three controls are PREPARED/UNRUN; no CPU,
+database, provider or current-root execution occurred. Genuine initial batch
+admission/writer integration, separate paid effects, partial/batch/native and
+provider/security acceptance remain required; no C-item or stable closure.
+See `deploy/controlled-original-receipt-route84-source-20261113.md`.
+
 Controlled canonical stages source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): a NEW UNAPPLIED continuation independently proves
 exact real payment/invoice/route/bank-observation/fee/FIFO-plan/state-event deltas
