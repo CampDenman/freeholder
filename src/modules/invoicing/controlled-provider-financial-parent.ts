@@ -104,3 +104,13 @@ export async function lockControlledParentMoney(ctx:ServiceContext,graph:Awaited
   for(const cash of cashNamespaces)await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`subscription-cash:${cash.platform}:${cash.account??""}:${cash.ref}`}))`);
 
 }
+
+/** Explicit comparison-only companion; no default graph is ever projected. */
+export async function parentFinancialGraphForOriginalInventory(tx: Tx, subscriptionId: string,
+  context: import("./original-cash-inventory-causal-proof").OriginalInventoryProjectionContext) {
+  const full = await parentFinancialGraphForTx(tx, subscriptionId);
+  const { merchantRefundDependencyFingerprintsForOriginalInventory } = await import("./merchant-refund-dependencies");
+  const children = await merchantRefundDependencyFingerprintsForOriginalInventory(tx,
+    { paymentIds: full.money.map(row => row.id), subscriptionChargeReceiptIds: full.receipts.map(row => row.id) }, context, full.children);
+  return { ...full, children };
+}

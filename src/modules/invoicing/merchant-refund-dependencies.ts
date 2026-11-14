@@ -130,3 +130,33 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
   }
   return { version: 1, entries: entries.toSorted((a, b) => a.table.localeCompare(b.table) || a.id.localeCompare(b.id)), incomplete: false };
 }
+
+/** Historical comparison companion ONLY. The ordinary reader above retains
+ * its exact full-row inventory, bounds and legacy digest domains. */
+export async function merchantRefundDependencyFingerprintsForOriginalInventory(
+  tx: Tx, input: { paymentIds: readonly string[]; subscriptionChargeReceiptIds: readonly string[] },
+  context: import("./original-cash-inventory-causal-proof").OriginalInventoryProjectionContext,
+  knownFull?: MerchantRefundDependencyReceipt,
+): Promise<MerchantRefundDependencyReceipt> {
+  const { requireOriginalInventoryCausalContext, originalInventoryCausalFeedback, originalInventoryCausalRefusal, assertOriginalInventoryOwnRowsCurrent } = await import("./original-cash-inventory-causal-proof");
+  requireOriginalInventoryCausalContext(context);
+  await assertOriginalInventoryOwnRowsCurrent(tx,context);
+  const full = knownFull ?? await merchantRefundDependencyFingerprints(tx, input);
+  if (full.incomplete || full.entries.length > MAX) originalInventoryCausalRefusal();
+  const own = new Map(context.entries.map(row => [`${row.table}:${row.id}`, row]));
+  const { full: source, causal } = await originalInventoryCausalFeedback(tx, input.paymentIds, input.subscriptionChargeReceiptIds, context);
+  const feedback = (row: typeof source.feedback[number]) => ({ id: `${merchantTaxDigest(row.namespace)}:${row.feedback.id}`, ...row });
+  const previousFeedback = new Map(source.feedback.map(row => { const value = feedback(row); return [value.id, merchantTaxDigest(value)]; }));
+  const entries = full.entries.filter(row => {
+    const actual = own.get(`${row.table}:${row.id}`);
+    if (actual) { if (row.fingerprint !== actual.dependencyFingerprint) originalInventoryCausalRefusal(); return false; }
+    if (row.table === "original_cash_feedback") {
+      if (previousFeedback.get(row.id) !== row.fingerprint) originalInventoryCausalRefusal();
+      previousFeedback.delete(row.id); return false;
+    }
+    return true;
+  });
+  if (previousFeedback.size) originalInventoryCausalRefusal();
+  for (const row of causal.feedback) { const value = feedback(row); entries.push({ table: "original_cash_feedback", id: value.id, fingerprint: merchantTaxDigest(value) }); }
+  return { version: 1, entries: entries.toSorted((a,b) => a.table.localeCompare(b.table) || a.id.localeCompare(b.id)), incomplete: false };
+}

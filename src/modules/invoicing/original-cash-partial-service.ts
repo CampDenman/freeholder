@@ -5,9 +5,10 @@ import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
-import { originalCashRecoveryOwner, originalCashRecoveryCashWitness } from "./original-cash-recovery-store";
+import { originalCashRecoveryOwner, originalCashRecoveryCashWitness, originalCashRecoveryOperation } from "./original-cash-recovery-store";
 import { currentOriginalCashInventory, appendOriginalCashFact, admitOriginalCashOperation, auxiliaryFactsResolved } from "./original-cash-recovery-service";
 import { originalCashRecoveryRevision } from "./original-cash-recovery-current";
+import { lockOriginalInventoryPrefix } from "./original-cash-inventory-prefix";
 import { originalPartialCashSource } from "./original-cash-partial-source";
 import { completeOriginalRefundInventory, originalPartialCashTargets, originalPartialTargetKey } from "./original-cash-partial-amounts";
 import { merchantPaymentObservations } from "./merchant-collection-schema";
@@ -19,7 +20,11 @@ async function targetBasis(ctx: ServiceContext, recoveryId: string, operationId:
   const owner = await originalCashRecoveryOwner(ctx.tx, recoveryId);
   if (!owner.paymentId || !owner.owner.cash.applied) throw new ServiceError("conflict", "Cumulative returned-part targets require an actual original applied payment; raw cash uses its separate original remainder flow.");
   // Establish canonical payment/invoice/credit locks BEFORE cash namespace.
-  const source = await originalPartialCashSource(ctx, owner.paymentId), current = await currentOriginalCashInventory(ctx, recoveryId, operationId);
+  const admitted=await originalCashRecoveryOperation(ctx.tx,operationId);if(admitted.recoveryId!==recoveryId)throw new ServiceError("conflict","Use the exact original partial source admission.");
+  const source=admitted.request.inventoryComparison!==undefined
+    ?await(await import("./original-cash-partial-source-v2")).originalPartialCashSourceV2(ctx,owner.paymentId)
+    :await originalPartialCashSource(ctx, owner.paymentId);
+  const current = await currentOriginalCashInventory(ctx, recoveryId, operationId);
   if (!current.history.creatorsQuiesced || current.history.feeDebt || !completeOriginalRefundInventory(current.evidence) || current.proof.debt.some(debt => !["customer_refund", "commission", "recipient"].includes(debt))
     || current.evidence.amountRefundedMinor !== source.customerReturnedMinor || current.evidence.currency !== source.currency) throw new ServiceError("conflict", "Restore the complete current original customer cash and finished callers before partial auxiliary money.");
   const refundIds = source.refundIds;
@@ -52,12 +57,13 @@ async function targetBasis(ctx: ServiceContext, recoveryId: string, operationId:
 }
 export const retainOriginalPartialCashTarget = defineService({
   name: "invoicing.retainOriginalPartialCashTarget", summary: "Freeze one exact cumulative original returned-part/credit policy and actual original auxiliary resource target.",
-  kind: "mutation", permission: "system", external: false, writeClass: "money", input: id.extend({ authorizedBy: z.string().regex(/^user:[0-9a-f-]{36}$/) }), output: z.object({ targetFactId: z.uuid() }),
+  kind: "mutation", permission: "system", external: false, writeClass: "money", input: id.extend({ authorizedBy: z.string().regex(/^user:[0-9a-f-]{36}$/) }), output: z.object({ targetFactId: z.uuid(), requiresFreshInventory: z.literal(true).optional() }),
   handler: async ({ recoveryId, operationId, authorizedBy }, ctx) => {
+    const v2=await lockOriginalInventoryPrefix(ctx,{recoveryId,operationId});
     const basis = await targetBasis(ctx, recoveryId, operationId), witness = await originalCashRecoveryCashWitness(ctx.tx, basis.current.cash);
     const existing = witness.facts.find(fact => fact.kind === "partial_target" && fact.evidence.targetKey === basis.body.targetKey);
     if (existing) return { targetFactId: existing.id };
-    const targetFactId = randomUUID(); await appendOriginalCashFact(ctx, recoveryId, null, "partial_target", originalPartialTarget.parse({ ...basis.body, authorizedBy }), targetFactId); return { targetFactId };
+    const targetFactId = randomUUID(); await appendOriginalCashFact(ctx, recoveryId, null, "partial_target", originalPartialTarget.parse({ ...basis.body, authorizedBy }), targetFactId); return { targetFactId, ...(v2?{requiresFreshInventory:true as const}:{}) };
   },
 });
 export const claimOriginalPartialCashAuxiliary = defineService({
@@ -65,6 +71,7 @@ export const claimOriginalPartialCashAuxiliary = defineService({
   kind: "mutation", permission: "system", external: false, writeClass: "money", input: id.extend({ targetFactId: z.uuid(), kind: z.enum(["fee", "recipient"]) }),
   output: z.object({ recoveryId: z.uuid(), operationId: z.uuid(), nonce: z.string(), request: z.record(z.string(), z.unknown()) }).nullable(),
   handler: async ({ recoveryId, operationId, targetFactId, kind }, ctx) => {
+    await lockOriginalInventoryPrefix(ctx,{recoveryId,operationId});
     const basis = await targetBasis(ctx, recoveryId, operationId), witness = await originalCashRecoveryCashWitness(ctx.tx, basis.current.cash);
     const actual = witness.facts.find(fact => fact.id === targetFactId && fact.kind === "partial_target");
     if (!actual || originalPartialTarget.parse(actual.evidence).targetKey !== basis.body.targetKey || !auxiliaryFactsResolved(witness)) throw new ServiceError("conflict", "Restore the same exact original target and resolve every older actual auxiliary caller before another generation.");
@@ -83,6 +90,11 @@ export const finalizeOriginalPartialCashTarget = defineService({
   name: "invoicing.finalizeOriginalPartialCashTarget", summary: "Confirm only the actual cumulative original returned-part target, preserving unreturned principal and its independent obligations.",
   kind: "mutation", permission: "system", external: false, writeClass: "money", input: id.extend({ targetFactId: z.uuid() }), output: z.object({ closureFactId: z.uuid() }),
   handler: async ({ recoveryId, operationId, targetFactId }, ctx) => {
+    const v2=await lockOriginalInventoryPrefix(ctx,{recoveryId,operationId});
+    if(v2){const originalOwner=await originalCashRecoveryOwner(ctx.tx,recoveryId),retained=await originalCashRecoveryCashWitness(ctx.tx,originalOwner.owner.cash);
+    const existingV2=retained.facts.find(fact=>fact.kind==="partial_closure"&&fact.evidence.targetFactId===targetFactId&&fact.evidence.originalInventoryOperationId===operationId
+      &&retained.operations.some(operation=>operation.id===operationId&&operation.request.inventoryComparison!==undefined));
+    if(existingV2){const{currentOriginalPartialCashClosure}=await import("./original-cash-partial-closure-current");await currentOriginalPartialCashClosure(ctx,recoveryId,existingV2.id);return{closureFactId:existingV2.id};}}
     const basis = await targetBasis(ctx, recoveryId, operationId), witness = await originalCashRecoveryCashWitness(ctx.tx, basis.current.cash);
     const target = witness.facts.find(fact => fact.id === targetFactId && fact.kind === "partial_target");
     if (!target || originalPartialTarget.parse(target.evidence).targetKey !== basis.body.targetKey || basis.target.fee.remainingMinor || basis.target.recipient.remainingMinor

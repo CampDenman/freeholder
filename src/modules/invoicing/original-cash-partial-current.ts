@@ -12,6 +12,13 @@ export async function originalCashPartialReturnCurrent(ctx: ServiceContext, paym
     if (!owner.owner.cash.applied) continue;
     const closures = witness.facts.filter(fact => fact.recoveryId === owner.id && fact.kind === "partial_closure").sort((a,b) => b.sequence-a.sequence);
     if (!closures.length) continue;
+    const v2=closures.filter(closure=>witness.operations.some(operation=>operation.id===closure.evidence.originalInventoryOperationId&&operation.recoveryId===owner.id&&operation.request.inventoryComparison!==undefined));
+    for(const closure of v2){
+      try{const{currentOriginalPartialCashClosure}=await import("./original-cash-partial-closure-current");const current=await currentOriginalPartialCashClosure(ctx,owner.id,closure.id);
+        return{targetFactId:current.targetFactId,customerReturnedMinor:current.target.customerReturnedMinor,acceptedFeeRetainedMinor:current.target.acceptedFeeRetainedMinor,feeTargetMinor:current.target.feeTargetMinor,recipientTargetMinor:current.target.recipientTargetMinor};}
+      catch(error){if(!(error instanceof ServiceError)||!["conflict","permission","not_found","validation"].includes(error.code))throw error;}
+    }
+    if(v2.length)return null;
     const current = await originalCashRecoveryRevision(ctx, owner.id);
     let source:Awaited<ReturnType<typeof originalPartialCashSource>>;
     try { source = await originalPartialCashSource(ctx, paymentId, false); }

@@ -22,6 +22,9 @@ import { recordMerchantRefundObservation } from "./merchant-refund-observations"
 import { merchantRefundRequests, merchantRefundDispatches, merchantRefundResourceBindings } from "./merchant-refund-schema";
 import { boundOriginalCashRecovery as bound, originalCashRecoveryRevision } from "./original-cash-recovery-current";
 import { currentOriginalCashInventory } from "./original-cash-inventory-current";
+import { lockOriginalInventoryPrefix } from "./original-cash-inventory-prefix";
+import { merchantRefundCashHistoryForOriginalInventory } from "./merchant-refund-history";
+import { originalInventoryComparison, ORIGINAL_INVENTORY_CAUSAL_PROTOCOL } from "./original-cash-inventory-causal-contract";
 export { currentOriginalCashInventory } from "./original-cash-inventory-current";
 export { originalCashRecoveryRevision, originalCashFullReturnCurrent } from "./original-cash-recovery-current";
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -51,9 +54,21 @@ export async function appendOriginalCashFact(ctx: ServiceContext, recoveryId: st
   await write(ctx); await ctx.tx.insert(originalCashRecoveryFacts).values(row);
   queueOriginalMerchantRefundRepair(ctx, { kind: "original_cash_fact", id: factId });
 }
-export async function admitOriginalCashOperation(ctx: ServiceContext, recoveryId: string, kind: "inspection" | "fee" | "recipient", request: Record<string, unknown>, operationId: string = randomUUID()) {
+export async function admitOriginalCashOperation(ctx: ServiceContext, recoveryId: string, kind: "inspection" | "fee" | "recipient", request: Record<string, unknown>, operationId: string = randomUUID(),
+  inventorySnapshot?: Awaited<ReturnType<typeof merchantRefundCashHistoryForOriginalInventory>>) {
   const nonce = randomBytes(32).toString("base64url"), createdAt = new Date(), caller = merchantPhysicalCaller();
-  const body = { recoveryId, kind, request: json(request), caller, nonceHash: hash(nonce) }, digest = merchantTaxDigest(body);
+  let actualRequest = request;
+  if (inventorySnapshot) {
+    const original = await originalCashRecoveryOwner(ctx.tx,recoveryId);
+    if(kind!=="inspection"||request.auxiliaryOperationId||inventorySnapshot.history.incomplete||!inventorySnapshot.history.creatorsQuiesced
+      ||request.sourceRevision!==merchantTaxDigest({cash:original.owner.cash,history:inventorySnapshot.history.digest}))
+      throw new ServiceError("conflict","Freeze the genuine complete closed original pre-admission inventory before the new physical GET.");
+    const comparison=originalInventoryComparison.parse({protocol:ORIGINAL_INVENTORY_CAUSAL_PROTOCOL,recoveryId,namespaceKey:original.namespaceKey,operationId,callerId:caller.id,nonceHash:hash(nonce),
+      sourceCashDigest:merchantTaxDigest(original.owner.cash),sourceHistoryDigest:inventorySnapshot.history.digest,sourceRevision:request.sourceRevision,
+      preimageEntries:inventorySnapshot.preimageEntries,controlledResolutionPreimages:inventorySnapshot.controlledResolutionPreimages});
+    actualRequest={...request,inventoryComparison:comparison};
+  }
+  const body = { recoveryId, kind, request: json(actualRequest), caller, nonceHash: hash(nonce) }, digest = merchantTaxDigest(body);
   await write(ctx); await ctx.tx.insert(originalCashRecoveryOperations).values({ id: operationId, ...body, digest, createdAt,
     authentication: signOriginalCashRecovery("operation", { id: operationId, digest, createdAt }, originalCashSigningKey()) });
   queueOriginalMerchantRefundRepair(ctx, { kind: "original_cash_operation", id: operationId });
@@ -103,7 +118,13 @@ export const claimOriginalCashInspection = defineService({
       const original = await originalCashRecoveryOperation(ctx.tx, auxiliaryOperationId);
       if (original.recoveryId !== recoveryId || original.kind === "inspection") throw new ServiceError("conflict", "An auxiliary GET must follow its exact original physical admission.");
     }
-    return admitOriginalCashOperation(ctx, recoveryId, "inspection", { sourceRevision: current.revision, ...(auxiliaryOperationId ? { auxiliaryOperationId } : {}) });
+    // Ordinary legacy/auxiliary admissions retain their original request and
+    // digest path. Controlled parents need a separately signed causal-v2
+    // preimage because their full RF graph also contains the newborn read.
+    const snapshot=!auxiliaryOperationId&&current.history.physicalIdentities?.some(row=>row.table==="subscription_controlled_collections")
+      ?await merchantRefundCashHistoryForOriginalInventory(ctx,current.cash):undefined;
+    if(snapshot&&snapshot.history.digest!==current.history.digest)throw new ServiceError("conflict","The original inventory changed before its actual GET admission.");
+    return admitOriginalCashOperation(ctx, recoveryId, "inspection", { sourceRevision: current.revision, ...(auxiliaryOperationId ? { auxiliaryOperationId } : {}) },randomUUID(),snapshot);
   },
 });
 export const recordOriginalCashFact = defineService({
@@ -146,6 +167,7 @@ export const claimOriginalCashAuxiliary = defineService({
   name: "invoicing.claimOriginalCashAuxiliary", summary: "Admit one exact original fee or recipient return after full customer-cash confirmation and actual caller quiescence.",
   kind: "mutation", permission: "system", external: false, writeClass: "money", input: id.extend({ operationId: z.uuid(), kind: z.enum(["fee", "recipient"]) }), output: claimResult.nullable(),
   handler: async ({ recoveryId, operationId, kind }, ctx) => {
+    await lockOriginalInventoryPrefix(ctx,{recoveryId,operationId});
     const { owner, cash } = await bound(ctx, recoveryId);
     const witness = await originalCashRecoveryCashWitness(ctx.tx, cash), prior = witness.operations.find(operation => operation.kind === kind && !operation.request.targetFactId);
     if (prior) return null; // A retained admission grants GET recovery only.
@@ -209,6 +231,7 @@ export const claimOriginalUnappliedCashRefund = defineService({
   name: "invoicing.claimOriginalUnappliedCashRefund", summary: "Reserve only actual remaining original receipt-owned cash, with explicit exact failed-parent lineage and no invented logical refund.",
   kind: "mutation", permission: "system", external: false, writeClass: "money", input: id.extend({ operationId: z.uuid(), authorizedBy: z.string().min(1) }), output: merchantRefundRequestRow.nullable(),
   handler: async ({ recoveryId, operationId, authorizedBy }, ctx) => {
+    await lockOriginalInventoryPrefix(ctx,{recoveryId,operationId});
     const { owner, cash } = await bound(ctx, recoveryId);
     if (cash.applied) return null; // Applied payments keep their actual ordinary refund/credit lifecycle.
     const prior = await ctx.tx.select().from(merchantRefundRequests).where(and(eq(merchantRefundRequests.providerPlatformAccountId, cash.providerPlatformAccountId),
@@ -304,7 +327,13 @@ export const finalizeOriginalCashRecovery = defineService({
   kind: "mutation", permission: "system", external: false, writeClass: "money", input: id.extend({ operationId: z.uuid(), unappliedReturnReceiptId: z.uuid().optional() }),
   output: z.object({ closureId: z.uuid() }),
   handler: async ({ recoveryId, operationId, unappliedReturnReceiptId }, ctx) => {
+    await lockOriginalInventoryPrefix(ctx,{recoveryId,operationId});
     const { owner, cash } = await bound(ctx, recoveryId), witness = await originalCashRecoveryCashWitness(ctx.tx, cash);
+    // A v2 closure seals the FULL state before its own immutable insertion.
+    // Retry may use only that exact independently current closure proof; it
+    // never treats the GET's historical preimage as current money authority.
+    const existingV2Closure=witness.closures.find(row=>row.operationId===operationId&&witness.operations.some(operation=>operation.id===operationId&&operation.request.inventoryComparison!==undefined));
+    if(existingV2Closure){const {currentOriginalCashClosure}=await import("./original-cash-closure-current");await currentOriginalCashClosure(ctx,recoveryId,existingV2Closure.id);return{closureId:existingV2Closure.id};}
     const current = cash.applied ? await currentOriginalCashInventory(ctx, recoveryId, operationId) : null;
     if (current && (!current.proof.settled || current.history.feeDebt) || !auxiliaryFactsResolved(witness)) throw new ServiceError("conflict", "Keep the authentic original cash-return debt until all actual resources and callers are resolved.");
     if (!cash.applied) {
