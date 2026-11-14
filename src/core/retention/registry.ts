@@ -137,6 +137,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_commercial_amendments: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
   subscription_commercial_resumptions: "Immutable fresh calendar consent has no TTL; original agreement privacy, financial duties and legal holds govern minimization.",
   subscription_proration_payment_protocols: "Immutable original financial consent, attempts and actual caller receipts have no TTL; financial/privacy holds govern retention.",
+  subscription_controlled_paid_period_receipts: "Immutable original paid-period effect receipts and actual financial/access history have no TTL; financial/privacy holds govern retention.",
   subscription_controlled_resources: "Immutable original controlled financial resources, actual callers and cash-origin/closure receipts have no TTL; financial/privacy holds govern retention.",
   subscription_controlled_operations: "Immutable original controlled financial resources, actual callers and cash-origin/closure receipts have no TTL; financial/privacy holds govern retention.",
   subscription_controlled_calls: "Immutable original controlled financial resources, actual callers and cash-origin/closure receipts have no TTL; financial/privacy holds govern retention.",

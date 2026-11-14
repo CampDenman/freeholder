@@ -3655,6 +3655,22 @@ unchanged. No execution, SQL/model/fixture/root edits or readiness/stable claim;
 failed V24 and all acceptance remain open. See
 `deploy/controlled-historical-draft84-source-20261113.md`.
 
+Paid-period financial/privacy composition source checkpoint 2026-11-13
+(C9.33/C12.38/C1.08): immutable paid-effect history now follows ONLY the actual
+invoice IDs of validated controlled targets, partitioned for merchants by the
+accepted quote profile AND exact collection/invoice ownership. Original cashless
+and no-route histories remain complete. Shared physical table/UUID identities
+are deduplicated, conflicting SHA/ancestry or one combined5000 overflow refuses;
+empty legacy witness/export shapes remain unchanged. Buyer exports omit merchant
+review and all private proof/bank/process bodies. The subscription subject source
+has the literal table inventory and actual-subscription safe projection. The real
+paid-invoice event calls the independently guarded period effect before legacy
+handlers and returns only when handled; old handler bodies remain unchanged.
+Ten new pure controls and extended actual-service native footprint/export/merge
+contexts are PREPARED/UNRUN. No SQL/model addition in this composition slice;
+parent source, full existing/new schema, native/provider/security acceptance
+remain REQUIRED. See `deploy/controlled-paid-financial155-source-20261113.md`.
+
 Controlled original-zero fixture source correction 2026-11-13
 (C12.38/C9.33/C1.08): root's actual V23 first-target journey created/bound the
 NET4000 component, then the read-only ordinary classifier isolated exactly one
@@ -3727,6 +3743,26 @@ preserved. Atomic whole-batch cent allocation, real currency/overage anomalies,
 separate paid effects and full native/provider/security acceptance remain
 required, not deferred. See
 `deploy/controlled-cash-staged-writer84-source-20261113.md`.
+Independent controlled paid-period effect source checkpoint 2026-11-13
+(C9.33/C12.38/C1.08): one new immutable exact-FK effect receipt and NEW UNAPPLIED
+SQL authenticate a genuinely separate transaction after real canonical money
+commits. Current original principal, latest HMAC inspection/finished bank facts,
+complete observed namespace/parent PG preimage and actual accepted terms/calendar
+remain required; the old same-TX cash batch is never reused as an effect grant.
+Immediate and deferred guards bind exact actual source/events and normalize only
+twelve managed parent columns. A shared private period-grant operation preserves
+old dates/usage, refuses overlap/grace and creates fresh actual grant identities;
+exact-window retries and contact merge retain that history. Ancillary owed/review
+is separate from principal and never labelled collected. Twelve pure, six SQL
+boundary and three actual-service native controls are PREPARED/UNRUN. No compiler,
+lint, build, test, database, provider or hosting execution occurred in this lane.
+Root still owns central financial/privacy/export/event composition and fresh
+model/SQL/native qualification. Proration current-bank composition, genuine
+positive terminal/alternative disposition and automatic renewal/recovery/UI
+orchestration remain required implementation, alongside all provider/platform/
+security acceptance. No C-item, feature, stable or release sign-off is closed.
+See `deploy/controlled-paid-period155-source-20261113.md`.
+
 Controlled original-receipt routing source checkpoint 2026-11-13
 (C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
 canonical receipt's real controlled-origin child, authenticates its genuine

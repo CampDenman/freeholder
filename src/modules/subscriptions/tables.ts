@@ -18,3 +18,5 @@ export * from "./controlled-provider-schema";
 
 export * from "./controlled-provider-collection-schema";
 export * from "./controlled-cash-inspection-lineage-schema";
+
+export * from "./controlled-provider-paid-period-schema";

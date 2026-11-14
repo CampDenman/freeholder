@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Entitlements and the grants that actually let somebody in
 // (MASTER.md §4.15, C9.14).
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
+import { advanceSubscriptionPeriod } from "./period-service";
 import { listed, okResult, row, timestamp, uuid as uuidSchema } from "@/core/contract";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactReference } from "@/core/contacts/service";
@@ -440,6 +441,8 @@ registerContactReference({
         sourceSubscriptionId: entitlementGrants.sourceSubscriptionId,
         sourcePassBalanceId: entitlementGrants.sourcePassBalanceId,
         sourceUnlockId: entitlementGrants.sourceUnlockId,
+        startsStamp: sql<string>`${entitlementGrants.startsAt}::text`,
+        endsStamp: sql<string | null>`${entitlementGrants.endsAt}::text`,
       })
       .from(entitlementGrants)
       .where(
@@ -451,19 +454,20 @@ registerContactReference({
     const taken = new Set(
       survivor.map(
         (row) =>
-          `${row.entitlementId}:${row.sourceSubscriptionId ?? ""}:${row.sourcePassBalanceId ?? ""}:${row.sourceUnlockId ?? ""}`,
+          `${row.entitlementId}:${row.sourceSubscriptionId ?? ""}:${row.sourcePassBalanceId ?? ""}:${row.sourceUnlockId ?? ""}${row.sourceSubscriptionId ? `:period:${row.startsStamp}:${row.endsStamp ?? ""}` : ""}`,
       ),
     );
     const duplicate = await tx
-      .select()
+      .select({ grant: entitlementGrants, startsStamp: sql<string>`${entitlementGrants.startsAt}::text`, endsStamp: sql<string | null>`${entitlementGrants.endsAt}::text` })
       .from(entitlementGrants)
       .where(eq(entitlementGrants.contactId, duplicateId));
-    for (const row of duplicate) {
-      const key = `${row.entitlementId}:${row.sourceSubscriptionId ?? ""}:${row.sourcePassBalanceId ?? ""}:${row.sourceUnlockId ?? ""}`;
+    for (const entry of duplicate) {
+      const row = entry.grant;
+      const key = `${row.entitlementId}:${row.sourceSubscriptionId ?? ""}:${row.sourcePassBalanceId ?? ""}:${row.sourceUnlockId ?? ""}${row.sourceSubscriptionId ? `:period:${entry.startsStamp}:${entry.endsStamp ?? ""}` : ""}`;
       if (taken.has(key) && (row.status === "active" || row.status === "paused")) {
         await tx
           .update(entitlementGrants)
-          .set({ status: "revoked", endsAt: new Date() })
+          .set(row.sourceSubscriptionId ? { contactId: survivingId, status: "revoked" } : { status: "revoked", endsAt: new Date() })
           .where(eq(entitlementGrants.id, row.id));
         continue;
       }
@@ -583,6 +587,7 @@ export default [
   listGrants,
   hasAccess,
   syncSubscriptionAccess,
+  advanceSubscriptionPeriod,
   syncTierAccess,
   issuePass,
   spendPass,

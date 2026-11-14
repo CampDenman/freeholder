@@ -1,0 +1,273 @@
+{
+  "$comment": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "description": "C9.33/C12.38/C1.08 source-only implementation inventory; MASTER43 remains product/status authority.",
+  "model": {
+    "logicalName": "subscriptionControlledPaidPeriodReceipts",
+    "table": "subscription_controlled_paid_period_receipts",
+    "checks": [
+      "controlled_paid_period_protocol",
+      "controlled_paid_period_digests",
+      "controlled_paid_period_calendar",
+      "controlled_paid_period_evidence"
+    ],
+    "foreignKeys": [
+      {
+        "logicalColumn": "collectionId",
+        "logicalTarget": "subscriptionControlledCollections.id",
+        "physicalConstraint": "controlled_paid_period_collection_fk",
+        "onDelete": "restrict",
+        "onUpdate": "no action",
+        "deferrable": false
+      },
+      {
+        "logicalColumn": "resourceId",
+        "logicalTarget": "subscriptionControlledResources.id",
+        "physicalConstraint": "controlled_paid_period_resource_fk",
+        "onDelete": "restrict",
+        "onUpdate": "no action",
+        "deferrable": false
+      },
+      {
+        "logicalColumn": "subscriptionId",
+        "logicalTarget": "subscriptions.id",
+        "physicalConstraint": "controlled_paid_period_subscription_fk",
+        "onDelete": "restrict",
+        "onUpdate": "no action",
+        "deferrable": false
+      },
+      {
+        "logicalColumn": "invoiceId",
+        "logicalTarget": "invoices.id",
+        "physicalConstraint": "controlled_paid_period_invoice_fk",
+        "onDelete": "restrict",
+        "onUpdate": "no action",
+        "deferrable": false
+      },
+      {
+        "logicalColumn": "termsId",
+        "logicalTarget": "subscriptionCommercialTerms.id",
+        "physicalConstraint": "controlled_paid_period_terms_fk",
+        "onDelete": "restrict",
+        "onUpdate": "no action",
+        "deferrable": false
+      },
+      {
+        "logicalColumn": "renewalEventId",
+        "logicalTarget": "subscriptionEvents.id",
+        "physicalConstraint": "controlled_paid_period_renewal_event_fk",
+        "onDelete": "restrict",
+        "onUpdate": "no action",
+        "deferrable": false
+      },
+      {
+        "logicalColumn": "planEventId",
+        "logicalTarget": "subscriptionEvents.id",
+        "physicalConstraint": "controlled_paid_period_plan_event_fk",
+        "onDelete": "restrict",
+        "onUpdate": "no action",
+        "deferrable": false
+      },
+      {
+        "logicalColumn": "planId",
+        "logicalTarget": "plans.id",
+        "physicalConstraint": "controlled_paid_period_plan_fk",
+        "onDelete": "restrict",
+        "onUpdate": "no action",
+        "deferrable": false
+      },
+      {
+        "logicalColumn": "productVariantId",
+        "logicalTarget": "productVariants.id",
+        "physicalConstraint": "controlled_paid_period_variant_fk",
+        "onDelete": "restrict",
+        "onUpdate": "no action",
+        "deferrable": false
+      }
+    ],
+    "uniqueConstraints": [
+      "controlled_paid_period_collection_key",
+      "controlled_paid_period_invoice_key",
+      "controlled_paid_period_renewal_event_key",
+      "controlled_paid_period_plan_event_key"
+    ],
+    "indexes": [
+      "controlled_paid_period_subscription_idx",
+      "controlled_paid_period_resource_idx"
+    ],
+    "contactColumns": []
+  },
+  "sql": {
+    "path": "deploy/subscription-controlled-paid-period84.fragment.sql",
+    "sha256": "f1478264fa9fc0872adb56bb322c2bba4f7060d543bb6b4a9f29889412a94505",
+    "bytes": 41809,
+    "newFunctionCount": 11,
+    "newTriggerCount": 5,
+    "functions": [
+      {
+        "name": "freeholder_controlled_paid_period_end",
+        "declarationArguments": "original_start timestamptz,original_snapshot jsonb",
+        "bodySha256": "584fa8ee6a1ee2e72a05ecc313f8971473bed0d03c3b2b5e2dcc19ac62019824"
+      },
+      {
+        "name": "freeholder_controlled_paid_period_parent",
+        "declarationArguments": "target_collection_uuid uuid,own_effect_uuid uuid DEFAULT null,normalize_parent boolean DEFAULT false",
+        "bodySha256": "180efb0d5bee911502ee1d7efb03e03b39a147887bb1f964b52d0775de73bba3"
+      },
+      {
+        "name": "freeholder_controlled_paid_period_locks",
+        "declarationArguments": "target_effect_uuid uuid",
+        "bodySha256": "7754036640fd3f02b1b74210bb3ed9e2f0c70c0628595d422ce122031b514654"
+      },
+      {
+        "name": "freeholder_controlled_paid_period_source",
+        "declarationArguments": "target_effect_uuid uuid",
+        "bodySha256": "141237d07f913e05a883519797ad64b4541f3e440e42c4d51a70a873dad33c9c"
+      },
+      {
+        "name": "freeholder_controlled_paid_bank_principal",
+        "declarationArguments": "original_receipt jsonb,original_route jsonb,bank jsonb",
+        "bodySha256": "90ce13d539045fb686fd3f2a0da597d0304c2d969b55e70466102b3cbfcee028"
+      },
+      {
+        "name": "guard_controlled_paid_period_receipt",
+        "declarationArguments": "",
+        "bodySha256": "7dc7bfec3818df05cf43c8764e7bea24bceb4559a79667f89439b60693635df3"
+      },
+      {
+        "name": "guard_controlled_paid_period_birth",
+        "declarationArguments": "",
+        "bodySha256": "bfedcbb43ebc14f0785bac37fdc2e4b07a5bd53741e6e8f027c0b2273a9db422"
+      },
+      {
+        "name": "guard_subscription_controlled_paid_period",
+        "declarationArguments": "",
+        "bodySha256": "6284ea5b48d816eaafcb1a1caf29d87f67a6daac53975c32105ebbf87fc34efe"
+      },
+      {
+        "name": "guard_controlled_paid_period_complete",
+        "declarationArguments": "",
+        "bodySha256": "b49b017469394bd72625c46991e30eef8bc93a4170c76ba1ff727edf28927df4"
+      },
+      {
+        "name": "guard_controlled_paid_period_event",
+        "declarationArguments": "",
+        "bodySha256": "bfd51b0b2a91973d9db542b9a4487babda559c54809d44d754047d00ad7a37fc"
+      }
+    ],
+    "readyFunction": "freeholder_controlled_paid_period_ready()"
+  },
+  "parentComposition": {
+    "rootOwnedFiles": [
+      "src/modules/invoicing/merchant-refund-dependencies.ts",
+      "src/modules/invoicing/merchant-payment-dependencies.ts",
+      "src/modules/invoicing/merchant-tax-privacy.ts",
+      "src/modules/subscriptions/service.ts"
+    ],
+    "witness": "controlledPaidPeriodWitnesses",
+    "safeExport": "exportControlledPaidPeriodHistory",
+    "scope": [
+      "subscriptionIds",
+      "invoiceIds",
+      "profileId"
+    ],
+    "maxCombinedPhysicalRows": 5000,
+    "search": "private exclusion",
+    "retention": "explicit NO_TTL",
+    "privacyOwner": "actual resource -> subscription/current contact and accepted original terms/profile",
+    "privateServices": [
+      "subscriptions.completePaidControlledPeriod",
+      "subscriptions.pendingPaidControlledPeriods",
+      "entitlements.advanceSubscriptionPeriod"
+    ]
+  },
+  "controls": {
+    "purePreparedUnrun": 12,
+    "sqlPreparedUnrun": 6,
+    "nativePreparedUnrun": 3,
+    "qualification": "UNRUN; source-only, no compiler/lint/build/tests/PG/provider/hosting execution."
+  },
+  "paidFamilyComposition": {
+    "base": "74e357aa77379c39089767e035d09f9c02a6002b",
+    "normalMergedPaidCheckpoint": "4123d3b7b776e9ae3cdf8711b4d9398b65cb40bf",
+    "adapter": "src/modules/invoicing/controlled-paid-financial.ts",
+    "selector": "Only actual nonnull invoice IDs from validated target collections; merchant partition is quote.profileId AND actual collectionId/invoiceId. Never subscription/profile OR discovery.",
+    "physicalIdentity": [
+      "table",
+      "id"
+    ],
+    "conflictingFingerprint": "refuse",
+    "aggregateBound": 5000,
+    "emptyCompatibility": "No paid/ originalPaidPeriods field when no actual paid receipt; failed witness retains its original runtime shape.",
+    "exports": {
+      "buyer": "safe actual IDs/calendar/activation only",
+      "merchant": "same whitelist plus financialReviewPendingAtActivation, only exact profile partition",
+      "forbidden": [
+        "HMAC/authentication",
+        "bank/process/nonce/transaction bodies",
+        "beforeEntries/beforeParentFields",
+        "internal row hashes"
+      ]
+    },
+    "centralConsumers": {
+      "src/modules/invoicing/merchant-refund-dependencies.ts": "existing shared controlled witness, before final combined bound; paid identity is counted once",
+      "src/modules/invoicing/merchant-payment-dependencies.ts": "existing controlled witness before no-route exit, invoice merge footprint; seller original-payment filter unchanged",
+      "src/modules/invoicing/merchant-tax-privacy.ts": "existing quote-profile partitioned witness/export and full merchant aggregate",
+      "src/modules/subscriptions/service.ts": "literal privacy inventory, subject-safe paid receipts under actual target/subscription; hook immediately after invoiceId validation before old paid handlers"
+    },
+    "newSqlOrModels": false,
+    "qualification": "UNRUN. Source only; parent owns source/native/SQL qualification.",
+    "preparedControls": {
+      "newPure": 10,
+      "expandedActualNative": "existing full effect native now exercises actual event hook, invoice/subject/refund/profile footprints, whitelist and contact merge"
+    },
+    "schemaCoverageRequired": [
+      {
+        "logical": "subscriptionControlledPaidPeriodReceipts",
+        "physical": "subscription_controlled_paid_period_receipts",
+        "operations": [
+          "insert",
+          "immutable read/history"
+        ],
+        "contract": "the full original model/SQL manifest above"
+      },
+      {
+        "logical": "subscriptions",
+        "physical": "subscriptions",
+        "operations": [
+          "exact accepted paid-period update",
+          "contact merge"
+        ],
+        "contract": "Existing CHECK/FK/index full catalogue and new paid guard; exactly twelve managed columns, original before row preserved"
+      },
+      {
+        "logical": "subscriptionEvents",
+        "physical": "subscription_events",
+        "operations": [
+          "insert renewed",
+          "optional insert plan_changed"
+        ],
+        "contract": "Existing full model plus immutable paid-event guard and exact invoice/subscription/event ancestry"
+      },
+      {
+        "logical": "entitlementGrants",
+        "physical": "entitlement_grants",
+        "operations": [
+          "expire genuinely elapsed live status",
+          "insert new period IDs",
+          "exact idempotent retry",
+          "contact merge"
+        ],
+        "contract": "Existing full FK/CHECK/index inventory; unchanged entitlement_grants_subscription_live_idx plus exact-window/overlap/merge natives"
+      },
+      {
+        "logical": "entitlements",
+        "physical": "entitlements",
+        "operations": [
+          "read exact plan catalogue",
+          "shared ensureEntitlement may insert site entitlement if no catalogue exists"
+        ],
+        "contract": "Existing full model unique/FK/CHECK/index contract; catalogue insertion is a real shared writer, not an assumed read-only table"
+      }
+    ]
+  }
+}

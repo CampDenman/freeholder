@@ -113,6 +113,7 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_commercial_amendments: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",
   subscription_commercial_resumptions: "Immutable explicit replacement-calendar consent; read only through the authorized agreement, never global content search.",
   subscription_proration_payment_protocols: "Private original stored-method mandates and physical payment read receipts; authorized financial recovery only.",
+  subscription_controlled_paid_period_receipts: "Private immutable independent paid-effect receipts and exact original financial preimages; authorized subject/merchant export only.",
   subscription_controlled_resources: "Private original controlled calendar, actual caller/bank fact and cash-origin history; authorized financial recovery only.",
   subscription_controlled_operations: "Private original controlled calendar, actual caller/bank fact and cash-origin history; authorized financial recovery only.",
   subscription_controlled_calls: "Private original controlled calendar, actual caller/bank fact and cash-origin history; authorized financial recovery only.",

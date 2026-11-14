@@ -42,6 +42,8 @@ import { buyerAcceptedProration } from "./proration-buyer-export";
 import { syncSubscriptionAccess } from "@/core/entitlements/service";
 import { exportControlledProviderHistory } from "./controlled-provider-witnesses";
 import { exportControlledTargetFinancialHistory } from "@/modules/invoicing/controlled-target-financial-export";
+import { completePaidControlledPeriod } from "./controlled-provider-paid-period";
+import { exportControlledPaidFinancialHistory } from "@/modules/invoicing/controlled-paid-financial";
 import {exportControlledApplicationFinancialHistory} from "@/modules/invoicing/controlled-application-financial";
 import { controlledFinancialWitness } from "@/modules/invoicing/controlled-provider-financial-witness";
 import { subscriptionProrationCardWitnesses, exportProrationCardHistory } from "./proration-card-witnesses";
@@ -1410,6 +1412,8 @@ export async function onInvoicePaid(
       ? (payload as { invoiceId?: string }).invoiceId
       : undefined;
   if (!invoiceId) return;
+  const controlledPeriod = await completePaidControlledPeriod.call({ invoiceId }, { kind: "system" });
+  if (controlledPeriod.handled) return;
   await completePaidGrossProration.call({ invoiceId }, { kind: "system" });
   await recoverDunning.call({ invoiceId }, { kind: "system" });
   await activatePaidSignup.call({ invoiceId }, { kind: "system" });
@@ -1618,7 +1622,7 @@ registerContactReference({
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
   tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines", "subscription_provider_read_tickets", "subscription_provider_read_finishes", "subscription_provider_read_stops",
-    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses", "subscription_proration_cash_confirmations", "subscription_proration_credit_confirmations", "subscription_proration_payment_protocols", "subscription_proration_card_mandates", "subscription_proration_card_attempts", "subscription_proration_card_jobs", "subscription_proration_card_reads", "subscription_proration_card_read_finishes", "subscription_proration_card_read_stops", "subscription_controlled_resources", "subscription_controlled_operations", "subscription_controlled_calls", "subscription_controlled_facts", "subscription_controlled_finishes", "subscription_controlled_stops", "subscription_controlled_verifications", "subscription_controlled_charge_origins", "subscription_controlled_closures", "subscription_controlled_cash_inspection_lineages", "subscription_controlled_quotes", "subscription_controlled_collections", "subscription_controlled_components", "subscription_controlled_invoice_bindings", "subscription_controlled_item_receipts", "subscription_controlled_invoice_proofs", "controlled_cash_application_batches", "controlled_cash_application_receipts", "controlled_cash_application_links"],
+    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses", "subscription_proration_cash_confirmations", "subscription_proration_credit_confirmations", "subscription_proration_payment_protocols", "subscription_proration_card_mandates", "subscription_proration_card_attempts", "subscription_proration_card_jobs", "subscription_proration_card_reads", "subscription_proration_card_read_finishes", "subscription_proration_card_read_stops", "subscription_controlled_resources", "subscription_controlled_operations", "subscription_controlled_calls", "subscription_controlled_facts", "subscription_controlled_finishes", "subscription_controlled_stops", "subscription_controlled_verifications", "subscription_controlled_charge_origins", "subscription_controlled_closures", "subscription_controlled_cash_inspection_lineages", "subscription_controlled_quotes", "subscription_controlled_collections", "subscription_controlled_components", "subscription_controlled_invoice_bindings", "subscription_controlled_item_receipts", "subscription_controlled_invoice_proofs", "controlled_cash_application_batches", "controlled_cash_application_receipts", "controlled_cash_application_links", "subscription_controlled_paid_period_receipts"],
   retentionScopes: ["commerce.money"],
   exportData: async (tx: Tx, contactId: string) => {
     const rows = await tx
@@ -1695,6 +1699,7 @@ registerContactPrivacySource({
     const controlledHistory=exportControlledProviderHistory(controlled.history),controlledCount=controlled.entries.length;
     const targetHistory=controlled.targets?await exportControlledTargetFinancialHistory(tx,controlled.targets):null;
     const applicationHistory=controlled.application?await exportControlledApplicationFinancialHistory(tx,controlled.application,{merchant:false,existingRows:controlled.entries.length-controlled.application.entries.length}):null;
+    const paidHistory=controlled.paid?await exportControlledPaidFinancialHistory(tx,controlled.paid,{merchant:false,existingRows:controlled.entries.length-controlled.paid.entries.length}):null;
     const controlledFor=(subscriptionId:string)=>{
       const resources=controlledHistory.resources.filter(row=>row.subscriptionId===subscriptionId),resourceIds=new Set(resources.map(row=>row.resourceId));
       const operations=controlledHistory.operations.filter(row=>resourceIds.has(row.resourceId)),operationIds=new Set(operations.map(row=>row.operationId));
@@ -1703,12 +1708,14 @@ registerContactPrivacySource({
       const collections=targetHistory?.collections.filter(row=>quoteIds.has(row.quoteId))??[],collectionIds=new Set(collections.map(row=>row.collectionId));
       const components=targetHistory?.components.filter(row=>collectionIds.has(row.collectionId))??[],componentIds=new Set(components.map(row=>row.componentId));
       const applicationBatches=applicationHistory?.batches.filter(row=>row.subscriptionId===subscriptionId)??[],applicationBatchIds=new Set(applicationBatches.map(row=>row.id));
+      const paidPeriods=paidHistory?.receipts.filter(row=>row.subscriptionId===subscriptionId&&collectionIds.has(row.collectionId))??[];
       return{resources,operations,calls,facts:controlledHistory.facts.filter(row=>callIds.has(row.callId)),actualFinishes:controlledHistory.actualFinishes.filter(row=>callIds.has(row.callId)),
         independentStops:controlledHistory.independentStops.filter(row=>callIds.has(row.callId)),verifications:controlledHistory.verifications.filter(row=>operationIds.has(row.operationId)),
         originalChargeLinks:controlledHistory.originalChargeLinks.filter(row=>resourceIds.has(row.resourceId)),actualClosures:controlledHistory.actualClosures.filter(row=>resourceIds.has(row.resourceId)),
         ...(quotes.length?{originalTargets:{quotes,collections,components,invoiceBindings:targetHistory?.invoiceBindings.filter(row=>collectionIds.has(row.collectionId))??[],
           itemReceipts:targetHistory?.itemReceipts.filter(row=>componentIds.has(row.componentId))??[],invoiceProofs:targetHistory?.invoiceProofs.filter(row=>collectionIds.has(row.collectionId))??[]}}:{}),
-        ...(applicationBatches.length?{originalApplications:{batches:applicationBatches,receipts:applicationHistory?.receipts.filter(row=>applicationBatchIds.has(row.batchId))??[],links:applicationHistory?.links.filter(row=>applicationBatchIds.has(row.batchId))??[]}}:{})};
+        ...(applicationBatches.length?{originalApplications:{batches:applicationBatches,receipts:applicationHistory?.receipts.filter(row=>applicationBatchIds.has(row.batchId))??[],links:applicationHistory?.links.filter(row=>applicationBatchIds.has(row.batchId))??[]}}:{}),
+        ...(paidPeriods.length?{originalPaidPeriods:{receipts:paidPeriods}}:{})};
     };
     const originalCash = await originalCashRecoveryFinancialWitness(tx, [], charges.map(row => row.id));
     const inspectionStops = await cashInspectionFinancialWitness(tx, { paymentIds: [], receiptIds: charges.map(row => row.id), resourceIds: controlled.history.resources.map(row => row.id) });

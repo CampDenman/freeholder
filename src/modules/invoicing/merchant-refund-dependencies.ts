@@ -106,6 +106,8 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
   await read("merchant_cash_return_observations", tables.merchantCashReturnObservations, ids("inspection_id", inspectionIds));
   await read("merchant_unapplied_charge_resolution_refunds", tables.merchantUnappliedChargeResolutionRefunds, ids("resolution_id", resolutionIds));
   if (overflow || collected.reduce((sum, group) => sum + group.rows.length, 0) > MAX) return incomplete();
+  // Includes paid-effect receipts only through validated target invoice FKs;
+  // retain them before any cash-route shortcut and within this shared MAX.
   const controlled = await controlledFinancialWitness(tx, { paymentIds, receiptIds });
   if (controlled.incomplete || collected.reduce((sum, group) => sum + group.rows.length, 0) + controlled.entries.length > MAX) return incomplete();
   const inspectionStops = await cashInspectionFinancialWitness(tx, { paymentIds, receiptIds });
