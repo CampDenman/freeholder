@@ -7,7 +7,7 @@ import {signAtomicCreditFeePartition,verifiedAtomicCreditFeePartition} from "@/m
 import {ATOMIC_CREDIT_FEE_PROTOCOL} from "@/modules/invoicing/atomic-credit-fee-protocol";
 import {merchantTaxDigest} from "@/modules/invoicing/merchant-tax-store";
 const id=(n:number)=>`00000000-0000-4000-8000-${n.toString().padStart(12,"0")}`,sha="a".repeat(64),key="fictional-original-credit-purpose-key";
-function original():Parameters<typeof signAtomicCreditFeePartition>[0]{
+function original(){
  const amounts=atomicCreditFeeCapacities({originalPrincipalMinor:4199,originalFeeMinor:400,acceptedRetiredFeeMinor:1,actualCollectedFeeMinor:399,loans:[],takeMinor:4199});
  const economic:Omit<AtomicCreditFeeEconomicPlan,"economicRevision">={protocol:ATOMIC_CREDIT_FEE_PROTOCOL,epochKind:"direct" as const,sourcePaymentId:id(2),sourceApplicationId:null,parentFundingId:null,sourceCollectionId:id(3),sourceResourceId:id(4),rootKind:"payment" as const,rootApplicationId:null,legacyApplicationRevision:null,legacyApplicationProof:null,rootFundingId:null,rootEconomicRevision:null,originalRootPrincipalMinor:4199,originalRootFeeMinor:400,sourceSegments:[],takeSegments:[],originalPaymentFeeMinor:400,originalResourceRetiredFeeMinor:1,...amounts,retiredResources:[]};
  const plan={...economic,economicRevision:merchantTaxDigest(economic)};
