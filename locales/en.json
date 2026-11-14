@@ -9262,6 +9262,8 @@
   "media.transfer.absent": "Original write is now retired and absent",
   "media.transfer.reference": "Original provider final reference",
   "media.transfer.evidence": "Independent original provider evidence",
+  "media.transfer.recoveryDrain": "Verified stop receipt for the original unfinished caller",
+  "media.transfer.targetReview": "Review checks the original upload identity, all bytes and storage history. It will not repeat the upload. A missing file cannot authorize another upload.",
   "media.transfer.retry": "Authorize one new attempt only if this original operation was proven not applied",
   "media.transfer.reviewConfirm": "I verified the exact original caller returned or was stopped, and confirmed the final outcome in its original provider account.",
   "media.transfer.review": "Record original outcome",

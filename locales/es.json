@@ -9262,6 +9262,8 @@
   "media.transfer.absent": "La escritura original ya está retirada y ausente",
   "media.transfer.reference": "Referencia final del proveedor original",
   "media.transfer.evidence": "Pruebas independientes del proveedor original",
+  "media.transfer.recoveryDrain": "Comprobante de detención verificada de la llamada original sin finalizar",
+  "media.transfer.targetReview": "La revisión comprueba la identidad de la carga original, todos los bytes y el historial del almacenamiento. No repite la carga. Un archivo ausente no autoriza otra carga.",
   "media.transfer.retry": "Autorizar un nuevo intento solo si se demostró que la operación original no se aplicó",
   "media.transfer.reviewConfirm": "Verifiqué que el proceso original terminó o se detuvo y confirmé el resultado final en su cuenta original del proveedor.",
   "media.transfer.review": "Registrar resultado original",

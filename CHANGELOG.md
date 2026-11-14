@@ -349,6 +349,8 @@ Active development, not a release candidate.
 
 ### Patch Changes
 
+- Prepare exact original target PUT affirmative recovery with actual nonce, full bytes, complete provider inventory and genuine finish or executor-stop proof. Preserve missing first return/finish fields, settle only the original quota token and consume the separate immutable review for no-replay copy, cleanup and exact captured-drain continuation. Full protocol and provider/platform qualification remain open.
+
 - Prepare exact original provider nonce checks for transfer copy, adoption and source retirement. Retain actual read provenance, require new complete source and target byte reads before atomic adoption, and preserve old receipts instead of accepting equal current bytes or ETag alone. Full request, stopped-writer and provider/platform qualification remain open.
 
 - Prepare exact current-plan executor recovery capture and release for a complete physically finished transfer cohort. Preserve the first plan and stop witness, keep active drains fenced, reject unfinished or changed original admissions, and require monotone real operator capture/verification/release. Full multipart, unknown-writer recovery and actual operator/platform qualification remain open.

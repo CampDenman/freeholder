@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: copy/erasure authority is an actual original provider result.
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Tx } from "@/core/service";
 import type { StoredObjectRevision } from "@/adapters/storage/types";
 import { mediaObjectWrites } from "./write-schema";
@@ -24,7 +24,11 @@ export async function originalTransferPhysicalRevision(tx: Tx, object: { id: str
       return null; // No original target writer was admitted. Foreign bytes stay foreign.
     }
     const [receipt] = object.targetReceiptId ? await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id, object.targetReceiptId)).limit(1) : [];
-    if (!receipt || !callers.some(row => row.physicalReceiptId === receipt.id) || !receipt.writerRuntimeId || !receipt.writerFinishedAt || !receipt.observedAcceptedAt || !receipt.providerRevision || !receipt.providerRevisionDigest || receipt.providerRevisionDigest !== transferDigest(receipt.providerRevision)) transferConflict("Recover the actual original target PUT result before touching any target generation.");
+    if (!receipt || !callers.some(row => row.physicalReceiptId === receipt.id) || !receipt.writerRuntimeId || !receipt.providerRevision || !receipt.providerRevisionDigest || receipt.providerRevisionDigest !== transferDigest(receipt.providerRevision)) transferConflict("Recover the actual original target PUT result before touching any target generation.");
+    if(!receipt.writerFinishedAt||!receipt.observedAcceptedAt){
+      const caller=callers.find(row=>row.physicalReceiptId===receipt.id);if(!caller)transferConflict();
+      const[authority]=await tx.execute<{proven:boolean}>(sql`select freeholder_media_transfer_applied_put_review(${caller.id}::uuid) as proven`);if(authority?.proven!==true)transferConflict("Retain actual finishes/ACK or the exact affirmative original target review before physical cleanup.");
+    }
     if (receipt.providerRevision.key !== object.targetKey) transferConflict();
     return receipt.providerRevision;
   }

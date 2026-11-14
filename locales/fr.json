@@ -9262,6 +9262,8 @@
   "media.transfer.absent": "L’écriture originale est maintenant retirée et absente",
   "media.transfer.reference": "Référence finale du fournisseur original",
   "media.transfer.evidence": "Preuves indépendantes du fournisseur original",
+  "media.transfer.recoveryDrain": "Justificatif d’arrêt vérifié de l’appel initial inachevé",
+  "media.transfer.targetReview": "L’examen vérifie l’identité de l’envoi initial, tous les octets et l’historique du stockage. Il ne répète pas l’envoi. Un fichier absent n’autorise pas un nouvel envoi.",
   "media.transfer.retry": "Autoriser un nouvel essai uniquement si l’absence d’application de cette opération originale est prouvée",
   "media.transfer.reviewConfirm": "J’ai vérifié que le processus original est revenu ou a été arrêté et confirmé le résultat final dans son compte fournisseur original.",
   "media.transfer.review": "Enregistrer le résultat original",

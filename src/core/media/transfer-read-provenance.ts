@@ -24,5 +24,12 @@ export async function assertExactTransferRead(tx:Tx,read:typeof calls.$inferSele
  if(authority?.proven!==true||!read.resultRequestProof)transferConflict("The actual provider read does not prove the exact original physical admission. Preserve its first receipts for recovery.");
  const[request]=await tx.select().from(requests).where(eq(requests.id,read.resultRequestProof.id)).limit(1);if(!request)transferConflict();
  const[writer]=await tx.select().from(calls).where(eq(calls.id,request.callId)).limit(1);if(!writer)transferConflict();
+ if(writer.state==="stopped"&&["ordinary_put","target_put"].includes(writer.kind)){
+  const receiptId=writer.physicalReceiptId??writer.objectReceiptId;if(!receiptId)transferConflict();
+  const{originalInventoryLifecycle}=await import("./original-provider-inventory"),reviewed=writer.kind==="target_put"?await originalInventoryLifecycle.captureTransferPut(tx,receiptId,writer.id):await originalInventoryLifecycle.captureFinishedPut(tx,receiptId);
+  if(!reviewed.appliedReview)transferConflict();
+  const revision=requireFinishedTransferRead(read,binding,key,expected);
+  return requireOriginalProviderRequestResult(reviewed.write,{key,namespace:binding.namespace,revision,sha256:expected.sha256,bytes:expected.bytes,requestProof:read.resultRequestProof});
+ }
  return requireExactTransferReadNonce({writer,requests:await tx.select().from(requests).where(eq(requests.callId,writer.id)),read,binding,key,expected});
 }

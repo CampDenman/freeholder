@@ -15875,3 +15875,16 @@ Seven pure and four native controls are PREPARED/UNRUN. Full request/part flags,
 stopped-target review, remaining recovery/cutover and actual operator/provider/
 platform acceptance remain open. No execution/account/host actions or C-item
 closure occurred. See `deploy/media-transfer-read-provenance-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated original target PUT
+review producer now reuses the exact receipt-parent nonce/full-byte/two-pass
+inventory ledger with genuine target-plan ancestry and actual finish or verified
+stop. A separate immutable positive review closes physical debt without filling
+NULL first return/result/writer fields or replaying PUT. Shared reads, cleanup,
+retirement/minimization and the SAME captured plan/drain consume that review;
+active drains still refuse mutation. Four scoped pure and six portable native
+controls are PREPARED/UNRUN; actual stopped-runtime/operator acceptance remains
+required. Full request/part flags, tracked stopped-source chained eligibility,
+unknown DELETE, multipart, quota/cutover and actual provider/platform gates stay
+open. No execution/account/host actions or C-item closure occurred. See
+`deploy/media-target-put-review-source-2026-11-13.md`.
