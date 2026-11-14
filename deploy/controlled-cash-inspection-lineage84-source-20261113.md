@@ -87,3 +87,9 @@ by these controls. Full NET/gross tax/credit/fee/finalize/pay orchestration,
 prospective batch application/SQL/controlled routing, paid effects, terminal
 alternative disposition and durable unapplied manual receipts remain required.
 No C-item/stable/live provider acceptance is closed.
+
+Witness source correction: the collector-free selector also compares every signed
+admissionFingerprint against the actual PostgreSQL to_jsonb admission-row SHA,
+just as the latest inventory reader does. Canonical JavaScript admissionDigest
+remains separately authenticated; it never substitutes for the PostgreSQL hash
+or silently drops timestamp precision. No oracle or qualification claim changes.

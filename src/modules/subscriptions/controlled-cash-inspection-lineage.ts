@@ -96,7 +96,8 @@ export async function controlledCashInspectionLineageWitness(tx:Tx,input:{paymen
  const conditions=[...(receiptIds.length?[inArray(lineages.receiptId,receiptIds)]:[]),...(resources.length?[inArray(lineages.resourceId,resources)]:[])];
  const rows=conditions.length?await tx.select().from(lineages).where(or(...conditions)).orderBy(asc(lineages.inspectionId)).limit(5001):[];
  const ids=rows.map(row=>row.inspectionId),admissions=ids.length?await tx.select().from(merchantCashReturnInspections).where(inArray(merchantCashReturnInspections.id,ids)).limit(5001):[];
- const keys=cashInspectionEvidenceKeys();if(rows.length+admissions.length>5000||rows.some(row=>!admissions.some(original=>verifiedControlledCashInspectionLineage(original,row,keys))))refuse();
+ const admissionFingerprints=ids.length?await tx.select({id:merchantCashReturnInspections.id,fingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${merchantCashReturnInspections})::text,'UTF8')),'hex')`}).from(merchantCashReturnInspections).where(inArray(merchantCashReturnInspections.id,ids)):[];
+ const keys=cashInspectionEvidenceKeys();if(rows.length+admissions.length>5000||rows.some(row=>!admissions.some(original=>verifiedControlledCashInspectionLineage(original,row,keys))||admissionFingerprints.find(original=>original.id===row.inspectionId)?.fingerprint!==row.admissionFingerprint))refuse();
  const entries=ids.length?await tx.select({table:sql<string>`'subscription_controlled_cash_inspection_lineages'`,id:lineages.inspectionId,inspectionId:lineages.inspectionId,receiptId:lineages.receiptId,resourceId:lineages.resourceId,
   fingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${lineages})::text,'UTF8')),'hex')`}).from(lineages).where(inArray(lineages.inspectionId,ids)).orderBy(asc(lineages.inspectionId)):[];
  return{lineages:rows,admissions,entries};
