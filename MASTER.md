@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Public availability check2026-11-14 (C3.28/C11.17): unauthenticated GETs with
+redirects disabled return200 for freeholder.ai home and both public /api/health
+endpoints. Website health reports ok:true/0.2.0-beta.3; demo reports ok:true/
+0.2.0-beta.6. This supplies only availability at the recorded instant, no owner
+login/key/publishing/forbidden-operation/provider/recovery/stable acceptance.
+No deployment or LinkedIn post performed. Source current bank83 fulltypes/lint
+pass but V98 contracts stop on a one-newline preservation descriptor; domain/
+late-evidence follow-on remains required. No C closure. See
+`deploy/public-health-readonly-checkpoint-20261114.json`.
+
+
 Atomic current-refund bank ROOT assembly2026-11-14 (C12.38/C9.33/C1.08):
 frozenfd123 source follows qualified origin6b and exact financial8df. Entire
 current MASTER+only21newleaflines retained. ONE new SQL bank reader and THREE
