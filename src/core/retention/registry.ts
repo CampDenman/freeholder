@@ -93,8 +93,6 @@ export async function purgeAgedContactRows(
  * asserted in `tests/core/c11-14-retention.test.ts`.
  */
 export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
-  storage_quota_state: "Namespace capacity remains coupled to actual original storage inventory and cannot expire by age.",
-  storage_quota_objects: "Original resource quota reservations and settlement debt follow exact physical/privacy recovery; no TTL can erase unresolved accounting.",
   original_cash_recoveries: "Original financial cash-return owner and source observation; immutable financial proof, no age purge.",
   original_cash_recovery_operations: "Original admitted refund/fee/recipient read and write caller proof; no clock can erase its recovery debt.",
   original_cash_recovery_facts: "Private minimal authenticated financial callbacks, actual finishes and hosting reviews remain with original money.",
@@ -164,6 +162,9 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   invoice_credit_applications: "Immutable noncash invoice consideration has no TTL; original invoice/legal holds govern retention.",
   invoice_credit_releases: "Immutable unused target release has no TTL; releasing a target never deletes an issued customer credit promise.",
   agreement_fee_duties: "Immutable original commission and attested remittance receipts have no TTL; financial and privacy holds own retention.",
+  controlled_cash_application_batches: "Immutable original parent/bank application preimages have no TTL; original financial/privacy holds govern retention.",
+  controlled_cash_application_receipts: "Immutable exact original receipt application admissions have no TTL; original financial/privacy holds govern retention.",
+  controlled_cash_application_links: "Lifetime actual receipt/payment uniqueness evidence has no TTL; deleting a link cannot replenish original money capacity.",
   agreement_fee_credit_assignments: "Immutable original commission and attested remittance receipts have no TTL; financial and privacy holds own retention.",
   agreement_fee_cash_assignments: "Immutable original commission and attested remittance receipts have no TTL; financial and privacy holds own retention.",
   agreement_fee_eligibility: "Immutable original commission and attested remittance receipts have no TTL; financial and privacy holds own retention.",
@@ -177,6 +178,7 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_provider_generations: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
   subscription_provider_invoice_observations: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
   subscription_provider_invoice_lines: "Immutable agreement and provider lineage has no TTL; original agreement privacy, financial obligations and legal holds govern minimization.",
+  media_storage_transfer_subjects: "Original transfer ownership has no generic TTL; shared contact merge, named holds and exact original privacy minimization govern it.",
   media_uploads:"Original reservations survive unresolved physical work; guarded lifecycle and subject erasure own retirement.",
   media_objects:"Original object ownership survives unknown writes; guarded physical cleanup and privacy jobs remove it.",
   media_multipart_resources:"Original multipart resources survive timers; explicit original-provider retirement and subject erasure own cleanup.",

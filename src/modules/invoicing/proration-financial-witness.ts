@@ -176,7 +176,7 @@ export async function prorationFinancialWitness(tx: Tx, scope: ProrationFinancia
   for (const [table, key, extra] of [["agreement_fee_credit_assignments", "application_id", "applicationId"], ["agreement_fee_cash_assignments", "payment_id", "paymentId"],
     ["agreement_fee_eligibility", "invoice_id", "invoiceId"], ["agreement_fee_remittances", "id", "originalRemittanceId"]] as const) await read(table, col("r", key),
     table === "agreement_fee_remittances" ? sql`jsonb_build_object('invoiceId',r.invoice_id,'profileId',duty.merchant_profile_id,'prorationId',duty.acceptance_id,'originalRemittanceId',r.original_remittance_id)`
-      : sql`jsonb_build_object('invoiceId',r.invoice_id,'profileId',duty.merchant_profile_id,'prorationId',duty.acceptance_id,${extra},${col("r", key)})`,
+      : sql`jsonb_build_object('invoiceId',r.invoice_id,'profileId',duty.merchant_profile_id,'prorationId',duty.acceptance_id,${extra}::text,${col("r", key)})`,
     sql`${sql.identifier(table)} r join agreement_fee_duties duty on duty.invoice_id=r.invoice_id
       ${table === "agreement_fee_credit_assignments" ? sql`left join invoice_credit_applications consideration on consideration.reservation_id=r.application_id`
         : table === "agreement_fee_cash_assignments" ? sql`left join payments consideration on consideration.id=r.payment_id` : sql``}`,

@@ -15,7 +15,10 @@ import { merchantRefundCurrentReceipts } from "./merchant-refund-current-schema"
 import { assertOriginalMerchantRefundResult, assertOriginalMerchantRefundStart, retireOriginalMerchantRefund } from "./merchant-refund-core-guards";
 import { queueMerchantFeeReconciliation } from "./merchant-fee-service";
 import { reserveMerchantCharge } from "./merchant-charge";
+import { lockControlledOrdinaryCollectionParent } from "./controlled-ordinary-collection-parent";
+import { requireControlledOrdinaryCollectionAuthority } from "./controlled-ordinary-collection-authority";
 import { commercialPaymentRecorded, commercialRefundRecorded } from "./commercial-attestations";
+import { exportControlledFinancialHistory } from "./controlled-provider-financial-witness";
 import { exportProrationMoney } from "./proration-money-export";
 import { exportProrationCardHistory, subscriptionProrationCardWitnesses } from "@/modules/subscriptions/proration-card-witnesses";
 import { assertFinancialExportBound } from "./financial-export-bound";
@@ -324,7 +327,9 @@ registerContactPrivacySource({
     const bundles = await Promise.all(ids.map((id) => invoiceBundle(tx, id)));
     const card = await subscriptionProrationCardWitnesses(tx, ids);
     if (card.incomplete) throw new ServiceError("conflict", "Restore the complete bounded original payment-caller history before issuing the subject archive.");
+    const controlled = await exportControlledFinancialHistory(tx, { invoiceIds: ids });
     const families = {
+      ...(controlled.selected.entries.length ? { originalControlledProvider: controlled.exported } : {}),
       merchantRecovery: await exportMerchantRecoveryHistory(tx, ids),
       originalCreditAndExternalMoney: await exportProrationMoney(tx, ids),
       originalCommissionAssignments: await exportAgreementFeeHistory(tx, ids),
@@ -940,6 +945,14 @@ export const createPayment = defineService({
         throw new ServiceError("conflict", "That payment idempotency key was already used for a different attempt.");
       }
       return duplicate;
+    }
+    // Actual signed schedule cash was durably retained before application.
+    // It is not permission for a new physical charge and must not acquire a
+    // controlled resource after its existing reconciliation parent locks.
+    const originalReceiptApplication=input.method==="provider_schedule"&&Boolean(input.subscriptionChargeReceiptId)&&ctx.actor.kind==="system";
+    if(!originalReceiptApplication){
+      const controlled=await lockControlledOrdinaryCollectionParent(ctx.tx,input.invoiceId);
+      await requireControlledOrdinaryCollectionAuthority(ctx,controlled,{provider:input.provider,method:input.method});
     }
     await lock(ctx.tx, "invoice", input.invoiceId);
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);

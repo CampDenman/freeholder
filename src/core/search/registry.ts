@@ -69,8 +69,6 @@ export function clipSnippet(value: string | null | undefined): string | null {
  * Completeness is asserted in `tests/core/c11-14-search.test.ts`.
  */
 export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
-  storage_quota_state: "Private namespace capacity and original inventory accounting; authorized storage operations only, never content search.",
-  storage_quota_objects: "Private original object locator, quota reservation and settlement tokens; exact storage/privacy recovery only.",
   original_cash_recoveries: "Private exact original financial source; authorized shared recovery and financial export only.",
   original_cash_recovery_operations: "Private frozen money requests and physical caller capabilities are excluded from content search.",
   original_cash_recovery_facts: "Private raw financial facts and hashed hosting reviews have no public search projection.",
@@ -140,6 +138,9 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   invoice_credit_applications: "Private original noncash invoice consideration, never global content search.",
   invoice_credit_releases: "Private reviewed unused credit releases, never global content search.",
   agreement_fee_duties: "Private original merchant commission duties and cash/noncash assignments; authorized money services only.",
+  controlled_cash_application_batches: "Private full financial preimages and authenticated application admissions; never global content search.",
+  controlled_cash_application_receipts: "Private exact original bank/receipt/fee application admissions; authorized money services only.",
+  controlled_cash_application_links: "Private immutable original receipt to actual payment identities; authorized money services only.",
   agreement_fee_credit_assignments: "Private original merchant commission duties and cash/noncash assignments; authorized money services only.",
   agreement_fee_cash_assignments: "Private original merchant commission duties and cash/noncash assignments; authorized money services only.",
   agreement_fee_eligibility: "Private original merchant commission duties and cash/noncash assignments; authorized money services only.",
@@ -153,6 +154,7 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_provider_generations: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",
   subscription_provider_invoice_observations: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",
   subscription_provider_invoice_lines: "Immutable financial agreement evidence; available through the authorized agreement, never global content search.",
+  media_storage_transfer_subjects: "Private original transfer ownership pointer; shared contact merge and exact storage/privacy recovery own access, never a separate content-search hit.",
   media_object_writes:"Private physical-operation receipts; inspect through human storage recovery, not global search.",
   media_uploads:"Private original upload reservations and ownership; accessed through their authorized upload capability.",
   media_objects:"Private physical ownership pointers; the authorized library asset is the searchable record.",

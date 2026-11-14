@@ -14,6 +14,8 @@ import { LEGACY_REPLACEMENT_PROTOCOL, LEGACY_REPLACEMENT_REASON, LEGACY_REPLACEM
 import { BANK_REPLACEMENT_PROTOCOL, BANK_REPLACEMENT_REASON, BANK_REPLACEMENT_STATE } from "./merchant-bank-replacement-proof";
 import { legacyBankFeedbackFinancialWitness } from "./legacy-bank-feedback-store";
 import { originalCashRecoveryFinancialWitness } from "./original-cash-recovery-store";
+import { controlledFinancialWitness } from "./controlled-provider-financial-witness";
+import { cashInspectionStopFinancialWitness } from "./merchant-cash-inspection-stops";
 export interface MerchantRefundDependencyReceipt { version: 1; entries: Array<{ table: string; id: string; fingerprint: string }>; incomplete: boolean }
 const MAX = 5000;
 const ids = (column: string, values: readonly string[]): SQL => values.length
@@ -104,7 +106,14 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
   await read("merchant_cash_return_observations", tables.merchantCashReturnObservations, ids("inspection_id", inspectionIds));
   await read("merchant_unapplied_charge_resolution_refunds", tables.merchantUnappliedChargeResolutionRefunds, ids("resolution_id", resolutionIds));
   if (overflow || collected.reduce((sum, group) => sum + group.rows.length, 0) > MAX) return incomplete();
-  const entries: MerchantRefundDependencyReceipt["entries"] = [];
+  const controlled = await controlledFinancialWitness(tx, { paymentIds, receiptIds });
+  if (controlled.incomplete || collected.reduce((sum, group) => sum + group.rows.length, 0) + controlled.entries.length > MAX) return incomplete();
+  const inspectionStops = await cashInspectionStopFinancialWitness(tx, { paymentIds, receiptIds });
+  const selectedInspections = new Set(inspectionIds);
+  if (inspectionStops.admissions.length !== selectedInspections.size || inspectionStops.admissions.some(row => !selectedInspections.has(row.id))
+    || collected.reduce((sum, group) => sum + group.rows.length, 0) + controlled.entries.length + inspectionStops.entries.length > MAX) return incomplete();
+  const entries: MerchantRefundDependencyReceipt["entries"] = [...controlled.entries,
+    ...inspectionStops.entries.map(({ table, id, fingerprint }) => ({ table, id, fingerprint }))];
   for (const group of collected) for (const row of group.rows) {
     const composite = typeof row.resolution_id === "string" && typeof row.observation_id === "string" ? `${row.resolution_id}:${row.observation_id}` : null;
     const key = row.id ?? row.dispatch_id ?? row.read_id ?? row.request_id ?? row.inspection_id ?? composite;

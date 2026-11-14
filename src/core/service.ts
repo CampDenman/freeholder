@@ -227,7 +227,7 @@ export function hasModuleAccess(
 }
 
 const REDACTED_KEY =
-  /pass(word)?|secret|token|otp|key|credential|response|classificationNote/i;
+  /pass(word)?|secret|token|nonce|otp|key|credential|response|classificationNote/i;
 
 /** Secrets never reach the audit trail, whatever shape the input takes. */
 export function redact(value: unknown): unknown {

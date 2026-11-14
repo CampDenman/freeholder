@@ -13,6 +13,9 @@ import { originalCashRecoveries, originalCashRecoveryOperations, originalCashRec
 import { merchantRefundRequests, merchantUnappliedChargeResolutions } from "@/modules/invoicing/merchant-refund-schema";
 import { originalCashRecoveryFinancialWitness } from "@/modules/invoicing/original-cash-recovery-store";
 import { inspectOriginalCashReturn } from "@/modules/invoicing/original-cash-recovery";
+import { legacyBankFeedback } from "@/modules/invoicing/legacy-bank-feedback-schema";
+import { merchantRefundObservations } from "@/modules/invoicing/merchant-refund-schema";
+import { originalBankFeedbackOwner } from "@/modules/invoicing/original-cash-feedback-owner";
 import { reviewOriginalUnassignedCash } from "@/modules/invoicing/original-cash-unassigned-service";
 import { ORIGINAL_UNASSIGNED_CASH_CONFIRMATION } from "@/modules/invoicing/original-cash-partial-contract";
 import { partialCashFixture } from "../helpers/original-cash-partial";
@@ -45,15 +48,43 @@ describe.runIf(hasDatabase)("original partial cash checkpoint81", { timeout: 600
     await expect(active.partial()).rejects.toThrow();
     expect(active.posts).toEqual(["customer", "fee", "recipient", "customer", "fee", "recipient"]);
     expect((await db().select().from(originalCashRecoveryFacts)).some(fact => fact.kind === "finish" && fact.evidence.outcome === "threw")).toBe(true);
+    const beforeRecoveryOperations = await db().select().from(originalCashRecoveryOperations), beforeRecoveryFacts = await db().select().from(originalCashRecoveryFacts);
+    const lost = beforeRecoveryOperations.find(operation => operation.kind === "recipient"
+      && !beforeRecoveryFacts.some(fact => fact.operationId === operation.id && fact.kind === "ack"));
+    expect(lost).toBeTruthy();
+    const lostOriginalFacts = beforeRecoveryFacts.filter(fact => fact.operationId === lost!.id);
+    expect(lostOriginalFacts.some(fact => fact.kind === "finish" && fact.evidence.outcome === "threw")).toBe(true);
     const before = [...active.posts]; await active.partial(); expect(active.posts).toEqual(before);
     const operations = await db().select().from(originalCashRecoveryOperations), facts = await db().select().from(originalCashRecoveryFacts), recipients = operations.filter(operation => operation.kind === "recipient");
     expect(recipients).toHaveLength(2); expect(new Set(recipients.map(operation => operation.request.targetFactId)).size).toBe(2);
-    const refs = recipients.map(operation => new Set(facts.filter(fact => fact.operationId === operation.id && fact.kind === "ack").map(fact => fact.evidence.providerRef)));
+    // Recovery is a new physical GET tied to the exact original operation.
+    // It must not invent an acknowledgement on the POST that lost its reply.
+    expect(facts.filter(fact => fact.operationId === lost!.id)).toEqual(lostOriginalFacts);
+    const refs = recipients.map(operation => {
+      const inspections = operations.filter(row => row.kind === "inspection" && row.request.auxiliaryOperationId === operation.id);
+      for (const inspection of inspections) expect(facts.some(fact => fact.operationId === inspection.id && fact.kind === "finish" && fact.evidence.outcome === "returned")).toBe(true);
+      if (operation.id === lost!.id) expect(inspections.length).toBeGreaterThan(0);
+      return new Set(facts.filter(fact => fact.kind === "ack" && (fact.operationId === operation.id
+        || inspections.some(inspection => inspection.id === fact.operationId && fact.evidence.auxiliaryOperationId === operation.id))).map(fact => fact.evidence.providerRef));
+    });
     expect(refs.every(ref => ref.size === 1)).toBe(true); expect([...refs[0]!][0]).not.toBe([...refs[1]!][0]);
     expect((await db().select().from(payments).where(eq(payments.id, active.paymentId)))[0]?.refundedMinor).toBe(active.amount * 2 / 3);
   });
+  it("keeps a PI-bearing signed refund on the actual managed observation path before a cash owner",async()=>{
+    active=await partialCashFixture({unapplied:true});const resource=active.dashboardRefund(active.amount/3);
+    await active.signedDashboard(resource);
+    expect(await db().select().from(legacyBankFeedback)).toHaveLength(0);
+    const observed=await db().select().from(merchantRefundObservations);expect(observed).toHaveLength(1);
+    expect(observed[0]).toMatchObject({paymentId:active.paymentId,requestId:null,subscriptionChargeReceiptId:null,providerRef:resource.providerRef});
+    expect(await db().select().from(originalCashRecoveries)).toHaveLength(0);expect(await db().select().from(refunds)).toHaveLength(0);expect(active.posts).toEqual([]);
+  });
   it("owns signed unassigned feedback before its first cash owner and returns only the reviewed actual unapplied remainder", async () => {
-    active = await partialCashFixture({ unapplied: true }); const resource = active.dashboardRefund(active.amount / 3); await active.signedDashboard(resource);
+    active = await partialCashFixture({ unapplied: true }); const resource = active.dashboardRefund(active.amount / 3);
+    const events=await active.signedDashboard(resource,{chargeOnly:true});
+    expect(events).toHaveLength(1);expect(events[0]).toMatchObject({kind:"refund_succeeded",providerRef:resource.providerRef,observedPaymentIntentRef:null,paymentProviderRef:resource.providerChargeRef,providerChargeRef:resource.providerChargeRef});
+    const rawFeedback=await db().select().from(legacyBankFeedback);expect(rawFeedback).toHaveLength(1);expect(rawFeedback[0]!.evidence).toMatchObject({observedPaymentRef:null,observedChargeRef:resource.providerChargeRef,observedPlatformAccountId:"acct_fixturePlatform",observedChargeAccountId:null});
+    expect(await db().select().from(merchantRefundObservations)).toHaveLength(0);
+    expect(await db().transaction(tx=>originalBankFeedbackOwner(tx,rawFeedback[0]!))).toMatchObject({kind:"payment",paymentId:active.paymentId,subscriptionChargeReceiptId:null});
     const beforePayment = await db().select().from(payments), beforeRefunds = await db().select().from(refunds);
     const original = await db().transaction(tx => originalCashRecoveryFinancialWitness(tx, [active!.paymentId], []));
     expect(original.owners).toHaveLength(0); expect(original.operations).toHaveLength(0);

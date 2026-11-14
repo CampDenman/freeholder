@@ -15,12 +15,14 @@ import {registerStorageObservationReconciler,reconcileCommittedStorageObservatio
 import {mediaObjectWrites} from "./write-schema";
 import {mediaStorageTransferCalls,mediaStorageTransferErasureMembers,mediaStorageTransferErasureScopes,mediaStorageTransferObjects,mediaStorageTransferPlans,mediaStorageTransferReceipts,mediaStorageTransferReviews,mediaStorageTransferSubjects} from "./transfer-schema";
 import {lockTransferInventory,requireTransferCapability} from "./transfer-authority";
+import {lockEmptyMediaEvidence,lockOriginalMediaScopeCapture} from "./empty-scope-authority";
 import {storageOperationsHeld,objectKeyDigest} from "./write-ledger";
 import {eraseStorageTransferLineage} from "./transfer-erasure";
 import {transferConflict,transferDigest} from "./transfer-proof";
 import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
 import {mediaStorageProviderInventories,mediaStorageProviderInventoryPages,mediaStorageProviderInventoryEntries} from "./transfer-inventory-schema";
-import {originalQuotaProof,originalQuotaLocatorPending} from "./original-quota-evidence";
+import {minimizeOriginalProviderReservation} from "./original-provider-minimization";
+import {originalQuotaProof} from "./original-quota-evidence";
 import {transferRequestsDrained} from "./transfer-requests";
 export const TRANSFER_PRIVACY_SCOPE="media.storageTransfers";
 export const TRANSFER_ERASURE_JOB="core.eraseMediaStorageTransfer";
@@ -29,7 +31,7 @@ const payload=z.object({requestId:z.uuid(),originalJobId:z.uuid(),objectIds:z.ar
 const receipt=z.object({format:z.literal("freeholder.erasure-receipt"),outcomes:z.array(z.object({scope:z.string(),outcome:z.string(),pendingJobs:z.array(z.uuid()).optional()}))});
 async function owned(tx:Tx,contactId:string){return tx.select({object:mediaStorageTransferObjects,plan:mediaStorageTransferPlans}).from(mediaStorageTransferSubjects).innerJoin(mediaStorageTransferObjects,eq(mediaStorageTransferObjects.id,mediaStorageTransferSubjects.objectId)).innerJoin(mediaStorageTransferPlans,eq(mediaStorageTransferPlans.id,mediaStorageTransferObjects.planId)).where(eq(mediaStorageTransferSubjects.contactId,contactId)).orderBy(asc(mediaStorageTransferObjects.id)).limit(10001);}
 async function capture(tx:Tx,requestId:string,contactId:string){
- await lockTransferInventory(tx);const[prior]=await tx.select().from(mediaStorageTransferErasureScopes).where(eq(mediaStorageTransferErasureScopes.requestId,requestId)).limit(1).for("update");
+ await lockOriginalMediaScopeCapture(tx,{requestId,contactId,scope:TRANSFER_PRIVACY_SCOPE});const[prior]=await tx.select().from(mediaStorageTransferErasureScopes).where(eq(mediaStorageTransferErasureScopes.requestId,requestId)).limit(1).for("update");
  if(prior){if(!prior.complete)transferConflict("Restore the incomplete original transfer erasure capture.");return prior;}
  const rows=await owned(tx,contactId);if(rows.length>10000)transferConflict("The original transfer erasure membership exceeds the bounded capture.");
  const members=[...new Map(rows.map(row=>[row.object.id,{id:row.object.id,manifest:row.plan.manifestDigest}])).values()],captureDigest=transferDigest(members);
@@ -45,19 +47,21 @@ async function members(tx:Tx,requestId:string){
  return rows.map(row=>row.member.objectId);
 }
 export async function minimizeTransferredObjects(tx:Tx,ids:string[]):Promise<number>{
+ if(!ids.length){await lockEmptyMediaEvidence(tx);return 0;}
  await lockTransferInventory(tx);let minimized=0;
  for(const id of ids){
   const[object]=await tx.select().from(mediaStorageTransferObjects).where(eq(mediaStorageTransferObjects.id,id)).limit(1).for("update");if(!object)transferConflict();
   const subjects=await tx.select().from(mediaStorageTransferSubjects).where(eq(mediaStorageTransferSubjects.objectId,id));
   if(await storageOperationsHeld(tx,subjects.map(row=>row.contactId)))continue;
   const calls=await tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.objectId,id));
-  if(calls.some(row=>["admitted","unknown"].includes(row.state))||!await transferRequestsDrained(tx,calls.map(row=>row.id))||await originalQuotaLocatorPending(tx,calls))continue;
+  if(calls.some(row=>["admitted","unknown"].includes(row.state))||!await transferRequestsDrained(tx,calls.map(row=>row.id)))continue;
   const membership=await tx.select().from(mediaStorageTransferReceipts).where(eq(mediaStorageTransferReceipts.objectId,id));
   const physicalIds=[...new Set([...membership.map(row=>row.receiptId),...calls.flatMap(row=>row.physicalReceiptId?[row.physicalReceiptId]:[])])];
   const writes=physicalIds.length?await tx.select().from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,physicalIds)):[];
   if(!writes.length||writes.some(row=>!row.deletedAt||!["accepted","confirmed_absent"].includes(row.state)))continue;
   const complete=await tx.execute<{retired:boolean}>(sql`select freeholder_media_transfer_object_retired(${object.id}::uuid) as retired`);
   if(complete[0]?.retired!==true)continue;
+  let originalsReady=true;for(const reservationId of [...new Set(writes.map(row=>row.originalReservationId))])if(!await minimizeOriginalProviderReservation(tx,reservationId)){originalsReady=false;break;}if(!originalsReady)continue;
   const now=new Date();
   // This exact captured lineage has both complete physical inventory proofs.
   // Ordinary legacy minimization remains independently blocked.
@@ -91,7 +95,7 @@ export async function minimizeTransferredObjects(tx:Tx,ids:string[]):Promise<num
 }
 registerContactPrivacySource({scope:TRANSFER_PRIVACY_SCOPE,tables:["media_storage_transfer_plans","media_storage_transfer_objects","media_storage_transfer_receipts","media_storage_transfer_subjects","media_storage_transfer_calls","media_storage_transfer_reviews","media_storage_transfer_erasure_scopes","media_storage_transfer_erasure_members","media_storage_writer_drains","media_storage_transfer_jobs","media_storage_transfer_requests","media_storage_transfer_request_observations","media_storage_provider_inventories","media_storage_provider_inventory_pages","media_storage_provider_inventory_entries","storage_quota_objects"],retentionScopes:["members","media.storageOperations","media.multipartOperations"],requiresLogin:true,eraseOrder:19,
  captureRetention:async(tx,contactId,context)=>{if(context.isNew)await capture(tx,context.requestId,contactId);},
- exportData:async(tx,contactId)=>{await requireTransferCapability(tx);const rows=await owned(tx,contactId),ids=[...new Set(rows.map(row=>row.object.id))];
+ exportData:async(tx,contactId)=>{await lockEmptyMediaEvidence(tx);const rows=await owned(tx,contactId),ids=[...new Set(rows.map(row=>row.object.id))];
   const callers=ids.length?await tx.select().from(mediaStorageTransferCalls).where(inArray(mediaStorageTransferCalls.objectId,ids)):[],requests=callers.length?await tx.select().from(mediaStorageTransferRequests).where(inArray(mediaStorageTransferRequests.callId,callers.map(row=>row.id))):[];
   const planIds=[...new Set(rows.map(row=>row.plan.id))];
   const headers=planIds.length?await tx.select({id:mediaStorageProviderInventories.id,planId:mediaStorageProviderInventories.planId,side:mediaStorageProviderInventories.side,purpose:mediaStorageProviderInventories.purpose,state:mediaStorageProviderInventories.state,firstDigest:mediaStorageProviderInventories.firstDigest,confirmedDigest:mediaStorageProviderInventories.confirmedDigest}).from(mediaStorageProviderInventories).where(inArray(mediaStorageProviderInventories.planId,planIds)):[];

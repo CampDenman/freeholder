@@ -17,6 +17,8 @@ import { prepareMerchantCashReturnInspection,performMerchantCashReturnInspection
 import { cashInspectionRecoveryPlan,reviewCashInspectionCallerStopped } from "@/modules/invoicing/merchant-cash-inspection-stop-service";
 import { CASH_INSPECTION_STOP_CONFIRMATION } from "@/modules/invoicing/merchant-cash-inspection-stop-proof";
 import { cashInspectionStopFinancialWitness,exportCashInspectionStops } from "@/modules/invoicing/merchant-cash-inspection-stops";
+import { invoiceMerchantDependencyFingerprints,exportMerchantRecoveryHistory } from "@/modules/invoicing/merchant-payment-dependencies";
+import { merchantRefundDependencyFingerprints } from "@/modules/invoicing/merchant-refund-dependencies";
 import { cashInspectionSource } from "@/modules/invoicing/merchant-cash-inspection-evidence";
 import { originalMerchantRefundCash,lockMerchantRefundCash } from "@/modules/invoicing/merchant-refund-origin";
 import { currentOriginalCashInspection } from "@/modules/invoicing/merchant-cash-inspection-current";
@@ -46,12 +48,17 @@ describe.runIf(hasDatabase)("authentic original cash inspection independent stop
    await expect(prepareMerchantCashReturnInspection.call({source:f.source},system)).rejects.toMatchObject({code:"conflict"});expect(await db().select().from(merchantCashReturnInspectionStops)).toHaveLength(0);
    const exited=once(child,"exit");child.kill("SIGKILL");await exited;
    await expect(reviewCashInspectionCallerStopped.call({...review,expectedSourceRevision:"f".repeat(64)},OWNER)).rejects.toMatchObject({code:"conflict"});
+   const mergeBeforeStop=await db().transaction(tx=>invoiceMerchantDependencyFingerprints(tx,[f.invoiceId]));expect(mergeBeforeStop?.get(f.invoiceId)).toMatch(/^[a-f0-9]{64}$/);
    expect(await reviewCashInspectionCallerStopped.call(review,OWNER)).toEqual({reviewed:true,mechanicalCheck:"original_process_absent"});
+   const mergeAfterStop=await db().transaction(tx=>invoiceMerchantDependencyFingerprints(tx,[f.invoiceId]));expect(mergeAfterStop?.get(f.invoiceId)).toMatch(/^[a-f0-9]{64}$/);expect(mergeAfterStop?.get(f.invoiceId)).not.toBe(mergeBeforeStop?.get(f.invoiceId));
    expect(await db().select().from(merchantCashReturnInspections).where(eq(merchantCashReturnInspections.id,before.id))).toEqual([before]);expect(await db().select().from(merchantCashReturnInspectionFinishes)).toHaveLength(0);expect(await current.call(ticket,system)).toBe(false);
    await expect(finishMerchantCashReturnInspection.call({inspectionId:before.id,completionNonce:"A".repeat(43)},system)).rejects.toMatchObject({code:"conflict"});
    await expect(db().transaction(async tx=>{await tx.execute(sql`select set_config('freeholder.merchant_refund_v1','1',true)`);await tx.insert(merchantCashReturnInspectionFinishes).values({inspectionId:before.id,callerInstanceId:before.caller.id,outcome:"returned"});})).rejects.toThrow();
    const paymentId=before.paymentId;if(!paymentId)throw Error("The fixture must retain its actual payment-owned source.");
    const witness=await db().transaction(tx=>cashInspectionStopFinancialWitness(tx,{paymentIds:[paymentId],receiptIds:[]}));expect(witness.entries).toHaveLength(1);expect(witness.entries[0]).toMatchObject({table:"merchant_cash_return_inspection_stops",id:before.id,inspectionId:before.id});expect(witness.entries[0]?.fingerprint).toMatch(/^[a-f0-9]{64}$/);expect(exportCashInspectionStops(witness.stops)).toEqual([{inspectionId:before.id,reviewedAt:witness.stops[0]?.createdAt,callerStopped:true,suppliesBankEvidence:false}]);
+   const originalChildren=await db().transaction(tx=>merchantRefundDependencyFingerprints(tx,{paymentIds:[paymentId],subscriptionChargeReceiptIds:[]}));
+   expect(originalChildren.incomplete).toBe(false);expect(originalChildren.entries.filter(row=>row.table==="merchant_cash_return_inspection_stops")).toEqual(witness.entries.map(({table,id,fingerprint})=>({table,id,fingerprint})));
+   const subjectHistory=await db().transaction(tx=>exportMerchantRecoveryHistory(tx,[f.invoiceId]));expect(subjectHistory).toMatchObject({originalCashInspectionStops:exportCashInspectionStops(witness.stops)});
    const claim=await prepareMerchantCashReturnInspection.call({source:f.source},system),inspect=f.base.stripe.inspectMerchantReturnedCash?.bind(f.base.stripe);if(!inspect)throw Error("The real Stripe GET adapter is required.");
    await performMerchantCashReturnInspection(claim,()=>inspect({providerPlatformAccountId:claim.providerPlatformAccountId,providerApiVersion:claim.providerApiVersion,...(claim.providerAccountId?{providerAccountId:claim.providerAccountId}:{}),paymentProviderRef:claim.paymentProviderRef,
     onOriginalCashObserved:async evidence=>{await recordCashReturnPrimaryObservation.call({...claim,evidence:merchantPaymentEvidence.extend({amountMinor:z.number().int().nonnegative(),currency:z.string().regex(/^[A-Z]{3}$/)}).parse(evidence)},system);},

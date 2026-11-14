@@ -872,9 +872,12 @@ export const SERVICE_NAMES = [
   "invoicing.cancelPaymentPlan",
   "invoicing.cancelRefund",
   "invoicing.cartMerchantTaxBusinesses",
+  "invoicing.closeControlledZeroProviderResource",
   "invoicing.completePaymentCheckout",
   "invoicing.configureMerchantCollection",
   "invoicing.confirmCustomerPayment",
+  "invoicing.controlledProviderRecoveryPlan",
+  "invoicing.controlledProviderResourceStatus",
   "invoicing.createCreditNote",
   "invoicing.createDepositAndBalance",
   "invoicing.createDraft",
@@ -902,6 +905,7 @@ export const SERVICE_NAMES = [
   "invoicing.issue",
   "invoicing.issueCreditNote",
   "invoicing.list",
+  "invoicing.listCommercialRecordedPayments",
   "invoicing.listInPersonPayments",
   "invoicing.listPaymentDisputes",
   "invoicing.listPaymentProviders",
@@ -922,6 +926,7 @@ export const SERVICE_NAMES = [
   "invoicing.merchantTaxZones",
   "invoicing.myMerchantTaxExemptions",
   "invoicing.originalCashReturnRecovery",
+  "invoicing.prorationPaymentReadRecoveryPlan",
   "invoicing.purgeDemoFixture",
   "invoicing.quoteTax",
   "invoicing.receipt",
@@ -934,25 +939,35 @@ export const SERVICE_NAMES = [
   "invoicing.reconcilePaymentProviders",
   "invoicing.reconcileProviderPayout",
   "invoicing.reconciliation",
+  "invoicing.recordAgreementFeeRemittance",
+  "invoicing.recordCommercialFee",
   "invoicing.recordOfflinePayment",
   "invoicing.recordOfflineRefund",
   "invoicing.recordProviderBalanceTransaction",
   "invoicing.recordProviderPayout",
+  "invoicing.recoverControlledProviderCalendar",
+  "invoicing.recoverControlledProviderOperation",
   "invoicing.recoverLegacyBankRefund",
   "invoicing.refreshPaymentPlans",
   "invoicing.refundCustomerBalancePayment",
   "invoicing.refundInPersonPayment",
+  "invoicing.releaseInvoiceCredit",
   "invoicing.reminders",
   "invoicing.replaceLegacyReturnedBankRefund",
   "invoicing.replaceReturnedBankRefund",
   "invoicing.requestMerchantTaxExemption",
   "invoicing.returnOriginalCash",
+  "invoicing.reviewAgreementFee",
+  "invoicing.reviewCashInspectionCallerStopped",
+  "invoicing.reviewCommercialPayment",
+  "invoicing.reviewControlledProviderCallerStopped",
   "invoicing.reviewLegacyBankReaderStopped",
   "invoicing.reviewMerchantPaymentCallerStopped",
   "invoicing.reviewMerchantPaymentResourceOrigin",
   "invoicing.reviewOriginalCashCallerStopped",
   "invoicing.reviewOriginalCashLegacyFeeStopped",
   "invoicing.reviewOriginalUnassignedCash",
+  "invoicing.reviewProrationPaymentReadStopped",
   "invoicing.reviewSiteMerchantTaxExemption",
   "invoicing.revokeSavedPaymentMethod",
   "invoicing.runSchedules",
@@ -968,6 +983,7 @@ export const SERVICE_NAMES = [
   "invoicing.siteMerchantTaxThresholds",
   "invoicing.startPayment",
   "invoicing.startRefund",
+  "invoicing.stopControlledProviderCalendar",
   "invoicing.submitProviderRefund",
   "invoicing.taxConfiguration",
   "invoicing.taxThresholds",
@@ -1045,6 +1061,7 @@ export const SERVICE_NAMES = [
   "marketplace.sync",
   "media.abortUpload",
   "media.acceptAltTextSuggestion",
+  "media.advanceStorageTransfer",
   "media.altTextSuggestionState",
   "media.appendCaptureChunk",
   "media.assembleCapture",
@@ -1053,6 +1070,7 @@ export const SERVICE_NAMES = [
   "media.authorizeObjectDelivery",
   "media.beginUpload",
   "media.bindCaptureAsset",
+  "media.cancelStorageTransfer",
   "media.completeUpload",
   "media.confirmCapture",
   "media.createCaptureSession",
@@ -1069,8 +1087,12 @@ export const SERVICE_NAMES = [
   "media.listCaptureSessions",
   "media.listMultipartOperations",
   "media.listStorageOperations",
+  "media.listStorageTransferRecovery",
+  "media.listStorageTransfers",
+  "media.planStorageTransfer",
   "media.previewStorageTransfer",
   "media.purge",
+  "media.queueStorageTransferStep",
   "media.reconcileMultipartOperation",
   "media.reconcileStorageOperation",
   "media.rescan",
@@ -1078,11 +1100,14 @@ export const SERVICE_NAMES = [
   "media.resolveImage",
   "media.restore",
   "media.reviewCapture",
+  "media.reviewStorageTransferCall",
   "media.setAltText",
   "media.setFocalPoint",
   "media.signUploadParts",
   "media.startCapture",
   "media.stopCapture",
+  "media.storageTransferConfiguration",
+  "media.storageTransferStatus",
   "media.trash",
   "media.updateDetails",
   "media.upload",
@@ -1591,6 +1616,8 @@ export const SERVICE_NAMES = [
   "social.variantList",
   "subscriptions.acceptAmendment",
   "subscriptions.acceptMyAmendment",
+  "subscriptions.acceptMyProration",
+  "subscriptions.acceptProration",
   "subscriptions.amendmentStatus",
   "subscriptions.attachProviderSchedule",
   "subscriptions.beginTrialCardSetup",
@@ -1601,6 +1628,8 @@ export const SERVICE_NAMES = [
   "subscriptions.changeMine",
   "subscriptions.changePlan",
   "subscriptions.chargePlatformInvoice",
+  "subscriptions.collectMyProrationCard",
+  "subscriptions.collectProrationCard",
   "subscriptions.enroll",
   "subscriptions.get",
   "subscriptions.join",
@@ -1611,13 +1640,18 @@ export const SERVICE_NAMES = [
   "subscriptions.mine",
   "subscriptions.myAmendmentStatus",
   "subscriptions.myPaymentMethods",
+  "subscriptions.myProrationStatus",
   "subscriptions.pause",
+  "subscriptions.prepareControlledProviderCalendar",
+  "subscriptions.prorationStatus",
   "subscriptions.providerReaderRecoveryPlan",
   "subscriptions.publicPlans",
   "subscriptions.quoteAmendment",
   "subscriptions.quoteMembership",
   "subscriptions.quoteMyAmendment",
+  "subscriptions.quoteMyProration",
   "subscriptions.quoteNewAgreement",
+  "subscriptions.quoteProration",
   "subscriptions.reconcileTrialSetupDispatch",
   "subscriptions.recoverProviderReader",
   "subscriptions.resume",
@@ -5138,7 +5172,7 @@ export interface ServiceCatalog {
   };
   "invoicing.assessLateFee": {
     input: { invoiceId: string; terms: { basis: "fixed"; fixedMinor: number; capMinor?: number } | { basis: "percentage"; ratePpm: number; capMinor?: number }; graceDays?: number; asOf?: string; reason: string; taxCategoryCode?: string; tax: { mode: "calculate"; origin: { city?: string; region?: string; postalCode?: string; country: string }; destination: { city?: string; region?: string; postalCode?: string; country: string } } | { mode: "not_applicable"; reason: string }; dueAt?: string; issueNow?: boolean; idempotencyKey: string };
-    output: { assessment: { id: string; sourceInvoiceId: string; feeInvoiceId: string; basis: "fixed" | "percentage"; outstandingMinor: number; fixedMinor: number | null; ratePpm: number | null; capMinor: number | null; graceDays: number; assessedMinor: number; assessedAt: string; reason: string; idempotencyKey: string; requestHash: string; createdAt: string; [key: string]: unknown }; invoice: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } };
+    output: { assessment: { id: string; sourceInvoiceId: string; feeInvoiceId: string; basis: "fixed" | "percentage"; outstandingMinor: number; fixedMinor: number | null; ratePpm: number | null; capMinor: number | null; graceDays: number; assessedMinor: number; assessedAt: string; reason: string; idempotencyKey: string; requestHash: string; createdAt: string; [key: string]: unknown }; invoice: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } };
   };
   "invoicing.beginCustomerCheckout": {
     input: { id: string; token?: string; saveMethodConsent?: boolean };
@@ -5168,6 +5202,10 @@ export interface ServiceCatalog {
     input: { cartId: string; cartToken?: string };
     output: { sellerUserId: string | null; merchantName: string }[];
   };
+  "invoicing.closeControlledZeroProviderResource": {
+    input: { resourceId: string };
+    output: { closed: true };
+  };
   "invoicing.completePaymentCheckout": {
     input: { paymentId: string; idempotencyKey: string };
     output: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -5180,21 +5218,29 @@ export interface ServiceCatalog {
     input: { token: string };
     output: { status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; issuerName: string | null; issuerIsMerchant: boolean; issuerSupport: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null; remainingMinor?: number; continueUrl?: string | null };
   };
+  "invoicing.controlledProviderRecoveryPlan": {
+    input: { subscriptionId: string };
+    output: { resourceId: string; operationId: string; callId: string; kind: string; callerId: string; admissionDigest: string; currentEvidenceRevision: string; liveness: "live" | "absent" | "unobservable"; reviewed: boolean }[];
+  };
+  "invoicing.controlledProviderResourceStatus": {
+    input: { subscriptionId: string };
+    output: { resourceId: string; generation: number; closed: boolean; unfinishedCallers: number; zeroTransport: boolean }[];
+  };
   "invoicing.createCreditNote": {
     input: { invoiceId: string; idempotencyKey: string; reason: string; lines: { invoiceLineId?: string; description: string; quantityMicros: number; subtotalMinor: number; taxMinor?: number }[] };
     output: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "invoicing.createDepositAndBalance": {
     input: { contactId: string; currency: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual"; sourceId: string; deposit: { lines: { sourceType?: string; sourceId?: string; description: string; quantityMicros: number; unitAmountMinor: number; discountMinor?: number; taxCategoryCode?: string; requiresShipping?: boolean; snapshot?: { [key: string]: unknown } }[]; shippingMinor?: number; dueAt?: string }; balance: { lines: { sourceType?: string; sourceId?: string; description: string; quantityMicros: number; unitAmountMinor: number; discountMinor?: number; taxCategoryCode?: string; requiresShipping?: boolean; snapshot?: { [key: string]: unknown } }[]; shippingMinor?: number; dueAt?: string }; billingAddress?: { name?: string; street1?: string; street2?: string; city?: string; region?: string; postalCode?: string; country: string }; customerTaxId?: string; memo?: string; tax: { mode: "calculate"; origin: { city?: string; region?: string; postalCode?: string; country: string }; destination: { city?: string; region?: string; postalCode?: string; country: string } } | { mode: "not_applicable"; reason: string }; issueNow?: boolean; idempotencyKey: string };
-    output: { deposit: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; balance: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } };
+    output: { deposit: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; balance: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } };
   };
   "invoicing.createDraft": {
     input: { contactId: string; currency: string; sourceType?: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId?: string; idempotencyKey: string; lines: { sourceType?: string; sourceId?: string; description: string; quantityMicros: number; unitAmountMinor: number; discountMinor?: number; taxCategoryCode?: string; requiresShipping?: boolean; snapshot?: { [key: string]: unknown } }[]; shippingMinor?: number; billingAddress?: { name?: string; street1?: string; street2?: string; city?: string; region?: string; postalCode?: string; country: string }; customerTaxId?: string; memo?: string; schedule?: { [key: string]: unknown }; depositOfInvoiceId?: string; dueAt?: string; tax: { mode: "merchant"; destination: { city?: string; region?: string; postalCode?: string; country: string }; quoteDigest?: string } | { mode: "calculate"; origin: { city?: string; region?: string; postalCode?: string; country: string }; destination: { city?: string; region?: string; postalCode?: string; country: string } } | { mode: "not_applicable"; reason: string } };
-    output: { invoice: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; invoiceId: string; position: number; sourceType: string | null; sourceId: string | null; description: string; quantityMicros: number; unitAmountMinor: number; subtotalMinor: number; discountMinor: number; taxMinor: number; totalMinor: number; taxCategoryCode: string; snapshot: unknown; createdAt: string; [key: string]: unknown }[]; taxLines: { id: string; invoiceId: string; invoiceLineId: string | null; kind: "item" | "shipping" | "exemption"; rateName: string; ratePpm: number; taxableMinor: number; amountMinor: number; jurisdiction: string; registrationNumber: string | null; inclusive: boolean; compound: boolean; priority: number; exemptionKind: string | null; explanation: string; createdAt: string; [key: string]: unknown }[]; payments: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }[]; refunds: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; creditNotes: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
+    output: { invoice: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; invoiceId: string; position: number; sourceType: string | null; sourceId: string | null; description: string; quantityMicros: number; unitAmountMinor: number; subtotalMinor: number; discountMinor: number; taxMinor: number; totalMinor: number; taxCategoryCode: string; snapshot: unknown; createdAt: string; [key: string]: unknown }[]; taxLines: { id: string; invoiceId: string; invoiceLineId: string | null; kind: "item" | "shipping" | "exemption"; rateName: string; ratePpm: number; taxableMinor: number; amountMinor: number; jurisdiction: string; registrationNumber: string | null; inclusive: boolean; compound: boolean; priority: number; exemptionKind: string | null; explanation: string; createdAt: string; [key: string]: unknown }[]; payments: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }[]; refunds: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; creditNotes: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
   };
   "invoicing.createFlexiblePayment": {
     input: { kind: "tip" | "pay_what_you_want"; contactId: string; currency: string; chosenMinor: number; minimumMinor?: number; maximumMinor?: number; context: "checkout" | "invoice" | "gallery" | "booking" | "store" | "other"; attachedInvoiceId?: string; description: string; message?: string; taxCategoryCode?: string; tax: { mode: "calculate"; origin: { city?: string; region?: string; postalCode?: string; country: string }; destination: { city?: string; region?: string; postalCode?: string; country: string } } | { mode: "not_applicable"; reason: string }; dueAt?: string; issueNow?: boolean; idempotencyKey: string };
-    output: { flexiblePayment: { id: string; invoiceId: string; attachedInvoiceId: string | null; kind: "tip" | "pay_what_you_want"; context: "checkout" | "invoice" | "gallery" | "booking" | "store" | "other"; chosenMinor: number; minimumMinor: number; maximumMinor: number | null; message: string | null; idempotencyKey: string; requestHash: string; createdAt: string; [key: string]: unknown }; invoice: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } };
+    output: { flexiblePayment: { id: string; invoiceId: string; attachedInvoiceId: string | null; kind: "tip" | "pay_what_you_want"; context: "checkout" | "invoice" | "gallery" | "booking" | "store" | "other"; chosenMinor: number; minimumMinor: number; maximumMinor: number | null; message: string | null; idempotencyKey: string; requestHash: string; createdAt: string; [key: string]: unknown }; invoice: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } };
   };
   "invoicing.createPayment": {
     input: { invoiceId: string; provider: string; method: string; amountMinor: number; idempotencyKey: string; merchantAllocationId?: string; subscriptionChargeReceiptId?: string; metadata?: { [key: string]: unknown } };
@@ -5222,7 +5268,7 @@ export interface ServiceCatalog {
   };
   "invoicing.customerInvoice": {
     input: { id: string; token?: string };
-    output: { id: string; number: string; status: string; currency: string; issuerName: string | null; issuerIsMerchant: boolean; issuerSupport: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null; merchants: { allocationId: string; merchantName: string | null; merchantSupport: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null; lineIds: string[]; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; refundedMinor: number }[]; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; amountMinor: number; totalMinor: number }[]; saveMethodRequired: boolean; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable"; nextPaymentMinor: number | null; awaitingRelease: boolean; refunds: { id: string; amountMinor: number; currency: string; status: "pending" | "requires_action" | "succeeded" | "failed" | "canceled" | "unknown"; verified: boolean; refundPromiseOpen: boolean; reviewRequired: boolean; promiseFulfilledElsewhere: boolean }[] };
+    output: { id: string; number: string; status: string; currency: string; issuerName: string | null; issuerIsMerchant: boolean; issuerSupport: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null; merchants: { allocationId: string; merchantName: string | null; merchantSupport: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null; lineIds: string[]; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; refundedMinor: number }[]; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; totalMinor: number; paidMinor: number; creditedMinor: number; dueAt: string | null; memo: string | null; requiredTaxLegend: string | null; lines: { id: string; description: string; quantityMicros: number; amountMinor: number; totalMinor: number }[]; saveMethodRequired: boolean; canPay: boolean; paymentMode: "hosted" | "manual" | "unavailable"; nextPaymentMinor: number | null; awaitingRelease: boolean; refunds: { id: string; amountMinor: number; currency: string; status: "pending" | "requires_action" | "succeeded" | "failed" | "canceled" | "unknown"; verified: boolean; refundPromiseOpen: boolean; reviewRequired: boolean; promiseFulfilledElsewhere: boolean }[] };
   };
   "invoicing.customerInvoiceLink": {
     input: { id: string };
@@ -5242,7 +5288,7 @@ export interface ServiceCatalog {
   };
   "invoicing.get": {
     input: { id: string };
-    output: { invoice: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; invoiceId: string; position: number; sourceType: string | null; sourceId: string | null; description: string; quantityMicros: number; unitAmountMinor: number; subtotalMinor: number; discountMinor: number; taxMinor: number; totalMinor: number; taxCategoryCode: string; snapshot: unknown; createdAt: string; [key: string]: unknown }[]; taxLines: { id: string; invoiceId: string; invoiceLineId: string | null; kind: "item" | "shipping" | "exemption"; rateName: string; ratePpm: number; taxableMinor: number; amountMinor: number; jurisdiction: string; registrationNumber: string | null; inclusive: boolean; compound: boolean; priority: number; exemptionKind: string | null; explanation: string; createdAt: string; [key: string]: unknown }[]; payments: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }[]; refunds: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; creditNotes: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
+    output: { invoice: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; invoiceId: string; position: number; sourceType: string | null; sourceId: string | null; description: string; quantityMicros: number; unitAmountMinor: number; subtotalMinor: number; discountMinor: number; taxMinor: number; totalMinor: number; taxCategoryCode: string; snapshot: unknown; createdAt: string; [key: string]: unknown }[]; taxLines: { id: string; invoiceId: string; invoiceLineId: string | null; kind: "item" | "shipping" | "exemption"; rateName: string; ratePpm: number; taxableMinor: number; amountMinor: number; jurisdiction: string; registrationNumber: string | null; inclusive: boolean; compound: boolean; priority: number; exemptionKind: string | null; explanation: string; createdAt: string; [key: string]: unknown }[]; payments: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }[]; refunds: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; creditNotes: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
   };
   "invoicing.getCustomerBalance": {
     input: { contactId: string; currency?: string; limit?: number };
@@ -5250,7 +5296,7 @@ export interface ServiceCatalog {
   };
   "invoicing.getPayment": {
     input: { id: string };
-    output: { payment: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }; invoice: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } };
+    output: { payment: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }; invoice: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } };
   };
   "invoicing.getPaymentPlan": {
     input: { invoiceId: string };
@@ -5278,7 +5324,7 @@ export interface ServiceCatalog {
   };
   "invoicing.issue": {
     input: { id: string; dueAt?: string };
-    output: { invoice: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; invoiceId: string; position: number; sourceType: string | null; sourceId: string | null; description: string; quantityMicros: number; unitAmountMinor: number; subtotalMinor: number; discountMinor: number; taxMinor: number; totalMinor: number; taxCategoryCode: string; snapshot: unknown; createdAt: string; [key: string]: unknown }[]; taxLines: { id: string; invoiceId: string; invoiceLineId: string | null; kind: "item" | "shipping" | "exemption"; rateName: string; ratePpm: number; taxableMinor: number; amountMinor: number; jurisdiction: string; registrationNumber: string | null; inclusive: boolean; compound: boolean; priority: number; exemptionKind: string | null; explanation: string; createdAt: string; [key: string]: unknown }[]; payments: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }[]; refunds: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; creditNotes: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
+    output: { invoice: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; lines: { id: string; invoiceId: string; position: number; sourceType: string | null; sourceId: string | null; description: string; quantityMicros: number; unitAmountMinor: number; subtotalMinor: number; discountMinor: number; taxMinor: number; totalMinor: number; taxCategoryCode: string; snapshot: unknown; createdAt: string; [key: string]: unknown }[]; taxLines: { id: string; invoiceId: string; invoiceLineId: string | null; kind: "item" | "shipping" | "exemption"; rateName: string; ratePpm: number; taxableMinor: number; amountMinor: number; jurisdiction: string; registrationNumber: string | null; inclusive: boolean; compound: boolean; priority: number; exemptionKind: string | null; explanation: string; createdAt: string; [key: string]: unknown }[]; payments: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }[]; refunds: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[]; creditNotes: { id: string; invoiceId: string; number: string | null; sequenceKey: string; idempotencyKey: string; requestHash: string; status: "draft" | "issued" | "void"; currency: string; reason: string; subtotalMinor: number; taxMinor: number; totalMinor: number; issuedAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[] };
   };
   "invoicing.issueCreditNote": {
     input: { id: string };
@@ -5286,7 +5332,11 @@ export interface ServiceCatalog {
   };
   "invoicing.list": {
     input: { contactId?: string; status?: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; limit?: number };
-    output: { id: string; contactId: string; number: string | null; sequenceKey?: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey?: string; requestHash?: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+    output: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey?: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey?: string; requestHash?: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }[];
+  };
+  "invoicing.listCommercialRecordedPayments": {
+    input: { limit?: number };
+    output: { paymentId: string; invoiceNumber: string | null; currency: string; amountMinor: number; principalSafe: boolean; feeOwedMinor: number; feeRecordedMinor: number; reviewRequired: boolean }[];
   };
   "invoicing.listInPersonPayments": {
     input: { limit?: number };
@@ -5330,7 +5380,7 @@ export interface ServiceCatalog {
   };
   "invoicing.markOverdue": {
     input: { id: string; asOf?: string };
-    output: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+    output: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "invoicing.markOverdueSweep": {
     input: Record<string, never>;
@@ -5338,7 +5388,7 @@ export interface ServiceCatalog {
   };
   "invoicing.markViewed": {
     input: { id: string };
-    output: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+    output: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "invoicing.merchantCheckoutRequirements": {
     input: Record<string, never>;
@@ -5350,7 +5400,7 @@ export interface ServiceCatalog {
   };
   "invoicing.merchantPaymentReview": {
     input: { paymentId: string; offset?: number };
-    output: { payment: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }; routing: { providerApiVersion?: "2026-02-25.clover" | "2026-10-28.endive"; providerAccountId?: string; providerPlatformAccountId?: string; destinationAccountId?: string; settlementMerchantAccountId?: string; merchantAllocationId?: string; invoiceScopeId?: string; agreementSubscriptionId?: string; providerSubscriptionRef?: string; providerInvoiceRef?: string; providerPaymentIntentRef?: string; providerChargeRef?: string; originalChargeReceiptId?: string; applicationFeeMinor?: number }; witness: string; observations: { id: string; providerApiVersion: string | null; providerRef: string; status: "pending" | "succeeded" | "failed"; amountMinor: number; currency: string; providerPlatformAccountId: string; chargeAccountId: string | null; recipientAccountId: string | null; settlementMerchantAccountId: string | null; applicationFeeMinor: number | null; providerChargeRef: string | null; applicationFeeRef: string | null; transferRef: string | null; applicationFeeCurrency: string | null; observedApplicationFeeMinor: number | null; observedFeeRefundedMinor: number | null; customerChargeVerified: boolean; routeVerified: boolean; settlementVerified: boolean; observedAt: string }[]; feeOperations: { id: string; amountMinor: number; currency: string; status: string; providerRef: string | null; applicationFeeRef: string; targetRetainedFeeMinor: number; observedOriginalFeeMinor: number; createdAt: string }[]; feeObservations: { id: string; operationId: string; providerRef: string; applicationFeeRef: string; amountMinor: number; currency: string; bindingVerified: boolean; observedAt: string }[]; originalRequest: { providerInvoiceRef: string; providerContactRef: string; requestDigest: string } | null; dispatches: { id: string; ordinal: number; requestDigest: string; dispatchedAt: string; refusalCode: string | null; caller: { id: string; pid: number; host: string; startedAt: string; bootId: string | null; pidNamespace: string | null; startTicks: string | null }; finishedAt: string | null; stopReviewedAt: string | null; liveness: "live" | "absent" | "unobservable" }[]; resourceBindings: { id: string; dispatchId: string; resourceRef: string; resourceKind: "checkout" | "intent"; origin: "physical_ack" | "human_request_review"; observedAt: string }[]; retirementAcks: { id: string; checkoutRef: string | null; paymentRef: string | null; kind: "session_expired" | "intent_canceled"; observedAt: string }[]; terminalReceipt: { checkoutRef: string | null; paymentRef: string | null; sessionStatus: ("expired" | "complete") | null; intentStatus: string | null; amountReceivedMinor: 0; observedAt: string } | null; hasMore: boolean; nextOffset: number | null } | null;
+    output: { payment: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }; routing: { moneyOrigin?: "recorded_external"; providerApiVersion?: "2026-02-25.clover" | "2026-10-28.endive"; providerAccountId?: string; providerPlatformAccountId?: string; destinationAccountId?: string; settlementMerchantAccountId?: string; merchantAllocationId?: string; invoiceScopeId?: string; agreementSubscriptionId?: string; providerSubscriptionRef?: string; providerInvoiceRef?: string; providerPaymentIntentRef?: string; providerChargeRef?: string; originalChargeReceiptId?: string; applicationFeeMinor?: number }; witness: string; observations: { id: string; providerApiVersion: string | null; providerRef: string; status: "pending" | "succeeded" | "failed"; amountMinor: number; currency: string; providerPlatformAccountId: string; chargeAccountId: string | null; recipientAccountId: string | null; settlementMerchantAccountId: string | null; applicationFeeMinor: number | null; providerChargeRef: string | null; applicationFeeRef: string | null; transferRef: string | null; applicationFeeCurrency: string | null; observedApplicationFeeMinor: number | null; observedFeeRefundedMinor: number | null; customerChargeVerified: boolean; routeVerified: boolean; settlementVerified: boolean; observedAt: string }[]; feeOperations: { id: string; amountMinor: number; currency: string; status: string; providerRef: string | null; applicationFeeRef: string; targetRetainedFeeMinor: number; observedOriginalFeeMinor: number; createdAt: string }[]; feeObservations: { id: string; operationId: string; providerRef: string; applicationFeeRef: string; amountMinor: number; currency: string; bindingVerified: boolean; observedAt: string }[]; originalRequest: { providerInvoiceRef: string; providerContactRef: string; requestDigest: string } | null; dispatches: { id: string; ordinal: number; requestDigest: string; dispatchedAt: string; refusalCode: string | null; caller: { id: string; pid: number; host: string; startedAt: string; bootId: string | null; pidNamespace: string | null; startTicks: string | null }; finishedAt: string | null; stopReviewedAt: string | null; liveness: "live" | "absent" | "unobservable" }[]; resourceBindings: { id: string; dispatchId: string; resourceRef: string; resourceKind: "checkout" | "intent"; origin: "physical_ack" | "human_request_review"; observedAt: string }[]; retirementAcks: { id: string; checkoutRef: string | null; paymentRef: string | null; kind: "session_expired" | "intent_canceled"; observedAt: string }[]; terminalReceipt: { checkoutRef: string | null; paymentRef: string | null; sessionStatus: ("expired" | "complete") | null; intentStatus: string | null; amountReceivedMinor: 0; observedAt: string } | null; hasMore: boolean; nextOffset: number | null } | null;
   };
   "invoicing.merchantTaxZoneConfiguration": {
     input: { zoneId: string };
@@ -5367,6 +5417,10 @@ export interface ServiceCatalog {
   "invoicing.originalCashReturnRecovery": {
     input: Record<string, never>;
     output: { recoveryId: string | null; source: { kind: "payment"; paymentId: string; observationId?: string } | { kind: "subscription"; receiptId: string; observationId: string }; amountMinor: number; currency: string; closed: boolean; partialPaymentId: string | null; unassigned: { operationId: string; rawFactId: string; providerRef: string; amountMinor: number; currency: string }[]; partialConfirmed: boolean; confirmedReturnedMinor: number; canReturnFull: boolean; callers: { operationId: string; digest: string; callerId: string; host: string; pid: number; startedAt: string; liveness: "live" | "absent" | "unobservable" }[]; legacyFees: { id: string; digest: string }[] }[];
+  };
+  "invoicing.prorationPaymentReadRecoveryPlan": {
+    input: { invoiceId: string };
+    output: { paymentId: string; readId: string; callerId: string; admissionDigest: string; sourceRevision: string; liveness: "live" | "absent" | "unobservable"; reviewed: boolean }[];
   };
   "invoicing.purgeDemoFixture": {
     input: { scenarioKey: string; scenarioVersion: number; runId: string; generation: number; locale: string; records?: { fixtureKey: string; subjectType: string; subjectId: string; label: string }[] };
@@ -5390,7 +5444,7 @@ export interface ServiceCatalog {
   };
   "invoicing.reconcileMerchantApplicationFee": {
     input: { paymentId: string };
-    output: { state: "satisfied" | "pending" | "ready" | "review" | "accepted"; operation: { id: string; paymentId: string; applicationFeeRef: string; providerChargeRef: string; amountMinor: number; currency: string; idempotencyKey: string; status: "reserved" | "dispatching" | "accepted" | "unknown" | "refused" } | null; routing: { providerApiVersion?: "2026-02-25.clover" | "2026-10-28.endive"; providerAccountId?: string; providerPlatformAccountId?: string; destinationAccountId?: string; settlementMerchantAccountId?: string; merchantAllocationId?: string; invoiceScopeId?: string; agreementSubscriptionId?: string; providerSubscriptionRef?: string; providerInvoiceRef?: string; providerPaymentIntentRef?: string; providerChargeRef?: string; originalChargeReceiptId?: string; applicationFeeMinor?: number } };
+    output: { state: "satisfied" | "pending" | "ready" | "review" | "accepted"; operation: { id: string; paymentId: string; applicationFeeRef: string; providerChargeRef: string; amountMinor: number; currency: string; idempotencyKey: string; status: "reserved" | "dispatching" | "accepted" | "unknown" | "refused" } | null; routing: { moneyOrigin?: "recorded_external"; providerApiVersion?: "2026-02-25.clover" | "2026-10-28.endive"; providerAccountId?: string; providerPlatformAccountId?: string; destinationAccountId?: string; settlementMerchantAccountId?: string; merchantAllocationId?: string; invoiceScopeId?: string; agreementSubscriptionId?: string; providerSubscriptionRef?: string; providerInvoiceRef?: string; providerPaymentIntentRef?: string; providerChargeRef?: string; originalChargeReceiptId?: string; applicationFeeMinor?: number } };
   };
   "invoicing.reconcileMerchantCheckout": {
     input: { paymentId: string; action: "inspect" | "retire"; checkoutRef?: string; paymentRef?: string };
@@ -5414,7 +5468,15 @@ export interface ServiceCatalog {
   };
   "invoicing.reconciliation": {
     input: { limit?: number };
-    output: { balanced: boolean; checked: { invoices: number; payments: number; refunds: number }; discrepancies: { subjectType: "invoice" | "payment"; subjectId: string; field: string; recordedMinor: number; calculatedMinor: number }[] };
+    output: { balanced: boolean; checked: { invoices: number; payments: number; refunds: number; creditApplications: number }; discrepancies: { subjectType: "invoice" | "payment"; subjectId: string; field: string; recordedMinor: number; calculatedMinor: number }[] };
+  };
+  "invoicing.recordAgreementFeeRemittance": {
+    input: { invoiceId: string; amountMinor: number; direction?: "remitted" | "returned"; originalRemittanceId?: string; idempotencyKey: string; reference: string; evidence: string };
+    output: { recorded: true };
+  };
+  "invoicing.recordCommercialFee": {
+    input: { paymentId: string; amountMinor: number; direction?: "remitted" | "returned"; originalRemittanceId?: string; idempotencyKey: string; reference: string; evidence: string };
+    output: { recorded: true };
   };
   "invoicing.recordOfflinePayment": {
     input: { invoiceId: string; method: "cash" | "bank_transfer" | "cheque" | "external_card" | "other"; amountMinor: number; reference?: string; evidence: string; processedAt?: string; idempotencyKey: string };
@@ -5432,6 +5494,14 @@ export interface ServiceCatalog {
     input: { provider: "stripe" | "paypal" | "square" | "mollie" | "razorpay" | "paystack" | "flutterwave"; providerRef: string; status: "pending" | "in_transit" | "paid" | "failed" | "cancelled"; currency: string; amountMinor: number; occurredAt: string; expectedAt?: string; statementRef?: string; failureReason?: string };
     output: { payout: { id: string; provider: string; providerRef: string; status: "pending" | "in_transit" | "paid" | "failed" | "cancelled"; currency: string; amountMinor: number; statementRef: string | null; failureReason: string | null; expectedAt: string | null; providerStatusAt: string; paidAt: string | null; reconciledAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown }; applied: boolean };
   };
+  "invoicing.recoverControlledProviderCalendar": {
+    input: { resourceId: string };
+    output: { resourceId: string; verified: boolean; collectionPausedAsDraft: boolean };
+  };
+  "invoicing.recoverControlledProviderOperation": {
+    input: { operationId: string };
+    output: { observed: true };
+  };
   "invoicing.recoverLegacyBankRefund": {
     input: { refundId: string };
     output: { receiptId: string; status: ("pending" | "requires_action" | "succeeded" | "failed" | "canceled") | null; applied: boolean; requiresReview: boolean };
@@ -5447,6 +5517,10 @@ export interface ServiceCatalog {
   "invoicing.refundInPersonPayment": {
     input: { paymentId: string; amountMinor: number; reason: string; idempotencyKey: string };
     output: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+  };
+  "invoicing.releaseInvoiceCredit": {
+    input: { reservationId: string; reason: string };
+    output: { released: true };
   };
   "invoicing.reminders": {
     input: { invoiceId: string };
@@ -5467,6 +5541,22 @@ export interface ServiceCatalog {
   "invoicing.returnOriginalCash": {
     input: { source: { kind: "payment"; paymentId: string; observationId?: string } | { kind: "subscription"; receiptId: string; observationId: string }; confirmation: "RETURN ONLY THIS ORIGINAL CASH" };
     output: { recoveryId: string; closureId: string };
+  };
+  "invoicing.reviewAgreementFee": {
+    input: { invoiceId: string };
+    output: { invoiceId: string; currency: string; eligible: boolean; expectedReceivableMinor: number; owedMinor: number | null; recordedMinor: number | null; returnDueMinor: number | null; originalSourceExcessMinor: number | null; reviewRequired: boolean; pending: boolean; receipts: { id: string; amountMinor: number; direction: "remitted" | "returned"; originalRemittanceId: string | null; recordedBy: string; createdAt: string }[] };
+  };
+  "invoicing.reviewCashInspectionCallerStopped": {
+    input: { inspectionId: string; expectedCallerId: string; expectedAdmissionDigest: string; expectedSourceRevision: string; hostingEvidence: string; confirmation: "ORIGINAL CASH INSPECTION CALLER STOP VERIFIED" };
+    output: { reviewed: true; mechanicalCheck: "original_process_absent" };
+  };
+  "invoicing.reviewCommercialPayment": {
+    input: { paymentId: string };
+    output: { recorded: boolean; principalSafe: boolean; feeOwedMinor: number; feeRecordedMinor: number; reviewRequired: boolean; paymentId: string; invoiceId: string; currency: string; amountMinor: number; receipts: { id: string; direction: "remitted" | "returned"; originalRemittanceId: string | null; amountMinor: number; recordedBy: string; createdAt: string }[] };
+  };
+  "invoicing.reviewControlledProviderCallerStopped": {
+    input: { resourceId: string; operationId: string; callId: string; expectedCallerId: string; expectedAdmissionDigest: string; expectedSourceRevision: string; hostingEvidence: string; stoppedRuntimeReference?: string; stoppedRuntimeAt?: string; confirmation: "ORIGINAL CONTROLLED PROVIDER RUNTIME STOP VERIFIED" };
+    output: { reviewed: true; mechanicalCheck: "original_process_absent" | "unobservable_host_review" };
   };
   "invoicing.reviewLegacyBankReaderStopped": {
     input: { readId: string; expectedCallerId: string; expectedOriginalDigest: string; expectedSourceRevision: string; hostingEvidence: string; confirmation: "ORIGINAL LEGACY READ CALLER STOP VERIFIED" };
@@ -5491,6 +5581,10 @@ export interface ServiceCatalog {
   "invoicing.reviewOriginalUnassignedCash": {
     input: { recoveryId: string; operationId: string; rawFactId: string; confirmation: "REVIEW THIS ACTUAL ORIGINAL CASH RESOURCE" };
     output: { reviewed: true };
+  };
+  "invoicing.reviewProrationPaymentReadStopped": {
+    input: { paymentId: string; readId: string; expectedCallerId: string; expectedAdmissionDigest: string; expectedSourceRevision: string; hostingEvidence: string; stoppedRuntimeReference?: string; stoppedRuntimeAt?: string; confirmation: "ORIGINAL CHANGED-PRICE PAYMENT READ RUNTIME STOP VERIFIED" };
+    output: { reviewed: true; mechanicalCheck: "original_process_absent" | "unobservable_host_review" };
   };
   "invoicing.reviewSiteMerchantTaxExemption": {
     input: { id: string; expectedStatus: "pending" | "valid" | "expired" | "revoked"; decision: "valid" | "revoked"; confirmEvidence?: boolean; expiresAt?: string | null };
@@ -5552,6 +5646,10 @@ export interface ServiceCatalog {
     input: { id: string; providerRef?: string };
     output: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "invoicing.stopControlledProviderCalendar": {
+    input: { resourceId: string };
+    output: { resourceId: string; calendarCanceled: true; invoiceCount: number; financiallyQuiesced: false };
+  };
   "invoicing.submitProviderRefund": {
     input: { paymentId: string; amountMinor: number; reason: string; idempotencyKey: string };
     output: { id: string; paymentId: string; invoiceId: string; provider: string; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; currency: string; amountMinor: number; reason: string | null; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -5578,7 +5676,7 @@ export interface ServiceCatalog {
   };
   "invoicing.void": {
     input: { id: string; reason: string };
-    output: { id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
+    output: { creditedMinor: number; id: string; contactId: string; number: string | null; sequenceKey: string; sourceType: "order" | "quote" | "booking" | "subscription" | "manual" | "deposit" | "balance" | "tip" | "pay_what_you_want" | "late_fee" | "unlock" | "ad_campaign" | "event"; sourceId: string | null; idempotencyKey: string; requestHash: string; status: "draft" | "sent" | "viewed" | "partially_paid" | "paid" | "overdue" | "void" | "refunded"; currency: string; subtotalMinor: number; discountMinor: number; shippingMinor: number; taxMinor: number; taxZoneId: string | null; totalMinor: number; paidMinor: number; refundedMinor: number; billingAddress: unknown | null; customerTaxId: string | null; requiredTaxLegend: string | null; memo: string | null; schedule: unknown | null; depositOfInvoiceId: string | null; dueAt: string | null; issuedAt: string | null; viewedAt: string | null; paidAt: string | null; voidedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
   "invoicing.voidCreditNote": {
     input: { id: string; reason: string };
@@ -5860,6 +5958,10 @@ export interface ServiceCatalog {
     input: { id: string; suggestionId: string; altText: string };
     output: { id: string; kind: "image" | "video" | "doc" | "audio"; storageKey: string; filename: string; mime: string; legacyBytes: number; bytes: number; width: number | null; height: number | null; durationSeconds: number | null; variants: unknown; altText: string | null; blurhash: string | null; status: "processing" | "ready" | "quarantined" | "failed" | "trashed"; scanStatus: "pending" | "clean" | "not_configured" | "infected" | "error"; scanEngine: string | null; scanMessage: string | null; scannedAt: string | null; checksumSha256: string | null; metadata: unknown; provenance: unknown; source: "upload" | "import" | "generated" | "migration" | "capture"; uploadedBy: string | null; focalX: number; focalY: number; deletedAt: string | null; purgeAfter: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
   };
+  "media.advanceStorageTransfer": {
+    input: { id: string; action: "copy" | "adopt" | "retire"; objectId?: string };
+    output: { id: string; state: string; objects: number; verified: number; retired: number; pendingRecovery: boolean };
+  };
   "media.altTextSuggestionState": {
     input: { id: string };
     output: { available: boolean; provider: string; model: string | null; unavailableReason: string | null; suggestion: { id: string; assetId: string; status: "ready" | "accepted" | "dismissed" | "superseded"; suggestion: string; provider: string; model: string; promptVersion: string; sourceChecksum: string; authoredAltTextAtRequest: string | null; requestedBy: string; reviewedBy: string | null; reviewedAt: string | null; createdAt: string; updatedAt: string; [key: string]: unknown } | null };
@@ -5891,6 +5993,10 @@ export interface ServiceCatalog {
   "media.bindCaptureAsset": {
     input: { id?: string; token?: string; assetId: string };
     output: { id: string; source: "camera" | "microphone" | "screen" | "share_sheet" | "camera_roll" | "upload_link" | "import" | "social"; status: "pending" | "live" | "preview" | "confirmed" | "discarded" | "expired"; targetType: string | null; targetId: string | null; uploadCount: number; displaySurface: string | null; permissionGrantedAt: string | null; trimStartMs: number; trimEndMs: number | null; caption: string | null; focalX: number; focalY: number; staged: boolean; stagedMime: string | null; stagedFilename: string | null; items: { id: string; filename: string; bytes: number; mime: string; assetId: string | null }[]; uploadId: string | null; assetId: string | null; expiresAt: string; completedAt: string | null; captureUrl: string | null; [key: string]: unknown };
+  };
+  "media.cancelStorageTransfer": {
+    input: { id: string; confirmation: "CANCEL ORIGINAL TRANSFER WITHOUT DELETING SOURCE" };
+    output: { id: string; state: string; objects: number; verified: number; retired: number; pendingRecovery: boolean };
   };
   "media.completeUpload": {
     input: { id: string; parts: { partNumber: number; etag: string }[]; altText?: string };
@@ -5956,6 +6062,18 @@ export interface ServiceCatalog {
     input: { limit?: number };
     output: { rows: { id: string; operation: "put" | "delete"; key: string; namespace: string | null; bytes: number | null; sha256: string | null; contentType: string; state: string; observedAcceptedAt: string | null; createdAt: string; updatedAt: string }[] };
   };
+  "media.listStorageTransferRecovery": {
+    input: { id: string };
+    output: { rows: { id: string; kind: string; namespace: string; key: string; witness: string; returned: boolean; acknowledged: boolean }[] };
+  };
+  "media.listStorageTransfers": {
+    input: { limit?: number };
+    output: { rows: { id: string; state: string; objects: number; verified: number; retired: number; pendingRecovery: boolean }[] };
+  };
+  "media.planStorageTransfer": {
+    input: { requestKey: string; drainId?: string; confirmation: "COPY ADOPT AND RETIRE ORIGINAL STORAGE" };
+    output: { id: string };
+  };
   "media.previewStorageTransfer": {
     input: { keys: string[]; target: { kind: "s3"; namespace: string; location: { endpoint: string; bucket: string } } | { kind: "replit"; namespace: string; location: { bucket: string } } };
     output: { source: { kind: "s3"; namespace: string; location: { endpoint: string; bucket: string } } | { kind: "replit"; namespace: string; location: { bucket: string } }; target: { kind: "s3"; namespace: string; location: { endpoint: string; bucket: string } } | { kind: "replit"; namespace: string; location: { bucket: string } }; inventoryDigest: string; objects: { key: string; keyDigest: string; sha256: string; bytes: number; contentType: string; originalReceiptCount: number }[]; permitsCopy: false; permitsAdoption: false; permitsSourceDeletion: false };
@@ -5963,6 +6081,10 @@ export interface ServiceCatalog {
   "media.purge": {
     input: { id: string; confirmation: string };
     output: { ok: true; assetId: string; objects: number };
+  };
+  "media.queueStorageTransferStep": {
+    input: { id: string; requestKey: string; action: "copy" | "adopt" | "retire" };
+    output: { id: string; jobId: string };
   };
   "media.reconcileMultipartOperation": {
     input: { resourceId: string; operationId?: string; expectedWitness: string; originalNamespace: string; providerUploadId?: string; originalKey?: string; action: "verify_original" | "applied" | "not_applied" | "cleanup"; sha256?: string; bytes?: number; providerFinalReference: string; providerEvidence: string; stoppedWriterEvidence: string; confirmation: "ORIGINAL MULTIPART RESOURCE CONFIRMED" };
@@ -5992,6 +6114,10 @@ export interface ServiceCatalog {
     input: { id: string; trimStartMs?: number; trimEndMs?: number | null; caption?: string | null; focalX?: number; focalY?: number };
     output: { id: string; source: "camera" | "microphone" | "screen" | "share_sheet" | "camera_roll" | "upload_link" | "import" | "social"; status: "pending" | "live" | "preview" | "confirmed" | "discarded" | "expired"; targetType: string | null; targetId: string | null; uploadCount: number; displaySurface: string | null; permissionGrantedAt: string | null; trimStartMs: number; trimEndMs: number | null; caption: string | null; focalX: number; focalY: number; staged: boolean; stagedMime: string | null; stagedFilename: string | null; items: { id: string; filename: string; bytes: number; mime: string; assetId: string | null }[]; uploadId: string | null; assetId: string | null; expiresAt: string; completedAt: string | null; captureUrl: string | null; [key: string]: unknown };
   };
+  "media.reviewStorageTransferCall": {
+    input: { callId: string; expectedWitness: string; stopDrainId?: string; originalKey?: string; originalSourceKey?: string; outcome: "applied" | "not_applied" | "retired"; retryOriginal?: boolean; providerFinalReference: string; providerEvidence: string; confirmation: "ORIGINAL CALLER AND PROVIDER OUTCOME CONFIRMED" };
+    output: { ok: true; reviewId: string };
+  };
   "media.setAltText": {
     input: { id: string; altText: string };
     output: { id: string; kind: "image" | "video" | "doc" | "audio"; storageKey: string; filename: string; mime: string; legacyBytes: number; bytes: number; width: number | null; height: number | null; durationSeconds: number | null; variants: unknown; altText: string | null; blurhash: string | null; status: "processing" | "ready" | "quarantined" | "failed" | "trashed"; scanStatus: "pending" | "clean" | "not_configured" | "infected" | "error"; scanEngine: string | null; scanMessage: string | null; scannedAt: string | null; checksumSha256: string | null; metadata: unknown; provenance: unknown; source: "upload" | "import" | "generated" | "migration" | "capture"; uploadedBy: string | null; focalX: number; focalY: number; deletedAt: string | null; purgeAfter: string | null; createdAt: string; updatedAt: string; [key: string]: unknown };
@@ -6011,6 +6137,14 @@ export interface ServiceCatalog {
   "media.stopCapture": {
     input: { id: string };
     output: { id: string; source: "camera" | "microphone" | "screen" | "share_sheet" | "camera_roll" | "upload_link" | "import" | "social"; status: "pending" | "live" | "preview" | "confirmed" | "discarded" | "expired"; targetType: string | null; targetId: string | null; uploadCount: number; displaySurface: string | null; permissionGrantedAt: string | null; trimStartMs: number; trimEndMs: number | null; caption: string | null; focalX: number; focalY: number; staged: boolean; stagedMime: string | null; stagedFilename: string | null; items: { id: string; filename: string; bytes: number; mime: string; assetId: string | null }[]; uploadId: string | null; assetId: string | null; expiresAt: string; completedAt: string | null; captureUrl: string | null; [key: string]: unknown };
+  };
+  "media.storageTransferConfiguration": {
+    input: Record<string, never>;
+    output: { source: { kind: "s3"; namespace: string; location: { endpoint: string; bucket: string } } | { kind: "replit"; namespace: string; location: { bucket: string } }; target: { kind: "s3"; namespace: string; location: { endpoint: string; bucket: string } } | { kind: "replit"; namespace: string; location: { bucket: string } } };
+  };
+  "media.storageTransferStatus": {
+    input: { id: string };
+    output: { id: string; state: string; objects: number; verified: number; retired: number; pendingRecovery: boolean };
   };
   "media.trash": {
     input: { id: string };
@@ -8044,6 +8178,14 @@ export interface ServiceCatalog {
     input: { id: string; planId: string; productVariantId?: string; taxDestination: { country: string; region?: string; postalCode?: string; city?: string }; resumeAt?: string; locale?: "en" | "es" | "fr" | "ar"; previousTermsId: string; acceptedQuoteDigest: string; confirm: true };
     output: { termsId: string; state: "pending_stop" | "activated"; effectivePeriodStart: string };
   };
+  "subscriptions.acceptMyProration": {
+    input: { id: string; planId: string; productVariantId?: string; effectiveAt: string; taxDestination: { country: string; region?: string; postalCode?: string; city?: string }; locale?: "en" | "fr" | "es" | "ar"; previousTermsId: string; acceptedQuoteDigest: string; confirm: true };
+    output: { prorationId: string; invoiceId: string | null; creditNoteId: string | null; effectiveAt: string; state: "accepted" | "preparing" | "awaiting_invoice" | "awaiting_payment" | "awaiting_effective" | "applied" | "cancelled" | "review" };
+  };
+  "subscriptions.acceptProration": {
+    input: { id: string; planId: string; productVariantId?: string; effectiveAt: string; taxDestination: { country: string; region?: string; postalCode?: string; city?: string }; locale?: "en" | "fr" | "es" | "ar"; previousTermsId: string; acceptedQuoteDigest: string; confirm: true };
+    output: { prorationId: string; invoiceId: string | null; creditNoteId: string | null; effectiveAt: string; state: "accepted" | "preparing" | "awaiting_invoice" | "awaiting_payment" | "awaiting_effective" | "applied" | "cancelled" | "review" };
+  };
   "subscriptions.amendmentStatus": {
     input: { id: string };
     output: { commercial: boolean; recoveryPending: boolean; needsReconsent: boolean; accepted: { termsId: string; name: string; state: "pending_stop" | "activated"; effectivePeriodStart: string; amountMinor: number; currency: string; canRetry: boolean } | null };
@@ -8083,6 +8225,14 @@ export interface ServiceCatalog {
   "subscriptions.chargePlatformInvoice": {
     input: { subscriptionId: string; invoiceId?: string };
     output: { advanced: boolean; skipped: boolean; [key: string]: unknown };
+  };
+  "subscriptions.collectMyProrationCard": {
+    input: { prorationId: string };
+    output: { prorationId: string; invoiceId: string | null; paymentId: string | null; collectionState: "skipped" | "pending" | "paid" | "needs_review"; applied: boolean };
+  };
+  "subscriptions.collectProrationCard": {
+    input: { prorationId: string };
+    output: { prorationId: string; invoiceId: string | null; paymentId: string | null; collectionState: "skipped" | "pending" | "paid" | "needs_review"; applied: boolean };
   };
   "subscriptions.enroll": {
     input: { contactId: string; planId: string; productVariantId?: string; currency?: string; paymentMethodId?: string };
@@ -8124,9 +8274,21 @@ export interface ServiceCatalog {
     input: { subscriptionId?: string; planId?: string };
     output: { id: string; label: string }[];
   };
+  "subscriptions.myProrationStatus": {
+    input: { id: string };
+    output: { commercial: boolean; prorating: boolean; billingMode: "manual" | "platform" | "provider"; accepted: { prorationId: string; invoiceId: string | null; creditNoteId: string | null; effectiveAt: string; state: "accepted" | "preparing" | "awaiting_invoice" | "awaiting_payment" | "awaiting_effective" | "applied" | "cancelled" | "review"; currency: string; debitMinor: number; creditMinor: number; remainingMinor: number | null; needsFreshConsent: boolean; originalCardMandate: boolean } | null };
+  };
   "subscriptions.pause": {
     input: { id: string };
     output: { id: string; contactId: string; planId: string; productVariantId: string; currency: string; billingMode: "provider" | "platform" | "manual"; status: "trialing" | "active" | "past_due" | "paused" | "cancelled" | "expired"; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt: string | null; paymentMethodId: string | null; signupPending: boolean; signupInvoiceId: string | null; pendingPlanId: string | null; provider: string | null; providerRef: string | null; cancelAtPeriodEnd: boolean; pausedAt: string | null; cancelledAt: string | null; endedAt: string | null; graceEndsAt: string | null; dunningNextAt: string | null; updatedAt: string; [key: string]: unknown };
+  };
+  "subscriptions.prepareControlledProviderCalendar": {
+    input: { subscriptionId: string };
+    output: { resourceId: string; collectionPausedAsDraft: true; positiveCollectionAdmissible: false; fixedTaxRequiredBeforeCollection: true };
+  };
+  "subscriptions.prorationStatus": {
+    input: { id: string };
+    output: { commercial: boolean; prorating: boolean; billingMode: "manual" | "platform" | "provider"; accepted: { prorationId: string; invoiceId: string | null; creditNoteId: string | null; effectiveAt: string; state: "accepted" | "preparing" | "awaiting_invoice" | "awaiting_payment" | "awaiting_effective" | "applied" | "cancelled" | "review"; currency: string; debitMinor: number; creditMinor: number; remainingMinor: number | null; needsFreshConsent: boolean; originalCardMandate: boolean } | null };
   };
   "subscriptions.providerReaderRecoveryPlan": {
     input: { subscriptionId: string };
@@ -8148,9 +8310,17 @@ export interface ServiceCatalog {
     input: { id: string; planId: string; productVariantId?: string; taxDestination: { country: string; region?: string; postalCode?: string; city?: string }; resumeAt?: string; locale?: "en" | "es" | "fr" | "ar" };
     output: { subscriptionId: string; previousTermsId: string; effectivePeriodStart: string; quoteDigest: string; quote: { planId: string; snapshot: { version: 1; name: string; description: string | null; productVariantId: string; taxCategoryCode: string; requiresShipping: boolean; currency: string; periodAmountMinor: number; setupFeeMinor: number; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; cancelBehaviour: "immediate" | "period_end"; proration: "create_prorations" | "none"; billingMode: "manual" | "platform" | "provider" }; issuer: { name: string; support: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null }; initialTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; firstPeriodTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; renewalTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; quoteDigest: string; noticeDigest: string; noticeSnapshot: { locale: "en" | "es" | "fr" | "ar"; text: string } }; notice: string };
   };
+  "subscriptions.quoteMyProration": {
+    input: { id: string; planId: string; productVariantId?: string; effectiveAt: string; taxDestination: { country: string; region?: string; postalCode?: string; city?: string }; locale?: "en" | "fr" | "es" | "ar" };
+    output: { subscriptionId: string; previousTermsId: string; quoteDigest: string; sourceRevision: string; effectiveAt: string; originalPeriodStart: string; originalPeriodEnd: string; originalTrialEndsAt: string | null; calendar: { kind: "preserve_trial"; trialEndsAt: string; chargeMinor: 0; oldPaidCreditMinor: 0; nextPeriodStart: string; nextPeriodEnd: string } | { kind: "original_calendar"; prorationAt: string; currentPeriodStart: string; currentPeriodEnd: string; nextPeriodStart: string; nextPeriodEnd: string }; debitNetMinor: number; debitTaxMinor: number; creditNetMinor: number; creditTaxMinor: number; creditAppliedMinor: number; cashDueMinor: number; residualCreditMinor: number; creditDisposition: "exclusive_until_paid_access_switch_no_automatic_cash_refund"; requiresMerchantReview: boolean; payment: { methodId: string; label: string; last4: string | null; kind: string } | null; feeReview: { debitFeeObligationMinor: number; creditFeeObligationMinor: number; appliedFeeObligationMinor: number; appliedFeeProvenCollectedMinor: number; remainingNewCashFeeMinor: number; separateMerchantReceivableMinor: number; originalOverTargetMinor: number; originalSourceDebt: boolean; sources: { sourcePaymentId: string; sourceApplicationId: string | null; amountMinor: number; feeObligationMinor: number; feeProvenCollectedMinor: number; feeCollectionState: "not_due" | "owed" | "recorded_remitted" | "verified_collected" | "review"; feeEvidenceDigest: string; feeUnexpected: boolean }[] } | null; quote: { planId: string; snapshot: { version: 1; name: string; description: string | null; productVariantId: string; taxCategoryCode: string; requiresShipping: boolean; currency: string; periodAmountMinor: number; setupFeeMinor: number; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; cancelBehaviour: "immediate" | "period_end"; proration: "create_prorations" | "none"; billingMode: "manual" | "platform" | "provider" }; issuer: { name: string; support: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null }; initialTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; firstPeriodTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; renewalTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; quoteDigest: string; noticeDigest: string; noticeSnapshot: { locale: "en" | "es" | "fr" | "ar"; text: string } }; noticeSnapshot: { locale: "en" | "fr" | "es" | "ar"; text: string } };
+  };
   "subscriptions.quoteNewAgreement": {
     input: { planId: string; contactId: string; productVariantId?: string; currency?: string; taxDestination: { country: string; region?: string; postalCode?: string; city?: string }; paymentMethodId?: string; deferFirstPayment?: boolean; locale?: "en" | "es" | "fr" | "ar" };
     output: { planId: string; snapshot: { version: 1; name: string; description: string | null; productVariantId: string; taxCategoryCode: string; requiresShipping: boolean; currency: string; periodAmountMinor: number; setupFeeMinor: number; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; cancelBehaviour: "immediate" | "period_end"; proration: "create_prorations" | "none"; billingMode: "manual" | "platform" | "provider" }; issuer: { name: string; support: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null }; initialTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; firstPeriodTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; renewalTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; quoteDigest: string; noticeDigest: string; noticeSnapshot: { locale: "en" | "es" | "fr" | "ar"; text: string } } | null;
+  };
+  "subscriptions.quoteProration": {
+    input: { id: string; planId: string; productVariantId?: string; effectiveAt: string; taxDestination: { country: string; region?: string; postalCode?: string; city?: string }; locale?: "en" | "fr" | "es" | "ar" };
+    output: { subscriptionId: string; previousTermsId: string; quoteDigest: string; sourceRevision: string; effectiveAt: string; originalPeriodStart: string; originalPeriodEnd: string; originalTrialEndsAt: string | null; calendar: { kind: "preserve_trial"; trialEndsAt: string; chargeMinor: 0; oldPaidCreditMinor: 0; nextPeriodStart: string; nextPeriodEnd: string } | { kind: "original_calendar"; prorationAt: string; currentPeriodStart: string; currentPeriodEnd: string; nextPeriodStart: string; nextPeriodEnd: string }; debitNetMinor: number; debitTaxMinor: number; creditNetMinor: number; creditTaxMinor: number; creditAppliedMinor: number; cashDueMinor: number; residualCreditMinor: number; creditDisposition: "exclusive_until_paid_access_switch_no_automatic_cash_refund"; requiresMerchantReview: boolean; payment: { methodId: string; label: string; last4: string | null; kind: string } | null; feeReview: { debitFeeObligationMinor: number; creditFeeObligationMinor: number; appliedFeeObligationMinor: number; appliedFeeProvenCollectedMinor: number; remainingNewCashFeeMinor: number; separateMerchantReceivableMinor: number; originalOverTargetMinor: number; originalSourceDebt: boolean; sources: { sourcePaymentId: string; sourceApplicationId: string | null; amountMinor: number; feeObligationMinor: number; feeProvenCollectedMinor: number; feeCollectionState: "not_due" | "owed" | "recorded_remitted" | "verified_collected" | "review"; feeEvidenceDigest: string; feeUnexpected: boolean }[] } | null; quote: { planId: string; snapshot: { version: 1; name: string; description: string | null; productVariantId: string; taxCategoryCode: string; requiresShipping: boolean; currency: string; periodAmountMinor: number; setupFeeMinor: number; interval: "day" | "week" | "month" | "year"; intervalCount: number; trialDays: number; trialRequiresCard: boolean; cancelBehaviour: "immediate" | "period_end"; proration: "create_prorations" | "none"; billingMode: "manual" | "platform" | "provider" }; issuer: { name: string; support: { email: string | null; phone: string | null; url: string | null; address: { line1: string; line2: string | null; city: string | null; state: string | null; postalCode: string | null; country: string } | null } | null }; initialTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; firstPeriodTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; renewalTaxQuote: { quoteDigest: string; subtotalMinor: number; taxMinor: number; totalMinor: number }; quoteDigest: string; noticeDigest: string; noticeSnapshot: { locale: "en" | "es" | "fr" | "ar"; text: string } }; noticeSnapshot: { locale: "en" | "fr" | "es" | "ar"; text: string } };
   };
   "subscriptions.reconcileTrialSetupDispatch": {
     input: { dispatchId: string; outcome: "completed" | "cancelled"; providerOperationRef: string; providerEvidence: string; callerStopEvidence: string; confirmation: "PROVIDER OUTCOME CONFIRMED"; providerCustomerRef?: string; providerRef?: string };
@@ -9410,9 +9580,12 @@ export interface FreeholderApi {
     cancelPaymentPlan: (input: ServiceCatalog["invoicing.cancelPaymentPlan"]["input"]) => Promise<ServiceCatalog["invoicing.cancelPaymentPlan"]["output"]>;
     cancelRefund: (input: ServiceCatalog["invoicing.cancelRefund"]["input"]) => Promise<ServiceCatalog["invoicing.cancelRefund"]["output"]>;
     cartMerchantTaxBusinesses: (input: ServiceCatalog["invoicing.cartMerchantTaxBusinesses"]["input"]) => Promise<ServiceCatalog["invoicing.cartMerchantTaxBusinesses"]["output"]>;
+    closeControlledZeroProviderResource: (input: ServiceCatalog["invoicing.closeControlledZeroProviderResource"]["input"]) => Promise<ServiceCatalog["invoicing.closeControlledZeroProviderResource"]["output"]>;
     completePaymentCheckout: (input: ServiceCatalog["invoicing.completePaymentCheckout"]["input"]) => Promise<ServiceCatalog["invoicing.completePaymentCheckout"]["output"]>;
     configureMerchantCollection: (input: ServiceCatalog["invoicing.configureMerchantCollection"]["input"]) => Promise<ServiceCatalog["invoicing.configureMerchantCollection"]["output"]>;
     confirmCustomerPayment: (input: ServiceCatalog["invoicing.confirmCustomerPayment"]["input"]) => Promise<ServiceCatalog["invoicing.confirmCustomerPayment"]["output"]>;
+    controlledProviderRecoveryPlan: (input: ServiceCatalog["invoicing.controlledProviderRecoveryPlan"]["input"]) => Promise<ServiceCatalog["invoicing.controlledProviderRecoveryPlan"]["output"]>;
+    controlledProviderResourceStatus: (input: ServiceCatalog["invoicing.controlledProviderResourceStatus"]["input"]) => Promise<ServiceCatalog["invoicing.controlledProviderResourceStatus"]["output"]>;
     createCreditNote: (input: ServiceCatalog["invoicing.createCreditNote"]["input"]) => Promise<ServiceCatalog["invoicing.createCreditNote"]["output"]>;
     createDepositAndBalance: (input: ServiceCatalog["invoicing.createDepositAndBalance"]["input"]) => Promise<ServiceCatalog["invoicing.createDepositAndBalance"]["output"]>;
     createDraft: (input: ServiceCatalog["invoicing.createDraft"]["input"]) => Promise<ServiceCatalog["invoicing.createDraft"]["output"]>;
@@ -9440,6 +9613,7 @@ export interface FreeholderApi {
     issue: (input: ServiceCatalog["invoicing.issue"]["input"]) => Promise<ServiceCatalog["invoicing.issue"]["output"]>;
     issueCreditNote: (input: ServiceCatalog["invoicing.issueCreditNote"]["input"]) => Promise<ServiceCatalog["invoicing.issueCreditNote"]["output"]>;
     list: (input?: ServiceCatalog["invoicing.list"]["input"]) => Promise<ServiceCatalog["invoicing.list"]["output"]>;
+    listCommercialRecordedPayments: (input?: ServiceCatalog["invoicing.listCommercialRecordedPayments"]["input"]) => Promise<ServiceCatalog["invoicing.listCommercialRecordedPayments"]["output"]>;
     listInPersonPayments: (input?: ServiceCatalog["invoicing.listInPersonPayments"]["input"]) => Promise<ServiceCatalog["invoicing.listInPersonPayments"]["output"]>;
     listPaymentDisputes: (input?: ServiceCatalog["invoicing.listPaymentDisputes"]["input"]) => Promise<ServiceCatalog["invoicing.listPaymentDisputes"]["output"]>;
     listPaymentProviders: (input: ServiceCatalog["invoicing.listPaymentProviders"]["input"]) => Promise<ServiceCatalog["invoicing.listPaymentProviders"]["output"]>;
@@ -9460,6 +9634,7 @@ export interface FreeholderApi {
     merchantTaxZones: (input?: ServiceCatalog["invoicing.merchantTaxZones"]["input"]) => Promise<ServiceCatalog["invoicing.merchantTaxZones"]["output"]>;
     myMerchantTaxExemptions: (input?: ServiceCatalog["invoicing.myMerchantTaxExemptions"]["input"]) => Promise<ServiceCatalog["invoicing.myMerchantTaxExemptions"]["output"]>;
     originalCashReturnRecovery: (input?: ServiceCatalog["invoicing.originalCashReturnRecovery"]["input"]) => Promise<ServiceCatalog["invoicing.originalCashReturnRecovery"]["output"]>;
+    prorationPaymentReadRecoveryPlan: (input: ServiceCatalog["invoicing.prorationPaymentReadRecoveryPlan"]["input"]) => Promise<ServiceCatalog["invoicing.prorationPaymentReadRecoveryPlan"]["output"]>;
     purgeDemoFixture: (input: ServiceCatalog["invoicing.purgeDemoFixture"]["input"]) => Promise<ServiceCatalog["invoicing.purgeDemoFixture"]["output"]>;
     quoteTax: (input: ServiceCatalog["invoicing.quoteTax"]["input"]) => Promise<ServiceCatalog["invoicing.quoteTax"]["output"]>;
     receipt: (input: ServiceCatalog["invoicing.receipt"]["input"]) => Promise<ServiceCatalog["invoicing.receipt"]["output"]>;
@@ -9472,25 +9647,35 @@ export interface FreeholderApi {
     reconcilePaymentProviders: (input?: ServiceCatalog["invoicing.reconcilePaymentProviders"]["input"]) => Promise<ServiceCatalog["invoicing.reconcilePaymentProviders"]["output"]>;
     reconcileProviderPayout: (input: ServiceCatalog["invoicing.reconcileProviderPayout"]["input"]) => Promise<ServiceCatalog["invoicing.reconcileProviderPayout"]["output"]>;
     reconciliation: (input?: ServiceCatalog["invoicing.reconciliation"]["input"]) => Promise<ServiceCatalog["invoicing.reconciliation"]["output"]>;
+    recordAgreementFeeRemittance: (input: ServiceCatalog["invoicing.recordAgreementFeeRemittance"]["input"]) => Promise<ServiceCatalog["invoicing.recordAgreementFeeRemittance"]["output"]>;
+    recordCommercialFee: (input: ServiceCatalog["invoicing.recordCommercialFee"]["input"]) => Promise<ServiceCatalog["invoicing.recordCommercialFee"]["output"]>;
     recordOfflinePayment: (input: ServiceCatalog["invoicing.recordOfflinePayment"]["input"]) => Promise<ServiceCatalog["invoicing.recordOfflinePayment"]["output"]>;
     recordOfflineRefund: (input: ServiceCatalog["invoicing.recordOfflineRefund"]["input"]) => Promise<ServiceCatalog["invoicing.recordOfflineRefund"]["output"]>;
     recordProviderBalanceTransaction: (input: ServiceCatalog["invoicing.recordProviderBalanceTransaction"]["input"]) => Promise<ServiceCatalog["invoicing.recordProviderBalanceTransaction"]["output"]>;
     recordProviderPayout: (input: ServiceCatalog["invoicing.recordProviderPayout"]["input"]) => Promise<ServiceCatalog["invoicing.recordProviderPayout"]["output"]>;
+    recoverControlledProviderCalendar: (input: ServiceCatalog["invoicing.recoverControlledProviderCalendar"]["input"]) => Promise<ServiceCatalog["invoicing.recoverControlledProviderCalendar"]["output"]>;
+    recoverControlledProviderOperation: (input: ServiceCatalog["invoicing.recoverControlledProviderOperation"]["input"]) => Promise<ServiceCatalog["invoicing.recoverControlledProviderOperation"]["output"]>;
     recoverLegacyBankRefund: (input: ServiceCatalog["invoicing.recoverLegacyBankRefund"]["input"]) => Promise<ServiceCatalog["invoicing.recoverLegacyBankRefund"]["output"]>;
     refreshPaymentPlans: (input?: ServiceCatalog["invoicing.refreshPaymentPlans"]["input"]) => Promise<ServiceCatalog["invoicing.refreshPaymentPlans"]["output"]>;
     refundCustomerBalancePayment: (input: ServiceCatalog["invoicing.refundCustomerBalancePayment"]["input"]) => Promise<ServiceCatalog["invoicing.refundCustomerBalancePayment"]["output"]>;
     refundInPersonPayment: (input: ServiceCatalog["invoicing.refundInPersonPayment"]["input"]) => Promise<ServiceCatalog["invoicing.refundInPersonPayment"]["output"]>;
+    releaseInvoiceCredit: (input: ServiceCatalog["invoicing.releaseInvoiceCredit"]["input"]) => Promise<ServiceCatalog["invoicing.releaseInvoiceCredit"]["output"]>;
     reminders: (input: ServiceCatalog["invoicing.reminders"]["input"]) => Promise<ServiceCatalog["invoicing.reminders"]["output"]>;
     replaceLegacyReturnedBankRefund: (input: ServiceCatalog["invoicing.replaceLegacyReturnedBankRefund"]["input"]) => Promise<ServiceCatalog["invoicing.replaceLegacyReturnedBankRefund"]["output"]>;
     replaceReturnedBankRefund: (input: ServiceCatalog["invoicing.replaceReturnedBankRefund"]["input"]) => Promise<ServiceCatalog["invoicing.replaceReturnedBankRefund"]["output"]>;
     requestMerchantTaxExemption: (input: ServiceCatalog["invoicing.requestMerchantTaxExemption"]["input"]) => Promise<ServiceCatalog["invoicing.requestMerchantTaxExemption"]["output"]>;
     returnOriginalCash: (input: ServiceCatalog["invoicing.returnOriginalCash"]["input"]) => Promise<ServiceCatalog["invoicing.returnOriginalCash"]["output"]>;
+    reviewAgreementFee: (input: ServiceCatalog["invoicing.reviewAgreementFee"]["input"]) => Promise<ServiceCatalog["invoicing.reviewAgreementFee"]["output"]>;
+    reviewCashInspectionCallerStopped: (input: ServiceCatalog["invoicing.reviewCashInspectionCallerStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewCashInspectionCallerStopped"]["output"]>;
+    reviewCommercialPayment: (input: ServiceCatalog["invoicing.reviewCommercialPayment"]["input"]) => Promise<ServiceCatalog["invoicing.reviewCommercialPayment"]["output"]>;
+    reviewControlledProviderCallerStopped: (input: ServiceCatalog["invoicing.reviewControlledProviderCallerStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewControlledProviderCallerStopped"]["output"]>;
     reviewLegacyBankReaderStopped: (input: ServiceCatalog["invoicing.reviewLegacyBankReaderStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewLegacyBankReaderStopped"]["output"]>;
     reviewMerchantPaymentCallerStopped: (input: ServiceCatalog["invoicing.reviewMerchantPaymentCallerStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewMerchantPaymentCallerStopped"]["output"]>;
     reviewMerchantPaymentResourceOrigin: (input: ServiceCatalog["invoicing.reviewMerchantPaymentResourceOrigin"]["input"]) => Promise<ServiceCatalog["invoicing.reviewMerchantPaymentResourceOrigin"]["output"]>;
     reviewOriginalCashCallerStopped: (input: ServiceCatalog["invoicing.reviewOriginalCashCallerStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewOriginalCashCallerStopped"]["output"]>;
     reviewOriginalCashLegacyFeeStopped: (input: ServiceCatalog["invoicing.reviewOriginalCashLegacyFeeStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewOriginalCashLegacyFeeStopped"]["output"]>;
     reviewOriginalUnassignedCash: (input: ServiceCatalog["invoicing.reviewOriginalUnassignedCash"]["input"]) => Promise<ServiceCatalog["invoicing.reviewOriginalUnassignedCash"]["output"]>;
+    reviewProrationPaymentReadStopped: (input: ServiceCatalog["invoicing.reviewProrationPaymentReadStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewProrationPaymentReadStopped"]["output"]>;
     reviewSiteMerchantTaxExemption: (input: ServiceCatalog["invoicing.reviewSiteMerchantTaxExemption"]["input"]) => Promise<ServiceCatalog["invoicing.reviewSiteMerchantTaxExemption"]["output"]>;
     revokeSavedPaymentMethod: (input: ServiceCatalog["invoicing.revokeSavedPaymentMethod"]["input"]) => Promise<ServiceCatalog["invoicing.revokeSavedPaymentMethod"]["output"]>;
     runSchedules: (input?: ServiceCatalog["invoicing.runSchedules"]["input"]) => Promise<ServiceCatalog["invoicing.runSchedules"]["output"]>;
@@ -9506,6 +9691,7 @@ export interface FreeholderApi {
     siteMerchantTaxThresholds: (input?: ServiceCatalog["invoicing.siteMerchantTaxThresholds"]["input"]) => Promise<ServiceCatalog["invoicing.siteMerchantTaxThresholds"]["output"]>;
     startPayment: (input: ServiceCatalog["invoicing.startPayment"]["input"]) => Promise<ServiceCatalog["invoicing.startPayment"]["output"]>;
     startRefund: (input: ServiceCatalog["invoicing.startRefund"]["input"]) => Promise<ServiceCatalog["invoicing.startRefund"]["output"]>;
+    stopControlledProviderCalendar: (input: ServiceCatalog["invoicing.stopControlledProviderCalendar"]["input"]) => Promise<ServiceCatalog["invoicing.stopControlledProviderCalendar"]["output"]>;
     submitProviderRefund: (input: ServiceCatalog["invoicing.submitProviderRefund"]["input"]) => Promise<ServiceCatalog["invoicing.submitProviderRefund"]["output"]>;
     taxConfiguration: (input?: ServiceCatalog["invoicing.taxConfiguration"]["input"]) => Promise<ServiceCatalog["invoicing.taxConfiguration"]["output"]>;
     taxThresholds: (input?: ServiceCatalog["invoicing.taxThresholds"]["input"]) => Promise<ServiceCatalog["invoicing.taxThresholds"]["output"]>;
@@ -9597,6 +9783,7 @@ export interface FreeholderApi {
   media: {
     abortUpload: (input: ServiceCatalog["media.abortUpload"]["input"]) => Promise<ServiceCatalog["media.abortUpload"]["output"]>;
     acceptAltTextSuggestion: (input: ServiceCatalog["media.acceptAltTextSuggestion"]["input"]) => Promise<ServiceCatalog["media.acceptAltTextSuggestion"]["output"]>;
+    advanceStorageTransfer: (input: ServiceCatalog["media.advanceStorageTransfer"]["input"]) => Promise<ServiceCatalog["media.advanceStorageTransfer"]["output"]>;
     altTextSuggestionState: (input: ServiceCatalog["media.altTextSuggestionState"]["input"]) => Promise<ServiceCatalog["media.altTextSuggestionState"]["output"]>;
     appendCaptureChunk: (input: ServiceCatalog["media.appendCaptureChunk"]["input"]) => Promise<ServiceCatalog["media.appendCaptureChunk"]["output"]>;
     assembleCapture: (input?: ServiceCatalog["media.assembleCapture"]["input"]) => Promise<ServiceCatalog["media.assembleCapture"]["output"]>;
@@ -9605,6 +9792,7 @@ export interface FreeholderApi {
     authorizeObjectDelivery: (input: ServiceCatalog["media.authorizeObjectDelivery"]["input"]) => Promise<ServiceCatalog["media.authorizeObjectDelivery"]["output"]>;
     beginUpload: (input: ServiceCatalog["media.beginUpload"]["input"]) => Promise<ServiceCatalog["media.beginUpload"]["output"]>;
     bindCaptureAsset: (input: ServiceCatalog["media.bindCaptureAsset"]["input"]) => Promise<ServiceCatalog["media.bindCaptureAsset"]["output"]>;
+    cancelStorageTransfer: (input: ServiceCatalog["media.cancelStorageTransfer"]["input"]) => Promise<ServiceCatalog["media.cancelStorageTransfer"]["output"]>;
     completeUpload: (input: ServiceCatalog["media.completeUpload"]["input"]) => Promise<ServiceCatalog["media.completeUpload"]["output"]>;
     confirmCapture: (input?: ServiceCatalog["media.confirmCapture"]["input"]) => Promise<ServiceCatalog["media.confirmCapture"]["output"]>;
     createCaptureSession: (input: ServiceCatalog["media.createCaptureSession"]["input"]) => Promise<ServiceCatalog["media.createCaptureSession"]["output"]>;
@@ -9621,8 +9809,12 @@ export interface FreeholderApi {
     listCaptureSessions: (input?: ServiceCatalog["media.listCaptureSessions"]["input"]) => Promise<ServiceCatalog["media.listCaptureSessions"]["output"]>;
     listMultipartOperations: (input?: ServiceCatalog["media.listMultipartOperations"]["input"]) => Promise<ServiceCatalog["media.listMultipartOperations"]["output"]>;
     listStorageOperations: (input?: ServiceCatalog["media.listStorageOperations"]["input"]) => Promise<ServiceCatalog["media.listStorageOperations"]["output"]>;
+    listStorageTransferRecovery: (input: ServiceCatalog["media.listStorageTransferRecovery"]["input"]) => Promise<ServiceCatalog["media.listStorageTransferRecovery"]["output"]>;
+    listStorageTransfers: (input?: ServiceCatalog["media.listStorageTransfers"]["input"]) => Promise<ServiceCatalog["media.listStorageTransfers"]["output"]>;
+    planStorageTransfer: (input: ServiceCatalog["media.planStorageTransfer"]["input"]) => Promise<ServiceCatalog["media.planStorageTransfer"]["output"]>;
     previewStorageTransfer: (input: ServiceCatalog["media.previewStorageTransfer"]["input"]) => Promise<ServiceCatalog["media.previewStorageTransfer"]["output"]>;
     purge: (input: ServiceCatalog["media.purge"]["input"]) => Promise<ServiceCatalog["media.purge"]["output"]>;
+    queueStorageTransferStep: (input: ServiceCatalog["media.queueStorageTransferStep"]["input"]) => Promise<ServiceCatalog["media.queueStorageTransferStep"]["output"]>;
     reconcileMultipartOperation: (input: ServiceCatalog["media.reconcileMultipartOperation"]["input"]) => Promise<ServiceCatalog["media.reconcileMultipartOperation"]["output"]>;
     reconcileStorageOperation: (input: ServiceCatalog["media.reconcileStorageOperation"]["input"]) => Promise<ServiceCatalog["media.reconcileStorageOperation"]["output"]>;
     rescan: (input: ServiceCatalog["media.rescan"]["input"]) => Promise<ServiceCatalog["media.rescan"]["output"]>;
@@ -9630,11 +9822,14 @@ export interface FreeholderApi {
     resolveImage: (input: ServiceCatalog["media.resolveImage"]["input"]) => Promise<ServiceCatalog["media.resolveImage"]["output"]>;
     restore: (input: ServiceCatalog["media.restore"]["input"]) => Promise<ServiceCatalog["media.restore"]["output"]>;
     reviewCapture: (input: ServiceCatalog["media.reviewCapture"]["input"]) => Promise<ServiceCatalog["media.reviewCapture"]["output"]>;
+    reviewStorageTransferCall: (input: ServiceCatalog["media.reviewStorageTransferCall"]["input"]) => Promise<ServiceCatalog["media.reviewStorageTransferCall"]["output"]>;
     setAltText: (input: ServiceCatalog["media.setAltText"]["input"]) => Promise<ServiceCatalog["media.setAltText"]["output"]>;
     setFocalPoint: (input: ServiceCatalog["media.setFocalPoint"]["input"]) => Promise<ServiceCatalog["media.setFocalPoint"]["output"]>;
     signUploadParts: (input: ServiceCatalog["media.signUploadParts"]["input"]) => Promise<ServiceCatalog["media.signUploadParts"]["output"]>;
     startCapture: (input: ServiceCatalog["media.startCapture"]["input"]) => Promise<ServiceCatalog["media.startCapture"]["output"]>;
     stopCapture: (input: ServiceCatalog["media.stopCapture"]["input"]) => Promise<ServiceCatalog["media.stopCapture"]["output"]>;
+    storageTransferConfiguration: (input?: ServiceCatalog["media.storageTransferConfiguration"]["input"]) => Promise<ServiceCatalog["media.storageTransferConfiguration"]["output"]>;
+    storageTransferStatus: (input: ServiceCatalog["media.storageTransferStatus"]["input"]) => Promise<ServiceCatalog["media.storageTransferStatus"]["output"]>;
     trash: (input: ServiceCatalog["media.trash"]["input"]) => Promise<ServiceCatalog["media.trash"]["output"]>;
     updateDetails: (input: ServiceCatalog["media.updateDetails"]["input"]) => Promise<ServiceCatalog["media.updateDetails"]["output"]>;
     upload: (input: ServiceCatalog["media.upload"]["input"]) => Promise<ServiceCatalog["media.upload"]["output"]>;
@@ -10209,6 +10404,8 @@ export interface FreeholderApi {
   subscriptions: {
     acceptAmendment: (input: ServiceCatalog["subscriptions.acceptAmendment"]["input"]) => Promise<ServiceCatalog["subscriptions.acceptAmendment"]["output"]>;
     acceptMyAmendment: (input: ServiceCatalog["subscriptions.acceptMyAmendment"]["input"]) => Promise<ServiceCatalog["subscriptions.acceptMyAmendment"]["output"]>;
+    acceptMyProration: (input: ServiceCatalog["subscriptions.acceptMyProration"]["input"]) => Promise<ServiceCatalog["subscriptions.acceptMyProration"]["output"]>;
+    acceptProration: (input: ServiceCatalog["subscriptions.acceptProration"]["input"]) => Promise<ServiceCatalog["subscriptions.acceptProration"]["output"]>;
     amendmentStatus: (input: ServiceCatalog["subscriptions.amendmentStatus"]["input"]) => Promise<ServiceCatalog["subscriptions.amendmentStatus"]["output"]>;
     attachProviderSchedule: (input: ServiceCatalog["subscriptions.attachProviderSchedule"]["input"]) => Promise<ServiceCatalog["subscriptions.attachProviderSchedule"]["output"]>;
     beginTrialCardSetup: (input: ServiceCatalog["subscriptions.beginTrialCardSetup"]["input"]) => Promise<ServiceCatalog["subscriptions.beginTrialCardSetup"]["output"]>;
@@ -10219,6 +10416,8 @@ export interface FreeholderApi {
     changeMine: (input: ServiceCatalog["subscriptions.changeMine"]["input"]) => Promise<ServiceCatalog["subscriptions.changeMine"]["output"]>;
     changePlan: (input: ServiceCatalog["subscriptions.changePlan"]["input"]) => Promise<ServiceCatalog["subscriptions.changePlan"]["output"]>;
     chargePlatformInvoice: (input: ServiceCatalog["subscriptions.chargePlatformInvoice"]["input"]) => Promise<ServiceCatalog["subscriptions.chargePlatformInvoice"]["output"]>;
+    collectMyProrationCard: (input: ServiceCatalog["subscriptions.collectMyProrationCard"]["input"]) => Promise<ServiceCatalog["subscriptions.collectMyProrationCard"]["output"]>;
+    collectProrationCard: (input: ServiceCatalog["subscriptions.collectProrationCard"]["input"]) => Promise<ServiceCatalog["subscriptions.collectProrationCard"]["output"]>;
     enroll: (input: ServiceCatalog["subscriptions.enroll"]["input"]) => Promise<ServiceCatalog["subscriptions.enroll"]["output"]>;
     get: (input: ServiceCatalog["subscriptions.get"]["input"]) => Promise<ServiceCatalog["subscriptions.get"]["output"]>;
     join: (input: ServiceCatalog["subscriptions.join"]["input"]) => Promise<ServiceCatalog["subscriptions.join"]["output"]>;
@@ -10229,13 +10428,18 @@ export interface FreeholderApi {
     mine: (input: ServiceCatalog["subscriptions.mine"]["input"]) => Promise<ServiceCatalog["subscriptions.mine"]["output"]>;
     myAmendmentStatus: (input: ServiceCatalog["subscriptions.myAmendmentStatus"]["input"]) => Promise<ServiceCatalog["subscriptions.myAmendmentStatus"]["output"]>;
     myPaymentMethods: (input?: ServiceCatalog["subscriptions.myPaymentMethods"]["input"]) => Promise<ServiceCatalog["subscriptions.myPaymentMethods"]["output"]>;
+    myProrationStatus: (input: ServiceCatalog["subscriptions.myProrationStatus"]["input"]) => Promise<ServiceCatalog["subscriptions.myProrationStatus"]["output"]>;
     pause: (input: ServiceCatalog["subscriptions.pause"]["input"]) => Promise<ServiceCatalog["subscriptions.pause"]["output"]>;
+    prepareControlledProviderCalendar: (input: ServiceCatalog["subscriptions.prepareControlledProviderCalendar"]["input"]) => Promise<ServiceCatalog["subscriptions.prepareControlledProviderCalendar"]["output"]>;
+    prorationStatus: (input: ServiceCatalog["subscriptions.prorationStatus"]["input"]) => Promise<ServiceCatalog["subscriptions.prorationStatus"]["output"]>;
     providerReaderRecoveryPlan: (input: ServiceCatalog["subscriptions.providerReaderRecoveryPlan"]["input"]) => Promise<ServiceCatalog["subscriptions.providerReaderRecoveryPlan"]["output"]>;
     publicPlans: (input?: ServiceCatalog["subscriptions.publicPlans"]["input"]) => Promise<ServiceCatalog["subscriptions.publicPlans"]["output"]>;
     quoteAmendment: (input: ServiceCatalog["subscriptions.quoteAmendment"]["input"]) => Promise<ServiceCatalog["subscriptions.quoteAmendment"]["output"]>;
     quoteMembership: (input: ServiceCatalog["subscriptions.quoteMembership"]["input"]) => Promise<ServiceCatalog["subscriptions.quoteMembership"]["output"]>;
     quoteMyAmendment: (input: ServiceCatalog["subscriptions.quoteMyAmendment"]["input"]) => Promise<ServiceCatalog["subscriptions.quoteMyAmendment"]["output"]>;
+    quoteMyProration: (input: ServiceCatalog["subscriptions.quoteMyProration"]["input"]) => Promise<ServiceCatalog["subscriptions.quoteMyProration"]["output"]>;
     quoteNewAgreement: (input: ServiceCatalog["subscriptions.quoteNewAgreement"]["input"]) => Promise<ServiceCatalog["subscriptions.quoteNewAgreement"]["output"]>;
+    quoteProration: (input: ServiceCatalog["subscriptions.quoteProration"]["input"]) => Promise<ServiceCatalog["subscriptions.quoteProration"]["output"]>;
     reconcileTrialSetupDispatch: (input: ServiceCatalog["subscriptions.reconcileTrialSetupDispatch"]["input"]) => Promise<ServiceCatalog["subscriptions.reconcileTrialSetupDispatch"]["output"]>;
     recoverProviderReader: (input: ServiceCatalog["subscriptions.recoverProviderReader"]["input"]) => Promise<ServiceCatalog["subscriptions.recoverProviderReader"]["output"]>;
     resume: (input: ServiceCatalog["subscriptions.resume"]["input"]) => Promise<ServiceCatalog["subscriptions.resume"]["output"]>;

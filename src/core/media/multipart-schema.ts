@@ -12,7 +12,7 @@ export const MULTIPART_STATES=["unverified","creating","open","completing","comp
 export const MULTIPART_OPERATION_STATES=["started","accepted","unknown","not_applied"]as const;
 /** uploadId remains an immutable logical identity even after session pruning. */
 export const mediaMultipartResources=pgTable("media_multipart_resources",{
- id:uuid("id").primaryKey().defaultRandom(),uploadId:uuid("upload_id").notNull(),
+ id:uuid("id").primaryKey().defaultRandom(),originalReservationId:uuid("original_reservation_id"),uploadId:uuid("upload_id").notNull(),
  key:text("object_key").notNull(),keyDigest:text("key_digest").notNull(),
  namespace:text("storage_namespace"),storageKind:text("storage_kind"),storageLocation:jsonb("storage_location").$type<Record<string,string>>().notNull().default({}),
  providerUploadId:text("provider_upload_id"),contentType:text("content_type").notNull(),expectedBytes:bigint("expected_bytes",{mode:"number"}).notNull(),

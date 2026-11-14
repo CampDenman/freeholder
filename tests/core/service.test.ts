@@ -262,6 +262,15 @@ describe("orchestrated services", () => {
 });
 
 describe("redact()", () => {
+  it("redacts original caller nonces recursively while preserving audit identities", () => {
+    const input = { callId: "00000000-0000-4000-8000-000000000001", ordinal: 2,
+      nonce: "SYNTHETIC-original-callback-nonce", nested: { completionNonce: "SYNTHETIC-finish-nonce" },
+      facts: [{ originalNONCE: "SYNTHETIC-retained-nonce", readId: "00000000-0000-4000-8000-000000000002" }] };
+    const before = structuredClone(input), actual = redact(input);
+    expect(input).toEqual(before);
+    expect(actual).toEqual({ callId: input.callId, ordinal: 2, nonce: "[redacted]",
+      nested: { completionNonce: "[redacted]" }, facts: [{ originalNONCE: "[redacted]", readId: input.facts[0]!.readId }] });
+  });
   it("removes secrets at any depth, by key name", () => {
     expect(
       redact({

@@ -50,4 +50,3 @@ export async function invoicePaymentDueAmount(invoice: typeof invoices.$inferSel
   }
   return null;
 }
-

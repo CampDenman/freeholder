@@ -120,6 +120,7 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:C
     if (history.some(row => row.redactedAt || unsettled.has(row.state))) throw new ServiceError("conflict", "An original storage operation is unresolved or retired. Start a new upload or review its original receipt.");
     if (history.some(row => row.namespace !== binding.namespace)) throw new ServiceError("conflict", "Restore the exact original storage resource before writing this object key.");
     const original = history.filter(row => row.namespace === binding.namespace);
+    if(original.some(row=>row.operation==="put"&&(row.sha256!==sha256||row.bytes!==body.byteLength||row.contentType!==input.contentType)))throw new ServiceError("conflict","The first original upload intent has different bytes. Start a new reservation rather than bind another generation to its original identity.");
     if (original.some(row => row.operation === "delete" && row.state === "accepted")) throw new ServiceError("conflict", "This original object key was retired. Start a new upload.");
     const accepted = original.find(row => row.operation === "put" && row.state === "accepted" && !row.deletedAt);
     if (accepted) {
@@ -137,10 +138,11 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:C
     const contactId=originalOwner===undefined?contact?.id??null:originalOwner;
     await assertOriginalUploadWritable(tx,contactId,originalActor);
     const id = randomUUID();
-    await tx.insert(mediaObjectWrites).values({ id, operation: "put", key: input.key, keyDigest: objectKeyDigest(input.key), namespace: binding.namespace, storageKind: binding.kind,
-      storageLocation: binding.location, sha256, bytes: body.byteLength, contentType: input.contentType, actor: actorString(actor), contactId, state: "started",writerRuntimeId:mediaWriterRuntimeId,writerProtocol:store.writeProtocol??null });
-    await tx.insert(mediaObjects).values({ key: input.key, contentType: input.contentType, role: input.role, bytes: body.byteLength, uploadId: input.uploadId,ownerContactId:contactId, state: "pending" })
-      .onConflictDoUpdate({ target: mediaObjects.key, set: { contentType: input.contentType, role: input.role, bytes: body.byteLength, updatedAt: new Date() } });
+    const[pointer]=await tx.insert(mediaObjects).values({key:input.key,reservationId:randomUUID(),contentType:input.contentType,role:input.role,bytes:body.byteLength,uploadId:input.uploadId,ownerContactId:contactId,state:"pending"})
+      .onConflictDoUpdate({target:mediaObjects.key,set:{contentType:input.contentType,role:input.role,bytes:body.byteLength,updatedAt:new Date()}}).returning();
+    if(!pointer?.reservationId)throw new ServiceError("conflict","This legacy reservation has no original birth witness. Keep it for exact recovery rather than assigning a new historical identity.");
+    await tx.insert(mediaObjectWrites).values({id,originalReservationId:pointer.reservationId,operation:"put",key:input.key,keyDigest:objectKeyDigest(input.key),namespace:binding.namespace,storageKind:binding.kind,
+      storageLocation:binding.location,sha256,bytes:body.byteLength,contentType:input.contentType,actor:actorString(actor),contactId,state:"started",writerRuntimeId:mediaWriterRuntimeId,writerProtocol:store.writeProtocol??null});
     const caller=await admitOriginalMediaCaller(tx,{kind:"ordinary_put",objectReceiptId:id,token,runtimeIdentity},actor);
     return { reused: false as const, id,callerId:caller.id };
   });
@@ -192,10 +194,10 @@ export async function observeStorageOperation(id: string, accepted: boolean, set
     const contradiction = accepted && row.state === "confirmed_absent";
     await tx.update(mediaObjectWrites).set({ state: contradiction || !settled ? "unknown" : accepted ? "accepted" : "unknown",
       ...(accepted&&!row.observedAcceptedAt ? { observedAcceptedAt: new Date() } : {}), ...(contradiction ? { deletedAt: null } : {}), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, id));
-    if (contradiction && !row.redactedAt) {
+    if (contradiction && !row.redactedAt&&row.originalReservationId) {
       // A late positive fact supersedes a human's absence assertion. Restore
       // the pending pointer as well as the receipt so sweepers cannot lose it.
-      await tx.insert(mediaObjects).values({ key: row.key, role: "original", state: "pending", contentType: row.contentType, bytes: row.bytes ?? 0 }).onConflictDoNothing();
+      await tx.insert(mediaObjects).values({ key: row.key,reservationId:row.originalReservationId, role: "original", state: "pending", contentType: row.contentType, bytes: row.bytes ?? 0 }).onConflictDoNothing();
     }
   });
   await reconcileMediaErasureCohorts({objectReceiptId:id}).catch(()=>{});
@@ -238,7 +240,7 @@ export async function deleteWithReceipt(key: string,captured?:CapturedStorage): 
       return { done: true as const };
     }
     const id = randomUUID(), original = history.filter(row => row.operation === "put" && row.state === "accepted" && !row.deletedAt).at(-1) ?? history.at(-1);
-    await tx.insert(mediaObjectWrites).values({ id, operation: "delete", key, keyDigest: objectKeyDigest(key), namespace: binding.namespace, storageKind: binding.kind, storageLocation: binding.location,
+    await tx.insert(mediaObjectWrites).values({ id,originalReservationId:original?.originalReservationId, operation: "delete", key, keyDigest: objectKeyDigest(key), namespace: binding.namespace, storageKind: binding.kind, storageLocation: binding.location,
       sha256: original?.sha256 ?? null, bytes: original?.bytes ?? null, contentType: original?.contentType ?? "application/octet-stream", actor: "system:media-cleanup", contactId: original?.contactId ?? null, state: "started",writerRuntimeId:mediaWriterRuntimeId });
     for(const request of await originalMediaErasureRequests(tx,history.map(row=>row.id)))await captureMediaErasureCohort(tx,request.requestId,request.scope as "media.storageOperations"|"media.multipartOperations",[id]);
     return { done: false as const, id };

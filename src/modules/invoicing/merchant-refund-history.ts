@@ -15,6 +15,7 @@ import { cashInspectionStops } from "./merchant-cash-inspection-stops";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { merchantRefundObservationCaptures } from "./merchant-refund-current-schema";
 import { originalCashCallersFinished, originalCashHistoricalFeesQuiesced, originalCashRecoveryCashWitness } from "./original-cash-recovery-store";
+import { controlledCashFinancialHistory } from "./controlled-provider-financial-witness";
 const MAX = 5000;
 const sorted = (rows: readonly object[]) => rows.map(row => merchantTaxDigest(row)).toSorted();
 export async function merchantRefundCashHistory(ctx: ServiceContext, cash: MerchantRefundCashOrigin, ownInspectionId?: string, excludeRecoveryOperationId?: string): Promise<{
@@ -71,10 +72,13 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
   const otherReturns = await ctx.tx.select({ observation: merchantCashReturnObservations }).from(merchantCashReturnObservations)
     .innerJoin(merchantCashReturnInspections, eq(merchantCashReturnInspections.id, merchantCashReturnObservations.inspectionId)).where(inspectionScope).limit(MAX + 1);
   const recovery = await originalCashRecoveryCashWitness(ctx.tx, cash, excludeRecoveryOperationId);
+  const controlledParents = paymentIds.length ? await ctx.tx.select({ subscriptionId: merchantAgreementPaymentRoutes.subscriptionId }).from(merchantAgreementPaymentRoutes)
+    .where(inArray(merchantAgreementPaymentRoutes.paymentId, paymentIds)).limit(MAX + 1) : [];
+  const controlled = await controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.subscriptionId));
   const inventory = { requests, retirements, observations, observationCaptures, dispatches, finishes, stops, refusals, terminals, bindings, paymentCash, subscriptionCash, receiptRows, aliases, fees, feeObservations, otherPrimary, otherReturns,
-    recoveryOwners: recovery.owners, recoveryOperations: recovery.operations, recoveryFacts: recovery.facts.filter(fact => !["partial_closure", "unassigned_refund_review", "partial_target"].includes(fact.kind)), recoveryFeedback:recovery.feedback, ...(otherInspectionStops.length?{cashInspectionStops:otherInspectionStops}:{}), ...(otherInspectionAdmissions.length||otherInspectionFinishes.length?{cashInspectionAdmissions:otherInspectionAdmissions,cashInspectionFinishes:otherInspectionFinishes}:{}) };
+    recoveryOwners: recovery.owners, recoveryOperations: recovery.operations, recoveryFacts: recovery.facts.filter(fact => !["partial_closure", "unassigned_refund_review", "partial_target"].includes(fact.kind)), recoveryFeedback:recovery.feedback, ...(otherInspectionStops.length?{cashInspectionStops:otherInspectionStops}:{}), ...(otherInspectionAdmissions.length||otherInspectionFinishes.length?{cashInspectionAdmissions:otherInspectionAdmissions,cashInspectionFinishes:otherInspectionFinishes}:{}), ...(controlled.entries.length ? { controlledFinancial: controlled.entries } : {}) };
   const inventoryCount = Object.values(inventory).reduce((count, rows) => count + rows.length, 0);
-  const incomplete = inventoryCount+inspectionAdmissions.length+inspectionFinishes.length+inspectionStops.length-otherInspectionAdmissions.length-otherInspectionFinishes.length-otherInspectionStops.length > MAX;
+  const incomplete = inventoryCount+inspectionAdmissions.length+inspectionFinishes.length+inspectionStops.length-otherInspectionAdmissions.length-otherInspectionFinishes.length-otherInspectionStops.length > MAX || controlled.incomplete || controlledParents.length > MAX;
   let creatorsQuiesced = !incomplete && !inspectionStops.some(stop=>inspectionFinishes.some(finish=>finish.inspectionId===stop.inspectionId)) && cashInspectionCallersClosed(inspectionAdmissions.filter(row=>!inspectionStops.some(stop=>stop.inspectionId===row.id)),inspectionFinishes) && dispatches.every(call => finishes.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id)
     || stops.some(row => row.dispatchId === call.id && row.callerInstanceId === call.caller.id && row.requestDigest === call.requestDigest));
   for (const paymentId of paymentIds) {
@@ -84,10 +88,10 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
   // An accepted old projection alone does not prove its physical caller ended.
   // The common fee/reversal caller protocol must supply that separate proof;
   // until composed, any recorded fee operation keeps this return unresolved.
-  const principalCreatorsQuiesced = creatorsQuiesced && originalCashCallersFinished({
+  const principalCreatorsQuiesced = creatorsQuiesced && !controlled.principalCallerDebt && originalCashCallersFinished({
     operations: recovery.operations.filter(operation => operation.kind === "inspection" && !operation.request.auxiliaryOperationId), facts: recovery.facts,
   });
-  creatorsQuiesced &&= originalCashCallersFinished(recovery);
+  creatorsQuiesced &&= !controlled.financialCallerDebt && originalCashCallersFinished(recovery);
   // Old fee journals did not retain a physical process birth/finish. A new
   // explicit hosting review can cover that exact existing operation now;
   // it never fabricates an old caller or changes its accepted cash.
@@ -100,5 +104,5 @@ export async function merchantRefundCashHistory(ctx: ServiceContext, cash: Merch
       definitelyRefused: false, // Generic codes/empty lookups do not prove no effect.
     };
   });
-  return { refundRequests, inventoryCount, principalCreatorsQuiesced, digest: merchantTaxDigest(Object.fromEntries(Object.entries(inventory).map(([key, rows]) => [key, sorted(rows)]))), incomplete, creatorsQuiesced, feeDebt };
+  return { refundRequests, inventoryCount, principalCreatorsQuiesced, digest: merchantTaxDigest({ ...Object.fromEntries(Object.entries(inventory).map(([key, rows]) => [key, sorted(rows)])), ...(controlled.entries.length || controlled.namespaces.some(row => row.applies) ? { controlledCoverage: controlled.coverage.map(row => row.revision), controlledNamespaces: controlled.namespaces, ...(controlled.targetCoverage ? { controlledTargetCoverage: controlled.targetCoverage.map(row => row.revision),controlledRawResolution:controlled.rawClassifications?.map(row=>row.revision) } : {}) } : {}) }), incomplete, creatorsQuiesced, feeDebt };
 }

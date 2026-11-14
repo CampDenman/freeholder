@@ -575,6 +575,20 @@
       "when": 1793310000061,
       "tag": "0081_import_crawl_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1793310000062,
+      "tag": "0082_verified_media_transfer",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1793310000063,
+      "tag": "0083_original_cash_inspection_stops",
+      "breakpoints": true
     }
   ]
 }

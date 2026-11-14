@@ -17,7 +17,7 @@ import { databasePoolMax, databaseUrl } from "@/core/env";
  * those boundaries without any code changing. Pinning it here makes them UTC
  * by construction rather than by luck.
  */
-export const SESSION_SETTINGS = { TimeZone: "UTC", options: `-c freeholder.media_runtime_v1=1 -c freeholder.media_transfer_runtime_v1=1 -c freeholder.media_transfer_requests_runtime_v1=1 -c freeholder.media_caller_runtime_uuid=${serverRuntimeId}` } as const;
+export const SESSION_SETTINGS = { TimeZone: "UTC", options: `-c freeholder.media_runtime_v1=1 -c freeholder.media_transfer_runtime_v1=1 -c freeholder.media_transfer_requests_runtime_v1=1 -c freeholder.media_caller_runtime_uuid=${serverRuntimeId} -c freeholder.media_original_scope_runtime_v1=1` } as const;
 
 function connect() {
   const conn = postgres(databaseUrl(), {

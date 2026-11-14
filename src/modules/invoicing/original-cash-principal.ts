@@ -10,6 +10,7 @@ import { originalCashRecoveryFinancialWitness } from "./original-cash-recovery-s
 import { currentOriginalCashInventory } from "./original-cash-inventory-current";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { payments } from "./schema";
+import { controlledCashFinancialHistory } from "./controlled-provider-financial-witness";
 import type { MerchantReturnedCashEvidence } from "./merchant-returned-cash-proof";
 
 /** Bank evidence is actual exact-source inventory, not an amount selected from
@@ -41,6 +42,9 @@ export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, sour
   ])];
   // This authenticates feedback even with no recovery owner and no normal
   // merchant observation/application for the refund callback yet.
+  const controlledParents = cash.paymentId ? await ctx.tx.select({ id: merchantAgreementPaymentRoutes.subscriptionId }).from(merchantAgreementPaymentRoutes)
+    .where(eq(merchantAgreementPaymentRoutes.paymentId, cash.paymentId)).limit(2) : [];
+  const controlled = await controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.id));
   const witness = await originalCashRecoveryFinancialWitness(ctx.tx, paymentIds, receiptIds);
   const history = await merchantRefundCashHistory(ctx, cash);
   const [payment] = source.kind === "payment" ? await ctx.tx.select().from(payments).where(eq(payments.id, source.paymentId)).limit(1) : [];
@@ -83,8 +87,11 @@ export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, sour
   // silently supersede a callback that appeared after the first snapshot.
   const currentWitness = await originalCashRecoveryFinancialWitness(ctx.tx, paymentIds, receiptIds);
   if (merchantTaxDigest(currentWitness) !== merchantTaxDigest(witness)) reviewRequired = true;
+  const currentControlled = await controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.id));
+  if (currentControlled.incomplete || merchantTaxDigest(currentControlled) !== merchantTaxDigest(controlled)) reviewRequired = true;
   return { reviewRequired, receiptOnly, principalCallerDebt: !history.principalCreatorsQuiesced,
     ancillaryDebtPending: history.feeDebt || !history.creatorsQuiesced,
     currentPrincipalMinor: reviewRequired || !payment ? null : payment.amountMinor - payment.refundedMinor, inventoryCount,
-    revision: merchantTaxDigest({ source, cash, aliases, witness, currentWitness, history, bankEvidenceDigest, receiptOnly, reviewRequired }) };
+    revision: merchantTaxDigest({ source, cash, aliases, witness, currentWitness, history, bankEvidenceDigest, receiptOnly, reviewRequired,
+      ...(controlled.entries.length || controlled.namespaces.some(row => row.applies) ? { controlled, currentControlled } : {}) }) };
 }

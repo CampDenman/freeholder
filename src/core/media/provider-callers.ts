@@ -41,13 +41,13 @@ export async function admitOriginalMediaCaller(tx:Tx,input:OriginalMediaCallerAd
   const[identity]=await tx.select({keyDigest:mediaObjectWrites.keyDigest}).from(mediaObjectWrites).where(eq(mediaObjectWrites.id,input.objectReceiptId)).limit(1);if(!identity)transferConflict("The immutable original object receipt is missing.");
   await lockObjectDigest(tx,identity.keyDigest);
   const[parent]=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,input.objectReceiptId)).limit(1).for("update");if(!parent)transferConflict();
-  if(!parent.namespace||!input.kind.startsWith("ordinary_")||!recovery&&input.kind!==(parent.operation==="put"?"ordinary_put":"ordinary_delete"))transferConflict();
+  if(!parent.originalReservationId||!parent.namespace||!input.kind.startsWith("ordinary_")||!recovery&&input.kind!==(parent.operation==="put"?"ordinary_put":"ordinary_delete"))transferConflict();
   key=parent.key;namespace=parent.namespace;parentState=parent.state;originalRuntime=parent.writerRuntimeId;
   if(!recovery){physicalReceiptId=parent.id;if(parent.actor!==actorString(actor)&&!(actor.kind==="system"&&input.kind==="ordinary_delete"&&parent.actor==="system:media-cleanup"))transferConflict("The actual original parent actor differs from this admission.");}
  }else{
   const[identity]=await tx.select({resourceId:mediaMultipartResources.id,keyDigest:mediaMultipartResources.keyDigest}).from(mediaMultipartOperations).innerJoin(mediaMultipartResources,eq(mediaMultipartResources.id,mediaMultipartOperations.resourceId)).where(eq(mediaMultipartOperations.id,input.multipartOperationId!)).limit(1);if(!identity)transferConflict("The immutable original multipart call is missing.");
   await lockObjectDigest(tx,identity.keyDigest);
-  const[resource]=await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.id,identity.resourceId)).limit(1).for("update");if(!resource?.namespace)transferConflict();
+  const[resource]=await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.id,identity.resourceId)).limit(1).for("update");if(!resource?.namespace||!resource.originalReservationId)transferConflict();
   const[parent]=await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,input.multipartOperationId!)).limit(1).for("update");if(!parent||parent.resourceId!==resource.id)transferConflict();
   if(!input.kind.startsWith("multipart_")||!recovery&&input.kind!==`multipart_${parent.kind}`)transferConflict();
   key=resource.key;namespace=resource.namespace;parentState=parent.state;originalRuntime=parent.writerRuntimeId;

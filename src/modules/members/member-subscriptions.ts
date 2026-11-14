@@ -16,14 +16,15 @@ import { defineService, ServiceError, type ServiceContext } from "@/core/service
 import { activateProduct, createProduct } from "@/modules/catalog/service";
 import { applyVariantMatrix, getProductVariants, setVariantShipping } from "@/modules/catalog/variants";
 import { setPriceListEntry } from "@/modules/catalog/pricing";
-import { products, serviceOfferings } from "@/modules/catalog/schema";
+import { products } from "@/modules/catalog/schema";
 import { invoices } from "@/modules/invoicing/schema";
 import { getInvoiceMarketPolicy, marketFeeMinor } from "@/modules/invoicing/market-policy";
 import { merchantSettlement } from "@/modules/invoicing/merchant-settlement";
-import { bookings } from "@/core/scheduling/schema";
 import { savePlan } from "@/modules/subscriptions/service";
 import { publicMembershipPlans } from "@/modules/subscriptions/public-signup";
 import { plans, subscriptions } from "@/modules/subscriptions/schema";
+import { sellerForInvoice } from "./invoice-seller";
+export { sellerForInvoice } from "./invoice-seller";
 import { marketRules } from "./payouts";
 import { subscribes } from "./subscriber-check";
 import { notifyMember } from "./notify";
@@ -175,30 +176,6 @@ export const memberPlans = defineService({
   },
 });
 
-/** The member a paid invoice is owed to: a subscription to their plan (C12.05) or a booking of their service (C12.25). */
-export async function sellerForInvoice(ctx: ServiceContext, invoice: typeof invoices.$inferSelect): Promise<string | null> {
-  if (!invoice.sourceId) return null;
-  if (!z.uuid().safeParse(invoice.sourceId.split(":")[0]).success) return null;
-  if (invoice.sourceType === "subscription") {
-    const [row] = await ctx.tx
-      .select({ sellerUserId: products.sellerUserId })
-      .from(subscriptions)
-      .innerJoin(plans, eq(plans.id, subscriptions.planId))
-      .innerJoin(products, eq(products.id, plans.productId))
-      .where(eq(subscriptions.id, invoice.sourceId.split(":")[0]!));
-    return row?.sellerUserId ?? null;
-  }
-  if (invoice.sourceType === "booking") {
-    const [row] = await ctx.tx
-      .select({ sellerUserId: products.sellerUserId })
-      .from(bookings)
-      .innerJoin(serviceOfferings, eq(serviceOfferings.id, bookings.serviceOfferingId))
-      .innerJoin(products, eq(products.id, serviceOfferings.productId))
-      .where(eq(bookings.id, invoice.sourceId));
-    return row?.sellerUserId ?? null;
-  }
-  return null;
-}
 
 export const recordInvoicePayout = defineService({
   name: "members.recordInvoicePayout",

@@ -104,3 +104,120 @@ redefined base functions, including the final late-resumption commercial-terms
 branch. Neither assembly nor this source review supplies migration, parity or
 new business acceptance. The final owned82 source and complete qualification
 remain pending.
+
+## Controlled journal source assembly
+
+Frozen controlled-provider8d496356 adds nine ordinary resource/operation/call/
+fact/finish/stop/verification/origin/closure families. The owned ee87 tail adds
+eight new function names and replaces no existing commercial function. Its
+assembly follows the six commercial tails: SQL80 is603826bytes, SHA256
+`1c2ecd172a4321ff1df7808a6c2c757e7f7c67ac5ed29451b8fd9e8659028771`.
+Both entire560886-bytecf1e and397928-byte0cff prefixes are preserved. SQL81
+and all published0–79 identities are unchanged. This is unapplied source.
+
+The first compiler run after this merge at44da1a1c stops at two raw database
+scope/literal API type mismatches. Source repair90f3c52c validates the real
+scope with the existing schema before request projection, keeps the raw
+original snapshot in its return/revision and refuses unsupported protocol
+history. No type assertion supplies missing authority. Renewed qualification
+and final82 assembly remain pending. Positive controlled collection stays
+mechanically unavailable while its required lifecycle and parent consumers
+are being implemented.
+
+## Signed first-scope integration and protected main
+
+HTTP repair698 and audit minimization699 have both merged through the normal
+protected queue. Latest verified main isfe2645dc849be0aeda0a6e61dcbca85875281bed;
+699 merged18:23:19 UTC after44 PR checks and43 merge-group successes with zero
+scoped open scanning alerts. No deployment or stable release advanced.
+
+The preceding financial baseline3980898e passes313 actual tests across48
+complete files, with47 explicit database skips. This composes complete core/
+private-boundary proof34, the full corrected merchant driver15, and the
+remaining45 files264. The relation-tokenizer failure from v7 remains preserved;
+its exact eight physical-table whitelist is unchanged. Metadata passes, and
+full types/affected lint pass before this test-only driver correction.
+
+Signed first-scope3a96e711 is now integrated. Owned and assembled82 are identical
+115604bytes / SHA256
+`a09295aa47f831c87323e8cc034fcfedeb4f356de0ad98db369d61daaaa03a8c`.
+The journal still has83 entries; prior0–81 identities, SQL80/1c2e and81/438 are
+unchanged. No0–82 database has ever been created or migrated by this work.
+The16 owned models and three altered reservation-bearing models require fresh
+source qualification, and full old/new cohort parity is additionally included,
+for142 runtime-model targets. The media request capability stays unpublished.
+
+Its first compile stops at two omitted multipart projection fields. The source
+now selects the actual immutable reservation UUID and the stored original
+artifact SHA before membership/integrity checks. It does not synthesize birth
+or hash the current body as purported historical authority. Renewed full source
+gates, a new ordinary database, strict final-source/model/catalog parity and
+actual financial/native execution remain open. Standalone media retirement,
+crash/multipart recovery, initialization/cutover and controlled positive NET/
+gross collection are still required implementation work.
+
+
+## Actual143-model child startup failure (C12.38/C11.08)
+
+At ff375972, source gates pass382 actual controls in65 complete files, with103
+explicit native skips; fresh normal V11 passes all84 migration identities and
+strict v20 passes143 models/287 guards/229 function bodies. All clients drain.
+The first actual independent-stop journey fails before its admission barrier:
+the real tsx/CommonJS child loader imports media-transfer.mjs and refuses its
+CLI-only top-level await. No stop, bank read or financial application is proved.
+
+The original failed report/log, independent table hashes, all84 journal hashes
+and drained-client proof remain at
+/tmp/freeholder-current-full83-inspection-stop-native-v1-20261113*.
+The failed database freeholder_current_full83_normal_v11_test_20261113 is
+preserved and will not be reset. The CLI entry now invokes the same async main
+and catches errors through its promise, preserving exitCode1 and diagnostics
+without top-level await. No oracle, service, schema, SQL or capability changes.
+Fresh execution is required; this source repair supplies no native acceptance.
+
+
+## Renewed actual recovery qualification (C12.38/C1.08/C11.08)
+
+Candidate1bf950f759a8d3c57a020e08c7d63c7d75faef73 qualifies411 distinct source
+assertions across70 complete files, with103 explicit native skips. Types and
+affected lint pass at exact identical runtime source a9617734; the only later
+change fixes changeset front matter and official generated CHANGELOG output.
+The original v26 failed changelog check is preserved; v27 reruns that entire
+three-assertion file and metadata gates, subtracting its two earlier successes
+from the unique count. No previous failure is represented as a green run.
+
+Fresh V12 applies all84 exact current migrations (6.820s); strict v21 compares
+all143 models,287 guards and229 function bodies with every previous control
+preserved. It passes and drains all clients. Failed V11 remains unchanged.
+
+Nine original actual native journeys pass sequentially, with an independent
+read-only financial/table-hash, all84-journal, UTC/fsync/jit/profile and drained
+client proof before every next reset:
+
+| Actual journey | Seconds |
+|---|---:|
+| Real child admission, independent original process stop and NEW completed GET |16.136|
+| Held callback authentication and independent late occurrence |9.828|
+| Bare admission blocks successor GET |9.927|
+| Genuine returned neutral bank state |9.928|
+| Latest refund remains in current bank state |10.129|
+| Three cumulative original returned units |22.646|
+| Unreadable accepted second equal recipient generation |15.187|
+| Charge-only unassigned feedback before original cash owner |14.434|
+| PI-bearing signed refund keeps managed observation path |9.527|
+
+Reports are /tmp/freeholder-current-full83-<label>-native-v2-20261113-result.json
+and matching independent -ledger-v2.json. The stop oracle preserves its old
+admission/NULL finish and all old assertions, and additionally proves actual
+parent invoice merge fingerprints, exact PG stop-row hashes in refund witness,
+safe subject financial export and SQL late-finish/deletion refusal. Provider
+HTTP is synthetic; genuine OS process death is local, not cross-host proof.
+
+The public SDK was generated by the actual live registry, then verified without
+UPDATE_SDK:8+8 pass (3.619s each). Both independent readbacks preserve every
+component-table hash and all84 journal identities; all clients drain. The only
+generated delta is the real human-only review method; the private plan remains
+absent. No hand-written SDK change. No stable version, completed independent
+review, owner signature or provider/platform acceptance is supplied. Shared
+owner recovery UI, full positive controlled collection and the remaining media
+protocol/cutover/byte recovery continue as required implementation.

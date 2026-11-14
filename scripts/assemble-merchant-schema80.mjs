@@ -36,6 +36,7 @@ const fragments = [
   "deploy/subscription-agreement-fee80.fragment.sql",
   "deploy/subscription-proration-boundary80.fragment.sql",
   "deploy/subscription-proration-card80.fragment.sql",
+  "deploy/subscription-controlled-provider80.fragment.sql",
 ];
 const header = `-- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0

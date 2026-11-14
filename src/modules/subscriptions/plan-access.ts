@@ -53,4 +53,3 @@ export async function planSeller(ctx: ServiceContext, planId: string): Promise<s
     .limit(1);
   return found?.sellerUserId ?? null;
 }
-

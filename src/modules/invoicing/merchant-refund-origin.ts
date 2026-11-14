@@ -9,6 +9,7 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { routingForPayment } from "./merchant-charge";
 import { merchantPaymentObservations } from "./merchant-collection-schema";
 import { payments } from "./schema";
+import { readControlledReceiptNamespace } from "@/modules/subscriptions/controlled-provider-cash-namespace";
 
 export const merchantRefundSource = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("payment"), paymentId: z.uuid(), observationId: z.uuid().optional() }),
@@ -39,6 +40,8 @@ export async function originalMerchantRefundCash(ctx: ServiceContext, source: Me
       || cash.providerApiVersion !== receipt.providerApiVersion || cash.providerSubscriptionRef !== receipt.providerSubscriptionRef
       || cash.providerInvoiceRef !== receipt.providerInvoiceRef || cash.providerPaymentIntentRef !== receipt.providerPaymentIntentRef
       || cash.amountMinor !== receipt.amountMinor || cash.currency !== receipt.currency) throw new ServiceError("conflict", "Restore the exact original subscription cash receipt and observation before returning its money.");
+    const controlled = await readControlledReceiptNamespace(ctx.tx, receipt.id);
+    if (controlled.applies && !controlled.verified) throw new ServiceError("conflict", "Retain and recover this exact controlled cash origin before claiming original refund authority; historical fallback is forbidden.");
     const routes = await ctx.tx.select({ payment: payments }).from(merchantAgreementPaymentRoutes)
       .innerJoin(payments, eq(payments.id, merchantAgreementPaymentRoutes.paymentId)).where(eq(merchantAgreementPaymentRoutes.originalChargeReceiptId, receipt.id)).limit(2);
     // A route reservation is distinct from actual application. The caller must
@@ -52,6 +55,13 @@ export async function originalMerchantRefundCash(ctx: ServiceContext, source: Me
   }
   const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, source.paymentId));
   if (!payment || payment.provider !== "stripe") throw new ServiceError("conflict", "Restore the original Stripe payment before returning its cash.");
+  const aliases = await ctx.tx.select({ id: merchantAgreementPaymentRoutes.originalChargeReceiptId }).from(merchantAgreementPaymentRoutes)
+    .where(eq(merchantAgreementPaymentRoutes.paymentId, payment.id)).limit(2);
+  if (aliases.length > 1) throw new ServiceError("conflict", "Restore the unique actual original agreement cash owner.");
+  for (const alias of aliases) if (alias.id) {
+    const controlled = await readControlledReceiptNamespace(ctx.tx, alias.id);
+    if (controlled.applies && !controlled.verified) throw new ServiceError("conflict", "Recover the exact controlled charge bridge before original payment refund authority; no historical fallback is permitted.");
+  }
   const routing = await routingForPayment(ctx, payment.id);
   if (!routing.providerPlatformAccountId) throw new ServiceError("conflict", "Historical money is never silently adopted into the new refund protocol.");
   const [cash] = await ctx.tx.select().from(merchantPaymentObservations).where(and(eq(merchantPaymentObservations.paymentId, payment.id),
@@ -60,6 +70,13 @@ export async function originalMerchantRefundCash(ctx: ServiceContext, source: Me
         eq(merchantPaymentObservations.currency, payment.currency), eq(merchantPaymentObservations.customerChargeVerified, true))))
     .orderBy(desc(merchantPaymentObservations.observedAt), desc(merchantPaymentObservations.id)).limit(1);
   if (!cash || !/^pi_[A-Za-z0-9_]+$/.test(cash.providerRef)) throw new ServiceError("conflict", "Restore the actual positive original payment observation before returning its money.");
+  const canonical = await ctx.tx.select({ id: subscriptionProviderChargeReceipts.id }).from(subscriptionProviderChargeReceipts)
+    .where(and(eq(subscriptionProviderChargeReceipts.providerPlatformAccountId, cash.providerPlatformAccountId),
+      sql`${subscriptionProviderChargeReceipts.chargeAccountId} is not distinct from ${cash.chargeAccountId}`,
+      eq(subscriptionProviderChargeReceipts.providerPaymentIntentRef, cash.providerRef))).limit(2);
+  if (canonical.length > 1) throw new ServiceError("conflict", "Restore the unique exact original canonical cash namespace.");
+  for (const receipt of canonical) { const controlled = await readControlledReceiptNamespace(ctx.tx, receipt.id);
+    if (controlled.applies && !controlled.verified) throw new ServiceError("conflict", "Recover the retained controlled origin for this exact original cash namespace; missing aliases do not authorize historical fallback."); }
   const applied = payment.status === "succeeded" && payment.providerRef === cash.providerRef && payment.amountMinor === cash.amountMinor && payment.currency === cash.currency;
   if (!source.observationId && (!applied || cash.providerPlatformAccountId !== routing.providerPlatformAccountId || cash.chargeAccountId !== (routing.providerAccountId || null))) throw new ServiceError("conflict", "Use this invoice payment's actual applied cash for its refund.");
   const apiVersion = cash.providerApiVersion ?? routing.providerApiVersion ?? "2026-02-25.clover";
