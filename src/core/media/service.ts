@@ -1077,6 +1077,7 @@ const uploadStatusOutput = z.object({
       partNumber: z.number().int(),
       etag: z.string(),
       bytes: z.number().optional(),
+      checksumSha256:z.string().regex(/^[A-Za-z0-9+/]{43}=$/).optional(),
     }),
   ),
   assetId: uuid.nullable(),

@@ -74,7 +74,9 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
     const issue=parent.partIssue;if(parent.kind!=="sign"||!issue||descriptor.partNumber!==issue.partNumber||descriptor.bytes!==issue.bytes||descriptor.sha256!==issue.sha256||descriptor.expiresAt!==issue.expiresAt||Date.parse(issue.expiresAt)<=Date.now())transferConflict("The actual signature must match its exact original declared part and immutable issuance intent.");
     if(!scope.actor||parent.actor!==actorString(scope.actor))transferConflict("The original local issuer principal cannot be replaced after its admission.");
    }
+   if(descriptor.kind==="multipart.complete"){const[proof]=await tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_verified_parts(${parent.id}::uuid) as proven`);if(proof?.proven!==true)transferConflict("Verify every original uploaded part before assembling this upload.");}
    if(descriptor.kind==="multipart.inspect"){
+    if(call.kind==="multipart_complete"&&descriptor.partsDigest!==parent.partsDigest)transferConflict("The original completion may inspect only its immutable declared manifest.");
     if(!["multipart_recovery_inspect","multipart_create","multipart_complete","multipart_abort"].includes(call.kind)||!descriptor.uploadId||descriptor.uploadId!==(parent.providerUploadId??parent.observedProviderUploadId??resource.providerUploadId))transferConflict("Inspect only the original provider-acknowledged session.");
    }else if(call.kind!==descriptor.kind.replace(".","_")||descriptor.kind==="multipart.create"&&descriptor.contentType!==resource.contentType||descriptor.kind!=="multipart.create"&&(descriptor.uploadId!==parent.providerUploadId||descriptor.uploadId!==resource.providerUploadId)||descriptor.kind==="multipart.complete"&&(!descriptor.createOnly||descriptor.partsDigest!==parent.partsDigest))transferConflict("The actual multipart request differs from its immutable original session or manifest.");
   }
@@ -109,6 +111,13 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
     }
    }
   }else if(facts.stage==="capability")transferConflict("A local part capability belongs only to its original signer admission.");
+  if(facts.stage==="parts_verified"){
+   const[parent]=call.multipartOperationId?await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1):[];
+   const pages=facts.partPageIds;
+   if(late||call.kind!=="multipart_complete"||request.descriptor.kind!=="multipart.inspect"||!parent||parent.kind!=="complete"||facts.status!==200||facts.detailDigest!==parent.partsDigest||request.descriptor.partsDigest!==parent.partsDigest||facts.count!==parent.parts.length||!pages||pages.length<1||pages.length>11||pages.at(-1)!==request.id||new Set(pages).size!==pages.length)transferConflict("Part verification must retain the actual original complete page chain and declared manifest.");
+   const prior=await tx.select().from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.callId,call.id));
+   if(prior.length!==pages.length||prior.some(row=>!pages.includes(row.id)||row.descriptor.kind!=="multipart.inspect"||row.descriptor.partsDigest!==parent.partsDigest||row.id!==request.id&&(row.state!=="returned"||!row.returnedAt)))transferConflict("The original upload-part verification has unresolved or unrelated physical reads.");
+  }else if(facts.partPageIds)transferConflict("Original part-page identities belong only to the actual completed verification.");
   if(facts.requestProof&&request.descriptor.kind==="object.put"&&(facts.requestProof.id!==request.id||facts.requestProof.tokenDigest!==request.tokenDigest))transferConflict("The actual original upload returned another request identity.");
   if(facts.uploadId){
    if(typeof facts.uploadId!=="string"||!facts.uploadId||facts.uploadId.length>4096||/[\u0000-\u001f]/.test(facts.uploadId)||!request.descriptor.kind.startsWith("multipart.")||request.descriptor.kind!=="multipart.create"&&facts.uploadId!==request.descriptor.uploadId)transferConflict("The provider fact names a different original session.");
