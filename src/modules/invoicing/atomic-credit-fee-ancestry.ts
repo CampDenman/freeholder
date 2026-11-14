@@ -13,7 +13,7 @@ import {verifiedAtomicCreditReservation} from "./atomic-credit-reservation-proof
 import {originalAtomicCreditFeeSegment,selectAtomicCreditFeeSegments} from "./atomic-credit-reservation-segments";
 import {readAtomicCreditAcceptedQuoteSource} from "./atomic-credit-fee-declaration-reader";
 import {readAtomicCreditLegacyApplication} from "./atomic-credit-legacy-application";
-import {originalCashEvidenceKeys} from "./original-cash-recovery-store";
+import {originalCashEvidenceKeys} from "./original-cash-evidence-keys";
 import {merchantTaxDigest} from "./merchant-tax-store";
 import type {AtomicCreditFeePhysicalEntry} from "./atomic-credit-fee-partition-contract";
 function refuse():never{throw new ServiceError("conflict","Restore every actual credit source funding, issued note/line, reservation/application/release and fee assignment; incomplete or foreign ancestry cannot supply a new fee capacity.");}

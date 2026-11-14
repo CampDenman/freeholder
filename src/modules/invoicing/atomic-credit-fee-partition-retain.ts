@@ -8,7 +8,7 @@ import {invoiceCreditFundingAtomicFeePartitions} from "./atomic-credit-fee-parti
 import {ATOMIC_CREDIT_FEE_PROTOCOL} from "./atomic-credit-fee-protocol";
 import type {controlledAtomicCreditFeePartition} from "./atomic-credit-fee-partition";
 import {signAtomicCreditFeePartition,verifiedAtomicCreditFeePartition} from "./atomic-credit-fee-partition-proof";
-import {originalCashEvidenceKeys,originalCashSigningKey} from "./original-cash-recovery-store";
+import {originalCashEvidenceKeys,originalCashSigningKey} from "./original-cash-evidence-keys";
 import {readAtomicCreditFeeDeclarationForProration} from "./atomic-credit-fee-declaration-reader";
 type Candidate=NonNullable<Awaited<ReturnType<typeof controlledAtomicCreditFeePartition>>>;
 function refuse():never{throw new ServiceError("conflict","Retain the exact actual inserted funding, same-transaction original fee partition and signed pre-insert current source graph; a planned or orphaned parent is not an original credit loan.");}

@@ -3,7 +3,7 @@
 import {atomicCreditFeeDeclaration,type AtomicCreditFeeDeclaration} from "./atomic-credit-fee-declaration-contract";
 import {merchantTaxDigest} from "./merchant-tax-store";
 import {signOriginalCashRecovery,verifyOriginalCashRecovery} from "./original-cash-recovery-proof";
-export {originalCashEvidenceKeys as atomicCreditFeeDeclarationKeys,originalCashSigningKey as atomicCreditFeeDeclarationSigningKey} from "./original-cash-recovery-store";
+export {originalCashEvidenceKeys as atomicCreditFeeDeclarationKeys,originalCashSigningKey as atomicCreditFeeDeclarationSigningKey} from "./original-cash-evidence-keys";
 type Body=Omit<AtomicCreditFeeDeclaration,"digest"|"authentication">;
 export function signAtomicCreditFeeDeclaration(body:Body,quoteCreatedAt:Date,key:string){const digest=merchantTaxDigest(body);return{...body,digest,authentication:signOriginalCashRecovery("atomic_credit_fee_declaration.v1",{id:body.quoteId,createdAt:quoteCreatedAt,digest},key)};}
 export function verifiedAtomicCreditFeeDeclaration(value:unknown,quoteCreatedAt:Date,keys:readonly string[]){

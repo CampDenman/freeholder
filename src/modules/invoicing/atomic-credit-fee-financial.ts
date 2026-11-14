@@ -7,7 +7,7 @@ import {invoiceCreditFundingAtomicFeePartitions} from "./atomic-credit-fee-parti
 import {invoiceCreditReservationAtomicFeePartitions} from "./atomic-credit-reservation-schema";
 import {verifiedAtomicCreditFeePartition} from "./atomic-credit-fee-partition-proof";
 import {verifiedAtomicCreditReservation} from "./atomic-credit-reservation-proof";
-import {originalCashEvidenceKeys} from "./original-cash-recovery-store";
+import {originalCashEvidenceKeys} from "./original-cash-evidence-keys";
 import {verifiedAtomicCreditFeeDeclaration} from "./atomic-credit-fee-declaration-proof";
 import {atomicCreditFundingArchive,atomicCreditReservationArchive} from "./atomic-credit-fee-archive";
 import {merchantTaxDigest} from "./merchant-tax-store";

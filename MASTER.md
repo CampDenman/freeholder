@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+B bounded source checkpoint2026-11-14 (C12.38/C9.33/C1.08): approved two
+immutable purpose children now have actual parent-first retention, seven full
+new SQL bodies, four complete old-body-preserving successors, exact readiness
+and four actual trigger declarations. Shared full-PG parent/undo/archive
+consumers and per-subscription safe privacy exports now consume exact B2 FKs;
+profile is restriction only, one5000/old-empty shapes retained. Exact key leaf77a
+preserves signing/rotation/missing-key semantics. New real-service/HTTP B birth,
+caught-fault rollback and genuine queued deferred-event controls are PREPARED
+UNRUN, alongside exact reversals/private canaries/epoch/5000 refusals. Original
+whole fee native and180s remain byte-exact. No compiler/lint/parser/model/tests/
+PG/provider execution, root edits, assembly, B availability or stable claim.
+Independent applied-credit compensation/unwind, own-refunded residual capacity
+and noncash/unknown-stop/out-of-band/late-consent work remain REQUIRED; no old
+application/history reversal or debt forgiveness is introduced.
+
 B private final-delta/consumer SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08):
 both deferred final-conservation bodies and six new function bodies now exist
 as isolated UNRUN source; no readiness/trigger enabled. Actual shared central

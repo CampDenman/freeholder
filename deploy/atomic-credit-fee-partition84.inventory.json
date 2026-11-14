@@ -1,6 +1,6 @@
 {
   "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
-  "status": "SOURCE_ONLY_APPROVED_CHILD_INVENTORY_BEFORE_SCHEMA_GUARD_EDITS",
+  "status": "SOURCE_IMPLEMENTED_ALL_EXECUTION_UNRUN",
   "base": "af221ea3bc9dd71d301a9dfecfd8094712ec8540",
   "ownedTail": "deploy/atomic-credit-fee-partition84.fragment.sql",
   "parentColumnsChanged": [],
@@ -260,7 +260,7 @@
   ],
   "guardLimits": "Only exact typed source retirement calculation/collection and fully-accounted sibling-invoice refund exception; never remove global or own-payment safety predicates. Mandatory child even numeric coincidence.",
   "rootAssembly": null,
-  "qualification": "UNRUN; final full bodies, hashes, columns and exact source prefix pinned only at coherent freeze. No normal migration/journal/database changes.",
+  "qualification": "Seven new complete SQL bodies, four original-body-preserving successors, four trigger declarations and actual B2 shared financial/archive consumers exist as SOURCE ONLY. No types/lint/tests/parser/model/PG/native/provider execution; root owns final assembly and all qualification.",
   "beforeEntriesEncoding": "Existing controlledObservationEntries.full encoding: one actual table:ID key per physical row with explicit postgres_row/dependency_canonical/schedule_stable hash properties. No domain substitutions or duplicate-row budgeting. Actual parent funding full PG SHA remains separate.",
   "preQuoteSiblingDispositionProposal": {
     "status": "APPROVED_SOURCE_ONLY_HELPER_AND_NARROW_SELECTOR_INVENTORY",
@@ -318,5 +318,8 @@
     "newSQLFunctionsBeyondApprovedFour": 0,
     "actualCashProtocol": "controlled_cash_atomic.v1",
     "causalGetProtocolIsIndependent": "freeholder.original-cash-inventory-causal.v2; never the cash application discriminator"
-  }
+  },
+  "readinessInventory": "deploy/atomic-credit-fee-readiness84.source.json",
+  "sourceReport": "deploy/atomic-credit-fee-partition84-source-20261114.md",
+  "centralIntegrationActual": "Actual collector-free B2 adapter is composed into controlledFinancialWitness and its safe archive, plus subscription privacy table list/per-sub archives. Existing central invoice/refund/profile/parent/undo consumers therefore receive new full-PG entries through their shared adapter. Exact IDs/profile AND restriction, one5000 union, no new empty shape."
 }

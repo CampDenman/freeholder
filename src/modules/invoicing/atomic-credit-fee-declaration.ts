@@ -26,7 +26,7 @@ async function currentSources(ctx:ServiceContext,principal:readonly Principal[])
 export async function prepareAtomicCreditFeeDeclaration(ctx:ServiceContext,input:{quoteId:string;resourceId:string;subscriptionId:string;plannedProrationId:string;originalInvoiceId:string|null;originalInvoiceLineId:string|null;principal:readonly Principal[];quoteCreatedAt:Date}){
  const fundings=(await currentSources(ctx,input.principal)).map(source=>({fundingId:randomUUID(),...source}));
  if(!fundings.length)return null;
- if(!input.originalInvoiceId||!input.originalInvoiceLineId)refuse();const keys=atomicCreditFeeDeclarationKeys(),key=atomicCreditFeeDeclarationSigningKey();if(!key)refuse();
+ if(!input.originalInvoiceId||!input.originalInvoiceLineId)refuse();const keys=atomicCreditFeeDeclarationKeys(),key=atomicCreditFeeDeclarationSigningKey();
  const body:Omit<AtomicCreditFeeDeclaration,"digest"|"authentication">={protocol:ATOMIC_CREDIT_FEE_DECLARATION_PROTOCOL,quoteId:input.quoteId,resourceId:input.resourceId,subscriptionId:input.subscriptionId,plannedProrationId:input.plannedProrationId,originalInvoiceId:input.originalInvoiceId,originalInvoiceLineId:input.originalInvoiceLineId,fundings};
  const declaration=signAtomicCreditFeeDeclaration(body,input.quoteCreatedAt,key);if(!verifiedAtomicCreditFeeDeclaration(declaration,input.quoteCreatedAt,keys))refuse();return declaration;
 }

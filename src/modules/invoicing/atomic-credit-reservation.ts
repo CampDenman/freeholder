@@ -12,7 +12,7 @@ import {originalAtomicCreditFeeSegment,selectAtomicCreditFeeSegments} from "./at
 import {controlledAtomicCreditFeePartition} from "./atomic-credit-fee-partition";
 import {readAtomicCreditFeeAncestry} from "./atomic-credit-fee-ancestry";
 import {signAtomicCreditReservation,verifiedAtomicCreditReservation} from "./atomic-credit-reservation-proof";
-import {originalCashEvidenceKeys,originalCashSigningKey} from "./original-cash-recovery-store";
+import {originalCashEvidenceKeys,originalCashSigningKey} from "./original-cash-evidence-keys";
 import {merchantTaxDigest} from "./merchant-tax-store";
 import {captureAtomicCreditInvoiceProjections,captureAtomicCreditOwnerProjections} from "./atomic-credit-before-image";
 function refuse():never{throw new ServiceError("conflict","Restore the exact current B funding, original interval/caps, every application/release and real same-transaction reservation birth before consuming its fee capacity.");}

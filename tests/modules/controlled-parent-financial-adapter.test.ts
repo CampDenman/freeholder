@@ -20,6 +20,10 @@ function history():ControlledFinancialHistory{return{
 function reader(source:ControlledFinancialHistory,inspect?:(query:string,params:unknown[])=>void){
  const proxy=drizzle(async(query,params)=>{
   inspect?.(query,params);
+  if(query.includes('select actual_funding.id::text as id from invoice_credit_funding actual_funding')){
+   expect(query).toContain('actual_acceptance.id=actual_funding.proration_id');expect(query).toContain('actual_quote.planned_proration_id=actual_acceptance.id');expect(query).toContain('actual_quote.quote_digest=actual_acceptance.accepted_quote_digest');expect(query).toContain('actual_quote.profile_id=actual_acceptance.profile_id');expect(query).toContain('actual_quote.profile_version=actual_acceptance.profile_version');
+   expect(query).toContain('original_application.reservation_id=original_reservation.id');expect(query).toContain('original_reservation.funding_id=actual_funding.id');expect(params.length).toBeGreaterThan(0);expect(params.every(value=>value===id(70))).toBe(true);expect(query.trimEnd()).toMatch(/limit 5001$/);expect(query).not.toMatch(/contact_id|email|current_account|amount_minor|split_part/);return{rows:[]};
+  }
   if(query.includes("from merchant_agreement_payment_routes route join payments p"))return{rows:[{subscriptionId:id(10),receiptId:null}]};
   if(query.includes('from "subscription_controlled_quotes"')){
    expect(query).toContain('"subscription_commercial_terms"."subscription_id" = "subscription_controlled_resources"."subscription_id"');
