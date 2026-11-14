@@ -77,4 +77,19 @@ export const finishCustomerSignups = defineJob({
     return result;
   },
 });
-export default [renewSubscriptions, advanceDunning, finishCustomerSignups,eraseTrialSetupCustomers,applyGrossProration,collectProrationCardJob];
+export const applyPaidControlledPeriods = defineJob({
+  name: "subscriptions.applyPaidControlledPeriods", summary: "Apply actual fully paid accepted original periods after the money transaction commits.",
+  schedule: "* * * * *", concurrency: 1,
+  handler: async () => {
+    const { pendingPaidControlledPeriods, completePaidControlledPeriod } = await import("./controlled-provider-paid-period");
+    const invoices = await pendingPaidControlledPeriods.call({}, { kind: "system" });
+    let applied = 0, reviewRequired = 0;
+    for (const invoiceId of invoices) {
+      const effect = await completePaidControlledPeriod.call({ invoiceId }, { kind: "system" });
+      if (effect.state === "applied") applied++;
+      if (effect.state === "review_required") reviewRequired++;
+    }
+    return { considered: invoices.length, applied, reviewRequired };
+  },
+});
+export default [renewSubscriptions, advanceDunning, finishCustomerSignups,eraseTrialSetupCustomers,applyGrossProration,collectProrationCardJob,applyPaidControlledPeriods];

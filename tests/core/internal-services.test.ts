@@ -16,6 +16,9 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "entitlements.advanceSubscriptionPeriod",
+  "subscriptions.completePaidControlledPeriod",
+  "subscriptions.pendingPaidControlledPeriods",
   "subscriptions.controlledCollectionOrchestrationState",
   "subscriptions.bindObservedControlledCollection",
   "subscriptions.planControlledPeriodPreview",

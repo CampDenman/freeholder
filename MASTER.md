@@ -3564,6 +3564,26 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Independent controlled paid-period effect source checkpoint 2026-11-13
+(C9.33/C12.38/C1.08): one new immutable exact-FK effect receipt and NEW UNAPPLIED
+SQL authenticate a genuinely separate transaction after real canonical money
+commits. Current original principal, latest HMAC inspection/finished bank facts,
+complete observed namespace/parent PG preimage and actual accepted terms/calendar
+remain required; the old same-TX cash batch is never reused as an effect grant.
+Immediate and deferred guards bind exact actual source/events and normalize only
+twelve managed parent columns. A shared private period-grant operation preserves
+old dates/usage, refuses overlap/grace and creates fresh actual grant identities;
+exact-window retries and contact merge retain that history. Ancillary owed/review
+is separate from principal and never labelled collected. Twelve pure, six SQL
+boundary and three actual-service native controls are PREPARED/UNRUN. No compiler,
+lint, build, test, database, provider or hosting execution occurred in this lane.
+Root still owns central financial/privacy/export/event composition and fresh
+model/SQL/native qualification. Proration current-bank composition, genuine
+positive terminal/alternative disposition and automatic renewal/recovery/UI
+orchestration remain required implementation, alongside all provider/platform/
+security acceptance. No C-item, feature, stable or release sign-off is closed.
+See `deploy/controlled-paid-period155-source-20261113.md`.
+
 Controlled original-receipt routing source checkpoint 2026-11-13
 (C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
 canonical receipt's real controlled-origin child, authenticates its genuine

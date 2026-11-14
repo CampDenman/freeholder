@@ -12,7 +12,7 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
  let originalZero:Record<string,unknown>|null=null,updatePosts=0,draftPosts=0,itemPosts=0,feePosts=0,finalizePosts=0,payPosts=0,cashGets=0,externalAttachments=0;
  let lostUpdate=false,lostDraft=false,failedCash=false;
  const bankInvoices=new Map<string,Record<string,unknown>>(),bankLines=new Map<string,Array<Record<string,unknown>>>(),prices=new Map<string,Record<string,unknown>>(),intents=new Map<string,Record<string,unknown>>();
- const intentInvoices=new Map<string,string>();
+ const intentInvoices=new Map<string,string>(),externalRefunds=new Map<string,Record<string,unknown>>();
  const forms:Array<{path:string;form:URLSearchParams}>=[];
  const edge=controlledPeriodEdge84({atProviderStart:true,extra:async(url,init)=>{
   const subscription=current();if(!subscription)return null;
@@ -71,13 +71,15 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
   const intent=[...intents.values()].find(row=>url.pathname===`/v1/payment_intents/${bankRef(row.id)}`);
   if(intent&&init.method==="GET"){cashGets++;return Response.json(intent);}
   const chargeIntent=[...intents.values()].find(row=>url.pathname===`/v1/charges/${bankRef(row.latest_charge)}`);
-  if(chargeIntent&&init.method==="GET")return Response.json({id:chargeIntent.latest_charge,payment_intent:chargeIntent.id,amount_captured:chargeIntent.amount_received,currency:chargeIntent.currency,paid:true,captured:true,refunded:false,amount_refunded:0,
+  if(chargeIntent&&init.method==="GET")return Response.json({id:chargeIntent.latest_charge,payment_intent:chargeIntent.id,amount_captured:chargeIntent.amount_received,currency:chargeIntent.currency,paid:true,captured:true,refunded:[...externalRefunds.values()].filter(refund=>refund.payment_intent===chargeIntent.id).reduce((sum,refund)=>sum+Number(refund.amount),0)===Number(chargeIntent.amount_received),amount_refunded:[...externalRefunds.values()].filter(refund=>refund.payment_intent===chargeIntent.id).reduce((sum,refund)=>sum+Number(refund.amount),0),
    application_fee:Number(chargeIntent.application_fee_amount)>0?`fee_${bankRef(chargeIntent.id)}`:null,transfer:`tr_${bankRef(chargeIntent.id)}`});
   const feeIntent=[...intents.values()].find(row=>url.pathname===`/v1/application_fees/fee_${bankRef(row.id)}`);
   if(feeIntent&&init.method==="GET")return Response.json({id:`fee_${bankRef(feeIntent.id)}`,originating_transaction:feeIntent.latest_charge,charge:feeIntent.latest_charge,account:object(feeIntent.transfer_data).destination,amount:feeIntent.application_fee_amount,amount_refunded:0,currency:feeIntent.currency});
   const transferIntent=[...intents.values()].find(row=>url.pathname===`/v1/transfers/tr_${bankRef(row.id)}`);
   if(transferIntent&&init.method==="GET")return Response.json({id:`tr_${bankRef(transferIntent.id)}`,source_transaction:transferIntent.latest_charge,destination:object(transferIntent.transfer_data).destination,amount:transferIntent.amount_received,amount_reversed:0,currency:transferIntent.currency,reversed:false});
-  if((url.pathname==="/v1/refunds"||url.pathname==="/v1/disputes")&&init.method==="GET")return Response.json({data:[],has_more:false});
+  if(url.pathname==="/v1/refunds"&&init.method==="GET")return Response.json({data:[...externalRefunds.values()].filter(refund=>(!url.searchParams.has("charge")||refund.charge===url.searchParams.get("charge"))&&(!url.searchParams.has("payment_intent")||refund.payment_intent===url.searchParams.get("payment_intent"))),has_more:false});
+  const externalRefund=externalRefunds.get(url.pathname.slice("/v1/refunds/".length));if(externalRefund&&init.method==="GET")return Response.json(externalRefund);
+  if(url.pathname==="/v1/disputes"&&init.method==="GET")return Response.json({data:[],has_more:false});
   const price=prices.get(url.pathname.slice("/v1/prices/".length));if(price&&init.method==="GET"){
    if(options.failAfterPositiveCash&&intents.size&&!failedCash){failedCash=true;throw Error("Fictional original price GET failed after actual positive cash occurrence was retained.");}return Response.json(price);
   }
@@ -94,5 +96,11 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
   intents.set(id,intent);intentInvoices.set(id,providerInvoiceRef);invoice.amount_paid=Number(invoice.amount_paid)+amountMinor;invoice.amount_remaining=Number(invoice.total)-Number(invoice.amount_paid);invoice.status=invoice.amount_remaining===0?"paid":"open";
   return{providerInvoiceRef,providerPaymentIntentRef:id,amountMinor,feeMinor};
  }
- return{...edge,forms,externallyAttachPayment,externalAttachments:()=>externalAttachments,invoices:()=>[...bankInvoices.values()],intents:()=>[...intents.values()],counts:()=>({updatePosts,draftPosts,itemPosts,feePosts,finalizePosts,payPosts,cashGets})};
+ function externallyRefundPayment(providerPaymentIntentRef:string,amountMinor:number){
+  const intent=intents.get(providerPaymentIntentRef),already=[...externalRefunds.values()].filter(refund=>refund.payment_intent===providerPaymentIntentRef).reduce((sum,refund)=>sum+Number(refund.amount),0);
+  if(!intent||!Number.isSafeInteger(amountMinor)||amountMinor<=0||amountMinor+already>Number(intent.amount_received))throw Error("Refund only real already captured original bank principal, without mutating local money or inventing an intent.");
+  const id=`re_actualControlledExternal${externalRefunds.size+1}`,refund={id,object:"refund",payment_intent:providerPaymentIntentRef,charge:intent.latest_charge,amount:amountMinor,currency:intent.currency,status:"succeeded",created:Math.floor(Date.now()/1000)};
+  externalRefunds.set(id,refund);return refund;
+ }
+ return{...edge,forms,externallyAttachPayment,externallyRefundPayment,externalRefunds:()=>[...externalRefunds.values()],externalAttachments:()=>externalAttachments,invoices:()=>[...bankInvoices.values()],intents:()=>[...intents.values()],counts:()=>({updatePosts,draftPosts,itemPosts,feePosts,finalizePosts,payPosts,cashGets})};
 }
