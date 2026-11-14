@@ -1,6 +1,22 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # Current 159-model payment checkpoint
 
+Latest actual continuation, source `12b9600c`: the genuine runtime warmup
+correction passes source V79 (1,321/210 complete selected files/458 explicit
+DB skips, full types/lint/metadata), fresh V43 ordinary86/strictV54 and SDK8+8.
+The original injected-after-grant-inverse undo PASSES67.822s with every one of
+595 public tables exactly unchanged across the failed business transaction.
+The unchanged uneven and equal two-receipt atomic rollback natives PASS63.525s
+and61.870s: the exact SQL23514 injected-after-first-real-settlement cause is
+confirmed; all original canonical/event/access/core3 snapshot oracles pass.
+Independent all595/159 affected models/86 journals/caps/drain checks pass for
+each; paid0/payments0/core3zero, raw original4200 receipts retained and the
+transactional temporary failure trigger absent. Product/schema bytes are
+identical to c6; V42 and all earlier failures stay preserved. Held media source,
+fee residuals/proration and all unchecked acceptance remain open. This evidence
+does not close a C-item, actual provider acceptance or stable/signature gate.
+
+
 Current continuation 2026-11-14, source `c6c7d449`: source V78 passes 1,321
 actual assertions across 210 complete selected files, with 458 explicit database
 skips. Full types, affected lint and all metadata gates pass. Fresh V42 applies
