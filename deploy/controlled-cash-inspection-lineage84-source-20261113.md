@@ -112,3 +112,21 @@ bank callbacks. Subscription ownership is checked against actual owned receipt
 UUIDs and its privacy/retention table inventory declares the new child.
 Source/model/native qualification remains pending, including future genuine
 controlled producer and positive ordering/application native cases.
+
+
+Current144 component qualification at11fe3a5f: source549 actual/76 complete
+files with113 explicit native skips; types/affected lint/license/notes/plan pass.
+Fresh V15 applies85 migrations, every old84 identity preserved. Read-only v23
+passes144 models/289 guards/233 exact installed function bodies,3426 queries,
+sequence definition/ownership/unchanged unconsumed state and actual missing
+latest/empty-history negatives. The parser and every prior143 target/control
+remain unchanged. Ten actual old stop/callback/current-bank/partial-return/
+legacy-GET journeys pass with independent complete component SHA, all85
+journal hashes, settings and drained clients before every next reset. All
+ordinary cases retain zero controlled lineage rows; no old receipt is adopted.
+/tmp/freeholder-current-full84-ten-native-complete-v4-20261113.json lists exact
+case reports. This does NOT prove positive controlled lineage ordering or
+application. The separately prepared current9 real delayed-admission control
+will propagate a genuine raw-debt refusal rather than claim an order proof.
+Current production build/browser, provider/cross-host recovery, complete positive
+collection and independent security/final owner signature remain open.
