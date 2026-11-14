@@ -29,3 +29,14 @@ coincidences/caught JS. No free flag or guessed parent is contemplated.
 
 Applied-credit compensation/unwind and C recovery remain separately required;
 no reversal model or legacy guard relaxation is part of this private checkpoint.
+
+Private continuation after the current-bank leaf: the sibling reader now keeps
+returned-source generic principal/debt output verbatim and separately selects
+the genuine atomic bank proof where the old generic resolver is stale. Returned
+sources remain unavailable for new funding; this is unfinished composition,
+not a waiver of unrelated generic debt. Actual installed A/B body readiness is
+required before the new path. The additional reservation-purpose interval
+receipt is inventoried separately and awaits review before implementation;
+current inherited allocation code must not be qualified as complete until that
+original interval propagation is implemented. None of these private helpers is
+registered or wired into the old selectors.

@@ -9,6 +9,7 @@ import {CONTROLLED_CASH_ATOMIC_PROTOCOL} from "./controlled-cash-application-pro
 import {verifiedControlledCashBatch} from "./controlled-cash-application-protocol-proof";
 import {controlledCollectionState} from "@/modules/subscriptions/controlled-provider-collection-state";
 import {controlledAtomicFeeOwner,controlledAtomicRefundTarget,controlledAtomicRefundFeeState} from "./controlled-atomic-refund-target";
+import {readControlledAtomicRefundBankState} from "./controlled-atomic-refund-bank-state";
 import {controlledAtomicCreditFeePartition} from "./atomic-credit-fee-partition";
 import {readAtomicCreditFeeDispositionAncestry} from "./atomic-credit-fee-ancestry";
 import {readAtomicFeeReturnResources} from "./atomic-fee-return-resources";
@@ -31,6 +32,8 @@ async function readDisposition(ctx:ServiceContext,input:{subscriptionId:string;o
   if(known?.known!==false||money.some(row=>row.idempotencyKey.startsWith("controlled-receipt:"))&&batches.length===0)refuse();
   return{kind:"ordinary" as const};
  }
+ const[installed]=await ctx.tx.execute<{present:boolean}>(sql`select to_regprocedure('freeholder_credit_atomic_fee_ready()') is not null as present`);if(installed?.present!==true)refuse();
+ const[guarded]=await ctx.tx.execute<{ready:boolean}>(sql`select freeholder_atomic_auxiliary_fee_ready() and freeholder_credit_atomic_fee_ready() as ready`);if(guarded?.ready!==true)refuse();
  if(!money.length||money.some(row=>["created","processing"].includes(row.status)))refuse();
  const collectionIds=[...new Set(batches.map(row=>row.collectionId))];if(collectionIds.length!==1)refuse();
  const collectionId=collectionIds[0];if(!collectionId)refuse();
@@ -56,11 +59,17 @@ async function readDisposition(ctx:ServiceContext,input:{subscriptionId:string;o
   if(!link||link.batchId!==owner.batchId||link.receiptId!==owner.receiptId||link.receiptProofId!==owner.proofId)refuse();
   const original=await originalMerchantRefundCash(ctx,{kind:"payment",paymentId:payment.id}),bank=await readControlledCanonicalBankPrincipal(ctx,payment,original);
   const principal=principalAuthorityResult.parse(await ctx.callAsSystem(principalService,{paymentId:payment.id}));
-  if(!bank.applies||!bank.principalMatches||bank.ancillaryDebtPending||bank.receiptId!==owner.receiptId||!principal.principalSafe
-   ||principal.currentPrincipalMinor!==payment.amountMinor-payment.refundedMinor||principal.financialDebtPending)refuse();
+  if(!bank.applies||!bank.principalMatches||bank.ancillaryDebtPending||bank.receiptId!==owner.receiptId||principal.witness.paymentId!==payment.id)refuse();
+  if(payment.refundedMinor===0&&(!principal.principalSafe||principal.currentPrincipalMinor!==payment.amountMinor||principal.financialDebtPending))refuse();
   const feeTarget=await controlledAtomicRefundTarget(ctx,payment.id),feeState=await controlledAtomicRefundFeeState(ctx,payment.id),feeReturns=await readAtomicFeeReturnResources(ctx,payment.id);
   if(!feeReturns||feeReturns.pendingOperationIds.length||feeReturns.unfinishedIds.length||feeTarget&&(feeTarget.target===null||feeTarget.unassignedDutyMinor!==0||!feeState||feeState.pending))refuse();
   if(invoice.refundedMinor>0&&!feeTarget)refuse();
+  // A returned sibling supplies NO new funding/principal authority. Preserve
+  // its generic review/debt state, while independently proving its actual
+  // current zero/remaining bank disposition and exact whole fee/recipient
+  // conservation. A stale generic whole-closure flag is never rewritten.
+  const currentRefundBank=payment.refundedMinor>0?await readControlledAtomicRefundBankState(ctx,payment.id):null;
+  if(currentRefundBank&&(currentRefundBank.receiptId!==owner.receiptId||currentRefundBank.refundedMinor!==payment.refundedMinor||currentRefundBank.unfinishedFeeInvocationIds.length))refuse();
   if(feeTarget){
    if(whole&&merchantTaxDigest(whole.resources)!==merchantTaxDigest(feeTarget.resources))refuse();whole=feeTarget;
    const resource=feeTarget.resources.find(row=>row.paymentId===payment.id);
@@ -73,8 +82,9 @@ async function readDisposition(ctx:ServiceContext,input:{subscriptionId:string;o
   const partition=payment.refundedMinor===0?await controlledAtomicCreditFeePartition(ctx,{paymentId:payment.id,sourceApplicationId:null,takeMinor:0}):null;
   if(payment.refundedMinor===0&&!partition)refuse();
   const disposition=payment.refundedMinor===0?"unreturned" as const:payment.refundedMinor===payment.amountMinor?"fully_returned" as const:"partially_returned" as const;
-  siblings.push({payment,owner,link,original,bank,principal,feeTarget,feeState,feeReturns,ancestry,partition,disposition,
-   currentPrincipalMinor:payment.amountMinor-payment.refundedMinor,availableForNewFundingMinor:partition?.plan.availablePrincipalMinor??0});
+  siblings.push({payment,owner,link,original,bank,principal,currentRefundBank,feeTarget,feeState,feeReturns,ancestry,partition,disposition,
+   currentPrincipalMinor:payment.amountMinor-payment.refundedMinor,availableForNewFundingMinor:partition?.plan.availablePrincipalMinor??0,
+   suppliesReturnedSourceFundingAuthority:false as const,suppliesPrincipalAuthority:false as const});
   physical.push(...bank.physicalEntries.map(row=>({...row,domain:"postgres_row" as const})),...ancestry.physical.map(row=>({...row,domain:"postgres_row" as const})));
   for(const entry of partition?.beforeEntries??[]){
    const colon=entry.key.indexOf(":"),table=entry.key.slice(0,colon),id=entry.key.slice(colon+1);if(colon<1)refuse();
