@@ -1,13 +1,12 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // C12.38/C9.33: an admitted real receipt crosses the shared payment writer.
 import { eq, sql } from "drizzle-orm";
-import { z } from "zod";
 import { ServiceError, type ServiceContext } from "@/core/service";
 import { readControlledCashApplicationStage } from "@/modules/invoicing/controlled-cash-application-stage";
 import { subscriptionControlledChargeOrigins } from "./controlled-provider-schema";
 
-export const CONTROLLED_CASH_BATCH_MARKER = "freeholder.controlled_cash_application_batch_v1";
-export const controlledCashBatchPointer = z.object({ batchId: z.uuid(), collectionId: z.uuid(), receiptId: z.uuid(), admissionDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+import { controlledCashBatchPointer } from "./controlled-cash-batch-pointer";
+export { CONTROLLED_CASH_BATCH_MARKER,controlledCashBatchPointer } from "./controlled-cash-batch-pointer";
 export type ControlledSubscriptionCashPlan = {
   batchId: string; collectionId: string; receiptId: string; admissionDigest: string;
   amountMinor: number; currency: string; feeMinor: number; priorCashMinor: number; priorAllocatedFeeMinor: number;

@@ -85,6 +85,13 @@
       "bytes": 14917,
       "materializedSha256": "0b9f46f9eb92fed48d7719b4426795a2dae6d3339e19267c5c719ebc555671ce",
       "materializedBytes": 14917
+    },
+    {
+      "path": "deploy/controlled-cash-application-complete84.fragment.sql",
+      "sha256": "fdecccc2978cf13f1f1df292bad3b3ba576a0789f86381508b2a9f40de4a0db5",
+      "bytes": 13619,
+      "materializedSha256": "fdecccc2978cf13f1f1df292bad3b3ba576a0789f86381508b2a9f40de4a0db5",
+      "materializedBytes": 13619
     }
   ],
   "functionStatementReplacements": [
@@ -138,14 +145,14 @@
       "positionPreserved": true
     }
   ],
-  "sha256": "861f82666aaf2fb7ad40d0611ac0dd0ee9c275da2fc9aaf263de735610a4a532",
-  "bytes": 429589,
+  "sha256": "d6fe8b9c49db7d21c982ee60059d96eab856d235ea4bf9d0a8509d6ed86431b7",
+  "bytes": 443235,
   "normalMigrationWritten": true,
   "journalWritten": true,
   "databaseApplied": false,
   "models": 154,
   "oldMigrationsUntouched": "0\u201381 and83\u201384 exact prior identities; unpublished82 now6845a84e365657 bytes with full277201-bytead46 prefix",
-  "originalApplicationShapeStillFailClosed": true,
+  "originalApplicationShapeStillFailClosed": false,
   "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
   "sourceQualification": {
     "head": "221a883ae50e6ee228a9d6332574f2ec0c3acbc6",
@@ -155,7 +162,7 @@
     "wholeFiles": 173,
     "databaseSkips": 394
   },
-  "materialization": "Exact original source-part bytes with only seven full function CASE statements replaced at their original CREATE positions. Join each part.rstrip() with two newlines, statement-breakpoint, two newlines; terminate final newline. Frozen owned fragments stay unchanged.",
+  "materialization": "Exact original source-part bytes with only seven full function CASE statements replaced at their original CREATE positions. Join each part.rstrip() with two newlines, statement-breakpoint, two newlines; terminate final newline. Frozen owned fragments stay unchanged. Preserve the entire original429589-byte initial normal85 prefix, then append one statement breakpoint and the exact complete84 successor bytes.",
   "caseManifestPath": "deploy/controlled-cash-application-case84.manifest.json",
   "caseManifestSha256": "58119d2ddd24d5be183c2d6e8b2ea1195129516e0cd3e03e98b07c0dbaaedb00",
   "normalPath": "db/migrations/0085_controlled_collection_application.sql",
@@ -163,5 +170,14 @@
   "journalIndex": 85,
   "journalCount": 86,
   "normalSchemaNativeSdkQualification": "PENDING",
-  "capabilitiesPublished": false
+  "capabilitiesPublished": false,
+  "previousMaterialized85": {
+    "head": "bcf3610a2b42be3d7ca7bb8150b35acca47ff7de",
+    "sha256": "861f82666aaf2fb7ad40d0611ac0dd0ee9c275da2fc9aaf263de735610a4a532",
+    "bytes": 429589,
+    "entirePrefixPreserved": true,
+    "previousQualifiedSource": "1c7b35611d6d138e749e8c4bba1ff7c9693c513f"
+  },
+  "applicationShapeSuccessor": "Genuine immutable HMAC batch/core3/current-TX complete-stage structural proof; no marker permission. Actual service/native qualification PENDING.",
+  "currentSourceQualification": "PENDING current writer+media composition; sourceQualification records historical initial materialization only"
 }

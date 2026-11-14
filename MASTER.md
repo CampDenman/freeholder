@@ -3564,6 +3564,40 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled genuine staged writer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): genuine repeated initial parent/bank evidence now
+produces actual immutable HMAC admissions immediately before canonical writes.
+The real shared payment INSERT generates its UUID; every subsequent route,
+observation, settlement and complete-batch boundary rechecks783 current physical
+normalization and immutable bank facts. A genuine successor replaces old424's
+deliberate false shape while retaining all other structural predicates and
+exact original-period consent; thirteen actual enabled guards plus body pins
+are required before the first admission. The new private shared money command
+is system/external:false, with no bank POST or access mutation. Older partial
+invoice facts require exact signed complete historical receipt cohorts while a
+separate current proof remains mandatory. Six native application cases, six
+signed historical-cohort pures and five source controls are PREPARED/UNRUN;
+no execution or current migration edit occurred. Exact root4a/221 repairs are
+preserved. Atomic whole-batch cent allocation, real currency/overage anomalies,
+separate paid effects and full native/provider/security acceptance remain
+required, not deferred. See
+`deploy/controlled-cash-staged-writer84-source-20261113.md`.
+Controlled original-receipt routing source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
+canonical receipt's real controlled-origin child, authenticates its genuine
+same-transaction HMAC batch/current bank/parent stage BEFORE payment UUID birth,
+and compares the unchanged shared cash/fee computation to that exact receipt
+plan. Legacy period/generation routes and all previous cash/return/history guards
+remain intact. A NEW UNAPPLIED suffix preserves the full old route guard with
+only an exact verified controlled-origin alternative to its gross-proration
+attempt condition; independent BEFORE and deferred stage guards remain required.
+The route capability checks actual function-body hashes and enabled trigger
+identities, never a boolean marker. Three controls are PREPARED/UNRUN; no CPU,
+database, provider or current-root execution occurred. Genuine initial batch
+admission/writer integration, separate paid effects, partial/batch/native and
+provider/security acceptance remain required; no C-item or stable closure.
+See `deploy/controlled-original-receipt-route84-source-20261113.md`.
+
 Source continuation 2026-11-13 (C1.12/C11.08/C3.22): new managed multipart
 CREATE records explicit SHA256/COMPOSITE provenance. New COMPLETE keeps the
 original browser receipts and derives fixed byte/checksum limits from the

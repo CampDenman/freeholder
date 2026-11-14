@@ -16,6 +16,8 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  // C12.38/C1.08: the genuine staged receipt command remains private.
+  "invoicing.applyControlledReceiptBatch",
   // C1.08/C12.38: exact controlled target and original observation phases stay private.
   "invoicing.controlledProviderCashObservationAuthority",
   "invoicing.controlledProviderCollectionAuthority",
@@ -452,6 +454,8 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // C12.38/C1.08: the genuine staged receipt command remains private.
+  "invoicing.applyControlledReceiptBatch",
   // C12.38/C9.33/C9.38: all reviewed original target factory/GET phases remain private.
   "invoicing.controlledCashInspectionOutcome",
   "invoicing.prepareControlledCashInspection",
