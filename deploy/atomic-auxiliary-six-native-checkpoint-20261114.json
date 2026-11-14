@@ -1,0 +1,88 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C1.08",
+    "C11.10"
+  ],
+  "status": "SIX_ORIGINAL_ORACLE_CASES_VERIFIED_AT_RECORDED_HEADS",
+  "receiptBackendSourceGate": "/tmp/freeholder-current-full86-causal-media161-source-v111-20261114-result.json",
+  "sourceActualPassed": 1588,
+  "sourceCompleteFiles": 254,
+  "explicitDatabaseSkips": 543,
+  "cases": [
+    {
+      "case": "payment_positive",
+      "result": "/tmp/freeholder-current-full86-atomic-auxiliary161-positive-native-v8-20261114-result.json",
+      "sha256": "84d3178365797023ec173e64606798155c7017132e8fd7b9ec21f30cf0fb760a",
+      "sourceHead": "859e42119710d0744a09ae21d6842495a6d6df21",
+      "database": "freeholder_current_full86_causal_media161_normal_v70_test_20261114",
+      "seconds": 173.87060730101075,
+      "wholeOriginal180s": true,
+      "independentAfter": "/tmp/freeholder-current-full86-atomic-auxiliary161-positive-native-v8-20261114-after.json",
+      "independentAfterSha256": "a1c66e00e364de4d7cd964d3f74b4e7af9dd6c9d4e00ca48dd01f46faf4efd5a"
+    },
+    {
+      "case": "payment_recovery",
+      "result": "/tmp/freeholder-current-full86-atomic-auxiliary161-recovery-native-v1-20261114-result.json",
+      "sha256": "83683cc48c0cf3a99a9d33e4a780045f6cbc99928bbae1fc75ed445daad1d781",
+      "sourceHead": "859e42119710d0744a09ae21d6842495a6d6df21",
+      "database": "freeholder_current_full86_causal_media161_normal_v71_test_20261114",
+      "seconds": 148.5687111300649,
+      "wholeOriginal180s": true,
+      "independentAfter": "/tmp/freeholder-current-full86-atomic-auxiliary161-recovery-native-v1-20261114-after.json",
+      "independentAfterSha256": "163dce5d96795489e7e198e7fb246aae6febd698f509691c9e80f0e1add5f6fa"
+    },
+    {
+      "case": "payment_counter",
+      "result": "/tmp/freeholder-current-full86-atomic-auxiliary161-counter-native-v1-20261114-result.json",
+      "sha256": "dffaca712958eab34eec21d7a2463925325f77bb906fe811f876a024f2403b39",
+      "sourceHead": "859e42119710d0744a09ae21d6842495a6d6df21",
+      "database": "freeholder_current_full86_causal_media161_normal_v72_test_20261114",
+      "seconds": 135.24066234193742,
+      "wholeOriginal180s": true,
+      "independentAfter": "/tmp/freeholder-current-full86-atomic-auxiliary161-counter-native-v1-20261114-after.json",
+      "independentAfterSha256": "5112570b8a63f06cafb461e7fef9a830a170209edfd2404b4cfd07fcac03ad5f"
+    },
+    {
+      "case": "receipt_positive",
+      "result": "/tmp/freeholder-current-full86-atomic-auxiliary161-receipt-positive-native-v2-20261114-result.json",
+      "sha256": "e00a91153a6ed9776e123ecbefb2562c67f1128e57a57f4b28d28f022ea44bff",
+      "sourceHead": "7db593f452482007fbb07717b30a5cf5ce4a4091",
+      "database": "freeholder_current_full86_causal_media161_normal_v73_test_20261114",
+      "seconds": 159.73730057000648,
+      "wholeOriginal180s": true,
+      "independentAfter": "/tmp/freeholder-current-full86-atomic-auxiliary161-receipt-positive-native-v2-20261114-after.json",
+      "independentAfterSha256": "16cbcc9dc32fc4a13e93661fe97cf0452111a2e04a6b51961e9307cca5c38eb6"
+    },
+    {
+      "case": "receipt_recovery",
+      "result": "/tmp/freeholder-current-full86-atomic-auxiliary161-receipt-recovery-native-v2-20261114-result.json",
+      "sha256": "cdaee1418058d089085abb50b195322bc089b284ac53bf38896d0a02ff8d1e53",
+      "sourceHead": "7db593f452482007fbb07717b30a5cf5ce4a4091",
+      "database": "freeholder_current_full86_causal_media161_normal_v74_test_20261114",
+      "seconds": 162.7970417740289,
+      "wholeOriginal180s": true,
+      "independentAfter": "/tmp/freeholder-current-full86-atomic-auxiliary161-receipt-recovery-native-v2-20261114-after.json",
+      "independentAfterSha256": "59cc7fcd94a6f08007692e63f2652ee76cfb0571ba8ec81905dc2257d980e406"
+    },
+    {
+      "case": "receipt_counter",
+      "result": "/tmp/freeholder-current-full86-atomic-auxiliary161-receipt-counter-native-v2-20261114-result.json",
+      "sha256": "d005f63db6b1f0347b9a06eb7c202fd8f06caee27c6ca2d72a56100d834ffaf1",
+      "sourceHead": "7db593f452482007fbb07717b30a5cf5ce4a4091",
+      "database": "freeholder_current_full86_causal_media161_normal_v75_test_20261114",
+      "seconds": 151.89500711800065,
+      "wholeOriginal180s": true,
+      "independentAfter": "/tmp/freeholder-current-full86-atomic-auxiliary161-receipt-counter-native-v2-20261114-after.json",
+      "independentAfterSha256": "9e807402e72d52f380754549e58049c0d9b0cb4394690f20a3b80b2d6f6e910c"
+    }
+  ],
+  "bothPaymentAndOriginalReceiptOwnersVerified": true,
+  "allSixFullSnapshotAndJournalDrainChecksPassed": true,
+  "originalWholePaymentNativeUnchanged": true,
+  "receiptCompanionFullReversalToOriginalMoneyOracles": true,
+  "newCombinedImageAndSafeLogSourceQualified": false,
+  "providerAccountAcceptance": false,
+  "stableAcceptance": false
+}

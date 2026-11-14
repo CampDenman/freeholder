@@ -23,7 +23,7 @@ async function perform(form:FormData,kind:"review"|"recover"|"recover_resource"|
   else if(kind==="cancel")await stopControlledProviderCalendar.call({resourceId:text(form,"resourceId")},actor);
   else await closeControlledZeroProviderResource.call({resourceId:text(form,"resourceId")},actor);
   revalidatePath(`/admin/subscriptions/${subscriptionId}`);revalidatePath(`/admin/invoices/subscriptions/${subscriptionId}`);
- }catch(error){if(!(error instanceof ServiceError))throw error;failed=true;}
+ }catch(error){if(!(error instanceof ServiceError))throw new Error("The controlled provider action failed.");failed=true;}
  redirect(`${destination}?controlledResult=${failed?"failed":"saved"}`);
 }
 export async function reviewControlledProviderStopAction(form:FormData){return perform(form,"review");}

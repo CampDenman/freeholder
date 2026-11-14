@@ -1,0 +1,97 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C11.10",
+    "C1.08"
+  ],
+  "status": "SOURCE ONLY: finite logging precursor; safe producer S0 and S1 unfinished; all controls UNRUN",
+  "base": "77a77cba7af447a5d89f90b865c7e326513726b5",
+  "newModels": 0,
+  "newColumns": 0,
+  "newSql": 0,
+  "newServices": 0,
+  "existing": [
+    {
+      "path": "src/core/http/respond.ts",
+      "beforeSha256": "da68203f526f1333c689a1e549ed5cba1b6e84922a1ec8adb06b53afa0e821fa",
+      "afterSha256": "21508a71024b5f92f442f2895c2cae478fbf71154ae63f0418bf2b2a6d8aaa02",
+      "wholeReversalExact": true,
+      "edits": [
+        {
+          "beforeStart": 380,
+          "beforeEnd": 2666,
+          "afterStart": 380,
+          "afterEnd": 2698,
+          "before": "\nconst STATUS: Record<ServiceError[\"code\"], number> = {\n  validation: 400,\n  permission: 403,\n  not_found: 404,\n  conflict: 409,\n  rate_limited: 429,\n  step_up_required: 403,\n  internal: 500,\n};\n\nexport interface ResponseParts {\n  headers?: Record<string, string>;\n  /**\n   * Set-Cookie is the one header that legitimately repeats, and a plain record\n   * cannot express that \u2014 signing in sets both the session and CSRF cookies.\n   */\n  cookies?: string[];\n}\n\nexport function json(\n  body: unknown,\n  status = 200,\n  parts: ResponseParts = {},\n): Response {\n  const headers = new Headers({\n    \"content-type\": \"application/json; charset=utf-8\",\n    ...parts.headers,\n  });\n  for (const cookie of parts.cookies ?? []) {\n    headers.append(\"set-cookie\", cookie);\n  }\n  return new Response(JSON.stringify(body), { status, headers });\n}\n\n/**\n * ServiceError messages are written for the caller and are safe to return \u2014\n * they say what was wrong with the request, never how the system works.\n * Anything else is a bug, and a bug's message can contain a connection string\n * or a query, so it is logged and answered with a flat 500.\n *\n * A refused permission answers 401 for an anonymous caller and 403 for a\n * signed-in one: the first means \"log in\", the second means \"logging in as\n * someone else would not help\", and conflating them makes both confusing.\n */\nexport function errorResponse(error: unknown, actor: Actor): Response {\n  if (error instanceof RequestBodyError) {\n    return json(\n      { error: { code: \"validation\", message: error.message } },\n      error.status,\n    );\n  }\n  if (error instanceof ServiceError) {\n    const status =\n      error.code === \"permission\" && actor.kind === \"anonymous\"\n        ? 401\n        : STATUS[error.code];\n    // Retry-After turns \"try later\" into a number the caller can act on \u2014\n    // clients and well-behaved crawlers both honour it, and a person staring\n    // at a login form deserves to be told how long rather than guessing.\n    const headers = error.retryAfterSeconds\n      ? { \"retry-after\": String(error.retryAfterSeconds) }\n      : undefined;\n    return json(\n      { error: { code: error.code, message: error.message } },\n      status,\n      { headers },\n    );\n  }\n  console.error(\"unhandled error in a route handler\", error",
+          "after": "import { logUnhandledFailure } from \"@/core/safe-failure-log\";\n\nconst STATUS: Record<ServiceError[\"code\"], number> = {\n  validation: 400,\n  permission: 403,\n  not_found: 404,\n  conflict: 409,\n  rate_limited: 429,\n  step_up_required: 403,\n  internal: 500,\n};\n\nexport interface ResponseParts {\n  headers?: Record<string, string>;\n  /**\n   * Set-Cookie is the one header that legitimately repeats, and a plain record\n   * cannot express that \u2014 signing in sets both the session and CSRF cookies.\n   */\n  cookies?: string[];\n}\n\nexport function json(\n  body: unknown,\n  status = 200,\n  parts: ResponseParts = {},\n): Response {\n  const headers = new Headers({\n    \"content-type\": \"application/json; charset=utf-8\",\n    ...parts.headers,\n  });\n  for (const cookie of parts.cookies ?? []) {\n    headers.append(\"set-cookie\", cookie);\n  }\n  return new Response(JSON.stringify(body), { status, headers });\n}\n\n/**\n * ServiceError messages are written for the caller and are safe to return \u2014\n * they say what was wrong with the request, never how the system works.\n * Anything else is a bug, and a bug's message can contain a connection string\n * or a query, so it is logged and answered with a flat 500.\n *\n * A refused permission answers 401 for an anonymous caller and 403 for a\n * signed-in one: the first means \"log in\", the second means \"logging in as\n * someone else would not help\", and conflating them makes both confusing.\n */\nexport function errorResponse(error: unknown, actor: Actor): Response {\n  if (error instanceof RequestBodyError) {\n    return json(\n      { error: { code: \"validation\", message: error.message } },\n      error.status,\n    );\n  }\n  if (error instanceof ServiceError) {\n    const status =\n      error.code === \"permission\" && actor.kind === \"anonymous\"\n        ? 401\n        : STATUS[error.code];\n    // Retry-After turns \"try later\" into a number the caller can act on \u2014\n    // clients and well-behaved crawlers both honour it, and a person staring\n    // at a login form deserves to be told how long rather than guessing.\n    const headers = error.retryAfterSeconds\n      ? { \"retry-after\": String(error.retryAfterSeconds) }\n      : undefined;\n    return json(\n      { error: { code: error.code, message: error.message } },\n      status,\n      { headers },\n    );\n  }\n  logUnhandledFailure(\"http\""
+        }
+      ]
+    },
+    {
+      "path": "src/mcp/server.ts",
+      "beforeSha256": "69bf35ba6f4fefa42a20b32b61a68ad273eb4d28a21f16f492bbe1f2de282a5c",
+      "afterSha256": "4a7f53c620e8fe1d62b92f0e9710279d492704b79cf444dc27ca63231c1988c2",
+      "wholeReversalExact": true,
+      "edits": [
+        {
+          "beforeStart": 1720,
+          "beforeEnd": 5915,
+          "afterStart": 1720,
+          "afterEnd": 5906,
+          "before": "\n  DEFAULT_JSON_BODY_LIMIT,\n  readBoundedText,\n  RequestBodyError,\n} from \"@/core/http/body\";\nimport {\n  listExternalServices,\n  ServiceError,\n  type Actor,\n} from \"@/core/service\";\nimport { hiddenFromMcp, serviceForTool, toolsFor } from \"@/mcp/tools\";\n\n/** The revision this implements. Echoed back when a client asks for it. */\nexport const PROTOCOL_VERSION = \"2025-06-18\";\nconst SUPPORTED = new Set([PROTOCOL_VERSION, \"2025-03-26\", \"2024-11-05\"]);\n\ninterface JsonRpcRequest {\n  jsonrpc: \"2.0\";\n  id?: string | number | null;\n  method: string;\n  params?: Record<string, unknown>;\n}\n\n/** JSON-RPC's own codes. Tool *failures* are not these \u2014 see callTool. */\nconst PARSE_ERROR = -32700;\nconst INVALID_REQUEST = -32600;\nconst METHOD_NOT_FOUND = -32601;\nconst INVALID_PARAMS = -32602;\n\nfunction result(id: JsonRpcRequest[\"id\"], value: unknown): unknown {\n  return { jsonrpc: \"2.0\", id: id ?? null, result: value };\n}\n\nfunction failure(\n  id: JsonRpcRequest[\"id\"],\n  code: number,\n  message: string,\n): unknown {\n  return { jsonrpc: \"2.0\", id: id ?? null, error: { code, message } };\n}\n\nexport interface McpServerInfo {\n  name: string;\n  version: string;\n}\n\nfunction initialize(\n  request: JsonRpcRequest,\n  info: McpServerInfo,\n): unknown {\n  const asked = (request.params?.protocolVersion as string | undefined) ?? \"\";\n  // Answer in the client's dialect when it is one we speak, otherwise name\n  // ours and let the client decide \u2014 which is what the negotiation is for.\n  const version = SUPPORTED.has(asked) ? asked : PROTOCOL_VERSION;\n  return result(request.id, {\n    protocolVersion: version,\n    capabilities: {\n      // `listChanged` is false: the tool list is derived per request from the\n      // registry and the caller's scopes, so there is no change to announce \u2014\n      // a client that asks again gets the current answer.\n      tools: { listChanged: false },\n      resources: { listChanged: false, subscribe: false },\n      prompts: { listChanged: false },\n    },\n    serverInfo: info,\n    instructions: [\n      `${info.name} exposes this business's own platform as tools.`,\n      \"Every tool is a service call: the same validation, permissions and audit trail as the owner's admin screens.\",\n      \"Tools whose names read as queries only read. Anything that changes data is recorded against your API key by name.\",\n    ].join(\" \"),\n  });\n}\n\n/**\n * Run a tool.\n *\n * A service that refuses or fails comes back as a tool *result* with\n * `isError: true`, not as a JSON-RPC error. The protocol draws that line\n * deliberately: a JSON-RPC error means the client spoke wrongly, while a\n * failed call is information the model needs to see and reason about. Handing\n * a permission refusal back as a protocol error hides it from the agent, which\n * then has no idea why nothing happened.\n */\nasync function callTool(\n  request: JsonRpcRequest,\n  actor: Actor,\n): Promise<unknown> {\n  const name = request.params?.name;\n  if (typeof name !== \"string\") {\n    return failure(request.id, INVALID_PARAMS, \"A tool name is required.\");\n  }\n\n  const service = serviceForTool(actor, name);\n  if (!service) {\n    // Unknown and not-permitted answer identically, so the tool list stays the\n    // only way to learn what exists \u2014 guessing names reveals nothing.\n    return failure(\n      request.id,\n      INVALID_PARAMS,\n      `No tool called \"${name}\" is available to you. Call tools/list to see what is.`,\n    );\n  }\n\n  const args = request.params?.arguments ?? {};\n  try {\n    const value = await service.call(args, actor);\n    return result(request.id, {\n      content: [{ type: \"text\", text: JSON.stringify(value, null, 2) }],\n      // The same data again, structured, for clients that can use it without\n      // parsing the text back out.\n      structuredContent: { result: value },\n      isError: false,\n    });\n  } catch (error) {\n    const message =\n      error instanceof ServiceError\n        ? error.message\n        : \"Something went wrong running that tool.\";\n    if (!(error instanceof ServiceError)) {\n      // A non-ServiceError can carry a query or a connection string; it goes to\n      // the log, never to the caller.\n      console.error(`[mcp] ${service.def.name} failed`, error",
+          "after": " logUnhandledFailure } from \"@/core/safe-failure-log\";\nimport {\n  DEFAULT_JSON_BODY_LIMIT,\n  readBoundedText,\n  RequestBodyError,\n} from \"@/core/http/body\";\nimport {\n  listExternalServices,\n  ServiceError,\n  type Actor,\n} from \"@/core/service\";\nimport { hiddenFromMcp, serviceForTool, toolsFor } from \"@/mcp/tools\";\n\n/** The revision this implements. Echoed back when a client asks for it. */\nexport const PROTOCOL_VERSION = \"2025-06-18\";\nconst SUPPORTED = new Set([PROTOCOL_VERSION, \"2025-03-26\", \"2024-11-05\"]);\n\ninterface JsonRpcRequest {\n  jsonrpc: \"2.0\";\n  id?: string | number | null;\n  method: string;\n  params?: Record<string, unknown>;\n}\n\n/** JSON-RPC's own codes. Tool *failures* are not these \u2014 see callTool. */\nconst PARSE_ERROR = -32700;\nconst INVALID_REQUEST = -32600;\nconst METHOD_NOT_FOUND = -32601;\nconst INVALID_PARAMS = -32602;\n\nfunction result(id: JsonRpcRequest[\"id\"], value: unknown): unknown {\n  return { jsonrpc: \"2.0\", id: id ?? null, result: value };\n}\n\nfunction failure(\n  id: JsonRpcRequest[\"id\"],\n  code: number,\n  message: string,\n): unknown {\n  return { jsonrpc: \"2.0\", id: id ?? null, error: { code, message } };\n}\n\nexport interface McpServerInfo {\n  name: string;\n  version: string;\n}\n\nfunction initialize(\n  request: JsonRpcRequest,\n  info: McpServerInfo,\n): unknown {\n  const asked = (request.params?.protocolVersion as string | undefined) ?? \"\";\n  // Answer in the client's dialect when it is one we speak, otherwise name\n  // ours and let the client decide \u2014 which is what the negotiation is for.\n  const version = SUPPORTED.has(asked) ? asked : PROTOCOL_VERSION;\n  return result(request.id, {\n    protocolVersion: version,\n    capabilities: {\n      // `listChanged` is false: the tool list is derived per request from the\n      // registry and the caller's scopes, so there is no change to announce \u2014\n      // a client that asks again gets the current answer.\n      tools: { listChanged: false },\n      resources: { listChanged: false, subscribe: false },\n      prompts: { listChanged: false },\n    },\n    serverInfo: info,\n    instructions: [\n      `${info.name} exposes this business's own platform as tools.`,\n      \"Every tool is a service call: the same validation, permissions and audit trail as the owner's admin screens.\",\n      \"Tools whose names read as queries only read. Anything that changes data is recorded against your API key by name.\",\n    ].join(\" \"),\n  });\n}\n\n/**\n * Run a tool.\n *\n * A service that refuses or fails comes back as a tool *result* with\n * `isError: true`, not as a JSON-RPC error. The protocol draws that line\n * deliberately: a JSON-RPC error means the client spoke wrongly, while a\n * failed call is information the model needs to see and reason about. Handing\n * a permission refusal back as a protocol error hides it from the agent, which\n * then has no idea why nothing happened.\n */\nasync function callTool(\n  request: JsonRpcRequest,\n  actor: Actor,\n): Promise<unknown> {\n  const name = request.params?.name;\n  if (typeof name !== \"string\") {\n    return failure(request.id, INVALID_PARAMS, \"A tool name is required.\");\n  }\n\n  const service = serviceForTool(actor, name);\n  if (!service) {\n    // Unknown and not-permitted answer identically, so the tool list stays the\n    // only way to learn what exists \u2014 guessing names reveals nothing.\n    return failure(\n      request.id,\n      INVALID_PARAMS,\n      `No tool called \"${name}\" is available to you. Call tools/list to see what is.`,\n    );\n  }\n\n  const args = request.params?.arguments ?? {};\n  try {\n    const value = await service.call(args, actor);\n    return result(request.id, {\n      content: [{ type: \"text\", text: JSON.stringify(value, null, 2) }],\n      // The same data again, structured, for clients that can use it without\n      // parsing the text back out.\n      structuredContent: { result: value },\n      isError: false,\n    });\n  } catch (error) {\n    const message =\n      error instanceof ServiceError\n        ? error.message\n        : \"Something went wrong running that tool.\";\n    if (!(error instanceof ServiceError)) {\n      // Neither the untrusted error nor the requested tool name enters logs.\n      logUnhandledFailure(\"mcp\""
+        }
+      ]
+    },
+    {
+      "path": "app/controlled-provider-actions.ts",
+      "beforeSha256": "a811404fcd835474e3c6055017ee7e716f9e7b91aab746424e71423e3c03d8ef",
+      "afterSha256": "3c7dfe4d73b5c70f49b7e73da4b98ecb14a78b7f48e304be0cb2cc4933eccb25",
+      "wholeReversalExact": true,
+      "edits": [
+        {
+          "beforeStart": 2769,
+          "beforeEnd": 2774,
+          "afterStart": 2769,
+          "afterEnd": 2820,
+          "before": "error",
+          "after": "new Error(\"The controlled provider action failed.\")"
+        }
+      ]
+    },
+    {
+      "path": "MASTER.md",
+      "beforeSha256": "9ad382655dcf0300958b0dd33bc478f8383147ae49254a8107f3e9c08af8bdb1",
+      "afterSha256": "d39d6111084bc4e5e553919812ea5d5ae61e0b9fe9ad4cea73c5fcdebe79f1fe",
+      "wholeReversalExact": true,
+      "edits": [
+        {
+          "beforeStart": 288173,
+          "beforeEnd": 288173,
+          "afterStart": 288173,
+          "afterEnd": 288870,
+          "before": "",
+          "after": "Bounded safe-log SOURCE continuation2026-11-14 (C11.10/C1.08): HTTP and MCP\nunknown failures use one fixed-event logger with a newly generated server UUID;\nit never receives the failure, request headers, tool name, query or parameters.\nThe existing controlled-provider Server Action preserves known ServiceError\nredirects; every other thrown value becomes a new fixed native Error, retaining\nits generic failure behavior without copying cause/message/code/stack. Seven\nHTTP/MCP/installed-Next canary controls are PREPARED/UNRUN. This is a finite S0\nprecursor, not closure of unsafe provider-response retention, safe ingress,\nlegacy-FIN recovery, rollout, security review or provider acceptance.\n\n\n"
+        }
+      ]
+    }
+  ],
+  "new": [
+    {
+      "path": "src/core/safe-failure-log.ts",
+      "sha256": "716877ed1d290730e414f9d7e3083652f87b7c4ce5a95b91caf0d25d9b7ce05f"
+    },
+    {
+      "path": "tests/core/safe-failure-log.test.ts",
+      "sha256": "f30cd0922e8485cefe6d4569bf8056258cf9695f8442dbd02dcdc45458b00d7e"
+    },
+    {
+      "path": "tests/core/controlled-action-safe-failure.test.ts",
+      "sha256": "c362428e491b468b4a2b9f3416de17c6f5e8226abde7b4970c85194de6edd37b"
+    },
+    {
+      "path": ".changeset/safe-unhandled-failure-boundaries.md",
+      "sha256": "709435265f46b14b6d3130ab3713a8a74ad84ffdf966519e471a098ac837ea45"
+    }
+  ]
+}
