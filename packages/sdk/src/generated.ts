@@ -922,6 +922,8 @@ export const SERVICE_NAMES = [
   "invoicing.markViewed",
   "invoicing.merchantCheckoutRequirements",
   "invoicing.merchantCollectionConfiguration",
+  "invoicing.merchantFeeInvocationRecoveryList",
+  "invoicing.merchantFeeInvocationStopPlan",
   "invoicing.merchantPaymentReview",
   "invoicing.merchantTaxZoneConfiguration",
   "invoicing.merchantTaxZones",
@@ -949,6 +951,7 @@ export const SERVICE_NAMES = [
   "invoicing.recoverControlledProviderCalendar",
   "invoicing.recoverControlledProviderOperation",
   "invoicing.recoverLegacyBankRefund",
+  "invoicing.refreshAtomicFeeBankEvidence",
   "invoicing.refreshPaymentPlans",
   "invoicing.refundCustomerBalancePayment",
   "invoicing.refundInPersonPayment",
@@ -959,10 +962,12 @@ export const SERVICE_NAMES = [
   "invoicing.requestMerchantTaxExemption",
   "invoicing.returnOriginalCash",
   "invoicing.reviewAgreementFee",
+  "invoicing.reviewAtomicFeeReconciliation",
   "invoicing.reviewCashInspectionCallerStopped",
   "invoicing.reviewCommercialPayment",
   "invoicing.reviewControlledProviderCallerStopped",
   "invoicing.reviewLegacyBankReaderStopped",
+  "invoicing.reviewMerchantFeeInvocationStopped",
   "invoicing.reviewMerchantPaymentCallerStopped",
   "invoicing.reviewMerchantPaymentResourceOrigin",
   "invoicing.reviewOriginalCashCallerStopped",
@@ -5415,6 +5420,14 @@ export interface ServiceCatalog {
     input: Record<string, never>;
     output: { collectionKind: "direct" | "destination"; providerPlatformAccountId: string; verifiedAt: string } | null;
   };
+  "invoicing.merchantFeeInvocationRecoveryList": {
+    input: Record<string, never>;
+    output: { invocationId: string; paymentId: string; kind: "source_inspect" | "post" | "recover_get"; host: string; pid: number }[];
+  };
+  "invoicing.merchantFeeInvocationStopPlan": {
+    input: { paymentId: string; invocationId: string };
+    output: { invocationId: string; kind: "source_inspect" | "post" | "recover_get"; mechanicalCheck: "live" | "absent" | "unobservable"; revision: string; alreadyClosed: boolean };
+  };
   "invoicing.merchantPaymentReview": {
     input: { paymentId: string; offset?: number };
     output: { payment: { id: string; invoiceId: string; provider: string; providerCheckoutRef: string | null; providerRef: string | null; idempotencyKey: string; requestHash: string; status: "created" | "processing" | "succeeded" | "failed" | "cancelled"; method: string; currency: string; amountMinor: number; refundedMinor: number; failureCode: string | null; failureMessage: string | null; processedAt: string | null; failedAt: string | null; metadata: unknown; createdAt: string; updatedAt: string; [key: string]: unknown }; routing: { moneyOrigin?: "recorded_external"; providerApiVersion?: "2026-02-25.clover" | "2026-10-28.endive"; providerAccountId?: string; providerPlatformAccountId?: string; destinationAccountId?: string; settlementMerchantAccountId?: string; merchantAllocationId?: string; invoiceScopeId?: string; agreementSubscriptionId?: string; providerSubscriptionRef?: string; providerInvoiceRef?: string; providerPaymentIntentRef?: string; providerChargeRef?: string; originalChargeReceiptId?: string; applicationFeeMinor?: number }; witness: string; observations: { id: string; providerApiVersion: string | null; providerRef: string; status: "pending" | "succeeded" | "failed"; amountMinor: number; currency: string; providerPlatformAccountId: string; chargeAccountId: string | null; recipientAccountId: string | null; settlementMerchantAccountId: string | null; applicationFeeMinor: number | null; providerChargeRef: string | null; applicationFeeRef: string | null; transferRef: string | null; applicationFeeCurrency: string | null; observedApplicationFeeMinor: number | null; observedFeeRefundedMinor: number | null; customerChargeVerified: boolean; routeVerified: boolean; settlementVerified: boolean; observedAt: string }[]; feeOperations: { id: string; amountMinor: number; currency: string; status: string; providerRef: string | null; applicationFeeRef: string; targetRetainedFeeMinor: number; observedOriginalFeeMinor: number; createdAt: string }[]; feeObservations: { id: string; operationId: string; providerRef: string; applicationFeeRef: string; amountMinor: number; currency: string; bindingVerified: boolean; observedAt: string }[]; originalRequest: { providerInvoiceRef: string; providerContactRef: string; requestDigest: string } | null; dispatches: { id: string; ordinal: number; requestDigest: string; dispatchedAt: string; refusalCode: string | null; caller: { id: string; pid: number; host: string; startedAt: string; bootId: string | null; pidNamespace: string | null; startTicks: string | null }; finishedAt: string | null; stopReviewedAt: string | null; liveness: "live" | "absent" | "unobservable" }[]; resourceBindings: { id: string; dispatchId: string; resourceRef: string; resourceKind: "checkout" | "intent"; origin: "physical_ack" | "human_request_review"; observedAt: string }[]; retirementAcks: { id: string; checkoutRef: string | null; paymentRef: string | null; kind: "session_expired" | "intent_canceled"; observedAt: string }[]; terminalReceipt: { checkoutRef: string | null; paymentRef: string | null; sessionStatus: ("expired" | "complete") | null; intentStatus: string | null; amountReceivedMinor: 0; observedAt: string } | null; hasMore: boolean; nextOffset: number | null } | null;
@@ -5523,6 +5536,10 @@ export interface ServiceCatalog {
     input: { refundId: string };
     output: { receiptId: string; status: ("pending" | "requires_action" | "succeeded" | "failed" | "canceled") | null; applied: boolean; requiresReview: boolean };
   };
+  "invoicing.refreshAtomicFeeBankEvidence": {
+    input: { paymentId: string };
+    output: { handled: boolean; bankReadReturned: boolean; feeReconciled: boolean | null };
+  };
   "invoicing.refreshPaymentPlans": {
     input: { asOf?: string; limit?: number };
     output: { checked: number; changed: number; asOf: string };
@@ -5563,6 +5580,10 @@ export interface ServiceCatalog {
     input: { invoiceId: string };
     output: { invoiceId: string; currency: string; eligible: boolean; expectedReceivableMinor: number; owedMinor: number | null; recordedMinor: number | null; returnDueMinor: number | null; originalSourceExcessMinor: number | null; reviewRequired: boolean; pending: boolean; receipts: { id: string; amountMinor: number; direction: "remitted" | "returned"; originalRemittanceId: string | null; recordedBy: string; createdAt: string }[] };
   };
+  "invoicing.reviewAtomicFeeReconciliation": {
+    input: { invoiceId: string };
+    output: { paymentId: string; originalFeeMinor: number; targetRetainedFeeMinor: number | null; actualRetainedFeeMinor: number | null; currency: string; pending: boolean }[];
+  };
   "invoicing.reviewCashInspectionCallerStopped": {
     input: { inspectionId: string; expectedCallerId: string; expectedAdmissionDigest: string; expectedSourceRevision: string; hostingEvidence: string; confirmation: "ORIGINAL CASH INSPECTION CALLER STOP VERIFIED" };
     output: { reviewed: true; mechanicalCheck: "original_process_absent" };
@@ -5578,6 +5599,10 @@ export interface ServiceCatalog {
   "invoicing.reviewLegacyBankReaderStopped": {
     input: { readId: string; expectedCallerId: string; expectedOriginalDigest: string; expectedSourceRevision: string; hostingEvidence: string; confirmation: "ORIGINAL LEGACY READ CALLER STOP VERIFIED" };
     output: { reviewed: true; mechanicalCheck: "original_process_absent" | "unobservable_host_review" };
+  };
+  "invoicing.reviewMerchantFeeInvocationStopped": {
+    input: { paymentId: string; invocationId: string; expectedRevision: string; hostingEvidence: string; confirmation: "THE ORIGINAL FEE CALLER HAS STOPPED" };
+    output: { stopped: true; suppliesBankEvidence: false };
   };
   "invoicing.reviewMerchantPaymentCallerStopped": {
     input: { dispatchId: string; expectedCallerId: string; expectedRequestDigest: string; hostingEvidence: string; confirmation: "ORIGINAL PAYMENT CALLER STOP VERIFIED" };
@@ -9695,6 +9720,8 @@ export interface FreeholderApi {
     markViewed: (input: ServiceCatalog["invoicing.markViewed"]["input"]) => Promise<ServiceCatalog["invoicing.markViewed"]["output"]>;
     merchantCheckoutRequirements: (input?: ServiceCatalog["invoicing.merchantCheckoutRequirements"]["input"]) => Promise<ServiceCatalog["invoicing.merchantCheckoutRequirements"]["output"]>;
     merchantCollectionConfiguration: (input?: ServiceCatalog["invoicing.merchantCollectionConfiguration"]["input"]) => Promise<ServiceCatalog["invoicing.merchantCollectionConfiguration"]["output"]>;
+    merchantFeeInvocationRecoveryList: (input?: ServiceCatalog["invoicing.merchantFeeInvocationRecoveryList"]["input"]) => Promise<ServiceCatalog["invoicing.merchantFeeInvocationRecoveryList"]["output"]>;
+    merchantFeeInvocationStopPlan: (input: ServiceCatalog["invoicing.merchantFeeInvocationStopPlan"]["input"]) => Promise<ServiceCatalog["invoicing.merchantFeeInvocationStopPlan"]["output"]>;
     merchantPaymentReview: (input: ServiceCatalog["invoicing.merchantPaymentReview"]["input"]) => Promise<ServiceCatalog["invoicing.merchantPaymentReview"]["output"]>;
     merchantTaxZoneConfiguration: (input: ServiceCatalog["invoicing.merchantTaxZoneConfiguration"]["input"]) => Promise<ServiceCatalog["invoicing.merchantTaxZoneConfiguration"]["output"]>;
     merchantTaxZones: (input?: ServiceCatalog["invoicing.merchantTaxZones"]["input"]) => Promise<ServiceCatalog["invoicing.merchantTaxZones"]["output"]>;
@@ -9722,6 +9749,7 @@ export interface FreeholderApi {
     recoverControlledProviderCalendar: (input: ServiceCatalog["invoicing.recoverControlledProviderCalendar"]["input"]) => Promise<ServiceCatalog["invoicing.recoverControlledProviderCalendar"]["output"]>;
     recoverControlledProviderOperation: (input: ServiceCatalog["invoicing.recoverControlledProviderOperation"]["input"]) => Promise<ServiceCatalog["invoicing.recoverControlledProviderOperation"]["output"]>;
     recoverLegacyBankRefund: (input: ServiceCatalog["invoicing.recoverLegacyBankRefund"]["input"]) => Promise<ServiceCatalog["invoicing.recoverLegacyBankRefund"]["output"]>;
+    refreshAtomicFeeBankEvidence: (input: ServiceCatalog["invoicing.refreshAtomicFeeBankEvidence"]["input"]) => Promise<ServiceCatalog["invoicing.refreshAtomicFeeBankEvidence"]["output"]>;
     refreshPaymentPlans: (input?: ServiceCatalog["invoicing.refreshPaymentPlans"]["input"]) => Promise<ServiceCatalog["invoicing.refreshPaymentPlans"]["output"]>;
     refundCustomerBalancePayment: (input: ServiceCatalog["invoicing.refundCustomerBalancePayment"]["input"]) => Promise<ServiceCatalog["invoicing.refundCustomerBalancePayment"]["output"]>;
     refundInPersonPayment: (input: ServiceCatalog["invoicing.refundInPersonPayment"]["input"]) => Promise<ServiceCatalog["invoicing.refundInPersonPayment"]["output"]>;
@@ -9732,10 +9760,12 @@ export interface FreeholderApi {
     requestMerchantTaxExemption: (input: ServiceCatalog["invoicing.requestMerchantTaxExemption"]["input"]) => Promise<ServiceCatalog["invoicing.requestMerchantTaxExemption"]["output"]>;
     returnOriginalCash: (input: ServiceCatalog["invoicing.returnOriginalCash"]["input"]) => Promise<ServiceCatalog["invoicing.returnOriginalCash"]["output"]>;
     reviewAgreementFee: (input: ServiceCatalog["invoicing.reviewAgreementFee"]["input"]) => Promise<ServiceCatalog["invoicing.reviewAgreementFee"]["output"]>;
+    reviewAtomicFeeReconciliation: (input: ServiceCatalog["invoicing.reviewAtomicFeeReconciliation"]["input"]) => Promise<ServiceCatalog["invoicing.reviewAtomicFeeReconciliation"]["output"]>;
     reviewCashInspectionCallerStopped: (input: ServiceCatalog["invoicing.reviewCashInspectionCallerStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewCashInspectionCallerStopped"]["output"]>;
     reviewCommercialPayment: (input: ServiceCatalog["invoicing.reviewCommercialPayment"]["input"]) => Promise<ServiceCatalog["invoicing.reviewCommercialPayment"]["output"]>;
     reviewControlledProviderCallerStopped: (input: ServiceCatalog["invoicing.reviewControlledProviderCallerStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewControlledProviderCallerStopped"]["output"]>;
     reviewLegacyBankReaderStopped: (input: ServiceCatalog["invoicing.reviewLegacyBankReaderStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewLegacyBankReaderStopped"]["output"]>;
+    reviewMerchantFeeInvocationStopped: (input: ServiceCatalog["invoicing.reviewMerchantFeeInvocationStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewMerchantFeeInvocationStopped"]["output"]>;
     reviewMerchantPaymentCallerStopped: (input: ServiceCatalog["invoicing.reviewMerchantPaymentCallerStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewMerchantPaymentCallerStopped"]["output"]>;
     reviewMerchantPaymentResourceOrigin: (input: ServiceCatalog["invoicing.reviewMerchantPaymentResourceOrigin"]["input"]) => Promise<ServiceCatalog["invoicing.reviewMerchantPaymentResourceOrigin"]["output"]>;
     reviewOriginalCashCallerStopped: (input: ServiceCatalog["invoicing.reviewOriginalCashCallerStopped"]["input"]) => Promise<ServiceCatalog["invoicing.reviewOriginalCashCallerStopped"]["output"]>;

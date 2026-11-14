@@ -3564,6 +3564,23 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Fee160 schema/SDK checkpoint2026-11-14 (C12.38/C9.33/C1.08/C11.08): exact
+5e609ff2 sourceV85 PASSES1412 assertions/223 complete selected files/482 explicit
+DB skips, fulltypes/lint/metadata. FreshV45 ordinary86 and strictV56
+160models/359guards/389fullfunctionbodies/4066queries/2456expressions PASS.
+ActualSDK update+verify8each PASS with160whole-row/journal/sequence invariance
+and drain0; generated SDK adds exactly5scoped names and hides all8private names,
+with no public removals. V26 wrapper failed ONLY on parsing its TS trailing
+comma AFTER tests/snapshots; V27 completion exceeded git's1MiB read buffer BEFORE
+DB. Both preserved; V28 read-only completion validates exact original16results,
+corrects only parsing/buffer and rechecks160rows/journals/sequence unchanged.
+No generation rerun or generatedcode hand edit. GeneratedSDK fulltypes/lint/
+metadata and actual fee/paid business natives remain required. Held privacy,
+auxiliary owner/credit/unknown recovery and media/full-spec/provider/platform/
+build/browser/CI/recovery/security/signature gates remain open. No C closure.
+See `deploy/fee-invocation160-schema-sdk-checkpoint-20261114.json`.
+
+
 Fee160 verifier source correction2026-11-14 (C12.38/C1.08): V84 fulltypes
 PASS5.322s; lint stops on an inline type import and implicit string coercion of
 unknown JSON namespace fields. The function reference is now imported type-only;
