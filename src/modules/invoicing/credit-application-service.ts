@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // C9.33/C12.38: real noncash credit disposition; original cash remains cash.
 import { randomUUID } from "node:crypto";
+import type {readAtomicCreditFeeDeclarationForProration} from "./atomic-credit-fee-declaration-reader";
+import type {readAtomicCreditInvoiceDisposition} from "./atomic-credit-invoice-disposition";
 import { and, asc, eq, inArray, like, sql } from "drizzle-orm";
 import { z } from "zod";
 import { actorString, defineService, getService, ServiceError, type ServiceContext } from "@/core/service";
@@ -83,7 +85,7 @@ export const fundProrationCredit = defineService({ name: "invoicing.fundProratio
     const originalLines = await ctx.tx.select().from(creditNoteLines).where(eq(creditNoteLines.creditNoteId, note.id)).orderBy(creditNoteLines.id).limit(1001);
     if (originalLines.length > 1000 || originalLines.some(line => actual.lines.filter(source => source.creditNoteLineId === line.id).reduce((sum, source) => sum + BigInt(source.amountMinor), 0n) !== BigInt(line.totalMinor))
       || actual.lines.some(source => !originalLines.some(line => line.id === source.creditNoteLineId))) throw new ServiceError("conflict", "Each exact original credit line needs its complete own principal; equal totals cannot borrow another line's credit.");
-    let bDeclaration:Awaited<ReturnType<typeof import("./atomic-credit-fee-declaration-reader").readAtomicCreditFeeDeclarationForProration>>|undefined;
+    let bDeclaration:Awaited<ReturnType<typeof readAtomicCreditFeeDeclarationForProration>>|undefined;
     for (const source of [...actual.lines].sort(compareCreditSources)) {
       const [line] = await ctx.tx.select({ credit: creditNoteLines, original: invoiceLines }).from(creditNoteLines).innerJoin(invoiceLines, eq(invoiceLines.id, creditNoteLines.invoiceLineId))
         .where(eq(creditNoteLines.id, source.creditNoteLineId)).limit(1);
@@ -159,7 +161,7 @@ export const reserveInvoiceCredit = defineService({ name: "invoicing.reserveInvo
 });
 async function matchingParties(ctx: ServiceContext, sourceInvoiceId: string, target: typeof invoices.$inferSelect, actualReservationId?:string) {
   const [source] = await ctx.tx.select().from(invoices).where(eq(invoices.id, sourceInvoiceId)).limit(1);
-  let atomicSiblings:Awaited<ReturnType<typeof import("./atomic-credit-invoice-disposition").readAtomicCreditInvoiceDisposition>>|null=null;
+  let atomicSiblings:Awaited<ReturnType<typeof readAtomicCreditInvoiceDisposition>>|null=null;
   if(source&&source.refundedMinor!==0&&actualReservationId){
     const{readAtomicCreditReservationProof}=await import("./atomic-credit-reservation-reader"),proof=await readAtomicCreditReservationProof(ctx.tx,actualReservationId);
     if(proof&&proof.parent.funding.sourceInvoiceId===source.id&&proof.parent.reservation.targetSourceId===target.sourceId){

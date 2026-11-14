@@ -20,7 +20,7 @@ import {createListing} from "@/modules/members/listings";
 import {getProductVariants} from "@/modules/catalog/variants";
 import {savePlan} from "@/modules/subscriptions/service";
 import {quoteControlledProration} from "@/modules/subscriptions/controlled-provider-proration-quote";
-import {actualControlledPeriod84} from "./actual-controlled-period84";
+import type {actualControlledPeriod84} from "./actual-controlled-period84";
 import {actualControlledOpenInvoice84} from "./actual-controlled-open-invoice84";
 import {retainActualControlledManifest84} from "./actual-controlled-current-manifest84";
 import {OWNER} from "./spine";
