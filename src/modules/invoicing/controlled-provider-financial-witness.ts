@@ -109,9 +109,9 @@ export async function controlledCashFinancialHistory(tx:Tx,receiptIds:readonly s
  const actualSubscriptions=[...new Set(witness.history.resources.map(row=>row.subscriptionId))];
  if(witness.targets&&actualSubscriptions.some(id=>!subscriptionIds.includes(id)))witness=await controlledFinancialWitness(tx,{receiptIds,subscriptionIds:actualSubscriptions});
  const namespaces=[];for(const id of [...new Set(receiptIds)].sort())namespaces.push({receiptId:id,...await readControlledReceiptNamespace(tx,id)});
- const targetCoverage=[];
+ const targetCoverage:Awaited<ReturnType<typeof controlledCollectionCoverage>>[]=[];
  if(witness.targets)for(const id of [...new Set(witness.targets.quotes.map(row=>row.subscriptionId))].sort())targetCoverage.push(await controlledCollectionCoverage(tx,{subscriptionId:id}));
- const coverage=[];for(const id of [...new Set(witness.history.resources.map(row=>row.subscriptionId))].sort())coverage.push(await controlledProviderCoverage(tx,{subscriptionId:id}));
+ const coverage:Awaited<ReturnType<typeof controlledProviderCoverage>>[]=[];for(const id of [...new Set(witness.history.resources.map(row=>row.subscriptionId))].sort())coverage.push(await controlledProviderCoverage(tx,{subscriptionId:id}));
  const rawClassifications=[];
  for(const actual of targetCoverage){const subscriptions=[...new Set(actual.witness.quotes.map(row=>row.subscriptionId))];if(subscriptions.length!==1)throw new ServiceError("conflict","Restore the exact controlled target subscription before classifying its raw facts.");
   rawClassifications.push(await controlledTargetRawClassification(tx,subscriptions[0]!,actual));

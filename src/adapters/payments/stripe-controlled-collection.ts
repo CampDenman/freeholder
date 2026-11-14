@@ -97,11 +97,11 @@ export function stripeControlledCollections(api:Api){
   // Observation/recovery retains every actual original PI/cash BEFORE a
   // canceled/changed calendar, customer promise or target mismatch can refuse.
   // Exact proof still confers no settlement/access or write authority.
-  const actual=await inventory(request,true);await current(request);const financial=await isolated(request),m=request.manifest;
+  const actual=await inventory(request,true);await current(request);const financial=await isolated(request),m=request.manifest;const manifest=object(m);if(!manifest)refuse();
   if(actual.totalMinor!==m.cashDueMinor||actual.actualInvoice.subtotal!==m.cashDueMinor||(actual.actualInvoice.application_fee_amount??0)!==m.applicationFeeMinor
    ||actual.actualInvoice.starting_balance!==0||actual.actualInvoice.ending_balance!==0||actual.actualInvoice.pre_payment_credit_notes_amount!==0||actual.actualInvoice.post_payment_credit_notes_amount!==0
    ||!empty(actual.actualInvoice.total_discount_amounts)||!empty(actual.actualInvoice.total_taxes)||actual.actualInvoice.total_tax_amounts!==undefined&&!empty(actual.actualInvoice.total_tax_amounts))refuse();
-  return{providerInvoiceRef:request.providerInvoiceRef,manifestDigest:controlledSubscriptionFactsDigest(m),inventory:actual,customerFinancialDigest:financial.inventoryDigest,exactManifest:true as const,suppliesPaidAuthority:false as const};
+  return{providerInvoiceRef:request.providerInvoiceRef,manifestDigest:controlledSubscriptionFactsDigest(manifest),inventory:actual,customerFinancialDigest:financial.inventoryDigest,exactManifest:true as const,suppliesPaidAuthority:false as const};
  }
  const post=async(request:MerchantControlledCollectionRequest,path:string,form:URLSearchParams)=>api(path,{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded","idempotency-key":request.idempotencyKey},body:form},request);
  return{

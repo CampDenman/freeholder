@@ -76,8 +76,8 @@ export const controlledProviderCollectionAuthority=defineService({
     if(!controlledPeriodAdmission({subscriptionId:parent.id,sourceId:canonical.invoice.sourceId??"",now:new Date(),pay:["finalize_invoice","pay_invoice"].includes(input.kind),parentStart:parent.currentPeriodStart.toISOString(),parentEnd:parent.currentPeriodEnd.toISOString(),trialEnd:parent.trialEndsAt?.toISOString()??null,
      originalStart:review.calendar.originalApplicationPeriodStart,originalEnd:review.calendar.originalApplicationPeriodEnd,originalTrialEnd:review.calendar.originalTrialEndsAt,periodStart:review.calendar.proposedPeriodStart,periodEnd:review.calendar.proposedPeriodEnd,
      credits:[review.creditNetMinor,review.creditTaxMinor,review.creditAppliedMinor,review.residualCreditMinor]})
-     ||canonical.lines.some(line=>line.sourceType!=="subscription"||line.sourceId!==parent.id||line.snapshot.subscriptionTermsId!==source.terms.id
-      ||line.snapshot.subscriptionPeriodStart!==review.calendar.proposedPeriodStart||line.snapshot.subscriptionPeriodEnd!==review.calendar.proposedPeriodEnd))refuse();
+     ||canonical.lines.some(line=>{const snapshot=record.safeParse(line.snapshot);return line.sourceType!=="subscription"||line.sourceId!==parent.id||!snapshot.success||snapshot.data.subscriptionTermsId!==source.terms.id
+      ||snapshot.data.subscriptionPeriodStart!==review.calendar.proposedPeriodStart||snapshot.data.subscriptionPeriodEnd!==review.calendar.proposedPeriodEnd;}))refuse();
    }else{
     const authority=getService("subscriptions.prorationCollectionAuthority");if(!authority)refuse();
     const actual=z.object({allowed:z.boolean(),revision:sha}).parse(await ctx.callAsSystem(authority,{invoiceId:canonical.invoice.id}));if(!actual.allowed)refuse();currentProofs.push(actual);

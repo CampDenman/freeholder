@@ -1707,7 +1707,7 @@ registerContactPrivacySource({
           itemReceipts:targetHistory?.itemReceipts.filter(row=>componentIds.has(row.componentId))??[],invoiceProofs:targetHistory?.invoiceProofs.filter(row=>collectionIds.has(row.collectionId))??[]}}:{})};
     };
     const originalCash = await originalCashRecoveryFinancialWitness(tx, [], charges.map(row => row.id));
-    const inspectionStops = await cashInspectionFinancialWitness(tx, { paymentIds: [], receiptIds: charges.map(row => row.id), resourceIds: controlled.resources.map(row => row.id) });
+    const inspectionStops = await cashInspectionFinancialWitness(tx, { paymentIds: [], receiptIds: charges.map(row => row.id), resourceIds: controlled.history.resources.map(row => row.id) });
     const actualReceiptIds = new Set(charges.map(row => row.id));
     if (inspectionStops.lineages.some(row => !actualReceiptIds.has(row.receiptId))) throw new ServiceError("conflict", "Restore the exact original subscription receipt ownership before exporting inspection lineages.");
     const exportedInspectionStops = exportCashInspectionStops(inspectionStops.stops);

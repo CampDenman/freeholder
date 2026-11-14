@@ -26,7 +26,7 @@ import { controlledCashManifest,refuseControlledCash } from "./controlled-provid
 import { controlledProspectiveRawBindings } from "./controlled-provider-cash-prospective-occurrences";
 import { controlledCashBankExpectation,controlledCashPhysicalEntry,controlledCollectionCashProof,type ControlledCashReceiptProof,type ControlledCollectionCashProof } from "./controlled-provider-collection-cash-contract";
 export { controlledCollectionCashProof,type ControlledCollectionCashProof } from "./controlled-provider-collection-cash-contract";
-const request=z.object({collectionId:z.uuid(),receiptIds:z.array(z.uuid()).min(1).max(5000)}).strict().refine(value=>new Set(value.receiptIds).size===value.receiptIds.length&&value.receiptIds.every((id,i,ids)=>i===0||ids[i-1]<id),"Provide the exact sorted unique receipt UUID batch.");
+const request=z.object({collectionId:z.uuid(),receiptIds:z.array(z.uuid()).min(1).max(5000)}).strict().refine(value=>new Set(value.receiptIds).size===value.receiptIds.length&&value.receiptIds.every((id,i,ids)=>{const previous=ids[i-1];return i===0||previous!==undefined&&previous<id;}),"Provide the exact sorted unique receipt UUID batch.");
 const sha=z.string().regex(/^[a-f0-9]{64}$/);
 const bankRow=z.object({actual_inspection_id:z.uuid(),actual_observation_id:z.uuid(),current_evidence:merchantReturnedCashEvidenceSchema,original_expectation:z.record(z.string(),z.unknown()),bank_witness:z.array(z.object({table:z.string(),id:z.string(),fingerprint:sha}).strict()).min(1).max(5000),bank_fingerprint:sha,immutable_bank_fingerprint:sha,admitted_source_history_digest:sha}).strict();
 const bigintNumber=(value:bigint)=>{const number=Number(value);if(!Number.isSafeInteger(number)||number<0)refuseControlledCash();return number;};

@@ -115,7 +115,8 @@ function currentProof(target:ControlledRawTarget){
   ||payload.data.invoiceOrigin.creatorRequestDigest!==history.operations.find(op=>op.id===binding.creatorOperationId)?.requestDigest))return null;
  if(payload?.success&&binding.originKind!=="created_draft"){
   const creator=history.operations.find(op=>op.id===binding.creatorOperationId),epoch=creator?object.safeParse(creator.originalRequest.payload):null;
-  if(!epoch?.success||payload.data.invoiceOrigin.priceEpochCollectionId!==epoch.data.collectionId||payload.data.invoiceOrigin.priceEpochAcceptedQuoteDigest!==epoch.data.acceptedQuoteDigest)return null;
+  const origin=payload.data.invoiceOrigin;
+  if(!epoch?.success||origin.kind==="created_draft"||origin.priceEpochCollectionId!==epoch.data.collectionId||origin.priceEpochAcceptedQuoteDigest!==epoch.data.acceptedQuoteDigest)return null;
  }
  if(!completeManifest&&(!observedBank?.success||operation.kind!=="read_invoice"))return null;
  const inventory=parsed?.success?parsed.data.inventory:observedBank?.success?observedBank.data:null;if(!inventory)return null;
@@ -286,7 +287,7 @@ export function classifyControlledTargetRawFacts(targets:readonly ControlledRawT
   const review=controlledRawFinancialReview(target.resource,target.history);
   for(const financial of review.facts){const fact=target.history.facts.find(row=>row.id===financial.factId),operation=target.history.operations.find(row=>row.id===financial.operationId);if(!fact||!operation)continue;
    const raw=fact.actual.raw;let owned=false;const calendarFact=["subscription_read","calendar_updated","pause_subscription","bootstrap_subscription"].includes(fact.actual.kind);
-   function bankFact(proof:NonNullable<ReturnType<typeof currentProof>>):{owned:boolean;listOwners:ControlledRawTarget[]|null}{
+   function bankFact(proof:NonNullable<ReturnType<typeof currentProof>>,fact:History["facts"][number],operation:History["operations"][number]):{owned:boolean;listOwners:ControlledRawTarget[]|null}{
     let owned=false;let listOwners:ControlledRawTarget[]|null=null;
     switch(fact.actual.kind){
     case"invoice_list_read":{
@@ -316,13 +317,13 @@ export function classifyControlledTargetRawFacts(targets:readonly ControlledRawT
     case"controlled_item_created":owned=exactItemSnapshot(target,raw,operation.id);break;
     case"invoice_payments_read":owned=completePages(target.history,fact.callId,"invoice_payments_read")!==null&&Array.isArray(raw.data)&&raw.data.every(value=>{const payment=object.safeParse(value);if(!payment.success)return false;const data=payment.data;
       const actual=proof.inventory.actualPayments.find(row=>ref(row.id)===ref(data.id)),relation=object.safeParse(data.payment),currentRelation=actual?object.safeParse(actual.payment):null;
-      return !!actual&&relation.success&&currentRelation?.success&&ref(data.invoice)===target.binding?.providerInvoiceRef
+      return !!actual&&relation.success&&currentRelation?.success===true&&ref(data.invoice)===target.binding?.providerInvoiceRef
        &&relation.data.type==="payment_intent"&&currentRelation.data.type==="payment_intent"&&ref(relation.data.payment_intent)===ref(currentRelation.data.payment_intent)&&data.amount_requested===actual.amount_requested
        &&(data.amount_paid===0||data.amount_paid===actual.amount_paid);});break;
     default:break;
     }return{owned,listOwners};
    }
-   const bankResult=!calendarFact&&proof?bankFact(proof):null,listOwners=bankResult?.listOwners??null;
+   const bankResult=!calendarFact&&proof?bankFact(proof,fact,operation):null,listOwners=bankResult?.listOwners??null;
    owned=calendarFact?exactCalendarSnapshot(target,raw,targets,proofFor):bankResult?.owned??false;
    const bankOwners=listOwners!==null?listOwners.flatMap(candidate=>{const current=proofFor(candidate);return current?[{candidate,current}]:[];}):targets.flatMap(candidate=>{if(candidate.resource.id!==target.resource.id||!candidate.binding)return[];
     const current=proofFor(candidate);return current&&(financial.providerInvoiceRefs.includes(candidate.binding.providerInvoiceRef)||current.inventory.actualIntents.some(intent=>financial.providerIntentRefs.includes(ref(intent.id)??"")))?[{candidate,current}]:[];});
