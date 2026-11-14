@@ -219,7 +219,7 @@ function exactIntentSnapshot(target:ControlledRawTarget,proof:NonNullable<Return
 function exactItemSnapshot(target:ControlledRawTarget,raw:Record<string,unknown>,operationId:string){
  const item=target.itemReceipts.find(row=>row.providerInvoiceItemRef===ref(raw.id)&&row.creatorOperationId===operationId),component=item?target.manifest.components.find(row=>row.id===item.componentId):null;
  const operation=target.history.operations.find(row=>row.id===operationId),payload=operation?controlledCollectionPayload.safeParse(operation.originalRequest.payload):null,metadata=object.safeParse(raw.metadata);
- return !!component&&!!item&&payload?.success&&operation?.kind==="add_invoice_component"&&payload.data.componentId===component.id
+ return !!component&&!!item&&payload?.success===true&&operation?.kind==="add_invoice_component"&&payload.data.componentId===component.id
   &&merchantTaxDigest(payload.data.manifest)===merchantTaxDigest(target.manifest)&&raw.amount===component.amountMinor&&raw.currency===target.manifest.currency.toLowerCase()
   &&ref(raw.customer)===target.resource.originalScope.providerCustomerRef&&ref(raw.invoice)===target.binding?.providerInvoiceRef&&metadata.success
   &&metadata.data.freeholder_controlled_collection_id===target.manifest.collectionId&&metadata.data.freeholder_controlled_component_id===component.id
