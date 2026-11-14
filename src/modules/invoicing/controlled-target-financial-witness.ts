@@ -49,7 +49,7 @@ export function controlledTargetAncestryComplete(targets:ControlledTargetHistory
   &&calls.get(callId)?.operationId===operationId&&(!factId||facts.get(factId)?.callId===callId);
  return !targets.incomplete&&families.every(family=>new Set(targets[family].map(row=>row.id)).size===targets[family].length)
   &&targets.quotes.every(quote=>{const resource=resources.get(quote.resourceId);return resource?.subscriptionId===quote.subscriptionId&&resource.profileId===quote.originalProfileId&&resource.profileVersion===quote.originalProfileVersion
-   &&[[quote.calendarReadOperationId,"read_calendar"],[quote.customerFinancialOperationId,"read_customer_financials"],[quote.nativePreviewOperationId,"preview_proration"],[quote.updatePreviewOperationId,"preview_update"]].every(([id,kind])=>operations.get(id)?.resourceId===quote.resourceId&&operations.get(id)?.kind===kind);})
+   &&([[quote.calendarReadOperationId,"read_calendar"],[quote.customerFinancialOperationId,"read_customer_financials"],[quote.nativePreviewOperationId,"preview_proration"],[quote.updatePreviewOperationId,"preview_update"]] as const).every(([id,kind])=>operations.get(id)?.resourceId===quote.resourceId&&operations.get(id)?.kind===kind);})
   &&targets.collections.every(collection=>{const quote=quotes.get(collection.quoteId);return quote?.plannedCollectionId===collection.id&&quote.kind===collection.kind&&quote.plannedProrationId===collection.prorationId
    &&(collection.kind!=="period"||collection.invoiceId!==null&&collection.prorationId===null);})
   &&targets.components.every(component=>collections.has(component.collectionId))

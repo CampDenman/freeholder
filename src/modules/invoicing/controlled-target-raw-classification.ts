@@ -66,8 +66,9 @@ export async function controlledTargetRawClassification(tx:Tx,subscriptionId:str
   targets.push({resource:actual.resource,history:actual.history,manifest:actual.manifest,binding:actual.binding,proofs:actual.proofs,itemReceipts:actual.itemReceipts,components:actual.components,
    period:{periodAmountMinor:actual.terms.snapshot.periodAmountMinor,interval:actual.terms.snapshot.interval,intervalCount:actual.terms.snapshot.intervalCount},
    calendarAuthority:{periodStart:actual.review.calendar.expectedProviderPeriodStart,periodEnd:actual.review.calendar.expectedProviderPeriodEnd,anchor:actual.review.calendar.expectedProviderBillingAnchor,trialEnd:actual.review.calendar.expectedProviderTrialEndsAt,
-    periodAmountMinor:actual.terms.snapshot.periodAmountMinor,interval:actual.terms.snapshot.interval,intervalCount:actual.terms.snapshot.intervalCount},
-   canonicalPaidMinor:actual.canonical.invoice.paidMinor,canonicalRefundedMinor:actual.canonical.invoice.refundedMinor,cash:cash.filter(row=>row.resourceId===actual.resource.id&&row.canonicalInvoiceId===actual.canonical.invoice.id),...(prospective?{prospective}:{})});
+    periodAmountMinor:actual.terms.snapshot.periodAmountMinor,interval:actual.terms.snapshot.interval,intervalCount:actual.terms.snapshot.intervalCount,
+    ...(actual.collection.kind==="period"?{reviewedPeriodWindows:actual.review.calendar.nativeForecasts.filter(forecast=>!forecast.proration&&forecast.amountMinor===actual.terms.snapshot.periodAmountMinor).map(forecast=>({periodStart:forecast.periodStart,periodEnd:forecast.periodEnd}))}:{})},
+   canonicalCount:actual.canonical.count,canonicalPaidMinor:actual.canonical.invoice.paidMinor,canonicalRefundedMinor:actual.canonical.invoice.refundedMinor,cash:cash.filter(row=>row.resourceId===actual.resource.id&&row.canonicalInvoiceId===actual.canonical.invoice.id),...(prospective?{prospective}:{})});
  }
  const resolved=coverage.transport.unfinishedCalls.length?{resolutions:[],unresolvedFactIds:coverage.transport.rawCashReviewFactIds}:classifyControlledTargetRawFacts(targets);
  const unresolvedFactIds=[...new Set([...additionalReviewFactIds,...resolved.unresolvedFactIds,...coverage.transport.rawCashReviewFactIds.filter(id=>!resolved.resolutions.some(row=>row.factId===id))])].sort();

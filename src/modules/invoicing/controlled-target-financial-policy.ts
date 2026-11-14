@@ -11,3 +11,11 @@ export function controlledPeriodAdmission(input:{subscriptionId:string;sourceId:
   ||input.trialEnd!==null&&Date.parse(input.periodStart)<Date.parse(input.trialEnd))return false;
  return !input.pay||input.now.getTime()>=Date.parse(input.periodStart)&&(input.trialEnd===null||input.now.getTime()>=Date.parse(input.trialEnd));
 }
+
+/** A normal renewal can cross only an explicitly reviewed actual full-NET
+ * forecast. This does not change accepted service dates, anchor or trial. */
+export function controlledReviewedPeriodWindow(input:{kind:"period"|"proration";beforeUpdate:boolean;periodStart:string;periodEnd:string;expectedStart:string;expectedEnd:string;principalMinor:number;
+ forecasts:readonly{proration:boolean;amountMinor:number;periodStart:string;periodEnd:string}[]}){
+ return input.periodStart===input.expectedStart&&input.periodEnd===input.expectedEnd
+  ||!input.beforeUpdate&&input.kind==="period"&&input.forecasts.some(forecast=>!forecast.proration&&forecast.amountMinor===input.principalMinor&&forecast.periodStart===input.periodStart&&forecast.periodEnd===input.periodEnd);
+}

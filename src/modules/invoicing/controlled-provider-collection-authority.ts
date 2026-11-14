@@ -22,7 +22,7 @@ import { merchantTaxDigest } from "./merchant-tax-store";
 import { parentFinancialGraph,lockControlledParentMoney } from "./controlled-provider-financial-parent";
 import { CONTROLLED_FINANCIAL_PROTOCOL,requireControlledFinancialProtocol } from "./controlled-provider-financial-protocol";
 import { controlledTargetRawClassification } from "./controlled-target-raw-classification";
-import { controlledPeriodAdmission } from "./controlled-target-financial-policy";
+import { controlledPeriodAdmission,controlledReviewedPeriodWindow } from "./controlled-target-financial-policy";
 function refuse():never{throw new ServiceError("conflict","Recover this exact accepted target's actual original principal, bank callers, tax/credit/fee disposition and current accepted calendar before another collection. Coverage or an equal amount cannot authorize its money.");}
 const sha=z.string().regex(/^[a-f0-9]{64}$/);
 const record=z.record(z.string(),z.unknown());
@@ -76,8 +76,8 @@ export const controlledProviderCollectionAuthority=defineService({
     if(!controlledPeriodAdmission({subscriptionId:parent.id,sourceId:canonical.invoice.sourceId??"",now:new Date(),pay:["finalize_invoice","pay_invoice"].includes(input.kind),parentStart:parent.currentPeriodStart.toISOString(),parentEnd:parent.currentPeriodEnd.toISOString(),trialEnd:parent.trialEndsAt?.toISOString()??null,
      originalStart:review.calendar.originalApplicationPeriodStart,originalEnd:review.calendar.originalApplicationPeriodEnd,originalTrialEnd:review.calendar.originalTrialEndsAt,periodStart:review.calendar.proposedPeriodStart,periodEnd:review.calendar.proposedPeriodEnd,
      credits:[review.creditNetMinor,review.creditTaxMinor,review.creditAppliedMinor,review.residualCreditMinor]})
-     ||canonical.lines.some(line=>line.sourceType!=="subscription"||line.sourceId!==parent.id||line.snapshot.subscriptionTermsId!==source.terms.id
-      ||line.snapshot.subscriptionPeriodStart!==review.calendar.proposedPeriodStart||line.snapshot.subscriptionPeriodEnd!==review.calendar.proposedPeriodEnd))refuse();
+     ||canonical.lines.some(line=>{const snapshot=record.safeParse(line.snapshot);return line.sourceType!=="subscription"||line.sourceId!==parent.id||!snapshot.success||snapshot.data.subscriptionTermsId!==source.terms.id
+      ||snapshot.data.subscriptionPeriodStart!==review.calendar.proposedPeriodStart||snapshot.data.subscriptionPeriodEnd!==review.calendar.proposedPeriodEnd;}))refuse();
    }else{
     const authority=getService("subscriptions.prorationCollectionAuthority");if(!authority)refuse();
     const actual=z.object({allowed:z.boolean(),revision:sha}).parse(await ctx.callAsSystem(authority,{invoiceId:canonical.invoice.id}));if(!actual.allowed)refuse();currentProofs.push(actual);
@@ -107,8 +107,9 @@ export const controlledProviderCollectionAuthority=defineService({
    const calendar=controlledCalendarSource(history,resource.originalScope,source.terms,{providerProductRef:resource.originalScope.providerProductRef,principalMinor:review.quote.snapshot.periodAmountMinor,
     interval:review.quote.snapshot.interval,intervalCount:review.quote.snapshot.intervalCount},review.effectiveAt).payload;
    const beforeUpdate=input.kind==="update_calendar";
-   if(calendar.originalPeriodStart!==(beforeUpdate?review.calendar.originalProviderPeriodStart:review.calendar.expectedProviderPeriodStart)
-    ||calendar.originalPeriodEnd!==(beforeUpdate?review.calendar.originalProviderPeriodEnd:review.calendar.expectedProviderPeriodEnd)
+   if(!controlledReviewedPeriodWindow({kind:collection.kind,beforeUpdate,periodStart:calendar.originalPeriodStart,periodEnd:calendar.originalPeriodEnd,
+    expectedStart:beforeUpdate?review.calendar.originalProviderPeriodStart:review.calendar.expectedProviderPeriodStart,expectedEnd:beforeUpdate?review.calendar.originalProviderPeriodEnd:review.calendar.expectedProviderPeriodEnd,
+    principalMinor:review.quote.snapshot.periodAmountMinor,forecasts:review.calendar.nativeForecasts})
     ||calendar.originalAnchor!==(beforeUpdate?review.calendar.originalBillingAnchor:review.calendar.expectedProviderBillingAnchor)
     ||calendar.originalProviderTrialEnd!==(beforeUpdate?review.calendar.originalProviderTrialEndsAt:review.calendar.expectedProviderTrialEndsAt))refuse();
    if(["finalize_invoice","pay_invoice"].includes(input.kind)){

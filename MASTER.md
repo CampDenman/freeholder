@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled original preparation source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): the isolated future consumer now distinguishes
+actual original zero bootstrap invoice evidence from canonical target owners in
+mixed raw lists. It requires authenticated pre-update bootstrap ancestry plus a
+complete later list/independent invoice inventory after actual writes, original
+customer/platform/account and zero historical atom checks; unknown, ambiguous,
+contradictory and unfinished evidence stays debt. Normal-period bank rollover
+is limited to exact accepted full-NET, nonproration forecast windows while price,
+interval, anchor and trial checks remain. Eight signed raw cases and nine window
+cases are PREPARED/UNRUN, with source-only type-narrowing corrections preserved.
+No execution, SQL/model/registration or activation occurred. Initial application
+parent evaluation, staged writer/routing, exact activated-amendment late-period
+admission and actual native/provider/security acceptance remain required. See
+`deploy/controlled-bootstrap-zero-context84-source-20261113.md`.
+
 Controlled prospective context source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): a private real-Tx read-only initializer obtains the
 genuine batch bank proof itself, freezes a receipt-only retained-unapplied model
