@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled prospective context source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): a private real-Tx read-only initializer obtains the
+genuine batch bank proof itself, freezes a receipt-only retained-unapplied model
+without paymentId, verifies full PG before/after evidence and always removes its
+context. Actual raw/principal/debt reader plumbing retains actual canonical paid,
+every raw/caller row and strict receiptOnly/default guards. Complete known mixed
+invoice facts now preserve exact multiple owners/proofs; unknown/duplicate/
+ambiguous atoms stay debt without amount/current-account adoption. Twenty new
+signed-raw pure and four source controls are PREPARED/UNRUN; no execution, SQL,
+model/current-root or service-registration change occurred. Genuine full parent
+evaluation, mutation-stage context/writer/routing, original bootstrap nonpayable
+proof and native/provider/security acceptance remain required. Application and
+stable remain unactivated/open. See
+`deploy/controlled-cash-prospective-context84-source-20261113.md`.
+
 Controlled canonical stages source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): a NEW UNAPPLIED continuation independently proves
 exact real payment/invoice/route/bank-observation/fee/FIFO-plan/state-event deltas

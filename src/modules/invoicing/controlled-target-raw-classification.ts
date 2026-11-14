@@ -14,6 +14,7 @@ import { payments } from "./schema";
 import { parentFinancialGraphForTx } from "./controlled-provider-financial-parent";
 import { classifyControlledTargetRawFacts,controlledCustomerRawReview,type ControlledRawTarget,type ControlledResolvedCash } from "./controlled-target-raw-policy";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import { controlledCashProspectiveProjection } from "./controlled-cash-prospective-context";
 type Coverage=Awaited<ReturnType<typeof controlledCollectionCoverage>>;
 const hash=(row:unknown)=>sql<string>`encode(sha256(convert_to(to_jsonb(${row})::text,'UTF8')),'hex')`;
 function refuse():never{throw new ServiceError("conflict","Restore complete exact original target, current bank facts, canonical receipt/route/payment and parent financial witnesses before resolving raw review.");}
@@ -61,15 +62,17 @@ export async function controlledTargetRawClassification(tx:Tx,subscriptionId:str
  for(const collection of coverage.witness.collections){if(!collection.invoiceId)continue;
   const actual=await controlledCollectionState(tx,collection.id);
   if(actual.parent.id!==subscriptionId||actual.resource.subscriptionId!==subscriptionId||actual.collection.invoiceId!==collection.invoiceId)refuse();
+  const prospective=controlledCashProspectiveProjection(tx,{resourceId:actual.resource.id,collectionId:actual.collection.id,invoiceId:actual.canonical.invoice.id});
   targets.push({resource:actual.resource,history:actual.history,manifest:actual.manifest,binding:actual.binding,proofs:actual.proofs,itemReceipts:actual.itemReceipts,components:actual.components,
    period:{periodAmountMinor:actual.terms.snapshot.periodAmountMinor,interval:actual.terms.snapshot.interval,intervalCount:actual.terms.snapshot.intervalCount},
    calendarAuthority:{periodStart:actual.review.calendar.expectedProviderPeriodStart,periodEnd:actual.review.calendar.expectedProviderPeriodEnd,anchor:actual.review.calendar.expectedProviderBillingAnchor,trialEnd:actual.review.calendar.expectedProviderTrialEndsAt,
     periodAmountMinor:actual.terms.snapshot.periodAmountMinor,interval:actual.terms.snapshot.interval,intervalCount:actual.terms.snapshot.intervalCount},
-   canonicalPaidMinor:actual.canonical.invoice.paidMinor,canonicalRefundedMinor:actual.canonical.invoice.refundedMinor,cash:cash.filter(row=>row.resourceId===actual.resource.id&&row.canonicalInvoiceId===actual.canonical.invoice.id)});
+   canonicalPaidMinor:actual.canonical.invoice.paidMinor,canonicalRefundedMinor:actual.canonical.invoice.refundedMinor,cash:cash.filter(row=>row.resourceId===actual.resource.id&&row.canonicalInvoiceId===actual.canonical.invoice.id),...(prospective?{prospective}:{})});
  }
  const resolved=coverage.transport.unfinishedCalls.length?{resolutions:[],unresolvedFactIds:coverage.transport.rawCashReviewFactIds}:classifyControlledTargetRawFacts(targets);
  const unresolvedFactIds=[...new Set([...additionalReviewFactIds,...resolved.unresolvedFactIds,...coverage.transport.rawCashReviewFactIds.filter(id=>!resolved.resolutions.some(row=>row.factId===id))])].sort();
  if(coverage.transport.excludedOperationId)entries.delete(`subscription_controlled_operations:${coverage.transport.excludedOperationId}`);
  const evidenceEntries=[...entries].sort(([a],[b])=>a.localeCompare(b)).map(([key,fingerprint])=>{const at=key.indexOf(":");return{table:key.slice(0,at),id:key.slice(at+1),fingerprint};});
- return{resolutions:resolved.resolutions,unresolvedFactIds,additionalReviewFactIds:[...new Set(additionalReviewFactIds)].sort(),evidenceEntries,revision:merchantTaxDigest({coverageRevision:coverage.revision,resolutions:resolved.resolutions,unresolvedFactIds,evidenceEntries})};
+ const prospectiveRevisions=targets.flatMap(target=>target.prospective?[{collectionId:target.manifest.collectionId,revision:target.prospective.revision,parentPgRevision:target.prospective.parentPgRevision}]:[]).sort((a,b)=>a.collectionId.localeCompare(b.collectionId));
+ return{resolutions:resolved.resolutions,unresolvedFactIds,additionalReviewFactIds:[...new Set(additionalReviewFactIds)].sort(),evidenceEntries,revision:merchantTaxDigest({coverageRevision:coverage.revision,resolutions:resolved.resolutions,unresolvedFactIds,evidenceEntries,...(prospectiveRevisions.length?{prospectiveRevisions}:{})})};
 }

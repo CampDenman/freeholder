@@ -11,6 +11,7 @@ import { controlledRawFinancialReview } from "@/modules/subscriptions/controlled
 import { originalControlledCall,finishedControlledCall,stoppedControlledCall } from "@/modules/subscriptions/controlled-provider-proof";
 import type { controlledProviderJournal } from "@/modules/subscriptions/controlled-provider-proof";
 import type { controlledCollectionState } from "@/modules/subscriptions/controlled-provider-collection-state";
+import type { ControlledCashProspectiveProjection,RetainedUnappliedControlledCash } from "./controlled-cash-prospective-context";
 type State=Awaited<ReturnType<typeof controlledCollectionState>>;
 type History=Awaited<ReturnType<typeof controlledProviderJournal>>;
 const object=z.record(z.string(),z.unknown()),records=z.array(object).max(5000),minor=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -26,8 +27,13 @@ export type ControlledResolvedCash={receiptId:string;paymentId:string;resourceId
  * This pure policy supplies no signature, DB ownership or public admission. */
 export type ControlledRawTarget={resource:State["resource"];history:History;manifest:State["manifest"];binding:State["binding"];proofs:State["proofs"];itemReceipts:State["itemReceipts"];components:State["components"];
  period:Pick<State["terms"]["snapshot"],"periodAmountMinor"|"interval"|"intervalCount">;
- canonicalPaidMinor:number;canonicalRefundedMinor:number;cash:ControlledResolvedCash[];
+ canonicalPaidMinor:number;canonicalRefundedMinor:number;cash:ControlledResolvedCash[];prospective?:ControlledCashProspectiveProjection;
  calendarAuthority?:{periodStart:string;periodEnd:string;anchor:string;trialEnd:string|null;periodAmountMinor:number;interval:string;intervalCount:number}};
+/** Actual canonical owners stay in cash. A separately genuine private prewrite
+ * context may ALSO represent exact retained bank receipts without a paymentId.
+ * This union never changes canonicalPaidMinor or invents a principal counter. */
+function cashOwners(target:ControlledRawTarget):readonly(ControlledResolvedCash|RetainedUnappliedControlledCash)[]{return target.prospective?[...target.cash,...target.prospective.receipts]:target.cash;}
+function uniqueInvoiceTarget(targets:readonly ControlledRawTarget[],resourceId:string,invoiceRef:string|null){const owners=targets.filter(candidate=>candidate.resource.id===resourceId&&candidate.binding?.providerInvoiceRef===invoiceRef);return owners.length===1?owners[0]:null;}
 function authentic(resource:State["resource"],history:History){
  return !history.unfinished.length&&history.count<=5000&&history.operations.every(op=>op.resourceId===resource.id&&merchantTaxDigest(op.originalRequest)===op.requestDigest&&op.originalRequest.scopeDigest===merchantTaxDigest(resource.originalScope))
   &&history.calls.every(call=>{const op=history.operations.find(row=>row.id===call.operationId),finish=history.finishes.find(row=>row.callId===call.id),stop=history.stops.find(row=>row.callId===call.id);
@@ -87,6 +93,11 @@ function sameRows(left:Record<string,unknown>[],right:Record<string,unknown>[]){
  * No original raw fact, live caller, own quote or admitted read is excluded. */
 function currentProof(target:ControlledRawTarget){
  const{history,manifest,binding}=target;if(!binding||!authentic(target.resource,history)||!safeMinor(target.canonicalRefundedMinor)||target.canonicalRefundedMinor>target.canonicalPaidMinor)return null;
+ const prospective=target.prospective;
+ if(prospective&&(prospective.purpose!=="controlled_cash_prospective_read.v1"||prospective.resourceId!==target.resource.id||prospective.subscriptionId!==target.resource.subscriptionId
+  ||prospective.collectionId!==manifest.collectionId||prospective.invoiceId!==manifest.canonicalInvoiceId||prospective.acceptedQuoteDigest!==manifest.acceptedQuoteDigest||prospective.canonicalTargetDigest!==manifest.canonicalTargetDigest
+  ||prospective.actualCanonicalPaidMinor!==target.canonicalPaidMinor||prospective.manifestDigest!==merchantTaxDigest(manifest)||!prospective.receipts.length
+  ||prospective.receipts.some(row=>row.kind!=="retained_unapplied"||row.resourceId!==target.resource.id||row.collectionId!==manifest.collectionId||row.canonicalInvoiceId!==manifest.canonicalInvoiceId||row.providerInvoiceRef!==binding.providerInvoiceRef)))return null;
  const full=target.proofs.map(p=>({p,ordinal:history.operations.find(op=>op.id===p.operationId)?.ordinal??0})).sort((a,b)=>a.ordinal-b.ordinal).at(-1)?.p;
  const observed=history.verifications.filter(row=>history.operations.some(op=>op.id===row.operationId&&op.kind==="read_invoice"&&object.safeParse(op.originalRequest.payload).success
   &&object.parse(op.originalRequest.payload).providerInvoiceRef===binding.providerInvoiceRef)).at(-1);
@@ -97,6 +108,7 @@ function currentProof(target:ControlledRawTarget){
  const parsed=verification&&completeManifest?result.safeParse(verification.actualResult):null,observedBank=verification&&!completeManifest?bank.safeParse(verification.actualResult):null;
  const payload=operation&&completeManifest?controlledCollectionPayload.safeParse(operation.originalRequest.payload):null;
  if(!proof||!operation||!verification||proof.resultDigest!==verification.actualResultDigest)return null;
+ if(prospective&&(!completeManifest||proof.operationId!==prospective.manifestOperationId||proof.callId!==prospective.manifestCallId||proof.resultDigest!==prospective.manifestResultDigest))return null;
  if(completeManifest&&(!full||!parsed?.success||!payload?.success||operation.kind!=="read_manifest"||full.canonicalTargetDigest!==manifest.canonicalTargetDigest||full.customerFinancialDigest!==parsed.data.customerFinancialDigest
   ||parsed.data.manifestDigest!==controlledSubscriptionFactsDigest(manifest)||merchantTaxDigest(payload.data.manifest)!==merchantTaxDigest(manifest)
   ||payload.data.providerInvoiceRef!==binding.providerInvoiceRef||payload.data.invoiceOrigin.creatorOperationId!==binding.creatorOperationId
@@ -115,7 +127,9 @@ function currentProof(target:ControlledRawTarget){
   ||(completeManifest||inventory.paidMinor>0)&&inventory.totalMinor!==manifest.cashDueMinor
   ||!completeManifest&&inventory.totalMinor!==Number(inventory.actualLines.reduce((sum,line)=>sum+BigInt(typeof line.amount==="number"&&Number.isSafeInteger(line.amount)?line.amount:0),0n))
   ||inventory.actualInvoice.amount_paid!==inventory.paidMinor||inventory.actualInvoice.amount_remaining!==inventory.remainingMinor
-  ||inventory.remainingMinor!==inventory.totalMinor-inventory.paidMinor||inventory.paidMinor!==target.canonicalPaidMinor
+  ||inventory.remainingMinor!==inventory.totalMinor-inventory.paidMinor
+  ||(prospective?inventory.paidMinor!==prospective.actualBankPaidMinor||inventory.remainingMinor!==prospective.actualBankRemainingMinor
+   ||BigInt(inventory.paidMinor)!==BigInt(target.canonicalPaidMinor)+prospective.receipts.reduce((sum,row)=>sum+BigInt(row.amountMinor),0n):inventory.paidMinor!==target.canonicalPaidMinor)
   ||((completeManifest||inventory.paidMinor>0)&&(inventory.actualInvoice.application_fee_amount??0)!==manifest.applicationFeeMinor)||!["draft","open","paid"].includes(inventory.status))return null;
  const invoiceFacts=history.facts.filter(fact=>fact.callId===proof.callId&&fact.actual.kind==="invoice_read");
  if(invoiceFacts.length!==1||merchantTaxDigest(invoiceFacts[0]!.actual.raw)!==merchantTaxDigest(inventory.actualInvoice)
@@ -141,19 +155,21 @@ function currentProof(target:ControlledRawTarget){
    ||intent.amount_received>intent.amount||intent.amount>manifest.cashDueMinor||intent.amount_capturable!==0||ref(intent.customer)!==target.resource.originalScope.providerCustomerRef
    ||intent.currency!==manifest.currency.toLowerCase()||!merchantIntentEvidence(target.resource.originalScope,intent).merchantRouteVerified)return null;
   payments.add(pi);paid+=BigInt(intent.amount_received);
-  if(intent.amount_received>0){const cash=target.cash.filter(row=>row.providerIntentRef===pi&&row.resourceId===target.resource.id&&row.canonicalInvoiceId===manifest.canonicalInvoiceId&&row.providerInvoiceRef===binding.providerInvoiceRef);
+  if(intent.amount_received>0){const cash=cashOwners(target).filter(row=>row.providerIntentRef===pi&&row.resourceId===target.resource.id&&row.canonicalInvoiceId===manifest.canonicalInvoiceId&&row.providerInvoiceRef===binding.providerInvoiceRef);
    const original=cash.length===1?history.chargeOrigins.filter(row=>row.receiptId===cash[0]!.receiptId&&row.resourceId===target.resource.id):[];
    const origin=original.length===1?original[0]:null,originFact=origin?history.facts.find(row=>row.id===origin.factId&&row.callId===origin.callId&&row.actual.kind==="cash_observed"):null;
    const originCall=origin?history.calls.find(row=>row.id===origin.callId&&row.operationId===origin.operationId):null,originOperation=origin?history.operations.find(row=>row.id===origin.operationId):null;
    const originalCash=originFact?controlledCashEvidence.safeParse(originFact.actual.raw.cash):null;
+   const firstCash=cash[0],retained=firstCash&&"kind"in firstCash?firstCash:null;
    if(!origin||!originFact||!originCall||!originOperation||!originalCash?.success||originalCash.data.providerPaymentIntentRef!==pi||originalCash.data.providerInvoiceRef!==binding.providerInvoiceRef
     ||originalCash.data.amountMinor!==intent.amount_received||originalCash.data.currency!==manifest.currency
+    ||retained&&(retained.originOperationId!==originOperation.id||retained.originCallId!==originCall.id||retained.originFactId!==originFact.id)
     ||origin.originalEvidenceDigest!==merchantTaxDigest({resource:target.resource,operation:originOperation,call:originCall,fact:originFact,cash:originalCash.data}))return null;
    if(intent.status!=="succeeded"||payment.status!=="paid"||cash.length!==1||cash[0]!.amountMinor!==intent.amount_received||cash[0]!.currency!==manifest.currency
     ||cash[0]!.providerChargeRef!==ref(intent.latest_charge)||!inventory.actualCash.some(row=>row.providerPaymentIntentRef===pi&&row.amountMinor===intent.amount_received&&row.currency===manifest.currency))return null;
   }else if(!["canceled","requires_payment_method"].includes(String(intent.status))||!["canceled","open"].includes(String(payment.status)))return null;
  }
- if(payments.size!==inventory.actualIntents.length||paid!==BigInt(inventory.paidMinor)||target.cash.filter(row=>row.canonicalInvoiceId===manifest.canonicalInvoiceId).length!==inventory.actualCash.length)return null;
+ if(payments.size!==inventory.actualIntents.length||paid!==BigInt(inventory.paidMinor)||cashOwners(target).filter(row=>row.canonicalInvoiceId===manifest.canonicalInvoiceId).length!==inventory.actualCash.length)return null;
  for(const mutation of history.operations){if(mutation.ordinal<=operation.ordinal||!history.calls.some(call=>call.operationId===mutation.id)||!["create_draft","add_invoice_component","set_invoice_fee","finalize_invoice","pay_invoice","void_invoice","delete_draft","update_calendar"].includes(mutation.kind))continue;
   const body=object.safeParse(mutation.originalRequest.payload),m=body.success?object.safeParse(body.data.manifest):null;
   if(body.success&&(body.data.providerInvoiceRef===binding.providerInvoiceRef||body.data.collectionId===manifest.collectionId||m?.success&&m.data.collectionId===manifest.collectionId))return null;
@@ -196,7 +212,7 @@ function exactIntentSnapshot(target:ControlledRawTarget,proof:NonNullable<Return
  const actual=proof.inventory.actualIntents.find(row=>ref(row.id)===ref(raw.id));
  return !!actual&&ref(raw.customer)===target.resource.originalScope.providerCustomerRef&&raw.currency===target.manifest.currency.toLowerCase()
   &&raw.amount===actual.amount&&safeMinor(raw.amount_received)&&raw.amount_capturable===0
-  &&(raw.amount_received===0||raw.amount_received===actual.amount_received&&target.cash.some(row=>row.providerIntentRef===ref(raw.id)&&row.amountMinor===raw.amount_received))
+  &&(raw.amount_received===0||raw.amount_received===actual.amount_received&&cashOwners(target).some(row=>row.providerIntentRef===ref(raw.id)&&row.amountMinor===raw.amount_received))
   &&merchantIntentEvidence(target.resource.originalScope,raw).merchantRouteVerified;
 }
 function exactItemSnapshot(target:ControlledRawTarget,raw:Record<string,unknown>,operationId:string){
@@ -248,30 +264,38 @@ function exactCalendarSnapshot(target:ControlledRawTarget,raw:Record<string,unkn
   ||price.data.unit_amount!==expected.periodAmountMinor||price.data.currency!==scope.currency.toLowerCase()||ref(price.data.product)!==destination.data.providerProductRef
   ||!recurring?.success||recurring.data.interval!==expected.interval||recurring.data.interval_count!==expected.intervalCount
   ||price.data.unit_amount_decimal!==undefined&&(typeof price.data.unit_amount_decimal!=="string"||!new RegExp(`^${expected.periodAmountMinor}(?:\\.0+)?$`).test(price.data.unit_amount_decimal)))return false;
- const latest=ref(raw.latest_invoice);if(latest){const owner=targets.find(candidate=>candidate.resource.id===target.resource.id&&candidate.binding?.providerInvoiceRef===latest),proof=owner?proofFor(owner):null;
+ const latest=ref(raw.latest_invoice);if(latest){const owner=uniqueInvoiceTarget(targets,target.resource.id,latest),proof=owner?proofFor(owner):null;
   if(!owner||!proof)return false;const invoice=object.safeParse(raw.latest_invoice);if(invoice.success&&!exactInvoiceSnapshot(owner,proof,invoice.data,read.verification.callId))return false;
  }else if(raw.latest_invoice!==null)return false;
  return true;
 }
+type ControlledRawResolutionCommon={factId:string;disposition:"owned_nonautomatic_obligation"|"canonical_cash"|"retained_unapplied_cash";receiptIds:string[];bankProofs:Array<{collectionId:string;operationId:string;callId:string}>};
+export type ControlledRawResolution=ControlledRawResolutionCommon&({collectionId:string;proofOperationId:string;proofCallId:string;canonicalRefundedMinor:number}
+ |{collectionId:null;collectionIds:string[];proofOperationId:null;proofCallId:null;canonicalRefundedMinor:null;canonicalRefunds:Array<{collectionId:string;amountMinor:number}>});
 /** Returns derived resolutions only; every original fact/reason/row SHA remains
- * in coverage. Positive amounts must map to already real canonical cash, while
- * a nonpayable exact draft/component is merely a retained owned obligation.
+ * in coverage. Positive amounts map to actual canonical cash or the distinct
+ * genuine private retained-receipt context; canonical paid is never invented.
+ * A nonpayable exact draft/component is merely a retained owned obligation.
  * Nothing here grants paid/access, remits fees or releases another bank caller. */
 export function classifyControlledTargetRawFacts(targets:readonly ControlledRawTarget[]){
  const proofs=new Map(targets.map(target=>[target,currentProof(target)]));const proofFor=(target:ControlledRawTarget)=>proofs.get(target)??null;
- const resolutions=new Map<string,{factId:string;collectionId:string;proofOperationId:string;proofCallId:string;disposition:"owned_nonautomatic_obligation"|"canonical_cash";receiptIds:string[];canonicalRefundedMinor:number;bankProofs:Array<{collectionId:string;operationId:string;callId:string}>}>(),unresolved=new Set<string>(),ambiguous=new Set<string>();
+ const resolutions=new Map<string,ControlledRawResolution>(),unresolved=new Set<string>(),ambiguous=new Set<string>();
  for(const target of targets){const review=controlledRawFinancialReview(target.resource,target.history);for(const fact of review.facts)unresolved.add(fact.factId);for(const id of controlledCustomerRawReview(target.resource,target.history))unresolved.add(id);}
  for(const target of targets){const proof=proofFor(target),calendar=calendarRead(target);if(proof&&!proof.inventory.actualLines.every(line=>exactLine(target,line,proof.operation.id)))continue;
   if(!proof&&!calendar)continue;
   const review=controlledRawFinancialReview(target.resource,target.history);
   for(const financial of review.facts){const fact=target.history.facts.find(row=>row.id===financial.factId),operation=target.history.operations.find(row=>row.id===financial.operationId);if(!fact||!operation)continue;
    const raw=fact.actual.raw;let owned=false;const calendarFact=["subscription_read","calendar_updated","pause_subscription","bootstrap_subscription"].includes(fact.actual.kind);
-   function bankFact(proof:NonNullable<ReturnType<typeof currentProof>>){
-    let owned=false;
+   function bankFact(proof:NonNullable<ReturnType<typeof currentProof>>):{owned:boolean;listOwners:ControlledRawTarget[]|null}{
+    let owned=false;let listOwners:ControlledRawTarget[]|null=null;
     switch(fact.actual.kind){
-    case"invoice_list_read":owned=completePages(target.history,fact.callId,"invoice_list_read")!==null&&Array.isArray(raw.data)&&raw.data.every(value=>{const invoice=object.safeParse(value);if(!invoice.success)return false;const data=invoice.data;
-      const owner=targets.find(candidate=>candidate.resource.id===target.resource.id&&candidate.binding?.providerInvoiceRef===ref(data.id)),actual=owner?proofFor(owner):null;
-      return !!owner&&!!actual&&exactInvoiceSnapshot(owner,actual,data,fact.callId);});break;
+    case"invoice_list_read":{
+     const pages=completePages(target.history,fact.callId,"invoice_list_read"),owners:ControlledRawTarget[]=[];
+     owned=pages!==null&&new Set(pages.map(row=>ref(row.id))).size===pages.length&&Array.isArray(raw.data)&&raw.data.every(value=>{const invoice=object.safeParse(value);if(!invoice.success)return false;const data=invoice.data;
+      const owner=uniqueInvoiceTarget(targets,target.resource.id,ref(data.id)),actual=owner?proofFor(owner):null;
+      if(!owner||!actual||!exactInvoiceSnapshot(owner,actual,data,fact.callId))return false;owners.push(owner);return true;});
+     if(owned)listOwners=[...new Set(owners)].sort((a,b)=>a.manifest.collectionId.localeCompare(b.manifest.collectionId));break;
+    }
     case"invoice_read":case"controlled_draft_created":case"controlled_invoice_updated":case"controlled_invoice_finalized":case"controlled_invoice_paid":
      owned=exactInvoiceSnapshot(target,proof,raw,fact.callId);break;
     case"intent_read":owned=exactIntentSnapshot(target,proof,raw);break;
@@ -284,7 +308,7 @@ export function classifyControlledTargetRawFacts(targets:readonly ControlledRawT
       &&data.providerInvoiceRef===target.binding?.providerInvoiceRef&&data.providerPaymentIntentRef===ref(intent.data.id)&&data.amountMinor===intent.data.amount_received
       &&data.currency===target.manifest.currency&&data.merchantRouteVerified===true&&ref(payment.data.invoice)===target.binding?.providerInvoiceRef
       &&ref(relation.data.payment_intent)===ref(intent.data.id)&&exactIntentSnapshot(target,proof,intent.data)&&exactInvoiceSnapshot(target,proof,invoice.data,fact.callId)
-      &&target.cash.some(row=>row.providerIntentRef===data.providerPaymentIntentRef&&row.amountMinor===data.amountMinor&&row.currency===data.currency);
+      &&cashOwners(target).some(row=>row.providerIntentRef===data.providerPaymentIntentRef&&row.amountMinor===data.amountMinor&&row.currency===data.currency);
      break;
     }
     case"invoice_lines_read":owned=completePages(target.history,fact.callId,"invoice_lines_read")!==null&&Array.isArray(raw.data)&&raw.data.every(value=>{const line=object.safeParse(value);if(!line.success)return false;const data=line.data;
@@ -296,18 +320,24 @@ export function classifyControlledTargetRawFacts(targets:readonly ControlledRawT
        &&relation.data.type==="payment_intent"&&currentRelation.data.type==="payment_intent"&&ref(relation.data.payment_intent)===ref(currentRelation.data.payment_intent)&&data.amount_requested===actual.amount_requested
        &&(data.amount_paid===0||data.amount_paid===actual.amount_paid);});break;
     default:break;
-    }return owned;
+    }return{owned,listOwners};
    }
-   owned=calendarFact?exactCalendarSnapshot(target,raw,targets,proofFor):proof?bankFact(proof):false;
-   const bankOwners=targets.flatMap(candidate=>{if(candidate.resource.id!==target.resource.id||!candidate.binding)return[];
+   const bankResult=!calendarFact&&proof?bankFact(proof):null,listOwners=bankResult?.listOwners??null;
+   owned=calendarFact?exactCalendarSnapshot(target,raw,targets,proofFor):bankResult?.owned??false;
+   const bankOwners=listOwners!==null?listOwners.flatMap(candidate=>{const current=proofFor(candidate);return current?[{candidate,current}]:[];}):targets.flatMap(candidate=>{if(candidate.resource.id!==target.resource.id||!candidate.binding)return[];
     const current=proofFor(candidate);return current&&(financial.providerInvoiceRefs.includes(candidate.binding.providerInvoiceRef)||current.inventory.actualIntents.some(intent=>financial.providerIntentRefs.includes(ref(intent.id)??"")))?[{candidate,current}]:[];});
    const positiveKnown=financial.reportedPositiveMoney?bankOwners.some(owner=>owner.current.inventory.paidMinor>0):true;
-   const proofIdentity=calendarFact&&calendar?{operationId:calendar.operation.id,callId:calendar.verification.callId}:proof?{operationId:proof.operation.id,callId:proof.proof.callId}:null;
+   const singleListOwner=listOwners?.length===1?listOwners[0]:null,singleListProof=singleListOwner?proofFor(singleListOwner):null;
+   const resolutionTarget=singleListOwner??target;
+   const proofIdentity=singleListProof?{operationId:singleListProof.operation.id,callId:singleListProof.proof.callId}:calendarFact&&calendar?{operationId:calendar.operation.id,callId:calendar.verification.callId}:proof?{operationId:proof.operation.id,callId:proof.proof.callId}:null;
    if(!owned||!proofIdentity||ambiguous.has(fact.id)||!positiveKnown)continue;
-   const prior=resolutions.get(fact.id);if(prior&&prior.collectionId!==target.manifest.collectionId){resolutions.delete(fact.id);unresolved.add(fact.id);ambiguous.add(fact.id);continue;}
-   resolutions.set(fact.id,{factId:fact.id,collectionId:target.manifest.collectionId,proofOperationId:proofIdentity.operationId,proofCallId:proofIdentity.callId,
-    canonicalRefundedMinor:target.canonicalRefundedMinor,bankProofs:bankOwners.map(({candidate,current})=>({collectionId:candidate.manifest.collectionId,operationId:current.operation.id,callId:current.proof.callId})),
-    disposition:financial.reportedPositiveMoney?"canonical_cash":"owned_nonautomatic_obligation",receiptIds:financial.reportedPositiveMoney?[...new Set(targets.flatMap(candidate=>candidate.cash).filter(row=>row.resourceId===target.resource.id&&(financial.providerIntentRefs.length?financial.providerIntentRefs.includes(row.providerIntentRef):financial.providerInvoiceRefs.includes(row.providerInvoiceRef))).map(row=>row.receiptId))].sort():[]});
+   const factCash=(listOwners??targets).flatMap(candidate=>cashOwners(candidate)).filter(row=>row.resourceId===target.resource.id&&(financial.providerIntentRefs.length?financial.providerIntentRefs.includes(row.providerIntentRef):financial.providerInvoiceRefs.includes(row.providerInvoiceRef)));
+   const common:ControlledRawResolutionCommon={factId:fact.id,bankProofs:bankOwners.map(({candidate,current})=>({collectionId:candidate.manifest.collectionId,operationId:current.operation.id,callId:current.proof.callId})),
+    disposition:financial.reportedPositiveMoney?factCash.some(row=>"kind"in row)?"retained_unapplied_cash":"canonical_cash":"owned_nonautomatic_obligation",receiptIds:financial.reportedPositiveMoney?[...new Set(factCash.map(row=>row.receiptId))].sort():[]};
+   const next:ControlledRawResolution=listOwners&&listOwners.length>1?{...common,collectionId:null,collectionIds:listOwners.map(owner=>owner.manifest.collectionId),proofOperationId:null,proofCallId:null,canonicalRefundedMinor:null,canonicalRefunds:listOwners.map(owner=>({collectionId:owner.manifest.collectionId,amountMinor:owner.canonicalRefundedMinor}))}
+    :{factId:common.factId,collectionId:resolutionTarget.manifest.collectionId,proofOperationId:proofIdentity.operationId,proofCallId:proofIdentity.callId,canonicalRefundedMinor:resolutionTarget.canonicalRefundedMinor,bankProofs:common.bankProofs,disposition:common.disposition,receiptIds:common.receiptIds};
+   const prior=resolutions.get(fact.id);if(prior&&(prior.collectionId!==next.collectionId||prior.collectionId===null&&merchantTaxDigest(prior)!==merchantTaxDigest(next))){resolutions.delete(fact.id);unresolved.add(fact.id);ambiguous.add(fact.id);continue;}
+   resolutions.set(fact.id,next);
    unresolved.delete(fact.id);
   }
  }
