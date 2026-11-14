@@ -149,3 +149,18 @@ New explicit safe archive excludes private fee coordinates for buyers and all
 MAC/preimage/provider/hosting payloads. Merchant fee/interval fields require an
 exact owned profile scope. Four nested-private-canary controls PREPARED/UNRUN.
 These helpers are not registered/composed into root and grant no authority.
+
+The reservation-purpose BEFORE function is now also source-written, with the
+same exact actual newborn parent/full-PG/held-prefix/independently current source
+and one-own-parent PG reconstruction. No trigger or readiness is enabled yet.
+Both deferred final-conservation bodies and readiness plus all three original
+successors remain unfinished. Current exact shared-writer tracing confirms
+later actual changes to proration job/task/state and subscription pending plan/
+updatedAt, followed by q-planned collection/component births. Root approved
+separate NEW B private owner preimages: actual full-PG hash verified FIRST,
+explicit listed fields only, exact PostgreSQL timestamp precision/offset kept.
+They are comparison inputs only; deferred permission still requires genuine
+enqueue/task/accepted-q/new-plan proof. Timeline emits only a separate timeline
+row; no contact update was found in that actual shared helper. Provider I/O or
+money/access effects remain absent from this acceptance transaction. Four
+preimage contract controls PREPARED/UNRUN; no broader field subtraction exists.

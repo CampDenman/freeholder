@@ -8,7 +8,7 @@ import {atomicCreditFeeEconomicPlan,atomicCreditFeeStoredEconomics} from "./atom
 import {atomicCreditFeeCapacities,type AtomicCreditFeeCapacityInput} from "./atomic-credit-fee-amounts";
 import {selectAtomicCreditFeeSegments} from "./atomic-credit-reservation-segments";
 import type {AtomicCreditFeeSegment} from "./atomic-credit-reservation-contract";
-import {captureAtomicCreditInvoiceProjections} from "./atomic-credit-before-image";
+import {captureAtomicCreditInvoiceProjections,captureAtomicCreditOwnerProjections} from "./atomic-credit-before-image";
 import {readAtomicCreditLegacyApplication} from "./atomic-credit-legacy-application";
 import type {AtomicCreditFeeEconomicPlan} from "./atomic-credit-fee-partition-contract";
 import {readAtomicCreditFeeAncestry} from "./atomic-credit-fee-ancestry";
@@ -159,7 +159,8 @@ export async function controlledAtomicCreditFeePartition(ctx:ServiceContext,inpu
    ||actual.remaining_principal_minor!==plan.remainingPrincipalMinor||actual.remaining_actual_fee_minor!==plan.remainingActualFeeMinor)refuse();return actual;
  };
  const actualSql=await sqlCandidate(),postgresSourceRevision=actualSql.evidence_fingerprint,beforeInvoiceProjections=await captureAtomicCreditInvoiceProjections(ctx.tx,beforeEntries);
- const storedEconomics=atomicCreditFeeStoredEconomics.parse({plan,currentParentRevision,postgresSourceRevision,beforeInvoiceProjections,currentFeeProofRevision,bankNamespaceRevision,sourceGraphRevision:prefix.revision,feeEvidenceDigest,birthDeclaration:null});
+ const ownerProjections=await captureAtomicCreditOwnerProjections(ctx.tx,beforeEntries);
+ const storedEconomics=atomicCreditFeeStoredEconomics.parse({plan,currentParentRevision,postgresSourceRevision,beforeInvoiceProjections,...ownerProjections,currentFeeProofRevision,bankNamespaceRevision,sourceGraphRevision:prefix.revision,feeEvidenceDigest,birthDeclaration:null});
  const afterPrefix=await assertAtomicCreditSourcePrefix(ctx,[payment.id]),afterOwner=await controlledAtomicFeeOwner(ctx,payment.id),afterReturns=await readAtomicFeeReturnResources(ctx,payment.id);
  if(afterPrefix.revision!==prefix.revision||!afterOwner||afterOwner.revision!==owner.revision||!afterReturns||afterReturns.revision!==returns.revision
   ||await readBankRevision()!==bankNamespaceRevision||merchantTaxDigest(await currentEntries())!==currentParentRevision||merchantTaxDigest(await sqlCandidate())!==merchantTaxDigest(actualSql))refuse();

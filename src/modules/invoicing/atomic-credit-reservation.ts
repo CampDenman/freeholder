@@ -14,7 +14,7 @@ import {readAtomicCreditFeeAncestry} from "./atomic-credit-fee-ancestry";
 import {signAtomicCreditReservation,verifiedAtomicCreditReservation} from "./atomic-credit-reservation-proof";
 import {originalCashEvidenceKeys} from "./original-cash-recovery-store";
 import {merchantTaxDigest} from "./merchant-tax-store";
-import {captureAtomicCreditInvoiceProjections} from "./atomic-credit-before-image";
+import {captureAtomicCreditInvoiceProjections,captureAtomicCreditOwnerProjections} from "./atomic-credit-before-image";
 function refuse():never{throw new ServiceError("conflict","Restore the exact current B funding, original interval/caps, every application/release and real same-transaction reservation birth before consuming its fee capacity.");}
 /** Ordinary private reader. The real outer writer already holds the complete
  * discovered source/target prefix. No lock is acquired late and no provider I/O
@@ -52,9 +52,10 @@ export async function readAtomicCreditReservationPartition(ctx:ServiceContext,in
  if(sqlRows.length!==1||!actual||actual.known!==true||actual.funding_id!==funding.id||actual.root_funding_id!==root.fundingId||actual.source_payment_id!==funding.sourcePaymentId||actual.source_application_id!==funding.sourceApplicationId
   ||actual.principal_minor!==selected.selected.amountMinor||actual.nominal_fee_minor!==selected.selected.nominalFeeMinor||actual.retired_fee_minor!==selected.selected.retiredFeeMinor||actual.assigned_fee_minor!==selected.selected.assignedFeeMinor||actual.collected_fee_minor!==selected.selected.provenCollectedMinor||actual.owed_fee_minor!==selected.selected.owedFeeMinor
   ||merchantTaxDigest(actual.segments)!==merchantTaxDigest(selected.segments)||merchantTaxDigest(actual.active_reservation_ids)!==merchantTaxDigest(active.map(row=>row.id).sort())||merchantTaxDigest(actual.released_reservation_ids)!==merchantTaxDigest(released.map(row=>row.reservationId).sort())||!/^[a-f0-9]{64}$/.test(actual.evidence_fingerprint))refuse();
+ const ownerProjections=await captureAtomicCreditOwnerProjections(ctx.tx,beforeEntries);
  const body={protocol:ATOMIC_CREDIT_RESERVATION_PROTOCOL,rootKind:rootPlan.rootKind,rootApplicationId:rootPlan.rootApplicationId,legacyApplicationRevision:rootPlan.legacyApplicationRevision,rootFundingId:root.fundingId,sourcePaymentId:funding.sourcePaymentId,originalPrincipalMinor:rootPlan.originalRootPrincipalMinor,originalFeeMinor:rootPlan.originalRootFeeMinor,rootEconomicRevision:rootPlan.economicRevision,
   fundingId:funding.id,sourceApplicationId:funding.sourceApplicationId,fundingEconomicRevision:plan.economicRevision,fundingNominalFeeMinor:selected.whole.nominalFeeMinor,fundingRetiredFeeMinor:selected.whole.retiredFeeMinor,fundingAssignedFeeMinor:selected.whole.assignedFeeMinor,fundingProvenCollectedMinor:selected.whole.provenCollectedMinor,fundingOwedFeeMinor:selected.whole.owedFeeMinor,
-  segments:selected.segments,...selected.selected,activeReservationIds:active.map(row=>row.id).sort(),releasedReservationIds:released.map(row=>row.reservationId).sort(),currentSourceRevision,postgresSourceRevision:actual.evidence_fingerprint,beforeInvoiceProjections};
+  segments:selected.segments,...selected.selected,activeReservationIds:active.map(row=>row.id).sort(),releasedReservationIds:released.map(row=>row.reservationId).sort(),currentSourceRevision,postgresSourceRevision:actual.evidence_fingerprint,beforeInvoiceProjections,...ownerProjections};
  const economics=atomicCreditReservationEconomics.parse({...body,economicRevision:merchantTaxDigest(body)});
  const fingerprint=ancestry.physical.find(row=>row.table==="invoice_credit_funding_atomic_fee_partitions"&&row.id===funding.id)?.fingerprint;if(!fingerprint||actual.funding_partition_fingerprint!==fingerprint)refuse();
  const after=await readAtomicCreditFeeAncestry(ctx.tx,funding.sourcePaymentId);if(after.revision!==ancestry.revision)refuse();

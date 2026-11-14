@@ -3,7 +3,7 @@
 import {z} from "zod";
 import {ATOMIC_CREDIT_FEE_PROTOCOL} from "./atomic-credit-fee-protocol";
 import {atomicCreditFeeSegment} from "./atomic-credit-reservation-contract";
-import {atomicCreditInvoiceProjection} from "./atomic-credit-before-image-contract";
+import {atomicCreditInvoiceProjection,atomicCreditProrationProjection,atomicCreditSubscriptionProjection} from "./atomic-credit-before-image-contract";
 const minor=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),uuid=z.uuid(),sha=z.string().regex(/^[a-f0-9]{64}$/);
 export const atomicCreditLegacyEpochProof=z.object({protocol:z.literal("freeholder.atomic-credit-legacy-application-epoch.v1"),applicationId:uuid,quoteId:uuid,quoteFingerprint:sha,acceptedProrationId:uuid,sourcePrincipalId:uuid,
  applicationFingerprint:sha,reservationFingerprint:sha,fundingFingerprint:sha,principalMinor:minor.positive(),feeMinor:minor,provenMinor:minor}).strict();
@@ -20,7 +20,7 @@ export const atomicCreditFeeEconomicPlan=z.object({
 }).strict();
 export type AtomicCreditFeeEconomicPlan=z.infer<typeof atomicCreditFeeEconomicPlan>;
 export const atomicCreditFeeBirthDeclaration=z.object({quoteId:uuid,plannedFundingId:uuid,prorationId:uuid,sourcePrincipalId:uuid,creditNoteId:uuid,creditNoteLineId:uuid,declarationDigest:sha,declarationAuthentication:sha,quoteFingerprint:sha}).strict();
-export const atomicCreditFeeStoredEconomics=z.object({plan:atomicCreditFeeEconomicPlan,currentParentRevision:sha,postgresSourceRevision:sha,beforeInvoiceProjections:z.array(atomicCreditInvoiceProjection).max(5000),currentFeeProofRevision:sha,bankNamespaceRevision:sha,sourceGraphRevision:sha,feeEvidenceDigest:sha,birthDeclaration:atomicCreditFeeBirthDeclaration.nullable()}).strict();
+export const atomicCreditFeeStoredEconomics=z.object({plan:atomicCreditFeeEconomicPlan,currentParentRevision:sha,postgresSourceRevision:sha,beforeInvoiceProjections:z.array(atomicCreditInvoiceProjection).max(5000),beforeProrationProjections:z.array(atomicCreditProrationProjection).max(5000),beforeSubscriptionProjections:z.array(atomicCreditSubscriptionProjection).max(5000),currentFeeProofRevision:sha,bankNamespaceRevision:sha,sourceGraphRevision:sha,feeEvidenceDigest:sha,birthDeclaration:atomicCreditFeeBirthDeclaration.nullable()}).strict();
 export type AtomicCreditFeeStoredEconomics=z.infer<typeof atomicCreditFeeStoredEconomics>;
 export const atomicCreditFeePhysicalEntry=z.object({table:z.string().min(1),id:z.string().min(1),fingerprint:sha,hashDomain:z.literal("postgres_row")}).strict();
 export type AtomicCreditFeePhysicalEntry=z.infer<typeof atomicCreditFeePhysicalEntry>;

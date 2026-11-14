@@ -564,3 +564,64 @@ BEGIN
   RAISE EXCEPTION 'Only this exact actual newborn parent may be reconstructed; every other current physical source/callback remains unchanged' USING ERRCODE='23514';END IF;
  RETURN NEW;
 END $$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_guard_credit_atomic_reservation() RETURNS trigger LANGUAGE plpgsql VOLATILE AS $$
+DECLARE actual_parent invoice_credit_reservations%ROWTYPE;actual_funding invoice_credit_funding%ROWTYPE;funding_purpose invoice_credit_funding_atomic_fee_partitions%ROWTYPE;root_purpose invoice_credit_funding_atomic_fee_partitions%ROWTYPE;
+ parent_xid text;economics jsonb;plan jsonb;scope jsonb;physical_count bigint;physical_revision text;conflicting_physical boolean;source_capacity record;required_resource uuid;required_key text;
+BEGIN
+ IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Original reservation fee intervals are immutable' USING ERRCODE='23514';END IF;
+ IF NOT freeholder_credit_atomic_fee_ready() OR NEW.protocol IS DISTINCT FROM 'freeholder.atomic-credit-fee-reservation.v1'
+  OR NEW.admission_transaction_id IS DISTINCT FROM pg_current_xact_id()::text THEN RAISE EXCEPTION 'Use the genuine installed original reservation protocol in its actual birth transaction' USING ERRCODE='23514';END IF;
+ SELECT original_parent.* INTO actual_parent FROM invoice_credit_reservations original_parent WHERE original_parent.id=NEW.reservation_id;
+ SELECT original_parent.xmin::text INTO parent_xid FROM invoice_credit_reservations original_parent WHERE original_parent.id=NEW.reservation_id;
+ SELECT original_funding.* INTO actual_funding FROM invoice_credit_funding original_funding WHERE original_funding.id=actual_parent.funding_id;
+ SELECT original_purpose.* INTO funding_purpose FROM invoice_credit_funding_atomic_fee_partitions original_purpose WHERE original_purpose.funding_id=actual_funding.id;
+ SELECT original_root.* INTO root_purpose FROM invoice_credit_funding_atomic_fee_partitions original_root WHERE original_root.funding_id=NEW.root_funding_id;
+ IF actual_parent.id IS NULL OR actual_funding.id IS NULL OR funding_purpose.funding_id IS NULL OR root_purpose.funding_id IS NULL
+  OR parent_xid IS DISTINCT FROM mod(pg_current_xact_id()::text::numeric,4294967296)::text
+  OR NEW.parent_fingerprint IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(actual_parent)::text,'UTF8')),'hex')
+  OR funding_purpose.parent_fingerprint IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(actual_funding)::text,'UTF8')),'hex')
+  OR NEW.funding_partition_fingerprint IS DISTINCT FROM encode(sha256(convert_to(to_jsonb(funding_purpose)::text,'UTF8')),'hex')
+  OR actual_parent.funding_id IS DISTINCT FROM NEW.funding_id OR actual_funding.source_payment_id IS DISTINCT FROM NEW.source_payment_id OR actual_funding.source_application_id IS DISTINCT FROM NEW.source_application_id
+  OR root_purpose.source_payment_id IS DISTINCT FROM NEW.source_payment_id OR root_purpose.economics->'plan'->>'rootFundingId' IS NOT NULL THEN
+  RAISE EXCEPTION 'The actual newborn reservation, original funding and immutable original root must be exact' USING ERRCODE='23514';END IF;
+ economics:=NEW.economics;plan:=funding_purpose.economics->'plan';
+ IF jsonb_typeof(economics) IS DISTINCT FROM 'object' OR economics->>'fundingId' IS DISTINCT FROM actual_funding.id::text OR economics->>'rootFundingId' IS DISTINCT FROM NEW.root_funding_id::text
+  OR economics->>'sourcePaymentId' IS DISTINCT FROM NEW.source_payment_id::text OR economics->>'sourceApplicationId' IS DISTINCT FROM NEW.source_application_id::text
+  OR economics->>'fundingEconomicRevision' IS DISTINCT FROM plan->>'economicRevision' OR economics->>'rootEconomicRevision' IS DISTINCT FROM root_purpose.economics->'plan'->>'economicRevision'
+  OR economics->>'rootKind' IS DISTINCT FROM root_purpose.economics->'plan'->>'rootKind' OR economics->>'rootApplicationId' IS DISTINCT FROM root_purpose.economics->'plan'->>'rootApplicationId'
+  OR economics->>'legacyApplicationRevision' IS DISTINCT FROM root_purpose.economics->'plan'->>'legacyApplicationRevision'
+  OR economics->>'originalPrincipalMinor' IS DISTINCT FROM root_purpose.economics->'plan'->>'originalRootPrincipalMinor' OR economics->>'originalFeeMinor' IS DISTINCT FROM root_purpose.economics->'plan'->>'originalRootFeeMinor'
+  OR economics->>'amountMinor' IS DISTINCT FROM actual_parent.amount_minor::text OR economics->>'assignedFeeMinor' IS DISTINCT FROM actual_parent.fee_obligation_minor::text OR economics->>'provenCollectedMinor' IS DISTINCT FROM actual_parent.fee_proven_collected_minor::text
+  OR actual_parent.fee_collection_state IS DISTINCT FROM actual_funding.fee_collection_state OR actual_parent.fee_unexpected IS DISTINCT FROM actual_funding.fee_unexpected
+  OR EXISTS(SELECT 1 FROM jsonb_array_elements(NEW.before_entries) prior_entry(value) WHERE prior_entry.value->>'key' IN('invoice_credit_reservations:'||NEW.reservation_id::text,'invoice_credit_reservation_atomic_fee_partitions:'||NEW.reservation_id::text)) THEN
+  RAISE EXCEPTION 'Original absolute root/caps and actual reservation principal/fee cannot be rebased at birth' USING ERRCODE='23514';END IF;
+ SELECT current_capacity.* INTO source_capacity FROM freeholder_atomic_credit_fee_partition(NEW.source_payment_id,NEW.source_application_id,0) current_capacity;
+ IF source_capacity.known IS DISTINCT FROM true THEN RAISE EXCEPTION 'Every original global loan, current bank and retired fee must remain independently accounted' USING ERRCODE='23514';END IF;
+ scope:=freeholder_controlled_cash_scope((plan->>'sourceCollectionId')::uuid);
+ FOR required_resource IN SELECT actual_resource_id FROM unnest(freeholder_controlled_cash_scope_ids(scope,'resources')) actual_resource_id LOOP PERFORM freeholder_controlled_cash_require_prefix(required_resource);END LOOP;
+ FOR required_key IN SELECT 'payment:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(scope,'payments')) actual_id
+  UNION SELECT 'invoice:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(scope,'invoices')) actual_id
+  UNION SELECT 'credit-note:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(scope,'notes')) actual_id
+  UNION SELECT 'merchant-return-read:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(scope,'inspections')) actual_id
+  UNION SELECT 'merchant-fee-invocation:'||actual_id::text FROM unnest(freeholder_controlled_cash_scope_ids(scope,'payments')) actual_id
+  UNION SELECT 'subscription-cash:'||(actual_namespace->>'platform')||':'||coalesce(actual_namespace->>'account','')||':'||(actual_namespace->>'intent') FROM jsonb_array_elements(scope->'namespaces') actual_namespace LOOP
+  IF required_key IS NULL OR NOT EXISTS(SELECT 1 FROM pg_locks actual_lock WHERE actual_lock.pid=pg_backend_pid() AND actual_lock.locktype='advisory' AND actual_lock.granted
+   AND actual_lock.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND actual_lock.mode='ExclusiveLock' AND actual_lock.objsubid=1
+   AND actual_lock.classid::bigint=(CASE WHEN hashtext(required_key)<0 THEN 4294967295::bigint ELSE 0::bigint END)
+   AND actual_lock.objid::bigint=(hashtext(required_key)::bigint & 4294967295::bigint)) THEN
+   RAISE EXCEPTION 'The complete original source/canonical/callback prefix must already be held before reservation birth' USING ERRCODE='23514';END IF;
+ END LOOP;
+ WITH physical AS(
+  SELECT current_entry.family,current_entry.identity,current_entry.fingerprint FROM freeholder_controlled_cash_parent_entries((plan->>'sourceCollectionId')::uuid) current_entry
+   WHERE NOT(current_entry.family='invoice_credit_reservations' AND current_entry.identity=NEW.reservation_id::text)
+  UNION ALL SELECT 'invoice_credit_funding_atomic_fee_partitions',actual_purpose.funding_id::text,encode(sha256(convert_to(to_jsonb(actual_purpose)::text,'UTF8')),'hex') FROM invoice_credit_funding_atomic_fee_partitions actual_purpose WHERE actual_purpose.source_payment_id=ANY(freeholder_controlled_cash_scope_ids(scope,'payments'))
+  UNION ALL SELECT 'invoice_credit_reservation_atomic_fee_partitions',actual_purpose.reservation_id::text,encode(sha256(convert_to(to_jsonb(actual_purpose)::text,'UTF8')),'hex') FROM invoice_credit_reservation_atomic_fee_partitions actual_purpose WHERE actual_purpose.source_payment_id=ANY(freeholder_controlled_cash_scope_ids(scope,'payments'))
+  UNION ALL SELECT 'merchant_fee_refund_invocations',actual_invocation.id::text,encode(sha256(convert_to(to_jsonb(actual_invocation)::text,'UTF8')),'hex') FROM merchant_fee_refund_invocations actual_invocation WHERE actual_invocation.payment_id=ANY(freeholder_controlled_cash_scope_ids(scope,'payments'))
+ ),actual_rows AS(SELECT physical.family,physical.identity,min(physical.fingerprint) AS fingerprint FROM physical GROUP BY physical.family,physical.identity)
+ SELECT count(*),encode(sha256(convert_to(string_agg(actual_rows.family||':'||actual_rows.identity||':'||actual_rows.fingerprint,E'\n' ORDER BY actual_rows.family,actual_rows.identity),'UTF8')),'hex'),
+  EXISTS(SELECT 1 FROM physical GROUP BY physical.family,physical.identity HAVING count(DISTINCT physical.fingerprint)<>1) INTO physical_count,physical_revision,conflicting_physical FROM actual_rows;
+ IF physical_count NOT BETWEEN 1 AND 5000 OR conflicting_physical OR physical_revision IS DISTINCT FROM economics->>'postgresSourceRevision' THEN
+  RAISE EXCEPTION 'Only the exact newborn reservation may be reconstructed; every other current physical row stays full' USING ERRCODE='23514';END IF;
+ RETURN NEW;
+END $$;

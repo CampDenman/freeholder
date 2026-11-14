@@ -27,6 +27,10 @@ export function verifiedAtomicCreditReservation(row:Partition,keys:readonly stri
   ||entries.data.some(entry=>entry.key===`invoice_credit_reservations:${row.reservationId}`||entry.key===`invoice_credit_reservation_atomic_fee_partitions:${row.reservationId}`)
   ||new Set(economics.beforeInvoiceProjections.map(value=>value.invoiceId)).size!==economics.beforeInvoiceProjections.length
   ||economics.beforeInvoiceProjections.some(value=>!entries.data.some(entry=>entry.key===`invoices:${value.invoiceId}`&&entry.postgres_row)))return false;
+ if(new Set(economics.beforeProrationProjections.map(value=>value.prorationId)).size!==economics.beforeProrationProjections.length
+  ||new Set(economics.beforeSubscriptionProjections.map(value=>value.subscriptionId)).size!==economics.beforeSubscriptionProjections.length
+  ||economics.beforeProrationProjections.some(value=>!entries.data.some(entry=>entry.key===`subscription_prorations:${value.prorationId}`&&entry.postgres_row))
+  ||economics.beforeSubscriptionProjections.some(value=>!entries.data.some(entry=>entry.key===`subscriptions:${value.subscriptionId}`&&entry.postgres_row)))return false;
  try{
   const checked=selectAtomicCreditFeeSegments({originalPrincipalMinor:economics.originalPrincipalMinor,originalFeeMinor:economics.originalFeeMinor,sourceSegments:economics.segments,occupied:[],takeMinor:economics.amountMinor});
   if(checked.remaining.amountMinor!==0||checked.selected.nominalFeeMinor!==economics.nominalFeeMinor||checked.selected.retiredFeeMinor!==economics.retiredFeeMinor||checked.selected.assignedFeeMinor!==economics.assignedFeeMinor
