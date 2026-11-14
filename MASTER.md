@@ -3564,6 +3564,22 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled canonical current-bank principal source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08): applied controlled receipts now require their actual
+committed signed batch/receipt and generated-payment lifetime link, immutable
+per-receipt route/fee epoch, latest HMAC admission-lineage RETURNED bank facts,
+and separately rechecked complete current namespace/parent PG graph. A bare
+later refund/dispute inspection is effective even without a recovery owner;
+no fully-paid-invoice, prospective application proof or old cash transaction
+is substituted for current principal. Known wrong recipients refuse; ancillary
+unknown/owed commission remains separate review. Actual controlled counting
+uses one table/identity union and refuses conflicting full PG SHAs/overflow;
+ordinary default history/digest shapes and existing recovery/caller requirements
+remain. Nine pure and two genuine partial-principal/later-refund native controls
+are PREPARED/UNRUN, with no source/native/SQL/provider acceptance claimed.
+Remaining actual recovery, proration/credit/terminal and launch work stays
+REQUIRED. See `deploy/controlled-canonical-bank-principal84-source-20261113.md`.
+
 Independent controlled paid-period effect source checkpoint 2026-11-13
 (C9.33/C12.38/C1.08): one new immutable exact-FK effect receipt and NEW UNAPPLIED
 SQL authenticate a genuinely separate transaction after real canonical money

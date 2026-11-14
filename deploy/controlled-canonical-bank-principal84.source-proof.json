@@ -1,0 +1,23 @@
+{
+  "$comment": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "sourceOnly": true,
+  "base": "6cb7b8f2685cc72518eb35517062e79a1ca32de1",
+  "oldAndExtractedPurePolicySha256": "c7baefa92aa8627a8aa940623c6dbcdfc1f18c2c5a814cbd9f1860928de2faac",
+  "oldAndNewHistoryDigestExpressionSha256": "5b0dbf51a2a72238a9868fedf3fb6fcf920e5f2b24eacd8ba23cbbc7b778a9ac",
+  "controlsPreparedUnrun": {
+    "pure": 9,
+    "actualNative": 2
+  },
+  "sqlModelOrServiceChanges": false,
+  "files": {
+    "src/modules/invoicing/original-bank-principal-policy.ts": "d43fbabc1a15194a08e14d11a4a43eddfb45f838a7e8aba3dee13f3f605ff3ae",
+    "src/modules/invoicing/controlled-canonical-bank-policy.ts": "2da2a80e7651776b818d044f5aec5337c3f4d3099a94eac1c927d1ce8417ad83",
+    "src/modules/invoicing/controlled-canonical-bank-principal.ts": "02a78a43935d5c12a5ef05b25f2d3b85822e9ef426cf6eb0ceb8976a89a91642",
+    "src/modules/invoicing/original-cash-principal.ts": "cb892b13d8e67123820cc22dbf0d0ba0470571c8b76603c551ff81f13a7c2f6d",
+    "src/modules/invoicing/merchant-refund-history.ts": "f972886629804b76534d4777b4650b748ea0202fad8ab84bd35ab9592b902bb5",
+    "src/modules/invoicing/controlled-cash-application-bank-policy.ts": "31bf486e142eb9ab879981bba641290682a9aa5b457ffd7442469fe7103aecfc",
+    "src/modules/subscriptions/controlled-provider-paid-bank.ts": "5ece9fc2cefb2cb626eeea65fba3f3f694f41a1cafdf6877a30d9a8fa53a2be6",
+    "tests/modules/controlled-canonical-bank-policy.test.ts": "85531e7d49f4004a1090352a76ee91218836de8345200dd9023628b58740d9e8",
+    "tests/modules/controlled-canonical-bank-principal84.test.ts": "9ee9e1d47d98ba5c441b09a1060f7ee9d98f3ee59dbf679436ec198e075b7111"
+  }
+}
