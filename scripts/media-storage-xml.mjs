@@ -11,7 +11,7 @@ export function parseOriginalStorageXml(source){
  // Strip only that outer framing; retain the exact original wire digest.
  source=source.replace(/^\s+(?=<\?xml\s)/,'');
  if(Buffer.byteLength(source,'utf8')>MAX_XML||/<!DOCTYPE|<!ENTITY|<!\[CDATA\[/i.test(source)||/<\?(?!xml(?:\s|\?))/i.test(source)||/&(?!(?:amp|lt|gt|quot|apos|#[0-9]+|#x[0-9a-fA-F]+);)/.test(source)||XMLValidator.validate(source)!==true)invalid();
- const parsed=new XMLParser({ignoreAttributes:true,parseTagValue:false,ignoreDeclaration:true,ignorePiTags:true,processEntities:true,trimValues:false}).parse(source);
+ const parsed=new XMLParser({ignoreAttributes:true,parseTagValue:false,ignoreDeclaration:true,ignorePiTags:true,processEntities:true,htmlEntities:{amp:"&",lt:"<",gt:">",quot:'"',apos:"'"},trimValues:false}).parse(source);
  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)||Object.keys(parsed).length!==1)invalid();
  return parsed;
 }
