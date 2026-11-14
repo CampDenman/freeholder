@@ -3564,6 +3564,31 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Current causal/media161 ROOT checkpoint2026-11-14 (C12.38/C1.12/C11.08/C1.08/
+C9.33): exact8df9e847 current SQL sourceV97 passes1497/240 complete selected
+files/524 explicit DB skips; unchanged TS/lint fullV95 reused through finite
+SQL-only changes. FreshV55 ordinary86/strictV67 actual161models/365guards/
+415fullfunctions/4142queries/2495expressions and SDKV34 actual8 pass. Existing
+media_uploads is target161; physical public tables stay596. Three actual ready
+predicates plus missing-payment unknown/pending negative pass with ALL596 full
+rows/journal/sequence unchanged; both media capabilities absent.
+Original WHOLE6e positiveV6 still FAILS157.59s: genuine tiny return completes
+(1owner/4ops/28facts/1wholeclosure), then bigfee target refuses BEFORE any fee
+return operation. All596 before/after proof retained, failedV55 drained. Actual
+read-only V1–V3 diagnosis proves BOTH original resources known/notpending but
+atomic SQL target empty: generic refund-current receipt correctly stales after
+later genuine captures, while latest authentic controlled bank independently
+retains the exact1CAD succeeded refund, full current witness422tiny/384big.
+No generic resolver/capture/receipt waiver or blind refresh cycle is applied.
+Commerce prepares a finite atomic-boundary current-bank proof continuation;
+B credit work remains incomplete, as do held proration/media/full-spec gates.
+Negative/A/causal natives UNRUN. Earlier normalV52 compile and nativeV5 errors
+retained; SQL alias corrections separately reversible. No C/stable/signature/
+main/deploy/post acceptance. LinkedIn draft confirmed LOCAL ONLY. Remote backup
+still awaits explicit approval after auto-review rejection. See
+`deploy/current-causal-media161-root-checkpoint-20261114.json`.
+
+
 Actual original fee nativeV5 first failure2026-11-14 (C12.38/C9.33/C1.08):
 current3ba9 source1497/240/524, freshnormalV53 ordinary86/strict161models/
 365guards/415completefunctions/4142queries/2495expressions and actualSDK8 pass.
@@ -5034,7 +5059,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-14. Protected main last verified fdba2817 (PR702); PR701 older/unqualified. Exactb40c8658 sourceV91 passes1448/228 complete selected files/490 explicit DB skips, fulltypes/lint/metadata; freshV51 ordinary86/strict160models/362guards/399fullownedfunctions/4091queries and currentSDKverify8 pass, all11private phases hidden. Actual auxiliary/fee/paid installation predicates true with596-table invariance; no money/native/provider authority follows. All5privacy natives passed237.293s at explicit ee7b predecessor. Original fullfee positive/negative and auxiliary3natives remain open pending isolated original-cash causal read/closure/principal/prefix repairs; failures retained. Credit/proration/media and all unchecked full-spec/provider/platform/build/browser/CI/recovery/security/signature gates remain required. Version0.2.0-beta.6; no stable/post closure; remote backup awaits explicit authorization after auto-review rejection. |
+| Latest launch audit | 2026-11-14. Protected main last verified fdba2817 (PR702); PR701 older/unqualified. Exact8df9e847 sourceV97 passes1497/240 complete selected files/524 explicit DB skips; unchanged fulltypes/lintV95 retained through finite SQL-only corrections. FreshV55 ordinary86/strict161models/365guards/415fullfunctions/4142queries and SDKV34 actual8 pass, all11private phases hidden. Actual installed readiness and missing-payment refusal preserve ALL596tables/j86/seq; no money/native/provider authority follows. Original fullfee positiveV6 FAILS157.59s after realtinywholeclosure, BEFOREfeePOST: generic refund-current receipt stale from genuine latercaptures while newer current controlled bank proves exactrefund. Readonly diagnosis retains all rows; finite atomic current-bank repair pending. Original negative/A/causal natives unrun. All5privacy natives passed only at explicit ee7b predecessor. Credit/proration/media/full-spec/provider/platform/build/browser/CI/recovery/security/signature gates remain required. Version0.2.0-beta.6; no stable/post closure; remote backup awaits explicit authorization after auto-review rejection. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
