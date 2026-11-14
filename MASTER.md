@@ -3694,7 +3694,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-13 checkpoint. Protected main remains fe2645dc; draft PR701 still reviews older5b504abb/27c0eda4 and CI is not green. Current integration4be0b712 passed full types, affected lint,355 actual controls in59 complete files and license/notes/plan (64 native cases explicitly skipped there). NEW V8 normally applied all83 migrations; strict v17 passed142 models,282 guards and227 function bodies. Three actual cash-inspection journeys and all four original cash-return/feedback regressions passed individually with independent financial/journal/profile/drain proof. NULL-payment receipt feedback and controlled raw-positive/unpaid journeys also passed after documented SQL fixes. Historical empty-media/import/SDK proofs stay preserved. Media retirement/crash/multipart/quota/cutover and positive controlled collection remain implementation work; a separate existing-session browser signing containment patch is in preparation. Current-source green CI, provider/platform acceptance, final object-byte recovery, Tony’s C11.10 report and exact C11.17 signature remain absent. No live item closes from this checkpoint. |
+| Latest launch audit | 2026-11-13 checkpoint. Protected main is fdba2817 after signing containment PR702, with44 PR checks and43 protected merge-group jobs passed. Broader draft PR701 remains older and its CI is not green. Current1bf950f7 source qualifies411 deduplicated actual controls across70 complete files,103 explicit native skips, types/affected lint and license/notes/plan. Fresh V12 applies all84 migrations; strict v21 passes143 models/287 guards/229 function bodies. All nine actual stop/capture/current-reader/original-cash journeys now pass individually with independent financial/table SHA, all84 journal identities, settings and drained-client proof. Live-registry SDK generation and non-update verification pass8+8 and preserve all component hashes. FailedV11 and earlier datasets/logs remain preserved. Positive controlled collection and full media recovery/multipart/quota/cutover remain implementation work. Current-source green CI, owner recovery UI, provider/platform acceptance, final byte recovery, Tony’s C11.10 report and exact C11.17 signature remain open. No live item closes from this checkpoint. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -14404,6 +14404,52 @@ whatever is best for the people using the site.
   supplies its own fictional webhook secret instead of depending on inherited
   process configuration. No production availability guard changed. Both actual
   raw-finance controls still require a fresh database and original assertions.
+  Source callback checkpoint 2026-11-13 (C12.38/C1.08/C11.10): new optional
+  private original-holder validation authenticates each actual inspection refund
+  capture with its original admission/caller and occurrence UUID/time. Late or
+  foreign callbacks retain raw money independently and cannot be adopted as that
+  read by a semantic FK. Legacy defaults remain intact. Six pure and one actual
+  shared-service/HTTP controls are PREPARED/UNRUN; no schema/SQL or financial
+  permission changes. This grants no recovery/money authority. Genuine positive
+  observational context, causal comparison, bank proof and full acceptance remain
+  REQUIRED; no C/stable closure. See
+  deploy/original-cash-inspection-capture83-source-20261113.md.
+  Independent-stop inventory correction2026-11-13: v24 full types and
+  affected lint passed, then the explicit service-boundary test found the new
+  recovery plan listed as BOTH system-only and caller-authorized private. Its
+  real permission is scoped/person-only with external:false. The mistaken
+  system-list entry is removed, retaining the explicit caller-authorized
+  private entry and every permission/HTTP/MCP assertion. No product permission
+  changes. Failed v24 is preserved; complete renewed contracts remain pending.
+  Independent-stop helper validation2026-11-13: the precise callback input
+  exposes the adapter-level optional platform-account field. The test now
+  parses the actual callback through the real shared service input schema,
+  exactly as its handler does, instead of asserting or inventing a required
+  account. Failed v23 type evidence is preserved; renewed qualification stays
+  pending.
+  Independent-stop initial source qualification2026-11-13: full TypeScript
+  passed56.115s at007315b9. Focused lint stopped on one native-test callback
+  declaration: the generic call parameter is unknown, so its union with
+  undefined was redundant. The helper now derives its callback input from the
+  actual service Zod schema. No handler, test oracle or lint rule is relaxed;
+  the failed v22 log is preserved. Renewed source and all143-model/native
+  acceptance remain pending.
+  Independent-stop parent composition2026-11-13 (C12.38/C1.08/C11.14): signed
+  current-family5ed83538 and leaf-only callback97c11c76 are integrated without
+  future six collection models. The exact4283-byte owned stop tail is copied to
+  NEW0083_original_cash_inspection_stops, SHA8bde27cacfcfd8e9363821bafac053a87e104e4ed0b23c1b6fc51669d2037409;
+  the whole previous83 journal/SQL identities remain unchanged. Target cohort
+  is143 models, with two new guard functions/five new triggers. Full stop-row
+  PostgreSQL SHA participates in actual refund, invoice and frozen-profile undo
+  witnesses, including a real unrouted original invoice before the no-route
+  exit. Buyer invoice, merchant profile and NULL-payment receipt-only exports
+  select exact original parents and expose only inspection ID/review time/
+  stopped:true/no-bank-evidence; authentication/nonce/process/hosting material
+  remains private. Aggregate5000 bounds and seller payment filters remain.
+  The original live-child/actual-exit/native oracles are retained and extended
+  to prove a new stop changes actual parent undo fingerprints and safe export.
+  Generated SDK update, full source/143-model/84-journal proof, actual child
+  recovery/callback/privacy tests and all provider/stable acceptance are pending.
   Current cash-reader source qualification2026-11-13: full TypeScript passes
   at4cc200a9. Whole-repository lint stops only at two new issues: schema imports
   used solely as types and an unbound actual Stripe inspection method in the
@@ -14446,8 +14492,25 @@ whatever is best for the people using the site.
   applied_reservation/eligible_payment names; all financial conditions remain
   unchanged. Failed V9 is preserved with independent table/journal/profile/
   client-drain proof. No first payment/attestation was partially committed.
-  Fresh V10, strict installed-body parity and unchanged offline/gross business
-  controls remain required. All142 models and0–79/81/82 stay unchanged.
+  Fresh V10 normally applied all83 entries in6.773s. Strict read-only v19
+  passed all142 models,282 guards and227 exact installed function bodies in
+  11.432s/3357 queries, with unchanged parser and full prior controls. The
+  unchanged actual offline journey passed10.429s: partial1 then final4724,
+  exact4725 paid invoice, preserved access until paid, two owner-attested
+  payment receipts, real canonical refund of4724 and separate original fee
+  remittance/return. The unchanged gross-proration journey passed53.559s:
+  exact5250 debit, original2100 credit and3150 new cash (1 then3149), original
+  calendar/terms unchanged and paid access only after full actual consideration.
+  Three attested payments and the credit funding/reservation/application remain
+  intact. Independent minimal financial/table SHA, all83 journal/profile and
+  zero-client proofs passed before each reset. Evidence under /tmp: freeholder-
+  current-full82-parity142-v19-{result,drain}-20261113.json and freeholder-current-
+  full82-financial-{offline,gross}-native-v2-20261113 (-result.json and
+  -ledger-v2.json). No production TypeScript changed after the368-case source
+  qualification; exact generated-output and license/notes/plan checks passed
+  again for the SQL-only correction. These are owner-attested external-money
+  component controls, not independent bank/provider or stable acceptance.
+  All142 models and0–79/81/82 stay unchanged.
   Related external-money alias audit2026-11-13: source review found the same
   trigger OLD collision in all three owned guard_commercial_attestation bodies
   (commercial attestation, agreement fee and gross proration). Signed af8c4b77
@@ -15944,6 +16007,43 @@ whatever is best for the people using the site.
   No current or future financial capability is declared qualified or deferred;
   C12.38/C1.08/stable stay open. See
   deploy/original-cash-inspection-stop83-source-20261113.md.
+  Actual original-inspection stop qualification 2026-11-13 (C12.38/C11.08):
+  source gates pass382 actual controls across65 complete files; fresh normal
+  migration and strict comparison pass84 migrations,143 models,287 guards and
+  229 function bodies. The first genuine-child journey stops before admission:
+  the imported media-transfer CLI has top-level await that the actual CommonJS
+  child loader cannot transform. Its failed database, journal, whole-table SHA
+  evidence and drained-client proof are preserved. The guarded CLI entry now
+  calls the same async main/error handler without top-level await. No service,
+  test oracle, provider authority, schema or migration identity changes; renewed
+  execution remains required and no native stop proof is claimed.
+  Renewed actual component qualification 2026-11-13 (C12.38/C1.08/C11.08):
+  the same unchanged original stop oracle now passes at1bf950f7 after the narrow
+  CLI import repair. A real live child commits admission before its blocked
+  bank GET; live/key/stale review refuses, SIGKILL and actual exit precede
+  independent stop, old admission/NULL finish remain unchanged, and only a NEW
+  completed GET supplies bank evidence. Actual parent merge fingerprints change
+  on the authentic stop, refund dependency hashes match and subject export
+  includes only the safe stop projection. SQL late-finish/deletion refuse.
+  The held callback, three current readers and all four original cash-return
+  journeys also pass independently on fresh V12 with all84 journal hashes and
+  drained clients. SDK generation/verification pass8+8 from the live registry.
+  Source qualification is411 deduplicated actual controls/70 whole files with
+  103 explicit native skips. These synthetic provider-edge component proofs
+  are distinct from real provider/platform acceptance and independent review.
+  Shared owner recovery UI and full controlled application remain required.
+  Controlled cash-read order source checkpoint 2026-11-13 (C12.38/C1.08/C9.33):
+  one proposed immutable child records actual namespace-locked PostgreSQL
+  admission sequence, signed original caller/admission and exact predecessor/
+  closed namespace history. No timestamp/transaction-age order, backfill,
+  invented returned finish or payment authority is supplied. Old admissions,
+  strict legacy reader semantics and independent stop UI remain unchanged.
+  Twelve controls plus one unchanged real legacy GET regression are prepared,
+  UNRUN; owned forward SQL is UNAPPLIED. Central full-row financial/privacy/
+  export/retention composition and future real controlled producer/batch
+  integration plus positive native qualification remain required; C12.38,
+  C1.08 and stable stay open. See
+  `deploy/controlled-cash-inspection-lineage84-source-20261113.md`.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;

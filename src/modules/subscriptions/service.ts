@@ -52,6 +52,7 @@ import { subscriptionProrationCashConfirmations, subscriptionProrationCreditConf
 import { subscriptionProrations, subscriptionProrationPrincipal, subscriptionProrationCreditUses } from "./proration-schema";
 import { originalCashRecoveryFinancialWitness } from "@/modules/invoicing/original-cash-recovery-store";
 import { exportOriginalCashHistory } from "@/modules/invoicing/original-cash-invoice-history";
+import { cashInspectionStopFinancialWitness, exportCashInspectionStops } from "@/modules/invoicing/merchant-cash-inspection-stops";
 import { contacts } from "@/core/contacts/schema";
 import { listLocations } from "@/core/locations/service";
 import { getBusiness } from "@/core/settings/service";
@@ -1841,14 +1842,18 @@ registerContactPrivacySource({
           itemReceipts:targetHistory?.itemReceipts.filter(row=>componentIds.has(row.componentId))??[],invoiceProofs:targetHistory?.invoiceProofs.filter(row=>collectionIds.has(row.collectionId))??[]}}:{})};
     };
     const originalCash = await originalCashRecoveryFinancialWitness(tx, [], charges.map(row => row.id));
+    const inspectionStops = await cashInspectionStopFinancialWitness(tx, { paymentIds: [], receiptIds: charges.map(row => row.id) });
+    const exportedInspectionStops = exportCashInspectionStops(inspectionStops.stops);
     const aggregate = rows.length + charges.length + accepted.length + amendments.length + resumptions.length + periodInvoices.length + readerTickets.length + readerStops.length
-      + controlledCount + cardCount + prorations.length + prorations.filter(row=>row.targetInvoice!==null).length + prorationPrincipal.length + prorationCredits.length + cashBoundary.length + creditBoundary.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length;
+      + controlledCount + cardCount + prorations.length + prorations.filter(row=>row.targetInvoice!==null).length + prorationPrincipal.length + prorationCredits.length + cashBoundary.length + creditBoundary.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length + inspectionStops.admissions.length + inspectionStops.stops.length;
     if (aggregate > 5000) throw new ServiceError("conflict", "Restore a bounded complete original subscription subject export; receipt-only cash and its authentic children cannot be truncated.");
     const cashHistory = exportOriginalCashHistory(originalCash);
     const cashFor = (subscriptionId: string) => {
       const receiptIds = new Set(charges.filter(row => row.subscriptionId === subscriptionId).map(row => row.id));
       const owners = cashHistory.owners.filter(row => row.subscriptionChargeReceiptId !== null && receiptIds.has(row.subscriptionChargeReceiptId)), ownerIds = new Set(owners.map(row => row.id));
-      return { owners, operations: cashHistory.operations.filter(row => ownerIds.has(row.recoveryId)), facts: cashHistory.facts.filter(row => ownerIds.has(row.recoveryId)),
+      const inspectionIds = new Set(inspectionStops.admissions.filter(row => row.subscriptionChargeReceiptId !== null && receiptIds.has(row.subscriptionChargeReceiptId)).map(row => row.id));
+      const independentInspectionStops = exportedInspectionStops.filter(row => inspectionIds.has(row.inspectionId));
+      return { owners, ...(independentInspectionStops.length ? { independentInspectionStops } : {}), operations: cashHistory.operations.filter(row => ownerIds.has(row.recoveryId)), facts: cashHistory.facts.filter(row => ownerIds.has(row.recoveryId)),
         closures: cashHistory.closures.filter(row => ownerIds.has(row.recoveryId)), feedback: cashHistory.feedback.filter(row => row.namespace.subscriptionChargeReceiptId !== null && receiptIds.has(row.namespace.subscriptionChargeReceiptId)) };
     };
     return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [], acceptedCommercialTerms: accepted.filter(value => value.subscriptionId === row.id),

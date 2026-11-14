@@ -25,6 +25,7 @@ import {subscriptionProviderInvoiceObservations,subscriptionProviderInvoiceLines
 import {merchantRefundDependencyFingerprints} from "./merchant-refund-dependencies";
 import {originalCashRecoveryFinancialWitness} from "./original-cash-recovery-store";
 import {exportOriginalCashHistory} from "./original-cash-invoice-history";
+import { cashInspectionStopFinancialWitness, exportCashInspectionStops } from "./merchant-cash-inspection-stops";
 import {prorationFinancialWitness} from "./proration-financial-witness";
 import {exportProrationMerchantHistory} from "./proration-merchant-export";
 
@@ -204,15 +205,16 @@ registerContactPrivacySource({
   const owners=await merchantProfileCashOwners(tx,ids);
   if(!owners)throw new ServiceError("conflict","Restore the complete original merchant cash ownership before financial export.");
   const cash=await originalCashRecoveryFinancialWitness(tx,owners.paymentIds,owners.subscriptionChargeReceiptIds);
+  const inspectionStops=await cashInspectionStopFinancialWitness(tx,{paymentIds:owners.paymentIds,receiptIds:owners.subscriptionChargeReceiptIds});
   const versions=ids.length?await tx.select().from(merchantTaxProfileVersions).where(inArray(merchantTaxProfileVersions.profileId,ids)).limit(5001):[];
   const registrations=ids.length?await tx.select().from(taxRegistrations).where(inArray(taxRegistrations.merchantProfileId,ids)).limit(5001):[];
-  const existingRows=profiles.length+versions.length+registrations.length+Object.values(cash).reduce((sum,rows)=>sum+rows.length,0);
+  const existingRows=profiles.length+versions.length+registrations.length+Object.values(cash).reduce((sum,rows)=>sum+rows.length,0)+inspectionStops.admissions.length+inspectionStops.stops.length;
   if(existingRows>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant financial export.");
   const originalCommercialHistory=await exportProrationMerchantHistory(tx,ids,{existingRows});
   if(existingRows+originalCommercialHistory.entries.length>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant financial export.");
   const controlled=await exportControlledFinancialHistory(tx,{profileIds:ids,receiptIds:owners.subscriptionChargeReceiptIds});
   if(existingRows+originalCommercialHistory.entries.length+controlled.selected.entries.length+controlled.exported.originalCashReceipts.length>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant controlled history.");
-  return{profiles,versions,registrations,originalCash:exportOriginalCashHistory(cash),...(originalCommercialHistory.entries.length?{originalCommercialHistory}:{}),...(controlled.selected.entries.length?{originalControlledProvider:controlled.exported}:{})};
+  return{profiles,versions,registrations,originalCash:exportOriginalCashHistory(cash),...(inspectionStops.stops.length?{originalCashInspectionStops:exportCashInspectionStops(inspectionStops.stops)}:{}),...(originalCommercialHistory.entries.length?{originalCommercialHistory}:{}),...(controlled.selected.entries.length?{originalControlledProvider:controlled.exported}:{})};
  },
  erase:async(tx,contactId,context)=>{
   const profiles=await tx.select({id:merchantTaxProfiles.id}).from(merchantTaxProfiles).where(eq(merchantTaxProfiles.contactId,contactId));
