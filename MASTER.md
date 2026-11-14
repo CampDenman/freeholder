@@ -3564,6 +3564,18 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Paid-owner privacy ROOT assembly2026-11-14 (C1.08/C9.33/C12.38): frozen
+269f1e9f source merged, preserving entire current MASTER plus only17newleaflines.
+Owned/normal85 append exact28854/ec0a463b tail AFTER entire729144/842f6d55
+qualified refund-guard prefix; old624213 historical prefix still byteexact.
+Five new full functions/three exact BEFORE guards and two full paid-source/ready
+successors retain old pins and source reversals. Zero models/columns/services/
+flags; original whole paid and fee native cases unchanged. Current composed
+source/schema/SDK/native qualification UNRUN. Separate actual original-cash GET
+causal-v2 repair remains required; no money/provider/stable or C closure. See
+`deploy/controlled-paid-privacy85-root-assembly.manifest.json`.
+
+
 Paid-access privacy SOURCE repair 2026-11-14 (C1.08/C9.33/C12.38): a verified
 erasure request does not yet set the contact erasure marker. New controlled
 period access now requires the same exact frozen-buyer/quote.profileId merchant
