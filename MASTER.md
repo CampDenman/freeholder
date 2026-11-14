@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Paid-privacy handler-pin composition2026-11-14 (C1.08/C9.33/C12.38): V88
+fulltypes/lint PASS; contracts proceed past exact contacts-file composition then
+stop on old cartless whole paid-handler SHA. The source-pin harness reverses
+ONLY the exact unique privacy import+target gate before the entire original SHA;
+original cart/constructors/native/access/undo comparisons and old manifest stay
+unchanged. All changed privacy predecessor SHAs were searched for other pins.
+V87/V88 preserved; focused compositions and complete fresh source/schema/native
+qualification required, no C closure/stable. See
+`deploy/controlled-paid-privacy85-cartless-contract.manifest.json`.
+
+
 Paid-privacy source-pin composition2026-11-14 (C1.08/C9.33/C12.38): V87
 fulltypes/lint PASS; contracts stop on old financial-undo whole contacts-service
 SHA after exactly2new reserved-source fences outside undo. Original source patch,

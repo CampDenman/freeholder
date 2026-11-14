@@ -52,7 +52,18 @@ describe("cartless genuine paid merge precondition", () => {
     expect(actual).toContain("[survivor.id, f.parent.contactId]"); expect(actual).toContain("await undoContactMerge.call");
   });
   it("leaves all runtime/cart undo policy and money/access code unchanged", () => {
-    for (const file of manifest.unchangedRuntime) expect(hash(read(file.path))).toBe(file.sha256);
+    for (const file of manifest.unchangedRuntime) {
+      let source = read(file.path);
+      if (file.path === "src/modules/subscriptions/controlled-provider-paid-period.ts") {
+        // Preserve the entire original money/access body after reversing only
+        // the independently pinned privacy import and target-derived gate.
+        for (const insertion of [
+          'import { controlledTargetPrivacyReady } from "./controlled-target-privacy";\n',
+          '    if (!await controlledTargetPrivacyReady(ctx.tx, target.collection.id)) return { handled: true, state: "review_required" as const, financialReviewPending: true };\n',
+        ]) { expect(source.split(insertion)).toHaveLength(2); source = source.replace(insertion, ""); }
+      }
+      expect(hash(source)).toBe(file.sha256);
+    }
     const policy = read("src/modules/catalog/cart.ts"); expect(policy).toContain("undoable: rows.length === 0");
     expect(policy).toContain("Open carts were merged and cannot be split back apart safely.");
   });
