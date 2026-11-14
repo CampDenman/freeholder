@@ -9,7 +9,7 @@ import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agreement-schema";
 import { merchantPaymentObservations } from "@/modules/invoicing/merchant-collection-schema";
 import { principalAuthorityResult } from "@/modules/invoicing/principal-authority-contract";
-import { currentBankPrincipalMatches } from "@/modules/invoicing/original-cash-principal";
+import { currentBankPrincipalMatches } from "@/modules/invoicing/original-bank-principal-policy";
 import { originalMerchantRefundCash } from "@/modules/invoicing/merchant-refund-origin";
 import { originalCashInspectionBankFacts } from "@/modules/invoicing/merchant-cash-inspection-bank-facts";
 import { controlledCashApplicationBatches, controlledCashApplicationReceipts, controlledCashApplicationLinks } from "@/modules/invoicing/controlled-cash-application-protocol-schema";

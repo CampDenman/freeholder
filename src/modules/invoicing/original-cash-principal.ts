@@ -11,27 +11,9 @@ import { currentOriginalCashInventory } from "./original-cash-inventory-current"
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { payments } from "./schema";
 import { controlledCashFinancialHistory } from "./controlled-provider-financial-witness";
-import type { MerchantReturnedCashEvidence } from "./merchant-returned-cash-proof";
-
-/** Bank evidence is actual exact-source inventory, not an amount selected from
- * a callback. The caller independently proves the actual merchant route. */
-export function currentBankPrincipalMatches(input: { amountMinor: number; currency: string; refundedMinor: number; apiVersion: string; platform: string; account: string | null; paymentRef: string; chargeRef?: string | null }, evidence: MerchantReturnedCashEvidence) {
-  if (!Number.isSafeInteger(input.amountMinor) || input.amountMinor <= 0 || evidence.providerApiVersion !== input.apiVersion || evidence.providerPlatformAccountId !== input.platform || evidence.chargeAccountId !== input.account || evidence.paymentProviderRef !== input.paymentRef
-    || input.chargeRef && evidence.providerChargeRef !== input.chargeRef || evidence.chargePaymentProviderRef !== input.paymentRef
-    || evidence.paymentIntentStatus !== "succeeded" || evidence.amountCapturableMinor !== 0 || evidence.amountMinor !== input.amountMinor || evidence.currency !== input.currency
-    || evidence.chargeAmountMinor !== input.amountMinor || evidence.chargeCurrency !== input.currency || !evidence.paid || !evidence.captured
-    || !evidence.refundsComplete || !evidence.disputesComplete || evidence.disputes.some(row => row.chargeRef !== evidence.providerChargeRef || !["won", "warning_closed"].includes(row.status))) return false;
-  if (new Set(evidence.disputes.map(row => row.providerRef)).size !== evidence.disputes.length) return false;
-  const seen = new Set<string>(); let returned = 0n;
-  for (const refund of evidence.refunds) {
-    if (seen.has(refund.providerRef) || refund.paymentProviderRef !== input.paymentRef || refund.chargeRef !== evidence.providerChargeRef
-      || refund.currency !== input.currency || refund.amountMinor === null || !Number.isSafeInteger(refund.amountMinor) || refund.amountMinor <= 0
-      || !["succeeded", "failed", "canceled"].includes(refund.status ?? "")) return false;
-    seen.add(refund.providerRef); if (refund.status === "succeeded") returned += BigInt(refund.amountMinor);
-  }
-  return Number.isSafeInteger(input.refundedMinor) && input.refundedMinor >= 0 && input.refundedMinor <= input.amountMinor
-    && returned === BigInt(input.refundedMinor) && evidence.amountRefundedMinor === input.refundedMinor;
-}
+import { readControlledCanonicalBankPrincipal } from "./controlled-canonical-bank-principal";
+import { currentBankPrincipalMatches } from "./original-bank-principal-policy";
+export { currentBankPrincipalMatches } from "./original-bank-principal-policy";
 
 export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, source: MerchantRefundSource) {
   const cash = await originalMerchantRefundCash(ctx, source);
@@ -51,7 +33,7 @@ export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, sour
   // The history already counts the exact namespace's owners/operations/raw
   // feedback and ordinary facts. Add only families deliberately excluded from
   // its revision digest plus the distinct canonical payment row, once.
-  const inventoryCount = history.inventoryCount + witness.facts.filter(row => ["partial_closure", "unassigned_refund_review", "partial_target"].includes(row.kind)).length
+  let inventoryCount = history.inventoryCount + witness.facts.filter(row => ["partial_closure", "unassigned_refund_review", "partial_target"].includes(row.kind)).length
     + witness.closures.length + (payment ? 1 : 0);
   const receiptOnly = source.kind === "subscription" || !payment || !cash.applied;
   let reviewRequired = receiptOnly || history.incomplete || inventoryCount > 5000 || !history.principalCreatorsQuiesced;
@@ -82,6 +64,26 @@ export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, sour
       }
     }
   }
+  // A bare controlled GET can report a later refund/dispute before any
+  // recovery owner exists. Historical application is never a current bank
+  // proof. Ordinary legacy/default namespace and digest bytes stay unchanged.
+  let controlledBank: Awaited<ReturnType<typeof readControlledCanonicalBankPrincipal>> | null = null;
+  let controlledBankUnknown = false;
+  if(payment){
+    try{
+      controlledBank=await readControlledCanonicalBankPrincipal(ctx,payment,cash);
+      if(controlledBank.applies){
+        reviewRequired ||= !controlledBank.principalMatches;
+        if(!history.physicalIdentities)reviewRequired=true;
+        else{
+          const identities=new Set([...history.physicalIdentities,...controlledBank.physicalEntries,
+            ...witness.facts.map(row=>({table:"original_cash_recovery_facts",id:row.id})),
+            ...witness.closures.map(row=>({table:"original_cash_recovery_closures",id:row.id})),{table:"payments",id:payment.id}].map(row=>`${row.table}:${row.id}`));
+          inventoryCount=identities.size;if(inventoryCount>5000)reviewRequired=true;
+        }
+      }
+    }catch(error){if(error instanceof ServiceError&&["conflict","permission","not_found","validation"].includes(error.code)){reviewRequired=true;controlledBankUnknown=true;}else throw error;}
+  }
   // Independently committed callback ingress can race these ordinary reads.
   // Fence the authentic exact-source inventory again; later state cannot
   // silently supersede a callback that appeared after the first snapshot.
@@ -89,9 +91,15 @@ export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, sour
   if (merchantTaxDigest(currentWitness) !== merchantTaxDigest(witness)) reviewRequired = true;
   const currentControlled = await controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.id));
   if (currentControlled.incomplete || merchantTaxDigest(currentControlled) !== merchantTaxDigest(controlled)) reviewRequired = true;
+  let currentControlledBank: Awaited<ReturnType<typeof readControlledCanonicalBankPrincipal>> | null = null;
+  if(payment&&controlledBank?.applies){
+    try{currentControlledBank=await readControlledCanonicalBankPrincipal(ctx,payment,cash);if(merchantTaxDigest(currentControlledBank)!==merchantTaxDigest(controlledBank))reviewRequired=true;}
+    catch(error){if(error instanceof ServiceError&&["conflict","permission","not_found","validation"].includes(error.code)){reviewRequired=true;controlledBankUnknown=true;}else throw error;}
+  }
   return { reviewRequired, receiptOnly, principalCallerDebt: !history.principalCreatorsQuiesced,
-    ancillaryDebtPending: history.feeDebt || !history.creatorsQuiesced,
+    ancillaryDebtPending: history.feeDebt || !history.creatorsQuiesced || controlledBankUnknown || controlledBank?.applies === true && controlledBank.ancillaryDebtPending,
     currentPrincipalMinor: reviewRequired || !payment ? null : payment.amountMinor - payment.refundedMinor, inventoryCount,
     revision: merchantTaxDigest({ source, cash, aliases, witness, currentWitness, history, bankEvidenceDigest, receiptOnly, reviewRequired,
-      ...(controlled.entries.length || controlled.namespaces.some(row => row.applies) ? { controlled, currentControlled } : {}) }) };
+      ...(controlled.entries.length || controlled.namespaces.some(row => row.applies) ? { controlled, currentControlled } : {}),
+      ...(controlledBank?.applies||controlledBankUnknown?{controlledBank,currentControlledBank,controlledBankUnknown}:{}) }) };
 }

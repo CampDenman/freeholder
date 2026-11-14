@@ -3564,6 +3564,37 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled principal old-empty successor source checkpoint 2026-11-13
+(C12.38/C1.08): the existing receipt/namespace and immutable agreement route are
+read before future application links. Only an ordinary key, zero actual receipts,
+no controlled namespace/alias and a valid ordinary method/attempt shape can take
+the early legacy empty return. Reserved controlled-receipt keys and every known
+controlled source still require full membership/HMAC/current-bank proof; missing
+or foreign schedule aliases refuse. This relies on the actual existing signed
+receipt/trigger-only immutable birth key invariant, not on detecting arbitrary
+corruption after guards are bypassed. The independent same-transaction principal
+refusal remains unchanged; the traced shared writer has no such call before
+commit. Two principal natives now carry the exact frozen genuine post-write
+manifest GET/retention helper before inspection/application. Nine selector and
+two source controls are PREPARED/UNRUN. No guard/SQL/permission or acceptance
+waiver. See `deploy/controlled-principal-oldempty84-source-20261113.md`.
+
+Controlled canonical current-bank principal source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08): applied controlled receipts now require their actual
+committed signed batch/receipt and generated-payment lifetime link, immutable
+per-receipt route/fee epoch, latest HMAC admission-lineage RETURNED bank facts,
+and separately rechecked complete current namespace/parent PG graph. A bare
+later refund/dispute inspection is effective even without a recovery owner;
+no fully-paid-invoice, prospective application proof or old cash transaction
+is substituted for current principal. Known wrong recipients refuse; ancillary
+unknown/owed commission remains separate review. Actual controlled counting
+uses one table/identity union and refuses conflicting full PG SHAs/overflow;
+ordinary default history/digest shapes and existing recovery/caller requirements
+remain. Nine pure and two genuine partial-principal/later-refund native controls
+are PREPARED/UNRUN, with no source/native/SQL/provider acceptance claimed.
+Remaining actual recovery, proration/credit/terminal and launch work stays
+REQUIRED. See `deploy/controlled-canonical-bank-principal84-source-20261113.md`.
+
 Actual application witness correction 2026-11-13 (C12.38/C9.33/C1.08):
 V27 with the genuine fresh paid manifest passes the earlier freshness boundary,
 then refuses before admission with BigInt JSON serialization in the derived

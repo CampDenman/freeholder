@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // C12.38: exact original capture + current unchanged bank funds, not a return.
-import { currentBankPrincipalMatches } from "./original-cash-principal";
+import { currentBankPrincipalMatches } from "./original-bank-principal-policy";
 import type { MerchantReturnedCashEvidence } from "./merchant-returned-cash-proof";
 import type { MerchantChargeScope } from "@/adapters/payments";
 import type { merchantPaymentEvidence } from "./merchant-payment-observations";
