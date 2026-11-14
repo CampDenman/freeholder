@@ -1798,3 +1798,47 @@ CREATE FUNCTION freeholder_media_original_drain_releasable(original_drain uuid) 
    AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_calls caller ON caller.id=request.call_id WHERE caller.namespace=drain.namespace AND request.descriptor->>'kind' IN('object.put','object.delete','multipart.create','multipart.complete','multipart.abort') AND (request.created_at>drain.created_at OR request.runtime_identity IS DISTINCT FROM caller.runtime_identity OR request.redacted_at IS NULL AND request.descriptor_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(request.descriptor) OR NOT(request.state='returned' AND request.returned_at IS NOT NULL OR EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=request.stop_receipt_id AND review.call_id=caller.id AND review.stop_drain_id=drain.id AND (freeholder_media_original_applied_review(caller.id) OR freeholder_media_transfer_applied_put_review(caller.id) OR freeholder_media_original_monotonic_delete_review(caller.id))))))
  )
 $$;
+
+--> statement-breakpoint
+-- C1.12/C11.08/C12.36: actual NEW encrypted-file claims bind their original
+-- reservation. No DEFAULT and no UPDATE supplies a historical legacy birth.
+ALTER TABLE member_sealed_blobs ADD COLUMN original_reservation_id uuid;
+--> statement-breakpoint
+CREATE UNIQUE INDEX member_sealed_blobs_reservation_idx ON member_sealed_blobs(original_reservation_id);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_member_sealed_removal_proven(original_blob uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(SELECT 1 FROM member_sealed_blobs blob WHERE blob.id=original_blob AND blob.original_reservation_id IS NOT NULL
+  AND (blob.deleted_at IS NOT NULL OR blob.message_id IS NULL AND blob.created_at<clock_timestamp()-interval '24 hours')
+  AND NOT EXISTS(SELECT 1 FROM privacy_retention_exceptions hold JOIN data_requests request ON request.id=hold.data_request_id LEFT JOIN contacts owner ON owner.user_id=blob.owner_id WHERE hold.scope IN('members','media.storageOperations','media.multipartOperations','media.storageTransfers') AND (hold.expires_at IS NULL OR hold.expires_at>clock_timestamp()) AND (owner.id IS NULL OR owner.id=request.contact_id OR EXISTS(SELECT 1 FROM media_object_writes original WHERE original.original_reservation_id=blob.original_reservation_id AND original.contact_id=request.contact_id)))
+  AND (freeholder_media_original_reservation_retired(blob.original_reservation_id)
+   OR NOT EXISTS(SELECT 1 FROM media_objects pointer WHERE pointer.reservation_id=blob.original_reservation_id)
+    AND NOT EXISTS(SELECT 1 FROM media_object_writes physical WHERE physical.original_reservation_id=blob.original_reservation_id OR physical.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(blob.storage_key,'UTF8')),'hex'))
+    AND NOT EXISTS(SELECT 1 FROM media_multipart_resources resource WHERE resource.original_reservation_id=blob.original_reservation_id OR resource.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(blob.storage_key,'UTF8')),'hex'))))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_member_sealed_original_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE pointer media_objects; physical media_object_writes;
+BEGIN
+ IF TG_OP='DELETE' THEN
+  IF NOT freeholder_member_sealed_removal_proven(OLD.id) THEN RAISE EXCEPTION 'Keep the original encrypted-file record until all bytes/copies/callers have verified retirement; legacy birth stays unknown' USING ERRCODE='23514'; END IF;
+  RETURN OLD;
+ END IF;
+ IF TG_OP='UPDATE' THEN
+  IF ROW(NEW.id,NEW.owner_id,NEW.conversation_id,NEW.storage_key,NEW.size,NEW.created_at,NEW.original_reservation_id) IS DISTINCT FROM ROW(OLD.id,OLD.owner_id,OLD.conversation_id,OLD.storage_key,OLD.size,OLD.created_at,OLD.original_reservation_id) THEN RAISE EXCEPTION 'Encrypted-file original identity cannot be rebound or backfilled by equal key' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO pointer FROM media_objects WHERE reservation_id=NEW.original_reservation_id;
+  IF NEW.original_reservation_id IS NULL OR NEW.state<>'pending' OR NEW.message_id IS NOT NULL OR NEW.deleted_at IS NOT NULL OR pointer.reservation_id IS NULL OR pointer.created_at<>transaction_timestamp() OR pointer.key IS DISTINCT FROM NEW.storage_key OR pointer.bytes IS DISTINCT FROM NEW.size OR pointer.role<>'original' OR pointer.state<>'pending' OR pointer.content_type<>'application/octet-stream'
+   OR NOT EXISTS(SELECT 1 FROM contacts owner WHERE owner.id=pointer.owner_contact_id AND owner.user_id=NEW.owner_id)
+  THEN RAISE EXCEPTION 'A new encrypted-file claim needs its exact same-transaction original reservation and real owner contact' USING ERRCODE='23514'; END IF;
+ END IF;
+ IF NEW.state='ready' AND (TG_OP='INSERT' OR OLD.state<>'ready') THEN
+  SELECT * INTO physical FROM media_object_writes WHERE original_reservation_id=NEW.original_reservation_id AND operation_kind='put';
+  IF physical.id IS NULL OR physical.object_key IS DISTINCT FROM NEW.storage_key OR physical.bytes IS DISTINCT FROM NEW.size OR physical.actor IS DISTINCT FROM 'user:'||NEW.owner_id::text OR physical.state<>'accepted' OR physical.deleted_at IS NOT NULL OR physical.redacted_at IS NOT NULL OR physical.provider_revision IS NULL OR physical.provider_revision_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(physical.provider_revision)
+   OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls caller WHERE caller.object_receipt_id=physical.id AND caller.kind='ordinary_put' AND (caller.state='returned' AND caller.returned_at IS NOT NULL AND caller.observed_accepted_at IS NOT NULL AND physical.writer_finished_at IS NOT NULL OR freeholder_media_original_applied_review(caller.id)))
+   OR EXISTS(SELECT 1 FROM media_object_writes other WHERE other.original_reservation_id=NEW.original_reservation_id AND other.operation_kind='put' AND other.id<>physical.id)
+  THEN RAISE EXCEPTION 'Publish encrypted bytes only after their authentic original physical nonce/result and actual finish or exact affirmative stop review' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER member_sealed_original BEFORE INSERT OR UPDATE OR DELETE ON member_sealed_blobs FOR EACH ROW EXECUTE FUNCTION freeholder_member_sealed_original_guard();

@@ -224,7 +224,7 @@ async function checkDatabase(): Promise<Check[]> {
   return checks;
 }
 
-async function checkStorage(): Promise<Check> {
+async function checkStorage(actor:import("@/core/service").Actor={kind:"system"}): Promise<Check> {
   // A real round trip. Credentials that parse and a bucket that refuses writes
   // look identical from the outside until an owner uploads a photograph.
   const probe = `doctor/${Date.now()}-${Math.random().toString(36).slice(2)}.txt`;
@@ -232,9 +232,10 @@ async function checkStorage(): Promise<Check> {
     const { storage } = await import("@/adapters/storage");
     const store = storage();
     const body = new TextEncoder().encode("freeholder doctor");
-    await store.put(probe, body, "text/plain");
+    const{putWithReceipt,deleteWithReceipt}=await import("@/core/media/write-ledger");
+    await putWithReceipt({key:probe,body,contentType:"text/plain",role:"staged"},actor);
     const read = await store.get(probe);
-    await store.delete(probe);
+    if(!await deleteWithReceipt(probe))throw new Error("The diagnostic file still needs original storage recovery; no absence was inferred.");
     if (!read || new TextDecoder().decode(read) !== "freeholder doctor") {
       return fail(
         "storage.roundTrip",
@@ -1233,12 +1234,12 @@ async function checkZoneData(): Promise<Check[]> {
   }
 }
 
-export async function runDoctor(): Promise<DoctorReport> {
+export async function runDoctor(actor:import("@/core/service").Actor={kind:"system"}): Promise<DoctorReport> {
   const checks: Check[] = [
     ...(await checkEnvironment()),
     ...(await checkDatabase()),
     ...(await checkZoneData()),
-    await checkStorage(),
+    await checkStorage(actor),
     await checkMalwareScanner(),
     await checkAltTextSuggester(),
     ...(await checkMail()),
@@ -1269,6 +1270,13 @@ export async function runDoctor(): Promise<DoctorReport> {
       : "ok";
 
   return { verdict, checks, ranAt: new Date().toISOString() };
+}
+
+/** Passive HTTP/SSR/status reads never dispatch adapter or physical probes.
+ * A warning is explicit: configuration checks cannot prove writable storage. */
+export async function readDoctorStatus():Promise<DoctorReport>{
+ const checks:Check[]=[...(await checkEnvironment()),...(await checkDatabase()),...(await checkZoneData()),await checkPayments(),...(await checkNotificationChannels()),...(await checkProviderGrants()),checkPlatformVersion(),{id:"storage.roundTrip",title:"File storage",verdict:"warn",detail:"No storage or provider probe is performed by this read-only status request.",remedy:"Run the authorized diagnostic probe to create, verify and retire its original test file.",message:{key:"doctor.probe.required",params:{}}}];
+ return{verdict:checks.some(check=>check.verdict==="fail")?"fail":"warn",checks,ranAt:new Date().toISOString()};
 }
 
 /** The report as somebody would want to read it in a terminal. */

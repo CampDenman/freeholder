@@ -15914,3 +15914,21 @@ boundary fence; full request capability cannot be published before they and
 multipart/capture/quota/cutover are completed and qualified. No execution,
 provider/host actions, production incident claim or C-item closure occurred.
 See `deploy/media-monotonic-delete-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C12.36/C8.07): the isolated managed
+producer leaf migrates encrypted attachments, gallery archives and diagnostic
+roundtrips to real shared original reservation/caller/nonce/FIN admission and
+verified retirement. A nullable/no-default sealed-file birth column, unique index
+and SQL guard prevent historical backfill/ready-without-proof/early forget;
+legacy NULL-birth personal files refuse completed erasure rather than vanish.
+Business gallery work retains its existing ownership policy. The application
+adapter adds a final missing-context mutation/signing refusal. Doctor GET/SSR
+and old health scopes stay passive; NEW platform.probeDoctor is an explicitly
+authorized/audited mutation outside service TX, with POST/CSRF, CLI/admin submit
+and four-locale guidance. Four pures and six native TCP/MLS controls are
+PREPARED/UNRUN. Root final SDK regeneration, schema/model/function/guard parity,
+all source/native gates and actual provider/operator/platform acceptance remain
+required. Full request/part flags and multipart/capture/quota/cutover/legacy
+recovery completion remain open. No execution/provider/host actions, production
+incident claim or C-item closure occurred. See
+`deploy/media-managed-producers-source-2026-11-13.md`.

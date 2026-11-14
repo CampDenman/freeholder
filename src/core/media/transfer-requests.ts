@@ -26,6 +26,13 @@ interface Scope {callId:string;token:string;runtimeIdentity:StorageCallerRuntime
 const invocation=new AsyncLocalStorage<Scope>();
 export class TransferRequestNotAttemptedError extends Error{constructor(readonly logicalCallId:string,cause:unknown){super("The original provider request was not attempted.",{cause});this.name="TransferRequestNotAttemptedError";}}
 export async function withTransferRequestScope<T>(scope:Omit<Scope,"active"|"receiptIds"|"multipartOperationIds">,operation:()=>Promise<T>):Promise<T>{const current={...scope,active:true,receiptIds:new Set<string>(),multipartOperationIds:new Set<string>()};try{return await invocation.run(current,operation);}finally{current.active=false;}}
+/** Last application-adapter fence. Possessing a function or a generic writer
+ * flag is insufficient: the real observer, live scope and committed original
+ * token/role/key must all match before the adapter can dispatch anything. */
+export async function requireActualStorageMutation(observer:unknown,key:string,kind:"object.put"|"multipart.create"|"multipart.complete"|"multipart.abort"):Promise<void>{
+ const scope=invocation.getStore();if(observer!==observeTransferRequest||!scope?.active)transferConflict("Start storage work through its shared upload or recovery service; no original caller is active.");
+ await db().transaction(async tx=>{const caller=await locked(tx,scope),kinds=kind==="object.put"?["ordinary_put","target_put"]:[kind.replace(".","_")];if(!scope.active||caller.state!=="admitted"||caller.physicalKey!==key||!kinds.includes(caller.kind))transferConflict("The storage operation does not belong to its genuine original caller, role and file key.");});
+}
 async function locked(tx:Tx,scope:Scope){
  await requireTransferCapability(tx);await tx.execute(sql`select pg_advisory_xact_lock(1691709,82)`);
  const[call]=await tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.id,scope.callId)).limit(1).for("update");

@@ -56,6 +56,7 @@ export async function discardUnwrittenObjectReservation(key:string):Promise<bool
   if(await pendingObjectIsOwned(key,new Date(),tx))return false;
   const[object]=await tx.select().from(mediaObjects).where(eq(mediaObjects.key,key)).limit(1).for("update");
   if(!object||object.state!=="pending"||(await records(tx,key)).length)return false;
+  if(await storageOperationsHeld(tx,[object.ownerContactId]))return false;
   const active=await tx.select({id:mediaUploads.id}).from(mediaUploads).where(and(eq(mediaUploads.storageKey,key),inArray(mediaUploads.state,["created","uploading","uploaded","processing"]),gt(mediaUploads.expiresAt,new Date()))).limit(1);
   const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.keyDigest,objectKeyDigest(key)),isNull(mediaMultipartResources.retiredAt))).limit(1);
   if(active.length||multipart.length)return false;

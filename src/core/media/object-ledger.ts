@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Shared infrastructure: reserve before provider I/O on the owning service TX.
+import {eq} from "drizzle-orm";
 import { mediaObjects } from "./schema";
 import type { ServiceContext, Tx } from "@/core/service";
 import {actorString} from "@/core/service";
@@ -28,13 +29,16 @@ export async function deleteUnownedPendingObjects(keys: readonly string[]): Prom
 /** The caller authorizes the operation and derives its own storage namespace. */
 export async function reservePendingMediaObject(
   ctx: Pick<ServiceContext, "tx"|"actor">,
-  input: { key: string; role: "original" | "staged"; contentType: string; bytes: number },
-): Promise<void> {
+  input: { key: string; role: "original" | "staged"; contentType: string; bytes: number;requireNewBirth?:boolean },
+): Promise<{reservationId:string|null}> {
   await lockContactIdentityForRead(ctx.tx);
   await allowMediaReceiptWrites(ctx.tx);
   const uploadedBy=actorString(ctx.actor),ownerContactId=await originalUploadContact(ctx.tx,uploadedBy);
   await assertOriginalUploadWritable(ctx.tx,ownerContactId,uploadedBy);
-  await ctx.tx.insert(mediaObjects).values({
+  const[created]=await ctx.tx.insert(mediaObjects).values({
     key: input.key, role: input.role, state: "pending", bytes: input.bytes, contentType: input.contentType,ownerContactId,
-  }).onConflictDoNothing();
+  }).onConflictDoNothing().returning();
+  if(input.requireNewBirth&&!created?.reservationId)throw new Error("A new original object claim needs its actual new reservation; an equal existing key cannot supply its birth.");
+  const original=created??(await ctx.tx.select().from(mediaObjects).where(eq(mediaObjects.key,input.key)).limit(1))[0];
+  return{reservationId:original?.reservationId??null};
 }

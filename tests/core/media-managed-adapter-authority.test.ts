@@ -1,0 +1,13 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// PREPARED / UNRUN. Boundary refusal controls, not actual provider acceptance.
+import {describe,expect,it} from "vitest";
+import {withManagedStorageMutations} from "@/adapters/storage/managed";
+import type {StorageAdapter} from "@/adapters/storage/types";
+function fixture(){let mutations=0;const body=new Uint8Array([0,255]),store:StorageAdapter={id:"s3",isPublic:false,async put(key,bytes,type){mutations++;return{key,bytes:bytes.byteLength,contentType:type};},async delete(){mutations++;},async get(){return body;},async head(key){return{key,bytes:2,contentType:"application/octet-stream"};},async stream(){return undefined;},async readRange(){return body;},async url(key){return`https://fictional.invalid/${key}`;},directMultipart:{async create(){mutations++;return{uploadId:"fictional"};},async signPart(){mutations++;return{url:"https://fictional.invalid/put",method:"PUT"};},async listParts(){return[];},async complete(key){mutations++;return{key,bytes:2,contentType:"application/octet-stream"};},async abort(){mutations++;}}};return{managed:withManagedStorageMutations(store),body,mutations:()=>mutations};}
+describe("application storage requires a real committed caller",()=>{
+ it("refuses raw object creation and removal before reaching the provider",async()=>{const f=fixture();await expect(f.managed.put("private/original",f.body,"application/octet-stream")).rejects.toThrow("original caller");await expect(f.managed.delete("private/original")).rejects.toThrow("shared original-file");expect(f.mutations()).toBe(0);});
+ it("refuses raw session creation/completion/abort without durable original authority",async()=>{const f=fixture(),m=f.managed.directMultipart!;await expect(m.create("private/original","application/octet-stream")).rejects.toThrow("original caller");await expect(m.complete("private/original","fictional",[])).rejects.toThrow("original caller");await expect(m.abort("private/original","fictional")).rejects.toThrow("original caller");expect(f.mutations()).toBe(0);});
+ it("refuses all raw part signing while the actual original part protocol is unfinished",async()=>{const f=fixture();await expect(f.managed.directMultipart!.signPart("private/original","fictional",1)).rejects.toThrow("upload recovery");expect(f.mutations()).toBe(0);});
+ it("preserves read-only adapter behavior without inventing physical mutation authority",async()=>{const f=fixture();expect(await f.managed.get("private/original")).toEqual(f.body);expect(await f.managed.head("private/original")).toMatchObject({key:"private/original",bytes:2});expect(await f.managed.url("private/original")).toBe("https://fictional.invalid/private/original");expect(f.mutations()).toBe(0);});
+});
