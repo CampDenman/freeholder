@@ -3682,6 +3682,18 @@ contexts are PREPARED/UNRUN. No SQL/model addition in this composition slice;
 parent source, full existing/new schema, native/provider/security acceptance
 remain REQUIRED. See `deploy/controlled-paid-financial155-source-20261113.md`.
 
+Controlled external anomaly controls prepared 2026-11-13 (C12.38/C9.33/C1.08):
+two TEST-ONLY desired natives observe declared wrong-currency USD and whole
+overage4201/4200 through real owned OPEN targets, actual HTTP adapter/raw commit/
+finish services and real refusal boundaries. Exact positive raw money must stay
+retained while canonical/payment/core3/access remain unchanged, no receipt is
+clipped/adopted, and no original caller/physical pay is replayed. Complete
+original-zero fixture provenance and Carrier's disjoint refund helper remain
+required. All controls are UNRUN; no product/SQL/schema/root/failure change or
+readiness/stable claim. Actual anomaly/disposition/provider/security/full-scope
+acceptance remains required. See
+`deploy/controlled-external-anomalies84-prepared-20261113.md`.
+
 Controlled original-zero fixture source correction 2026-11-13
 (C12.38/C9.33/C1.08): root's actual V23 first-target journey created/bound the
 NET4000 component, then the read-only ordinary classifier isolated exactly one

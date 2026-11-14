@@ -109,5 +109,22 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
   const id=`re_actualControlledExternal${externalRefunds.size+1}`,refund={id,object:"refund",payment_intent:providerPaymentIntentRef,charge:intent.latest_charge,amount:amountMinor,currency:intent.currency,status:"succeeded",created:Math.floor(Date.now()/1000)};
   externalRefunds.set(id,refund);return refund;
  }
- return{...edge,forms,externallyAttachPayment,externallyRefundPayment,externalRefunds:()=>[...externalRefunds.values()],externalAttachments:()=>externalAttachments,invoices:()=>[...bankInvoices.values()],intents:()=>[...intents.values()],counts:()=>({updatePosts,draftPosts,itemPosts,feePosts,finalizePosts,payPosts,cashGets})};
+ // Explicit fictional external anomalies, never a production policy selector.
+ // Original identity comes ONLY from the already-created exact bank invoice.
+ // These methods intentionally describe contradictory received bank facts; the
+ // real application must retain them without FX, clipping or owner adoption.
+ function externalAnomaly(providerInvoiceRef:string,kind:"wrong_currency"|"overage"){
+  const invoice=bankInvoices.get(providerInvoiceRef),subscription=current(),total=Number(invoice?.total);
+  if(!invoice||!subscription||invoice.status!=="open"||invoice.currency!=="cad"||invoice.amount_paid!==0||!Number.isSafeInteger(total)||total<=0||total>=Number.MAX_SAFE_INTEGER)
+   throw Error("Use an actual untouched OPEN CAD bank target before attaching its declared external anomaly.");
+  const amountMinor=kind==="overage"?total+1:1,currency=kind==="wrong_currency"?"usd":"cad",feeMinor=kind==="overage"?Number(invoice.application_fee_amount):0;
+  if(!Number.isSafeInteger(feeMinor)||feeMinor<0||feeMinor>amountMinor)throw Error("The fictional anomaly must still retain an actual bounded bank fee.");
+  externalAttachments++;const id=`pi_actualPeriodAnomaly${externalAttachments}`;
+  const intent={id,object:"payment_intent",status:"succeeded",customer:subscription.customer,payment_method:subscription.default_payment_method,amount:amountMinor,amount_received:amountMinor,amount_capturable:0,currency,
+   latest_charge:`ch_actualPeriodAnomaly${externalAttachments}`,transfer_data:structuredClone(subscription.transfer_data),on_behalf_of:subscription.on_behalf_of,application_fee_amount:feeMinor};
+  intents.set(id,intent);intentInvoices.set(id,providerInvoiceRef);invoice.amount_paid=amountMinor;invoice.amount_remaining=kind==="overage"?0:total-amountMinor;invoice.status=kind==="overage"?"paid":"open";
+  return{providerInvoiceRef,providerPaymentIntentRef:id,amountMinor,currency:currency.toUpperCase(),feeMinor};
+ }
+ return{...edge,forms,externallyAttachPayment,externallyRefundPayment,externalRefunds:()=>[...externalRefunds.values()],externallyAttachWrongCurrencyPayment:(providerInvoiceRef:string)=>externalAnomaly(providerInvoiceRef,"wrong_currency"),externallyOverpayInvoice:(providerInvoiceRef:string)=>externalAnomaly(providerInvoiceRef,"overage"),
+  externalAttachments:()=>externalAttachments,invoices:()=>[...bankInvoices.values()],intents:()=>[...intents.values()],counts:()=>({updatePosts,draftPosts,itemPosts,feePosts,finalizePosts,payPosts,cashGets})};
 }
