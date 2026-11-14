@@ -15,7 +15,7 @@ import { signProviderReadProof } from "@/modules/subscriptions/provider-read-sig
 type History=Awaited<ReturnType<typeof controlledProviderJournal>>;
 type Operation=typeof subscriptionControlledOperations.$inferSelect;
 const sha="a".repeat(64),start="2026-11-01T00:00:00.000Z",end="2026-12-01T00:00:00.000Z";
-function vector(options:{paid?:boolean;partial?:boolean;contradictory?:boolean;unfinished?:boolean;precision?:boolean;incompletePayments?:boolean;historicalIncomplete?:boolean}={}){
+function vector(options:{bootstrapZero?:boolean;paid?:boolean;partial?:boolean;contradictory?:boolean;unfinished?:boolean;precision?:boolean;incompletePayments?:boolean;historicalIncomplete?:boolean}={}){
  const resource:ControlledRawTarget["resource"]={id:randomUUID(),subscriptionId:randomUUID(),termsId:randomUUID(),generation:1,originalSourceRevision:sha,createdAt:new Date(),originalScope:{
   subscriptionId:"",termsId:"",generation:1,providerApiVersion:"2026-10-28.endive",providerPlatformAccountId:"acct_originalPlatform",providerAccountId:"acct_originalSeller",
   providerCustomerRef:"cus_original",providerMethodRef:"pm_original",providerProductRef:"prod_original",currency:"CAD",interval:"month",intervalCount:1,acceptedPeriodEnd:end,acceptedTrialEnd:null}};
@@ -55,6 +55,9 @@ function vector(options:{paid?:boolean;partial?:boolean;contradictory?:boolean;u
  function invoice(paid:number,total=1000){return{id:"in_original",subscription:"sub_original",customer:"cus_original",metadata:invoiceMetadata,parent:{subscription_details:{subscription:"sub_original",metadata:tag}},currency:"cad",status:paid===total&&total>0?"paid":paid>0?"open":"draft",
   total,subtotal:total,amount_due:total,amount_paid:paid,amount_remaining:total-paid,auto_advance:false,collection_method:"charge_automatically",default_payment_method:"pm_original",automatic_tax:{enabled:false},discounts:[],default_tax_rates:[],
   starting_balance:0,ending_balance:0,pre_payment_credit_notes_amount:0,post_payment_credit_notes_amount:0,total_discount_amounts:[],total_taxes:[],application_fee_amount:0,transfer_data:null,on_behalf_of:null};}
+ const preparationInvoice={...invoice(0,0),id:"in_bootstrap",status:"paid"};
+ if(options.bootstrapZero)append("read_bootstrap",{bootstrapOperationId:bootstrap.operation.id,bootstrapRequestDigest:bootstrap.operation.requestDigest,providerSubscriptionRef:"sub_original"},()=>({facts:[],result:{providerSubscriptionRef:"sub_original",providerInvoiceRef:"in_bootstrap",completeZeroRecurringItem:true,
+  providerApiVersion:resource.originalScope.providerApiVersion,providerPlatformAccountId:resource.originalScope.providerPlatformAccountId,chargeAccountId:resource.originalScope.providerAccountId??null}}));
  const creator=append("create_draft",base,operation=>{
   invoiceMetadata={...tag,freeholder_controlled_collection_protocol:manifest.protocol,freeholder_controlled_collection_id:manifest.collectionId,freeholder_controlled_collection_quote_id:manifest.quoteId,
    freeholder_canonical_invoice_id:manifest.canonicalInvoiceId,freeholder_canonical_target_digest:manifest.canonicalTargetDigest,freeholder_controlled_collection_quote_digest:manifest.acceptedQuoteDigest,
@@ -89,7 +92,7 @@ function vector(options:{paid?:boolean;partial?:boolean;contradictory?:boolean;u
   history.chargeOrigins.push({receiptId:original.receiptId,resourceId:resource.id,operationId:current.operation.id,callId:current.call.id,factId:fact.id,
    originalEvidenceDigest:merchantTaxDigest({resource,operation:current.operation,call:current.call,fact,cash}),createdAt:new Date()});history.count++;
  }
- return{target,append,current,creator,itemCreator,line,intent,invoice,calendar,tag,review:()=>controlledRawFinancialReview(resource,history)};
+ return{target,append,current,creator,itemCreator,line,intent,invoice,preparationInvoice,calendar,tag,review:()=>controlledRawFinancialReview(resource,history)};
 }
 /** Still a PURE signed-raw vector: no actual receipt/inspection, ServiceContext
  * or DB authority is manufactured. The real initializer obtains those itself. */
@@ -248,4 +251,25 @@ describe("exact full15 derived raw financial disposition",()=>{
   expect(actual.unresolvedFactIds).toEqual([]);expect(actual.resolutions.every(row=>row.canonicalRefundedMinor===500)).toBe(true);
   expect(v.target.cash[0]!.amountMinor).toBe(1000);expect(JSON.stringify(actual)).not.toMatch(/principalSafe|financiallyQuiesced|refundSettled|paidAccess/);
  });
+});
+
+/** Full returned list + independent reads use real Ed25519 proofs above; the
+ * canonical projection remains mock-only. No DB/service authority is created. */
+function withBootstrapInventory(options:{unknown?:boolean;foreignCustomer?:boolean;historicalPositive?:boolean;missingOriginal?:boolean;incomplete?:boolean}={}){
+ const v=vector({bootstrapZero:!options.missingOriginal}),invoice={...v.preparationInvoice,...(options.unknown?{id:"in_unknown_zero"}:{}),...(options.foreignCustomer?{customer:"cus_foreign"}:{})};
+ const actual=v.current.facts.find(row=>row.actual.kind==="invoice_read");if(!actual)throw Error("Missing prepared target invoice");
+ const list=v.append("list_invoices",{providerSubscriptionRef:"sub_original",bootstrapOperationId:v.calendar.bootstrapOperationId,bootstrapRequestDigest:v.calendar.bootstrapRequestDigest},()=>({facts:[{kind:"invoice_list_read",raw:{data:[options.historicalPositive?{...invoice,total:1,subtotal:1,amount_due:1,amount_paid:1}:invoice,actual.actual.raw],has_more:false}}],result:{complete:true,providerSubscriptionRef:"sub_original",providerInvoiceRefs:[String(invoice.id),"in_original"],actualInvoices:[invoice,actual.actual.raw]}}));
+ const original=v.target.history.verifications.find(row=>row.operationId===v.current.operation.id);if(!original)throw Error("Missing prepared returned original read");
+ v.append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts:v.current.facts.map(row=>row.actual),result:original.actualResult}));
+ v.append("read_invoice",{providerInvoiceRef:String(invoice.id)},()=>({facts:[{kind:"invoice_read",raw:invoice},{kind:"invoice_payments_read",raw:{data:[],has_more:false}},{kind:"invoice_lines_read",raw:{data:[],has_more:false}}],result:{providerInvoiceRef:invoice.id,providerSubscriptionRef:"sub_original",providerCustomerRef:options.foreignCustomer?"cus_foreign":"cus_original",currency:"CAD",status:"paid",totalMinor:0,paidMinor:0,remainingMinor:0,autoAdvance:false,completePayments:!options.incomplete,completeLines:true,actualInvoice:invoice,actualCash:[],actualPayments:[],actualIntents:[],actualLines:[],actualPrices:[],suppliesPaidAuthority:false,financiallyQuiesced:false}}));
+ v.target.canonicalCount=12;const fact=list.facts[0];if(!fact)throw Error("Missing prepared list fact");return{v,fact};
+}
+describe("separate genuine original zero-preparation evidence in mixed raw lists",()=>{
+ it("binds original bootstrap and actual fresh inventory without inventing another canonical owner",()=>{const{v,fact}=withBootstrapInventory(),before=merchantTaxDigest(v.target.history),actual=classifyControlledTargetRawFacts([v.target]),resolution=actual.resolutions.find(row=>row.factId===fact.id);
+  expect(actual.unresolvedFactIds).not.toContain(fact.id);expect(resolution).toMatchObject({collectionId:v.target.manifest.collectionId,disposition:"canonical_cash",receiptIds:[v.target.cash[0]?.receiptId],preparationProofs:[{kind:"original_bootstrap_zero",resourceId:v.target.resource.id,providerInvoiceRef:"in_bootstrap"}]});
+  expect(resolution?.bankProofs).toHaveLength(1);expect(v.target.cash).toHaveLength(1);expect(merchantTaxDigest(v.target.history)).toBe(before);expect(JSON.stringify(resolution?.preparationProofs)).not.toMatch(/paymentId|canonicalInvoiceId|amountMinor|allowed|principalSafe/);
+ });
+ it.each(["unknown","foreignCustomer","historicalPositive","missingOriginal","incomplete"] as const)("keeps %s zero-looking/contradictory list atoms as actual debt",change=>{const{v,fact}=withBootstrapInventory({[change]:true});expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(fact.id);expect(v.target.history.facts).toContain(fact);});
+ it("refuses preparation adoption when the real canonical bound is absent",()=>{const{v,fact}=withBootstrapInventory();delete v.target.canonicalCount;expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(fact.id);});
+ it("retains an actual unfinished physical caller rather than borrowing the fresh zero read",()=>{const{v,fact}=withBootstrapInventory();v.append("read_invoice",{providerInvoiceRef:"in_bootstrap"},()=>({facts:[],result:{}}),true);expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(fact.id);});
 });
