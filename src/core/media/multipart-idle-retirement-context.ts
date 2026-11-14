@@ -7,7 +7,8 @@ import type {TransferRequestDescriptor} from "../../../scripts/media-transfer.mj
 import {mediaMultipartOperations as operations,mediaMultipartResources as resources} from "./multipart-schema";
 import {mediaUploads,mediaObjects} from "./schema";
 import {mediaObjectWrites} from "./write-schema";
-import {mediaStorageTransferCalls as calls,mediaStorageTransferObjects as copies} from "./transfer-schema";
+import type {mediaStorageTransferCalls as calls} from "./transfer-schema";
+import {mediaStorageTransferObjects as copies} from "./transfer-schema";
 import {mediaStorageTransferRequests as requests} from "./transfer-request-schema";
 import {storageQuotaObjects} from "./storage-quota-schema";
 import {lockTransferInventory} from "./transfer-authority";

@@ -5,7 +5,7 @@ import {observeTransferRequest,withTransferRequestScope,TransferRequestNotAttemp
 import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C11.08: commit original intent, call its provider, then record facts.
 import {createHash,randomUUID} from "node:crypto";
-import {and,asc,eq,inArray,isNull,sql} from "drizzle-orm";
+import {and,asc,eq,inArray,sql} from "drizzle-orm";
 import {boundStorage} from "@/adapters/storage";
 import type {StorageTransferRevision} from "./transfer-schema";
 import type {MultipartPart,StorageBinding} from "@/adapters/storage/types";
