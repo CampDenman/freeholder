@@ -9330,5 +9330,7 @@
   "cashInspection.reviewHelp": "Describe how you verified that this exact original process stopped. After review, retry the bank inspection from the original payment or recovery action.",
   "cashInspection.evidence": "Hosting evidence",
   "cashInspection.confirm": "I verified that this original inspection process stopped. I understand that a new completed bank inspection is still required.",
-  "cashInspection.review": "Record verified stop"
+  "cashInspection.review": "Record verified stop",
+  "subscriptions.proration.controlledNotice": "Your billing provider’s dates and any calendar reset are shown here. Your existing access stays in place until this invoice is fully paid and the reviewed change takes effect. The original trial end does not change. Unused paid price and its original tax become credit reserved for this invoice; any remaining credit becomes available after the actual switch. No cash refund is automatic. Unrelated account credit is not accepted as payment for this change. If the actual dates or money differ, review again; existing partial payments, issued credit and fee duties remain recorded.",
+  "subscriptions.period.controlledNotice": "Your existing paid access keeps its original end date. This invoice covers the original accepted next-period dates, its price, any original one-time setup fee and the tax shown here. The trial is never billed early. Only this exact invoice may be collected; provider estimates or transitional drafts are not extra customer charges. Unrelated account credit cannot fund it. Partial payments remain recorded and do not advance access before full payment."
 }

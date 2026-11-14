@@ -3574,7 +3574,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-14 checkpoint. Protected main remains fdba2817 (PR702:44 PR/43 merge-group checks); broader PR701 is older and not green. Current integrated source aa941edc, including first multipart CREATE baseline b8f9480b, passes751 actual assertions in130 complete files, with319 explicit database skips, full TypeScript, affected lint and metadata. Fresh V18 applies85 ordinary migrations; strict v25 verifies145 affected model targets/301 guards/262 function bodies/3491 read-only queries. Owned/normal82 is46f6c2b3/260201 bytes and preserves its complete248307-byte prior prefix; all other migration bytes and all85 journal entries remain unchanged. Actual live SDK non-update verification passes8 assertions, preserving every145 whole-row component SHA, all85 journal hashes, sequence state and drained clients. Prior f125/cf7 source739/V17/schema/SDK-generation checkpoint, failed attempts and all older datasets/proofs remain preserved in deploy/current-source145-checkpoint-20261113.md. Prior4349 production build and four owner browser journeys remain historical. Full multipart part/consumption/object-proof/capture/session/quota/cutover and positive financial ordering/batch/application remain implementation/qualification; both media capabilities stay unpublished. Current CI/build/browser, actual provider/platform/cross-host byte recovery, Tony’s C11.10 report and C11.17 signature remain open. No C-item closes; stable and announcement remain pending required acceptance. NEW6451cf99 completed-object source is integrated after this qualified checkpoint; owned/normal82 becomes9d8390a6/269577 bytes, preserving the complete260201-byte prefix. Source/schema/native renewal remains pending; original session retirement still requires separate issued-part consumption proof. |
+| Latest launch audit | 2026-11-14 checkpoint. Protected main remains fdba2817 (PR702:44 PR/43 merge-group checks); broader PR701 is older and not green. Current integrated source aa941edc, including first multipart CREATE baseline b8f9480b, passes751 actual assertions in130 complete files, with319 explicit database skips, full TypeScript, affected lint and metadata. Fresh V18 applies85 ordinary migrations; strict v25 verifies145 affected model targets/301 guards/262 function bodies/3491 read-only queries. Owned/normal82 is46f6c2b3/260201 bytes and preserves its complete248307-byte prior prefix; all other migration bytes and all85 journal entries remain unchanged. Actual live SDK non-update verification passes8 assertions, preserving every145 whole-row component SHA, all85 journal hashes, sequence state and drained clients. Prior f125/cf7 source739/V17/schema/SDK-generation checkpoint, failed attempts and all older datasets/proofs remain preserved in deploy/current-source145-checkpoint-20261113.md. Prior4349 production build and four owner browser journeys remain historical. Full multipart part/consumption/object-proof/capture/session/quota/cutover and positive financial ordering/batch/application remain implementation/qualification; both media capabilities stay unpublished. Current CI/build/browser, actual provider/platform/cross-host byte recovery, Tony’s C11.10 report and C11.17 signature remain open. No C-item closes; stable and announcement remain pending required acceptance. NEW6451cf99 completed-object source is integrated after this qualified checkpoint; owned/normal82 becomes9d8390a6/269577 bytes, preserving the complete260201-byte prefix. Source/schema/native renewal remains pending; original session retirement still requires separate issued-part consumption proof. NEW02156cc5 financial factory/orchestration source is also integrated for review: six future model families are registered but their normal SQL, full parent/privacy composition and source/native/SDK qualification remain pending. The exact existing invoice writer, central financial guards, original stop UI/native and every prior locale value are preserved; full positive application and separate effects remain open. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -15531,6 +15531,58 @@ whatever is best for the people using the site.
   authentic late/partial recovery still REQUIRE implementation and qualification.
   No requirement is deferred. See
   `deploy/subscription-controlled-provider80-source-20261113.md`.
+  Controlled target identity/lock source correction (2026-11-13, C9.33/C12.38):
+  the accepted commercial digest now binds stable subscription/source/invoice/
+  original policy and issued-credit economic identity, separately from current
+  contact aliases and mutable status/timestamps. Current invoice/parent buyer
+  and merchant policy identities must still agree, and full physical row SHA
+  remains in current financial revisions. The target planner locks the actual
+  parent immediately after resource, before payments/invoice/notes, preserving
+  resource→parent→sorted payment→invoice→note→cash. This is source only;
+  qualification and the full positive lifecycle remain required.
+  Controlled canonical collection contract/runtime checkpoint (2026-11-13,
+  C9.33/C9.38/C12.38/C1.08): a new six-family source boundary distinguishes
+  actual ordinary periods from explicit prorations and preserves original
+  physical creators separately from observing calls/facts. Concrete adapters
+  create/reuse a nonautomatic target draft, attach exact NET, fixed dated
+  merchant-declared tax and locked canonical negative amount items, verify
+  complete manifests/customer balances, set exact fees, finalize without
+  automatic collection and explicitly pay the original saved method. Positive
+  PI facts are retained before later price/manifest/application failures. Bank
+  ACKs/paid flags/zero due never manufacture canonical cash or access.
+  Historical quotedParentRevision remains evidence; acceptance must separately
+  record acceptedCurrentParentRevision after complete fresh current safety and
+  exactly unchanged economics/source IDs/epochs/profile/dated tax/currency/fee/
+  calendar/trial/method/namespace/API/disposition checks. Own unaccepted quotes
+  remain in full physical witnesses and reserve no principal; admitted readers
+  are never excluded. Relevant changed economics require fresh explicit consent.
+  A separate required target money-authority query and expanded protocol remain
+  mechanically unavailable until their genuine parent consumers are integrated
+  and qualified. Coverage readiness alone never declares money quiesced.
+  Seven actual mocked-HTTP controls are PREPARED/UNRUN; the owned additive SQL
+  tail is UNAPPLIED and source-only. Public canonical period/proration quote and
+  acceptance factories, original binding/item/proof retention commands, final
+  canonical receipt/payment/effect, six-family parent/privacy consumers, genuine
+  positive-target closure/late-partial recovery and provider acceptance remain
+  REQUIRED implementation and qualification, with no deferral or feature/stable
+  closure. See deploy/subscription-controlled-collection82-source-20261113.md.
+  Controlled original draft retention source checkpoint (2026-11-13,
+  C9.33/C9.38/C12.38/C1.08): three private shared services retain genuine
+  original invoice bindings, separate creator/observer item receipts and
+  complete returned manifest proofs. Ordinary reader/writer ownership checks
+  preserve original bootstrap, merchant route, actual price/period/interval
+  and immutable target identity. Renewal origins bind their original price
+  epoch separately from the new canonical period. Observation inventories
+  actual positive money before later calendar/manifest refusal; it never
+  releases an unfinished caller or grants settlement/access. Normal-period
+  finalize/pay stay behind accepted service/trial dates at final SQL admission.
+  Six pure and three additional mocked-HTTP controls are PREPARED/UNRUN; the
+  additive owned suffix is UNAPPLIED. Public canonical factories, real first
+  periods, paid effect, generated-draft disposition, genuine positive/partial/
+  late/terminal alternative recovery and durable unapplied manual receipts
+  remain REQUIRED implementation and qualification. No gate closes or
+  requirement is deferred. See
+  deploy/subscription-controlled-retention82-source-20261113.md.
   Original phase dispatch source checkpoint (2026-11-13, C12.38): four private
   shared phases now freeze the complete reviewed horizon and exact physical
   request, retain actual schedule ACKs before price reads, and finish only the
@@ -15840,6 +15892,13 @@ whatever is best for the people using the site.
   controlled observation/application and source-money transition fencing remain
   REQUIRED implementation/qualification. No later read invents an old finish.
   See deploy/original-cash-inspection-current83-source-20261113.md.
+  Current cash-reader source qualification2026-11-13: full TypeScript passes
+  at4cc200a9. Whole-repository lint stops only at two new issues: schema imports
+  used solely as types and an unbound actual Stripe inspection method in the
+  native helper. The source now uses type-only imports and binds that genuine
+  method to its original adapter. No lint rule, runtime policy or financial
+  oracle is relaxed. Failed v17 logs remain preserved; renewed focused lint,
+  all complete affected contracts and actual reader journeys are still required.
   Independent original-inspection stop SOURCE checkpoint (2026-11-13,
   C12.38/C1.08/C11.10): one proposed model143 retains a signed exact-admission
   stop separately from genuine bank-wrapper completion. Fresh human review
@@ -16365,3 +16424,123 @@ provider/host action, new model/journal, capability publication or C-item closur
 Part issuance/consumption, unknown recovery, capture/quota/cutover and all
 qualification/acceptance remain open. See
 `deploy/media-multipart-completed-object-source-2026-11-13.md`.
+Source contract checkpoint 2026-11-13 (C12.38/C1.08): the ordinary controlled
+cash observational source reader binds an actual accepted target/receipt and
+original creator/caller/fact plus every retained observation/raw occurrence.
+Source identity supplies no observation/application/principal/access authority.
+Seven controls are PREPARED/UNRUN. Genuine parent coverage/caller/privacy
+observation authority, actual GET producer and explicit own-read causal history
+comparison remain REQUIRED implementation, followed by genuine finished bank
+proof and canonical batch application/effects. No private service is registered,
+financial default relaxed, SQL assembled or C-item/stable closure claimed. See
+deploy/controlled-cash-observation-source82-20261113.md.
+
+Source callback checkpoint 2026-11-13 (C12.38/C1.08/C11.10): new optional
+private original-holder validation authenticates each actual inspection refund
+capture with its original admission/caller and occurrence UUID/time. Late or
+foreign callbacks retain raw money independently and cannot be adopted as that
+read by a semantic FK. Legacy defaults remain intact. Six pure and one actual
+shared-service/HTTP controls are PREPARED/UNRUN; no schema/SQL or financial
+permission changes. This grants no recovery/money authority. Genuine positive
+observational context, causal comparison, bank proof and full acceptance remain
+REQUIRED; no C/stable closure. See
+deploy/original-cash-inspection-capture83-source-20261113.md.
+
+Source ancestry checkpoint 2026-11-13 (C12.38/C1.08/C11.10): a new ordinary
+reader proves only an exact receipt-owned genuinely returned inspection and its
+authenticated original callback entries. Its historical causal selector never
+contains stop receipts or unrelated repeated captures; full current financial
+coverage retains every own row/caller/fact. Six strict controls are PREPARED/
+UNRUN; no registered authority, new model, SQL or activation. The genuine
+observational parent query/producer/context and all prospective application,
+canonical effects and acceptance remain REQUIRED. See
+deploy/controlled-cash-inspection-ancestry82-20261113.md.
+
+Source producer checkpoint 2026-11-13 (C12.38/C1.08/C11.10): a shared audited
+controlled-receipt orchestrator now commits its actual original inspection
+before GET, retains nonce-authenticated callbacks and genuine wrapper finish,
+and reports actual bank state without money authority. A distinct current-bank
+reader uses genuine parent observational coverage/causal history and shared
+neutral facts; legacy financial defaults and revision remain strict/unchanged.
+Missing parent query refuses before SDK work. Five controls plus one actual
+SQL lock-identity/lifetime control are PREPARED/UNRUN, not positive payment
+acceptance. Real query/consumer integration, complete positive provider/partial
+batch/calendar/disposition/recovery/UI/privacy and actual account/security
+acceptance remain REQUIRED, with no new deferral or C/stable closure. See
+deploy/controlled-cash-inspection-producer82-20261113.md.
+
+Parent qualification repair2026-11-13: full TypeScript passed56.115s at007315b9.
+Focused lint stopped on a native-test callback declaration whose generic call
+parameter was unknown. The control now derives its callback input from the real
+service Zod schema. No handler/oracle/lint policy changes; failed v22 remains
+preserved and renewed143/source/native acceptance remains pending.
+
+Parent helper validation2026-11-13: the precise callback input exposes the
+adapter-level optional platform account. The control now parses the actual
+callback through the real shared input schema instead of asserting or inventing
+an account. Failed v23 type evidence is preserved; renewed qualification remains
+pending. This carries the exact parent0180165c repair, not a new local test run.
+
+Source continuation 2026-11-13 (C12.38/C1.08): the future controlled observation
+producer uses the actual same-transaction immutable lineage birth hook before
+any bank GET. Exact returned-own ancestry authenticates only its own optional
+lineage child as a seventh historical causal family; full CURRENT coverage
+retains it and every other caller/raw/money row. No legacy backfill, blanket
+own-read exclusion, bank/application/access authority or qualification is
+claimed. See `deploy/controlled-cash-inspection-lineage-producer84-source-20261113.md`.
+
+Source contract checkpoint 2026-11-13 (C12.38/C9.33/C1.08): explicit exact receipt
+batch evidence separates immutable returned-bank facts/current namespace revisions
+from full CURRENT parent application authority. Partial paid cash retains its
+unpaid remainder and actual canonical projections; every raw occurrence and
+unfinished caller remains explicit. All authority flags are false. Ten contract
+controls are prepared/UNRUN; genuine producer, parent context, SQL/routing and
+native qualification remain required. See
+`deploy/controlled-collection-cash-contract84-source-20261113.md`.
+
+Source implementation checkpoint 2026-11-13 (C12.38/C9.33/C1.08): the ordinary
+real-context receipt-batch bank reader now consumes genuine latest admission
+lineage, actual returned complete charge/refund/dispute facts and SQL bank policy,
+complete actual manifest/PI/payment inventory, canonical issued-credit/dated-tax/
+fee ownership and all raw occurrence/caller evidence. Partial paid bank amounts
+retain their unpaid balance; no canonical paid/access projection or payment
+eligibility is invented. Separate immutable bank/current namespace revisions feed
+Commerce's required full CURRENT parent/batch authority. Ten new controls are
+PREPARED/UNRUN. Mismatched partial/provider fee allocation remains retained review
+and required recovery work; parent staging/routing, positive factories/orchestration,
+paid effects and actual batch/native/provider acceptance remain required. See
+`deploy/controlled-collection-cash-reader84-source-20261113.md`.
+
+Source factory checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08): shared owner and
+customer provider preview/consent paths now retain authentic actual calendar/
+customer/native/no-proration evidence and create the real canonical gross invoice,
+exclusive old paid credit and fee/job/terms lineage through the same existing
+writer. Historical quoted/full current accepted revisions remain distinct; no
+unaccepted quote reserves money or disappears from coverage. Actual trial end and
+zero trial principal stay intact. Eight pure and three genuine-service native
+controls are PREPARED/UNRUN; new owned SQL tail is UNAPPLIED. Provider paid effects
+still mechanically refuse pending genuine authority; first/normal-period factories,
+full collection/application/recovery/UI/native/live acceptance remain required.
+See `deploy/controlled-proration-canonical-factory82-source-20261113.md`.
+
+Source original-period factory checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08):
+owner/customer actual native/calendar/customer previews and unchanged original
+mandate now materialize the next canonical posttrial/renewal invoice through the
+byte-identical shared period writer. Original consent and dated-period quote remain
+distinct; setup once, dated merchant tax, old paid access and trial end are preserved.
+No initial-sale/signupPending bypass, new acceptance actor or fake phase is inferred.
+Six pure plus three actual-service controls are PREPARED/UNRUN; new owned SQL tail
+is UNAPPLIED. Complete positive collection/disposition, prospective staging/routing,
+separate paid effects and all source/native/live/security acceptance remain REQUIRED.
+See `deploy/controlled-original-period-factory84-source-20261113.md`.
+
+Source actual-collection checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08): actual
+owner/customer orchestration now executes complete causally ordered invoice/PI/
+line inventory, paused update, exact original draft/item binding, fixed tax/fee,
+manifest/finalize/pay through genuine admitted SDK calls. Actual raw positive cash
+commits before application; lost actual POSTs are not replayed. Nine pure controls
+are PREPARED/UNRUN; owned SQL remains UNAPPLIED. Results never claim application or
+access. Genuine proper-target native/ordering, generated draft disposition, staged
+application/routing, partial remainder recovery, separate paid effects and full
+UI/privacy/live/security acceptance remain REQUIRED.
+See `deploy/controlled-collection-orchestration84-source-20261113.md`.

@@ -27,6 +27,10 @@ import { subscriptionProrationCardMandates } from "./proration-card-schema";
 import { retainProrationCardMandate } from "./proration-card-mandate";
 import { prorationBoundaryFunded } from "./proration-boundary";
 import { originalMerchantTerms } from "./merchant-terms-read";
+import { subscriptionControlledQuotes } from "./controlled-provider-collection-schema";
+import { subscriptionControlledResources } from "./controlled-provider-schema";
+import { controlledProviderJournal } from "./controlled-provider-proof";
+import { authenticatedControlledQuote } from "./controlled-provider-quote-proof";
 
 export const APPLY_GROSS_PRORATION_JOB = "subscriptions.applyGrossProration";
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
@@ -51,13 +55,42 @@ async function accept(ctx: ServiceContext, input: z.infer<typeof acceptance>) {
   if (prepared.previous.id !== input.previousTermsId || prepared.review.quoteDigest !== input.acceptedQuoteDigest)
     throw new ServiceError("conflict", "The original principal, price, tax, calendar or exact credit capacity changed. Review a fresh explicit quote.");
   if (prepared.review.requiresMerchantReview) throw new ServiceError("conflict", "This change needs its original merchant fee review before accepting any payment or credit promise.");
-  const { basis, economic, effectiveAt } = prepared;
+  const { basis } = prepared;
   // Preserve shared lock order: original payments, invoices, then original notes.
   for (const id of [...new Set(basis.principal.map(row => row.sourcePaymentId))].sort()) await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment:${id}`}))`);
   if (basis.invoice) await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`invoice:${basis.invoice.id}`}))`);
   const checked = await prepareGrossProrationQuote(ctx, input);
   if (checked.review.quoteDigest !== prepared.review.quoteDigest) throw new ServiceError("conflict", "The original current money or accepted offer changed while locking its exact principal. Review it again.");
-  const id = randomUUID(), termsId = randomUUID(), originalJobId = randomUUID(), acceptedAt = new Date();
+  return retainAcceptedGrossProration(ctx, input, prepared);
+}
+
+/** Trusted shared canonical writer. Callers must finish current source/consent
+ * and exact payment/invoice/note locks before entering it; it accepts no public
+ * bank payload and opens no separate transaction or SDK call. */
+export type AcceptedGrossProrationSource=Pick<Awaited<ReturnType<typeof prepareGrossProrationQuote>>,
+ "parent"|"previous"|"economic"|"basis"|"effectiveAt"|"debitTaxQuote"|"noticeDigest"|"noticeSnapshot"|"feeReview"|"card"> & {
+ review:Pick<Awaited<ReturnType<typeof prepareGrossProrationQuote>>["review"],
+ "quoteDigest"|"debitNetMinor"|"debitTaxMinor"|"creditNetMinor"|"creditTaxMinor"|"creditAppliedMinor"|"requiresMerchantReview">;
+};
+export async function retainAcceptedGrossProration(ctx:ServiceContext,input:z.infer<typeof acceptance>,prepared:AcceptedGrossProrationSource,controlled?:{quoteId:string}){
+  const {parent,basis,economic,effectiveAt}=prepared;
+  if(parent.id!==input.id||prepared.previous.id!==input.previousTermsId||economic.planId!==input.planId||effectiveAt.toISOString()!==input.effectiveAt
+    ||prepared.review.quoteDigest!==input.acceptedQuoteDigest||prepared.review.requiresMerchantReview)
+    throw new ServiceError("conflict","The shared canonical writer requires exactly unchanged reviewed original economics and current consent.");
+  let plannedProrationId:string|undefined,proposedPeriodEnd=parent.currentPeriodEnd;
+  if(controlled){
+    const[quote]=await ctx.tx.select().from(subscriptionControlledQuotes).where(eq(subscriptionControlledQuotes.id,controlled.quoteId)).limit(1);
+    const[resource]=quote?await ctx.tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,quote.resourceId)).limit(1):[];
+    if(!quote||!resource||parent.billingMode!=="provider"||resource.subscriptionId!==parent.id)throw new ServiceError("conflict","The provider writer needs its genuine original controlled quote and owning resource.");
+    const actual=authenticatedControlledQuote(quote,resource,await controlledProviderJournal(ctx.tx,resource.id)).review;
+    if(actual.kind!=="proration"||!quote.plannedProrationId||actual.quoteDigest!==prepared.review.quoteDigest||actual.previousTermsId!==prepared.previous.id
+      ||actual.effectiveAt!==effectiveAt.toISOString()||merchantTaxDigest(actual.quote.snapshot)!==merchantTaxDigest(economic.snapshot)
+      ||actual.debitNetMinor!==prepared.review.debitNetMinor||actual.debitTaxMinor!==prepared.review.debitTaxMinor||actual.creditNetMinor!==basis.creditNetMinor||actual.creditTaxMinor!==basis.creditTaxMinor
+      ||actual.creditAppliedMinor!==prepared.review.creditAppliedMinor||merchantTaxDigest(actual.noticeSnapshot)!==merchantTaxDigest(prepared.noticeSnapshot))
+      throw new ServiceError("conflict","Preserve exactly the genuine unchanged native-preview calendar, canonical old principal, tax, fee and explicit provider consent.");
+    plannedProrationId=quote.plannedProrationId;proposedPeriodEnd=new Date(actual.calendar.proposedPeriodEnd);
+  }else if(parent.billingMode==="provider")throw new ServiceError("conflict","Provider proration requires its separate genuine preview/consent and collection protocol.");
+  const id = plannedProrationId??randomUUID(), termsId = randomUUID(), originalJobId = randomUUID(), acceptedAt = new Date();
   if (acceptedAt >= effectiveAt) throw new ServiceError("conflict", "This effective instant expired before acceptance. Review a fresh future instant; access is never backdated.");
   await write(ctx);
   await ctx.tx.insert(subscriptionProrations).values({ id, subscriptionId: parent.id, planId: input.planId, previousTermsId: prepared.previous.id, termsId,
@@ -65,7 +98,7 @@ async function accept(ctx: ServiceContext, input: z.infer<typeof acceptance>) {
     debitTaxQuote: prepared.debitTaxQuote, noticeDigest: prepared.noticeDigest, noticeSnapshot: prepared.noticeSnapshot, quoteOccurredAt: economic.quoteOccurredAt,
     acceptedQuoteDigest: input.acceptedQuoteDigest, sourceRevision: basis.sourceRevision, acceptedBy: actorString(ctx.actor), effectiveAt,
     originalPeriodStart: parent.currentPeriodStart, originalPeriodEnd: parent.currentPeriodEnd, originalTrialEndsAt: parent.status === "trialing" ? parent.trialEndsAt : null,
-    proposedPeriodStart: effectiveAt, proposedPeriodEnd: parent.currentPeriodEnd, basisPeriodStart: basis.periodStart, basisPeriodEnd: basis.periodEnd,
+    proposedPeriodStart: effectiveAt, proposedPeriodEnd, basisPeriodStart: basis.periodStart, basisPeriodEnd: basis.periodEnd,
     originalInvoiceId: basis.invoice?.id ?? null, originalInvoiceLineId: basis.line?.id ?? null, debitNetMinor: prepared.review.debitNetMinor, debitTaxMinor: prepared.review.debitTaxMinor,
     creditNetMinor: basis.creditNetMinor, creditTaxMinor: basis.creditTaxMinor,
     debitFeeObligationMinor: prepared.feeReview.debitFeeObligationMinor, creditFeeObligationMinor: prepared.feeReview.creditFeeObligationMinor,
@@ -74,7 +107,7 @@ async function accept(ctx: ServiceContext, input: z.infer<typeof acceptance>) {
   await ctx.tx.insert(subscriptionCommercialTerms).values({ id: termsId, subscriptionId: parent.id, revision: prepared.previous.revision + 1, previousTermsId: prepared.previous.id,
     snapshot: economic.snapshot, profileId: economic.profile.profileId, profileVersion: economic.profile.profileVersion, taxLiability: economic.profile.liability, taxDestination: economic.taxDestination,
     acceptedQuoteDigest: input.acceptedQuoteDigest, initialTaxQuote: economic.initialTaxQuote, firstPeriodTaxQuote: economic.firstPeriodTaxQuote, renewalTaxQuote: economic.renewalTaxQuote,
-    noticeDigest: prepared.noticeDigest, noticeSnapshot: prepared.noticeSnapshot, quoteOccurredAt: economic.quoteOccurredAt, effectivePeriodStart: parent.currentPeriodEnd, acceptedAt, acceptanceSource: "amendment" });
+    noticeDigest: prepared.noticeDigest, noticeSnapshot: prepared.noticeSnapshot, quoteOccurredAt: economic.quoteOccurredAt, effectivePeriodStart: proposedPeriodEnd, acceptedAt, acceptanceSource: "amendment" });
   let invoiceId: string | null = null, creditNoteId: string | null = null;
   if (parent.status !== "trialing") {
     const sourceId = `${parent.id}:proration:${id}`;
@@ -82,7 +115,7 @@ async function accept(ctx: ServiceContext, input: z.infer<typeof acceptance>) {
       idempotencyKey: `subscription-proration:${id}:debit`, dueAt: effectiveAt,
       lines: [{ sourceType: "subscription", sourceId: parent.id, description: economic.snapshot.name, quantityMicros: 1000000, unitAmountMinor: prepared.review.debitNetMinor,
         discountMinor: 0, taxCategoryCode: economic.snapshot.taxCategoryCode, requiresShipping: economic.snapshot.requiresShipping,
-        snapshot: { subscriptionProrationId: id, subscriptionTermsId: termsId, subscriptionComponent: "proration_debit", subscriptionPeriodStart: effectiveAt.toISOString(), subscriptionPeriodEnd: parent.currentPeriodEnd.toISOString() } }],
+        snapshot: { subscriptionProrationId: id, subscriptionTermsId: termsId, subscriptionComponent: "proration_debit", subscriptionPeriodStart: effectiveAt.toISOString(), subscriptionPeriodEnd: proposedPeriodEnd.toISOString() } }],
       tax: { mode: "merchant", destination: economic.taxDestination, quoteDigest: prepared.debitTaxQuote.quoteDigest } });
     invoiceId = draft.invoice.id;
     if (draft.invoice.totalMinor !== prepared.debitTaxQuote.totalMinor || draft.invoice.taxMinor !== prepared.review.debitTaxMinor)
@@ -152,7 +185,7 @@ export const resolveGrossProrationInvoice = defineService({ name: "subscriptions
       || input.lines.length !== 1 || !line || line.sourceType !== "subscription" || line.sourceId !== parent.id || line.quantityMicros !== 1000000 || line.discountMinor !== 0
       || line.unitAmountMinor !== accepted.debitNetMinor || line.taxCategoryCode !== accepted.snapshot.taxCategoryCode || line.requiresShipping !== accepted.snapshot.requiresShipping
       || line.snapshot.subscriptionProrationId !== accepted.id || line.snapshot.subscriptionTermsId !== accepted.termsId || line.snapshot.subscriptionComponent !== "proration_debit"
-      || line.snapshot.subscriptionPeriodStart !== accepted.effectiveAt.toISOString() || line.snapshot.subscriptionPeriodEnd !== accepted.originalPeriodEnd.toISOString())
+      || line.snapshot.subscriptionPeriodStart !== accepted.effectiveAt.toISOString() || line.snapshot.subscriptionPeriodEnd !== accepted.proposedPeriodEnd.toISOString())
       throw new ServiceError("conflict", "The draft differs from its exact accepted original gross price, tax date, buyer, calendar or exclusive target.");
     return [{ sellerUserId: policy.sellerUserId, profileId: accepted.profileId, profileVersion: accepted.profileVersion, linePositions: [0], shippingMinor: 0, occurredAt: accepted.effectiveAt, expectedQuoteDigest: accepted.debitTaxQuote.quoteDigest }];
   },

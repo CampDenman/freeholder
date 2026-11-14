@@ -9330,5 +9330,7 @@
   "cashInspection.reviewHelp": "Describa cómo verificó que este proceso original exacto se detuvo. Tras la revisión, vuelva a intentar la inspección bancaria desde el pago original o la acción de recuperación.",
   "cashInspection.evidence": "Pruebas del alojamiento",
   "cashInspection.confirm": "Verifiqué que este proceso de inspección original se detuvo. Entiendo que aún se requiere una nueva inspección bancaria completada.",
-  "cashInspection.review": "Registrar detención verificada"
+  "cashInspection.review": "Registrar detención verificada",
+  "subscriptions.proration.controlledNotice": "Aquí se muestran las fechas del proveedor de pagos y cualquier cambio de calendario. Su acceso actual continúa hasta que esta factura esté totalmente pagada y el cambio revisado entre en vigor. El fin de prueba original no cambia. El precio pagado no utilizado y su impuesto original forman un crédito reservado para esta factura; el saldo queda disponible tras el cambio efectivo. No hay reembolso automático. Otro crédito de cuenta no se acepta como pago de este cambio. Si las fechas o importes reales difieren, revíselos de nuevo; los pagos parciales, el crédito emitido y las comisiones pendientes siguen registrados.",
+  "subscriptions.period.controlledNotice": "Su acceso pagado conserva la fecha de fin original. Esta factura cubre las fechas del siguiente período aceptado, su precio, cualquier cargo inicial de alta único y el impuesto mostrado aquí. La prueba nunca se cobra antes de su fin. Solo puede cobrarse esta factura exacta; las estimaciones o borradores de transición del proveedor no son cargos adicionales. Otro crédito de cuenta no puede pagarla. Los pagos parciales quedan registrados y no adelantan el acceso antes del pago completo."
 }

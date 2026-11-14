@@ -79,7 +79,7 @@ export function stripeControlledSubscriptions(api:Api) {
       // recurring collection components stay permanently zero until a separate admitted update.
       // No trial/anchor/backdate field changes accepted application economics.
       const form=new URLSearchParams({ customer:request.providerCustomerRef,default_payment_method:request.providerMethodRef,collection_method:"charge_automatically",
-        payment_behavior:"default_incomplete","billing_mode[type]":"flexible","automatic_tax[enabled]":"false","proration_behavior":"none",
+        payment_behavior:"default_incomplete",discounts:"","billing_mode[type]":"flexible","automatic_tax[enabled]":"false","proration_behavior":"none",
         "items[0][price_data][currency]":request.currency.toLowerCase(),"items[0][price_data][product]":request.providerProductRef,"items[0][price_data][unit_amount]":"0",
         "items[0][price_data][tax_behavior]":"exclusive","items[0][price_data][recurring][interval]":request.interval,"items[0][price_data][recurring][interval_count]":String(request.intervalCount),"items[0][quantity]":"1",
         "payment_settings[save_default_payment_method]":"off" });

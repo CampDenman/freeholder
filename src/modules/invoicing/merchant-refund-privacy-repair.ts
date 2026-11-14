@@ -44,13 +44,14 @@ const factTypes = {
   refund_retirement: ["merchant_refund_reservation_retirements", "request_id"],
   cash_primary: ["merchant_cash_return_primary_observations", "id"],
   cash_state: ["merchant_cash_return_observations", "id"],
+  cash_read: ["merchant_cash_return_inspections", "id"],
   controlled_cash_lineage: ["subscription_controlled_cash_inspection_lineages", "inspection_id"],
   cash_stop: ["merchant_cash_return_inspection_stops", "inspection_id"],
   cash_finish: ["merchant_cash_return_inspection_finishes", "inspection_id"],
   cash_resolution: ["merchant_unapplied_charge_resolutions", "id"],
 } as const;
 export const originalRefundRepairPointer = z.object({
-  kind: z.enum(["original_cash_owner", "original_cash_operation", "original_cash_fact", "original_cash_closure", "legacy_bank_feedback", "legacy_bank_replacement", "legacy_bank_stop", "legacy_bank_current", "legacy_bank_read", "legacy_bank_fact", "legacy_bank_finish", "request", "refund_observation", "refund_capture", "refund_current", "bank_replacement", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_stop", "controlled_cash_lineage", "cash_resolution"]),
+  kind: z.enum(["original_cash_owner", "original_cash_operation", "original_cash_fact", "original_cash_closure", "legacy_bank_feedback", "legacy_bank_replacement", "legacy_bank_stop", "legacy_bank_current", "legacy_bank_read", "legacy_bank_fact", "legacy_bank_finish", "request", "refund_observation", "refund_capture", "refund_current", "bank_replacement", "refund_ack", "refund_finish", "refund_retirement", "cash_primary", "cash_state", "cash_finish", "cash_stop", "cash_read", "controlled_cash_lineage", "cash_resolution"]),
   id: z.uuid(),
 }).strict();
 type Pointer = z.infer<typeof originalRefundRepairPointer>;

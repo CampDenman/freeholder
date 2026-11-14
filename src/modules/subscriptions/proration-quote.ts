@@ -12,35 +12,19 @@ import { moduleSettings } from "@/core/settings/schema";
 import { previewMerchantTax, merchantTaxPreviewOutput } from "@/modules/invoicing/merchant-tax-preview";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { requireAgreementFeeSchema } from "@/modules/invoicing/agreement-fee-store";
-import { marketFeeMinor } from "@/modules/invoicing/market-policy";
-import { compareCreditSources, proportionalFeeCarry, remainingCashFeeBudget } from "@/modules/invoicing/credit-fee-amounts";
-import { feeCollectionState } from "@/modules/invoicing/credit-fee-origin";
-import { subscriptionTaxDestination } from "./merchant-scope-contract";
+import { originalProrationFeeReview } from "./proration-fee-review";
 import { merchantTermsQuoteOutput, publicMerchantTermsQuote, quoteOriginalMerchantTerms } from "./merchant-terms-quote";
 import { subscriptionInitialTaxQuote } from "./merchant-terms-contract";
 import { subscriptionCommercialTerms, subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptions } from "./schema";
 import { subscriptionProviderScheduleResources } from "./provider-schedule-schema";
 import { subscriptionProrations } from "./proration-schema";
 import { reviewedProrationCard } from "./proration-card-mandate";
-import { prorationCardSummary } from "./proration-card-contract";
 import { requireProrationBoundarySchema } from "./proration-boundary";
 import { paidProrationBasis } from "./proration-basis";
 import { proratedAmounts } from "./proration-amounts";
 import { reviewedProrationCalendar } from "./proration-contract";
-const sha = z.string().regex(/^[a-f0-9]{64}$/), minor = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-export const grossProrationInput = z.object({ id: z.uuid(), planId: z.uuid(), productVariantId: z.uuid().optional(), effectiveAt: z.iso.datetime(),
-  taxDestination: subscriptionTaxDestination, locale: z.enum(["en", "fr", "es", "ar"]).default("en") }).strict();
-export const grossProrationReview = z.object({ subscriptionId: z.uuid(), previousTermsId: z.uuid(), quoteDigest: sha, sourceRevision: sha, effectiveAt: z.iso.datetime(),
-  originalPeriodStart: z.iso.datetime(), originalPeriodEnd: z.iso.datetime(), originalTrialEndsAt: z.iso.datetime().nullable(),
-  calendar: z.union([z.object({ kind: z.literal("preserve_trial"), trialEndsAt: z.iso.datetime(), chargeMinor: z.literal(0), oldPaidCreditMinor: z.literal(0), nextPeriodStart: z.iso.datetime(), nextPeriodEnd: z.iso.datetime() }),
-    z.object({ kind: z.literal("original_calendar"), prorationAt: z.iso.datetime(), currentPeriodStart: z.iso.datetime(), currentPeriodEnd: z.iso.datetime(), nextPeriodStart: z.iso.datetime(), nextPeriodEnd: z.iso.datetime() })]),
-  debitNetMinor: minor, debitTaxMinor: minor, creditNetMinor: minor, creditTaxMinor: minor, creditAppliedMinor: minor, cashDueMinor: minor,
-  residualCreditMinor: minor, creditDisposition: z.literal("exclusive_until_paid_access_switch_no_automatic_cash_refund"),
-  requiresMerchantReview: z.boolean(), payment: prorationCardSummary.nullable(),
-  feeReview: z.object({ debitFeeObligationMinor: minor, creditFeeObligationMinor: minor, appliedFeeObligationMinor: minor, appliedFeeProvenCollectedMinor: minor,
-    remainingNewCashFeeMinor: minor, separateMerchantReceivableMinor: minor, originalOverTargetMinor: minor, originalSourceDebt: z.boolean(), sources: z.array(z.object({ sourcePaymentId: z.uuid(), sourceApplicationId: z.uuid().nullable(),
-      amountMinor: minor, feeObligationMinor: minor, feeProvenCollectedMinor: minor, feeCollectionState, feeEvidenceDigest: sha, feeUnexpected: z.boolean() })).max(1000) }).nullable(),
-  quote: publicMerchantTermsQuote.unwrap(), noticeSnapshot: z.object({ locale: z.enum(["en", "fr", "es", "ar"]), text: z.string().min(1) }) });
+import { grossProrationInput,grossProrationReview } from "./proration-review-contract";
+export { grossProrationInput,grossProrationReview } from "./proration-review-contract";
 
 export async function requireGrossProrationSchema(ctx: ServiceContext) {
   const [ready] = await ctx.tx.execute<{ ready: boolean }>(sql`select count(*)=4 as ready from pg_trigger where not tgisinternal and tgenabled in('O','A') and(tgrelid,tgname) in
@@ -100,18 +84,7 @@ export async function prepareGrossProrationQuote(ctx: ServiceContext, input: z.i
   const debitTaxQuote = subscriptionInitialTaxQuote.parse({ quoteDigest: actualTax.quoteDigest, subtotalMinor: actualTax.amounts.subtotalMinor, taxMinor: actualTax.amounts.taxMinor, totalMinor: actualTax.amounts.totalMinor });
   if (debitTaxQuote.subtotalMinor !== debitNetMinor || parent.status === "trialing" && debitTaxQuote.totalMinor !== 0) throw new ServiceError("conflict", "The actual dated quote cannot change the accepted unused principal or bill an uncharged trial window.");
   const totalCredit = BigInt(basis.creditNetMinor) + BigInt(basis.creditTaxMinor), totalDebit = BigInt(debitTaxQuote.totalMinor), applied = totalCredit < totalDebit ? totalCredit : totalDebit;
-  let remainder = Number(applied), appliedFeeObligationMinor = 0, appliedFeeProvenCollectedMinor = 0;
-  for (const source of [...basis.principal].sort(compareCreditSources)) {
-    const takeMinor = Math.min(remainder, source.amountMinor); if (!takeMinor) break;
-    appliedFeeObligationMinor += proportionalFeeCarry({ principalMinor: source.amountMinor, feeObligationMinor: source.feeObligationMinor, allocatedPrincipalMinor: 0, allocatedFeeMinor: 0, takeMinor });
-    appliedFeeProvenCollectedMinor += proportionalFeeCarry({ principalMinor: source.amountMinor, feeObligationMinor: source.feeProvenCollectedMinor, allocatedPrincipalMinor: 0, allocatedFeeMinor: 0, takeMinor });
-    remainder -= takeMinor;
-  }
-  const debitFeeObligationMinor = marketFeeMinor(debitNetMinor, policy.siteFeeBps), creditFeeObligationMinor = basis.principal.reduce((sum, source) => sum + source.feeObligationMinor, 0);
-  const feeBudget = remainingCashFeeBudget(debitTaxQuote.totalMinor, debitFeeObligationMinor, Number(applied), appliedFeeObligationMinor);
-  const feeReview = { debitFeeObligationMinor, creditFeeObligationMinor, appliedFeeObligationMinor, appliedFeeProvenCollectedMinor, remainingNewCashFeeMinor: Math.min(feeBudget.feeObligationMinor, feeBudget.principalMinor),
-    separateMerchantReceivableMinor: Math.max(0, feeBudget.feeObligationMinor - feeBudget.principalMinor),
-    originalOverTargetMinor: feeBudget.originalOverTargetMinor, originalSourceDebt: basis.principal.some(source => source.feeUnexpected || ["owed", "review"].includes(source.feeCollectionState)), sources: basis.principal };
+  const feeReview = originalProrationFeeReview(basis.principal, debitNetMinor, debitTaxQuote.totalMinor, Number(applied), policy.siteFeeBps);
   const card = await reviewedProrationCard(ctx, parent, { providerPlatformAccountId: economic.route.providerPlatformAccountId,
     ...(economic.route.collectionKind === "direct" ? { providerAccountId: economic.route.chargeAccountId! } : { destinationAccountId: economic.route.recipientAccountId, settlementMerchantAccountId: economic.route.settlementMerchantAccountId }) }, Number(totalDebit - applied));
   const noticeSnapshot = { locale: input.locale, text: `${economic.noticeSnapshot.text}\n${translator(input.locale)("subscriptions.grossProrationNotice")}\n${translator(input.locale)("subscriptions.proration.feeReceivableNotice")}\n${translator(input.locale)("subscriptions.proration.boundaryNotice")}${card ? `\n${translator(input.locale)("subscriptions.proration.cardNotice", { method: card.summary.label })}` : ""}` };
