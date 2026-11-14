@@ -1916,3 +1916,59 @@ END $$;
 CREATE TRIGGER media_multipart_create_baseline BEFORE INSERT OR UPDATE ON media_multipart_operations FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_baseline_guard();
 --> statement-breakpoint
 CREATE TRIGGER media_physical_create_baseline BEFORE INSERT ON media_storage_transfer_requests FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_baseline_guard();
+--> statement-breakpoint
+-- Complete object identity is distinct from session/issued part consumption.
+-- No caller FIN, old baseline or old provider revision is backfilled here.
+CREATE FUNCTION freeholder_media_multipart_completed_result(original_operation uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_operations operation
+  JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  JOIN media_storage_transfer_calls actual ON actual.multipart_operation_id=operation.id AND actual.kind='multipart_complete'
+  JOIN media_multipart_operations creation ON creation.resource_id=resource.id AND creation.operation_kind='create'
+  JOIN media_storage_transfer_calls creator ON creator.multipart_operation_id=creation.id AND creator.kind='multipart_create'
+  JOIN media_storage_transfer_requests birth ON birth.call_id=creator.id AND birth.descriptor->>'kind'='multipart.create'
+  JOIN media_storage_transfer_requests completion ON completion.call_id=actual.id AND completion.descriptor->>'kind'='multipart.complete'
+  JOIN media_storage_transfer_requests body ON body.call_id=actual.id AND body.descriptor->>'kind'='object.read'
+  WHERE operation.id=original_operation AND operation.operation_kind='complete' AND operation.state='accepted' AND operation.writer_finished_at IS NOT NULL AND operation.provider_accepted_at IS NOT NULL
+   AND operation.provider_upload_id=resource.provider_upload_id AND operation.observed_provider_upload_id=resource.provider_upload_id
+   AND resource.original_reservation_id IS NOT NULL AND resource.redacted_at IS NULL AND resource.storage_kind='s3'
+   AND actual.object_id IS NULL AND actual.object_receipt_id IS NULL AND actual.state='returned' AND actual.returned_at IS NOT NULL AND actual.observed_accepted_at IS NOT NULL AND actual.runtime_id=operation.writer_runtime_id
+   AND actual.namespace=resource.storage_namespace AND actual.physical_key=resource.object_key AND actual.result_revision->>'namespace'=resource.storage_namespace AND actual.result_revision->>'key'=resource.object_key
+   AND actual.result_sha256 ~ '^[a-f0-9]{64}$' AND actual.result_bytes>=0 AND actual.result_bytes<=resource.expected_bytes AND actual.result_absent IS NULL
+   AND creation.state='accepted' AND creation.writer_finished_at IS NOT NULL AND creation.provider_accepted_at IS NOT NULL
+   AND creation.create_baseline->>'state'='complete' AND creation.create_baseline->>'callId'=creator.id::text AND creation.create_baseline->>'namespace'=resource.storage_namespace AND creation.create_baseline->>'keyDigest'=resource.key_digest
+   AND creator.state='returned' AND creator.returned_at IS NOT NULL AND creator.observed_accepted_at IS NOT NULL AND creator.namespace=resource.storage_namespace AND creator.physical_key=resource.object_key
+   AND birth.state='returned' AND birth.returned_at IS NOT NULL AND birth.descriptor->>'key'=resource.object_key AND birth.descriptor->'binding'->>'namespace'=resource.storage_namespace
+   AND actual.result_request_proof=jsonb_build_object('id',birth.id,'tokenDigest',birth.token_digest)
+   AND (SELECT count(*) FROM media_multipart_operations other WHERE other.resource_id=resource.id AND other.operation_kind='create')=1
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=birth.id AND fact.facts->>'stage'='response_body' AND fact.facts->>'detailDigest' ~ '^[a-f0-9]{64}$')
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=birth.id AND fact.facts->>'stage'='session' AND fact.facts->>'uploadId'=resource.provider_upload_id)
+   AND completion.state='returned' AND completion.returned_at IS NOT NULL AND completion.descriptor->>'key'=resource.object_key AND completion.descriptor->>'uploadId'=resource.provider_upload_id AND completion.descriptor->'createOnly'='true'::jsonb AND completion.descriptor->>'partsDigest'=operation.parts_digest
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=completion.id AND fact.facts->>'stage'='response_body' AND fact.facts->>'detailDigest' ~ '^[a-f0-9]{64}$')
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=completion.id AND fact.facts->>'stage'='metadata' AND fact.facts->'revision'=actual.result_revision AND fact.facts->>'uploadId'=resource.provider_upload_id)
+   AND body.state='returned' AND body.returned_at IS NOT NULL AND body.created_at>=completion.returned_at AND body.descriptor->>'key'=resource.object_key AND body.descriptor->'expectedRevision'=actual.result_revision AND body.descriptor->>'bytes'=resource.expected_bytes::text
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=body.id AND fact.facts->>'stage'='metadata' AND fact.facts->'revision'=actual.result_revision AND fact.facts->'requestProof'=actual.result_request_proof)
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=body.id AND fact.facts->>'stage'='body' AND fact.facts->'revision'=actual.result_revision AND fact.facts->>'sha256'=actual.result_sha256 AND fact.facts->>'bytes'=actual.result_bytes::text)
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests unresolved WHERE unresolved.call_id=actual.id AND (unresolved.state<>'returned' OR unresolved.returned_at IS NULL))
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_completed_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE operation media_multipart_operations; resource media_multipart_resources; actual media_storage_transfer_calls;
+BEGIN
+ IF TG_TABLE_NAME='media_object_writes' THEN
+  IF TG_OP<>'INSERT' OR NEW.writer_protocol IS DISTINCT FROM 'multipart-receipts-v1' THEN RETURN NEW; END IF;
+  SELECT original.* INTO resource FROM media_multipart_resources original WHERE original.original_reservation_id=NEW.original_reservation_id;
+  SELECT parent.* INTO operation FROM media_multipart_operations parent JOIN media_storage_transfer_calls caller ON caller.multipart_operation_id=parent.id WHERE parent.resource_id=resource.id AND parent.operation_kind='complete' AND caller.kind='multipart_complete' AND freeholder_media_multipart_completed_result(parent.id);
+  SELECT * INTO actual FROM media_storage_transfer_calls WHERE multipart_operation_id=operation.id AND kind='multipart_complete';
+  IF actual.id IS NULL OR NEW.operation_kind<>'put' OR NEW.state<>'accepted' OR NEW.deleted_at IS NOT NULL OR NEW.redacted_at IS NOT NULL OR NEW.actor IS DISTINCT FROM operation.actor OR NEW.contact_id IS DISTINCT FROM resource.contact_id OR NEW.content_type IS DISTINCT FROM resource.content_type OR NEW.storage_kind IS DISTINCT FROM resource.storage_kind OR NEW.storage_location IS DISTINCT FROM resource.storage_location OR NEW.storage_namespace IS DISTINCT FROM resource.storage_namespace OR NEW.key_digest IS DISTINCT FROM resource.key_digest OR NEW.object_key IS DISTINCT FROM resource.object_key OR NEW.sha256 IS DISTINCT FROM actual.result_sha256 OR NEW.bytes IS DISTINCT FROM actual.result_bytes OR NEW.provider_revision IS DISTINCT FROM actual.result_revision OR NEW.provider_revision_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(actual.result_revision) OR NEW.writer_runtime_id IS DISTINCT FROM operation.writer_runtime_id OR NEW.writer_finished_at IS DISTINCT FROM operation.writer_finished_at OR NEW.observed_accepted_at IS DISTINCT FROM operation.provider_accepted_at THEN RAISE EXCEPTION 'A new multipart object receipt must preserve its actual original CREATE nonce, full pinned bytes, revision and real caller finish' USING ERRCODE='23514'; END IF;
+ ELSE
+  IF NEW.state='completed' AND (TG_OP='INSERT' OR NEW.state IS DISTINCT FROM OLD.state OR NEW.object_receipt_id IS DISTINCT FROM OLD.object_receipt_id) AND NOT EXISTS(SELECT 1 FROM media_multipart_operations parent JOIN media_storage_transfer_calls caller ON caller.multipart_operation_id=parent.id JOIN media_object_writes receipt ON receipt.id=NEW.object_receipt_id WHERE parent.resource_id=NEW.id AND parent.operation_kind='complete' AND caller.kind='multipart_complete' AND receipt.original_reservation_id=NEW.original_reservation_id AND receipt.deleted_at IS NULL AND receipt.redacted_at IS NULL AND receipt.provider_revision=caller.result_revision AND receipt.sha256=caller.result_sha256 AND receipt.bytes=caller.result_bytes AND freeholder_media_multipart_completed_result(parent.id)) THEN RAISE EXCEPTION 'Complete object adoption requires the exact original full-byte proof and its physical receipt' USING ERRCODE='23514'; END IF;
+  IF NEW.state='completed' AND NEW.retired_at IS NOT NULL AND (TG_OP='INSERT' OR NEW.retired_at IS DISTINCT FROM OLD.retired_at) THEN RAISE EXCEPTION 'A completed object does not prove consumption of issued or in-flight part authority; retain session recovery debt' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_completed_object BEFORE INSERT ON media_object_writes FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_completed_guard();
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_completed_resource BEFORE INSERT OR UPDATE ON media_multipart_resources FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_completed_guard();
