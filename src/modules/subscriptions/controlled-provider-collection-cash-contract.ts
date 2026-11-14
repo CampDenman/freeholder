@@ -1,0 +1,34 @@
+// Copyright (C) 2026 Tony Aly
+// SPDX-License-Identifier: Apache-2.0
+// C12.38: actual bank batch evidence, never a parent/payment authority grant.
+import { z } from "zod";
+import { merchantPaymentEvidence } from "@/modules/invoicing/merchant-payment-observations";
+import { merchantReturnedCashEvidenceSchema } from "@/modules/invoicing/merchant-returned-cash-contract";
+import { CONTROLLED_COLLECTION_PROTOCOL } from "./controlled-provider-collection-contract";
+const sha=z.string().regex(/^[a-f0-9]{64}$/),minor=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),ref=z.string().min(1).max(200),account=z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200),currency=z.string().regex(/^[A-Z]{3}$/);
+export const controlledCashPhysicalEntry=z.object({table:z.string().min(1).max(160),id:z.string().min(1).max(300),fingerprint:sha,hashDomain:z.literal("postgres_row")}).strict();
+export const controlledCashBankExpectation=z.object({providerApiVersion:z.literal("2026-10-28.endive"),providerPlatformAccountId:account,providerAccountId:account.optional(),destinationAccountId:account.optional(),settlementMerchantAccountId:account.optional(),
+ providerRef:ref,chargeRef:ref,amountMinor:minor.positive(),currency,feeMinor:minor,originalFeeRef:ref.nullable(),customerChargeVerified:z.boolean(),merchantRouteVerified:z.boolean()}).strict();
+export const controlledCashFeeAllocation=z.object({basis:z.enum(["existing_original_route","actual_prior_and_exact_earlier_batch"]),actualPriorCashMinor:minor,actualPriorAllocatedFeeMinor:minor,precedingReceiptIds:z.array(z.uuid()).max(5000),priorCashMinor:minor,priorAllocatedFeeMinor:minor,feeMinor:minor,revision:sha}).strict();
+export const controlledCashReceiptProof=z.object({receiptId:z.uuid(),amountMinor:minor.positive(),currency,originOperationId:z.uuid(),originCallId:z.uuid(),originFactId:z.uuid(),originalObservationIds:z.array(z.uuid()).min(1).max(5000),
+ inspectionId:z.uuid(),bankObservationId:z.uuid(),finishCallerId:z.uuid(),immutableBankRevision:sha,namespaceRevision:sha,physicalWitnessEntries:z.array(controlledCashPhysicalEntry).min(1).max(5000),
+ actualPaymentEvidence:merchantPaymentEvidence,actualBankEvidence:merchantReturnedCashEvidenceSchema,originalExpectation:controlledCashBankExpectation,feeAllocation:controlledCashFeeAllocation,existingPaymentId:z.uuid().nullable(),originRevision:sha}).strict();
+export const controlledCashCanonicalProof=z.object({outstandingMinor:minor,totalMinor:minor,creditedMinor:minor,paidMinor:minor,refundedMinor:minor,currentCollectible:z.boolean(),originalCreditNoteId:z.uuid().nullable(),originalCreditFundingIds:z.array(z.uuid()).max(5000),creditReservationIds:z.array(z.uuid()).max(5000),creditApplicationIds:z.array(z.uuid()).max(5000),feeDutyId:z.uuid().nullable(),feeCreditAssignmentIds:z.array(z.uuid()).max(5000),creditRevision:sha,feeRevision:sha,revision:sha}).strict();
+export const controlledCollectionCashProof=z.object({protocol:z.literal(CONTROLLED_COLLECTION_PROTOCOL),collectionId:z.uuid(),quoteId:z.uuid(),resourceId:z.uuid(),subscriptionId:z.uuid(),invoiceId:z.uuid(),termsId:z.uuid(),acceptedQuoteDigest:sha,canonicalTargetDigest:sha,requestedReceiptIds:z.array(z.uuid()).min(1).max(5000),
+ bankInvoice:z.object({providerSubscriptionRef:ref,providerInvoiceRef:ref,providerCustomerRef:ref,currency,status:z.enum(["open","paid"]),totalMinor:minor.positive(),paidMinor:minor.positive(),remainingMinor:minor,positiveReceiptIds:z.array(z.uuid()).min(1).max(5000),manifestOperationId:z.uuid(),manifestCallId:z.uuid(),manifestResultDigest:sha,manifestDigest:sha,zeroWalletProofDigest:sha}).strict(),
+ canonical:controlledCashCanonicalProof,receipts:z.array(controlledCashReceiptProof).min(1).max(5000),
+ prospectiveRawBindings:z.array(z.object({factId:z.uuid(),operationId:z.uuid(),callId:z.uuid(),actualDigest:sha,receiptIds:z.array(z.uuid()).min(1).max(5000)}).strict()).max(5000),rawReviewFactIds:z.array(z.uuid()).max(5000),
+ unfinishedControlledCallIds:z.array(z.uuid()).max(5000),unfinishedInspectionIds:z.array(z.uuid()).max(5000),unfinishedNamespaceCallers:z.array(z.object({kind:z.enum(["refund","recovery"]),id:z.uuid()}).strict()).max(5000),
+ preApplicationRevision:sha,sourceRevision:sha,suppliesObservationAuthority:z.literal(false),suppliesPrincipalAuthority:z.literal(false),suppliesApplicationAuthority:z.literal(false),suppliesAccessAuthority:z.literal(false),
+}).strict().superRefine((value,ctx)=>{
+ const requested=value.requestedReceiptIds,actual=value.receipts.map(row=>row.receiptId);
+ if(new Set(value.bankInvoice.positiveReceiptIds).size!==value.bankInvoice.positiveReceiptIds.length||requested.some(id=>!value.bankInvoice.positiveReceiptIds.includes(id)))ctx.addIssue({code:"custom",message:"Every requested actual receipt must belong to the complete unique positive bank inventory."});
+ const physical=new Map<string,string>();for(const receipt of value.receipts)for(const row of receipt.physicalWitnessEntries){const key=`${row.table}:${row.id}`,previous=physical.get(key);if(previous!==undefined&&previous!==row.fingerprint)ctx.addIssue({code:"custom",message:"The same actual PostgreSQL financial row changed within this batch proof."});physical.set(key,row.fingerprint);}
+ if(physical.size>5000)ctx.addIssue({code:"custom",message:"Compose one complete bounded bank witness across the entire real receipt batch."});
+
+ if(new Set(requested).size!==requested.length||requested.some((id,index)=>index>0&&id<=requested[index-1]!)||requested.length!==actual.length||requested.some((id,index)=>actual[index]!==id))ctx.addIssue({code:"custom",message:"The actual receipt batch must be explicit, unique and sorted, with exactly one authenticated proof per requested UUID."});
+ if(BigInt(value.bankInvoice.paidMinor)+BigInt(value.bankInvoice.remainingMinor)!==BigInt(value.bankInvoice.totalMinor)||value.bankInvoice.status==="paid"&&value.bankInvoice.remainingMinor!==0||value.bankInvoice.status==="open"&&value.bankInvoice.remainingMinor===0)ctx.addIssue({code:"custom",message:"Actual complete bank paid/remaining must conserve the accepted invoice; a partial bank payment cannot be labelled fully paid."});
+ if(value.receipts.some(row=>row.currency!==value.bankInvoice.currency||row.actualBankEvidence.paymentProviderRef!==row.originalExpectation.providerRef||row.actualBankEvidence.amountMinor!==row.amountMinor||row.actualBankEvidence.currency!==row.currency))ctx.addIssue({code:"custom",message:"Each actual bank receipt must retain its original namespace, amount and currency without clipping or FX."});
+});
+export type ControlledCollectionCashProof=z.infer<typeof controlledCollectionCashProof>;
+export type ControlledCashReceiptProof=z.infer<typeof controlledCashReceiptProof>;

@@ -15823,3 +15823,12 @@ lineage child as a seventh historical causal family; full CURRENT coverage
 retains it and every other caller/raw/money row. No legacy backfill, blanket
 own-read exclusion, bank/application/access authority or qualification is
 claimed. See `deploy/controlled-cash-inspection-lineage-producer84-source-20261113.md`.
+
+Source contract checkpoint 2026-11-13 (C12.38/C9.33/C1.08): explicit exact receipt
+batch evidence separates immutable returned-bank facts/current namespace revisions
+from full CURRENT parent application authority. Partial paid cash retains its
+unpaid remainder and actual canonical projections; every raw occurrence and
+unfinished caller remains explicit. All authority flags are false. Ten contract
+controls are prepared/UNRUN; genuine producer, parent context, SQL/routing and
+native qualification remain required. See
+`deploy/controlled-collection-cash-contract84-source-20261113.md`.
