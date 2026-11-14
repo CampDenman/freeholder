@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Actual application witness correction 2026-11-13 (C12.38/C9.33/C1.08):
+V27 with the genuine fresh paid manifest passes the earlier freshness boundary,
+then refuses before admission with BigInt JSON serialization in the derived
+fee witness. Actual source history deliberately returns three BigInt totals;
+only that local derived witness now uses the existing checked safe-integer
+conversions, retaining pending and every original money/raw/namespace predicate.
+The shared canonicalizer/signature format and all SQL stay byte-identical.
+Failed V27 retains paid0/payment0/receipt14200, three actual manifest proofs,
+one genuine inspection and all595 table snapshots with zero clients. Exact
+finite source/reversal identities are recorded in
+`deploy/controlled-cash-prior-witness84.manifest.json`. Source and fresh native
+renewal remain required; no application/access/C-item/stable acceptance.
+
 Current159 payment checkpoint 2026-11-13 (C12.38/C9.33/C1.08/C1.12/C11.08):
 source6791 passes1243 actual/196 selected files,433 explicit DB skips and full
 types/lint/metadata. FreshV25/V26 all86 migrations pass; strict159/353 guards/

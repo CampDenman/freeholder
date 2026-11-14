@@ -1,0 +1,20 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SOURCE_CORRECTION_PREPARED_UNRUN",
+  "source": "src/modules/subscriptions/controlled-provider-collection-cash.ts",
+  "beforeSha256": "2de9b5c685e462f70c37f07f83e41e1a895d220c9a0e05a441129323968c69fa",
+  "afterSha256": "5a5442d425912fef6da41a688a29de903c29e2ca685b4c1927086bf4225d661d",
+  "finiteDelta": {
+    "before": "actualPriorCash:prior})",
+    "after": "actualPriorCash:{cash:actualPriorCashMinor,refunded:bigintNumber(prior.refunded),allocatedFee:actualPriorAllocatedFeeMinor,pending:prior.pending}})"
+  },
+  "reverseRestoresEntireOriginalSource": true,
+  "sharedCanonicalizer": {
+    "path": "src/modules/invoicing/merchant-tax-store.ts",
+    "sha256": "53e53dfbd4cb3f5abe71991f262fad935fdfee9774b14d6d18c62c44d5c6e51b",
+    "unchanged": true
+  },
+  "arithmeticPolicy": "Existing bigintNumber refuses negative or unsafe values; cash/allocatedFee already checked and refunded must remain exactly0n. Only JSON witness representation changes. Every actual source/namespace/fee/admission predicate remains unchanged.",
+  "failedNative": "/tmp/freeholder-current-full86-application-full-native-v2-20261113-result.json",
+  "nativeAcceptance": "PENDING fresh DB; V27 preserved, no reset"
+}
