@@ -108,5 +108,18 @@
     "same-source auxiliary/credit/unknown/external returns",
     "new paid-access privacy gate and complete media protocol",
     "all unchecked MASTER43/provider/platform/recovery/security/final acceptance"
-  ]
+  ],
+  "fixtureTypeContinuation": {
+    "path": "tests/helpers/merchant-controlled-collection84.ts",
+    "beforeSha256": "aa82fdc64f48fadd969f4f4797e57f34a482b68e0e8d4da36813f3d9ad4d9304",
+    "afterSha256": "bc8a158ffb3e45e41eb2a24f28a090f6b8e94418a17ffa9c9fcf0b894af52a2c",
+    "finiteDelta": {
+      "before": "const returned=externallyRefundPayment(bankRef(selected.id),Number(actual.get(\"amount\")));returned.metadata=tag(actual);",
+      "after": "const returned:Record<string,unknown>=externallyRefundPayment(bankRef(selected.id),Number(actual.get(\"amount\")));returned.metadata=tag(actual);"
+    },
+    "entireFileReverseExact": true,
+    "reason": "The actual fictional refund response is a provider record with metadata populated from the actual POST; annotate the existing variable without runtime changes",
+    "sourceV83": "/tmp/freeholder-current-full86-financial160-source-v83-20261114-result.json",
+    "sourceV83StoppedAtTypes": true
+  }
 }
