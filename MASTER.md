@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Auxiliary source typing repair2026-11-14 (C12.38/C1.08/C11.10): V90 fulltypes
+stops before lint/PG. Generic keyof on a discriminated input union omitted the
+actualOperationId audit key and collapsed private claim inference; framework
+key typing now distributes over validated variants. Runtime parsed-input
+Object.hasOwn selection/redaction/permissions/transactions stay byte-identical;
+actual operation remains audited, nonce excluded. Two generic native spy inputs
+now pass through the actual strict service input parser before identical calls/
+fault timing; every original business oracle unchanged. Exact source reversals
+recorded. V90/assembly preflights retained. Complete fresh source/schema/SDK/
+native/provider acceptance required; no C/stable closure. See
+`deploy/atomic-auxiliary-fee84-type-continuation.manifest.json`.
+
+
 Same-owner auxiliary ROOT assembly2026-11-14 (C12.38/C9.33/C1.08/C11.08):
 frozenaf221 source now follows qualified paid-privacy ee7b/fedc, preserving full
 current MASTER plus only12newleaflines and the actual root namespace/type fixes.
