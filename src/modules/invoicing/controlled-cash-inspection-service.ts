@@ -11,6 +11,7 @@ import { subscriptionControlledCollections,subscriptionControlledQuotes } from "
 import { subscriptionControlledResources } from "@/modules/subscriptions/controlled-provider-schema";
 import { subscriptions } from "@/modules/subscriptions/schema";
 import { requireControlledCollectionSchema } from "@/modules/subscriptions/controlled-provider-collection-schema-guard";
+import { retainControlledCashInspectionLineage } from "@/modules/subscriptions/controlled-cash-inspection-lineage";
 import { readControlledCashObservationSource } from "@/modules/subscriptions/controlled-provider-cash-observation-source";
 import { cashInspectionStops } from "./merchant-cash-inspection-stops";
 import { merchantPhysicalCaller } from "./merchant-physical-caller";
@@ -48,6 +49,7 @@ export const prepareControlledCashInspection=defineService({name:"invoicing.prep
    providerPlatformAccountId:source.providerPlatformAccountId,chargeAccountId:source.chargeAccountId,providerApiVersion:source.providerApiVersion,originalPaymentRef:source.providerPaymentIntentRef,originalCashAmountMinor:source.amountMinor,currency:source.currency,
    sourceHistoryDigest:current.authority.causalSourceRevision,caller:merchantPhysicalCaller(),completionNonceHash:createHash("sha256").update(completionNonce).digest("hex")}).returning();
   if(!saved)throw new ServiceError("conflict","Retain the genuine original inspection admission before physical work.");
+  await retainControlledCashInspectionLineage(ctx,{inspectionId:saved.id,completionNonce});
   ctx.setSubject("subscription_provider_charge",source.receiptId);queueOriginalMerchantRefundRepair(ctx,{kind:"cash_read",id:saved.id});
   return{inspectionId:saved.id,completionNonce,providerPlatformAccountId:source.providerPlatformAccountId,providerAccountId:source.chargeAccountId,providerApiVersion:source.providerApiVersion,paymentProviderRef:source.providerPaymentIntentRef,sourceRevision:source.sourceRevision};
  }});

@@ -51,4 +51,13 @@ describe("exact returned-own causal comparison",()=>{
   expect(()=>controlledObservationEntries([{...row(),table:"merchant_cash_return_observations:foreign"}])).toThrow();
   const composite={...row(),table:"legacy_bank_feedback",id:`${pg}:${id}`};expect(controlledObservationEntries([composite]).full[0]?.key).toBe(`legacy_bank_feedback:${pg}:${id}`);
  });
+ it("keeps an authentic own admission-lineage row in full history while comparing its exact original birth causally",()=>{
+  const birth:ObservationFingerprint={table:"subscription_controlled_cash_inspection_lineages",id,fingerprint:pg,domain:"postgres_row"};
+  const result=controlledObservationEntries([row(),birth],{entries:[owned({table:"subscription_controlled_cash_inspection_lineages"})]});expect(result.full).toHaveLength(2);expect(result.causal).toEqual([{key:`merchant_cash_return_observations:${id}`,postgres_row:pg}]);
+ });
+ it("cannot remove another read's or an altered admission-lineage row",()=>{
+  const birth:ObservationFingerprint={table:"subscription_controlled_cash_inspection_lineages",id:other,fingerprint:foreign,domain:"postgres_row"};
+  expect(()=>controlledObservationEntries([birth],{entries:[owned({table:"subscription_controlled_cash_inspection_lineages"})]})).toThrow();
+  expect(()=>controlledObservationEntries([{...birth,id}],{entries:[owned({table:"subscription_controlled_cash_inspection_lineages"})]})).toThrow();
+ });
 });

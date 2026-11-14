@@ -17,3 +17,4 @@ export * from "./proration-card-schema";
 export * from "./controlled-provider-schema";
 
 export * from "./controlled-provider-collection-schema";
+export * from "./controlled-cash-inspection-lineage-schema";
