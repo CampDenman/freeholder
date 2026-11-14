@@ -1,0 +1,51 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SOURCE_ONLY_UNAPPLIED",
+  "checklist": [
+    "C9.33",
+    "C12.38",
+    "C1.08"
+  ],
+  "base": "766c594a",
+  "prefix": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "bytes": 614412,
+    "sha256": "007a545f3daf5e32fe3effe2b83125c7b0bca1d70b9981d05cb909835a52438c",
+    "entirePrefixMustRemainUnchanged": true
+  },
+  "fragment": {
+    "path": "deploy/controlled-period-route-lineage84.fragment.sql",
+    "bytes": 9775,
+    "sha256": "c48a2ab692193ae36c46bb3be9b390423faf65a687503e1326d4614ce22ac0d2"
+  },
+  "periodFunction": {
+    "signature": "freeholder_subscription_period_cash_application()",
+    "beforeBodySha256": "fb0de515feeb999bfcb4f9b061131e38a9646652c59bf3c95f786e034b7a89ef",
+    "afterBodySha256": "45821c8b9b091cd3af998039a832e38fdbf04a4861793afd95bb3a31f527064d",
+    "exactInsertedBranch": " -- A controlled origin is never adopted by the unrelated legacy phase\n -- reader. Its actual generated payment/link, same-TX signed batch and full\n -- current immutable bank/parent stage must prove the exact proposed route.\n IF EXISTS(SELECT 1 FROM subscription_controlled_charge_origins controlled_origin WHERE controlled_origin.receipt_id=NEW.original_charge_receipt_id)\n  OR EXISTS(SELECT 1 FROM controlled_cash_application_links controlled_link WHERE controlled_link.payment_id=NEW.payment_id) THEN\n  IF TG_OP IS DISTINCT FROM 'INSERT'\n   OR NOT EXISTS(SELECT 1 FROM subscription_controlled_charge_origins controlled_origin WHERE controlled_origin.receipt_id=NEW.original_charge_receipt_id)\n   OR freeholder_controlled_subscription_route_valid(to_jsonb(NEW)) IS DISTINCT FROM true THEN\n   RAISE EXCEPTION 'Only the exact original controlled receipt and genuine same-transaction bank/parent stage may create its period route' USING ERRCODE='23514';END IF;\n  RETURN NEW;\n END IF;\n",
+    "singleRemovalRestoresEntireLegacyBody": true,
+    "ordinaryLegacyNormal80BodyEqual": true
+  },
+  "readyFunction": {
+    "signature": "freeholder_controlled_subscription_route_ready()",
+    "beforeBodySha256": "1da1418693693401db7e250f2389b39771fd0b62111218022be19c9fe1af5b27",
+    "afterBodySha256": "7930328ffe4a1982addaf6bbf2b5c14d2ad5bca71a88da4764b934967c7cb63a",
+    "exactAdditionalPins": "  AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_subscription_period_cash_application()') AND p.provolatile='v' AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='45821c8b9b091cd3af998039a832e38fdbf04a4861793afd95bb3a31f527064d')\n  AND EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='merchant_agreement_payment_routes'::regclass AND t.tgname='merchant_agreement_period_lineage' AND t.tgfoid=to_regprocedure('freeholder_subscription_period_cash_application()') AND t.tgenabled IN('O','A') AND t.tgtype=7 AND NOT t.tgisinternal)\n",
+    "singleRemovalRestoresEntirePreviousReadyBody": true
+  },
+  "requiredExistingTrigger": {
+    "table": "merchant_agreement_payment_routes",
+    "name": "merchant_agreement_period_lineage",
+    "function": "freeholder_subscription_period_cash_application()",
+    "tgtype": 7,
+    "enabled": [
+      "O",
+      "A"
+    ],
+    "notInternal": true
+  },
+  "newModels": 0,
+  "newFunctions": 0,
+  "newTriggers": 0,
+  "execution": "UNRUN; root owns assembly, normal migrations, strict catalogue and actual full application retry."
+}

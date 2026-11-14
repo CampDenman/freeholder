@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled original-period route SOURCE correction2026-11-14 (C9.33/C12.38/C1.08):
+actual V31 reached a genuine created payment/lifetime receipt link, then the
+legacy period trigger required unrelated old schedule invoice observations and
+rolled back all canonical money. A separate UNAPPLIED owned85 successor now
+admits only the exact controlled origin through the FULL existing signed
+same-transaction bank/parent route validator; recognized invalid controlled
+candidates refuse before fallback. Removing its one branch restores every byte
+of the old ordinary policy. Readiness additionally pins that complete function
+and the exact enabled original period trigger while preserving all existing
+bank/validator/route pins. Four source controls are PREPARED/UNRUN; no migration,
+CPU/native/provider execution or acceptance occurred in this lane. Root owns
+assembly after the full614412-byte prefix and fresh strict/actual qualification.
+C12.38, public composition/proration and stable remain open. See
+`deploy/controlled-period-route-lineage84-source-20261114.md`.
+
 Actual application retry 2026-11-14 (C12.38/C9.33/C1.08): cb2 source
 passes1302/205/454 explicit skips; fresh V30 normal86, strict159/356guards/
 367completefunctions, SDK16 and112 standalone amount expressions pass. Original
