@@ -22,3 +22,16 @@ guard. If root's actual run reaches that refusal, preserve the exact failure and
 ledger; the positive ordering proof still requires the genuine debt-observing
 future observation producer. No permissions/raw debt/default principal policy is
 changed or bypassed to make this control pass. No native acceptance is claimed.
+
+
+First actual run at7a0f6288: timeout before any bank admission. The raw SQL
+timestamp was typed Date, but actual Drizzle/Postgres raw execution returns
+a string; its failure was captured in outcome while the setup barrier remained
+unresolved. An actual read-only driver probe confirms type:string and valid
+explicit date conversion. This is a harness defect, not an ordering or money
+proof. The V15 failure is preserved with one genuine positive canonical
+receipt/origin, zero local invoices/payments/inspections/lineages, untouched
+sequence, all85 migration identities and no open clients. Corrected setup
+uses explicit timestamp text plus validation and propagates startup errors;
+all original order/caller/bank and no-payment assertions remain unchanged.
+Fresh retry is required; no product guard or caller authority changes.
