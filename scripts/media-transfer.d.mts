@@ -61,6 +61,9 @@ export interface TransferInventoryEntry {
 export interface TransferInventoryPage {entries:TransferInventoryEntry[];next:Record<string,string>|null}
 export interface TransferInventoryConfiguration {versioning:"disabled"|"Enabled"|"Suspended";softDeleteSeconds:number;retentionSeconds:number}
 export interface AccountedTransferStore extends VersionedTransferStore {
+ /** A complete original pinned body is hashed with bounded memory. This is
+  * read evidence, never completion/consumption or original caller FIN. */
+ readDigestVersioned?(key:string,revision:TransferRevision,maxBytes:number):Promise<{sha256:string;bytes:number;contentType:string;revision:TransferRevision;requestProof?:OriginalProviderRequestProof}|undefined>;
  inventoryPage(kind:"objects"|"versions"|"sessions"|"retained",cursor?:Record<string,string>|null):Promise<TransferInventoryPage>;
  inventoryConfiguration():Promise<TransferInventoryConfiguration>;
 }

@@ -15959,3 +15959,17 @@ oracles remain intact. No execution/provider/host action or request/part
 capability publication occurred. Part authority/consumption, legacy creator
 closure, capture/quota/cutover and all qualification/external acceptance remain
 open. See `deploy/media-multipart-create-baseline-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): multipart completion now retains
+its actual ACK/revision before a complete bounded-memory pinned-body SHA/nonce
+read through the same genuine caller. Object adoption must match the exact
+original CREATE/session and actual finished full-byte result and stores that
+provider revision/digest. A later current-key validation cannot replace its
+SHA/bytes. Complete object identity does not set session retired_at or invent
+consumption of issued/in-flight part authority; legacy/unknown callers and all
+retirement debt stay preserved. Fourteen pure/protocol controls are PREPARED/
+UNRUN; original positive/native oracle bodies remain unchanged. No execution,
+provider/host action, new model/journal, capability publication or C-item closure.
+Part issuance/consumption, unknown recovery, capture/quota/cutover and all
+qualification/acceptance remain open. See
+`deploy/media-multipart-completed-object-source-2026-11-13.md`.
