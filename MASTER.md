@@ -15815,3 +15815,11 @@ adapter-level optional platform account. The control now parses the actual
 callback through the real shared input schema instead of asserting or inventing
 an account. Failed v23 type evidence is preserved; renewed qualification remains
 pending. This carries the exact parent0180165c repair, not a new local test run.
+
+Source continuation 2026-11-13 (C12.38/C1.08): the future controlled observation
+producer uses the actual same-transaction immutable lineage birth hook before
+any bank GET. Exact returned-own ancestry authenticates only its own optional
+lineage child as a seventh historical causal family; full CURRENT coverage
+retains it and every other caller/raw/money row. No legacy backfill, blanket
+own-read exclusion, bank/application/access authority or qualification is
+claimed. See `deploy/controlled-cash-inspection-lineage-producer84-source-20261113.md`.
