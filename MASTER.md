@@ -15833,6 +15833,18 @@ whatever is best for the people using the site.
   103 explicit native skips. These synthetic provider-edge component proofs
   are distinct from real provider/platform acceptance and independent review.
   Shared owner recovery UI and full controlled application remain required.
+  Controlled cash-read order source checkpoint 2026-11-13 (C12.38/C1.08/C9.33):
+  one proposed immutable child records actual namespace-locked PostgreSQL
+  admission sequence, signed original caller/admission and exact predecessor/
+  closed namespace history. No timestamp/transaction-age order, backfill,
+  invented returned finish or payment authority is supplied. Old admissions,
+  strict legacy reader semantics and independent stop UI remain unchanged.
+  Twelve controls plus one unchanged real legacy GET regression are prepared,
+  UNRUN; owned forward SQL is UNAPPLIED. Central full-row financial/privacy/
+  export/retention composition and future real controlled producer/batch
+  integration plus positive native qualification remain required; C12.38,
+  C1.08 and stable stay open. See
+  `deploy/controlled-cash-inspection-lineage84-source-20261113.md`.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;
