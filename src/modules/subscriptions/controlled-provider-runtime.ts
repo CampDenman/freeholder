@@ -15,6 +15,9 @@ import { subscriptionControlledResources,subscriptionControlledOperations,subscr
 import { controlledProviderJournal,CONTROLLED_CALL_PURPOSE,originalControlledCall,finishedControlledCall } from "./controlled-provider-proof";
 import { controlledFinancialReadiness,controlledWorkNeedsParentReadiness,controlledCollectionReadiness,controlledWorkNeedsCollectionReadiness } from "./controlled-provider-readiness";
 import { requireControlledProviderSchema } from "./controlled-provider-source";
+import { subscriptionControlledCollections } from "./controlled-provider-collection-schema";
+import { controlledCollectionState } from "./controlled-provider-collection-state";
+import { assertControlledCollectionInventoryProof } from "./controlled-provider-collection-inventory-owner";
 import { controlledTargetFinancialAuthority,controlledTargetOperationKind } from "./controlled-provider-target-authority";
 import { signProviderReadProof } from "./provider-read-signatures";
 const digest=(nonce:string)=>createHash("sha256").update(nonce).digest("hex");
@@ -66,6 +69,11 @@ export const claimControlledProviderCall=defineService({name:"subscriptions.clai
    if(!collectionId)throw new ServiceError("conflict","Bind this physical operation to its exact immutable canonical collection, never an arbitrary provider payload.");
    const target=await controlledTargetFinancialAuthority(ctx,collectionId,targetKind.data,source.operation.id);
    if(target.revision!==source.operation.originalRequest.targetFinancialRevision)throw new ServiceError("conflict","The complete original target money/caller/disposition changed before actual admission; retain and freshly review its current source.");
+   if(targetKind.data!=="read_manifest"){
+    const[canonicalTarget]=await ctx.tx.select({invoiceId:subscriptionControlledCollections.invoiceId}).from(subscriptionControlledCollections).where(eq(subscriptionControlledCollections.id,collectionId)).limit(1);
+    if(!canonicalTarget)throw new ServiceError("conflict","Restore the actual controlled target before its physical invocation.");
+    if(canonicalTarget.invoiceId!==null)await assertControlledCollectionInventoryProof(ctx,await controlledCollectionState(ctx.tx,collectionId),source.operation.originalRequest.collectionInventory);
+   }
   }
   const[allowed]=await ctx.tx.execute<{allowed:boolean}>(sql`select freeholder_controlled_operation_admissible(${source.operation.id}::uuid) as allowed`);
   if(allowed?.allowed!==true)throw new ServiceError("conflict","This actual original controlled operation lacks its required current consent, deadline, cash disposition or prior bank proof.");

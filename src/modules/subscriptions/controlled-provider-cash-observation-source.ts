@@ -10,6 +10,7 @@ import { subscriptionControlledChargeOrigins,subscriptionControlledResources } f
 import { subscriptionControlledCollections,subscriptionControlledInvoiceBindings,subscriptionControlledQuotes } from "./controlled-provider-collection-schema";
 import { controlledCashEvidence,readOriginalControlledChargeAuthority,type ControlledCashEvidence } from "./controlled-provider-cash-origin";
 import { controlledProviderJournal } from "./controlled-provider-proof";
+import { assertControlledOriginalConsent } from "./controlled-provider-original-consent";
 import { authenticatedControlledQuote } from "./controlled-provider-quote-proof";
 import { controlledRawFinancialReview } from "./controlled-provider-raw-financial-review";
 import { CONTROLLED_COLLECTION_PROTOCOL,CONTROLLED_COLLECTION_POLICY } from "./controlled-provider-collection-contract";
@@ -51,8 +52,9 @@ export async function readControlledCashObservationSource(tx:Tx,input:{collectio
  if(!collection||!quote||!resource||!parent||!terms||!receipt||!origin||!binding||!collection.invoiceId||origin.resourceId!==resource.id||binding.resourceId!==resource.id
   ||terms.subscriptionId!==parent.id||receipt.subscriptionId!==parent.id||receipt.providerApiVersion!=="2026-10-28.endive"
   ||collection.id!==quote.plannedCollectionId||collection.prorationId!==quote.plannedProrationId||collection.kind!==quote.kind||collection.collectionPolicy!==CONTROLLED_COLLECTION_POLICY
-  ||collection.acceptedQuoteDigest!==quote.quoteDigest||collection.originalConsentDigest!==quote.quoteDigest||binding.providerInvoiceRef!==receipt.providerInvoiceRef)refuse();
+  ||collection.acceptedQuoteDigest!==quote.quoteDigest||binding.providerInvoiceRef!==receipt.providerInvoiceRef)refuse();
  const history=await controlledProviderJournal(tx,resource.id),authenticated=authenticatedControlledQuote(quote,resource,history);
+ assertControlledOriginalConsent(collection,authenticated.review,terms);
  if(authenticated.review.controlled.plannedCollectionId!==collection.id||authenticated.review.subscriptionId!==parent.id)refuse();
  const ownFact=history.facts.find(row=>row.id===origin.factId),ownCall=history.calls.find(row=>row.id===origin.callId);
  if(!ownFact||!ownCall||ownCall.operationId!==origin.operationId||ownFact.callId!==ownCall.id||ownFact.actual.kind!=="cash_observed")refuse();

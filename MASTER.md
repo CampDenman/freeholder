@@ -16116,6 +16116,17 @@ whatever is best for the people using the site.
   integration plus positive native qualification remain required; C12.38,
   C1.08 and stable stay open. See
   `deploy/controlled-cash-inspection-lineage84-source-20261113.md`.
+  Genuine ordering first-run classification 2026-11-14 UTC (C12.38/C1.08):
+  current7a0f6288 live SDK verification passes8 without output changes and its
+  new test types/lint/metadata pass. The actual ordering run times out before
+  any inspection: the harness typed raw SQL timestamp as Date, but the actual
+  Drizzle/Postgres parser returns a string. A read-only driver probe confirms
+  this. Failed V15 keeps its one genuine positive receipt/origin, zero local
+  invoices/payments/inspections/lineages, unconsumed sequence, all85 hashes and
+  drained clients. The setup now validates the actual text timestamp and
+  propagates startup rejection instead of leaving the barrier pending. Every
+  admission/order/bank/financial assertion stays unchanged. Fresh retry and
+  genuine positive ordering remain required; no raw-debt guard was bypassed.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;
@@ -16453,3 +16464,37 @@ PREPARED/UNRUN. Mismatched partial/provider fee allocation remains retained revi
 and required recovery work; parent staging/routing, positive factories/orchestration,
 paid effects and actual batch/native/provider acceptance remain required. See
 `deploy/controlled-collection-cash-reader84-source-20261113.md`.
+
+Source factory checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08): shared owner and
+customer provider preview/consent paths now retain authentic actual calendar/
+customer/native/no-proration evidence and create the real canonical gross invoice,
+exclusive old paid credit and fee/job/terms lineage through the same existing
+writer. Historical quoted/full current accepted revisions remain distinct; no
+unaccepted quote reserves money or disappears from coverage. Actual trial end and
+zero trial principal stay intact. Eight pure and three genuine-service native
+controls are PREPARED/UNRUN; new owned SQL tail is UNAPPLIED. Provider paid effects
+still mechanically refuse pending genuine authority; first/normal-period factories,
+full collection/application/recovery/UI/native/live acceptance remain required.
+See `deploy/controlled-proration-canonical-factory82-source-20261113.md`.
+
+Source original-period factory checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08):
+owner/customer actual native/calendar/customer previews and unchanged original
+mandate now materialize the next canonical posttrial/renewal invoice through the
+byte-identical shared period writer. Original consent and dated-period quote remain
+distinct; setup once, dated merchant tax, old paid access and trial end are preserved.
+No initial-sale/signupPending bypass, new acceptance actor or fake phase is inferred.
+Six pure plus three actual-service controls are PREPARED/UNRUN; new owned SQL tail
+is UNAPPLIED. Complete positive collection/disposition, prospective staging/routing,
+separate paid effects and all source/native/live/security acceptance remain REQUIRED.
+See `deploy/controlled-original-period-factory84-source-20261113.md`.
+
+Source actual-collection checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08): actual
+owner/customer orchestration now executes complete causally ordered invoice/PI/
+line inventory, paused update, exact original draft/item binding, fixed tax/fee,
+manifest/finalize/pay through genuine admitted SDK calls. Actual raw positive cash
+commits before application; lost actual POSTs are not replayed. Nine pure controls
+are PREPARED/UNRUN; owned SQL remains UNAPPLIED. Results never claim application or
+access. Genuine proper-target native/ordering, generated draft disposition, staged
+application/routing, partial remainder recovery, separate paid effects and full
+UI/privacy/live/security acceptance remain REQUIRED.
+See `deploy/controlled-collection-orchestration84-source-20261113.md`.

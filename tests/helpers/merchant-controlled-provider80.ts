@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // PREPARED / UNRUN. Fictional HTTP edge, actual shared-service admission/writers.
 import { expect,vi } from "vitest";
+import { periodEnd } from "@/modules/subscriptions/calendar";
 import { createStripePayments } from "@/adapters/payments/stripe";
-export function controlledProviderEdge80(options:{loseBootstrapReply?:boolean}={}){
+export function controlledProviderEdge80(options:{loseBootstrapReply?:boolean;strictIntervalCalendar?:true;extra?:(url:URL,init:RequestInit)=>Promise<Response|null>}={}){
  let subscription:Record<string,unknown>|undefined,price:Record<string,unknown>|undefined,bootstrapPosts=0,pausePosts=0,cancelCalls=0,discoveryGets=0,lost=false,unexpectedPaid=false,unexpectedPending=false;
  const forms:URLSearchParams[]=[];
  const metadata=(form:URLSearchParams)=>Object.fromEntries([...form].filter(([key])=>key.startsWith("metadata[")).map(([key,value])=>[key.slice(9,-1),value]));
@@ -16,9 +17,12 @@ export function controlledProviderEdge80(options:{loseBootstrapReply?:boolean}={
   expect(url.origin).toBe("https://stripe.example.test");expect(headers.has("stripe-account")).toBe(false);
   if(url.pathname==="/v1/account")return Response.json({id:"acct_fixturePlatform"});
   expect(headers.get("stripe-version")).toBe("2026-10-28.endive");
+  const extra=await options.extra?.(url,init);if(extra)return extra;
   if(url.pathname==="/v1/subscriptions"&&init.method==="POST"){
    bootstrapPosts++;const form=new URLSearchParams(init.body as URLSearchParams);forms.push(form);expect(form.get("payment_behavior")).toBe("default_incomplete");expect(form.get("items[0][price_data][unit_amount]")).toBe("0");
-   const start=Math.floor(Date.now()/1000),end=start+30*86400;
+   const start=Math.floor(Date.now()/1000),interval=form.get("items[0][price_data][recurring][interval]"),count=Number(form.get("items[0][price_data][recurring][interval_count]"));
+   if(interval!=="day"&&interval!=="week"&&interval!=="month"&&interval!=="year")throw Error("The actual bank fixture needs the original admitted recurring interval.");
+   const end=options.strictIntervalCalendar?periodEnd(new Date(start*1000),interval,count).getTime()/1000:start+30*86400;
    price={id:"price_actualControlledZero",product:form.get("items[0][price_data][product]"),currency:form.get("items[0][price_data][currency]"),unit_amount:0,unit_amount_decimal:"0",billing_scheme:"per_unit",type:"recurring",transform_quantity:null,
     tax_behavior:"exclusive",recurring:{interval:form.get("items[0][price_data][recurring][interval]"),interval_count:Number(form.get("items[0][price_data][recurring][interval_count]")),usage_type:"licensed"}};
    subscription={id:"sub_actualControlledZero",object:"subscription",customer:form.get("customer"),currency:form.get("items[0][price_data][currency]"),metadata:metadata(form),status:"active",collection_method:"charge_automatically",
@@ -47,5 +51,5 @@ export function controlledProviderEdge80(options:{loseBootstrapReply?:boolean}={
   if(url.pathname==="/v1/prices/price_actualControlledZero"&&init.method==="GET"&&price)return Response.json(price);
   throw Error(`Unexpected fictional controlled provider request: ${init.method} ${url.pathname}`);
  });
- return{provider:createStripePayments({secretKey:"sk_actual_controlled_fixture",webhookSecrets:["whsec_actual_controlled_fixture"],apiBase:"https://stripe.example.test",fetch:fetcher}),forms,externallyPayUnexpectedInvoice:()=>{if(!subscription)throw Error("An actual original controlled resource must exist first");unexpectedPaid=true;unexpectedPending=false;subscription={...subscription,latest_invoice:"in_actualControlledUnexpected"};},externallyAddUnpaidUnexpectedInvoice:()=>{if(!subscription)throw Error("Create the actual original controlled resource before its external bank obligation");unexpectedPending=true;subscription={...subscription,latest_invoice:"in_actualControlledUnexpected"};},bootstrapPosts:()=>bootstrapPosts,pausePosts:()=>pausePosts,cancelCalls:()=>cancelCalls,discoveryGets:()=>discoveryGets};
+ return{provider:createStripePayments({secretKey:"sk_actual_controlled_fixture",webhookSecrets:["whsec_actual_controlled_fixture"],apiBase:"https://stripe.example.test",fetch:fetcher}),forms,externallyPayUnexpectedInvoice:()=>{if(!subscription)throw Error("An actual original controlled resource must exist first");unexpectedPaid=true;unexpectedPending=false;subscription={...subscription,latest_invoice:"in_actualControlledUnexpected"};},externallyAddUnpaidUnexpectedInvoice:()=>{if(!subscription)throw Error("Create the actual original controlled resource before its external bank obligation");unexpectedPending=true;subscription={...subscription,latest_invoice:"in_actualControlledUnexpected"};},currentSubscription:()=>subscription,bootstrapPosts:()=>bootstrapPosts,pausePosts:()=>pausePosts,cancelCalls:()=>cancelCalls,discoveryGets:()=>discoveryGets};
 }

@@ -69,7 +69,7 @@ export function assertControlledComponentLine(source:Source,component:Component,
  }
  const observerCall=source.history.calls.find(row=>row.operationId===observer.id),price=source.history.facts.find(row=>row.callId===observerCall?.id&&row.actual.kind==="price_read"&&row.actual.raw.id===priceRef)?.actual.raw;
  const payload=object(creator.originalRequest.payload),target=object(payload.target),recurring=object(price?.recurring);
- if(component.kind!=="net"||creator.id!==binding.creatorOperationId||creator.kind!=="update_calendar"||parent.type!=="subscription_item_details"||si.proration!==false
+ if(component.kind!=="net"||object(component.provenance).canonicalComponent==="setup"||creator.id!==binding.creatorOperationId||creator.kind!=="update_calendar"||parent.type!=="subscription_item_details"||si.proration!==false
   ||!price||price.unit_amount!==source.review.quote.snapshot.periodAmountMinor||price.currency!==component.currency.toLowerCase()||ref(price.product)!==actual.providerProductRef
   ||recurring.interval!==source.review.quote.snapshot.interval||recurring.interval_count!==source.review.quote.snapshot.intervalCount
   ||target.principalMinor!==source.review.quote.snapshot.periodAmountMinor||target.interval!==recurring.interval||target.intervalCount!==recurring.interval_count

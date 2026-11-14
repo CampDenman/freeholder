@@ -12,8 +12,7 @@ import { moduleSettings } from "@/core/settings/schema";
 import { previewMerchantTax, merchantTaxPreviewOutput } from "@/modules/invoicing/merchant-tax-preview";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { requireAgreementFeeSchema } from "@/modules/invoicing/agreement-fee-store";
-import { marketFeeMinor } from "@/modules/invoicing/market-policy";
-import { compareCreditSources, proportionalFeeCarry, remainingCashFeeBudget } from "@/modules/invoicing/credit-fee-amounts";
+import { originalProrationFeeReview } from "./proration-fee-review";
 import { merchantTermsQuoteOutput, publicMerchantTermsQuote, quoteOriginalMerchantTerms } from "./merchant-terms-quote";
 import { subscriptionInitialTaxQuote } from "./merchant-terms-contract";
 import { subscriptionCommercialTerms, subscriptionMarketPolicies, subscriptionMerchantScopes, subscriptions } from "./schema";
@@ -85,18 +84,7 @@ export async function prepareGrossProrationQuote(ctx: ServiceContext, input: z.i
   const debitTaxQuote = subscriptionInitialTaxQuote.parse({ quoteDigest: actualTax.quoteDigest, subtotalMinor: actualTax.amounts.subtotalMinor, taxMinor: actualTax.amounts.taxMinor, totalMinor: actualTax.amounts.totalMinor });
   if (debitTaxQuote.subtotalMinor !== debitNetMinor || parent.status === "trialing" && debitTaxQuote.totalMinor !== 0) throw new ServiceError("conflict", "The actual dated quote cannot change the accepted unused principal or bill an uncharged trial window.");
   const totalCredit = BigInt(basis.creditNetMinor) + BigInt(basis.creditTaxMinor), totalDebit = BigInt(debitTaxQuote.totalMinor), applied = totalCredit < totalDebit ? totalCredit : totalDebit;
-  let remainder = Number(applied), appliedFeeObligationMinor = 0, appliedFeeProvenCollectedMinor = 0;
-  for (const source of [...basis.principal].sort(compareCreditSources)) {
-    const takeMinor = Math.min(remainder, source.amountMinor); if (!takeMinor) break;
-    appliedFeeObligationMinor += proportionalFeeCarry({ principalMinor: source.amountMinor, feeObligationMinor: source.feeObligationMinor, allocatedPrincipalMinor: 0, allocatedFeeMinor: 0, takeMinor });
-    appliedFeeProvenCollectedMinor += proportionalFeeCarry({ principalMinor: source.amountMinor, feeObligationMinor: source.feeProvenCollectedMinor, allocatedPrincipalMinor: 0, allocatedFeeMinor: 0, takeMinor });
-    remainder -= takeMinor;
-  }
-  const debitFeeObligationMinor = marketFeeMinor(debitNetMinor, policy.siteFeeBps), creditFeeObligationMinor = basis.principal.reduce((sum, source) => sum + source.feeObligationMinor, 0);
-  const feeBudget = remainingCashFeeBudget(debitTaxQuote.totalMinor, debitFeeObligationMinor, Number(applied), appliedFeeObligationMinor);
-  const feeReview = { debitFeeObligationMinor, creditFeeObligationMinor, appliedFeeObligationMinor, appliedFeeProvenCollectedMinor, remainingNewCashFeeMinor: Math.min(feeBudget.feeObligationMinor, feeBudget.principalMinor),
-    separateMerchantReceivableMinor: Math.max(0, feeBudget.feeObligationMinor - feeBudget.principalMinor),
-    originalOverTargetMinor: feeBudget.originalOverTargetMinor, originalSourceDebt: basis.principal.some(source => source.feeUnexpected || ["owed", "review"].includes(source.feeCollectionState)), sources: basis.principal };
+  const feeReview = originalProrationFeeReview(basis.principal, debitNetMinor, debitTaxQuote.totalMinor, Number(applied), policy.siteFeeBps);
   const card = await reviewedProrationCard(ctx, parent, { providerPlatformAccountId: economic.route.providerPlatformAccountId,
     ...(economic.route.collectionKind === "direct" ? { providerAccountId: economic.route.chargeAccountId! } : { destinationAccountId: economic.route.recipientAccountId, settlementMerchantAccountId: economic.route.settlementMerchantAccountId }) }, Number(totalDebit - applied));
   const noticeSnapshot = { locale: input.locale, text: `${economic.noticeSnapshot.text}\n${translator(input.locale)("subscriptions.grossProrationNotice")}\n${translator(input.locale)("subscriptions.proration.feeReceivableNotice")}\n${translator(input.locale)("subscriptions.proration.boundaryNotice")}${card ? `\n${translator(input.locale)("subscriptions.proration.cardNotice", { method: card.summary.label })}` : ""}` };
