@@ -3564,6 +3564,15 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Period guard source-control correction 2026-11-14 (C12.38): first composed
+source V71 stops at one test helper selecting the trailing EXECUTE FUNCTION
+trigger reference instead of the actual CREATE FUNCTION declaration in the
+older legacy fragment. No SQL predicate or expected original-body hash changed.
+The test helper now selects only anchored CREATE/CREATE OR REPLACE declarations;
+its exact whole legacy-body, original ready-body and frozen-prefix assertions
+remain mandatory. V71 is a failed partial source run, not1310/207 acceptance;
+focused and full source checks must rerun before fresh database qualification.
+
 Controlled/legacy period integration checkpoint 2026-11-14 (C12.38/C9.33):
 original application V7 at766 clears full bank/admission/payment birth but the
 old period-route trigger demands an unrelated legacy schedule observation.

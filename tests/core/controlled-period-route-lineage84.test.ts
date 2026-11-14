@@ -14,7 +14,8 @@ const manifest = z.object({
 }).parse(JSON.parse(read("deploy/controlled-period-route-lineage84.manifest.json")));
 const fragment = read(manifest.fragment.path);
 function body(text: string, name: string) {
-  const start = text.lastIndexOf(`FUNCTION ${name}(`), begin = text.indexOf("AS $$", start), end = text.indexOf("$$;", begin);
+  const declaration = [...text.matchAll(new RegExp(`^CREATE(?: OR REPLACE)? FUNCTION ${name}\\(`, "gm"))].at(-1);
+  const start = declaration?.index ?? -1, begin = text.indexOf("AS $$", start), end = text.indexOf("$$;", begin);
   if (start < 0 || begin < 0 || end < 0) throw Error("Retain the entire authentic SQL function.");
   return text.slice(begin + 5, end);
 }
