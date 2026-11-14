@@ -1,0 +1,122 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SOURCE_ONLY_PREPARED_UNRUN",
+  "materialization": "Replace only these complete unapplied source statements at their ORIGINAL creation positions in a NEW forward migration. Change CREATE OR REPLACE back to CREATE for originally new functions. Do not execute invalid original definitions first; a later replacement cannot rescue an earlier validation failure. Preserve every trigger, other statement, predicate, original frozen source and all published migration identities.",
+  "sources": {
+    "controlled-cash-application-protocol84.fragment.sql": "d6e08c2703ab087343c452d525d438ac18b160bb70d81a875f73cbbc579286fb",
+    "controlled-cash-application-stages84.fragment.sql": "06d4cdc17c1e5b93119318a6e7f4de4089aa096827b813aaf3ea4a9a276eebfd"
+  },
+  "replacementSha256": "16c1347a270b252761ffc095ee1ab63cbf764aefa4dd178c3554d4e50e9b08e0",
+  "functions": [
+    {
+      "name": "freeholder_controlled_cash_require_prefix",
+      "signature": "freeholder_controlled_cash_require_prefix(target_resource_uuid uuid)",
+      "source": "deploy/controlled-cash-application-protocol84.fragment.sql",
+      "beforeStatementSha256": "98e58917e8f1dc1be3ea23e64bd19c0ceecba300dc24ebf0de912c212aacd6ed",
+      "replacement": "deploy/controlled-cash-application-case84.fragment.sql",
+      "afterStatementSha256": "7eae527b11fdb815202d0e9b2b167bf4363d14f599b10183a7a72bc8fd56ec99",
+      "caseOperands": [
+        {
+          "before": "CASE WHEN hashtext('controlled-provider:'||target_resource_uuid::text)<0 THEN 4294967295::bigint ELSE 0::bigint END",
+          "after": "(CASE WHEN hashtext('controlled-provider:'||target_resource_uuid::text)<0 THEN 4294967295::bigint ELSE 0::bigint END)"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_cash_before_settlement",
+      "signature": "freeholder_controlled_cash_before_settlement(target_payment_uuid uuid)",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "beforeStatementSha256": "c6a0b4a0020b970790ee9f4d7b5ea66bae912b12f4022ab5f9cdca6af145233a",
+      "replacement": "deploy/controlled-cash-application-case84.fragment.sql",
+      "afterStatementSha256": "b2e63f0860eddc2fb16a48276bc333a031746aea2aff17dc0e696ed1d413b0ac",
+      "caseOperands": [
+        {
+          "before": "CASE WHEN EXISTS(SELECT 1 FROM agreement_fee_duties actual_duty WHERE actual_duty.invoice_id=batch_record.invoice_id) THEN 1 ELSE 0 END",
+          "after": "(CASE WHEN EXISTS(SELECT 1 FROM agreement_fee_duties actual_duty WHERE actual_duty.invoice_id=batch_record.invoice_id) THEN 1 ELSE 0 END)"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_cash_stage",
+      "signature": "freeholder_controlled_cash_stage(target_batch_uuid uuid,target_receipt_uuid uuid DEFAULT null,target_payment_uuid uuid DEFAULT null)",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "beforeStatementSha256": "ccb421fef9e5b8335d5fd5322cc22a43fb57daa658a6b21282ce36d01f3e589f",
+      "replacement": "deploy/controlled-cash-application-case84.fragment.sql",
+      "afterStatementSha256": "b3edbb653dea74737db70dc542f6bb0249db586b1a588bab8382689b8383ebe9",
+      "caseOperands": [
+        {
+          "before": "CASE WHEN has_duty THEN 1 ELSE 0 END",
+          "after": "(CASE WHEN has_duty THEN 1 ELSE 0 END)"
+        },
+        {
+          "before": "CASE WHEN has_duty THEN 1 ELSE 0 END",
+          "after": "(CASE WHEN has_duty THEN 1 ELSE 0 END)"
+        },
+        {
+          "before": "CASE WHEN expected_from IS DISTINCT FROM expected_to THEN 1 ELSE 0 END",
+          "after": "(CASE WHEN expected_from IS DISTINCT FROM expected_to THEN 1 ELSE 0 END)"
+        },
+        {
+          "before": "CASE WHEN plan_from IS DISTINCT FROM plan_to THEN 1 ELSE 0 END",
+          "after": "(CASE WHEN plan_from IS DISTINCT FROM plan_to THEN 1 ELSE 0 END)"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_cash_require_current_locks",
+      "signature": "freeholder_controlled_cash_require_current_locks(target_batch_uuid uuid)",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "beforeStatementSha256": "86c31cd3c542b53e67fb599929548e132746ce08c21c2214ed4c56df7ca28e9a",
+      "replacement": "deploy/controlled-cash-application-case84.fragment.sql",
+      "afterStatementSha256": "f0e85b7b2b565e9441b38de72f8dcabe9cff30f381b3034af61d7e9b0f040147",
+      "caseOperands": [
+        {
+          "before": "CASE WHEN hashtext(required_key)<0 THEN 4294967295::bigint ELSE 0::bigint END",
+          "after": "(CASE WHEN hashtext(required_key)<0 THEN 4294967295::bigint ELSE 0::bigint END)"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_cash_validate_state_event",
+      "signature": "freeholder_controlled_cash_validate_state_event(target_event_uuid uuid)",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "beforeStatementSha256": "7d87113249b0501038e592784759f5622c8fe39311485cda77ec84985c8b17b2",
+      "replacement": "deploy/controlled-cash-application-case84.fragment.sql",
+      "afterStatementSha256": "211d9c39a20d73ad922d9816efc0197ea40036a2fdaa324dd64d0ce92d86dc0a",
+      "caseOperands": [
+        {
+          "before": "CASE WHEN EXISTS(SELECT 1 FROM money_state_events processing_event WHERE processing_event.subject_type='payment' AND processing_event.subject_id=payment_record.id AND processing_event.from_state='created' AND processing_event.to_state='processing') THEN 'processing' ELSE 'created' END",
+          "after": "(CASE WHEN EXISTS(SELECT 1 FROM money_state_events processing_event WHERE processing_event.subject_type='payment' AND processing_event.subject_id=payment_record.id AND processing_event.from_state='created' AND processing_event.to_state='processing') THEN 'processing' ELSE 'created' END)"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_cash_validate_route",
+      "signature": "freeholder_controlled_cash_validate_route(target_payment_uuid uuid)",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "beforeStatementSha256": "f4f22d8e4af9bb74289c4cba2c1b7ccc1b5a1e35dbb3e61e58b7dfe42b3817e8",
+      "replacement": "deploy/controlled-cash-application-case84.fragment.sql",
+      "afterStatementSha256": "c7c5423063ad141f56a8074b94b9278abc961f216dba66565dc8c1aa7176d6cc",
+      "caseOperands": [
+        {
+          "before": "CASE WHEN resource_record.original_scope->>'destinationAccountId' IS NOT NULL THEN 'destination' ELSE 'direct' END",
+          "after": "(CASE WHEN resource_record.original_scope->>'destinationAccountId' IS NOT NULL THEN 'destination' ELSE 'direct' END)"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_cash_normalized_plans",
+      "signature": "freeholder_controlled_cash_normalized_plans(target_batch_uuid uuid)\nRETURNS TABLE(family text,identity text,fingerprint text) LANGUAGE plpgsql VOLATILE AS $$\nDECLARE admitted_batch controlled_cash_application_batches%ROWTYPE; actual_plan payment_plans%ROWTYPE; original_plan jsonb; installment_record payment_plan_installments%ROWTYPE; original_installment jsonb;\n receipt_record record; remaining numeric; available numeric; expected_allocation numeric; allocation_count integer; allocation_sum numeric; prior_allocation numeric; total_delta numeric; installment_delta numeric;\n restored text; expected_status text; last_ordinal integer;\nBEGIN\n SELECT * INTO admitted_batch FROM controlled_cash_application_batches WHERE id=target_batch_uuid;\n IF admitted_batch.id IS NULL OR admitted_batch.admission_transaction_id IS DISTINCT FROM txid_current()::text THEN RAISE EXCEPTION 'Normalize only the genuine current application transaction' USING ERRCODE='23514';END IF;\n SELECT * INTO actual_plan FROM payment_plans WHERE invoice_id=admitted_batch.invoice_id;\n IF actual_plan.id IS NULL THEN\n  IF jsonb_array_length(admitted_batch.mutable_before_rows)<>0 OR EXISTS(SELECT 1 FROM payment_allocations actual_allocation JOIN controlled_cash_application_links actual_link ON actual_link.payment_id=actual_allocation.payment_id WHERE actual_link.batch_id=admitted_batch.id) THEN\n   RAISE EXCEPTION 'A nonexistent original plan cannot own new allocations or lose a retained before-row' USING ERRCODE='23514';END IF;\n  RETURN;\n END IF;\n SELECT original_row INTO original_plan FROM jsonb_array_elements(admitted_batch.mutable_before_rows) original_row WHERE original_row->>'table'='payment_plans' AND original_row->>'id'=actual_plan.id::text;\n IF original_plan IS NULL OR actual_plan.currency IS DISTINCT FROM admitted_batch.currency\n  OR jsonb_array_length(admitted_batch.mutable_before_rows)<>1+(SELECT count(*) FROM payment_plan_installments actual_installment WHERE actual_installment.plan_id=actual_plan.id) THEN\n  RAISE EXCEPTION 'Preserve the full exact original plan and installment set; no new/omitted principal row' USING ERRCODE='23514';END IF;\n IF EXISTS(SELECT 1 FROM payment_allocations actual_allocation JOIN controlled_cash_application_links actual_link ON actual_link.payment_id=actual_allocation.payment_id\n  JOIN payments actual_payment ON actual_payment.id=actual_link.payment_id LEFT JOIN payment_plan_installments actual_installment ON actual_installment.id=actual_allocation.installment_id\n  WHERE actual_link.batch_id=admitted_batch.id AND(actual_payment.status IS DISTINCT FROM 'succeeded' OR actual_installment.plan_id IS DISTINCT FROM actual_plan.id)) THEN\n  RAISE EXCEPTION 'Only actual settled receipt payments can fund their exact original invoice plan' USING ERRCODE='23514';END IF;\n FOR receipt_record IN SELECT actual_proof.*,actual_payment.status AS payment_status FROM controlled_cash_application_receipts actual_proof\n  JOIN controlled_cash_application_links actual_link ON actual_link.receipt_proof_id=actual_proof.id AND actual_link.batch_id=admitted_batch.id\n  JOIN payments actual_payment ON actual_payment.id=actual_link.payment_id WHERE actual_proof.batch_id=admitted_batch.id ORDER BY actual_proof.ordinal LOOP\n  IF receipt_record.payment_status<>'succeeded' THEN CONTINUE;END IF;\n  IF original_plan->'fields'->>'status' NOT IN('active','defaulted') THEN\n   IF EXISTS(SELECT 1 FROM payment_allocations actual_allocation JOIN controlled_cash_application_links actual_link ON actual_link.payment_id=actual_allocation.payment_id WHERE actual_link.receipt_proof_id=receipt_record.id) THEN\n    RAISE EXCEPTION 'The unchanged shared spine does not allocate into a cancelled/completed original plan' USING ERRCODE='23514';END IF;\n   CONTINUE;\n  END IF;\n  remaining=receipt_record.amount_minor;\n  FOR installment_record IN SELECT installment_row.* FROM payment_plan_installments installment_row WHERE installment_row.plan_id=actual_plan.id ORDER BY installment_row.due_at,installment_row.position LOOP\n   SELECT original_row INTO original_installment FROM jsonb_array_elements(admitted_batch.mutable_before_rows) original_row WHERE original_row->>'table'='payment_plan_installments' AND original_row->>'id'=installment_record.id::text;\n   IF original_installment IS NULL THEN RAISE EXCEPTION 'Every actual installment must retain its original full-row preimage' USING ERRCODE='23514';END IF;\n   SELECT coalesce(sum(actual_allocation.amount_minor),0) INTO prior_allocation FROM payment_allocations actual_allocation\n    JOIN controlled_cash_application_links actual_link ON actual_link.payment_id=actual_allocation.payment_id AND actual_link.batch_id=admitted_batch.id\n    JOIN controlled_cash_application_receipts prior_proof ON prior_proof.id=actual_link.receipt_proof_id AND prior_proof.ordinal<receipt_record.ordinal WHERE actual_allocation.installment_id=installment_record.id;\n   available=installment_record.amount_minor::numeric-(original_installment->'fields'->>'paid_minor')::numeric-prior_allocation;\n   IF available<0 THEN RAISE EXCEPTION 'Earlier actual receipts cannot allocate the same installment principal twice' USING ERRCODE='23514';END IF;\n   expected_allocation=CASE WHEN original_installment->'fields'->>'status' IN('scheduled','due','partially_paid','defaulted') THEN least(remaining,available) ELSE 0 END;\n   SELECT count(*),coalesce(sum(actual_allocation.amount_minor),0) INTO allocation_count,allocation_sum FROM payment_allocations actual_allocation\n    JOIN controlled_cash_application_links actual_link ON actual_link.payment_id=actual_allocation.payment_id AND actual_link.receipt_proof_id=receipt_record.id WHERE actual_allocation.installment_id=installment_record.id;\n   IF allocation_sum IS DISTINCT FROM expected_allocation OR allocation_count<>CASE WHEN expected_allocation>0 THEN 1 ELSE 0 END THEN\n    RAISE EXCEPTION 'Require the exact real oldest-due/position FIFO allocation, not a sum-only plan distribution' USING ERRCODE='23514';END IF;\n   remaining=remaining-expected_allocation;\n  END LOOP;\n  IF remaining<>0 THEN RAISE EXCEPTION 'Actual settlement cannot exceed the exact unallocated original plan principal' USING ERRCODE='23514';END IF;\n END LOOP;\n SELECT coalesce(sum(actual_allocation.amount_minor),0) INTO total_delta FROM payment_allocations actual_allocation JOIN controlled_cash_application_links actual_link ON actual_link.payment_id=actual_allocation.payment_id AND actual_link.batch_id=admitted_batch.id;\n SELECT coalesce(max(receipt_proof.ordinal),0) INTO last_ordinal FROM controlled_cash_application_receipts receipt_proof JOIN controlled_cash_application_links actual_link ON actual_link.receipt_proof_id=receipt_proof.id AND actual_link.batch_id=admitted_batch.id JOIN payments actual_payment ON actual_payment.id=actual_link.payment_id AND actual_payment.status='succeeded';\n expected_status=freeholder_controlled_cash_plan_status(admitted_batch.id,last_ordinal);\n IF actual_plan.paid_minor::numeric IS DISTINCT FROM(original_plan->'fields'->>'paid_minor')::numeric+total_delta OR actual_plan.status IS DISTINCT FROM expected_status THEN\n  RAISE EXCEPTION 'The actual plan status and paid principal must derive only from its genuine allocated receipt prefix' USING ERRCODE='23514';END IF;\n restored=encode(sha256(convert_to((to_jsonb(actual_plan)||(original_plan->'fields')||jsonb_build_object('updated_at',(original_plan->'fields'->>'updated_at')::timestamptz))::text,'UTF8')),'hex');\n IF restored IS DISTINCT FROM original_plan->>'fingerprint' THEN RAISE EXCEPTION 'No other plan field can change during cash application' USING ERRCODE='23514';END IF;\n family='payment_plans';identity=actual_plan.id::text;fingerprint=restored;RETURN NEXT;\n FOR installment_record IN SELECT installment_row.* FROM payment_plan_installments installment_row WHERE installment_row.plan_id=actual_plan.id LOOP\n  SELECT original_row INTO original_installment FROM jsonb_array_elements(admitted_batch.mutable_before_rows) original_row WHERE original_row->>'table'='payment_plan_installments' AND original_row->>'id'=installment_record.id::text;\n  SELECT coalesce(sum(actual_allocation.amount_minor),0) INTO installment_delta FROM payment_allocations actual_allocation JOIN controlled_cash_application_links actual_link ON actual_link.payment_id=actual_allocation.payment_id AND actual_link.batch_id=admitted_batch.id WHERE actual_allocation.installment_id=installment_record.id;\n  expected_status=CASE WHEN installment_delta=0 THEN original_installment->'fields'->>'status' WHEN installment_record.paid_minor=installment_record.amount_minor THEN 'paid' ELSE 'partially_paid' END;\n  IF installment_record.paid_minor::numeric IS DISTINCT FROM(original_installment->'fields'->>'paid_minor')::numeric+installment_delta OR installment_record.status IS DISTINCT FROM expected_status THEN\n   RAISE EXCEPTION 'Only genuine original FIFO allocations may change the exact installment paid/status columns' USING ERRCODE='23514';END IF;\n  restored=encode(sha256(convert_to((to_jsonb(installment_record)||(original_installment->'fields')||jsonb_build_object('updated_at',(original_installment->'fields'->>'updated_at')::timestamptz))::text,'UTF8')),'hex');\n  IF restored IS DISTINCT FROM original_installment->>'fingerprint' THEN RAISE EXCEPTION 'Preserve every other full installment row field and timestamp preimage' USING ERRCODE='23514';END IF;\n  family='payment_plan_installments';identity=installment_record.id::text;fingerprint=restored;RETURN NEXT;\n END LOOP;\nEND $$;",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "beforeStatementSha256": "edbe3b3bc558bc74dcc8cf94701d3f4a4c5b6ed8a44f805527b142d36ebc124b",
+      "replacement": "deploy/controlled-cash-application-case84.fragment.sql",
+      "afterStatementSha256": "da30bddd2e31146f58d73e79cf51716adf68d30fe3eb7ab2fad476177b931a15",
+      "caseOperands": [
+        {
+          "before": "CASE WHEN expected_allocation>0 THEN 1 ELSE 0 END",
+          "after": "(CASE WHEN expected_allocation>0 THEN 1 ELSE 0 END)"
+        }
+      ]
+    }
+  ]
+}
