@@ -50,7 +50,7 @@ import { subscriptionProrationCashConfirmations, subscriptionProrationCreditConf
 import { subscriptionProrations, subscriptionProrationPrincipal, subscriptionProrationCreditUses } from "./proration-schema";
 import { originalCashRecoveryFinancialWitness } from "@/modules/invoicing/original-cash-recovery-store";
 import { exportOriginalCashHistory } from "@/modules/invoicing/original-cash-invoice-history";
-import { cashInspectionStopFinancialWitness, exportCashInspectionStops } from "@/modules/invoicing/merchant-cash-inspection-stops";
+import { cashInspectionFinancialWitness, exportCashInspectionStops, exportControlledCashInspectionLineages } from "@/modules/invoicing/merchant-cash-inspection-financial";
 import { contacts } from "@/core/contacts/schema";
 import { listLocations } from "@/core/locations/service";
 import { getBusiness } from "@/core/settings/service";
@@ -1750,7 +1750,7 @@ registerContactReference({
 registerContactPrivacySource({
   scope: "subscriptions.agreements",
   tables: ["subscriptions", "subscription_events", "subscription_merchant_scopes", "subscription_provider_charge_receipts", "subscription_commercial_terms", "subscription_commercial_amendments", "subscription_commercial_resumptions", "subscription_provider_generations", "subscription_provider_invoice_observations", "subscription_provider_invoice_lines", "subscription_provider_read_tickets", "subscription_provider_read_finishes", "subscription_provider_read_stops",
-    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses", "subscription_proration_cash_confirmations", "subscription_proration_credit_confirmations", "subscription_proration_payment_protocols", "subscription_proration_card_mandates", "subscription_proration_card_attempts", "subscription_proration_card_jobs", "subscription_proration_card_reads", "subscription_proration_card_read_finishes", "subscription_proration_card_read_stops","subscription_controlled_resources", "subscription_controlled_operations", "subscription_controlled_calls", "subscription_controlled_facts", "subscription_controlled_finishes", "subscription_controlled_stops", "subscription_controlled_verifications", "subscription_controlled_charge_origins", "subscription_controlled_closures"],
+    "subscription_prorations", "subscription_proration_principal", "subscription_proration_credit_uses", "subscription_proration_cash_confirmations", "subscription_proration_credit_confirmations", "subscription_proration_payment_protocols", "subscription_proration_card_mandates", "subscription_proration_card_attempts", "subscription_proration_card_jobs", "subscription_proration_card_reads", "subscription_proration_card_read_finishes", "subscription_proration_card_read_stops","subscription_controlled_resources", "subscription_controlled_operations", "subscription_controlled_calls", "subscription_controlled_facts", "subscription_controlled_finishes", "subscription_controlled_stops", "subscription_controlled_verifications", "subscription_controlled_charge_origins", "subscription_controlled_closures", "subscription_controlled_cash_inspection_lineages"],
   retentionScopes: ["commerce.money"],
   exportData: async (tx: Tx, contactId: string) => {
     const rows = await tx
@@ -1834,18 +1834,22 @@ registerContactPrivacySource({
         originalChargeLinks:controlledHistory.originalChargeLinks.filter(row=>resourceIds.has(row.resourceId)),actualClosures:controlledHistory.actualClosures.filter(row=>resourceIds.has(row.resourceId))};
     };
     const originalCash = await originalCashRecoveryFinancialWitness(tx, [], charges.map(row => row.id));
-    const inspectionStops = await cashInspectionStopFinancialWitness(tx, { paymentIds: [], receiptIds: charges.map(row => row.id) });
+    const inspectionStops = await cashInspectionFinancialWitness(tx, { paymentIds: [], receiptIds: charges.map(row => row.id), resourceIds: controlled.resources.map(row => row.id) });
+    const actualReceiptIds = new Set(charges.map(row => row.id));
+    if (inspectionStops.lineages.some(row => !actualReceiptIds.has(row.receiptId))) throw new ServiceError("conflict", "Restore the exact original subscription receipt ownership before exporting inspection lineages.");
     const exportedInspectionStops = exportCashInspectionStops(inspectionStops.stops);
+    const exportedInspectionLineages = exportControlledCashInspectionLineages(inspectionStops.lineages);
     const aggregate = rows.length + charges.length + accepted.length + amendments.length + resumptions.length + periodInvoices.length + readerTickets.length + readerStops.length
-      + controlledCount + cardCount + prorations.length + prorations.filter(row=>row.targetInvoice!==null).length + prorationPrincipal.length + prorationCredits.length + cashBoundary.length + creditBoundary.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length + inspectionStops.admissions.length + inspectionStops.stops.length;
+      + controlledCount + cardCount + prorations.length + prorations.filter(row=>row.targetInvoice!==null).length + prorationPrincipal.length + prorationCredits.length + cashBoundary.length + creditBoundary.length + originalCash.owners.length + originalCash.operations.length + originalCash.facts.length + originalCash.closures.length + originalCash.feedback.length + inspectionStops.admissions.length + inspectionStops.stops.length + inspectionStops.lineages.length;
     if (aggregate > 5000) throw new ServiceError("conflict", "Restore a bounded complete original subscription subject export; receipt-only cash and its authentic children cannot be truncated.");
     const cashHistory = exportOriginalCashHistory(originalCash);
     const cashFor = (subscriptionId: string) => {
       const receiptIds = new Set(charges.filter(row => row.subscriptionId === subscriptionId).map(row => row.id));
       const owners = cashHistory.owners.filter(row => row.subscriptionChargeReceiptId !== null && receiptIds.has(row.subscriptionChargeReceiptId)), ownerIds = new Set(owners.map(row => row.id));
-      const inspectionIds = new Set(inspectionStops.admissions.filter(row => row.subscriptionChargeReceiptId !== null && receiptIds.has(row.subscriptionChargeReceiptId)).map(row => row.id));
+      const inspectionIds = new Set(inspectionStops.receiptInspectionOwnership.filter(row => receiptIds.has(row.receiptId)).map(row => row.inspectionId));
       const independentInspectionStops = exportedInspectionStops.filter(row => inspectionIds.has(row.inspectionId));
-      return { owners, ...(independentInspectionStops.length ? { independentInspectionStops } : {}), operations: cashHistory.operations.filter(row => ownerIds.has(row.recoveryId)), facts: cashHistory.facts.filter(row => ownerIds.has(row.recoveryId)),
+      const originalInspectionLineages = exportedInspectionLineages.filter(row => receiptIds.has(row.receiptId) && inspectionIds.has(row.inspectionId));
+      return { owners, ...(independentInspectionStops.length ? { independentInspectionStops } : {}), ...(originalInspectionLineages.length ? { originalInspectionLineages } : {}), operations: cashHistory.operations.filter(row => ownerIds.has(row.recoveryId)), facts: cashHistory.facts.filter(row => ownerIds.has(row.recoveryId)),
         closures: cashHistory.closures.filter(row => ownerIds.has(row.recoveryId)), feedback: cashHistory.feedback.filter(row => row.namespace.subscriptionChargeReceiptId !== null && receiptIds.has(row.namespace.subscriptionChargeReceiptId)) };
     };
     return rows.map(row => ({ ...row, observedRenewalCharges: byAgreement.get(row.id) ?? [], acceptedCommercialTerms: accepted.filter(value => value.subscriptionId === row.id),

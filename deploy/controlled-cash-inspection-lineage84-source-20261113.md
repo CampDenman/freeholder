@@ -93,3 +93,22 @@ admissionFingerprint against the actual PostgreSQL to_jsonb admission-row SHA,
 just as the latest inventory reader does. Canonical JavaScript admissionDigest
 remains separately authenticated; it never substitutes for the PostgreSQL hash
 or silently drops timestamp precision. No oracle or qualification claim changes.
+
+
+Parent integration SOURCE checkpoint (2026-11-14 UTC): owned84 is copied byte
+for byte to normal0084_controlled_cash_inspection_lineages.sql, journal index84
+at1793310000064. All previous84 journal/file identities remain unchanged. No
+database has been migrated or cloned. Central four financial/export readers
+now compose an ordinary collector-free wrapper: exact original payment/receipt
+and owned controlled resource FKs, independently authenticated child/admission
+PG hashes, shared parent admissions counted once and each stop/lineage counted
+separately under one5000 bound. Invoice buyer history covers receipt-only
+controlled resources BEFORE a payment-route exit, and retains their complete
+current refund/callback graph separately from immutable read order; seller
+filters never widen to a whole shared invoice. Merchant profile merge inherits
+exact child PG entries. Merchant/invoice/buyer exports add only nonempty safe
+lineage projections, never sequence, namespace, process, nonce, HMAC or raw
+bank callbacks. Subscription ownership is checked against actual owned receipt
+UUIDs and its privacy/retention table inventory declares the new child.
+Source/model/native qualification remains pending, including future genuine
+controlled producer and positive ordering/application native cases.

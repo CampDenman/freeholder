@@ -16,7 +16,7 @@ import { exportOriginalCashHistory, originalCashForInvoice, originalCashInvoiceH
 import { invoices, paymentDisputes, payments, refunds } from "./schema";
 import { controlledFinancialTables, controlledFinancialWitness, type ControlledFinancialEntry } from "./controlled-provider-financial-witness";
 import { prorationFinancialWitness } from "./proration-financial-witness";
-import { cashInspectionStopFinancialWitness, exportCashInspectionStops } from "./merchant-cash-inspection-stops";
+import { cashInspectionFinancialWitness, exportCashInspectionStops, exportControlledCashInspectionLineages } from "./merchant-cash-inspection-financial";
 
 /** NULL makes the existing parent merge explicitly non-undoable.
  * The default is the buyer's complete invoice. A seller caller must derive
@@ -50,14 +50,37 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   let additionalCount = additionalWitnessCount + prorationFinancial.entries.length + controlledFinancial.entries.filter(row => !externalControlled.has(`${row.table}:${row.id}`)).length;
   let prorationInvoiceIds: string[] = [];
   const originalCash = await originalCashInvoiceHistory(tx, invoiceIds, originalPaymentIds);
-  const inspectionStops = await cashInspectionStopFinancialWitness(tx, {
+  const inspectionStops = await cashInspectionFinancialWitness(tx, {
     paymentIds: originalCash.references.map(row => row.id),
     receiptIds: originalCash.receiptReferences.map(row => row.receiptId).filter((id): id is string => id !== null),
+    resourceIds: "history" in controlledFinancial ? controlledFinancial.history.resources.map(row => row.id) : [],
   });
-  additionalCount += inspectionStops.admissions.length + inspectionStops.entries.length;
+  additionalCount += inspectionStops.admissions.length + inspectionStops.entries.length + inspectionStops.lineageEntries.length;
   const inspectionHistoryKeys = new Set([...inspectionStops.entries.map(row => `${row.table}:${row.id}`),
+    ...inspectionStops.lineageEntries.map(row => `${row.table}:${row.id}`),
     ...inspectionStops.admissions.map(row => `merchant_cash_return_inspections:${row.id}`)]);
   const cashCount = Object.values(originalCash.witness).reduce((sum, rows) => sum + rows.length, 0);
+  if (cashCount + additionalCount > 5000) return null;
+  // Controlled receipt-owned callbacks exist before any invoice payment route.
+  // Keep their complete current graph independently of immutable read order.
+  const controlledReceiptIds = [...new Set([
+    ...("history" in controlledFinancial ? controlledFinancial.history.chargeOrigins.map(row => row.id) : []),
+    ...inspectionStops.lineages.map(row => row.receiptId),
+  ])];
+  const controlledCashChildren = controlledFinancial.entries.length && controlledReceiptIds.length
+    ? await merchantRefundDependencyFingerprints(tx, { paymentIds: [], subscriptionChargeReceiptIds: controlledReceiptIds })
+    : { version: 1 as const, entries: [], incomplete: false };
+  if (controlledCashChildren.incomplete) return null;
+  const cashKeys = new Set([
+    ...originalCash.witness.owners.map(row => `original_cash_recoveries:${row.id}`),
+    ...originalCash.witness.operations.map(row => `original_cash_recovery_operations:${row.id}`),
+    ...originalCash.witness.facts.map(row => `original_cash_recovery_facts:${row.id}`),
+    ...originalCash.witness.closures.map(row => `original_cash_recovery_closures:${row.id}`),
+    ...originalCash.witness.feedback.map(row => `original_cash_feedback:${merchantTaxDigest(row.namespace)}:${row.feedback.id}`),
+  ]);
+  const existingControlledKeys = new Set([...externalControlled.keys(), ...controlledFinancial.entries.map(row => `${row.table}:${row.id}`),
+    ...inspectionHistoryKeys, ...cashKeys]);
+  additionalCount += controlledCashChildren.entries.filter(row => !existingControlledKeys.has(`${row.table}:${row.id}`)).length;
   if (cashCount + additionalCount > 5000) return null;
   // Authentic feedback creates financial debt before the first GET. Select
   // through exact original payments, including feedback-owned legacy refunds,
@@ -98,9 +121,11 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
     const originalInspections = new Set(inspectionStops.admissions.filter(row => row.paymentId !== null && originalPayments.has(row.paymentId)
       || row.subscriptionChargeReceiptId !== null && originalReceipts.has(row.subscriptionChargeReceiptId)).map(row => row.id));
     const entries = inspectionStops.entries.filter(row => originalInspections.has(row.inspectionId)).map(({ table, id, fingerprint }) => ({ table, id, fingerprint }));
-    if (entries.length) {
+    const lineageEntries = inspectionStops.lineageEntries.filter(row => originalInspections.has(row.inspectionId)).map(({ table, id, fingerprint }) => ({ table, id, fingerprint }));
+    if (entries.length || lineageEntries.length) {
       const legacy = legacyFinancial.get(invoiceId);
-      legacyFinancial.set(invoiceId, merchantTaxDigest({ ...(legacy ? { legacy } : {}), originalCashInspectionStops: entries }));
+      legacyFinancial.set(invoiceId, merchantTaxDigest({ ...(legacy ? { legacy } : {}), ...(entries.length ? { originalCashInspectionStops: entries } : {}),
+        ...(lineageEntries.length ? { originalCashInspectionLineages: lineageEntries } : {}) }));
     }
   }
   if (prorationFinancial.entries.length || controlledFinancial.entries.length) {
@@ -113,7 +138,9 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
     prorationInvoiceIds = originalInvoices.map(row => row.id);
     for (const invoiceId of prorationInvoiceIds) {
       const original = legacyFinancial.get(invoiceId);
-      legacyFinancial.set(invoiceId, merchantTaxDigest({ ...(original ? { original } : {}), ...(prorationFinancial.entries.length ? { prorationFinancial } : {}), ...(controlledFinancial.entries.length ? { controlledFinancial } : {}) }));
+      legacyFinancial.set(invoiceId, merchantTaxDigest({ ...(original ? { original } : {}), ...(prorationFinancial.entries.length ? { prorationFinancial } : {}), ...(controlledFinancial.entries.length ? { controlledFinancial } : {}),
+        ...(controlledFinancial.entries.length && inspectionStops.lineageEntries.length ? { originalControlledCashInspectionLineages: inspectionStops.lineageEntries } : {}),
+        ...(controlledCashChildren.entries.length ? { originalControlledCashHistory: controlledCashChildren } : {}) }));
     }
   }
   const owned = await tx.select({ payment: payments, orderRoute: merchantPaymentRoutes, singleRoute: merchantInvoicePaymentRoutes, agreementRoute: merchantAgreementPaymentRoutes }).from(payments)
@@ -152,7 +179,8 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
   // the existing invoice reference receipt.
   const refundChildren = await merchantRefundDependencyFingerprints(tx, { paymentIds,
     subscriptionChargeReceiptIds: scoped.map(row => row.agreementRoute?.originalChargeReceiptId).filter((id): id is string => Boolean(id)) });
-  const controlledKeys = new Set([...externalControlled.keys(), ...controlledFinancial.entries.map(row => `${row.table}:${row.id}`), ...inspectionHistoryKeys]);
+  const controlledKeys = new Set([...externalControlled.keys(), ...controlledFinancial.entries.map(row => `${row.table}:${row.id}`), ...inspectionHistoryKeys,
+    ...controlledCashChildren.entries.map(row => `${row.table}:${row.id}`)]);
   if (refundChildren.entries.some(row => externalControlled.has(`${row.table}:${row.id}`) && externalControlled.get(`${row.table}:${row.id}`) !== row.fingerprint)) return null;
   const distinctRefundChildren = refundChildren.entries.filter(row => !controlledKeys.has(`${row.table}:${row.id}`));
   if (refundChildren.incomplete || count + cashCount + legacyCount + additionalCount + distinctRefundChildren.length > 5000) return null;
@@ -182,9 +210,12 @@ export async function exportMerchantRecoveryHistory(tx: Tx, invoiceIds: readonly
   const ownedDispatches = tx.select({ id: merchantPaymentDispatches.id }).from(merchantPaymentDispatches).where(inArray(merchantPaymentDispatches.paymentId, ownedPayments));
   const ownedFees = tx.select({ id: merchantFeeRefunds.id }).from(merchantFeeRefunds).where(inArray(merchantFeeRefunds.paymentId, ownedPayments));
   const originalCash = await originalCashInvoiceHistory(tx, invoiceIds);
-  const inspectionStops = await cashInspectionStopFinancialWitness(tx, {
+  const controlled = await controlledFinancialWitness(tx, { invoiceIds });
+  if (controlled.incomplete) throw new ServiceError("conflict", "Restore the complete owned controlled financial graph before exporting original inspections.");
+  const inspectionStops = await cashInspectionFinancialWitness(tx, {
     paymentIds: originalCash.references.map(row => row.id),
     receiptIds: originalCash.receiptReferences.map(row => row.receiptId).filter((id): id is string => id !== null),
+    resourceIds: controlled.history.resources.map(row => row.id),
   });
   const history = {
     requests: await tx.select().from(merchantPaymentRequests).where(inArray(merchantPaymentRequests.paymentId, ownedPayments)).orderBy(asc(merchantPaymentRequests.paymentId)).limit(5001),
@@ -199,8 +230,9 @@ export async function exportMerchantRecoveryHistory(tx: Tx, invoiceIds: readonly
     feeAcknowledgements: await tx.select().from(merchantFeeObservations).where(inArray(merchantFeeObservations.operationId, ownedFees)).orderBy(asc(merchantFeeObservations.id)).limit(5001),
   };
   if (Object.values(history).reduce((sum, rows) => sum + rows.length, 0) + Object.values(originalCash.witness).reduce((sum, rows) => sum + rows.length, 0)
-    + inspectionStops.admissions.length + inspectionStops.stops.length > 5000)
+    + inspectionStops.admissions.length + inspectionStops.stops.length + inspectionStops.lineages.length > 5000)
     throw new ServiceError("conflict", "Restore the complete bounded original financial export before issuing the subject archive.");
   return { ...history, originalCash: exportOriginalCashHistory(originalCash.witness),
-    ...(inspectionStops.stops.length ? { originalCashInspectionStops: exportCashInspectionStops(inspectionStops.stops) } : {}) };
+    ...(inspectionStops.stops.length ? { originalCashInspectionStops: exportCashInspectionStops(inspectionStops.stops) } : {}),
+    ...(inspectionStops.lineages.length ? { originalCashInspectionLineages: exportControlledCashInspectionLineages(inspectionStops.lineages) } : {}) };
 }

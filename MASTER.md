@@ -15882,6 +15882,20 @@ whatever is best for the people using the site.
   integration plus positive native qualification remain required; C12.38,
   C1.08 and stable stay open. See
   `deploy/controlled-cash-inspection-lineage84-source-20261113.md`.
+  Lineage parent integration SOURCE checkpoint 2026-11-14 UTC (C12.38/C1.08):
+  normal forward84 copies the13264-byte owned lineage SQL exactly (SHA814c7a22)
+  and preserves every prior84 migration identity. It adds one model144, one
+  sequence, four functions and two guards. A collector-free parent wrapper
+  authenticates exact inspection/receipt/resource UUID ownership and PG row
+  hashes; shared admissions count once with distinct stop/lineage children under
+  one5000 bound. Invoice merge covers genuine receipt-only controlled resources
+  and their full current refund/callback graph before any payment-route exit,
+  independently of immutable read order; seller-filtered inputs remain scoped.
+  Original merchant/buyer exports add only nonempty safe lineage projections
+  and subscription retention declares the new child. No raw nonce/process/HMAC
+  or global sequence is exported. All source, fresh85-journal/144-model and
+  actual native qualification remain pending; no database is migrated in place
+  and no positive collection or stable authority is supplied.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;

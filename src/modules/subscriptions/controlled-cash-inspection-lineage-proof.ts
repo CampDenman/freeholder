@@ -19,7 +19,7 @@ export function verifiedControlledCashInspectionLineage(admission:Admission,row:
  return row.inspectionId===admission.id&&row.callerInstanceId===admission.caller.id&&row.namespaceKey===controlledCashInspectionNamespace(admission)
   &&row.admissionDigest===merchantTaxDigest(admission)&&Number.isSafeInteger(row.admissionSequence)&&row.admissionSequence>0
   &&row.closedInspectionIds.length<=5000&&new Set(row.closedInspectionIds).size===row.closedInspectionIds.length
-  &&!row.closedInspectionIds.includes(row.inspectionId)&&row.closedInspectionIds.every((id,i,ids)=>i===0||ids[i-1]<id)
+  &&!row.closedInspectionIds.includes(row.inspectionId)&&row.closedInspectionIds.every((id,i,ids)=>{const previous=ids[i-1];return i===0||previous!==undefined&&previous<id;})
   &&/^[a-f0-9]{64}$/.test(row.admissionFingerprint)&&/^[a-f0-9]{64}$/.test(row.closedHistoryDigest)
   &&verifyOriginalCashRecovery(CONTROLLED_CASH_LINEAGE_PURPOSE,{id:row.inspectionId,digest:row.digest,authentication:row.authentication,createdAt:row.createdAt},controlledCashInspectionLineageBody(row),keys);
 }
