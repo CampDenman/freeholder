@@ -5,7 +5,8 @@ import { errorResponse } from "@/core/http/respond";
 import { z } from "zod";
 import { ServiceError } from "@/core/service";
 import { logUnhandledFailure } from "@/core/safe-failure-log";
-const seam=vi.hoisted(()=>({call:vi.fn()}));
+const seam=vi.hoisted(():{call:ReturnType<typeof vi.fn>;uuid?:string}=>({call:vi.fn()}));
+vi.mock("node:crypto",async original=>{const actual=await original<typeof import("node:crypto")>();return{...actual,randomUUID:()=>seam.uuid??actual.randomUUID()};});
 vi.mock("@/core/runtime",()=>({ready:async()=>undefined}));
 vi.mock("@/core/http/actor",()=>({actorFromRequest:async()=>({kind:"anonymous"})}));
 vi.mock("@/mcp/tools",()=>({hiddenFromMcp:()=>false,toolsFor:()=>[],serviceForTool:()=>({def:{name:"canary.tool"},call:seam.call})}));
@@ -16,7 +17,7 @@ function hostile() {
  Object.defineProperties(value,{name:{get(){throw new Error(privateCanary);}},code:{get(){throw new Error(privateCanary);}},message:{get(){throw new Error(privateCanary);}}});
  return value;
 }
-afterEach(()=>vi.restoreAllMocks());
+afterEach(()=>{vi.restoreAllMocks();delete seam.uuid;});
 function safeRecord(calls:unknown[][],surface:string) {
  expect(calls).toHaveLength(1);expect(calls[0]).toHaveLength(1);
  const event=z.object({event:z.literal("unhandled_failure"),surface:z.enum(["http","mcp"]),category:z.literal("internal"),code:z.literal("internal"),requestId:z.uuid()}).strict().parse(calls[0]?.[0]);
@@ -24,6 +25,10 @@ function safeRecord(calls:unknown[][],surface:string) {
  expect(JSON.stringify(calls)).not.toContain(privateCanary);
 }
 describe("fixed unhandled-failure logging",()=>{
+ it("throws a fresh fixed failure without logging a malformed generator value",()=>{
+  const log=vi.spyOn(console,"error").mockImplementation(()=>undefined);seam.uuid=privateCanary;
+  expect(()=>logUnhandledFailure("http")).toThrowError("Cannot allocate an internal failure reference.");expect(log).not.toHaveBeenCalled();
+ });
  it("keeps the actual HTTP generic500 and never reads hostile error accessors",async()=>{
   const log=vi.spyOn(console,"error").mockImplementation(()=>undefined);
   const response=errorResponse(hostile(),{kind:"anonymous"});
