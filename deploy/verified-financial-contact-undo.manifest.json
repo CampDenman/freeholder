@@ -1,0 +1,93 @@
+{
+  "base": "3ec20ddee89330b80b05e7fb03203a0ceaceeabe",
+  "execution": "PREPARED_UNRUN_SOURCE_ONLY",
+  "sourcePatch": {
+    "path": "deploy/verified-financial-contact-undo.source.patch",
+    "sha256": "cef10fc799d664d80ac6ee08a63f904b0ba730444d1497f83db3b3b9d97a2f5d"
+  },
+  "files": [
+    {
+      "path": "src/core/contacts/service.ts",
+      "beforeSha256": "30c53ee2ea2b7472203157ce45a403b369dd4b5d62046d87aacc13bfc5a1014b",
+      "afterSha256": "233a6539dcae57cb12083b7fa6230808566d0e1e73e51f0fc5db83f0d2aad306"
+    },
+    {
+      "path": "src/modules/subscriptions/service.ts",
+      "beforeSha256": "7a448ce72e4d09560af1f48c82ff6cd69ddeded23f64fb59e241d733460a4749",
+      "afterSha256": "6ae4707a7fbd583fe4ce4eabc06cdff830e6afec9fa4b2c4a6dbf5d56f540ddd"
+    },
+    {
+      "path": "src/modules/invoicing/invoice-service.ts",
+      "beforeSha256": "f093f0bd3b91eef558d58048eff53eaa8c2cdde003d71ca2e9b596da9333b137",
+      "afterSha256": "0b03ee9e85e3ed4e5180da59a3719b18f0f934042ca3ac93562c64fc2f9406cc"
+    }
+  ],
+  "native": {
+    "path": "tests/modules/controlled-paid-period155.test.ts",
+    "sha256": "355f24d53f0be7ae837fadd0a34767322fdf8365d0fa0bf7e64814d2a00ffac9",
+    "status": "Original clean journey bytes unchanged; root must rerun after integration."
+  },
+  "lockProvider": {
+    "path": "src/modules/invoicing/contact-undo-financial-lock.ts",
+    "sha256": "aa8610e47594de1f1ac5e4a80fd8a75eb81740dafd38aa48a266c40c6ffdf654",
+    "prefix": [
+      "contact-identity-privacy exclusive",
+      "ALL controlled-provider advisory and actual resource rows",
+      "ALL subscription parent rows",
+      "ALL sorted payment advisory",
+      "ALL sorted invoice advisory",
+      "ALL sorted credit-note advisory",
+      "ALL sorted subscription-cash namespaces",
+      "NONBLOCKING merchant-return-read exact inspection keys",
+      "Full identical FK/namespace/inspection rediscovery before comparison"
+    ]
+  },
+  "oldRestoreBodies": {
+    "subscription": {
+      "path": "src/modules/subscriptions/service.ts",
+      "body": "\n    const original = await subscriptionOriginalEvidence(tx, [duplicateId, survivingId]);\n    const modern = !Array.isArray(before) ? merchantSubscriptionUndo.parse(before) : null;\n    if (modern) {\n      const expected = merchantSubscriptionUndo.parse(after);\n      if (original.overflow || JSON.stringify(original.evidence) !== JSON.stringify(expected.originalEvidence)) throw new ServiceError(\"conflict\", \"Original subscription scope or observed money changed after the merge. Reconcile it before separating ownership.\");\n    } else if (original.overflow || original.evidence.length) throw new ServiceError(\"conflict\", \"This historical merge did not record the new original subscription evidence. Restore the pre-upgrade snapshot to separate it safely.\");\n    const ids = (modern?.movedIds ?? (Array.isArray(before) ? before : [])).filter(\n      (each): each is string => typeof each === \"string\",\n    );\n    if (ids.length === 0) return;\n    await tx\n      .update(subscriptions)\n      .set({ contactId: duplicateId })\n      .where(inArray(subscriptions.id, ids));",
+      "sha256": "cc0fad27d5506f73cab3406b04738f781424efa521b7844ebe0d770b9c6836e6"
+    },
+    "invoice": {
+      "path": "src/modules/invoicing/invoice-service.ts",
+      "body": "\n      const schema = z.array(z.object({ id: z.string().uuid(), contactId: z.string().uuid(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional() }));\n      const before = schema.parse(beforeState);\n      const after = schema.parse(afterState);\n      const current = await selectRows(tx, [duplicateId, survivingId]);\n      const currentById = new Map(current?.map((row) => [row.id, row]) ?? []);\n      if (current === null || current.length !== after.length || after.some((row) => currentById.get(row.id)?.contactId !== row.contactId || currentById.get(row.id)?.fingerprint !== row.fingerprint)) {\n        throw new ServiceError(\n          \"conflict\",\n          `A ${table.replaceAll(\"_\", \" \")} record changed after this merge. Leave the merge in place or restore that record first.`,\n        );\n      }\n      const movedIds = before.filter((row) => row.contactId === duplicateId).map((row) => row.id);\n      if (movedIds.length === 0) return;\n      if (table === \"invoices\") {\n        await tx.update(invoices).set({ contactId: duplicateId }).where(inArray(invoices.id, movedIds));\n      } else if (table === \"tax_exemptions\") {\n        await allowMerchantTaxWrites(tx);\n        await tx.update(taxExemptions).set({ contactId: duplicateId }).where(inArray(taxExemptions.id, movedIds));\n      } else if (table === \"payment_provider_customers\") {\n        await tx.update(paymentProviderCustomers).set({ contactId: duplicateId }).where(inArray(paymentProviderCustomers.id, movedIds));\n      } else {\n        await tx.update(paymentMethods).set({ contactId: duplicateId }).where(inArray(paymentMethods.id, movedIds));\n      }",
+      "sha256": "0cc81a0d61e0c13bee223d6aa76a9a7a517e6bc2e326183e43376fa26b7bbbe9"
+    }
+  },
+  "callbackFences": [
+    {
+      "path": "src/modules/invoicing/merchant-cash-inspection-holder.ts",
+      "function": "cashInspectionHolder",
+      "key": "merchant-return-read:<inspectionId>",
+      "mode": "existing blocking callback; undo NONBLOCKING try-lock only",
+      "sourceSha256": "e8200c9f7628f74e25576d7a7112554bea2b5c0b22e4c2ecf2677ad2875887f5"
+    },
+    {
+      "path": "src/modules/invoicing/merchant-cash-return-service.ts",
+      "functions": [
+        "recordCashReturnObservation",
+        "finishMerchantCashReturnInspection"
+      ],
+      "key": "actual cashInspectionHolder read key",
+      "sourceSha256": "36ead59681471e9347d68fbfb1357922ac55b3ede60eadbb5799b14a0c82b572"
+    },
+    {
+      "path": "src/modules/invoicing/merchant-refund-observations.ts",
+      "function": "recordMerchantRefundObservation",
+      "key": "actual inspection read key before SQL original cash capture lock",
+      "sourceSha256": "421f466067335e3f1a6521f3d48d8df027469972ec4e31e05ab962bc06d74e41"
+    },
+    {
+      "path": "deploy/merchant-refund-current-state80.fragment.sql",
+      "function": "freeholder_refund_capture_lock",
+      "key": "subscription-cash:<original platform>:<original account>:<original PI>",
+      "sourceSha256": "a008e94024fdd7a96d069ce9db2998478ff61b969e956d5372514459a2175af5"
+    },
+    {
+      "path": "deploy/original-cash-partial81.fragment.sql",
+      "function": "freeholder_guard_legacy_bank_feedback",
+      "key": "payment:<actual UUID> and original cash namespace; later qualified charge-only successor preserved",
+      "sourceSha256": "b1cadc24ef55c967a845de73884528ca52966bd49417b1f8ad780554168e403c"
+    }
+  ]
+}

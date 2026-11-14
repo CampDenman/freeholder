@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Financial merge undo verification SOURCE repair2026-11-14 (C1.08/C12.38):
+actual cartless V39 failed after merge although a genuine read-only diagnostic
+proved all370 current subscription evidence entries exactly equal to its stored
+merged snapshot. Undo's own earlier inverse writes invalidated that snapshot.
+Optional same-TX reference preparers now verify complete existing invoice and
+subscription comparisons BEFORE any inverse write, under one complete pair-wide
+resource/parent/canonical/cash prefix and nonblocking actual inspection callback
+fences. Original inverse order, all financial fingerprints and foreign-change
+refusals remain; direct restore still verifies. No schema/SQL/permission or grant
+quota policy change. Original full paid native bytes unchanged; six source and
+four actual desired controls PREPARED/UNRUN. Root qualification remains required;
+no stable/C-item closure. See `deploy/verified-financial-contact-undo-source-20261114.md`.
+
 Paid-period merge fixture SOURCE correction2026-11-14 (C9.33/C12.38/C1.08):
 actual V36 reached genuine paid effect/history/export/merge, then undo correctly
 refused the unrelated original checkout setup cart. Cart undo captures every
