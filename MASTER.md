@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Strict154 qualification checkpoint 2026-11-13 (C12.38/C1.08): fresh ordinary
+V20 passes all86 migrations/hashes/profile/drain in6.921s. The first strict source
+preflight correctly identifies five genuine modeled factory phases absent from
+its older independent kind inventory; those exact phases are recorded without
+dropping old kinds or predicates. The renewed read-only check passes the first146
+models, then finds two otherwise identical conjunction terms in the new collection
+model ordered differently from the frozen SQL. Only those terms are reordered
+in the model; the strict parser/expression oracle and every SQL byte stay unchanged.
+Both failures/results/drains and V19/V20 databases are preserved. Renewed source,
+fresh154 catalog/SDK/native and all stable acceptance remain pending.
+
 Fresh migration failure 2026-11-13 (C1.12/C11.08): ordinaryV19 stops in new
 media82 at one unmatched closing parenthesis in the issued-authority closure SQL
 function. The failed database/result are preserved and drained; no schema or
