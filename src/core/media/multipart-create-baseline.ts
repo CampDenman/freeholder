@@ -15,6 +15,7 @@ import {lockTransferInventory} from "./transfer-authority";
 import {assertOriginalNamespaceMutation} from "./original-namespace-fence";
 import {transferConflict,transferDigest} from "./transfer-proof";
 import type {StorageBinding} from "@/adapters/storage/types";
+import type {TransferInventoryConfiguration,TransferInventoryPage} from "../../../scripts/media-transfer.mjs";
 import {appendMultipartCreateBaseline,finishMultipartCreateBaseline,multipartBaselineResultDigest,nextMultipartBaselinePage,type MultipartCreateBaselinePage} from "./multipart-create-baseline-proof";
 
 export async function captureMultipartCreateBaseline(operationId:string,binding:StorageBinding):Promise<void>{
@@ -36,7 +37,7 @@ export async function captureMultipartCreateBaseline(operationId:string,binding:
    }
    if(next.cursorDigest!==transferDigest(cursor))transferConflict("An earlier partial scan cannot be resumed from a reconstructed current cursor.");
    // The configured account is resolved above, never from a public host/key.
-   const result=next.kind==="configuration"?await store.inventoryConfiguration():await store.inventoryPage(next.kind,cursor),digest=multipartBaselineResultDigest(result);
+   const result:TransferInventoryConfiguration|TransferInventoryPage=next.kind==="configuration"?await store.inventoryConfiguration():await store.inventoryPage(next.kind,cursor),digest=multipartBaselineResultDigest(result);
    await db().transaction(async tx=>{
     await lockTransferInventory(tx);await lockObjectDigest(tx,baseline.keyDigest);
     const[current]=await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,operationId)).limit(1).for("update");
