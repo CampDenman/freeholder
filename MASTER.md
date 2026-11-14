@@ -3564,6 +3564,23 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Paid-access privacy SOURCE repair 2026-11-14 (C1.08/C9.33/C12.38): a verified
+erasure request does not yet set the contact erasure marker. New controlled
+period access now requires the same exact frozen-buyer/quote.profileId merchant
+write privacy policy as collection, under the existing shared identity prefix.
+Five bounded shared writers acquire exclusive identity before relevant locks;
+three additive SQL BEFORE guards independently fence new restrictions and
+actual request/hold ownership rebinding. Original money, bank, calendar,
+permissions, retention, observational recovery and historical no-op paths remain.
+The full existing SQL85 prefix and ordinary source bodies are preserved through
+explicit reversals; the owned successor pins every new body/trigger. Zero new
+models, columns, services or flags. Four source contracts and genuine paid-event,
+verification-concurrency and alternate-writer native controls are PREPARED/UNRUN.
+No CPU/PG/provider/SDK qualification ran in this isolated leaf. See
+`deploy/controlled-paid-privacy85.{md,manifest.json,fragment.sql}`. Required actual
+qualification, full proration/specification, provider, security and stable gates
+remain open.
+
 Media composed checkpoint2026-11-14 (C1.12/C11.08/C12.38/C9.33/C1.08): exact
 5df00274 sourceV82 passes1351 assertions/218 complete selected files/480 explicit
 DB skips and fulltypes/lint/metadata. FreshV44 ordinary86 and strictV55

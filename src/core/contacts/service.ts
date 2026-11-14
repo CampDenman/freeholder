@@ -324,6 +324,7 @@ export const resolveContact = defineService({
   }),
   output: resolvedContact,
   handler: async (input, ctx) => {
+    if (input.source === "privacy-erasure") await lockContactIdentity(ctx.tx);
     await ensureOrganization(ctx.tx, input.orgId);
     const resolvedInput: ResolveInput = {
       ...input,
@@ -1213,6 +1214,7 @@ export const updateContact = defineService({
   output: contactRow,
   handler: async (input, ctx) => {
     const { id, ...requested } = input;
+    if (requested.source === "privacy-erasure") await lockContactIdentity(ctx.tx);
     if (Object.keys(requested).length === 0) {
       throw new ServiceError("validation", "Choose something to change.");
     }

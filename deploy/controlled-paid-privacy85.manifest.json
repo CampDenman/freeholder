@@ -1,0 +1,185 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly",
+  "spdxLicenseIdentifier": "Apache-2.0",
+  "status": "SOURCE ONLY; all controls PREPARED/UNRUN",
+  "baseCommit": "7322c43f13ff17468217bcd46aab6c5869ece8ab",
+  "prefix": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "bytes": 624213,
+    "sha256": "9b6144a71e1a898406f048a441df6178c89a8de0f8073fa3557191525a57f901"
+  },
+  "ownedTail": {
+    "path": "deploy/controlled-paid-privacy85.fragment.sql",
+    "bytes": 28854,
+    "sha256": "ec0a463b30f54aab51829dba2c39e0999dc97b24d042aa5c043bc11bb5fd3670"
+  },
+  "newModels": 0,
+  "newColumns": 0,
+  "newPublicServices": 0,
+  "newFunctions": [
+    {
+      "signature": "freeholder_identity_privacy_exclusive()",
+      "bodySha256": "c394daf1829aeae00529cc9ffdb1a4c95a7c70f05894b630ff1a844be062d6d9"
+    },
+    {
+      "signature": "freeholder_controlled_target_privacy_ready(uuid)",
+      "bodySha256": "d0711747f403327e5c0b1773783fbe857458439803e77d286b7e817f78caa4b0"
+    },
+    {
+      "signature": "guard_controlled_privacy_request_identity()",
+      "bodySha256": "504a6709bcb8867231a7b0e10d07dcca179e4e5e19a1d3ef1336f7d220a83887"
+    },
+    {
+      "signature": "guard_controlled_privacy_hold_identity()",
+      "bodySha256": "b130e239f2293983bf3128d0b40730a67bebafb3c8e030cdbdc28c6d47bc25b0"
+    },
+    {
+      "signature": "guard_controlled_privacy_contact_identity()",
+      "bodySha256": "28e135a1e082559ef33e35bdbe798c53402a2b503e788131fdbc7968c8ea4919"
+    }
+  ],
+  "triggers": [
+    {
+      "name": "controlled_privacy_request_identity",
+      "table": "data_requests",
+      "eventBits": 23,
+      "function": "guard_controlled_privacy_request_identity()",
+      "deferrable": false
+    },
+    {
+      "name": "controlled_privacy_hold_identity",
+      "table": "privacy_retention_exceptions",
+      "eventBits": 23,
+      "function": "guard_controlled_privacy_hold_identity()",
+      "deferrable": false
+    },
+    {
+      "name": "controlled_privacy_contact_identity",
+      "table": "contacts",
+      "eventBits": 19,
+      "function": "guard_controlled_privacy_contact_identity()",
+      "deferrable": false
+    }
+  ],
+  "successors": [
+    {
+      "signature": "freeholder_controlled_paid_period_source(uuid)",
+      "beforeBodySha256": "141237d07f913e05a883519797ad64b4541f3e440e42c4d51a70a873dad33c9c",
+      "afterBodySha256": "79e38fd129088bc9bbbdc67c0e163b02a9297c51a0104434c8c4af21477d9916",
+      "reverseExactInsertion": "\n IF NOT freeholder_controlled_target_privacy_ready(effect_row.collection_id) THEN RETURN false;END IF;"
+    },
+    {
+      "signature": "freeholder_controlled_paid_period_ready()",
+      "beforeBodySha256": "0e7309fc0e09b8cd2348331236d10839bbc914f6a7755fb3c4261353b9658339",
+      "afterBodySha256": "7f856d1879d2b1b809ab7b4e8ac8b2e72b11754a51086d154b701c681b512224",
+      "preservesAllPriorPins": true
+    }
+  ],
+  "ordering": "Exclusive identity before contact/request/resource/canonical locks; readers hold shared identity through actual paid-effect commit. SQL guards verify actual held lock and never acquire it. pg_locks proves held exclusive identity, not advisory lock lifetime; shared services acquire transaction-scoped lock.",
+  "sourceReversals": [
+    {
+      "path": "src/core/privacy/service.ts",
+      "beforeSha256": "3ac8c56f0856f3f97696b224b2292d4cc71a7e9a47d35d0f03affc7e90f9459a",
+      "afterSha256": "dc9a3933de17a771f18898769e3f77c560ded96a9d3c947f7767aab7a475f418",
+      "changes": [
+        {
+          "before": "  output: dataRequestRow,\n  handler: async (input, ctx) => {\n    const contact = await personalContact(ctx.tx, ctx.actor);\n    const [request] = await ctx.tx\n",
+          "after": "  output: dataRequestRow,\n  handler: async (input, ctx) => {\n    await lockContactIdentity(ctx.tx);\n    const contact = await personalContact(ctx.tx, ctx.actor);\n    const [request] = await ctx.tx\n"
+        },
+        {
+          "before": "  input: z.object({ id: z.string().uuid(), method: z.string().trim().min(1).max(200) }),\n  output: dataRequestRow,\n  handler: async (input, ctx) => {\n    const [request] = await ctx.tx\n      .update(dataRequests)\n",
+          "after": "  input: z.object({ id: z.string().uuid(), method: z.string().trim().min(1).max(200) }),\n  output: dataRequestRow,\n  handler: async (input, ctx) => {\n    await lockContactIdentity(ctx.tx);\n    const [request] = await ctx.tx\n      .update(dataRequests)\n"
+        },
+        {
+          "before": "  auditInputFields: [\"requestId\", \"scope\"], auditWhen: (output: { jobId: string | null; recoveryRequired: boolean; changed: boolean }) => output.changed,\n  handler: async (input, ctx) => {\n    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);\n    const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, input.requestId)).for(\"update\");\n",
+          "after": "  auditInputFields: [\"requestId\", \"scope\"], auditWhen: (output: { jobId: string | null; recoveryRequired: boolean; changed: boolean }) => output.changed,\n  handler: async (input, ctx) => {\n    await lockContactIdentity(ctx.tx);\n    await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);\n    const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, input.requestId)).for(\"update\");\n"
+        }
+      ]
+    },
+    {
+      "path": "src/core/contacts/service.ts",
+      "beforeSha256": "233a6539dcae57cb12083b7fa6230808566d0e1e73e51f0fc5db83f0d2aad306",
+      "afterSha256": "b30451b49b87c60245c3ddf23d684251e9fa4c9d3a6da48c05436cae12fe8a66",
+      "changes": [
+        {
+          "before": "  output: resolvedContact,\n  handler: async (input, ctx) => {\n    await ensureOrganization(ctx.tx, input.orgId);\n    const resolvedInput: ResolveInput = {\n",
+          "after": "  output: resolvedContact,\n  handler: async (input, ctx) => {\n    if (input.source === \"privacy-erasure\") await lockContactIdentity(ctx.tx);\n    await ensureOrganization(ctx.tx, input.orgId);\n    const resolvedInput: ResolveInput = {\n"
+        },
+        {
+          "before": "  handler: async (input, ctx) => {\n    const { id, ...requested } = input;\n    if (Object.keys(requested).length === 0) {\n      throw new ServiceError(\"validation\", \"Choose something to change.\");\n",
+          "after": "  handler: async (input, ctx) => {\n    const { id, ...requested } = input;\n    if (requested.source === \"privacy-erasure\") await lockContactIdentity(ctx.tx);\n    if (Object.keys(requested).length === 0) {\n      throw new ServiceError(\"validation\", \"Choose something to change.\");\n"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-paid-period.ts",
+      "beforeSha256": "58ee83e86992cb4cd1bc3d7d786061e77a504d2429e7dfac3db641a79025e306",
+      "afterSha256": "4fd5b224bfa8421555709786f59a25f56094419b661ef9c354dc80c263f81fab",
+      "changes": [
+        {
+          "before": "import { controlledCollectionState } from \"./controlled-provider-collection-state\";\nimport { controlledPaidParentSnapshot, lockControlledPaidSources, readControlledPaidBank, refuseControlledPaid } from \"./controlled-provider-paid-bank\";\n\nconst output = z.object({ handled: z.boolean(), state: z.enum([\"unrelated\", \"awaiting_payment\", \"awaiting_start\", \"review_required\", \"applied\", \"already_applied\"]), financialReviewPending: z.boolean().nullable() }).strict();\n",
+          "after": "import { controlledCollectionState } from \"./controlled-provider-collection-state\";\nimport { controlledPaidParentSnapshot, lockControlledPaidSources, readControlledPaidBank, refuseControlledPaid } from \"./controlled-provider-paid-bank\";\nimport { controlledTargetPrivacyReady } from \"./controlled-target-privacy\";\n\nconst output = z.object({ handled: z.boolean(), state: z.enum([\"unrelated\", \"awaiting_payment\", \"awaiting_start\", \"review_required\", \"applied\", \"already_applied\"]), financialReviewPending: z.boolean().nullable() }).strict();\n"
+        },
+        {
+          "before": "    if (installed?.ready !== true) throw new ServiceError(\"conflict\", \"Install and qualify the genuine controlled paid-period alternate-writer guard before applying access.\");\n    await lockControlledPaidSources(ctx, target.collection.id);\n    // Genuine real events are born first, then INCLUDED in the fresh complete\n    // parent proof. No arbitrary event/child subtraction or historical digest\n",
+          "after": "    if (installed?.ready !== true) throw new ServiceError(\"conflict\", \"Install and qualify the genuine controlled paid-period alternate-writer guard before applying access.\");\n    await lockControlledPaidSources(ctx, target.collection.id);\n    if (!await controlledTargetPrivacyReady(ctx.tx, target.collection.id)) return { handled: true, state: \"review_required\" as const, financialReviewPending: true };\n    // Genuine real events are born first, then INCLUDED in the fresh complete\n    // parent proof. No arbitrary event/child subtraction or historical digest\n"
+        }
+      ]
+    }
+  ],
+  "sourceAddedPredicate": "\n IF NOT freeholder_controlled_target_privacy_ready(effect_row.collection_id) THEN RETURN false;END IF;",
+  "readyAddedConjunction": "\n AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_identity_privacy_exclusive()') AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='c394daf1829aeae00529cc9ffdb1a4c95a7c70f05894b630ff1a844be062d6d9')\n AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('freeholder_controlled_target_privacy_ready(uuid)') AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='d0711747f403327e5c0b1773783fbe857458439803e77d286b7e817f78caa4b0')\n AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('guard_controlled_privacy_request_identity()') AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='504a6709bcb8867231a7b0e10d07dcca179e4e5e19a1d3ef1336f7d220a83887')\n AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('guard_controlled_privacy_hold_identity()') AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='b130e239f2293983bf3128d0b40730a67bebafb3c8e030cdbdc28c6d47bc25b0')\n AND EXISTS(SELECT 1 FROM pg_proc p WHERE p.oid=to_regprocedure('guard_controlled_privacy_contact_identity()') AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='28e135a1e082559ef33e35bdbe798c53402a2b503e788131fdbc7968c8ea4919')\n AND EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='data_requests'::regclass AND t.tgname='controlled_privacy_request_identity' AND t.tgfoid=to_regprocedure('guard_controlled_privacy_request_identity()') AND t.tgtype=23 AND NOT t.tgisinternal AND NOT t.tgdeferrable AND NOT t.tginitdeferred AND t.tgenabled IN('O','A'))\n AND EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='privacy_retention_exceptions'::regclass AND t.tgname='controlled_privacy_hold_identity' AND t.tgfoid=to_regprocedure('guard_controlled_privacy_hold_identity()') AND t.tgtype=23 AND NOT t.tgisinternal AND NOT t.tgdeferrable AND NOT t.tginitdeferred AND t.tgenabled IN('O','A'))\n AND EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid='contacts'::regclass AND t.tgname='controlled_privacy_contact_identity' AND t.tgfoid=to_regprocedure('guard_controlled_privacy_contact_identity()') AND t.tgtype=19 AND NOT t.tgisinternal AND NOT t.tgdeferrable AND NOT t.tginitdeferred AND t.tgenabled IN('O','A'))",
+  "affectedExistingModels": [
+    {
+      "logical": "contacts",
+      "physical": "contacts"
+    },
+    {
+      "logical": "dataRequests",
+      "physical": "data_requests"
+    },
+    {
+      "logical": "privacyRetentionExceptions",
+      "physical": "privacy_retention_exceptions"
+    },
+    {
+      "logical": "subscriptionControlledPaidPeriodReceipts",
+      "physical": "subscription_controlled_paid_period_receipts"
+    },
+    {
+      "logical": "subscriptionControlledCollections",
+      "physical": "subscription_controlled_collections"
+    },
+    {
+      "logical": "subscriptionControlledQuotes",
+      "physical": "subscription_controlled_quotes"
+    },
+    {
+      "logical": "subscriptionControlledResources",
+      "physical": "subscription_controlled_resources"
+    },
+    {
+      "logical": "subscriptions",
+      "physical": "subscriptions"
+    },
+    {
+      "logical": "subscriptionCommercialTerms",
+      "physical": "subscription_commercial_terms"
+    },
+    {
+      "logical": "merchantTaxProfiles",
+      "physical": "merchant_tax_profiles"
+    },
+    {
+      "logical": "invoices",
+      "physical": "invoices"
+    }
+  ],
+  "preparedControls": {
+    "sourceFile": "tests/modules/controlled-paid-privacy-source.test.ts",
+    "sourceCases": 4,
+    "nativeFile": "tests/modules/controlled-paid-privacy.test.ts",
+    "nativeCases": 5,
+    "status": "PREPARED/UNRUN"
+  }
+}

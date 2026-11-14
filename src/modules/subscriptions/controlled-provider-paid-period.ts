@@ -18,6 +18,7 @@ import { subscriptionControlledPaidPeriodReceipts } from "./controlled-provider-
 import { CONTROLLED_PAID_PERIOD_PROTOCOL, signControlledPaidPeriod, verifiedControlledPaidPeriod } from "./controlled-provider-paid-period-proof";
 import { controlledCollectionState } from "./controlled-provider-collection-state";
 import { controlledPaidParentSnapshot, lockControlledPaidSources, readControlledPaidBank, refuseControlledPaid } from "./controlled-provider-paid-bank";
+import { controlledTargetPrivacyReady } from "./controlled-target-privacy";
 
 const output = z.object({ handled: z.boolean(), state: z.enum(["unrelated", "awaiting_payment", "awaiting_start", "review_required", "applied", "already_applied"]), financialReviewPending: z.boolean().nullable() }).strict();
 /** Real existing invoice and exact accepted target only; no public proof or
@@ -70,6 +71,7 @@ export const completePaidControlledPeriod = defineService({
     const [installed] = await ctx.tx.execute<{ ready: boolean }>(sql`select freeholder_controlled_paid_period_ready() as ready`);
     if (installed?.ready !== true) throw new ServiceError("conflict", "Install and qualify the genuine controlled paid-period alternate-writer guard before applying access.");
     await lockControlledPaidSources(ctx, target.collection.id);
+    if (!await controlledTargetPrivacyReady(ctx.tx, target.collection.id)) return { handled: true, state: "review_required" as const, financialReviewPending: true };
     // Genuine real events are born first, then INCLUDED in the fresh complete
     // parent proof. No arbitrary event/child subtraction or historical digest
     // waiver is used to certify this new independent effect transaction.
