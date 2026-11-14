@@ -1,0 +1,113 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08",
+    "C11.08"
+  ],
+  "status": "SOURCE_SCHEMA_CURRENT_SDK_INSTALLATION_PASS_BUSINESS_NATIVE_UNRUN",
+  "sourceHead": "b40c8658cda4c61fe2e480780fd21249ce5f9ad8",
+  "frozenLeaf": "af221ea3bc9dd71d301a9dfecfd8094712ec8540",
+  "assemblyManifest": "deploy/atomic-auxiliary-fee84-root-assembly.manifest.json",
+  "source": {
+    "path": "/tmp/freeholder-current-full86-auxiliary160-source-v91-20261114-result.json",
+    "sha256": "91573abb98d19e5f12b1c7ed4ca78ffeb3e5ab02d06ea5e302c3cf3aa0c55999",
+    "passed": true,
+    "actualAssertions": 1448,
+    "completeSelectedFiles": 228,
+    "explicitDatabaseSkips": 490,
+    "fullTypesAffectedLintAndMetadataPassed": true
+  },
+  "ordinary": {
+    "path": "/tmp/freeholder-current-full86-normal-v51-result-20261113.json",
+    "sha256": "69ab8d848b5c1d353dfc1c8868ee70b7e681cf6bf6a41d7b517a69245a15d229",
+    "passed": true,
+    "database": "freeholder_current_full86_auxiliary160_normal_v51_test_20261114",
+    "journalEntries": 86,
+    "active": []
+  },
+  "strictSchema": {
+    "path": "/tmp/freeholder-current-full86-parity160-v62-result-20261113.json",
+    "sha256": "622879a6f4c5c0b79e48b680d61b00bf0e804a06a92c2a37bd0e77fc0844d978",
+    "passed": true,
+    "models": 160,
+    "guards": 362,
+    "completeOwnedFunctionBodies": 399,
+    "queries": 4091,
+    "explainExpressions": 2468,
+    "manifest": "/tmp/freeholder-current-full86-parity160-v62-manifest-20261113.json",
+    "manifestSha256": "2b61c1bb89793e740d3db1438ade083f5c05e17742e3bcb0c368b0e8f33f2cc2"
+  },
+  "currentSdk": {
+    "path": "/tmp/freeholder-current-full86-sdk-verification-v32-20261114-result.json",
+    "sha256": "a2e1119f281e99ae86614a2f1212f93e0ff775199b2181be52de8b9ceb2215e3",
+    "passed": true,
+    "actualAssertions": 8,
+    "generationUpdate": false,
+    "generatedSdkSha256": "03ef130ab3280be047fc51f3fc51f80e621d1abd0ccbc324d085f563d0572fc9",
+    "generatedSdkUnchanged": true,
+    "all160WholeRowsJournalsSequenceUnchanged": true,
+    "privateNamesHidden": 11
+  },
+  "installedMachinery": {
+    "path": "/tmp/freeholder-current-full86-auxiliary-installation-readiness-v1-20261114-result.json",
+    "sha256": "2b28f085dcaf16966e4c6644c5b0d6fc526a340b9e3edd90182235349408a94c",
+    "passed": true,
+    "actualReadiness": {
+      "auxiliary": true,
+      "fee_invocations": true,
+      "paid_period": true
+    },
+    "all596WholeRowHashesUnchanged": true,
+    "journalAndSequenceUnchanged": true,
+    "active": [],
+    "installationOnlyNotFinancialAuthority": true
+  },
+  "typeOnlyFrameworkContinuation": {
+    "path": "/tmp/freeholder-current-full86-audit-variant-runtime-proof-v1-20261114-result.json",
+    "sha256": "3b5307f3780b4b6a06b6e2c4066846a50237d003942508a483fd25e6b54d1cbb",
+    "passed": true,
+    "wholeRuntimeJavaScriptByteIdentical": true,
+    "currentFullTypesPassedSeparately": true,
+    "finiteManifest": "deploy/atomic-auxiliary-fee84-type-continuation.manifest.json",
+    "nativeFaultTimingAndAllMoneyOraclesUnchanged": true
+  },
+  "sql85": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "ownedPath": "deploy/sql/0085_controlled_collection_application.unapplied.sql",
+    "bytes": 832734,
+    "sha256": "86e09cd11268730c289f0d06f9977fe7650700e0e135ad1136fbdc7c7d0c172e"
+  },
+  "preservedFailures": [
+    {
+      "path": "/tmp/freeholder-current-full86-auxiliary160-source-v90-20261114-result.json",
+      "sha256": "bafef1ba2f124920042a38d70c94994d02c5d0312e6ac70e3c72e0559cd6a1e3"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-assemble-atomic-auxiliary-v1-20261114-harness-failure.json",
+      "sha256": "6614ae568f6441fa89d629cc7ca973e59e0b17e8e786ddae3a24f9aa0b6ed2b6"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-assemble-atomic-auxiliary-v2-20261114-harness-failure.json",
+      "sha256": "a12c6ee019311cf4b31913ba7ef00d4e6f7a41319272570f10a63b413ccf8289"
+    }
+  ],
+  "actualBusinessAcceptance": {
+    "auxiliaryNativeCases": "3 prepared, UNRUN",
+    "originalFeePositiveAndNegative": "Unclosed: retained V48 original positive failed before auxiliary path on generic controlled original-cash GET; causal read/whole+partial closure/principal/current lock-prefix repairs remain source-only isolated work",
+    "privacyFiveCases": "All5 PASS237.293s at exact predecessor ee7b4a39, not transferred to this new source",
+    "providerAccounts": false,
+    "stable": false,
+    "announcement": false,
+    "noChecklistClosures": true
+  },
+  "remoteBackup": {
+    "status": "AUTO_REVIEW_REJECTED_PENDING_EXPLICIT_USER_ANSWER",
+    "requestedCheckpoint": "b5c0f3a9",
+    "requestedDestination": "CampDenman/freeholder refs/heads/integrate/current-full82-signed-history-20261113",
+    "lastConfirmedRemoteCheckpoint": "7322c43f13ff17468217bcd46aab6c5869ece8ab",
+    "reason": "Potential source/audit egress destination not explicitly authorized by trusted thread instructions; do not retry or bypass without authorization."
+  },
+  "remaining": "Every unchecked MASTER43 row remains required. Exact causal original recovery integration and all whole original fee/auxiliary natives, typed credit/reversal/unknown disposition/proration/public completion, held media/quotas/capture/cutover and actual providers/platforms/build/browser/CI/recovery/Tony independent security review/final signature remain open."
+}
