@@ -46,7 +46,7 @@ async function retireOwnedCapturePointers(tx:Tx,keys:string[],knownActors:Set<st
 }
 
 async function minimizeOwned(tx:Tx,contactId:string,requestId:string):Promise<void>{
- const first=await originalMediaScopeMembers(tx,requestId,MULTIPART_PRIVACY_SCOPE);if(first.birthDebt)return;const originalIds=first.receiptIds,reservationIds=[...new Set([...first.membership.reservations.map(row=>row.id),...first.membership.receipts.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.resources.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.uploads.flatMap(row=>row.reservationId?[row.reservationId]:[])])];
+ const first=await originalMediaScopeMembers(tx,requestId,MULTIPART_PRIVACY_SCOPE);if(first.birthDebt)return;const originalIds=first.receiptIds,reservationIds=[...new Set([...first.membership.reservations.map(row=>row.id),...first.membership.receipts.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.resources.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.uploads.flatMap(row=>row.reservationId?[row.reservationId]:row.legacyAnchor?[row.legacyAnchor.reservationId]:[])])];
  async function scopedWrites(keyDigest:string){const history=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,keyDigest));return{writes:history.filter(row=>originalIds.includes(row.id)),foreign:history.some(row=>!originalIds.includes(row.id))};}
  await allowMediaReceiptWrites(tx);
  if(await storageOperationsHeld(tx,[contactId]))return;

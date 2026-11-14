@@ -3684,6 +3684,19 @@ real complete request ABI. No capability, C closure or provider/security/stable
 acceptance. Legacy/issued-authority/quota/capture/cutover and real qualification
 remain required. See `deploy/media-upload-original-reservation-source-2026-11-14.md`.
 
+Source-only continuation, 2026-11-14 (C1.12/C11.08): optional future legacy
+upload anchors retain safe literal original capture/pointer/upload witnesses
+without filling historical NULL births. Two scalar SQL functions and six full
+continuations require an intact earlier same-subject capture/receipt, exact
+surviving whole original pointer witness, authentic ordinary PUT/caller and
+full physical retirement. Unknown/unwritten legacy remains pending. No new
+model/column/index/trigger/service/job/capability; whole prior owned82 prefix
+and prior oracles stay exact. Eight pure/seven genuine old-producer upgrade
+controls are PREPARED/UNRUN; SQL/Drizzle full-pointer equality and actual public
+hold/terminal-old-receipt reachability must pass first. No provider/security/
+stable/C closure. Issued-authority, capture/quota/cutover and full real acceptance
+remain required. See `deploy/media-legacy-upload-anchor-source-2026-11-14.md`.
+
 ### 43.2 Definition of done for every feature
 
 Every feature checkbox below inherits this checklist. If a line does not

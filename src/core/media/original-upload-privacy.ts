@@ -12,13 +12,13 @@ import {allowMediaReceiptWrites,lockObjectDigest} from "./write-ledger";
 import {minimizeOriginalProviderReservation} from "./original-provider-minimization";
 
 /** Does not call a provider, clear another reservation, infer FIN or release
- * quota by key. A surviving legacy FK is read-only evidence in this leaf;
- * its nullable canonical birth is never filled or silently replaced. */
+ * quota by key. Legacy reduction needs the authenticated immutable first anchor plus
+ * independent full ordinary physical proof; canonical NULL stays NULL. */
 export async function minimizeOriginalUpload(tx:Tx,requestId:string,uploadId:string):Promise<boolean>{
  await lockTransferInventory(tx);
  const first=await originalMediaScopeMembers(tx,requestId,"media.multipartOperations");if(first.birthDebt)return false;
  const original=await readOriginalUploadEvidence(tx,first.membership,uploadId);
- if(original.state!=="proven"||original.basis!=="new_birth"||original.upload.strategy!=="proxy")return false;
+ if(original.state!=="proven"||!["new_birth","legacy_anchor"].includes(original.basis)||original.upload.strategy!=="proxy")return false;
  await lockObjectDigest(tx,original.keyDigest);
  const[ready]=await tx.execute<{ready:boolean}>(sql`select freeholder_media_upload_original_erasure_ready(${uploadId}::uuid,${requestId}::uuid) as ready`);if(ready?.ready!==true)return false;
  // SQL validates every actually linked pointer against the immutable first

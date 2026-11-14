@@ -7,12 +7,12 @@ import {and,asc,eq,inArray,isNotNull,ne,or,sql} from "drizzle-orm";
 import type {Tx} from "@/core/service";
 import {erasureArtifactIsIntact} from "@/core/privacy/service";
 import {contactPrivacyIdentity,contactPrivacyHistory,contactHistoryOwnership} from "@/core/privacy/contact-identity";
-import {originalUploadPriorSubject,type RetainedUploadFirstIdentity} from "./original-upload-evidence";
+import {originalUploadPriorSubject,readOriginalUploadLegacyAnchor,type RetainedUploadFirstIdentity} from "./original-upload-evidence";
 import {dataRequestArtifacts,dataRequests} from "@/core/privacy/schema";
 import {mediaObjects,mediaUploads} from "./schema";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartResources} from "./multipart-schema";
-import {mediaErasureCohorts,mediaOriginalErasureScopes,type OriginalMediaErasureMembership} from "./erasure-schema";
+import {mediaErasureCohorts,mediaOriginalErasureScopes,type OriginalMediaErasureMembership,type OriginalUploadLegacyAnchor} from "./erasure-schema";
 import {lockOriginalMediaScopeCapture} from "./empty-scope-authority";
 import {transferConflict,transferDigest} from "./transfer-proof";
 import {firstOriginalMediaMembership,intactOriginalMediaMembership,originalMediaBirthDebt,originalMediaReservationCaptured} from "./original-erasure-proof";
@@ -74,7 +74,9 @@ export async function captureFirstOriginalMediaScope(tx:Tx,requestId:string,cont
  if(resources.length>10000||receipts.length>10000||uploads.length>10000||reservations.length>10000)transferConflict("The complete original media scope exceeds its bounded capture. No subset may be acknowledged.");
  if(authority.resourceIds.some(id=>!resources.some(row=>row.id===id)))transferConflict("Restore the exact original multipart/upload scope membership.");
  if(authority.uploadIds.some(id=>!uploads.some(row=>row.id===id)))transferConflict("Restore the exact original upload proof row; a new first scope cannot omit or recreate its missing identity.");
- const membership=firstOriginalMediaMembership({receipts,resources,uploads,reservations,legacyScopes:authority.legacyScopes,priorUploadIdentities:authority.priorUploadIdentities}),captureDigest=transferDigest(membership);
+ const legacyUploadAnchors:Array<{id:string;anchor:OriginalUploadLegacyAnchor}>=[];
+ for(const upload of uploads)if(upload.originalReservationId===null){const anchor=await readOriginalUploadLegacyAnchor(tx,upload.id,requestId);if(anchor)legacyUploadAnchors.push({id:upload.id,anchor});}
+ const membership=firstOriginalMediaMembership({receipts,resources,uploads,reservations,legacyScopes:authority.legacyScopes,priorUploadIdentities:authority.priorUploadIdentities,legacyUploadAnchors}),captureDigest=transferDigest(membership);
  if(authorityMode==="empty_metadata"&&(membership.receipts.length||membership.resources.length||membership.uploads.length||membership.reservations.length||originalMediaBirthDebt(membership)))transferConflict("Only a genuinely empty first scope can use metadata authority; retain original legacy/birth evidence until the complete protocol is available.");
  const[header]=await tx.insert(mediaOriginalErasureScopes).values({requestId,scope,membership,captureDigest,complete:false}).returning();
  if(receipts.length)await tx.insert(mediaErasureCohorts).values(receipts.map(row=>({requestId,scope,objectReceiptId:row.id}))).onConflictDoNothing();
@@ -117,7 +119,7 @@ export async function originalMediaScopePending(tx:Tx,requestId:string,scope:Ori
  if(receipts.some(row=>!row.redactedAt||!row.deletedAt||["unverified","started","unknown"].includes(row.state))||resources.some(row=>!row.redactedAt||!row.retiredAt||row.providerUploadId!==null||!["completed","aborted"].includes(row.state)))return true;
  for(const resource of resources)if(resource.redactedAt&&resource.objectReceiptId===null&&!await readOriginalMultipartCertificateCoverage(tx,resource.id))return true;
  if(scope==="media.multipartOperations"){
-  const ids=first.membership.uploads.map(row=>row.id),uploads=ids.length?await tx.select().from(mediaUploads).where(inArray(mediaUploads.id,ids)):[],reservationIds=unique([...first.membership.reservations.map(row=>row.id),...first.membership.receipts.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.resources.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.uploads.flatMap(row=>row.reservationId?[row.reservationId]:[])]);
+  const ids=first.membership.uploads.map(row=>row.id),uploads=ids.length?await tx.select().from(mediaUploads).where(inArray(mediaUploads.id,ids)):[],reservationIds=unique([...first.membership.reservations.map(row=>row.id),...first.membership.receipts.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.resources.flatMap(row=>row.reservationId?[row.reservationId]:[]),...first.membership.uploads.flatMap(row=>row.reservationId?[row.reservationId]:row.legacyAnchor?[row.legacyAnchor.reservationId]:[])]);
   const pointers=reservationIds.length?await tx.select({id:mediaObjects.reservationId}).from(mediaObjects).where(inArray(mediaObjects.reservationId,reservationIds)).limit(1):[];
   if(uploads.length!==ids.length||pointers.length||uploads.some(row=>row.ownerContactId!==null||row.uploadedBy!=="erased"||row.filename!=="[erased]"))return true;
   // Both consumers require their exact original first identity and current
@@ -125,7 +127,7 @@ export async function originalMediaScopePending(tx:Tx,requestId:string,scope:Ori
   for(const upload of uploads){
    if(resources.some(resource=>resource.uploadId===upload.id&&resource.objectReceiptId===null&&resource.redactedAt))continue;
    const evidence=await(await import("./original-upload-evidence")).readOriginalUploadEvidence(tx,first.membership,upload.id);
-   if(evidence.state!=="proven"||evidence.basis!=="new_birth"||upload.storageKey!==`retained:${evidence.keyDigest}`||upload.providerUploadId!==null||!["complete","aborted"].includes(upload.state)||Object.keys(upload.provenance).length||Object.keys(upload.mediaMetadata).length||upload.failureReason!==null)return true;
+   if(evidence.state!=="proven"||!["new_birth","legacy_anchor"].includes(evidence.basis)||upload.storageKey!==`retained:${evidence.keyDigest}`||upload.providerUploadId!==null||!["complete","aborted"].includes(upload.state)||Object.keys(upload.provenance).length||Object.keys(upload.mediaMetadata).length||upload.failureReason!==null)return true;
    const[proof]=await tx.execute<{ready:boolean}>(sql`select freeholder_media_upload_original_erasure_ready(${upload.id}::uuid,${requestId}::uuid) as ready`);if(proof?.ready!==true)return true;
   }
   for(const resource of resources)if(resource.redactedAt&&resource.objectReceiptId===null){const upload=uploads.find(row=>row.id===resource.uploadId);if(!upload||upload.storageKey!==`retained:${resource.keyDigest}`||upload.providerUploadId!==null||upload.state!=="aborted"||Object.keys(upload.provenance).length||Object.keys(upload.mediaMetadata).length||upload.failureReason!==null)return true;}
