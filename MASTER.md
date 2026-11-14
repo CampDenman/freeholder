@@ -3564,6 +3564,18 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Integrated successor checkpoint 2026-11-13 (C1.12/C11.08/C12.38/C9.33):
+latest actual V24 native advances through NET4000 and TAX200 then refuses an
+older mixed-list snapshot before set-fee. Failed database and all raw evidence
+remain preserved; no payment or receipt is created. The exact historical
+LIST/read/mutation proof repair and paid-family composition are in progress.
+Atomic actual-fee and tracked multipart withheld/readback/unknown-COMPLETE
+branches are integrated in the isolated checkout; new normal82 preserves its
+entire383272-byte prefix and normal85 its entire453680-byte prefix. These
+integrated source/normal-schema/native/SDK gates are PREPARED/UNRUN. No storage
+capability, C-item closure, stable release or announcement is authorized by
+this checkpoint. See `deploy/sql/0082_0085_integrated_successors_20261113.manifest.json`.
+
 Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the actual current local
 issuer may retain a distinct first WITHHELD disposition only in its owning
 failure continuation, before returning any URL, with its exact original mint,

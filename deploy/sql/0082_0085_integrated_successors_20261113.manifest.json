@@ -1,0 +1,24 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "MATERIALIZED_PREPARED_UNRUN",
+  "normal82": {
+    "previousSha256": "a5445a81866851542c379c9ab8501020968192b87e673478d78209a48d5b26c2",
+    "previousBytes": 383272,
+    "sha256": "fb7d956b86ae61e0e20e7ece6c6d42c02278125fd815d5486b7d9984f3c5936d",
+    "bytes": 488021,
+    "entirePrefixPreserved": true
+  },
+  "normal85": {
+    "previousSha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
+    "previousBytes": 453680,
+    "sha256": "5b8edf5feaa53135e33241c3622f85be94ed8e2ebca594487d3f98d2be78b76a",
+    "bytes": 528451,
+    "entirePrefixPreserved": true,
+    "suffixPath": "deploy/controlled-cash-atomic-fee84.fragment.sql",
+    "suffixSha256": "cc4c6960f2881d2db279132bb7445d5ab4b96259b3fbfdd0c50f4639848cf5e5"
+  },
+  "oldPublishedMigrationsUnchanged": true,
+  "journalCount": 86,
+  "capabilitiesPublished": false,
+  "acceptance": "Pending source, fresh migration/schema, genuine native/SDK/provider/security and full specification acceptance"
+}
