@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled original-zero fixture source correction 2026-11-13
+(C12.38/C9.33/C1.08): root's actual V23 first-target journey created/bound the
+NET4000 component, then the read-only ordinary classifier isolated exactly one
+mixed-list refusal. Its original zero-only fictional invoice omitted explicit
+tax/route/default fields required by the positive mixed-list ownership contract.
+Only the positive fixture now freezes a complete original document from the
+actual original bootstrap response; generic80 and every product/raw/caller
+predicate remain unchanged. Three real-adapter controls and stronger retained
+fact assertions on the original unchanged full native are PREPARED/UNRUN.
+Failed V23 evidence remains preserved and fresh-database/native/source acceptance
+is required. No readiness, C-item closure or stable claim. See
+`deploy/controlled-original-zero-fixture84-source-20261113.md`.
+
 Actual controlled inventory failure 2026-11-13 (C12.38/C9.33/C1.08): V22
 passes real catalogue setup and creates its canonical4200 target, then SQL42702
 refuses BEFORE a bank charge because local actual collides with facts.actual.
