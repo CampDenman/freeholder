@@ -38,7 +38,7 @@ describe("whole auxiliary closure and original-owner continuation",()=>{
   const change=manifest.receiptOwnerCompanion;let actual=read(change.path).toString();
   expect(hash(actual)).toBe(change.afterSha256);
   for(const edit of [...change.finiteDelta].reverse()){
-   expect(actual.split(edit.after)).toHaveLength(2);actual=actual.replace(edit.after,()=>edit.before);
+   const count="count" in edit&&typeof edit.count==="number"?edit.count:1;expect(actual.split(edit.after)).toHaveLength(count+1);actual=actual.replaceAll(edit.after,()=>edit.before);
   }
   expect(actual).toBe(read(change.originalPath).toString());expect(hash(actual)).toBe(change.originalSha256);
   expect(actual).toContain("timeout:180000");

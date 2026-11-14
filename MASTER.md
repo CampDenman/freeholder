@@ -3565,6 +3565,28 @@ open the admin until Thursday still needs to know about Monday.
 ## 43. Product Completion Plan — the live checklist
 
 
+Three original auxiliary natives checkpoint2026-11-14 (C12.38/C1.08/C11.10):
+exact859e4211 sourceV107 fulltypes/lint/1588actual/254files/543explicitDBskips
+PASS. FreshV70/V71/V72 each ordinary86/strict161models/365guards/417wholefunctions/
+4144queries/SDK48/49/50 actual8 PASS. ALL THREE whole original auxiliary cases
+PASS within original180s: successful1-cent own return+repeatGET173.87s; genuine
+thrown observer/unchanged firstFIN/new returnedGET/no secondPOST148.57s; actual
+externalcounter/no POST/no equal-amount adoption135.24s. Independent full596/
+j86/sequence/capability/drain and exact per-case bank/ledger/FIN checks PASS.
+V7 wrapper stopped BEFORE any native/config only on the newly extended fixture
+hash; V8 reverts the reviewed GET-only delta before unchanged old wire proof,
+using the same untouched qualified V70 (no reset/migration rerun).
+NEW exact key extraction77a77cba moves/reexports only identical original
+functions for one rotation/throw policy; source/activation not inferred. NEW
+receipt-owner companion adds its ACTUAL original receipt ID to unchanged witness
+selection (that reader deliberately does not guess aliases from payment IDs);
+ALL original assertions retained. Companion cases/source qualification pending.
+No C/stable or provider/security sign-off. See
+`deploy/atomic-auxiliary-three-original-native-checkpoint-20261114.json` and
+`deploy/original-cash-key-extraction-root-source-20261114.json`.
+
+
+
 Specific original auxiliary GET fixture continuation2026-11-14 (C12.38/C1.08):
 exact0486b428 sourceV106 fulltypes/lint/1587actual/253files/543explicitDBskips
 PASS; freshV69 ordinary86/strict161/365guards/417fullfunctions/4144queries and

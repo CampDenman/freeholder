@@ -132,7 +132,7 @@
     "path": "tests/modules/atomic-auxiliary-fee-receipt-owner84.test.ts",
     "originalPath": "tests/modules/atomic-auxiliary-fee84.test.ts",
     "originalSha256": "c1339a7ef5fb7a0a71237773b7f983495acdede62ff64f397f440d0f23a1fa61",
-    "afterSha256": "9a6d901cbd298cc045786d6340c777860475b7049e065b18a50596d8bd74c24e",
+    "afterSha256": "eded04a66d93ffd1ea56b423a82899f8a60ec60e85c0071a64e236aceecc4e7a",
     "finiteDelta": [
       {
         "before": "same-owner original atomic fee-only return",
@@ -141,8 +141,25 @@
       {
         "before": "const owner=await claimOriginalCashRecovery.call({source:{kind:\"payment\",paymentId:big.id},authorizedBy:actorString(OWNER)},system);",
         "after": "const originalReceipt=receipts.find(row=>row.providerPaymentIntentRef===big.providerRef);if(!originalReceipt)throw Error(\"Use the actual original receipt of this applied payment.\");\n  const[originalProof]=await db().select().from(controlledCashApplicationReceipts).where(eq(controlledCashApplicationReceipts.receiptId,originalReceipt.id));if(!originalProof)throw Error(\"Use its actual issued canonical application proof and original observation FK.\");\n  const owner=await claimOriginalCashRecovery.call({source:{kind:\"subscription\",receiptId:originalReceipt.id,observationId:originalProof.originalObservationId},authorizedBy:actorString(OWNER)},system);"
+      },
+      {
+        "before": "return{f,big,tiny,owner,receipts};",
+        "after": "return{f,big,tiny,owner,receipts,originalReceiptId:originalReceipt.id};"
+      },
+      {
+        "before": "const{f,big,tiny,owner}=await original()",
+        "after": "const{f,big,tiny,owner,originalReceiptId}=await original()"
+      },
+      {
+        "before": "const{f,big,owner}=await original(),before=await canonical(f.target.invoiceId,f.parent.id);",
+        "after": "const{f,big,owner,originalReceiptId}=await original(),before=await canonical(f.target.invoiceId,f.parent.id);"
+      },
+      {
+        "before": "originalCashRecoveryFinancialWitness(tx,[big.id],[])",
+        "after": "originalCashRecoveryFinancialWitness(tx,[big.id],[originalReceiptId])",
+        "count": 2
       }
     ],
-    "scope": "All original three 180s money/origin/recovery/orphan/canonical oracles retained in a new companion. Only genuine owner source changes through actual applied receipt/application original-observation FKs; original file remains exact. PREPARED/UNRUN."
+    "scope": "All original three 180s money/origin/recovery/orphan/canonical oracles retained in a new companion. Only genuine owner source changes through actual applied receipt/application original-observation FKs; original file remains exact. PREPARED/UNRUN. Actual witness scope explicitly includes its original receipt ID; the unchanged witness does not infer receipt aliases from payment UUIDs. All money/canonical/recovery assertions unchanged."
   }
 }

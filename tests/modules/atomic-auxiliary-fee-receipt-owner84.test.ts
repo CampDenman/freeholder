@@ -53,14 +53,14 @@ describe.runIf(hasDatabase)("same-owner receipt-backed original atomic fee-only 
   const[request]=await db().select().from(merchantRefundRequests).where(eq(merchantRefundRequests.refundId,refunded.id));if(!request)throw Error("The actual customer refund must retain its original request.");await reconcileMerchantRefundCurrentState.call({requestId:request.id},OWNER);
   await returnOriginalCash.call({source:{kind:"payment",paymentId:tiny.id},confirmation:ORIGINAL_CASH_RETURN_CONFIRMATION},OWNER);
   for(const receipt of receipts)await inspectControlledCashReceipt.call({collectionId:f.target.collectionId,receiptId:receipt.id},OWNER);
-  return{f,big,tiny,owner,receipts};
+  return{f,big,tiny,owner,receipts,originalReceiptId:originalReceipt.id};
  }
  it("returns the sibling-induced cent through the same real auxiliary owner and requires fresh bank/FIN closure without creating an old fee operation",async()=>{
-  const{f,big,tiny,owner}=await original(),before=await canonical(f.target.invoiceId,f.parent.id);
+  const{f,big,tiny,owner,originalReceiptId}=await original(),before=await canonical(f.target.invoiceId,f.parent.id);
   expect((await reviewAtomicFeeReconciliation.call({invoiceId:f.target.invoiceId},OWNER)).find(row=>row.paymentId===big.id)).toMatchObject({originalFeeMinor:400,targetRetainedFeeMinor:399,pending:true});
   expect(await reconcileMerchantApplicationFee.call({paymentId:big.id},OWNER)).toMatchObject({state:"accepted",operation:null});
   expect(await db().select().from(merchantFeeRefunds).where(inArray(merchantFeeRefunds.paymentId,[big.id,tiny.id]))).toHaveLength(0);
-  const journal=await db().transaction(tx=>originalCashRecoveryFinancialWitness(tx,[big.id],[])),fee=journal.operations.filter(row=>row.kind==="fee");expect(journal.owners.map(row=>row.id)).toEqual([owner.recoveryId]);expect(fee).toHaveLength(1);
+  const journal=await db().transaction(tx=>originalCashRecoveryFinancialWitness(tx,[big.id],[originalReceiptId])),fee=journal.operations.filter(row=>row.kind==="fee");expect(journal.owners.map(row=>row.id)).toEqual([owner.recoveryId]);expect(fee).toHaveLength(1);
   const actual=fee[0];if(!actual)throw Error("Use the actual original auxiliary fee caller.");
   expect(actual.request).toMatchObject({atomicFeeProtocol:"freeholder.original-cash-atomic-fee-operation.v1",originalAmountMinor:400,alreadyReturnedMinor:0,amountMinor:1});
   expect(journal.facts.filter(row=>row.kind==="atomic_fee_target")).toHaveLength(1);expect(journal.facts.filter(row=>row.kind==="atomic_fee_closure")).toHaveLength(1);
@@ -72,14 +72,14 @@ describe.runIf(hasDatabase)("same-owner receipt-backed original atomic fee-only 
   expect(await canonical(f.target.invoiceId,f.parent.id)).toEqual(before);expect(await db().select().from(originalCashRecoveries).where(eq(originalCashRecoveries.id,owner.recoveryId))).toEqual(journal.owners);
  });
  it("preserves a genuine thrown original observer, recovers its exact positive resource by a new returned GET and never creates another POST",async()=>{
-  const{f,big,owner}=await original(),before=await canonical(f.target.invoiceId,f.parent.id);
+  const{f,big,owner,originalReceiptId}=await original(),before=await canonical(f.target.invoiceId,f.parent.id);
   const call=recordOriginalCashFact.call.bind(recordOriginalCashFact);let injected=false;
   const fault=vi.spyOn(recordOriginalCashFact,"call").mockImplementation(async(input,actor,options)=>{const parsed=recordOriginalCashFact.def.input.parse(input),actual=await call(parsed,actor,options);const[row]=await db().select().from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.id,parsed.factId));if(!injected&&row?.kind==="resource"&&row.recoveryId===owner.recoveryId){injected=true;throw Error("Fictional caller fails only AFTER the real raw resource committed.");}return actual;});
   await expect(reconcileMerchantApplicationFee.call({paymentId:big.id},OWNER)).rejects.toThrow();fault.mockRestore();expect(injected).toBe(true);expect(f.remote.counts().feeRefundPosts).toBe(1);
   const calls=await db().select().from(originalCashRecoveryOperations).where(eq(originalCashRecoveryOperations.recoveryId,owner.recoveryId)),post=calls.find(row=>row.kind==="fee");if(!post)throw Error("Retain the genuine original fee caller.");
   const[firstFinish]=await db().select().from(originalCashRecoveryFacts).where(eq(originalCashRecoveryFacts.operationId,post.id)).then(rows=>rows.filter(row=>row.kind==="finish"));expect(firstFinish?.evidence.outcome).toBe("threw");
   expect(await reconcileMerchantApplicationFee.call({paymentId:big.id},OWNER)).toMatchObject({state:"satisfied",operation:null});expect(f.remote.counts().feeRefundPosts).toBe(1);
-  const journal=await db().transaction(tx=>originalCashRecoveryFinancialWitness(tx,[big.id],[]));expect(journal.operations.filter(row=>row.kind==="fee")).toEqual([post]);expect(journal.facts.find(row=>row.id===firstFinish?.id)).toEqual(firstFinish);
+  const journal=await db().transaction(tx=>originalCashRecoveryFinancialWitness(tx,[big.id],[originalReceiptId]));expect(journal.operations.filter(row=>row.kind==="fee")).toEqual([post]);expect(journal.facts.find(row=>row.id===firstFinish?.id)).toEqual(firstFinish);
   const recovery=journal.operations.filter(row=>row.kind==="inspection"&&row.request.auxiliaryOperationId===post.id);expect(recovery.length).toBeGreaterThan(0);expect(recovery.some(row=>journal.facts.some(fact=>fact.operationId===row.id&&fact.kind==="finish"&&fact.evidence.outcome==="returned"&&fact.evidence.callerInstanceId===row.caller.id))).toBe(true);
   expect(journal.facts.filter(row=>row.kind==="atomic_fee_closure")).toHaveLength(1);expect(await canonical(f.target.invoiceId,f.parent.id)).toEqual(before);
  });

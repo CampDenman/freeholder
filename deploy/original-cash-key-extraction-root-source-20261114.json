@@ -1,0 +1,12 @@
+{
+  "base": "859e42119710d0744a09ae21d6842495a6d6df21",
+  "status": "SOURCE ONLY / no execution",
+  "functionBodyExact": true,
+  "functionBlockSha256": "1f30517e2d1a75a1df506ea5c707d8783130e3cb78caa6d80379f8edef956926",
+  "storeBeforeSha256": "bea01595e55232af1b8aadf19b247ad1b36fa9e87164e2afab3259ee14df68b4",
+  "storeAfterSha256": "1a3b230662a6847df7213a9d6c0ee6455e8df7bacdcee819ba07849072bfa67a",
+  "leafSha256": "6aa89864b8ff32c88de32b1805f1a75ea850d1dfa9d4873749b2c65a99d67e09",
+  "fullStoreReversalExact": true,
+  "signing": "CREDENTIAL_KEY ?? SESSION_SECRET; missing throws same ServiceError",
+  "verification": "unique [CREDENTIAL_KEY,CREDENTIAL_KEY_PREVIOUS,SESSION_SECRET] truthy order unchanged"
+}
