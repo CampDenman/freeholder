@@ -3564,6 +3564,22 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Paid-period financial/privacy composition source checkpoint 2026-11-13
+(C9.33/C12.38/C1.08): immutable paid-effect history now follows ONLY the actual
+invoice IDs of validated controlled targets, partitioned for merchants by the
+accepted quote profile AND exact collection/invoice ownership. Original cashless
+and no-route histories remain complete. Shared physical table/UUID identities
+are deduplicated, conflicting SHA/ancestry or one combined5000 overflow refuses;
+empty legacy witness/export shapes remain unchanged. Buyer exports omit merchant
+review and all private proof/bank/process bodies. The subscription subject source
+has the literal table inventory and actual-subscription safe projection. The real
+paid-invoice event calls the independently guarded period effect before legacy
+handlers and returns only when handled; old handler bodies remain unchanged.
+Ten new pure controls and extended actual-service native footprint/export/merge
+contexts are PREPARED/UNRUN. No SQL/model addition in this composition slice;
+parent source, full existing/new schema, native/provider/security acceptance
+remain REQUIRED. See `deploy/controlled-paid-financial155-source-20261113.md`.
+
 Controlled original-zero fixture source correction 2026-11-13
 (C12.38/C9.33/C1.08): root's actual V23 first-target journey created/bound the
 NET4000 component, then the read-only ordinary classifier isolated exactly one

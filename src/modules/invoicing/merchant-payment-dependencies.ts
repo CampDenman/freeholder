@@ -42,6 +42,8 @@ export async function invoiceMerchantDependencyFingerprints(tx: Tx, invoiceIds: 
     ? await prorationFinancialWitness(tx, { kind: "invoice", ids: invoiceIds })
     : { version: 1 as const, entries: [], incomplete: false };
   if (prorationFinancial.incomplete) return null;
+  // Actual paid-period history follows validated target invoices even when
+  // this invoice has no current payment route; seller filters stay exact.
   const controlledFinancial = originalPaymentIds === undefined
     ? await controlledFinancialWitness(tx, { invoiceIds })
     : { entries: [], incomplete: false };

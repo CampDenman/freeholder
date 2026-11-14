@@ -1,0 +1,20 @@
+{
+  "$comment": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SOURCE-ONLY comparison, not compiler/test/native qualification",
+  "base": "74e357aa77379c39089767e035d09f9c02a6002b",
+  "paidParent": "4123d3b7b776e9ae3cdf8711b4d9398b65cb40bf",
+  "originalPaidHookSha256": "420cb624467fe7ec3a661c6823b59621cc32263dbf53f53752e13c2baabbdcba",
+  "newHookAfterRemovingOnlyExactTwoInsertedLinesSha256": "420cb624467fe7ec3a661c6823b59621cc32263dbf53f53752e13c2baabbdcba",
+  "paidSqlSha256Unchanged": "f1478264fa9fc0872adb56bb322c2bba4f7060d543bb6b4a9f29889412a94505",
+  "sharedPeriodInvoiceFileSha256Unchanged": "a5782585f33e71e03092c27fe8159d8ad03fac01662bd8b4d65f23fce2569fe8",
+  "ownedSourceFiles": {
+    "src/modules/invoicing/controlled-paid-financial.ts": "a579853a01f12eb862fc63230f6fef77bda8ced73afb3e7d7cf178f1a9c6c06b",
+    "src/modules/invoicing/controlled-provider-financial-witness.ts": "5fa8803604a4713abba568c38ce1c7307d4bc1a4e0291df9ffa1364070181386",
+    "src/modules/invoicing/merchant-refund-dependencies.ts": "1498171242b487aab83b104c714251fb999c949a6ca4d0f645dd8fd7eaf68365",
+    "src/modules/invoicing/merchant-payment-dependencies.ts": "7fbeeff48e0eb8a4b9581074585b3dd328b0c35de84dfbf09a5121c0e4ef0e07",
+    "src/modules/invoicing/merchant-tax-privacy.ts": "dd7e85d041f31049f3cd24e061a4d99f52554a134385f4e0db917a39b6a807b6",
+    "src/modules/subscriptions/service.ts": "7a448ce72e4d09560af1f48c82ff6cd69ddeded23f64fb59e241d733460a4749",
+    "tests/modules/controlled-paid-financial155.test.ts": "2e3a16c4207769462177ad8e3a7bbdaf8d151ea3dfdb67521811e8a6c13f5dd0",
+    "tests/modules/controlled-paid-period155.test.ts": "2e1618a44ab3b4113927476faf38c3120e912fe855467a54e0b117715f0d0720"
+  }
+}

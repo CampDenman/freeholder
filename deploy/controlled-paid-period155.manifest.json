@@ -185,5 +185,89 @@
     "sqlPreparedUnrun": 6,
     "nativePreparedUnrun": 3,
     "qualification": "UNRUN; source-only, no compiler/lint/build/tests/PG/provider/hosting execution."
+  },
+  "paidFamilyComposition": {
+    "base": "74e357aa77379c39089767e035d09f9c02a6002b",
+    "normalMergedPaidCheckpoint": "4123d3b7b776e9ae3cdf8711b4d9398b65cb40bf",
+    "adapter": "src/modules/invoicing/controlled-paid-financial.ts",
+    "selector": "Only actual nonnull invoice IDs from validated target collections; merchant partition is quote.profileId AND actual collectionId/invoiceId. Never subscription/profile OR discovery.",
+    "physicalIdentity": [
+      "table",
+      "id"
+    ],
+    "conflictingFingerprint": "refuse",
+    "aggregateBound": 5000,
+    "emptyCompatibility": "No paid/ originalPaidPeriods field when no actual paid receipt; failed witness retains its original runtime shape.",
+    "exports": {
+      "buyer": "safe actual IDs/calendar/activation only",
+      "merchant": "same whitelist plus financialReviewPendingAtActivation, only exact profile partition",
+      "forbidden": [
+        "HMAC/authentication",
+        "bank/process/nonce/transaction bodies",
+        "beforeEntries/beforeParentFields",
+        "internal row hashes"
+      ]
+    },
+    "centralConsumers": {
+      "src/modules/invoicing/merchant-refund-dependencies.ts": "existing shared controlled witness, before final combined bound; paid identity is counted once",
+      "src/modules/invoicing/merchant-payment-dependencies.ts": "existing controlled witness before no-route exit, invoice merge footprint; seller original-payment filter unchanged",
+      "src/modules/invoicing/merchant-tax-privacy.ts": "existing quote-profile partitioned witness/export and full merchant aggregate",
+      "src/modules/subscriptions/service.ts": "literal privacy inventory, subject-safe paid receipts under actual target/subscription; hook immediately after invoiceId validation before old paid handlers"
+    },
+    "newSqlOrModels": false,
+    "qualification": "UNRUN. Source only; parent owns source/native/SQL qualification.",
+    "preparedControls": {
+      "newPure": 10,
+      "expandedActualNative": "existing full effect native now exercises actual event hook, invoice/subject/refund/profile footprints, whitelist and contact merge"
+    },
+    "schemaCoverageRequired": [
+      {
+        "logical": "subscriptionControlledPaidPeriodReceipts",
+        "physical": "subscription_controlled_paid_period_receipts",
+        "operations": [
+          "insert",
+          "immutable read/history"
+        ],
+        "contract": "the full original model/SQL manifest above"
+      },
+      {
+        "logical": "subscriptions",
+        "physical": "subscriptions",
+        "operations": [
+          "exact accepted paid-period update",
+          "contact merge"
+        ],
+        "contract": "Existing CHECK/FK/index full catalogue and new paid guard; exactly twelve managed columns, original before row preserved"
+      },
+      {
+        "logical": "subscriptionEvents",
+        "physical": "subscription_events",
+        "operations": [
+          "insert renewed",
+          "optional insert plan_changed"
+        ],
+        "contract": "Existing full model plus immutable paid-event guard and exact invoice/subscription/event ancestry"
+      },
+      {
+        "logical": "entitlementGrants",
+        "physical": "entitlement_grants",
+        "operations": [
+          "expire genuinely elapsed live status",
+          "insert new period IDs",
+          "exact idempotent retry",
+          "contact merge"
+        ],
+        "contract": "Existing full FK/CHECK/index inventory; unchanged entitlement_grants_subscription_live_idx plus exact-window/overlap/merge natives"
+      },
+      {
+        "logical": "entitlements",
+        "physical": "entitlements",
+        "operations": [
+          "read exact plan catalogue",
+          "shared ensureEntitlement may insert site entitlement if no catalogue exists"
+        ],
+        "contract": "Existing full model unique/FK/CHECK/index contract; catalogue insertion is a real shared writer, not an assumed read-only table"
+      }
+    ]
   }
 }

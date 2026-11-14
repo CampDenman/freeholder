@@ -113,6 +113,8 @@ async function snapshot(tx:Tx,ids:string[]){
  }).from(subscriptionProviderInvoiceLines).innerJoin(subscriptionProviderInvoiceObservations,eq(subscriptionProviderInvoiceObservations.id,subscriptionProviderInvoiceLines.observationId))
   .innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptionProviderInvoiceObservations.subscriptionId))
   .where(inArray(subscriptionMerchantScopes.taxProfileId,profileIds)).orderBy(subscriptionMerchantScopes.taxProfileId,subscriptionProviderInvoiceLines.id).limit(5001);
+ // Paid effects are partitioned by the target quote profile and exact
+ // collection/invoice FKs, never by all invoices of an ancestor subscription.
  const controlledFinancial=await controlledFinancialWitness(tx,{profileIds});
  if(controlledFinancial.incomplete)return null;
  const originalHistoryCount=rows.length+acceptedTerms.length+providerScopes.length+providerOperations.length+providerResources.length+amendments.length+resumptions.length+generations.length+periodInvoices.length+periodLines.length+prorationFinancial.entries.length;
