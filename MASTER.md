@@ -16026,3 +16026,21 @@ legacy recovery, capture/quota/cutover, qualification/provider/platform and
 independent review/stable gates remain open. No child execution/provider/host
 actions or C-item closure. See
 `deploy/media-multipart-part-verification-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the actual current local
+issuer may retain a distinct first WITHHELD disposition only in its owning
+failure continuation, before returning any URL, with its exact original mint,
+nonce and real request/caller FINs. Earlier successful/FAILED results, missing
+FINs and restored-snapshot absence cannot become withheld proof. New attempts
+have new identities; accepted/unknown remote authority still blocks cutover.
+Interrupted projection uses only complete retained first proof. Later genuine
+positive facts are retained before reopening original debt. Existing model state
+and SQL checks distinguish this from unattempted minting/provider revocation;
+no new model/column/capability is added. Four locales give bounded owner recovery
+guidance through the real shared query. Six ownership and five actual-service/
+SDK/TCP controls plus one SQL evidence-guard control are PREPARED/UNRUN; all old
+oracles and preceding owned SQL remain intact. No child execution/provider/host
+actions or C-item closure. Genuine remote terminal consumption, unknown/legacy
+recovery, authority-certificate minimization, session/capture/quota/cutover and
+all qualification/external/independent/stable gates remain open. See
+`deploy/media-multipart-withheld-issuer-source-2026-11-13.md`.

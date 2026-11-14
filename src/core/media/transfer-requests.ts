@@ -105,10 +105,6 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
     if(!proof||proof.format!=="original-multipart-part-capability/v1"||facts.requestProof?.id!==request.id||facts.requestProof.tokenDigest!==request.tokenDigest||proof.requestId!==request.id||proof.partNumber!==request.descriptor.partNumber||proof.sha256!==request.descriptor.sha256||proof.bytes!==request.descriptor.bytes||facts.sha256!==proof.sha256||facts.bytes!==proof.bytes||facts.expiresAt!==proof.expiresAt||!(/^[a-f0-9]{64}$/.test(proof.urlDigest))||!(/^[a-f0-9]{64}$/.test(proof.headersDigest))||facts.detailDigest!==transferDigest(proof)||!facts.uploadId||facts.uploadId!==request.descriptor.uploadId||proof.uploadIdDigest!==transferDigest(facts.uploadId)||!request.descriptor.expiresAt||!Number.isFinite(Date.parse(proof.expiresAt))||Date.parse(proof.expiresAt)>Date.parse(request.descriptor.expiresAt))transferConflict("Retain only the actual original local signer result for its exact declared body and deadline.");
     const[parent]=call.multipartOperationId?await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1):[];if(!parent)transferConflict();
     scope.multipartOperationIds.add(parent.id);
-    if(late){
-     await tx.update(mediaMultipartOperations).set({state:"unknown",updatedAt:new Date()}).where(eq(mediaMultipartOperations.id,parent.id));
-     await tx.update(mediaMultipartResources).set({state:"unknown",retiredAt:null,updatedAt:new Date()}).where(eq(mediaMultipartResources.id,parent.resourceId));
-    }
    }
   }else if(facts.stage==="capability")transferConflict("A local part capability belongs only to its original signer admission.");
   if(facts.stage==="parts_verified"){
@@ -133,6 +129,13 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
   const ordinal=request.observationCount+1;
   await tx.insert(mediaStorageTransferRequestObservations).values({requestId:id,ordinal,facts,factsDigest:transferDigest(facts),bytes:facts.bytes});
   await tx.update(mediaStorageTransferRequests).set({observationCount:ordinal,...(late?{state:"unknown" as const}:{})}).where(eq(mediaStorageTransferRequests.id,id));
+  if(late&&facts.stage==="capability"&&call.multipartOperationId){
+   // Retain the actual positive fact FIRST. A later contradictory mint cannot
+   // be rejected merely because an earlier private disposition was closed.
+   const[parent]=await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1);if(!parent)transferConflict();
+   await tx.update(mediaMultipartOperations).set({state:"unknown",updatedAt:new Date()}).where(eq(mediaMultipartOperations.id,parent.id));
+   await tx.update(mediaMultipartResources).set({state:"unknown",retiredAt:null,updatedAt:new Date()}).where(eq(mediaMultipartResources.id,parent.resourceId));
+  }
   if(facts.stage==="metadata"&&facts.revision&&request.descriptor.kind==="object.put"&&call.physicalReceiptId){
    const[receipt]=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,call.physicalReceiptId)).limit(1).for("update");if(!receipt)transferConflict();
    const digest=transferDigest(facts.revision),conflicting=Boolean(receipt.providerRevisionDigest&&receipt.providerRevisionDigest!==digest),now=new Date();

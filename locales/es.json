@@ -8820,6 +8820,7 @@
   "media.recovery.complete": "Completar carga reanudable",
   "media.recovery.create": "Iniciar carga reanudable",
   "media.recovery.sign": "Emisión del enlace de carga",
+  "media.recovery.withheld": "Se creó un enlace de carga localmente, pero no se devolvió. Se conserva su comprobante original. Otras operaciones de carga o almacenamiento aún pueden necesitar revisión.",
   "media.recovery.signingReview": "Este enlace aún puede permitir escrituras. Conserve la carga mientras se revisan su emisión original y el resultado del almacenamiento. Su caducidad o una respuesta del navegador no completan la recuperación.",
   "media.recovery.multipart": "Carga reanudable original",
   "media.recovery.multipartConfirm": "Confirmo el recurso multiparte original y que sus escritores anteriores se han detenido.",

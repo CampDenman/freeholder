@@ -2715,3 +2715,82 @@ CREATE TRIGGER media_multipart_complete_parts BEFORE INSERT OR UPDATE ON media_m
 CREATE TRIGGER media_multipart_complete_parts_request BEFORE INSERT ON media_storage_transfer_requests FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_complete_parts_guard();
 --> statement-breakpoint
 CREATE TRIGGER media_multipart_complete_parts_fact BEFORE INSERT ON media_storage_transfer_request_observations FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_complete_parts_guard();
+
+--> statement-breakpoint
+-- WITHHELD is an actual local failure disposition before returning a URL,
+-- never provider revocation, an unattempted mint or historical review/backfill.
+ALTER TABLE media_multipart_operations DROP CONSTRAINT media_multipart_operation_state;
+--> statement-breakpoint
+ALTER TABLE media_multipart_operations ADD CONSTRAINT media_multipart_operation_state CHECK(state IN ('started','accepted','unknown','not_applied','withheld'));
+--> statement-breakpoint
+ALTER TABLE media_multipart_operations ADD CONSTRAINT media_multipart_withheld_kind CHECK(state<>'withheld' OR operation_kind='sign');
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_withheld_issue(original_issue uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_operations operation JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  JOIN media_storage_transfer_calls caller ON caller.multipart_operation_id=operation.id AND caller.kind='multipart_sign'
+  JOIN media_storage_transfer_requests request ON request.call_id=caller.id AND request.descriptor->>'kind'='multipart.sign'
+  JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id AND fact.facts->>'stage'='capability'
+  WHERE operation.id=original_issue AND operation.operation_kind='sign' AND operation.part_issue IS NOT NULL
+   AND operation.writer_finished_at IS NOT NULL AND operation.writer_finished_at=caller.returned_at AND operation.provider_accepted_at IS NULL AND operation.observed_provider_upload_id IS NULL
+   AND caller.object_id IS NULL AND caller.object_receipt_id IS NULL AND caller.state='returned' AND caller.returned_at IS NOT NULL AND caller.observed_accepted_at IS NULL
+   AND caller.result_digest=freeholder_media_transfer_fact_digest(jsonb_build_object('withheldCapabilityDigest',fact.facts->'detailDigest'))
+   AND caller.result_revision IS NULL AND caller.result_request_proof IS NULL AND caller.result_sha256 IS NULL AND caller.result_bytes IS NULL AND caller.result_absent IS NULL
+   AND caller.namespace=resource.storage_namespace AND request.descriptor->'binding'->>'namespace'=caller.namespace AND request.key_digest=resource.key_digest
+   AND request.state IN ('returned','failed') AND request.returned_at IS NOT NULL AND request.returned_at<=caller.returned_at AND request.runtime_identity=caller.runtime_identity
+   AND request.descriptor->>'uploadId'=operation.provider_upload_id AND request.descriptor->>'partNumber'=operation.part_issue->>'partNumber' AND request.descriptor->>'sha256'=operation.part_issue->>'sha256' AND request.descriptor->>'bytes'=operation.part_issue->>'bytes' AND request.descriptor->>'expiresAt'=operation.part_issue->>'expiresAt'
+   AND fact.facts->'status'='null'::jsonb AND fact.facts->>'detailDigest'=freeholder_media_transfer_fact_digest(fact.facts->'capabilityProof')
+   AND fact.facts->'requestProof'=jsonb_build_object('id',request.id,'tokenDigest',request.token_digest)
+   AND fact.facts->'capabilityProof'->>'format'='original-multipart-part-capability/v1' AND fact.facts->'capabilityProof'->>'requestId'=request.id::text
+   AND fact.facts->'capabilityProof'->>'partNumber'=operation.part_issue->>'partNumber' AND fact.facts->'capabilityProof'->>'sha256'=operation.part_issue->>'sha256' AND fact.facts->'capabilityProof'->>'bytes'=operation.part_issue->>'bytes'
+   AND fact.facts->'capabilityProof'->>'uploadIdDigest'=freeholder_media_transfer_fact_digest(to_jsonb(operation.provider_upload_id))
+   AND fact.facts->'capabilityProof'->>'urlDigest' ~ '^[a-f0-9]{64}$' AND fact.facts->'capabilityProof'->>'headersDigest' ~ '^[a-f0-9]{64}$'
+   AND (fact.facts->'capabilityProof'->>'expiresAt')::timestamptz<=(operation.part_issue->>'expiresAt')::timestamptz
+   AND (SELECT count(*) FROM media_storage_transfer_requests other WHERE other.call_id=caller.id)=1
+   AND (SELECT count(*) FROM media_storage_transfer_request_observations capability WHERE capability.request_id=request.id AND capability.facts->>'stage'='capability')=1
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations other WHERE other.request_id=request.id AND other.facts->>'stage'<>'capability')
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_withheld_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.state='withheld' THEN
+  IF TG_OP='INSERT' OR NEW.operation_kind<>'sign' OR NOT freeholder_media_multipart_withheld_issue(NEW.id) THEN RAISE EXCEPTION 'Only the exact actual first withheld local result and genuine physical/caller FINs close an unexposed issuer' USING ERRCODE='23514'; END IF;
+ END IF;
+ IF TG_OP='UPDATE' AND OLD.state='withheld' AND NEW.state IS DISTINCT FROM OLD.state AND NOT(
+  NEW.state='unknown' AND EXISTS(SELECT 1 FROM media_storage_transfer_calls caller JOIN media_storage_transfer_requests request ON request.call_id=caller.id WHERE caller.multipart_operation_id=OLD.id AND caller.kind='multipart_sign' AND request.state='unknown' AND request.returned_at IS NOT NULL
+   AND (SELECT count(*) FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='capability')>1
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='capability' AND fact.created_at>=OLD.writer_finished_at))
+ ) THEN RAISE EXCEPTION 'An original withheld result cannot be exposed, retried or reclassified; actual later positive evidence must instead reopen debt' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_withheld_disposition BEFORE INSERT OR UPDATE ON media_multipart_operations FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_withheld_guard();
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_multipart_issued_authorities_closed(original_namespace text) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT NOT EXISTS(
+  SELECT 1 FROM media_multipart_operations operation JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  WHERE resource.storage_namespace=original_namespace AND operation.operation_kind='sign' AND NOT(
+   freeholder_media_multipart_unused_issue(operation.id) OR operation.state='withheld' AND freeholder_media_multipart_withheld_issue(operation.id)
+  )
+ )
+$$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_multipart_complete_intent_ready(original_resource uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_resources resource JOIN media_multipart_operations creation ON creation.resource_id=resource.id AND creation.operation_kind='create'
+  WHERE resource.id=original_resource AND freeholder_media_multipart_checksum_birth(resource.id)
+   AND NOT EXISTS(SELECT 1 FROM media_multipart_operations operation WHERE operation.resource_id=resource.id AND operation.operation_kind='sign' AND NOT(
+    operation.state='accepted' AND freeholder_media_multipart_issue_result(operation.id) OR freeholder_media_multipart_unused_issue(operation.id) OR operation.state='withheld' AND freeholder_media_multipart_withheld_issue(operation.id)))
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(creation.part_bodies->'parts') body WHERE NOT EXISTS(
+    SELECT 1 FROM media_multipart_operations operation WHERE operation.resource_id=resource.id AND operation.operation_kind='sign' AND operation.state='accepted'
+     AND operation.part_issue->>'bodyManifestId'=creation.part_bodies->>'id' AND operation.part_issue->>'bodyManifestDigest'=freeholder_media_transfer_fact_digest(creation.part_bodies)
+     AND operation.part_issue->>'partNumber'=body->>'partNumber' AND operation.part_issue->>'sha256'=body->>'sha256' AND operation.part_issue->>'bytes'=body->>'bytes'
+     AND freeholder_media_multipart_issue_result(operation.id)))
+   AND NOT freeholder_media_original_key_recreation_fenced(resource.storage_namespace,resource.key_digest)
+   AND NOT EXISTS(SELECT 1 FROM media_storage_writer_drains drain WHERE drain.namespace=resource.storage_namespace AND drain.state<>'released')
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans plan WHERE (plan.source_namespace=resource.storage_namespace OR plan.target_namespace=resource.storage_namespace) AND plan.state NOT IN ('complete','cancelled'))
+   AND NOT EXISTS(SELECT 1 FROM data_requests privacy WHERE privacy.contact_id=resource.contact_id AND privacy.kind='erasure' AND privacy.status IN ('verified','in_progress','completed','partially_completed'))
+   AND NOT EXISTS(SELECT 1 FROM privacy_retention_exceptions hold JOIN data_requests privacy ON privacy.id=hold.data_request_id WHERE hold.scope IN ('media.storageOperations','media.multipartOperations','media.storageTransfers','members') AND (hold.expires_at IS NULL OR hold.expires_at>clock_timestamp()) AND (resource.contact_id IS NULL OR privacy.contact_id=resource.contact_id))
+ )
+$$;

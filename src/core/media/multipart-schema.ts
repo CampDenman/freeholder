@@ -12,7 +12,7 @@ import type {OriginalMultipartPartIssue} from "./multipart-part-issue-types";
 import {mediaObjectWrites} from "./write-schema";
 
 export const MULTIPART_STATES=["unverified","creating","open","completing","completed","aborting","aborted","unknown"]as const;
-export const MULTIPART_OPERATION_STATES=["started","accepted","unknown","not_applied"]as const;
+export const MULTIPART_OPERATION_STATES=["started","accepted","unknown","not_applied","withheld"]as const;
 /** uploadId remains an immutable logical identity even after session pruning. */
 export const mediaMultipartResources=pgTable("media_multipart_resources",{
  id:uuid("id").primaryKey().defaultRandom(),originalReservationId:uuid("original_reservation_id"),uploadId:uuid("upload_id").notNull(),
@@ -55,7 +55,8 @@ export const mediaMultipartOperations=pgTable("media_multipart_operations",{
  index("media_multipart_operations_resource_idx").on(t.resourceId,t.createdAt),
  index("media_multipart_operations_open_idx").on(t.state,t.createdAt),
  check("media_multipart_operation_kind",sql`${t.kind} in ('create','complete','abort','sign')`),
- check("media_multipart_operation_state",sql`${t.state} in ('started','accepted','unknown','not_applied')`),
+ check("media_multipart_operation_state",sql`${t.state} in ('started','accepted','unknown','not_applied','withheld')`),
+ check("media_multipart_withheld_kind",sql`${t.state} <> 'withheld' or ${t.kind} = 'sign'`),
  check("media_multipart_parts_digest",sql`${t.partsDigest} is null or ${t.partsDigest} ~ '^[a-f0-9]{64}$'`),
  check("media_multipart_create_baseline",sql`${t.createBaseline} is null or (${t.kind} = 'create' and jsonb_typeof(${t.createBaseline}) = 'object' and ${t.createBaseline}->>'format' = 'original-multipart-create-baseline/v1' and ${t.createBaseline}->>'state' in ('capturing','complete') and jsonb_typeof(${t.createBaseline}->'pages') = 'array') is true`),
  check("media_multipart_part_bodies",sql`${t.partBodies} is null or (${t.kind} = 'create' and jsonb_typeof(${t.partBodies}) = 'object' and ${t.partBodies}->>'format' = 'original-multipart-part-bodies/v1' and jsonb_typeof(${t.partBodies}->'parts') = 'array') is true`),

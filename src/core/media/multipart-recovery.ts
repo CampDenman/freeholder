@@ -47,7 +47,7 @@ async function capture(tx:Tx,input:z.infer<typeof confirmation>){
 }
 export const listMultipartOperations=defineService({
  name:"media.listMultipartOperations",summary:"Inspect original upload resources and unresolved multipart calls.",kind:"query",permission:"scoped",agentCallable:false,
- input:z.object({limit:z.number().int().min(1).max(100).default(25)}),output:z.object({rows:z.array(z.object({resource:resourceRow,operation:operationRow.nullable(),witness:digest,sha256:digest.nullable(),bytes:z.number().nullable()}))}),
+ input:z.object({limit:z.number().int().min(1).max(100).default(25)}),output:z.object({rows:z.array(z.object({resource:resourceRow,operation:operationRow.nullable(),withheld:z.boolean(),witness:digest,sha256:digest.nullable(),bytes:z.number().nullable()}))}),
  handler:async(input,ctx)=>{
   human(ctx.actor);
   const resources=await ctx.tx.select().from(mediaMultipartResources).orderBy(asc(mediaMultipartResources.createdAt),asc(mediaMultipartResources.id)).limit(500);
@@ -59,7 +59,7 @@ export const listMultipartOperations=defineService({
    if(resource.redactedAt&&!uncertain.length&&resource.retiredAt)continue;
    if(!uncertain.length&&!['unverified','creating','completing','aborting','unknown'].includes(resource.state)&&!(upload&&upload.state!=="complete"&&(!resource.retiredAt||resource.objectReceiptId)))continue;
    const object=resource.objectReceiptId?(await ctx.tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,resource.objectReceiptId)).limit(1))[0]:null;
-   for(const operation of uncertain.length?uncertain:[null]){rows.push({resource,operation,witness:fingerprint(resource,operation),sha256:object?.sha256??null,bytes:object?.bytes??resource.expectedBytes});if(rows.length>=input.limit)return{rows};}
+   for(const operation of uncertain.length?uncertain:[null]){rows.push({resource,operation,withheld:operations.some(row=>row.state==="withheld"),witness:fingerprint(resource,operation),sha256:object?.sha256??null,bytes:object?.bytes??resource.expectedBytes});if(rows.length>=input.limit)return{rows};}
   }
   return{rows};
  },
