@@ -2,8 +2,13 @@
 // C12.38: exact current bank facts never discard a retained refund occurrence.
 import {ServiceError} from "@/core/service";
 import type {z} from "zod";
-import type {merchantReturnedCashEvidenceSchema} from "./merchant-returned-cash-contract";
+import {merchantReturnedCashEvidenceSchema} from "./merchant-returned-cash-contract";
+import type {MerchantRefundCashOrigin} from "./merchant-refund-origin";
 import {currentBankPrincipalMatches} from "./original-bank-principal-policy";
+import {originalInventoryComparison} from "./original-cash-inventory-causal-contract";
+import {cashNamespaceKey} from "./original-cash-recovery-proof";
+import {merchantTaxDigest} from "./merchant-tax-store";
+import type {originalCashRecoveryFinancialWitness} from "./original-cash-recovery-store";
 type Bank=z.infer<typeof merchantReturnedCashEvidenceSchema>;
 export type AtomicRefundBankRequest={requestId:string;refundId:string;providerRef:string;amountMinor:number;currency:string;status:string;providerPlatformAccountId:string;chargeAccountId:string|null;providerApiVersion:string;originalPaymentRef:string;chargeRef:string};
 export type AtomicRefundBankCapture={captureId:string;provenance:{kind:"same_state"}|{kind:"earlier_returned_inspection";inspectionId:string;admissionSequence:number;callerInstanceId:string}};
@@ -48,4 +53,54 @@ export function controlledAtomicRefundBankPolicy(input:{payment:{id:string;provi
  if(input.requests.length+input.observations.length+captures.size>5000)refuse();
  for(const request of input.requests)if(!input.observations.some(row=>row.providerRef===request.providerRef&&row.requestId===request.requestId&&row.bindingVerified))refuse();
  return{returnedMinor:Number(returned),refundResourceRefs:[...refs].sort(),observationIds:input.observations.map(row=>row.id).sort(),captureIds:[...captures].sort()};
+}
+/** Called only AFTER every actual row MAC is verified by the real store.
+ * A signed COMPLETE preimage containing the selected immutable lineage UUID
+ * proves a causal AFTER edge. history_canonical is never compared to PG SHA.
+ * This supplies no principal/closure/dispatch authority. */
+export function controlledAtomicRefundOriginalReadOrder(input:{cash:MerchantRefundCashOrigin;currentBank:Bank;lineageInspectionId:string;
+ original:Awaited<ReturnType<typeof originalCashRecoveryFinancialWitness>>}){
+ const namespaceKey=cashNamespaceKey(input.cash),priorOperationIds:string[]=[],covered=new Set<string>();
+ const remember=(key:string)=>{covered.add(key);if(covered.size>5000)refuse();};
+ if(input.original.owners.some(row=>row.namespaceKey!==namespaceKey||row.owner.cash.providerApiVersion!==input.cash.providerApiVersion||row.owner.cash.amountMinor!==input.cash.amountMinor||row.owner.cash.currency!==input.cash.currency))refuse();
+ for(const operation of input.original.operations){
+  if(operation.kind!=="inspection"||operation.request.auxiliaryOperationId)continue;
+  const owner=input.original.owners.find(row=>row.id===operation.recoveryId),header=originalInventoryComparison.safeParse(operation.request.inventoryComparison);
+  if(!header.success){if(operation.request.inventoryComparison!==undefined)refuse();continue;} // Unknown v1 needs exact coverage below; no upgrade.
+  if(!owner||header.data.recoveryId!==owner.id||header.data.namespaceKey!==namespaceKey||header.data.operationId!==operation.id
+   ||header.data.callerId!==operation.caller.id||header.data.nonceHash!==operation.nonceHash||header.data.sourceCashDigest!==merchantTaxDigest(owner.owner.cash)
+   ||header.data.sourceRevision!==operation.request.sourceRevision||header.data.sourceRevision!==merchantTaxDigest({cash:owner.owner.cash,history:header.data.sourceHistoryDigest}))refuse();
+  if(header.data.preimageEntries.some(row=>row.table==="subscription_controlled_cash_inspection_lineages"&&row.id===input.lineageInspectionId))refuse();
+  for(const row of header.data.preimageEntries)remember(`${row.table}:${row.id}`);
+  const own=input.original.facts.filter(row=>row.operationId===operation.id),finishes=own.filter(row=>row.kind==="finish"),finish=finishes[0];
+  if(finishes.length!==1||!finish||finish.evidence.callerInstanceId!==operation.caller.id||!["returned","threw"].includes(String(finish.evidence.outcome))
+   ||own.some(row=>row.kind==="stop"||row.sequence>finish.sequence))refuse();
+  remember(`original_cash_recovery_operations:${operation.id}`);for(const row of own)remember(`original_cash_recovery_facts:${row.id}`);
+  priorOperationIds.push(operation.id);
+ }
+ // A genuine prior complete preimage may establish an older legacy/auxiliary
+ // row's existence. Its actual own packet/FIN identities must ALL be covered;
+ // unknown or later detached evidence cannot ride an old operation UUID.
+ for(const operation of input.original.operations){
+  if(!covered.has(`original_cash_recovery_operations:${operation.id}`))refuse();
+  for(const fact of input.original.facts.filter(row=>row.operationId===operation.id))if(!covered.has(`original_cash_recovery_facts:${fact.id}`))refuse();
+ }
+ for(const fact of input.original.facts){
+  const e=fact.evidence;
+  if(["primary","state","refund"].includes(fact.kind)&&(!fact.operationId||!covered.has(`original_cash_recovery_facts:${fact.id}`)))refuse();
+  if(fact.kind==="primary"&&(e.providerRef!==input.cash.providerRef||e.providerPlatformAccountId!==input.cash.providerPlatformAccountId||(e.providerAccountId??null)!==input.cash.chargeAccountId
+   ||e.providerApiVersion!==input.cash.providerApiVersion||e.amountMinor!==input.cash.amountMinor||e.currency!==input.cash.currency))refuse();
+  if(fact.kind==="state"){
+   const parsed=merchantReturnedCashEvidenceSchema.safeParse(e);if(!parsed.success)refuse();const row=parsed.data;
+   if(row.providerPlatformAccountId!==input.cash.providerPlatformAccountId||row.chargeAccountId!==input.cash.chargeAccountId||row.providerApiVersion!==input.cash.providerApiVersion
+    ||row.paymentProviderRef!==input.cash.providerRef||row.providerChargeRef!==input.currentBank.providerChargeRef||row.amountMinor!==input.cash.amountMinor||row.currency!==input.cash.currency)refuse();
+  }
+  if(fact.kind==="refund"){
+   const resource=input.currentBank.refunds.find(row=>row.providerRef===e.providerRef);
+   if(!resource||e.providerPlatformAccountId!==input.cash.providerPlatformAccountId||(e.providerAccountId??null)!==input.cash.chargeAccountId
+    ||e.paymentProviderRef!==null&&e.paymentProviderRef!==input.cash.providerRef||e.providerChargeRef!==undefined&&e.providerChargeRef!==resource.chargeRef
+    ||e.amountMinor!==resource.amountMinor||e.currency!==resource.currency)refuse();
+  }
+ }
+ return{namespaceKey,priorOperationIds:priorOperationIds.sort(),suppliesDispatchAuthority:false as const};
 }

@@ -3564,6 +3564,46 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Atomic bank causal-fence ROOT assembly2026-11-14 (C12.38/C9.33/C1.08):
+frozendd3 follows wholecurrent45/83; entire MASTER+only22newleaflines retained.
+Whole89757985 prefix followed by TWO exact full helper/Aready successors;
+0new signatures/models/columns/kinds/services/guards/indexes. Old default
+resolver/target/160ready/native180s preserved. New ordinary proof keeps actual
+namespace SHA separate from literal account key, validates every returned-own
+packet/FIN and older covered identities, and refuses later selected-lineage
+preimages or maximal changed/missing bank state and unresolved raw feedback.
+V98 fulltypes/lint passed but contracts stopped on ONE metadata newline;
+corrected descriptor reverses to the exact same original whole target SHA.
+Actual exact8df readonly QUERY probes accept the real V55 last-own FIN/packets
+and maximal final bank state with all596 rows/j86/seq unchanged; these probes
+supply no new money authority. Full current source/schema/SDK/original native
+qualification remains required; no C/stable closure. See
+`deploy/atomic-refund-bank-fence161-root-assembly.manifest.json`.
+
+
+Atomic bank late-evidence SOURCE continuation2026-11-14 (C12.38/C9.33/C1.08):
+frozenfd preserved. New bank owner check uses original cashNamespaceKey SHA,
+never controlled literal namespace bytes. Signed original-v2 admission preimage
+membership of selected lineage UUID establishes causal AFTER edge, invalidating
+older bank proof without time/row subtraction. Each prior GET's OWN actual
+packets/unique last FIN are independently covered; older rows require exact
+prior-preimage coverage. Causally maximal complete original GET states/packets
+must agree with current bank; unknown/concurrent changed state stays review,
+older genuinely covered transfer0→1 history retained. Raw signed feedback must
+match exact current original resource/status; detached late pending stays debt.
+Full current PG/caller/budget/hash domains preserved, no generic resolver or
+old MAC rewrite. Root genuine V55 readonly QUERY proves old positive own8/FIN
+ordering/maximal policy reachable/all596rows+j86+seq unchanged, NOT successor
+qualification. Metadata-only fd descriptor consumes one final newline after
+V98 preserved source failure; old beforeSHA/product source unchanged. NEW
+UNAPPLIED suffix only existing helper+one Aready body-pin successor; no new
+signatures/models/columns/kinds/services. Ten pure/six source/three additional
+actual desired natives PREPARED, ALL UNRUN; original whole fee180s exact.
+Full root source/schema/native/SDK and B/C/full-spec remain open; no C/stable
+acceptance. See `deploy/controlled-atomic-refund-bank-fence84-source-20261114.md`.
+
+
+
 Public availability check2026-11-14 (C3.28/C11.17): unauthenticated GETs with
 redirects disabled return200 for freeholder.ai home and both public /api/health
 endpoints. Website health reports ok:true/0.2.0-beta.3; demo reports ok:true/
