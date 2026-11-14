@@ -3564,6 +3564,23 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Fee160 original native/fixture checkpoint2026-11-14 (C12.38/C9.33/C1.08):
+actualV45 positive fee journey FAILS97.070s on the customer refund transport.
+Two real payments/core3 retain4200 and one genuine initial source GET+result+
+FIN succeeds; no customer refund or fee operation commits. Same-source readonly
+wire metadata proves frozen logical flagsfalse, correct retained PI, but both
+optional wire toggles OMITTED. The new fictional bank wrongly required literal
+false strings, throwing before returning its refund. Official Stripe destination
+refund docs verify omission retains fee/transfer. Exactly TWO fixture assertions
+now apply that false default ONLY to omitted fields; explicittrue/malformed
+still fails. Production frozen serializer/body/SQL and original entire fee native
+case unchanged. All596 hashes/86journals/sequence unchanged across diagnosis,
+drain0; V45 and first failed diagnostic (wrong metadata-key check) preserved.
+Fresh ordinary/schema/current qualification and original full native rerun
+remain required; no native/provider/stable acceptance transferred.
+See `deploy/controlled-refund-wire-defaults160.manifest.json`.
+
+
 Fee160 schema/SDK checkpoint2026-11-14 (C12.38/C9.33/C1.08/C11.08): exact
 5e609ff2 sourceV85 PASSES1412 assertions/223 complete selected files/482 explicit
 DB skips, fulltypes/lint/metadata. FreshV45 ordinary86 and strictV56

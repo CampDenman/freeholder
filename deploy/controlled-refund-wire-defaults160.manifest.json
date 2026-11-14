@@ -1,0 +1,47 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "source": "tests/helpers/merchant-controlled-collection84.ts",
+  "beforeSha256": "bc8a158ffb3e45e41eb2a24f28a090f6b8e94418a17ffa9c9fcf0b894af52a2c",
+  "afterSha256": "055f8d09c8ffd4abb94f371d7b468e15a4315938f2aaf378c42e03078be461e5",
+  "finiteDelta": [
+    {
+      "before": "expect(actual.get(\"reverse_transfer\")).toBe(\"false\")",
+      "after": "expect(actual.get(\"reverse_transfer\")??\"false\").toBe(\"false\")"
+    },
+    {
+      "before": "expect(actual.get(\"refund_application_fee\")).toBe(\"false\")",
+      "after": "expect(actual.get(\"refund_application_fee\")??\"false\").toBe(\"false\")"
+    }
+  ],
+  "wholeFileReverseExact": true,
+  "productionRuntimeUnchanged": true,
+  "originalWholeNativeCaseUnchanged": true,
+  "status": "FIXTURE_ONLY_PREPARED_UNRUN_NATIVE",
+  "failedActualNative": "/tmp/freeholder-current-full86-fee160-residual-native-v1-20261114-result.json",
+  "actualReadOnlyDiagnosis": {
+    "path": "/tmp/freeholder-current-full86-native-v45-refund-wire-v2-20261114-result.json",
+    "sha256": "7c9dead39d9863a51d109d1bdab16f0abe74c7af59fb22e53b105fa3e736d840",
+    "sameSource": "6e6f5a245ef57d948c0e522f169ed293870024c1",
+    "all596WholeRowsJournalsSequenceUnchanged": true
+  },
+  "primarySource": {
+    "url": "https://docs.stripe.com/connect/destination-charges?platform=web&ui=elements#issue-refunds",
+    "checked": "2026-11-14",
+    "scope": "Omission keeps destination transfer and application fee; explicit true is required to request automatic auxiliary returns. API reference confirms parameters are optional.",
+    "apiReference": "https://docs.stripe.com/api/refunds/create"
+  },
+  "preservedNativeBefore": {
+    "paid": 4200,
+    "refunded": 0,
+    "payments": 2,
+    "feeOperations": 0,
+    "sourceInvocations": 1,
+    "sourceResultAndFIN": "returned"
+  },
+  "guard": "Omission alone takes documented false default. Any explicit true, empty or malformed string still fails the same false assertions. Production frozen request/serializer/SQL and every money/fee/access oracle remain unchanged."
+}

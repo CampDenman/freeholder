@@ -91,7 +91,7 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
   if(url.pathname==="/v1/refunds"&&init.method==="POST"){
    const actual=form(),selected=[...intents.values()].find(row=>row.id===actual.get("payment_intent")||row.latest_charge===actual.get("charge"));
    if(!selected)throw Error("Refund POST must name its actual existing original PI or charge.");
-   expect(actual.get("reverse_transfer")).toBe("false");expect(actual.get("refund_application_fee")).toBe("false");principalRefundPosts++;
+   expect(actual.get("reverse_transfer")??"false").toBe("false");expect(actual.get("refund_application_fee")??"false").toBe("false");principalRefundPosts++;
    const returned:Record<string,unknown>=externallyRefundPayment(bankRef(selected.id),Number(actual.get("amount")));returned.metadata=tag(actual);return Response.json(returned);
   }
   const feeParent=[...intents.values()].find(row=>url.pathname===`/v1/application_fees/${actualFeeRef(row.id)}/refunds`);
