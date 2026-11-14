@@ -3617,6 +3617,21 @@ evaluation, mutation-stage context/writer/routing, original bootstrap nonpayable
 proof and native/provider/security acceptance remain required. Application and
 stable remain unactivated/open. See
 `deploy/controlled-cash-prospective-context84-source-20261113.md`.
+Controlled original-receipt routing source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
+canonical receipt's real controlled-origin child, authenticates its genuine
+same-transaction HMAC batch/current bank/parent stage BEFORE payment UUID birth,
+and compares the unchanged shared cash/fee computation to that exact receipt
+plan. Legacy period/generation routes and all previous cash/return/history guards
+remain intact. A NEW UNAPPLIED suffix preserves the full old route guard with
+only an exact verified controlled-origin alternative to its gross-proration
+attempt condition; independent BEFORE and deferred stage guards remain required.
+The route capability checks actual function-body hashes and enabled trigger
+identities, never a boolean marker. Three controls are PREPARED/UNRUN; no CPU,
+database, provider or current-root execution occurred. Genuine initial batch
+admission/writer integration, separate paid effects, partial/batch/native and
+provider/security acceptance remain required; no C-item or stable closure.
+See `deploy/controlled-original-receipt-route84-source-20261113.md`.
 
 Controlled canonical stages source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): a NEW UNAPPLIED continuation independently proves
@@ -16547,3 +16562,26 @@ All four are UNRUN; no source/native/live acceptance is claimed. Actual integrat
 staged money application, separate paid effects and full lifecycle/privacy/provider/
 security work remain REQUIRED. See
 `deploy/controlled-positive-bank-native84-prepared-20261113.md`.
+
+Ordering oracle source migration 2026-11-13 (C9.33/C9.38/C12.38/C1.08): the
+ORIGINAL desired positive admission-order case now uses the genuine accepted target
+and controlled observation producer, preserving ordering/no-new-money/bank/old-read
+assertions. Its old actual current9 generic guard refusal is a separate exact
+negative; duplicate newly prepared positive is consolidated into the original
+file. Five total next-suite actual-service native cases remain UNRUN. No guard or
+acceptance is weakened. See `deploy/controlled-order-oracle84-migration-20261113.md`.
+
+Source original-period guard successor 2026-11-13 (C9.33/C9.38/C12.38): a new owned
+UNAPPLIED tail makes unknown nested original-provider evidence explicitly false
+and refuses target birth unless the real source predicate is true. Full original
+source/mandate/calendar/caller conditions remain; no old SQL identity changed or
+acceptance claimed. Root source/SQL/native qualification remains REQUIRED. See
+`deploy/controlled-period-source-null84-source-20261113.md`.
+
+Prepared external-partial control 2026-11-13 (C9.33/C9.38/C12.38/C1.08): a real
+owned canonical target is prepared through actual SDK phases to OPEN without a
+pay POST. Fictional external PI1/fee0/transfer1 is then retained and genuinely
+inspected, preserving total4200/remaining4199 and the uncollected fee obligation,
+with no local payment/access invented. This desired native is UNRUN; actual
+partial/batch application, residual recovery and full lifecycle acceptance remain
+REQUIRED. See `deploy/controlled-external-partial-bank84-prepared-20261113.md`.

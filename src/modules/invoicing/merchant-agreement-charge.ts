@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.26/C12.38: original agreement routes compose through the money services.
 import { originalProrationPaymentProtocol } from "@/modules/subscriptions/proration-payment-protocol";
+import { recheckControlledSubscriptionCashRoute, type ControlledSubscriptionCashPlan } from "@/modules/subscriptions/controlled-provider-payment-route";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { paymentAdapter, type MerchantChargeScope } from "@/adapters/payments";
@@ -17,6 +18,7 @@ import { invoiceCashFeeAllocation } from "./invoice-credit-cash-fee";
 
 export type SubscriptionInvoiceRouting = {
   subscriptionId: string; agreementRoutingVersion: 1; scope: MerchantChargeScope; siteFeeBps: number;
+  controlledCashPlan?: ControlledSubscriptionCashPlan;
   providerOrigin?: { providerApiVersion?: "2026-10-28.endive"; receiptId: string; providerSubscriptionRef: string; providerInvoiceRef: string; providerPaymentIntentRef: string; providerChargeRef: string };
 };
 let resolver: ((ctx: ServiceContext, input: { invoiceId: string; method: string; subscriptionChargeReceiptId?: string }) => Promise<SubscriptionInvoiceRouting | null>) | undefined;
@@ -51,6 +53,12 @@ export async function reserveAgreementCharge(ctx: ServiceContext, invoice: typeo
   const previous = await commercialInvoiceCashHistory(ctx, invoice);
   if (previous.pending || previous.cash !== BigInt(invoice.paidMinor)) throw new ServiceError("conflict", "Reconcile original refunded or outstanding agreement principal before another attempt.");
   const { feeMinor } = await invoiceCashFeeAllocation(ctx, invoice, policy.feeMinor, { amountMinor: request.amountMinor, priorCashMinor: Number(previous.cash), priorAllocatedFeeMinor: Number(previous.allocatedFee) });
+  if (original.controlledCashPlan) {
+    const plan = original.controlledCashPlan;
+    if (request.method !== "provider_schedule" || request.subscriptionChargeReceiptId !== plan.receiptId || request.amountMinor !== plan.amountMinor || invoice.currency !== plan.currency
+      || feeMinor !== plan.feeMinor || previous.cash !== BigInt(plan.priorCashMinor) || previous.allocatedFee !== BigInt(plan.priorAllocatedFeeMinor)) throw new ServiceError("conflict", "The shared original cash/fee calculation no longer matches this exact admitted controlled receipt.");
+    await recheckControlledSubscriptionCashRoute(ctx, { invoiceId: invoice.id, subscriptionId: original.subscriptionId, plan });
+  }
   if (feeMinor < 0 || feeMinor > request.amountMinor) throw new ServiceError("conflict", "The original agreement application fee needs reconciliation.");
   return { ...scope, providerAccountId: scope.providerAccountId ?? "", applicationFeeMinor: feeMinor, agreementSubscriptionId: original.subscriptionId,
     ...(request.method === "provider_schedule" && original.providerOrigin ? { ...original.providerOrigin, originalChargeReceiptId: original.providerOrigin.receiptId } : {}) };
