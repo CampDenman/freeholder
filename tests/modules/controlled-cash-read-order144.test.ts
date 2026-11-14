@@ -31,7 +31,7 @@ function signal<T>(){let resolve!:(value:T)=>void;const promise=new Promise<T>(a
 const claimSchema=z.object({inspectionId:z.uuid(),completionNonce:z.string(),providerPlatformAccountId:z.string(),providerAccountId:z.string().nullable(),providerApiVersion:z.enum(["2026-02-25.clover","2026-10-28.endive"]),paymentProviderRef:z.string()});
 let started=signal<string>(),resume=signal<void>();
 const delayed=defineService({name:"invoicing.testActuallyDelayedCashAdmission144",summary:"Start an actual transaction before another genuine read, admitting only after its actual caller finishes.",kind:"mutation",permission:"system",external:false,writeClass:"money",input:z.object({source:merchantRefundSource}),output:claimSchema,
- handler:async(input,ctx)=>{const[clock]=await ctx.tx.execute<{started_at:Date}>(sql`select transaction_timestamp() as started_at`);if(!clock)throw Error("The actual transaction must exist before the barrier.");started.resolve(clock.started_at.toISOString());await resume.promise;return ctx.callAsSystem(prepareMerchantCashReturnInspection,input);}});
+ handler:async(input,ctx)=>{const[clock]=await ctx.tx.execute<{started_at:string}>(sql`select transaction_timestamp()::text as started_at`);if(!clock)throw Error("The actual transaction must exist before the barrier.");started.resolve(z.coerce.date().parse(clock.started_at).toISOString());await resume.promise;return ctx.callAsSystem(prepareMerchantCashReturnInspection,input);}});
 describe.runIf(hasDatabase)("actual controlled cash ordering is admission order, never transaction start",{timeout:90000},()=>{
  let original:Awaited<ReturnType<typeof seedActualProviderSubscription80>>|undefined;
  beforeAll(ready,60000);beforeEach(async()=>{await truncateSpine();started=signal<string>();resume=signal<void>();});afterEach(()=>{original?.fixture.cleanup();original=undefined;vi.restoreAllMocks();});afterAll(async()=>{await stopJobs();await closeDb();});
@@ -59,7 +59,7 @@ describe.runIf(hasDatabase)("actual controlled cash ordering is admission order,
    onReturnStateObserved:async evidence=>{await recordCashReturnObservation.call({...claim,evidence},system);}}));}
   const attempt=delayed.call({source},system),outcome=attempt.then(value=>({ok:true as const,value}),(error:unknown)=>({ok:false as const,error}));
   try{
-   const aStarted=await started.promise;
+   const aStarted=await Promise.race([started.promise,outcome.then(result=>{if(!result.ok)throw result.error;throw Error("The delayed admission returned before its actual transaction barrier was released.");})]);
    // DO NOT catch/reinterpret a genuine current9 raw-debt refusal here. It
    // means the ordering path is not yet admitted, not that this oracle passed.
    const b=await prepareMerchantCashReturnInspection.call({source},system);await perform(b);

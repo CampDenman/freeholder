@@ -15910,6 +15910,17 @@ whatever is best for the people using the site.
   PREPARED/UNRUN and must propagate any strict raw-debt refusal. It cannot be
   supplied by model comparisons or a later success. Provider/batch application,
   current build/browser and C11/final stable gates remain open.
+  Genuine ordering first-run classification 2026-11-14 UTC (C12.38/C1.08):
+  current7a0f6288 live SDK verification passes8 without output changes and its
+  new test types/lint/metadata pass. The actual ordering run times out before
+  any inspection: the harness typed raw SQL timestamp as Date, but the actual
+  Drizzle/Postgres parser returns a string. A read-only driver probe confirms
+  this. Failed V15 keeps its one genuine positive receipt/origin, zero local
+  invoices/payments/inspections/lineages, unconsumed sequence, all85 hashes and
+  drained clients. The setup now validates the actual text timestamp and
+  propagates startup rejection instead of leaving the barrier pending. Every
+  admission/order/bank/financial assertion stays unchanged. Fresh retry and
+  genuine positive ordering remain required; no raw-debt guard was bypassed.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;
