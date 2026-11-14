@@ -8821,6 +8821,7 @@
   "media.recovery.complete": "Terminer le téléversement reprenable",
   "media.recovery.create": "Démarrer le téléversement reprenable",
   "media.recovery.sign": "Émission d’un lien de téléversement",
+  "media.recovery.withheld": "Un lien de téléversement a été créé localement mais n’a pas été renvoyé. Sa preuve initiale est conservée. D’autres opérations de téléversement ou de stockage peuvent encore nécessiter une vérification.",
   "media.recovery.signingReview": "Ce lien peut encore permettre une écriture. Conservez le téléversement pendant la vérification de son émission initiale et de son stockage. Son expiration ou une réponse du navigateur ne termine pas la récupération.",
   "media.recovery.multipart": "Téléversement reprenable initial",
   "media.recovery.multipartConfirm": "Je confirme la ressource multipart initiale et l’arrêt de ses écritures précédentes.",

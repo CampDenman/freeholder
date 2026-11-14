@@ -17,6 +17,7 @@ import {assertOriginalNamespaceMutation} from "./original-namespace-fence";
 import { requireTransferCapability } from "./transfer-authority";
 import { lockObjectDigest } from "./write-ledger";
 import { transferConflict, transferDigest } from "./transfer-proof";
+import {requireOriginalPartWithheldAuthority} from "./multipart-part-disposition";
 import {assertMediaActorLive} from "./upload-ownership";
 import { actualStorageCallerRuntimeIdentity, mediaWriterRuntimeId, type CurrentStorageCallerRuntimeIdentity } from "./physical-caller-runtime";
 
@@ -89,7 +90,7 @@ export function originalMultipartCaller(operationId:string){
  return call;
 }
 
-export interface OriginalMediaCallerReturn {inventoryDigest?:string;inventoryCount?:number;configurationDigest?:string;inspectionDigest?:string;capabilityDigest?:string;providerUploadId?:string;accepted?:boolean;failed?:true;notAttempted?:true;revision?:StorageTransferRevision;sha256?:string;bytes?:number;absent?:boolean;requestProof?:OriginalProviderRequestProof}
+export interface OriginalMediaCallerReturn {inventoryDigest?:string;inventoryCount?:number;configurationDigest?:string;inspectionDigest?:string;capabilityDigest?:string;withheldCapabilityDigest?:string;providerUploadId?:string;accepted?:boolean;failed?:true;notAttempted?:true;revision?:StorageTransferRevision;sha256?:string;bytes?:number;absent?:boolean;requestProof?:OriginalProviderRequestProof}
 /** Actual server closure only: this is authenticated by its admission token,
  * never an owner-supplied final-outcome string. Outcome application remains a
  * separate shared phase; a returned caller can still have unknown write debt.
@@ -105,6 +106,10 @@ export async function retainOriginalMediaCallerReturn(id:string,token:string,res
   const requests=await tx.select().from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.callId,id));
   const observations=requests.length?await tx.select().from(mediaStorageTransferRequestObservations).where(inArray(mediaStorageTransferRequestObservations.requestId,requests.map(row=>row.id))):[];
   if(call.kind==="multipart_sign"){
+   if(result.withheldCapabilityDigest){
+    requireOriginalPartWithheldAuthority(id,token);
+    if(result.capabilityDigest||result.failed||result.notAttempted||requests.length!==1||requests.some(request=>!request.returnedAt||!["returned","failed"].includes(request.state))||observations.filter(row=>row.facts.stage==="capability"&&row.facts.detailDigest===result.withheldCapabilityDigest).length!==1)transferConflict("Withhold only this actual still-private minted link after its genuine original physical finish.");
+   }
    if(result.capabilityDigest){
     if(!actor)transferConflict("The actual issued result needs its owning server-resolved principal.");await assertMediaActorLive(tx,actor);
     const[parent]=await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId!)).limit(1);if(!parent||parent.actor!==actorString(actor))transferConflict();
@@ -112,8 +117,8 @@ export async function retainOriginalMediaCallerReturn(id:string,token:string,res
     if(eligible?.eligible!==true)transferConflict("The original upload no longer permits new links. Keep it for review.");
    }
    if(result.accepted||result.providerUploadId||result.revision||result.requestProof||result.sha256!==undefined||result.bytes!==undefined||result.absent)transferConflict("An actual local signer finish cannot claim provider acceptance, received bytes or absence.");
-   if(result.capabilityDigest&&!observations.some(row=>row.facts.stage==="capability"&&row.facts.detailDigest===result.capabilityDigest)||!result.capabilityDigest&&!result.failed&&!result.notAttempted)transferConflict("Retain the original actual capability result or explicit local failure; never invent its first result.");
-  }else if(result.capabilityDigest)transferConflict("A local capability result belongs only to its original signer.");
+   if(result.capabilityDigest&&!observations.some(row=>row.facts.stage==="capability"&&row.facts.detailDigest===result.capabilityDigest)||!result.capabilityDigest&&!result.withheldCapabilityDigest&&!result.failed&&!result.notAttempted)transferConflict("Retain the original actual capability result or explicit local failure; never invent its first result.");
+  }else if(result.capabilityDigest||result.withheldCapabilityDigest)transferConflict("A local capability result belongs only to its original signer.");
   if(result.providerUploadId&&!observations.some(row=>row.facts.uploadId===result.providerUploadId&&["accepted","session"].includes(row.facts.stage)))transferConflict("The returned original session has no actual original provider observation.");
   if(result.requestProof&&!observations.some(row=>row.facts.stage==="metadata"&&transferDigest(row.facts.requestProof)===transferDigest(result.requestProof)&&transferDigest(row.facts.revision)===transferDigest(result.revision)))transferConflict("The actual returned original request proof has no matching physical metadata observation.");
   const write=["ordinary_put","ordinary_delete","multipart_create","multipart_complete","multipart_abort","multipart_sign"].includes(call.kind);

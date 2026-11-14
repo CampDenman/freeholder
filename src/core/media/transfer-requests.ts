@@ -80,6 +80,10 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
     if(!["multipart_recovery_inspect","multipart_create","multipart_complete","multipart_abort"].includes(call.kind)||!descriptor.uploadId||descriptor.uploadId!==(parent.providerUploadId??parent.observedProviderUploadId??resource.providerUploadId))transferConflict("Inspect only the original provider-acknowledged session.");
    }else if(call.kind!==descriptor.kind.replace(".","_")||descriptor.kind==="multipart.create"&&descriptor.contentType!==resource.contentType||descriptor.kind!=="multipart.create"&&(descriptor.uploadId!==parent.providerUploadId||descriptor.uploadId!==resource.providerUploadId)||descriptor.kind==="multipart.complete"&&(!descriptor.createOnly||descriptor.partsDigest!==parent.partsDigest))transferConflict("The actual multipart request differs from its immutable original session or manifest.");
   }
+  if(descriptor.kind==="object.read"&&["multipart_complete","multipart_recovery_inspect"].includes(call.kind)){
+   const[parent]=call.multipartOperationId?await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1):[];
+   if(!parent||parent.kind!=="complete"||descriptor.partsDigest!==parent.partsDigest)transferConflict("The original completed file read must retain every original part boundary and checksum.");
+  }
   if(descriptor.kind==="object.delete"&&(!["source_delete","privacy_delete","privacy_source_delete","ordinary_delete"].includes(call.kind)||!call.expectedRevision||transferDigest(descriptor.expectedRevision)!==transferDigest(call.expectedRevision)))transferConflict();
   if(descriptor.kind==="object.delete"&&call.kind==="ordinary_delete")await(await import("./original-retirement")).assertOrdinaryRetirementRequest(tx,call,descriptor);
   if(descriptor.kind==="object.body"){
@@ -105,10 +109,6 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
     if(!proof||proof.format!=="original-multipart-part-capability/v1"||facts.requestProof?.id!==request.id||facts.requestProof.tokenDigest!==request.tokenDigest||proof.requestId!==request.id||proof.partNumber!==request.descriptor.partNumber||proof.sha256!==request.descriptor.sha256||proof.bytes!==request.descriptor.bytes||facts.sha256!==proof.sha256||facts.bytes!==proof.bytes||facts.expiresAt!==proof.expiresAt||!(/^[a-f0-9]{64}$/.test(proof.urlDigest))||!(/^[a-f0-9]{64}$/.test(proof.headersDigest))||facts.detailDigest!==transferDigest(proof)||!facts.uploadId||facts.uploadId!==request.descriptor.uploadId||proof.uploadIdDigest!==transferDigest(facts.uploadId)||!request.descriptor.expiresAt||!Number.isFinite(Date.parse(proof.expiresAt))||Date.parse(proof.expiresAt)>Date.parse(request.descriptor.expiresAt))transferConflict("Retain only the actual original local signer result for its exact declared body and deadline.");
     const[parent]=call.multipartOperationId?await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1):[];if(!parent)transferConflict();
     scope.multipartOperationIds.add(parent.id);
-    if(late){
-     await tx.update(mediaMultipartOperations).set({state:"unknown",updatedAt:new Date()}).where(eq(mediaMultipartOperations.id,parent.id));
-     await tx.update(mediaMultipartResources).set({state:"unknown",retiredAt:null,updatedAt:new Date()}).where(eq(mediaMultipartResources.id,parent.resourceId));
-    }
    }
   }else if(facts.stage==="capability")transferConflict("A local part capability belongs only to its original signer admission.");
   if(facts.stage==="parts_verified"){
@@ -118,6 +118,9 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
    const prior=await tx.select().from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.callId,call.id));
    if(prior.length!==pages.length||prior.some(row=>!pages.includes(row.id)||row.descriptor.kind!=="multipart.inspect"||row.descriptor.partsDigest!==parent.partsDigest||row.id!==request.id&&(row.state!=="returned"||!row.returnedAt)))transferConflict("The original upload-part verification has unresolved or unrelated physical reads.");
   }else if(facts.partPageIds)transferConflict("Original part-page identities belong only to the actual completed verification.");
+  if(facts.partsDigest!==undefined&&(facts.stage!=="body"||request.descriptor.kind!=="object.read"||facts.partsDigest!==request.descriptor.partsDigest))transferConflict("Original file-part readback belongs only to its exact complete physical body request.");
+  // Genuine old/partial body facts without this new certificate stay retained
+  // as debt. Adoption independently requires exact complete part readback.
   if(facts.requestProof&&request.descriptor.kind==="object.put"&&(facts.requestProof.id!==request.id||facts.requestProof.tokenDigest!==request.tokenDigest))transferConflict("The actual original upload returned another request identity.");
   if(facts.uploadId){
    if(typeof facts.uploadId!=="string"||!facts.uploadId||facts.uploadId.length>4096||/[\u0000-\u001f]/.test(facts.uploadId)||!request.descriptor.kind.startsWith("multipart.")||request.descriptor.kind!=="multipart.create"&&facts.uploadId!==request.descriptor.uploadId)transferConflict("The provider fact names a different original session.");
@@ -133,6 +136,13 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
   const ordinal=request.observationCount+1;
   await tx.insert(mediaStorageTransferRequestObservations).values({requestId:id,ordinal,facts,factsDigest:transferDigest(facts),bytes:facts.bytes});
   await tx.update(mediaStorageTransferRequests).set({observationCount:ordinal,...(late?{state:"unknown" as const}:{})}).where(eq(mediaStorageTransferRequests.id,id));
+  if(late&&facts.stage==="capability"&&call.multipartOperationId){
+   // Retain the actual positive fact FIRST. A later contradictory mint cannot
+   // be rejected merely because an earlier private disposition was closed.
+   const[parent]=await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1);if(!parent)transferConflict();
+   await tx.update(mediaMultipartOperations).set({state:"unknown",updatedAt:new Date()}).where(eq(mediaMultipartOperations.id,parent.id));
+   await tx.update(mediaMultipartResources).set({state:"unknown",retiredAt:null,updatedAt:new Date()}).where(eq(mediaMultipartResources.id,parent.resourceId));
+  }
   if(facts.stage==="metadata"&&facts.revision&&request.descriptor.kind==="object.put"&&call.physicalReceiptId){
    const[receipt]=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,call.physicalReceiptId)).limit(1).for("update");if(!receipt)transferConflict();
    const digest=transferDigest(facts.revision),conflicting=Boolean(receipt.providerRevisionDigest&&receipt.providerRevisionDigest!==digest),now=new Date();

@@ -7,47 +7,27 @@ import {createHash,randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,isNull,isNotNull,ne} from "drizzle-orm";
 import {z} from "zod";
 import {boundStorage} from "@/adapters/storage";
-import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
-import {actorString,defineOrchestratedService,hasModuleAccess,ServiceError,type Actor,type Tx} from "@/core/service";
+import {actorString,defineOrchestratedService,ServiceError} from "@/core/service";
 import {defineMediaService as defineService} from "./guarded-service";
 import {mediaUploads,mediaObjects} from "./schema";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartOperations,mediaMultipartResources,MULTIPART_STATES} from "./multipart-schema";
-import {allowMediaReceiptWrites,deleteWithReceipt,lockObjectDigest,storageOperationsHeld,objectKeyDigest} from "./write-ledger";
+import {allowMediaReceiptWrites,deleteWithReceipt,storageOperationsHeld} from "./write-ledger";
+import appliedRecoveryServices,{recoverExactOriginalMultipartComplete} from "./multipart-applied-recovery";
+import {confirmation,capture,fingerprint,human} from "./multipart-recovery-context";
 import {withOriginalMultipartInvocation} from "./provider-callers";
 import {abortOriginalMultipart,claimMultipartAbort} from "./multipart-operations";
 import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 
-type Resource=typeof mediaMultipartResources.$inferSelect;
-type Operation=typeof mediaMultipartOperations.$inferSelect;
 const digest=z.string().regex(/^[a-f0-9]{64}$/),date=z.date();
 const resourceRow=z.object({id:z.uuid(),uploadId:z.uuid(),key:z.string(),namespace:digest.nullable(),providerUploadId:z.string().nullable(),state:z.enum(MULTIPART_STATES),expectedBytes:z.number(),contentType:z.string(),objectReceiptId:z.uuid().nullable(),retiredAt:date.nullable(),updatedAt:date});
 const operationRow=z.object({id:z.uuid(),kind:z.enum(["create","complete","abort","sign"]),state:z.string(),providerAcceptedAt:date.nullable(),updatedAt:date});
-const confirmation=z.object({resourceId:z.uuid(),operationId:z.uuid().optional(),expectedWitness:digest,originalNamespace:digest,providerUploadId:z.string().min(1).max(4096).optional(),
- originalKey:z.string().min(1).max(2048).optional(),
- action:z.enum(["verify_original","applied","not_applied","cleanup"]),sha256:digest.optional(),bytes:z.number().int().nonnegative().max(5*1024**3).optional(),
- providerFinalReference:z.string().trim().min(8).max(300),providerEvidence:z.string().trim().min(20).max(2000),stoppedWriterEvidence:z.string().trim().min(20).max(2000),confirmation:z.literal("ORIGINAL MULTIPART RESOURCE CONFIRMED")});
+
 const proof=z.object({state:z.enum(["open","absent","object"]),providerUploadId:z.string().nullable(),sha256:digest.optional(),bytes:z.number().int().nonnegative().optional()});
-function human(actor:Actor){if(actor.kind!=="user"||actor.keyScopes||!hasModuleAccess(actor,"media","manage"))throw new ServiceError("permission","Sign in as a person with permission to manage original upload recovery.");}
-function fingerprint(resource:Resource,operation:Operation|null){return createHash("sha256").update(JSON.stringify({resource,operation})).digest("hex");}
-async function capture(tx:Tx,input:z.infer<typeof confirmation>){
- await lockContactIdentityForRead(tx);
- const[identity]=await tx.select({digest:mediaMultipartResources.keyDigest}).from(mediaMultipartResources).where(eq(mediaMultipartResources.id,input.resourceId)).limit(1);
- if(!identity)throw new ServiceError("not_found","The original multipart resource is unavailable.");
- await lockObjectDigest(tx,identity.digest);
- const[resource]=await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.id,input.resourceId)).limit(1).for("update");
- const operation=input.operationId?(await tx.select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.id,input.operationId),eq(mediaMultipartOperations.resourceId,input.resourceId))).limit(1).for("update"))[0]??null:null;
- if(!resource||(input.operationId&&!operation)||fingerprint(resource,operation)!==input.expectedWitness)throw new ServiceError("conflict","The original upload evidence changed. Reload it before reviewing the outcome.");
- const key=resource.redactedAt?input.originalKey:resource.key;
- if(!key||(input.originalKey&&input.originalKey!==key)||objectKeyDigest(key)!==resource.keyDigest||/[\u0000-\u001f]/.test(key))throw new ServiceError("validation","Restore the exact original object key and verify its immutable digest before recovery.");
- if(resource.namespace&&resource.namespace!==input.originalNamespace)throw new ServiceError("conflict","Restore this upload's original storage resource; its namespace cannot be replaced.");
- if(input.providerUploadId&&resource.providerUploadId&&resource.providerUploadId!==input.providerUploadId)throw new ServiceError("conflict","The evidence names a different original provider upload.");
- if(input.action==="not_applied"&&operation?.providerAcceptedAt)throw new ServiceError("conflict","A recorded positive provider acknowledgement cannot be marked unapplied.");
- return{resource,operation,key};
-}
+
 export const listMultipartOperations=defineService({
  name:"media.listMultipartOperations",summary:"Inspect original upload resources and unresolved multipart calls.",kind:"query",permission:"scoped",agentCallable:false,
- input:z.object({limit:z.number().int().min(1).max(100).default(25)}),output:z.object({rows:z.array(z.object({resource:resourceRow,operation:operationRow.nullable(),witness:digest,sha256:digest.nullable(),bytes:z.number().nullable()}))}),
+ input:z.object({limit:z.number().int().min(1).max(100).default(25)}),output:z.object({rows:z.array(z.object({resource:resourceRow,operation:operationRow.nullable(),withheld:z.boolean(),witness:digest,sha256:digest.nullable(),bytes:z.number().nullable()}))}),
  handler:async(input,ctx)=>{
   human(ctx.actor);
   const resources=await ctx.tx.select().from(mediaMultipartResources).orderBy(asc(mediaMultipartResources.createdAt),asc(mediaMultipartResources.id)).limit(500);
@@ -59,7 +39,7 @@ export const listMultipartOperations=defineService({
    if(resource.redactedAt&&!uncertain.length&&resource.retiredAt)continue;
    if(!uncertain.length&&!['unverified','creating','completing','aborting','unknown'].includes(resource.state)&&!(upload&&upload.state!=="complete"&&(!resource.retiredAt||resource.objectReceiptId)))continue;
    const object=resource.objectReceiptId?(await ctx.tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,resource.objectReceiptId)).limit(1))[0]:null;
-   for(const operation of uncertain.length?uncertain:[null]){rows.push({resource,operation,witness:fingerprint(resource,operation),sha256:object?.sha256??null,bytes:object?.bytes??resource.expectedBytes});if(rows.length>=input.limit)return{rows};}
+   for(const operation of uncertain.length?uncertain:[null]){rows.push({resource,operation,withheld:operations.some(row=>row.state==="withheld"),witness:fingerprint(resource,operation),sha256:object?.sha256??null,bytes:object?.bytes??resource.expectedBytes});if(rows.length>=input.limit)return{rows};}
   }
   return{rows};
  },
@@ -133,7 +113,9 @@ const claimMultipartCleanup=defineService({
 export const reconcileMultipartOperation=defineOrchestratedService({
  name:"media.reconcileMultipartOperation",summary:"Verify an original upload resource and record a fresh person's provider evidence.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,auditInputFields:["resourceId","action"],input:confirmation,output:z.object({ok:z.literal(true),needsCleanup:z.boolean()}),
  handler:async(input,actor)=>withOriginalMultipartInvocation(async()=>{
-  const original=await claimMultipartRecovery.call(input,actor);requireDurableMediaRetirementProof();const captured=await boundStorage();
+  const original=await claimMultipartRecovery.call(input,actor);
+  if(input.action==="applied"&&original.operation?.kind==="complete")return recoverExactOriginalMultipartComplete(input,actor);
+  requireDurableMediaRetirementProof();const captured=await boundStorage();
   const key=input.originalKey??original.resource.key;
   if(captured.binding.namespace!==input.originalNamespace||(original.resource.namespace&&original.resource.namespace!==captured.binding.namespace)||!captured.store.directMultipart?.inspect)throw new ServiceError("conflict","Restore the exact original private multipart resource before verification.");
   if(input.action==="cleanup"){
@@ -168,4 +150,4 @@ export const reconcileMultipartOperation=defineOrchestratedService({
   await reconcileMediaErasureCohorts({multipartResourceId:input.resourceId}).catch(()=>{});return result;
  }),
 });
-export default[listMultipartOperations,claimMultipartRecovery,applyMultipartRecovery,claimMultipartCleanup,reconcileMultipartOperation];
+export default[listMultipartOperations,claimMultipartRecovery,applyMultipartRecovery,claimMultipartCleanup,reconcileMultipartOperation,...appliedRecoveryServices];

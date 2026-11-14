@@ -3564,6 +3564,61 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the actual current local
+issuer may retain a distinct first WITHHELD disposition only in its owning
+failure continuation, before returning any URL, with its exact original mint,
+nonce and real request/caller FINs. Earlier successful/FAILED results, missing
+FINs and restored-snapshot absence cannot become withheld proof. New attempts
+have new identities; accepted/unknown remote authority still blocks cutover.
+Interrupted projection uses only complete retained first proof. Later genuine
+positive facts are retained before reopening original debt. Existing model state
+and SQL checks distinguish this from unattempted minting/provider revocation;
+no new model/column/capability is added. Four locales give bounded owner recovery
+guidance through the real shared query. Six ownership and five actual-service/
+SDK/TCP controls plus one SQL evidence-guard control are PREPARED/UNRUN; all old
+oracles and preceding owned SQL remain intact. No child execution/provider/host
+actions or C-item closure. Genuine remote terminal consumption, unknown/legacy
+recovery, authority-certificate minimization, session/capture/quota/cutover and
+all qualification/external/independent/stable gates remain open. See
+`deploy/media-multipart-withheld-issuer-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): real normal multipart
+completion now streams every original fixed part boundary/checksum as well as
+whole-file SHA before object adoption, binding its actual body fact to the
+immutable original manifest, pinned revision and CREATE nonce. Reported ETag,
+part listing, size or Content-Length cannot substitute. Same-size changed
+stored bytes retain actual earlier ACK/backend bytes as recovery debt; no
+second POST is authorized. Older/partial positive facts stay retained without
+receiving a fabricated new certificate. One appended function/two guards and
+an existing adoption predicate continuation add no model/column/check or
+capability. Seven verifier, six wire and two real-service/TCP controls are
+PREPARED/UNRUN; all old oracles and preceding owned SQL remain intact. This is
+an actual readback dependency, not unknown-COMPLETE review or remote authority
+consumption. Unknown/legacy recovery, certificate minimization, session/
+capture/quota/cutover and all qualification/external/independent/stable gates
+remain open. No child execution/provider/host actions or C-item closure. See
+`deploy/media-multipart-stored-part-readback-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the genuine human shared
+multipart recovery service now handles a tracked unknown COMPLETE through its
+immutable first CREATE/body declaration/preflight and original local finishes
+or exact independently verified stop. Fresh actual metadata and bounded full
+part readback pin any retained first revision; two complete original provider
+inventories precede immutable applied review/private descendant receipt. Normal
+completion can consume only that guarded proof without another POST. Original
+first results, ACKs and actual/NULL FINs remain unchanged; ownership/erasure,
+nonce, namespace and first-capture lineage stay authoritative. A real multipart
+inventory guard owns this producer; no metadata exemption/model/column or
+capability is added. Existing four-locale stop guidance and UI use the same
+shared audit/step-up/key refusal; root final SDK qualification is required.
+Thirteen proof, six wire and five genuine-service/SDK/TCP controls are PREPARED/
+UNRUN, with a concrete separately unrun actual Linux acceptance plan. All old
+oracles and predecessor owned SQL remain intact. No child execution/provider/
+host actions or C-item closure. Remote terminal consumption, unknown CREATE/
+legacy issuer recovery, certificate minimization, full session/capture/quota/
+cutover and every qualification/external/independent/stable gate remain open.
+See `deploy/media-multipart-applied-complete-recovery-source-2026-11-13.md`.
+
 Controlled original-zero fixture source correction 2026-11-13
 (C12.38/C9.33/C1.08): root's actual V23 first-target journey created/bound the
 NET4000 component, then the read-only ordinary classifier isolated exactly one

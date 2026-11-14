@@ -25,6 +25,7 @@ import {newMultipartCreateBaseline} from "./multipart-create-baseline-proof";
 import {captureMultipartCreateBaseline} from "./multipart-create-baseline";
 import {configuredOriginalRequestStore} from "./transfer-storage";
 import {requireOriginalMultipartCompletedBody,type OriginalMultipartCreateProof} from "./multipart-completed-proof";
+import {mediaStorageTransferReviews} from "./transfer-schema";
 import {mediaStorageTransferCalls} from "./transfer-schema";
 import {originalMultipartCompleteManifest} from "./multipart-complete-manifest";
 import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
@@ -184,6 +185,8 @@ export async function completeOriginalMultipart(uploadId:string,operationId:stri
  let acknowledged=Boolean(operation.providerAcceptedAt);
  try{
   if(recoverOnly){
+   const[review]=await db().execute<{proven:boolean}>(sql`select freeholder_media_multipart_applied_review(${operation.id}::uuid) as proven`);
+   if(review?.proven===true)return captured;
    requireDurableMediaRetirementProof();
    conflict("The earlier original completion needs exact caller/request recovery; it cannot be retried or adopted from a current-key HEAD.");
   }else{
@@ -197,7 +200,8 @@ export async function completeOriginalMultipart(uploadId:string,operationId:stri
     if(inspection.state!=="open")conflict("The original upload session is unavailable. Keep its receipts for recovery.");
     await captured.store.directMultipart.complete(captured.resource.key,operation.providerUploadId!,operation.parts,{request:observeTransferRequest,onAccepted:async result=>{acknowledged=true;revision=result?.revision;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}});
     if(!revision)conflict();
-    const bytes=await store.readDigestVersioned!(captured.resource.key,revision,captured.resource.expectedBytes);if(!bytes)conflict("The original completed upload is unavailable. Keep its original receipt for review.");
+    const bytes=await store.readDigestVersioned!(captured.resource.key,revision,captured.resource.expectedBytes,operation.parts);if(!bytes)conflict("The original completed upload is unavailable. Keep its original receipt for review.");
+    if(bytes.partsDigest!==operation.partsDigest||bytes.bytes!==captured.resource.expectedBytes)conflict("Keep the original completed upload for review. Its stored parts differ from the original file declaration.");
     requireOriginalMultipartCompletedBody(creation,{...bytes,key:captured.resource.key,namespace:captured.binding.namespace},{uploadId:operation.providerUploadId!,namespace:captured.binding.namespace,key:captured.resource.key,revision,maxBytes:captured.resource.expectedBytes});
     return bytes;
    });
@@ -214,8 +218,10 @@ export async function adoptCompletedMultipart(uploadId:string,operationId:string
   await lockContactIdentityForRead(tx);const{operation,resource}=await lockedOperation(tx,operationId);
   const[upload]=await tx.select().from(mediaUploads).where(eq(mediaUploads.id,uploadId)).limit(1).for("update");
   if(!upload||operation.kind!=="complete"||resource.uploadId!==uploadId||!Number.isSafeInteger(bytes)||bytes<0||(requireExpected&&bytes!==resource.expectedBytes))conflict();
-  const[proof]=await tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_completed_result(${operation.id}::uuid) as proven`);
-  const[actual]=await tx.select().from(mediaStorageTransferCalls).where(and(eq(mediaStorageTransferCalls.multipartOperationId,operation.id),eq(mediaStorageTransferCalls.kind,"multipart_complete"))).limit(1);
+  const[proof]=await tx.execute<{proven:boolean;reviewed:boolean}>(sql`select freeholder_media_multipart_completed_result(${operation.id}::uuid) or freeholder_media_multipart_applied_review(${operation.id}::uuid) as proven,freeholder_media_multipart_applied_review(${operation.id}::uuid) as reviewed`);
+  const[original]=await tx.select().from(mediaStorageTransferCalls).where(and(eq(mediaStorageTransferCalls.multipartOperationId,operation.id),eq(mediaStorageTransferCalls.kind,"multipart_complete"))).limit(1);
+  let actual=original;
+  if(proof?.reviewed===true){const[review]=original?.stopReceiptId?await tx.select().from(mediaStorageTransferReviews).where(eq(mediaStorageTransferReviews.id,original.stopReceiptId)).limit(1):[];actual=review?(await tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.id,review.readCallId)).limit(1))[0]:undefined;}
   if(proof?.proven!==true||!actual?.resultRevision||!actual.resultSha256||actual.resultBytes!==bytes||sha256!==null&&actual.resultSha256!==sha256)conflict("The original stored file changed during validation. Keep its exact upload receipt for review.");
   const actualSha256=actual.resultSha256;
   // Preserve an already-admitted physical fact even if its owner was erased

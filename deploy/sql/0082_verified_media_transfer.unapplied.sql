@@ -2715,3 +2715,721 @@ CREATE TRIGGER media_multipart_complete_parts BEFORE INSERT OR UPDATE ON media_m
 CREATE TRIGGER media_multipart_complete_parts_request BEFORE INSERT ON media_storage_transfer_requests FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_complete_parts_guard();
 --> statement-breakpoint
 CREATE TRIGGER media_multipart_complete_parts_fact BEFORE INSERT ON media_storage_transfer_request_observations FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_complete_parts_guard();
+
+--> statement-breakpoint
+-- WITHHELD is an actual local failure disposition before returning a URL,
+-- never provider revocation, an unattempted mint or historical review/backfill.
+ALTER TABLE media_multipart_operations DROP CONSTRAINT media_multipart_operation_state;
+--> statement-breakpoint
+ALTER TABLE media_multipart_operations ADD CONSTRAINT media_multipart_operation_state CHECK(state IN ('started','accepted','unknown','not_applied','withheld'));
+--> statement-breakpoint
+ALTER TABLE media_multipart_operations ADD CONSTRAINT media_multipart_withheld_kind CHECK(state<>'withheld' OR operation_kind='sign');
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_withheld_issue(original_issue uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_operations operation JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  JOIN media_storage_transfer_calls caller ON caller.multipart_operation_id=operation.id AND caller.kind='multipart_sign'
+  JOIN media_storage_transfer_requests request ON request.call_id=caller.id AND request.descriptor->>'kind'='multipart.sign'
+  JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id AND fact.facts->>'stage'='capability'
+  WHERE operation.id=original_issue AND operation.operation_kind='sign' AND operation.part_issue IS NOT NULL
+   AND operation.writer_finished_at IS NOT NULL AND operation.writer_finished_at=caller.returned_at AND operation.provider_accepted_at IS NULL AND operation.observed_provider_upload_id IS NULL
+   AND caller.object_id IS NULL AND caller.object_receipt_id IS NULL AND caller.state='returned' AND caller.returned_at IS NOT NULL AND caller.observed_accepted_at IS NULL
+   AND caller.result_digest=freeholder_media_transfer_fact_digest(jsonb_build_object('withheldCapabilityDigest',fact.facts->'detailDigest'))
+   AND caller.result_revision IS NULL AND caller.result_request_proof IS NULL AND caller.result_sha256 IS NULL AND caller.result_bytes IS NULL AND caller.result_absent IS NULL
+   AND caller.namespace=resource.storage_namespace AND request.descriptor->'binding'->>'namespace'=caller.namespace AND request.key_digest=resource.key_digest
+   AND request.state IN ('returned','failed') AND request.returned_at IS NOT NULL AND request.returned_at<=caller.returned_at AND request.runtime_identity=caller.runtime_identity
+   AND request.descriptor->>'uploadId'=operation.provider_upload_id AND request.descriptor->>'partNumber'=operation.part_issue->>'partNumber' AND request.descriptor->>'sha256'=operation.part_issue->>'sha256' AND request.descriptor->>'bytes'=operation.part_issue->>'bytes' AND request.descriptor->>'expiresAt'=operation.part_issue->>'expiresAt'
+   AND fact.facts->'status'='null'::jsonb AND fact.facts->>'detailDigest'=freeholder_media_transfer_fact_digest(fact.facts->'capabilityProof')
+   AND fact.facts->'requestProof'=jsonb_build_object('id',request.id,'tokenDigest',request.token_digest)
+   AND fact.facts->'capabilityProof'->>'format'='original-multipart-part-capability/v1' AND fact.facts->'capabilityProof'->>'requestId'=request.id::text
+   AND fact.facts->'capabilityProof'->>'partNumber'=operation.part_issue->>'partNumber' AND fact.facts->'capabilityProof'->>'sha256'=operation.part_issue->>'sha256' AND fact.facts->'capabilityProof'->>'bytes'=operation.part_issue->>'bytes'
+   AND fact.facts->'capabilityProof'->>'uploadIdDigest'=freeholder_media_transfer_fact_digest(to_jsonb(operation.provider_upload_id))
+   AND fact.facts->'capabilityProof'->>'urlDigest' ~ '^[a-f0-9]{64}$' AND fact.facts->'capabilityProof'->>'headersDigest' ~ '^[a-f0-9]{64}$'
+   AND (fact.facts->'capabilityProof'->>'expiresAt')::timestamptz<=(operation.part_issue->>'expiresAt')::timestamptz
+   AND (SELECT count(*) FROM media_storage_transfer_requests other WHERE other.call_id=caller.id)=1
+   AND (SELECT count(*) FROM media_storage_transfer_request_observations capability WHERE capability.request_id=request.id AND capability.facts->>'stage'='capability')=1
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations other WHERE other.request_id=request.id AND other.facts->>'stage'<>'capability')
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_withheld_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.state='withheld' THEN
+  IF TG_OP='INSERT' OR NEW.operation_kind<>'sign' OR NOT freeholder_media_multipart_withheld_issue(NEW.id) THEN RAISE EXCEPTION 'Only the exact actual first withheld local result and genuine physical/caller FINs close an unexposed issuer' USING ERRCODE='23514'; END IF;
+ END IF;
+ IF TG_OP='UPDATE' AND OLD.state='withheld' AND NEW.state IS DISTINCT FROM OLD.state AND NOT(
+  NEW.state='unknown' AND EXISTS(SELECT 1 FROM media_storage_transfer_calls caller JOIN media_storage_transfer_requests request ON request.call_id=caller.id WHERE caller.multipart_operation_id=OLD.id AND caller.kind='multipart_sign' AND request.state='unknown' AND request.returned_at IS NOT NULL
+   AND (SELECT count(*) FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='capability')>1
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='capability' AND fact.created_at>=OLD.writer_finished_at))
+ ) THEN RAISE EXCEPTION 'An original withheld result cannot be exposed, retried or reclassified; actual later positive evidence must instead reopen debt' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_withheld_disposition BEFORE INSERT OR UPDATE ON media_multipart_operations FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_withheld_guard();
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_multipart_issued_authorities_closed(original_namespace text) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT NOT EXISTS(
+  SELECT 1 FROM media_multipart_operations operation JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  WHERE resource.storage_namespace=original_namespace AND operation.operation_kind='sign' AND NOT(
+   freeholder_media_multipart_unused_issue(operation.id) OR operation.state='withheld' AND freeholder_media_multipart_withheld_issue(operation.id)
+  )
+ )
+$$;
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_multipart_complete_intent_ready(original_resource uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_resources resource JOIN media_multipart_operations creation ON creation.resource_id=resource.id AND creation.operation_kind='create'
+  WHERE resource.id=original_resource AND freeholder_media_multipart_checksum_birth(resource.id)
+   AND NOT EXISTS(SELECT 1 FROM media_multipart_operations operation WHERE operation.resource_id=resource.id AND operation.operation_kind='sign' AND NOT(
+    operation.state='accepted' AND freeholder_media_multipart_issue_result(operation.id) OR freeholder_media_multipart_unused_issue(operation.id) OR operation.state='withheld' AND freeholder_media_multipart_withheld_issue(operation.id)))
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(creation.part_bodies->'parts') body WHERE NOT EXISTS(
+    SELECT 1 FROM media_multipart_operations operation WHERE operation.resource_id=resource.id AND operation.operation_kind='sign' AND operation.state='accepted'
+     AND operation.part_issue->>'bodyManifestId'=creation.part_bodies->>'id' AND operation.part_issue->>'bodyManifestDigest'=freeholder_media_transfer_fact_digest(creation.part_bodies)
+     AND operation.part_issue->>'partNumber'=body->>'partNumber' AND operation.part_issue->>'sha256'=body->>'sha256' AND operation.part_issue->>'bytes'=body->>'bytes'
+     AND freeholder_media_multipart_issue_result(operation.id)))
+   AND NOT freeholder_media_original_key_recreation_fenced(resource.storage_namespace,resource.key_digest)
+   AND NOT EXISTS(SELECT 1 FROM media_storage_writer_drains drain WHERE drain.namespace=resource.storage_namespace AND drain.state<>'released')
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans plan WHERE (plan.source_namespace=resource.storage_namespace OR plan.target_namespace=resource.storage_namespace) AND plan.state NOT IN ('complete','cancelled'))
+   AND NOT EXISTS(SELECT 1 FROM data_requests privacy WHERE privacy.contact_id=resource.contact_id AND privacy.kind='erasure' AND privacy.status IN ('verified','in_progress','completed','partially_completed'))
+   AND NOT EXISTS(SELECT 1 FROM privacy_retention_exceptions hold JOIN data_requests privacy ON privacy.id=hold.data_request_id WHERE hold.scope IN ('media.storageOperations','media.multipartOperations','media.storageTransfers','members') AND (hold.expires_at IS NULL OR hold.expires_at>clock_timestamp()) AND (resource.contact_id IS NULL OR privacy.contact_id=resource.contact_id))
+ )
+$$;
+
+
+--> statement-breakpoint
+-- Original full-body readback additionally verifies each fixed original part.
+CREATE OR REPLACE FUNCTION freeholder_media_multipart_completed_result(original_operation uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_operations operation
+  JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  JOIN media_storage_transfer_calls actual ON actual.multipart_operation_id=operation.id AND actual.kind='multipart_complete'
+  JOIN media_multipart_operations creation ON creation.resource_id=resource.id AND creation.operation_kind='create'
+  JOIN media_storage_transfer_calls creator ON creator.multipart_operation_id=creation.id AND creator.kind='multipart_create'
+  JOIN media_storage_transfer_requests birth ON birth.call_id=creator.id AND birth.descriptor->>'kind'='multipart.create'
+  JOIN media_storage_transfer_requests completion ON completion.call_id=actual.id AND completion.descriptor->>'kind'='multipart.complete'
+  JOIN media_storage_transfer_requests body ON body.call_id=actual.id AND body.descriptor->>'kind'='object.read'
+  WHERE operation.id=original_operation AND operation.operation_kind='complete' AND operation.state='accepted' AND operation.writer_finished_at IS NOT NULL AND operation.provider_accepted_at IS NOT NULL
+   AND operation.provider_upload_id=resource.provider_upload_id AND operation.observed_provider_upload_id=resource.provider_upload_id
+   AND resource.original_reservation_id IS NOT NULL AND resource.redacted_at IS NULL AND resource.storage_kind='s3'
+   AND actual.object_id IS NULL AND actual.object_receipt_id IS NULL AND actual.state='returned' AND actual.returned_at IS NOT NULL AND actual.observed_accepted_at IS NOT NULL AND actual.runtime_id=operation.writer_runtime_id
+   AND actual.namespace=resource.storage_namespace AND actual.physical_key=resource.object_key AND actual.result_revision->>'namespace'=resource.storage_namespace AND actual.result_revision->>'key'=resource.object_key
+   AND actual.result_sha256 ~ '^[a-f0-9]{64}$' AND actual.result_bytes>=0 AND actual.result_bytes<=resource.expected_bytes AND actual.result_absent IS NULL
+   AND creation.state='accepted' AND creation.writer_finished_at IS NOT NULL AND creation.provider_accepted_at IS NOT NULL
+   AND creation.create_baseline->>'state'='complete' AND creation.create_baseline->>'callId'=creator.id::text AND creation.create_baseline->>'namespace'=resource.storage_namespace AND creation.create_baseline->>'keyDigest'=resource.key_digest
+   AND creator.state='returned' AND creator.returned_at IS NOT NULL AND creator.observed_accepted_at IS NOT NULL AND creator.namespace=resource.storage_namespace AND creator.physical_key=resource.object_key
+   AND birth.state='returned' AND birth.returned_at IS NOT NULL AND birth.descriptor->>'key'=resource.object_key AND birth.descriptor->'binding'->>'namespace'=resource.storage_namespace
+   AND actual.result_request_proof=jsonb_build_object('id',birth.id,'tokenDigest',birth.token_digest)
+   AND (SELECT count(*) FROM media_multipart_operations other WHERE other.resource_id=resource.id AND other.operation_kind='create')=1
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=birth.id AND fact.facts->>'stage'='response_body' AND fact.facts->>'detailDigest' ~ '^[a-f0-9]{64}$')
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=birth.id AND fact.facts->>'stage'='session' AND fact.facts->>'uploadId'=resource.provider_upload_id)
+   AND completion.state='returned' AND completion.returned_at IS NOT NULL AND completion.descriptor->>'key'=resource.object_key AND completion.descriptor->>'uploadId'=resource.provider_upload_id AND completion.descriptor->'createOnly'='true'::jsonb AND completion.descriptor->>'partsDigest'=operation.parts_digest
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=completion.id AND fact.facts->>'stage'='response_body' AND fact.facts->>'detailDigest' ~ '^[a-f0-9]{64}$')
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=completion.id AND fact.facts->>'stage'='metadata' AND fact.facts->'revision'=actual.result_revision AND fact.facts->>'uploadId'=resource.provider_upload_id)
+   AND body.state='returned' AND body.returned_at IS NOT NULL AND body.created_at>=completion.returned_at AND body.descriptor->>'key'=resource.object_key AND body.descriptor->'expectedRevision'=actual.result_revision AND body.descriptor->>'bytes'=resource.expected_bytes::text AND body.descriptor->>'partsDigest'=operation.parts_digest
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=body.id AND fact.facts->>'stage'='metadata' AND fact.facts->'revision'=actual.result_revision AND fact.facts->'requestProof'=actual.result_request_proof)
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=body.id AND fact.facts->>'stage'='body' AND fact.facts->'revision'=actual.result_revision AND fact.facts->>'sha256'=actual.result_sha256 AND fact.facts->>'bytes'=actual.result_bytes::text AND fact.facts->>'partsDigest'=operation.parts_digest AND fact.facts->>'bytes'=resource.expected_bytes::text)
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests unresolved WHERE unresolved.call_id=actual.id AND (unresolved.state<>'returned' OR unresolved.returned_at IS NULL))
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_readback_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE request media_storage_transfer_requests; caller media_storage_transfer_calls; operation media_multipart_operations; resource media_multipart_resources;
+BEGIN
+ IF TG_TABLE_NAME='media_storage_transfer_requests' THEN request:=NEW;
+ ELSE SELECT * INTO request FROM media_storage_transfer_requests WHERE id=NEW.request_id;
+ END IF;
+ SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=request.call_id;
+ IF request.descriptor->>'kind'<>'object.read' OR caller.kind<>'multipart_complete' THEN
+  IF TG_TABLE_NAME='media_storage_transfer_request_observations' THEN
+   IF NEW.facts ? 'partsDigest' THEN RAISE EXCEPTION 'Original multipart readback cannot certify another physical request or caller role' USING ERRCODE='23514'; END IF;
+  END IF;
+  RETURN NEW;
+ END IF;
+ SELECT * INTO operation FROM media_multipart_operations WHERE id=caller.multipart_operation_id;
+ SELECT * INTO resource FROM media_multipart_resources WHERE id=operation.resource_id;
+ -- Retain authentic older/partial positive facts without granting them a
+ -- present-day part certificate. Complete adoption checks this separately.
+ IF TG_TABLE_NAME='media_storage_transfer_request_observations' THEN
+  IF NOT(NEW.facts ? 'partsDigest') THEN RETURN NEW; END IF;
+ END IF;
+ IF operation.operation_kind IS DISTINCT FROM 'complete' OR resource.id IS NULL OR request.descriptor->>'partsDigest' IS DISTINCT FROM operation.parts_digest OR request.descriptor->>'key' IS DISTINCT FROM resource.object_key OR request.descriptor->'binding'->>'namespace' IS DISTINCT FROM resource.storage_namespace OR request.descriptor->>'bytes' IS DISTINCT FROM resource.expected_bytes::text THEN RAISE EXCEPTION 'Read every stored byte against the original complete file part manifest and exact resource' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='media_storage_transfer_request_observations' THEN
+  IF NEW.facts->>'stage'='body' THEN
+   IF NEW.facts->>'partsDigest' IS DISTINCT FROM operation.parts_digest OR NEW.facts->>'bytes' IS DISTINCT FROM resource.expected_bytes::text OR coalesce(NEW.facts->>'sha256','') !~ '^[a-f0-9]{64}$' THEN RAISE EXCEPTION 'Only the full actually streamed original file may receive its part readback digest' USING ERRCODE='23514'; END IF;
+  ELSIF NEW.facts ? 'partsDigest' THEN RAISE EXCEPTION 'Part readback is a complete body fact, never metadata, HEAD or a provider ACK' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_readback_request BEFORE INSERT ON media_storage_transfer_requests FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_readback_guard();
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_readback_fact BEFORE INSERT ON media_storage_transfer_request_observations FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_readback_guard();
+
+--> statement-breakpoint
+-- Historical preflight proof is immutable across an actual unknown return or
+-- independently reviewed stop. It does not manufacture the original ACK/FIN.
+CREATE FUNCTION freeholder_media_multipart_original_preflight(original_operation uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_operations operation JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  JOIN media_storage_transfer_calls caller ON caller.multipart_operation_id=operation.id AND caller.kind='multipart_complete'
+  JOIN media_storage_transfer_requests completion ON completion.call_id=caller.id AND completion.descriptor->>'kind'='multipart.complete'
+  JOIN media_storage_transfer_requests final_page ON final_page.call_id=caller.id AND final_page.descriptor->>'kind'='multipart.inspect'
+  JOIN media_storage_transfer_request_observations fact ON fact.request_id=final_page.id AND fact.facts->>'stage'='parts_verified'
+  WHERE operation.id=original_operation AND operation.operation_kind='complete' AND freeholder_media_multipart_checksum_birth(resource.id)
+   AND operation.parts_digest=freeholder_media_multipart_manifest_digest(operation.parts) AND operation.provider_upload_id=resource.provider_upload_id
+   AND caller.object_id IS NULL AND caller.object_receipt_id IS NULL AND caller.namespace=resource.storage_namespace AND caller.physical_key=resource.object_key AND caller.runtime_id=operation.writer_runtime_id
+   AND completion.descriptor->>'partsDigest'=operation.parts_digest AND completion.descriptor->>'uploadId'=resource.provider_upload_id AND completion.descriptor->'createOnly'='true'::jsonb
+   AND (SELECT count(*) FROM media_storage_transfer_requests original WHERE original.call_id=caller.id AND original.descriptor->>'kind'='multipart.complete')=1
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests original WHERE original.call_id=caller.id AND (original.descriptor->>'kind' NOT IN ('multipart.inspect','multipart.complete','object.metadata','object.read') OR original.runtime_identity IS DISTINCT FROM caller.runtime_identity OR original.descriptor_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(original.descriptor) OR original.descriptor->'binding'->>'namespace' IS DISTINCT FROM resource.storage_namespace OR original.descriptor->>'key' IS DISTINCT FROM resource.object_key))
+   AND final_page.state='returned' AND final_page.returned_at IS NOT NULL AND final_page.returned_at<=completion.created_at
+   AND fact.facts->>'status'='200' AND fact.facts->>'uploadId'=resource.provider_upload_id AND fact.facts->>'detailDigest'=operation.parts_digest AND fact.facts->>'count'=jsonb_array_length(operation.parts)::text
+   AND jsonb_typeof(fact.facts->'partPageIds')='array' AND jsonb_array_length(fact.facts->'partPageIds') BETWEEN 1 AND 11 AND fact.facts->'partPageIds'->>-1=final_page.id::text
+   AND (SELECT count(DISTINCT value) FROM jsonb_array_elements_text(fact.facts->'partPageIds'))=jsonb_array_length(fact.facts->'partPageIds')
+   AND (SELECT count(*) FROM media_storage_transfer_requests page WHERE page.call_id=caller.id AND page.descriptor->>'kind'='multipart.inspect')=jsonb_array_length(fact.facts->'partPageIds')
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(fact.facts->'partPageIds') WITH ORDINALITY chain(id,ordinal) LEFT JOIN media_storage_transfer_requests page ON page.id::text=chain.id AND page.call_id=caller.id
+    WHERE page.id IS NULL OR page.state<>'returned' OR page.returned_at IS NULL OR page.returned_at>completion.created_at OR page.descriptor->>'kind'<>'multipart.inspect' OR page.descriptor->>'partsDigest' IS DISTINCT FROM operation.parts_digest OR page.descriptor->>'uploadId' IS DISTINCT FROM resource.provider_upload_id
+     OR chain.ordinal=1 AND coalesce(page.descriptor->'cursor','null'::jsonb)<>'null'::jsonb
+     OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations wire WHERE wire.request_id=page.id AND wire.facts->>'stage'='response_body' AND wire.facts->>'detailDigest' ~ '^[a-f0-9]{64}$')
+     OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_request_observations inventory WHERE inventory.request_id=page.id AND inventory.facts->>'stage'='inventory' AND inventory.facts->>'uploadId'=resource.provider_upload_id))
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_executor_stopped(original_call uuid,original_drain uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_storage_transfer_calls caller JOIN media_storage_writer_drains drain ON drain.id=original_drain AND drain.namespace=caller.namespace
+  JOIN media_multipart_operations operation ON operation.id=caller.multipart_operation_id AND operation.operation_kind='complete'
+  JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  WHERE caller.id=original_call AND caller.kind='multipart_complete' AND caller.object_id IS NULL AND caller.object_receipt_id IS NULL
+   AND caller.runtime_id=operation.writer_runtime_id AND caller.namespace=resource.storage_namespace AND caller.physical_key=resource.object_key AND resource.original_reservation_id IS NOT NULL
+   AND freeholder_media_multipart_original_preflight(operation.id)
+   AND drain.state IN ('verified','released') AND drain.verified_at IS NOT NULL AND drain.verified_at>=drain.created_at AND caller.created_at<=drain.created_at
+   AND (drain.state='verified' AND drain.released_at IS NULL OR drain.state='released' AND drain.released_at>=drain.verified_at)
+   AND drain.stop_proof_digest ~ '^[a-f0-9]{64}$' AND drain.source_revision ~ '^[a-f0-9]{40}$'
+   AND caller.runtime_identity->>'kind'='linux' AND caller.runtime_identity->>'instance'=caller.runtime_id::text
+   AND caller.runtime_identity->>'boot' ~ '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$' AND caller.runtime_identity->>'pid' ~ '^[1-9][0-9]*$' AND caller.runtime_identity->>'startTicks' ~ '^[0-9]+$'
+   AND drain.executor_identity='linux-systemd:'||(caller.runtime_identity->>'boot') AND drain.original_processes->>'format'='freeholder.media-writer-drain/v1' AND drain.original_processes->>'boot'=caller.runtime_identity->>'boot'
+   AND drain.original_processes->>'unit'='freeholder.service' AND drain.original_processes->>'invocation' ~ '^[a-f0-9]{32}$' AND drain.original_processes->>'group' ~ '^/[A-Za-z0-9_./-]+$' AND position('..' in drain.original_processes->>'group')=0
+   AND jsonb_typeof(drain.original_processes->'processes')='array' AND jsonb_array_length(drain.original_processes->'processes') BETWEEN 1 AND 4096
+   AND (SELECT count(*) FROM jsonb_array_elements(drain.original_processes->'processes'))=(SELECT count(DISTINCT process->>'pid') FROM jsonb_array_elements(drain.original_processes->'processes') process)
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(drain.original_processes->'processes') process WHERE coalesce(process->>'pid','') !~ '^[1-9][0-9]*$' OR coalesce(process->>'startTicks','') !~ '^[0-9]+$')
+   AND EXISTS(SELECT 1 FROM jsonb_array_elements(drain.original_processes->'processes') process WHERE process->>'pid'=caller.runtime_identity->>'pid' AND process->>'startTicks'=caller.runtime_identity->>'startTicks')
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_requests completion WHERE completion.call_id=caller.id AND completion.descriptor->>'kind'='multipart.complete' AND completion.created_at<=drain.created_at)
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND request.created_at>drain.verified_at)
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_recovery_read(original_operation uuid,original_read uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_operations operation JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  JOIN media_storage_transfer_calls original ON original.multipart_operation_id=operation.id AND original.kind='multipart_complete'
+  JOIN media_multipart_operations creation ON creation.resource_id=resource.id AND creation.operation_kind='create'
+  JOIN media_storage_transfer_calls creator ON creator.multipart_operation_id=creation.id AND creator.kind='multipart_create'
+  JOIN media_storage_transfer_requests birth ON birth.call_id=creator.id AND birth.descriptor->>'kind'='multipart.create'
+  JOIN media_storage_transfer_calls proof ON proof.id=original_read
+  JOIN media_storage_transfer_requests body ON body.call_id=proof.id AND body.descriptor->>'kind'='object.read'
+  WHERE operation.id=original_operation AND freeholder_media_multipart_original_preflight(operation.id)
+   AND proof.multipart_operation_id=operation.id AND proof.kind='multipart_recovery_inspect' AND proof.object_id IS NULL AND proof.object_receipt_id IS NULL
+   AND proof.state='returned' AND proof.returned_at IS NOT NULL AND proof.result_absent IS NULL AND proof.result_sha256 ~ '^[a-f0-9]{64}$' AND proof.result_bytes=resource.expected_bytes
+   AND proof.namespace=resource.storage_namespace AND proof.physical_key=resource.object_key AND proof.result_revision->>'namespace'=resource.storage_namespace AND proof.result_revision->>'key'=resource.object_key
+   AND proof.result_request_proof=jsonb_build_object('id',birth.id,'tokenDigest',birth.token_digest)
+   AND (original.result_revision IS NULL OR proof.result_revision=original.result_revision)
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests completion JOIN media_storage_transfer_request_observations actual ON actual.request_id=completion.id WHERE completion.call_id=original.id AND completion.descriptor->>'kind'='multipart.complete' AND actual.facts->>'stage'='metadata' AND actual.facts->'revision' IS NOT NULL AND actual.facts->'revision' IS DISTINCT FROM proof.result_revision)
+   AND body.state='returned' AND body.returned_at IS NOT NULL AND body.descriptor->>'partsDigest'=operation.parts_digest AND body.descriptor->'expectedRevision'=proof.result_revision AND body.descriptor->>'bytes'=resource.expected_bytes::text
+   AND (SELECT count(*) FROM media_storage_transfer_requests actual WHERE actual.call_id=proof.id)=1
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=body.id AND fact.facts->>'stage'='metadata' AND fact.facts->'revision'=proof.result_revision AND fact.facts->'requestProof'=proof.result_request_proof)
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=body.id AND fact.facts->>'stage'='body' AND fact.facts->>'partsDigest'=operation.parts_digest AND fact.facts->>'sha256'=proof.result_sha256 AND fact.facts->>'bytes'=resource.expected_bytes::text AND fact.facts->'revision'=proof.result_revision)
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_inventory_resource_digest(entry jsonb) RETURNS text LANGUAGE sql IMMUTABLE STRICT AS $$
+ SELECT freeholder_media_transfer_fact_digest(jsonb_build_object('kind',entry->'kind','key',entry->'key','namespace',coalesce(entry->'revision'->'namespace','null'::jsonb),'identity',
+  CASE WHEN entry->>'kind'='session' THEN jsonb_build_object('sessionId',entry->'sessionId') WHEN entry->>'kind'='delete_marker' THEN jsonb_build_object('versionId',entry->'versionId') WHEN entry->>'kind'='object' THEN jsonb_build_object('current',true) WHEN entry->'revision'->>'kind'='generation' THEN jsonb_build_object('generation',entry->'revision'->'value') ELSE jsonb_strip_nulls(jsonb_build_object('versionId',entry->'revision'->'versionId')) END))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_inventory_pass_digest(original_inventory uuid,original_pass integer) RETURNS text LANGUAGE sql STABLE AS $$
+ SELECT freeholder_media_transfer_fact_digest(jsonb_build_object('configuration',configuration.configuration,'entries',coalesce((SELECT jsonb_agg(entry.entry ORDER BY entry.resource_digest) FROM media_storage_provider_inventory_entries entry WHERE entry.inventory_id=original_inventory AND entry.pass=original_pass),'[]'::jsonb)))
+ FROM media_storage_provider_inventory_pages configuration WHERE configuration.inventory_id=original_inventory AND configuration.pass=original_pass AND configuration.kind='configuration'
+$$;
+
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_inventory_proven(original_inventory uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ WITH RECURSIVE context AS (
+  SELECT header.*,resource.object_key,resource.key_digest,resource.expected_bytes,proof.result_revision FROM media_storage_provider_inventories header
+  JOIN media_multipart_operations operation ON operation.id=header.multipart_operation_id
+  JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  JOIN media_storage_transfer_calls proof ON proof.id=header.proof_call_id
+  WHERE header.id=original_inventory AND header.plan_id IS NULL AND header.object_receipt_id IS NULL AND header.side='source' AND header.purpose='recovery'
+   AND header.namespace=resource.storage_namespace AND header.binding=jsonb_build_object('kind',resource.storage_kind,'namespace',resource.storage_namespace,'location',resource.storage_location)
+   AND freeholder_media_multipart_recovery_read(operation.id,proof.id)
+ ), walked(id,inventory_id,pass,kind,next_cursor) AS (
+  SELECT page.id,page.inventory_id,page.pass,page.kind,page.next_cursor FROM media_storage_provider_inventory_pages page JOIN context ON context.id=page.inventory_id WHERE page.cursor IS NULL
+  UNION
+  SELECT page.id,page.inventory_id,page.pass,page.kind,page.next_cursor FROM walked prior JOIN media_storage_provider_inventory_pages page ON page.inventory_id=prior.inventory_id AND page.pass=prior.pass AND page.kind=prior.kind AND page.cursor=prior.next_cursor WHERE prior.next_cursor IS NOT NULL
+ ), required AS (SELECT context.id,pass_number,kind FROM context CROSS JOIN generate_series(0,1) passes(pass_number) CROSS JOIN unnest(ARRAY['configuration','objects','versions','sessions']) kinds(kind))
+ SELECT EXISTS(SELECT 1 FROM context)
+ AND NOT EXISTS(SELECT 1 FROM required WHERE NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages page WHERE page.inventory_id=required.id AND page.pass=required.pass_number AND page.kind=required.kind AND page.next_cursor IS NULL))
+ AND (SELECT count(*) FROM media_storage_provider_inventory_pages page WHERE page.inventory_id=original_inventory AND page.kind='configuration')=2
+ AND NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages page JOIN context ON context.id=page.inventory_id JOIN media_storage_transfer_calls caller ON caller.id=page.call_id WHERE
+  NOT EXISTS(SELECT 1 FROM walked WHERE walked.id=page.id) OR caller.multipart_operation_id IS DISTINCT FROM context.multipart_operation_id OR caller.kind<>'multipart_retirement_inventory' OR caller.state<>'returned' OR caller.returned_at IS NULL OR caller.namespace IS DISTINCT FROM context.namespace OR caller.physical_key IS DISTINCT FROM context.object_key
+  OR (SELECT count(*) FROM media_storage_transfer_requests request WHERE request.call_id=caller.id)<>1
+  OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND (request.state<>'returned' OR request.returned_at IS NULL))
+  OR page.entry_count<>(SELECT count(*) FROM media_storage_provider_inventory_entries entry WHERE entry.page_id=page.id)
+  OR page.membership_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(coalesce((SELECT jsonb_agg(entry.entry_digest ORDER BY entry.ordinal) FROM media_storage_provider_inventory_entries entry WHERE entry.page_id=page.id),'[]'::jsonb))
+  OR page.page_digest IS DISTINCT FROM (CASE WHEN page.kind='configuration' THEN freeholder_media_transfer_fact_digest(page.configuration) ELSE freeholder_media_transfer_fact_digest(jsonb_build_object('entries',coalesce((SELECT jsonb_agg(entry.entry ORDER BY entry.ordinal) FROM media_storage_provider_inventory_entries entry WHERE entry.page_id=page.id),'[]'::jsonb),'next',page.next_cursor)) END)
+  OR caller.result_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest((CASE WHEN page.kind='configuration' THEN jsonb_build_object('configurationDigest',page.page_digest) ELSE jsonb_build_object('inventoryDigest',page.page_digest,'inventoryCount',page.entry_count) END)))
+ AND NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_entries entry WHERE entry.inventory_id=original_inventory AND (entry.entry_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(entry.entry) OR entry.resource_digest IS DISTINCT FROM freeholder_media_inventory_resource_digest(entry.entry)))
+ AND freeholder_media_multipart_inventory_pass_digest(original_inventory,0)=freeholder_media_multipart_inventory_pass_digest(original_inventory,1)
+ AND NOT EXISTS(SELECT 1 FROM context CROSS JOIN generate_series(0,1) passes(pass_number) WHERE
+  (SELECT count(*) FROM media_storage_provider_inventory_entries entry WHERE entry.inventory_id=context.id AND entry.pass=passes.pass_number AND entry.key_digest=context.key_digest AND entry.entry->>'kind'='object')<>1
+  OR EXISTS(SELECT 1 FROM media_storage_provider_inventory_entries entry WHERE entry.inventory_id=context.id AND entry.pass=passes.pass_number AND entry.key_digest=context.key_digest AND (
+   entry.entry->>'kind' NOT IN ('object','version') OR entry.entry->>'bytes' IS DISTINCT FROM context.expected_bytes::text OR entry.entry->'revision'->>'namespace' IS DISTINCT FROM context.namespace OR entry.entry->'revision'->>'key' IS DISTINCT FROM context.object_key OR entry.entry->'revision'->>'value' IS DISTINCT FROM context.result_revision->>'value'
+   OR entry.entry->>'kind'='version' AND (entry.entry->'revision'->>'versionId' IS DISTINCT FROM context.result_revision->>'versionId' OR entry.entry->'current' IS DISTINCT FROM 'true'::jsonb)))
+  OR EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages config WHERE config.inventory_id=context.id AND config.pass=passes.pass_number AND config.kind='configuration' AND config.configuration->>'versioning'<>'disabled' AND
+   (SELECT count(*) FROM media_storage_provider_inventory_entries entry WHERE entry.inventory_id=context.id AND entry.pass=passes.pass_number AND entry.key_digest=context.key_digest AND entry.entry->>'kind'='version' AND entry.entry->'current'='true'::jsonb AND entry.entry->'revision'->>'versionId'=context.result_revision->>'versionId')<>1))
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_recovery_inventory_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE header media_storage_provider_inventories; operation media_multipart_operations; resource media_multipart_resources; anchor media_storage_transfer_calls; proof media_storage_transfer_calls; caller media_storage_transfer_calls; page media_storage_provider_inventory_pages; raw_result text; actual_result jsonb;
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Keep immutable original multipart recovery evidence' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='media_storage_provider_inventories' THEN
+  IF NEW.multipart_operation_id IS NULL THEN RETURN NEW; END IF;header:=NEW;
+ ELSE SELECT * INTO header FROM media_storage_provider_inventories WHERE id=NEW.inventory_id;IF header.multipart_operation_id IS NULL THEN RETURN NEW; END IF;
+ END IF;
+ IF TG_OP='DELETE' OR current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Keep original multipart recovery inventory evidence' USING ERRCODE='23514'; END IF;
+ SELECT * INTO operation FROM media_multipart_operations WHERE id=header.multipart_operation_id;
+ SELECT * INTO resource FROM media_multipart_resources WHERE id=operation.resource_id;
+ SELECT * INTO anchor FROM media_storage_transfer_calls WHERE id=header.anchor_call_id;
+ SELECT * INTO proof FROM media_storage_transfer_calls WHERE id=header.proof_call_id;
+ IF operation.operation_kind IS DISTINCT FROM 'complete' OR header.plan_id IS NOT NULL OR header.object_receipt_id IS NOT NULL OR header.object_id IS NOT NULL OR header.side<>'source' OR header.purpose<>'recovery' OR header.redacted_at IS NOT NULL OR coalesce(header.original_witness,'') !~ '^[a-f0-9]{64}$'
+  OR resource.id IS NULL OR resource.original_reservation_id IS NULL OR resource.redacted_at IS NOT NULL OR header.namespace IS DISTINCT FROM resource.storage_namespace OR header.binding IS DISTINCT FROM jsonb_build_object('kind',resource.storage_kind,'namespace',resource.storage_namespace,'location',resource.storage_location)
+  OR anchor.kind IS DISTINCT FROM 'multipart_complete' OR anchor.multipart_operation_id IS DISTINCT FROM operation.id OR NOT freeholder_media_multipart_recovery_read(operation.id,proof.id) OR NOT freeholder_media_multipart_original_issuers_finished(operation.id)
+  OR NOT coalesce((operation.writer_finished_at IS NOT NULL AND anchor.returned_at=operation.writer_finished_at AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests original WHERE original.call_id=anchor.id AND original.returned_at IS NULL) OR EXISTS(SELECT 1 FROM media_storage_writer_drains stop WHERE freeholder_media_multipart_executor_stopped(anchor.id,stop.id))),false)
+ THEN RAISE EXCEPTION 'Multipart inventory requires exact original preflight/CREATE, actual full nonce-bound file and real local finishes or independent stop' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='media_storage_provider_inventories' THEN
+  IF TG_OP='INSERT' THEN
+   IF NEW.state<>'capturing' OR NEW.first_digest IS NOT NULL OR NEW.confirmed_digest IS NOT NULL OR NEW.completed_at IS NOT NULL THEN RAISE EXCEPTION 'Capture the first original multipart inventory before enumeration' USING ERRCODE='23514'; END IF;
+  ELSE
+   IF (to_jsonb(NEW)-ARRAY['state','first_digest','confirmed_digest','configuration','entry_count','total_bytes','blocker','completed_at','updated_at']) IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['state','first_digest','confirmed_digest','configuration','entry_count','total_bytes','blocker','completed_at','updated_at']) OR OLD.state<>'capturing' AND (to_jsonb(NEW)-'updated_at') IS DISTINCT FROM (to_jsonb(OLD)-'updated_at') OR OLD.first_digest IS NOT NULL AND NEW.first_digest IS DISTINCT FROM OLD.first_digest THEN RAISE EXCEPTION 'The original multipart inventory context and first enumeration are immutable' USING ERRCODE='23514'; END IF;
+   IF NEW.state='complete' AND (NOT freeholder_media_multipart_inventory_proven(OLD.id) OR NEW.first_digest IS DISTINCT FROM freeholder_media_multipart_inventory_pass_digest(OLD.id,0) OR NEW.confirmed_digest IS DISTINCT FROM freeholder_media_multipart_inventory_pass_digest(OLD.id,1) OR NEW.completed_at IS NULL) THEN RAISE EXCEPTION 'Every original multipart provider page must genuinely finish and both whole passes must agree' USING ERRCODE='23514'; END IF;
+  END IF;
+  RETURN NEW;
+ END IF;
+ IF TG_OP<>'INSERT' OR NEW.redacted_at IS NOT NULL OR header.state<>'capturing' THEN RAISE EXCEPTION 'Keep immutable multipart provider pages/resources until a separate actual retirement/minimization protocol' USING ERRCODE='23514'; END IF;
+ raw_result:=current_setting('freeholder.media_multipart_recovery_page_v1',true);IF raw_result IS NULL OR length(raw_result)>8388608 THEN RAISE EXCEPTION 'Retain the actual original parsed provider page before application' USING ERRCODE='23514'; END IF;actual_result:=raw_result::jsonb;
+ IF TG_TABLE_NAME='media_storage_provider_inventory_pages' THEN
+  SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=NEW.call_id;
+  IF caller.multipart_operation_id IS DISTINCT FROM operation.id OR caller.kind IS DISTINCT FROM 'multipart_retirement_inventory' OR caller.state<>'returned' OR caller.returned_at IS NULL OR caller.namespace IS DISTINCT FROM header.namespace OR caller.physical_key IS DISTINCT FROM resource.object_key OR NEW.cursor_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(coalesce(NEW.cursor,'null'::jsonb))
+   OR NEW.page_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(actual_result) OR NEW.kind NOT IN ('configuration','objects','versions','sessions')
+   OR NEW.kind='configuration' AND (NEW.cursor IS NOT NULL OR NEW.next_cursor IS NOT NULL OR NEW.configuration IS DISTINCT FROM actual_result OR NEW.entry_count<>0)
+   OR NEW.kind<>'configuration' AND (jsonb_typeof(actual_result->'entries') IS DISTINCT FROM 'array' OR jsonb_array_length(actual_result->'entries')<>NEW.entry_count OR NEW.next_cursor IS DISTINCT FROM nullif(actual_result->'next','null'::jsonb))
+   OR (SELECT count(*) FROM media_storage_transfer_requests request WHERE request.call_id=caller.id)<>1
+   OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id
+    WHERE request.call_id=caller.id AND request.state='returned' AND request.returned_at IS NOT NULL AND request.descriptor->'binding'=header.binding AND coalesce(request.descriptor->'cursor','null'::jsonb)=coalesce(NEW.cursor,'null'::jsonb)
+     AND request.descriptor->>'kind'=(CASE WHEN NEW.kind='configuration' THEN 'bucket.metadata' ELSE 'inventory.'||NEW.kind END)
+     AND fact.facts->>'stage'=(CASE WHEN NEW.kind='configuration' THEN 'configuration' ELSE 'inventory' END) AND fact.facts->>'detailDigest'=encode(sha256(convert_to(raw_result,'UTF8')),'hex')
+     AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations wire WHERE wire.request_id=request.id AND wire.facts->>'stage'='inventory_raw' AND wire.facts->>'detailDigest' ~ '^[a-f0-9]{64}$'))
+  THEN RAISE EXCEPTION 'Append only the exact actual original multipart provider result and full wire/cursor witness' USING ERRCODE='23514'; END IF;
+  IF NEW.cursor IS NOT NULL AND NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages previous WHERE previous.inventory_id=header.id AND previous.pass=NEW.pass AND previous.kind=NEW.kind AND previous.next_cursor=NEW.cursor) OR EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages previous WHERE previous.inventory_id=header.id AND previous.pass=NEW.pass AND previous.kind=NEW.kind AND previous.next_cursor IS NULL) THEN RAISE EXCEPTION 'Original multipart page chains cannot omit, replace or append after their actual terminal page' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO page FROM media_storage_provider_inventory_pages WHERE id=NEW.page_id;
+  IF page.inventory_id IS DISTINCT FROM header.id OR page.pass<>NEW.pass OR NEW.original_object_id IS NOT NULL OR NEW.attribution<>'unattributed' OR NEW.ordinal<0 OR NEW.ordinal>=page.entry_count OR NEW.entry IS DISTINCT FROM actual_result->'entries'->NEW.ordinal OR NEW.entry_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(NEW.entry) OR NEW.resource_digest IS DISTINCT FROM freeholder_media_inventory_resource_digest(NEW.entry) OR NEW.key_digest IS DISTINCT FROM encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(NEW.entry->>'key','UTF8')),'hex') THEN RAISE EXCEPTION 'Original multipart observations preserve exact resource identity without guessed ownership' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER multipart_recovery_inventory BEFORE INSERT OR UPDATE OR DELETE ON media_storage_provider_inventories FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_recovery_inventory_guard();
+--> statement-breakpoint
+CREATE TRIGGER multipart_recovery_inventory_page BEFORE INSERT OR UPDATE OR DELETE ON media_storage_provider_inventory_pages FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_recovery_inventory_guard();
+--> statement-breakpoint
+CREATE TRIGGER multipart_recovery_inventory_entry BEFORE INSERT OR UPDATE OR DELETE ON media_storage_provider_inventory_entries FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_recovery_inventory_guard();
+
+--> statement-breakpoint
+-- Only LOCAL issuer finishes. Accepted browser authority still needs its
+-- distinct genuine terminal/consumption proof before retirement/cutover.
+CREATE FUNCTION freeholder_media_multipart_original_issuers_finished(original_operation uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_operations operation JOIN media_multipart_operations creation ON creation.resource_id=operation.resource_id AND creation.operation_kind='create'
+  WHERE operation.id=original_operation AND operation.operation_kind='complete' AND creation.part_bodies IS NOT NULL
+   AND NOT EXISTS(SELECT 1 FROM media_multipart_operations issue WHERE issue.resource_id=operation.resource_id AND issue.operation_kind='sign' AND (
+    issue.created_at>operation.created_at OR issue.writer_finished_at IS NULL OR issue.writer_finished_at>operation.created_at OR NOT(issue.state='accepted' AND freeholder_media_multipart_issue_result(issue.id) OR issue.state='withheld' AND freeholder_media_multipart_withheld_issue(issue.id) OR freeholder_media_multipart_unused_issue(issue.id))))
+   AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(creation.part_bodies->'parts') body WHERE NOT EXISTS(SELECT 1 FROM media_multipart_operations issue WHERE issue.resource_id=operation.resource_id AND issue.operation_kind='sign' AND issue.state='accepted'
+    AND issue.part_issue->>'bodyManifestId'=creation.part_bodies->>'id' AND issue.part_issue->>'bodyManifestDigest'=freeholder_media_transfer_fact_digest(creation.part_bodies) AND issue.part_issue->>'partNumber'=body->>'partNumber' AND issue.part_issue->>'sha256'=body->>'sha256' AND issue.part_issue->>'bytes'=body->>'bytes' AND freeholder_media_multipart_issue_result(issue.id)))
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_applied_review(original_operation uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_operations operation JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  JOIN media_storage_transfer_calls caller ON caller.multipart_operation_id=operation.id AND caller.kind='multipart_complete'
+  JOIN media_storage_transfer_reviews review ON review.id=caller.stop_receipt_id
+  JOIN media_storage_provider_inventories inventory ON inventory.id=review.inventory_id
+  JOIN media_storage_transfer_calls proof ON proof.id=review.read_call_id
+  WHERE operation.id=original_operation AND operation.operation_kind='complete' AND operation.state='accepted' AND operation.reviewed_at IS NOT NULL AND operation.evidence_digest=review.provider_evidence_digest
+   AND resource.original_reservation_id IS NOT NULL AND resource.redacted_at IS NULL AND caller.state='stopped' AND caller.stopped_at IS NOT NULL
+   AND caller.namespace=resource.storage_namespace AND caller.physical_key=resource.object_key AND caller.runtime_id=operation.writer_runtime_id
+   AND review.multipart_operation_id=operation.id AND review.object_id IS NULL AND review.object_receipt_id IS NULL AND review.call_id=caller.id AND review.outcome='applied' AND NOT review.permits_retry
+   AND review.original_call_witness ~ '^[a-f0-9]{64}$' AND review.provider_evidence_digest ~ '^[a-f0-9]{64}$'
+   AND inventory.multipart_operation_id=operation.id AND inventory.anchor_call_id=caller.id AND inventory.proof_call_id=proof.id AND inventory.state='complete' AND inventory.completed_at IS NOT NULL AND inventory.first_digest=inventory.confirmed_digest
+   AND freeholder_media_multipart_inventory_proven(inventory.id) AND freeholder_media_multipart_recovery_read(operation.id,proof.id) AND freeholder_media_multipart_original_issuers_finished(operation.id)
+   AND (review.stop_drain_id IS NULL AND operation.writer_finished_at IS NOT NULL AND caller.returned_at=operation.writer_finished_at AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND request.returned_at IS NULL)
+    OR review.stop_drain_id IS NOT NULL AND freeholder_media_multipart_executor_stopped(caller.id,review.stop_drain_id))
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND (request.state NOT IN ('returned','failed','stopped') OR request.state='stopped' AND request.stop_receipt_id IS DISTINCT FROM review.id OR request.returned_at IS NULL AND review.stop_drain_id IS NULL))
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_applied_review_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE operation media_multipart_operations; resource media_multipart_resources; original media_storage_transfer_calls; proof media_storage_transfer_calls; inventory media_storage_provider_inventories;
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Keep immutable original multipart recovery evidence' USING ERRCODE='23514'; END IF;
+ IF NEW.multipart_operation_id IS NULL THEN RETURN NEW; END IF;
+ IF TG_OP<>'INSERT' OR NEW.object_id IS NOT NULL OR NEW.object_receipt_id IS NOT NULL OR NEW.outcome<>'applied' OR NEW.permits_retry THEN RAISE EXCEPTION 'Original multipart review records only affirmative original bytes, never absence, replay, retirement or substituted context' USING ERRCODE='23514'; END IF;
+ SELECT * INTO operation FROM media_multipart_operations WHERE id=NEW.multipart_operation_id;SELECT * INTO resource FROM media_multipart_resources WHERE id=operation.resource_id;
+ SELECT * INTO original FROM media_storage_transfer_calls WHERE id=NEW.call_id;SELECT * INTO proof FROM media_storage_transfer_calls WHERE id=NEW.read_call_id;SELECT * INTO inventory FROM media_storage_provider_inventories WHERE id=NEW.inventory_id;
+ IF operation.operation_kind IS DISTINCT FROM 'complete' OR operation.state NOT IN ('started','unknown') OR resource.original_reservation_id IS NULL OR resource.redacted_at IS NOT NULL
+  OR original.kind IS DISTINCT FROM 'multipart_complete' OR original.multipart_operation_id IS DISTINCT FROM operation.id OR original.namespace IS DISTINCT FROM resource.storage_namespace OR original.physical_key IS DISTINCT FROM resource.object_key OR original.runtime_id IS DISTINCT FROM operation.writer_runtime_id OR original.state NOT IN ('admitted','unknown','returned')
+  OR inventory.multipart_operation_id IS DISTINCT FROM operation.id OR inventory.anchor_call_id IS DISTINCT FROM original.id OR inventory.proof_call_id IS DISTINCT FROM proof.id OR inventory.state IS DISTINCT FROM 'complete' OR inventory.completed_at IS NULL OR inventory.first_digest IS DISTINCT FROM inventory.confirmed_digest
+  OR NOT freeholder_media_multipart_inventory_proven(inventory.id) OR NOT freeholder_media_multipart_recovery_read(operation.id,proof.id) OR NOT freeholder_media_multipart_original_issuers_finished(operation.id)
+  OR NOT coalesce((NEW.stop_drain_id IS NULL AND operation.writer_finished_at IS NOT NULL AND original.returned_at=operation.writer_finished_at AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=original.id AND request.returned_at IS NULL)
+   OR NEW.stop_drain_id IS NOT NULL AND freeholder_media_multipart_executor_stopped(original.id,NEW.stop_drain_id)),false)
+ THEN RAISE EXCEPTION 'Applied multipart review needs exact original finishes or independent stop, whole nonce/part-bound bytes and two complete provider inventories' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_applied_review BEFORE INSERT OR UPDATE OR DELETE ON media_storage_transfer_reviews FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_applied_review_guard();
+
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_original_inventory_evidence_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE header media_storage_provider_inventories; receipt media_object_writes; original media_storage_transfer_calls; proof media_storage_transfer_calls; caller media_storage_transfer_calls; page media_storage_provider_inventory_pages; target_context boolean:=false;
+BEGIN
+ IF TG_OP='DELETE' OR current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Keep immutable original provider inventory evidence' USING ERRCODE='23514'; END IF;
+ -- Genuine multipart rows have their own mandatory exact original evidence
+ -- guard; ordinary/target contexts and every prior predicate stay unchanged.
+ IF TG_TABLE_NAME='media_storage_provider_inventories' THEN
+  IF NEW.multipart_operation_id IS NOT NULL THEN RETURN NEW; END IF;
+ ELSE
+  SELECT * INTO header FROM media_storage_provider_inventories WHERE id=NEW.inventory_id;
+  IF header.multipart_operation_id IS NOT NULL THEN RETURN NEW; END IF;
+ END IF;
+ IF TG_OP='UPDATE' THEN
+  IF TG_TABLE_NAME='media_storage_provider_inventories' THEN header:=OLD;
+  ELSE SELECT * INTO header FROM media_storage_provider_inventories WHERE id=NEW.inventory_id;
+  END IF;
+  SELECT * INTO receipt FROM media_object_writes WHERE id=header.object_receipt_id;
+  IF header.plan_id IS NULL AND receipt.id IS NOT NULL AND freeholder_media_original_reservation_retired(receipt.original_reservation_id) THEN
+   IF TG_TABLE_NAME='media_storage_provider_inventories' THEN
+    IF OLD.redacted_at IS NULL AND NEW.redacted_at IS NOT NULL AND NEW.binding=jsonb_build_object('kind',OLD.binding->'kind','namespace',OLD.namespace,'location','{}'::jsonb)
+     AND (to_jsonb(NEW)-ARRAY['binding','redacted_at','updated_at','state','blocker'])=(to_jsonb(OLD)-ARRAY['binding','redacted_at','updated_at','state','blocker']) AND (NEW.state=OLD.state AND NEW.blocker IS NOT DISTINCT FROM OLD.blocker OR OLD.state='capturing' AND NEW.state='blocked' AND NEW.blocker=coalesce(OLD.blocker,'original_resource_retired')) THEN RETURN NEW; END IF;
+   ELSIF TG_TABLE_NAME='media_storage_provider_inventory_pages' THEN
+    IF OLD.redacted_at IS NULL AND NEW.redacted_at IS NOT NULL AND NEW.cursor IS NULL AND NEW.next_cursor IS NULL AND (to_jsonb(NEW)-ARRAY['cursor','next_cursor','redacted_at'])=(to_jsonb(OLD)-ARRAY['cursor','next_cursor','redacted_at']) THEN RETURN NEW; END IF;
+   ELSE
+    IF OLD.redacted_at IS NULL AND NEW.redacted_at IS NOT NULL AND NEW.entry=jsonb_build_object('kind',OLD.entry->'kind','key','retained:'||OLD.key_digest,'bytes',OLD.entry->'bytes','current',OLD.entry->'current') AND (to_jsonb(NEW)-ARRAY['entry','redacted_at'])=(to_jsonb(OLD)-ARRAY['entry','redacted_at']) THEN RETURN NEW; END IF;
+   END IF;
+  END IF;
+ END IF;
+ IF TG_TABLE_NAME='media_storage_provider_inventories' THEN
+  IF NEW.plan_id IS NOT NULL THEN RETURN NEW; END IF;
+  SELECT * INTO receipt FROM media_object_writes WHERE id=NEW.object_receipt_id;
+  SELECT * INTO original FROM media_storage_transfer_calls WHERE id=NEW.anchor_call_id;
+  SELECT * INTO proof FROM media_storage_transfer_calls WHERE id=NEW.proof_call_id;
+  target_context:=original.kind='target_put' AND original.physical_receipt_id=receipt.id AND original.object_receipt_id IS NULL AND original.multipart_operation_id IS NULL AND EXISTS(SELECT 1 FROM media_storage_transfer_objects object JOIN media_storage_transfer_plans plan ON plan.id=object.plan_id WHERE object.id=original.object_id AND object.target_receipt_id=receipt.id AND object.target_object_key=receipt.object_key AND object.target_key_digest=receipt.key_digest AND plan.target_namespace=receipt.storage_namespace AND plan.original_target=NEW.binding);
+  IF target_context AND (NEW.purpose<>'recovery' OR proof.kind<>'recovery_read' OR proof.object_id IS DISTINCT FROM original.object_id) THEN RAISE EXCEPTION 'An original target recovery inventory cannot borrow another transfer context or authorize standalone retirement' USING ERRCODE='23514'; END IF;
+  IF NEW.multipart_operation_id IS NOT NULL OR NEW.object_id IS NOT NULL OR receipt.id IS NULL OR receipt.operation_kind<>'put' OR receipt.redacted_at IS NOT NULL OR receipt.deleted_at IS NOT NULL OR (receipt.writer_finished_at IS NULL AND NOT freeholder_media_original_applied_review(NEW.anchor_call_id) AND (NEW.purpose<>'recovery' OR NOT EXISTS(SELECT 1 FROM media_storage_writer_drains stop WHERE freeholder_media_original_executor_stopped(NEW.anchor_call_id,stop.id)))) OR NEW.side<>'source' OR NEW.purpose NOT IN ('recovery','retirement') OR coalesce(NEW.original_witness,'') !~ '^[a-f0-9]{64}$' OR NEW.namespace IS DISTINCT FROM receipt.storage_namespace OR NEW.binding->>'namespace' IS DISTINCT FROM receipt.storage_namespace OR NEW.binding->>'kind' IS DISTINCT FROM receipt.storage_kind OR NEW.binding->'location' IS DISTINCT FROM receipt.storage_location THEN RAISE EXCEPTION 'Ordinary inventory must capture its exact intact original receipt/resource; multipart retirement remains unavailable' USING ERRCODE='23514'; END IF;
+  IF original.id IS NULL OR (NOT target_context AND (original.object_receipt_id IS DISTINCT FROM receipt.id OR original.kind<>'ordinary_put')) OR original.runtime_id IS DISTINCT FROM receipt.writer_runtime_id OR original.namespace IS DISTINCT FROM NEW.namespace OR original.physical_key IS DISTINCT FROM receipt.object_key OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=original.id) THEN RAISE EXCEPTION 'Keep the exact original originating caller and request birth' USING ERRCODE='23514'; END IF;
+  IF original.returned_at IS NULL OR EXISTS(SELECT 1 FROM media_storage_transfer_requests WHERE call_id=original.id AND returned_at IS NULL) THEN
+   IF NOT freeholder_media_original_applied_review(original.id) AND (NEW.purpose<>'recovery' OR NOT EXISTS(SELECT 1 FROM media_storage_writer_drains stop WHERE freeholder_media_original_executor_stopped(original.id,stop.id))) THEN RAISE EXCEPTION 'Actual original finishes or exact independent executor stop plus affirmative applied proof are required; stop never proves absence' USING ERRCODE='23514'; END IF;
+  END IF;
+  IF proof.id IS NULL OR NOT target_context AND (proof.object_receipt_id IS DISTINCT FROM receipt.id OR proof.kind<>'ordinary_recovery_read') OR proof.state<>'returned' OR proof.returned_at IS NULL OR proof.namespace IS DISTINCT FROM NEW.namespace OR proof.physical_key IS DISTINCT FROM receipt.object_key THEN RAISE EXCEPTION 'Fresh original provider proof must finish in the exact original resource' USING ERRCODE='23514'; END IF;
+  IF NEW.purpose='recovery' THEN
+   IF proof.result_revision IS NULL OR proof.result_request_proof IS NULL OR proof.result_absent IS NOT NULL OR proof.result_sha256 IS DISTINCT FROM receipt.sha256 OR proof.result_bytes IS DISTINCT FROM receipt.bytes OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=original.id AND request.descriptor->>'kind'='object.put' AND request.id::text=proof.result_request_proof->>'id' AND request.token_digest=proof.result_request_proof->>'tokenDigest') THEN RAISE EXCEPTION 'Fresh full-byte provider proof must name this exact original physical request nonce' USING ERRCODE='23514'; END IF;
+  ELSE
+   IF receipt.provider_revision IS NULL OR receipt.provider_revision_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(receipt.provider_revision) OR proof.expected_revision IS DISTINCT FROM receipt.provider_revision OR proof.result_absent IS NULL OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=proof.id AND request.state='returned' AND request.returned_at IS NOT NULL AND fact.facts->>'stage'='absence') OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=proof.id AND (request.state<>'returned' OR request.returned_at IS NULL OR request.descriptor->>'kind' NOT IN ('object.metadata','object.read','object.body') OR request.descriptor->'expectedRevision' IS DISTINCT FROM receipt.provider_revision)) THEN RAISE EXCEPTION 'Retirement inventory requires a finished actual pinned absence read, never logical404 alone' USING ERRCODE='23514'; END IF;
+  END IF;
+  IF TG_OP='INSERT' THEN
+   IF NEW.state<>'capturing' OR NEW.redacted_at IS NOT NULL OR NEW.first_digest IS NOT NULL OR NEW.confirmed_digest IS NOT NULL OR NEW.completed_at IS NOT NULL THEN RAISE EXCEPTION 'Capture the immutable original inventory before reading pages' USING ERRCODE='23514'; END IF;
+  ELSE
+   IF (to_jsonb(NEW)-ARRAY['state','first_digest','confirmed_digest','configuration','entry_count','total_bytes','blocker','completed_at','updated_at']) IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['state','first_digest','confirmed_digest','configuration','entry_count','total_bytes','blocker','completed_at','updated_at']) OR OLD.state<>'capturing' AND (to_jsonb(NEW)-'updated_at') IS DISTINCT FROM (to_jsonb(OLD)-'updated_at') OR OLD.first_digest IS NOT NULL AND NEW.first_digest IS DISTINCT FROM OLD.first_digest THEN RAISE EXCEPTION 'First original recovery inventory context and proof cannot change' USING ERRCODE='23514'; END IF;
+   IF NEW.state='complete' AND (NEW.first_digest IS DISTINCT FROM NEW.confirmed_digest OR EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages item JOIN media_storage_transfer_calls actual ON actual.id=item.call_id WHERE item.inventory_id=OLD.id AND (actual.state<>'returned' OR actual.returned_at IS NULL OR actual.object_receipt_id IS DISTINCT FROM receipt.id OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=actual.id AND request.state IN ('admitted','unknown')))) OR EXISTS(SELECT required.pass_number FROM generate_series(0,1) required(pass_number) WHERE NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages WHERE inventory_id=OLD.id AND pass=required.pass_number AND kind='configuration'))) THEN RAISE EXCEPTION 'Both complete original recovery inventories and all actual page requests must finish' USING ERRCODE='23514'; END IF;
+  END IF;
+ ELSIF TG_TABLE_NAME='media_storage_provider_inventory_pages' THEN
+  SELECT * INTO header FROM media_storage_provider_inventories WHERE id=NEW.inventory_id;
+  IF header.plan_id IS NOT NULL THEN RETURN NEW; END IF;
+  SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=NEW.call_id;
+  IF TG_OP<>'INSERT' OR NEW.redacted_at IS NOT NULL OR header.id IS NULL OR header.state<>'capturing' OR caller.id IS NULL OR caller.object_receipt_id IS DISTINCT FROM header.object_receipt_id OR caller.kind<>'ordinary_retirement_inventory' OR caller.state<>'returned' OR caller.returned_at IS NULL OR caller.namespace IS DISTINCT FROM header.namespace OR NEW.cursor_digest<>freeholder_media_transfer_fact_digest(coalesce(NEW.cursor,'null'::jsonb)) THEN RAISE EXCEPTION 'Append only the actual original returned page to its original receipt inventory' USING ERRCODE='23514'; END IF;
+  IF NEW.kind<>'configuration' AND NEW.cursor IS NOT NULL AND NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages prior WHERE prior.inventory_id=header.id AND prior.pass=NEW.pass AND prior.kind=NEW.kind AND prior.next_cursor=NEW.cursor) THEN RAISE EXCEPTION 'The original provider cursor chain is incomplete' USING ERRCODE='23514'; END IF;
+ ELSE
+  SELECT * INTO header FROM media_storage_provider_inventories WHERE id=NEW.inventory_id;
+  IF header.plan_id IS NOT NULL THEN RETURN NEW; END IF;
+  SELECT * INTO page FROM media_storage_provider_inventory_pages WHERE id=NEW.page_id;
+  IF TG_OP<>'INSERT' OR NEW.redacted_at IS NOT NULL OR header.id IS NULL OR header.state<>'capturing' OR page.id IS NULL OR page.inventory_id IS DISTINCT FROM header.id OR page.pass<>NEW.pass OR NEW.original_object_id IS NOT NULL OR NEW.attribution<>'unattributed' OR NEW.ordinal<0 OR NEW.ordinal>=page.entry_count OR NEW.entry_digest<>freeholder_media_transfer_fact_digest(NEW.entry) OR NEW.key_digest<>encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(NEW.entry->>'key','UTF8')),'hex') THEN RAISE EXCEPTION 'Original recovery resource observations are immutable and never guessed ownership' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_multipart_readback_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE request media_storage_transfer_requests; caller media_storage_transfer_calls; operation media_multipart_operations; resource media_multipart_resources;
+BEGIN
+ IF TG_TABLE_NAME='media_storage_transfer_requests' THEN request:=NEW;
+ ELSE SELECT * INTO request FROM media_storage_transfer_requests WHERE id=NEW.request_id;
+ END IF;
+ SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=request.call_id;
+ IF request.descriptor->>'kind'<>'object.read' OR caller.kind NOT IN ('multipart_complete','multipart_recovery_inspect') THEN
+  IF TG_TABLE_NAME='media_storage_transfer_request_observations' THEN
+   IF NEW.facts ? 'partsDigest' THEN RAISE EXCEPTION 'Original multipart readback cannot certify another physical request or caller role' USING ERRCODE='23514'; END IF;
+  END IF;
+  RETURN NEW;
+ END IF;
+ SELECT * INTO operation FROM media_multipart_operations WHERE id=caller.multipart_operation_id;
+ SELECT * INTO resource FROM media_multipart_resources WHERE id=operation.resource_id;
+ -- Retain authentic older/partial positive facts without granting them a
+ -- present-day part certificate. Complete adoption checks this separately.
+ IF TG_TABLE_NAME='media_storage_transfer_request_observations' THEN
+  IF NOT(NEW.facts ? 'partsDigest') THEN RETURN NEW; END IF;
+ END IF;
+ IF operation.operation_kind IS DISTINCT FROM 'complete' OR resource.id IS NULL OR request.descriptor->>'partsDigest' IS DISTINCT FROM operation.parts_digest OR request.descriptor->>'key' IS DISTINCT FROM resource.object_key OR request.descriptor->'binding'->>'namespace' IS DISTINCT FROM resource.storage_namespace OR request.descriptor->>'bytes' IS DISTINCT FROM resource.expected_bytes::text THEN RAISE EXCEPTION 'Read every stored byte against the original complete file part manifest and exact resource' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='media_storage_transfer_request_observations' THEN
+  IF NEW.facts->>'stage'='body' THEN
+   IF NEW.facts->>'partsDigest' IS DISTINCT FROM operation.parts_digest OR NEW.facts->>'bytes' IS DISTINCT FROM resource.expected_bytes::text OR coalesce(NEW.facts->>'sha256','') !~ '^[a-f0-9]{64}$' THEN RAISE EXCEPTION 'Only the full actually streamed original file may receive its part readback digest' USING ERRCODE='23514'; END IF;
+  ELSIF NEW.facts ? 'partsDigest' THEN RAISE EXCEPTION 'Part readback is a complete body fact, never metadata, HEAD or a provider ACK' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_result_caller(original_operation uuid) RETURNS uuid LANGUAGE sql STABLE AS $$
+ SELECT caller.id FROM media_storage_transfer_calls caller WHERE caller.multipart_operation_id=original_operation AND caller.kind='multipart_complete' AND freeholder_media_multipart_completed_result(original_operation)
+ UNION ALL
+ SELECT proof.id FROM media_storage_transfer_calls caller JOIN media_storage_transfer_reviews review ON review.id=caller.stop_receipt_id JOIN media_storage_transfer_calls proof ON proof.id=review.read_call_id WHERE caller.multipart_operation_id=original_operation AND caller.kind='multipart_complete' AND freeholder_media_multipart_applied_review(original_operation)
+$$;
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_multipart_completed_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE operation media_multipart_operations; resource media_multipart_resources; actual media_storage_transfer_calls;
+BEGIN
+ IF TG_TABLE_NAME='media_object_writes' THEN
+  IF TG_OP<>'INSERT' OR NEW.writer_protocol IS DISTINCT FROM 'multipart-receipts-v1' THEN RETURN NEW; END IF;
+  SELECT original.* INTO resource FROM media_multipart_resources original WHERE original.original_reservation_id=NEW.original_reservation_id;
+  SELECT parent.* INTO operation FROM media_multipart_operations parent WHERE parent.resource_id=resource.id AND parent.operation_kind='complete' AND freeholder_media_multipart_result_caller(parent.id) IS NOT NULL;
+  SELECT * INTO actual FROM media_storage_transfer_calls WHERE id=freeholder_media_multipart_result_caller(operation.id);
+  IF actual.id IS NULL OR NEW.operation_kind<>'put' OR NEW.state<>'accepted' OR NEW.deleted_at IS NOT NULL OR NEW.redacted_at IS NOT NULL OR NEW.actor IS DISTINCT FROM operation.actor OR NEW.contact_id IS DISTINCT FROM resource.contact_id OR NEW.content_type IS DISTINCT FROM resource.content_type OR NEW.storage_kind IS DISTINCT FROM resource.storage_kind OR NEW.storage_location IS DISTINCT FROM resource.storage_location OR NEW.storage_namespace IS DISTINCT FROM resource.storage_namespace OR NEW.key_digest IS DISTINCT FROM resource.key_digest OR NEW.object_key IS DISTINCT FROM resource.object_key OR NEW.sha256 IS DISTINCT FROM actual.result_sha256 OR NEW.bytes IS DISTINCT FROM actual.result_bytes OR NEW.provider_revision IS DISTINCT FROM actual.result_revision OR NEW.provider_revision_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(actual.result_revision) OR NEW.writer_runtime_id IS DISTINCT FROM operation.writer_runtime_id OR NEW.writer_finished_at IS DISTINCT FROM operation.writer_finished_at OR NEW.observed_accepted_at IS DISTINCT FROM operation.provider_accepted_at THEN RAISE EXCEPTION 'A new multipart object receipt must preserve its actual original CREATE nonce, full pinned bytes, revision and real caller finish' USING ERRCODE='23514'; END IF;
+ ELSE
+  IF NEW.state='completed' AND (TG_OP='INSERT' OR NEW.state IS DISTINCT FROM OLD.state OR NEW.object_receipt_id IS DISTINCT FROM OLD.object_receipt_id) AND NOT EXISTS(SELECT 1 FROM media_multipart_operations parent JOIN media_storage_transfer_calls caller ON caller.id=freeholder_media_multipart_result_caller(parent.id) JOIN media_object_writes receipt ON receipt.id=NEW.object_receipt_id WHERE parent.resource_id=NEW.id AND parent.operation_kind='complete' AND caller.kind IN ('multipart_complete','multipart_recovery_inspect') AND receipt.original_reservation_id=NEW.original_reservation_id AND receipt.deleted_at IS NULL AND receipt.redacted_at IS NULL AND receipt.provider_revision=caller.result_revision AND receipt.sha256=caller.result_sha256 AND receipt.bytes=caller.result_bytes AND freeholder_media_multipart_result_caller(parent.id) IS NOT NULL) THEN RAISE EXCEPTION 'Complete object adoption requires the exact original full-byte proof and its physical receipt' USING ERRCODE='23514'; END IF;
+  IF NEW.state='completed' AND NEW.retired_at IS NOT NULL AND (TG_OP='INSERT' OR NEW.retired_at IS DISTINCT FROM OLD.retired_at) THEN RAISE EXCEPTION 'A completed object does not prove consumption of issued or in-flight part authority; retain session recovery debt' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_original_creator_tombstone_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE original_namespace text; original_digest text; role text; caller media_storage_transfer_calls; creating boolean:=false; deleting boolean:=false;
+BEGIN
+ IF TG_TABLE_NAME='media_object_writes' THEN
+  original_namespace:=NEW.storage_namespace; original_digest:=NEW.key_digest; role:=NEW.operation_kind;
+  IF NEW.operation_kind='put' AND NEW.state='accepted' AND NEW.writer_protocol='multipart-receipts-v1' AND EXISTS(
+ SELECT 1 FROM media_multipart_resources resource JOIN media_multipart_operations operation ON operation.resource_id=resource.id JOIN media_storage_transfer_calls proof ON proof.id=freeholder_media_multipart_result_caller(operation.id)
+ WHERE resource.original_reservation_id=NEW.original_reservation_id AND resource.key_digest=NEW.key_digest AND resource.storage_namespace=NEW.storage_namespace AND operation.operation_kind='complete' AND freeholder_media_multipart_applied_review(operation.id)
+  AND NEW.writer_runtime_id=operation.writer_runtime_id AND NEW.writer_finished_at IS NOT DISTINCT FROM operation.writer_finished_at AND NEW.observed_accepted_at IS NOT DISTINCT FROM operation.provider_accepted_at
+  AND NEW.provider_revision=proof.result_revision AND NEW.provider_revision_digest=freeholder_media_transfer_fact_digest(proof.result_revision) AND NEW.sha256=proof.result_sha256 AND NEW.bytes=proof.result_bytes AND NEW.evidence_digest=operation.evidence_digest
+) THEN RETURN NEW; END IF;
+  -- A genuinely admitted multipart completion may retain a late positive FACT.
+  -- Its caller was admitted separately before I/O and its resource remains debt.
+  IF NEW.operation_kind='put' AND NEW.state='accepted' AND NEW.writer_protocol='multipart-receipts-v1' AND NEW.writer_finished_at IS NOT NULL AND EXISTS(
+   SELECT 1 FROM media_multipart_resources resource JOIN media_multipart_operations operation ON operation.resource_id=resource.id JOIN media_storage_transfer_calls actual ON actual.multipart_operation_id=operation.id
+   WHERE resource.original_reservation_id=NEW.original_reservation_id AND resource.key_digest=NEW.key_digest AND resource.storage_namespace=NEW.storage_namespace AND operation.operation_kind='complete' AND operation.writer_runtime_id=NEW.writer_runtime_id AND operation.writer_finished_at=NEW.writer_finished_at AND operation.provider_accepted_at=NEW.observed_accepted_at AND actual.kind='multipart_complete' AND actual.returned_at IS NOT NULL AND actual.observed_accepted_at IS NOT NULL
+  ) THEN RETURN NEW; END IF;
+  creating:=NEW.operation_kind='put'; deleting:=NEW.operation_kind='delete';
+ ELSIF TG_TABLE_NAME='media_multipart_resources' THEN
+  original_namespace:=NEW.storage_namespace; original_digest:=NEW.key_digest; role:='multipart_create'; creating:=true;
+ ELSIF TG_TABLE_NAME='media_storage_transfer_calls' THEN
+  original_namespace:=NEW.namespace; original_digest:=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(NEW.physical_key,'UTF8')),'hex');role:=NEW.kind;
+  creating:=NEW.kind IN ('ordinary_put','target_put','multipart_create','multipart_complete','multipart_sign');
+ ELSE
+  SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=NEW.call_id;
+  IF caller.id IS NULL THEN RAISE EXCEPTION 'A physical request needs its exact original caller before recreation fencing' USING ERRCODE='23514'; END IF;
+  original_namespace:=NEW.descriptor->'binding'->>'namespace'; original_digest:=NEW.key_digest;role:=NEW.descriptor->>'kind';
+  IF role IS NULL OR role NOT IN ('object.read','object.metadata','object.body','object.put','object.delete','bucket.metadata','inventory.objects','inventory.versions','inventory.sessions','inventory.retained','multipart.create','multipart.inspect','multipart.complete','multipart.abort','multipart.sign') THEN RAISE EXCEPTION 'New physical mutation/part authority requires its complete durable original protocol' USING ERRCODE='23514'; END IF;
+  creating:=role IN ('object.put','multipart.create','multipart.complete','multipart.sign');
+  IF creating AND (original_namespace IS DISTINCT FROM caller.namespace OR NEW.descriptor->>'key' IS DISTINCT FROM caller.physical_key OR NEW.key_digest IS DISTINCT FROM encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(caller.physical_key,'UTF8')),'hex')) THEN RAISE EXCEPTION 'A physical creator cannot choose another namespace/key from its authentic caller' USING ERRCODE='23514'; END IF;
+ END IF;
+ IF creating OR deleting THEN
+  PERFORM pg_advisory_xact_lock_shared(1691709,82);
+  PERFORM pg_advisory_xact_lock(hashtext('media-object-write:'||original_digest));
+ END IF;
+ IF creating AND freeholder_media_original_key_recreation_fenced(original_namespace,original_digest) THEN RAISE EXCEPTION 'A permanent original namespace/key retirement intent refuses every new creator independently of flags, reservation ID, TTL or current pointer' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_original_reservation_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_TABLE_NAME='media_objects' THEN
+  IF TG_OP='UPDATE' THEN
+   IF NEW.reservation_id IS DISTINCT FROM OLD.reservation_id OR NEW.key IS DISTINCT FROM OLD.key THEN RAISE EXCEPTION 'Original reservation identity, including legacy NULL, cannot be rebound or backfilled' USING ERRCODE='23514'; END IF;
+  ELSIF NEW.reservation_id IS NULL THEN RAISE EXCEPTION 'New reservations require their actual originating birth identity' USING ERRCODE='23514';
+  ELSIF EXISTS(SELECT 1 FROM media_original_erasure_scopes first_media WHERE freeholder_media_original_scope_contains(first_media.membership,NEW.reservation_id)) AND NOT (
+   EXISTS(SELECT 1 FROM media_object_writes original WHERE original.original_reservation_id=NEW.reservation_id AND original.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(NEW.key,'UTF8')),'hex') AND original.observed_accepted_at IS NOT NULL AND original.redacted_at IS NULL)
+   OR EXISTS(SELECT 1 FROM media_multipart_resources original JOIN media_multipart_operations operation ON operation.resource_id=original.id WHERE original.original_reservation_id=NEW.reservation_id AND original.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(NEW.key,'UTF8')),'hex') AND operation.provider_accepted_at IS NOT NULL AND original.redacted_at IS NULL)
+  ) THEN RAISE EXCEPTION 'Only an actual admitted original positive caller can restore its captured pointer; never create a later birth in that scope' USING ERRCODE='23514'; END IF;
+ ELSIF TG_TABLE_NAME='media_object_writes' THEN
+  IF TG_OP='UPDATE' THEN
+   IF NEW.original_reservation_id IS DISTINCT FROM OLD.original_reservation_id THEN RAISE EXCEPTION 'Keep the original write reservation, including unknown legacy birth' USING ERRCODE='23514'; END IF;
+   IF ROW(NEW.operation_kind,NEW.key_digest,NEW.storage_namespace,NEW.sha256,NEW.bytes,NEW.content_type) IS DISTINCT FROM ROW(OLD.operation_kind,OLD.key_digest,OLD.storage_namespace,OLD.sha256,OLD.bytes,OLD.content_type) THEN RAISE EXCEPTION 'The original write payload and namespace are immutable' USING ERRCODE='23514'; END IF;
+  ELSE
+   IF NEW.original_reservation_id IS NULL THEN RAISE EXCEPTION 'A new physical write cannot invent an unknown historical reservation' USING ERRCODE='23514'; END IF;
+   IF NEW.operation_kind='put' THEN
+    IF NOT (EXISTS(SELECT 1 FROM media_objects pointer WHERE pointer.reservation_id=NEW.original_reservation_id AND pointer.key=NEW.object_key) AND NOT EXISTS(SELECT 1 FROM media_original_erasure_scopes first_media JOIN data_requests request ON request.id=first_media.request_id WHERE request.kind='erasure' AND request.verified_at IS NOT NULL AND freeholder_media_original_scope_contains(first_media.membership,NEW.original_reservation_id)))
+     AND NOT (NEW.state='accepted' AND NEW.writer_protocol='multipart-receipts-v1' AND EXISTS(
+      SELECT 1 FROM media_multipart_resources resource JOIN media_multipart_operations operation ON operation.resource_id=resource.id JOIN media_storage_transfer_calls caller ON caller.multipart_operation_id=operation.id
+      WHERE resource.original_reservation_id=NEW.original_reservation_id AND resource.key_digest=NEW.key_digest AND resource.storage_namespace=NEW.storage_namespace AND operation.operation_kind='complete'
+       AND operation.writer_runtime_id=NEW.writer_runtime_id AND operation.writer_finished_at=NEW.writer_finished_at AND operation.provider_accepted_at=NEW.observed_accepted_at
+       AND operation.writer_finished_at IS NOT NULL AND operation.provider_accepted_at IS NOT NULL AND caller.kind='multipart_complete' AND caller.returned_at IS NOT NULL AND caller.observed_accepted_at IS NOT NULL AND caller.result_revision IS NOT NULL AND caller.result_digest IS NOT NULL
+     )) AND NOT(NEW.state='accepted' AND NEW.writer_protocol='multipart-receipts-v1' AND EXISTS(
+ SELECT 1 FROM media_multipart_resources resource JOIN media_multipart_operations operation ON operation.resource_id=resource.id JOIN media_storage_transfer_calls proof ON proof.id=freeholder_media_multipart_result_caller(operation.id)
+ WHERE resource.original_reservation_id=NEW.original_reservation_id AND resource.key_digest=NEW.key_digest AND resource.storage_namespace=NEW.storage_namespace AND operation.operation_kind='complete' AND freeholder_media_multipart_applied_review(operation.id)
+  AND NEW.writer_runtime_id=operation.writer_runtime_id AND NEW.writer_finished_at IS NOT DISTINCT FROM operation.writer_finished_at AND NEW.observed_accepted_at IS NOT DISTINCT FROM operation.provider_accepted_at
+  AND NEW.provider_revision=proof.result_revision AND NEW.provider_revision_digest=freeholder_media_transfer_fact_digest(proof.result_revision) AND NEW.sha256=proof.result_sha256 AND NEW.bytes=proof.result_bytes AND NEW.evidence_digest=operation.evidence_digest
+)) THEN RAISE EXCEPTION 'A new PUT needs its actual uncaptured birth; only a finished already-admitted multipart caller can retain a late original object fact' USING ERRCODE='23514'; END IF;
+    IF EXISTS(SELECT 1 FROM media_object_writes retirement WHERE retirement.original_reservation_id=NEW.original_reservation_id AND retirement.operation_kind='delete') AND NEW.writer_protocol IS DISTINCT FROM 'multipart-receipts-v1' THEN RAISE EXCEPTION 'An original retirement intent fences every future ordinary PUT admission' USING ERRCODE='23514'; END IF;
+    IF EXISTS(SELECT 1 FROM media_object_writes original WHERE original.original_reservation_id=NEW.original_reservation_id AND original.operation_kind='put' AND ROW(original.key_digest,original.storage_namespace,original.sha256,original.bytes,original.content_type) IS DISTINCT FROM ROW(NEW.key_digest,NEW.storage_namespace,NEW.sha256,NEW.bytes,NEW.content_type)) THEN RAISE EXCEPTION 'A retry cannot change the first original reservation payload or resource generation' USING ERRCODE='23514'; END IF;
+   ELSIF NOT EXISTS(SELECT 1 FROM media_object_writes original WHERE original.original_reservation_id=NEW.original_reservation_id AND original.operation_kind='put' AND original.key_digest=NEW.key_digest AND original.storage_namespace=NEW.storage_namespace) THEN RAISE EXCEPTION 'A DELETE requires the exact original PUT lineage' USING ERRCODE='23514'; END IF;
+  END IF;
+ ELSE
+  IF TG_OP='UPDATE' THEN
+   IF NEW.original_reservation_id IS DISTINCT FROM OLD.original_reservation_id THEN RAISE EXCEPTION 'Keep original multipart birth; unknown legacy sessions remain unknown' USING ERRCODE='23514'; END IF;
+  ELSIF NEW.original_reservation_id IS NULL OR NOT EXISTS(SELECT 1 FROM media_objects pointer WHERE pointer.reservation_id=NEW.original_reservation_id AND pointer.key=NEW.object_key AND pointer.upload_id=NEW.upload_id)
+   OR EXISTS(SELECT 1 FROM media_object_writes retirement WHERE retirement.original_reservation_id=NEW.original_reservation_id AND retirement.operation_kind='delete')
+   OR EXISTS(SELECT 1 FROM media_original_erasure_scopes first_media JOIN data_requests request ON request.id=first_media.request_id WHERE request.kind='erasure' AND request.verified_at IS NOT NULL AND freeholder_media_original_scope_contains(first_media.membership,NEW.original_reservation_id)) THEN RAISE EXCEPTION 'A new multipart session requires its exact new uncaptured upload reservation; never infer legacy session birth' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_transfer_evidence_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE minimizing boolean:=false; object_id uuid; source_receipt media_object_writes;
+BEGIN
+ IF TG_TABLE_NAME='media_storage_writer_drains' THEN
+  IF current_setting('freeholder.media_transfer_operator_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Writer stop evidence belongs to the original operator executor' USING ERRCODE='23514'; END IF;
+ ELSE
+  IF current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Use the shared verified-transfer writer' USING ERRCODE='23514'; END IF;
+ END IF;
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Original transfer evidence cannot be deleted' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='media_storage_transfer_receipts' THEN
+  IF TG_OP='INSERT' THEN
+   SELECT * INTO source_receipt FROM media_object_writes WHERE id=NEW.receipt_id;
+   IF NEW.original_snapshot_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(NEW.original_snapshot) OR NEW.original_snapshot->>'id' IS DISTINCT FROM NEW.receipt_id::text THEN RAISE EXCEPTION 'Capture the exact immutable original source receipt before transfer' USING ERRCODE='23514'; END IF;
+   IF source_receipt.operation_kind='put' AND source_receipt.writer_finished_at IS NULL AND (NEW.original_snapshot->'writerFinishedAt' IS DISTINCT FROM 'null'::jsonb OR NOT freeholder_media_transfer_source_review_matches(NEW.object_id,NEW.receipt_id,NEW.original_snapshot)) THEN RAISE EXCEPTION 'A missing original source finish needs its affirmative review in the FIRST capture; never fill an old snapshot from current evidence' USING ERRCODE='23514'; END IF;
+  END IF;
+ END IF;
+ IF TG_TABLE_NAME='media_storage_writer_drains' THEN
+  IF TG_OP='INSERT' THEN
+   IF NEW.state<>'capturing' OR NEW.original_processes<>'{}'::jsonb OR NEW.stop_proof_digest IS NOT NULL OR NEW.verified_at IS NOT NULL OR NEW.released_at IS NOT NULL THEN RAISE EXCEPTION 'A writer drain is born capturing, never stopped or released' USING ERRCODE='23514'; END IF;
+  ELSE
+   IF NEW.state<>OLD.state AND NOT(OLD.state='capturing' AND NEW.state='captured' OR OLD.state='captured' AND NEW.state='verified' OR OLD.state='verified' AND NEW.state='released') THEN RAISE EXCEPTION 'A writer drain cannot skip or rewind its actual capture, stop verification and release' USING ERRCODE='23514'; END IF;
+   IF ROW(NEW.stop_proof_digest,NEW.verified_at) IS DISTINCT FROM ROW(OLD.stop_proof_digest,OLD.verified_at) AND NOT(OLD.state='captured' AND NEW.state='verified' AND NEW.stop_proof_digest ~ '^[a-f0-9]{64}$' AND NEW.verified_at IS NOT NULL AND NEW.verified_at>=NEW.created_at) THEN RAISE EXCEPTION 'Retain the first actual stop proof; a timeout or release cannot supply it' USING ERRCODE='23514'; END IF;
+   IF NEW.released_at IS DISTINCT FROM OLD.released_at AND NOT(OLD.state='verified' AND NEW.state='released' AND NEW.released_at IS NOT NULL AND NEW.released_at>=OLD.verified_at) THEN RAISE EXCEPTION 'Only a previously verified stopped executor can acquire a release timestamp' USING ERRCODE='23514'; END IF;
+  END IF;
+ IF TG_OP='UPDATE' AND OLD.state='capturing' AND NEW.state='captured' AND NEW.original_processes->'recovery' IS NOT NULL THEN
+  IF NEW.original_processes->'recovery'->>'format' IS DISTINCT FROM 'freeholder.media-transfer-drain/v1' OR NEW.original_processes->'recovery'->>'namespace' IS DISTINCT FROM NEW.namespace OR coalesce(NEW.original_processes->'recovery'->>'planId','') !~ '^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$' THEN RAISE EXCEPTION 'Capture the exact versioned current-plan recovery association before stopping its executor' USING ERRCODE='23514'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans plan WHERE plan.id=(NEW.original_processes->'recovery'->>'planId')::uuid AND plan.state NOT IN ('complete','cancelled')) OR NEW.original_processes->'recovery'->'snapshot' IS DISTINCT FROM freeholder_media_transfer_recovery_snapshot((NEW.original_processes->'recovery'->>'planId')::uuid,NEW.namespace) THEN RAISE EXCEPTION 'The complete original plan/caller cohort changed before actual executor capture; no subset or later association is accepted' USING ERRCODE='23514'; END IF;
+ END IF;
+ END IF;
+ IF TG_OP='UPDATE' THEN
+  IF TG_TABLE_NAME='media_storage_transfer_receipts' THEN
+   IF NEW.original_snapshot='{}'::jsonb AND freeholder_media_transfer_object_retired(OLD.object_id) AND (to_jsonb(NEW)-'original_snapshot')=(to_jsonb(OLD)-'original_snapshot') THEN RETURN NEW; END IF;
+   RAISE EXCEPTION 'Original receipt capture can only be minimized after all copies retire' USING ERRCODE='23514';
+  END IF;
+  IF TG_TABLE_NAME IN ('media_storage_transfer_reviews','media_storage_transfer_jobs','media_storage_transfer_erasure_members') THEN RAISE EXCEPTION 'Original transfer membership, jobs and reviews are immutable' USING ERRCODE='23514'; END IF;
+  IF TG_TABLE_NAME='media_storage_transfer_plans' THEN
+   minimizing:=OLD.redacted_at IS NULL AND NEW.redacted_at IS NOT NULL AND NEW.created_by='erased'
+    AND NEW.original_source=jsonb_build_object('kind',OLD.original_source->>'kind','namespace',OLD.source_namespace,'location','{}'::jsonb)
+    AND NEW.original_target=jsonb_build_object('kind',OLD.original_target->>'kind','namespace',OLD.target_namespace,'location','{}'::jsonb)
+    AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_objects WHERE plan_id=OLD.id AND (redacted_at IS NULL OR NOT freeholder_media_transfer_object_retired(id)));
+   IF (to_jsonb(NEW)-ARRAY['state','updated_at','adopted_at']) IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['state','updated_at','adopted_at']) AND NOT(minimizing AND (to_jsonb(NEW)-ARRAY['state','updated_at','adopted_at','original_source','original_target','created_by','redacted_at'])=(to_jsonb(OLD)-ARRAY['state','updated_at','adopted_at','original_source','original_target','created_by','redacted_at'])) THEN RAISE EXCEPTION 'Original first transfer capture is immutable' USING ERRCODE='23514'; END IF;
+   IF OLD.adopted_at IS NOT NULL AND NEW.adopted_at IS DISTINCT FROM OLD.adopted_at THEN RAISE EXCEPTION 'Original adoption fact is immutable' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='media_storage_transfer_objects' THEN
+   minimizing:=OLD.redacted_at IS NULL AND NEW.redacted_at IS NOT NULL AND NEW.object_key='retained:'||OLD.key_digest AND NEW.target_object_key='retained:'||OLD.target_key_digest AND NEW.source_revision IS NULL AND NEW.target_revision IS NULL AND freeholder_media_transfer_object_retired(OLD.id);
+   IF ROW(NEW.id,NEW.plan_id,NEW.key_digest,NEW.target_key_digest,NEW.sha256,NEW.bytes,NEW.content_type,NEW.original_receipt_set_digest,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.plan_id,OLD.key_digest,OLD.target_key_digest,OLD.sha256,OLD.bytes,OLD.content_type,OLD.original_receipt_set_digest,OLD.created_at)
+    OR ROW(NEW.object_key,NEW.target_object_key,NEW.redacted_at) IS DISTINCT FROM ROW(OLD.object_key,OLD.target_object_key,OLD.redacted_at) AND NOT minimizing THEN RAISE EXCEPTION 'Original object transfer membership cannot be rebound' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='media_storage_transfer_calls' THEN
+   minimizing:=(OLD.redacted_at IS NULL AND NEW.redacted_at IS NOT NULL OR OLD.redacted_at IS NOT NULL AND NEW.redacted_at=OLD.redacted_at) AND (freeholder_media_transfer_object_retired(OLD.object_id) OR freeholder_media_original_call_retired(OLD.id)) AND (NEW.physical_key=OLD.physical_key AND NEW.physical_key LIKE 'retained:%' OR NEW.physical_key='retained:'||encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(OLD.physical_key,'UTF8')),'hex')) AND NEW.expected_revision IS NULL AND NEW.result_revision IS NULL;
+   IF ROW(NEW.id,NEW.object_id,NEW.kind,NEW.namespace,NEW.request_digest,NEW.caller_token_digest,NEW.runtime_id,NEW.runtime_identity,NEW.physical_receipt_id,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.object_id,OLD.kind,OLD.namespace,OLD.request_digest,OLD.caller_token_digest,OLD.runtime_id,OLD.runtime_identity,OLD.physical_receipt_id,OLD.created_at)
+    OR ROW(NEW.physical_key,NEW.expected_revision,NEW.redacted_at) IS DISTINCT FROM ROW(OLD.physical_key,OLD.expected_revision,OLD.redacted_at) AND NOT minimizing THEN RAISE EXCEPTION 'Original physical caller admission is immutable' USING ERRCODE='23514'; END IF;
+   IF OLD.observed_accepted_at IS NOT NULL AND NEW.observed_accepted_at IS DISTINCT FROM OLD.observed_accepted_at THEN RAISE EXCEPTION 'A positive original provider fact cannot be erased' USING ERRCODE='23514'; END IF;
+   IF OLD.result_digest IS NOT NULL AND (ROW(NEW.returned_at,NEW.result_digest,NEW.result_sha256,NEW.result_bytes,NEW.result_absent,NEW.result_request_proof) IS DISTINCT FROM ROW(OLD.returned_at,OLD.result_digest,OLD.result_sha256,OLD.result_bytes,OLD.result_absent,OLD.result_request_proof) OR NEW.result_revision IS DISTINCT FROM OLD.result_revision AND NOT minimizing) THEN RAISE EXCEPTION 'Actual original physical return cannot be replaced' USING ERRCODE='23514'; END IF;
+   IF EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=OLD.stop_receipt_id AND (review.object_receipt_id IS NOT NULL OR review.multipart_operation_id IS NOT NULL OR review.object_id IS NOT NULL AND review.inventory_id IS NOT NULL) AND review.outcome='applied') AND (ROW(NEW.stopped_at,NEW.stop_receipt_id,NEW.returned_at,NEW.result_digest,NEW.result_request_proof,NEW.result_sha256,NEW.result_bytes,NEW.result_absent) IS DISTINCT FROM ROW(OLD.stopped_at,OLD.stop_receipt_id,OLD.returned_at,OLD.result_digest,OLD.result_request_proof,OLD.result_sha256,OLD.result_bytes,OLD.result_absent) OR NEW.result_revision IS DISTINCT FROM OLD.result_revision AND NOT minimizing) THEN RAISE EXCEPTION 'Keep the original affirmative review and actual missing or retained caller return' USING ERRCODE='23514'; END IF;
+   IF NEW.state='stopped' AND OLD.state<>'stopped' AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=NEW.stop_receipt_id AND review.call_id=OLD.id AND review.object_id IS NOT DISTINCT FROM OLD.object_id AND review.object_receipt_id IS NOT DISTINCT FROM OLD.object_receipt_id AND review.multipart_operation_id IS NOT DISTINCT FROM OLD.multipart_operation_id) THEN RAISE EXCEPTION 'Actual caller stop requires its exact original review receipt' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='media_storage_transfer_subjects' THEN
+   IF ROW(NEW.id,NEW.object_id,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.object_id,OLD.created_at) OR OLD.redacted_at IS NOT NULL AND ROW(NEW.contact_id,NEW.redacted_at) IS DISTINCT FROM ROW(OLD.contact_id,OLD.redacted_at) OR NEW.redacted_at IS NOT NULL AND OLD.redacted_at IS NULL AND (NEW.contact_id IS NOT NULL OR NOT freeholder_media_transfer_object_retired(OLD.object_id)) THEN RAISE EXCEPTION 'Original subject membership cannot be rebound or erased before physical retirement' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='media_storage_writer_drains' THEN
+   IF ROW(NEW.id,NEW.namespace,NEW.source_revision,NEW.executor_identity,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.namespace,OLD.source_revision,OLD.executor_identity,OLD.created_at) OR OLD.state<>'capturing' AND NEW.original_processes IS DISTINCT FROM OLD.original_processes OR OLD.state IN ('verified','released') AND (ROW(NEW.stop_proof_digest,NEW.verified_at) IS DISTINCT FROM ROW(OLD.stop_proof_digest,OLD.verified_at) OR NEW.state<>OLD.state AND NOT(OLD.state='verified' AND NEW.state='released' AND NEW.released_at IS NOT NULL AND (freeholder_media_original_drain_releasable(OLD.id) OR freeholder_media_transfer_recovery_drain_releasable(OLD.id)) AND NOT EXISTS(SELECT 1 FROM media_object_writes WHERE storage_namespace=OLD.namespace AND state IN ('unverified','started','unknown')))) THEN RAISE EXCEPTION 'Original captured process and stop witness are immutable' USING ERRCODE='23514'; END IF;
+  END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_transfer_request_evidence_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE caller media_storage_transfer_calls; original_object uuid; request media_storage_transfer_requests;
+BEGIN
+ IF current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' OR TG_OP='DELETE' THEN RAISE EXCEPTION 'Use the shared original provider request writer' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='media_storage_transfer_requests' THEN
+  SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=NEW.call_id;
+  IF caller.id IS NULL OR NEW.runtime_identity IS DISTINCT FROM caller.runtime_identity THEN RAISE EXCEPTION 'Request belongs to its actual original caller/runtime' USING ERRCODE='23514'; END IF;
+  IF TG_OP='INSERT' THEN
+   IF caller.state<>'admitted' OR NEW.state<>'admitted' OR NEW.redacted_at IS NOT NULL OR NEW.returned_at IS NOT NULL OR NEW.stop_receipt_id IS NOT NULL OR NEW.observation_count<>0 OR NEW.descriptor_digest<>freeholder_media_transfer_fact_digest(NEW.descriptor) OR NEW.descriptor->'binding'->>'namespace'<>caller.namespace OR NEW.key_digest IS NOT NULL AND NEW.key_digest<>encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(NEW.descriptor->>'key','UTF8')),'hex') THEN RAISE EXCEPTION 'Request must be admitted before its exact original physical I/O' USING ERRCODE='23514'; END IF;
+  ELSE
+   IF ROW(NEW.id,NEW.call_id,NEW.key_digest,NEW.descriptor_digest,NEW.token_digest,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.call_id,OLD.key_digest,OLD.descriptor_digest,OLD.token_digest,OLD.created_at) OR NEW.runtime_identity IS DISTINCT FROM OLD.runtime_identity OR OLD.returned_at IS NOT NULL AND NEW.returned_at IS DISTINCT FROM OLD.returned_at THEN RAISE EXCEPTION 'Original request admission and actual finish are immutable' USING ERRCODE='23514'; END IF;
+   IF NEW.descriptor IS DISTINCT FROM OLD.descriptor AND NOT(OLD.redacted_at IS NULL AND NEW.redacted_at IS NOT NULL AND (freeholder_media_transfer_object_retired(caller.object_id) OR freeholder_media_original_call_retired(caller.id)) AND NEW.descriptor=jsonb_build_object('kind',OLD.descriptor->'kind','binding',jsonb_build_object('kind',OLD.descriptor->'binding'->'kind','namespace',caller.namespace,'location','{}'::jsonb))||(CASE WHEN OLD.key_digest IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('key','retained:'||OLD.key_digest) END)) THEN RAISE EXCEPTION 'Original request descriptor can only be minimized after every copy retires' USING ERRCODE='23514'; END IF;
+   IF NEW.observation_count<OLD.observation_count OR NEW.observation_count>OLD.observation_count+1 OR NEW.observation_count<>(SELECT count(*) FROM media_storage_transfer_request_observations WHERE request_id=OLD.id) THEN RAISE EXCEPTION 'Original request observation count is exact and monotone' USING ERRCODE='23514'; END IF;
+   IF EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=OLD.stop_receipt_id AND (review.object_receipt_id IS NOT NULL OR review.multipart_operation_id IS NOT NULL OR review.object_id IS NOT NULL AND review.inventory_id IS NOT NULL) AND review.outcome='applied') AND ROW(NEW.stop_receipt_id,NEW.returned_at) IS DISTINCT FROM ROW(OLD.stop_receipt_id,OLD.returned_at) THEN RAISE EXCEPTION 'An affirmative review never invents the original physical return or replaces its review' USING ERRCODE='23514'; END IF;
+   IF NEW.state='stopped' AND OLD.state<>'stopped' AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.id=NEW.stop_receipt_id AND review.call_id=OLD.call_id) THEN RAISE EXCEPTION 'Physical request stop requires its original caller review' USING ERRCODE='23514'; END IF;
+  END IF;
+ ELSE
+  SELECT * INTO request FROM media_storage_transfer_requests WHERE id=NEW.request_id;
+  SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=request.call_id;
+  IF caller.id IS NULL THEN RAISE EXCEPTION 'Original physical request is missing' USING ERRCODE='23514'; END IF;
+  IF TG_OP='INSERT' THEN
+   IF NEW.ordinal<>request.observation_count+1 OR NEW.facts_digest<>freeholder_media_transfer_fact_digest(NEW.facts) THEN RAISE EXCEPTION 'Append the exact original provider fact once in order' USING ERRCODE='23514'; END IF;
+  ELSIF ROW(NEW.id,NEW.request_id,NEW.ordinal,NEW.facts_digest,NEW.bytes,NEW.created_at) IS DISTINCT FROM ROW(OLD.id,OLD.request_id,OLD.ordinal,OLD.facts_digest,OLD.bytes,OLD.created_at) OR NOT(OLD.redacted_at IS NULL AND NEW.redacted_at IS NOT NULL AND (freeholder_media_transfer_object_retired(caller.object_id) OR freeholder_media_original_call_retired(caller.id)) AND NEW.facts=jsonb_build_object('stage',OLD.facts->'stage','status',OLD.facts->'status')) THEN RAISE EXCEPTION 'Original provider facts are append-only until scoped minimization' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_transfer_multipart_fence() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE ns text;
+BEGIN
+ IF TG_TABLE_NAME='media_multipart_resources' THEN ns:=NEW.storage_namespace;
+ ELSE SELECT storage_namespace INTO ns FROM media_multipart_resources WHERE id=NEW.resource_id;
+ END IF;
+ IF TG_OP='INSERT' AND (EXISTS(SELECT 1 FROM media_storage_writer_drains WHERE namespace=ns AND state<>'released')
+  OR EXISTS(SELECT 1 FROM media_storage_transfer_plans WHERE source_namespace=ns AND state<>'cancelled')) THEN
+  RAISE EXCEPTION 'Original multipart writer admission is fenced for transfer' USING ERRCODE='23514';
+ END IF;
+ IF TG_TABLE_NAME='media_multipart_operations' AND TG_OP='UPDATE' AND
+  (NEW.writer_runtime_id IS DISTINCT FROM OLD.writer_runtime_id OR NEW.writer_finished_at IS DISTINCT FROM OLD.writer_finished_at AND (OLD.writer_finished_at IS NOT NULL OR EXISTS(SELECT 1 FROM media_storage_transfer_reviews review WHERE review.multipart_operation_id=OLD.id AND review.outcome='applied' AND review.stop_drain_id IS NOT NULL))) THEN
+  RAISE EXCEPTION 'Original multipart writer birth and finish cannot be rebound' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+
+--> statement-breakpoint
+CREATE OR REPLACE FUNCTION freeholder_media_transfer_namespace_fence() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE ns text;
+BEGIN
+ ns:=(CASE WHEN TG_TABLE_NAME='media_object_writes' THEN NEW.storage_namespace ELSE NEW.storage_namespace END);
+ IF TG_OP='INSERT' AND current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1'
+  AND (EXISTS(SELECT 1 FROM media_storage_writer_drains WHERE namespace=ns AND state<>'released')
+   OR EXISTS(SELECT 1 FROM media_storage_transfer_plans WHERE source_namespace=ns AND state<>'cancelled')) THEN
+  RAISE EXCEPTION 'The original storage namespace is fenced for a verified transfer' USING ERRCODE='23514';
+ END IF;
+ IF TG_OP='UPDATE' AND NEW.writer_runtime_id IS DISTINCT FROM OLD.writer_runtime_id THEN
+  RAISE EXCEPTION 'Historical physical writer birth cannot be backfilled or rebound' USING ERRCODE='23514';
+ END IF;
+ IF TG_OP='UPDATE' AND NEW.writer_finished_at IS DISTINCT FROM OLD.writer_finished_at AND (OLD.writer_finished_at IS NOT NULL OR EXISTS(SELECT 1 FROM media_storage_transfer_calls caller JOIN media_storage_transfer_reviews review ON review.id=caller.stop_receipt_id WHERE coalesce(caller.physical_receipt_id,caller.object_receipt_id)=OLD.id AND review.outcome='applied' AND review.stop_drain_id IS NOT NULL) OR EXISTS(SELECT 1 FROM media_multipart_resources resource JOIN media_storage_transfer_reviews review ON review.multipart_operation_id IN (SELECT id FROM media_multipart_operations operation WHERE operation.resource_id=resource.id) WHERE resource.original_reservation_id=OLD.original_reservation_id AND resource.object_receipt_id=OLD.id AND review.outcome='applied' AND review.stop_drain_id IS NOT NULL)) THEN
+  RAISE EXCEPTION 'Actual physical writer finish is immutable' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
