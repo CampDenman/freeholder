@@ -452,6 +452,18 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // C12.38/C9.33/C9.38: all reviewed original target factory/GET phases remain private.
+  "invoicing.controlledCashInspectionOutcome",
+  "invoicing.prepareControlledCashInspection",
+  "subscriptions.assertControlledPeriodPreviewSource",
+  "subscriptions.assertControlledProrationPreviewSource",
+  "subscriptions.bindObservedControlledCollection",
+  "subscriptions.controlledCollectionOrchestrationState",
+  "subscriptions.planControlledPeriodPreview",
+  "subscriptions.planControlledProrationPreview",
+  "subscriptions.retainControlledPeriodQuote",
+  "subscriptions.retainControlledPeriodTarget",
+  "subscriptions.retainControlledProrationQuote",
   // C1.08/C12.38: exact controlled target and original observation phases stay private.
   "invoicing.controlledProviderCashObservationAuthority",
   "invoicing.controlledProviderCollectionAuthority",
