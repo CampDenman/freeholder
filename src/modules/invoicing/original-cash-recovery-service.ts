@@ -28,7 +28,7 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const id = z.object({ recoveryId: z.uuid() }).strict();
 const claimResult = z.object({ recoveryId: z.uuid(), operationId: z.uuid(), nonce: z.string(), request: z.record(z.string(), z.unknown()) });
 type FactKind = typeof originalCashRecoveryFacts.$inferInsert.kind;
-type Holder = { recoveryId: string; nonce: string; facts: Map<string, { kind: FactKind; evidence: Record<string, unknown> }>; outcome?: "returned" | "threw" };
+type Holder = { recoveryId: string; nonce: string; facts: Map<string, { kind: FactKind; evidence: Record<string, unknown> }>; outcome?: "returned" | "threw"; atomicFeeDispatchReleased?:boolean };
 const slot = Symbol.for("freeholder.original-cash-return.actual-callers.v1");
 const globals = globalThis as typeof globalThis & { [slot]?: Map<string, Holder> };
 const held = globals[slot] ??= new Map<string, Holder>();
@@ -120,6 +120,10 @@ export const recordOriginalCashFact = defineService({
     return { retained: true as const };
   },
 });
+/** Exact actual running server holder only. No stop, supplied flag or another
+ * operation may authorize this atomic caller's one pre-POST release. */
+export function originalAtomicFeeCallerHeld(operationId:string,nonce:string){const local=held.get(operationId);return Boolean(local&&local.nonce===nonce&&local.outcome===undefined&&!local.atomicFeeDispatchReleased);}
+export function releaseOriginalAtomicFeeCaller(operationId:string,nonce:string){const local=held.get(operationId);if(!local||!originalAtomicFeeCallerHeld(operationId,nonce))throw new ServiceError("permission","Only this exact running original auxiliary holder may release its one SDK POST.");local.atomicFeeDispatchReleased=true;}
 export async function performOriginalCashRecovery<T>(claim: z.infer<typeof claimResult>, work: (observe: (kind: "primary" | "refund" | "state" | "parent" | "ack" | "resource", value: unknown) => Promise<void>) => Promise<T>): Promise<T> {
   const local: Holder = { recoveryId: claim.recoveryId, nonce: claim.nonce, facts: new Map() }; held.set(claim.operationId, local);
   const observe = async (kind: "primary" | "refund" | "state" | "parent" | "ack" | "resource", value: unknown) => {
@@ -168,7 +172,7 @@ export const claimOriginalCashAuxiliary = defineService({
 });
 export const originalCashAuxiliaryRequest = z.object({ kind: z.enum(["fee", "recipient"]), operationId: z.uuid(), providerPlatformAccountId: z.string(),
   providerApiVersion: z.enum(["2026-02-25.clover", "2026-10-28.endive"]), originalChargeRef: z.string(), originalAccountId: z.string(), parentRef: z.string(),
-  originalAmountMinor: z.number().int().positive(), alreadyReturnedMinor: z.number().int().min(0), amountMinor: z.number().int().positive(), currency: z.string(), idempotencyKey: z.string(), frozenBody: z.string(), targetFactId: z.uuid().optional() }).strict();
+  originalAmountMinor: z.number().int().positive(), alreadyReturnedMinor: z.number().int().min(0), amountMinor: z.number().int().positive(), currency: z.string(), idempotencyKey: z.string(), frozenBody: z.string(), targetFactId: z.uuid().optional(),atomicFeeProtocol:z.literal("freeholder.original-cash-atomic-fee-operation.v1").optional(),admissionInventoryOperationId:z.uuid().optional() }).strict();
 export async function originalCashAuxiliaryRecoveryRequest(ctx: ServiceContext, recoveryId: string, operationId: string): Promise<Omit<MerchantCashAuxiliaryRequest, "onResourceAcknowledged" | "onResourceObserved" | "onParentObserved">> {
   await bound(ctx, recoveryId); const original = await originalCashRecoveryOperation(ctx.tx, operationId);
   if (original.recoveryId !== recoveryId || original.kind === "inspection") throw new ServiceError("conflict", "Restore the exact original auxiliary caller before GET recovery.");

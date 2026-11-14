@@ -23,12 +23,15 @@ const claim = z.object({ state: z.enum(["satisfied", "pending", "ready", "review
 
 export const merchantFeeSource = defineService({
   name: "invoicing.merchantFeeSource", summary: "Read immutable original money and routing before commission inspection.",
-  kind: "query", permission: "system", external: false, input: z.object({ paymentId: z.uuid() }), output: z.object({ payment: paymentRow, routing: paymentRouting }),
+  kind: "query", permission: "system", external: false, input: z.object({ paymentId: z.uuid() }), output: z.object({ payment: paymentRow, routing: paymentRouting,atomicAuxiliaryOwner:z.object({recoveryId:z.uuid(),collectionId:z.uuid(),receiptId:z.uuid(),auxiliaryIds:z.array(z.uuid()).max(5000)}).optional() }),
   handler: async ({ paymentId }, ctx) => {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, paymentId));
     if (!payment) throw new ServiceError("not_found", "That original payment is not here.");
     const routing = await routingForPayment(ctx, paymentId);
     if (!routing.providerPlatformAccountId || payment.provider !== "stripe") throw new ServiceError("conflict", "This reconciliation requires an original versioned merchant charge.");
+    const{controlledAtomicFeeOwner}=await import("./controlled-atomic-refund-target");
+    const original=await controlledAtomicFeeOwner(ctx,paymentId);
+    if(original){const{originalCashRecoveryFinancialWitness}=await import("./original-cash-recovery-store");const witness=await originalCashRecoveryFinancialWitness(ctx.tx,[paymentId],[original.receiptId]);const owner=witness.owners[0];if(owner){if(witness.owners.length!==1||!owner.owner.cash.applied||`${owner.owner.cash.providerPlatformAccountId}:${owner.owner.cash.chargeAccountId??""}:${owner.owner.cash.providerRef}`!==original.namespaceKey)throw new ServiceError("conflict","Restore the one exact original fee owner and immutable namespace.");return{payment,routing,atomicAuxiliaryOwner:{recoveryId:owner.id,collectionId:original.collectionId,receiptId:original.receiptId,auxiliaryIds:witness.operations.filter(row=>row.kind==="fee").map(row=>row.id)}};}}
     return { payment, routing };
   },
 });
@@ -165,6 +168,7 @@ export const reconcileMerchantApplicationFee = defineOrchestratedService({
     const{performMerchantFeeInvocation,flushMerchantFeeInvocationFinishes,performMerchantFeePreflight,assertMerchantFeePostPreflight,recordMerchantFeeInvocationObservation}=await import("./merchant-fee-invocation-runtime");
     await flushMerchantFeeInvocationFinishes(paymentId);
     const source = await merchantFeeSource.call({ paymentId }, system);
+    if(source.atomicAuxiliaryOwner){const{reconcileAtomicAuxiliaryFeeReturn}=await import("./atomic-auxiliary-fee-reconciliation");return reconcileAtomicAuxiliaryFeeReturn({routing:source.routing,atomicAuxiliaryOwner:source.atomicAuxiliaryOwner},caller);}
     const adapter = paymentAdapter(source.payment.provider);
     if (!adapter.inspectMerchantPayment || !adapter.refundMerchantFee || !adapter.recoverMerchantFeeRefund || !source.payment.providerRef) throw new ServiceError("conflict", "The original provider cannot yet reconcile this fee.");
     const { routing } = source;

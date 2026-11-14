@@ -3564,6 +3564,18 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Same-owner atomic fee source 2026-11-14 (C12.38/C9.33/C1.08/C11.08): zero
+new models; two explicitly versioned original-journal fee-only fact kinds and
+exact lifecycle indexes preserve original full/partial return semantics and the
+old fee-dispatch blocker. Actual physical resource/ACK/returned-caller union,
+fresh GET after own target birth, full current pre-POST nonce/holder checks and
+separate current-bank closure are prepared. Generic original historical digests
+and original FIN bodies stay unchanged. All controls and actual desired natives
+are PREPARED/UNRUN; source/schema/provider/security acceptance, credit economic
+partition/reversal and unknown/out-of-band recovery remain required. No C-item,
+stable or launch closure. See deploy/atomic-auxiliary-fee84-source-20261114.md.
+
+
 Original atomic-fee residual source checkpoint 2026-11-14 (C12.38/C9.33/
 C1.08/C11.08): real4199/F400+1/F0 captures and tiny principal return retain the
 immutable Fi and explicit whole399 debt until the exact original fee1 return,
