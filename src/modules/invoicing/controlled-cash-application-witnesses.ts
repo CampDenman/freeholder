@@ -6,7 +6,7 @@ import { ServiceError,type Tx } from "@/core/service";
 import { controlledCashApplicationBatches,controlledCashApplicationReceipts } from "./controlled-cash-application-protocol-schema";
 import { verifiedControlledCashBatch,verifiedControlledCashReceipt } from "./controlled-cash-application-protocol-proof";
 export const controlledCashApplicationTables={batches:"controlled_cash_application_batches",receipts:"controlled_cash_application_receipts",links:"controlled_cash_application_links"} as const;
-export type ControlledCashApplicationWitnessScope={subscriptionIds?:readonly string[];invoiceIds?:readonly string[];receiptIds?:readonly string[];profileId?:string};
+export type ControlledCashApplicationWitnessScope={subscriptionIds?:readonly string[];invoiceIds?:readonly string[];receiptIds?:readonly string[];profileId?:string;collectionIds?:readonly string[]};
 export type ControlledCashApplicationWitnessEntry={table:typeof controlledCashApplicationTables[keyof typeof controlledCashApplicationTables];id:string;fingerprint:string;
  parents:{batchId:string;collectionId:string;quoteId:string;subscriptionId:string;invoiceId:string;profileId:string;profileVersion:number;receiptId:string|null;paymentId:string|null}};
 const list=(values:readonly string[])=>values.length?sql.join(values.map(id=>sql`${id}::uuid`),sql`, `):sql`null::uuid`;
@@ -16,11 +16,13 @@ function refuse():never{throw new ServiceError("conflict","Restore complete exac
  * subscription/invoice/receipt subgraph. Empty old histories remain empty. */
 export async function controlledCashApplicationWitnesses(tx:Tx,input:ControlledCashApplicationWitnessScope){
  const scope={subscriptionIds:[...new Set(input.subscriptionIds??[])].sort(),invoiceIds:[...new Set(input.invoiceIds??[])].sort(),receiptIds:[...new Set(input.receiptIds??[])].sort()};
- const requested=Object.values(scope).flat();if(requested.length>5000||requested.some(id=>!z.uuid().safeParse(id).success)||input.profileId&&!z.uuid().safeParse(input.profileId).success)refuse();
- if(!requested.length){if(input.profileId)refuse();return{version:1 as const,entries:[] as ControlledCashApplicationWitnessEntry[],incomplete:false};}
+ const collectionIds=input.collectionIds===undefined?undefined:[...new Set(input.collectionIds)].sort();
+ const requested=Object.values(scope).flat();if(requested.length+(collectionIds?.length??0)>5000||collectionIds?.some(id=>!z.uuid().safeParse(id).success)||requested.some(id=>!z.uuid().safeParse(id).success)||input.profileId&&!z.uuid().safeParse(input.profileId).success)refuse();
+ if(!requested.length){if(input.profileId||collectionIds?.length)refuse();return{version:1 as const,entries:[] as ControlledCashApplicationWitnessEntry[],incomplete:false};}
  const[ownership]=await tx.execute<{complete:boolean}>(sql`with candidates as(
-  select batch_row.* from controlled_cash_application_batches batch_row where batch_row.subscription_id in(${list(scope.subscriptionIds)}) or batch_row.invoice_id in(${list(scope.invoiceIds)})
-   or exists(select 1 from controlled_cash_application_receipts receipt_proof where receipt_proof.batch_id=batch_row.id and receipt_proof.receipt_id in(${list(scope.receiptIds)}))
+  select batch_row.* from controlled_cash_application_batches batch_row where(batch_row.subscription_id in(${list(scope.subscriptionIds)}) or batch_row.invoice_id in(${list(scope.invoiceIds)})
+   or exists(select 1 from controlled_cash_application_receipts receipt_proof where receipt_proof.batch_id=batch_row.id and receipt_proof.receipt_id in(${list(scope.receiptIds)})))
+   ${collectionIds?sql`and batch_row.collection_id in(${list(collectionIds)})`:sql``}
  ) select(select count(*)<=5000 from candidates) and not exists(
   select 1 from candidates batch_row left join subscription_controlled_collections collection_row on collection_row.id=batch_row.collection_id
    left join subscription_controlled_quotes quote_row on quote_row.id=batch_row.quote_id
@@ -52,6 +54,7 @@ export async function controlledCashApplicationWitnesses(tx:Tx,input:ControlledC
   join subscription_controlled_resources resource_row on resource_row.id=quote_row.resource_id and resource_row.subscription_id=batch_row.subscription_id
   where(batch_row.subscription_id in(${list(scope.subscriptionIds)}) or batch_row.invoice_id in(${list(scope.invoiceIds)}) or exists(
    select 1 from controlled_cash_application_receipts receipt_proof where receipt_proof.batch_id=batch_row.id and receipt_proof.receipt_id in(${list(scope.receiptIds)})))
+   ${collectionIds?sql`and batch_row.collection_id in(${list(collectionIds)})`:sql``}
    ${input.profileId?sql`and quote_row.profile_id=${input.profileId}::uuid`:sql``}
  ),physical as(
   select 'controlled_cash_application_batches'::text as table,batch_row.id::text as id,encode(sha256(convert_to(to_jsonb(batch_row)::text,'UTF8')),'hex') as fingerprint,

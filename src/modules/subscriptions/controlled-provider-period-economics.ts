@@ -3,7 +3,7 @@
 // Actual native price/calendar evidence and canonical full original period price.
 import { ServiceError,type ServiceContext } from "@/core/service";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
-import { controlledPeriodInput } from "./controlled-provider-collection-contract";
+import type { controlledPeriodInput } from "./controlled-provider-collection-contract";
 import { controlledCalendarPayload } from "./controlled-provider-adapter-contract";
 import { controlledActualPreview } from "./controlled-provider-preview-contract";
 import { controlledNativeAmounts } from "./controlled-provider-native-amounts";

@@ -3,7 +3,7 @@
 // C12.38: parent-owned admission coverage, distinct from erasure quiescence.
 import { eq,sql } from "drizzle-orm";
 import { z } from "zod";
-import { defineService,getService,ServiceError,type ServiceContext } from "@/core/service";
+import { defineService,getService,ServiceError } from "@/core/service";
 import { controlledCollectionCoverage } from "@/modules/subscriptions/controlled-provider-collection-coverage";
 import { CONTROLLED_FINANCIAL_PROTOCOL, requireControlledFinancialProtocol } from "./controlled-provider-financial-protocol";
 import { controlledProviderCoverage } from "@/modules/subscriptions/controlled-provider-coverage";

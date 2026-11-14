@@ -12,6 +12,8 @@ import { exportControlledTargetFinancialHistory } from "./controlled-target-fina
 import { controlledTargetTables, controlledTargetFinancialWitness, controlledTargetEntries, controlledTargetAncestryComplete, type ControlledTargetHistory } from "./controlled-target-financial-witness";
 import { controlledProviderCoverage } from "@/modules/subscriptions/controlled-provider-coverage";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import {controlledCashApplicationTables} from "./controlled-cash-application-witnesses";
+import {controlledApplicationFinancialWitness,exportControlledApplicationFinancialHistory,type ControlledApplicationFinancialHistory} from "./controlled-application-financial";
 
 export const controlledTransportTables = {
  resources: "subscription_controlled_resources", operations: "subscription_controlled_operations", calls: "subscription_controlled_calls",
@@ -20,7 +22,7 @@ export const controlledTransportTables = {
 } as const;
 export type ControlledFinancialHistory = Awaited<ReturnType<typeof controlledProviderWitnesses>>;
 export type ControlledFinancialEntry = { table: string; id: string; fingerprint: string };
-export const controlledFinancialTables = { ...controlledTransportTables, ...controlledTargetTables };
+export const controlledFinancialTables = { ...controlledTransportTables, ...controlledTargetTables, ...controlledCashApplicationTables };
 const families = Object.keys(controlledTransportTables) as Array<keyof typeof controlledTransportTables>;
 export function controlledFinancialEntries(history: ControlledFinancialHistory): ControlledFinancialEntry[] {
  return families.flatMap(family => history[family].map(row => ({ table: controlledTransportTables[family], id: row.id, fingerprint: row.fingerprint })))
@@ -50,7 +52,7 @@ export async function controlledFinancialWitness(tx: Tx, scope: ControlledFinanc
  const input = { subscriptionIds:[...new Set(scope.subscriptionIds??[])].sort(), receiptIds:[...new Set(scope.receiptIds??[])].sort(),
   paymentIds:[...new Set(scope.paymentIds??[])].sort(), invoiceIds:[...new Set(scope.invoiceIds??[])].sort(), profileIds:[...new Set(scope.profileIds??[])].sort() };
  const empty = await controlledProviderWitnesses(tx,{});
- const failed = () => ({ version:1 as const, history:empty, entries:[] as ControlledFinancialEntry[], receiptIds:[] as string[], targets:undefined as ControlledTargetHistory|undefined, incomplete:true });
+ const failed = () => ({ version:1 as const, history:empty, entries:[] as ControlledFinancialEntry[], receiptIds:[] as string[], targets:undefined as ControlledTargetHistory|undefined, application:undefined as ControlledApplicationFinancialHistory|undefined, incomplete:true });
  if(Object.values(input).some(ids=>ids.length>5000)) return failed();
  const links = input.paymentIds.length || input.invoiceIds.length ? await tx.execute<{subscriptionId:string|null;receiptId:string|null}>(sql`
   select route.subscription_id::text as "subscriptionId",route.original_charge_receipt_id::text as "receiptId"
@@ -99,7 +101,9 @@ export async function controlledFinancialWitness(tx: Tx, scope: ControlledFinanc
  const targetEntries=controlledTargetEntries(targets),entries=[...controlledFinancialEntries(history),...targetEntries].sort((a,b)=>a.table.localeCompare(b.table)||a.id.localeCompare(b.id));
  if(groups.some(group=>group.incomplete)||entries.length>5000||!controlledFinancialAncestryComplete(history)||!controlledTargetAncestryComplete(targets,history))return failed();
  if(input.profileIds.length&&!input.subscriptionIds.length&&!input.receiptIds.length&&history.resources.some(row=>!input.profileIds.includes(row.profileId)&&!targets.quotes.some(quote=>quote.resourceId===row.id&&input.profileIds.includes(quote.profileId))))return failed();
- return{version:1 as const,history,entries,receiptIds:input.receiptIds,incomplete:false,...(targetEntries.length?{targets}:{})};
+ const application=await controlledApplicationFinancialWitness(tx,scope,targets,input.receiptIds);
+ const allEntries=[...entries,...application.entries].sort((a,b)=>a.table.localeCompare(b.table)||a.id.localeCompare(b.id));if(allEntries.length>5000)return failed();
+ return{version:1 as const,history,entries:allEntries,receiptIds:input.receiptIds,incomplete:false,...(targetEntries.length?{targets}:{}),...(application.entries.length?{application}:{})};
 }
 /** Authentication/debt is separate from a privacy fingerprint. Missing exact
  * controlled bridge must remain applies=true debt, never a legacy fallback. */
@@ -140,7 +144,8 @@ export async function exportControlledFinancialHistory(tx:Tx,scope:ControlledFin
   from subscription_provider_charge_receipts r where r.id in (${list(receiptIds)}) order by r.id limit 5001`):[];
  if(receipts.length!==receiptIds.length||selected.entries.length+receipts.length>5000)throw new ServiceError("conflict","Restore the complete actual controlled canonical cash identity before export.");
  const targetExport=selected.targets?await exportControlledTargetFinancialHistory(tx,selected.targets,Boolean(scope.profileIds?.length)):null;
+ const applicationExport=selected.application?await exportControlledApplicationFinancialHistory(tx,selected.application,{merchant:Boolean(scope.profileIds?.length),existingRows:selected.entries.length+receipts.length-selected.application.entries.length}):null;
  const after=await controlledFinancialWitness(tx,scope);
  if(after.incomplete||merchantTaxDigest(after)!==merchantTaxDigest(selected))throw new ServiceError("conflict","The original controlled financial history changed during export.");
- return{selected,exported:{...exportControlledProviderHistory(selected.history),originalCashReceipts:receipts,...(targetExport?{originalTargets:targetExport}:{})}};
+ return{selected,exported:{...exportControlledProviderHistory(selected.history),originalCashReceipts:receipts,...(targetExport?{originalTargets:targetExport}:{}),...(applicationExport?{originalApplications:applicationExport}:{})}};
 }
