@@ -6,7 +6,7 @@ import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { getService,ServiceError,type ServiceContext } from "@/core/service";
 import { controlledCollectionState } from "@/modules/subscriptions/controlled-provider-collection-state";
 import { controlledCollectionCoverage } from "@/modules/subscriptions/controlled-provider-collection-coverage";
-import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-contract";
+import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
 import { controlledCashEvidence,readOriginalControlledChargeAuthority } from "@/modules/subscriptions/controlled-provider-cash-origin";
 import { cashObservationSourceMatches } from "@/modules/subscriptions/controlled-provider-cash-observation-source";
 import { subscriptionControlledCollections,subscriptionControlledQuotes } from "@/modules/subscriptions/controlled-provider-collection-schema";

@@ -2,6 +2,7 @@
 // PREPARED / UNRUN: actual Ed25519 caller/raw vectors, mock canonical projection.
 // No ServiceContext, canonical DB rows, provider or native acceptance is minted.
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { describe,expect,it } from "vitest";
 import type { MerchantControlledObservation } from "@/adapters/payments";
 import { merchantPhysicalCaller } from "@/modules/invoicing/merchant-physical-caller";
@@ -272,4 +273,37 @@ describe("separate genuine original zero-preparation evidence in mixed raw lists
  it.each(["unknown","foreignCustomer","historicalPositive","missingOriginal","incomplete"] as const)("keeps %s zero-looking/contradictory list atoms as actual debt",change=>{const{v,fact}=withBootstrapInventory({[change]:true});expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(fact.id);expect(v.target.history.facts).toContain(fact);});
  it("refuses preparation adoption when the real canonical bound is absent",()=>{const{v,fact}=withBootstrapInventory();delete v.target.canonicalCount;expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(fact.id);});
  it("retains an actual unfinished physical caller rather than borrowing the fresh zero read",()=>{const{v,fact}=withBootstrapInventory();v.append("read_invoice",{providerInvoiceRef:"in_bootstrap"},()=>({facts:[],result:{}}),true);expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(fact.id);});
+});
+
+/** Two genuine signed returned cohorts on ONE immutable original invoice;
+ * canonical owner rows remain explicitly mock projections for this PURE test. */
+function cumulativePaidVector(){
+ const v=vector({partial:true}),prior=v.target.history.verifications.find(row=>row.operationId===v.current.operation.id),first=v.target.cash[0];
+ if(!prior||!first)throw Error("Missing original actual partial cohort");
+ const oldCash=v.current.facts.find(row=>row.actual.kind==="cash_observed"),oldPayment=v.current.facts.find(row=>row.actual.kind==="invoice_payments_read");
+ if(!oldCash||!oldPayment||!Array.isArray(oldPayment.actual.raw.data))throw Error("Missing actual original payment/cash facts");
+ const originalPayment=z.array(z.record(z.string(),z.unknown())).parse(oldPayment.actual.raw.data)[0];if(!originalPayment)throw Error("Missing original exact payment row");
+ const intent={...v.intent,id:"pi_later",amount:500,amount_received:500,latest_charge:"ch_later"},payment={...originalPayment,id:"inpay_later",amount_requested:500,amount_paid:500,payment:{type:"payment_intent",payment_intent:"pi_later"}};
+ const originalCash=z.record(z.string(),z.unknown()).parse(oldCash.actual.raw.cash),cash={...originalCash,providerPaymentIntentRef:"pi_later",providerChargeRef:"ch_later",amountMinor:500};
+ const actualInvoice=v.invoice(1000),facts:MerchantControlledObservation[]=[{kind:"invoice_read",raw:actualInvoice},{kind:"invoice_payments_read",raw:{data:[originalPayment,payment],has_more:false}},
+  {kind:"intent_read",raw:v.intent},{kind:"intent_read",raw:intent},{kind:"cash_observed",raw:{...oldCash.actual.raw,invoice:actualInvoice}},{kind:"cash_observed",raw:{cash,invoice:actualInvoice,intent,invoicePayment:payment}},
+  ...v.current.facts.filter(row=>["invoice_lines_read","price_read"].includes(row.actual.kind)).map(row=>row.actual)];
+ const result={...prior.actualResult,status:"paid",paidMinor:1000,remainingMinor:0,actualInvoice,actualPayments:[originalPayment,payment],actualIntents:[v.intent,intent],actualCash:[originalCash,cash]};
+ const current=v.append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts,result})),originFact=current.facts.find(row=>row.actual.kind==="cash_observed"&&z.record(z.string(),z.unknown()).parse(row.actual.raw.cash).providerPaymentIntentRef==="pi_later");
+ if(!originFact)throw Error("Missing genuinely signed later positive occurrence");const receiptId=randomUUID();
+ v.target.cash.push({...first,receiptId,paymentId:randomUUID(),providerIntentRef:"pi_later",providerChargeRef:"ch_later",amountMinor:500});
+ v.target.history.chargeOrigins.push({receiptId,resourceId:v.target.resource.id,operationId:current.operation.id,callId:current.call.id,factId:originFact.id,originalEvidenceDigest:merchantTaxDigest({resource:v.target.resource,operation:current.operation,call:current.call,fact:originFact,cash}),createdAt:new Date()});v.target.history.count++;
+ v.target.canonicalPaidMinor=1000;v.target.canonicalCount=12;
+ return{v,current,result,facts,prior,first};
+}
+describe("exact historical returned cohorts across cumulative partial cash",()=>{
+ it("retains the genuine earlier500 and later1000 invoice facts with exact original receipt owners",()=>{const{v,first}=cumulativePaidVector(),before=merchantTaxDigest(v.target.history),actual=classifyControlledTargetRawFacts([v.target]),oldInvoice=v.current.facts.find(row=>row.actual.kind==="invoice_read");
+  if(!oldInvoice)throw Error("Missing original partial invoice fact");expect(actual.unresolvedFactIds).toEqual([]);expect(actual.resolutions.find(row=>row.factId===oldInvoice.id)?.historicalPaidProofs).toEqual([{collectionId:v.target.manifest.collectionId,operationId:v.current.operation.id,callId:v.current.call.id,resultDigest:merchantTaxDigest(v.target.history.verifications.find(row=>row.operationId===v.current.operation.id)?.actualResult),receiptIds:[first.receiptId]}]);
+  expect(actual.resolutions.find(row=>row.factId===oldInvoice.id)?.receiptIds).toEqual([first.receiptId]);expect(v.target.canonicalPaidMinor).toBe(1000);expect(v.target.cash.map(row=>row.amountMinor)).toEqual([500,500]);expect(merchantTaxDigest(v.target.history)).toBe(before);
+ });
+ it("refuses a smaller invented historical balance rather than using <= current paid",()=>{const{v,result,facts}=cumulativePaidVector(),bad=v.append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts:[{kind:"invoice_read",raw:{...v.invoice(500),amount_paid:499,amount_remaining:501}}],result:{retainedBeforeFailure:true}}));v.append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts,result}));const fact=bad.facts[0];if(!fact)throw Error("Missing actual signed contradiction");expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(fact.id);});
+ it("does not backfill a missing original normalized returned cohort from a newer full read",()=>{const{v}=cumulativePaidVector(),old=v.current.facts.find(row=>row.actual.kind==="invoice_read");if(!old)throw Error("Missing original partial occurrence");v.target.history.verifications=v.target.history.verifications.filter(row=>row.operationId!==v.current.operation.id);expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(old.id);});
+ it("keeps old partial money unknown when an actual owner disappears despite equal final cash",()=>{const{v}=cumulativePaidVector(),old=v.current.facts.find(row=>row.actual.kind==="invoice_read");if(!old)throw Error("Missing original positive occurrence");v.target.cash=v.target.cash.filter(row=>row.providerIntentRef!=="pi_original");expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(old.id);});
+ it("never releases a genuinely unfinished old caller with the later complete bank cohort",()=>{const{v}=cumulativePaidVector();v.append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts:[],result:{}}),true);expect(classifyControlledTargetRawFacts([v.target]).resolutions).toEqual([]);});
+ it("requires the complete source bound instead of ignoring old original cash inventory",()=>{const{v}=cumulativePaidVector(),old=v.current.facts.find(row=>row.actual.kind==="invoice_read");if(!old)throw Error("Missing original partial occurrence");v.target.canonicalCount=5000;expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(old.id);});
 });

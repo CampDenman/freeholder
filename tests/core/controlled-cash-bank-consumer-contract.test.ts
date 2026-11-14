@@ -14,6 +14,8 @@ describe("explicit controlled bank consumption",()=>{
   const text=source("controlled-cash-application-bank.ts");expect(text).toContain("commercialInvoiceCashHistory(ctx,canonical.invoice)");expect(text).toContain("invoiceCashFeeAllocation(ctx,canonical.invoice");expect(text).toContain("controlledCashBankApplicationEvidence(");expect(text).toContain("current.cash.applied");
  });
  it("retains complete pre-write prospective authority and exact canonical-receipt charge binding",()=>{
-  const text=source("controlled-receipt-batch-application.ts");expect(text).toContain('getService("invoicing.controlledProviderCashApplicationAuthority")');expect(text).toContain("bank.paymentEvidence.providerChargeRef!==bank.receiptChargeRef");expect(text).toContain("evidence.providerChargeRef!==null&&bank.paymentEvidence.providerChargeRef!==evidence.providerChargeRef");
+  const text=source("controlled-receipt-batch-application.ts");expect(text).toContain("admitControlledCashApplication(ctx,input)");expect(text).toContain("readControlledCashApplicationStage(ctx,{batchId:batch.id,receiptId:receipt.receiptId})");
+  expect(text).toContain("bank.actualPaymentEvidence.providerChargeRef!==original.providerChargeRef");expect(text).toContain("original.providerChargeRef===null");expect(text).toContain("receipt.paymentEvidenceDigest");
+  expect(text).toContain("paymentId:created.id");expect(text).toContain("freeholder_controlled_cash_before_settlement");expect(text).not.toContain("readControlledCashApplicationBank(ctx");expect(text).not.toContain('getService("invoicing.controlledProviderCashApplicationAuthority")');
  });
 });

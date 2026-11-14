@@ -7,7 +7,7 @@ import { ServiceError,type ServiceContext } from "@/core/service";
 import { subscriptions } from "@/modules/subscriptions/schema";
 import { subscriptionControlledResources } from "@/modules/subscriptions/controlled-provider-schema";
 import { subscriptionControlledCollections,subscriptionControlledQuotes } from "@/modules/subscriptions/controlled-provider-collection-schema";
-import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-contract";
+import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
 import { controlledProviderCoverage } from "@/modules/subscriptions/controlled-provider-coverage";
 import { controlledProviderJournal } from "@/modules/subscriptions/controlled-provider-proof";
 import { authenticatedControlledQuote } from "@/modules/subscriptions/controlled-provider-quote-proof";

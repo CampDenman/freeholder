@@ -3,8 +3,8 @@
   "status": "SOURCE_ONLY_PREPARED_UNRUN",
   "materialization": "Replace only these complete unapplied source statements at their ORIGINAL creation positions in a NEW forward migration. Change CREATE OR REPLACE back to CREATE for originally new functions. Do not execute invalid original definitions first; a later replacement cannot rescue an earlier validation failure. Preserve every trigger, other statement, predicate, original frozen source and all published migration identities.",
   "sources": {
-    "controlled-cash-application-protocol84.fragment.sql": "d6e08c2703ab087343c452d525d438ac18b160bb70d81a875f73cbbc579286fb",
-    "controlled-cash-application-stages84.fragment.sql": "06d4cdc17c1e5b93119318a6e7f4de4089aa096827b813aaf3ea4a9a276eebfd"
+    "deploy/controlled-cash-application-protocol84.fragment.sql": "d6e08c2703ab087343c452d525d438ac18b160bb70d81a875f73cbbc579286fb",
+    "deploy/controlled-cash-application-stages84.fragment.sql": "06d4cdc17c1e5b93119318a6e7f4de4089aa096827b813aaf3ea4a9a276eebfd"
   },
   "replacementSha256": "16c1347a270b252761ffc095ee1ab63cbf764aefa4dd178c3554d4e50e9b08e0",
   "functions": [

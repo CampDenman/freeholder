@@ -3564,6 +3564,25 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled genuine staged writer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): genuine repeated initial parent/bank evidence now
+produces actual immutable HMAC admissions immediately before canonical writes.
+The real shared payment INSERT generates its UUID; every subsequent route,
+observation, settlement and complete-batch boundary rechecks783 current physical
+normalization and immutable bank facts. A genuine successor replaces old424's
+deliberate false shape while retaining all other structural predicates and
+exact original-period consent; thirteen actual enabled guards plus body pins
+are required before the first admission. The new private shared money command
+is system/external:false, with no bank POST or access mutation. Older partial
+invoice facts require exact signed complete historical receipt cohorts while a
+separate current proof remains mandatory. Six native application cases, six
+signed historical-cohort pures and five source controls are PREPARED/UNRUN;
+no execution or current migration edit occurred. Exact root4a/221 repairs are
+preserved. Atomic whole-batch cent allocation, real currency/overage anomalies,
+separate paid effects and full native/provider/security acceptance remain
+required, not deferred. See
+`deploy/controlled-cash-staged-writer84-source-20261113.md`.
+
 Controlled scalar CASE source correction 2026-11-13 (C12.38/C1.08): the frozen
 unapplied core/783 source is retained unchanged. Seven complete function-body
 replacements add only parentheses around scalar CASE operands in IF expressions;

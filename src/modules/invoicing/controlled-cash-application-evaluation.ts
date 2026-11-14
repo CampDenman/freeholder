@@ -9,7 +9,7 @@ import { subscriptionControlledResources } from "@/modules/subscriptions/control
 import { subscriptionControlledCollections,subscriptionControlledQuotes } from "@/modules/subscriptions/controlled-provider-collection-schema";
 import { controlledCollectionState } from "@/modules/subscriptions/controlled-provider-collection-state";
 import { controlledCollectionCoverage } from "@/modules/subscriptions/controlled-provider-collection-coverage";
-import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-contract";
+import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
 import { subscriptionProviderScheduleOperations } from "@/modules/subscriptions/provider-schedule-schema";
 import { scheduleCallerHasStopped } from "@/modules/subscriptions/provider-schedule-proof";
 import { originalProviderReadsFinished } from "@/modules/subscriptions/provider-schedule-read-proof";

@@ -21,7 +21,7 @@ import { controlledCollectionState } from "./controlled-provider-collection-stat
 import { readControlledCashObservationSource } from "./controlled-provider-cash-observation-source";
 import { latestControlledCashInspectionLineage } from "./controlled-cash-inspection-lineage";
 import { controlledRawFinancialReview } from "./controlled-provider-raw-financial-review";
-import { CONTROLLED_COLLECTION_PROTOCOL } from "./controlled-provider-collection-contract";
+import { CONTROLLED_COLLECTION_PROTOCOL } from "./controlled-provider-collection-protocol";
 import { controlledCashManifest,refuseControlledCash } from "./controlled-provider-collection-cash-manifest";
 import { controlledProspectiveRawBindings } from "./controlled-provider-cash-prospective-occurrences";
 import { controlledCashBankExpectation,controlledCashPhysicalEntry,controlledCollectionCashProof,type ControlledCashReceiptProof,type ControlledCollectionCashProof } from "./controlled-provider-collection-cash-contract";
