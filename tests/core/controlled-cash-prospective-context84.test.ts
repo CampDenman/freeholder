@@ -18,7 +18,7 @@ describe("genuine private retained-unapplied prospective source",()=>{
   expect(policy).toContain("inventory.paidMinor)!==BigInt(target.canonicalPaidMinor)+prospective.receipts.reduce");expect(policy).not.toContain("target.canonicalPaidMinor=");
  });
  it("requires exact complete known atom owner sets while retaining unknown/ambiguous raw debt and original default revisions",()=>{
-  expect(policy).toContain("owners.length===1?owners[0]:null");expect(policy).toContain("new Set(pages.map(row=>ref(row.id))).size===pages.length");expect(policy).toContain("if(!actual||!exactInvoiceSnapshot(owner,actual,data,fact.callId,historicalPaidProofs))return false");
+  expect(policy).toContain("owners.length===1?owners[0]:null");expect(policy).toContain("new Set(pages.map(row=>ref(row.id))).size===pages.length");expect(policy).toContain("if(!actual||!exactInvoiceSnapshot(owner,actual,data,fact.callId,historicalPaidProofs,nonpayableSubsetProofs))return false");
   expect(policy).toContain("if(targets.some(candidate=>candidate.resource.id===target.resource.id&&candidate.binding?.providerInvoiceRef===ref(data.id)))return false");
   expect(policy).toContain("if(!preparation||!exactBootstrapZeroSnapshot(target,preparation,data))return false");
   expect(policy).toContain("collectionId:null,collectionIds:listOwners.map");expect(policy).toContain("canonicalRefunds:listOwners.map");
