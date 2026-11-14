@@ -73,3 +73,50 @@ currently contains only the approved exact two child tables/FKs/CHECKs/indexes;
 it is NOT ready for root assembly. Seven genuine candidate/trigger/readiness
 bodies, exact final typed application/projection/assignment/target delta and
 all narrow old-body-preserving successors remain required before integration.
+
+Current continuation now has two genuine SQL candidate bodies for direct/
+segmented inherited funding and exact reservation holes, in addition to the
+two approved table definitions. This is still UNFINISHED: the reviewed positive
+legacy-application-as-own-epoch SQL branch, five trigger/readiness bodies,
+complete final typed delta and full old successors are not complete. No false
+ready function or enabled application stub is provided.
+
+NEW controlled B quote reviews have a separately typed private declaration,
+HMAC purpose `atomic_credit_fee_declaration.v1`, actual server-planned funding
+UUIDs and exact source/proration/note-line ancestry. Public DTO schemas remain
+unchanged; the producer stores a separate private review and returns the old
+public review. No fictitious historical quote HMAC is asserted: old quotes
+retain their actual review/quote digests and signed native journal ancestry.
+Acceptance independently rechecks current sources; actual funding uses the
+declared UUID only at its real INSERT and its child binds the actual born PK/
+PG SHA and source-principal FK path. Missing declared children, even numeric
+legacy coincidences, cannot become old loans.
+
+The source now distinguishes original payment segments from positively proved
+legacy application-as-own-epoch. The latter requires actual accepted quote,
+native signature, note/line/unique principal and immutable whole funding/
+reservation/application PG evidence; no offset is reconstructed. Original
+payment Fi/retired/current bank/all global loans remain independently checked,
+including refusal of old loan400 against actual399. New B descendants cannot
+downgrade. This remains private, unqualified source; all compiler/lint/parser/
+model/PG/native/provider/host execution is UNRUN. Old invoice-wide gate
+continuations require the actual whole sibling descriptor; OWN returned source,
+buyer/currency/tax/RMA/caller checks remain strict.
+
+Private persistence continuation now calls the genuine interval plan before
+each new B reservation, inserts the actual reservation parent with that plan's
+exact assigned/proven fee, then retains its actual same-TX purpose child. The
+ordinary proportional expressions and old opaque digest remain the fallback
+ONLY for an ordinary unreturned funding with no B purpose. New planned funding
+declaration MAC has seven prepared adversarial controls (birth/rotation, quote
+and source substitution, nested mutation, duplicate births/source tuples,
+unsafe aggregate and unknown authority fields), ALL UNRUN. These source
+controls do not prove database birth, current bank authority or rollback.
+
+The connected lock graph now follows actual reservation-purpose root funding
+and inherited funding-purpose source-application FKs. Exact purpose table/UUID
+identities count in the same complete 5000 union. No resource is acquired late
+and no same-amount/current-account relation is introduced. This private WIP
+checkpoint is NOT suitable for root integration: legacy SQL root continuation,
+five genuine trigger/readiness bodies, three complete old successors, exact
+deferred typed-delta conservation and financial/privacy leaf remain required.

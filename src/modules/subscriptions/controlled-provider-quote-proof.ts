@@ -4,7 +4,8 @@
 import { z } from "zod";
 import { ServiceError } from "@/core/service";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
-import { controlledTargetReview } from "./controlled-provider-collection-contract";
+import {controlledStoredTargetReview} from "./controlled-provider-private-review-contract";
+import {atomicCreditFeeDeclarationKeys,verifiedAtomicCreditFeeDeclaration} from "@/modules/invoicing/atomic-credit-fee-declaration-proof";
 import type { subscriptionControlledQuotes } from "./controlled-provider-collection-schema";
 import type { subscriptionControlledResources } from "./controlled-provider-schema";
 import type { controlledProviderJournal } from "./controlled-provider-proof";
@@ -15,14 +16,18 @@ const record=z.record(z.string(),z.unknown());
 /** Digest deliberately excludes only its own digest field. Full quoted parent
  * revision, own immutable IDs, actual read identities and unchanged economics
  * remain bound. Parent current financial coverage never filters this quote. */
-export function controlledTargetQuoteDigest(input:NonNullable<Quote["input"]>,review:z.infer<typeof controlledTargetReview>,profileId:string,profileVersion:number){
+export function controlledTargetQuoteDigest(input:NonNullable<Quote["input"]>,review:z.infer<typeof controlledStoredTargetReview>,profileId:string,profileVersion:number){
  const economic=Object.fromEntries(Object.entries(review).filter(([key])=>key!=="quoteDigest"));
  return merchantTaxDigest({version:1,kind:"controlled_target_review",input,review:economic,profileId,profileVersion});
 }
 function refuse():never{throw new ServiceError("conflict","Restore the exact complete original native/update previews, dated canonical economics and independently retained original calendar/customer reads before using this quote.");}
 export function authenticatedControlledQuote(quote:Quote,resource:Resource,history:History){
  if(!quote.input||!quote.review||quote.redactedAt||quote.inputDigest!==merchantTaxDigest(quote.input)||quote.reviewDigest!==merchantTaxDigest(quote.review))refuse();
- const review=controlledTargetReview.parse(quote.review),c=review.controlled;
+ const review=controlledStoredTargetReview.parse(quote.review),c=review.controlled;
+ if(review.kind==="proration"&&review.atomicCreditFeeDeclaration){
+  const declaration=review.atomicCreditFeeDeclaration;
+  if(!verifiedAtomicCreditFeeDeclaration(declaration,quote.createdAt,atomicCreditFeeDeclarationKeys())||declaration.quoteId!==quote.id||declaration.resourceId!==quote.resourceId||declaration.subscriptionId!==resource.subscriptionId||declaration.plannedProrationId!==quote.plannedProrationId)refuse();
+ }
  if(quote.resourceId!==resource.id||quote.kind!==review.kind||quote.previousTermsId!==review.previousTermsId||quote.plannedProrationId!==c.plannedProrationId||quote.plannedCollectionId!==c.plannedCollectionId
   ||quote.id!==c.quoteId||c.resourceId!==resource.id||review.subscriptionId!==resource.subscriptionId||quote.canonicalSourceId!==review.canonicalSourceId
   ||quote.quoteDigest!==review.quoteDigest||quote.sourceRevision!==review.sourceRevision||quote.quotedParentRevision!==c.quotedParentRevision||quote.effectiveAt.toISOString()!==review.effectiveAt

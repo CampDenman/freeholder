@@ -18,6 +18,8 @@ export function verifiedAtomicCreditReservation(row:Partition,keys:readonly stri
   ||![row.reservationId,row.fundingId,row.rootFundingId,row.sourcePaymentId].every(value=>z.uuid().safeParse(value).success)
   ||row.sourceApplicationId!==null&&!z.uuid().safeParse(row.sourceApplicationId).success||new Set(entries.data.map(value=>value.key)).size!==entries.data.length)return false;
  const economics=parsed.data;
+ if(economics.rootKind==="payment"&&(economics.rootApplicationId!==null||economics.legacyApplicationRevision!==null)
+  ||economics.rootKind==="legacy_application"&&(!economics.rootApplicationId||!economics.legacyApplicationRevision))return false;
  if(economics.fundingId!==row.fundingId||economics.rootFundingId!==row.rootFundingId||economics.sourcePaymentId!==row.sourcePaymentId||economics.sourceApplicationId!==row.sourceApplicationId
   ||economics.segments.some(segment=>segment.epochFundingId!==row.rootFundingId)
   ||new Set(economics.activeReservationIds).size!==economics.activeReservationIds.length||new Set(economics.releasedReservationIds).size!==economics.releasedReservationIds.length

@@ -8,7 +8,8 @@ import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { subscriptionCommercialTerms,subscriptionMarketPolicies,subscriptions } from "./schema";
 import { subscriptionControlledResources } from "./controlled-provider-schema";
 import { subscriptionControlledQuotes,subscriptionControlledCollections,subscriptionControlledComponents,subscriptionControlledInvoiceBindings,subscriptionControlledItemReceipts,subscriptionControlledInvoiceProofs } from "./controlled-provider-collection-schema";
-import { controlledComponentProvenance,controlledTargetReview } from "./controlled-provider-collection-contract";
+import { controlledComponentProvenance } from "./controlled-provider-collection-contract";
+import {controlledStoredTargetReview} from "./controlled-provider-private-review-contract";
 import { controlledCollectionManifest } from "./controlled-provider-adapter-contract";
 import { controlledProviderJournal } from "./controlled-provider-proof";
 import { authenticatedControlledQuote } from "./controlled-provider-quote-proof";
@@ -27,7 +28,7 @@ export async function controlledCollectionState(tx:Tx,collectionId:string){
  const[parent]=resource?await tx.select().from(subscriptions).where(eq(subscriptions.id,resource.subscriptionId)).limit(1):[];
  const[terms]=collection?await tx.select().from(subscriptionCommercialTerms).where(eq(subscriptionCommercialTerms.id,collection.termsId)).limit(1):[];
  if(!collection||!quote||!resource||!parent||!terms||!collection.invoiceId)refuse();
- const review=controlledTargetReview.parse(quote.review);
+ const review=controlledStoredTargetReview.parse(quote.review);
  if(collection.kind!==quote.kind||collection.kind!==review.kind||review.subscriptionId!==parent.id||review.previousTermsId!==quote.previousTermsId
   ||review.controlled.resourceId!==resource.id||review.controlled.quoteId!==quote.id||review.controlled.plannedCollectionId!==collection.id
   ||review.controlled.plannedProrationId!==collection.prorationId||quote.plannedProrationId!==collection.prorationId||quote.plannedCollectionId!==collection.id

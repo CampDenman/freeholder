@@ -42,7 +42,8 @@ export async function paidProrationBasis(ctx: ServiceContext, parent: Parent, ef
   const [invoice] = previous?.debitInvoiceId
     ? await ctx.tx.select().from(invoices).where(eq(invoices.id, previous.debitInvoiceId)).limit(1)
     : await ctx.tx.select().from(invoices).where(and(eq(invoices.sourceType, "subscription"), eq(invoices.sourceId, `${parent.id}:${parent.currentPeriodStart.toISOString()}`))).limit(1);
-  if (!invoice || invoice.contactId !== parent.contactId || invoice.currency !== parent.currency || invoice.status !== "paid" || !invoiceSettled(invoice) || invoice.refundedMinor !== 0)
+  const atomicSiblings=invoice&&invoice.refundedMinor!==0?await(await import("@/modules/invoicing/atomic-credit-invoice-disposition")).readAtomicCreditInvoiceDisposition(ctx,{subscriptionId:parent.id,originalInvoiceId:invoice.id}):null;
+  if (!invoice || invoice.contactId !== parent.contactId || invoice.currency !== parent.currency || invoice.status !== "paid" || !invoiceSettled(invoice) || invoice.refundedMinor !== 0&&atomicSiblings?.kind!=="atomic_sibling_disposition.v1")
     throw new ServiceError("conflict", "Only the exact fully settled, unreturned original invoice can fund unused-period credit.");
   const lines = await ctx.tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, invoice.id)).orderBy(invoiceLines.position).limit(3);
   const eligible = lines.filter(line => { const proof = line.snapshot as Record<string, unknown>;
@@ -70,7 +71,12 @@ export async function paidProrationBasis(ctx: ServiceContext, parent: Parent, ef
   const principal: ProrationPrincipal[] = [], currentFacts: unknown[] = [];
   let remaining = BigInt(creditNetMinor) + BigInt(creditTaxMinor);
   for (const payment of cash.filter(row => row.status === "succeeded")) {
-    if (payment.refundedMinor !== 0) throw new ServiceError("conflict", "Returned original principal cannot fund another unused credit.");
+    if (payment.refundedMinor !== 0) {
+      const sibling=atomicSiblings?.kind==="atomic_sibling_disposition.v1"?atomicSiblings.siblings.find(row=>row.payment.id===payment.id):null;
+      if(!sibling||sibling.disposition==="unreturned"||sibling.availableForNewFundingMinor!==0||sibling.payment.refundedMinor!==payment.refundedMinor)
+        throw new ServiceError("conflict", "Returned original principal cannot fund another unused credit.");
+      currentFacts.push({paymentId:payment.id,returnedAtomicSibling:sibling});continue;
+    }
     currentFacts.push({ paymentId: payment.id, state: await safeProrationPrincipal(ctx, payment.id) });
     const [budget] = await ctx.tx.execute<{ available: string }>(sql`select freeholder_proration_principal_capacity(${payment.id}::uuid,null)::text as available`);
     const take = remaining < BigInt(budget?.available ?? "0") ? remaining : BigInt(budget?.available ?? "0");
@@ -89,6 +95,7 @@ export async function paidProrationBasis(ctx: ServiceContext, parent: Parent, ef
       feeObligationMinor: fee.feeObligationMinor, feeProvenCollectedMinor: fee.provenCollectedMinor, feeCollectionState: fee.collectionState, feeEvidenceDigest: fee.evidenceDigest, feeUnexpected: fee.unexpectedFee }); remaining -= take; }
   }
   if (remaining) throw new ServiceError("conflict", "The original unused principal already backs another credit or refund promise; recover that exact ownership before another quote.");
-  return { invoice, line, periodStart, periodEnd, creditNetMinor, creditTaxMinor, principal,
+  const result={ invoice, line, periodStart, periodEnd, creditNetMinor, creditTaxMinor, principal,
     sourceRevision: merchantTaxDigest({ parent, previous, invoice, line, cash, inherited, currentFacts, witness, principal, effectiveAt: effectiveAt.toISOString() }) };
+  return atomicSiblings?.kind==="atomic_sibling_disposition.v1"?{...result,sourceRevision:merchantTaxDigest({protocol:"freeholder.atomic-credit-source.v1",originalSourceRevision:result.sourceRevision,wholeSiblingRevision:atomicSiblings.revision})}:result;
 }

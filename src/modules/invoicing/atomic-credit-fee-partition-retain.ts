@@ -9,6 +9,7 @@ import {ATOMIC_CREDIT_FEE_PROTOCOL} from "./atomic-credit-fee-protocol";
 import type {controlledAtomicCreditFeePartition} from "./atomic-credit-fee-partition";
 import {signAtomicCreditFeePartition,verifiedAtomicCreditFeePartition} from "./atomic-credit-fee-partition-proof";
 import {originalCashEvidenceKeys} from "./original-cash-recovery-store";
+import {readAtomicCreditFeeDeclarationForProration} from "./atomic-credit-fee-declaration-reader";
 type Candidate=NonNullable<Awaited<ReturnType<typeof controlledAtomicCreditFeePartition>>>;
 function refuse():never{throw new ServiceError("conflict","Retain the exact actual inserted funding, same-transaction original fee partition and signed pre-insert current source graph; a planned or orphaned parent is not an original credit loan.");}
 /** Candidate was genuinely produced immediately BEFORE the parent mutation.
@@ -23,9 +24,14 @@ export async function retainAtomicCreditFundingPartition(ctx:ServiceContext,inpu
   ||parent.row.feeCollectionState!==candidate.allocation.collectionState||parent.row.feeUnexpected!==candidate.allocation.unexpectedFee
   ||candidate.beforeEntries.some(entry=>entry.key===`invoice_credit_funding:${parent.row.id}`||entry.key===`invoice_credit_funding_atomic_fee_partitions:${parent.row.id}`))refuse();
  const[transaction]=await ctx.tx.execute<{id:string}>(sql`select pg_current_xact_id()::text as id`),keys=originalCashEvidenceKeys(),key=keys[0];if(!transaction||!key)refuse();
+ const source=await readAtomicCreditFeeDeclarationForProration(ctx.tx,parent.row.prorationId);
+ const declared=source?.declaration.fundings.find(row=>row.fundingId===parent.row.id),principal=source?.principal.find(row=>row.sourcePaymentId===parent.row.sourcePaymentId&&row.sourceApplicationId===parent.row.sourceApplicationId);
+ if(!source||!declared||!principal||declared.sourcePaymentId!==parent.row.sourcePaymentId||declared.sourceApplicationId!==parent.row.sourceApplicationId||declared.amountMinor!==parent.row.amountMinor||declared.feeEvidenceDigest!==parent.row.feeEvidenceDigest
+  ||source.note.id!==parent.row.creditNoteId||source.line.id!==parent.row.creditNoteLineId||source.accepted.originalInvoiceId!==parent.row.sourceInvoiceId)refuse();
+ const economics={...candidate.storedEconomics,birthDeclaration:{quoteId:source.quote.id,plannedFundingId:parent.row.id,prorationId:source.accepted.id,sourcePrincipalId:principal.id,creditNoteId:source.note.id,creditNoteLineId:source.line.id,declarationDigest:source.declaration.digest,declarationAuthentication:source.declaration.authentication,quoteFingerprint:source.quoteFingerprint}};
  const row={fundingId:parent.row.id,sourcePaymentId:parent.row.sourcePaymentId,sourceApplicationId:parent.row.sourceApplicationId,sourceInvoiceId:parent.row.sourceInvoiceId,creditNoteId:parent.row.creditNoteId,creditNoteLineId:parent.row.creditNoteLineId,
   originalChargeReceiptId:candidate.owner.receiptId,bankInspectionId:candidate.bank.inspectionId,bankObservationId:candidate.bank.observationId,protocol:ATOMIC_CREDIT_FEE_PROTOCOL,parentFingerprint:parent.fingerprint,
-  economics:candidate.storedEconomics,beforeEntries:candidate.beforeEntries,admissionTransactionId:transaction.id,createdAt:new Date()};
+  economics,beforeEntries:candidate.beforeEntries,admissionTransactionId:transaction.id,createdAt:new Date()};
  const signed={...row,...signAtomicCreditFeePartition(row,key)};if(!verifiedAtomicCreditFeePartition(signed,keys))refuse();
  await ctx.tx.insert(invoiceCreditFundingAtomicFeePartitions).values(signed);return signed;
 }

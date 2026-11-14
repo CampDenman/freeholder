@@ -28,6 +28,7 @@ import { requireAgreementFeeSchema } from "@/modules/invoicing/agreement-fee-sto
 import { requireProrationBoundarySchema } from "./proration-boundary";
 import { requireGrossProrationSchema } from "./proration-quote";
 import { requireControlledCollectionSchema } from "./controlled-provider-collection-schema-guard";
+import {lockAtomicCreditSubscriptionPrefix} from "@/modules/invoicing/atomic-credit-source-prefix";
 function refuse():never{throw new ServiceError("conflict","Restore current complete original principal, accepted merchant terms, actual native/update evidence and dated canonical tax before another controlled quote or acceptance.");}
 /** No SDK or separate transaction. Called once to quote, then again under
  * original payment/invoice/note locks at acceptance. The latter checks actual
@@ -35,6 +36,7 @@ function refuse():never{throw new ServiceError("conflict","Restore current compl
  * evidence and never silently replaces historical quotedParentRevision. */
 export async function controlledProrationCandidate(ctx:ServiceContext,rawInput:ControlledProrationInput){
  const input=controlledProrationInput.parse(rawInput);await lockContactIdentityForRead(ctx.tx);await requireGrossProrationSchema(ctx);await requireAgreementFeeSchema(ctx);await requireProrationBoundarySchema(ctx);await requireControlledCollectionSchema(ctx);
+ await lockAtomicCreditSubscriptionPrefix(ctx,input.id,input.resourceId);
  await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`controlled-provider:${input.resourceId}`}))`);
  const[resource]=await ctx.tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,input.resourceId)).limit(1).for("update");
  const[parent]=await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id,input.id)).limit(1).for("update");

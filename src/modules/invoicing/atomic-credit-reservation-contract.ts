@@ -10,7 +10,7 @@ export const atomicCreditFeeSegment=z.object({
 }).strict();
 export type AtomicCreditFeeSegment=z.infer<typeof atomicCreditFeeSegment>;
 export const atomicCreditReservationEconomics=z.object({
- protocol:z.literal(ATOMIC_CREDIT_RESERVATION_PROTOCOL),rootFundingId:z.uuid(),sourcePaymentId:z.uuid(),originalPrincipalMinor:minor.positive(),originalFeeMinor:minor,rootEconomicRevision:sha,
+ protocol:z.literal(ATOMIC_CREDIT_RESERVATION_PROTOCOL),rootKind:z.enum(["payment","legacy_application"]),rootApplicationId:z.uuid().nullable(),legacyApplicationRevision:sha.nullable(),rootFundingId:z.uuid(),sourcePaymentId:z.uuid(),originalPrincipalMinor:minor.positive(),originalFeeMinor:minor,rootEconomicRevision:sha,
  fundingId:z.uuid(),sourceApplicationId:z.uuid().nullable(),fundingEconomicRevision:sha,
  fundingNominalFeeMinor:minor,fundingRetiredFeeMinor:minor,fundingAssignedFeeMinor:minor,fundingProvenCollectedMinor:minor,fundingOwedFeeMinor:minor,
  segments:z.array(atomicCreditFeeSegment).min(1).max(5000),amountMinor:minor.positive(),nominalFeeMinor:minor,retiredFeeMinor:minor,assignedFeeMinor:minor,provenCollectedMinor:minor,owedFeeMinor:minor,

@@ -3564,6 +3564,18 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+B private persistence SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08): signed private
+stored-review declaration now binds server-planned funding/proration and exact
+actual accepted source ancestry without changing public DTOs or asserting an
+old quote HMAC. Positively proved old applications use their own immutable
+original epoch, never an invented payment offset. Actual funding/reservation
+writers retain their real parent then same-TX purpose child; exact B intervals
+replace proportional repricing only for authenticated B funding. Seven new
+declaration controls plus prior fifteen math/MAC controls are PREPARED/UNRUN.
+SQL birth/final conservation guards, old complete successors and central safe
+witness integration remain unfinished; private checkpoint is NOT an
+integration/qualification/readiness/stable claim. No execution occurred here.
+
 B reservation segment private SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08):
 root approved the additional purpose-child inventory. Child schema/strict
 contract/MAC and pure interval arithmetic now preserve separate ORIGINAL epoch

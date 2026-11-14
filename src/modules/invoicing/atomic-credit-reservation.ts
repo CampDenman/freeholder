@@ -4,6 +4,7 @@ import {eq,sql} from "drizzle-orm";
 import {z} from "zod";
 import {ServiceError,type ServiceContext} from "@/core/service";
 import {invoiceCreditFunding,invoiceCreditReservations} from "./credit-application-schema";
+import {invoices,payments} from "./schema";
 import {invoiceCreditReservationAtomicFeePartitions} from "./atomic-credit-reservation-schema";
 import {ATOMIC_CREDIT_RESERVATION_PROTOCOL} from "./atomic-credit-fee-protocol";
 import {atomicCreditReservationEconomics} from "./atomic-credit-reservation-contract";
@@ -21,17 +22,25 @@ function refuse():never{throw new ServiceError("conflict","Restore the exact cur
 export async function readAtomicCreditReservationPartition(ctx:ServiceContext,input:{fundingId:string;amountMinor:number}){
  if(!z.uuid().safeParse(input.fundingId).success||!Number.isSafeInteger(input.amountMinor)||input.amountMinor<=0)refuse();
  const[funding]=await ctx.tx.select().from(invoiceCreditFunding).where(eq(invoiceCreditFunding.id,input.fundingId)).limit(1);if(!funding)refuse();
+ const[original]=await ctx.tx.select({refundedMinor:invoices.refundedMinor}).from(payments).innerJoin(invoices,eq(invoices.id,payments.invoiceId)).where(eq(payments.id,funding.sourcePaymentId)).limit(1);if(!original)refuse();
+ // B is selected by its actual purpose FK or the actual original refunded
+ // namespace. A missing mandatory child is checked by the current reader;
+ // ordinary unreturned histories never acquire a new economic interpretation.
+ const[installed]=await ctx.tx.execute<{present:boolean}>(sql`select to_regclass('invoice_credit_funding_atomic_fee_partitions') is not null as present`);
+ const[known]=installed?.present===true?await ctx.tx.execute<{known:boolean}>(sql`select exists(select 1 from invoice_credit_funding_atomic_fee_partitions actual_purpose where actual_purpose.funding_id=${funding.id}::uuid) as known`):[];
+ if(!known?.known&&original.refundedMinor===0)return null;
  const current=await controlledAtomicCreditFeePartition(ctx,{paymentId:funding.sourcePaymentId,sourceApplicationId:funding.sourceApplicationId,takeMinor:0});if(!current)return null;
  const ancestry=current.ancestry,child=ancestry.partitions.find(row=>row.fundingId===funding.id);
  if(!child){if(current.requiresChild)refuse();return null;}
- const plan=child.economics.plan,rootId=plan.epochKind==="direct"?funding.id:plan.rootFundingId;
- const root=rootId&&ancestry.partitions.find(row=>row.fundingId===rootId);if(!root||root.sourceApplicationId!==null)refuse();
- const rootPlan=root.economics.plan,sourceSegments=plan.epochKind==="direct"?[originalAtomicCreditFeeSegment({originalPrincipalMinor:rootPlan.originalPrincipalMinor,originalFeeMinor:rootPlan.originalFeeMinor},
+ const plan=child.economics.plan,rootId=plan.rootFundingId??funding.id;
+ const root=ancestry.partitions.find(row=>row.fundingId===rootId);if(!root)refuse();
+ const rootPlan=root.economics.plan;if(rootPlan.rootFundingId!==null||rootPlan.rootKind==="payment"&&root.sourceApplicationId!==null||rootPlan.rootKind==="legacy_application"&&root.sourceApplicationId!==rootPlan.rootApplicationId)refuse();
+ const sourceSegments=plan.rootFundingId===null?[originalAtomicCreditFeeSegment({originalPrincipalMinor:rootPlan.originalRootPrincipalMinor,originalFeeMinor:rootPlan.originalRootFeeMinor},
   {epochFundingId:root.fundingId,epochStartMinor:rootPlan.allocatedPrincipalMinor,epochEndMinor:rootPlan.afterPrincipalMinor,epochAssignedFeeMinor:rootPlan.takeAssignedFeeMinor,epochProvenCollectedMinor:rootPlan.takeProvenCollectedMinor},rootPlan.allocatedPrincipalMinor,rootPlan.afterPrincipalMinor)]:plan.takeSegments;
  const reservations=ancestry.reservations.filter(row=>row.fundingId===funding.id),released=ancestry.releases.filter(row=>reservations.some(parent=>parent.id===row.reservationId));
  const active=reservations.filter(row=>!released.some(release=>release.reservationId===row.id)||ancestry.applications.some(application=>application.reservationId===row.id));
  const occupied=active.map(row=>{const receipt=ancestry.reservationPartitions.find(value=>value.reservationId===row.id);if(!receipt)refuse();return{reservationId:row.id,segments:receipt.economics.segments};});
- const selected=selectAtomicCreditFeeSegments({originalPrincipalMinor:rootPlan.originalPrincipalMinor,originalFeeMinor:rootPlan.originalFeeMinor,sourceSegments,occupied,takeMinor:input.amountMinor});
+ const selected=selectAtomicCreditFeeSegments({originalPrincipalMinor:rootPlan.originalRootPrincipalMinor,originalFeeMinor:rootPlan.originalRootFeeMinor,sourceSegments,occupied,takeMinor:input.amountMinor});
  if(selected.whole.amountMinor!==funding.amountMinor||selected.whole.assignedFeeMinor!==funding.feeObligationMinor||selected.whole.provenCollectedMinor!==funding.feeProvenCollectedMinor)refuse();
  const beforeEntries=current.beforeEntries,currentSourceRevision=merchantTaxDigest({current:current.revision,ancestry:ancestry.revision,fundingId:funding.id,sourceSegments,activeReservationIds:active.map(row=>row.id).sort(),releasedReservationIds:released.map(row=>row.reservationId).sort()});
  const sqlRows=await ctx.tx.execute<{known:boolean;funding_id:string;root_funding_id:string;source_payment_id:string;source_application_id:string|null;principal_minor:number;nominal_fee_minor:number;retired_fee_minor:number;assigned_fee_minor:number;collected_fee_minor:number;owed_fee_minor:number;segments:unknown;active_reservation_ids:string[];released_reservation_ids:string[];funding_partition_fingerprint:string;evidence_fingerprint:string}>(sql`
@@ -43,7 +52,7 @@ export async function readAtomicCreditReservationPartition(ctx:ServiceContext,in
  if(sqlRows.length!==1||!actual||actual.known!==true||actual.funding_id!==funding.id||actual.root_funding_id!==root.fundingId||actual.source_payment_id!==funding.sourcePaymentId||actual.source_application_id!==funding.sourceApplicationId
   ||actual.principal_minor!==selected.selected.amountMinor||actual.nominal_fee_minor!==selected.selected.nominalFeeMinor||actual.retired_fee_minor!==selected.selected.retiredFeeMinor||actual.assigned_fee_minor!==selected.selected.assignedFeeMinor||actual.collected_fee_minor!==selected.selected.provenCollectedMinor||actual.owed_fee_minor!==selected.selected.owedFeeMinor
   ||merchantTaxDigest(actual.segments)!==merchantTaxDigest(selected.segments)||merchantTaxDigest(actual.active_reservation_ids)!==merchantTaxDigest(active.map(row=>row.id).sort())||merchantTaxDigest(actual.released_reservation_ids)!==merchantTaxDigest(released.map(row=>row.reservationId).sort())||!/^[a-f0-9]{64}$/.test(actual.evidence_fingerprint))refuse();
- const body={protocol:ATOMIC_CREDIT_RESERVATION_PROTOCOL,rootFundingId:root.fundingId,sourcePaymentId:funding.sourcePaymentId,originalPrincipalMinor:rootPlan.originalPrincipalMinor,originalFeeMinor:rootPlan.originalFeeMinor,rootEconomicRevision:rootPlan.economicRevision,
+ const body={protocol:ATOMIC_CREDIT_RESERVATION_PROTOCOL,rootKind:rootPlan.rootKind,rootApplicationId:rootPlan.rootApplicationId,legacyApplicationRevision:rootPlan.legacyApplicationRevision,rootFundingId:root.fundingId,sourcePaymentId:funding.sourcePaymentId,originalPrincipalMinor:rootPlan.originalRootPrincipalMinor,originalFeeMinor:rootPlan.originalRootFeeMinor,rootEconomicRevision:rootPlan.economicRevision,
   fundingId:funding.id,sourceApplicationId:funding.sourceApplicationId,fundingEconomicRevision:plan.economicRevision,fundingNominalFeeMinor:selected.whole.nominalFeeMinor,fundingRetiredFeeMinor:selected.whole.retiredFeeMinor,fundingAssignedFeeMinor:selected.whole.assignedFeeMinor,fundingProvenCollectedMinor:selected.whole.provenCollectedMinor,fundingOwedFeeMinor:selected.whole.owedFeeMinor,
   segments:selected.segments,...selected.selected,activeReservationIds:active.map(row=>row.id).sort(),releasedReservationIds:released.map(row=>row.reservationId).sort(),currentSourceRevision,postgresSourceRevision:actual.evidence_fingerprint,beforeInvoiceProjections};
  const economics=atomicCreditReservationEconomics.parse({...body,economicRevision:merchantTaxDigest(body)});

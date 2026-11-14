@@ -20,10 +20,14 @@ import { retainAcceptedGrossProration } from "./proration-service";
 import { controlledCanonicalTarget } from "./controlled-provider-canonical-target";
 import { controlledCashlessCollectionState,controlledTrialTargetDigest } from "./controlled-provider-cashless-state";
 import { controlledCollectionState } from "./controlled-provider-collection-state";
+import {assertAtomicCreditFeeDeclarationCurrent} from "@/modules/invoicing/atomic-credit-fee-declaration";
+import {lockAtomicCreditSubscriptionPrefix} from "@/modules/invoicing/atomic-credit-source-prefix";
 const result=z.object({collectionId:z.uuid(),prorationId:z.uuid(),invoiceId:z.uuid().nullable(),creditNoteId:z.uuid().nullable(),effectiveAt:z.iso.datetime()});
 function refuse():never{throw new ServiceError("conflict","The reviewed original provider terms, actual source principal, tax, fee, method or calendar changed or expired. Review fresh explicit consent; preserve old access, issued credit and all actual partial money.");}
 async function original(ctx:ServiceContext,input:z.infer<typeof controlledProrationAcceptance>){
  await lockContactIdentityForRead(ctx.tx);
+ const[prefixOwner]=await ctx.tx.select({subscriptionId:subscriptionControlledResources.subscriptionId}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,input.resourceId)).limit(1);
+ if(!prefixOwner)refuse();await lockAtomicCreditSubscriptionPrefix(ctx,prefixOwner.subscriptionId,input.resourceId);
  await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`controlled-provider:${input.resourceId}`}))`);
  const[resource]=await ctx.tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,input.resourceId)).limit(1).for("update");
  const[quote]=await ctx.tx.select().from(subscriptionControlledQuotes).where(eq(subscriptionControlledQuotes.id,input.quoteId)).limit(1);
@@ -44,6 +48,7 @@ async function accept(ctx:ServiceContext,input:z.infer<typeof controlledProratio
  for(const id of [...new Set(source.basis.principal.map(row=>row.sourcePaymentId))].sort())await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`payment:${id}`}))`);
  if(source.basis.invoice)await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`invoice:${source.basis.invoice.id}`}))`);
  source=await prepareControlledProrationEconomics(ctx,economicInput,evidence);
+ await assertAtomicCreditFeeDeclarationCurrent(ctx,{declaration:review.atomicCreditFeeDeclaration??null,quoteCreatedAt:quote.createdAt,originalInvoiceId:source.basis.invoice?.id??null,originalInvoiceLineId:source.basis.line?.id??null,principal:source.basis.principal});
  if(source.sourceRevision!==quote.sourceRevision||source.previous.id!==quote.previousTermsId||source.method.methodDigest!==review.controlled.methodDigest
   ||source.actual.debitNetMinor!==review.debitNetMinor||source.debitTaxQuote.taxMinor!==review.debitTaxMinor||source.basis.creditNetMinor!==review.creditNetMinor||source.basis.creditTaxMinor!==review.creditTaxMinor
   ||source.creditAppliedMinor!==review.creditAppliedMinor||source.cashDueMinor!==review.cashDueMinor||source.residualCreditMinor!==review.residualCreditMinor||merchantTaxDigest(source.feeReview)!==merchantTaxDigest(review.feeReview)

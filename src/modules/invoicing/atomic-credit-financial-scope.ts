@@ -11,9 +11,9 @@ function refuse():never{throw new ServiceError("conflict","Restore the complete 
 /** No locking, principal/fee authority or owner discovery by value. A shared
  * contact/account/profile is NOT an edge. Actual funding/reservation/application
  * FKs keep all borrowed source and target resources represented. */
-export async function atomicCreditFinancialScope(tx:Tx,actualPaymentIds:readonly string[]){
- const requested=[...new Set(actualPaymentIds)].sort();if(requested.length>5000||requested.some(id=>!z.uuid().safeParse(id).success))refuse();
- if(!requested.length)return{nodes:[],namespaces:[],inspectionIds:[],resourceIds:[],subscriptionIds:[],paymentIds:[],invoiceIds:[],noteIds:[],revision:merchantTaxDigest([])};
+export async function atomicCreditFinancialScope(tx:Tx,actualPaymentIds:readonly string[],actualSubscriptionIds:readonly string[]=[]){
+ const requested=[...new Set(actualPaymentIds)].sort(),parents=[...new Set(actualSubscriptionIds)].sort();if(requested.length+parents.length>5000||[...requested,...parents].some(id=>!z.uuid().safeParse(id).success))refuse();
+ if(!requested.length&&!parents.length)return{nodes:[],namespaces:[],inspectionIds:[],resourceIds:[],subscriptionIds:[],paymentIds:[],invoiceIds:[],noteIds:[],revision:merchantTaxDigest([])};
  const raw=await tx.execute<{kind:string;id:string}>(sql`
   with recursive edges(a_kind,a_id,b_kind,b_id) as (
    select 'subscription',e.subscription_id,'invoice',e.invoice_id from subscription_events e where e.invoice_id is not null
@@ -37,6 +37,8 @@ export async function atomicCreditFinancialScope(tx:Tx,actualPaymentIds:readonly
    union all select 'funding',f.id,'payment',f.source_payment_id from invoice_credit_funding f
    union all select 'funding',f.id,'note',f.credit_note_id from invoice_credit_funding f
    union all select 'funding',f.id,'reservation',f.source_application_id from invoice_credit_funding f where f.source_application_id is not null
+   union all select 'reservation',purpose.reservation_id,'funding',purpose.root_funding_id from invoice_credit_reservation_atomic_fee_partitions purpose
+   union all select 'funding',purpose.funding_id,'reservation',purpose.source_application_id from invoice_credit_funding_atomic_fee_partitions purpose where purpose.source_application_id is not null
    union all select 'funding',r.funding_id,'reservation',r.id from invoice_credit_reservations r
    union all select 'reservation',a.reservation_id,'invoice',a.invoice_id from invoice_credit_applications a
    union all select 'reservation',r.id,'proration',p.id from invoice_credit_reservations r
@@ -48,12 +50,12 @@ export async function atomicCreditFinancialScope(tx:Tx,actualPaymentIds:readonly
    union all select 'reservation',r.id,'invoice',i.id from invoice_credit_reservations r
     join invoices i on i.source_type='subscription' and i.source_id=r.target_source_id
   ),adjacent(a_kind,a_id,b_kind,b_id) as(select * from edges union all select b_kind,b_id,a_kind,a_id from edges),
-  owned(kind,id) as(select 'payment',p.id from payments p where p.id in(${list(requested)})),
+  owned(kind,id) as(select 'payment',p.id from payments p where p.id in(${list(requested)}) union select 'subscription',s.id from subscriptions s where s.id in(${list(parents)})),
   reachable(kind,id) as(select kind,id from owned union select a.b_kind,a.b_id from reachable r join adjacent a on a.a_kind=r.kind and a.a_id=r.id where a.b_id is not null)
   select kind,id::text from reachable order by kind,id limit 5001`);
  if(raw.length>5000)refuse();const nodes=raw.map(value=>node.parse(value));
  const ids=(kind:z.output<typeof node>["kind"])=>nodes.filter(value=>value.kind===kind).map(value=>value.id).sort();
- if(requested.some(id=>!ids("payment").includes(id)))refuse();
+ if(requested.some(id=>!ids("payment").includes(id))||parents.some(id=>!ids("subscription").includes(id)))refuse();
  const namespaces=(await tx.execute<{platform:string;account:string|null;intent:string}>(sql`
   select r.provider_platform_account_id as platform,r.charge_account_id as account,r.provider_payment_intent_ref as intent from subscription_provider_charge_receipts r where r.id in(${list(ids("receipt"))})
   union select m.provider_platform_account_id,m.charge_account_id,m.provider_ref from merchant_payment_observations m where m.payment_id in(${list(ids("payment"))})

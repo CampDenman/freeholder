@@ -11,6 +11,8 @@ import {verifiedAtomicCreditFeePartition} from "./atomic-credit-fee-partition-pr
 import {invoiceCreditReservationAtomicFeePartitions} from "./atomic-credit-reservation-schema";
 import {verifiedAtomicCreditReservation} from "./atomic-credit-reservation-proof";
 import {originalAtomicCreditFeeSegment,selectAtomicCreditFeeSegments} from "./atomic-credit-reservation-segments";
+import {readAtomicCreditAcceptedQuoteSource} from "./atomic-credit-fee-declaration-reader";
+import {readAtomicCreditLegacyApplication} from "./atomic-credit-legacy-application";
 import {originalCashEvidenceKeys} from "./original-cash-recovery-store";
 import {merchantTaxDigest} from "./merchant-tax-store";
 import type {AtomicCreditFeePhysicalEntry} from "./atomic-credit-fee-partition-contract";
@@ -35,8 +37,13 @@ async function readAncestry(tx:Tx,paymentId:string,requireUnreturned:boolean){
  const groups=[funding,reservations,applications,releases,assignments,notes,lines,originalLines,invoiceRows,cashAssignments,duties,remittances,partitions,reservationPartitions];
  if(1+groups.reduce((sum,rows)=>sum+rows.length,0)>5000||notes.length!==noteIds.length||lines.length!==lineIds.length||originalLines.length!==originalLineIds.length||invoiceRows.length!==invoiceIds.length)refuse();
  const original=invoiceRows.find(row=>row.id===payment.invoiceId);if(!original)refuse();
+ const quotedSources=new Map<string,Awaited<ReturnType<typeof readAtomicCreditAcceptedQuoteSource>>>();
  if(invoiceRows.some(row=>row.contactId!==original.contactId||row.currency!==payment.currency))refuse();
  for(const row of funding){
+  if(!quotedSources.has(row.prorationId))quotedSources.set(row.prorationId,await readAtomicCreditAcceptedQuoteSource(tx,row.prorationId));
+  const declared=quotedSources.get(row.prorationId),planned=declared?.declaration?.fundings.find(source=>source.fundingId===row.id||source.sourcePaymentId===row.sourcePaymentId&&source.sourceApplicationId===row.sourceApplicationId);
+  if(planned){if(!declared||planned.fundingId!==row.id||planned.sourcePaymentId!==row.sourcePaymentId||planned.sourceApplicationId!==row.sourceApplicationId||planned.amountMinor!==row.amountMinor||planned.feeEvidenceDigest!==row.feeEvidenceDigest
+   ||declared.note.id!==row.creditNoteId||declared.line.id!==row.creditNoteLineId||!partitions.some(child=>child.fundingId===row.id))refuse();}
   const note=notes.find(value=>value.id===row.creditNoteId),line=lines.find(value=>value.id===row.creditNoteLineId),parent=row.sourceApplicationId?applications.find(value=>value.reservationId===row.sourceApplicationId):null;
   if(!note||note.status!=="issued"||!line||line.creditNoteId!==note.id||!line.invoiceLineId||!originalLines.some(value=>value.id===line.invoiceLineId&&value.invoiceId===row.sourceInvoiceId)||note.currency!==payment.currency||note.invoiceId!==row.sourceInvoiceId||row.sourcePaymentId!==paymentId||!row.feeEvidenceDigest
    ||(row.sourceApplicationId? !parent||parent.invoiceId!==row.sourceInvoiceId:row.sourceInvoiceId!==payment.invoiceId))refuse();
@@ -50,30 +57,37 @@ async function readAncestry(tx:Tx,paymentId:string,requireUnreturned:boolean){
  await capture(payments,"payments","id",[payment.id]);await capture(invoiceCreditFunding,"invoice_credit_funding","id",fundingIds);await capture(invoiceCreditReservations,"invoice_credit_reservations","id",reservationIds);await capture(invoiceCreditApplications,"invoice_credit_applications","reservation_id",applications.map(row=>row.reservationId));await capture(invoiceCreditReleases,"invoice_credit_releases","reservation_id",releases.map(row=>row.reservationId));await capture(agreementFeeCreditAssignments,"agreement_fee_credit_assignments","application_id",assignments.map(row=>row.applicationId));await capture(creditNotes,"credit_notes","id",noteIds);await capture(creditNoteLines,"credit_note_lines","id",lineIds);await capture(invoiceLines,"invoice_lines","id",originalLineIds);await capture(invoices,"invoices","id",invoiceIds);await capture(agreementFeeCashAssignments,"agreement_fee_cash_assignments","payment_id",cashAssignments.map(row=>row.paymentId));await capture(agreementFeeDuties,"agreement_fee_duties","invoice_id",duties.map(row=>row.invoiceId));await capture(agreementFeeRemittances,"agreement_fee_remittances","id",remittances.map(row=>row.id));await capture(invoiceCreditFundingAtomicFeePartitions,"invoice_credit_funding_atomic_fee_partitions","funding_id",partitions.map(row=>row.fundingId));
  if(physical.length>5000)refuse();
  await capture(invoiceCreditReservationAtomicFeePartitions,"invoice_credit_reservation_atomic_fee_partitions","reservation_id",reservationPartitions.map(row=>row.reservationId));
- if(physical.length>5000)refuse();
+ for(const declaration of quotedSources.values())if(declaration)physical.push({table:"subscription_controlled_quotes",id:declaration.quote.id,fingerprint:declaration.quoteFingerprint,hashDomain:"postgres_row"});
+ if(new Set([...physical.map(row=>`${row.table}:${row.id}`),...[...quotedSources.values()].flatMap(source=>source?.physicalIdentities??[])]).size>5000)refuse();
  for(const child of partitions){const parent=funding.find(row=>row.id===child.fundingId),entry=physical.find(row=>row.table==="invoice_credit_funding"&&row.id===child.fundingId);if(!parent||!entry||child.parentFingerprint!==entry.fingerprint||child.sourcePaymentId!==parent.sourcePaymentId||child.sourceApplicationId!==parent.sourceApplicationId||child.sourceInvoiceId!==parent.sourceInvoiceId||child.creditNoteId!==parent.creditNoteId||child.creditNoteLineId!==parent.creditNoteLineId||child.economics.plan.takePrincipalMinor!==parent.amountMinor||child.economics.plan.takeAssignedFeeMinor!==parent.feeObligationMinor||child.economics.plan.takeProvenCollectedMinor!==parent.feeProvenCollectedMinor||child.economics.feeEvidenceDigest!==parent.feeEvidenceDigest)refuse();}
  for(const child of reservationPartitions){
   const parent=reservations.find(row=>row.id===child.reservationId),fundingChild=partitions.find(row=>row.fundingId===child.fundingId),rootChild=partitions.find(row=>row.fundingId===child.rootFundingId);
   const parentEntry=physical.find(row=>row.table==="invoice_credit_reservations"&&row.id===child.reservationId),fundingEntry=physical.find(row=>row.table==="invoice_credit_funding_atomic_fee_partitions"&&row.id===child.fundingId);
-  if(!parent||!fundingChild||!rootChild||rootChild.sourceApplicationId!==null||!parentEntry||!fundingEntry||child.parentFingerprint!==parentEntry.fingerprint||child.fundingPartitionFingerprint!==fundingEntry.fingerprint
+  if(!parent||!fundingChild||!rootChild||rootChild.economics.plan.rootFundingId!==null||!parentEntry||!fundingEntry||child.parentFingerprint!==parentEntry.fingerprint||child.fundingPartitionFingerprint!==fundingEntry.fingerprint
    ||parent.fundingId!==child.fundingId||child.sourcePaymentId!==payment.id||child.sourceApplicationId!==fundingChild.sourceApplicationId
    ||child.economics.fundingEconomicRevision!==fundingChild.economics.plan.economicRevision||child.economics.rootEconomicRevision!==rootChild.economics.plan.economicRevision
    ||parent.amountMinor!==child.economics.amountMinor||parent.feeObligationMinor!==child.economics.assignedFeeMinor||parent.feeProvenCollectedMinor!==child.economics.provenCollectedMinor)refuse();
   const root=rootChild.economics.plan,plan=fundingChild.economics.plan,economic=child.economics;
-  if(economic.originalPrincipalMinor!==root.originalPrincipalMinor||economic.originalFeeMinor!==root.originalFeeMinor||economic.segments.some(segment=>segment.epochFundingId!==rootChild.fundingId
+  if(economic.rootKind!==root.rootKind||economic.rootApplicationId!==root.rootApplicationId||economic.legacyApplicationRevision!==root.legacyApplicationRevision||economic.originalPrincipalMinor!==root.originalRootPrincipalMinor||economic.originalFeeMinor!==root.originalRootFeeMinor||economic.segments.some(segment=>segment.epochFundingId!==rootChild.fundingId
    ||segment.epochStartMinor!==root.allocatedPrincipalMinor||segment.epochEndMinor!==root.afterPrincipalMinor||segment.epochAssignedFeeMinor!==root.takeAssignedFeeMinor||segment.epochProvenCollectedMinor!==root.takeProvenCollectedMinor))refuse();
-  const sourceSegments=plan.epochKind==="direct"?[originalAtomicCreditFeeSegment({originalPrincipalMinor:root.originalPrincipalMinor,originalFeeMinor:root.originalFeeMinor},{epochFundingId:rootChild.fundingId,epochStartMinor:root.allocatedPrincipalMinor,epochEndMinor:root.afterPrincipalMinor,epochAssignedFeeMinor:root.takeAssignedFeeMinor,epochProvenCollectedMinor:root.takeProvenCollectedMinor},root.allocatedPrincipalMinor,root.afterPrincipalMinor)]:plan.takeSegments;
-  if(plan.epochKind==="direct"&&fundingChild.fundingId!==rootChild.fundingId||plan.epochKind==="inherited"&&(plan.rootFundingId!==rootChild.fundingId||plan.rootEconomicRevision!==root.economicRevision))refuse();
+  const sourceSegments=plan.rootFundingId===null?[originalAtomicCreditFeeSegment({originalPrincipalMinor:root.originalRootPrincipalMinor,originalFeeMinor:root.originalRootFeeMinor},{epochFundingId:rootChild.fundingId,epochStartMinor:root.allocatedPrincipalMinor,epochEndMinor:root.afterPrincipalMinor,epochAssignedFeeMinor:root.takeAssignedFeeMinor,epochProvenCollectedMinor:root.takeProvenCollectedMinor},root.allocatedPrincipalMinor,root.afterPrincipalMinor)]:plan.takeSegments;
+  if(plan.rootFundingId===null&&fundingChild.fundingId!==rootChild.fundingId||plan.rootFundingId!==null&&(plan.rootFundingId!==rootChild.fundingId||plan.rootEconomicRevision!==root.economicRevision))refuse();
   const checked=selectAtomicCreditFeeSegments({originalPrincipalMinor:economic.originalPrincipalMinor,originalFeeMinor:economic.originalFeeMinor,sourceSegments,occupied:[{reservationId:parent.id,segments:economic.segments}],takeMinor:0});
   if(checked.whole.nominalFeeMinor!==economic.fundingNominalFeeMinor||checked.whole.retiredFeeMinor!==economic.fundingRetiredFeeMinor||checked.whole.assignedFeeMinor!==economic.fundingAssignedFeeMinor||checked.whole.provenCollectedMinor!==economic.fundingProvenCollectedMinor||checked.whole.owedFeeMinor!==economic.fundingOwedFeeMinor)refuse();
  }
  for(const child of partitions)if(child.sourceApplicationId!==null){
   const parent=reservationPartitions.find(row=>row.reservationId===child.sourceApplicationId),plan=child.economics.plan;
+  if(plan.rootKind==="legacy_application"&&plan.rootFundingId===null){
+   const legacy=await readAtomicCreditLegacyApplication(tx,child.sourceApplicationId);
+   if(plan.rootApplicationId!==child.sourceApplicationId||plan.legacyApplicationRevision!==legacy.revision||merchantTaxDigest(plan.legacyApplicationProof)!==merchantTaxDigest(legacy.body)||plan.originalRootPrincipalMinor!==legacy.reservation.amountMinor||plan.originalRootFeeMinor!==legacy.application.feeObligationMinor)refuse();
+   continue;
+  }
   if(!parent||plan.rootFundingId!==parent.rootFundingId||plan.rootEconomicRevision!==parent.economics.rootEconomicRevision||plan.originalRootPrincipalMinor!==parent.economics.originalPrincipalMinor||plan.originalRootFeeMinor!==parent.economics.originalFeeMinor
+   ||plan.rootKind!==parent.economics.rootKind||plan.rootApplicationId!==parent.economics.rootApplicationId||plan.legacyApplicationRevision!==parent.economics.legacyApplicationRevision
    ||merchantTaxDigest(plan.sourceSegments)!==merchantTaxDigest(parent.economics.segments))refuse();
  }
  for(const parent of reservations)if(partitions.some(row=>row.fundingId===parent.fundingId)&&!reservationPartitions.some(row=>row.reservationId===parent.id))refuse();
- return{payment,originalInvoice:original,funding,reservations,applications,releases,assignments,notes,lines,originalLines,invoices:invoiceRows,cashAssignments,duties,remittances,partitions,reservationPartitions,physical,revision:merchantTaxDigest(physical)};
+ return{payment,originalInvoice:original,funding,reservations,applications,releases,assignments,notes,lines,originalLines,invoices:invoiceRows,cashAssignments,duties,remittances,partitions,reservationPartitions,quotedSources:[...quotedSources.values()].filter(value=>value!==null),physical,revision:merchantTaxDigest(physical)};
 }
 /** Actual new funding still requires its OWN unreturned source. */
 export async function readAtomicCreditFeeAncestry(tx:Tx,paymentId:string){return readAncestry(tx,paymentId,true);}
