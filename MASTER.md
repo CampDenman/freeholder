@@ -3564,6 +3564,16 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled scalar CASE source correction 2026-11-13 (C12.38/C1.08): the frozen
+unapplied core/783 source is retained unchanged. Seven complete function-body
+replacements add only parentheses around scalar CASE operands in IF expressions;
+an exact source/hash/signature manifest records every change. Root must place
+these corrected statements at their original creation positions in a NEW forward
+migration; appending replacements after an invalid CREATE cannot repair an
+already failed normal migration. Nine preservation controls are PREPARED/UNRUN.
+No SQL/parser/test execution, published migration change or activation occurred.
+See `deploy/controlled-cash-application-case84-source-20261113.md`.
+
 Controlled initial batch evaluation source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): a NEW ordinary unregistered evaluator discovers the
 actual complete SQL financial FK scope before canonical locks, obtains the
