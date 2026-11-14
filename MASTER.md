@@ -3564,6 +3564,22 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Actual paid-effect commit / timestamp oracle correction 2026-11-14
+(C12.38/C9.33/C1.08): b30 source1310/207/454 skips, fresh V35 normal86,
+strict159/356guards/367completefunctions and SDK16 pass. Original paid native
+V4 then commits money and one independent actual effect, but FAILS64.120s at
+its oldgrant equality expecting updatedAt unchanged. Mandatory shared $onUpdate
+SQLnow must record status retirement. Same-source READONLY diagnosis proves
+2expired+2fresh grants in the actual effect row transaction, old updated_at
+EXACTLY equals new SQL created_at, and effectTX differs moneyTX; all595 table
+hashes/all86 journals/sequence unchanged and drain0. V35 remains preserved.
+Only the test timestamp oracle changes: every old ID/contact/source/entitlement,
+startsAt/endsAt/used/createdAt equality stays, updatedAt must equal actual fresh
+birth PLUS full PostgreSQL timestamp and row-XID proof; no anyDate/date/usage
+waiver. Remaining original assertions need a fresh complete native pass; this
+correction is PREPARED/UNRUN. All stable/provider/full-spec gates stay open.
+See `deploy/controlled-paid-period-updated-at-oracle155.manifest.json`.
+
 Actual original money PASS / independent access failure 2026-11-14
 (C12.38/C9.33/C1.08): at6aaf, complete source1310/207/454 explicit DB skips,
 fresh V33 normal86 and strict159/356guards/367completefunctions, SDK16 all pass.

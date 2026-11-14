@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // PREPARED/UNRUN. Genuine producer/bank/private writer; no inserted proof/money.
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/core/db";
@@ -82,8 +82,19 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
     if (!effect) throw Error("A real independent immutable effect receipt is required.");
     expect(effect).toMatchObject({ invoiceId: applied.invoiceId, collectionId: f.target.collectionId, periodStart: new Date(f.target.periodStart), periodEnd: new Date(f.target.periodEnd) });
     const current = await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id);
-    for (const old of f.grants) expect(current.find(row => row.id === old.id)).toEqual({ ...old, status: "expired" });
     const fresh = current.filter(row => !f!.grants.some(old => old.id === row.id));
+    const firstFresh = fresh[0]; if (!firstFresh) throw Error("Retain the actual new grant birth before checking retirement timestamps.");
+    for (const old of f.grants) expect(current.find(row => row.id === old.id)).toEqual({ ...old, status: "expired", updatedAt: firstFresh.createdAt });
+    // updatedAt records the actual retirement. Full microsecond SQL equality
+    // and actual row transaction identities keep this stronger than anyDate.
+    const [retirementStamp] = await db().execute<{ count: number; exact_time: boolean; actual_effect_tx: boolean }>(sql`select count(*)::integer as count,
+      bool_and(retired.updated_at=fresh.created_at) as exact_time,
+      bool_and(retired.xmin::text::bigint=(effect.admission_transaction_id::bigint%4294967296)
+        and fresh.xmin::text::bigint=(effect.admission_transaction_id::bigint%4294967296)) as actual_effect_tx
+      from entitlement_grants retired join subscription_controlled_paid_period_receipts effect on effect.id=${effect.id}::uuid
+      join entitlement_grants fresh on fresh.id=${firstFresh.id}::uuid and fresh.source_subscription_id=effect.subscription_id
+      where retired.source_subscription_id=effect.subscription_id and retired.id in(${sql.join(f.grants.map(row => sql`${row.id}::uuid`), sql`,`)})`);
+    expect(retirementStamp).toEqual({ count: f.grants.length, exact_time: true, actual_effect_tx: true });
     expect(fresh.map(row => row.entitlementId).sort()).toEqual(f.grants.map(row => row.entitlementId).sort());
     for (const grant of fresh) expect(grant).toMatchObject({ startsAt: effect.effectAt, endsAt: effect.periodEnd, used: 0, status: "active" });
     expect(await advanceSubscriptionPeriod.call({ subscriptionId: f.parent.id, contactId: f.parent.contactId, planId: effect.planId,
