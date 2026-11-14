@@ -22,7 +22,7 @@ type Resource=typeof mediaMultipartResources.$inferSelect;
 type Operation=typeof mediaMultipartOperations.$inferSelect;
 const digest=z.string().regex(/^[a-f0-9]{64}$/),date=z.date();
 const resourceRow=z.object({id:z.uuid(),uploadId:z.uuid(),key:z.string(),namespace:digest.nullable(),providerUploadId:z.string().nullable(),state:z.enum(MULTIPART_STATES),expectedBytes:z.number(),contentType:z.string(),objectReceiptId:z.uuid().nullable(),retiredAt:date.nullable(),updatedAt:date});
-const operationRow=z.object({id:z.uuid(),kind:z.enum(["create","complete","abort"]),state:z.string(),providerAcceptedAt:date.nullable(),updatedAt:date});
+const operationRow=z.object({id:z.uuid(),kind:z.enum(["create","complete","abort","sign"]),state:z.string(),providerAcceptedAt:date.nullable(),updatedAt:date});
 const confirmation=z.object({resourceId:z.uuid(),operationId:z.uuid().optional(),expectedWitness:digest,originalNamespace:digest,providerUploadId:z.string().min(1).max(4096).optional(),
  originalKey:z.string().min(1).max(2048).optional(),
  action:z.enum(["verify_original","applied","not_applied","cleanup"]),sha256:digest.optional(),bytes:z.number().int().nonnegative().max(5*1024**3).optional(),
@@ -54,7 +54,7 @@ export const listMultipartOperations=defineService({
   const rows=[];
   for(const resource of resources){
    const operations=await ctx.tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.resourceId,resource.id)).orderBy(asc(mediaMultipartOperations.createdAt),asc(mediaMultipartOperations.id));
-   const uncertain=operations.filter(row=>["started","unknown"].includes(row.state));
+   const uncertain=operations.filter(row=>["started","unknown"].includes(row.state)||row.kind==="sign"&&row.state==="accepted"&&!resource.retiredAt);
    const upload=(await ctx.tx.select({state:mediaUploads.state}).from(mediaUploads).where(eq(mediaUploads.id,resource.uploadId)).limit(1))[0];
    if(resource.redactedAt&&!uncertain.length&&resource.retiredAt)continue;
    if(!uncertain.length&&!['unverified','creating','completing','aborting','unknown'].includes(resource.state)&&!(upload&&upload.state!=="complete"&&(!resource.retiredAt||resource.objectReceiptId)))continue;
@@ -67,7 +67,7 @@ export const listMultipartOperations=defineService({
 const claimMultipartRecovery=defineService({
  name:"media.claimMultipartRecovery",summary:"Capture unchanged original upload evidence for human verification.",kind:"mutation",permission:"scoped",external:false,orchestratedBy:"media.reconcileMultipartOperation",agentCallable:false,stepUp:true,auditInputFields:["resourceId","action"],
  input:confirmation,output:z.object({resource:resourceRow,operation:operationRow.nullable()}),
- handler:async(input,ctx)=>{human(ctx.actor);const captured=await capture(ctx.tx,input);ctx.setSubject("media_multipart_resource",captured.resource.id);return captured;},
+ handler:async(input,ctx)=>{human(ctx.actor);const captured=await capture(ctx.tx,input);if(captured.operation?.kind==="sign")throw new ServiceError("conflict","Keep this upload for review. Its upload links require their original issuance and storage-consumption evidence; expiry or a browser response cannot complete recovery.");ctx.setSubject("media_multipart_resource",captured.resource.id);return captured;},
 });
 const applyMultipartRecovery=defineService({
  name:"media.applyMultipartRecovery",summary:"Record verified original multipart observations without rewriting intent.",kind:"mutation",permission:"scoped",external:false,orchestratedBy:"media.reconcileMultipartOperation",agentCallable:false,stepUp:true,auditInputFields:["resourceId","action"],

@@ -34,10 +34,10 @@ export default async function StorageRecoveryPage() {
       {!needsStepUp ? <RecoveryForm operation={row.operation} id={row.id} updatedAt={new Date(row.updatedAt).toISOString()} namespace={row.namespace} sha256={row.sha256} bytes={row.bytes} labels={labels} originalKeyRequired={row.key.startsWith("retained:")} /> : null}
     </Card>)}
     {multipart.rows.map(row=><Card key={`${row.resource.id}:${row.operation?.id??"resource"}`} className="grid min-w-0 gap-4">
-      <dl className="grid min-w-0 gap-2 text-sm"><dt className="font-semibold">{t("media.recovery.operation")}</dt><dd>{t(row.operation?.kind==="create"?"media.recovery.create":row.operation?.kind==="complete"?"media.recovery.complete":row.operation?.kind==="abort"?"media.recovery.abort":"media.recovery.multipart")}</dd>
+      <dl className="grid min-w-0 gap-2 text-sm"><dt className="font-semibold">{t("media.recovery.operation")}</dt><dd>{t(row.operation?.kind==="create"?"media.recovery.create":row.operation?.kind==="complete"?"media.recovery.complete":row.operation?.kind==="abort"?"media.recovery.abort":row.operation?.kind==="sign"?"media.recovery.sign":"media.recovery.multipart")}</dd>
         <dt className="font-semibold">{t("media.recovery.object")}</dt><dd className="break-all font-mono" dir="ltr">{row.resource.key}</dd><dt className="font-semibold">{t("media.recovery.receipt")}</dt><dd className="break-all font-mono" dir="ltr">{row.operation?.id??row.resource.id}</dd></dl>
       {row.operation?.providerAcceptedAt?<Callout>{t("media.recovery.acknowledged")}</Callout>:null}
-      {!needsStepUp?<MultipartRecoveryForm resourceId={row.resource.id} operationId={row.operation?.id??null} witness={row.witness} namespace={row.resource.namespace} providerUploadId={row.resource.providerUploadId} sha256={row.sha256} bytes={row.bytes} labels={multipartLabels} originalKeyRequired={row.resource.key.startsWith("retained:")}/>:null}
+      {row.operation?.kind==="sign"?<Callout>{t("media.recovery.signingReview")}</Callout>:!needsStepUp?<MultipartRecoveryForm resourceId={row.resource.id} operationId={row.operation?.id??null} witness={row.witness} namespace={row.resource.namespace} providerUploadId={row.resource.providerUploadId} sha256={row.sha256} bytes={row.bytes} labels={multipartLabels} originalKeyRequired={row.resource.key.startsWith("retained:")}/>:null}
     </Card>)}
   </div>;
 }

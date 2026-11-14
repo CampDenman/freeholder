@@ -17,9 +17,10 @@ import {assertOriginalNamespaceMutation} from "./original-namespace-fence";
 import { requireTransferCapability } from "./transfer-authority";
 import { lockObjectDigest } from "./write-ledger";
 import { transferConflict, transferDigest } from "./transfer-proof";
+import {assertMediaActorLive} from "./upload-ownership";
 import { actualStorageCallerRuntimeIdentity, mediaWriterRuntimeId, type CurrentStorageCallerRuntimeIdentity } from "./physical-caller-runtime";
 
-export type OriginalMediaCallerKind="ordinary_put"|"ordinary_delete"|"multipart_create"|"multipart_complete"|"multipart_abort";
+export type OriginalMediaCallerKind="ordinary_put"|"ordinary_delete"|"multipart_create"|"multipart_complete"|"multipart_abort"|"multipart_sign";
 export type OriginalMediaRecoveryKind="ordinary_recovery_read"|"multipart_recovery_inspect"|"ordinary_retirement_inventory"|"multipart_retirement_inventory";
 export interface OriginalMediaCallerAdmission {
  kind:OriginalMediaCallerKind|OriginalMediaRecoveryKind;
@@ -60,7 +61,7 @@ export async function admitOriginalMediaCaller(tx:Tx,input:OriginalMediaCallerAd
   const exact=input.objectReceiptId?await tx.execute<{born:boolean}>(sql`select exists(select 1 from media_object_writes where id=${input.objectReceiptId}::uuid and created_at=transaction_timestamp()) as born`):await tx.execute<{born:boolean}>(sql`select exists(select 1 from media_multipart_operations where id=${input.multipartOperationId}::uuid and created_at=transaction_timestamp()) as born`);
   if(originalRuntime!==mediaWriterRuntimeId||parentState!=="started"||exact[0]?.born!==true)transferConflict("An earlier admission cannot acquire a new writer birth or token. Retain its original recovery debt.");
  }
- if(["ordinary_put","multipart_create","multipart_complete"].includes(input.kind))await assertOriginalKeyCreator(tx,{namespace,key,role:input.kind as "ordinary_put"|"multipart_create"|"multipart_complete"});
+ if(["ordinary_put","multipart_create","multipart_complete","multipart_sign"].includes(input.kind))await assertOriginalKeyCreator(tx,{namespace,key,role:input.kind==="multipart_sign"?"multipart_part":input.kind as "ordinary_put"|"multipart_create"|"multipart_complete"});
  const id=randomUUID(),requestDigest=transferDigest({id,kind:input.kind,objectReceiptId:input.objectReceiptId??null,multipartOperationId:input.multipartOperationId??null,key,namespace,runtimeIdentity:input.runtimeIdentity,expectedRevision:input.expectedRevision??null});
  await tx.insert(mediaStorageTransferCalls).values({id,objectId:null,objectReceiptId:input.objectReceiptId??null,multipartOperationId:input.multipartOperationId??null,kind:input.kind,namespace,physicalKey:key,requestDigest,callerTokenDigest:transferDigest(input.token),physicalReceiptId,runtimeId:mediaWriterRuntimeId,runtimeIdentity:input.runtimeIdentity,expectedRevision:input.expectedRevision});
  return{id,requestDigest,key,namespace};
@@ -75,7 +76,7 @@ export async function withOriginalMultipartInvocation<T>(operation:()=>Promise<T
  const scope={active:true,runtimeIdentity:await actualStorageCallerRuntimeIdentity(),callers:new Map<string,{id:string;token:string;runtimeIdentity:CurrentStorageCallerRuntimeIdentity}>()};
  try{return await multipartInvocation.run(scope,operation);}finally{scope.active=false;}
 }
-export async function admitOriginalMultipartCaller(tx:Tx,operationId:string,kind:"multipart_create"|"multipart_complete"|"multipart_abort",actor:Actor){
+export async function admitOriginalMultipartCaller(tx:Tx,operationId:string,kind:"multipart_create"|"multipart_complete"|"multipart_abort"|"multipart_sign",actor:Actor){
  const scope=multipartInvocation.getStore();if(!scope?.active||scope.callers.has(operationId))transferConflict("A new multipart caller needs its actual owning server invocation.");
  const token=randomUUID()+randomUUID(),runtimeIdentity=scope.runtimeIdentity;
  const call=await admitOriginalMediaCaller(tx,{kind,multipartOperationId:operationId,token,runtimeIdentity},actor);
@@ -88,12 +89,12 @@ export function originalMultipartCaller(operationId:string){
  return call;
 }
 
-export interface OriginalMediaCallerReturn {inventoryDigest?:string;inventoryCount?:number;configurationDigest?:string;inspectionDigest?:string;providerUploadId?:string;accepted?:boolean;failed?:true;notAttempted?:true;revision?:StorageTransferRevision;sha256?:string;bytes?:number;absent?:boolean;requestProof?:OriginalProviderRequestProof}
+export interface OriginalMediaCallerReturn {inventoryDigest?:string;inventoryCount?:number;configurationDigest?:string;inspectionDigest?:string;capabilityDigest?:string;providerUploadId?:string;accepted?:boolean;failed?:true;notAttempted?:true;revision?:StorageTransferRevision;sha256?:string;bytes?:number;absent?:boolean;requestProof?:OriginalProviderRequestProof}
 /** Actual server closure only: this is authenticated by its admission token,
  * never an owner-supplied final-outcome string. Outcome application remains a
  * separate shared phase; a returned caller can still have unknown write debt.
  */
-export async function retainOriginalMediaCallerReturn(id:string,token:string,result:OriginalMediaCallerReturn):Promise<{settled:boolean}>{
+export async function retainOriginalMediaCallerReturn(id:string,token:string,result:OriginalMediaCallerReturn,actor?:Actor):Promise<{settled:boolean}>{
  return db().transaction(async tx=>{
   await requireTransferCapability(tx);
   await tx.execute(sql`select pg_advisory_xact_lock(1691709,82)`);
@@ -103,9 +104,19 @@ export async function retainOriginalMediaCallerReturn(id:string,token:string,res
   if(call.resultDigest){if(call.resultDigest!==digest)transferConflict("The first actual original caller return cannot be replaced.");return{settled:call.state==="returned"};}
   const requests=await tx.select().from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.callId,id));
   const observations=requests.length?await tx.select().from(mediaStorageTransferRequestObservations).where(inArray(mediaStorageTransferRequestObservations.requestId,requests.map(row=>row.id))):[];
+  if(call.kind==="multipart_sign"){
+   if(result.capabilityDigest){
+    if(!actor)transferConflict("The actual issued result needs its owning server-resolved principal.");await assertMediaActorLive(tx,actor);
+    const[parent]=await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId!)).limit(1);if(!parent||parent.actor!==actorString(actor))transferConflict();
+    const[eligible]=await tx.execute<{eligible:boolean}>(sql`select exists(select 1 from media_multipart_operations creation where creation.resource_id=${parent.resourceId}::uuid and creation.operation_kind='create' and freeholder_media_multipart_part_body_context(creation.id)) as eligible`);
+    if(eligible?.eligible!==true)transferConflict("The original upload no longer permits new links. Keep it for review.");
+   }
+   if(result.accepted||result.providerUploadId||result.revision||result.requestProof||result.sha256!==undefined||result.bytes!==undefined||result.absent)transferConflict("An actual local signer finish cannot claim provider acceptance, received bytes or absence.");
+   if(result.capabilityDigest&&!observations.some(row=>row.facts.stage==="capability"&&row.facts.detailDigest===result.capabilityDigest)||!result.capabilityDigest&&!result.failed&&!result.notAttempted)transferConflict("Retain the original actual capability result or explicit local failure; never invent its first result.");
+  }else if(result.capabilityDigest)transferConflict("A local capability result belongs only to its original signer.");
   if(result.providerUploadId&&!observations.some(row=>row.facts.uploadId===result.providerUploadId&&["accepted","session"].includes(row.facts.stage)))transferConflict("The returned original session has no actual original provider observation.");
   if(result.requestProof&&!observations.some(row=>row.facts.stage==="metadata"&&transferDigest(row.facts.requestProof)===transferDigest(result.requestProof)&&transferDigest(row.facts.revision)===transferDigest(result.revision)))transferConflict("The actual returned original request proof has no matching physical metadata observation.");
-  const write=["ordinary_put","ordinary_delete","multipart_create","multipart_complete","multipart_abort"].includes(call.kind);
+  const write=["ordinary_put","ordinary_delete","multipart_create","multipart_complete","multipart_abort","multipart_sign"].includes(call.kind);
   const unresolved=requests.some(row=>["admitted","unknown"].includes(row.state));
   if(write&&result.accepted&&!observations.some(row=>row.facts.stage==="accepted")){
    const[parent]=call.objectReceiptId?await tx.select({kind:mediaObjectWrites.storageKind}).from(mediaObjectWrites).where(eq(mediaObjectWrites.id,call.objectReceiptId)).limit(1):[];

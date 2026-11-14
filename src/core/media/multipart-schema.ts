@@ -8,6 +8,7 @@ import {createdAtColumn,updatedAtColumn} from "@/core/db/columns";
 import type {MultipartPart} from "@/adapters/storage/types";
 import type {MultipartCreateBaseline} from "./multipart-create-baseline-proof";
 import type {OriginalMultipartPartBodies} from "./multipart-part-bodies-proof";
+import type {OriginalMultipartPartIssue} from "./multipart-part-issue-types";
 import {mediaObjectWrites} from "./write-schema";
 
 export const MULTIPART_STATES=["unverified","creating","open","completing","completed","aborting","aborted","unknown"]as const;
@@ -35,7 +36,7 @@ export const mediaMultipartResources=pgTable("media_multipart_resources",{
 ]);
 export const mediaMultipartOperations=pgTable("media_multipart_operations",{
  id:uuid("id").primaryKey().defaultRandom(),resourceId:uuid("resource_id").notNull().references(()=>mediaMultipartResources.id,{onDelete:"restrict"}),
- kind:text("operation_kind",{enum:["create","complete","abort"]}).notNull(),state:text("state",{enum:MULTIPART_OPERATION_STATES}).notNull(),
+ kind:text("operation_kind",{enum:["create","complete","abort","sign"]}).notNull(),state:text("state",{enum:MULTIPART_OPERATION_STATES}).notNull(),
  // Original admission, not a current account or a reconstructed provider ID.
  providerUploadId:text("provider_upload_id"),parts:jsonb("parts").$type<MultipartPart[]>().notNull().default([]),partsDigest:text("parts_digest"),
  actor:text("actor").notNull(),
@@ -47,14 +48,16 @@ export const mediaMultipartOperations=pgTable("media_multipart_operations",{
  // A declaration limits future issuer authority. It does not attest receipt
  // of any bytes or retire any old/issued capability. Legacy NULL stays debt.
  partBodies:jsonb("part_bodies").$type<OriginalMultipartPartBodies>(),
+ partIssue:jsonb("part_issue").$type<OriginalMultipartPartIssue>(),
  reviewedAt:timestamp("reviewed_at",{withTimezone:true}),reviewedBy:text("reviewed_by"),evidenceDigest:text("evidence_digest"),
  createdAt:createdAtColumn(),updatedAt:updatedAtColumn(),
 },t=>[
  index("media_multipart_operations_resource_idx").on(t.resourceId,t.createdAt),
  index("media_multipart_operations_open_idx").on(t.state,t.createdAt),
- check("media_multipart_operation_kind",sql`${t.kind} in ('create','complete','abort')`),
+ check("media_multipart_operation_kind",sql`${t.kind} in ('create','complete','abort','sign')`),
  check("media_multipart_operation_state",sql`${t.state} in ('started','accepted','unknown','not_applied')`),
  check("media_multipart_parts_digest",sql`${t.partsDigest} is null or ${t.partsDigest} ~ '^[a-f0-9]{64}$'`),
  check("media_multipart_create_baseline",sql`${t.createBaseline} is null or (${t.kind} = 'create' and jsonb_typeof(${t.createBaseline}) = 'object' and ${t.createBaseline}->>'format' = 'original-multipart-create-baseline/v1' and ${t.createBaseline}->>'state' in ('capturing','complete') and jsonb_typeof(${t.createBaseline}->'pages') = 'array') is true`),
  check("media_multipart_part_bodies",sql`${t.partBodies} is null or (${t.kind} = 'create' and jsonb_typeof(${t.partBodies}) = 'object' and ${t.partBodies}->>'format' = 'original-multipart-part-bodies/v1' and jsonb_typeof(${t.partBodies}->'parts') = 'array') is true`),
+ check("media_multipart_part_issue",sql`${t.partIssue} is null or (${t.kind} = 'sign' and jsonb_typeof(${t.partIssue}) = 'object' and ${t.partIssue}->>'format' = 'original-multipart-part-issue/v1') is true`),
 ]);

@@ -8820,6 +8820,8 @@
   "media.recovery.cleanup": "Limpiar el recurso original",
   "media.recovery.complete": "Completar carga reanudable",
   "media.recovery.create": "Iniciar carga reanudable",
+  "media.recovery.sign": "Emisión del enlace de carga",
+  "media.recovery.signingReview": "Este enlace aún puede permitir escrituras. Conserve la carga mientras se revisan su emisión original y el resultado del almacenamiento. Su caducidad o una respuesta del navegador no completan la recuperación.",
   "media.recovery.multipart": "Carga reanudable original",
   "media.recovery.multipartConfirm": "Confirmo el recurso multiparte original y que sus escritores anteriores se han detenido.",
   "media.recovery.providerUploadId": "ID de carga del proveedor original (si se conoce)",

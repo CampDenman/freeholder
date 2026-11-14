@@ -8820,6 +8820,8 @@
   "media.recovery.cleanup": "Nettoyer la ressource initiale",
   "media.recovery.complete": "Terminer le téléversement reprenable",
   "media.recovery.create": "Démarrer le téléversement reprenable",
+  "media.recovery.sign": "Émission d’un lien de téléversement",
+  "media.recovery.signingReview": "Ce lien peut encore permettre une écriture. Conservez le téléversement pendant la vérification de son émission initiale et de son stockage. Son expiration ou une réponse du navigateur ne termine pas la récupération.",
   "media.recovery.multipart": "Téléversement reprenable initial",
   "media.recovery.multipartConfirm": "Je confirme la ressource multipart initiale et l’arrêt de ses écritures précédentes.",
   "media.recovery.providerUploadId": "Identifiant du téléversement chez le fournisseur initial (si connu)",

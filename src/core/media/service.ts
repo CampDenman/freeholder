@@ -38,6 +38,7 @@ import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {originalUploadContact,assertOriginalUploadWritable} from "./upload-ownership";
 import {declareOriginalMultipartPartBodies} from "./multipart-part-bodies";
 import {ORIGINAL_MULTIPART_PART_BYTES} from "./multipart-part-bodies-proof";
+import {claimOriginalPartIssuance,finishUnattemptedPartIssuance,issueOriginalMultipartPart} from "./multipart-part-issuance";
 import {transferDigest} from "./transfer-proof";
 import {withOriginalMultipartInvocation} from "./provider-callers";
 import {reserveMultipart,createOriginalMultipart,originalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
@@ -1184,8 +1185,10 @@ const signUploadClaim = defineService({
     providerUploadId: z.string(),
     expiresAt: timestamp,
     partNumbers: z.array(z.number().int()),
+    issuances:z.array(z.object({operationId:uuid,partNumber:z.number().int()})),
   }),
   handler: async (input, ctx) => {
+    await assertDurableMultipartPartIssuance(ctx.tx);
     const {upload:session,resource}=await lockMultipartUpload(ctx.tx,input.id);
     if (!session || session.strategy !== "direct_multipart") {
       throw new ServiceError("not_found", "That direct upload is not here.");
@@ -1210,6 +1213,7 @@ const signUploadClaim = defineService({
     await assertDurableMultipartPartIssuance(ctx.tx);
     // A metadata-only upload birth never bypasses the exact resource key fence.
     await(await import("./original-key-tombstone")).assertOriginalKeyCreator(ctx.tx,{namespace:resource.namespace,key:resource.key,role:"multipart_part"});
+    const issuances:Array<{operationId:string;partNumber:number}>=[];for(const partNumber of partNumbers)issuances.push(await claimOriginalPartIssuance(ctx,session.id,partNumber));
     if (session.state === "created") {
       await ctx.tx
         .update(mediaUploads)
@@ -1222,6 +1226,7 @@ const signUploadClaim = defineService({
       providerUploadId: session.providerUploadId,
       expiresAt: session.expiresAt,
       partNumbers,
+      issuances,
     };
   },
 });
@@ -1242,30 +1247,22 @@ export const signUploadParts = defineOrchestratedService({
         partNumber: z.number().int(),
         url: z.string(),
         method: z.literal("PUT"),
+        headers:z.record(z.string(),z.string()),
       }),
     ),
     expiresAt: timestamp,
   }),
-  handler: async (input, actor) => {
+  handler: async (input, actor) => withOriginalMultipartInvocation(async()=>{
     const claimed = await signUploadClaim.call(input, actor);
-    await db().transaction(assertDurableMultipartPartIssuance);
-    const captured=await originalMultipart(input.id),multipart=captured.store.directMultipart;
-    if (!multipart) {
-      throw new ServiceError("conflict", "Direct uploads are unavailable.");
-    }
-    await db().transaction(async tx=>{const{resource}=await lockMultipartUpload(tx,input.id);await(await import("./original-key-tombstone")).assertOriginalKeyCreator(tx,{namespace:resource.namespace,key:resource.key,role:"multipart_part"});});
-    const signed = await Promise.all(
-      claimed.partNumbers.map(async (partNumber) => ({
-        partNumber,
-        ...(await multipart.signPart(
-          claimed.storageKey,
-          claimed.providerUploadId,
-          partNumber,
-        )),
-      })),
-    );
-    return { parts: signed, expiresAt: claimed.expiresAt };
-  },
+    try{await db().transaction(async tx=>{await assertDurableMultipartPartIssuance(tx);const{resource}=await lockMultipartUpload(tx,input.id);await(await import("./original-key-tombstone")).assertOriginalKeyCreator(tx,{namespace:resource.namespace,key:resource.key,role:"multipart_part"});});}
+    catch(error){await Promise.allSettled(claimed.issuances.map(issuance=>finishUnattemptedPartIssuance(issuance.operationId)));throw error;}
+    // Every genuine local signer must settle before the owning invocation
+    // closes, including siblings when one attempt fails. No orphan promises.
+    const results=await Promise.allSettled(claimed.issuances.map(issuance=>issueOriginalMultipartPart(input.id,issuance.operationId,actor))),signed:Array<Awaited<ReturnType<typeof issueOriginalMultipartPart>>>=[],failures:unknown[]=[];
+    for(const result of results)if(result.status==="fulfilled")signed.push(result.value);else failures.push(result.reason);
+    if(failures.length)throw new AggregateError(failures,"Original upload link attempts are retained. Keep the upload for recovery before trying again.");
+    return { parts: signed, expiresAt: new Date(Math.min(...signed.map(part=>part.expiresAt.getTime()))) };
+  }),
 });
 
 const failDirectUpload = defineService({

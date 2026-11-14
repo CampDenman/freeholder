@@ -249,7 +249,7 @@ async function directUpload(
   for (let partNumber = 1; partNumber <= reservation.partCount!; partNumber += 1) {
     if (completed.has(partNumber)) continue;
     const signed = await apiJson<{
-      parts: { partNumber: number; url: string; method: "PUT" }[];
+      parts: { partNumber: number; url: string; method: "PUT";headers:Record<string,string> }[];
     }>("/api/media/uploads/parts", {
       method: "POST",
       body: JSON.stringify({ id: reservation.id, partNumbers: [partNumber] }),
@@ -258,6 +258,7 @@ async function directUpload(
     const end = Math.min(start + partSize, file.size);
     const response = await fetch(signed.parts[0]!.url, {
       method: "PUT",
+      headers:signed.parts[0]!.headers,
       body: file.slice(start, end),
       signal: options.signal,
     });
