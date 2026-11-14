@@ -35,7 +35,7 @@ export async function controlledCollectionState(tx:Tx,collectionId:string){
   ||merchantTaxDigest(terms.snapshot)!==merchantTaxDigest(review.quote.snapshot)||collection.kind==="proration"&&terms.acceptedQuoteDigest!==review.quoteDigest
   ||collection.kind==="period"&&collection.acceptanceKind!=="original_period_mandate"||collection.kind==="proration"&&collection.acceptanceKind!=="explicit_change")refuse();
  const history=await controlledProviderJournal(tx,resource.id);authenticatedControlledQuote(quote,resource,history);
- const canonical=await controlledCanonicalTarget(tx,collection.invoiceId);
+ const canonical=await controlledCanonicalTarget(tx,collection.invoiceId,collection.creditNoteId);
  const[market]=await tx.select().from(subscriptionMarketPolicies).where(eq(subscriptionMarketPolicies.subscriptionId,parent.id)).limit(1);
  if(!market||market.model!=="seller_merchant"||canonical.marketPolicy.sellerUserId!==market.sellerUserId||canonical.marketPolicy.siteFeeBps!==market.siteFeeBps
   ||canonical.marketPolicy.merchantContactId!==market.merchantContactId||canonical.marketPolicy.providerAccountId!==market.providerAccountId)refuse();
