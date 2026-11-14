@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+B reservation segment private SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08):
+root approved the additional purpose-child inventory. Child schema/strict
+contract/MAC and pure interval arithmetic now preserve separate ORIGINAL epoch
+start/end/caps and ABSOLUTE selected endpoints. Nonzero100/[104,105), nested
+slices/holes/retired/proven/owed and tampering have fifteen prepared controls,
+ALL UNRUN. Explicit table/private/noTTL source metadata added in isolation;
+actual FK/current-bank/persistence/SQL candidate/BEFORE+deferred mandatory-birth
+guards/old-consumer continuations and all qualification remain unfinished.
+No current authority, release, B completion or stable claim; original funding/
+reservation/application rows and their old hash domains remain unchanged.
+
 B reservation economic-segment INVENTORY2026-11-14 (C12.38/C9.33/C1.08):
 source audit proves existing reservation fee scalars/opaque digest do not retain
 the original root interval; repricing a4199/F400 retired1/current399 source at

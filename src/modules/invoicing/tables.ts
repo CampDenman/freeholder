@@ -68,3 +68,4 @@ export { merchantCashReturnInspectionStops } from "./merchant-cash-inspection-st
 export { merchantFeeRefundInvocations } from "./merchant-fee-invocation-schema";
 
 export { invoiceCreditFundingAtomicFeePartitions } from "./atomic-credit-fee-partition-schema";
+export { invoiceCreditReservationAtomicFeePartitions } from "./atomic-credit-reservation-schema";

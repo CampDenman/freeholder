@@ -136,6 +136,7 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_proration_principal: "Private exact original cash/credit principal allocations, never global content search.",
   subscription_proration_credit_uses: "Private explicitly accepted credit dispositions; authorized original agreement only.",
   invoice_credit_funding_atomic_fee_partitions: "Private immutable original credit fee retirement, bank and actual funding ownership evidence; authorized financial services only.",
+  invoice_credit_reservation_atomic_fee_partitions: "Private immutable original credit fee segment and actual reservation ownership evidence; authorized financial services only.",
   invoice_credit_funding: "Private original issued credit and exact principal ownership; authorized money services only.",
   invoice_credit_reservations: "Private retained customer credit promises, never global content search.",
   invoice_credit_applications: "Private original noncash invoice consideration, never global content search.",

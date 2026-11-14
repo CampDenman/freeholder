@@ -1,7 +1,7 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # B reservation segment inventory, source only
 
-C12.38/C9.33/C1.08. This is an inventory for review before implementation.
+C12.38/C9.33/C1.08. Root approved this exact inventory before implementation.
 The finite field/FK/function/trigger/source/privacy contract is
 `atomic-credit-reservation-segments84.inventory.json`. No additional schema,
 SQL or runtime capability is implemented or qualified here.
@@ -30,7 +30,16 @@ domains remain exact. Released unused intervals remain full historical evidence;
 applied intervals stay consumed. Future C compensation must bind these exact
 intervals and cannot turn them into generic available credit.
 
-The additional model, three function headers, two triggers and finite existing
-B successors are proposed, not implemented. No compiler, lint, parser, model
+Private source WIP now contains the approved child schema, strict contract,
+MAC verifier, absolute interval arithmetic and fifteen meaningful prepared pure
+controls. Original epochStart/end and assigned/proven caps are distinct from
+each selected interval's ABSOLUTE endpoints: N(t)=floor(Fi*t/P)-floor(Fi*s/P).
+Nonzero epoch100/[104,105), nested slices, caps/owed, released holes, overlapping
+or foreign ranges, tampered MAC/preimage and unexplained fee counters are
+covered in prepared controls. These arithmetic/MAC checks supply no actual FK,
+current bank, caller or writer authority.
+
+The three SQL headers, two triggers, actual persistence/readers/consumer wiring
+and finite existing B successors remain unfinished. No compiler, lint, parser, model
 imports, test, PostgreSQL, provider, host or installation command ran. No
 readiness, closure, stable or release claim follows from this inventory.
