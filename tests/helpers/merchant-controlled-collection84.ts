@@ -5,6 +5,8 @@ import { expect } from "vitest";
 import { z } from "zod";
 import { controlledPeriodEdge84 } from "./merchant-controlled-period84";
 const bankRef=(value:unknown)=>z.string().min(1).max(200).parse(value);
+const actualFeeRef=(intent:unknown)=>`fee_${bankRef(intent).replace(/^pi_/,"")}`;
+const actualTransferRef=(intent:unknown)=>`tr_${bankRef(intent).replace(/^pi_/,"")}`;
 const object=(value:unknown):Record<string,unknown>=>value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:{};
 const tag=(form:URLSearchParams)=>Object.fromEntries([...form].filter(([key])=>key.startsWith("metadata[")).map(([key,value])=>[key.slice(9,-1),value]));
 export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDraftReply?:true;failAfterPositiveCash?:true}={}){
@@ -13,6 +15,8 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
  let lostUpdate=false,lostDraft=false,failedCash=false;
  const bankInvoices=new Map<string,Record<string,unknown>>(),bankLines=new Map<string,Array<Record<string,unknown>>>(),prices=new Map<string,Record<string,unknown>>(),intents=new Map<string,Record<string,unknown>>();
  const intentInvoices=new Map<string,string>(),externalRefunds=new Map<string,Record<string,unknown>>();
+ const feeReturns=new Map<string,Record<string,unknown>>(),transferReturns=new Map<string,Record<string,unknown>>();
+ let principalRefundPosts=0,feeRefundPosts=0,transferReturnPosts=0;
  const forms:Array<{path:string;form:URLSearchParams}>=[];
  const edge=controlledPeriodEdge84({atProviderStart:true,extra:async(url,init)=>{
   const subscription=current();if(!subscription)return null;
@@ -78,12 +82,34 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
   const intent=[...intents.values()].find(row=>url.pathname===`/v1/payment_intents/${bankRef(row.id)}`);
   if(intent&&init.method==="GET"){cashGets++;return Response.json(intent);}
   const chargeIntent=[...intents.values()].find(row=>url.pathname===`/v1/charges/${bankRef(row.latest_charge)}`);
-  if(chargeIntent&&init.method==="GET")return Response.json({id:chargeIntent.latest_charge,payment_intent:chargeIntent.id,amount_captured:chargeIntent.amount_received,currency:chargeIntent.currency,paid:true,captured:true,refunded:[...externalRefunds.values()].filter(refund=>refund.payment_intent===chargeIntent.id).reduce((sum,refund)=>sum+Number(refund.amount),0)===Number(chargeIntent.amount_received),amount_refunded:[...externalRefunds.values()].filter(refund=>refund.payment_intent===chargeIntent.id).reduce((sum,refund)=>sum+Number(refund.amount),0),
-   application_fee:Number(chargeIntent.application_fee_amount)>0?`fee_${bankRef(chargeIntent.id)}`:null,transfer:`tr_${bankRef(chargeIntent.id)}`});
-  const feeIntent=[...intents.values()].find(row=>url.pathname===`/v1/application_fees/fee_${bankRef(row.id)}`);
-  if(feeIntent&&init.method==="GET")return Response.json({id:`fee_${bankRef(feeIntent.id)}`,originating_transaction:feeIntent.latest_charge,charge:feeIntent.latest_charge,account:object(feeIntent.transfer_data).destination,amount:feeIntent.application_fee_amount,amount_refunded:0,currency:feeIntent.currency});
-  const transferIntent=[...intents.values()].find(row=>url.pathname===`/v1/transfers/tr_${bankRef(row.id)}`);
-  if(transferIntent&&init.method==="GET")return Response.json({id:`tr_${bankRef(transferIntent.id)}`,source_transaction:transferIntent.latest_charge,destination:object(transferIntent.transfer_data).destination,amount:transferIntent.amount_received,amount_reversed:0,currency:transferIntent.currency,reversed:false});
+  if(chargeIntent&&init.method==="GET")return Response.json({id:chargeIntent.latest_charge,payment_intent:chargeIntent.id,amount_captured:chargeIntent.amount_received,currency:chargeIntent.currency,status:"succeeded",paid:true,captured:true,refunded:[...externalRefunds.values()].filter(refund=>refund.payment_intent===chargeIntent.id).reduce((sum,refund)=>sum+Number(refund.amount),0)===Number(chargeIntent.amount_received),amount_refunded:[...externalRefunds.values()].filter(refund=>refund.payment_intent===chargeIntent.id).reduce((sum,refund)=>sum+Number(refund.amount),0),
+   application_fee:Number(chargeIntent.application_fee_amount)>0?actualFeeRef(chargeIntent.id):null,transfer:actualTransferRef(chargeIntent.id)});
+  const feeIntent=[...intents.values()].find(row=>url.pathname===`/v1/application_fees/${actualFeeRef(row.id)}`);
+  if(feeIntent&&init.method==="GET")return Response.json({id:actualFeeRef(feeIntent.id),originating_transaction:feeIntent.latest_charge,charge:feeIntent.latest_charge,account:object(feeIntent.transfer_data).destination,amount:feeIntent.application_fee_amount,amount_refunded:[...feeReturns.values()].filter(row=>row.fee===actualFeeRef(feeIntent.id)).reduce((sum,row)=>sum+Number(row.amount),0),currency:feeIntent.currency});
+  const transferIntent=[...intents.values()].find(row=>url.pathname===`/v1/transfers/${actualTransferRef(row.id)}`);
+  if(transferIntent&&init.method==="GET"){const reversed=[...transferReturns.values()].filter(row=>row.transfer===actualTransferRef(transferIntent.id)).reduce((sum,row)=>sum+Number(row.amount),0);return Response.json({id:actualTransferRef(transferIntent.id),source_transaction:transferIntent.latest_charge,destination:object(transferIntent.transfer_data).destination,amount:transferIntent.amount_received,amount_reversed:reversed,currency:transferIntent.currency,reversed:reversed===Number(transferIntent.amount_received)});}
+  if(url.pathname==="/v1/refunds"&&init.method==="POST"){
+   const actual=form(),selected=[...intents.values()].find(row=>row.id===actual.get("payment_intent")||row.latest_charge===actual.get("charge"));
+   if(!selected)throw Error("Refund POST must name its actual existing original PI or charge.");
+   expect(actual.get("reverse_transfer")).toBe("false");expect(actual.get("refund_application_fee")).toBe("false");principalRefundPosts++;
+   const returned=externallyRefundPayment(bankRef(selected.id),Number(actual.get("amount")));returned.metadata=tag(actual);return Response.json(returned);
+  }
+  const feeParent=[...intents.values()].find(row=>url.pathname===`/v1/application_fees/${actualFeeRef(row.id)}/refunds`);
+  if(feeParent){
+   const rows=[...feeReturns.values()].filter(row=>row.fee===actualFeeRef(feeParent.id));
+   if(init.method==="GET")return Response.json({data:rows,has_more:false});
+   if(init.method==="POST"){const actual=form(),amount=Number(actual.get("amount")),before=rows.reduce((sum,row)=>sum+Number(row.amount),0);
+    if(!Number.isSafeInteger(amount)||amount<=0||before+amount>Number(feeParent.application_fee_amount))throw Error("Return only actual remaining original fee money.");
+    feeRefundPosts++;const id=`fr_actualControlledFee${feeRefundPosts}`,row={id,fee:actualFeeRef(feeParent.id),amount,currency:feeParent.currency,metadata:tag(actual)};feeReturns.set(id,row);return Response.json(row);}
+  }
+  const transferParent=[...intents.values()].find(row=>url.pathname===`/v1/transfers/${actualTransferRef(row.id)}/reversals`);
+  if(transferParent){
+   const rows=[...transferReturns.values()].filter(row=>row.transfer===actualTransferRef(transferParent.id));
+   if(init.method==="GET")return Response.json({data:rows,has_more:false});
+   if(init.method==="POST"){const actual=form(),amount=Number(actual.get("amount")),before=rows.reduce((sum,row)=>sum+Number(row.amount),0);
+    if(!Number.isSafeInteger(amount)||amount<=0||before+amount>Number(transferParent.amount_received))throw Error("Reverse only actual remaining original recipient money.");
+    transferReturnPosts++;const id=`trr_actualControlledRecipient${transferReturnPosts}`,row={id,transfer:actualTransferRef(transferParent.id),amount,currency:transferParent.currency,metadata:tag(actual)};transferReturns.set(id,row);return Response.json(row);}
+  }
   if(url.pathname==="/v1/refunds"&&init.method==="GET")return Response.json({data:[...externalRefunds.values()].filter(refund=>(!url.searchParams.has("charge")||refund.charge===url.searchParams.get("charge"))&&(!url.searchParams.has("payment_intent")||refund.payment_intent===url.searchParams.get("payment_intent"))),has_more:false});
   const externalRefund=externalRefunds.get(url.pathname.slice("/v1/refunds/".length));if(externalRefund&&init.method==="GET")return Response.json(externalRefund);
   if(url.pathname==="/v1/disputes"&&init.method==="GET")return Response.json({data:[],has_more:false});
@@ -109,6 +135,11 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
   const id=`re_actualControlledExternal${externalRefunds.size+1}`,refund={id,object:"refund",payment_intent:providerPaymentIntentRef,charge:intent.latest_charge,amount:amountMinor,currency:intent.currency,status:"succeeded",created:Math.floor(Date.now()/1000)};
   externalRefunds.set(id,refund);return refund;
  }
+ function externallyReturnFee(providerPaymentIntentRef:string,amountMinor:number){
+  const intent=intents.get(providerPaymentIntentRef),already=[...feeReturns.values()].filter(row=>row.fee===actualFeeRef(providerPaymentIntentRef)).reduce((sum,row)=>sum+Number(row.amount),0);
+  if(!intent||!Number.isSafeInteger(amountMinor)||amountMinor<=0||already+amountMinor>Number(intent.application_fee_amount))throw Error("Return only an actual existing original bank fee; never manufacture local acceptance or metadata ownership.");
+  const id=`fr_actualExternalFee${feeReturns.size+1}`,actual={id,fee:actualFeeRef(providerPaymentIntentRef),amount:amountMinor,currency:intent.currency,metadata:{external_review:"fictional_dashboard_return"}};feeReturns.set(id,actual);return actual;
+ }
  // Explicit fictional external anomalies, never a production policy selector.
  // Original identity comes ONLY from the already-created exact bank invoice.
  // These methods intentionally describe contradictory received bank facts; the
@@ -125,6 +156,6 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
   intents.set(id,intent);intentInvoices.set(id,providerInvoiceRef);invoice.amount_paid=amountMinor;invoice.amount_remaining=kind==="overage"?0:total-amountMinor;invoice.status=kind==="overage"?"paid":"open";
   return{providerInvoiceRef,providerPaymentIntentRef:id,amountMinor,currency:currency.toUpperCase(),feeMinor};
  }
- return{...edge,forms,externallyAttachPayment,externallyRefundPayment,externalRefunds:()=>[...externalRefunds.values()],externallyAttachWrongCurrencyPayment:(providerInvoiceRef:string)=>externalAnomaly(providerInvoiceRef,"wrong_currency"),externallyOverpayInvoice:(providerInvoiceRef:string)=>externalAnomaly(providerInvoiceRef,"overage"),
-  externalAttachments:()=>externalAttachments,invoices:()=>[...bankInvoices.values()],intents:()=>[...intents.values()],counts:()=>({updatePosts,draftPosts,itemPosts,feePosts,finalizePosts,payPosts,cashGets})};
+ return{...edge,forms,externallyAttachPayment,externallyRefundPayment,externallyReturnFee,externalRefunds:()=>[...externalRefunds.values()],externallyAttachWrongCurrencyPayment:(providerInvoiceRef:string)=>externalAnomaly(providerInvoiceRef,"wrong_currency"),externallyOverpayInvoice:(providerInvoiceRef:string)=>externalAnomaly(providerInvoiceRef,"overage"),
+  externalAttachments:()=>externalAttachments,invoices:()=>[...bankInvoices.values()],intents:()=>[...intents.values()],feeReturns:()=>[...feeReturns.values()],transferReturns:()=>[...transferReturns.values()],counts:()=>({updatePosts,draftPosts,itemPosts,feePosts,finalizePosts,payPosts,cashGets,principalRefundPosts,feeRefundPosts,transferReturnPosts})};
 }

@@ -18,13 +18,18 @@ import { reviewOriginalUnassignedCash } from "@/modules/invoicing/original-cash-
 import { ORIGINAL_PARTIAL_CASH_CONFIRMATION, ORIGINAL_UNASSIGNED_CASH_CONFIRMATION } from "@/modules/invoicing/original-cash-partial-contract";
 import { reviewCashInspectionCallerStopped } from "@/modules/invoicing/merchant-cash-inspection-stop-service";
 import { CASH_INSPECTION_STOP_CONFIRMATION } from "@/modules/invoicing/merchant-cash-inspection-stop-proof";
+import {reviewMerchantFeeInvocationStopped} from "@/modules/invoicing/merchant-fee-invocation-recovery";
+import {MERCHANT_FEE_STOP_CONFIRMATION} from "@/modules/invoicing/merchant-fee-invocation-contract";
 const path = "/admin/invoices/cash-recovery";
 const field = (form: FormData, key: string) => { const value = form.get(key); return typeof value === "string" ? value : ""; };
 export async function originalCashRecoveryAction(form: FormData) {
   const actor = { ...await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value), request: requestMetadataFromHeaders(await headers()) };
   try {
     const intent = field(form, "intent");
-    if (intent === "return") {
+    if(intent==="feeInvocationStop"){
+      if(field(form,"confirmation")!==MERCHANT_FEE_STOP_CONFIRMATION)throw new ServiceError("validation","Review only the actual original fee caller's mechanical stop.");
+      await reviewMerchantFeeInvocationStopped.call({paymentId:field(form,"paymentId"),invocationId:field(form,"invocationId"),expectedRevision:field(form,"expectedRevision"),hostingEvidence:field(form,"hostingEvidence"),confirmation:MERCHANT_FEE_STOP_CONFIRMATION},actor);
+    } else if (intent === "return") {
       const source = merchantRefundSource.parse(field(form, "sourceKind") === "subscription"
         ? { kind: "subscription", receiptId: field(form, "sourceId"), observationId: field(form, "observationId") }
         : { kind: "payment", paymentId: field(form, "sourceId"), ...(field(form, "observationId") ? { observationId: field(form, "observationId") } : {}) });

@@ -38,6 +38,7 @@ export async function originalAgreementFeeState(ctx: ServiceContext, invoiceId: 
     || invoice.creditedMinor !== duty.creditedMinor || policy?.model !== "seller_merchant" || policy.feeMinor !== duty.targetFeeMinor
     || lines.length !== 1 || lineSnapshot?.subscriptionProrationId !== duty.acceptanceId || cash.length + credits.length + receipts.length > 1000;
   let retainedCash = 0n, originalGrossCash = 0n, returnedCash = 0n, retainedCashDuty = 0n, retainedCredit = 0n, retainedCarriedDuty = 0n;
+  let atomicFeePending=false;
   const currentEvidence: unknown[] = [];
   try { await assertNoUnappliedMerchantCharge(ctx, invoiceId); }
   catch (error) { if (error instanceof ServiceError && error.code === "conflict") reviewRequired = true; else throw error; }
@@ -60,6 +61,11 @@ export async function originalAgreementFeeState(ctx: ServiceContext, invoiceId: 
       const recorded = await ctx.callAsSystem(commercialPrincipalState, { paymentId: row.payment.id });
       currentDuty = recorded.recorded && recorded.principalSafe ? recorded.feeOwedMinor : null;
     } else currentDuty = await originalMerchantFeeTarget(ctx, row.payment, await routingForPayment(ctx, row.payment.id));
+    if(row.assignment.origin!=="recorded_external"){
+      const{controlledAtomicRefundFeeState}=await import("./controlled-atomic-refund-target");
+      const atomic=await controlledAtomicRefundFeeState(ctx,row.payment.id);
+      if(atomic){atomicFeePending||=atomic.pending;if(atomic.actualRetainedFeeMinor===null)reviewRequired=true;currentDuty=atomic.actualRetainedFeeMinor;}
+    }
     if (currentDuty === null || !Number.isSafeInteger(currentDuty) || currentDuty < 0 || currentDuty > row.assignment.feeObligationMinor) { reviewRequired = true; continue; }
     originalGrossCash += BigInt(row.payment.amountMinor); returnedCash += BigInt(row.payment.refundedMinor);
     retainedCash += BigInt(principal.currentPrincipalMinor); retainedCashDuty += BigInt(currentDuty);
@@ -97,7 +103,7 @@ export async function originalAgreementFeeState(ctx: ServiceContext, invoiceId: 
   const returnDueMinor = owedMinor !== null && recordedMinor !== null ? Math.max(0, recordedMinor - owedMinor) : null;
   return { invoiceId, currency: duty.currency, eligible: Boolean(eligibility), expectedReceivableMinor: duty.expectedReceivableMinor,
     owedMinor, recordedMinor, returnDueMinor, originalSourceExcessMinor: disposition?.originalSourceExcessMinor ?? null, reviewRequired,
-    pending: reviewRequired || !eligibility || owedMinor !== recordedMinor || (disposition?.originalSourceExcessMinor ?? 0) > 0,
+    pending: reviewRequired || atomicFeePending || !eligibility || owedMinor !== recordedMinor || (disposition?.originalSourceExcessMinor ?? 0) > 0,
     witness: { revision: merchantTaxDigest({ duty, invoice, policy, lines, cash, credits, eligibility, receipts, currentEvidence }), duty, cash, credits, eligibility, receipts } };
 }
 

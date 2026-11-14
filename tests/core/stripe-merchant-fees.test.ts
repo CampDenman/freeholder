@@ -104,4 +104,23 @@ describe("exact original application-fee refunds (C12.26/C12.38)", () => {
     await expect(p.issue(request)).rejects.toMatchObject({ code: "provider_failure", retryable: true });
     expect(p.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
   });
+  it("rechecks exact private original/returned counters after retaining the actual preflight GET and refuses a concurrent fee return before POST",async()=>{
+    const p=provider([identity,{...fee,amount_refunded:1}]),actual:Record<string,unknown>[]=[];
+    await expect(p.issue({...request,expectedOriginalFeeMinor:100,expectedFeeRefundedMinor:0,performFeeSourceRead:async read=>{const result=await read();actual.push(structuredClone(result));return result;}})).rejects.toMatchObject({code:"provider_failure"});
+    expect(actual).toEqual([{...fee,amount_refunded:1}]);expect(p.fetcher.mock.calls.every(([,init])=>init?.method==="GET")).toBe(true);
+  });
+  it("requires both exact private counters when the new POST preflight uses either, without substituting the original amount",async()=>{
+    const p=provider([identity,fee]);await expect(p.issue({...request,expectedOriginalFeeMinor:100})).rejects.toMatchObject({code:"provider_failure"});expect(p.fetcher.mock.calls.every(([,init])=>init?.method==="GET")).toBe(true);
+  });
+  it("rechecks the completed genuine read immediately before POST and leaves the exact old form/key unchanged",async()=>{
+    const p=provider([identity,fee,identity,refund]),order:string[]=[];
+    await p.issue({...request,expectedOriginalFeeMinor:100,expectedFeeRefundedMinor:0,performFeeSourceRead:async read=>{order.push("admit");const actual=await read();order.push("retain_actual_read");return actual;},beforeFeePost:async()=>{order.push("recheck_full_current");},onFeeRefundObserved:async()=>{order.push("retain_ack");}});
+    expect(order).toEqual(["admit","retain_actual_read","recheck_full_current","retain_ack"]);expect(p.fetcher.mock.calls.filter(([,init])=>init?.method==="POST")).toHaveLength(1);
+  });
+  it("keeps recovery GET-only after the original POST changed the returned counter and still represents its actual preparation read",async()=>{
+    const p=provider([identity,{...fee,amount_refunded:17},identity,{data:[refund],has_more:false}]),actual:Record<string,unknown>[]=[];
+    expect(await p.recover({...request,expectedOriginalFeeMinor:100,expectedFeeRefundedMinor:0,performFeeSourceRead:async read=>{const result=await read();actual.push(result);return result;}})).toMatchObject({providerRef:"fr_original",amountMinor:17});
+    expect(actual).toEqual([{...fee,amount_refunded:17}]);expect(p.fetcher.mock.calls.every(([,init])=>init?.method==="GET")).toBe(true);
+  });
+
 });

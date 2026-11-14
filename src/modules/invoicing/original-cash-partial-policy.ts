@@ -10,6 +10,9 @@ export async function originalPartialFeePolicy(ctx:ServiceContext,payment:typeof
   const [invoice]=await ctx.tx.select().from(invoices).where(eq(invoices.id,payment.invoiceId));
   const [policy]=await ctx.tx.select().from(invoiceMarketPolicies).where(eq(invoiceMarketPolicies.invoiceId,payment.invoiceId));
   const routing=await routingForPayment(ctx,payment.id);
+  const {controlledAtomicRefundTarget}=await import("./controlled-atomic-refund-target");
+  const atomic=routing.originalChargeReceiptId?await controlledAtomicRefundTarget(ctx,payment.id):null;
+  if(atomic?.target===null)throw new ServiceError("conflict","Restore the authentic committed atomic cash epochs and their exact resolved refunds before partial auxiliary targets.");
   if(!invoice||!policy||![0,1].includes(policy.collectionVersion)||policy.model!=="seller_merchant"||!Number.isSafeInteger(policy.siteFeeBps)||policy.siteFeeBps<0||policy.siteFeeBps>10000)throw new ServiceError("conflict","Restore the actual original accepted invoice fee authority before partial cash targets.");
   let segmentPrincipal=invoice.totalMinor,segmentFee=policy.feeMinor;
   let lineFees:Array<{invoiceLineId:string;revenueMinor:number;feeMinor:number}>=[];
@@ -42,9 +45,13 @@ export async function originalPartialFeePolicy(ctx:ServiceContext,payment:typeof
     if(policy.collectionVersion===1&&actual.merchantAllocationId!==routing.merchantAllocationId)continue;
     const before=captured;captured+=BigInt(original.amountMinor);
     const expected=BigInt(segmentFee)*captured/BigInt(segmentPrincipal)-BigInt(segmentFee)*before/BigInt(segmentPrincipal);
-    if(captured>BigInt(segmentPrincipal)||actual.applicationFeeMinor===undefined||BigInt(actual.applicationFeeMinor)!==expected)throw new ServiceError("conflict","An original captured fee conflicts with its canonical accepted invoice policy. Preserve actual old zero/positive money; do not manufacture a replacement fee.");
+    const exactAtomic=atomic?.resources.find(resource=>resource.paymentId===original.id);
+    if(captured>BigInt(segmentPrincipal)||actual.applicationFeeMinor===undefined||(atomic
+      ?!exactAtomic||exactAtomic.amountMinor!==original.amountMinor||exactAtomic.refundedMinor!==original.refundedMinor||exactAtomic.feeMinor!==actual.applicationFeeMinor
+      :BigInt(actual.applicationFeeMinor)!==expected))throw new ServiceError("conflict","An original captured fee conflicts with its canonical accepted invoice policy. Preserve actual old zero/positive money; do not manufacture a replacement fee.");
     resources.push({paymentId:original.id,amountMinor:original.amountMinor,feeMinor:actual.applicationFeeMinor});
   }
   if(!resources.some(resource=>resource.paymentId===payment.id))throw new ServiceError("conflict","Restore this actual original captured fee resource before partial targets.");
-  return {version:policy.collectionVersion,mode:policy.collectionVersion===1?"per_line":"aggregate",invoiceId:invoice.id,siteFeeBps:policy.siteFeeBps,invoiceFeeMinor:policy.feeMinor,segmentPrincipalMinor:segmentPrincipal,segmentFeeMinor:segmentFee,lineFees,nonLineShippingMinor:invoice.shippingMinor,resources};
+  if(atomic&&resources.length!==atomic.resources.length)throw new ServiceError("conflict","Retain every exact atomic captured resource in its original partial-return fee policy.");
+  return {version:policy.collectionVersion,mode:policy.collectionVersion===1?"per_line":"aggregate",invoiceId:invoice.id,siteFeeBps:policy.siteFeeBps,invoiceFeeMinor:policy.feeMinor,segmentPrincipalMinor:segmentPrincipal,segmentFeeMinor:segmentFee,lineFees,nonLineShippingMinor:invoice.shippingMinor,resources,...(atomic?{atomicRefundRevision:atomic.revision}:{})};
 }

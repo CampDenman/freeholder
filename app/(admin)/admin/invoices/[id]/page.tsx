@@ -35,6 +35,8 @@ import { requireStaffActor } from "../../guard";
 import { formatPpm, invoiceLineAmounts, invoiceTone, money, quantityFromMicros } from "../format";
 import { domainOrNull } from "../../../read-helpers";
 
+import {reviewAtomicFeeReconciliation} from "@/modules/invoicing/controlled-atomic-fee-review";
+import {AtomicFeeReconciliation} from "../../../../components/AtomicFeeReconciliation";
 export const dynamic = "force-dynamic";
 
 export default async function InvoiceDetailPage({
@@ -65,6 +67,7 @@ export default async function InvoiceDetailPage({
   const timezone = business?.timezone ?? "UTC";
   const locale = business?.defaultLocale ?? "en";
   const invoice = bundle.invoice;
+  const atomicFees=await reviewAtomicFeeReconciliation.call({invoiceId:id},actor);
   const merchantPayments = new Set(await listInvoiceMerchantPayments.call({ invoiceId: id }, actor));
   const refundStates = await invoiceRefundStates.call({ invoiceId: id }, actor);
   const interruptedReads = canManage ? await legacyBankReaderRecoveryPlan.call({ invoiceId: id }, actor) : [];
@@ -100,6 +103,7 @@ export default async function InvoiceDetailPage({
       </div>
 
       {invoice.sourceType === "subscription" && invoice.sourceId?.split(":")[1] === "proration" && invoice.totalMinor > 0 ? <a className="text-accent underline" href={`/admin/invoices/${invoice.id}/commission`}>{t("agreementCommission.title")}</a> : null}
+      <AtomicFeeReconciliation invoiceId={id} rows={atomicFees} manage={canManage} t={t} money={money}/>
       {errorCode ? (
         <Callout tone="danger" icon={<WarningCircle size={17} weight="fill" />}>
           {t(`invoices.error.${errorCode}`)}
