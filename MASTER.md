@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Composed source checkpoint 2026-11-14 (C1.12/C11.08/C12.38/C9.33):
+current-bank principal/ordinary legacy empty-read boundaries and tracked first-ACK
+CREATE/idle ABORT/verification-only ABORT source are integrated. New normal82
+preserves all488021 prior bytes and materializes the exact649575-byte owned
+successor. A genuine readonly framework diagnostic of failedV28 isolates only
+three page atoms from one original pay39's distinct pre/post invoice reads;
+53 other atoms resolve, all595 row hashes/all86 journals/sequence stay unchanged,
+no callers remain and no payment/admission exists. Exact signed-anchor cohort
+repair is in progress, without deduplication or ownership exemption. Current
+composed source/schema/native/SDK acceptance must rerun; new160 fee-call model
+is still isolated/incomplete, both media capabilities absent, all stable gates
+open. See `deploy/sql/0082_tracked_create_abort_successors_20261114.manifest.json`.
+
 Source continuation 2026-11-13 (C1.12/C11.08/C3.22): genuine human multipart
 recovery now has a retained-first-ACK CREATE path. Exact original baseline,
 physical nonce/runtime/full ACK/UploadId and actual FINs or independent stop
