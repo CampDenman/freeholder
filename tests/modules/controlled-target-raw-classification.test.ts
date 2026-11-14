@@ -400,7 +400,13 @@ function payCohortVector(change?:"missingAnchor"|"missingAck"|"duplicateAck"|"in
 describe("original pay caller with two honest complete inventory cohorts",()=>{
  it.each([false,true])("retains both actual same-caller page passes with partial=%s and separate current manifest, never inventing canonical payment",partial=>{
   const{v,pay,pages,receiptId}=payCohortVector(undefined,partial),before=merchantTaxDigest(v.target.history),actual=classifyControlledTargetRawFacts([v.target]);
-  for(const page of pages){expect(actual.unresolvedFactIds).not.toContain(page.id);const resolution=actual.resolutions.find(row=>row.factId===page.id);
+  const reviewed=new Set(controlledRawFinancialReview(v.target.resource,v.target.history).factIds),financialPages=pages.filter(page=>reviewed.has(page.id));
+  expect(pages).toHaveLength(4);expect(financialPages.map(page=>page.actual.kind)).toEqual(["invoice_lines_read","invoice_payments_read","invoice_lines_read"]);
+  const empty=pages.find(page=>page.actual.kind==="invoice_payments_read"&&Array.isArray(page.actual.raw.data)&&page.actual.raw.data.length===0);
+  if(!empty)throw Error("Retain the genuine empty complete preflight payment page.");
+  expect(reviewed.has(empty.id)).toBe(false);expect(actual.resolutions.some(row=>row.factId===empty.id)).toBe(false);
+  for(const page of pages)expect(v.target.history.facts.find(row=>row.id===page.id)).toEqual(page);
+  for(const page of financialPages){expect(actual.unresolvedFactIds).not.toContain(page.id);const resolution=actual.resolutions.find(row=>row.factId===page.id);
    expect(resolution?.inventoryCohortProofs).toHaveLength(1);const cohort=resolution?.inventoryCohortProofs?.[0];
    expect(cohort).toMatchObject({kind:"original_pay_inventory_cohort",operationId:pay.operation.id,callId:pay.call.id,payFactId:pay.facts.find(row=>row.actual.kind==="controlled_invoice_paid")?.id});
    expect(typeof cohort?.invoiceFactId).toBe("string");}
