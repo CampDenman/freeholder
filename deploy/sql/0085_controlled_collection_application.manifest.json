@@ -106,6 +106,13 @@
       "bytes": 74744,
       "materializedSha256": "cc4c6960f2881d2db279132bb7445d5ab4b96259b3fbfdd0c50f4639848cf5e5",
       "materializedBytes": 74744
+    },
+    {
+      "path": "deploy/subscription-controlled-paid-period84.fragment.sql",
+      "sha256": "f1478264fa9fc0872adb56bb322c2bba4f7060d543bb6b4a9f29889412a94505",
+      "bytes": 41809,
+      "materializedSha256": "f1478264fa9fc0872adb56bb322c2bba4f7060d543bb6b4a9f29889412a94505",
+      "materializedBytes": 41809
     }
   ],
   "functionStatementReplacements": [
@@ -159,12 +166,12 @@
       "positionPreserved": true
     }
   ],
-  "sha256": "5b8edf5feaa53135e33241c3622f85be94ed8e2ebca594487d3f98d2be78b76a",
-  "bytes": 528451,
+  "sha256": "1ea95389c2b254bf1f3548e672020da37d42d99bf5f8454b5b252d7d9e947a85",
+  "bytes": 570287,
   "normalMigrationWritten": true,
   "journalWritten": true,
   "databaseApplied": false,
-  "models": 154,
+  "models": 159,
   "oldMigrationsUntouched": "0\u201381 and83\u201384 exact prior identities; unpublished82 now6845a84e365657 bytes with full277201-bytead46 prefix",
   "originalApplicationShapeStillFailClosed": false,
   "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
@@ -176,7 +183,7 @@
     "wholeFiles": 173,
     "databaseSkips": 394
   },
-  "materialization": "Exact original source-part bytes with only seven full function CASE statements replaced at their original CREATE positions. Join each part.rstrip() with two newlines, statement-breakpoint, two newlines; terminate final newline. Frozen owned fragments stay unchanged. Preserve the entire original429589-byte initial normal85 prefix, then append one statement breakpoint and the exact complete84 successor bytes. Preserve the entire443235-byte staged-writer prefix and append exact local-binding successor bytes after one statement breakpoint. Preserve the entire453680-byte local-binding prefix, then append one statement breakpoint and the exact atomic-fee successor bytes.",
+  "materialization": "Exact original source-part bytes with only seven full function CASE statements replaced at their original CREATE positions. Join each part.rstrip() with two newlines, statement-breakpoint, two newlines; terminate final newline. Frozen owned fragments stay unchanged. Preserve the entire original429589-byte initial normal85 prefix, then append one statement breakpoint and the exact complete84 successor bytes. Preserve the entire443235-byte staged-writer prefix and append exact local-binding successor bytes after one statement breakpoint. Preserve the entire453680-byte local-binding prefix, then append one statement breakpoint and the exact atomic-fee successor bytes. Preserve the entire528451-byte atomic-fee prefix, then append one statement breakpoint and exact paid-period successor bytes.",
   "caseManifestPath": "deploy/controlled-cash-application-case84.manifest.json",
   "caseManifestSha256": "58119d2ddd24d5be183c2d6e8b2ea1195129516e0cd3e03e98b07c0dbaaedb00",
   "normalPath": "db/migrations/0085_controlled_collection_application.sql",
@@ -193,7 +200,7 @@
     "previousQualifiedSource": "1c7b35611d6d138e749e8c4bba1ff7c9693c513f"
   },
   "applicationShapeSuccessor": "Genuine immutable HMAC batch/core3/current-TX complete-stage structural proof; no marker permission. Actual service/native qualification PENDING.",
-  "currentSourceQualification": "PENDING integrated atomic-fee/media source, fresh normal/schema/native/SDK qualification",
+  "currentSourceQualification": "PENDING integrated paid159 + prior atomic/media/history source/normal/schema/native/SDK",
   "completeFunctionSuccessors": [
     {
       "fragment": "deploy/controlled-collection-inventory-local84.fragment.sql",
@@ -212,5 +219,11 @@
     "sha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
     "bytes": 453680,
     "entirePrefixPreserved": true
-  }
+  },
+  "previousAtomicFee85": {
+    "sha256": "5b8edf5feaa53135e33241c3622f85be94ed8e2ebca594487d3f98d2be78b76a",
+    "bytes": 528451,
+    "entirePrefixPreserved": true
+  },
+  "modelCountMeaning": "Affected strict target inventory: prior154 + one paid receipt + four existing subscription/event/grant/catalogue models; actual registration and full strict schema acceptance PENDING"
 }

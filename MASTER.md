@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Paid-period forward assembly 2026-11-13 (C9.33/C12.38/C1.08): the real
+paid-effect model and existing subscription/event/grant/catalogue mutations now
+compose with actual target-derived invoice/profile history and the ordinary
+paid-invoice event. New85 appends the exact41809-byte paid suffix after the
+entire528451-byte atomic prefix; published0–79 and frozen80/81/83/84 stay intact.
+The affected strict inventory must expand154→159, including the four existing
+parent/access tables. Source, fresh ordinary schema, SDK and actual money/access/
+recovery/provider/security acceptance remain PENDING. Prior3b4f488d source-only
+qualification passes1221 actual/191 whole selected files,422 DB skips and full
+types/lint/metadata, but predates this paid integration. No C-item/stable closure.
+
 Source correction 2026-11-13 (C1.12/C11.08/C3.22): root v58 compiler stopped
 before business/native execution on multipart cursor/page inference, a widened
 negative fixture kind and two shadowed fetch type references. An isolated c792
