@@ -3564,6 +3564,20 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled initial batch evaluation source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): a NEW ordinary unregistered evaluator discovers the
+actual complete SQL financial FK scope before canonical locks, obtains the
+genuine retained bank batch itself through the private prospective initializer,
+and checks original current principal/debt, credit/fee, ownership/privacy and all
+actual source callers/raw occurrences. The unchanged caller inventory is reused
+on the full source scope without reverse foreign-resource locking; partial
+capacity and full PG before/after invariance remain explicit. Three genuine
+factory/bank/inspection service-native controls are PREPARED/UNRUN, not passes.
+No SQL/model/registration/activation or execution occurred. Signing/persisting
+actual prewrite admissions, staged writer and original route/settlement boundary
+integration, partial/tiny batch natives and final acceptance remain required.
+See `deploy/controlled-cash-initial-evaluation84-source-20261113.md`.
+
 Controlled original preparation source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): the isolated future consumer now distinguishes
 actual original zero bootstrap invoice evidence from canonical target owners in
