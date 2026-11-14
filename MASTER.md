@@ -15993,6 +15993,13 @@ whatever is best for the people using the site.
   controlled observation/application and source-money transition fencing remain
   REQUIRED implementation/qualification. No later read invents an old finish.
   See deploy/original-cash-inspection-current83-source-20261113.md.
+  Current cash-reader source qualification2026-11-13: full TypeScript passes
+  at4cc200a9. Whole-repository lint stops only at two new issues: schema imports
+  used solely as types and an unbound actual Stripe inspection method in the
+  native helper. The source now uses type-only imports and binds that genuine
+  method to its original adapter. No lint rule, runtime policy or financial
+  oracle is relaxed. Failed v17 logs remain preserved; renewed focused lint,
+  all complete affected contracts and actual reader journeys are still required.
   Independent original-inspection stop SOURCE checkpoint (2026-11-13,
   C12.38/C1.08/C11.10): one proposed model143 retains a signed exact-admission
   stop separately from genuine bank-wrapper completion. Fresh human review
@@ -16339,3 +16346,23 @@ acceptance. Real query/consumer integration, complete positive provider/partial
 batch/calendar/disposition/recovery/UI/privacy and actual account/security
 acceptance remain REQUIRED, with no new deferral or C/stable closure. See
 deploy/controlled-cash-inspection-producer82-20261113.md.
+
+Parent qualification repair2026-11-13: full TypeScript passed56.115s at007315b9.
+Focused lint stopped on a native-test callback declaration whose generic call
+parameter was unknown. The control now derives its callback input from the real
+service Zod schema. No handler/oracle/lint policy changes; failed v22 remains
+preserved and renewed143/source/native acceptance remains pending.
+
+Parent helper validation2026-11-13: the precise callback input exposes the
+adapter-level optional platform account. The control now parses the actual
+callback through the real shared input schema instead of asserting or inventing
+an account. Failed v23 type evidence is preserved; renewed qualification remains
+pending. This carries the exact parent0180165c repair, not a new local test run.
+
+Source continuation 2026-11-13 (C12.38/C1.08): the future controlled observation
+producer uses the actual same-transaction immutable lineage birth hook before
+any bank GET. Exact returned-own ancestry authenticates only its own optional
+lineage child as a seventh historical causal family; full CURRENT coverage
+retains it and every other caller/raw/money row. No legacy backfill, blanket
+own-read exclusion, bank/application/access authority or qualification is
+claimed. See `deploy/controlled-cash-inspection-lineage-producer84-source-20261113.md`.

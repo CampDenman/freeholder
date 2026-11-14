@@ -49,6 +49,7 @@ export const prepareMerchantCashReturnInspection = defineService({
       caller: merchantPhysicalCaller(), completionNonceHash: hash(completionNonce) }).returning();
     await retainControlledCashInspectionLineage(ctx,{inspectionId:saved!.id,completionNonce});
     queueOriginalMerchantRefundRepair(ctx,{kind:"cash_read",id:saved!.id});
+    await retainControlledCashInspectionLineage(ctx,{inspectionId:saved!.id,completionNonce});
     ctx.setSubject(cash.paymentId ? "payment" : "subscription_provider_charge", cash.paymentId ?? cash.subscriptionChargeReceiptId!);
     return { inspectionId: saved!.id, completionNonce, providerPlatformAccountId: cash.providerPlatformAccountId, providerAccountId: cash.chargeAccountId,
       providerApiVersion: cash.providerApiVersion, paymentProviderRef: cash.providerRef };
