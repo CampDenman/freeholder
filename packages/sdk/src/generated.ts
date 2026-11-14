@@ -1339,6 +1339,7 @@ export const SERVICE_NAMES = [
   "platform.openForkUpdate",
   "platform.outboxSummary",
   "platform.preflightUpdate",
+  "platform.probeDoctor",
   "platform.redriveDeadLetters",
   "platform.replayOutboxEvent",
   "platform.retryJob",
@@ -6064,7 +6065,7 @@ export interface ServiceCatalog {
   };
   "media.listStorageTransferRecovery": {
     input: { id: string };
-    output: { rows: { id: string; kind: string; namespace: string; key: string; witness: string; returned: boolean; acknowledged: boolean }[] };
+    output: { rows: { id: string; kind: string; namespace: string; key: string; witness: string; returned: boolean; needsStop: boolean; acknowledged: boolean }[] };
   };
   "media.listStorageTransfers": {
     input: { limit?: number };
@@ -6091,7 +6092,7 @@ export interface ServiceCatalog {
     output: { ok: true; needsCleanup: boolean };
   };
   "media.reconcileStorageOperation": {
-    input: { id: string; expectedUpdatedAt: string; originalNamespace: string; originalKey?: string; outcome: "applied" | "not_applied"; sha256?: string; bytes?: number; providerFinalReference: string; providerEvidence: string; stoppedWriterEvidence: string; confirmation: "ORIGINAL STORAGE OUTCOME CONFIRMED" };
+    input: { id: string; expectedUpdatedAt: string; originalNamespace: string; stopDrainId?: string; originalKey?: string; outcome: "applied" | "not_applied"; sha256?: string; bytes?: number; providerFinalReference: string; providerEvidence: string; stoppedWriterEvidence: string; confirmation: "ORIGINAL STORAGE OUTCOME CONFIRMED" };
     output: { ok: true };
   };
   "media.rescan": {
@@ -7069,6 +7070,10 @@ export interface ServiceCatalog {
   "platform.preflightUpdate": {
     input: { feed?: unknown; targetVersion?: string };
     output: { ok: boolean; estimatedDowntimeMs: number; steps: { id: string; verdict: "ok" | "warn" | "fail"; detail: string }[] };
+  };
+  "platform.probeDoctor": {
+    input: Record<string, never>;
+    output: { verdict: "ok" | "warn" | "fail"; checks: { id: string; title: string; verdict: "ok" | "warn" | "fail"; detail: string; remedy?: string; message?: { key: string; params: { [key: string]: string } }; [key: string]: unknown }[]; ranAt: string };
   };
   "platform.redriveDeadLetters": {
     input: { sourceName?: string; limit?: number; confirm: "REDRIVE" };
@@ -10075,6 +10080,7 @@ export interface FreeholderApi {
     openForkUpdate: (input?: ServiceCatalog["platform.openForkUpdate"]["input"]) => Promise<ServiceCatalog["platform.openForkUpdate"]["output"]>;
     outboxSummary: (input?: ServiceCatalog["platform.outboxSummary"]["input"]) => Promise<ServiceCatalog["platform.outboxSummary"]["output"]>;
     preflightUpdate: (input?: ServiceCatalog["platform.preflightUpdate"]["input"]) => Promise<ServiceCatalog["platform.preflightUpdate"]["output"]>;
+    probeDoctor: (input?: ServiceCatalog["platform.probeDoctor"]["input"]) => Promise<ServiceCatalog["platform.probeDoctor"]["output"]>;
     redriveDeadLetters: (input: ServiceCatalog["platform.redriveDeadLetters"]["input"]) => Promise<ServiceCatalog["platform.redriveDeadLetters"]["output"]>;
     replayOutboxEvent: (input: ServiceCatalog["platform.replayOutboxEvent"]["input"]) => Promise<ServiceCatalog["platform.replayOutboxEvent"]["output"]>;
     retryJob: (input: ServiceCatalog["platform.retryJob"]["input"]) => Promise<ServiceCatalog["platform.retryJob"]["output"]>;
