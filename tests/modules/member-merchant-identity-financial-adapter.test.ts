@@ -32,7 +32,7 @@ const policy = () => ({ id: id(10), contactId: id(90), material: "original-priva
 type Owner = Pick<ReturnType<typeof collection>, "id" | "invoiceId" | "profileId" | "sellerUserId"> & { collectionInvoiceId: string };
 type Route = { paymentId: string; allocationId: string; invoiceId: string; paymentInvoiceId: string; sellerUserId: string; collectionInvoiceId: string; profileId: string };
 type Source = { paymentId: string; invoiceId: string; sourceType: string; sourceId: string; subscriptionId: string; sellerUserId: string };
-type Data = { collections?: ReturnType<typeof collection>[]; policies?: ReturnType<typeof policy>[]; routes?: { paymentId: string; allocationId: string }[]; owners?: Owner[]; routeFacts?: Route[]; sourceFacts?: Source[]; financial?: Inventory };
+type Data = { controlledTargets?:{subscriptionId:string;profileId:string;sellerUserId:string|null}[]; collections?: ReturnType<typeof collection>[]; policies?: ReturnType<typeof policy>[]; routes?: { paymentId: string; allocationId: string }[]; owners?: Owner[]; routeFacts?: Route[]; sourceFacts?: Source[]; financial?: Inventory };
 function reader(data: Data, inspect?: (table: string, query: string, params: unknown[]) => void) {
   const dialect = new PgDialect(), selects: string[] = [], financialReads: string[] = [];
   const tx = {
@@ -85,12 +85,20 @@ function reader(data: Data, inspect?: (table: string, query: string, params: unk
     },
     execute: async (statement: SQL) => {
       const { sql: query, params } = dialect.sqlToQuery(statement), table = query.match(/\bvalid\s+from\s+"?([a-z_]+)"? r\b/)?.[1] as ProrationFinancialTable | undefined;
+      if(!table&&query.includes('from subscription_controlled_collections target join subscription_controlled_quotes quote on quote.id=target.quote_id')){
+        expect(query).toContain('resource.id=quote.resource_id');expect(query).toContain('policy.subscription_id=resource.subscription_id');
+        expect(query).toContain('where target.invoice_id=');expect(query.trimEnd()).toMatch(/limit 5001$/);
+        expect(params).toHaveLength(1);expect((data.collections??[]).some(row=>row.invoiceId===params[0])).toBe(true);
+        expect(query).not.toMatch(/amount_minor|email|current_account|contact_id/);
+        inspect?.("controlled_collection_target_parents",query,params);return data.controlledTargets??[];
+      }
       if (!table && query.includes('from merchant_agreement_payment_routes route join payments p on p.id=route.payment_id')) {
         // Existing order fixtures have no agreement/controlled aliases. Check
         // the real bounded original-PI/FK selector before returning that fact.
         expect(query.trimEnd()).toMatch(/limit 5001$/);expect(params.length).toBeGreaterThan(0);
         expect([...query.matchAll(/\b(?:from|join)\s+([a-z_]+)\b(?!\.)/gi)].map(match => match[1])).toEqual([
           "merchant_agreement_payment_routes", "payments", "subscription_provider_charge_receipts", "merchant_payment_observations", "payments", "subscription_events", "subscription_prorations", "invoices",
+          "subscription_controlled_collections", "subscription_controlled_quotes", "subscription_controlled_resources", "payments",
         ]);
         expect(params.every(value => (data.routes ?? []).some(route => route.paymentId === value))).toBe(true);
         expect(query).toContain('observed.provider_platform_account_id=cash.provider_platform_account_id');
@@ -116,6 +124,11 @@ const capture = (table: string, tx: Tx) => reference(table).captureForUndo(tx, i
 
 describe("exact original merchant identity financial snapshots", () => {
   beforeEach(() => { seams.dependencies.mockReset();seams.dependencies.mockResolvedValue(new Map()); });
+  it.each(["foreign-seller","ambiguous-source"] as const)("refuses a cashless controlled target with %s on a shared frozen profile",async change=>{
+    const target={subscriptionId:id(10),profileId:id(20),sellerUserId:id(111)};
+    const mock=reader({collections:[collection()],controlledTargets:change==="foreign-seller"?[target]:[target,{...target,sellerUserId:id(110)}]});
+    const result=await capture("invoice_merchant_collections",mock.tx);expect(result.undoable).toBe(false);expect(seams.dependencies).not.toHaveBeenCalled();
+  });
   it("preserves old empty history fingerprints and existing UUID-only receipt shapes byte-for-byte", async () => {
     const source = { collections: [collection()], policies: [policy()] }, mock = reader(source);
     expect(await capture("invoice_merchant_collections", mock.tx)).toEqual({ undoable: true, state: [{ id: id(40), fingerprint: hash(JSON.stringify({ material: collection().material })) }] });

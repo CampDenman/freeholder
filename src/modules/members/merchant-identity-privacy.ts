@@ -241,7 +241,23 @@ async function collectionSnapshot(tx:Tx,ids:string[]){
  for(const row of rows){
   const originalPayments=await tx.select({id:merchantPaymentRoutes.paymentId}).from(merchantPaymentRoutes).where(eq(merchantPaymentRoutes.allocationId,row.id)).limit(5001);
   if(originalPayments.length>5000)return null;
-  const actual=await controlledFinancialWitness(tx,{paymentIds:originalPayments.map(payment=>payment.id)});
+  let actual=await controlledFinancialWitness(tx,{paymentIds:originalPayments.map(payment=>payment.id)});
+  const targetParents=await tx.execute<{subscriptionId:string;profileId:string;sellerUserId:string|null}>(sql`
+   select resource.subscription_id::text as "subscriptionId",quote.profile_id::text as "profileId",policy.seller_user_id::text as "sellerUserId"
+    from subscription_controlled_collections target join subscription_controlled_quotes quote on quote.id=target.quote_id
+    join subscription_controlled_resources resource on resource.id=quote.resource_id
+    left join subscription_market_policies policy on policy.subscription_id=resource.subscription_id
+   where target.invoice_id=${row.invoiceId}::uuid order by target.id limit 5001`);
+  if(targetParents.length){
+   // A platform-liability profile does not identify a seller on a mixed
+   // invoice. Require the collection's frozen actual seller and target FK.
+   if(targetParents.length!==1||!row.sellerUserId||targetParents.some(parent=>parent.profileId!==row.profileId||parent.sellerUserId!==row.sellerUserId))return null;
+   const target=await controlledFinancialWitness(tx,{invoiceIds:[row.invoiceId]});
+   if(target.incomplete||!target.targets||target.targets.quotes.some(quote=>!targetParents.some(parent=>parent.subscriptionId===quote.subscriptionId&&parent.profileId===quote.profileId)))return null;
+   // Invoice mode includes the original ancestry and actual payments. It
+   // does not select all targets sharing that seller/profile/resource.
+   actual=target;
+  }
   if(actual.incomplete||actual.history.resources.some(resource=>resource.profileId!==row.profileId))return null;
   controlledRoots.set(row.id,actual);for(const entry of actual.entries)controlledDistinct.add(`${entry.table}:${entry.id}`);
  }

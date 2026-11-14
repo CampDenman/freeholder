@@ -3,6 +3,8 @@
 // In-person collection through the POS adapter family (C5.24).
 // Cash and Terminal takes become ordinary Payment rows on the invoice.
 
+import { lockControlledOrdinaryCollectionParent } from "./controlled-ordinary-collection-parent";
+import { requireControlledOrdinaryCollectionAuthority } from "./controlled-ordinary-collection-authority";
 import { invoiceOutstanding } from "./invoice-balance";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -102,6 +104,8 @@ export const claimInPersonPayment = defineService({
     payment: paymentRow.nullable(),
   }),
   handler: async (input, ctx) => {
+    const controlled=await lockControlledOrdinaryCollectionParent(ctx.tx,input.invoiceId);
+    if(input.method==="cash")await requireControlledOrdinaryCollectionAuthority(ctx,controlled,{provider:"manual",method:input.method});
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, input.invoiceId)).limit(1);
     if (!invoice || !invoice.number) throw new ServiceError("not_found", "That issued invoice is not here.");
     const locations = await ctx.callAsSystem(listLocations, { includeHidden: true });

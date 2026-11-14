@@ -65,6 +65,7 @@ import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
 import { providerPeriodInvoiceEvidence } from "@/modules/subscriptions/provider-period-contract";
 import { nextCollectionAmount } from "./merchant-collection";
 import { invoicePaymentDueAmount } from "./invoice-payment-due";
+import { lockControlledOrdinaryCollectionParent } from "./controlled-ordinary-collection-parent";
 import { getInvoiceMarketPolicy } from "./market-policy";
 import { retainSubscriptionProviderEvidence } from "./merchant-provider-stage";
 import { originalProviderPlatform } from "./provider-platform-scope";
@@ -823,6 +824,7 @@ export const claimPaymentCheckout = defineService({
   input: beginCheckoutInput.extend({ initiatedBy }),
   output: z.object({ payment: paymentRow, invoice: invoiceRow, email: z.string(), name: z.string(), providerCustomerRef: z.string().nullable(), providerRequestContactRef: z.uuid().optional(), creationAdmitted: z.boolean(), routing: paymentRouting }),
   handler: async (input, ctx) => {
+    await lockControlledOrdinaryCollectionParent(ctx.tx,input.invoiceId);
     if (input.saveMethod && input.saveMethodConsent !== true) throw new ServiceError("validation", "Saving a payment method requires the customer's explicit consent.");
     const adapter = paymentAdapter(input.provider);
     if (!adapter.status.available) throw new ServiceError("conflict", adapter.status.message);
@@ -1237,6 +1239,7 @@ export const recordOfflinePayment = defineService({
   }),
   output: paymentRow,
   handler: async (input, ctx) => {
+    await lockControlledOrdinaryCollectionParent(ctx.tx,input.invoiceId);
     const payment = await ctx.call(createPayment, { invoiceId: input.invoiceId, provider: "manual", method: input.method, amountMinor: input.amountMinor, idempotencyKey: input.idempotencyKey, metadata: { evidence: input.evidence, externalReference: input.reference } });
     await captureCommercialPaymentAttestation(ctx, payment, input);
     return ctx.call(settlePayment, { id: payment.id, providerRef: input.reference ? `manual:${input.reference}` : `manual:${payment.id}`, processedAt: input.processedAt });

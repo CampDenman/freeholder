@@ -13,8 +13,7 @@ import { invoiceMerchantDependencyFingerprints } from "@/modules/invoicing/merch
 import { merchantRefundDependencyFingerprints } from "@/modules/invoicing/merchant-refund-dependencies";
 import { prorationFinancialWitness } from "@/modules/invoicing/proration-financial-witness";
 import { subscriptionCommercialResumptions } from "./commercial-resumption-schema";
-import { controlledFinancialEntries } from "@/modules/invoicing/controlled-provider-financial-witness";
-import { controlledProviderWitnesses } from "./controlled-provider-witnesses";
+import { controlledFinancialWitness } from "@/modules/invoicing/controlled-provider-financial-witness";
 import { subscriptionProviderReadWitnesses } from "./provider-read-witness";
 import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
 import { subscriptionProviderGenerations } from "./provider-generation-schema";
@@ -81,10 +80,9 @@ export async function subscriptionOriginalEvidence(tx: Tx, contactIds: string[])
     .where(inArray(subscriptions.contactId, contactIds)).orderBy(subscriptionCommercialResumptions.termsId).limit(5001 - evidence.length - prorationCount);
   if (resumptions.length + evidence.length + prorationCount > 5000) return { evidence: [], overflow: true };
   evidence.push(...resumptions.map(row => fingerprint(row, "commercial_resumption")));
-  const controlled=await controlledProviderWitnesses(tx,{subscriptionIds:readParents.map(row=>row.id)});
-  const controlledFamilies=[controlled.resources,controlled.operations,controlled.calls,controlled.facts,controlled.finishes,controlled.stops,controlled.verifications,controlled.chargeOrigins,controlled.closures];
-  if(controlled.incomplete||controlledFamilies.reduce((total,rows)=>total+rows.length,evidence.length+prorationCount)>5000)return{evidence:[],overflow:true};
-  const controlledEntries=controlledFinancialEntries(controlled);
+  const controlled=await controlledFinancialWitness(tx,{subscriptionIds:readParents.map(row=>row.id)});
+  if(controlled.incomplete||controlled.entries.length+evidence.length+prorationCount>5000)return{evidence:[],overflow:true};
+  const controlledEntries=controlled.entries;
   const controlledKeys=new Set(controlledEntries.map(entry=>`${entry.table}:${entry.id}`));
   for(const row of controlledEntries)evidence.push({kind:"controlled_financial",id:row.id,
     fingerprint:createHash("sha256").update(JSON.stringify([row.table,row.fingerprint])).digest("hex")});
