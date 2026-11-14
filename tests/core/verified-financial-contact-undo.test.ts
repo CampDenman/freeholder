@@ -51,6 +51,17 @@ describe("financial contact undo preimage preservation",()=>{
  it("keeps the original full paid-period/merge/undo oracle unchanged",()=>{expect(sha(read(manifest.native.path))).toBe(manifest.native.sha256);});
  it("pins the exact reviewable source diff and all three changed original files",()=>{
   expect(sha(read(manifest.sourcePatch.path))).toBe(manifest.sourcePatch.sha256);
-  for(const file of manifest.files)expect(sha(read(file.path))).toBe(file.afterSha256);
+  for(const file of manifest.files){
+   let source=read(file.path);
+   if(file.path==="src/core/contacts/service.ts"){
+    // Only the two independently pinned privacy fences outside merge/undo may
+    // be reversed; the entire original contacts service must still match.
+    for(const insertion of [
+     '    if (input.source === "privacy-erasure") await lockContactIdentity(ctx.tx);\n',
+     '    if (requested.source === "privacy-erasure") await lockContactIdentity(ctx.tx);\n',
+    ]){expect(source.split(insertion)).toHaveLength(2);source=source.replace(insertion,"");}
+   }
+   expect(sha(source)).toBe(file.afterSha256);
+  }
  });
 });

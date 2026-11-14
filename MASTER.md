@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Paid-privacy source-pin composition2026-11-14 (C1.08/C9.33/C12.38): V87
+fulltypes/lint PASS; contracts stop on old financial-undo whole contacts-service
+SHA after exactly2new reserved-source fences outside undo. Original source patch,
+whole inverse/order comparisons and every native remain unchanged. The pin
+harness now reverses ONLY those2literal unique lines before requiring the entire
+original file SHA; no general exclusion/hash update. New privacy source contracts
+independently pin full current files and exact additions. V87 preserved; complete
+fresh source/schema/native qualification required; no financial/stable closure.
+See `deploy/controlled-paid-privacy85-undo-contract.manifest.json`.
+
+
 Paid-owner privacy ROOT assembly2026-11-14 (C1.08/C9.33/C12.38): frozen
 269f1e9f source merged, preserving entire current MASTER plus only17newleaflines.
 Owned/normal85 append exact28854/ec0a463b tail AFTER entire729144/842f6d55
