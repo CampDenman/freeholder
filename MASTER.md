@@ -3641,6 +3641,20 @@ legacy issuer recovery, certificate minimization, full session/capture/quota/
 cutover and every qualification/external/independent/stable gate remain open.
 See `deploy/media-multipart-applied-complete-recovery-source-2026-11-13.md`.
 
+Controlled historical nonpayable draft source correction 2026-11-13
+(C12.38/C9.33/C1.08): root actual V24 built both NET4000 and tax200, then the
+read-only ordinary classifier isolated an older partial4000 LIST atom; its
+genuine independent complete GET preceded the next tax writer, while a separate
+current full GET proved4200. A narrow typed historical cohort now binds that
+actual LIST→GET→next-writer sequence and exact then-owned component/line/price
+IDs, zero payment/PI/cash/fee and full bounds. Current proof, every raw atom,
+original caller, mixed owner, paid-cohort and default same-call predicates stay
+required; no amount comparison can adopt an owner or discharge debt. Ten signed
+pure controls are PREPARED/UNRUN and original complete native assertions remain
+unchanged. No execution, SQL/model/fixture/root edits or readiness/stable claim;
+failed V24 and all acceptance remain open. See
+`deploy/controlled-historical-draft84-source-20261113.md`.
+
 Controlled original-zero fixture source correction 2026-11-13
 (C12.38/C9.33/C1.08): root's actual V23 first-target journey created/bound the
 NET4000 component, then the read-only ordinary classifier isolated exactly one
