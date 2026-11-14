@@ -8,7 +8,7 @@ import { subscriptions,subscriptionProviderChargeReceipts,subscriptionProviderCh
 import { subscriptionControlledResources } from "@/modules/subscriptions/controlled-provider-schema";
 import { subscriptionControlledCollections,subscriptionControlledQuotes } from "@/modules/subscriptions/controlled-provider-collection-schema";
 import { controlledCollectionState } from "@/modules/subscriptions/controlled-provider-collection-state";
-import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-contract";
+import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
 import { controlledCashEvidence,readOriginalControlledChargeAuthority } from "@/modules/subscriptions/controlled-provider-cash-origin";
 import { parentFinancialGraph,lockControlledParentMoney } from "./controlled-provider-financial-parent";
 import { planControlledReceiptBatch } from "./controlled-receipt-batch-plan";

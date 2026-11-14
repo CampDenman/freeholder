@@ -4,7 +4,7 @@
 import { z } from "zod";
 import { merchantPaymentEvidence } from "@/modules/invoicing/merchant-payment-observations";
 import { merchantReturnedCashEvidenceSchema } from "@/modules/invoicing/merchant-returned-cash-contract";
-import { CONTROLLED_COLLECTION_PROTOCOL } from "./controlled-provider-collection-contract";
+import { CONTROLLED_COLLECTION_PROTOCOL } from "./controlled-provider-collection-protocol";
 const sha=z.string().regex(/^[a-f0-9]{64}$/),minor=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),ref=z.string().min(1).max(200),account=z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200),currency=z.string().regex(/^[A-Z]{3}$/);
 export const controlledCashPhysicalEntry=z.object({table:z.string().min(1).max(160),id:z.string().min(1).max(300),fingerprint:sha,hashDomain:z.literal("postgres_row")}).strict();
 export const controlledCashBankExpectation=z.object({providerApiVersion:z.literal("2026-10-28.endive"),providerPlatformAccountId:account,providerAccountId:account.optional(),destinationAccountId:account.optional(),settlementMerchantAccountId:account.optional(),

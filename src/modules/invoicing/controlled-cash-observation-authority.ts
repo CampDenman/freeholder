@@ -2,7 +2,7 @@
 // C12.38: authentic observational GET coverage only; no money/access grant.
 import { z } from "zod";
 import { defineService } from "@/core/service";
-import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-contract";
+import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
 import { readControlledCashObservationParent } from "./controlled-cash-observation-parent";
 const sha=z.string().regex(/^[a-f0-9]{64}$/);
 export const controlledProviderCashObservationAuthority=defineService({

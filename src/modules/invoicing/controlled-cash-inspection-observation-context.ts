@@ -4,7 +4,7 @@
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { getService,ServiceError,type ServiceContext } from "@/core/service";
-import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-contract";
+import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
 import { readControlledCashObservationSource } from "@/modules/subscriptions/controlled-provider-cash-observation-source";
 import { readControlledCashInspectionAncestry } from "@/modules/subscriptions/controlled-provider-cash-inspection-ancestry";
 import { merchantTaxDigest } from "./merchant-tax-store";

@@ -14,7 +14,7 @@ import { merchantReturnedCashEvidenceSchema } from "@/modules/invoicing/merchant
 import { readControlledCashObservationSource } from "./controlled-provider-cash-observation-source";
 import { subscriptionControlledCashInspectionLineages } from "./controlled-cash-inspection-lineage-schema";
 import { verifiedControlledCashInspectionLineage } from "./controlled-cash-inspection-lineage-proof";
-import { CONTROLLED_COLLECTION_PROTOCOL } from "./controlled-provider-collection-contract";
+import { CONTROLLED_COLLECTION_PROTOCOL } from "./controlled-provider-collection-protocol";
 const sha=z.string().regex(/^[a-f0-9]{64}$/);
 export const controlledCashInspectionCausalEntry=z.object({table:z.enum(["merchant_cash_return_inspections","merchant_cash_return_inspection_finishes","merchant_cash_return_primary_observations","merchant_cash_return_observations","merchant_refund_observations","merchant_refund_observation_captures","subscription_controlled_cash_inspection_lineages"]),id:z.uuid(),fingerprint:sha,dependencyFingerprint:sha}).strict();
 export const controlledCashInspectionAncestry=z.object({protocol:z.literal(CONTROLLED_COLLECTION_PROTOCOL),collectionId:z.uuid(),receiptId:z.uuid(),inspectionId:z.uuid(),callerId:z.uuid(),admissionDigest:sha,admissionFingerprint:sha,parentPreAdmissionRevision:sha,sourceRevision:sha,ownEvidenceDigest:sha,

@@ -4,8 +4,8 @@
 import { z } from "zod";
 import { prorationCardSummary } from "./proration-card-contract";
 import { grossProrationInput,grossProrationReview } from "./proration-review-contract";
-export const CONTROLLED_COLLECTION_PROTOCOL="controlled_net_gross.v1";
-export const CONTROLLED_COLLECTION_POLICY="canonical_gross_target_locked_credit_no_wallet";
+import { CONTROLLED_COLLECTION_PROTOCOL,CONTROLLED_COLLECTION_POLICY } from "./controlled-provider-collection-protocol";
+export { CONTROLLED_COLLECTION_PROTOCOL,CONTROLLED_COLLECTION_POLICY } from "./controlled-provider-collection-protocol";
 const sha=z.string().regex(/^[a-f0-9]{64}$/),reference=z.string().min(1).max(200),minor=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const controlledProrationInput=grossProrationInput.extend({resourceId:z.uuid()}).strict();
 export const controlledProrationCalendar=z.object({kind:z.literal("controlled_provider"),prorationAt:z.iso.datetime(),
