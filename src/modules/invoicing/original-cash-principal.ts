@@ -13,6 +13,7 @@ import { payments } from "./schema";
 import { controlledCashFinancialHistory } from "./controlled-provider-financial-witness";
 import { readControlledCanonicalBankPrincipal } from "./controlled-canonical-bank-principal";
 import { currentBankPrincipalMatches } from "./original-bank-principal-policy";
+import { originalInventoryComparison } from "./original-cash-inventory-causal-contract";
 export { currentBankPrincipalMatches } from "./original-bank-principal-policy";
 
 export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, source: MerchantRefundSource) {
@@ -49,6 +50,35 @@ export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, sour
     const owners = witness.owners.filter(matchingOwner);
     if (owners.length !== 1) reviewRequired = true;
     else {
+      const exactOwner=owners[0];if(!exactOwner)throw new ServiceError("conflict","Restore the exact original principal owner.");
+      const v2Closures=witness.closures.filter(closure=>closure.recoveryId===exactOwner.id&&witness.operations.some(operation=>operation.id===closure.operationId&&operation.request.inventoryComparison!==undefined));
+      if(v2Closures.length){
+        // Only an independently CURRENT whole-return closure may avoid
+        // mistaking its GET's expected historical preimage for current debt.
+        // No pre-existing review flag is cleared and no fee-only/partial row
+        // can enter this branch. Failed known v2 never falls back to v1.
+        if(!payment||payment.status!=="succeeded"||payment.refundedMinor!==payment.amountMinor||!cash.applied)reviewRequired=true;
+        else{
+          const{currentOriginalCashClosure}=await import("./original-cash-closure-current");
+          const currentClosures:Array<Awaited<ReturnType<typeof currentOriginalCashClosure>>>=[];
+          let malformed=false;
+          for(const closure of v2Closures){
+            const operation=witness.operations.find(row=>row.id===closure.operationId&&row.recoveryId===closure.recoveryId),header=originalInventoryComparison.safeParse(operation?.request.inventoryComparison);
+            if(!operation||!header.success||header.data.operationId!==operation.id||header.data.recoveryId!==exactOwner.id||header.data.callerId!==operation.caller.id||header.data.nonceHash!==operation.nonceHash||header.data.namespaceKey!==exactOwner.namespaceKey
+              ||header.data.sourceCashDigest!==merchantTaxDigest(exactOwner.owner.cash)||header.data.sourceRevision!==operation.request.sourceRevision
+              ||header.data.sourceRevision!==merchantTaxDigest({cash:exactOwner.owner.cash,history:header.data.sourceHistoryDigest})||operation.kind!=="inspection"||operation.request.auxiliaryOperationId){malformed=true;continue;}
+            try{currentClosures.push(await currentOriginalCashClosure(ctx,closure.recoveryId,closure.id));}
+            catch(error){if(!(error instanceof ServiceError)||!["conflict","permission","not_found","validation"].includes(error.code))throw error;}
+          }
+          const current=currentClosures[0];
+          if(malformed||currentClosures.length!==1||!current||!current.proof.settled||current.history.incomplete||!current.history.creatorsQuiesced||current.history.feeDebt
+            ||!currentBankPrincipalMatches({amountMinor:payment.amountMinor,currency:payment.currency,refundedMinor:payment.refundedMinor,apiVersion:cash.providerApiVersion,
+              platform:cash.providerPlatformAccountId,account:cash.chargeAccountId,paymentRef:cash.providerRef,chargeRef:cash.originalChargeRef},current.evidence))reviewRequired=true;
+          else{
+            bankEvidenceDigest=merchantTaxDigest({protocol:"freeholder.original-cash-whole-closure-principal.v2",closureId:current.closure.id,operationId:current.operationId,currentRevision:current.fullCurrentRevision,evidence:current.evidence});
+          }
+        }
+      }else{
       const reads = witness.operations.filter(row => row.recoveryId === owners[0]!.id && row.kind === "inspection" && !row.request.auxiliaryOperationId)
         .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id));
       const latest = reads[0];
@@ -61,6 +91,7 @@ export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, sour
               apiVersion: cash.providerApiVersion, platform: cash.providerPlatformAccountId, account: cash.chargeAccountId, paymentRef: cash.providerRef, chargeRef: cash.originalChargeRef }, current.evidence)) reviewRequired = true;
           bankEvidenceDigest = merchantTaxDigest({ operationId: latest.id, currentRevision: current.revision, evidence: current.evidence });
         } catch (error) { if (error instanceof ServiceError && ["conflict", "permission", "not_found", "validation"].includes(error.code)) reviewRequired = true; else throw error; }
+      }
       }
     }
   }

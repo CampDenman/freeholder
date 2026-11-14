@@ -3564,6 +3564,41 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Original controlled inventory causal-v2 SOURCE checkpoint2026-11-14
+(C12.38/C9.33/C1.08): actual preserved V48 diagnosis proves its authentic
+inspection+8facts are excluded directly but reintroduced through controlled
+RF/raw-parent history. A new signed controlled-inspection request preimage
+binds actual owner/namespace/op/caller/nonce and per-domain physical identities;
+explicit comparison companions reconstruct ONLY authentic own read rows and
+feedback namespaces, keeping FULL current rows/callers/5000 before/after.
+Separate closure context projects ONLY its exact authenticated own closure
+against signed FULL pre-insert revision, retaining GET/allfacts/feedback/other
+closures. Old v1/HMAC/SQL/default digest expressions and original whole native
+files preserved; no old row upgrade or cached money authority. 0models/SQL/new
+services. Twelve pure/nine source/three registry/five actual desired native controls
+PREPARED, ALL UNRUN; types/lint/PG/SDK/provider UNRUN. GET-only admission is
+explicitly optimistic with full rechecks. V2 mutable
+entries acquire shared identity/complete connected resource/parent/canonical/
+cash prefix before bound, nonblocking actual callback keys and rediscovery;
+no late locks or public marker. Real two-connection race prepared/unrun. Frozen
+A's three future handler entries need the explicit same-prefix composition.
+Exact current WHOLE v2 closure may supply fully refunded canonical principal
+through unchanged independent debt/bank checks; no review flag clearing or
+partial/fee closure upgrade. Newly born v2 partial target requests one genuine
+fresh GET before claims; v1 sequence unchanged. Exact controlled partial
+closure projects only its own authenticated fact,
+retaining the real target/GET/other facts/current resource and source proofs;
+no whole/principal grant. Separately tagged v2 partial economic source retains
+all original Fi/refund/credit ancestry and explicit unassigned duty, with full
+physical currentSourceRevision independently fresh; old v1 source pinned.
+Genuine equal-receipt partial/repeat/foreign-invalidation native prepared/unrun.
+Root qualification,
+B credit partition, actual credit return/unwind and every full-spec gate remain
+open. See `deploy/original-cash-inventory-causal84-source-20261114.md` and
+source preservation manifest. No C closure/stable/post.
+
+
+
 Media source type correction2026-11-14 (C1.12/C11.08): V92 fulltypes stops
 before lint/DB on unknown JSON metadata passed to Object.keys and one duplicate
 retained-identity import. A shared pure empty-record predicate now requires a

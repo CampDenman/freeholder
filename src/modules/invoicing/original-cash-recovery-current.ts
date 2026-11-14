@@ -23,6 +23,16 @@ export async function originalCashFullReturnCurrent(ctx: ServiceContext, payment
   const witness = await originalCashRecoveryFinancialWitness(ctx.tx, [paymentId], []);
   for (const owner of witness.owners) {
     if (!owner.owner.cash.applied) continue;
+    const v2Closures=witness.closures.filter(closure=>closure.recoveryId===owner.id&&witness.operations.some(operation=>operation.id===closure.operationId&&operation.request.inventoryComparison!==undefined));
+    for(const closure of v2Closures){
+      try{const {currentOriginalCashClosure}=await import("./original-cash-closure-current");await currentOriginalCashClosure(ctx,owner.id,closure.id);return true;}
+      catch(error){if(!(error instanceof ServiceError)||error.code!=="conflict")throw error;}
+    }
+    if(v2Closures.length){
+      const legacy=witness.closures.filter(closure=>closure.recoveryId===owner.id&&witness.operations.some(operation=>operation.id===closure.operationId&&operation.request.inventoryComparison===undefined));
+      if(legacy.length){const current=await originalCashRecoveryRevision(ctx,owner.id);if(legacy.some(closure=>closure.revision===current.revision))return true;}
+      continue;
+    }
     const current = await originalCashRecoveryRevision(ctx, owner.id);
     if (witness.closures.some(closure => closure.recoveryId === owner.id && closure.revision === current.revision)) return true;
   }
