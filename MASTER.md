@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Original pay-caller inventory cohort source correction 2026-11-14
+(C12.38/C9.33/C1.08): actual V28 retained4200 safely, then prospective application
+refused only three line/payment page facts from pay39. Its genuine caller performs
+an open preflight inventory, the real pay POST/ACK and another inventory; global
+same-caller pagination incorrectly joined the two terminal page runs. A bounded
+consumer now derives each run from existing signed invoice_read anchors and the
+actual intervening controlled_invoice_paid fact. Complete original caller/request,
+exact target/component/price/PI/cash ownership and an independent full CURRENT
+manifest remain mandatory. Every original occurrence is retained; no invented
+pass ID, annotation, amount-based adoption, page value deduplication or blanket
+pay exemption. Default completePages/currentProof remain byte-unchanged. Sixteen
+new chronological signed-raw controls are PREPARED/UNRUN; the original real native
+oracle remains unchanged and must qualify. No SQL/model/permission/provider or
+stable claim. See `deploy/controlled-pay-inventory-cohorts84-source-20261114.md`.
+
 Composed source checkpoint 2026-11-14 (C1.12/C11.08/C12.38/C9.33):
 current-bank principal/ordinary legacy empty-read boundaries and tracked first-ACK
 CREATE/idle ABORT/verification-only ABORT source are integrated. New normal82
@@ -4285,7 +4300,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-14. Protected main last verified fdba2817 (PR702); PR701 remains older and not green. Source6791 passes1243 actual/196 selected files,433 explicit DB skips and full types/lint/metadata. FreshV25/V26 all86 normal migrations and strict159 affected models/353 enabled guards/351 full bodies/3976 readonly queries pass. Actual SDK generation8+verification8/full types pass. Original provider collection PASSES at02b44a5c (32.419s, real4200 retained, localpaid0/payment0, original access); full local application FAILS before admission because retained manifest38 precedespay39. V26/all595 table hashes/86 journals/sequence/drain evidence are preserved, and genuine post-pay fixture proof repair is pending. See deploy/current-source159-payment-checkpoint-20261113.md. Both media capabilities absent. Application/access/refund/recovery/build/browser/CI/provider/platform/independent review and every other unchecked full-spec acceptance remain open. Tony’s C11.10 report/C11.17 signature pending; no stable/post closure. |
+| Latest launch audit | 2026-11-14. Protected main last verified fdba2817 (PR702); PR701 is older/not green. Last fully qualified34f47628 passes1243 actual/196 selected files,434 explicit DB skips/full types/lint/metadata; freshV28 all86 migrations, strict159/353 guards/351 parsed full bodies, actual SDK8+8/hash invariance pass. Original provider collection passed at02b44a5c. Local application still FAILS before admission: V26 stale pre-pay fixture corrected; V27 BigInt local witness corrected; V28 readonly genuine-framework diagnosis isolates3 pay39 multipass page atoms with53 other resolutions, no unfinished calls and all595 hashes/86 journals/sequence unchanged. Signed-anchor cohort repair, current-principal and CREATE/ABORT recovery are now composed but UNQUALIFIED together. Both media capabilities remain absent; new fee invocation160 work isolated/incomplete. The next verifier also independently covers atomic numeric-helper signature previously only ready-body-pinned. All application/access/refund/recovery/build/browser/CI/provider/platform/full-spec/independent review/final signature gates remain open; no stable/post closure. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |

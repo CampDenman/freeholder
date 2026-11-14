@@ -1,0 +1,21 @@
+{
+  "$comment": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "base": "34f47628dbc0dc0710c9592de75db7019d30ebe0",
+  "sourceOnly": true,
+  "preparedUnrun": {
+    "newSignedRawCases": 16,
+    "actualNative": "Parent original oracle unchanged; UNRUN in this lane"
+  },
+  "preservedOriginalFunctionSha256": {
+    "completePages": "d8c477cb5aed99f008fbe833a2e8d9a6a9b36af04e3d8bbc213ae0b9bd216703",
+    "currentProof": "c7d6b1616df63d6d337aea0ad19c47b0bb7ed9147ecbe1ed14efd1ff55af6ce8"
+  },
+  "oldTestPrefixSha256": "205336ef1b15d125f5b9a047eae11e882cc7f9e1ee9ce3ba1d41562bd7b9ac5f",
+  "originalTestPrefixUnchanged": true,
+  "implementation": "existing immutable signed anchor/ACK/fact ordinal cohorts; no invented pass IDs, value dedup or stored annotation",
+  "files": {
+    "src/modules/invoicing/controlled-target-raw-policy.ts": "b60d7cc2d748d36c0836bf73489b39ecd7a17c3528800d143430f9645268cca7",
+    "tests/modules/controlled-target-raw-classification.test.ts": "eb98d39deb9b451a146dccc9abe633473600374683eb62960a36e7103dae06c7"
+  },
+  "sqlOrSchemaOrAdapterChanges": false
+}
