@@ -11029,6 +11029,16 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   source packaging/documentation defect, separate from storage runtime quality.
   Focused source checks do not close hosted build or operational acceptance.
 
+  New-launch origin precursor 2026-11-14 is SOURCE ONLY: the real DigitalOcean
+  CLI path prepares a durable128-bit random admission, one actual media create,
+  independent response/return/metadata receipts and private read-only delivery
+  to the UID1001 application. Old/existing/ambiguous origins cannot be adopted
+  or replayed. Twelve source controls and one fictional TCP producer/delivery
+  control remain entirely UNRUN. Quota initialization, its real installed
+  first-writer fence and durable replay consumer remain unimplemented; no
+  capability, usable initializer or provider/stable acceptance is claimed.
+  See `deploy/media-namespace-origin-source-2026-11-14.md`. All rows stay open.
+
 
 - [ ] **C10.33** Make hosted cutover use a durable operation-owned app/DB
   admission fence shared with member/group call starts and canonical jobs.

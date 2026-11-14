@@ -10,6 +10,12 @@ export interface S3Credentials {
   secretAccessKey: string;
 }
 
+/** Installed by the real launcher; records no Authorization header or key. */
+export interface BucketCreateObserver {
+  response(fact: { status: number; requestIdDigest: string | null; providerDate: string | null; bodyDigest: string }): Promise<void>;
+  returned(): Promise<void>;
+}
+
 const sha256 = (data: string) => createHash("sha256").update(data).digest("hex");
 const hmac = (key: Buffer | string, data: string) => createHmac("sha256", key).update(data).digest();
 
@@ -40,20 +46,36 @@ export class SpacesClient {
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
-  private async request(method: string, bucket: string, query = "", body = ""): Promise<{ status: number; text: string }> {
+  private async request(method: string, bucket: string, query = "", body = "", bounded = false): Promise<{ status: number; text: string; requestId: string | null; providerDate: string | null }> {
     const url = new URL(`${this.endpoint.replace(/\/+$/, "")}/${bucket}${query}`);
     const headers = signS3({ method, url, body, region: this.region, credentials: this.credentials });
-    const response = await this.fetcher(url, { method, headers, ...(body ? { body } : {}) });
-    return { status: response.status, text: await response.text() };
+    const response = await this.fetcher(url, { method, headers, redirect: "error", ...(body ? { body } : {}) });
+    let text: string;
+    if (bounded && response.body) {
+      const reader = response.body.getReader(), chunks: Uint8Array[] = []; let bytes = 0;
+      try { for (;;) { const part = await reader.read(); if (part.done) break; bytes += part.value.byteLength; if (bytes > 4 * 1024 * 1024) { await reader.cancel(); throw new Error("Spaces bucket metadata is too large to verify."); } chunks.push(part.value); } }
+      finally { reader.releaseLock(); }
+      text = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
+    } else text = await response.text();
+    return { status: response.status, text, requestId: response.headers.get("x-amz-request-id"), providerDate: response.headers.get("date") };
   }
 
   /** Create a private bucket. True when it was created, false when this account already had it. */
-  async createBucket(bucket: string): Promise<boolean> {
-    const { status, text } = await this.request("PUT", bucket);
+  async createBucket(bucket: string, observer?: BucketCreateObserver): Promise<boolean> {
+    const { status, text, requestId, providerDate } = await this.request("PUT", bucket, "", "", Boolean(observer));
+    if (observer) { await observer.response({ status, bodyDigest: sha256(text), requestIdDigest: requestId ? sha256(requestId) : null, providerDate: providerDate && Number.isFinite(Date.parse(providerDate)) ? new Date(providerDate).toISOString() : null }); await observer.returned(); }
     if (status === 200) return true;
     if (status === 409 && text.includes("BucketAlreadyOwnedByYou")) return false;
     if (status === 409) throw new Error(`The bucket name ${bucket} is taken by someone else.`);
     throw new Error(`Spaces refused to create ${bucket} (${status}).`);
+  }
+
+  /** Account-owned provider metadata, used only by the one-shot origin producer.
+   * A listing is corroboration; it cannot by itself establish freshness. */
+  async bucketMetadata(): Promise<string> {
+    const result = await this.request("GET", "", "", "", true);
+    if (result.status !== 200) throw new Error(`Spaces could not verify namespace metadata (${result.status}).`);
+    return result.text;
   }
 
   async enableVersioning(bucket: string): Promise<void> {

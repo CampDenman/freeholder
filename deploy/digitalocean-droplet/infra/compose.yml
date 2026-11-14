@@ -44,6 +44,12 @@ services:
       db: { condition: service_healthy }
     # Not published to the host: Caddy is the only way in.
     expose: ["3000"]
+    # Trusted provisioning evidence is separate from auth/claim secrets and
+    # immutable to the app. Its independent consumption journal survives app
+    # replacement. These contain witnesses only; media stays in Spaces.
+    volumes:
+      - ./namespace-origin:/run/freeholder/namespace-origin:ro
+      - ./namespace-origin-state:/run/freeholder/namespace-origin-state
 
   db:
     image: postgres:16-alpine
