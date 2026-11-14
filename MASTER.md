@@ -3564,6 +3564,18 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Current SQL compilation correction2026-11-14 (C1.12/C11.08): sourceV95 passes
+1497 tests/240 complete files/524 explicit DB skips, fulltypes/lint/metadata.
+Fresh normalV52 then stops SQL42883 in multipart idle minimization: bare outcome
+SRF alias resolves outer certificate.outcome TEXT. Explicit outcome(value) and
+qualified value references retain the exact original artifact/job/scope predicates.
+Owned/normal82 receive identical finite unpublished-source correction; complete
+rewind proves all earlier whole prefix identities. Failed V52 DB retained/drained;
+no SDK/business/native ran on it. No cast/guard waiver/capability or C closure.
+Fresh full qualification and original business tests remain required. See
+`deploy/media-multipart-artifact-alias-root-continuation.manifest.json`.
+
+
 Current source lint correction2026-11-14 (C12.38/C1.12/C11.08): V94 fulltypes
 passes, then affected lint stops on four forbidden inline type imports and two
 unsafe Vitest matcher assignments. Explicit type-only imports follow the exact
