@@ -11,7 +11,7 @@ import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { subscriptions,subscriptionCommercialTerms,subscriptionMarketPolicies } from "./schema";
 import { subscriptionProrations } from "./proration-schema";
 import { subscriptionProviderScheduleResources,subscriptionProviderScheduleOperations } from "./provider-schedule-schema";
-import { verifiedPreparatoryPhaseProducts } from "./provider-phase-product-proof";
+import { verifiedPreparatoryPhaseProducts,verifiedControlledPhaseProductAncestry } from "./provider-phase-product-proof";
 import { subscriptionControlledResources } from "./controlled-provider-schema";
 import { controlledProviderJournal } from "./controlled-provider-proof";
 import { controlledCalendarPayload } from "./controlled-provider-adapter-contract";
@@ -50,7 +50,7 @@ export async function controlledProrationCandidate(ctx:ServiceContext,rawInput:C
  if(pending)refuse();
  const[legacy]=await ctx.tx.select().from(subscriptionProviderScheduleResources).where(eq(subscriptionProviderScheduleResources.subscriptionId,parent.id)).limit(1);
  const legacyOperations=await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(eq(subscriptionProviderScheduleOperations.subscriptionId,parent.id)).orderBy(subscriptionProviderScheduleOperations.operationRevision).limit(5001);
- if(!legacy||legacyOperations.length>5000||!verifiedPreparatoryPhaseProducts(legacy,legacyOperations))refuse();
+ if(!legacy||legacyOperations.length>5000||(!verifiedPreparatoryPhaseProducts(legacy,legacyOperations)&&!verifiedControlledPhaseProductAncestry(legacy,legacyOperations,resource)))refuse();
  const people=[parent.contactId,policy.merchantContactId];
  const[erasure]=await ctx.tx.select({id:dataRequests.id}).from(dataRequests).where(and(inArray(dataRequests.contactId,people),eq(dataRequests.kind,"erasure"),sql`${dataRequests.verifiedAt} is not null`,
   inArray(dataRequests.status,["verified","in_progress","completed","partially_completed"]))).limit(1);

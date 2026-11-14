@@ -6,6 +6,7 @@ import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { scheduleCallerHasStopped } from "./provider-schedule-proof";
 import { originalProviderReadsFinished } from "./provider-schedule-read-proof";
 import type { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "./provider-schedule-schema";
+import type {subscriptionControlledResources} from "./controlled-provider-schema";
 const productProof = z.object({ version: z.literal(1), operationId: z.uuid(), requestDigest: z.string().regex(/^[a-f0-9]{64}$/), providerProductRef: z.string().regex(/^prod_[A-Za-z0-9]{1,195}$/) });
 type Operation = typeof subscriptionProviderScheduleOperations.$inferSelect;
 export function verifiedOriginalPhaseProduct(operation: Operation): string | null {
@@ -50,4 +51,23 @@ export function verifiedPreparatoryPhaseProducts(resource: typeof subscriptionPr
     || !operations.length || operations.length !== resource.operationRevision) return false;
   return operations.every((operation, index) => operation.subscriptionId === resource.subscriptionId
     && operation.operationRevision === index + 1 && verifiedOriginalPhaseProduct(operation) !== null);
+}
+
+/** Existing controlled transport owns its own actual cash. Retaining that cash
+ * deliberately marks the old schedule unknown. This checks ONLY the original
+ * nonbilling product ancestry; it never clears those flags or supplies current
+ * principal, fees, caller closure, consent, collection or access authority.
+ * The controlled caller must independently run all current money checks.
+ */
+export function verifiedControlledPhaseProductAncestry(resource:typeof subscriptionProviderScheduleResources.$inferSelect,operations:readonly Operation[],
+ controlled:Pick<typeof subscriptionControlledResources.$inferSelect,"subscriptionId"|"termsId"|"generation"|"originalSourceRevision">&{
+  originalScope:Pick<(typeof subscriptionControlledResources.$inferSelect)["originalScope"],"subscriptionId"|"termsId"|"generation"|"providerProductRef">;
+ }):boolean{
+ if(resource.state!=="unknown"||resource.recoveryPending!==true||resource.providerSubscriptionRef!==null||resource.providerCustomerRef!==null||resource.stoppedProof!==null
+  ||!operations.length||operations.length>5000||operations.length!==resource.operationRevision||new Set(operations.map(row=>row.id)).size!==operations.length
+  ||controlled.subscriptionId!==resource.subscriptionId||controlled.originalScope.subscriptionId!==resource.subscriptionId
+  ||controlled.originalScope.termsId!==controlled.termsId||controlled.originalScope.generation!==controlled.generation
+  ||!Number.isSafeInteger(controlled.generation)||controlled.generation<=0||!/^[a-f0-9]{64}$/.test(controlled.originalSourceRevision))return false;
+ const products=operations.map((operation,index)=>operation.subscriptionId===resource.subscriptionId&&operation.operationRevision===index+1?verifiedOriginalPhaseProduct(operation):null);
+ return products.every(product=>product!==null)&&products.filter(product=>product===controlled.originalScope.providerProductRef).length===1;
 }

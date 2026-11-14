@@ -3,7 +3,7 @@
 // C12.38: read-only declared product history cannot invent zero billing work.
 import { describe, expect, it } from "vitest";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
-import { verifiedOriginalPhaseProduct, verifiedPreparatoryPhaseProducts } from "@/modules/subscriptions/provider-phase-product-proof";
+import { verifiedOriginalPhaseProduct, verifiedPreparatoryPhaseProducts,verifiedControlledPhaseProductAncestry } from "@/modules/subscriptions/provider-phase-product-proof";
 import type { subscriptionProviderScheduleOperations, subscriptionProviderScheduleResources } from "@/modules/subscriptions/provider-schedule-schema";
 type Operation = typeof subscriptionProviderScheduleOperations.$inferSelect;
 type Resource = typeof subscriptionProviderScheduleResources.$inferSelect;
@@ -48,4 +48,30 @@ describe("complete original preparatory product evidence", () => {
     const changed = { ...operation.originalRequest, physical: { method: "POST", path: "/v1/subscriptions", body: {} } };
     expect(verifiedOriginalPhaseProduct({ ...operation, originalRequest: changed, requestDigest: merchantTaxDigest(changed) })).toBeNull();
   });
+});
+
+describe("existing controlled product ancestry keeps raw legacy debt",()=>{
+ const controlled=()=>({subscriptionId,termsId:"00000000-0000-4000-8000-000000000003",generation:1,originalSourceRevision:"b".repeat(64),
+  originalScope:{subscriptionId,termsId:"00000000-0000-4000-8000-000000000003",generation:1,providerProductRef:"prod_original"}});
+ it("recognizes only actual nonbilling product identity without clearing unknown cash flags or authorizing a new legacy bootstrap",()=>{
+  const{operation,resource}=history(),unknown={...resource,state:"unknown" as const,recoveryPending:true},before=JSON.stringify({unknown,operation});
+  expect(verifiedPreparatoryPhaseProducts(unknown,[operation])).toBe(false);
+  expect(verifiedControlledPhaseProductAncestry(unknown,[operation],controlled())).toBe(true);
+  expect(JSON.stringify({unknown,operation})).toBe(before);
+ });
+ it("refuses any legacy billing identity, stop, incomplete journal, unfinished or nonproduct work",()=>{
+  const{operation,resource}=history(),unknown={...resource,state:"unknown" as const,recoveryPending:true};
+  for(const changed of [{...unknown,providerSubscriptionRef:"sub_legacy"},{...unknown,providerCustomerRef:"cus_legacy"},{...unknown,operationRevision:2},{...unknown,recoveryPending:false},{...unknown,state:"quiescing" as const}])expect(verifiedControlledPhaseProductAncestry(changed,[operation],controlled())).toBe(false);
+  for(const changed of [{...operation,state:"unknown" as const},{...operation,kind:"create"},{...operation,operationRevision:2}])expect(verifiedControlledPhaseProductAncestry(unknown,[changed],controlled())).toBe(false);
+  expect(verifiedControlledPhaseProductAncestry(unknown,[],controlled())).toBe(false);
+ });
+ it("requires the exact stored controlled subscription, terms, generation and original verified product",()=>{
+  const{operation,resource}=history(),unknown={...resource,state:"unknown" as const,recoveryPending:true},source=controlled();
+  for(const changed of [{...source,subscriptionId:"00000000-0000-4000-8000-000000000004"},{...source,termsId:"00000000-0000-4000-8000-000000000004"},{...source,generation:2},{...source,originalSourceRevision:"invalid"},{...source,originalScope:{...source.originalScope,providerProductRef:"prod_other"}}])expect(verifiedControlledPhaseProductAncestry(unknown,[operation],changed)).toBe(false);
+ });
+ it("cannot turn retained subscription/schedule evidence or missing original verification into product identity",()=>{
+  const{operation,resource}=history(),unknown={...resource,state:"unknown" as const,recoveryPending:true};
+  const old=operation.providerObservation.history as Array<Record<string,unknown>>;
+  for(const observations of [old.filter(row=>row.source!=="phase_product_read_verified"),[...old,{source:"actual-foreign-billing",providerSubscriptionRef:"sub_foreign"}],[...old,{source:"actual-foreign-billing",providerScheduleRef:"sub_sched_foreign"}]])expect(verifiedControlledPhaseProductAncestry(unknown,[{...operation,providerObservation:{...operation.providerObservation,history:observations}}],controlled())).toBe(false);
+ });
 });

@@ -3565,6 +3565,21 @@ open the admin until Thursday still needs to know about Monday.
 ## 43. Product Completion Plan — the live checklist
 
 
+B first actual funding native2026-11-14 (C12.38/C9.33): qualified95c9 sourceV119
+PASSES1679actual/267files/546explicitDBskips, types/lint/CLI and fresh normal79/
+strict163/369guards/424wholefunctions/4215queries/SDK8; installed B/A/invocation
+readiness TRUE. Original B positive FAIL125.28s BEFORE quote/credit birth because
+controlled cash retention correctly marks the legacy schedule unknown/recovery,
+while the quote still requires pre-cash uncreated flags. Failed79/all598/j86/
+sequence/clients retained; no reset/migration/second native there. New DISTINCT
+existing-controlled product-ancestry predicate preserves the complete real
+nonbilling product journal and original scope, leaving generic initial bootstrap
+rules and every current financial/privacy/caller/consent/native/tax gate strict.
+No raw flag or row is cleared. Four role/refusal controls are prepared; fresh
+source/schema/SDK/original B native qualification REQUIRED. No B/stable closure.
+See `deploy/controlled-product-ancestry-root-continuation-20261114.json`.
+
+
 B readiness source continuation2026-11-14 (C12.38/C9.33): sourceV118 at83349d19
 PASSES types/lint/CLI/1679actual/267files/546explicitDBskips; fresh normal78,
 strict163/369guards/424wholefunctions/4215queries/actualSDK8 PASS. An ACTUAL
