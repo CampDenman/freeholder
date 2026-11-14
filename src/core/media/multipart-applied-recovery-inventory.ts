@@ -12,6 +12,7 @@ import {mediaStorageProviderInventories as inventories,mediaStorageProviderInven
 import {captureAppliedMultipartContext} from "./multipart-applied-recovery-context";
 import type {MultipartRecoveryConfirmation} from "./multipart-recovery-context";
 import {requireOriginalMultipartCompletedBody} from "./multipart-completed-proof";
+import {requireKnownOriginalEmptySession} from "./multipart-known-create-proof";
 import {requireAppliedOriginalMultipartObject} from "./multipart-complete-recovery-proof";
 import {inventoryResourceDigest,physicalInventoryBytes,providerInventoryDigest} from "./transfer-inventory-proof";
 import {readProviderInventoryPass} from "./transfer-inventory";
@@ -23,8 +24,14 @@ const wireDigest=(value:unknown)=>createHash("sha256").update(JSON.stringify(val
 export async function appliedMultipartReadProof(tx:Tx,input:RecoveryInput,proofCallId:string){
  const original=await captureAppliedMultipartContext(tx,input);if(original.witness!==input.originalWitness)transferConflict("The immutable original COMPLETE evidence changed before recovery.");
  const[proof]=await tx.select().from(calls).where(eq(calls.id,proofCallId)).limit(1);
- if(!proof||proof.multipartOperationId!==original.operation.id||proof.objectId||proof.objectReceiptId||proof.kind!=="multipart_recovery_inspect"||proof.namespace!==original.resource.namespace||proof.physicalKey!==original.key||proof.state!=="returned"||!proof.returnedAt||!proof.resultRevision||!proof.resultSha256||proof.resultBytes===null||!proof.resultRequestProof||proof.resultAbsent||!await transferRequestsDrained(tx,[proof.id]))transferConflict("The genuine fresh original-provider full read must finish before its first inventory.");
- const physical=await tx.select().from(requests).where(eq(requests.callId,proof.id)),facts=physical.length?await tx.select().from(observations).where(inArray(observations.requestId,physical.map(row=>row.id))):[],bodies=facts.filter(row=>row.facts.stage==="body"&&row.facts.partsDigest===original.operation.partsDigest&&row.facts.sha256===proof.resultSha256&&row.facts.bytes===proof.resultBytes);
+ if(!proof||proof.multipartOperationId!==original.operation.id||proof.objectId||proof.objectReceiptId||proof.kind!=="multipart_recovery_inspect"||proof.namespace!==original.resource.namespace||proof.physicalKey!==original.key||proof.state!=="returned"||!proof.returnedAt||!await transferRequestsDrained(tx,[proof.id]))transferConflict("The genuine fresh original-provider full read must finish before its first inventory.");
+ const physical=await tx.select().from(requests).where(eq(requests.callId,proof.id)),facts=physical.length?await tx.select().from(observations).where(inArray(observations.requestId,physical.map(row=>row.id))):[];
+ if(original.kind==="create"){
+  if(proof.resultDigest!==transferDigest({inspectionDigest:transferDigest({state:"open",parts:[]})})||proof.resultRevision||proof.resultSha256||proof.resultBytes!==null||proof.resultRequestProof||proof.resultAbsent||physical.length!==1||physical[0]?.descriptor.kind!=="multipart.inspect"||physical[0].descriptor.uploadId!==original.resource.providerUploadId||physical[0].descriptor.cursor!=null||!facts.some(row=>row.facts.stage==="response_body"&&row.facts.detailDigest)||!facts.some(row=>row.facts.stage==="inventory"&&row.facts.count===0&&row.facts.uploadId===original.resource.providerUploadId))transferConflict("The exact originally acknowledged session needs a genuine complete empty part inspection; singleton key or current absence is insufficient.");
+  return{...original,proof,actual:null};
+ }
+ if(!proof.resultRevision||!proof.resultSha256||proof.resultBytes===null||!proof.resultRequestProof||proof.resultAbsent)transferConflict("Retain the exact actual complete original nonce-bound file read.");
+ const bodies=facts.filter(row=>row.facts.stage==="body"&&row.facts.partsDigest===original.operation.partsDigest&&row.facts.sha256===proof.resultSha256&&row.facts.bytes===proof.resultBytes);
  if(physical.length!==1||physical[0]?.descriptor.kind!=="object.read"||physical[0].descriptor.partsDigest!==original.operation.partsDigest||bodies.length!==1||bodies[0]!.requestId!==physical[0].id)transferConflict("Retain the exact actual complete part-bound body read, never a current-key/HEAD-only result.");
  const actual={key:original.key,namespace:original.binding.namespace,sha256:proof.resultSha256,bytes:proof.resultBytes,revision:proof.resultRevision,requestProof:proof.resultRequestProof,partsDigest:bodies[0]!.facts.partsDigest};
  if(original.expectedRevision&&transferDigest(actual.revision)!==transferDigest(original.expectedRevision))transferConflict("The first actual original COMPLETE revision cannot be rebound to a current generation.");
@@ -67,6 +74,7 @@ export async function appendAppliedMultipartInventoryPage(tx:Tx,input:RecoveryIn
 export async function finishAppliedMultipartInventory(tx:Tx,input:RecoveryInput&{inventoryId:string}){
  const original=await lockedAppliedMultipartInventory(tx,input),header=original.inventory;if(header.state!=="capturing")return header;
  const first=await readProviderInventoryPass(tx,header,0),confirmed=await readProviderInventoryPass(tx,header,1);
- requireAppliedOriginalMultipartObject({creation:original.creationProof,actual:original.actual,parts:original.operation.parts,expectedRevision:original.expectedRevision,uploadId:original.resource.providerUploadId!,namespace:original.binding.namespace,key:original.key,bytes:original.resource.expectedBytes,first,confirmed});
+ if(original.kind==="create")requireKnownOriginalEmptySession({key:original.key,uploadId:original.resource.providerUploadId!,first,confirmed});
+ else requireAppliedOriginalMultipartObject({creation:original.creationProof,actual:original.actual,parts:original.operation.parts,expectedRevision:original.expectedRevision,uploadId:original.resource.providerUploadId!,namespace:original.binding.namespace,key:original.key,bytes:original.resource.expectedBytes,first,confirmed});
  const firstDigest=providerInventoryDigest(first.configuration,first.entries),confirmedDigest=providerInventoryDigest(confirmed.configuration,confirmed.entries),[saved]=await tx.update(inventories).set({state:"complete",firstDigest,confirmedDigest,configuration:first.configuration,entryCount:first.entries.length,totalBytes:physicalInventoryBytes(first.configuration,first.entries),completedAt:new Date(),updatedAt:new Date()}).where(eq(inventories.id,header.id)).returning();return saved!;
 }

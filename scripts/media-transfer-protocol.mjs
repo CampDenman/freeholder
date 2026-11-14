@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: explicit physical requests; no hidden resumable session/retry.
 import {createHash} from "node:crypto";
+import {createS3MultipartProtocol} from "./media-multipart-protocol.mjs";
 import {originalMultipartReadback} from "./media-multipart-readback.mjs";
 import {readOriginalStorageXml} from "./media-storage-xml.mjs";
 const MAX_PAGE=250;
@@ -63,6 +64,7 @@ export function createS3TransferProtocol({client,url,binding,observer}){
   await notify({stage:"body",status:response.status,revision:rev,sha256:digest(body),bytes:body.byteLength});return{body,contentType:response.headers.get("content-type")??"application/octet-stream",revision:rev,...(requestProof?{requestProof}:{})};
  });}
  return{binding,readVersioned,
+  async inspectMultipart(key,uploadId){if(!observer||binding.kind!=="s3")failure();return createS3MultipartProtocol({client,binding,url,observer,retainXmlEvidence:true,requirePartChecksums:true}).inspect(key,uploadId);},
   async metadataVersioned(key,input){
    objectKey(key);const pinned=input?exactRevision(input,binding,key):undefined,target=new URL(url(key));if(pinned?.versionId!==undefined)target.searchParams.set("versionId",pinned.versionId);
    return observed(observer,{kind:"object.metadata",binding,key,...(pinned?{expectedRevision:pinned}:{})},async notify=>{

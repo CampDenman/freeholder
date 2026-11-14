@@ -16081,3 +16081,24 @@ host actions or C-item closure. Remote terminal consumption, unknown CREATE/
 legacy issuer recovery, certificate minimization, full session/capture/quota/
 cutover and every qualification/external/independent/stable gate remain open.
 See `deploy/media-multipart-applied-complete-recovery-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): genuine human multipart
+recovery now has a retained-first-ACK CREATE path. Exact original baseline,
+physical nonce/runtime/full ACK/UploadId and actual FINs or independent stop
+precede a fresh empty original-session inspection and two complete immutable
+provider inventories. Immutable applied review permits genuine future parts/
+completion without changing the original failed/NULL return, ACK or FIN.
+Unknown-no-ACK singleton sessions remain pending; session retirement, issued
+URL consumption, erasure and quota release are not inferred. Exact reviewed
+local CREATE closure can permit ordinary stopped-executor drain release while
+all other namespace/cohort checks remain. The earlier ordinary review trigger's
+unconditional multipart refusal is replaced by the same full mandatory typed
+proof predicates, preserving old ordinary/transfer branches and c792 oracles.
+Six functions/eight continuations append after the intact c792 owned82 prefix;
+no model/column/trigger/capability/journal is added. Eight proof/five genuine
+service/SDK/browser PUT/fictional TCP controls are PREPARED/UNRUN; 1633836e
+original-fixture type-only alignment is explicit. No child execution/provider/
+host action or C closure. Unknown/legacy/terminal/session/capture/quota/cutover,
+full qualification, actual provider/operator/platform acceptance, independent
+review and stable sign-offs remain open. See
+`deploy/media-multipart-known-create-recovery-source-2026-11-13.md`.

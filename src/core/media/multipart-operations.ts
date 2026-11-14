@@ -27,6 +27,7 @@ import {configuredOriginalRequestStore} from "./transfer-storage";
 import {requireOriginalMultipartCompletedBody,type OriginalMultipartCreateProof} from "./multipart-completed-proof";
 import {mediaStorageTransferReviews} from "./transfer-schema";
 import {mediaStorageTransferCalls} from "./transfer-schema";
+import {retainedKnownCreateReview} from "./multipart-known-create-review";
 import {originalMultipartCompleteManifest} from "./multipart-complete-manifest";
 import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
 
@@ -169,12 +170,14 @@ export async function claimMultipartComplete(ctx:ServiceContext,uploadId:string,
 async function originalMultipartCreateProof(resource:Resource):Promise<OriginalMultipartCreateProof>{
  const creators=await db().select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,resource.id),eq(mediaMultipartOperations.kind,"create"))).limit(2),creator=creators[0];
  const callers=creator?await db().select().from(mediaStorageTransferCalls).where(and(eq(mediaStorageTransferCalls.multipartOperationId,creator.id),eq(mediaStorageTransferCalls.kind,"multipart_create"))).limit(2):[],caller=callers[0];
- if(creators.length!==1||!creator?.createBaseline||creator.createBaseline.state!=="complete"||!creator.writerFinishedAt||creator.state!=="accepted"||callers.length!==1||!caller||caller.state!=="returned"||!caller.returnedAt||!caller.observedAcceptedAt||creator.createBaseline.callId!==caller.id)conflict("Keep the original upload for review. Its original session creation evidence is incomplete.");
+ if(creators.length!==1||!creator?.createBaseline||creator.createBaseline.state!=="complete"||creator.state!=="accepted"||callers.length!==1||!caller||!caller.observedAcceptedAt||creator.createBaseline.callId!==caller.id)conflict("Keep the original upload for review. Its original session creation evidence is incomplete.");
+ const review=caller.state==="stopped"?await db().transaction(tx=>retainedKnownCreateReview(tx,creator.id)):undefined;
+ if((!creator.writerFinishedAt||caller.state!=="returned"||!caller.returnedAt)&&!review)conflict("Keep the original upload for review. Its original creator finish or exact immutable applied review is incomplete.");
  const physical=await db().select().from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.callId,caller.id)),requests=physical.filter(row=>row.descriptor.kind==="multipart.create"),request=requests[0];
- if(requests.length!==1||!request||request.state!=="returned"||!request.returnedAt||request.descriptor.binding.namespace!==resource.namespace||request.descriptor.key!==resource.key)conflict();
+ if(requests.length!==1||!request||((request.state!=="returned"||!request.returnedAt)&&!review)||request.descriptor.binding.namespace!==resource.namespace||request.descriptor.key!==resource.key)conflict();
  const facts=await db().select().from(mediaStorageTransferRequestObservations).where(eq(mediaStorageTransferRequestObservations.requestId,request.id));
  if(!resource.providerUploadId||!facts.some(row=>row.facts.stage==="response_body"&&row.facts.detailDigest)||!facts.some(row=>row.facts.stage==="session"&&row.facts.uploadId===resource.providerUploadId))conflict();
- return{...request,observedUploadId:resource.providerUploadId};
+ return{...request,observedUploadId:resource.providerUploadId,...(review?{review}:{})};
 }
 export async function completeOriginalMultipart(uploadId:string,operationId:string,recoverOnly:boolean):Promise<BoundMultipart>{
  let captured:BoundMultipart;
