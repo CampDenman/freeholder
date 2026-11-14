@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+B reservation economic-segment INVENTORY2026-11-14 (C12.38/C9.33/C1.08):
+source audit proves existing reservation fee scalars/opaque digest do not retain
+the original root interval; repricing a4199/F400 retired1/current399 source at
+399/4199 changes first21 fee2 to1. ONE additional immutable reservation-purpose
+child is PROPOSED before schema/guard implementation: actual parent PK/fullPG,
+five named RESTRICT FKs, original interval/nominal/retired/assigned/proven/owed
+conservation, actual sameTX child birth with mandatory deferred check. Existing
+application reservation PK+FK proves one-to-one derivation without another
+application model. No parent columns/backfill/idempotency-key authority, old
+non-B floor/hash changes, provider chronology guesses or generic applied-credit
+release. Exact source/privacy/central witness and function/trigger inventory is
+`deploy/atomic-credit-reservation-segments84.inventory.json`; root review,
+implementation and all execution remain pending. This inventory establishes no
+readiness, credit-return completion, stable or release claim.
+
 Atomic current refund bank SOURCE continuation2026-11-14 (C12.38/C9.33/C1.08):
 actual preserved V55 proves newer genuine refund captures stale the old generic
 current receipt while independently authenticated current controlled bank rows
