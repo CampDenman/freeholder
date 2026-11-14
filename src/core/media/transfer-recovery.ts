@@ -87,7 +87,7 @@ const apply=defineMediaService({name:"media.applyTransferReview",summary:"Append
   await ctx.tx.update(mediaObjectWrites).set({state:absent?(original.call.observedAcceptedAt?"accepted":"confirmed_absent"):"accepted",...(absent?{deletedAt:now}:{}),reviewedAt:now,reviewedBy:actorString(ctx.actor),evidenceDigest,updatedAt:now}).where(eq(mediaObjectWrites.id,original.call.physicalReceiptId));
  }
  if(absent&&original.call.kind==="target_put"){
-  await releaseTransferQuota(ctx.tx,original.plan.targetNamespace,original.key);
+  await releaseTransferQuota(ctx.tx,{objectId:original.object.id,side:"target",callId:original.call.id});
   await ctx.tx.update(mediaStorageTransferObjects).set({state:input.retryOriginal?"planned":"blocked",updatedAt:now}).where(eq(mediaStorageTransferObjects.id,original.object.id));
   await ctx.tx.update(mediaStorageTransferPlans).set({state:input.retryOriginal?"copying":"blocked",updatedAt:now}).where(eq(mediaStorageTransferPlans.id,original.plan.id));
  }

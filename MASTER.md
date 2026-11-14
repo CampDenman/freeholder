@@ -3564,6 +3564,48 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Source-only continuation, 2026-11-14 (C1.12/C11.08): new ordinary upload births
+now explicitly bind one immutable upload/reservation UUID in the genuine shared
+same-TX producer, with deferred cross-row validation and no historical NULL
+fill/default/FK to a temporary pointer. Future first captures retain the exact
+original key digest; repeated requests require agreeing intact captures and
+precise historical subject ownership. Exact ordinary erasure and thirty-day
+redundant metadata custody consumers preserve the UUID and separate derivative
+proofs; unknown/held/legacy evidence remains pending. Four functions/two triggers/
+one index/one nullable column append after the intact owned82 prefix. Eight pure
+and five genuine service/TCP controls are PREPARED, all UNRUN; two require the
+real complete request ABI. No capability, C closure or provider/security/stable
+acceptance. Legacy/issued-authority/quota/capture/cutover and real qualification
+remain required. See `deploy/media-upload-original-reservation-source-2026-11-14.md`.
+
+Source-only continuation, 2026-11-14 (C1.12/C11.08): optional future legacy
+upload anchors retain safe literal original capture/pointer/upload witnesses
+without filling historical NULL births. Two scalar SQL functions and six full
+continuations require an intact earlier same-subject capture/receipt, exact
+surviving whole original pointer witness, authentic ordinary PUT/caller and
+full physical retirement. Unknown/unwritten legacy remains pending. No new
+model/column/index/trigger/service/job/capability; whole prior owned82 prefix
+and prior oracles stay exact. Eight pure/seven genuine old-producer upgrade
+controls are PREPARED/UNRUN; SQL/Drizzle full-pointer equality and actual public
+hold/terminal-old-receipt reachability must pass first. No provider/security/
+stable/C closure. Issued-authority, capture/quota/cutover and full real acceptance
+remain required. See `deploy/media-legacy-upload-anchor-source-2026-11-14.md`.
+
+Source-only continuation, 2026-11-14 (C1.12/C10.32/C11.08): transfer quota
+settlement/release now follows actual original caller tokens and separate
+source/target physical roles. Real accepted request accounting may precede
+outer FIN; no FIN is invented. Full source retirement releases its capacity
+while target charge and original copied privacy lineage remain live; current
+holds/late caller facts invalidate proof before dedup. Actually unattempted
+same-original retry requires all real FIN/frame evidence; unknown/unbound
+charges remain debt. Two scalar SQL functions/one full existing guard and five
+TS files, zero new model/field/trigger/service/job/capability. Nine pure/nine
+native controls PREPARED/UNRUN; all qualification remains UNRUN in this child.
+Actual namespace initialization, issued-authority closure, capture/cutover,
+external provider/operator/security and final stable gates remain required.
+See `deploy/media-transfer-quota-role-source-2026-11-14.md`.
+
+
 Source-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart
 consumer leaf separates immutable historical first identity, exact current
 whole-frontier coverage and actual original erasure-job entitlement. The genuine

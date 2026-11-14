@@ -925,9 +925,12 @@ const beginUploadApply = defineService({
     await checkCaptureUpload(ctx.tx, ctx.actor, input.provenance);
     const uploadedBy=input.provenance.captureToken?`capture:${input.provenance.captureToken}`:actorString(ctx.actor);
     const ownerContactId=await originalUploadContact(ctx.tx,uploadedBy);
+    await assertOriginalUploadWritable(ctx.tx,ownerContactId,uploadedBy);
+    const originalReservationId=randomUUID();
     const [session] = await ctx.tx
       .insert(mediaUploads)
       .values({
+        originalReservationId,
         strategy: input.strategy,
         storageKey: input.key,
         filename: input.filename,
@@ -942,6 +945,7 @@ const beginUploadApply = defineService({
       })
       .returning();
     await ctx.tx.insert(mediaObjects).values({
+      reservationId:originalReservationId,
       key: input.key,
       uploadId: session!.id,
       role: "staged",
@@ -3419,23 +3423,14 @@ export async function cleanupOrphanedMedia(now = new Date()): Promise<{
     if (await pendingObjectIsOwned(object.key, now)) continue;
     if (await deleteWithReceipt(object.key)) orphanedObjects += 1;
   }
-  const terminalCutoff = new Date(now.getTime() - TRASH_RETENTION_MS);
-  const pruned = await db().transaction(async tx=>{
-    await allowMediaReceiptWrites(tx);
-    return tx.delete(mediaUploads)
-    .where(
-      and(
-        inArray(mediaUploads.state, ["complete", "failed", "aborted", "expired"]),
-        lt(mediaUploads.updatedAt, terminalCutoff),
-        sql`not exists(select 1 from media_multipart_resources resource where resource.upload_id=${mediaUploads.id} and resource.retired_at is null)`,
-        sql`not exists(select 1 from media_object_writes receipt where receipt.key_digest=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(${mediaUploads.storageKey},'UTF8')),'hex') and receipt.state in('unverified','started','unknown'))`,
-      ),
-    )
-    .returning({ id: mediaUploads.id });});
+  // Thirty-day session pruning now removes only redundant metadata after
+  // real custody/retirement proof; its durable UUID record remains. Unknown
+  // legacy locators are retained as explicit recovery debt, never TTL absence.
+  const prunedSessions=await db().transaction(async tx=>(await import("./original-upload-retention")).reduceTerminalUploadMetadata(tx,now));
   return {
     expiredUploads,
     orphanedObjects,
-    prunedSessions: pruned.length,
+    prunedSessions,
   };
 }
 
