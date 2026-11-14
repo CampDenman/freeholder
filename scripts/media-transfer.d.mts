@@ -53,6 +53,7 @@ export interface TransferRequestObservation {
  stage:"response"|"metadata"|"body"|"accepted"|"absence"|"inventory"|"configuration"|"not_attempted"|"inventory_raw"|"session"|"response_body"|"capability"|"parts_verified";
  status:number|null;uploadId?:string;requestProof?:OriginalProviderRequestProof;detailDigest?:string;revision?:TransferRevision;sha256?:string;bytes?:number;count?:number;expiresAt?:string;
  partPageIds?:string[];
+ partsDigest?:string;
  capabilityProof?:import('./media-part-capability.mjs').OriginalPartCapabilityProof;
 }
 export type TransferRequestObserver=<T>(descriptor:TransferRequestDescriptor,operation:(notify:(facts:TransferRequestObservation)=>Promise<void>,identity?:TransferRequestIdentity)=>Promise<T>)=>Promise<T>;
@@ -65,7 +66,7 @@ export interface TransferInventoryConfiguration {versioning:"disabled"|"Enabled"
 export interface AccountedTransferStore extends VersionedTransferStore {
  /** A complete original pinned body is hashed with bounded memory. This is
   * read evidence, never completion/consumption or original caller FIN. */
- readDigestVersioned?(key:string,revision:TransferRevision,maxBytes:number):Promise<{sha256:string;bytes:number;contentType:string;revision:TransferRevision;requestProof?:OriginalProviderRequestProof}|undefined>;
+ readDigestVersioned?(key:string,revision:TransferRevision,maxBytes:number,originalParts?:readonly import("./media-multipart-readback.mjs").OriginalMultipartReadbackPart[]):Promise<{sha256:string;bytes:number;partsDigest?:string;contentType:string;revision:TransferRevision;requestProof?:OriginalProviderRequestProof}|undefined>;
  inventoryPage(kind:"objects"|"versions"|"sessions"|"retained",cursor?:Record<string,string>|null):Promise<TransferInventoryPage>;
  inventoryConfiguration():Promise<TransferInventoryConfiguration>;
 }

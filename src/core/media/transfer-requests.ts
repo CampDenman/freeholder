@@ -80,6 +80,10 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
     if(!["multipart_recovery_inspect","multipart_create","multipart_complete","multipart_abort"].includes(call.kind)||!descriptor.uploadId||descriptor.uploadId!==(parent.providerUploadId??parent.observedProviderUploadId??resource.providerUploadId))transferConflict("Inspect only the original provider-acknowledged session.");
    }else if(call.kind!==descriptor.kind.replace(".","_")||descriptor.kind==="multipart.create"&&descriptor.contentType!==resource.contentType||descriptor.kind!=="multipart.create"&&(descriptor.uploadId!==parent.providerUploadId||descriptor.uploadId!==resource.providerUploadId)||descriptor.kind==="multipart.complete"&&(!descriptor.createOnly||descriptor.partsDigest!==parent.partsDigest))transferConflict("The actual multipart request differs from its immutable original session or manifest.");
   }
+  if(descriptor.kind==="object.read"&&call.kind==="multipart_complete"){
+   const[parent]=call.multipartOperationId?await tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1):[];
+   if(!parent||parent.kind!=="complete"||descriptor.partsDigest!==parent.partsDigest)transferConflict("The original completed file read must retain every original part boundary and checksum.");
+  }
   if(descriptor.kind==="object.delete"&&(!["source_delete","privacy_delete","privacy_source_delete","ordinary_delete"].includes(call.kind)||!call.expectedRevision||transferDigest(descriptor.expectedRevision)!==transferDigest(call.expectedRevision)))transferConflict();
   if(descriptor.kind==="object.delete"&&call.kind==="ordinary_delete")await(await import("./original-retirement")).assertOrdinaryRetirementRequest(tx,call,descriptor);
   if(descriptor.kind==="object.body"){
@@ -114,6 +118,9 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
    const prior=await tx.select().from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.callId,call.id));
    if(prior.length!==pages.length||prior.some(row=>!pages.includes(row.id)||row.descriptor.kind!=="multipart.inspect"||row.descriptor.partsDigest!==parent.partsDigest||row.id!==request.id&&(row.state!=="returned"||!row.returnedAt)))transferConflict("The original upload-part verification has unresolved or unrelated physical reads.");
   }else if(facts.partPageIds)transferConflict("Original part-page identities belong only to the actual completed verification.");
+  if(facts.partsDigest!==undefined&&(facts.stage!=="body"||request.descriptor.kind!=="object.read"||facts.partsDigest!==request.descriptor.partsDigest))transferConflict("Original file-part readback belongs only to its exact complete physical body request.");
+  // Genuine old/partial body facts without this new certificate stay retained
+  // as debt. Adoption independently requires exact complete part readback.
   if(facts.requestProof&&request.descriptor.kind==="object.put"&&(facts.requestProof.id!==request.id||facts.requestProof.tokenDigest!==request.tokenDigest))transferConflict("The actual original upload returned another request identity.");
   if(facts.uploadId){
    if(typeof facts.uploadId!=="string"||!facts.uploadId||facts.uploadId.length>4096||/[\u0000-\u001f]/.test(facts.uploadId)||!request.descriptor.kind.startsWith("multipart.")||request.descriptor.kind!=="multipart.create"&&facts.uploadId!==request.descriptor.uploadId)transferConflict("The provider fact names a different original session.");

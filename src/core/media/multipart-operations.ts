@@ -197,7 +197,8 @@ export async function completeOriginalMultipart(uploadId:string,operationId:stri
     if(inspection.state!=="open")conflict("The original upload session is unavailable. Keep its receipts for recovery.");
     await captured.store.directMultipart.complete(captured.resource.key,operation.providerUploadId!,operation.parts,{request:observeTransferRequest,onAccepted:async result=>{acknowledged=true;revision=result?.revision;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}});
     if(!revision)conflict();
-    const bytes=await store.readDigestVersioned!(captured.resource.key,revision,captured.resource.expectedBytes);if(!bytes)conflict("The original completed upload is unavailable. Keep its original receipt for review.");
+    const bytes=await store.readDigestVersioned!(captured.resource.key,revision,captured.resource.expectedBytes,operation.parts);if(!bytes)conflict("The original completed upload is unavailable. Keep its original receipt for review.");
+    if(bytes.partsDigest!==operation.partsDigest||bytes.bytes!==captured.resource.expectedBytes)conflict("Keep the original completed upload for review. Its stored parts differ from the original file declaration.");
     requireOriginalMultipartCompletedBody(creation,{...bytes,key:captured.resource.key,namespace:captured.binding.namespace},{uploadId:operation.providerUploadId!,namespace:captured.binding.namespace,key:captured.resource.key,revision,maxBytes:captured.resource.expectedBytes});
     return bytes;
    });

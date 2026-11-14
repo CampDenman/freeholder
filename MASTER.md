@@ -16044,3 +16044,20 @@ actions or C-item closure. Genuine remote terminal consumption, unknown/legacy
 recovery, authority-certificate minimization, session/capture/quota/cutover and
 all qualification/external/independent/stable gates remain open. See
 `deploy/media-multipart-withheld-issuer-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): real normal multipart
+completion now streams every original fixed part boundary/checksum as well as
+whole-file SHA before object adoption, binding its actual body fact to the
+immutable original manifest, pinned revision and CREATE nonce. Reported ETag,
+part listing, size or Content-Length cannot substitute. Same-size changed
+stored bytes retain actual earlier ACK/backend bytes as recovery debt; no
+second POST is authorized. Older/partial positive facts stay retained without
+receiving a fabricated new certificate. One appended function/two guards and
+an existing adoption predicate continuation add no model/column/check or
+capability. Seven verifier, six wire and two real-service/TCP controls are
+PREPARED/UNRUN; all old oracles and preceding owned SQL remain intact. This is
+an actual readback dependency, not unknown-COMPLETE review or remote authority
+consumption. Unknown/legacy recovery, certificate minimization, session/
+capture/quota/cutover and all qualification/external/independent/stable gates
+remain open. No child execution/provider/host actions or C-item closure. See
+`deploy/media-multipart-stored-part-readback-source-2026-11-13.md`.

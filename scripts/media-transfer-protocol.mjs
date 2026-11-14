@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: explicit physical requests; no hidden resumable session/retry.
 import {createHash} from "node:crypto";
+import {originalMultipartReadback} from "./media-multipart-readback.mjs";
 import {readOriginalStorageXml} from "./media-storage-xml.mjs";
 const MAX_PAGE=250;
 const digest=value=>createHash("sha256").update(typeof value==="string"||value instanceof Uint8Array?value:JSON.stringify(value)).digest("hex");
@@ -62,16 +63,17 @@ export function createS3TransferProtocol({client,url,binding,observer}){
   await notify({stage:"body",status:response.status,revision:rev,sha256:digest(body),bytes:body.byteLength});return{body,contentType:response.headers.get("content-type")??"application/octet-stream",revision:rev,...(requestProof?{requestProof}:{})};
  });}
  return{binding,readVersioned,
-  async readDigestVersioned(key,input,maxBytes){
+  async readDigestVersioned(key,input,maxBytes,originalParts){
+   const partReadback=originalParts===undefined?undefined:originalMultipartReadback(originalParts,maxBytes);
    const pinned=exactRevision(input,binding,key);if(!Number.isSafeInteger(maxBytes)||maxBytes<0)failure();const target=new URL(url(key));if(pinned.versionId!==undefined)target.searchParams.set("versionId",pinned.versionId);
-   return observed(observer,{kind:"object.read",binding,key,expectedRevision:pinned,bytes:maxBytes},async notify=>{
+   return observed(observer,{kind:"object.read",binding,key,expectedRevision:pinned,bytes:maxBytes,...(partReadback?{partsDigest:partReadback.partsDigest}:{})},async notify=>{
     const response=await client.fetch(target,{redirect:"error",headers:{"accept-encoding":"identity","if-match":pinned.value}});await notify({stage:"response",status:response.status});
     if(response.status===404){await notify({stage:"absence",status:404});return undefined;}if(!response.ok)failure();
     const original=revision(binding,key,response.headers.get("etag"),response.headers.get("x-amz-version-id")??undefined);if(JSON.stringify(original)!==JSON.stringify(pinned))failure();
     const requestProof=originalRequestProof(response.headers.get("x-amz-meta-freeholder-original-request")??undefined,response.headers.get("x-amz-meta-freeholder-original-token")??undefined);
     await notify({stage:"metadata",status:response.status,revision:original,...(requestProof?{requestProof}:{})});
-    const hash=createHash("sha256");let bytes=0;if(response.body){const reader=response.body.getReader();try{for(;;){const item=await reader.read();if(item.done)break;bytes+=item.value.byteLength;if(bytes>maxBytes)failure();hash.update(item.value);}}finally{await reader.cancel().catch(()=>{});reader.releaseLock();}}
-    const sha256=hash.digest("hex");await notify({stage:"body",status:response.status,revision:original,sha256,bytes});return{sha256,bytes,contentType:response.headers.get("content-type")??"application/octet-stream",revision:original,...(requestProof?{requestProof}:{})};
+    const hash=createHash("sha256");let bytes=0;if(response.body){const reader=response.body.getReader();try{for(;;){const item=await reader.read();if(item.done)break;bytes+=item.value.byteLength;if(bytes>maxBytes)failure();partReadback?.update(item.value);hash.update(item.value);}}finally{await reader.cancel().catch(()=>{});reader.releaseLock();}}
+    const verifiedParts=partReadback?.finish(),sha256=hash.digest("hex");await notify({stage:"body",status:response.status,revision:original,sha256,bytes,...(verifiedParts?{partsDigest:verifiedParts.partsDigest}:{})});return{sha256,bytes,...(verifiedParts?{partsDigest:verifiedParts.partsDigest}:{}),contentType:response.headers.get("content-type")??"application/octet-stream",revision:original,...(requestProof?{requestProof}:{})};
    });
   },
   async get(key){return(await readVersioned(key))?.body;},

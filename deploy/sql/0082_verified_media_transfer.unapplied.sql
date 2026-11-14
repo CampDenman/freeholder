@@ -2794,3 +2794,73 @@ CREATE OR REPLACE FUNCTION freeholder_media_multipart_complete_intent_ready(orig
    AND NOT EXISTS(SELECT 1 FROM privacy_retention_exceptions hold JOIN data_requests privacy ON privacy.id=hold.data_request_id WHERE hold.scope IN ('media.storageOperations','media.multipartOperations','media.storageTransfers','members') AND (hold.expires_at IS NULL OR hold.expires_at>clock_timestamp()) AND (resource.contact_id IS NULL OR privacy.contact_id=resource.contact_id))
  )
 $$;
+
+
+--> statement-breakpoint
+-- Original full-body readback additionally verifies each fixed original part.
+CREATE OR REPLACE FUNCTION freeholder_media_multipart_completed_result(original_operation uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_operations operation
+  JOIN media_multipart_resources resource ON resource.id=operation.resource_id
+  JOIN media_storage_transfer_calls actual ON actual.multipart_operation_id=operation.id AND actual.kind='multipart_complete'
+  JOIN media_multipart_operations creation ON creation.resource_id=resource.id AND creation.operation_kind='create'
+  JOIN media_storage_transfer_calls creator ON creator.multipart_operation_id=creation.id AND creator.kind='multipart_create'
+  JOIN media_storage_transfer_requests birth ON birth.call_id=creator.id AND birth.descriptor->>'kind'='multipart.create'
+  JOIN media_storage_transfer_requests completion ON completion.call_id=actual.id AND completion.descriptor->>'kind'='multipart.complete'
+  JOIN media_storage_transfer_requests body ON body.call_id=actual.id AND body.descriptor->>'kind'='object.read'
+  WHERE operation.id=original_operation AND operation.operation_kind='complete' AND operation.state='accepted' AND operation.writer_finished_at IS NOT NULL AND operation.provider_accepted_at IS NOT NULL
+   AND operation.provider_upload_id=resource.provider_upload_id AND operation.observed_provider_upload_id=resource.provider_upload_id
+   AND resource.original_reservation_id IS NOT NULL AND resource.redacted_at IS NULL AND resource.storage_kind='s3'
+   AND actual.object_id IS NULL AND actual.object_receipt_id IS NULL AND actual.state='returned' AND actual.returned_at IS NOT NULL AND actual.observed_accepted_at IS NOT NULL AND actual.runtime_id=operation.writer_runtime_id
+   AND actual.namespace=resource.storage_namespace AND actual.physical_key=resource.object_key AND actual.result_revision->>'namespace'=resource.storage_namespace AND actual.result_revision->>'key'=resource.object_key
+   AND actual.result_sha256 ~ '^[a-f0-9]{64}$' AND actual.result_bytes>=0 AND actual.result_bytes<=resource.expected_bytes AND actual.result_absent IS NULL
+   AND creation.state='accepted' AND creation.writer_finished_at IS NOT NULL AND creation.provider_accepted_at IS NOT NULL
+   AND creation.create_baseline->>'state'='complete' AND creation.create_baseline->>'callId'=creator.id::text AND creation.create_baseline->>'namespace'=resource.storage_namespace AND creation.create_baseline->>'keyDigest'=resource.key_digest
+   AND creator.state='returned' AND creator.returned_at IS NOT NULL AND creator.observed_accepted_at IS NOT NULL AND creator.namespace=resource.storage_namespace AND creator.physical_key=resource.object_key
+   AND birth.state='returned' AND birth.returned_at IS NOT NULL AND birth.descriptor->>'key'=resource.object_key AND birth.descriptor->'binding'->>'namespace'=resource.storage_namespace
+   AND actual.result_request_proof=jsonb_build_object('id',birth.id,'tokenDigest',birth.token_digest)
+   AND (SELECT count(*) FROM media_multipart_operations other WHERE other.resource_id=resource.id AND other.operation_kind='create')=1
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=birth.id AND fact.facts->>'stage'='response_body' AND fact.facts->>'detailDigest' ~ '^[a-f0-9]{64}$')
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=birth.id AND fact.facts->>'stage'='session' AND fact.facts->>'uploadId'=resource.provider_upload_id)
+   AND completion.state='returned' AND completion.returned_at IS NOT NULL AND completion.descriptor->>'key'=resource.object_key AND completion.descriptor->>'uploadId'=resource.provider_upload_id AND completion.descriptor->'createOnly'='true'::jsonb AND completion.descriptor->>'partsDigest'=operation.parts_digest
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=completion.id AND fact.facts->>'stage'='response_body' AND fact.facts->>'detailDigest' ~ '^[a-f0-9]{64}$')
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=completion.id AND fact.facts->>'stage'='metadata' AND fact.facts->'revision'=actual.result_revision AND fact.facts->>'uploadId'=resource.provider_upload_id)
+   AND body.state='returned' AND body.returned_at IS NOT NULL AND body.created_at>=completion.returned_at AND body.descriptor->>'key'=resource.object_key AND body.descriptor->'expectedRevision'=actual.result_revision AND body.descriptor->>'bytes'=resource.expected_bytes::text AND body.descriptor->>'partsDigest'=operation.parts_digest
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=body.id AND fact.facts->>'stage'='metadata' AND fact.facts->'revision'=actual.result_revision AND fact.facts->'requestProof'=actual.result_request_proof)
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=body.id AND fact.facts->>'stage'='body' AND fact.facts->'revision'=actual.result_revision AND fact.facts->>'sha256'=actual.result_sha256 AND fact.facts->>'bytes'=actual.result_bytes::text AND fact.facts->>'partsDigest'=operation.parts_digest AND fact.facts->>'bytes'=resource.expected_bytes::text)
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests unresolved WHERE unresolved.call_id=actual.id AND (unresolved.state<>'returned' OR unresolved.returned_at IS NULL))
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_readback_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE request media_storage_transfer_requests; caller media_storage_transfer_calls; operation media_multipart_operations; resource media_multipart_resources;
+BEGIN
+ IF TG_TABLE_NAME='media_storage_transfer_requests' THEN request:=NEW;
+ ELSE SELECT * INTO request FROM media_storage_transfer_requests WHERE id=NEW.request_id;
+ END IF;
+ SELECT * INTO caller FROM media_storage_transfer_calls WHERE id=request.call_id;
+ IF request.descriptor->>'kind'<>'object.read' OR caller.kind<>'multipart_complete' THEN
+  IF TG_TABLE_NAME='media_storage_transfer_request_observations' THEN
+   IF NEW.facts ? 'partsDigest' THEN RAISE EXCEPTION 'Original multipart readback cannot certify another physical request or caller role' USING ERRCODE='23514'; END IF;
+  END IF;
+  RETURN NEW;
+ END IF;
+ SELECT * INTO operation FROM media_multipart_operations WHERE id=caller.multipart_operation_id;
+ SELECT * INTO resource FROM media_multipart_resources WHERE id=operation.resource_id;
+ -- Retain authentic older/partial positive facts without granting them a
+ -- present-day part certificate. Complete adoption checks this separately.
+ IF TG_TABLE_NAME='media_storage_transfer_request_observations' THEN
+  IF NOT(NEW.facts ? 'partsDigest') THEN RETURN NEW; END IF;
+ END IF;
+ IF operation.operation_kind IS DISTINCT FROM 'complete' OR resource.id IS NULL OR request.descriptor->>'partsDigest' IS DISTINCT FROM operation.parts_digest OR request.descriptor->>'key' IS DISTINCT FROM resource.object_key OR request.descriptor->'binding'->>'namespace' IS DISTINCT FROM resource.storage_namespace OR request.descriptor->>'bytes' IS DISTINCT FROM resource.expected_bytes::text THEN RAISE EXCEPTION 'Read every stored byte against the original complete file part manifest and exact resource' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='media_storage_transfer_request_observations' THEN
+  IF NEW.facts->>'stage'='body' THEN
+   IF NEW.facts->>'partsDigest' IS DISTINCT FROM operation.parts_digest OR NEW.facts->>'bytes' IS DISTINCT FROM resource.expected_bytes::text OR coalesce(NEW.facts->>'sha256','') !~ '^[a-f0-9]{64}$' THEN RAISE EXCEPTION 'Only the full actually streamed original file may receive its part readback digest' USING ERRCODE='23514'; END IF;
+  ELSIF NEW.facts ? 'partsDigest' THEN RAISE EXCEPTION 'Part readback is a complete body fact, never metadata, HEAD or a provider ACK' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_readback_request BEFORE INSERT ON media_storage_transfer_requests FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_readback_guard();
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_readback_fact BEFORE INSERT ON media_storage_transfer_request_observations FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_readback_guard();
