@@ -25,7 +25,7 @@
 //   - reports you filed stay, without your name; reports about you are closed.
 // It runs before the login is deleted, which would otherwise cascade over
 // some of this and be blocked by the sales records.
-import { and, eq, inArray, ne, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
 import { contacts } from "@/core/contacts/schema";
 import { registerContactPrivacySource } from "@/core/privacy/service";
@@ -283,6 +283,11 @@ registerContactPrivacySource({
     const userId = await loginOf(tx, contactId);
     if (!userId) return { affected: 0 };
     if (!context.service) throw new ServiceError("internal", "Member erasure requires its shared privacy service context.");
+    // Legacy opaque uploads have no original physical birth/caller. Keep
+    // their owner link and bytes until genuine recovery; never manufacture a
+    // new reservation from the current equal key or acknowledge empty scope.
+    const legacy=await tx.select({id:memberSealedBlobs.id}).from(memberSealedBlobs).where(and(eq(memberSealedBlobs.ownerId,userId),isNull(memberSealedBlobs.originalReservationId))).limit(1);
+    if(legacy.length)throw new ServiceError("conflict","An earlier encrypted file has no original upload record. Keep it for storage recovery before completing account erasure; a missing current file does not prove removal.");
     return { affected: await eraseMember(tx, userId, context.service) };
   },
 });

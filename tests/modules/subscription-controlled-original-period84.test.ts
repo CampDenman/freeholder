@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // PREPARED/UNRUN. Actual services; no hand-inserted financial/admission rows.
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi } from "vitest";
 import * as paymentAdapters from "@/adapters/payments";
 import { db } from "@/core/db";
@@ -45,7 +46,7 @@ describe.runIf(hasDatabase)("actual original posttrial and renewal controlled ta
   const f=await review(true);expect(f.parent.status).toBe("trialing");expect(f.quote.calendar.proposedPeriodStart).toBe(f.parent.trialEndsAt!.toISOString());
   expect(f.quote).toMatchObject({creditNetMinor:0,creditTaxMinor:0,creditAppliedMinor:0,debitNetMinor:4500,debitTaxMinor:225,cashDueMinor:4725});
   const target=await prepareControlledPeriodTarget.call({quoteId:f.quote.controlled.quoteId,resourceId:f.quote.controlled.resourceId},OWNER),lines=await db().select().from(invoiceLines).where(eq(invoiceLines.invoiceId,target.invoiceId)).orderBy(invoiceLines.position);
-  expect(lines.map(line=>({amount:line.unitAmountMinor,component:line.snapshot.subscriptionComponent}))).toEqual([{amount:4000,component:"period"},{amount:500,component:"setup"}]);
+  expect(lines.map(line=>({amount:line.unitAmountMinor,component:z.object({subscriptionComponent:z.enum(["period","setup"])}).parse(line.snapshot).subscriptionComponent}))).toEqual([{amount:4000,component:"period"},{amount:500,component:"setup"}]);
   const components=await db().select().from(subscriptionControlledComponents).where(eq(subscriptionControlledComponents.collectionId,target.collectionId));
   expect(components.filter(row=>row.kind==="net").map(row=>row.provenance)).toEqual(expect.arrayContaining([expect.objectContaining({canonicalComponent:"period",canonicalInvoiceLineId:lines[0]!.id}),expect.objectContaining({canonicalComponent:"setup",canonicalInvoiceLineId:lines[1]!.id})]));
   const[parent]=await db().select().from(subscriptions).where(eq(subscriptions.id,f.parent.id));expect(parent).toMatchObject({status:"trialing",trialEndsAt:f.parent.trialEndsAt,currentPeriodStart:f.parent.currentPeriodStart,currentPeriodEnd:f.parent.currentPeriodEnd,setupFeeInvoiceId:target.invoiceId});

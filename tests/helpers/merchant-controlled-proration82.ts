@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // PREPARED/UNRUN: actual HTTP adapter; explicit nonpayable bank preview fixture.
+import { z } from "zod";
 import { controlledProviderEdge80 } from "./merchant-controlled-provider80";
 const object=(value:unknown):Record<string,unknown>=>value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:{};
 export function controlledProrationEdge82(){
@@ -11,7 +12,7 @@ export function controlledProrationEdge82(){
   }
   if(url.pathname==="/v1/products/prod_actualControlledTax"&&init.method==="GET"&&product)return Response.json(product);
   const current=bank();if(!current)return null;
-  if(url.pathname===`/v1/customers/${current.customer}`&&init.method==="GET")return Response.json({id:current.customer,currency:"cad",balance:0,invoice_credit_balance:{cad:0},cash_balance:null});
+  if(url.pathname===`/v1/customers/${z.string().min(1).max(200).parse(current.customer)}`&&init.method==="GET")return Response.json({id:current.customer,currency:"cad",balance:0,invoice_credit_balance:{cad:0},cash_balance:null});
   if(url.pathname==="/v1/credit_notes"&&init.method==="GET")return Response.json({data:[],has_more:false});
   if(url.pathname!=="/v1/invoices/create_preview"||init.method!=="POST")return null;
   previewPosts++;const form=new URLSearchParams(init.body as URLSearchParams),items=object(current.items).data;

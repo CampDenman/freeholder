@@ -16,6 +16,8 @@ import { reviewOriginalCashCallerStopped, reviewOriginalCashLegacyFeeStopped } f
 import { reconcileOriginalPartialCashReturn } from "@/modules/invoicing/original-cash-partial";
 import { reviewOriginalUnassignedCash } from "@/modules/invoicing/original-cash-unassigned-service";
 import { ORIGINAL_PARTIAL_CASH_CONFIRMATION, ORIGINAL_UNASSIGNED_CASH_CONFIRMATION } from "@/modules/invoicing/original-cash-partial-contract";
+import { reviewCashInspectionCallerStopped } from "@/modules/invoicing/merchant-cash-inspection-stop-service";
+import { CASH_INSPECTION_STOP_CONFIRMATION } from "@/modules/invoicing/merchant-cash-inspection-stop-proof";
 const path = "/admin/invoices/cash-recovery";
 const field = (form: FormData, key: string) => { const value = form.get(key); return typeof value === "string" ? value : ""; };
 export async function originalCashRecoveryAction(form: FormData) {
@@ -34,6 +36,11 @@ export async function originalCashRecoveryAction(form: FormData) {
     } else if(intent==="reviewUnassigned") {
       if(field(form,"confirmation")!==ORIGINAL_UNASSIGNED_CASH_CONFIRMATION)throw new ServiceError("validation","Review the actual original bank receipt before confirming its cash ownership.");
       await reviewOriginalUnassignedCash.call({recoveryId:field(form,"recoveryId"),operationId:field(form,"operationId"),rawFactId:field(form,"rawFactId"),confirmation:ORIGINAL_UNASSIGNED_CASH_CONFIRMATION},actor);
+    } else if (intent === "inspectionStop") {
+      if (field(form, "confirmation") !== CASH_INSPECTION_STOP_CONFIRMATION) throw new ServiceError("validation", "Confirm review of the original inspection caller's actual stop.");
+      await reviewCashInspectionCallerStopped.call({ inspectionId: field(form, "inspectionId"), expectedCallerId: field(form, "expectedCallerId"),
+        expectedAdmissionDigest: field(form, "expectedAdmissionDigest"), expectedSourceRevision: field(form, "expectedSourceRevision"),
+        hostingEvidence: field(form, "hostingEvidence"), confirmation: CASH_INSPECTION_STOP_CONFIRMATION }, actor);
     } else if (intent === "inspect") await inspectOriginalCashReturn.call({ recoveryId: field(form, "recoveryId") }, actor);
     else if (intent === "stop" || intent === "legacyFeeStop") {
       if (field(form, "confirmation") !== ORIGINAL_CASH_STOP_CONFIRMATION) throw new ServiceError("validation", "Review the actual original hosting stop before confirming.");

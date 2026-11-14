@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // PREPARED/UNRUN: fictional HTTP responses for actual original 4000 CAD mandate.
+import { z } from "zod";
 import { controlledProviderEdge80 } from "./merchant-controlled-provider80";
 const object=(value:unknown):Record<string,unknown>=>value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:{};
 export function controlledPeriodEdge84(options:{atProviderStart?:true;extra?:(url:URL,init:RequestInit)=>Promise<Response|null>}={}){
@@ -12,7 +13,7 @@ export function controlledPeriodEdge84(options:{atProviderStart?:true;extra?:(ur
   }
   if(url.pathname==="/v1/products/prod_actualPeriodTax"&&init.method==="GET"&&product)return Response.json(product);
   const current=bank();if(!current)return null;
-  if(url.pathname===`/v1/customers/${current.customer}`&&init.method==="GET")return Response.json({id:current.customer,currency:"cad",balance:0,invoice_credit_balance:{cad:0},cash_balance:null});
+  if(url.pathname===`/v1/customers/${z.string().min(1).max(200).parse(current.customer)}`&&init.method==="GET")return Response.json({id:current.customer,currency:"cad",balance:0,invoice_credit_balance:{cad:0},cash_balance:null});
   if(url.pathname==="/v1/credit_notes"&&init.method==="GET")return Response.json({data:[],has_more:false});
   if(url.pathname!=="/v1/invoices/create_preview"||init.method!=="POST")return null;
   previewPosts++;const form=new URLSearchParams(init.body as URLSearchParams),items=object(current.items).data;

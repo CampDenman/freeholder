@@ -25,9 +25,16 @@ export async function actualControlledPeriod84(options:Parameters<typeof control
  try{
   const remote=controlledCollectionEdge84(options);vi.spyOn(paymentAdapters,"paymentAdapter").mockReturnValue(remote.provider);
   const id=original.accepted.subscription.id,[parent]=await db().select().from(subscriptions).where(eq(subscriptions.id,id));if(!parent)throw Error("The actual paid original parent is required.");
-  await saveEntitlement.call({grantorType:"plan",grantorId:parent.planId,name:"Actual original paid access",resource:{kind:"page",selector:"actual-controlled-original"}},OWNER);
+  const previousGrants=await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId,id));
+  if(!previousGrants.length)throw Error("The genuine original paid subscription must already have its access catalogue.");
+  const addedEntitlement=await saveEntitlement.call({grantorType:"plan",grantorId:parent.planId,name:"Actual original paid access",resource:{kind:"page",selector:"actual-controlled-original"}},OWNER);
   await syncSubscriptionAccess.call({subscriptionId:id,contactId:parent.contactId,planId:parent.planId,planName:original.plan.name,startsAt:parent.currentPeriodStart,endsAt:parent.currentPeriodEnd,status:"active"},{kind:"system"});
-  const grants=await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId,id));if(grants.length!==1)throw Error("The actual old paid access grant is required.");
+  const grants=await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId,id));
+  const addedGrants=grants.filter(row=>row.entitlementId===addedEntitlement.id),added=addedGrants[0];
+  const originalCataloguePreserved=previousGrants.every(original=>grants.some(current=>current.id===original.id&&current.entitlementId===original.entitlementId&&current.contactId===original.contactId&&current.sourceSubscriptionId===original.sourceSubscriptionId
+   &&current.startsAt.getTime()===original.startsAt.getTime()&&(current.endsAt?.getTime()??null)===(original.endsAt?.getTime()??null)&&current.used===original.used&&current.status===original.status));
+  if(grants.length!==previousGrants.length+1||!originalCataloguePreserved||addedGrants.length!==1||!added||added.contactId!==parent.contactId||added.sourceSubscriptionId!==id||added.status!=="active"||added.used!==0
+   ||added.startsAt.getTime()!==parent.currentPeriodStart.getTime()||added.endsAt?.getTime()!==parent.currentPeriodEnd.getTime())throw Error("Preserve the full actual original paid catalogue and its dates/used counters alongside the one genuine added page grant.");
   const prepared=await prepareControlledProviderCalendar.call({subscriptionId:id},OWNER);
   const review=await quoteControlledPeriod.call({id,resourceId:prepared.resourceId,previewAt:remote.previewAt().toISOString(),locale:"en"},OWNER);
   const target=await prepareControlledPeriodTarget.call({quoteId:review.controlled.quoteId,resourceId:prepared.resourceId},OWNER);

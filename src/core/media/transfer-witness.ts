@@ -13,7 +13,7 @@ export const transferBindingSchema=z.discriminatedUnion("kind",[
  z.object({kind:z.literal("s3"),namespace:digest,location:z.object({endpoint:z.string().url(),bucket:z.string().min(1).max(1024)}).strict()}).strict(),
  z.object({kind:z.literal("replit"),namespace:digest,location:z.object({bucket:z.string().min(1).max(1024)}).strict()}).strict(),
 ]);
-export function checkedTransferBinding(input:StorageBinding):StorageBinding{
+export function checkedTransferBinding(input:unknown):z.infer<typeof transferBindingSchema>{
  const parsed=transferBindingSchema.safeParse(input);
  if(!parsed.success)throw new ServiceError("validation","Choose an explicit S3 or Replit storage resource without credentials or extra fields.");
  const binding=parsed.data;
@@ -52,9 +52,9 @@ export function originalTransferObject(source:StorageBinding,key:string,history:
   receiptSetDigest:witness(receipts),receipts:receipts.map(row=>({id:row.id,witnessDigest:witness(row)})),
   contactIds:[...new Set(receipts.flatMap(row=>row.contactId?[row.contactId]:[]))].sort()};
 }
-export function transferInventoryDigest(source:StorageBinding,target:StorageBinding,objects:readonly ReturnType<typeof originalTransferObject>[]){
+export function transferInventoryDigest(source:StorageBinding,target:StorageBinding,objects:readonly (ReturnType<typeof originalTransferObject>&{sourceReviews?:readonly unknown[]})[]){
  const from=checkedTransferBinding(source),to=checkedTransferBinding(target);
  if(from.namespace===to.namespace)throw new ServiceError("validation","Choose a different verified target storage resource.");
  if(new Set(objects.map(object=>object.keyDigest)).size!==objects.length)throw new ServiceError("conflict","The original transfer inventory contains duplicate object keys.");
- return witness({source:from,target:to,objects:[...objects].sort((a,b)=>a.keyDigest<b.keyDigest?-1:a.keyDigest>b.keyDigest?1:0)});
+ return witness({source:from,target:to,objects:[...objects].map(object=>{const{sourceReviews,...receipt}=object;return sourceReviews?.length?object:receipt;}).sort((a,b)=>a.keyDigest<b.keyDigest?-1:a.keyDigest>b.keyDigest?1:0)});
 }

@@ -93,3 +93,40 @@ admissionFingerprint against the actual PostgreSQL to_jsonb admission-row SHA,
 just as the latest inventory reader does. Canonical JavaScript admissionDigest
 remains separately authenticated; it never substitutes for the PostgreSQL hash
 or silently drops timestamp precision. No oracle or qualification claim changes.
+
+
+Parent integration SOURCE checkpoint (2026-11-14 UTC): owned84 is copied byte
+for byte to normal0084_controlled_cash_inspection_lineages.sql, journal index84
+at1793310000064. All previous84 journal/file identities remain unchanged. No
+database has been migrated or cloned. Central four financial/export readers
+now compose an ordinary collector-free wrapper: exact original payment/receipt
+and owned controlled resource FKs, independently authenticated child/admission
+PG hashes, shared parent admissions counted once and each stop/lineage counted
+separately under one5000 bound. Invoice buyer history covers receipt-only
+controlled resources BEFORE a payment-route exit, and retains their complete
+current refund/callback graph separately from immutable read order; seller
+filters never widen to a whole shared invoice. Merchant profile merge inherits
+exact child PG entries. Merchant/invoice/buyer exports add only nonempty safe
+lineage projections, never sequence, namespace, process, nonce, HMAC or raw
+bank callbacks. Subscription ownership is checked against actual owned receipt
+UUIDs and its privacy/retention table inventory declares the new child.
+Source/model/native qualification remains pending, including future genuine
+controlled producer and positive ordering/application native cases.
+
+
+Current144 component qualification at11fe3a5f: source549 actual/76 complete
+files with113 explicit native skips; types/affected lint/license/notes/plan pass.
+Fresh V15 applies85 migrations, every old84 identity preserved. Read-only v23
+passes144 models/289 guards/233 exact installed function bodies,3426 queries,
+sequence definition/ownership/unchanged unconsumed state and actual missing
+latest/empty-history negatives. The parser and every prior143 target/control
+remain unchanged. Ten actual old stop/callback/current-bank/partial-return/
+legacy-GET journeys pass with independent complete component SHA, all85
+journal hashes, settings and drained clients before every next reset. All
+ordinary cases retain zero controlled lineage rows; no old receipt is adopted.
+/tmp/freeholder-current-full84-ten-native-complete-v4-20261113.json lists exact
+case reports. This does NOT prove positive controlled lineage ordering or
+application. The separately prepared current9 real delayed-admission control
+will propagate a genuine raw-debt refusal rather than claim an order proof.
+Current production build/browser, provider/cross-host recovery, complete positive
+collection and independent security/final owner signature remain open.

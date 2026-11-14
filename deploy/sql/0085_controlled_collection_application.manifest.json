@@ -1,0 +1,204 @@
+{
+  "sourceHead": "221a883ae50e6ee228a9d6332574f2ec0c3acbc6",
+  "status": "MATERIALIZED_NORMAL_FORWARD_MIGRATION_PREPARED_UNRUN",
+  "sourceParts": [
+    {
+      "path": "deploy/subscription-controlled-collection82.fragment.sql",
+      "sha256": "7a0d620a8dac8acb102e4801d545f5dfcfc089ebabb2a11e3d7c347d60482423",
+      "bytes": 61670,
+      "materializedSha256": "7a0d620a8dac8acb102e4801d545f5dfcfc089ebabb2a11e3d7c347d60482423",
+      "materializedBytes": 61670
+    },
+    {
+      "path": "deploy/subscription-controlled-positive-lifecycle82.fragment.sql",
+      "sha256": "a2b419b441a515ae3edad978d5384838c75128d6823ad94ece50dfac3cec635c",
+      "bytes": 9865,
+      "materializedSha256": "a2b419b441a515ae3edad978d5384838c75128d6823ad94ece50dfac3cec635c",
+      "materializedBytes": 9865
+    },
+    {
+      "path": "deploy/subscription-controlled-canonical82.fragment.sql",
+      "sha256": "2c9c1db285b4d9cddca2f570b0489ea59bf4f15cc3094cb2eb48e0ccd8a862ae",
+      "bytes": 29583,
+      "materializedSha256": "2c9c1db285b4d9cddca2f570b0489ea59bf4f15cc3094cb2eb48e0ccd8a862ae",
+      "materializedBytes": 29583
+    },
+    {
+      "path": "deploy/subscription-controlled-original-period84.fragment.sql",
+      "sha256": "62eb6823e6f0fe6aeaa2cb086b9bd83689cc19bff1d790829b8dac48327d8c2e",
+      "bytes": 14865,
+      "materializedSha256": "62eb6823e6f0fe6aeaa2cb086b9bd83689cc19bff1d790829b8dac48327d8c2e",
+      "materializedBytes": 14865
+    },
+    {
+      "path": "deploy/subscription-controlled-collection-orchestration84.fragment.sql",
+      "sha256": "42dcc2bf64c4d5562078ddc692b774b621a03c6970fdd8f061f0149beed73834",
+      "bytes": 22652,
+      "materializedSha256": "42dcc2bf64c4d5562078ddc692b774b621a03c6970fdd8f061f0149beed73834",
+      "materializedBytes": 22652
+    },
+    {
+      "path": "deploy/subscription-controlled-period-source-null84.fragment.sql",
+      "sha256": "0b1585e8a2051db04a7825f94d67a8be8ad97bb1a390e55468d6ffd5be3d7703",
+      "bytes": 7538,
+      "materializedSha256": "0b1585e8a2051db04a7825f94d67a8be8ad97bb1a390e55468d6ffd5be3d7703",
+      "materializedBytes": 7538
+    },
+    {
+      "path": "deploy/subscription-controlled-cash-application82.fragment.sql",
+      "sha256": "ea245aa9e04ba7263ffa59e4c4d5f28cb0a0579c01c59f2564ad93eb5029d23c",
+      "bytes": 14528,
+      "materializedSha256": "ea245aa9e04ba7263ffa59e4c4d5f28cb0a0579c01c59f2564ad93eb5029d23c",
+      "materializedBytes": 14528
+    },
+    {
+      "path": "deploy/subscription-controlled-current-bank82.fragment.sql",
+      "sha256": "b4b4c082356b0da4364c3ea46ef1314b040cdf3472bcd3c6f0ae9ce08198b28e",
+      "bytes": 42790,
+      "materializedSha256": "b4b4c082356b0da4364c3ea46ef1314b040cdf3472bcd3c6f0ae9ce08198b28e",
+      "materializedBytes": 42790
+    },
+    {
+      "path": "deploy/controlled-bank-read-order84.fragment.sql",
+      "sha256": "0f824c3a92018890f80e46763d3a915c47c1dde22ddfc4865ddecdddfc8bebce",
+      "bytes": 30215,
+      "materializedSha256": "0f824c3a92018890f80e46763d3a915c47c1dde22ddfc4865ddecdddfc8bebce",
+      "materializedBytes": 30215
+    },
+    {
+      "path": "deploy/controlled-cash-application-protocol84.fragment.sql",
+      "sha256": "d6e08c2703ab087343c452d525d438ac18b160bb70d81a875f73cbbc579286fb",
+      "bytes": 114689,
+      "materializedSha256": "f99a74557937ef7d142f67ed1412fddd4ac6ce758d9bf502cc197ea3f6bdd91f",
+      "materializedBytes": 114691
+    },
+    {
+      "path": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "sha256": "06d4cdc17c1e5b93119318a6e7f4de4089aa096827b813aaf3ea4a9a276eebfd",
+      "bytes": 65961,
+      "materializedSha256": "4785cbf53740589f576c8cae24faa03b6013e7dfe8332d04341eda9bb15fb06d",
+      "materializedBytes": 65979
+    },
+    {
+      "path": "deploy/subscription-controlled-payment-route84.fragment.sql",
+      "sha256": "0b9f46f9eb92fed48d7719b4426795a2dae6d3339e19267c5c719ebc555671ce",
+      "bytes": 14917,
+      "materializedSha256": "0b9f46f9eb92fed48d7719b4426795a2dae6d3339e19267c5c719ebc555671ce",
+      "materializedBytes": 14917
+    },
+    {
+      "path": "deploy/controlled-cash-application-complete84.fragment.sql",
+      "sha256": "fdecccc2978cf13f1f1df292bad3b3ba576a0789f86381508b2a9f40de4a0db5",
+      "bytes": 13619,
+      "materializedSha256": "fdecccc2978cf13f1f1df292bad3b3ba576a0789f86381508b2a9f40de4a0db5",
+      "materializedBytes": 13619
+    },
+    {
+      "path": "deploy/controlled-collection-inventory-local84.fragment.sql",
+      "sha256": "69d25abff4929cc93a5d54c5a64413abd879ee542c6aa0e04878d36298c59c40",
+      "bytes": 10418,
+      "materializedSha256": "69d25abff4929cc93a5d54c5a64413abd879ee542c6aa0e04878d36298c59c40",
+      "materializedBytes": 10418
+    }
+  ],
+  "functionStatementReplacements": [
+    {
+      "name": "freeholder_controlled_cash_require_prefix",
+      "source": "deploy/controlled-cash-application-protocol84.fragment.sql",
+      "original": "98e58917e8f1dc1be3ea23e64bd19c0ceecba300dc24ebf0de912c212aacd6ed",
+      "correctedFullStatement": "baa0d62503bc8bfefc93018dd313893c608dad591d380af95dc102a546ef8962",
+      "positionPreserved": true
+    },
+    {
+      "name": "freeholder_controlled_cash_before_settlement",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "original": "c6a0b4a0020b970790ee9f4d7b5ea66bae912b12f4022ab5f9cdca6af145233a",
+      "correctedFullStatement": "942fa3ecd797e41d325230cf6e2495ef399367de189117cb26e4811b01793a4c",
+      "positionPreserved": true
+    },
+    {
+      "name": "freeholder_controlled_cash_stage",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "original": "ccb421fef9e5b8335d5fd5322cc22a43fb57daa658a6b21282ce36d01f3e589f",
+      "correctedFullStatement": "c450fc8b82ddc70d4a3cce9bb269de5c46d92c6224e6155d24d33a0884501305",
+      "positionPreserved": true
+    },
+    {
+      "name": "freeholder_controlled_cash_require_current_locks",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "original": "86c31cd3c542b53e67fb599929548e132746ce08c21c2214ed4c56df7ca28e9a",
+      "correctedFullStatement": "e27a103769a87809e478e11cc3dca3514936bd22af7537f638737b1e3ff8d0b6",
+      "positionPreserved": true
+    },
+    {
+      "name": "freeholder_controlled_cash_validate_state_event",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "original": "7d87113249b0501038e592784759f5622c8fe39311485cda77ec84985c8b17b2",
+      "correctedFullStatement": "ad12e472cc5caf6a5d32cb4dac88b64f67f6a11b5f089df1e400f77ed7be77e2",
+      "positionPreserved": true
+    },
+    {
+      "name": "freeholder_controlled_cash_validate_route",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "original": "f4f22d8e4af9bb74289c4cba2c1b7ccc1b5a1e35dbb3e61e58b7dfe42b3817e8",
+      "correctedFullStatement": "55c315be790a57a5e0756f5c88cd225332ff84b61205b76e4e7395d90acdd8cd",
+      "positionPreserved": true
+    },
+    {
+      "name": "freeholder_controlled_cash_normalized_plans",
+      "source": "deploy/controlled-cash-application-stages84.fragment.sql",
+      "original": "edbe3b3bc558bc74dcc8cf94701d3f4a4c5b6ed8a44f805527b142d36ebc124b",
+      "correctedFullStatement": "7d987d8526e4508259477ef03fffc323c3243d10e85c41f7eded038828a051e0",
+      "positionPreserved": true
+    }
+  ],
+  "sha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
+  "bytes": 453680,
+  "normalMigrationWritten": true,
+  "journalWritten": true,
+  "databaseApplied": false,
+  "models": 154,
+  "oldMigrationsUntouched": "0\u201381 and83\u201384 exact prior identities; unpublished82 now6845a84e365657 bytes with full277201-bytead46 prefix",
+  "originalApplicationShapeStillFailClosed": false,
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "sourceQualification": {
+    "head": "221a883ae50e6ee228a9d6332574f2ec0c3acbc6",
+    "path": "/tmp/freeholder-current-full86-financial154-source-v52-20261113-result.json",
+    "sha256": "239d037222cc4c392dc554c61fdc5563cb68cd2d9354e628bd34cd6423df4326",
+    "actualPassed": 1103,
+    "wholeFiles": 173,
+    "databaseSkips": 394
+  },
+  "materialization": "Exact original source-part bytes with only seven full function CASE statements replaced at their original CREATE positions. Join each part.rstrip() with two newlines, statement-breakpoint, two newlines; terminate final newline. Frozen owned fragments stay unchanged. Preserve the entire original429589-byte initial normal85 prefix, then append one statement breakpoint and the exact complete84 successor bytes. Preserve the entire443235-byte staged-writer prefix and append exact local-binding successor bytes after one statement breakpoint.",
+  "caseManifestPath": "deploy/controlled-cash-application-case84.manifest.json",
+  "caseManifestSha256": "58119d2ddd24d5be183c2d6e8b2ea1195129516e0cd3e03e98b07c0dbaaedb00",
+  "normalPath": "db/migrations/0085_controlled_collection_application.sql",
+  "ownedPath": "deploy/sql/0085_controlled_collection_application.unapplied.sql",
+  "journalIndex": 85,
+  "journalCount": 86,
+  "normalSchemaNativeSdkQualification": "PENDING",
+  "capabilitiesPublished": false,
+  "previousMaterialized85": {
+    "head": "bcf3610a2b42be3d7ca7bb8150b35acca47ff7de",
+    "sha256": "861f82666aaf2fb7ad40d0611ac0dd0ee9c275da2fc9aaf263de735610a4a532",
+    "bytes": 429589,
+    "entirePrefixPreserved": true,
+    "previousQualifiedSource": "1c7b35611d6d138e749e8c4bba1ff7c9693c513f"
+  },
+  "applicationShapeSuccessor": "Genuine immutable HMAC batch/core3/current-TX complete-stage structural proof; no marker permission. Actual service/native qualification PENDING.",
+  "currentSourceQualification": "PENDING SQL local-binding correction; prior runtime/SDK proofs retained",
+  "completeFunctionSuccessors": [
+    {
+      "fragment": "deploy/controlled-collection-inventory-local84.fragment.sql",
+      "sha256": "69d25abff4929cc93a5d54c5a64413abd879ee542c6aa0e04878d36298c59c40",
+      "bytes": 10418,
+      "reason": "PG42702 local actual variable collides with facts.actual in the same expression scope",
+      "proof": "deploy/controlled-collection-inventory-local84.manifest.json"
+    }
+  ],
+  "previousStagedWriter85": {
+    "sha256": "d6fe8b9c49db7d21c982ee60059d96eab856d235ea4bf9d0a8509d6ed86431b7",
+    "bytes": 443235,
+    "entirePrefixPreserved": true
+  }
+}

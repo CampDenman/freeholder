@@ -181,3 +181,104 @@ absent. No hand-written SDK change. No stable version, completed independent
 review, owner signature or provider/platform acceptance is supplied. Shared
 owner recovery UI, full positive controlled collection and the remaining media
 protocol/cutover/byte recovery continue as required implementation.
+
+
+## Owner recovery UI source increment (C12.38/C11.08)
+
+The shared cash-recovery page now lists unfinished inspection callers through
+a private scoped, signed-in-person query. It selects all unfinished admissions
+under an aggregate5000 bound, authenticates all retained stop receipts and
+refuses more than200 pending rows rather than showing a partial prefix. Its
+projection omits request/nonce, bank evidence, HMACs and review authority.
+The page opens one exact current recovery plan; only a mechanically absent
+known original process offers the existing fresh-human, step-up review form.
+Live/unknown birth/cross-host states retain pending guidance. The action calls
+the shared service, so posted identities/revisions cannot bypass validation.
+No SQL/model, provider action or public API signature changes. Four locale
+strings use shared semantic components. The existing native stop test retains
+all original assertions and additionally checks the real private list, actor
+refusal, safe field inventory and convergence after real stop and finish.
+Source/native renewal and actual owner browser/a11y acceptance are pending.
+
+
+Owner UI source8d5cc948 passes429 actual controls in70 whole files,103 explicit
+native skips, full types/affected lint and license/notes/plan. The extended
+original child-stop oracle passes12.532s with independent all84 journal hashes,
+actual authenticated stop and new finished read, complete component table SHA,
+UTC/fsync/jit settings and no open clients. Nativev3 evidence remains preserved.
+The separate four-file locale gate fails after107 successes because its unchanged
+RTL regex sees the pre-existing comparator TypeScript argument names left/right
+as CSS properties. The argument/local rename to first/second changes no sorting
+expression or caller behavior; locale/fee renewal remains pending. No regex,
+assertion, financial rule or schema is relaxed. Actual owner browser/a11y remains
+open and this source/native component proof closes no C-item.
+
+
+## Current production and actual owner UI qualification
+
+At4349a5a9e1332cb6a3a815ce787872ab6ca0fc1a, source qualification passes429
+actual controls in70 complete files (103 explicit native skips). The separate
+complete locale/fee five-file run passes117 controls with9 explicit database
+skips, plus renewed full types/affected lint and metadata. Counts overlap and
+are not summed. The first default-heap retry failed at4GB and is preserved;
+the same source succeeds with the established8GB compiler budget. A prior
+RTL-regex false match was fixed by comparator argument/local naming only;
+the unchanged RTL and fee oracles pass. Current live-registry SDK verification
+passes8 without update mode or artifact changes; all component hashes survive.
+
+Existing isolated local dependency bytes had96 generated command shims still
+pointing to the original donor. Their exact original text/hashes are preserved
+under /tmp/freeholder-current-full83-local-bin-shim-paths-before-20261113.json;
+only their generated absolute node_modules prefix is corrected to this isolated
+checkout. All1093 symlinks resolve inside it. No package, lock, dependency
+version, donor file or network installation changes. Old failed build logs,
+manifest/results and .next output are preserved. The historical v3 runner was
+overwritten during preparation; its original log/manifest/result are unchanged
+but its script is explicitly excluded as an exact reproduction source. The
+preflight collision ran no build. Fresh v4 is independent frozen evidence.
+
+The exact current production build now passes97.387s and scrubs24142 files /
+369684959 bytes without source/environment leakage:
+/tmp/freeholder-current-full82-build-memory-v4-20261113-result.json.
+Fresh V13 passes all84 migrations and strict v22 passes143 models/287 guards/
+229 function bodies with every previous model/control preserved. The first
+browser driver failed before session creation or Chromium because it omitted
+the actual plugin-kit/templates workspace aliases. Its V13 dataset stays
+untouched; independent all27 component hashes match before/after, all84
+journal hashes/settings pass and clients drain. Alias-only import smoke then
+passes without a session/browser or product change. Fresh V14 applies the same
+84 identities and is used for the actual browser retry.
+
+All four actual production Chromium journeys pass:
+
+| Locale | Seconds | Actual checks |
+|---|---:|---|
+|English|19.600|light/dark,320px,Axe0,keyboard review|
+|Spanish|18.848|light/dark,320px,Axe0,keyboard review|
+|French|19.155|light/dark,320px,Axe0,keyboard review|
+|Arabic|18.947|RTL,light/dark,320px,Axe0,keyboard review|
+
+Each fixture uses real shared checkout/capture and an actual child original
+GET. It observes the committed live admission, sends SIGKILL and awaits the
+real exit, leaving NULL finish and no stop. The actual production owner page
+opens the current plan; an explicitly fictional fresh-factor session submits
+review by keyboard. The pending list converges. There are no external network
+requests. Before any next reset, independent read-only proof confirms all27
+financial/admission/finish table hashes unchanged, exact original row fingerprint
+and caller binding in the one new stop, one actual human audit for its original
+payment without raw hosting text, all84 journal hashes, UTC/read-only/fsync/jit
+settings and no open clients. Original NULL finish stays NULL; no bank result
+or payment/refund is created. English light and Arabic dark screenshots were
+visually inspected after automated bounds checks.
+
+Aggregate evidence:
+/tmp/freeholder-current-full83-owner-browser-complete-v2-20261113.json.
+Per-locale frozen manifest, seed source/hash, original native seed report,
+production server/browser logs, screenshots and independent before/after
+ledgers are /tmp/freeholder-current-full83-owner-browser-<locale>-v2-20261113*.
+The qualification fixture source is separately preserved in /tmp; its temporary
+checkout path is removed after each run. No auth token is written to artifacts
+or chat. This does not establish first-boot, passkey, OTP, real bank/provider
+account, cross-host runtime death, final byte recovery or independent review.
+The owner component is qualified at these exact product bytes; positive
+controlled application, full media recovery and final release gates stay open.

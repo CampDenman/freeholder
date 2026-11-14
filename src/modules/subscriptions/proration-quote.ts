@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C9.33/C9.38/C12.38: explicit gross old-tax credit/new dated debit consent.
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { z } from "zod";
+import type { z } from "zod";
 import { contacts } from "@/core/contacts/schema";
 import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { translator } from "@/core/i18n";

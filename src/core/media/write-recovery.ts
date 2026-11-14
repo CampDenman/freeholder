@@ -1,5 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import originalDeleteRecoveryServices,{recoverExactOriginalDelete} from "./original-delete-recovery";
+import {db} from "@/core/db";
 import originalRecoveryServices,{recoverExactOriginalPut} from "./original-write-recovery";
 import {storageRecoveryConfirmation} from "./storage-recovery-contract";
 import {requireDurableMediaRetirementProof} from "./retirement-authority";
@@ -107,7 +109,8 @@ export const reconcileStorageOperation = defineOrchestratedService({
   auditInputFields: ["id", "outcome"], input: confirmation, output: z.object({ ok: z.literal(true) }),
   handler: async (input, actor) => {
     human(actor);
-    return recoverExactOriginalPut(input,actor);
+    const[row]=await db().select({operation:mediaObjectWrites.operation}).from(mediaObjectWrites).where(eq(mediaObjectWrites.id,input.id)).limit(1);
+    return row?.operation==="delete"?recoverExactOriginalDelete(input,actor):recoverExactOriginalPut(input,actor);
   },
 });
-export default [listStorageOperations, claimStorageRecovery, applyStorageRecovery, ...originalRecoveryServices,reconcileStorageOperation];
+export default [listStorageOperations, claimStorageRecovery, applyStorageRecovery, ...originalRecoveryServices,...originalDeleteRecoveryServices,reconcileStorageOperation];

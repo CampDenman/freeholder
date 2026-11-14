@@ -33,6 +33,6 @@ describe.runIf(hasDatabase)("actual external partial principal on one owned cano
   expect(await db().select().from(payments).where(eq(payments.invoiceId,f.target.invoiceId))).toHaveLength(0);
   expect((await db().select().from(invoices).where(eq(invoices.id,f.target.invoiceId)))[0]).toMatchObject({paidMinor:0,creditedMinor:0,totalMinor:4200});
   expect(await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId,f.parent.id))).toEqual(f.grants);
-  expect(f.remote.counts()).toMatchObject({...before,payPosts:0,cashGets:expect.any(Number)});expect(f.remote.counts().cashGets).toBeGreaterThan(before.cashGets);expect(f.remote.externalAttachments()).toBe(1);
+  expect(f.remote.counts()).toMatchObject({...before,payPosts:0,cashGets:expect.any(Number) as unknown});expect(f.remote.counts().cashGets).toBeGreaterThan(before.cashGets);expect(f.remote.externalAttachments()).toBe(1);
  });
 });

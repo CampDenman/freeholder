@@ -35,3 +35,16 @@ sequence, all85 migration identities and no open clients. Corrected setup
 uses explicit timestamp text plus validation and propagates startup errors;
 all original order/caller/bank and no-payment assertions remain unchanged.
 Fresh retry is required; no product guard or caller authority changes.
+
+
+Corrected actual retry at6a9b197a on genuinely fresh V16 (85 identical source
+migrations) exits10.829s with the strict generic final-return inventory/
+quiescence refusal BEFORE first GET/admission. Timestamp setup now works.
+The failed dataset, complete current9/source-table hashes, original positive
+canonical receipt/origin, zero local invoice/payment/read/lineage, untouched
+sequence, all85 journal hashes and drained clients remain preserved. This is
+a genuine missing positive-path prerequisite, not an order proof; no guard or
+assertion is weakened. The intended controlled observational producer must be
+used with a genuine accepted canonical target/collection and exact original
+receipt/origin. Unexpected zero-calendar cash cannot be adopted by amount.
+Carrier/Commerce continue those complete source paths and staged proof.

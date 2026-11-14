@@ -123,7 +123,7 @@ function completePages(history:History,callId:string,kind:string){
  if(!pages.length||pages.length>20||pages.some((fact,index)=>!Array.isArray(fact.actual.raw.data)||typeof fact.actual.raw.has_more!=="boolean"||fact.actual.raw.has_more!==(index<pages.length-1)))return null;
  const parsed=records.safeParse(pages.flatMap(fact=>z.array(z.unknown()).parse(fact.actual.raw.data)));return parsed.success?parsed.data:null;
 }
-function sameRows(left:Record<string,unknown>[],right:Record<string,unknown>[]){return left.length===right.length&&merchantTaxDigest(left)===merchantTaxDigest(right);}
+function sameRows(first:Record<string,unknown>[],second:Record<string,unknown>[]){return first.length===second.length&&merchantTaxDigest(first)===merchantTaxDigest(second);}
 /** Exact current independent proof, after every actual mutation of this invoice.
  * No original raw fact, live caller, own quote or admitted read is excluded. */
 function currentProof(target:ControlledRawTarget){
@@ -260,7 +260,7 @@ function historicalPaidProof(target:ControlledRawTarget,proof:NonNullable<Return
   let amount=0n;const paid=new Set<string>(),receiptIds:string[]=[];let valid=true;
   for(const payment of inventory.actualPayments){const relation=object.safeParse(payment.payment),pi=relation.success?ref(relation.data.payment_intent):null,intents=inventory.actualIntents.filter(intent=>ref(intent.id)===pi);
    if(!relation.success||relation.data.type!=="payment_intent"||!pi||paid.has(pi)||intents.length!==1||ref(payment.invoice)!==inventory.providerInvoiceRef){valid=false;break;}paid.add(pi);
-   const intent=intents[0];if(!intent||!safeMinor(intent.amount_received)||intent.amount_capturable!==0||!safeMinor(payment.amount_requested)||payment.amount_requested!==intent.amount||payment.currency!==undefined&&String(payment.currency).toUpperCase()!==target.manifest.currency||!safeMinor(payment.amount_paid)||payment.amount_paid!==intent.amount_received
+   const intent=intents[0];if(!intent||!safeMinor(intent.amount_received)||intent.amount_capturable!==0||!safeMinor(payment.amount_requested)||payment.amount_requested!==intent.amount||payment.currency!==undefined&&(typeof payment.currency!=="string"||payment.currency.toUpperCase()!==target.manifest.currency)||!safeMinor(payment.amount_paid)||payment.amount_paid!==intent.amount_received
     ||!exactIntentSnapshot(target,proof,intent)){valid=false;break;}
    if(intent.amount_received===0){if(!["canceled","requires_payment_method"].includes(String(intent.status))){valid=false;break;}continue;}
    const owners=cashOwners(target).filter(owner=>owner.providerIntentRef===pi&&owner.providerInvoiceRef===inventory.providerInvoiceRef),owner=owners[0],cash=inventory.actualCash.filter(row=>row.providerPaymentIntentRef===pi);
@@ -299,7 +299,7 @@ function exactIntentSnapshot(target:ControlledRawTarget,proof:NonNullable<Return
 function exactItemSnapshot(target:ControlledRawTarget,raw:Record<string,unknown>,operationId:string){
  const item=target.itemReceipts.find(row=>row.providerInvoiceItemRef===ref(raw.id)&&row.creatorOperationId===operationId),component=item?target.manifest.components.find(row=>row.id===item.componentId):null;
  const operation=target.history.operations.find(row=>row.id===operationId),payload=operation?controlledCollectionPayload.safeParse(operation.originalRequest.payload):null,metadata=object.safeParse(raw.metadata);
- return !!component&&!!item&&payload?.success&&operation?.kind==="add_invoice_component"&&payload.data.componentId===component.id
+ return !!component&&!!item&&payload?.success===true&&operation?.kind==="add_invoice_component"&&payload.data.componentId===component.id
   &&merchantTaxDigest(payload.data.manifest)===merchantTaxDigest(target.manifest)&&raw.amount===component.amountMinor&&raw.currency===target.manifest.currency.toLowerCase()
   &&ref(raw.customer)===target.resource.originalScope.providerCustomerRef&&ref(raw.invoice)===target.binding?.providerInvoiceRef&&metadata.success
   &&metadata.data.freeholder_controlled_collection_id===target.manifest.collectionId&&metadata.data.freeholder_controlled_component_id===component.id

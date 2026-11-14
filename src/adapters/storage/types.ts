@@ -10,6 +10,7 @@
 // need; anything vendor-specific stays behind the implementation.
 
 import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
+import type {OriginalPartCapabilityProof} from "../../../scripts/media-part-capability.mjs";
 
 export type StorageId = "s3" | "replit" | "local";
 
@@ -50,12 +51,23 @@ export interface MultipartPart {
   partNumber: number;
   etag: string;
   bytes?: number;
+  /** Actual SHA256 returned for this part, base64; never an object ETag. */
+  checksumSha256?:string;
 }
 export type MultipartInspection = { state: "open"; parts: MultipartPart[] } | { state: "absent" };
 export interface MultipartObservation {
+  /** Only the original COMPLETE caller may verify its immutable manifest. */
+  expectedParts?:MultipartPart[];
   request?:TransferRequestObserver;
   /** Commit the positive provider fact before subsequent inspection can fail. */
   onAccepted?: (result?: { uploadId: string;revision?:StoredObjectRevision }) => Promise<void>;
+}
+export interface MultipartPartSignatureObservation {
+ request?:TransferRequestObserver;sha256:string;bytes:number;expiresAt:string;
+}
+export interface SignedMultipartPart {
+ url:string;method:"PUT";headers?:Record<string,string>;expiresAt?:string;
+ capabilityDigest?:string;proof?:OriginalPartCapabilityProof;
 }
 
 /** Optional capability: only object stores that really support it expose it. */
@@ -66,7 +78,8 @@ export interface DirectMultipartStorage {
     uploadId: string,
     partNumber: number,
     expiresIn?: number,
-  ): Promise<{ url: string; method: "PUT" }>;
+    observation?:MultipartPartSignatureObservation,
+  ): Promise<SignedMultipartPart>;
   listParts(key: string, uploadId: string, observation?:MultipartObservation): Promise<MultipartPart[]>;
   /** Absence is authoritative NoSuchUpload, not an empty object HEAD. */
   inspect?(key: string, uploadId: string, observation?:MultipartObservation): Promise<MultipartInspection>;

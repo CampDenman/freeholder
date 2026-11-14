@@ -3612,6 +3612,30 @@ migration edit. Actual integration, currency/overage, refund/fee/paid effects,
 provider/security and all remaining full-scope acceptance remain required; no
 activation, C-item closure or stable claim. See
 `deploy/controlled-cash-atomic-fee84-source-20261113.md`.
+Controlled original-zero fixture source correction 2026-11-13
+(C12.38/C9.33/C1.08): root's actual V23 first-target journey created/bound the
+NET4000 component, then the read-only ordinary classifier isolated exactly one
+mixed-list refusal. Its original zero-only fictional invoice omitted explicit
+tax/route/default fields required by the positive mixed-list ownership contract.
+Only the positive fixture now freezes a complete original document from the
+actual original bootstrap response; generic80 and every product/raw/caller
+predicate remain unchanged. Three real-adapter controls and stronger retained
+fact assertions on the original unchanged full native are PREPARED/UNRUN.
+Failed V23 evidence remains preserved and fresh-database/native/source acceptance
+is required. No readiness, C-item closure or stable claim. See
+`deploy/controlled-original-zero-fixture84-source-20261113.md`.
+
+Actual controlled inventory failure 2026-11-13 (C12.38/C9.33/C1.08): V22
+passes real catalogue setup and creates its canonical4200 target, then SQL42702
+refuses BEFORE a bank charge because local actual collides with facts.actual.
+A NEW full-function successor renames only that local variable; both qualified
+fact.actual column references and every predicate remain byte-equivalent after
+reversal. Frozen orchestration84 source and the entire443235-byte normal85 prefix
+remain unchanged. All594 public-table hashes/all86 journals/drain are captured;
+actual target paid0, payment0, receipt0 and unconsumed sequence remain. Failed V22
+is preserved with no next reset. Fresh normal/schema/original native and all
+provider/paid/recovery/stable acceptance remain pending. See
+`deploy/controlled-collection-inventory-local84.manifest.json`.
 
 Controlled genuine staged writer source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): genuine repeated initial parent/bank evidence now
@@ -3631,6 +3655,132 @@ preserved. Atomic whole-batch cent allocation, real currency/overage anomalies,
 separate paid effects and full native/provider/security acceptance remain
 required, not deferred. See
 `deploy/controlled-cash-staged-writer84-source-20261113.md`.
+Controlled original-receipt routing source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
+canonical receipt's real controlled-origin child, authenticates its genuine
+same-transaction HMAC batch/current bank/parent stage BEFORE payment UUID birth,
+and compares the unchanged shared cash/fee computation to that exact receipt
+plan. Legacy period/generation routes and all previous cash/return/history guards
+remain intact. A NEW UNAPPLIED suffix preserves the full old route guard with
+only an exact verified controlled-origin alternative to its gross-proration
+attempt condition; independent BEFORE and deferred stage guards remain required.
+The route capability checks actual function-body hashes and enabled trigger
+identities, never a boolean marker. Three controls are PREPARED/UNRUN; no CPU,
+database, provider or current-root execution occurred. Genuine initial batch
+admission/writer integration, separate paid effects, partial/batch/native and
+provider/security acceptance remain required; no C-item or stable closure.
+See `deploy/controlled-original-receipt-route84-source-20261113.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): new managed multipart
+CREATE records explicit SHA256/COMPOSITE provenance. New COMPLETE keeps the
+original browser receipts and derives fixed byte/checksum limits from the
+immutable file declaration; all local issuer returns must be genuine. Its
+actual original caller verifies every provider ListParts page before one
+conditional COMPLETE, retaining complete XML/page identities and an independent
+verified-parts fact. Shared services and SQL enforce matching original birth,
+manifest, namespace/drain/tombstone/privacy/hold authority. Existing full pinned
+object readback remains required. Successful verification/completion does not
+retire issued links or sessions, invent remote ACK/FIN, or permit cutover.
+Eight manifest, twelve wire and five real-service/TCP controls are PREPARED/
+UNRUN; all earlier oracles remain unchanged. Six functions/three guards add no
+models/columns or capability definition. Source also carries root's exact
+655 SQL parenthesis correction and the source-inspected missing sign-role
+whitelist entry; no production incident is claimed. Consumption, unknown and
+legacy recovery, capture/quota/cutover, qualification/provider/platform and
+independent review/stable gates remain open. No child execution/provider/host
+actions or C-item closure. See
+`deploy/media-multipart-part-verification-source-2026-11-13.md`.
+
+Actual proper-target native checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08):
+the first real service journey stops BEFORE controlled target birth because its
+fixture assumed one grant. Actual paid subscription already owns its genuine site
+grant; adding the explicit page entitlement correctly produces a second old-period
+grant. Read-only postmortem proves both original dates/used0, no target, all594
+public-table fingerprints unchanged across diagnostics and zero clients. The
+fixture now preserves the complete original catalogue and verifies exactly the
+new page grant, every old date/used/status/identity and the exact added row count.
+No grant row is fabricated or original native oracle removed. V21 failed fixture
+and all logs/snapshots remain preserved; no next test resets it. The verification
+wrapper separately corrects Result-array prototype normalization and a diagnostic
+column name, retaining all86 exact journal values and original failures. Current
+native/application/access/provider/stable acceptance remains open.
+
+Strict154 qualification checkpoint 2026-11-13 (C12.38/C1.08): fresh ordinary
+V20 passes all86 migrations/hashes/profile/drain in6.921s. The first strict source
+preflight correctly identifies five genuine modeled factory phases absent from
+its older independent kind inventory; those exact phases are recorded without
+dropping old kinds or predicates. The renewed read-only check passes the first146
+models, then finds two otherwise identical conjunction terms in the new collection
+model ordered differently from the frozen SQL. Only those terms are reordered
+in the model; the strict parser/expression oracle and every SQL byte stay unchanged.
+Both failures/results/drains and V19/V20 databases are preserved. Renewed source,
+fresh154 catalog/SDK/native and all stable acceptance remain pending.
+
+Fresh migration failure 2026-11-13 (C1.12/C11.08): ordinaryV19 stops in new
+media82 at one unmatched closing parenthesis in the issued-authority closure SQL
+function. The failed database/result are preserved and drained; no schema or
+native pass is claimed. Exactly that syntax character is removed, preserving
+every predicate and the full277201-byte ad46 prefix; source/whole-file before/after
+identities are recorded in `deploy/sql/0082_multipart_issuer_parenthesis-correction.manifest.json`.
+Fresh migration/schema/native/SDK and all application/recovery/provider/security
+acceptance remain pending. Both storage capabilities remain absent.
+
+Forward migration materialization 2026-11-13 (C12.38/C1.08/C9.33/C9.38):
+source221a883a passes1,103 actual assertions/173 complete selected files,394
+explicit DB skips, exact full types/lint and license/notes/plan checks. The genuine
+protocol initialization failure is corrected with unchanged constants in a
+dependency-free leaf; original ancestry7 and CASE9 controls pass. New normal0085
+now materializes the nine new target/application model families AFTER lineage84,
+with seven complete scalar CASE corrections at original creation positions and
+all other frozen source/guards retained. All86 journal entries, fresh154 strict
+schema/native/SDK and genuine writer/paid/recovery/provider/security acceptance
+remain UNRUN/PENDING. Both storage capabilities stay absent; stable/signature/post
+remain pending. See `deploy/controlled-forward85-materialization-20261113.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): genuine local multipart
+issuance now uses per-attempt original operation/caller/request nonce and actual
+local FIN, exact immutable file-part body/session/deadline, managed facade and
+independent SQL namespace/hold/privacy/controller constraints. The real SDK
+signature binds body checksum/SHA/size/public nonce; only URL/header digests are
+retained, with no provider ACK, received bytes or terminal outcome invented.
+All sibling attempts drain before return. Issued authority stays pending after
+local FIN/expiry and blocks capture/cutover until genuine consumption proof.
+A TX-local current issuer ABI and mandatory future capability runtime predicate
+close the historical tagged-function gate path; actual old/untracked executor
+closure remains separate. No full request or part capability is published.
+English/French/Spanish/Arabic owner guidance preserves issued-link review debt.
+Ten crypto/wire and six real-service/TCP controls are PREPARED/UNRUN, all old
+oracles preserved. No execution/provider/host actions or C-item closure. Actual
+part/consumption, stopped/legacy recovery, capture/quota/cutover and every
+qualification/acceptance remain open. See
+`deploy/media-multipart-local-issuance-source-2026-11-13.md`.
+
+
+Controlled protocol initialization correction 2026-11-13 (C12.38/C1.08):
+source v49 passes full types and affected lint, then the unchanged positive
+inspection ancestry control exposes an initialization cycle: the protocol literal
+was captured as undefined before its importing contract finished loading. An
+independent diagnostic reproduces that exact invalid-value issue. Both unchanged
+protocol/policy constants now live in a dependency-free leaf; all runtime users
+import it directly and the existing contract reexports preserve its public ABI.
+The original positive and negative assertions remain unchanged. Renewed source,
+schema/native/provider qualification and stable sign-off remain pending.
+
+Controlled original-receipt routing source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
+canonical receipt's real controlled-origin child, authenticates its genuine
+same-transaction HMAC batch/current bank/parent stage BEFORE payment UUID birth,
+and compares the unchanged shared cash/fee computation to that exact receipt
+plan. Legacy period/generation routes and all previous cash/return/history guards
+remain intact. A NEW UNAPPLIED suffix preserves the full old route guard with
+only an exact verified controlled-origin alternative to its gross-proration
+attempt condition; independent BEFORE and deferred stage guards remain required.
+The route capability checks actual function-body hashes and enabled trigger
+identities, never a boolean marker. Three controls are PREPARED/UNRUN; no CPU,
+database, provider or current-root execution occurred. Genuine initial batch
+admission/writer integration, separate paid effects, partial/batch/native and
+provider/security acceptance remain required; no C-item or stable closure.
+See `deploy/controlled-original-receipt-route84-source-20261113.md`.
 
 Controlled scalar CASE source correction 2026-11-13 (C12.38/C1.08): the frozen
 unapplied core/783 source is retained unchanged. Seven complete function-body
@@ -3685,21 +3835,6 @@ evaluation, mutation-stage context/writer/routing, original bootstrap nonpayable
 proof and native/provider/security acceptance remain required. Application and
 stable remain unactivated/open. See
 `deploy/controlled-cash-prospective-context84-source-20261113.md`.
-Controlled original-receipt routing source checkpoint 2026-11-13
-(C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
-canonical receipt's real controlled-origin child, authenticates its genuine
-same-transaction HMAC batch/current bank/parent stage BEFORE payment UUID birth,
-and compares the unchanged shared cash/fee computation to that exact receipt
-plan. Legacy period/generation routes and all previous cash/return/history guards
-remain intact. A NEW UNAPPLIED suffix preserves the full old route guard with
-only an exact verified controlled-origin alternative to its gross-proration
-attempt condition; independent BEFORE and deferred stage guards remain required.
-The route capability checks actual function-body hashes and enabled trigger
-identities, never a boolean marker. Three controls are PREPARED/UNRUN; no CPU,
-database, provider or current-root execution occurred. Genuine initial batch
-admission/writer integration, separate paid effects, partial/batch/native and
-provider/security acceptance remain required; no C-item or stable closure.
-See `deploy/controlled-original-receipt-route84-source-20261113.md`.
 
 Controlled canonical stages source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): a NEW UNAPPLIED continuation independently proves
@@ -3881,7 +4016,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-13 checkpoint. Protected main is fdba2817 after signing containment PR702, with44 PR checks and43 protected merge-group jobs passed. Broader draft PR701 remains older and its CI is not green. Current1bf950f7 source qualifies411 deduplicated actual controls across70 complete files,103 explicit native skips, types/affected lint and license/notes/plan. Fresh V12 applies all84 migrations; strict v21 passes143 models/287 guards/229 function bodies. All nine actual stop/capture/current-reader/original-cash journeys now pass individually with independent financial/table SHA, all84 journal identities, settings and drained-client proof. Live-registry SDK generation and non-update verification pass8+8 and preserve all component hashes. FailedV11 and earlier datasets/logs remain preserved. Positive controlled collection and full media recovery/multipart/quota/cutover remain implementation work. Current-source green CI, owner recovery UI, provider/platform acceptance, final byte recovery, Tony’s C11.10 report and exact C11.17 signature remain open. No live item closes from this checkpoint. |
+| Latest launch audit | 2026-11-14. Protected main last verified fdba2817 (PR702:44 PR/43 merge-group checks); PR701 remains older and not green. Current1325527d passes1134 actual assertions/178 complete selected files,405 explicit DB skips, full types/lint/metadata; freshV22 all86 ordinary migrations6.957s; strict154 affected models/340 enabled guards/325 complete bodies/3768 read-only queries13.581s. Actual SDK generation8+verification8 and all154 whole-row/all86 journal/lineage sequence/drain invariance pass; generated full types/lint pass. See deploy/current-source154-writer-checkpoint-20261113.md. New private genuine staged writer and original multipart checksum verification are schema/source-qualified; actual current-target/native application remains UNRUN after precise real-catalogue fixture correction. Failed V19/V20/V21 and original wrapper diagnostics are preserved; both storage capabilities remain absent. Atomic fee endpoint, public apply composition, separate paid effects, latest-bank proration/credit safety, multipart terminal/unknown/legacy/session/quota/cutover, current build/browser/CI, actual provider/platform/recovery and all other unchecked full-spec acceptance remain open. Tony’s C11.10 report/C11.17 signature are pending; no C-item/stable/post closure. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
@@ -4384,6 +4519,52 @@ reading chat logs.
   retains all assembly/receipt/idempotency assertions. Full per-part recovery,
   old-runtime/issued-URL retirement, full-protocol/provider acceptance and this
   C item remain open. See `deploy/media-part-signing-containment-2026-11-13.md`.
+  Ordinary retirement source checkpoint2026-11-13: the existing cleanup path
+  now prepares exact original-UUID conditional deletion, retained actual caller
+  returns, fresh pinned absence and complete two-pass physical-version/session
+  proof before retiring its two exact receipts and releasing only the original
+  quota token. Four new owned82 functions/two guards add no models or published
+  capability; all16 pure and six native declarations are unrun. Crash/stop,
+  failed/unattempted admission recovery, multipart, quota initialization,
+  cutover, translated recovery and actual acceptance remain required. See
+  `deploy/media-original-retirement-source-2026-11-13.md`. No C row closes.
+  Source-only continuation: a genuine finished unattempted preflight can admit
+  a separately born caller; unknown or acknowledged physical DELETEs cannot be
+  replayed. The exact original family retains prior returns and first digests.
+  Thirteen additional pure cases and one added native leaf remain unrun; no
+  request capability or completion status advances. See
+  `deploy/media-original-delete-continuation-source-2026-11-13.md`.
+  Pre-enable namespace fence source repair2026-11-13: shared full-writer tags
+  cannot authorize ordinary logical or physical mutations through a captured
+  drain/active source claim. Two new owned82 functions/three guards require
+  exact genuine transfer caller ancestry for the narrow exception and keep GET
+  recovery distinct. Six native controls are prepared/unrun; no production
+  incident, capability publication or C completion is claimed. See
+  `deploy/media-original-namespace-fence-source-2026-11-13.md`.
+  Stopped original PUT source slice2026-11-13: the existing person-only
+  recovery flow accepts an optional exact independently verified executor stop
+  ID, requires fresh original nonce/body and complete agreeing inventory for
+  affirmative applied recovery, and preserves NULL actual returns/finishes.
+  Four-locale UI guidance and14 pure controls are prepared/unrun. Linux is an
+  optional actual executor path; portable actual finishes need no Linux proof.
+  Stopped-caller absence/retirement, other executor adapters, final SDK
+  regeneration and all native/provider qualification remain open. See
+  `deploy/media-original-stopped-put-source-2026-11-13.md`.
+  Current-controller correction source2026-11-13: genuine old transfer ancestry
+  cannot cross another live source claim or an unrelated/later executor drain.
+  Shared logical/physical admission and SQL independently require exact current
+  plan/phase/original stop digest. Twelve pure and two native controls are
+  prepared/unrun. Additional crashed-executor association/release and browser
+  multipart part issuance remain required; capability is still unpublished.
+  See `deploy/media-transfer-controller-fence-source-2026-11-13.md`.
+  Finished acknowledged DELETE source2026-11-13: an actual successful provider
+  ACK plus real original caller/request finishes can proceed to fresh proof
+  only after failed local result retention. No second DELETE is dispatched;
+  the first failure/ACK remain immutable and a separate review requires pinned
+  absence/full physical inventory. Seven pure and one native regression are
+  prepared/unrun. Unknown outcomes without ACK, stopped-origin retirement,
+  multipart/quota/cutover and all acceptance remain open. See
+  `deploy/media-finished-delete-recovery-source-2026-11-13.md`.
   (`0029_closed_rockslide.sql`; rollback-compatible large-file accounting and
   legacy-write inventory trigger; signature/extension/type/size validation;
   private-S3 multipart resume and terminal idempotency; streaming ClamAV seam;
@@ -16226,6 +16407,43 @@ whatever is best for the people using the site.
   103 explicit native skips. These synthetic provider-edge component proofs
   are distinct from real provider/platform acceptance and independent review.
   Shared owner recovery UI and full controlled application remain required.
+  Owner recovery UI SOURCE increment 2026-11-13 (C12.38/C11.08):
+  the cash-recovery page discovers the complete bounded unfinished inspection
+  list through a private person-only shared query, authenticating every retained
+  stop rather than hiding unauthenticated rows. It selects one current plan
+  and submits the existing fresh-human/step-up review service. Live and unknown
+  process states have guidance without an approval form. English, Spanish,
+  French and Arabic strings use the existing semantic theme components. The
+  original real-child oracle retains all assertions and adds bounded private
+  list projection, API-key/system refusal and genuine-stop/finish convergence.
+  No SQL/model, authority, SDK public method or provider action changes. Source
+  gates, renewed native list proof and actual browser/accessibility acceptance
+  remain pending; no C-item closes.
+  Owner recovery qualification checkpoint 2026-11-13 (C12.38/C11.08):
+  source8d5cc948 passes429 actual controls/70 complete files,103 explicit
+  native skips, full types/affected lint and metadata. The real-child stop
+  journey with private owner-list assertions passes12.532s, with independent
+  all84-journal, real stop/finish, financial/table SHA and drained clients.
+  A separate four-file locale gate passes107 controls but flags the existing
+  credit comparator parameter names as CSS directions; it stays a preserved
+  failed gate. Renaming only the comparator arguments/locals to first/second
+  preserves its exact ordering and leaves the unchanged RTL oracle intact.
+  Locale/fee renewal and actual owner browser/a11y remain pending.
+  Actual owner browser component acceptance 2026-11-14 UTC (C12.38/C11.08):
+  current4349a5a9 production build passes97.387s and standalone scrub verifies
+  24142 files/369684959 bytes without source/environment leakage. Each of
+  four en/es/fr/ar journeys creates genuine original cash through shared
+  services, observes a real child GET admission, kills and awaits that process,
+  then uses the production owner page and keyboard to submit the shared review.
+  Both themes at320px pass Axe, control/page bounds and Arabic RTL. Independent
+  readback proves one exact authenticated stop and human audit/payment subject,
+  no raw hosting evidence in audit, all27 financial/admission/finish table SHA
+  unchanged, all84 journal hashes and no clients left open. The sign-in is an
+  explicitly fictional fresh-factor fixture, not first-boot/OTP/passkey proof.
+  Failed alias-loader V13 is preserved; the alias-only driver repair changes
+  no product bytes and succeeds on fresh V14. Local OS death and synthetic
+  provider edges do not supply cross-host/provider acceptance or C11 sign-off.
+  Positive controlled application and full C12.38 remain open.
   Controlled cash-read order source checkpoint 2026-11-13 (C12.38/C1.08/C9.33):
   one proposed immutable child records actual namespace-locked PostgreSQL
   admission sequence, signed original caller/admission and exact predecessor/
@@ -16238,6 +16456,34 @@ whatever is best for the people using the site.
   integration plus positive native qualification remain required; C12.38,
   C1.08 and stable stay open. See
   `deploy/controlled-cash-inspection-lineage84-source-20261113.md`.
+  Lineage parent integration SOURCE checkpoint 2026-11-14 UTC (C12.38/C1.08):
+  normal forward84 copies the13264-byte owned lineage SQL exactly (SHA814c7a22)
+  and preserves every prior84 migration identity. It adds one model144, one
+  sequence, four functions and two guards. A collector-free parent wrapper
+  authenticates exact inspection/receipt/resource UUID ownership and PG row
+  hashes; shared admissions count once with distinct stop/lineage children under
+  one5000 bound. Invoice merge covers genuine receipt-only controlled resources
+  and their full current refund/callback graph before any payment-route exit,
+  independently of immutable read order; seller-filtered inputs remain scoped.
+  Original merchant/buyer exports add only nonempty safe lineage projections
+  and subscription retention declares the new child. No raw nonce/process/HMAC
+  or global sequence is exported. All source, fresh85-journal/144-model and
+  actual native qualification remain pending; no database is migrated in place
+  and no positive collection or stable authority is supplied.
+  Actual current144 component qualification 2026-11-14 UTC (C12.38/C1.08):
+  source11fe3a5f passes549 actual controls/76 complete files,113 explicit native
+  skips, full types/affected lint and metadata. Fresh V15 passes all85 ordinary
+  migrations; strict v23 proves144 models,289 guards,233 exact function bodies,
+  sequence parameters/ownership/unconsumed state and negative history/latest
+  behavior with3426 read-only queries. Every old143 target and all old84
+  migration identities are preserved. Ten actual stop/capture/current-reader/
+  partial-return/legacy GET journeys pass independently; each retains all85
+  journal hashes, original financial/closure assertions and drained clients,
+  with zero fabricated controlled children for ordinary legacy cash. Genuine
+  delayed transaction admission/positive latest selection is separately
+  PREPARED/UNRUN and must propagate any strict raw-debt refusal. It cannot be
+  supplied by model comparisons or a later success. Provider/batch application,
+  current build/browser and C11/final stable gates remain open.
   Genuine ordering first-run classification 2026-11-14 UTC (C12.38/C1.08):
   current7a0f6288 live SDK verification passes8 without output changes and its
   new test types/lint/metadata pass. The actual ordering run times out before
@@ -16249,6 +16495,18 @@ whatever is best for the people using the site.
   propagates startup rejection instead of leaving the barrier pending. Every
   admission/order/bank/financial assertion stays unchanged. Fresh retry and
   genuine positive ordering remain required; no raw-debt guard was bypassed.
+  Genuine ordering retry 2026-11-14 UTC (C12.38/C1.08): validated timestamp
+  setup/type/lint/metadata passes at6a9b197a; fresh V16 reapplies identical85
+  source identities. The actual current9 unexpected-cash attempt now reaches
+  the strict final-return precondition and refuses incomplete/nonquiesced
+  original money/callers BEFORE any GET/admission. Failed V16 preserves one
+  genuine receipt/origin, zero local invoices/payments/inspections/lineages,
+  unconsumed sequence, all85 hashes and drained clients. This refusal is not
+  reinterpreted as a positive order proof or bypassed. The next positive
+  ordering journey requires the intended genuine controlled observational
+  producer and accepted target/collection with exact original receipt ancestry.
+  That source is in progress; no old zero-calendar money may be amount-adopted
+  into a new collection. Full controlled application and stable remain open.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;
@@ -16500,6 +16758,141 @@ requires an empty fifth dependency array and adds one strict nine-empty-family/
 unknown-parent control. Root's v6 first failure is preserved; the corrected15
 controls are UNRUN. No product behavior or database changed. See
 `deploy/member-controlled-financial-driver82-source-20261113.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated ordinary retirement
+slice now consumes the exact guarded affirmative original PUT review, retained
+nonce/full-byte/two-pass positive inventory and actual finishes or independent
+executor stop. It preserves missing actual return/writer-finish values and still
+requires fresh pinned original revision reads, conditional DELETE and complete
+physical absence inventories before retirement/minimization. Nine pure and three
+native controls are PREPARED/UNRUN; real stopped-runtime acceptance remains open.
+The provider COMPLETE/in-flight multipart authority guarantee is explicitly
+unproven, and both full request and dedicated part capabilities remain
+unpublished. No execution/account/host actions or C-item closure occurred. See
+`deploy/media-applied-put-retirement-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated additional transfer
+executor-drain slice records an immutable exact current-plan/digest-only mutation
+cohort before actual operator stop. Only unchanged complete actual logical and
+physical finishes plus real stop verification permit its separate release;
+sourceDrainId and all active-drain mutation fences remain unchanged. Captured
+→ released shortcuts and terminal drain births now refuse. Ten pure and four
+native negative controls are PREPARED/UNRUN, with no synthetic verified stop or
+capability publication. Truly unfinished/stopped-applied target callers still
+require exact original nonce/full-byte/complete-inventory review and physical
+settlement; actual operator/provider/platform acceptance remains open. No
+execution/host/account actions or C-item closure occurred. See
+`deploy/media-transfer-crash-drain-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated transfer read slice
+retains actual provider nonce/token proof in the existing first logical read
+return and independently checks exact original create-only lineage through
+shared TS/SQL before copy verification, adoption and source retirement. Adoption
+now obtains new full-byte source/target reads outside transactions before its
+atomic exact membership apply; known revision reads/absence stay pinned. Old
+first returns/captures are preserved, not augmented from current metadata.
+Seven pure and four native controls are PREPARED/UNRUN. Full request/part flags,
+stopped-target review, remaining recovery/cutover and actual operator/provider/
+platform acceptance remain open. No execution/account/host actions or C-item
+closure occurred. See `deploy/media-transfer-read-provenance-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated original target PUT
+review producer now reuses the exact receipt-parent nonce/full-byte/two-pass
+inventory ledger with genuine target-plan ancestry and actual finish or verified
+stop. A separate immutable positive review closes physical debt without filling
+NULL first return/result/writer fields or replaying PUT. Shared reads, cleanup,
+retirement/minimization and the SAME captured plan/drain consume that review;
+active drains still refuse mutation. Four scoped pure and six portable native
+controls are PREPARED/UNRUN; actual stopped-runtime/operator acceptance remains
+required. Full request/part flags, tracked stopped-source chained eligibility,
+unknown DELETE, multipart, quota/cutover and actual provider/platform gates stay
+open. No execution/account/host actions or C-item closure occurred. See
+`deploy/media-target-put-review-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): NEW stopped-source claims retain
+an exact affirmative review/actual executor-stop projection in their immutable
+first receipt capture; NULL actual FINs and old captures are never filled.
+Chained physical inventory, reads and adoption follow bounded exact prior
+receipt-to-captured-membership edges; only exact full conditional source
+retirement proof excludes physically retired ancestors, while original privacy
+lineage remains live. Five pure and three native TCP controls are PREPARED/UNRUN.
+No execution/provider/host actions occurred. Request/part capabilities, unknown
+DELETE monotonic-removal fences, multipart/quota/cutover and actual acceptance
+remain open. See `deploy/media-stopped-source-chain-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): the isolated monotonic-removal
+prerequisite leaf adds permanent namespace/key-digest creator fences and a
+separate exact local-finish/independent-stop conditional DELETE review. Fresh
+pinned absence plus complete inventories never invent remote ACKs, NULL FINs,
+first results or replay. All other creators/session/capture/transfer ancestry
+remain explicit debt. The existing fresh-human shared recovery/UI/audit path
+now selects the exact DELETE for verification; ordinary drain release requires
+whole-cohort closure. Ten pure and six native controls are PREPARED/UNRUN.
+Source inspection found genuine raw sealed-blob, gallery archive and doctor
+producers still requiring authentic original admissions and a final adapter
+boundary fence; full request capability cannot be published before they and
+multipart/capture/quota/cutover are completed and qualified. No execution,
+provider/host actions, production incident claim or C-item closure occurred.
+See `deploy/media-monotonic-delete-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C12.36/C8.07): the isolated managed
+producer leaf migrates encrypted attachments, gallery archives and diagnostic
+roundtrips to real shared original reservation/caller/nonce/FIN admission and
+verified retirement. A nullable/no-default sealed-file birth column, unique index
+and SQL guard prevent historical backfill/ready-without-proof/early forget;
+legacy NULL-birth personal files refuse completed erasure rather than vanish.
+Business gallery work retains its existing ownership policy. The application
+adapter adds a final missing-context mutation/signing refusal. Doctor GET/SSR
+and old health scopes stay passive; NEW platform.probeDoctor is an explicitly
+authorized/audited mutation outside service TX, with POST/CSRF, CLI/admin submit
+and four-locale guidance. Four pures and six native TCP/MLS controls are
+PREPARED/UNRUN. Root final SDK regeneration, schema/model/function/guard parity,
+all source/native gates and actual provider/operator/platform acceptance remain
+required. Full request/part flags and multipart/capture/quota/cutover/legacy
+recovery completion remain open. No execution/provider/host actions, production
+incident claim or C-item closure occurred. See
+`deploy/media-managed-producers-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): managed multipart requests now
+retain full bounded XML response digest/size and share strict whole-document
+parsing with provider inventory. Duplicate identities, wrappers/nested200 errors,
+invalid entities/UTF8 and redirects refuse before acceptance; NoSuchUpload is
+an absence observation, never a fabricated ABORT ACK/byte retirement. Twelve
+protocol cases are PREPARED/UNRUN and original positive oracle bodies remain
+unchanged. Public primary AWS completion/abort/part contracts were reviewed;
+no actual provider/host operations ran. Original CREATE/session first baseline,
+part capability/body receipts and selected-provider consumption proof, capture,
+quota/cutover and all qualification/acceptance remain open. No full request/part
+capability or C-item closure advances. See
+`deploy/media-multipart-wire-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): NEW multipart CREATE operations
+bind a nullable/no-default first-baseline header to their actual same-TX caller.
+Both complete pre-dispatch policy/object/version/session passes and SQL-verified
+physical result/cursor digests precede the single CREATE. Old NULLs never gain a
+current baseline; complete headers cannot refill/rebind. Only digests/counts are
+retained there, including private cursor digests. Logical404 with retained
+versions/sessions refuses creation. A lost or paused CREATE never gains a session
+or caller FIN from its negative baseline or equal current key. Twelve pure and
+five real shared-service/fictional TCP controls are PREPARED/UNRUN; original
+oracles remain intact. No execution/provider/host action or request/part
+capability publication occurred. Part authority/consumption, legacy creator
+closure, capture/quota/cutover and all qualification/external acceptance remain
+open. See `deploy/media-multipart-create-baseline-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): multipart completion now retains
+its actual ACK/revision before a complete bounded-memory pinned-body SHA/nonce
+read through the same genuine caller. Object adoption must match the exact
+original CREATE/session and actual finished full-byte result and stores that
+provider revision/digest. A later current-key validation cannot replace its
+SHA/bytes. Complete object identity does not set session retired_at or invent
+consumption of issued/in-flight part authority; legacy/unknown callers and all
+retirement debt stay preserved. Fourteen pure/protocol controls are PREPARED/
+UNRUN; original positive/native oracle bodies remain unchanged. No execution,
+provider/host action, new model/journal, capability publication or C-item closure.
+Part issuance/consumption, unknown recovery, capture/quota/cutover and all
+qualification/acceptance remain open. See
+`deploy/media-multipart-completed-object-source-2026-11-13.md`.
 Source contract checkpoint 2026-11-13 (C12.38/C1.08): the ordinary controlled
 cash observational source reader binds an actual accepted target/receipt and
 original creator/caller/fact plus every retained observation/raw occurrence.
@@ -16621,6 +17014,20 @@ application/routing, partial remainder recovery, separate paid effects and full
 UI/privacy/live/security acceptance remain REQUIRED.
 See `deploy/controlled-collection-orchestration84-source-20261113.md`.
 
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the shared audited upload
+service/HTTP route now declares the whole selected file's exact ordered part
+sizes and SHA256 values against its genuine original CREATE/session/baseline.
+The browser declares every bounded part before remote resume progress or any
+signing request; a same-size different file cannot replace its first header.
+The existing operation model gains nullable/no-default part_bodies JSONB, with
+no legacy birth/backfill or raw key/URL/token/owner copied into the header.
+App/SQL retain namespace/tombstone/drain/privacy/hold constraints. Eight pure and
+five actual-service/fictional TCP controls are PREPARED/UNRUN; originals remain
+unchanged. Declarations do not prove received bytes, FIN or consumption, and no
+signer/request/part capability is enabled. Actual issuer/part/consumption,
+unknown recovery, capture/quota/cutover and all qualification/acceptance remain
+open. No execution/provider/host actions or C-item closure. See
+`deploy/media-multipart-part-bodies-source-2026-11-13.md`.
 Prepared positive-bank control checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08):
 four actual-service desired native journeys now use a real accepted normal-period
 canonical target, real HTTP adapter and fictional bank, covering original bank

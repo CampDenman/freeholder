@@ -11,6 +11,7 @@
 // or a small droplet (§14).
 import { AwsClient } from "aws4fetch";
 import {createS3MultipartProtocol} from "../../../scripts/media-multipart-protocol.mjs";
+import {createS3MultipartPartIssuer} from "../../../scripts/media-part-capability.mjs";
 import {createS3TransferProtocol} from "../../../scripts/media-transfer-protocol.mjs";
 import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
 import {verifyS3PhysicalAbsence} from "./physical-absence";
@@ -105,9 +106,9 @@ export function createS3Storage(config: S3Config): StorageAdapter {
     return target;
   };
 
-  const accountedMultipart=(observer:TransferRequestObserver)=>createS3MultipartProtocol({client,binding:{kind:"s3",namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer});
+  const accountedMultipart=(observer:TransferRequestObserver)=>createS3MultipartProtocol({client,binding:{kind:"s3",namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer,retainXmlEvidence:true,requirePartChecksums:true});
   async function inspectMultipart(key: string, uploadId: string, observation?:MultipartObservation): Promise<MultipartInspection> {
-    if(observation?.request)return accountedMultipart(observation.request).inspect(key,uploadId);
+    if(observation?.request)return accountedMultipart(observation.request).inspect(key,uploadId,observation.expectedParts);
     const parts: MultipartPart[] = [];
     let marker: string | undefined;
     for (let page = 0; page < 11; page++) {
@@ -153,7 +154,8 @@ export function createS3Storage(config: S3Config): StorageAdapter {
         return { uploadId };
       },
 
-      async signPart(key, uploadId, partNumber, expiresIn) {
+      async signPart(key, uploadId, partNumber, expiresIn, observation) {
+        if(observation?.request)return createS3MultipartPartIssuer({client,binding:{kind:"s3",namespace:storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket}),location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer:observation.request})({key,uploadId,partNumber,sha256:observation.sha256,bytes:observation.bytes,expiresAt:observation.expiresAt});
         const target = multipartUrl(key, uploadId, partNumber);
         target.searchParams.set(
           "X-Amz-Expires",

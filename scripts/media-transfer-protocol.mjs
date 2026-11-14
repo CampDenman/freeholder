@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: explicit physical requests; no hidden resumable session/retry.
 import {createHash} from "node:crypto";
-import {XMLParser,XMLValidator} from "fast-xml-parser";
-const MAX_PAGE=250,MAX_XML=2*1024*1024;
+import {readOriginalStorageXml} from "./media-storage-xml.mjs";
+const MAX_PAGE=250;
 const digest=value=>createHash("sha256").update(typeof value==="string"||value instanceof Uint8Array?value:JSON.stringify(value)).digest("hex");
 const httpStatus=value=>/^([1-5][0-9]{2})$/.test(String(value))?Number(value):null;
 const failure=()=>{throw Error("The exact original provider inventory or request result is incomplete.");};
 function objectKey(key){if(typeof key!=="string"||!key||key.length>2048||/[\u0000-\u001f\u007f]/.test(key)||key.split("/").some(part=>part==="."||part===".."))failure();return key;}
 function size(value){if(typeof value!=="string"||! /^(0|[1-9][0-9]*)$/.test(value)||BigInt(value)>BigInt(Number.MAX_SAFE_INTEGER))failure();return Number(value);}
 function opaque(value){if(typeof value!=="string"||!value||value.length>4096||/[\u0000-\u001f\u007f]/.test(value))failure();return value;}
-function entities(value){if(typeof value!=="string")failure();const decoded=value.replace(/&(amp|lt|gt|quot|apos);/g,(_all,key)=>({amp:"&",lt:"<",gt:">",quot:'"',apos:"'"})[key]);if(/&(?:#|[a-zA-Z]+;)/.test(decoded))failure();return decoded;}
+function entities(value){if(typeof value!=="string")failure();return value;}
 function revision(binding,key,value,versionId){
  objectKey(key);if(binding.kind!=="s3"&&versionId!==undefined)failure();if(typeof value!=="string"||(binding.kind==="s3"?!/^"[\x21\x23-\x7e\x80-\xff]+"$/.test(value):!/^[1-9][0-9]{0,19}$/.test(value)))failure();
  return{kind:binding.kind==="s3"?"etag":"generation",key,namespace:binding.namespace,value,...(versionId!==undefined?{versionId:opaque(versionId)}:{})};
@@ -24,12 +24,7 @@ function originalRequestProof(id,token){
 function originalRequestHeaders(identity){return identity?{"x-amz-meta-freeholder-original-request":identity.id,"x-amz-meta-freeholder-original-token":identity.token}:{};}
 async function observed(observer,descriptor,operation){return observer?observer(descriptor,operation):operation(async()=>{});}
 async function xml(response,notify){
- if(!response.ok||!response.body)failure();const reader=response.body.getReader(),chunks=[];let bytes=0;
- try{for(;;){const value=await reader.read();if(value.done)break;bytes+=value.value.byteLength;if(bytes>MAX_XML)failure();chunks.push(value.value);}}finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
- const wire=Buffer.concat(chunks);if(notify)await notify({stage:"inventory_raw",status:response.status,detailDigest:digest(wire),bytes:wire.byteLength});
- const source=new TextDecoder("utf-8",{fatal:true}).decode(wire);if(/<!DOCTYPE|<!ENTITY|<!\[CDATA\[/i.test(source)||XMLValidator.validate(source)!==true)failure();
- const parsed=new XMLParser({ignoreAttributes:true,parseTagValue:false,ignoreDeclaration:true,processEntities:false}).parse(source);
- if(!parsed||typeof parsed!=="object"||Array.isArray(parsed)||Object.keys(parsed).length!==1)failure();return parsed;
+ return readOriginalStorageXml(response,notify,{stage:"inventory_raw",requireSuccess:true});
 }
 function root(document,name,bucket){const value=document[name];if(!value||typeof value!=="object"||Array.isArray(value)||entities(value.Name??value.Bucket)!==bucket)failure();return value;}
 function rows(value){return value===undefined?[]:Array.isArray(value)?value:[value];}
@@ -67,6 +62,18 @@ export function createS3TransferProtocol({client,url,binding,observer}){
   await notify({stage:"body",status:response.status,revision:rev,sha256:digest(body),bytes:body.byteLength});return{body,contentType:response.headers.get("content-type")??"application/octet-stream",revision:rev,...(requestProof?{requestProof}:{})};
  });}
  return{binding,readVersioned,
+  async readDigestVersioned(key,input,maxBytes){
+   const pinned=exactRevision(input,binding,key);if(!Number.isSafeInteger(maxBytes)||maxBytes<0)failure();const target=new URL(url(key));if(pinned.versionId!==undefined)target.searchParams.set("versionId",pinned.versionId);
+   return observed(observer,{kind:"object.read",binding,key,expectedRevision:pinned,bytes:maxBytes},async notify=>{
+    const response=await client.fetch(target,{redirect:"error",headers:{"accept-encoding":"identity","if-match":pinned.value}});await notify({stage:"response",status:response.status});
+    if(response.status===404){await notify({stage:"absence",status:404});return undefined;}if(!response.ok)failure();
+    const original=revision(binding,key,response.headers.get("etag"),response.headers.get("x-amz-version-id")??undefined);if(JSON.stringify(original)!==JSON.stringify(pinned))failure();
+    const requestProof=originalRequestProof(response.headers.get("x-amz-meta-freeholder-original-request")??undefined,response.headers.get("x-amz-meta-freeholder-original-token")??undefined);
+    await notify({stage:"metadata",status:response.status,revision:original,...(requestProof?{requestProof}:{})});
+    const hash=createHash("sha256");let bytes=0;if(response.body){const reader=response.body.getReader();try{for(;;){const item=await reader.read();if(item.done)break;bytes+=item.value.byteLength;if(bytes>maxBytes)failure();hash.update(item.value);}}finally{await reader.cancel().catch(()=>{});reader.releaseLock();}}
+    const sha256=hash.digest("hex");await notify({stage:"body",status:response.status,revision:original,sha256,bytes});return{sha256,bytes,contentType:response.headers.get("content-type")??"application/octet-stream",revision:original,...(requestProof?{requestProof}:{})};
+   });
+  },
   async get(key){return(await readVersioned(key))?.body;},
   async put(key,body,contentType){objectKey(key);return observed(observer,{kind:"object.put",binding,key,createOnly:true,sha256:digest(body),bytes:body.byteLength},async(notify,identity)=>{
    const response=await client.fetch(url(key),{method:"PUT",redirect:"error",body:new Blob([body],{type:contentType}),headers:{"content-length":String(body.byteLength),"if-none-match":"*",...originalRequestHeaders(identity)}});

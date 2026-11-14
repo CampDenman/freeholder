@@ -14,13 +14,25 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { listed, okResult, row, uuid } from "@/core/contract";
 import { defineOrchestratedService, defineService, ServiceError, type ServiceContext } from "@/core/service";
-import { storage } from "@/adapters/storage";
+import {putWithReceipt,deleteWithReceipt,discardUnwrittenObjectReservation} from "@/core/media/write-ledger";
+import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
+import {reservePendingMediaObject,registerPendingObjectOwner} from "@/core/media/object-ledger";
+import {requireManagedOriginalObject} from "@/core/media/managed-object-proof";
 import { activeSelf, participant } from "./messages";
 import { memberMessages, memberMlsGroups, memberSealedBlobs } from "./schema";
 
 export const MAX_SEALED_BYTES = 25 * 1024 * 1024;
 const MAX_PENDING = 20;
 const ABANDONED_MS = 24 * 3600 * 1000;
+
+// This is the module's existing live/abandoned lifetime, read through the same
+// transaction as cleanup. A pending physical pointer is not an orphan while
+// its genuine encrypted-message owner still retains it.
+registerPendingObjectOwner("member-sealed/",async(key,now,tx)=>{
+ const executor=tx??(await import("@/core/db")).db();
+ const[blob]=await executor.select().from(memberSealedBlobs).where(eq(memberSealedBlobs.storageKey,key)).limit(1);
+ return Boolean(blob&&!blob.deletedAt&&(blob.messageId!==null||blob.createdAt.getTime()>now.getTime()-ABANDONED_MS));
+});
 
 export const claimSealedBlob = defineService({
   name: "members.claimSealedBlob",
@@ -33,6 +45,7 @@ export const claimSealedBlob = defineService({
   input: z.object({ conversationId: uuid, size: z.number().int().min(1).max(MAX_SEALED_BYTES) }),
   output: z.object({ id: uuid, storageKey: z.string() }),
   handler: async (input, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
     const me = await activeSelf(ctx);
     const seat = await participant(ctx, input.conversationId, me.userId);
     if (seat.state !== "active") throw new ServiceError("permission", "Accept this conversation before sending files.");
@@ -45,7 +58,8 @@ export const claimSealedBlob = defineService({
     if (pending >= MAX_PENDING) throw new ServiceError("validation", "Send or discard the files you already added first.");
     const id = randomUUID();
     const storageKey = `member-sealed/${input.conversationId}/${id}`;
-    await ctx.tx.insert(memberSealedBlobs).values({ id, ownerId: me.userId, conversationId: input.conversationId, storageKey, size: input.size });
+    const birth=await reservePendingMediaObject(ctx,{key:storageKey,role:"original",contentType:"application/octet-stream",bytes:input.size,requireNewBirth:true});
+    await ctx.tx.insert(memberSealedBlobs).values({ id, ownerId: me.userId, conversationId: input.conversationId, storageKey, originalReservationId:birth.reservationId,size: input.size });
     return { id, storageKey };
   },
 });
@@ -61,7 +75,11 @@ export const confirmSealedBlob = defineService({
   input: z.object({ id: uuid }),
   output: okResult,
   handler: async (input, ctx) => {
+    await lockContactIdentityForRead(ctx.tx);
     const me = await activeSelf(ctx);
+    const[original]=await ctx.tx.select().from(memberSealedBlobs).where(and(eq(memberSealedBlobs.id,input.id),eq(memberSealedBlobs.ownerId,me.userId),eq(memberSealedBlobs.state,"pending"),isNull(memberSealedBlobs.deletedAt))).limit(1).for("update");
+    if(!original)throw new ServiceError("not_found","That file is not available.");
+    await requireManagedOriginalObject(ctx.tx,{key:original.storageKey,bytes:original.size,reservationId:original.originalReservationId,actor:`user:${me.userId}`});
     const [done] = await ctx.tx
       .update(memberSealedBlobs)
       .set({ state: "ready" })
@@ -86,7 +104,7 @@ export const uploadSealedBlob = defineOrchestratedService({
   handler: async (input, actor) => {
     if (input.bytes.length === 0 || input.bytes.length > MAX_SEALED_BYTES) throw new ServiceError("validation", "That file is empty or too large.");
     const claimed = await claimSealedBlob.call({ conversationId: input.conversationId, size: input.bytes.length }, actor);
-    await storage().put(claimed.storageKey, new Uint8Array(input.bytes), "application/octet-stream");
+    await putWithReceipt({key:claimed.storageKey,body:new Uint8Array(input.bytes),contentType:"application/octet-stream",role:"original",requiresReservation:true},actor);
     await confirmSealedBlob.call({ id: claimed.id }, actor);
     return { id: claimed.id };
   },
@@ -164,7 +182,12 @@ export const forgetSealedBlobs = defineService({
   input: z.object({ ids: z.array(uuid).max(500) }),
   output: okResult,
   handler: async (input, ctx) => {
-    if (input.ids.length) await ctx.tx.delete(memberSealedBlobs).where(inArray(memberSealedBlobs.id, input.ids));
+    await lockContactIdentityForRead(ctx.tx);
+    if(input.ids.length){
+      const originals=await ctx.tx.select().from(memberSealedBlobs).where(inArray(memberSealedBlobs.id,input.ids)).for("update");
+      for(const original of originals){const[proof]=await ctx.tx.execute<{removed:boolean}>(sql`select freeholder_member_sealed_removal_proven(${original.id}::uuid) as removed`);if(proof?.removed!==true)throw new ServiceError("conflict","Keep this encrypted file record until its original upload is safely removed or its unused reservation is abandoned.");}
+      await ctx.tx.delete(memberSealedBlobs).where(inArray(memberSealedBlobs.id,input.ids));
+    }
     return { ok: true as const };
   },
 });
@@ -175,8 +198,7 @@ export async function purgeSealedBlobs(): Promise<{ purged: number }> {
   const gone: string[] = [];
   for (const blob of blobs) {
     try {
-      await storage().delete(blob.storageKey);
-      gone.push(blob.id);
+      if(await discardUnwrittenObjectReservation(blob.storageKey)||await deleteWithReceipt(blob.storageKey))gone.push(blob.id);
     } catch {
       // Tried again on the next run.
     }

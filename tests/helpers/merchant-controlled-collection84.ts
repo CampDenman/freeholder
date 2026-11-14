@@ -16,7 +16,14 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
  const forms:Array<{path:string;form:URLSearchParams}>=[];
  const edge=controlledPeriodEdge84({atProviderStart:true,extra:async(url,init)=>{
   const subscription=current();if(!subscription)return null;
-  if(!originalZero)originalZero=structuredClone(zero());
+  if(!originalZero){
+   // Freeze the ORIGINAL fictional bank document once, before any update.
+   // These fields come from the actual bootstrap POST's returned subscription;
+   // the old generic zero-only fixture deliberately did not model them.
+   const original=z.object({collection_method:z.literal("charge_automatically"),default_payment_method:z.string().min(1),automatic_tax:z.object({enabled:z.literal(false)}).passthrough(),
+    discounts:z.array(z.unknown()).length(0),default_tax_rates:z.array(z.unknown()).length(0),transfer_data:z.object({destination:z.string().nullable()}).passthrough().nullable(),on_behalf_of:z.string().nullable()}).parse(subscription);
+   originalZero={...structuredClone(zero()),...structuredClone(original),application_fee_amount:null,total_discount_amounts:[],total_taxes:[],total_tax_amounts:[],paid_out_of_band:false};
+  }
   const form=()=>{const actual=new URLSearchParams(init.body as URLSearchParams);forms.push({path:url.pathname,form:actual});return actual;};
   const refresh=(id:string)=>{const invoice=bankInvoices.get(id),lines=bankLines.get(id);if(!invoice||!lines)throw Error("A genuine bank invoice and lines must exist.");const total=lines.reduce((n,line)=>n+Number(line.amount),0);invoice.total=total;invoice.subtotal=total;invoice.amount_due=total;invoice.amount_remaining=total-Number(invoice.amount_paid);};
   if(url.pathname===`/v1/subscriptions/${bankRef(subscription.id)}`&&init.method==="POST"){

@@ -589,6 +589,20 @@
       "when": 1793310000063,
       "tag": "0083_original_cash_inspection_stops",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1793310000064,
+      "tag": "0084_controlled_cash_inspection_lineages",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1793310000065,
+      "tag": "0085_controlled_collection_application",
+      "breakpoints": true
     }
   ]
 }

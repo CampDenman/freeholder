@@ -8,6 +8,7 @@ import {promisify} from "node:util";
 import {createHash,randomUUID} from "node:crypto";
 import {pathToFileURL} from "node:url";
 import postgres from "postgres";
+import {requireTransferDrainAssociation} from "./media-transfer-drain-proof.mjs";
 const exec=promisify(execFile);
 const digest=value=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const conflict=()=>{throw Error("The exact original writer process group has not been proven stopped. The namespace remains fenced.");};
@@ -35,27 +36,35 @@ async function members(group){
  await scan(`/sys/fs/cgroup${group}`,0);
  return(await Promise.all([...pids].map(processIdentity))).filter(Boolean).sort((a,b)=>a.pid-b.pid);
 }
-export async function runMediaWriterDrain({sql,action,namespace,sourceRevision,id}){
+export async function runMediaWriterDrain({sql,action,namespace,sourceRevision,id,planId}){
  if(process.platform!=="linux"||process.getuid?.()!==0)throw Error("Run the writer-drain executor as root on the original Linux host.");
  if(!/^[a-f0-9]{64}$/.test(namespace)||!/^([a-f0-9]{40})$/.test(sourceRevision)||!["capture","verify","release"].includes(action))throw Error("Explicit original namespace, source revision and capture/verify action are required.");
+ if(planId!==undefined&&!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(planId))throw Error("Use the exact original transfer plan UUID for a recovery association.");
  const boot=(await readFile("/proc/sys/kernel/random/boot_id","utf8")).trim();
  if(action==="capture"){
   const drainId=randomUUID();
   // Durable namespace admission closes BEFORE the process inventory is read.
-  await sql.begin(async tx=>{
+  const recovery=await sql.begin(async tx=>{
    await tx`select pg_advisory_xact_lock(1691709,82)`;
    await tx`select set_config('freeholder.media_transfer_operator_v1','1',true)`;
    await tx`insert into media_storage_writer_drains(id,namespace,state,source_revision,executor_identity) values(${drainId},${namespace},'capturing',${sourceRevision},${`linux-systemd:${boot}`})`;
+   if(!planId)return null;
+   const[plan]=await tx`select id from media_storage_transfer_plans where id=${planId}::uuid and state not in ('complete','cancelled')`;
+   if(!plan)conflict();
+   const[row]=await tx`select freeholder_media_transfer_recovery_snapshot(${planId}::uuid,${namespace}) as snapshot`;
+   if(!row?.snapshot)conflict();
+   return requireTransferDrainAssociation({format:"freeholder.media-transfer-drain/v1",planId,namespace,snapshot:row.snapshot},{planId,namespace,snapshot:row.snapshot});
   });
   const original=await unit(),processes=await members(original.ControlGroup);
   if(original.ActiveState!=="active"||!original.InvocationID||!processes.length||!processes.some(value=>value.pid===Number(original.MainPID)))conflict();
-  const snapshot={format:"freeholder.media-writer-drain/v1",boot,unit:"freeholder.service",invocation:original.InvocationID,group:original.ControlGroup,processes};
+  const snapshot={format:"freeholder.media-writer-drain/v1",boot,unit:"freeholder.service",invocation:original.InvocationID,group:original.ControlGroup,processes,...(recovery?{recovery}:{})};
   await sql.begin(async tx=>{
+   await tx`select pg_advisory_xact_lock(1691709,82)`;
    await tx`select set_config('freeholder.media_transfer_operator_v1','1',true)`;
    const changed=await tx`update media_storage_writer_drains set original_processes=${tx.json(snapshot)},state='captured',updated_at=now() where id=${drainId} and state='capturing' returning id`;
    if(changed.length!==1)conflict();
   });
-  return{drainId,state:"captured",next:"Stop freeholder.service using the original host's operator session, then run verify with this drain ID."};
+  return{drainId,state:"captured",...(recovery?{planId:recovery.planId}:{}),next:"Stop freeholder.service using the original host's operator session, then run verify with this drain ID."};
  }
  if(action==="release"){
   await sql.begin(async tx=>{
@@ -63,9 +72,13 @@ export async function runMediaWriterDrain({sql,action,namespace,sourceRevision,i
    await tx`select set_config('freeholder.media_transfer_operator_v1','1',true)`;
    const [original]=await tx`select * from media_storage_writer_drains where id=${id} and namespace=${namespace} and source_revision=${sourceRevision} for update`;
    if(!original||original.state!=="verified"||!original.verified_at||!original.stop_proof_digest)conflict();
-   const active=await tx`select id from media_storage_transfer_plans where source_namespace=${namespace} and state<>'cancelled' limit 1`;
+   const active=await tx`select id from media_storage_transfer_plans where (source_namespace=${namespace} or target_namespace=${namespace}) and state not in ('complete','cancelled') limit 1`;
    const uncertain=await tx`select id from media_object_writes where storage_namespace=${namespace} and state in ('unverified','started','unknown') limit 1`;
-   if(active.length||uncertain.length)conflict();
+   const[association]=await tx`select freeholder_media_transfer_recovery_drain_releasable(${id}::uuid) as releasable`;
+   const[ordinary]=await tx`select freeholder_media_original_drain_releasable(${id}::uuid) as releasable`;
+   if(original.original_processes?.recovery){const[current]=await tx`select freeholder_media_transfer_recovery_snapshot(${original.original_processes.recovery.planId}::uuid,${namespace}) as snapshot`;requireTransferDrainAssociation(original.original_processes.recovery,{planId,namespace,snapshot:current?.snapshot});}
+   if((active.length||original.original_processes?.recovery)?!association?.releasable:!ordinary?.releasable)conflict();
+   if(uncertain.length||planId!==undefined&&original.original_processes?.recovery?.planId!==planId)conflict();
    await tx`update media_storage_writer_drains set state='released',released_at=now(),updated_at=now() where id=${id} and state='verified'`;
   });
   return{drainId:id,state:"released",originalStopWitnessPreserved:true};
@@ -92,7 +105,7 @@ export async function runMediaWriterDrain({sql,action,namespace,sourceRevision,i
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const value=name=>{const i=process.argv.indexOf(`--${name}`);return i>=0?process.argv[i+1]:undefined;};
  const sql=postgres(process.env.DATABASE_URL,{max:1,connection:{TimeZone:"UTC"},onnotice:()=>{}});
- try{console.log(JSON.stringify(await runMediaWriterDrain({sql,action:value("action"),namespace:value("namespace"),sourceRevision:value("source-revision"),id:value("id")})));}
+ try{console.log(JSON.stringify(await runMediaWriterDrain({sql,action:value("action"),namespace:value("namespace"),sourceRevision:value("source-revision"),id:value("id"),planId:value("plan-id")})));}
  catch{console.error("Original writer drain is not verified. Keep the fenced namespace and restore its exact operator evidence.");process.exitCode=1;}
  finally{await sql.end();}
 }

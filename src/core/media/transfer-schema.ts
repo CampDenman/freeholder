@@ -98,7 +98,7 @@ export const mediaStorageTransferSubjects=pgTable("media_storage_transfer_subjec
 
 export interface StorageTransferRevision {kind:"etag"|"generation";key:string;namespace:string;value:string;versionId?:string}
 export const STORAGE_TRANSFER_CALL_KINDS=["source_read","target_probe","target_put","target_verify","target_current","source_delete","source_absence","privacy_read","privacy_delete","privacy_absence","privacy_source_read","privacy_source_delete","privacy_source_absence","recovery_read","source_inventory","target_inventory","source_retirement_inventory","target_erasure_inventory","source_erasure_inventory"] as const;
-export const STORAGE_MEDIA_CALL_KINDS=[...STORAGE_TRANSFER_CALL_KINDS,"ordinary_put","ordinary_delete","multipart_create","multipart_complete","multipart_abort","ordinary_recovery_read","multipart_recovery_inspect","ordinary_retirement_inventory","multipart_retirement_inventory"]as const;
+export const STORAGE_MEDIA_CALL_KINDS=[...STORAGE_TRANSFER_CALL_KINDS,"ordinary_put","ordinary_delete","multipart_create","multipart_complete","multipart_abort","multipart_sign","ordinary_recovery_read","multipart_recovery_inspect","ordinary_retirement_inventory","multipart_retirement_inventory"]as const;
 /** One committed row per actual provider invocation. A return is not domain apply. */
 export const mediaStorageTransferCalls=pgTable("media_storage_transfer_calls",{
  id:uuid("id").primaryKey().defaultRandom(),
@@ -126,13 +126,13 @@ export const mediaStorageTransferCalls=pgTable("media_storage_transfer_calls",{
 },t=>[
  index("media_storage_transfer_calls_object_idx").on(t.objectId,t.createdAt,t.id),
  uniqueIndex("media_storage_calls_original_write_idx").on(t.objectReceiptId).where(sql`${t.kind} in ('ordinary_put','ordinary_delete')`),
- uniqueIndex("media_storage_calls_original_multipart_idx").on(t.multipartOperationId).where(sql`${t.kind} in ('multipart_create','multipart_complete','multipart_abort')`),
+ uniqueIndex("media_storage_calls_original_multipart_idx").on(t.multipartOperationId).where(sql`${t.kind} in ('multipart_create','multipart_complete','multipart_abort','multipart_sign')`),
  index("media_storage_calls_receipt_idx").on(t.objectReceiptId,t.createdAt,t.id),
  index("media_storage_calls_multipart_idx").on(t.multipartOperationId,t.createdAt,t.id),
  check("media_storage_calls_original_parent",sql`num_nonnulls(${t.objectId},${t.objectReceiptId},${t.multipartOperationId})=1`),
  uniqueIndex("media_storage_original_quota_token_idx").on(t.namespace,t.quotaToken).where(sql`${t.quotaToken} is not null`),
  index("media_storage_transfer_calls_runtime_idx").on(t.runtimeId,t.state),
- check("media_storage_transfer_calls_kind",sql`${t.kind} in ('source_read','target_probe','target_put','target_verify','target_current','source_delete','source_absence','privacy_read','privacy_delete','privacy_absence','privacy_source_read','privacy_source_delete','privacy_source_absence','recovery_read','source_inventory','target_inventory','source_retirement_inventory','target_erasure_inventory','source_erasure_inventory','ordinary_put','ordinary_delete','multipart_create','multipart_complete','multipart_abort','ordinary_recovery_read','multipart_recovery_inspect','ordinary_retirement_inventory','multipart_retirement_inventory')`),
+ check("media_storage_transfer_calls_kind",sql`${t.kind} in ('source_read','target_probe','target_put','target_verify','target_current','source_delete','source_absence','privacy_read','privacy_delete','privacy_absence','privacy_source_read','privacy_source_delete','privacy_source_absence','recovery_read','source_inventory','target_inventory','source_retirement_inventory','target_erasure_inventory','source_erasure_inventory','ordinary_put','ordinary_delete','multipart_create','multipart_complete','multipart_abort','multipart_sign','ordinary_recovery_read','multipart_recovery_inspect','ordinary_retirement_inventory','multipart_retirement_inventory')`),
  check("media_storage_transfer_calls_state",sql`${t.state} in ('admitted','returned','unknown','stopped')`),
  check("media_storage_transfer_calls_digests",sql`${t.namespace} ~ '^[a-f0-9]{64}$' and ${t.requestDigest} ~ '^[a-f0-9]{64}$' and ${t.callerTokenDigest} ~ '^[a-f0-9]{64}$'`),
  check("media_storage_transfer_calls_return",sql`(${t.state}<>'returned' or (${t.returnedAt} is not null and ${t.resultDigest} ~ '^[a-f0-9]{64}$')) and (${t.state}<>'stopped' or (${t.stoppedAt} is not null and ${t.stopReceiptId} is not null))`),

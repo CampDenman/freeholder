@@ -19,6 +19,17 @@ const INTERNAL = [
   "entitlements.advanceSubscriptionPeriod",
   "subscriptions.completePaidControlledPeriod",
   "subscriptions.pendingPaidControlledPeriods",
+  // C12.38/C1.08: the genuine staged receipt command remains private.
+  "invoicing.applyControlledReceiptBatch",
+  // C1.08/C12.38: exact controlled target and original observation phases stay private.
+  "invoicing.controlledProviderCashObservationAuthority",
+  "invoicing.controlledProviderCollectionAuthority",
+  "subscriptions.planControlledCollectionOperation",
+  "subscriptions.retainControlledInvoiceBinding",
+  "subscriptions.retainControlledInvoiceProof",
+  "subscriptions.retainControlledItemReceipt",
+  // C1.12/C11.08: only the gallery worker can reserve its archive generation.
+  "galleries.claimArchiveObject",
   // C12.38: authenticated parent coverage; internal queries do not admit positive collection.
   "invoicing.controlledProviderFinancialReadiness",
   // C1.08/C12.38: reviewed credit/card and controlled-provider phases.
@@ -446,6 +457,38 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // C12.38/C1.08: the genuine staged receipt command remains private.
+  "invoicing.applyControlledReceiptBatch",
+  // C12.38/C9.33/C9.38: all reviewed original target factory/GET phases remain private.
+  "invoicing.controlledCashInspectionOutcome",
+  "invoicing.prepareControlledCashInspection",
+  "subscriptions.assertControlledPeriodPreviewSource",
+  "subscriptions.assertControlledProrationPreviewSource",
+  "subscriptions.bindObservedControlledCollection",
+  "subscriptions.controlledCollectionOrchestrationState",
+  "subscriptions.planControlledPeriodPreview",
+  "subscriptions.planControlledProrationPreview",
+  "subscriptions.retainControlledPeriodQuote",
+  "subscriptions.retainControlledPeriodTarget",
+  "subscriptions.retainControlledProrationQuote",
+  // C1.08/C12.38: exact controlled target and original observation phases stay private.
+  "invoicing.controlledProviderCashObservationAuthority",
+  "invoicing.controlledProviderCollectionAuthority",
+  "subscriptions.planControlledCollectionOperation",
+  "subscriptions.retainControlledInvoiceBinding",
+  "subscriptions.retainControlledInvoiceProof",
+  "subscriptions.retainControlledItemReceipt",
+  // C1.12/C11.08: reviewed original-byte and gallery phases stay private.
+  "galleries.claimArchiveObject",
+  "media.captureOriginalDeleteRecovery",
+  "media.captureTargetPutReviewInventory",
+  "media.readTargetPutReviewInventory",
+  "media.admitTargetPutReviewInventoryRequest",
+  "media.appendTargetPutReviewInventoryPage",
+  "media.finishTargetPutReviewInventory",
+  // C1.12/C11.08: explicit diagnostic mutations retain the real caller and remain private.
+  "platform.authorizeDoctorProbe",
+  "platform.recordDoctorProbe",
   // C12.38: authenticated parent coverage; internal queries do not admit positive collection.
   "invoicing.controlledProviderFinancialReadiness",
   // C1.08/C12.38: reviewed credit/card and controlled-provider phases.
@@ -671,6 +714,7 @@ const CALLER_AUTHORIZED_PHASES = [
   "invoicing.recordCashReturnObservation",
   "invoicing.assertMerchantCashInspectionInvocation",
   "invoicing.cashInspectionRecoveryPlan",
+  "invoicing.cashInspectionRecoveryList",
   "invoicing.finishMerchantCashReturnInspection",
   "invoicing.finalizeUnappliedCashReturn",
   "invoicing.subscriptionChargeDisposition",

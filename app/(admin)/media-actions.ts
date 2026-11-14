@@ -45,7 +45,7 @@ export async function reconcileStorageAction(_previous: MediaActionState, form: 
   try {
     const actor = await actorFromToken((await cookies()).get(SESSION_COOKIE)?.value);
     await reconcileStorageOperation.call({ id: text(form, "id"), expectedUpdatedAt: text(form, "expectedUpdatedAt"),
-      originalNamespace: text(form, "originalNamespace"), originalKey:text(form,"originalKey")||undefined,outcome: text(form, "outcome"), sha256: text(form, "sha256") || undefined,
+      stopDrainId:text(form,"stopDrainId")||undefined,originalNamespace: text(form, "originalNamespace"), originalKey:text(form,"originalKey")||undefined,outcome: text(form, "outcome"), sha256: text(form, "sha256") || undefined,
       bytes: text(form, "bytes") ? Number(text(form, "bytes")) : undefined,
       providerFinalReference: text(form, "providerFinalReference"), providerEvidence: text(form, "providerEvidence"),
       stoppedWriterEvidence: text(form, "stoppedWriterEvidence"), confirmation: text(form, "confirmation") }, actor);

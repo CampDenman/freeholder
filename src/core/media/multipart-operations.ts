@@ -6,7 +6,7 @@ import {assertPhysicalStorageAbsence} from "./physical-absence";
 import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C11.08: commit original intent, call its provider, then record facts.
 import {createHash,randomUUID} from "node:crypto";
-import {and,asc,eq,inArray,isNull} from "drizzle-orm";
+import {and,asc,eq,inArray,isNull,sql} from "drizzle-orm";
 import {boundStorage} from "@/adapters/storage";
 import type {StorageTransferRevision} from "./transfer-schema";
 import type {MultipartPart,StorageBinding} from "@/adapters/storage/types";
@@ -21,12 +21,19 @@ import {mediaMultipartOperations,mediaMultipartResources} from "./multipart-sche
 import {allowMediaReceiptWrites,lockObjectDigest,objectKeyDigest,storageOperationsHeld} from "./write-ledger";
 import {captureMediaErasureCohort,originalMediaErasureRequests} from "./erasure-cohorts";
 import {assertOriginalUploadWritable} from "./upload-ownership";
+import {newMultipartCreateBaseline} from "./multipart-create-baseline-proof";
+import {captureMultipartCreateBaseline} from "./multipart-create-baseline";
+import {configuredOriginalRequestStore} from "./transfer-storage";
+import {requireOriginalMultipartCompletedBody,type OriginalMultipartCreateProof} from "./multipart-completed-proof";
+import {mediaStorageTransferCalls} from "./transfer-schema";
+import {originalMultipartCompleteManifest} from "./multipart-complete-manifest";
+import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
 
 type Resource=typeof mediaMultipartResources.$inferSelect;
 type Upload=typeof mediaUploads.$inferSelect;
 export type BoundMultipart=Awaited<ReturnType<typeof boundStorage>>&{resource:Resource};
 const uncertain=["started","unknown"]as const;
-const partsHash=(parts:MultipartPart[])=>createHash("sha256").update(JSON.stringify(parts.map(({partNumber,etag})=>({partNumber,etag})))).digest("hex");
+const partsHash=(parts:MultipartPart[])=>createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 function conflict(message="This original multipart operation needs recovery before another physical call."):never{throw new ServiceError("conflict",message);}
 
 /** Caller has already authorized this logical reservation in the same TX. */
@@ -37,7 +44,8 @@ export async function reserveMultipart(ctx:ServiceContext,upload:Upload,binding:
  if(!pointer?.reservationId||pointer.uploadId!==upload.id)conflict("The exact new multipart reservation has no original birth witness.");
  const[resource]=await ctx.tx.insert(mediaMultipartResources).values({originalReservationId:pointer.reservationId,uploadId:upload.id,key:upload.storageKey,keyDigest:objectKeyDigest(upload.storageKey),namespace:binding.namespace,storageKind:binding.kind,storageLocation:{...binding.location},contentType:upload.declaredMime,expectedBytes:upload.expectedBytes,actor:actorString(ctx.actor),contactId:upload.ownerContactId,state:"creating"}).returning();
  const[operation]=await ctx.tx.insert(mediaMultipartOperations).values({resourceId:resource!.id,kind:"create",state:"started",writerRuntimeId:mediaWriterRuntimeId,actor:actorString(ctx.actor)}).returning();
- await admitOriginalMultipartCaller(ctx.tx,operation!.id,"multipart_create",ctx.actor);
+ const caller=await admitOriginalMultipartCaller(ctx.tx,operation!.id,"multipart_create",ctx.actor);
+ await ctx.tx.update(mediaMultipartOperations).set({createBaseline:newMultipartCreateBaseline({callId:caller.id,namespace:binding.namespace,keyDigest:resource!.keyDigest})}).where(eq(mediaMultipartOperations.id,operation!.id));
  return operation!.id;
 }
 
@@ -120,6 +128,7 @@ export async function createOriginalMultipart(uploadId:string,operationId:string
  try{captured=await originalMultipart(uploadId);}catch(error){await retainOriginalMediaCallerReturn(caller.id,caller.token,{notAttempted:true});await notAttempted(operationId);throw error;}
  let acknowledged=false,observedId:string|undefined;
  try{
+  await captureMultipartCreateBaseline(operationId,captured.binding);
   const result=await withTransferRequestScope({callId:caller.id,token:caller.token,runtimeIdentity:caller.runtimeIdentity},()=>captured.store.directMultipart!.create(captured.resource.key,captured.resource.contentType,{request:observeTransferRequest,onAccepted:async result=>{acknowledged=true;observedId=result?.uploadId;if(!observedId)conflict();await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,uploadId:observedId});}}));
   acknowledged=true;observedId=result.uploadId;
   if(!(await retainOriginalMediaCallerReturn(caller.id,caller.token,{accepted:true,providerUploadId:observedId})).settled)conflict();
@@ -142,17 +151,29 @@ export async function claimMultipartComplete(ctx:ServiceContext,uploadId:string,
  const{resource,upload}=await lockMultipartUpload(ctx.tx,uploadId);await assertOriginalUploadWritable(ctx.tx,upload.ownerContactId,upload.uploadedBy);
  if(upload.expiresAt<=new Date())conflict("The original upload reservation expired before completion admission.");
  if(["aborted","expired","failed"].includes(upload.state)||["unverified","creating","aborting","aborted"].includes(resource.state))conflict();
- const manifest=parts.map(({partNumber,etag})=>({partNumber,etag})),digest=partsHash(manifest);
  const operations=await ctx.tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.resourceId,resource.id)).orderBy(asc(mediaMultipartOperations.createdAt),asc(mediaMultipartOperations.id)).for("update");
  if(operations.some(row=>row.kind!=="complete"&&uncertain.includes(row.state as typeof uncertain[number])))conflict();
  const prior=operations.filter(row=>row.kind==="complete"&&row.state!=="not_applied").at(-1);
- if(prior){if(prior.partsDigest!==digest)conflict("The original completion used a different exact part manifest.");return{operationId:prior.id,recoverOnly:true};}
+ if(prior){if(partsHash(prior.parts.map(({partNumber,etag})=>({partNumber,etag})))!==partsHash(parts.map(({partNumber,etag})=>({partNumber,etag}))))conflict("The original completion used a different exact part manifest.");return{operationId:prior.id,recoverOnly:true};}
  if(resource.state!=="open")conflict();
+ const creation=operations.filter(row=>row.kind==="create");if(creation.length!==1||!creation[0]?.partBodies)conflict("Keep this original upload for review. Its original file declaration is unavailable.");
+ const manifest=originalMultipartCompleteManifest(parts,creation[0].partBodies),digest=partsHash(manifest);
+ const[ready]=await ctx.tx.execute<{ready:boolean}>(sql`select freeholder_media_multipart_complete_intent_ready(${resource.id}::uuid) as ready`);if(ready?.ready!==true)conflict("Keep the original upload for review. Every upload-link attempt needs its exact original return evidence before completion.");
  const[operation]=await ctx.tx.insert(mediaMultipartOperations).values({resourceId:resource.id,kind:"complete",state:"started",writerRuntimeId:mediaWriterRuntimeId,providerUploadId:resource.providerUploadId,parts:manifest,partsDigest:digest,actor:actorString(ctx.actor)}).returning();
  await ctx.tx.update(mediaMultipartResources).set({state:"completing",updatedAt:new Date()}).where(eq(mediaMultipartResources.id,resource.id));
  await ctx.tx.update(mediaUploads).set({state:"processing",updatedAt:new Date()}).where(eq(mediaUploads.id,upload.id));
  await admitOriginalMultipartCaller(ctx.tx,operation!.id,"multipart_complete",ctx.actor);
  return{operationId:operation!.id,recoverOnly:false};
+}
+async function originalMultipartCreateProof(resource:Resource):Promise<OriginalMultipartCreateProof>{
+ const creators=await db().select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,resource.id),eq(mediaMultipartOperations.kind,"create"))).limit(2),creator=creators[0];
+ const callers=creator?await db().select().from(mediaStorageTransferCalls).where(and(eq(mediaStorageTransferCalls.multipartOperationId,creator.id),eq(mediaStorageTransferCalls.kind,"multipart_create"))).limit(2):[],caller=callers[0];
+ if(creators.length!==1||!creator?.createBaseline||creator.createBaseline.state!=="complete"||!creator.writerFinishedAt||creator.state!=="accepted"||callers.length!==1||!caller||caller.state!=="returned"||!caller.returnedAt||!caller.observedAcceptedAt||creator.createBaseline.callId!==caller.id)conflict("Keep the original upload for review. Its original session creation evidence is incomplete.");
+ const physical=await db().select().from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.callId,caller.id)),requests=physical.filter(row=>row.descriptor.kind==="multipart.create"),request=requests[0];
+ if(requests.length!==1||!request||request.state!=="returned"||!request.returnedAt||request.descriptor.binding.namespace!==resource.namespace||request.descriptor.key!==resource.key)conflict();
+ const facts=await db().select().from(mediaStorageTransferRequestObservations).where(eq(mediaStorageTransferRequestObservations.requestId,request.id));
+ if(!resource.providerUploadId||!facts.some(row=>row.facts.stage==="response_body"&&row.facts.detailDigest)||!facts.some(row=>row.facts.stage==="session"&&row.facts.uploadId===resource.providerUploadId))conflict();
+ return{...request,observedUploadId:resource.providerUploadId};
 }
 export async function completeOriginalMultipart(uploadId:string,operationId:string,recoverOnly:boolean):Promise<BoundMultipart>{
  let captured:BoundMultipart;
@@ -167,9 +188,20 @@ export async function completeOriginalMultipart(uploadId:string,operationId:stri
    conflict("The earlier original completion needs exact caller/request recovery; it cannot be retried or adopted from a current-key HEAD.");
   }else{
    if(!caller)conflict();
+   const creation=await originalMultipartCreateProof(captured.resource),store=await configuredOriginalRequestStore(captured.binding);
+   if(!store.readDigestVersioned)conflict("Keep this upload for review. Its original storage cannot verify the complete stored file.");
    let revision:StorageTransferRevision|undefined;
-   await withTransferRequestScope({callId:caller.id,token:caller.token,runtimeIdentity:caller.runtimeIdentity},()=>captured.store.directMultipart!.complete(captured.resource.key,operation.providerUploadId!,operation.parts,{request:observeTransferRequest,onAccepted:async result=>{acknowledged=true;revision=result?.revision;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}}));
-   if(!revision||!(await retainOriginalMediaCallerReturn(caller.id,caller.token,{accepted:true,providerUploadId:operation.providerUploadId!,revision})).settled)conflict();
+   const actual=await withTransferRequestScope({callId:caller.id,token:caller.token,runtimeIdentity:caller.runtimeIdentity},async()=>{
+    if(!captured.store.directMultipart?.inspect)conflict("The original provider cannot verify every declared upload part.");
+    const inspection=await captured.store.directMultipart.inspect(captured.resource.key,operation.providerUploadId!,{request:observeTransferRequest,expectedParts:operation.parts});
+    if(inspection.state!=="open")conflict("The original upload session is unavailable. Keep its receipts for recovery.");
+    await captured.store.directMultipart.complete(captured.resource.key,operation.providerUploadId!,operation.parts,{request:observeTransferRequest,onAccepted:async result=>{acknowledged=true;revision=result?.revision;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}});
+    if(!revision)conflict();
+    const bytes=await store.readDigestVersioned!(captured.resource.key,revision,captured.resource.expectedBytes);if(!bytes)conflict("The original completed upload is unavailable. Keep its original receipt for review.");
+    requireOriginalMultipartCompletedBody(creation,{...bytes,key:captured.resource.key,namespace:captured.binding.namespace},{uploadId:operation.providerUploadId!,namespace:captured.binding.namespace,key:captured.resource.key,revision,maxBytes:captured.resource.expectedBytes});
+    return bytes;
+   });
+   if(!(await retainOriginalMediaCallerReturn(caller.id,caller.token,{accepted:true,providerUploadId:operation.providerUploadId!,revision:actual.revision,sha256:actual.sha256,bytes:actual.bytes,requestProof:actual.requestProof})).settled)conflict();
    acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,finished:true});
   }
   return captured;
@@ -182,17 +214,24 @@ export async function adoptCompletedMultipart(uploadId:string,operationId:string
   await lockContactIdentityForRead(tx);const{operation,resource}=await lockedOperation(tx,operationId);
   const[upload]=await tx.select().from(mediaUploads).where(eq(mediaUploads.id,uploadId)).limit(1).for("update");
   if(!upload||operation.kind!=="complete"||resource.uploadId!==uploadId||!Number.isSafeInteger(bytes)||bytes<0||(requireExpected&&bytes!==resource.expectedBytes))conflict();
+  const[proof]=await tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_completed_result(${operation.id}::uuid) as proven`);
+  const[actual]=await tx.select().from(mediaStorageTransferCalls).where(and(eq(mediaStorageTransferCalls.multipartOperationId,operation.id),eq(mediaStorageTransferCalls.kind,"multipart_complete"))).limit(1);
+  if(proof?.proven!==true||!actual?.resultRevision||!actual.resultSha256||actual.resultBytes!==bytes||sha256!==null&&actual.resultSha256!==sha256)conflict("The original stored file changed during validation. Keep its exact upload receipt for review.");
+  const actualSha256=actual.resultSha256;
   // Preserve an already-admitted physical fact even if its owner was erased
   // while the provider worked. This is no permission to publish or write more.
   const existing=resource.objectReceiptId?(await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,resource.objectReceiptId)).limit(1))[0]:null;
-  if(existing&&(existing.sha256!==sha256||existing.bytes!==bytes||existing.namespace!==resource.namespace))conflict("The original completed object changed.");
+  if(existing&&(existing.deletedAt||existing.redactedAt||existing.sha256!==actualSha256||existing.bytes!==bytes||existing.namespace!==resource.namespace||existing.providerRevisionDigest!==transferDigest(actual.resultRevision)))conflict("The original completed object changed.");
   const id=existing?.id??randomUUID(),now=new Date();
-  if(!existing)await tx.insert(mediaObjectWrites).values({id,originalReservationId:resource.originalReservationId,operation:"put",key:resource.key,keyDigest:resource.keyDigest,namespace:resource.namespace,storageKind:resource.storageKind,storageLocation:resource.storageLocation,sha256,bytes,contentType:resource.contentType,actor:operation.actor,contactId:resource.contactId,state:"accepted",observedAcceptedAt:operation.providerAcceptedAt,writerRuntimeId:operation.writerRuntimeId,writerFinishedAt:operation.writerFinishedAt,writerProtocol:operation.writerRuntimeId?"multipart-receipts-v1":null});
+  if(!existing)await tx.insert(mediaObjectWrites).values({id,originalReservationId:resource.originalReservationId,operation:"put",key:resource.key,keyDigest:resource.keyDigest,namespace:resource.namespace,storageKind:resource.storageKind,storageLocation:resource.storageLocation,sha256:actualSha256,bytes,contentType:resource.contentType,actor:operation.actor,contactId:resource.contactId,state:"accepted",observedAcceptedAt:operation.providerAcceptedAt,writerRuntimeId:operation.writerRuntimeId,writerFinishedAt:operation.writerFinishedAt,writerProtocol:"multipart-receipts-v1",providerRevision:actual.resultRevision,providerRevisionDigest:transferDigest(actual.resultRevision)});
   // This receipt is an actual descendant of the already captured original
   // session, never a new owner/current-key inference after erasure capture.
   for(const request of await originalMediaErasureRequests(tx,[],[resource.id]))await captureMediaErasureCohort(tx,request.requestId,request.scope as "media.storageOperations"|"media.multipartOperations",[id]);
   await tx.update(mediaMultipartOperations).set({state:"accepted",verifiedAt:now,updatedAt:now}).where(eq(mediaMultipartOperations.id,operation.id));
-  await tx.update(mediaMultipartResources).set({state:"completed",completedAt:resource.completedAt??now,retiredAt:resource.retiredAt??now,objectReceiptId:id,updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
+  // Complete object identity is not proof that issued/replayed/in-flight part
+  // authorities were consumed. Only the separate genuine terminal protocol
+  // may retire the session; its current pending state must remain truthful.
+  await tx.update(mediaMultipartResources).set({state:"completed",completedAt:resource.completedAt??now,objectReceiptId:id,updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));
  });
 }
 

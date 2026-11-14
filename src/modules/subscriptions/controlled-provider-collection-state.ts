@@ -91,17 +91,19 @@ export async function controlledCollectionState(tx:Tx,collectionId:string){
  if(binding){
   const source=actual(binding.operationId,binding.callId,binding.factId),creator=history.operations.find(row=>row.id===binding.creatorOperationId);
   if(binding.resourceId!==resource.id||!creator||!history.calls.some(row=>row.operationId===creator.id)||!["controlled_draft_created","invoice_read","invoice_list_read"].includes(source.fact.actual.kind))refuse();
-  const rows=source.fact.actual.kind==="invoice_list_read"?source.fact.actual.raw.data:[source.fact.actual.raw];
-  if(!Array.isArray(rows)||!rows.some(row=>ref(row)===binding.providerInvoiceRef)||binding.originalEvidenceDigest!==merchantTaxDigest({collectionId:collection.id,creator,operation:source.operation,call:source.call,fact:source.fact,providerInvoiceRef:binding.providerInvoiceRef}))refuse();
+  const parsedRows=z.array(z.unknown()).safeParse(source.fact.actual.kind==="invoice_list_read"?source.fact.actual.raw.data:[source.fact.actual.raw]);
+  if(!parsedRows.success)refuse();const rows=parsedRows.data;
+  if(!rows.some(row=>ref(row)===binding.providerInvoiceRef)||binding.originalEvidenceDigest!==merchantTaxDigest({collectionId:collection.id,creator,operation:source.operation,call:source.call,fact:source.fact,providerInvoiceRef:binding.providerInvoiceRef}))refuse();
   const raw=rows.find(row=>ref(row)===binding.providerInvoiceRef);
   if(!raw||typeof raw!=="object"||Array.isArray(raw))refuse();
   assertControlledInvoiceOrigin({resource,manifest,review,history,binding},binding.originKind,creator,source.operation,z.record(z.string(),z.unknown()).parse(raw));
  }
  for(const item of itemReceipts){const source=actual(item.operationId,item.callId,item.factId),creator=history.operations.find(row=>row.id===item.creatorOperationId);
-  if(item.resourceId!==resource.id||!binding||!creator||!history.calls.some(row=>row.operationId===creator.id)||source.fact.actual.kind!=="invoice_lines_read"||!Array.isArray(source.fact.actual.raw.data)
-   ||!source.fact.actual.raw.data.some(row=>ref(row)===item.providerInvoiceLineRef)||item.originalEvidenceDigest!==merchantTaxDigest({componentId:item.componentId,creator,operation:source.operation,call:source.call,fact:source.fact,
+  const parsedRows=z.array(z.unknown()).safeParse(source.fact.actual.raw.data);if(!parsedRows.success)refuse();const rows=parsedRows.data;
+  if(item.resourceId!==resource.id||!binding||!creator||!history.calls.some(row=>row.operationId===creator.id)||source.fact.actual.kind!=="invoice_lines_read"
+   ||!rows.some(row=>ref(row)===item.providerInvoiceLineRef)||item.originalEvidenceDigest!==merchantTaxDigest({componentId:item.componentId,creator,operation:source.operation,call:source.call,fact:source.fact,
     providerInvoiceRef:binding.providerInvoiceRef,providerInvoiceItemRef:item.providerInvoiceItemRef,providerInvoiceLineRef:item.providerInvoiceLineRef,providerPriceRef:item.providerPriceRef}))refuse();
-  const component=components.find(row=>row.id===item.componentId),raw=source.fact.actual.raw.data.find(row=>ref(row)===item.providerInvoiceLineRef);
+  const component=components.find(row=>row.id===item.componentId),raw=rows.find(row=>ref(row)===item.providerInvoiceLineRef);
   if(!component||!raw||typeof raw!=="object"||Array.isArray(raw))refuse();
   const lineage=assertControlledComponentLine({resource,manifest,review,history,binding},component,creator,source.operation,z.record(z.string(),z.unknown()).parse(raw));
   if(lineage.originKind!==item.originKind||lineage.providerInvoiceItemRef!==item.providerInvoiceItemRef||lineage.providerPriceRef!==item.providerPriceRef)refuse();

@@ -1,7 +1,5 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-import {assertPhysicalStorageAbsence} from "./physical-absence";
-import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C3.22/C11.08: original physical intent survives network/process failure.
 import { createHash, randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull, gt, sql } from "drizzle-orm";
@@ -21,7 +19,7 @@ import { pendingObjectIsOwned } from "./object-ledger";
 import {mediaMultipartResources} from "./multipart-schema";
 import {reconcileCommittedStorageObservation} from "./observation-hooks";
 import {assertOriginalUploadWritable,assertMediaActorLive} from "./upload-ownership";
-import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
+import {reconcileMediaErasureCohorts} from "./erasure-cohorts";
 
 export const MEDIA_WRITES_SCOPE = "media.storageOperations";
 const unsettled = new Set(["unverified", "started", "unknown"]);
@@ -58,6 +56,7 @@ export async function discardUnwrittenObjectReservation(key:string):Promise<bool
   if(await pendingObjectIsOwned(key,new Date(),tx))return false;
   const[object]=await tx.select().from(mediaObjects).where(eq(mediaObjects.key,key)).limit(1).for("update");
   if(!object||object.state!=="pending"||(await records(tx,key)).length)return false;
+  if(await storageOperationsHeld(tx,[object.ownerContactId]))return false;
   const active=await tx.select({id:mediaUploads.id}).from(mediaUploads).where(and(eq(mediaUploads.storageKey,key),inArray(mediaUploads.state,["created","uploading","uploaded","processing"]),gt(mediaUploads.expiresAt,new Date()))).limit(1);
   const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.keyDigest,objectKeyDigest(key)),isNull(mediaMultipartResources.retiredAt))).limit(1);
   if(active.length||multipart.length)return false;
@@ -166,16 +165,6 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:C
   }
 }
 
-async function finishActualMediaWriter(id:string):Promise<void>{
- await db().transaction(async tx=>{
-  await allowMediaReceiptWrites(tx);
-  await tx.execute(sql`select pg_advisory_xact_lock_shared(1691709,82)`);
-  const[row]=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,id)).limit(1).for("update");
-  if(!row||row.writerRuntimeId!==mediaWriterRuntimeId||row.writerFinishedAt)return;
-  await tx.update(mediaObjectWrites).set({writerFinishedAt:new Date(),updatedAt:new Date()}).where(eq(mediaObjectWrites.id,id));
- });
-}
-
 export async function observeStorageOperation(id: string, accepted: boolean, settled = true,revision?:StoredObjectRevision): Promise<void> {
   await db().transaction(async tx => {
     await allowMediaReceiptWrites(tx);
@@ -212,59 +201,11 @@ export async function storageOperationsHeld(tx: Tx, owners: Array<string | null>
   return holds.some(hold => owners.includes(null) || owners.includes(hold.contactId));
 }
 
-/** Delete only an unowned, settled object in its original resource namespace.
- * The durable delete attempt fences a concurrent/future PUT for this key.
+/** The existing cleanup lifecycle delegates to exact original physical proof.
+ * Captured adapters cannot grant recovery authority or substitute a namespace.
  */
-export async function deleteWithReceipt(key: string,captured?:CapturedStorage): Promise<boolean> {
-  const transferred=await(await import("./transfer-erasure")).deleteTransferredLineage(key);
-  if(transferred!==undefined)return transferred;
-  if (await pendingObjectIsOwned(key)) return false;
-  const { store, binding } = captured??await boundStorage();
-  const claim = await db().transaction(async tx => {
-    await lockContactIdentityForRead(tx);
-    await lockObject(tx, key);
-    await allowMediaReceiptWrites(tx);
-    if (await pendingObjectIsOwned(key, new Date(), tx)) return null;
-    const [object] = await tx.select().from(mediaObjects).where(eq(mediaObjects.key, key)).limit(1).for("update");
-    const history = await records(tx, key);
-    const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.keyDigest,objectKeyDigest(key)),isNull(mediaMultipartResources.retiredAt))).limit(1);
-    if(multipart.length)return null;
-    if (!history.length || history.some(row => unsettled.has(row.state))) return null;
-    const live = history.filter(row => !row.deletedAt);
-    if (history.some(row => !row.namespace || row.namespace !== binding.namespace)) return null;
-    if (object?.state === "attached" || await storageOperationsHeld(tx, history.map(row => row.contactId))) return null;
-    requireDurableMediaRetirementProof();
-    const completed = history.find(row => row.operation === "delete" && row.state === "accepted" && row.namespace === binding.namespace);
-    if (completed && !live.length) {
-      if (object) await tx.delete(mediaObjects).where(eq(mediaObjects.key, key));
-      return { done: true as const };
-    }
-    const id = randomUUID(), original = history.filter(row => row.operation === "put" && row.state === "accepted" && !row.deletedAt).at(-1) ?? history.at(-1);
-    await tx.insert(mediaObjectWrites).values({ id,originalReservationId:original?.originalReservationId, operation: "delete", key, keyDigest: objectKeyDigest(key), namespace: binding.namespace, storageKind: binding.kind, storageLocation: binding.location,
-      sha256: original?.sha256 ?? null, bytes: original?.bytes ?? null, contentType: original?.contentType ?? "application/octet-stream", actor: "system:media-cleanup", contactId: original?.contactId ?? null, state: "started",writerRuntimeId:mediaWriterRuntimeId });
-    for(const request of await originalMediaErasureRequests(tx,history.map(row=>row.id)))await captureMediaErasureCohort(tx,request.requestId,request.scope as "media.storageOperations"|"media.multipartOperations",[id]);
-    return { done: false as const, id };
-  });
-  if (!claim) return false;
-  if (claim.done) return true;
-  try {
-    await store.delete(key);
-    await finishActualMediaWriter(claim.id);
-    // Preserve the positive DELETE acknowledgement even if verification or
-    // its local commit subsequently fails. It is distinct from absence.
-    await observeStorageOperation(claim.id, true, false);
-    await assertPhysicalStorageAbsence(store,key);
-    await db().transaction(async tx => {
-      await allowMediaReceiptWrites(tx);
-      await lockObject(tx, key);
-      await tx.update(mediaObjectWrites).set({ state: "accepted", observedAcceptedAt: new Date(), deletedAt: new Date(), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, claim.id));
-      await tx.update(mediaObjectWrites).set({ deletedAt: new Date(), updatedAt: new Date() }).where(and(eq(mediaObjectWrites.keyDigest, objectKeyDigest(key)), eq(mediaObjectWrites.namespace, binding.namespace), isNull(mediaObjectWrites.deletedAt)));
-      await tx.delete(mediaObjects).where(and(eq(mediaObjects.key, key), eq(mediaObjects.state, "pending")));
-    });
-    return true;
-  } catch (error) {
-    await finishActualMediaWriter(claim.id).catch(()=>{});
-    await observeStorageOperation(claim.id, false).catch(() => {});
-    throw error;
-  }
+export async function deleteWithReceipt(key:string,captured?:CapturedStorage):Promise<boolean>{
+ const transferred=await(await import("./transfer-erasure")).deleteTransferredLineage(key);
+ if(transferred!==undefined)return transferred;
+ return(await import("./original-retirement")).retireOriginalMediaObject(key,captured?.binding);
 }
