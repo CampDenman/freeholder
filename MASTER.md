@@ -3565,6 +3565,15 @@ open the admin until Thursday still needs to know about Monday.
 ## 43. Product Completion Plan — the live checklist
 
 
+Receipt companion preservation-control continuation2026-11-14 (C12.38): V109
+focused source guard correctly refuses the new companion's changed whole-file
+SHA after its explicit real receipt witness scope extension. The historical
+GET-fixture guard now first reverses ONLY that recorded scope delta, then
+requires the SAME exact original whole file/hash/180s. No production or monetary
+assertion changes; V109 failure retained. Full current qualification pending.
+
+
+
 Three original auxiliary natives checkpoint2026-11-14 (C12.38/C1.08/C11.10):
 exact859e4211 sourceV107 fulltypes/lint/1588actual/254files/543explicitDBskips
 PASS. FreshV70/V71/V72 each ordinary86/strict161models/365guards/417wholefunctions/
