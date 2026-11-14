@@ -41,7 +41,7 @@ import {ORIGINAL_MULTIPART_PART_BYTES} from "./multipart-part-bodies-proof";
 import {claimOriginalPartIssuance,finishUnattemptedPartIssuance,issueOriginalMultipartPart} from "./multipart-part-issuance";
 import {transferDigest} from "./transfer-proof";
 import {withOriginalMultipartInvocation} from "./provider-callers";
-import {reserveMultipart,createOriginalMultipart,originalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
+import {reserveMultipart,createOriginalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
 import {
   storageKey,
   type MultipartPart,
