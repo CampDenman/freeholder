@@ -23,8 +23,9 @@ export const prorationCreditSource = defineService({ name: "subscriptions.prorat
     const [original] = await ctx.tx.select().from(invoices).where(eq(invoices.id, accepted.originalInvoiceId)).limit(1);
     const [sourceLine] = await ctx.tx.select().from(invoiceLines).where(eq(invoiceLines.id, accepted.originalInvoiceLineId)).limit(1);
     const lines = await ctx.tx.select().from(creditNoteLines).where(eq(creditNoteLines.creditNoteId, note.id)).limit(2);
+    const atomicSiblings=original&&original.refundedMinor!==0?await(await import("@/modules/invoicing/atomic-credit-invoice-disposition")).readAtomicCreditInvoiceDisposition(ctx,{subscriptionId:accepted.subscriptionId,originalInvoiceId:original.id}):null;
     if (!original || !sourceLine || sourceLine.invoiceId !== original.id || original.sourceType !== "subscription" || original.sourceId?.split(":")[0] !== accepted.subscriptionId
-      || original.currency !== accepted.snapshot.currency || original.status !== "paid" || BigInt(original.paidMinor)+BigInt(original.creditedMinor)!==BigInt(original.totalMinor) || original.refundedMinor !== 0
+      || original.currency !== accepted.snapshot.currency || original.status !== "paid" || BigInt(original.paidMinor)+BigInt(original.creditedMinor)!==BigInt(original.totalMinor) || original.refundedMinor !== 0&&atomicSiblings?.kind!=="atomic_sibling_disposition.v1"
       || lines.length !== 1 || lines[0]!.invoiceLineId !== sourceLine.id || lines[0]!.subtotalMinor !== accepted.creditNetMinor || lines[0]!.taxMinor !== accepted.creditTaxMinor
       || accepted.creditNetMinor>sourceLine.subtotalMinor-sourceLine.discountMinor || accepted.creditTaxMinor>sourceLine.taxMinor)
       throw new ServiceError("conflict", "The issued proration credit does not reproduce its exact originally paid principal and tax line.");

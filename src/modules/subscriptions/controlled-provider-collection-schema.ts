@@ -9,7 +9,8 @@ import { merchantTaxProfileVersions } from "@/modules/invoicing/merchant-tax-sch
 import { subscriptionCommercialTerms } from "./schema";
 import { subscriptionProrations } from "./proration-schema";
 import { subscriptionControlledResources,subscriptionControlledOperations,subscriptionControlledCalls,subscriptionControlledFacts } from "./controlled-provider-schema";
-import type { ControlledTargetInput,ControlledTargetReview,ControlledComponentProvenance } from "./controlled-provider-collection-contract";
+import type { ControlledTargetInput,ControlledComponentProvenance } from "./controlled-provider-collection-contract";
+import type {ControlledStoredTargetReview} from "./controlled-provider-private-review-contract";
 export const subscriptionControlledQuotes=pgTable("subscription_controlled_quotes",{
  id:uuid("id").primaryKey(),kind:text("kind",{enum:["period","proration"]}).notNull(),canonicalSourceId:text("canonical_source_id").notNull(),resourceId:uuid("resource_id").notNull().references(()=>subscriptionControlledResources.id,{onDelete:"restrict"}),
  previousTermsId:uuid("previous_terms_id").notNull().references(()=>subscriptionCommercialTerms.id,{onDelete:"restrict"}),
@@ -19,7 +20,7 @@ export const subscriptionControlledQuotes=pgTable("subscription_controlled_quote
  customerFinancialOperationId:uuid("customer_financial_operation_id").notNull().references(()=>subscriptionControlledOperations.id,{onDelete:"restrict"}),
  nativePreviewOperationId:uuid("native_preview_operation_id").notNull().references(()=>subscriptionControlledOperations.id,{onDelete:"restrict"}),
  updatePreviewOperationId:uuid("update_preview_operation_id").notNull().references(()=>subscriptionControlledOperations.id,{onDelete:"restrict"}),
- input:jsonb("input").$type<ControlledTargetInput>(),review:jsonb("review").$type<ControlledTargetReview>(),
+ input:jsonb("input").$type<ControlledTargetInput>(),review:jsonb("review").$type<ControlledStoredTargetReview>(),
  inputDigest:text("input_digest").notNull(),reviewDigest:text("review_digest").notNull(),redactedAt:timestamp("redacted_at",{withTimezone:true}),
  quotedParentRevision:text("quoted_parent_revision").notNull(),sourceRevision:text("source_revision").notNull(),quoteDigest:text("quote_digest").notNull(),effectiveAt:timestamp("effective_at",{withTimezone:true}).notNull(),createdAt:createdAtColumn(),
 },t=>[foreignKey({name:"subscription_controlled_quotes_profile_version",columns:[t.profileId,t.profileVersion],foreignColumns:[merchantTaxProfileVersions.profileId,merchantTaxProfileVersions.version]}).onDelete("restrict"),index("subscription_controlled_quotes_resource").on(t.resourceId),uniqueIndex("subscription_controlled_quotes_proration").on(t.plannedProrationId),uniqueIndex("subscription_controlled_quotes_collection").on(t.plannedCollectionId),

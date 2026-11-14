@@ -3565,6 +3565,15 @@ open the admin until Thursday still needs to know about Monday.
 ## 43. Product Completion Plan — the live checklist
 
 
+B isolated ROOT source composition2026-11-14 (C12.38/C9.33/C1.08): frozen
+a39244d7 is combined with qualified root5f647179 in a separate review checkout.
+The WHOLE1063073-byte85 prefix is preserved before its exact238979-byte owned
+tail. Two purpose models/seven new functions/four complete old successors/four
+trigger declarations remain UNAPPLIED and UNQUALIFIED. Root5f qualification and
+native work are untouched. No B availability, checklist closure or stable claim.
+See `deploy/atomic-credit-fee-root-assembly-20261114.json`.
+
+
 Current stable-v1 status2026-11-14 (owner requires FULL specification): the
 canonical plan still has373 unique IDs/323checked/50open. No new deferral,
 stable release, main merge, production deployment or announcement is complete.
@@ -3811,6 +3820,89 @@ Full fresh source/schema/SDK/original180s native remain required. No C/stable
 closure; B/C/media/provider/recovery/security/signature gates stay open. See
 `deploy/atomic-refund-bank-alias161-root-assembly.manifest.json`.
 
+B bounded source checkpoint2026-11-14 (C12.38/C9.33/C1.08): approved two
+immutable purpose children now have actual parent-first retention, seven full
+new SQL bodies, four complete old-body-preserving successors, exact readiness
+and four actual trigger declarations. Shared full-PG parent/undo/archive
+consumers and per-subscription safe privacy exports now consume exact B2 FKs;
+profile is restriction only, one5000/old-empty shapes retained. Exact key leaf77a
+preserves signing/rotation/missing-key semantics. New real-service/HTTP B birth,
+caught-fault rollback and genuine queued deferred-event controls are PREPARED
+UNRUN, alongside exact reversals/private canaries/epoch/5000 refusals. Original
+whole fee native and180s remain byte-exact. No compiler/lint/parser/model/tests/
+PG/provider execution, root edits, assembly, B availability or stable claim.
+Independent applied-credit compensation/unwind, own-refunded residual capacity
+and noncash/unknown-stop/out-of-band/late-consent work remain REQUIRED; no old
+application/history reversal or debt forgiveness is introduced.
+
+B private final-delta/consumer SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08):
+both deferred final-conservation bodies and six new function bodies now exist
+as isolated UNRUN source; no readiness/trigger enabled. Actual shared central
+financial witness and invoice/merchant/subscription safe archives now consume
+exact B child/source ancestors conditionally, preserving old parent counts and
+empty shapes. Two original full successors have exact old literal reversals;
+two remaining successors, readiness/enabled pins and actual native controls
+remain unfinished. Root approved only the additional narrow original invoice
+refund birth gate for authentic NEW B/current whole sibling proof. No root
+edits, execution, qualification, B acceptance or stable claim here.
+
+B private owner-delta SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08): reservation
+purpose BEFORE source now independently checks actual newborn parent/root,
+held complete callback/canonical prefix/current source and only-own-parent PG
+reconstruction. New private exact full-PG-verified subscription/proration
+preimages preserve original pending-plan/job/task/state plus PostgreSQL exact
+timestamp precision; four prepared controls remain UNRUN. Both mandatory
+deferred whole-final-delta functions, readiness and old successors remain
+unfinished; no trigger enabled, no root assembly/execution/qualification.
+
+B private SQL/footprint SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08): actual
+legacy-application positive ancestry and original absolute-root candidates now
+exist in the isolated tail, plus genuine funding-purpose BEFORE preimage/birth/
+held-prefix/current-bank checks. Four remaining new function bodies, complete
+deferred final conservation, old successors and readiness/trigger pins are NOT
+complete or enabled. Collector-free exact-parent fullPG/MAC witnesses and safe
+buyer/owned-profile merchant archive helpers now exist; four private-canary
+controls PREPARED/UNRUN. No root collector/SQL assembly or execution changed.
+Private WIP remains unsuitable for integration or any qualification/stable
+claim; required full current physical/caller/loan conservation is not waived.
+
+B private persistence SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08): signed private
+stored-review declaration now binds server-planned funding/proration and exact
+actual accepted source ancestry without changing public DTOs or asserting an
+old quote HMAC. Positively proved old applications use their own immutable
+original epoch, never an invented payment offset. Actual funding/reservation
+writers retain their real parent then same-TX purpose child; exact B intervals
+replace proportional repricing only for authenticated B funding. Seven new
+declaration controls plus prior fifteen math/MAC controls are PREPARED/UNRUN.
+SQL birth/final conservation guards, old complete successors and central safe
+witness integration remain unfinished; private checkpoint is NOT an
+integration/qualification/readiness/stable claim. No execution occurred here.
+
+B reservation segment private SOURCE WIP2026-11-14 (C12.38/C9.33/C1.08):
+root approved the additional purpose-child inventory. Child schema/strict
+contract/MAC and pure interval arithmetic now preserve separate ORIGINAL epoch
+start/end/caps and ABSOLUTE selected endpoints. Nonzero100/[104,105), nested
+slices/holes/retired/proven/owed and tampering have fifteen prepared controls,
+ALL UNRUN. Explicit table/private/noTTL source metadata added in isolation;
+actual FK/current-bank/persistence/SQL candidate/BEFORE+deferred mandatory-birth
+guards/old-consumer continuations and all qualification remain unfinished.
+No current authority, release, B completion or stable claim; original funding/
+reservation/application rows and their old hash domains remain unchanged.
+
+B reservation economic-segment INVENTORY2026-11-14 (C12.38/C9.33/C1.08):
+source audit proves existing reservation fee scalars/opaque digest do not retain
+the original root interval; repricing a4199/F400 retired1/current399 source at
+399/4199 changes first21 fee2 to1. ONE additional immutable reservation-purpose
+child is PROPOSED before schema/guard implementation: actual parent PK/fullPG,
+five named RESTRICT FKs, original interval/nominal/retired/assigned/proven/owed
+conservation, actual sameTX child birth with mandatory deferred check. Existing
+application reservation PK+FK proves one-to-one derivation without another
+application model. No parent columns/backfill/idempotency-key authority, old
+non-B floor/hash changes, provider chronology guesses or generic applied-credit
+release. Exact source/privacy/central witness and function/trigger inventory is
+`deploy/atomic-credit-reservation-segments84.inventory.json`; root review,
+implementation and all execution remain pending. This inventory establishes no
+readiness, credit-return completion, stable or release claim.
 
 Atomic bank record-alias SOURCE successor2026-11-14 (C12.38/C9.33/C1.08):
 independent source audit finds one nested JSON alias actual_refund colliding

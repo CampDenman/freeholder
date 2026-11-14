@@ -159,6 +159,8 @@ export const RETENTION_TABLE_OPT_OUTS: Record<string, string> = {
   subscription_prorations: "Immutable accepted original proration evidence has no TTL; original financial/privacy holds own minimization.",
   subscription_proration_principal: "Original principal allocations have no TTL; deleting cash/credit ancestry cannot release a promise.",
   subscription_proration_credit_uses: "Explicit accepted credit use has no TTL; original financial/privacy holds own retention.",
+  invoice_credit_funding_atomic_fee_partitions: "Immutable original credit fee capacity and actual retired-resource proof has no TTL; preserve its whole source/target financial lineage.",
+  invoice_credit_reservation_atomic_fee_partitions: "Immutable original credit reservation fee intervals have no TTL; preserve actual source, application, issued promise and successor-locked financial lineage.",
   invoice_credit_funding: "Immutable issued credit principal funding has no TTL; financial/legal holds retain its whole exact lineage.",
   invoice_credit_reservations: "Customer credit reservations have no TTL; only the authorized original promise can release capacity.",
   invoice_credit_applications: "Immutable noncash invoice consideration has no TTL; original invoice/legal holds govern retention.",

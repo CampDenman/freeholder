@@ -1,0 +1,761 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "ISOLATED_ROOT_SOURCE_COMPOSED_UNAPPLIED_UNQUALIFIED",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "rootBefore": "5f64717910a931159315308901ab17c40e946a4b",
+  "leaf": "a39244d7d926d022a08861dbe3dd598f6df295ba",
+  "frozenManifestSha256": "83b4ace6dc73b3db4a886be7fce5067605c57ad1004641eed23d209a750c74d6",
+  "normal85": {
+    "paths": [
+      "db/migrations/0085_controlled_collection_application.sql",
+      "deploy/sql/0085_controlled_collection_application.unapplied.sql"
+    ],
+    "beforeBytes": 1063073,
+    "beforeSha256": "8b12245ceb657877e3ad4b739fb02c5c5efa3f3d412c7cf2b69d9d3e4b8ef6f8",
+    "afterBytes": 1302078,
+    "afterSha256": "6c3ab59720fc79464529391c2a629d42d032110456bb9576c7b10654790731a2",
+    "entirePrefixExact": true,
+    "separator": "\n--> statement-breakpoint\n",
+    "tailBytes": 238979,
+    "tailSha256": "a356812761a9f1cd08331fca6da5ee01b96da85821d473a0e8155568fc7d60e7"
+  },
+  "oldFourLatestWholeBodyHashesVerified": [
+    {
+      "signature": "freeholder_credit_fee_receipt()",
+      "beforeBodySha256": "fcc76d3684e78e2968c2f36472a6225b24d15283c50312b7bbaa377debb2e5bd",
+      "afterBodySha256": "603e87240f516be268c773240cb4f1b1caea437199f9883140fc503f6c2228e7"
+    },
+    {
+      "signature": "freeholder_credit_fee_is_collected(uuid,text)",
+      "beforeBodySha256": "a722a59e49688ea475439d68fa72d6156682b23471befcb5e99d227dcff9f414",
+      "afterBodySha256": "b0c528b93cad5cbbcdbdab52e74c14dcfd572a712e14bed617406b0b0383f21e"
+    },
+    {
+      "signature": "freeholder_guard_invoice_credit()",
+      "beforeBodySha256": "34750c60606f249477dc1dc8c565c38966317aebf6a7e6f4e23a108c90f71900",
+      "afterBodySha256": "257e9ff9cd6e027ee167eef9d96e43ba20edfcb8c5a6c6acfe8eecc053d234de"
+    },
+    {
+      "signature": "freeholder_subscription_proration_receipt()",
+      "beforeBodySha256": "4fb34f9f6ccd19b9a30e075f14d41b6acd3bffaab8043e5cdcacc0c9a4a05ddb",
+      "afterBodySha256": "7f1528a6b44ea1c47cd49f6479690ae42f2328c43d17ef2b13c017c4257d61c2"
+    }
+  ],
+  "files": [
+    {
+      "path": ".changeset/original-atomic-credit-fee-partitions.md",
+      "frozen": {
+        "bytes": 376,
+        "sha256": "8c7d978f37eb5a6a21a1a364fabe5a579a09ebc3101e0a2a3e06f36e85746ff2"
+      },
+      "composedBytes": 376,
+      "composedSha256": "8c7d978f37eb5a6a21a1a364fabe5a579a09ebc3101e0a2a3e06f36e85746ff2",
+      "frozenExact": true
+    },
+    {
+      "path": "MASTER.md",
+      "frozen": {
+        "bytes": 1457616,
+        "sha256": "4748c2a59f9c9e55ddf422d6b4e9a1455afe109becbdb99083f74f23213fe65d"
+      },
+      "composedBytes": 1481654,
+      "composedSha256": "e21e01c789f8f1db69cd5cb41b4f8a9f0f70ceea9222160897927127e7ee62a7",
+      "frozenExact": false
+    },
+    {
+      "path": "deploy/atomic-credit-fee-old-functions84.before.json",
+      "frozen": {
+        "bytes": 26302,
+        "sha256": "0317666679ed1270623f74dc7c6aab8bcd2b3cc0fd7c92c14ff016c4719aec37"
+      },
+      "composedBytes": 26302,
+      "composedSha256": "0317666679ed1270623f74dc7c6aab8bcd2b3cc0fd7c92c14ff016c4719aec37",
+      "frozenExact": true
+    },
+    {
+      "path": "deploy/atomic-credit-fee-partition84-source-20261114.md",
+      "frozen": {
+        "bytes": 8452,
+        "sha256": "1b2fb5f5713f752c603f22843f8a357101bbd27ab6effa61c949670f1f75f82e"
+      },
+      "composedBytes": 8452,
+      "composedSha256": "1b2fb5f5713f752c603f22843f8a357101bbd27ab6effa61c949670f1f75f82e",
+      "frozenExact": true
+    },
+    {
+      "path": "deploy/atomic-credit-fee-partition84-wip-20261114.md",
+      "frozen": {
+        "bytes": 14425,
+        "sha256": "a3fcdae3ce172773bbf5ea870f35e154619d3ba2c1d0f4b57c03f8d0991a49bb"
+      },
+      "composedBytes": 14425,
+      "composedSha256": "a3fcdae3ce172773bbf5ea870f35e154619d3ba2c1d0f4b57c03f8d0991a49bb",
+      "frozenExact": true
+    },
+    {
+      "path": "deploy/atomic-credit-fee-partition84.fragment.sql",
+      "frozen": {
+        "bytes": 238979,
+        "sha256": "a356812761a9f1cd08331fca6da5ee01b96da85821d473a0e8155568fc7d60e7"
+      },
+      "composedBytes": 238979,
+      "composedSha256": "a356812761a9f1cd08331fca6da5ee01b96da85821d473a0e8155568fc7d60e7",
+      "frozenExact": true
+    },
+    {
+      "path": "deploy/atomic-credit-fee-partition84.inventory.json",
+      "frozen": {
+        "bytes": 13055,
+        "sha256": "f23ae257a1d30959e8c336e16a0635dac48b5f610957e06910fee21844b221b9"
+      },
+      "composedBytes": 13055,
+      "composedSha256": "f23ae257a1d30959e8c336e16a0635dac48b5f610957e06910fee21844b221b9",
+      "frozenExact": true
+    },
+    {
+      "path": "deploy/atomic-credit-fee-readiness84.source.json",
+      "frozen": {
+        "bytes": 23032,
+        "sha256": "967edd8d21a15dca62a553eb94780150f46e98a8a5f2fc5a4cee66383ff3376d"
+      },
+      "composedBytes": 23032,
+      "composedSha256": "967edd8d21a15dca62a553eb94780150f46e98a8a5f2fc5a4cee66383ff3376d",
+      "frozenExact": true
+    },
+    {
+      "path": "deploy/atomic-credit-fee-successors84.wip.json",
+      "frozen": {
+        "bytes": 108948,
+        "sha256": "0c7c1206f5bf2a93fadf565fa3e87339fef13c3ccae60da6271da40ba23dae7e"
+      },
+      "composedBytes": 108948,
+      "composedSha256": "0c7c1206f5bf2a93fadf565fa3e87339fef13c3ccae60da6271da40ba23dae7e",
+      "frozenExact": true
+    },
+    {
+      "path": "deploy/atomic-credit-reservation-segments84-source-20261114.md",
+      "frozen": {
+        "bytes": 2881,
+        "sha256": "33a70ee6f9a604dfa68542970b299c033671dc67c4c28e3b1f8f887a1c6211c9"
+      },
+      "composedBytes": 2881,
+      "composedSha256": "33a70ee6f9a604dfa68542970b299c033671dc67c4c28e3b1f8f887a1c6211c9",
+      "frozenExact": true
+    },
+    {
+      "path": "deploy/atomic-credit-reservation-segments84.inventory.json",
+      "frozen": {
+        "bytes": 16247,
+        "sha256": "713a8a9c7b23b5407c714c45285f0c7ad59475965a3d83673542fa00e41acbfb"
+      },
+      "composedBytes": 16247,
+      "composedSha256": "713a8a9c7b23b5407c714c45285f0c7ad59475965a3d83673542fa00e41acbfb",
+      "frozenExact": true
+    },
+    {
+      "path": "src/core/retention/registry.ts",
+      "frozen": {
+        "bytes": 26894,
+        "sha256": "ec5142cbd9fc159b3038c06c7caf86dc7f83401cefba4c65c51a3a7a3ece851b"
+      },
+      "composedBytes": 26894,
+      "composedSha256": "ec5142cbd9fc159b3038c06c7caf86dc7f83401cefba4c65c51a3a7a3ece851b",
+      "frozenExact": true
+    },
+    {
+      "path": "src/core/search/registry.ts",
+      "frozen": {
+        "bytes": 23564,
+        "sha256": "fbcfb6420d9e28b60d335d9aad4856d997c528c3ac82ec367eaf24e3a311211f"
+      },
+      "composedBytes": 23564,
+      "composedSha256": "fbcfb6420d9e28b60d335d9aad4856d997c528c3ac82ec367eaf24e3a311211f",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-before-image-contract.ts",
+      "frozen": {
+        "bytes": 1443,
+        "sha256": "9eae636cc888de91d127033bcac36edd12f590728f7749f4ded0aec7ca06dd93"
+      },
+      "composedBytes": 1443,
+      "composedSha256": "9eae636cc888de91d127033bcac36edd12f590728f7749f4ded0aec7ca06dd93",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-before-image.ts",
+      "frozen": {
+        "bytes": 5070,
+        "sha256": "8a6bf628be517163fbf69bf44ba7207fa7969fafc7d70aa4739f477c87651723"
+      },
+      "composedBytes": 5070,
+      "composedSha256": "8a6bf628be517163fbf69bf44ba7207fa7969fafc7d70aa4739f477c87651723",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-amounts.ts",
+      "frozen": {
+        "bytes": 6171,
+        "sha256": "acb2213f201b8e14626f3db0fdcae1219e5c5be795dd631aea0401cd327af5fc"
+      },
+      "composedBytes": 6171,
+      "composedSha256": "acb2213f201b8e14626f3db0fdcae1219e5c5be795dd631aea0401cd327af5fc",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-ancestry.ts",
+      "frozen": {
+        "bytes": 17536,
+        "sha256": "8bde6054f3a8f0e32f2a62df9fc57e9d9089d3d45bbfce7f2a3da56e7389e99d"
+      },
+      "composedBytes": 17536,
+      "composedSha256": "8bde6054f3a8f0e32f2a62df9fc57e9d9089d3d45bbfce7f2a3da56e7389e99d",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-archive.ts",
+      "frozen": {
+        "bytes": 3089,
+        "sha256": "2bfbfbbbafe8296762315d6c12dadedaaa80bef773ee2440cea4236f77dcc4af"
+      },
+      "composedBytes": 3089,
+      "composedSha256": "2bfbfbbbafe8296762315d6c12dadedaaa80bef773ee2440cea4236f77dcc4af",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-declaration-contract.ts",
+      "frozen": {
+        "bytes": 931,
+        "sha256": "7855cfa21d38218d990b00008458e2a6b60eb38e43c1cccbd848bef6263363fb"
+      },
+      "composedBytes": 931,
+      "composedSha256": "7855cfa21d38218d990b00008458e2a6b60eb38e43c1cccbd848bef6263363fb",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-declaration-proof.ts",
+      "frozen": {
+        "bytes": 1681,
+        "sha256": "d028c3ca798ecbfff361f342cb44d45254abcfa71375653fe14f7ecb829f8a86"
+      },
+      "composedBytes": 1681,
+      "composedSha256": "d028c3ca798ecbfff361f342cb44d45254abcfa71375653fe14f7ecb829f8a86",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-declaration-reader.ts",
+      "frozen": {
+        "bytes": 6054,
+        "sha256": "aec70011c8db23b5ba1d7e5b488811456226ed54b9fc5b61fe4d6f0d01013d2b"
+      },
+      "composedBytes": 6054,
+      "composedSha256": "aec70011c8db23b5ba1d7e5b488811456226ed54b9fc5b61fe4d6f0d01013d2b",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-declaration.ts",
+      "frozen": {
+        "bytes": 4932,
+        "sha256": "367e2454896caecc4ec032c4db5f7b910257b7eed0bcfb8800134a50557dba61"
+      },
+      "composedBytes": 4932,
+      "composedSha256": "367e2454896caecc4ec032c4db5f7b910257b7eed0bcfb8800134a50557dba61",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-financial.ts",
+      "frozen": {
+        "bytes": 22690,
+        "sha256": "61ad42dc8cbb484d9f4e26b37ef6e60eb24c9cc0b215b38a886d2ed6bd1f4299"
+      },
+      "composedBytes": 22690,
+      "composedSha256": "61ad42dc8cbb484d9f4e26b37ef6e60eb24c9cc0b215b38a886d2ed6bd1f4299",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-partition-contract.ts",
+      "frozen": {
+        "bytes": 4379,
+        "sha256": "3c7a119985d89cae52c0ee863728a503362a3a2a06886d6c18194e2846fc1d7a"
+      },
+      "composedBytes": 4379,
+      "composedSha256": "3c7a119985d89cae52c0ee863728a503362a3a2a06886d6c18194e2846fc1d7a",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-partition-proof.ts",
+      "frozen": {
+        "bytes": 7120,
+        "sha256": "f813e35acb77a95ac7f8712a3d013f05d6ee164e2898f264bf2aa43add616525"
+      },
+      "composedBytes": 7120,
+      "composedSha256": "f813e35acb77a95ac7f8712a3d013f05d6ee164e2898f264bf2aa43add616525",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-partition-retain.ts",
+      "frozen": {
+        "bytes": 4821,
+        "sha256": "52fca9891ca9ee9b6d89fdb87b54814e56cc67def7b10d12dd52bad8aae2aa88"
+      },
+      "composedBytes": 4821,
+      "composedSha256": "52fca9891ca9ee9b6d89fdb87b54814e56cc67def7b10d12dd52bad8aae2aa88",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-partition-schema.ts",
+      "frozen": {
+        "bytes": 4735,
+        "sha256": "37459411002ac9f652ef2c9740770df58e1bb8c2fb4f0ede5a79b591e6715708"
+      },
+      "composedBytes": 4735,
+      "composedSha256": "37459411002ac9f652ef2c9740770df58e1bb8c2fb4f0ede5a79b591e6715708",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-partition.ts",
+      "frozen": {
+        "bytes": 24014,
+        "sha256": "2fd347c3bc6fac178a7f8e12c1a9011a6199d88bacda5afc0bc0ffb036ba5339"
+      },
+      "composedBytes": 24014,
+      "composedSha256": "2fd347c3bc6fac178a7f8e12c1a9011a6199d88bacda5afc0bc0ffb036ba5339",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-fee-protocol.ts",
+      "frozen": {
+        "bytes": 426,
+        "sha256": "3c4192b673506fdf3b8f6c1a52bce00c6f4f43659f83587370fd3de8dab0464d"
+      },
+      "composedBytes": 426,
+      "composedSha256": "3c4192b673506fdf3b8f6c1a52bce00c6f4f43659f83587370fd3de8dab0464d",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-financial-integration.ts",
+      "frozen": {
+        "bytes": 6408,
+        "sha256": "ffa0f09bc351a7028f14ae461658b879fe5a2901669655e28d0ba884f21b7bb3"
+      },
+      "composedBytes": 6408,
+      "composedSha256": "ffa0f09bc351a7028f14ae461658b879fe5a2901669655e28d0ba884f21b7bb3",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-financial-scope.ts",
+      "frozen": {
+        "bytes": 8726,
+        "sha256": "8f1c0b19c81efa0a326cb9d295b2ee5fa34654aaced3d9dd9aaeb8405adf617f"
+      },
+      "composedBytes": 8726,
+      "composedSha256": "8f1c0b19c81efa0a326cb9d295b2ee5fa34654aaced3d9dd9aaeb8405adf617f",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-invoice-disposition.ts",
+      "frozen": {
+        "bytes": 13465,
+        "sha256": "110a96c703943fc3f15ff0909e1d88cdf371dd69cb9526c58f02146baf3151d1"
+      },
+      "composedBytes": 13465,
+      "composedSha256": "110a96c703943fc3f15ff0909e1d88cdf371dd69cb9526c58f02146baf3151d1",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-legacy-application.ts",
+      "frozen": {
+        "bytes": 7016,
+        "sha256": "a16d63c1b000fb0bd88f05a335b6d8b12979abbaadb2cb20ba81f4f0b02b10cb"
+      },
+      "composedBytes": 7016,
+      "composedSha256": "a16d63c1b000fb0bd88f05a335b6d8b12979abbaadb2cb20ba81f4f0b02b10cb",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-reservation-contract.ts",
+      "frozen": {
+        "bytes": 2288,
+        "sha256": "7fcd989923dfe2b370feec0fb299a3ceed6605c14b797fddbe5db27a7009b07d"
+      },
+      "composedBytes": 2288,
+      "composedSha256": "7fcd989923dfe2b370feec0fb299a3ceed6605c14b797fddbe5db27a7009b07d",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-reservation-proof.ts",
+      "frozen": {
+        "bytes": 5571,
+        "sha256": "9331395fba2d3cbf6e838cb1b9ef0e028e81c7ec36e93f535adad12611fac3ba"
+      },
+      "composedBytes": 5571,
+      "composedSha256": "9331395fba2d3cbf6e838cb1b9ef0e028e81c7ec36e93f535adad12611fac3ba",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-reservation-reader.ts",
+      "frozen": {
+        "bytes": 2442,
+        "sha256": "a50c9cddc1a74a4f0b07b614353927c26e12ecf6cf725cefca0b416529542f0c"
+      },
+      "composedBytes": 2442,
+      "composedSha256": "a50c9cddc1a74a4f0b07b614353927c26e12ecf6cf725cefca0b416529542f0c",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-reservation-schema.ts",
+      "frozen": {
+        "bytes": 4124,
+        "sha256": "0d419d16766b8e2beacac2ab2a2c9d9b7402c281c94d8abe8ef1cbcf9cb8ea72"
+      },
+      "composedBytes": 4124,
+      "composedSha256": "0d419d16766b8e2beacac2ab2a2c9d9b7402c281c94d8abe8ef1cbcf9cb8ea72",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-reservation-segments.ts",
+      "frozen": {
+        "bytes": 7089,
+        "sha256": "b202573c5679e10b6a409407b30bd926d7baeb630c722275dcb79f04d1500223"
+      },
+      "composedBytes": 7089,
+      "composedSha256": "b202573c5679e10b6a409407b30bd926d7baeb630c722275dcb79f04d1500223",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-reservation.ts",
+      "frozen": {
+        "bytes": 12313,
+        "sha256": "659118958ea2f6e90f81d84db9c96c832f8990bd152bea5d136a9532867f088e"
+      },
+      "composedBytes": 12313,
+      "composedSha256": "659118958ea2f6e90f81d84db9c96c832f8990bd152bea5d136a9532867f088e",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/atomic-credit-source-prefix.ts",
+      "frozen": {
+        "bytes": 11000,
+        "sha256": "02c2e33f3b995d874870396f2150ee7dab828340fdf811b14f63ae320624ee26"
+      },
+      "composedBytes": 11000,
+      "composedSha256": "02c2e33f3b995d874870396f2150ee7dab828340fdf811b14f63ae320624ee26",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-financial-witness.ts",
+      "frozen": {
+        "bytes": 20639,
+        "sha256": "918a84f99958c21c6665677088f7c8fb93047563c10a0082be0eaab60a3da4a8"
+      },
+      "composedBytes": 20639,
+      "composedSha256": "918a84f99958c21c6665677088f7c8fb93047563c10a0082be0eaab60a3da4a8",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/credit-application-service.ts",
+      "frozen": {
+        "bytes": 30573,
+        "sha256": "20a8f13ea61dc72f0714a9ca5740a9de7bf1849d75df99bf13e785936e88c960"
+      },
+      "composedBytes": 30573,
+      "composedSha256": "20a8f13ea61dc72f0714a9ca5740a9de7bf1849d75df99bf13e785936e88c960",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/credit-fee-origin.ts",
+      "frozen": {
+        "bytes": 8911,
+        "sha256": "f25ba8daf6d70e5deac0258a45c907e820bdc48e7ee66232cb44ba142f737c85"
+      },
+      "composedBytes": 8911,
+      "composedSha256": "f25ba8daf6d70e5deac0258a45c907e820bdc48e7ee66232cb44ba142f737c85",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-evidence-keys.ts",
+      "frozen": {
+        "bytes": 635,
+        "sha256": "6aa89864b8ff32c88de32b1805f1a75ea850d1dfa9d4873749b2c65a99d67e09"
+      },
+      "composedBytes": 635,
+      "composedSha256": "6aa89864b8ff32c88de32b1805f1a75ea850d1dfa9d4873749b2c65a99d67e09",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/original-cash-recovery-store.ts",
+      "frozen": {
+        "bytes": 9029,
+        "sha256": "1a3b230662a6847df7213a9d6c0ee6455e8df7bacdcee819ba07849072bfa67a"
+      },
+      "composedBytes": 9029,
+      "composedSha256": "1a3b230662a6847df7213a9d6c0ee6455e8df7bacdcee819ba07849072bfa67a",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/invoicing/tables.ts",
+      "frozen": {
+        "bytes": 3365,
+        "sha256": "025e1d1be0ed25711174388e787bdfe90d5380285436f056be91fcda802bf09f"
+      },
+      "composedBytes": 3365,
+      "composedSha256": "025e1d1be0ed25711174388e787bdfe90d5380285436f056be91fcda802bf09f",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-schema.ts",
+      "frozen": {
+        "bytes": 11297,
+        "sha256": "4dded0e9edfc90ac0bc78e877f038bb4ac0dc752079025eb0f1781ebe8ae47e3"
+      },
+      "composedBytes": 11297,
+      "composedSha256": "4dded0e9edfc90ac0bc78e877f038bb4ac0dc752079025eb0f1781ebe8ae47e3",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-state.ts",
+      "frozen": {
+        "bytes": 14557,
+        "sha256": "1830f6501b8fe3df6ee4086fa971810c4dbe67e89ca91bc51e5ac7e36bf1d2a1"
+      },
+      "composedBytes": 14557,
+      "composedSha256": "1830f6501b8fe3df6ee4086fa971810c4dbe67e89ca91bc51e5ac7e36bf1d2a1",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-private-review-contract.ts",
+      "frozen": {
+        "bytes": 762,
+        "sha256": "7fb101f7a6ebd6eb00ec707ffb0e0e51b75684a718dbbb93ef4c8a8bbb52be6e"
+      },
+      "composedBytes": 762,
+      "composedSha256": "7fb101f7a6ebd6eb00ec707ffb0e0e51b75684a718dbbb93ef4c8a8bbb52be6e",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proration-acceptance.ts",
+      "frozen": {
+        "bytes": 13661,
+        "sha256": "0ab295d18be26eeb2917d4b9c76bf384b5cc309726c30a406f3c5de0be1f2c54"
+      },
+      "composedBytes": 13661,
+      "composedSha256": "0ab295d18be26eeb2917d4b9c76bf384b5cc309726c30a406f3c5de0be1f2c54",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proration-economics.ts",
+      "frozen": {
+        "bytes": 12954,
+        "sha256": "2d39be56e95b723fd99d75f6eb8ac4109445e6ac7dbf80f9152622b3bfcbbb04"
+      },
+      "composedBytes": 12954,
+      "composedSha256": "2d39be56e95b723fd99d75f6eb8ac4109445e6ac7dbf80f9152622b3bfcbbb04",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proration-quote.ts",
+      "frozen": {
+        "bytes": 12113,
+        "sha256": "db3791b3b5acb4ebbfa2e2a8d1dc952ecb9d7d4942c5939a752b4b818c51135c"
+      },
+      "composedBytes": 12113,
+      "composedSha256": "db3791b3b5acb4ebbfa2e2a8d1dc952ecb9d7d4942c5939a752b4b818c51135c",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-quote-proof.ts",
+      "frozen": {
+        "bytes": 6668,
+        "sha256": "cd2efe0425d82f3dc6e078ba96b58dbdbabb6aceea2330c6d934bf6c1875bb6a"
+      },
+      "composedBytes": 6668,
+      "composedSha256": "cd2efe0425d82f3dc6e078ba96b58dbdbabb6aceea2330c6d934bf6c1875bb6a",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/proration-basis.ts",
+      "frozen": {
+        "bytes": 11746,
+        "sha256": "5708ec2d3ce3741000694d22f3be75a9a4084fbc1367de49f7b0760fa8e59e6a"
+      },
+      "composedBytes": 11746,
+      "composedSha256": "5708ec2d3ce3741000694d22f3be75a9a4084fbc1367de49f7b0760fa8e59e6a",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/proration-credit-owner.ts",
+      "frozen": {
+        "bytes": 8802,
+        "sha256": "4f888cb2de4e164ee4925964bd0bb464ab56224daac09b49022a4cff24d1e519"
+      },
+      "composedBytes": 8802,
+      "composedSha256": "4f888cb2de4e164ee4925964bd0bb464ab56224daac09b49022a4cff24d1e519",
+      "frozenExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/service.ts",
+      "frozen": {
+        "bytes": 88947,
+        "sha256": "28f3f267929778df6a70f23851df4812eacc896c6eef68cfd178523bceaeb497"
+      },
+      "composedBytes": 88947,
+      "composedSha256": "28f3f267929778df6a70f23851df4812eacc896c6eef68cfd178523bceaeb497",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/core/atomic-credit-fee-source84.test.ts",
+      "frozen": {
+        "bytes": 6351,
+        "sha256": "9a716eb0c647e3d037dfbd7cd10d820665e2cad0b553d9199d2013f02c31fc3c"
+      },
+      "composedBytes": 6351,
+      "composedSha256": "9a716eb0c647e3d037dfbd7cd10d820665e2cad0b553d9199d2013f02c31fc3c",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/helpers/actual-atomic-credit-source84.ts",
+      "frozen": {
+        "bytes": 6716,
+        "sha256": "027b1a2ee9254b9464ffbcb8931eebf125ea4f18edeac8c7950bc2cb808b1f22"
+      },
+      "composedBytes": 6716,
+      "composedSha256": "027b1a2ee9254b9464ffbcb8931eebf125ea4f18edeac8c7950bc2cb808b1f22",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/helpers/merchant-controlled-collection84.ts",
+      "frozen": {
+        "bytes": 25295,
+        "sha256": "766343bf0ee07cdf575ea5be3aedf13d1ea1893d0bf899116716184a5ca7ab6c"
+      },
+      "composedBytes": 25928,
+      "composedSha256": "79f79e4250726e7e7d3f521dbf11507a6c273ef6abae400e2a1620e96319cbf9",
+      "frozenExact": false
+    },
+    {
+      "path": "tests/modules/atomic-credit-before-image-contract.test.ts",
+      "frozen": {
+        "bytes": 2237,
+        "sha256": "308b4c76ba464559f878d3db01bb07f693834a281cb19249460e803f5508060a"
+      },
+      "composedBytes": 2237,
+      "composedSha256": "308b4c76ba464559f878d3db01bb07f693834a281cb19249460e803f5508060a",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/modules/atomic-credit-fee-amounts.test.ts",
+      "frozen": {
+        "bytes": 4106,
+        "sha256": "a46ab24cea4070fb58c598dde825f571ecad4fd6f3c8cf0c23089ed9d78fe16e"
+      },
+      "composedBytes": 4106,
+      "composedSha256": "a46ab24cea4070fb58c598dde825f571ecad4fd6f3c8cf0c23089ed9d78fe16e",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/modules/atomic-credit-fee-archive.test.ts",
+      "frozen": {
+        "bytes": 3672,
+        "sha256": "ab12510868169703bc2807c7f32754e50f388b8fe16c814410c247d661505051"
+      },
+      "composedBytes": 3672,
+      "composedSha256": "ab12510868169703bc2807c7f32754e50f388b8fe16c814410c247d661505051",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/modules/atomic-credit-fee-declaration.test.ts",
+      "frozen": {
+        "bytes": 3575,
+        "sha256": "4db42911844644bcdb9b1b7d4da370ce24c0704ee3e21f9507851fc2278d5e2f"
+      },
+      "composedBytes": 3575,
+      "composedSha256": "4db42911844644bcdb9b1b7d4da370ce24c0704ee3e21f9507851fc2278d5e2f",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/modules/atomic-credit-fee-partition-proof.test.ts",
+      "frozen": {
+        "bytes": 4810,
+        "sha256": "81f0466ab3c42a95f68bd4a87b40c9ee2fb1967147cbbec02bce115bf3ef807c"
+      },
+      "composedBytes": 4810,
+      "composedSha256": "81f0466ab3c42a95f68bd4a87b40c9ee2fb1967147cbbec02bce115bf3ef807c",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/modules/atomic-credit-fee-persistence84.test.ts",
+      "frozen": {
+        "bytes": 12259,
+        "sha256": "71dd0c0efccab135da068a09cc833939c629f14e15d49a350685b20857dce25c"
+      },
+      "composedBytes": 12259,
+      "composedSha256": "71dd0c0efccab135da068a09cc833939c629f14e15d49a350685b20857dce25c",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/modules/atomic-credit-reservation-proof.test.ts",
+      "frozen": {
+        "bytes": 4555,
+        "sha256": "babcf1bfe613405765f667e8a47688687ff87700a765372aaf924edb564ef106"
+      },
+      "composedBytes": 4555,
+      "composedSha256": "babcf1bfe613405765f667e8a47688687ff87700a765372aaf924edb564ef106",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/modules/atomic-credit-reservation-segments.test.ts",
+      "frozen": {
+        "bytes": 5259,
+        "sha256": "93a3738e6ced94ed4bfb0e86fcb2428efe92079ab74e204ee548258532f90ca8"
+      },
+      "composedBytes": 5259,
+      "composedSha256": "93a3738e6ced94ed4bfb0e86fcb2428efe92079ab74e204ee548258532f90ca8",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/modules/controlled-parent-financial-adapter.test.ts",
+      "frozen": {
+        "bytes": 10745,
+        "sha256": "db51f1ae0ac3f34e1b06cc15429808f77f6a16ffdcbe2210a0f5c57b70a2041d"
+      },
+      "composedBytes": 10745,
+      "composedSha256": "db51f1ae0ac3f34e1b06cc15429808f77f6a16ffdcbe2210a0f5c57b70a2041d",
+      "frozenExact": true
+    },
+    {
+      "path": "tests/modules/member-merchant-identity-financial-adapter.test.ts",
+      "frozen": {
+        "bytes": 27345,
+        "sha256": "5e0c2dfafa0f33560fc44c481f58d4eafe5e28e6928d17c4834291d6cc548337"
+      },
+      "composedBytes": 27345,
+      "composedSha256": "5e0c2dfafa0f33560fc44c481f58d4eafe5e28e6928d17c4834291d6cc548337",
+      "frozenExact": true
+    }
+  ],
+  "modelsAdded": 2,
+  "newFunctionHeaders": 7,
+  "oldWholeSuccessors": 4,
+  "newTriggers": 4,
+  "ordinaryJournalCount": 86,
+  "qualification": "UNRUN",
+  "native": "UNRUN",
+  "provider": false,
+  "stable": false,
+  "mergedFixtureGetContinuation": {
+    "source": "tests/helpers/merchant-controlled-collection84.ts",
+    "manifest": "deploy/atomic-auxiliary-specific-get-fixture-root-continuation.manifest.json",
+    "wholeCurrentSha256": "79f79e4250726e7e7d3f521dbf11507a6c273ef6abae400e2a1620e96319cbf9",
+    "wholeFrozenBRecoveredExact": true,
+    "frozenBSha256": "766343bf0ee07cdf575ea5be3aedf13d1ea1893d0bf899116716184a5ca7ab6c",
+    "finiteDelta": {
+      "before": "  const feeParent=[...intents.values()].find(row=>url.pathname===`/v1/application_fees/${actualFeeRef(row.id)}/refunds`);",
+      "after": "  // Specific recovery GETs return only the already-created exact parent/resource.\n  // Never synthesize a return from an equal amount or another parent's ID.\n  const actualFeeReturn=[...feeReturns.values()].find(row=>url.pathname===`/v1/application_fees/${bankRef(row.fee)}/refunds/${bankRef(row.id)}`);\n  if(actualFeeReturn&&init.method===\"GET\")return Response.json(actualFeeReturn);\n  const actualTransferReturn=[...transferReturns.values()].find(row=>url.pathname===`/v1/transfers/${bankRef(row.transfer)}/reversals/${bankRef(row.id)}`);\n  if(actualTransferReturn&&init.method===\"GET\")return Response.json(actualTransferReturn);\n  const feeParent=[...intents.values()].find(row=>url.pathname===`/v1/application_fees/${actualFeeRef(row.id)}/refunds`);"
+    },
+    "originalFeeResourceGetRoutesRetained": true
+  }
+}

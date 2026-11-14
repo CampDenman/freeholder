@@ -16,6 +16,8 @@ import { planControlledProrationPreview } from "./controlled-provider-preview-pl
 import { planControlledProviderOperation } from "./controlled-provider-plan";
 import { executeControlledOperation } from "./controlled-provider-execution";
 import { ownGrossProration } from "./proration-quote";
+import {prepareAtomicCreditFeeDeclaration} from "@/modules/invoicing/atomic-credit-fee-declaration";
+import {controlledStoredProrationReview} from "./controlled-provider-private-review-contract";
 const evidence=z.object({nativeOperationId:z.uuid(),updateOperationId:z.uuid(),customerOperationId:z.uuid(),calendarOperationId:z.uuid()}).strict();
 /** Current complete financial revision is historical quote evidence, never a
  * reservation. Acceptance must recompute safety and unchanged source economics. */
@@ -41,10 +43,12 @@ export const retainControlledProrationQuote=defineService({name:"subscriptions.r
     calendarReadOperationId:evidence.calendarOperationId,customerFinancialOperationId:evidence.customerOperationId,nativePreviewOperationId:evidence.nativeOperationId,updatePreviewOperationId:evidence.updateOperationId,
     nativeActualEvidenceDigest:source.native.verified.actualResultDigest,controlledUpdateActualEvidenceDigest:source.update.verified.actualResultDigest,customerFinancialDigest:z.string().regex(/^[a-f0-9]{64}$/).parse(source.customer.verified.actualResult.inventoryDigest),
     economicTargetDigest:merchantTaxDigest({debitNetMinor,debitTaxMinor,creditAppliedMinor,cashDueMinor,calendar,feeReview})}});
-  review.quoteDigest=controlledTargetQuoteDigest(input,review,economic.profile.profileId,economic.profile.profileVersion);
+  const createdAt=new Date(),declaration=await prepareAtomicCreditFeeDeclaration(ctx,{quoteId,resourceId:resource.id,subscriptionId:parent.id,plannedProrationId,originalInvoiceId:basis.invoice?.id??null,originalInvoiceLineId:basis.line?.id??null,principal:basis.principal,quoteCreatedAt:createdAt});
+  const storedReview=declaration?controlledStoredProrationReview.parse({...review,atomicCreditFeeDeclaration:declaration}):review;
+  storedReview.quoteDigest=controlledTargetQuoteDigest(input,storedReview,economic.profile.profileId,economic.profile.profileVersion);review.quoteDigest=storedReview.quoteDigest;
   const row={id:quoteId,kind:"proration" as const,canonicalSourceId:review.canonicalSourceId,resourceId:resource.id,previousTermsId:previous.id,plannedProrationId,plannedCollectionId,
    profileId:economic.profile.profileId,profileVersion:economic.profile.profileVersion,calendarReadOperationId:evidence.calendarOperationId,customerFinancialOperationId:evidence.customerOperationId,nativePreviewOperationId:evidence.nativeOperationId,updatePreviewOperationId:evidence.updateOperationId,
-   input,review,inputDigest:merchantTaxDigest(input),reviewDigest:merchantTaxDigest(review),redactedAt:null,quotedParentRevision:source.currentParentRevision,sourceRevision:source.sourceRevision,quoteDigest:review.quoteDigest,effectiveAt:source.effectiveAt,createdAt:new Date()};
+   input,review:storedReview,inputDigest:merchantTaxDigest(input),reviewDigest:merchantTaxDigest(storedReview),redactedAt:null,quotedParentRevision:source.currentParentRevision,sourceRevision:source.sourceRevision,quoteDigest:review.quoteDigest,effectiveAt:source.effectiveAt,createdAt};
   authenticatedControlledQuote(row,resource,source.history);
   await ctx.tx.execute(sql`select set_config('freeholder.controlled_collection_v1','1',true)`);await ctx.tx.insert(subscriptionControlledQuotes).values(row);
   ctx.setSubject("subscription",parent.id);return review;

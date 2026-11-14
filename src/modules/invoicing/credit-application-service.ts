@@ -83,6 +83,7 @@ export const fundProrationCredit = defineService({ name: "invoicing.fundProratio
     const originalLines = await ctx.tx.select().from(creditNoteLines).where(eq(creditNoteLines.creditNoteId, note.id)).orderBy(creditNoteLines.id).limit(1001);
     if (originalLines.length > 1000 || originalLines.some(line => actual.lines.filter(source => source.creditNoteLineId === line.id).reduce((sum, source) => sum + BigInt(source.amountMinor), 0n) !== BigInt(line.totalMinor))
       || actual.lines.some(source => !originalLines.some(line => line.id === source.creditNoteLineId))) throw new ServiceError("conflict", "Each exact original credit line needs its complete own principal; equal totals cannot borrow another line's credit.");
+    let bDeclaration:Awaited<ReturnType<typeof import("./atomic-credit-fee-declaration-reader").readAtomicCreditFeeDeclarationForProration>>|undefined;
     for (const source of [...actual.lines].sort(compareCreditSources)) {
       const [line] = await ctx.tx.select({ credit: creditNoteLines, original: invoiceLines }).from(creditNoteLines).innerJoin(invoiceLines, eq(invoiceLines.id, creditNoteLines.invoiceLineId))
         .where(eq(creditNoteLines.id, source.creditNoteLineId)).limit(1);
@@ -97,10 +98,18 @@ export const fundProrationCredit = defineService({ name: "invoicing.fundProratio
       const fee = await originalCreditFeeAllocation(ctx, source.sourcePaymentId, source.sourceApplicationId, source.amountMinor);
       if (fee.feeObligationMinor !== source.feeObligationMinor || fee.provenCollectedMinor !== source.feeProvenCollectedMinor || fee.collectionState !== source.feeCollectionState || fee.evidenceDigest !== source.feeEvidenceDigest || fee.unexpectedFee !== source.feeUnexpected)
         throw new ServiceError("conflict", "The original fee duty or actual collection proof changed; review its exact source before freezing another credit promise.");
+      const[originalPaymentInvoice]=await ctx.tx.select({refundedMinor:invoices.refundedMinor}).from(invoices).where(eq(invoices.id,payment.invoiceId)).limit(1);
+      const candidate=originalPaymentInvoice&&originalPaymentInvoice.refundedMinor>0?await(await import("./atomic-credit-fee-partition")).controlledAtomicCreditFeePartition(ctx,{paymentId:payment.id,sourceApplicationId:source.sourceApplicationId,takeMinor:source.amountMinor}):null;
+      if(candidate?.requiresChild&&bDeclaration===undefined)bDeclaration=await(await import("./atomic-credit-fee-declaration-reader")).readAtomicCreditFeeDeclarationForProration(ctx.tx,actual.prorationId);
+      const planned=candidate?.requiresChild?bDeclaration?.declaration.fundings.find(row=>row.sourcePaymentId===payment.id&&row.sourceApplicationId===source.sourceApplicationId):undefined;
+      if(candidate?.requiresChild){if(!bDeclaration||!planned||planned.amountMinor!==source.amountMinor||planned.feeEvidenceDigest!==source.feeEvidenceDigest||bDeclaration.note.id!==note.id||bDeclaration.line.id!==line.credit.id)
+        throw new ServiceError("conflict","Retain the genuine quoted planned funding UUID and exact actual note/line before its mandatory B purpose birth.");}
+      const fundingId=planned?.fundingId??randomUUID();
       await ctx.tx.execute(sql`select set_config('freeholder.invoice_credit_v1','1',true)`);
-      await ctx.tx.insert(invoiceCreditFunding).values({ id: randomUUID(), creditNoteId: note.id, creditNoteLineId: line.credit.id, sourceInvoiceId: note.invoiceId, sourcePaymentId: payment.id,
+      await ctx.tx.insert(invoiceCreditFunding).values({ id: fundingId, creditNoteId: note.id, creditNoteLineId: line.credit.id, sourceInvoiceId: note.invoiceId, sourcePaymentId: payment.id,
         sourceApplicationId: source.sourceApplicationId, prorationId: actual.prorationId, amountMinor: source.amountMinor, originalEvidenceDigest: actual.evidenceDigest,
         feeObligationMinor: source.feeObligationMinor, feeProvenCollectedMinor: source.feeProvenCollectedMinor, feeCollectionState: source.feeCollectionState, feeEvidenceDigest: source.feeEvidenceDigest, feeUnexpected: source.feeUnexpected });
+      if(candidate?.requiresChild){const{retainAtomicCreditFundingPartition}=await import("./atomic-credit-fee-partition-retain");await retainAtomicCreditFundingPartition(ctx,{fundingId,candidate});}
     }
     ctx.setSubject("creditNote", note.id); return { funded: true as const, rows: actual.lines.length };
   },
@@ -133,21 +142,32 @@ export const reserveInvoiceCredit = defineService({ name: "invoicing.reserveInvo
       const live = await originalCreditFeeAllocation(ctx, source.sourcePaymentId, source.sourceApplicationId, 0);
       if (!source.feeEvidenceDigest || ["verified_collected", "recorded_remitted", "not_due"].includes(source.feeCollectionState) && source.feeCollectionState !== live.collectionState || live.unexpectedFee && !source.feeUnexpected)
         throw new ServiceError("conflict", "New contrary original fee proof requires fresh review; preserve this whole original credit and target.");
-      const feeObligationMinor = proportionalFeeCarry({ principalMinor: source.amountMinor, feeObligationMinor: source.feeObligationMinor, allocatedPrincipalMinor: budget?.principal ?? 0, allocatedFeeMinor: budget?.fee ?? 0, takeMinor: take });
-      const feeProvenCollectedMinor = proportionalFeeCarry({ principalMinor: source.amountMinor, feeObligationMinor: source.feeProvenCollectedMinor, allocatedPrincipalMinor: budget?.principal ?? 0, allocatedFeeMinor: budget?.proven ?? 0, takeMinor: take });
+      const {readAtomicCreditReservationPartition,retainAtomicCreditReservationPartition}=await import("./atomic-credit-reservation");
+      const atomicPlan=await readAtomicCreditReservationPartition(ctx,{fundingId:source.id,amountMinor:take});
+      const feeObligationMinor = atomicPlan?atomicPlan.economics.assignedFeeMinor:proportionalFeeCarry({ principalMinor: source.amountMinor, feeObligationMinor: source.feeObligationMinor, allocatedPrincipalMinor: budget?.principal ?? 0, allocatedFeeMinor: budget?.fee ?? 0, takeMinor: take });
+      const feeProvenCollectedMinor = atomicPlan?atomicPlan.economics.provenCollectedMinor:proportionalFeeCarry({ principalMinor: source.amountMinor, feeObligationMinor: source.feeProvenCollectedMinor, allocatedPrincipalMinor: budget?.principal ?? 0, allocatedFeeMinor: budget?.proven ?? 0, takeMinor: take });
       const id = randomUUID(); await ctx.tx.execute(sql`select set_config('freeholder.invoice_credit_v1','1',true)`);
       await ctx.tx.insert(invoiceCreditReservations).values({ id, fundingId: source.id, targetSourceId: input.targetSourceId, amountMinor: take, idempotencyKey: `${prefix}:${source.id}`, requestDigest,
         feeObligationMinor, feeProvenCollectedMinor, feeCollectionState: source.feeCollectionState, feeUnexpected: source.feeUnexpected,
-        feeEvidenceDigest: merchantTaxDigest({ sourceFeeDigest: source.feeEvidenceDigest, fundingId: source.id, targetSourceId: input.targetSourceId, take, feeObligationMinor, feeProvenCollectedMinor, liveFeeProof: live.evidenceDigest }) });
+        feeEvidenceDigest: atomicPlan?atomicPlan.feeEvidenceDigest:merchantTaxDigest({ sourceFeeDigest: source.feeEvidenceDigest, fundingId: source.id, targetSourceId: input.targetSourceId, take, feeObligationMinor, feeProvenCollectedMinor, liveFeeProof: live.evidenceDigest }) });
+      if(atomicPlan)await retainAtomicCreditReservationPartition(ctx,{reservationId:id,plan:atomicPlan});
       reservationIds.push(id); remaining -= take; if (!remaining) break;
     }
     if (remaining) throw new ServiceError("conflict", "Restore the actual unspent original credit principal before reserving this amount.");
     ctx.setSubject("creditNote", input.creditNoteId); return { reservationIds, reservedMinor: input.amountMinor };
   },
 });
-async function matchingParties(ctx: ServiceContext, sourceInvoiceId: string, target: typeof invoices.$inferSelect) {
+async function matchingParties(ctx: ServiceContext, sourceInvoiceId: string, target: typeof invoices.$inferSelect, actualReservationId?:string) {
   const [source] = await ctx.tx.select().from(invoices).where(eq(invoices.id, sourceInvoiceId)).limit(1);
-  if (!source || source.contactId !== target.contactId || source.currency !== target.currency || source.refundedMinor !== 0) throw new ServiceError("conflict", "Original credit and target invoice must retain the same actual buyer/currency and unreturned principal.");
+  let atomicSiblings:Awaited<ReturnType<typeof import("./atomic-credit-invoice-disposition").readAtomicCreditInvoiceDisposition>>|null=null;
+  if(source&&source.refundedMinor!==0&&actualReservationId){
+    const{readAtomicCreditReservationProof}=await import("./atomic-credit-reservation-reader"),proof=await readAtomicCreditReservationProof(ctx.tx,actualReservationId);
+    if(proof&&proof.parent.funding.sourceInvoiceId===source.id&&proof.parent.reservation.targetSourceId===target.sourceId){
+      const[owner]=await ctx.tx.execute<{subscription_id:string}>(sql`select actual_owner.subscription_id::text from subscription_prorations actual_owner where actual_owner.id=${proof.parent.funding.prorationId}::uuid`);
+      if(owner){const{readAtomicCreditInvoiceDisposition}=await import("./atomic-credit-invoice-disposition");atomicSiblings=await readAtomicCreditInvoiceDisposition(ctx,{subscriptionId:owner.subscription_id,originalInvoiceId:source.id});}
+    }
+  }
+  if (!source || source.contactId !== target.contactId || source.currency !== target.currency || source.refundedMinor !== 0&&atomicSiblings?.kind!=="atomic_sibling_disposition.v1") throw new ServiceError("conflict", "Original credit and target invoice must retain the same actual buyer/currency and unreturned principal.");
   const policies = await ctx.tx.select().from(invoiceMarketPolicies).where(inArray(invoiceMarketPolicies.invoiceId, [source.id, target.id]));
   const before = policies.find(row => row.invoiceId === source.id), after = policies.find(row => row.invoiceId === target.id);
   for (const field of ["model", "sellerUserId", "merchantContactId", "providerAccountId", "siteFeeBps"] as const) if ((before?.[field] ?? null) !== (after?.[field] ?? null)) throw new ServiceError("conflict", "Credit cannot move to another original merchant or fee contract.");
@@ -174,7 +194,7 @@ export const applyInvoiceCredit = defineService({ name: "invoicing.applyInvoiceC
     const [pending] = await ctx.tx.select({ id: payments.id }).from(payments).where(and(eq(payments.invoiceId, target.id), inArray(payments.status, ["created", "processing"]))).limit(1);
     if (pending) throw new ServiceError("conflict", "An original target payment caller remains unresolved. Finish or authentically recover it before applying credit.");
     await assertInvoiceMerchantCreatorsQuiesced(ctx, target.id);
-    const owner = await matchingParties(ctx, identity.funding.sourceInvoiceId, target);
+    const owner = await matchingParties(ctx, identity.funding.sourceInvoiceId, target,input.reservationId);
     const [note] = await ctx.tx.select().from(creditNotes).where(eq(creditNotes.id, identity.funding.creditNoteId)).limit(1);
     if (note?.status !== "issued") throw new ServiceError("conflict", "The original credit note must remain issued.");
     const creditedMinor = target.creditedMinor + identity.reservation.amountMinor, settled = invoiceSettled({ ...target, creditedMinor });

@@ -1,0 +1,619 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "PRIVATE SOURCE ONLY; installation/semantics/runtime UNRUN",
+  "sourceDependencies": [
+    {
+      "signature": "freeholder_atomic_credit_fee_partition(uuid,uuid,bigint)",
+      "returnType": "TABLE(known boolean, principal_minor bigint, original_fee_minor bigint, retired_fee_minor bigint, allocated_principal_minor bigint, allocated_nominal_fee_minor bigint, allocated_assigned_fee_minor bigint, allocated_retired_fee_minor bigint, take_nominal_fee_minor bigint, take_retired_fee_minor bigint, take_assigned_fee_minor bigint, take_collected_fee_minor bigint, take_owed_fee_minor bigint, remaining_principal_minor bigint, remaining_actual_fee_minor bigint, source_receipt_id uuid, bank_inspection_id uuid, bank_observation_id uuid, bank_namespace_revision text, evidence_fingerprint text)",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "ec3fe3ba0066fac91f75d0a2c993b0c21c0257860274d05347204c8e7f78bfcd"
+    },
+    {
+      "signature": "freeholder_atomic_credit_reservation_partition(uuid,bigint)",
+      "returnType": "TABLE(known boolean, funding_id uuid, root_funding_id uuid, source_payment_id uuid, source_application_id uuid, principal_minor bigint, nominal_fee_minor bigint, retired_fee_minor bigint, assigned_fee_minor bigint, collected_fee_minor bigint, owed_fee_minor bigint, segments jsonb, active_reservation_ids uuid[], released_reservation_ids uuid[], funding_partition_fingerprint text, evidence_fingerprint text)",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "ea723ef7a5aa541a80c7d7dff11b6c03754e42dcf60be9eba0a34dfa2154d519"
+    },
+    {
+      "signature": "freeholder_guard_credit_atomic_fee_partition()",
+      "returnType": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "f4856af250dd433f237f987ee9f2fb3d11fa1881dc4b0920706e5de172c9e0f0"
+    },
+    {
+      "signature": "freeholder_guard_credit_atomic_reservation()",
+      "returnType": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "ab907768d5749ed9973107b5972070d4b36138eab9d2d0e4d4870ddf25ab0d64"
+    },
+    {
+      "signature": "freeholder_credit_atomic_fee_birth_guard()",
+      "returnType": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "7a508b1cde77159052a617a40e51ac8bfd3af4cb5e44c600a1153b15bb16f2a0"
+    },
+    {
+      "signature": "freeholder_credit_atomic_reservation_birth_guard()",
+      "returnType": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "39ffcc33555d04a651375a6c2022f99903baa40cecc1ccdb4d562f1907631aeb"
+    },
+    {
+      "signature": "freeholder_credit_fee_receipt()",
+      "returnType": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "603e87240f516be268c773240cb4f1b1caea437199f9883140fc503f6c2228e7"
+    },
+    {
+      "signature": "freeholder_credit_fee_is_collected(uuid,text)",
+      "returnType": "boolean",
+      "language": "sql",
+      "volatility": "s",
+      "bodySha256": "b0c528b93cad5cbbcdbdab52e74c14dcfd572a712e14bed617406b0b0383f21e"
+    },
+    {
+      "signature": "freeholder_guard_invoice_credit()",
+      "returnType": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "257e9ff9cd6e027ee167eef9d96e43ba20edfcb8c5a6c6acfe8eecc053d234de"
+    },
+    {
+      "signature": "freeholder_subscription_proration_receipt()",
+      "returnType": "trigger",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "7f1528a6b44ea1c47cd49f6479690ae42f2328c43d17ef2b13c017c4257d61c2"
+    },
+    {
+      "signature": "freeholder_atomic_auxiliary_fee_ready()",
+      "returnType": "boolean",
+      "language": "sql",
+      "volatility": "s",
+      "bodySha256": "a6bbff06bac4dae6697bd420369d9409b6b955c62d6a0daa9f23b6754d39b0dd",
+      "predecessorSource": "root source journal 85; no live catalog inference"
+    },
+    {
+      "signature": "freeholder_merchant_fee_invocations_ready()",
+      "returnType": "boolean",
+      "language": "sql",
+      "volatility": "s",
+      "bodySha256": "98a0b6c71aafd07c27bb3b7b198040041ba80e80ab3161e09497041cbc5da047",
+      "predecessorSource": "root source journal 85; no live catalog inference"
+    },
+    {
+      "signature": "freeholder_controlled_cash_scope(uuid)",
+      "returnType": "jsonb",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "2fcf83d06dd9b39209f208214a6cc40e110b63dd12ac1bcc53fc64ed4b7feb6f",
+      "predecessorSource": "actual root source journal 85, unchanged full function; no live inference"
+    },
+    {
+      "signature": "freeholder_controlled_cash_scope_ids(jsonb,text)",
+      "returnType": "uuid[]",
+      "language": "plpgsql",
+      "volatility": "i",
+      "bodySha256": "75833bb1c04a88a7cf51f9f452973e8c54829534f842bf1cd4a160a9356e0145",
+      "predecessorSource": "actual root source journal 85, unchanged full function; no live inference"
+    },
+    {
+      "signature": "freeholder_controlled_cash_parent_entries(uuid)",
+      "returnType": "TABLE(family text, identity text, fingerprint text)",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "910332eb8ba11d7a7f7c4916a6237b739b60be8c20b1d53147654deab2249556",
+      "predecessorSource": "actual root source journal 85, unchanged full function; no live inference"
+    },
+    {
+      "signature": "freeholder_controlled_cash_require_prefix(uuid)",
+      "returnType": "void",
+      "language": "plpgsql",
+      "volatility": "v",
+      "bodySha256": "cb5cce323d7eb935e4d8edb2a094fcaeb535f9d2e5dc698b7c0152e61c71ea52",
+      "predecessorSource": "actual root source journal 85, unchanged full function; no live inference"
+    },
+    {
+      "signature": "freeholder_controlled_proration_source(uuid)",
+      "returnType": "boolean",
+      "language": "plpgsql",
+      "volatility": "s",
+      "bodySha256": "426b6fc0c205dbdf1de66617f24b0a2e5464af26379cbc4962392ad453b3d99b",
+      "predecessorSource": "actual root source journal 85, unchanged full function; no live inference"
+    },
+    {
+      "signature": "freeholder_controlled_collection_valid(uuid)",
+      "returnType": "boolean",
+      "language": "plpgsql",
+      "volatility": "s",
+      "bodySha256": "22793b3ddca6fc24eb422e941afce483be525cfa0340123477531de16b2766cc",
+      "predecessorSource": "actual root source journal 85, unchanged full function; no live inference"
+    },
+    {
+      "signature": "freeholder_controlled_bank_minor(jsonb,boolean DEFAULT false)",
+      "returnType": "boolean",
+      "language": "sql",
+      "volatility": "i",
+      "bodySha256": "05d891ce5a52f018a9c5b6f21d9c3ae43f68d7abd7e831fb2cf512cff476a68e",
+      "predecessorSource": "actual root source journal 85, unchanged full function; no live inference"
+    },
+    {
+      "signature": "freeholder_controlled_receipt_bank_observation(uuid,uuid)",
+      "returnType": "TABLE(actual_inspection_id uuid, actual_observation_id uuid, current_evidence jsonb, original_expectation jsonb, bank_witness jsonb, bank_fingerprint text, immutable_bank_fingerprint text, admitted_source_history_digest text)",
+      "language": "plpgsql",
+      "volatility": "s",
+      "bodySha256": "abaf44dcfdd99b05d01e41b0ae52b6aef6aa7861087a20628ffe17ad3f13b731",
+      "predecessorSource": "actual root source journal 85, unchanged full function; no live inference"
+    }
+  ],
+  "newReady": {
+    "signature": "freeholder_credit_atomic_fee_ready()",
+    "bodySha256": "b633d3e2297010b5541a7fb31b33681188086b1937bc4e51ac67738b148b4cda",
+    "returnType": "boolean"
+  },
+  "columns": {
+    "invoice_credit_funding_atomic_fee_partitions": [
+      [
+        "funding_id",
+        "uuid"
+      ],
+      [
+        "source_payment_id",
+        "uuid"
+      ],
+      [
+        "source_application_id",
+        "uuid"
+      ],
+      [
+        "source_invoice_id",
+        "uuid"
+      ],
+      [
+        "credit_note_id",
+        "uuid"
+      ],
+      [
+        "credit_note_line_id",
+        "uuid"
+      ],
+      [
+        "original_charge_receipt_id",
+        "uuid"
+      ],
+      [
+        "bank_inspection_id",
+        "uuid"
+      ],
+      [
+        "bank_observation_id",
+        "uuid"
+      ],
+      [
+        "protocol",
+        "text"
+      ],
+      [
+        "parent_fingerprint",
+        "text"
+      ],
+      [
+        "economics",
+        "jsonb"
+      ],
+      [
+        "before_entries",
+        "jsonb"
+      ],
+      [
+        "admission_transaction_id",
+        "text"
+      ],
+      [
+        "digest",
+        "text"
+      ],
+      [
+        "authentication",
+        "text"
+      ],
+      [
+        "created_at",
+        "timestamp with time zone"
+      ]
+    ],
+    "invoice_credit_reservation_atomic_fee_partitions": [
+      [
+        "reservation_id",
+        "uuid"
+      ],
+      [
+        "funding_id",
+        "uuid"
+      ],
+      [
+        "root_funding_id",
+        "uuid"
+      ],
+      [
+        "source_payment_id",
+        "uuid"
+      ],
+      [
+        "source_application_id",
+        "uuid"
+      ],
+      [
+        "protocol",
+        "text"
+      ],
+      [
+        "parent_fingerprint",
+        "text"
+      ],
+      [
+        "funding_partition_fingerprint",
+        "text"
+      ],
+      [
+        "economics",
+        "jsonb"
+      ],
+      [
+        "before_entries",
+        "jsonb"
+      ],
+      [
+        "admission_transaction_id",
+        "text"
+      ],
+      [
+        "digest",
+        "text"
+      ],
+      [
+        "authentication",
+        "text"
+      ],
+      [
+        "created_at",
+        "timestamp with time zone"
+      ]
+    ]
+  },
+  "foreignKeys": [
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_funding_fk",
+      "column": "funding_id",
+      "target": "invoice_credit_funding",
+      "targetColumn": "id"
+    },
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_payment_fk",
+      "column": "source_payment_id",
+      "target": "payments",
+      "targetColumn": "id"
+    },
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_source_application_fk",
+      "column": "source_application_id",
+      "target": "invoice_credit_applications",
+      "targetColumn": "reservation_id"
+    },
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_source_invoice_fk",
+      "column": "source_invoice_id",
+      "target": "invoices",
+      "targetColumn": "id"
+    },
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_note_fk",
+      "column": "credit_note_id",
+      "target": "credit_notes",
+      "targetColumn": "id"
+    },
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_line_fk",
+      "column": "credit_note_line_id",
+      "target": "credit_note_lines",
+      "targetColumn": "id"
+    },
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_receipt_fk",
+      "column": "original_charge_receipt_id",
+      "target": "subscription_provider_charge_receipts",
+      "targetColumn": "id"
+    },
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_inspection_fk",
+      "column": "bank_inspection_id",
+      "target": "merchant_cash_return_inspections",
+      "targetColumn": "id"
+    },
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_observation_fk",
+      "column": "bank_observation_id",
+      "target": "merchant_cash_return_observations",
+      "targetColumn": "id"
+    },
+    {
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "name": "credit_atomic_reservation_parent_fk",
+      "column": "reservation_id",
+      "target": "invoice_credit_reservations",
+      "targetColumn": "id"
+    },
+    {
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "name": "credit_atomic_reservation_funding_fk",
+      "column": "funding_id",
+      "target": "invoice_credit_funding_atomic_fee_partitions",
+      "targetColumn": "funding_id"
+    },
+    {
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "name": "credit_atomic_reservation_root_fk",
+      "column": "root_funding_id",
+      "target": "invoice_credit_funding_atomic_fee_partitions",
+      "targetColumn": "funding_id"
+    },
+    {
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "name": "credit_atomic_reservation_payment_fk",
+      "column": "source_payment_id",
+      "target": "payments",
+      "targetColumn": "id"
+    },
+    {
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "name": "credit_atomic_reservation_application_fk",
+      "column": "source_application_id",
+      "target": "invoice_credit_applications",
+      "targetColumn": "reservation_id"
+    }
+  ],
+  "checks": [
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_protocol",
+      "pgGetExpr": "((protocol = 'freeholder.atomic-credit-fee-partition.v1'::text) AND (admission_transaction_id ~ '^[0-9]+$'::text))",
+      "qualification": "SOURCE EXPECTATION UNRUN; exact comparison, no normalization/exemption"
+    },
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_fingerprints",
+      "pgGetExpr": "((parent_fingerprint ~ '^[a-f0-9]{64}$'::text) AND (digest ~ '^[a-f0-9]{64}$'::text) AND (authentication ~ '^[a-f0-9]{64}$'::text))",
+      "qualification": "SOURCE EXPECTATION UNRUN; exact comparison, no normalization/exemption"
+    },
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_economics",
+      "pgGetExpr": "(((jsonb_typeof(economics) = 'object'::text) AND (((economics -> 'plan'::text) ->> 'protocol'::text) = 'freeholder.atomic-credit-fee-partition.v1'::text) AND ((((economics -> 'plan'::text) ->> 'originalPrincipalMinor'::text))::numeric >= (1)::numeric) AND ((((economics -> 'plan'::text) ->> 'originalPrincipalMinor'::text))::numeric <= (9007199254740991)::numeric) AND ((((economics -> 'plan'::text) ->> 'originalFeeMinor'::text))::numeric >= (0)::numeric) AND ((((economics -> 'plan'::text) ->> 'originalFeeMinor'::text))::numeric <= (((economics -> 'plan'::text) ->> 'originalPrincipalMinor'::text))::numeric) AND ((((economics -> 'plan'::text) ->> 'takeNominalFeeMinor'::text))::numeric = ((((economics -> 'plan'::text) ->> 'takeRetiredFeeMinor'::text))::numeric + (((economics -> 'plan'::text) ->> 'takeAssignedFeeMinor'::text))::numeric)) AND ((((economics -> 'plan'::text) ->> 'takeAssignedFeeMinor'::text))::numeric = ((((economics -> 'plan'::text) ->> 'takeProvenCollectedMinor'::text))::numeric + (((economics -> 'plan'::text) ->> 'takeOwedFeeMinor'::text))::numeric))) IS TRUE)",
+      "qualification": "SOURCE EXPECTATION UNRUN; exact comparison, no normalization/exemption"
+    },
+    {
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "name": "credit_atomic_fee_before_entries",
+      "pgGetExpr": "((jsonb_typeof(before_entries) = 'array'::text) AND (jsonb_array_length(before_entries) <= 5000))",
+      "qualification": "SOURCE EXPECTATION UNRUN; exact comparison, no normalization/exemption"
+    },
+    {
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "name": "credit_atomic_reservation_protocol",
+      "pgGetExpr": "((protocol = 'freeholder.atomic-credit-fee-reservation.v1'::text) AND (admission_transaction_id ~ '^[0-9]+$'::text))",
+      "qualification": "SOURCE EXPECTATION UNRUN; exact comparison, no normalization/exemption"
+    },
+    {
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "name": "credit_atomic_reservation_fingerprints",
+      "pgGetExpr": "((parent_fingerprint ~ '^[a-f0-9]{64}$'::text) AND (funding_partition_fingerprint ~ '^[a-f0-9]{64}$'::text) AND (digest ~ '^[a-f0-9]{64}$'::text) AND (authentication ~ '^[a-f0-9]{64}$'::text))",
+      "qualification": "SOURCE EXPECTATION UNRUN; exact comparison, no normalization/exemption"
+    },
+    {
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "name": "credit_atomic_reservation_economics",
+      "pgGetExpr": "(((jsonb_typeof(economics) = 'object'::text) AND ((economics ->> 'protocol'::text) = 'freeholder.atomic-credit-fee-reservation.v1'::text) AND (jsonb_typeof((economics -> 'segments'::text)) = 'array'::text) AND (jsonb_array_length((economics -> 'segments'::text)) >= 1) AND (jsonb_array_length((economics -> 'segments'::text)) <= 5000) AND (((economics ->> 'originalPrincipalMinor'::text))::numeric >= (1)::numeric) AND (((economics ->> 'originalPrincipalMinor'::text))::numeric <= (9007199254740991)::numeric) AND (((economics ->> 'originalFeeMinor'::text))::numeric >= (0)::numeric) AND (((economics ->> 'originalFeeMinor'::text))::numeric <= ((economics ->> 'originalPrincipalMinor'::text))::numeric) AND (((economics ->> 'amountMinor'::text))::numeric >= (1)::numeric) AND (((economics ->> 'amountMinor'::text))::numeric <= ((economics ->> 'originalPrincipalMinor'::text))::numeric) AND (((economics ->> 'nominalFeeMinor'::text))::numeric = (((economics ->> 'retiredFeeMinor'::text))::numeric + ((economics ->> 'assignedFeeMinor'::text))::numeric)) AND (((economics ->> 'assignedFeeMinor'::text))::numeric = (((economics ->> 'provenCollectedMinor'::text))::numeric + ((economics ->> 'owedFeeMinor'::text))::numeric))) IS TRUE)",
+      "qualification": "SOURCE EXPECTATION UNRUN; exact comparison, no normalization/exemption"
+    },
+    {
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "name": "credit_atomic_reservation_before_entries",
+      "pgGetExpr": "((jsonb_typeof(before_entries) = 'array'::text) AND (jsonb_array_length(before_entries) <= 5000))",
+      "qualification": "SOURCE EXPECTATION UNRUN; exact comparison, no normalization/exemption"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "credit_atomic_fee_payment",
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "columns": [
+        "source_payment_id",
+        "funding_id"
+      ]
+    },
+    {
+      "name": "credit_atomic_fee_parent_source",
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "columns": [
+        "source_payment_id",
+        "source_application_id",
+        "funding_id"
+      ]
+    },
+    {
+      "name": "credit_atomic_fee_note",
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "columns": [
+        "credit_note_id",
+        "credit_note_line_id",
+        "funding_id"
+      ]
+    },
+    {
+      "name": "credit_atomic_fee_receipt",
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "columns": [
+        "original_charge_receipt_id",
+        "funding_id"
+      ]
+    },
+    {
+      "name": "credit_atomic_fee_inspection",
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "columns": [
+        "bank_inspection_id",
+        "funding_id"
+      ]
+    },
+    {
+      "name": "credit_atomic_reservation_funding",
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "columns": [
+        "funding_id",
+        "reservation_id"
+      ]
+    },
+    {
+      "name": "credit_atomic_reservation_root",
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "columns": [
+        "source_payment_id",
+        "root_funding_id",
+        "reservation_id"
+      ]
+    },
+    {
+      "name": "credit_atomic_reservation_application",
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "columns": [
+        "source_application_id",
+        "reservation_id"
+      ]
+    }
+  ],
+  "newTriggers": [
+    {
+      "name": "credit_atomic_fee_partition_guard",
+      "table": "invoice_credit_funding_atomic_fee_partitions",
+      "function": "freeholder_guard_credit_atomic_fee_partition()",
+      "tgtype": 31,
+      "deferrable": false,
+      "initiallyDeferred": false,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    },
+    {
+      "name": "credit_atomic_fee_funding_birth",
+      "table": "invoice_credit_funding",
+      "function": "freeholder_credit_atomic_fee_birth_guard()",
+      "tgtype": 5,
+      "deferrable": true,
+      "initiallyDeferred": true,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    },
+    {
+      "name": "credit_atomic_reservation_partition_guard",
+      "table": "invoice_credit_reservation_atomic_fee_partitions",
+      "function": "freeholder_guard_credit_atomic_reservation()",
+      "tgtype": 31,
+      "deferrable": false,
+      "initiallyDeferred": false,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    },
+    {
+      "name": "credit_atomic_reservation_birth",
+      "table": "invoice_credit_reservations",
+      "function": "freeholder_credit_atomic_reservation_birth_guard()",
+      "tgtype": 5,
+      "deferrable": true,
+      "initiallyDeferred": true,
+      "enabled": [
+        "O",
+        "A"
+      ]
+    }
+  ],
+  "oldTriggers": [
+    {
+      "name": "invoice_credit_funding_guard",
+      "table": "invoice_credit_funding",
+      "function": "freeholder_guard_invoice_credit()",
+      "tgtype": 31,
+      "deferrable": false
+    },
+    {
+      "name": "invoice_credit_reservations_guard",
+      "table": "invoice_credit_reservations",
+      "function": "freeholder_guard_invoice_credit()",
+      "tgtype": 31,
+      "deferrable": false
+    },
+    {
+      "name": "invoice_credit_applications_guard",
+      "table": "invoice_credit_applications",
+      "function": "freeholder_guard_invoice_credit()",
+      "tgtype": 31,
+      "deferrable": false
+    },
+    {
+      "name": "invoice_credit_releases_guard",
+      "table": "invoice_credit_releases",
+      "function": "freeholder_guard_invoice_credit()",
+      "tgtype": 31,
+      "deferrable": false
+    },
+    {
+      "name": "invoice_credit_fee_funding_guard",
+      "table": "invoice_credit_funding",
+      "function": "freeholder_credit_fee_receipt()",
+      "tgtype": 7,
+      "deferrable": false
+    },
+    {
+      "name": "invoice_credit_fee_reservations_guard",
+      "table": "invoice_credit_reservations",
+      "function": "freeholder_credit_fee_receipt()",
+      "tgtype": 7,
+      "deferrable": false
+    },
+    {
+      "name": "invoice_credit_fee_applications_guard",
+      "table": "invoice_credit_applications",
+      "function": "freeholder_credit_fee_receipt()",
+      "tgtype": 7,
+      "deferrable": false
+    },
+    {
+      "name": "subscription_prorations_guard",
+      "table": "subscription_prorations",
+      "function": "freeholder_subscription_proration_receipt()",
+      "tgtype": 31,
+      "deferrable": false
+    }
+  ],
+  "qualification": "No checks executed. CHECK deparser exact-source expectations must be independently qualified; mismatch refuses, never a generic constraint exemption."
+}

@@ -9,7 +9,7 @@ const actualFeeRef=(intent:unknown)=>`fee_${bankRef(intent).replace(/^pi_/,"")}`
 const actualTransferRef=(intent:unknown)=>`tr_${bankRef(intent).replace(/^pi_/,"")}`;
 const object=(value:unknown):Record<string,unknown>=>value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:{};
 const tag=(form:URLSearchParams)=>Object.fromEntries([...form].filter(([key])=>key.startsWith("metadata[")).map(([key,value])=>[key.slice(9,-1),value]));
-export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDraftReply?:true;failAfterPositiveCash?:true}={}){
+export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDraftReply?:true;failAfterPositiveCash?:true;prorationPreview6000?:true}={}){
  let current:()=>Record<string,unknown>|undefined=()=>undefined,zero:()=>Record<string,unknown>=()=>{throw Error("The actual bootstrap must exist first.");};
  let originalZero:Record<string,unknown>|null=null,updatePosts=0,draftPosts=0,itemPosts=0,feePosts=0,finalizePosts=0,payPosts=0,cashGets=0,externalAttachments=0;
  let lostUpdate=false,lostDraft=false,failedCash=false;
@@ -29,6 +29,19 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
    originalZero={...structuredClone(zero()),...structuredClone(original),application_fee_amount:null,total_discount_amounts:[],total_taxes:[],total_tax_amounts:[],paid_out_of_band:false};
   }
   const form=()=>{const actual=new URLSearchParams(init.body as URLSearchParams);forms.push({path:url.pathname,form:actual});return actual;};
+  if(options.prorationPreview6000&&url.pathname==="/v1/invoices/create_preview"&&init.method==="POST"){
+   const actual=new URLSearchParams(init.body as URLSearchParams),target=actual.get("subscription_details[items][0][price_data][unit_amount]");
+   // The ordinary 4000 mandate preview remains the original fixture path.
+   if(target==="6000"){
+    const items=z.array(z.object({id:z.string().min(1),current_period_start:z.number().int(),current_period_end:z.number().int()}).passthrough()).length(1).parse(object(subscription.items).data),item=items[0];
+    if(!item)throw Error("Read the actual current original bank item first.");
+    const native=actual.get("subscription_details[proration_behavior]")==="create_prorations",at=Number(actual.get("subscription_details[proration_date]")),start=item.current_period_start,end=item.current_period_end;
+    if(end-start!==86400||native&&(!Number.isSafeInteger(at)||at<=start||at>=end)||!native&&actual.has("subscription_details[proration_date]"))throw Error("The native estimate must bind the actual current paid-day interval and genuine request instant.");
+    const product=actual.get("subscription_details[items][0][price_data][product]"),line=(id:string,amount:number,from:number,to:number,proration:boolean)=>({id,amount,currency:"cad",quantity:1,period:{start:from,end:to},parent:{type:"subscription_item_details",subscription_item_details:{subscription:subscription.id,subscription_item:item.id,proration}},pricing:{price_details:{price:"price_actualBPreview",product}},discount_amounts:[],taxes:[]});
+    const rows=[...(native?[line("il_actualBUnusedNET",Math.floor(6000*(end-at)/(end-start)+0.5),at,end,true)]:[]),line("il_actualBForecast",6000,end,end+86400,false)],total=rows.reduce((sum,row)=>sum+row.amount,0);
+    return Response.json({id:`upcoming_in_actualB${native?"Native":"Update"}`,customer:subscription.customer,currency:"cad",amount_paid:0,subtotal:total,total,amount_due:total,period_start:end,period_end:end+86400,lines:{has_more:false,data:rows}});
+   }
+  }
   const refresh=(id:string)=>{const invoice=bankInvoices.get(id),lines=bankLines.get(id);if(!invoice||!lines)throw Error("A genuine bank invoice and lines must exist.");const total=lines.reduce((n,line)=>n+Number(line.amount),0);invoice.total=total;invoice.subtotal=total;invoice.amount_due=total;invoice.amount_remaining=total-Number(invoice.amount_paid);};
   if(url.pathname===`/v1/subscriptions/${bankRef(subscription.id)}`&&init.method==="POST"){
    const actual=new URLSearchParams(init.body as URLSearchParams);if(!actual.has("items[0][price_data][unit_amount]"))return null;
@@ -146,6 +159,16 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
   if(!intent||!Number.isSafeInteger(amountMinor)||amountMinor<=0||already+amountMinor>Number(intent.application_fee_amount))throw Error("Return only an actual existing original bank fee; never manufacture local acceptance or metadata ownership.");
   const id=`fr_actualExternalFee${feeReturns.size+1}`,actual={id,fee:actualFeeRef(providerPaymentIntentRef),amount:amountMinor,currency:intent.currency,metadata:{external_review:"fictional_dashboard_return"}};feeReturns.set(id,actual);return actual;
  }
+ function advanceToPaidInvoicePeriod(providerInvoiceRef:string){
+  const invoice=bankInvoices.get(providerInvoiceRef),lines=bankLines.get(providerInvoiceRef),subscription=current();
+  if(!invoice||!lines?.length||!subscription||invoice.status!=="paid"||invoice.amount_paid!==invoice.total||invoice.amount_remaining!==0||invoice.subscription!==subscription.id)throw Error("Rollover requires this genuine fully paid original bank invoice.");
+  const periods=lines.map(line=>z.object({start:z.number().int(),end:z.number().int()}).parse(line.period)),period=periods[0],items=z.array(z.object({current_period_start:z.number().int(),current_period_end:z.number().int()}).passthrough()).length(1).parse(object(subscription.items).data),item=items[0];
+  if(!period||!item||period.end-period.start!==86400||periods.some(other=>other.start!==period.start||other.end!==period.end)||period.start*1000>Date.now()||period.end*1000<=Date.now())throw Error("Only the actual paid bank component interval containing the real observation instant can roll over.");
+  // Mutate the fictional bank object, never canonical rows or signed facts.
+  const actualItems=object(subscription.items).data;if(!Array.isArray(actualItems)||actualItems.length!==1)throw Error("Retain the exact original bank item.");
+  const actualItem=object(actualItems[0]);actualItem.current_period_start=period.start;actualItem.current_period_end=period.end;
+  return{periodStart:new Date(period.start*1000),periodEnd:new Date(period.end*1000)};
+ }
  // Explicit fictional external anomalies, never a production policy selector.
  // Original identity comes ONLY from the already-created exact bank invoice.
  // These methods intentionally describe contradictory received bank facts; the
@@ -162,6 +185,6 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
   intents.set(id,intent);intentInvoices.set(id,providerInvoiceRef);invoice.amount_paid=amountMinor;invoice.amount_remaining=kind==="overage"?0:total-amountMinor;invoice.status=kind==="overage"?"paid":"open";
   return{providerInvoiceRef,providerPaymentIntentRef:id,amountMinor,currency:currency.toUpperCase(),feeMinor};
  }
- return{...edge,forms,externallyAttachPayment,externallyRefundPayment,externallyReturnFee,externalRefunds:()=>[...externalRefunds.values()],externallyAttachWrongCurrencyPayment:(providerInvoiceRef:string)=>externalAnomaly(providerInvoiceRef,"wrong_currency"),externallyOverpayInvoice:(providerInvoiceRef:string)=>externalAnomaly(providerInvoiceRef,"overage"),
+ return{...edge,forms,externallyAttachPayment,externallyRefundPayment,externallyReturnFee,advanceToPaidInvoicePeriod,externalRefunds:()=>[...externalRefunds.values()],externallyAttachWrongCurrencyPayment:(providerInvoiceRef:string)=>externalAnomaly(providerInvoiceRef,"wrong_currency"),externallyOverpayInvoice:(providerInvoiceRef:string)=>externalAnomaly(providerInvoiceRef,"overage"),
   externalAttachments:()=>externalAttachments,invoices:()=>[...bankInvoices.values()],intents:()=>[...intents.values()],feeReturns:()=>[...feeReturns.values()],transferReturns:()=>[...transferReturns.values()],counts:()=>({updatePosts,draftPosts,itemPosts,feePosts,finalizePosts,payPosts,cashGets,principalRefundPosts,feeRefundPosts,transferReturnPosts})};
 }

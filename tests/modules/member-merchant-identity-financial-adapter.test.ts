@@ -85,6 +85,16 @@ function reader(data: Data, inspect?: (table: string, query: string, params: unk
     },
     execute: async (statement: SQL) => {
       const { sql: query, params } = dialect.sqlToQuery(statement), table = query.match(/\bvalid\s+from\s+"?([a-z_]+)"? r\b/)?.[1] as ProrationFinancialTable | undefined;
+      if(!table&&query.includes('select actual_funding.id::text as id from invoice_credit_funding actual_funding')){
+        // Existing order fixtures have NO controlled quote owning their credit.
+        // Return empty only for this exact FK-bound new-purpose parent selector.
+        expect(query).toContain('actual_acceptance.id=actual_funding.proration_id');expect(query).toContain('actual_quote.planned_proration_id=actual_acceptance.id');
+        expect(query).toContain('actual_quote.quote_digest=actual_acceptance.accepted_quote_digest');expect(query).toContain('actual_quote.profile_id=actual_acceptance.profile_id');expect(query).toContain('actual_quote.profile_version=actual_acceptance.profile_version');
+        expect(query).toContain('original_route.payment_id=actual_funding.source_payment_id');expect(query).toContain('original_application.reservation_id=original_reservation.id');expect(query).toContain('original_reservation.funding_id=actual_funding.id');
+        expect([...query.matchAll(/\b(?:from|join)\s+([a-z_]+)\b(?!\.)/gi)].map(match=>match[1])).toEqual(['invoice_credit_funding','subscription_prorations','subscription_controlled_quotes','merchant_agreement_payment_routes','invoice_credit_reservations','invoice_credit_applications']);
+        const selected=new Set([...(data.collections??[]).map(row=>row.invoiceId),...(data.routes??[]).map(row=>row.paymentId)]);expect(params.length).toBeGreaterThan(0);expect(params.every(value=>typeof value==='string'&&selected.has(value))).toBe(true);
+        expect(query.trimEnd()).toMatch(/limit 5001$/);expect(query).not.toMatch(/contact_id|email|current_account|amount_minor|split_part/);inspect?.('atomic_credit_exact_parent_selector',query,params);return [];
+      }
       if(!table&&query.includes('from subscription_controlled_collections target join subscription_controlled_quotes quote on quote.id=target.quote_id')){
         expect(query).toContain('resource.id=quote.resource_id');expect(query).toContain('policy.subscription_id=resource.subscription_id');
         expect(query).toContain('where target.invoice_id=');expect(query.trimEnd()).toMatch(/limit 5001$/);
