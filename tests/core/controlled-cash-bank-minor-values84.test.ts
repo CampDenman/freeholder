@@ -36,10 +36,11 @@ describe("complete repeated bank amount extraction", () => {
   });
   it("keeps every prior migrated byte and exactly materializes the new owned suffix", () => {
     const normal = Buffer.from(read("db/migrations/0085_controlled_collection_application.sql"));
-    expect(normal.length).toBe(manifest.assembled.bytes);
-    expect(hash(normal)).toBe(manifest.assembled.sha256);
+    expect(normal.length).toBeGreaterThanOrEqual(manifest.assembled.bytes);
+    const frozen = normal.subarray(0, manifest.assembled.bytes);
+    expect(hash(frozen)).toBe(manifest.assembled.sha256);
     expect(hash(normal.subarray(0, manifest.prefix.bytes))).toBe(manifest.prefix.sha256);
-    expect(normal.subarray(manifest.prefix.bytes).toString()).toBe(`\n--> statement-breakpoint\n${fragment}`);
+    expect(frozen.subarray(manifest.prefix.bytes).toString()).toBe(`\n--> statement-breakpoint\n${fragment}`);
     expect(read("deploy/sql/0085_controlled_collection_application.unapplied.sql")).toBe(normal.toString());
   });
   it("preserves the complete previous readiness predicates while changing only the corrected bank body pin", () => {

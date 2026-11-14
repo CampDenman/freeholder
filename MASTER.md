@@ -3564,6 +3564,25 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled/legacy period integration checkpoint 2026-11-14 (C12.38/C9.33):
+original application V7 at766 clears full bank/admission/payment birth but the
+old period-route trigger demands an unrelated legacy schedule observation.
+Its transaction rolls back completely: paid0/payment0/core3zero, authentic4200
+CAD minor receipt retained, independent595 snapshots/drain0; V31 stays preserved.
+New source distinguishes an actual controlled origin/generated payment link,
+then requires the entire existing same-transaction original bank/parent route
+validator; missing origin or invalid stage refuses before any legacy fallback.
+Removing one literal branch restores every ordinary legacy byte. Current ready
+guard retains all prior bank/validator/route pins and adds the full period body
+and exact enabled BEFORE INSERT ROW trigger. Two replacements append after all
+614412 frozen SQL85 bytes; no new function/model/trigger/journal or permission.
+This composition is PREPARED/UNRUN. New amount regression controls preserve their
+entire exact614412-byte checkpoint while allowing separately checked later SQL
+suffixes; no prior predicate/body oracle changes. Renewed source/strict complete
+function-origin inventories and original money/access natives remain required;
+no C closure or stable/provider sign-off. See
+`deploy/sql/0085_controlled_period_route_successor_20261114.manifest.json`.
+
 Controlled original-period route SOURCE correction2026-11-14 (C9.33/C12.38/C1.08):
 actual V31 reached a genuine created payment/lifetime receipt link, then the
 legacy period trigger required unrelated old schedule invoice observations and
