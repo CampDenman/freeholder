@@ -3564,6 +3564,62 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): genuine human multipart
+recovery now has a retained-first-ACK CREATE path. Exact original baseline,
+physical nonce/runtime/full ACK/UploadId and actual FINs or independent stop
+precede a fresh empty original-session inspection and two complete immutable
+provider inventories. Immutable applied review permits genuine future parts/
+completion without changing the original failed/NULL return, ACK or FIN.
+Unknown-no-ACK singleton sessions remain pending; session retirement, issued
+URL consumption, erasure and quota release are not inferred. Exact reviewed
+local CREATE closure can permit ordinary stopped-executor drain release while
+all other namespace/cohort checks remain. The earlier ordinary review trigger's
+unconditional multipart refusal is replaced by the same full mandatory typed
+proof predicates, preserving old ordinary/transfer branches and c792 oracles.
+Six functions/eight continuations append after the intact c792 owned82 prefix;
+no model/column/trigger/capability/journal is added. Eight proof/five genuine
+service/SDK/browser PUT/fictional TCP controls are PREPARED/UNRUN; 1633836e
+original-fixture type-only alignment is explicit. No child execution/provider/
+host action or C closure. Unknown/legacy/terminal/session/capture/quota/cutover,
+full qualification, actual provider/operator/platform acceptance, independent
+review and stable sign-offs remain open. See
+`deploy/media-multipart-known-create-recovery-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08/C3.22): the existing authorized
+owner/expiry/verified-first-scope cleanup has a genuine idle original multipart
+ABORT path. Exact known CREATE and every unused/withheld issuer must close;
+exposed/unknown URLs, holds, foreign generations and unbound charges refuse.
+A permanent original namespace/key admission fence precedes one real ABORT.
+Actual ACK/FIN, fresh accounted exact-session/object absence and two complete
+immutable physical inventories precede retirement of only that original pending
+pointer. No TTL/logical404/browser callback, quota release, global legacy gate
+or remote issued-link closure is inferred. Never-dispatched CREATE has its own
+strict real original proof; lost/failed ABORT stays pending without replay.
+Seven proof/seven genuine service/SDK/fictional TCP controls are PREPARED/UNRUN;
+all prior oracle bodies remain intact. Six functions/three continuations/three
+mandatory guards append after the intact known-CREATE owned82 prefix, with no
+model/column/journal/capability change. No child execution/provider/host action
+or C closure. Unknown/terminal/legacy/session/capture/quota/cutover work, all
+qualification/external/platform/independent review and stable gates remain
+open. See `deploy/media-multipart-idle-retirement-source-2026-11-13.md`.
+
+Source continuation 2026-11-14 (C1.12/C11.08/C3.22): explicit fresh-human
+multipart cleanup can verify a failed/unknown original idle ABORT without a
+new DELETE. Exact original caller/nonce/session, every creator independently
+closed, permanent namespace/key fencing, actual local FIN or independent stop,
+fresh two-request absence and two full immutable provider passes precede a
+typed retired review. Original missing ACK/FIN/first result stay unchanged;
+held/retained/foreign/charged/exposed cohorts refuse. Earlier failed inventory
+is not refilled. Exact actual-FIN reviewed CREATE/ABORT can close its own
+pre-drain cohort without inventing a Linux stop FK; all other drain/plan
+requirements remain. Three functions/nine continuations append after the
+intact idle owned82 prefix, with no trigger/model/column/journal/API/capability
+change. Eight proof/six genuine service/SDK/fictional TCP controls are PREPARED/
+UNRUN, all prior oracle bodies intact. No child execution/provider/host action
+or C closure. Remote authority/unknown/legacy/certificate/quota/capture/cutover,
+full qualification and external/platform/independent security/stable gates
+remain open. See `deploy/media-multipart-abort-recovery-source-2026-11-14.md`.
+
 Controlled principal old-empty successor source checkpoint 2026-11-13
 (C12.38/C1.08): the existing receipt/namespace and immutable agreement route are
 read before future application links. Only an ordinary key, zero actual receipts,
