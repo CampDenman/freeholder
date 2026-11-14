@@ -3564,6 +3564,24 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Actual original money PASS / independent access failure 2026-11-14
+(C12.38/C9.33/C1.08): at6aaf, complete source1310/207/454 explicit DB skips,
+fresh V33 normal86 and strict159/356guards/367completefunctions, SDK16 all pass.
+The ORIGINAL full local application V9 PASSES1 actual/10filtered in61.866s:
+actual4200 CADminor invoice settlement, one real payment and core3each1, unchanged
+access inside the genuine money TX, independent all595 snapshots/journal/caps/
+drain0. No actual provider account acceptance transfers. Fresh V34 normal86 and
+strict159 also pass. The independent paid-period native then FAILS72.734s after
+money committed: raw grant-window SQL passes JavaScript Date objects to a driver
+expecting timestamp strings. Target remains paid4200/payment1/core3each1 but
+paid-effect receipt0; full595 afterstate/drain0 preserved. Three parameters now
+use validated Date.toISOString() with explicit timestamptz casts; every exact/
+overlap/null/usage/history predicate is otherwise byte-identical. This source
+repair is PREPARED/UNRUN; source plus a new fresh independent access native must
+qualify. V34 is never reset. All other full-spec/provider/recovery/security/final
+stable gates remain open. See
+`deploy/controlled-paid-period-timestamp155.manifest.json`.
+
 Period guard source-control correction 2026-11-14 (C12.38): first composed
 source V71 stops at one test helper selecting the trailing EXECUTE FUNCTION
 trigger reference instead of the actual CREATE FUNCTION declaration in the

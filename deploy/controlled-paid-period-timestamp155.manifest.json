@@ -1,0 +1,16 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SOURCE_CORRECTION_PREPARED_UNRUN",
+  "source": "src/core/entitlements/access.ts",
+  "beforeSha256": "383c4577407fc497268b6e1130ce16980cd79d34a81b6a8909b64892ef08c2ee",
+  "afterSha256": "58265ebb68f39ed14ef298ece54dfb2ea6ca1d73ea3ceccc087a33a906246072",
+  "finiteDelta": {
+    "before": "exactWindow: sql<boolean>`coalesce(${entitlementGrants.startsAt}=${input.startsAt} and ${entitlementGrants.endsAt}=${input.endsAt},false)`,\n    overlaps: sql<boolean>`${entitlementGrants.endsAt} is null or ${entitlementGrants.endsAt}>${input.startsAt}`,",
+    "after": "exactWindow: sql<boolean>`coalesce(${entitlementGrants.startsAt}=${input.startsAt.toISOString()}::timestamptz and ${entitlementGrants.endsAt}=${input.endsAt.toISOString()}::timestamptz,false)`,\n    overlaps: sql<boolean>`${entitlementGrants.endsAt} is null or ${entitlementGrants.endsAt}>${input.startsAt.toISOString()}::timestamptz`,"
+  },
+  "wholeOriginalSourceReverseExact": true,
+  "semantics": "Three raw SQL parameters are UTC ISO timestamp strings explicitly cast timestamptz; original exact/overlap/null and historical dates/used/status predicates are unchanged. No grant/usage/calendar/idempotency waiver.",
+  "failedNative": "/tmp/freeholder-current-full86-paid-period-full-native-v3-20261114-result.json",
+  "preservedDatabase": "freeholder_current_full86_financial159_normal_v34_test_20261114",
+  "acceptance": "Pending source and fresh independent paid-period native; money was already committed, failed effect transaction committed no receipt/grant changes."
+}
