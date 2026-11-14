@@ -15,6 +15,8 @@ import { getInvoiceMarketPolicy, verifyInvoiceMerchant } from "./market-policy";
 import { type invoices } from "./schema";
 import { commercialInvoiceCashHistory } from "./commercial-attestations";
 import { invoiceCashFeeAllocation } from "./invoice-credit-cash-fee";
+import { CONTROLLED_CASH_ATOMIC_PROTOCOL } from "./controlled-cash-application-protocol";
+import { controlledAtomicStageFee } from "./controlled-cash-atomic-fee-stage";
 
 export type SubscriptionInvoiceRouting = {
   subscriptionId: string; agreementRoutingVersion: 1; scope: MerchantChargeScope; siteFeeBps: number;
@@ -52,7 +54,11 @@ export async function reserveAgreementCharge(ctx: ServiceContext, invoice: typeo
   }
   const previous = await commercialInvoiceCashHistory(ctx, invoice);
   if (previous.pending || previous.cash !== BigInt(invoice.paidMinor)) throw new ServiceError("conflict", "Reconcile original refunded or outstanding agreement principal before another attempt.");
-  const { feeMinor } = await invoiceCashFeeAllocation(ctx, invoice, policy.feeMinor, { amountMinor: request.amountMinor, priorCashMinor: Number(previous.cash), priorAllocatedFeeMinor: Number(previous.allocatedFee) });
+  let feeMinor:number;
+  if(original.controlledCashPlan?.applicationProtocol===CONTROLLED_CASH_ATOMIC_PROTOCOL){
+    const actual=await controlledAtomicStageFee(ctx,{batchId:original.controlledCashPlan.batchId,collectionId:original.controlledCashPlan.collectionId,admissionDigest:original.controlledCashPlan.admissionDigest,receiptId:original.controlledCashPlan.receiptId,invoice,originalFeeMinor:policy.feeMinor,priorCashMinor:Number(previous.cash),priorAllocatedFeeMinor:Number(previous.allocatedFee)});
+    if(actual===null)throw new ServiceError("conflict","This exact atomic receipt no longer has its complete authenticated same-transaction fee endpoint.");feeMinor=actual;
+  }else({feeMinor}=await invoiceCashFeeAllocation(ctx, invoice, policy.feeMinor, { amountMinor: request.amountMinor, priorCashMinor: Number(previous.cash), priorAllocatedFeeMinor: Number(previous.allocatedFee) }));
   if (original.controlledCashPlan) {
     const plan = original.controlledCashPlan;
     if (request.method !== "provider_schedule" || request.subscriptionChargeReceiptId !== plan.receiptId || request.amountMinor !== plan.amountMinor || invoice.currency !== plan.currency

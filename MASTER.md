@@ -3584,6 +3584,107 @@ orchestration remain required implementation, alongside all provider/platform/
 security acceptance. No C-item, feature, stable or release sign-off is closed.
 See `deploy/controlled-paid-period155-source-20261113.md`.
 
+Controlled activated-amendment date source checkpoint 2026-11-13
+(C12.38/C9.38/C9.33/C1.08): a genuine original-period factory can select a
+later explicitly accepted start through existing activated amendment terms,
+while the parent previously admitted only unchanged parentStart/End. A new
+ordinary actual calendar/terms/FK reader now supplies that exact narrow later
+start at both parent date boundaries and rechecks its full actual row revision.
+Original parent windows, trial, zero-credit, source, money/privacy/fee/caller and
+whole raw/PG checks remain; ordinary empty histories and observational GET
+behavior are unchanged. Pure/source controls are PREPARED/UNRUN; no execution,
+schema/SQL/root reader change or acceptance claim occurred. The real complete
+late-amendment native/provider/effect journey and all full-scope acceptance
+remain required. See `deploy/controlled-late-period-authority84-source-20261113.md`.
+
+Controlled atomic actual-fee source checkpoint 2026-11-13
+(C12.38/C9.33/C1.08/C9.38): target/bank protocol stays v1, while a distinct
+signed application batch version binds each actual original bank charge's fee
+and the complete original cumulative endpoint. Real earlier canonical prefixes
+must exist before later receipts; every receipt settles in one TX or all
+canonical/core3 writes roll back. Existing default prefix floors and original
+per-payment refund/credit epochs remain unchanged. The new owned UNAPPLIED
+suffix preserves full old route/fee guards and all current raw/parent/bank
+evidence; no model is added and root's18-family footprint remains required.
+Strict amount/signature/source controls and four additional genuine desired
+natives are PREPARED/UNRUN, with no SQL/parser/compiler/test execution or root
+migration edit. Actual integration, currency/overage, refund/fee/paid effects,
+provider/security and all remaining full-scope acceptance remain required; no
+activation, C-item closure or stable claim. See
+`deploy/controlled-cash-atomic-fee84-source-20261113.md`.
+
+Controlled genuine staged writer source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): genuine repeated initial parent/bank evidence now
+produces actual immutable HMAC admissions immediately before canonical writes.
+The real shared payment INSERT generates its UUID; every subsequent route,
+observation, settlement and complete-batch boundary rechecks783 current physical
+normalization and immutable bank facts. A genuine successor replaces old424's
+deliberate false shape while retaining all other structural predicates and
+exact original-period consent; thirteen actual enabled guards plus body pins
+are required before the first admission. The new private shared money command
+is system/external:false, with no bank POST or access mutation. Older partial
+invoice facts require exact signed complete historical receipt cohorts while a
+separate current proof remains mandatory. Six native application cases, six
+signed historical-cohort pures and five source controls are PREPARED/UNRUN;
+no execution or current migration edit occurred. Exact root4a/221 repairs are
+preserved. Atomic whole-batch cent allocation, real currency/overage anomalies,
+separate paid effects and full native/provider/security acceptance remain
+required, not deferred. See
+`deploy/controlled-cash-staged-writer84-source-20261113.md`.
+
+Controlled scalar CASE source correction 2026-11-13 (C12.38/C1.08): the frozen
+unapplied core/783 source is retained unchanged. Seven complete function-body
+replacements add only parentheses around scalar CASE operands in IF expressions;
+an exact source/hash/signature manifest records every change. Root must place
+these corrected statements at their original creation positions in a NEW forward
+migration; appending replacements after an invalid CREATE cannot repair an
+already failed normal migration. Nine preservation controls are PREPARED/UNRUN.
+No SQL/parser/test execution, published migration change or activation occurred.
+See `deploy/controlled-cash-application-case84-source-20261113.md`.
+
+Controlled initial batch evaluation source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): a NEW ordinary unregistered evaluator discovers the
+actual complete SQL financial FK scope before canonical locks, obtains the
+genuine retained bank batch itself through the private prospective initializer,
+and checks original current principal/debt, credit/fee, ownership/privacy and all
+actual source callers/raw occurrences. The unchanged caller inventory is reused
+on the full source scope without reverse foreign-resource locking; partial
+capacity and full PG before/after invariance remain explicit. Three genuine
+factory/bank/inspection service-native controls are PREPARED/UNRUN, not passes.
+No SQL/model/registration/activation or execution occurred. Signing/persisting
+actual prewrite admissions, staged writer and original route/settlement boundary
+integration, partial/tiny batch natives and final acceptance remain required.
+See `deploy/controlled-cash-initial-evaluation84-source-20261113.md`.
+
+Controlled original preparation source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): the isolated future consumer now distinguishes
+actual original zero bootstrap invoice evidence from canonical target owners in
+mixed raw lists. It requires authenticated pre-update bootstrap ancestry plus a
+complete later list/independent invoice inventory after actual writes, original
+customer/platform/account and zero historical atom checks; unknown, ambiguous,
+contradictory and unfinished evidence stays debt. Normal-period bank rollover
+is limited to exact accepted full-NET, nonproration forecast windows while price,
+interval, anchor and trial checks remain. Eight signed raw cases and nine window
+cases are PREPARED/UNRUN, with source-only type-narrowing corrections preserved.
+No execution, SQL/model/registration or activation occurred. Initial application
+parent evaluation, staged writer/routing, exact activated-amendment late-period
+admission and actual native/provider/security acceptance remain required. See
+`deploy/controlled-bootstrap-zero-context84-source-20261113.md`.
+
+Controlled prospective context source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): a private real-Tx read-only initializer obtains the
+genuine batch bank proof itself, freezes a receipt-only retained-unapplied model
+without paymentId, verifies full PG before/after evidence and always removes its
+context. Actual raw/principal/debt reader plumbing retains actual canonical paid,
+every raw/caller row and strict receiptOnly/default guards. Complete known mixed
+invoice facts now preserve exact multiple owners/proofs; unknown/duplicate/
+ambiguous atoms stay debt without amount/current-account adoption. Twenty new
+signed-raw pure and four source controls are PREPARED/UNRUN; no execution, SQL,
+model/current-root or service-registration change occurred. Genuine full parent
+evaluation, mutation-stage context/writer/routing, original bootstrap nonpayable
+proof and native/provider/security acceptance remain required. Application and
+stable remain unactivated/open. See
+`deploy/controlled-cash-prospective-context84-source-20261113.md`.
 Controlled original-receipt routing source checkpoint 2026-11-13
 (C12.38/C9.33/C1.08): the actual shared payment resolver recognizes only the
 canonical receipt's real controlled-origin child, authenticates its genuine

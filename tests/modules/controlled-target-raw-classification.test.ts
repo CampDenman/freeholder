@@ -2,6 +2,7 @@
 // PREPARED / UNRUN: actual Ed25519 caller/raw vectors, mock canonical projection.
 // No ServiceContext, canonical DB rows, provider or native acceptance is minted.
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { describe,expect,it } from "vitest";
 import type { MerchantControlledObservation } from "@/adapters/payments";
 import { merchantPhysicalCaller } from "@/modules/invoicing/merchant-physical-caller";
@@ -15,7 +16,7 @@ import { signProviderReadProof } from "@/modules/subscriptions/provider-read-sig
 type History=Awaited<ReturnType<typeof controlledProviderJournal>>;
 type Operation=typeof subscriptionControlledOperations.$inferSelect;
 const sha="a".repeat(64),start="2026-11-01T00:00:00.000Z",end="2026-12-01T00:00:00.000Z";
-function vector(options:{paid?:boolean;contradictory?:boolean;unfinished?:boolean;precision?:boolean;incompletePayments?:boolean;historicalIncomplete?:boolean}={}){
+function vector(options:{bootstrapZero?:boolean;paid?:boolean;partial?:boolean;contradictory?:boolean;unfinished?:boolean;precision?:boolean;incompletePayments?:boolean;historicalIncomplete?:boolean}={}){
  const resource:ControlledRawTarget["resource"]={id:randomUUID(),subscriptionId:randomUUID(),termsId:randomUUID(),generation:1,originalSourceRevision:sha,createdAt:new Date(),originalScope:{
   subscriptionId:"",termsId:"",generation:1,providerApiVersion:"2026-10-28.endive",providerPlatformAccountId:"acct_originalPlatform",providerAccountId:"acct_originalSeller",
   providerCustomerRef:"cus_original",providerMethodRef:"pm_original",providerProductRef:"prod_original",currency:"CAD",interval:"month",intervalCount:1,acceptedPeriodEnd:end,acceptedTrialEnd:null}};
@@ -52,9 +53,12 @@ function vector(options:{paid?:boolean;contradictory?:boolean;unfinished?:boolea
  const base={bootstrapOperationId:bootstrap.operation.id,bootstrapRequestDigest:bootstrap.operation.requestDigest,providerSubscriptionRef:"sub_original",manifest,calendar,
   invoiceOrigin:{kind:"created_draft",creatorOperationId:null,creatorRequestDigest:null},lineBindings:[]};
  let invoiceMetadata:Record<string,unknown>={};
- function invoice(paid:number,total=1000){return{id:"in_original",subscription:"sub_original",customer:"cus_original",metadata:invoiceMetadata,parent:{subscription_details:{subscription:"sub_original",metadata:tag}},currency:"cad",status:paid===total&&total>0?"paid":"draft",
+ function invoice(paid:number,total=1000){return{id:"in_original",subscription:"sub_original",customer:"cus_original",metadata:invoiceMetadata,parent:{subscription_details:{subscription:"sub_original",metadata:tag}},currency:"cad",status:paid===total&&total>0?"paid":paid>0?"open":"draft",
   total,subtotal:total,amount_due:total,amount_paid:paid,amount_remaining:total-paid,auto_advance:false,collection_method:"charge_automatically",default_payment_method:"pm_original",automatic_tax:{enabled:false},discounts:[],default_tax_rates:[],
   starting_balance:0,ending_balance:0,pre_payment_credit_notes_amount:0,post_payment_credit_notes_amount:0,total_discount_amounts:[],total_taxes:[],application_fee_amount:0,transfer_data:null,on_behalf_of:null};}
+ const preparationInvoice={...invoice(0,0),id:"in_bootstrap",status:"paid"};
+ if(options.bootstrapZero)append("read_bootstrap",{bootstrapOperationId:bootstrap.operation.id,bootstrapRequestDigest:bootstrap.operation.requestDigest,providerSubscriptionRef:"sub_original"},()=>({facts:[],result:{providerSubscriptionRef:"sub_original",providerInvoiceRef:"in_bootstrap",completeZeroRecurringItem:true,
+  providerApiVersion:resource.originalScope.providerApiVersion,providerPlatformAccountId:resource.originalScope.providerPlatformAccountId,chargeAccountId:resource.originalScope.providerAccountId??null}}));
  const creator=append("create_draft",base,operation=>{
   invoiceMetadata={...tag,freeholder_controlled_collection_protocol:manifest.protocol,freeholder_controlled_collection_id:manifest.collectionId,freeholder_controlled_collection_quote_id:manifest.quoteId,
    freeholder_canonical_invoice_id:manifest.canonicalInvoiceId,freeholder_canonical_target_digest:manifest.canonicalTargetDigest,freeholder_controlled_collection_quote_digest:manifest.acceptedQuoteDigest,
@@ -66,10 +70,10 @@ function vector(options:{paid?:boolean;contradictory?:boolean;unfinished?:boolea
    freeholder_controlled_item_operation_id:operation.id,freeholder_controlled_item_request_digest:operation.requestDigest}}}],result:{providerInvoiceRef:"in_original",componentId,providerInvoiceItemRef:"ii_original",providerPriceRef:"price_original",requiresIndependentRead:true}}));
  const line:Record<string,unknown>={...(options.precision?{quantity_decimal:"1.000000000001"}:{}),id:"il_original",amount:1000,currency:"cad",quantity:1,period:{start:Date.parse(start)/1000,end:Date.parse(end)/1000},parent:{invoice_item_details:{invoice_item:"ii_original"}},pricing:{price_details:{price:"price_original",product:"prod_original"}},
   metadata:{freeholder_controlled_collection_id:manifest.collectionId,freeholder_controlled_component_id:componentId,freeholder_controlled_component_digest:provenanceDigest,freeholder_canonical_target_digest:sha,freeholder_controlled_item_operation_id:itemCreator.operation.id,freeholder_controlled_item_request_digest:itemCreator.operation.requestDigest},discount_amounts:[],taxes:[]};
- const paid=options.paid===false?0:1000,intent={id:"pi_original",customer:"cus_original",amount:1000,amount_received:paid,amount_capturable:0,currency:"cad",status:paid?"succeeded":"canceled",latest_charge:paid?"ch_original":null,transfer_data:null,on_behalf_of:null};
+ const paid=options.paid===false?0:options.partial?500:1000,intent={id:"pi_original",customer:"cus_original",amount:1000,amount_received:paid,amount_capturable:0,currency:"cad",status:paid?"succeeded":"canceled",latest_charge:paid?"ch_original":null,transfer_data:null,on_behalf_of:null};
  const payment={id:"inpay_original",invoice:"in_original",payment:{type:"payment_intent",payment_intent:"pi_original"},status:paid?"paid":"canceled",amount_requested:1000,amount_paid:paid};
  const cash={provider:"stripe",subscriptionId:resource.subscriptionId,providerSubscriptionRef:"sub_original",providerInvoiceRef:"in_original",providerPaymentIntentRef:"pi_original",providerChargeRef:"ch_original",providerCustomerRef:"cus_original",
-  providerPlatformAccountId:resource.originalScope.providerPlatformAccountId,providerAccountId:resource.originalScope.providerAccountId,amountMinor:1000,currency:"CAD",customerChargeVerified:true,merchantRouteVerified:true};
+  providerPlatformAccountId:resource.originalScope.providerPlatformAccountId,providerAccountId:resource.originalScope.providerAccountId,amountMinor:paid||1000,currency:"CAD",customerChargeVerified:true,merchantRouteVerified:true};
  if(options.contradictory||options.unfinished)append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts:[{kind:"intent_read",raw:{...intent,amount_received:1001}}],result:{retainedBeforeFailure:true}}),options.unfinished);
  if(options.historicalIncomplete)append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts:[{kind:"invoice_payments_read",raw:{data:[payment],has_more:true}}],result:{retainedBeforeFailure:true}}));
  const current=append("read_invoice",{bootstrapOperationId:bootstrap.operation.id,bootstrapRequestDigest:bootstrap.operation.requestDigest,providerSubscriptionRef:"sub_original",providerInvoiceRef:"in_original"},()=>{
@@ -84,13 +88,95 @@ function vector(options:{paid?:boolean;contradictory?:boolean;unfinished?:boolea
   components:[{id:componentId,collectionId:manifest.collectionId,position:0,kind:"net",amountMinor:1000,currency:"CAD",periodStart:new Date(start),periodEnd:new Date(end),
    provenance,provenanceDigest,createdAt:new Date()}],
   itemReceipts:[{componentId,resourceId:resource.id,originKind:"invoice_item",creatorOperationId:itemCreator.operation.id,providerInvoiceItemRef:"ii_original",providerInvoiceLineRef:"il_original",providerPriceRef:"price_original",operationId:current.operation.id,callId:current.call.id,factId:current.facts.find(row=>row.actual.kind==="invoice_lines_read")!.id,originalEvidenceDigest:sha,createdAt:new Date()}],
-  canonicalPaidMinor:paid,canonicalRefundedMinor:0,cash:paid?[{receiptId:randomUUID(),paymentId:randomUUID(),resourceId:resource.id,canonicalInvoiceId:manifest.canonicalInvoiceId,providerInvoiceRef:"in_original",providerIntentRef:"pi_original",providerChargeRef:"ch_original",amountMinor:1000,currency:"CAD"}]:[]};
+  canonicalPaidMinor:paid,canonicalRefundedMinor:0,cash:paid?[{receiptId:randomUUID(),paymentId:randomUUID(),resourceId:resource.id,canonicalInvoiceId:manifest.canonicalInvoiceId,providerInvoiceRef:"in_original",providerIntentRef:"pi_original",providerChargeRef:"ch_original",amountMinor:paid,currency:"CAD"}]:[]};
  if(paid){const original=target.cash[0]!,fact=current.facts.find(row=>row.actual.kind==="cash_observed")!;
   history.chargeOrigins.push({receiptId:original.receiptId,resourceId:resource.id,operationId:current.operation.id,callId:current.call.id,factId:fact.id,
    originalEvidenceDigest:merchantTaxDigest({resource,operation:current.operation,call:current.call,fact,cash}),createdAt:new Date()});history.count++;
  }
- return{target,append,current,creator,itemCreator,line,intent,invoice,calendar,tag,review:()=>controlledRawFinancialReview(resource,history)};
+ return{target,append,current,creator,itemCreator,line,intent,invoice,preparationInvoice,calendar,tag,review:()=>controlledRawFinancialReview(resource,history)};
 }
+/** Still a PURE signed-raw vector: no actual receipt/inspection, ServiceContext
+ * or DB authority is manufactured. The real initializer obtains those itself. */
+function retainedVector(options:Parameters<typeof vector>[0]={}){
+ const v=vector(options),owner=v.target.cash[0],origin=v.target.history.chargeOrigins[0],bank=v.target.history.verifications.find(row=>row.operationId===v.current.operation.id);
+ if(!owner||!origin||!bank)throw Error("Missing prepared original positive raw vector");
+ const result={providerInvoiceRef:"in_original",manifestDigest:merchantTaxDigest(v.target.manifest),customerFinancialDigest:sha,exactManifest:true,suppliesPaidAuthority:false,inventory:bank.actualResult};
+ const full=v.append("read_manifest",{bootstrapOperationId:v.calendar.bootstrapOperationId,bootstrapRequestDigest:v.calendar.bootstrapRequestDigest,providerSubscriptionRef:"sub_original",providerInvoiceRef:"in_original",manifest:v.target.manifest,calendar:v.calendar,
+  invoiceOrigin:{kind:"created_draft",creatorOperationId:v.creator.operation.id,creatorRequestDigest:v.creator.operation.requestDigest},lineBindings:v.target.itemReceipts.map(row=>({componentId:row.componentId,providerInvoiceLineRef:row.providerInvoiceLineRef,providerInvoiceItemRef:row.providerInvoiceItemRef,providerPriceRef:row.providerPriceRef}))},()=>({facts:v.current.facts.map(row=>row.actual),result}));
+ v.target.proofs.push({id:randomUUID(),collectionId:v.target.manifest.collectionId,operationId:full.operation.id,callId:full.call.id,resultDigest:merchantTaxDigest(result),canonicalTargetDigest:v.target.manifest.canonicalTargetDigest,customerFinancialDigest:sha,createdAt:new Date()});
+ v.target.cash=[];v.target.canonicalPaidMinor=0;
+ v.target.prospective={purpose:"controlled_cash_prospective_read.v1",collectionId:v.target.manifest.collectionId,resourceId:v.target.resource.id,subscriptionId:v.target.resource.subscriptionId,invoiceId:v.target.manifest.canonicalInvoiceId,
+  acceptedQuoteDigest:v.target.manifest.acceptedQuoteDigest,canonicalTargetDigest:v.target.manifest.canonicalTargetDigest,manifestOperationId:full.operation.id,manifestCallId:full.call.id,manifestResultDigest:merchantTaxDigest(result),manifestDigest:merchantTaxDigest(v.target.manifest),
+  actualCanonicalPaidMinor:0,actualBankPaidMinor:v.intent.amount_received,actualBankRemainingMinor:1000-v.intent.amount_received,bankProofRevision:sha,parentPgRevision:sha,revision:sha,
+  receipts:[{kind:"retained_unapplied",receiptId:owner.receiptId,collectionId:v.target.manifest.collectionId,resourceId:v.target.resource.id,subscriptionId:v.target.resource.subscriptionId,canonicalInvoiceId:v.target.manifest.canonicalInvoiceId,
+   providerInvoiceRef:owner.providerInvoiceRef,providerIntentRef:owner.providerIntentRef,providerChargeRef:"ch_original",amountMinor:owner.amountMinor,currency:owner.currency,originOperationId:origin.operationId,originCallId:origin.callId,originFactId:origin.factId,
+   inspectionId:randomUUID(),bankObservationId:randomUUID(),finishCallerId:randomUUID(),immutableBankRevision:sha,namespaceRevision:sha}]};
+ return{...v,full,owner};
+}
+/** A second separately owned real-signed raw history on the SAME original
+ * resource. Equal amounts remain distinct through invoice/creator/PI/receipt
+ * identities. Its canonical projection is explicitly mock-only, as above. */
+function secondOwnedInvoice(v:ReturnType<typeof vector>){
+ const sourceComponent=v.target.components[0],sourceManifestComponent=v.target.manifest.components[0];if(!sourceComponent||!sourceManifestComponent)throw Error("Missing prepared canonical component");
+ const componentId=randomUUID(),manifest:ControlledRawTarget["manifest"]={...v.target.manifest,collectionId:randomUUID(),quoteId:randomUUID(),canonicalInvoiceId:randomUUID(),components:[{...sourceManifestComponent,id:componentId,position:0,kind:"net",amountMinor:1000,providerProductRef:"prod_original",periodStart:start,periodEnd:end,provenanceDigest:sourceComponent.provenanceDigest}]};
+ const base={bootstrapOperationId:v.calendar.bootstrapOperationId,bootstrapRequestDigest:v.calendar.bootstrapRequestDigest,providerSubscriptionRef:"sub_original",manifest,calendar:v.calendar,invoiceOrigin:{kind:"created_draft",creatorOperationId:null,creatorRequestDigest:null},lineBindings:[]};
+ let metadata:Record<string,unknown>={};
+ function invoice(paid:number,total=1000){return{...v.invoice(paid,total),id:"in_second",metadata};}
+ const creator=v.append("create_draft",base,operation=>{metadata={...v.tag,freeholder_controlled_collection_protocol:manifest.protocol,freeholder_controlled_collection_id:manifest.collectionId,freeholder_controlled_collection_quote_id:manifest.quoteId,
+  freeholder_canonical_invoice_id:manifest.canonicalInvoiceId,freeholder_canonical_target_digest:manifest.canonicalTargetDigest,freeholder_controlled_collection_quote_digest:manifest.acceptedQuoteDigest,freeholder_controlled_creator_operation_id:operation.id,freeholder_controlled_creator_request_digest:operation.requestDigest};return{facts:[{kind:"controlled_draft_created",raw:invoice(0,0)}],result:{providerInvoiceRef:"in_second",requiresIndependentRead:true,suppliesPaidAuthority:false}};});
+ const itemCreator=v.append("add_invoice_component",{...base,providerInvoiceRef:"in_second",componentId,invoiceOrigin:{kind:"created_draft",creatorOperationId:creator.operation.id,creatorRequestDigest:creator.operation.requestDigest}},operation=>({facts:[{kind:"controlled_item_created",raw:{id:"ii_second",invoice:"in_second",customer:"cus_original",amount:1000,currency:"cad",metadata:{freeholder_controlled_collection_id:manifest.collectionId,freeholder_controlled_component_id:componentId,freeholder_controlled_component_digest:sourceComponent.provenanceDigest,freeholder_canonical_target_digest:manifest.canonicalTargetDigest,freeholder_controlled_item_operation_id:operation.id,freeholder_controlled_item_request_digest:operation.requestDigest}}}],result:{providerInvoiceRef:"in_second",componentId,providerInvoiceItemRef:"ii_second",providerPriceRef:"price_second",requiresIndependentRead:true}}));
+ const line={...v.line,id:"il_second",parent:{invoice_item_details:{invoice_item:"ii_second"}},pricing:{price_details:{price:"price_second",product:"prod_original"}},metadata:{freeholder_controlled_collection_id:manifest.collectionId,freeholder_controlled_component_id:componentId,freeholder_controlled_component_digest:sourceComponent.provenanceDigest,freeholder_canonical_target_digest:manifest.canonicalTargetDigest,freeholder_controlled_item_operation_id:itemCreator.operation.id,freeholder_controlled_item_request_digest:itemCreator.operation.requestDigest}};
+ const actualInvoice=invoice(1000),intent={...v.intent,id:"pi_second",amount:1000,amount_received:1000,status:"succeeded",latest_charge:"ch_second"},payment={id:"inpay_second",invoice:"in_second",payment:{type:"payment_intent",payment_intent:"pi_second"},status:"paid",amount_requested:1000,amount_paid:1000};
+ const cash={provider:"stripe",subscriptionId:v.target.resource.subscriptionId,providerSubscriptionRef:"sub_original",providerInvoiceRef:"in_second",providerPaymentIntentRef:"pi_second",providerChargeRef:"ch_second",providerCustomerRef:"cus_original",providerPlatformAccountId:v.target.resource.originalScope.providerPlatformAccountId,providerAccountId:v.target.resource.originalScope.providerAccountId,amountMinor:1000,currency:"CAD",customerChargeVerified:true,merchantRouteVerified:true};
+ const current=v.append("read_invoice",{providerInvoiceRef:"in_second",providerSubscriptionRef:"sub_original",bootstrapOperationId:v.calendar.bootstrapOperationId,bootstrapRequestDigest:v.calendar.bootstrapRequestDigest},()=>({facts:[{kind:"invoice_read",raw:actualInvoice},{kind:"invoice_payments_read",raw:{data:[payment],has_more:false}},{kind:"intent_read",raw:intent},{kind:"cash_observed",raw:{cash,invoice:actualInvoice,intent,invoicePayment:payment}},{kind:"invoice_lines_read",raw:{data:[line],has_more:false}},{kind:"price_read",raw:{id:"price_second",currency:"cad",product:"prod_original",unit_amount:1000}}],
+  result:{providerInvoiceRef:"in_second",providerSubscriptionRef:"sub_original",providerCustomerRef:"cus_original",currency:"CAD",status:"paid",totalMinor:1000,paidMinor:1000,remainingMinor:0,autoAdvance:false,completePayments:true,completeLines:true,actualInvoice,actualPayments:[payment],actualIntents:[intent],actualCash:[cash],actualLines:[line],actualPrices:[{id:"price_second",currency:"cad",product:"prod_original",unit_amount:1000}],suppliesPaidAuthority:false,financiallyQuiesced:false}}));
+ const receiptId=randomUUID(),originalFact=current.facts.find(row=>row.actual.kind==="cash_observed"),lineFact=current.facts.find(row=>row.actual.kind==="invoice_lines_read"),creatorFact=creator.facts[0];if(!originalFact||!lineFact||!creatorFact)throw Error("Missing prepared genuine signed original facts");
+ const target:ControlledRawTarget={resource:v.target.resource,history:v.target.history,manifest,binding:{collectionId:manifest.collectionId,resourceId:v.target.resource.id,originKind:"created_draft",creatorOperationId:creator.operation.id,providerInvoiceRef:"in_second",operationId:creator.operation.id,callId:creator.call.id,factId:creatorFact.id,originalEvidenceDigest:sha,createdAt:new Date()},proofs:[],period:{...v.target.period},
+  components:[{...sourceComponent,id:componentId,collectionId:manifest.collectionId}],itemReceipts:[{componentId,resourceId:v.target.resource.id,originKind:"invoice_item",creatorOperationId:itemCreator.operation.id,providerInvoiceItemRef:"ii_second",providerInvoiceLineRef:"il_second",providerPriceRef:"price_second",operationId:current.operation.id,callId:current.call.id,factId:lineFact.id,originalEvidenceDigest:sha,createdAt:new Date()}],canonicalPaidMinor:1000,canonicalRefundedMinor:0,cash:[{receiptId,paymentId:randomUUID(),resourceId:v.target.resource.id,canonicalInvoiceId:manifest.canonicalInvoiceId,providerInvoiceRef:"in_second",providerIntentRef:"pi_second",providerChargeRef:"ch_second",amountMinor:1000,currency:"CAD"}]};
+ v.target.history.chargeOrigins.push({receiptId,resourceId:v.target.resource.id,operationId:current.operation.id,callId:current.call.id,factId:originalFact.id,originalEvidenceDigest:merchantTaxDigest({resource:v.target.resource,operation:current.operation,call:current.call,fact:originalFact,cash}),createdAt:new Date()});v.target.history.count++;
+ return{target,invoice:actualInvoice,current};
+}
+describe("genuine signed raw facts with a typed retained-unapplied projection",()=>{
+ it.each([false,true])("preserves actual canonical paid zero while identifying retained full/partial bank cash; partial=%s",partial=>{
+  const v=retainedVector({partial}),before=merchantTaxDigest(v.target.history),actual=classifyControlledTargetRawFacts([v.target]);expect(actual.unresolvedFactIds).toEqual([]);
+  expect(actual.resolutions.filter(row=>v.review().rawPositiveFactIds.includes(row.factId)).every(row=>row.disposition==="retained_unapplied_cash"&&row.receiptIds.includes(v.owner.receiptId))).toBe(true);
+  expect(v.target.cash).toEqual([]);expect(v.target.canonicalPaidMinor).toBe(0);expect(v.target.prospective?.actualBankRemainingMinor).toBe(partial?500:0);
+  expect(merchantTaxDigest(v.target.history)).toBe(before);expect(JSON.stringify(v.target.prospective)).not.toMatch(/paymentId|principalSafe|paidAccess|allowed/);
+ });
+ it.each(["resource","collection","invoice","origin-operation","manifest-caller","charge","currency","amount","fake-paid"] as const)("does not adopt retained cash through a foreign or invented %s",change=>{
+  const v=retainedVector(),projection=v.target.prospective;if(!projection)throw Error("Missing prepared retained projection");const first=projection.receipts[0];if(!first)throw Error("Missing prepared exact retained receipt");
+  if(change==="resource")v.target.prospective={...projection,resourceId:randomUUID()};
+  if(change==="collection")v.target.prospective={...projection,collectionId:randomUUID()};
+  if(change==="invoice")v.target.prospective={...projection,invoiceId:randomUUID()};
+  if(change==="origin-operation")v.target.prospective={...projection,receipts:[{...first,originOperationId:randomUUID()}]};
+  if(change==="manifest-caller")v.target.prospective={...projection,manifestCallId:randomUUID()};
+  if(change==="charge")v.target.prospective={...projection,receipts:[{...first,providerChargeRef:"ch_foreign"}]};
+  if(change==="currency")v.target.prospective={...projection,receipts:[{...first,currency:"USD"}]};
+  if(change==="amount")v.target.prospective={...projection,receipts:[{...first,amountMinor:999}]};
+  if(change==="fake-paid")v.target.prospective={...projection,actualCanonicalPaidMinor:1000};
+  const actual=classifyControlledTargetRawFacts([v.target]);expect(v.review().rawPositiveFactIds.every(id=>actual.unresolvedFactIds.includes(id))).toBe(true);expect(v.target.canonicalPaidMinor).toBe(0);
+ });
+ it("retains an earlier real contradictory positive occurrence despite a complete later retained receipt proof",()=>{const v=retainedVector({contradictory:true}),first=v.target.history.facts.find(row=>row.actual.kind==="intent_read"&&row.actual.raw.amount_received===1001);if(!first)throw Error("Missing prepared genuine contradictory occurrence");expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(first.id);expect(v.target.history.facts).toContain(first);});
+ it("never waives a genuine older unfinished physical caller",()=>{const v=retainedVector({unfinished:true}),actual=classifyControlledTargetRawFacts([v.target]);expect(actual.resolutions).toEqual([]);expect(v.target.history.unfinished).toHaveLength(1);});
+});
+describe("complete actual owner sets in signed multi-invoice facts",()=>{
+ function mixed(retained=false){const v=retained?retainedVector():vector(),second=secondOwnedInvoice(v),original=v.current.facts.find(row=>row.actual.kind==="invoice_read");if(!original)throw Error("Missing prepared original bank invoice");const list=v.append("list_invoices",{providerSubscriptionRef:"sub_original",bootstrapOperationId:v.calendar.bootstrapOperationId,bootstrapRequestDigest:v.calendar.bootstrapRequestDigest},()=>({facts:[{kind:"invoice_list_read",raw:{data:[original.actual.raw,second.invoice],has_more:false}}],result:{observed:true}}));return{v,second,list};}
+ it.each([false,true])("retains each exact distinct known invoice/creator/PI proof with no invented single owner; retained=%s",retained=>{
+  const{v,second,list}=mixed(retained),fact=list.facts[0];if(!fact)throw Error("Missing prepared signed multi-invoice fact");const before=merchantTaxDigest(v.target.history),actual=classifyControlledTargetRawFacts([v.target,second.target]),resolved=actual.resolutions.find(row=>row.factId===fact.id);
+  expect(actual.unresolvedFactIds).not.toContain(fact.id);expect(resolved).toMatchObject({collectionId:null,proofOperationId:null,proofCallId:null,canonicalRefundedMinor:null,disposition:retained?"retained_unapplied_cash":"canonical_cash"});
+  if(!resolved||resolved.collectionId!==null)throw Error("Expected explicit actual multiple-owner proof");expect(resolved.collectionIds).toEqual([v.target.manifest.collectionId,second.target.manifest.collectionId].sort());expect(resolved.bankProofs).toHaveLength(2);expect(resolved.canonicalRefunds).toHaveLength(2);
+  expect(merchantTaxDigest(v.target.history)).toBe(before);expect(v.target.canonicalPaidMinor).toBe(retained?0:1000);
+ });
+ it("a single owned invoice in a shared-resource list keeps its actual owner rather than every outer target",()=>{const{v,second}=mixed(),original=v.current.facts.find(row=>row.actual.kind==="invoice_read");if(!original)throw Error("Missing prepared original invoice");const list=v.append("list_invoices",{providerSubscriptionRef:"sub_original"},()=>({facts:[{kind:"invoice_list_read",raw:{data:[original.actual.raw],has_more:false}}],result:{observed:true}})),fact=list.facts[0];if(!fact)throw Error("Missing prepared signed fact");expect(classifyControlledTargetRawFacts([v.target,second.target]).resolutions.find(row=>row.factId===fact.id)?.collectionId).toBe(v.target.manifest.collectionId);});
+ it.each(["unknown","duplicate","ambiguous","missing-proof"] as const)("keeps %s mixed atoms as debt instead of using equal values or a partial owner list",change=>{
+  const{v,second}=mixed(),original=v.current.facts.find(row=>row.actual.kind==="invoice_read");if(!original)throw Error("Missing prepared original bank invoice");
+  const data=[original.actual.raw,change==="unknown"?{...second.invoice,id:"in_unknown"}:second.invoice];if(change==="duplicate")data.push(second.invoice);
+  const list=v.append("list_invoices",{providerSubscriptionRef:"sub_original"},()=>({facts:[{kind:"invoice_list_read",raw:{data,has_more:false}}],result:{observed:true}})),fact=list.facts[0];if(!fact)throw Error("Missing prepared signed mixed fact");
+  const targets=[v.target,second.target];if(change==="ambiguous")targets.push({...second.target,manifest:{...second.target.manifest,collectionId:randomUUID()}});
+  if(change==="missing-proof")v.target.history.verifications=v.target.history.verifications.filter(row=>row.operationId!==second.current.operation.id);
+  const actual=classifyControlledTargetRawFacts(targets);expect(actual.unresolvedFactIds).toContain(fact.id);expect(actual.resolutions.some(row=>row.factId===fact.id)).toBe(false);expect(v.target.history.facts).toContain(fact);
+ });
+});
 describe("exact full15 derived raw financial disposition",()=>{
  it("resolves genuine signed known cash only through exact current inventory and explicit mock canonical receipt identity, retaining every original fact",()=>{
   const v=vector(),before=merchantTaxDigest(v.target.history),raw=v.review(),actual=classifyControlledTargetRawFacts([v.target]);
@@ -166,4 +252,58 @@ describe("exact full15 derived raw financial disposition",()=>{
   expect(actual.unresolvedFactIds).toEqual([]);expect(actual.resolutions.every(row=>row.canonicalRefundedMinor===500)).toBe(true);
   expect(v.target.cash[0]!.amountMinor).toBe(1000);expect(JSON.stringify(actual)).not.toMatch(/principalSafe|financiallyQuiesced|refundSettled|paidAccess/);
  });
+});
+
+/** Full returned list + independent reads use real Ed25519 proofs above; the
+ * canonical projection remains mock-only. No DB/service authority is created. */
+function withBootstrapInventory(options:{unknown?:boolean;foreignCustomer?:boolean;historicalPositive?:boolean;missingOriginal?:boolean;incomplete?:boolean}={}){
+ const v=vector({bootstrapZero:!options.missingOriginal}),invoice={...v.preparationInvoice,...(options.unknown?{id:"in_unknown_zero"}:{}),...(options.foreignCustomer?{customer:"cus_foreign"}:{})};
+ const actual=v.current.facts.find(row=>row.actual.kind==="invoice_read");if(!actual)throw Error("Missing prepared target invoice");
+ const list=v.append("list_invoices",{providerSubscriptionRef:"sub_original",bootstrapOperationId:v.calendar.bootstrapOperationId,bootstrapRequestDigest:v.calendar.bootstrapRequestDigest},()=>({facts:[{kind:"invoice_list_read",raw:{data:[options.historicalPositive?{...invoice,total:1,subtotal:1,amount_due:1,amount_paid:1}:invoice,actual.actual.raw],has_more:false}}],result:{complete:true,providerSubscriptionRef:"sub_original",providerInvoiceRefs:[String(invoice.id),"in_original"],actualInvoices:[invoice,actual.actual.raw]}}));
+ const original=v.target.history.verifications.find(row=>row.operationId===v.current.operation.id);if(!original)throw Error("Missing prepared returned original read");
+ v.append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts:v.current.facts.map(row=>row.actual),result:original.actualResult}));
+ v.append("read_invoice",{providerInvoiceRef:String(invoice.id)},()=>({facts:[{kind:"invoice_read",raw:invoice},{kind:"invoice_payments_read",raw:{data:[],has_more:false}},{kind:"invoice_lines_read",raw:{data:[],has_more:false}}],result:{providerInvoiceRef:invoice.id,providerSubscriptionRef:"sub_original",providerCustomerRef:options.foreignCustomer?"cus_foreign":"cus_original",currency:"CAD",status:"paid",totalMinor:0,paidMinor:0,remainingMinor:0,autoAdvance:false,completePayments:!options.incomplete,completeLines:true,actualInvoice:invoice,actualCash:[],actualPayments:[],actualIntents:[],actualLines:[],actualPrices:[],suppliesPaidAuthority:false,financiallyQuiesced:false}}));
+ v.target.canonicalCount=12;const fact=list.facts[0];if(!fact)throw Error("Missing prepared list fact");return{v,fact};
+}
+describe("separate genuine original zero-preparation evidence in mixed raw lists",()=>{
+ it("binds original bootstrap and actual fresh inventory without inventing another canonical owner",()=>{const{v,fact}=withBootstrapInventory(),before=merchantTaxDigest(v.target.history),actual=classifyControlledTargetRawFacts([v.target]),resolution=actual.resolutions.find(row=>row.factId===fact.id);
+  expect(actual.unresolvedFactIds).not.toContain(fact.id);expect(resolution).toMatchObject({collectionId:v.target.manifest.collectionId,disposition:"canonical_cash",receiptIds:[v.target.cash[0]?.receiptId],preparationProofs:[{kind:"original_bootstrap_zero",resourceId:v.target.resource.id,providerInvoiceRef:"in_bootstrap"}]});
+  expect(resolution?.bankProofs).toHaveLength(1);expect(v.target.cash).toHaveLength(1);expect(merchantTaxDigest(v.target.history)).toBe(before);expect(JSON.stringify(resolution?.preparationProofs)).not.toMatch(/paymentId|canonicalInvoiceId|amountMinor|allowed|principalSafe/);
+ });
+ it.each(["unknown","foreignCustomer","historicalPositive","missingOriginal","incomplete"] as const)("keeps %s zero-looking/contradictory list atoms as actual debt",change=>{const{v,fact}=withBootstrapInventory({[change]:true});expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(fact.id);expect(v.target.history.facts).toContain(fact);});
+ it("refuses preparation adoption when the real canonical bound is absent",()=>{const{v,fact}=withBootstrapInventory();delete v.target.canonicalCount;expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(fact.id);});
+ it("retains an actual unfinished physical caller rather than borrowing the fresh zero read",()=>{const{v,fact}=withBootstrapInventory();v.append("read_invoice",{providerInvoiceRef:"in_bootstrap"},()=>({facts:[],result:{}}),true);expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(fact.id);});
+});
+
+/** Two genuine signed returned cohorts on ONE immutable original invoice;
+ * canonical owner rows remain explicitly mock projections for this PURE test. */
+function cumulativePaidVector(){
+ const v=vector({partial:true}),prior=v.target.history.verifications.find(row=>row.operationId===v.current.operation.id),first=v.target.cash[0];
+ if(!prior||!first)throw Error("Missing original actual partial cohort");
+ const oldCash=v.current.facts.find(row=>row.actual.kind==="cash_observed"),oldPayment=v.current.facts.find(row=>row.actual.kind==="invoice_payments_read");
+ if(!oldCash||!oldPayment||!Array.isArray(oldPayment.actual.raw.data))throw Error("Missing actual original payment/cash facts");
+ const originalPayment=z.array(z.record(z.string(),z.unknown())).parse(oldPayment.actual.raw.data)[0];if(!originalPayment)throw Error("Missing original exact payment row");
+ const intent={...v.intent,id:"pi_later",amount:500,amount_received:500,latest_charge:"ch_later"},payment={...originalPayment,id:"inpay_later",amount_requested:500,amount_paid:500,payment:{type:"payment_intent",payment_intent:"pi_later"}};
+ const originalCash=z.record(z.string(),z.unknown()).parse(oldCash.actual.raw.cash),cash={...originalCash,providerPaymentIntentRef:"pi_later",providerChargeRef:"ch_later",amountMinor:500};
+ const actualInvoice=v.invoice(1000),facts:MerchantControlledObservation[]=[{kind:"invoice_read",raw:actualInvoice},{kind:"invoice_payments_read",raw:{data:[originalPayment,payment],has_more:false}},
+  {kind:"intent_read",raw:v.intent},{kind:"intent_read",raw:intent},{kind:"cash_observed",raw:{...oldCash.actual.raw,invoice:actualInvoice}},{kind:"cash_observed",raw:{cash,invoice:actualInvoice,intent,invoicePayment:payment}},
+  ...v.current.facts.filter(row=>["invoice_lines_read","price_read"].includes(row.actual.kind)).map(row=>row.actual)];
+ const result={...prior.actualResult,status:"paid",paidMinor:1000,remainingMinor:0,actualInvoice,actualPayments:[originalPayment,payment],actualIntents:[v.intent,intent],actualCash:[originalCash,cash]};
+ const current=v.append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts,result})),originFact=current.facts.find(row=>row.actual.kind==="cash_observed"&&z.record(z.string(),z.unknown()).parse(row.actual.raw.cash).providerPaymentIntentRef==="pi_later");
+ if(!originFact)throw Error("Missing genuinely signed later positive occurrence");const receiptId=randomUUID();
+ v.target.cash.push({...first,receiptId,paymentId:randomUUID(),providerIntentRef:"pi_later",providerChargeRef:"ch_later",amountMinor:500});
+ v.target.history.chargeOrigins.push({receiptId,resourceId:v.target.resource.id,operationId:current.operation.id,callId:current.call.id,factId:originFact.id,originalEvidenceDigest:merchantTaxDigest({resource:v.target.resource,operation:current.operation,call:current.call,fact:originFact,cash}),createdAt:new Date()});v.target.history.count++;
+ v.target.canonicalPaidMinor=1000;v.target.canonicalCount=12;
+ return{v,current,result,facts,prior,first};
+}
+describe("exact historical returned cohorts across cumulative partial cash",()=>{
+ it("retains the genuine earlier500 and later1000 invoice facts with exact original receipt owners",()=>{const{v,first}=cumulativePaidVector(),before=merchantTaxDigest(v.target.history),actual=classifyControlledTargetRawFacts([v.target]),oldInvoice=v.current.facts.find(row=>row.actual.kind==="invoice_read");
+  if(!oldInvoice)throw Error("Missing original partial invoice fact");expect(actual.unresolvedFactIds).toEqual([]);expect(actual.resolutions.find(row=>row.factId===oldInvoice.id)?.historicalPaidProofs).toEqual([{collectionId:v.target.manifest.collectionId,operationId:v.current.operation.id,callId:v.current.call.id,resultDigest:merchantTaxDigest(v.target.history.verifications.find(row=>row.operationId===v.current.operation.id)?.actualResult),receiptIds:[first.receiptId]}]);
+  expect(actual.resolutions.find(row=>row.factId===oldInvoice.id)?.receiptIds).toEqual([first.receiptId]);expect(v.target.canonicalPaidMinor).toBe(1000);expect(v.target.cash.map(row=>row.amountMinor)).toEqual([500,500]);expect(merchantTaxDigest(v.target.history)).toBe(before);
+ });
+ it("refuses a smaller invented historical balance rather than using <= current paid",()=>{const{v,result,facts}=cumulativePaidVector(),bad=v.append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts:[{kind:"invoice_read",raw:{...v.invoice(500),amount_paid:499,amount_remaining:501}}],result:{retainedBeforeFailure:true}}));v.append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts,result}));const fact=bad.facts[0];if(!fact)throw Error("Missing actual signed contradiction");expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(fact.id);});
+ it("does not backfill a missing original normalized returned cohort from a newer full read",()=>{const{v}=cumulativePaidVector(),old=v.current.facts.find(row=>row.actual.kind==="invoice_read");if(!old)throw Error("Missing original partial occurrence");v.target.history.verifications=v.target.history.verifications.filter(row=>row.operationId!==v.current.operation.id);expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(old.id);});
+ it("keeps old partial money unknown when an actual owner disappears despite equal final cash",()=>{const{v}=cumulativePaidVector(),old=v.current.facts.find(row=>row.actual.kind==="invoice_read");if(!old)throw Error("Missing original positive occurrence");v.target.cash=v.target.cash.filter(row=>row.providerIntentRef!=="pi_original");expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(old.id);});
+ it("never releases a genuinely unfinished old caller with the later complete bank cohort",()=>{const{v}=cumulativePaidVector();v.append("read_invoice",{providerInvoiceRef:"in_original"},()=>({facts:[],result:{}}),true);expect(classifyControlledTargetRawFacts([v.target]).resolutions).toEqual([]);});
+ it("requires the complete source bound instead of ignoring old original cash inventory",()=>{const{v}=cumulativePaidVector(),old=v.current.facts.find(row=>row.actual.kind==="invoice_read");if(!old)throw Error("Missing original partial occurrence");v.target.canonicalCount=5000;expect(classifyControlledTargetRawFacts([v.target]).unresolvedFactIds).toContain(old.id);});
 });

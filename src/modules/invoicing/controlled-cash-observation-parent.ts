@@ -34,6 +34,7 @@ import { merchantCashReturnInspections,merchantCashReturnInspectionFinishes,merc
 import { merchantRefundStateReads,merchantRefundStateReadFinishes } from "./merchant-refund-current-schema";
 
 type Graph=Awaited<ReturnType<typeof parentFinancialGraph>>;
+type CallerGraph=Pick<Graph,"money"|"receipts">;
 export type ControlledCashObservationInput={collectionId:string;receiptId:string;requiredProtocol:typeof CONTROLLED_COLLECTION_PROTOCOL;inspectionId?:string};
 function refuse():never{throw new ServiceError("conflict","Restore complete authenticated original observation, parent ownership, privacy and actual caller coverage before another bank GET; retained money debt is not payment authority.");}
 const ids=(values:readonly string[])=>values.length?sql.join(values.map(id=>sql`${id}::uuid`),sql`, `):sql`null::uuid`;
@@ -42,13 +43,13 @@ const record=z.record(z.string(),z.unknown());
 /** All original namespaces are selected through actual receipt or payment
  * observation FKs. This also sees a bare admitted inspection before callbacks
  * and a namespace-bound callback whose canonical parent is still NULL. */
-function namespaceMember(graph:Graph,platform:SQL,account:SQL,ref:SQL){return sql`(
+function namespaceMember(graph:CallerGraph,platform:SQL,account:SQL,ref:SQL){return sql`(
  exists(select 1 from subscription_provider_charge_receipts original where original.id in(${ids(graph.receipts.map(row=>row.id))})
   and original.provider_platform_account_id=${platform} and original.charge_account_id is not distinct from ${account} and original.provider_payment_intent_ref=${ref})
  or exists(select 1 from merchant_payment_observations original where original.payment_id in(${ids(graph.money.map(row=>row.id))})
   and original.provider_platform_account_id=${platform} and original.charge_account_id is not distinct from ${account} and original.provider_ref=${ref}))`;}
 
-async function originalCallers(ctx:ServiceContext,graph:Graph,subscriptionIds:string[]){
+export async function readControlledOriginalCallers(ctx:ServiceContext,graph:CallerGraph,subscriptionIds:string[]){
  const unfinished:Array<{kind:"legacy_schedule"|"legacy_read"|"payment_dispatch"|"card_read"|"original_cash"|"historical_fee"|"cash_inspection"|"refund_dispatch"|"refund_read";id:string}>=[];
  const operations=await ctx.tx.select().from(subscriptionProviderScheduleOperations).where(inArray(subscriptionProviderScheduleOperations.subscriptionId,subscriptionIds)).limit(5001);
  if(operations.length>5000||operations.some(row=>merchantTaxDigest(row.originalRequest)!==row.requestDigest))refuse();
@@ -137,7 +138,7 @@ async function snapshot(ctx:ServiceContext,input:ControlledCashObservationInput,
    quoteEvidence.push({id:quote.id,inputDigest:quote.inputDigest,reviewDigest:quote.reviewDigest,quoteDigest:quote.quoteDigest});
   }else{const authenticated=authenticatedControlledQuote(quote,resource,journal);quoteEvidence.push({id:quote.id,quoteDigest:quote.quoteDigest,calendar:authenticated.calendar.verification.actualResultDigest,customer:authenticated.customer.verification.actualResultDigest,native:authenticated.native.verification.actualResultDigest,update:authenticated.update.verification.actualResultDigest});}
  }
- const callers=await originalCallers(ctx,graph,sourceSubscriptionIds);
+ const callers=await readControlledOriginalCallers(ctx,graph,sourceSubscriptionIds);
  // Ownership uses the actual current aliases independently of immutable quote
  // economics. A shared platform tax profile never adopts another seller.
  const[ownership]=await ctx.tx.execute<{valid:boolean}>(sql`select exists(select 1 from invoices i join subscription_market_policies s on s.subscription_id=${subscriptionId}::uuid

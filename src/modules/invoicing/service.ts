@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // One registry export for the convergent money module (C5.02-C5.05).
 
+import controlledCashApplicationServices from "./controlled-cash-application-service";
 import controlledProviderFinancialReadinessServices from "./controlled-provider-financial-readiness";
 import controlledCashObservationAuthorityServices from "./controlled-cash-observation-authority";
 import controlledProviderCollectionAuthorityServices from "./controlled-provider-collection-authority";
@@ -80,6 +81,7 @@ import "./reporting";
 import "./funnel";
 
 export default [
+  ...controlledCashApplicationServices,
   ...controlledProviderFinancialReadinessServices,
   ...controlledCashObservationAuthorityServices,
   ...controlledProviderCollectionAuthorityServices,

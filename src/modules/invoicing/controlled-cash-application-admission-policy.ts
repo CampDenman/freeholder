@@ -5,6 +5,7 @@ import { ServiceError } from "@/core/service";
 import { controlledCollectionCashProof } from "@/modules/subscriptions/controlled-provider-collection-cash-contract";
 import { controlledCashBankApplicationEvidence } from "./controlled-cash-application-bank-policy";
 import { merchantTaxDigest } from "./merchant-tax-store";
+import { controlledAtomicFeeAmounts } from "./controlled-cash-atomic-fee-amounts";
 const sha=z.string().regex(/^[a-f0-9]{64}$/);
 export const controlledCashPhysicalSnapshot=z.object({entries:z.array(z.object({table:z.string().min(1),id:z.string().min(1),fingerprint:sha,hashDomain:z.literal("postgres_row")}).strict()).min(1).max(5000),revision:sha,physicalRowCount:z.number().int().min(1).max(5000)}).strict();
 function refuse():never{throw new ServiceError("conflict","Restore the exact complete current parent/bank receipt batch, original cash/credit/fee capacity and actual earlier receipt prefix; keep every contradiction for review.");}
@@ -38,7 +39,7 @@ export function controlledCashAdmissionPlan(rawProof:unknown,rawSnapshot:unknown
   if(allocation.actualPriorCashMinor!==proof.canonical.paidMinor)refuse();
   if(row.existingPaymentId!==null){if(allocation.basis!=="existing_original_route"||allocation.precedingReceiptIds.length)refuse();continue;}
   if(fee===null)fee=BigInt(allocation.actualPriorAllocatedFeeMinor);
-  if(allocation.basis!=="actual_prior_and_exact_earlier_batch"||allocation.actualPriorAllocatedFeeMinor!==Number(fee-addedFee)
+  if(allocation.basis!==(proof.atomicFeePolicy?"actual_atomic_batch":"actual_prior_and_exact_earlier_batch")||allocation.actualPriorAllocatedFeeMinor!==Number(fee-addedFee)
    ||BigInt(allocation.priorCashMinor)!==cash||BigInt(allocation.priorAllocatedFeeMinor)!==fee
    ||allocation.precedingReceiptIds.length!==earlier.length||allocation.precedingReceiptIds.some((id,index)=>id!==earlier[index]))refuse();
   cash+=BigInt(row.amountMinor);fee+=BigInt(allocation.feeMinor);addedCash+=BigInt(row.amountMinor);addedFee+=BigInt(allocation.feeMinor);earlier.push(row.receiptId);
@@ -47,6 +48,12 @@ export function controlledCashAdmissionPlan(rawProof:unknown,rawSnapshot:unknown
   ||BigInt(proof.bankInvoice.paidMinor)+BigInt(proof.bankInvoice.remainingMinor)!==BigInt(proof.bankInvoice.totalMinor)
   ||BigInt(proof.bankInvoice.totalMinor)!==BigInt(proof.canonical.totalMinor)-BigInt(proof.canonical.creditedMinor)
   ||addedCash>BigInt(Number.MAX_SAFE_INTEGER)||addedFee>BigInt(Number.MAX_SAFE_INTEGER))refuse();
+ if(proof.atomicFeePolicy){
+  const policy=proof.atomicFeePolicy,amounts=controlledAtomicFeeAmounts({...policy,receipts:pending.map(row=>({receiptId:row.receiptId,amountMinor:row.amountMinor,feeMinor:row.feeAllocation.feeMinor}))});
+  if(policy.actualPriorCashMinor!==proof.canonical.paidMinor||policy.principalMinor!==proof.canonical.totalMinor-proof.canonical.creditedMinor
+   ||pending.some(row=>row.feeAllocation.actualPriorAllocatedFeeMinor!==policy.actualPriorAllocatedFeeMinor)
+   ||policy.batchCashMinor!==amounts.batchCashMinor||policy.batchFeeMinor!==amounts.batchFeeMinor||policy.batchCashMinor!==Number(addedCash)||policy.batchFeeMinor!==Number(addedFee))refuse();
+ }
  // Complete bank positives outside this explicit request still need exact
  // historical route/payment proof in the live parent/SQL admission. This pure
  // plan never converts their IDs (or raw fact associations) into an exemption.

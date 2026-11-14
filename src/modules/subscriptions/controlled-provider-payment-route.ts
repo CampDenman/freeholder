@@ -1,16 +1,16 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // C12.38/C9.33: an admitted real receipt crosses the shared payment writer.
 import { eq, sql } from "drizzle-orm";
-import { z } from "zod";
 import { ServiceError, type ServiceContext } from "@/core/service";
 import { readControlledCashApplicationStage } from "@/modules/invoicing/controlled-cash-application-stage";
 import { subscriptionControlledChargeOrigins } from "./controlled-provider-schema";
 
-export const CONTROLLED_CASH_BATCH_MARKER = "freeholder.controlled_cash_application_batch_v1";
-export const controlledCashBatchPointer = z.object({ batchId: z.uuid(), collectionId: z.uuid(), receiptId: z.uuid(), admissionDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+import { controlledCashBatchPointer } from "./controlled-cash-batch-pointer";
+export { CONTROLLED_CASH_BATCH_MARKER,controlledCashBatchPointer } from "./controlled-cash-batch-pointer";
 export type ControlledSubscriptionCashPlan = {
   batchId: string; collectionId: string; receiptId: string; admissionDigest: string;
   amountMinor: number; currency: string; feeMinor: number; priorCashMinor: number; priorAllocatedFeeMinor: number;
+  applicationProtocol:string;
 };
 function refuse(): never { throw new ServiceError("conflict", "Restore the genuine same-transaction batch, original receipt and current bank/parent stage before creating its canonical payment. A pointer cannot grant money authority."); }
 
@@ -34,7 +34,7 @@ export async function controlledSubscriptionCashRoute(ctx: ServiceContext, input
     || origin.callId !== proof.originCallId || origin.factId !== proof.originFactId
     || stage.links.some(link => link.receiptId === input.receiptId) || stage.evidence.paymentId !== null) refuse();
   return { ...pointer, amountMinor: proof.amountMinor, currency: proof.currency, feeMinor: proof.feeMinor,
-    priorCashMinor: proof.priorCashMinor, priorAllocatedFeeMinor: proof.priorAllocatedFeeMinor };
+    priorCashMinor: proof.priorCashMinor, priorAllocatedFeeMinor: proof.priorAllocatedFeeMinor,applicationProtocol:stage.batch.protocol };
 }
 
 /** Re-read the actual whole stage after the unchanged shared fee/history
@@ -44,5 +44,5 @@ export async function recheckControlledSubscriptionCashRoute(ctx: ServiceContext
   const plan = input.plan;
   if (current.batchId !== plan.batchId || current.collectionId !== plan.collectionId || current.receiptId !== plan.receiptId || current.admissionDigest !== plan.admissionDigest
     || current.amountMinor !== plan.amountMinor || current.currency !== plan.currency || current.feeMinor !== plan.feeMinor
-    || current.priorCashMinor !== plan.priorCashMinor || current.priorAllocatedFeeMinor !== plan.priorAllocatedFeeMinor) refuse();
+    || current.priorCashMinor !== plan.priorCashMinor || current.priorAllocatedFeeMinor !== plan.priorAllocatedFeeMinor||current.applicationProtocol!==plan.applicationProtocol) refuse();
 }
