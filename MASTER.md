@@ -3564,6 +3564,20 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Actual proper-target native checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08):
+the first real service journey stops BEFORE controlled target birth because its
+fixture assumed one grant. Actual paid subscription already owns its genuine site
+grant; adding the explicit page entitlement correctly produces a second old-period
+grant. Read-only postmortem proves both original dates/used0, no target, all594
+public-table fingerprints unchanged across diagnostics and zero clients. The
+fixture now preserves the complete original catalogue and verifies exactly the
+new page grant, every old date/used/status/identity and the exact added row count.
+No grant row is fabricated or original native oracle removed. V21 failed fixture
+and all logs/snapshots remain preserved; no next test resets it. The verification
+wrapper separately corrects Result-array prototype normalization and a diagnostic
+column name, retaining all86 exact journal values and original failures. Current
+native/application/access/provider/stable acceptance remains open.
+
 Strict154 qualification checkpoint 2026-11-13 (C12.38/C1.08): fresh ordinary
 V20 passes all86 migrations/hashes/profile/drain in6.921s. The first strict source
 preflight correctly identifies five genuine modeled factory phases absent from
