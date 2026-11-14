@@ -3564,6 +3564,22 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled canonical stages source checkpoint 2026-11-13
+(C12.38/C1.08/C9.33/C9.38): a NEW UNAPPLIED continuation independently proves
+exact real payment/invoice/route/bank-observation/fee/FIFO-plan/state-event deltas
+against the complete immutable PG parent preimage, retaining every other current
+raw/caller/privacy/source row. Actual prior receipt allocations are required
+before later fee use; strict settlement and deferred whole-batch conservation
+preserve partial remainders without paid/access claims. The ordinary real-context
+reader authenticates actual HMAC/lineage and current hashes, acquiring no lock in
+reverse and granting no permission. Nine pure/four source/nine read-only SQL
+primitive controls are PREPARED/UNRUN; no parser/runtime/database execution or
+current root/journal/old guard mutation occurred. Genuine initial parent
+prospective context, raw-atom/debt authority, batch writer/routing integration,
+native/provider/security acceptance and the full current specification remain
+required. Application stays unregistered/unactivated; all C-items and stable
+stay open. See `deploy/controlled-cash-application-stages84-source-20261113.md`.
+
 Controlled application admission source checkpoint 2026-11-13
 (C12.38/C1.08/C9.33/C9.38): the isolated future branch normally carries the real
 bank batch reader and adds three immutable exact-FK original batch/receipt/
