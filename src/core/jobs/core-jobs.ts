@@ -482,6 +482,12 @@ export const eraseMediaMultipartOperations=defineJob({
  handler:async(data,context)=>{if(!context)throw new Error("Original upload erasure requires a durable worker identity.");await context.throwIfCancelled();const{eraseMultipartOperations}=await import("@/core/media/multipart-privacy");return eraseMultipartOperations(data);},
 });
 
+/** Certificate catch-up consumes only the actual retirement's fixed safe job. */
+export const sealOriginalMultipartRetirement=defineJob({
+ name:"core.sealOriginalMultipartRetirement",summary:"Seal the exact captured original upload retirement after its owning transaction commits.",retry:{limit:40,delaySeconds:60,backoff:true,maxDelaySeconds:3600},concurrency:1,
+ handler:async(data,context)=>{if(!context)throw new Error("Original retirement sealing requires its actual durable worker identity.");const{executeOriginalMultipartRetirementJob}=await import("@/core/media/multipart-retirement-job");return executeOriginalMultipartRetirementJob(data,context);},
+});
+
 /** Unconfirmed recordings and leftover chunks must not outlive the session. */
 export const expireCaptureSessions = defineJob({
   name: "core.expireCaptureSessions",
@@ -1143,6 +1149,7 @@ export default [
   eraseMailRecords,
   eraseMediaStorageOperations,
   eraseMediaMultipartOperations,
+  sealOriginalMultipartRetirement,
   expireAgentApprovals,
   runPlaybooks,
   assembleBriefings,

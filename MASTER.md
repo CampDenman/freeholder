@@ -4558,6 +4558,42 @@ snapshot. `[ ]` means incomplete, including partially implemented work. An
 item may be checked only in the same change that supplies its evidence. Never
 use prose such as “mostly done” as a substitute for decomposing an item.
 
+Source-only continuation, 2026-11-14 (C1.12/C11.08): the finite immutable
+multipart retirement certificate-birth slice adds one nullable/no-default field
+on existing reviews and a system-only shared service, preserving historical
+NULL reviews and original caller ACK/FIN. Exact complete raw proof/frontier is
+independently checked before sealing/dedup; late evidence or holds keep current
+proof pending. Eight pure and six genuine service/TCP controls are prepared,
+all unrun. No raw/quota minimization, capability publication, new model or C
+closure. Root qualification and full late-evidence/minimization/catch-up,
+issued-authority terminal, quota/capture/cutover/provider acceptance remain open.
+See `deploy/media-multipart-retirement-certificate-source-2026-11-14.md`.
+
+Source-only continuation, 2026-11-14 (C1.12/C11.08): exact-admission certificate
+catch-up now queues the fixed safe proof through the original retirement TX's
+existing outbox primitive. Owner and actual worker use the same private system
+service; full proof/holds/frontier and original queue/claim/runtime identity
+precede dedup. Only resource retirement uses DB transaction time; actual original
+ACK/FIN remain unchanged. Five structural and six genuine service/TCP/worker
+controls are prepared, all UNRUN. No schema, flag, raw minimization, erasure
+acknowledgement or C closure. Consumers/late-identity/re-review, quota/capture/
+cutover and genuine provider acceptance remain required before publication.
+See `deploy/media-multipart-retirement-catchup-source-2026-11-14.md`.
+
+Source-only continuation, 2026-11-14 (C1.12/C11.08): authenticated first idle
+multipart identity now requires agreement of all intact original certificates;
+actual late session facts retain first key/session digests and reopen the same
+original debt without refilling ACK/FIN/canonical rows. Fresh authorized RAW
+same-ABORT READ/two-pass re-review appends a distinct review/seal/job while old
+stop receipts/results/proofs remain immutable. Historical identity is separate
+from current whole-frontier proof and grants no live mutation/remote terminal.
+Five new SQL functions and five full guard/current-review continuations are
+owned/unapplied;10pure+6genuine service/TCP controls are prepared, all UNRUN.
+No model/column/flag/global legacy gate/minimization/C closure. Compact consumers,
+other creator/conflicting-session recovery, quota/capture/cutover and actual
+provider/security acceptance remain required. See
+`deploy/media-multipart-retained-identity-source-2026-11-14.md`.
+
 ### 43.2 Definition of done for every feature
 
 Every feature checkbox below inherits this checklist. If a line does not
@@ -17561,3 +17597,20 @@ inspected, preserving total4200/remaining4199 and the uncollected fee obligation
 with no local payment/access invented. This desired native is UNRUN; actual
 partial/batch application, residual recovery and full lifecycle acceptance remain
 REQUIRED. See `deploy/controlled-external-partial-bank84-prepared-20261113.md`.
+
+Source continuation 2026-11-14 (C1.12/C11.08/C3.22): the real original physical
+observer now appends structurally valid conflicting multipart accepted/session
+facts before identity projection. It preserves first canonical UploadId/parent
+ACK/FIN/results and reopens the same original resource/caller/request debt,
+without adopting or deleting the conflicting session. Pointer restoration is
+a separate post-commit exact-original operation; unavailable/redacted/foreign
+pointers cannot roll back positive evidence, and the original erasure outbox
+still runs. This is a source finding, not an observed provider incident. No
+SQL/model/API/capability changes; all prior oracle bodies and owned82 bytes
+remain intact. Seven pure/four real-original-ledger controls with explicitly
+scripted additional facts are PREPARED/UNRUN and do not claim actual additional
+provider ACK/account acceptance. No child execution/provider/host action or
+C closure. Late-terminal/conflicting recovery, certificates/quota/remote part
+terminal/capture/cutover and all qualification/external/security/stable gates
+remain open. See
+`deploy/media-multipart-conflicting-session-facts-source-2026-11-14.md`.

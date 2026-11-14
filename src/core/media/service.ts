@@ -41,6 +41,7 @@ import {ORIGINAL_MULTIPART_PART_BYTES} from "./multipart-part-bodies-proof";
 import {claimOriginalPartIssuance,finishUnattemptedPartIssuance,issueOriginalMultipartPart} from "./multipart-part-issuance";
 import {transferDigest} from "./transfer-proof";
 import {withOriginalMultipartInvocation} from "./provider-callers";
+import {originalMultipartRetirementAdmission,sealOriginalMultipartRetirement} from "./multipart-retirement-certificate";
 import {reserveMultipart,createOriginalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
 import {
   storageKey,
@@ -1708,11 +1709,12 @@ const abortUploadApply = defineService({
   permission: "public",
   external: false,
   writeClass: "write",
-  input: z.object({ id: z.string().uuid(), storageKey: z.string().min(1) }),
+  input: z.object({ id: z.string().uuid(), storageKey: z.string().min(1), retirementAdmission:originalMultipartRetirementAdmission.optional() }),
   output: okResult,
   handler: async (input, ctx) => {
     const remaining = await ctx.tx.select({ key: mediaObjects.key }).from(mediaObjects).where(eq(mediaObjects.key, input.storageKey)).limit(1);
     if (remaining.length) throw new ServiceError("conflict", "The upload is stopped, but its original storage cleanup still needs recovery.");
+    if(input.retirementAdmission){if(input.retirementAdmission.uploadId!==input.id||input.retirementAdmission.keyDigest!==objectKeyDigest(input.storageKey))throw new ServiceError("conflict","Keep the exact original upload retirement receipt for review.");await ctx.callAsSystem(sealOriginalMultipartRetirement,input.retirementAdmission);}
     ctx.setSubject("mediaUpload", input.id);
     return { ok: true };
   },
@@ -1729,7 +1731,7 @@ export const abortUpload = defineOrchestratedService({
   handler: async (input, actor) => withOriginalMultipartInvocation(async()=>{
     const claimed = await abortUploadClaim.call(input, actor);
     if (claimed.alreadyTerminal) return { ok: true };
-    if(claimed.operationId){await abortOriginalMultipart(input.id,claimed.operationId);return abortUploadApply.call({id:input.id,storageKey:claimed.storageKey},actor);}
+    if(claimed.operationId){const retirementAdmission=await abortOriginalMultipart(input.id,claimed.operationId);return abortUploadApply.call({id:input.id,storageKey:claimed.storageKey,retirementAdmission},actor);}
     if (claimed.providerUploadId) throw new ServiceError("conflict", "Confirm this multipart upload's original storage resource before aborting it.");
     if (!await discardUnwrittenProxyReservation(input.id, claimed.storageKey) && !await deleteWithReceipt(claimed.storageKey)) throw new ServiceError("conflict", "The upload is stopped, but its original storage operation remains unresolved.");
     return abortUploadApply.call(

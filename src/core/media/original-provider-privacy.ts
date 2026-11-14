@@ -67,7 +67,7 @@ export async function exportOriginalProviderEvidence(tx:Tx,parent:OriginalProvid
   inventories:captured.headers.map(row=>({id:row.id,objectReceiptId:row.objectReceiptId,multipartOperationId:row.multipartOperationId,anchorCallId:row.anchorCallId,proofCallId:row.proofCallId,originalWitness:row.originalWitness,state:row.state,purpose:row.purpose,firstDigest:row.firstDigest,confirmedDigest:row.confirmedDigest,createdAt:row.createdAt})),
   pages:captured.pageProofs.map(row=>({id:row.id,inventoryId:row.inventoryId,callId:row.callId,pass:row.pass,kind:row.kind,pageDigest:row.pageDigest,membershipDigest:row.membershipDigest,createdAt:row.createdAt})),resources:scopedResources,
   quota:await originalQuotaProof(tx,captured.callers),
-  reviews:captured.reviews.map(row=>({id:row.id,callId:row.callId,readCallId:row.readCallId,inventoryId:row.inventoryId,originalCallWitness:row.originalCallWitness,outcome:row.outcome,providerEvidenceDigest:row.providerEvidenceDigest,createdAt:row.createdAt})),
+  reviews:captured.reviews.map(row=>({id:row.id,callId:row.callId,readCallId:row.readCallId,inventoryId:row.inventoryId,originalCallWitness:row.originalCallWitness,outcome:row.outcome,providerEvidenceDigest:row.providerEvidenceDigest,retirementProof:row.retirementProof,createdAt:row.createdAt})),
  };
 }
 /** Until exact physical retirement/minimization is implemented, retained raw

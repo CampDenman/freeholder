@@ -1,6 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import {admitOriginalMediaCaller,admitOriginalMultipartCaller,originalMultipartCaller,retainOriginalMediaCallerReturn,withOriginalMultipartInvocation} from "./provider-callers";
+import {readRetainedOriginalMultipartIdentity} from "./multipart-retained-identity";
+import {sealOriginalMultipartRetirement,type OriginalMultipartRetirementAdmission} from "./multipart-retirement-certificate";
 import {observeTransferRequest,withTransferRequestScope,TransferRequestNotAttemptedError} from "./transfer-requests";
 import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C11.08: commit original intent, call its provider, then record facts.
@@ -113,6 +115,13 @@ async function notAttempted(id:string):Promise<void>{
 export async function observeMultipart(id:string,options:{accepted?:boolean;uploadId?:string;verified?:boolean;unknown?:boolean;finished?:boolean;originalKey?:string}):Promise<void>{
  await db().transaction(async tx=>{
   await lockContactIdentityForRead(tx);const{operation,resource}=await lockedOperation(tx,id,Boolean(options.accepted)),now=new Date();
+  const first=await readRetainedOriginalMultipartIdentity(tx,resource.id);
+  if(first.state!=="absent"){
+   // Actual observer facts were already retained. A sealed first ACK/FIN or
+   // canonical locator is never filled by a later projection continuation.
+   await tx.update(mediaMultipartOperations).set({state:"unknown",updatedAt:now}).where(eq(mediaMultipartOperations.id,id));
+   await tx.update(mediaMultipartResources).set({state:"unknown",retiredAt:null,updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));return;
+  }
   if(resource.redactedAt&&operation.providerAcceptedAt&&operation.state==="accepted"&&resource.retiredAt&&options.accepted)return;
   if(options.uploadId&&resource.providerUploadId&&resource.providerUploadId!==options.uploadId)conflict("The provider named a different original multipart upload.");
   const late=Boolean(resource.redactedAt&&operation.createdAt<=resource.redactedAt&&options.accepted);
@@ -267,7 +276,7 @@ export async function claimMultipartAbort(ctx:Pick<ServiceContext,"tx"|"actor">,
  await admitOriginalMultipartCaller(ctx.tx,operation!.id,"multipart_abort",ctx.actor);
  return{operationId:operation!.id,terminal:false};
 }
-export async function abortOriginalMultipart(uploadId:string,operationId:string):Promise<void>{
+export async function abortOriginalMultipart(uploadId:string,operationId:string):Promise<OriginalMultipartRetirementAdmission>{
  const caller=originalMultipartCaller(operationId);
  let captured:BoundMultipart;
  try{captured=await originalMultipart(uploadId);}catch(error){await retainOriginalMediaCallerReturn(caller.id,caller.token,{notAttempted:true});await notAttempted(operationId);throw error;}
@@ -276,7 +285,7 @@ export async function abortOriginalMultipart(uploadId:string,operationId:string)
   await withTransferRequestScope({callId:caller.id,token:caller.token,runtimeIdentity:caller.runtimeIdentity},()=>captured.store.directMultipart!.abort(captured.resource.key,captured.resource.providerUploadId!,{request:observeTransferRequest,onAccepted:async()=>{acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true});}}));
   if(!(await retainOriginalMediaCallerReturn(caller.id,caller.token,{accepted:true,providerUploadId:captured.resource.providerUploadId!})).settled)conflict();
   returned=true;acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,finished:true});
-  await finishIdleOriginalMultipartRetirement(captured.resource.id,operationId);
+  return await finishIdleOriginalMultipartRetirement(captured.resource.id,operationId);
  }catch(error){if(!returned)await retainOriginalMediaCallerReturn(caller.id,caller.token,error instanceof TransferRequestNotAttemptedError?{notAttempted:true}:{failed:true}).catch(()=>{});await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true,finished:true}).catch(()=>{});throw error;}
 }
 /** Existing expiry/erasure authority may retire a known, idle original upload. */
@@ -287,6 +296,6 @@ export async function retireKnownMultipart(uploadId:string):Promise<boolean>{
   if(captured.resource.state!=="open")return false;
   const claim=await db().transaction(async tx=>claimMultipartAbort({tx,actor:{kind:"system"}},uploadId,Boolean(captured.resource.redactedAt)));
   if(claim.terminal)return true;
-  await abortOriginalMultipart(uploadId,claim.operationId);return true;
+  const admission=await abortOriginalMultipart(uploadId,claim.operationId);await sealOriginalMultipartRetirement.call(admission,{kind:"system"});return true;
  }catch{return false;}});
 }

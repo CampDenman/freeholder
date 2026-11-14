@@ -14,3 +14,13 @@ export async function checkActualWorkerCancellation():Promise<void>{
  if(!scope.active)throw new Error("The actual worker execution ended; no new provider request may be admitted from its detached work.");
  await scope.context.throwIfCancelled();
 }
+/** An internal consumer may require the exact object installed by the actual
+ * worker. An ID/name-shaped caller object or a detached old context is not it.
+ * This is queue execution identity, never provider admission/stop authority. */
+export function actualWorkerExecution():JobExecutionContext|undefined{
+ const scope=executions.getStore();if(scope&&!scope.active)throw new Error("The actual worker execution ended.");return scope?.context;
+}
+export async function requireActualWorkerExecution(context:JobExecutionContext):Promise<void>{
+ if(actualWorkerExecution()!==context)throw new Error("This continuation requires its actual installed worker execution.");
+ await context.throwIfCancelled();
+}

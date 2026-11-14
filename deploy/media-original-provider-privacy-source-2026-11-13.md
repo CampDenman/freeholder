@@ -96,3 +96,15 @@ qualified native controls after the physical retirement protocol is complete.
    the complete capability.
 
 These remain required implementation, not new deferrals. No C checkbox closes.
+
+## 2026-11-14 certificate-birth continuation (source only)
+
+A new NULL/no-default safe `retirement_proof` on existing reviews can be born
+only as a separate immutable system seal of independently derived genuine idle
+retirement. The scoped export includes its bounded safe body; original parent
+FK ownership, first capture, private/noTTL lifetime and holds are unchanged.
+Historical NULL reviews stay NULL. This adds no new subject table or search/
+retention optout. It authorizes no raw/evidence/quota minimization; every actual
+consumer and late-positive path must support the sealed first identity before
+that later change. Full contracts and unrun controls:
+`deploy/media-multipart-retirement-certificate-source-2026-11-14.md`.
