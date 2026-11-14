@@ -3564,6 +3564,17 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Atomic bank record-alias SOURCE successor2026-11-14 (C12.38/C9.33/C1.08):
+independent source audit finds one nested JSON alias actual_refund colliding
+with the function's refunds%ROWTYPE local. NEW owned UNAPPLIED complete helper
+successor renames ONLY nested alias/reference to current_refund_atom; complete
+Aready changes ONLY corresponding bodySHA literal. Frozen dd3/all predicates,
+types/physical rows/callers/5000 and original whole fee native180s remain exact.
+Three full-source/native-preservation controls PREPARED, ALL UNRUN. No actual
+SQL failure, compile/PG/native/readiness/closure/stable acceptance is claimed;
+root owns assembly/qualification. See
+`deploy/controlled-atomic-refund-bank-record-alias84-source-20261114.md`.
+
 Atomic bank late-evidence SOURCE continuation2026-11-14 (C12.38/C9.33/C1.08):
 frozenfd preserved. New bank owner check uses original cashNamespaceKey SHA,
 never controlled literal namespace bytes. Signed original-v2 admission preimage
