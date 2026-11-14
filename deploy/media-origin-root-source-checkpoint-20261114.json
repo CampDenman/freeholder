@@ -1,0 +1,56 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.12",
+    "C10.32",
+    "C11.08"
+  ],
+  "status": "ORIGIN_PRECURSOR_SOURCE_AND_FICTIONAL_TCP_QUALIFIED_ONLY",
+  "qualifiedSourceHead": "173f6400cf1202933b32773edbff1f34e8e617d9",
+  "composedFromRoot": "9d08c97f",
+  "frozenOriginLeaf": "8dc480155d1f410e2cd8c2a0b556340da6423d75",
+  "fullRootTypeQualification": {
+    "path": "/tmp/freeholder-media-origin-isolated-source-v1-20261114-result.json",
+    "actualTypeSeconds": 62.07343982800376,
+    "sourceHead": "1497983890e1143b834cb0260d6c66243f4db81e",
+    "productionCodeIdenticalToCurrent": true,
+    "followingDelta": "Exact typed getter in one test +documentation, reverses fully via existing manifest"
+  },
+  "currentChecks": {
+    "all12DependenciesExact": true,
+    "actualCliPackageLint": "tsc -p packages/cli/tsconfig.json --noEmit PASS",
+    "rootEslint": "3app/test files PASS0warnings; packages intentionally use their own lint",
+    "actualPassed": 77,
+    "completeFiles": 9,
+    "explicitNoDatabaseSkips": 16,
+    "pureOriginControlsPassed": 12,
+    "actualFictionalTcpProducerAndPrivateDeliveryPassed": 1,
+    "ownerKeyOrClaimOrProviderAccountUsed": false
+  },
+  "evidence": [
+    {
+      "path": "/tmp/freeholder-media-origin-isolated-source-v2-20261114-result.json",
+      "bytes": 2117,
+      "sha256": "d3633fbf21b0de589ca1c75d906b1b48135b3f7a7eea949756302b1138e59fdc"
+    },
+    {
+      "path": "/tmp/freeholder-media-origin-isolated-source-v2-20261114-tests.json",
+      "bytes": 34272,
+      "sha256": "3def119a4bd64d03bec02be57e67efac779fb86f805cd94147b3694408195aba"
+    },
+    {
+      "path": "/tmp/freeholder-media-origin-isolated-source-v1-20261114-result.json",
+      "bytes": 1622,
+      "sha256": "a29e73127f8fc01cbc511c5439adc87e8d0621f91dcb1307769768be5b5334eb"
+    }
+  ],
+  "normalSqlAndModelsUnchangedFromQualifiedRoot": true,
+  "primaryIntegrationWorktreeWasUnchangedDuringChecks": true,
+  "missingUsableInitializer": true,
+  "missingFirstWriterFenceAndDurableReplayConsumer": true,
+  "recoveryAndAntiRollbackAcceptanceOpen": true,
+  "noNewModelOrSqlOrServiceOrCapability": true,
+  "actualProviderSshPurchaseOwnerClaimAcceptance": false,
+  "independentSecurityStableOrPublicationAcceptance": false,
+  "anyCGateClosed": false
+}
