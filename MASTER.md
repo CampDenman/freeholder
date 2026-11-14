@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Media retirement SOURCE assembly2026-11-14 (C1.12/C11.08): frozen000d/7396/
+be87/b72b now compose with the qualified financial source, preserving entire
+current status text plus only53 new agent evidence lines and root type/lint
+corrections. Owned82 and ordinary82 now match749050/a52d8e61, with the complete
+649575/e704e568 prior prefix intact. Exactly one nullable/no-default/no-backfill
+review proof column/CHECK and one new guard; no model or capability publication.
+Finite strict-parser extension recognizes only the existing scalar reviews
+rowtype: eight controls pass, all411 prior parsed journal functions stay exact,
+all421 held functions/owned headers are covered. Fresh composed source, schema,
+SDK and actual media/worker/native acceptance remain UNRUN. Raw minimization,
+exposed/unknown/legacy/extra-session/capture/quota/cutover and all stable/provider/
+security/signature gates stay open. See
+`deploy/media-retirement159-root-assembly.manifest.json`.
+
+
 Actual financial rollback continuation2026-11-14 (C1.08/C12.38/C9.33):
 12b9600c changes only the finite genuine producer warmup and documentation;
 product/schema bytes remain exact c6. SourceV79 passes1321/210/458 explicit

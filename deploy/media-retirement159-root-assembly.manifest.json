@@ -1,0 +1,100 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.12",
+    "C11.08"
+  ],
+  "execution": "SOURCE_ASSEMBLED_UNQUALIFIED",
+  "mergedHeadBeforeNormalCopy": "5bb763049ba9c50585b21c6a1f7dfe8e37d4484b",
+  "financialBaseline": "5c6f9ea7",
+  "frozenLeaves": [
+    {
+      "manifest": "/tmp/freeholder-media-multipart-conflicting-session-facts82-source-freeze-20261114.json",
+      "sha256": "65e8076493732317f072b797eb51335a5cb0695bbae86ebb3e56f6457f6797e9",
+      "head": "000d0152b53886c40f243ec97de59c9fd1d54251",
+      "exactFrozenFileAndPreservedArtifactChecks": 50,
+      "passed": true
+    },
+    {
+      "manifest": "/tmp/freeholder-media-multipart-retirement-certificate82-source-freeze-20261114.json",
+      "sha256": "62e8a14a6dfa79261df02a0f509e07bea1e5a65b47527fcc910eb8ffbebcf581",
+      "head": "7396fb54870b7dd1d09c273b4ae5d20f7f26175b",
+      "exactFrozenFileAndPreservedArtifactChecks": 64,
+      "passed": true
+    },
+    {
+      "manifest": "/tmp/freeholder-media-multipart-retirement-catchup82-source-freeze-20261114.json",
+      "sha256": "6c8193435257c088c9016bb40ddf8f8acce23d7ea44fe625fa39593256909c2c",
+      "head": "be87c6869ace6d6887ec6a769bf39c3c5814c457",
+      "exactFrozenFileAndPreservedArtifactChecks": 62,
+      "passed": true
+    },
+    {
+      "manifest": "/tmp/freeholder-media-multipart-retained-identity82-source-freeze-20261114.json",
+      "sha256": "10b64e0f52458c0fd48d13a9af2e1c8895fe727f8636d17a94fbca1454720316",
+      "head": "b72b5633664396333d9bddf9d416896e87857200",
+      "exactFrozenFileAndPreservedArtifactChecks": 73,
+      "passed": true
+    }
+  ],
+  "normal82": {
+    "path": "db/migrations/0082_verified_media_transfer.sql",
+    "sha256": "a52d8e615b41f22588c3bdd5b8462511ea8e5830c3ae231b4d9f497a65e767cc",
+    "bytes": 749050,
+    "preservedEntirePriorPrefix": {
+      "bytes": 649575,
+      "sha256": "e704e568c20499f9452542d21b05fcce489b29d236bedaec0bf67e64f6817cb5"
+    }
+  },
+  "schemaDelta": {
+    "newModels": 0,
+    "existingTable": "media_storage_transfer_reviews",
+    "newColumn": "retirement_proof",
+    "nullable": true,
+    "default": null,
+    "backfill": false,
+    "newChecks": [
+      "media_storage_transfer_review_retirement_proof"
+    ],
+    "newGuards": [
+      "media_multipart_retirement_certificate"
+    ]
+  },
+  "parserControls": {
+    "path": "/tmp/freeholder-current-full86-parser159-media-controls-v3-20261114-result.json",
+    "sha256": "43f04a00ae6f9503830f55addc71165841449119e17af38fd704cd2e41cf6001",
+    "passed": true,
+    "all411PriorParsedFunctionsPreserved": true,
+    "fullHeldParsedFunctions": 421,
+    "argumentExtension": {
+      "oldPath": "/tmp/freeholder-current-full86-parity159-numeric-v39-sql-20261114.mjs",
+      "oldSha256": "c275454a3faaca61af044f0094fa27f01271d0e150741ac95abc5552abd5fcdb",
+      "path": "/tmp/freeholder-current-full86-parity159-media-v55-sql-20261114.mjs",
+      "sha256": "11c7f9cf1b76184feb21faff8b8e75887af01577924a4f2d527fd4845553910b",
+      "finiteDelta": {
+        "before": "/^(uuid|jsonb|text|integer|int|bigint|boolean|bytea|double precision|timestamp with time zone|timestamptz|numeric)(\\[\\])?$/i",
+        "after": "/^(?:(uuid|jsonb|text|integer|int|bigint|boolean|bytea|double precision|timestamp with time zone|timestamptz|numeric)(\\[\\])?|media_storage_transfer_reviews)$/i",
+        "occurrences": 2
+      },
+      "scope": "Exactly one scalar known media row argument type; columns and other type grammars unchanged",
+      "status": "PREPARED_UNRUN"
+    }
+  },
+  "masterResolution": "Entire current ours plus exactly53 new agent lines only, no old history duplicated",
+  "codeConflictResolution": [
+    "src/core/media/multipart-abort-recovery-context.ts: preserve root namespace narrowed type and add exact repeat:false discriminator",
+    "src/core/media/service.ts: import new retirement helpers while preserving root removal of unused originalMultipart"
+  ],
+  "unpublishedCapabilities": [
+    "freeholder_media_transfer_request_capability_v1()",
+    "freeholder_media_original_part_capability_v1()"
+  ],
+  "remaining": [
+    "fresh source/schema/SDK/native/worker/provider/platform acceptance",
+    "idle-only minimization and complete post-min consumers",
+    "unknown/legacy/exposed remote authority/extra-session/capture/quota/cutover recovery",
+    "all unchecked MASTER43 acceptance/independent review/final stable signature"
+  ],
+  "providerAcceptance": false,
+  "stableAcceptance": false
+}
