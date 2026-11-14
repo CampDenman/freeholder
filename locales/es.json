@@ -9302,5 +9302,6 @@
   "subscriptions.proration.cardCollect": "Cobrar o recuperar el pago original",
   "subscriptions.proration.cardReaderTitle": "Lecturas bancarias originales del cambio de precio",
   "subscriptions.proration.cardReaderIntro": "Cada verificación bancaria original debe terminar realmente o contar con una revisión independiente de la detención del proceso. Una lectura posterior correcta no sustituye una llamada perdida; revisar una detención no prueba si se movió dinero.",
-  "subscriptions.proration.cardReaderRecover": "Se registró la detención del proceso original. Use la inspección del pago original de arriba para realizar una nueva lectura bancaria autorizada."
+  "subscriptions.proration.cardReaderRecover": "Se registró la detención del proceso original. Use la inspección del pago original de arriba para realizar una nueva lectura bancaria autorizada.",
+  "subscriptions.period.controlledNotice": "Su acceso pagado conserva la fecha de fin original. Esta factura cubre las fechas del siguiente período aceptado, su precio, cualquier cargo inicial de alta único y el impuesto mostrado aquí. La prueba nunca se cobra antes de su fin. Solo puede cobrarse esta factura exacta; las estimaciones o borradores de transición del proveedor no son cargos adicionales. Otro crédito de cuenta no puede pagarla. Los pagos parciales quedan registrados y no adelantan el acceso antes del pago completo."
 }

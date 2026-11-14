@@ -15868,3 +15868,14 @@ controls are PREPARED/UNRUN; new owned SQL tail is UNAPPLIED. Provider paid effe
 still mechanically refuse pending genuine authority; first/normal-period factories,
 full collection/application/recovery/UI/native/live acceptance remain required.
 See `deploy/controlled-proration-canonical-factory82-source-20261113.md`.
+
+Source original-period factory checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08):
+owner/customer actual native/calendar/customer previews and unchanged original
+mandate now materialize the next canonical posttrial/renewal invoice through the
+byte-identical shared period writer. Original consent and dated-period quote remain
+distinct; setup once, dated merchant tax, old paid access and trial end are preserved.
+No initial-sale/signupPending bypass, new acceptance actor or fake phase is inferred.
+Six pure plus three actual-service controls are PREPARED/UNRUN; new owned SQL tail
+is UNAPPLIED. Complete positive collection/disposition, prospective staging/routing,
+separate paid effects and all source/native/live/security acceptance remain REQUIRED.
+See `deploy/controlled-original-period-factory84-source-20261113.md`.

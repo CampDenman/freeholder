@@ -9302,5 +9302,6 @@
   "subscriptions.proration.cardCollect": "Encaisser ou récupérer le paiement initial",
   "subscriptions.proration.cardReaderTitle": "Lectures bancaires initiales du changement de prix",
   "subscriptions.proration.cardReaderIntro": "Chaque vérification bancaire initiale doit réellement se terminer ou disposer d’un arrêt du processus examiné indépendamment. Une lecture ultérieure réussie ne remplace pas un appel perdu ; un examen d’arrêt ne prouve pas si des fonds ont été déplacés.",
-  "subscriptions.proration.cardReaderRecover": "L’arrêt du processus initial est enregistré. Utilisez l’inspection du paiement initial ci-dessus pour une nouvelle lecture bancaire autorisée."
+  "subscriptions.proration.cardReaderRecover": "L’arrêt du processus initial est enregistré. Utilisez l’inspection du paiement initial ci-dessus pour une nouvelle lecture bancaire autorisée.",
+  "subscriptions.period.controlledNotice": "Votre accès payé conserve sa date de fin initiale. Cette facture couvre les dates de la prochaine période acceptée, son prix, les éventuels frais initiaux de mise en place et la taxe affichée ici. L’essai n’est jamais facturé avant sa fin. Seule cette facture exacte peut être encaissée ; les estimations ou brouillons de transition du prestataire ne sont pas des frais supplémentaires. Un autre crédit de compte ne peut pas la régler. Les paiements partiels restent consignés sans avancer l’accès avant le paiement intégral."
 }

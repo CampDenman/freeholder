@@ -9302,5 +9302,6 @@
   "subscriptions.proration.cardCollect": "Collect or recover original payment",
   "subscriptions.proration.cardReaderTitle": "Original changed-price bank readers",
   "subscriptions.proration.cardReaderIntro": "Every original bank verification must actually finish or have an independently reviewed runtime stop. A later successful read cannot replace a lost caller; a stop review does not prove whether money moved.",
-  "subscriptions.proration.cardReaderRecover": "The original runtime stop is recorded. Use the original payment inspection above to make a newly admitted bank read."
+  "subscriptions.proration.cardReaderRecover": "The original runtime stop is recorded. Use the original payment inspection above to make a newly admitted bank read.",
+  "subscriptions.period.controlledNotice": "Your existing paid access keeps its original end date. This invoice covers the original accepted next-period dates, its price, any original one-time setup fee and the tax shown here. The trial is never billed early. Only this exact invoice may be collected; provider estimates or transitional drafts are not extra customer charges. Unrelated account credit cannot fund it. Partial payments remain recorded and do not advance access before full payment."
 }

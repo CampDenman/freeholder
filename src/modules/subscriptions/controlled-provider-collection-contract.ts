@@ -27,7 +27,7 @@ export const controlledProrationReview=grossProrationReview.omit({calendar:true,
 export const controlledPeriodInput=z.object({id:z.uuid(),resourceId:z.uuid(),previewAt:z.iso.datetime(),locale:z.enum(["en","fr","es","ar"]).default("en")}).strict();
 export const controlledPeriodReview=controlledProrationReview.omit({controlled:true}).extend({kind:z.literal("period"),canonicalSourceId:z.string().min(1).max(300),
  creditNetMinor:z.literal(0),creditTaxMinor:z.literal(0),creditAppliedMinor:z.literal(0),residualCreditMinor:z.literal(0),
- controlled:controlledProrationReview.shape.controlled.extend({plannedProrationId:z.null()})}).strict();
+ controlled:controlledProrationReview.shape.controlled.extend({plannedProrationId:z.null(),originalPeriodConsentDigest:sha})}).strict();
 export const controlledChangedPriceReview=controlledProrationReview.extend({kind:z.literal("proration"),canonicalSourceId:z.string().min(1).max(300)}).strict();
 export const controlledTargetReview=z.discriminatedUnion("kind",[controlledChangedPriceReview,controlledPeriodReview]);
 export type ControlledTargetReview=z.infer<typeof controlledTargetReview>;
@@ -36,7 +36,7 @@ export type ControlledProrationInput=z.infer<typeof controlledProrationInput>;
 export type ControlledProrationReview=z.infer<typeof controlledProrationReview>;
 export const controlledProrationAcceptance=z.object({quoteId:z.uuid(),resourceId:z.uuid(),previousTermsId:z.uuid(),acceptedQuoteDigest:sha,confirm:z.literal(true)}).strict();
 export const controlledComponentProvenance=z.discriminatedUnion("kind",[
- z.object({kind:z.literal("net"),providerProductRef:reference,providerPreviewLineRef:reference,originalProviderItemRef:reference,originalProviderPriceRef:reference,canonicalCalculationDigest:sha}),
+ z.object({kind:z.literal("net"),providerProductRef:reference,providerPreviewLineRef:reference,originalProviderItemRef:reference,originalProviderPriceRef:reference,canonicalCalculationDigest:sha,canonicalInvoiceLineId:z.uuid().optional(),canonicalComponent:z.enum(["period","setup"]).optional()}),
  z.object({kind:z.literal("merchant_declared_tax_collection"),providerProductRef:reference,taxQuoteDigest:sha,profileId:z.uuid(),profileVersion:z.number().int().positive()}),
  z.object({kind:z.literal("locked_canonical_credit"),creditNoteId:z.uuid(),applicationIds:z.array(z.uuid()).min(1).max(1000),canonicalDispositionDigest:sha}),
 ]);
