@@ -79,11 +79,14 @@ export async function controlledAtomicRefundTarget(ctx:ServiceContext,paymentId:
   ||batches.some(batch=>batch.invoiceId!==owner.invoice_id||!proofs.filter(proof=>proof.batchId===batch.id).every(proof=>batch.requestedReceiptIds.includes(proof.receiptId))))return unavailable;
  const first=rows[0];if(!first)return unavailable;
  const resources=rows.map(row=>({receiptId:row.receipt_id,paymentId:row.payment_id,amountMinor:row.amount_minor,refundedMinor:row.refunded_minor,feeMinor:row.original_fee_minor,feeReturnedMinor:row.actual_fee_returned_minor}));
+ const{readAtomicFeeReturnResources}=await import("./atomic-fee-return-resources");
+ const physicalReturns:Awaited<ReturnType<typeof readAtomicFeeReturnResources>>[]=[];
+ for(const resource of resources){const exact=await readAtomicFeeReturnResources(ctx,resource.paymentId);if(!exact||exact.owner.receiptId!==resource.receiptId||exact.returnedMinor!==resource.feeReturnedMinor)return unavailable;physicalReturns.push(exact);}
  let amounts:ReturnType<typeof controlledAtomicRefundAmounts>;
  try{amounts=controlledAtomicRefundAmounts({principalMinor:first.principal_minor,feeMinor:first.fee_minor,resources});}catch(error){if(!(error instanceof RangeError))throw error;return unavailable;}
  if(rows.some(row=>row.principal_minor!==first.principal_minor||row.fee_minor!==first.fee_minor||row.revision!==first.revision||amounts.resources.find(resource=>resource.paymentId===row.payment_id)?.targetRetainedFeeMinor!==row.target_retained_fee_minor))return unavailable;
  const selected=amounts.resources.find(row=>row.paymentId===paymentId);
- return{applies:true,target:selected?.targetRetainedFeeMinor??null,resources,unassignedDutyMinor:amounts.unassignedDutyMinor,revision:merchantTaxDigest({rows,batches,proofs})};
+ return{applies:true,target:selected?.targetRetainedFeeMinor??null,resources,unassignedDutyMinor:amounts.unassignedDutyMinor,revision:physicalReturns.some(actual=>actual?.resources.some(resource=>resource.ledger==="original_auxiliary"))?merchantTaxDigest({protocol:"freeholder.atomic-fee-return-union.v1",rows,batches,proofs,physicalReturns}):merchantTaxDigest({rows,batches,proofs})};
 }
 
 /** The existing fee claim otherwise locks its selected payment first. Genuine
@@ -155,6 +158,8 @@ export async function controlledAtomicRefundFeeState(ctx:ServiceContext,paymentI
  const resource=target.resources.find(row=>row.paymentId===paymentId),invocations=await merchantFeeInvocations(ctx.tx,paymentId);
  if(!resource||invocations.length+fees.length>5000||!state.inspection_id||!state.observation_id||!state.bank_namespace_revision)return{pending:true,actualRetainedFeeMinor:state.actual_retained_fee_minor,proof:null};
  const owner=await controlledAtomicFeeOwner(ctx,paymentId);if(!owner)return{pending:true,actualRetainedFeeMinor:state.actual_retained_fee_minor,proof:null};
+ const{readAtomicFeeReturnResources}=await import("./atomic-fee-return-resources");const physicalReturns=await readAtomicFeeReturnResources(ctx,paymentId);
+ if(!physicalReturns||physicalReturns.pendingOperationIds.length||physicalReturns.unfinishedIds.length||physicalReturns.returnedMinor!==resource.feeReturnedMinor)return{pending:true,actualRetainedFeeMinor:state.actual_retained_fee_minor,proof:null};
  const{parentFinancialGraphForTx}=await import("./controlled-provider-financial-parent");
  const{controlledObservationEntries}=await import("./controlled-cash-observation-revision");
  const{merchantFeeInvocationFinancialWitness}=await import("./merchant-fee-invocation-witnesses");
@@ -167,6 +172,6 @@ export async function controlledAtomicRefundFeeState(ctx:ServiceContext,paymentI
  const[after]=await ctx.tx.execute<SqlFeeState>(sql`select * from freeholder_controlled_atomic_refund_fee_state(${paymentId}::uuid)`);
  if(!after||merchantTaxDigest(after)!==merchantTaxDigest(state))return{pending:true,actualRetainedFeeMinor:null,proof:null};
  const proof:ControlledAtomicRefundFeeProof={paymentId,receiptId:state.receipt_id,inspectionId:state.inspection_id,bankObservationId:state.observation_id,bankNamespaceRevision:state.bank_namespace_revision,namespaceKey:owner.namespaceKey,originalFeeRef:owner.applicationFeeRef,originalFeeMinor:resource.feeMinor,acceptedReturnedFeeMinor:resource.feeReturnedMinor,targetRetainedFeeMinor:target.target,
-  actualRetainedFeeMinor:state.actual_retained_fee_minor,feeOperationIds:fees.map(row=>row.id).sort(),invocationIds:invocations.map(row=>row.id).sort(),revision:merchantTaxDigest({target,state,authenticBank,fees,invocations,physical})};
+  actualRetainedFeeMinor:state.actual_retained_fee_minor,feeOperationIds:fees.map(row=>row.id).sort(),invocationIds:invocations.map(row=>row.id).sort(),revision:physicalReturns.resources.some(resource=>resource.ledger==="original_auxiliary")?merchantTaxDigest({protocol:"freeholder.atomic-fee-return-union.v1",target,state,authenticBank,fees,invocations,physical,physicalReturns}):merchantTaxDigest({target,state,authenticBank,fees,invocations,physical})};
  return{pending:false,actualRetainedFeeMinor:state.actual_retained_fee_minor,proof};
 }

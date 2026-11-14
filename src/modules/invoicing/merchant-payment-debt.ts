@@ -84,7 +84,7 @@ export const merchantPaymentRecoveryDebt = defineService({
       if (!proof || !proof.customerChargeVerified || proof.amountMinor !== payment.amountMinor || proof.currency !== payment.currency
         || proof.providerPlatformAccountId !== routing.providerPlatformAccountId || proof.chargeAccountId !== (routing.providerAccountId ?? null)) reasons.add("unapplied_money");
       if (!proof?.routeVerified || !proof.settlementVerified&&!(currentAtomicFee&&auxiliaryReturnCurrent)) reasons.add("provider_settlement");
-      const returned = BigInt(feeState?.returned ?? "0");
+      const returned = currentAtomicFee?BigInt(currentAtomicFee.acceptedReturnedFeeMinor):BigInt(feeState?.returned ?? "0");
       const originalFeeRef=currentAtomicFee?currentAtomicFee.originalFeeRef:proof?.applicationFeeRef??null;
       const mismatchedOriginalFee = await ctx.tx.select({ id: merchantFeeRefunds.id }).from(merchantFeeRefunds).where(and(eq(merchantFeeRefunds.paymentId, paymentId), eq(merchantFeeRefunds.status, "accepted"), sql`${merchantFeeRefunds.applicationFeeRef} is distinct from ${originalFeeRef}`)).limit(1);
       if (!auxiliaryReturnCurrent && mismatchedOriginalFee.length) reasons.add("commission");
