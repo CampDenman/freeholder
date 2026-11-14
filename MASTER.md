@@ -15845,6 +15845,16 @@ whatever is best for the people using the site.
   No SQL/model, authority, SDK public method or provider action changes. Source
   gates, renewed native list proof and actual browser/accessibility acceptance
   remain pending; no C-item closes.
+  Owner recovery qualification checkpoint 2026-11-13 (C12.38/C11.08):
+  source8d5cc948 passes429 actual controls/70 complete files,103 explicit
+  native skips, full types/affected lint and metadata. The real-child stop
+  journey with private owner-list assertions passes12.532s, with independent
+  all84-journal, real stop/finish, financial/table SHA and drained clients.
+  A separate four-file locale gate passes107 controls but flags the existing
+  credit comparator parameter names as CSS directions; it stays a preserved
+  failed gate. Renaming only the comparator arguments/locals to first/second
+  preserves its exact ordering and leaves the unchanged RTL oracle intact.
+  Locale/fee renewal and actual owner browser/a11y remain pending.
   Trial-setup source increment 2026-11-11 (C9.38/C12.38/C1.08): migration70
   freezes each original Customer/Checkout request and records every physical
   dispatch before I/O. Exact current-attempt proof replaces card-age inference;

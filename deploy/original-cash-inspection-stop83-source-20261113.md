@@ -199,3 +199,16 @@ strings use shared semantic components. The existing native stop test retains
 all original assertions and additionally checks the real private list, actor
 refusal, safe field inventory and convergence after real stop and finish.
 Source/native renewal and actual owner browser/a11y acceptance are pending.
+
+
+Owner UI source8d5cc948 passes429 actual controls in70 whole files,103 explicit
+native skips, full types/affected lint and license/notes/plan. The extended
+original child-stop oracle passes12.532s with independent all84 journal hashes,
+actual authenticated stop and new finished read, complete component table SHA,
+UTC/fsync/jit settings and no open clients. Nativev3 evidence remains preserved.
+The separate four-file locale gate fails after107 successes because its unchanged
+RTL regex sees the pre-existing comparator TypeScript argument names left/right
+as CSS properties. The argument/local rename to first/second changes no sorting
+expression or caller behavior; locale/fee renewal remains pending. No regex,
+assertion, financial rule or schema is relaxed. Actual owner browser/a11y remains
+open and this source/native component proof closes no C-item.
