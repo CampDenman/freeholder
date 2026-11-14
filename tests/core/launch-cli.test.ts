@@ -14,7 +14,7 @@ import { resolveEdgeImage } from "../../packages/cli/src/launch/image";
 import { CRON_LINE, defaultName, runLaunch, sslipHost, type LaunchDeps } from "../../packages/cli/src/launch/launch";
 import { claimLink, Redactor } from "../../packages/cli/src/launch/secrets";
 import { parseEnv } from "../../packages/cli/src/launch/state";
-import type { Remote } from "../../packages/cli/src/launch/types";
+import type { LaunchOptions, LaunchState, Remote } from "../../packages/cli/src/launch/types";
 
 const IP = "203.0.113.7";
 const HOST = sslipHost(IP);
@@ -37,7 +37,7 @@ interface World {
 }
 
 function world(): World {
-  return { requests: [], keys: new Map(), deleted: [], buckets: new Set(), versioned: new Set(), bucketObjects: new Map(), droplet: null, siteStatus: 200, failBucket: false, failKeyDelete: false, remote: { commands: [], files: [], uploads: [] }, out: [], err: [] };
+  return { requests: [], keys: new Map(), deleted: [], buckets: new Set(["example-com-media", "example-com-backups"]), versioned: new Set(), bucketObjects: new Map(), droplet: null, siteStatus: 200, failBucket: false, failKeyDelete: false, remote: { commands: [], files: [], uploads: [] }, out: [], err: [] };
 }
 
 function fakeFetch(w: World): typeof fetch {
@@ -113,8 +113,23 @@ function fakeRemote(w: World): Remote {
 
 function setup(w: World, root: string): LaunchDeps {
   const fetcher = fakeFetch(w);
+  const legacy = digitalOcean("do-token", fetcher, async () => undefined);
+  // This generic orchestration fixture owns an EXISTING fictional bucket
+  // cohort. It exercises actual production legacy cleanup/restart/destroy,
+  // not genuine NEW DigitalOcean origin/image/claim acceptance. No verifier,
+  // receipt, profile or attestation is injected to authorize a new origin.
+  const retained = (options: LaunchOptions, state: LaunchState | null): LaunchState => {
+    if (state?.namespaceOrigin) throw new Error("The legacy component fixture cannot represent a new origin");
+    const buckets = { media: "example-com-media", backups: "example-com-backups" };
+    if (!w.buckets.has(buckets.media) || !w.buckets.has(buckets.backups)) throw new Error("The actual retained fictional provider cohort is missing");
+    return { ...(state ?? { version: 1, name: options.name, provider: options.provider, domain: options.domain, region: options.region, size: options.size, done: [] }), buckets };
+  };
   return {
-    provider: digitalOcean("do-token", fetcher, async () => undefined),
+    provider: {
+      ...legacy,
+      preflight: (options, state) => legacy.preflight(options, retained(options, state)),
+      async storage(options, state, save) { const existing = retained(options, state); await save({ buckets: existing.buckets }); await legacy.storage(options, existing, save); },
+    },
     remote: () => fakeRemote(w),
     fetcher,
     sleep: async () => undefined,
@@ -126,7 +141,7 @@ function setup(w: World, root: string): LaunchDeps {
 
 const args = (...extra: string[]) => parseLaunchArgs(["launch", "--domain", "example.com", "--no-open", ...extra], {});
 
-describe("freeholder launch (C3.30)", () => {
+describe("generic launch orchestration over retained fictional legacy storage (C3.30 component)", () => {
   let root: string;
   let w: World;
   beforeEach(() => {

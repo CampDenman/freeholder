@@ -139,7 +139,7 @@ export async function runLaunch(options: LaunchOptions, deps: LaunchDeps): Promi
     }
     await finish("secrets", `Secrets generated and written to ${envPath} (mode 600).`);
 
-    if (pending("spaces")) await deps.provider.storage(options, state, save, join(dir, "namespace-origin"));
+    if (pending("spaces") || state.namespaceOrigin) await deps.provider.storage(options, state, save, join(dir, "namespace-origin"));
     await finish("spaces", `Storage ready: ${state.buckets!.media} and ${state.buckets!.backups} (versioned), with a key scoped to just those two.`);
 
     const userData = await readFile(join(recipeDirectory(), "cloud-init.yml"), "utf8");

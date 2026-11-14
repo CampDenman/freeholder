@@ -11,14 +11,19 @@ import { describe, expect, it } from "vitest";
 import { parseLaunchArgs } from "../../packages/cli/src/launch/args";
 import { digitalOcean } from "../../packages/cli/src/launch/digitalocean";
 import { runLaunch } from "../../packages/cli/src/launch/launch";
+import { isPinned } from "../../packages/cli/src/launch/image";
 import { signS3 } from "../../packages/cli/src/launch/s3";
 import type { Remote } from "../../packages/cli/src/launch/types";
 import { verifyNamespaceOriginArtifacts, requireInstalledNamespaceOrigin } from "@/core/media/quota-namespace-origin";
 import { storageNamespace } from "@/core/media/storage-quota";
 
 const enabled = process.env.FREEHOLDER_TEST_NAMESPACE_ORIGIN_TCP === "1";
-describe.skipIf(!enabled)("genuine fictional TCP namespace birth and bootstrap delivery", () => {
+const publishedImage = process.env.FREEHOLDER_TEST_NAMESPACE_ORIGIN_IMAGE;
+// Named prerequisite: an ACTUAL published compatible image and its real public
+// gh/source verification. Never substitute a fixture profile or verifier.
+describe.skipIf(!enabled || !publishedImage)("genuine fictional TCP namespace birth and bootstrap delivery [requires real compatible published image]", () => {
   it("uses the real owner-run producer and real launch delivery sequence; a copied pure receipt still cannot authorize initialization", async () => {
+    if (!publishedImage || !isPinned(publishedImage)) throw new Error("Supply the actual published compatible immutable image; no fixture ABI is accepted");
     const root = await mkdtemp(join(tmpdir(), "freeholder-fictional-launch-origin-"));
     const calls: { method: string; path: string }[] = [], files = new Map<string, string>(), keys = new Map<string, string>(), buckets = new Set<string>();
     let droplet = false, backup = false, keyCount = 0, failure: Error | null = null;
@@ -76,13 +81,14 @@ describe.skipIf(!enabled)("genuine fictional TCP namespace birth and bootstrap d
     const base = `http://127.0.0.1:${address.port}`;
     const fetcher: typeof globalThis.fetch = (input, init) => {
       const url = input instanceof URL ? input : typeof input === "string" ? new URL(input) : new URL(input.url);
+      if (["ghcr.io", "raw.githubusercontent.com", "pkg-containers.githubusercontent.com", "github-registry-files.githubusercontent.com"].includes(url.hostname)) return fetch(input, init);
       const prefix = url.host === "api.digitalocean.com" ? "/api" : url.host === "nyc3.digitaloceanspaces.com" ? "/spaces" : "/site";
       return fetch(`${base}${prefix}${url.pathname}${url.search}`, init);
     };
     const deliver = async (value: unknown) => { const result = await fetch(`${base}/remote`, { method: "POST", headers: { authorization: "Bearer fictional-private-delivery", "content-type": "application/json" }, body: JSON.stringify(value) }); if (!result.ok) throw new Error("Fictional private delivery refused"); return result; };
     const remote: Remote = { async run(command) { return await (await deliver({ command })).json() as { code: number; stdout: string; stderr: string }; }, async upload(filesToUpload) { for (const file of filesToUpload) await deliver({ path: file.remote, content: await readFile(file.local, "utf8") }); }, async writeFile(path, content, mode) { await deliver({ path, content, mode }); } };
     try {
-      const options = parseLaunchArgs(["launch", "--domain", "fictional.example", "--no-open", "--image", `ghcr.io/campdenman/freeholder@sha256:${"a".repeat(64)}`], {});
+      const options = parseLaunchArgs(["launch", "--domain", "fictional.example", "--no-open", "--image", publishedImage], {});
       expect(await runLaunch(options, { provider: digitalOcean("fictional-owner-provider-token", fetcher, async () => undefined), remote: () => remote, fetcher, sleep: async () => undefined, resolve4: async () => [], configRoot: root, out: { log() {}, error() {} } })).toBe(0);
       const error = recordedFailure(); if (error) throw error;
       expect(droplet).toBe(true);

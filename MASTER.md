@@ -3564,6 +3564,20 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Namespace-image isolated SOURCE qualification2026-11-14 (C1.12/C3.28/C11.08):
+frozen418 plus official791-note generation atd1a89172 passes fulltypes64.97s,
+actualCLI copy+emit build with all6 companion/declaration/recipe bytes exact,
+affected lint and93actual/10selected files/17explicit prerequisite skips.
+Existing real legacy gateway controls remain; genuine new-origin TCP requires
+an actual compatible signed image and is not supplied by a fictional label or
+verifier. No provider account, purchase, SSH, claim, owner initialization or
+recovery acceptance occurred. No runtime profile/capability published. Primary
+financial candidate stays unchanged; root composition/full-spec/real-image/
+provider/recovery/security/signature remain open. See
+`deploy/media-image-admission-root-source-checkpoint-20261114.json`.
+
+
+
 
 Key-move preservation-control continuation2026-11-14 (C12.38/C11.10): V110
 focused checks/fulltypes67.82s/lint PASS, then broad contracts stop at the old
@@ -3879,6 +3893,19 @@ See `deploy/media-origin-tcp-typing-root-continuation.manifest.json`.
   first-writer fence and durable replay consumer remain unimplemented; no
   capability, usable initializer or provider/stable acceptance is claimed.
   See `deploy/media-namespace-origin-source-2026-11-14.md`. All rows stay open.
+
+
+  New-origin image containment 2026-11-14 is SOURCE ONLY: NEW DigitalOcean
+  storage refuses unknown account or unsupported pinned app/source before
+  resource purchase. The reader reuses exact existing signed main-CI image
+  policy and requires actual manifest/config/source-profile bytes. No complete
+  runtime profile or Docker/CI label is published while initializer/fence/
+  journal/recovery consumers remain unfinished.17 prepared controls are UNRUN;
+  inherited generic orchestration explicitly uses retained fictional legacy
+  buckets, preserving its assertions/counters. True-new TCP acceptance now
+  additionally requires a real published compatible immutable image, with
+  genuine public provenance checks; no fixture verifier/ABI supplies authority.
+  See `deploy/media-origin-image-admission-source-2026-11-14.md`. No row closes.
 
 
 Current causal/media161 ROOT checkpoint2026-11-14 (C12.38/C1.12/C11.08/C1.08/
