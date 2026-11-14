@@ -1,0 +1,83 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.12",
+    "C11.08",
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "sourceHead": "5df00274575e55b6676e4e2040c4ea1dcf47de04",
+  "status": "COMPOSED_SOURCE_FINALSCHEMA_SDK_AND_ORIGINAL_FINANCIAL_NATIVE_PASS; MEDIA_PROTOCOL_ACCEPTANCE_UNRUN",
+  "sourceAssertions": 1351,
+  "completeSelectedFiles": 218,
+  "explicitDatabaseSkips": 480,
+  "normalMigrations": 86,
+  "strictAffectedModels": 159,
+  "strictInstalledGuards": 357,
+  "strictInstalledFullFunctionBodies": 377,
+  "strictQueryCount": 4009,
+  "strictExplainExpressions": 2418,
+  "allPublicSnapshotTables": 595,
+  "originalFullFinancialNativeSeconds": 64.72263872402254,
+  "proofs": {
+    "source": {
+      "path": "/tmp/freeholder-current-full86-financial159-source-v82-20261114-result.json",
+      "sha256": "a7e174f8f0b007ceab42f77ea98789a79c0670c3cf6aed8594b43b6d9f8c1156",
+      "passed": true
+    },
+    "normal": {
+      "path": "/tmp/freeholder-current-full86-normal-v44-result-20261113.json",
+      "sha256": "c572e21816cdec4c7d2e77e4eaebc6c33f6a206c94c42ccc34a8f7fc430463db",
+      "passed": true
+    },
+    "strict": {
+      "path": "/tmp/freeholder-current-full86-parity159-v55-result-20261113.json",
+      "sha256": "fae6d5ecf432d4b8db6d04fb5553f1d719eaa0b4a1dcba926fe96b658881a99b",
+      "passed": true
+    },
+    "sdk": {
+      "path": "/tmp/freeholder-current-full86-sdk-generation-v25-20261114-result.json",
+      "sha256": "4faeb0f4c06affb6d141d59fd91cf03a95e8110d7b7acad36405b9b4bac4b62f",
+      "passed": true
+    },
+    "parser": {
+      "path": "/tmp/freeholder-current-full86-parser159-media-controls-v3-20261114-result.json",
+      "sha256": "43f04a00ae6f9503830f55addc71165841449119e17af38fd704cd2e41cf6001",
+      "passed": true
+    },
+    "originalFullFinancial-result.json": {
+      "path": "/tmp/freeholder-current-full86-paid-period-full-native-v8-20261114-result.json",
+      "sha256": "1435a0cb4cc37e8fc58c9d6b74f1e94de5181e49a0c646e8bb53f02276aec83a",
+      "passed": true
+    },
+    "originalFullFinancial-before.json": {
+      "path": "/tmp/freeholder-current-full86-paid-period-full-native-v8-20261114-before.json",
+      "sha256": "44f76d307b1ea526f5ccca53b5810002a2207d5db1a3793f932fc999e2047729",
+      "passed": true
+    },
+    "originalFullFinancial-after.json": {
+      "path": "/tmp/freeholder-current-full86-paid-period-full-native-v8-20261114-after.json",
+      "sha256": "ffbf8c13c621f3940fe7f209e0d86635218d584ff46276ef2250c7295294ccc6",
+      "passed": true
+    },
+    "originalFullFinancial-config.json": {
+      "path": "/tmp/freeholder-current-full86-paid-period-full-native-v8-20261114-config.json",
+      "sha256": "b5f3b00ed54ef23a60ad83575fd28ad68899a2ef296a70ac069b3bf72b9efec9"
+    },
+    "originalFullFinancial.json": {
+      "path": "/tmp/freeholder-current-full86-paid-period-full-native-v8-20261114.json",
+      "sha256": "3c90d445c8a92c48cfa77a0dea42c3c163f39990cf9d622f447575f8d51dcd92"
+    }
+  },
+  "actualMediaNativePrerequisite": "Prepared genuine idle/retirement/re-review cases require both complete request and part capabilities; both stay absent, no temporary publisher or fabricated context",
+  "remaining": [
+    "full media protocol and idle minimizer/post-min consumer source completion",
+    "real media SDK/TCP/worker/actual selected-provider acceptance",
+    "fee residual/proration/full-spec source and acceptance",
+    "production build/browser/protected CI/platform launches/recovery",
+    "independent security review and final owner signature"
+  ],
+  "providerAcceptance": false,
+  "stableAcceptance": false
+}
