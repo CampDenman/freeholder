@@ -10,6 +10,7 @@ import {z} from "zod";
 import {db} from "@/core/db";
 import {lockContactIdentity} from "@/core/contacts/identity-lock";
 import {enqueueJob} from "@/core/jobs";
+import type {JobExecutionContext} from "@/core/jobs";
 import {completeErasureJob,erasureArtifactIsIntact,registerContactPrivacySource} from "@/core/privacy/service";
 import {dataRequestArtifacts,dataRequests} from "@/core/privacy/schema";
 import type {Tx} from "@/core/service";
@@ -21,6 +22,7 @@ import {allowMediaReceiptWrites,deleteWithReceipt,MEDIA_WRITES_SCOPE,objectKeyDi
 import {minimizeMediaStorageOperations} from "./write-privacy";
 import {retireKnownMultipart} from "./multipart-operations";
 import {objectCohortIds,mediaCohortPending} from "./erasure-cohorts";
+import {minimizeIdleOriginalMultipart} from "./multipart-idle-minimization";
 
 export const MULTIPART_PRIVACY_SCOPE="media.multipartOperations";
 export const MULTIPART_ERASURE_JOB="core.eraseMediaMultipartOperations";
@@ -72,6 +74,9 @@ async function minimizeOwned(tx:Tx,contactId:string,requestId:string):Promise<vo
  }
  const uploadIds=first.membership.uploads.map(row=>row.id),uploads=uploadIds.length?await tx.select().from(mediaUploads).where(inArray(mediaUploads.id,uploadIds)).orderBy(asc(mediaUploads.id)).for("update"):[];
  for(const upload of uploads){
+  // Retained locators already name an immutable first digest. Rehashing one
+  // cannot erase anything further and would replace that original identity.
+  if(upload.uploadedBy==="erased"&&upload.ownerContactId===null&&/^retained:[a-f0-9]{64}$/.test(upload.storageKey))continue;
   const{writes,foreign}=await scopedWrites(objectKeyDigest(upload.storageKey));if(foreign)continue;
   const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(and(eq(mediaMultipartResources.uploadId,upload.id),isNull(mediaMultipartResources.redactedAt))).limit(1);
   if(writes.length&&!hasDurableOriginalMediaCallerProof())continue;
@@ -112,7 +117,7 @@ registerContactPrivacySource({
  },
 });
 
-export async function eraseMultipartOperations(data:Record<string,unknown>):Promise<{erased:number}>{
+export async function eraseMultipartOperations(data:Record<string,unknown>,context?:JobExecutionContext):Promise<{erased:number}>{
  const input=payload.parse(data);
  const captured=await db().transaction(async tx=>{
   await lockContactIdentity(tx);
@@ -129,14 +134,19 @@ export async function eraseMultipartOperations(data:Record<string,unknown>):Prom
   const keys=[...new Set([...resources.filter(row=>!row.redactedAt).map(row=>row.key),...uploads.filter(row=>row.ownerContactId).map(row=>row.storageKey),...objects.filter(row=>input.keyDigests.includes(objectKeyDigest(row.key))).map(row=>row.key)])];
   const originalIds=await objectCohortIds(tx,input.requestId,MULTIPART_PRIVACY_SCOPE);
   for(const key of keys){const foreign=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.keyDigest,objectKeyDigest(key)),originalIds.length?notInArray(mediaObjectWrites.id,originalIds):undefined)).limit(1);if(foreign.length)throw new Error("A physical receipt outside this immutable original erasure scope shares its key; keep both generations for recovery without adopting or deleting either.");}
-  return{contactId:request.contactId,keys,resources};
+  // A no-object multipart cohort is retired only by its own exact ABORT +
+  // full inventories. Routing it to ordinary deleteWithReceipt would create
+  // another original DELETE (or dispatch a retained placeholder) and destroy
+  // the no-object proof rather than finishing its metadata erasure.
+  const idleDigests=new Set(resources.filter(row=>row.objectReceiptId===null).map(row=>row.keyDigest));
+  return{contactId:request.contactId,keys:keys.filter(key=>!key.startsWith("retained:")&&!idleDigests.has(objectKeyDigest(key))),resources};
  });
  if(!captured)return{erased:0};
  // Unknown multipart calls are never replayed merely to satisfy an erasure.
  // Human recovery first establishes their exact original physical outcome.
  for(const resource of captured.resources)if(!resource.retiredAt&&resource.state==="open")await retireKnownMultipart(resource.uploadId);
  for(const key of captured.keys)await deleteWithReceipt(key);
- const pending=await db().transaction(async tx=>{await lockContactIdentity(tx);await minimizeOwned(tx,captured.contactId,input.requestId);const cohortIds=await objectCohortIds(tx,input.requestId,MULTIPART_PRIVACY_SCOPE);await minimizeMediaStorageOperations(tx,cohortIds);const rows=await personalRows(tx,captured.contactId);return rows.resourceIds.length+rows.uploadIds.length+rows.keyDigests.length+Number(await mediaCohortPending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE))+Number(await originalProviderEvidencePending(tx,{receiptIds:cohortIds,resourceIds:captured.resources.map(row=>row.id)}))+Number(await originalMediaScopePending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE,captured.contactId));});
+ const pending=await db().transaction(async tx=>{await lockContactIdentity(tx);if(context)for(const resource of captured.resources)if(resource.objectReceiptId===null)await minimizeIdleOriginalMultipart(tx,input,resource.id,context);await minimizeOwned(tx,captured.contactId,input.requestId);const cohortIds=await objectCohortIds(tx,input.requestId,MULTIPART_PRIVACY_SCOPE);await minimizeMediaStorageOperations(tx,cohortIds);const rows=await personalRows(tx,captured.contactId);return rows.resourceIds.length+rows.uploadIds.length+rows.keyDigests.length+Number(await mediaCohortPending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE))+Number(await originalProviderEvidencePending(tx,{receiptIds:cohortIds,resourceIds:captured.resources.map(row=>row.id)}))+Number(await originalMediaScopePending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE,captured.contactId));});
  if(pending)throw new Error("Original upload ownership, a named hold or unresolved provider work keeps this erasure pending.");
  await completeErasureJob.call({requestId:input.requestId,scope:MULTIPART_PRIVACY_SCOPE,jobId:input.originalJobId},{kind:"system"});
  return{erased:captured.keys.length};

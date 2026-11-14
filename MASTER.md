@@ -3651,6 +3651,25 @@ other creator/conflicting-session recovery, quota/capture/cutover and actual
 provider/security acceptance remain required. See
 `deploy/media-multipart-retained-identity-source-2026-11-14.md`.
 
+Source-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart
+consumer leaf separates immutable historical first identity, exact current
+whole-frontier coverage and actual original erasure-job entitlement. The genuine
+worker can reduce that verified no-object cohort atomically without another
+DELETE; raw/session locators stay NULL through fresh READ-only same-original
+late-evidence re-review. Existing listing exposes only the exact eligible old
+ABORT while preserving CREATE debt; current classification restores only after
+actual new reads, two full inventories and guarded review. All first ACK/FIN/
+stop/results, safe declarations, certificate/capture bodies and previous native
+oracles stay intact. Seven functions/sixteen full continuations append after the
+whole749050 owned82 prefix, no schema/model/trigger/service/job/flag/capability
+change. Eight genuine service/TCP/actual-worker controls are PREPARED/UNRUN;
+all qualification is UNRUN in this child. Ordinary physical minimizer/write
+proof stays byte-identical; unverified retained upload binding remains pending.
+No C closure, remote terminal, provider/host/security/stable acceptance. Full
+ordinary/legacy/issued-authority/quota/capture/cutover consumers and all real
+acceptance remain required. See
+`deploy/media-multipart-idle-compact-source-2026-11-14.md`.
+
 ### 43.2 Definition of done for every feature
 
 Every feature checkbox below inherits this checklist. If a line does not

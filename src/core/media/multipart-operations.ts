@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import {admitOriginalMediaCaller,admitOriginalMultipartCaller,originalMultipartCaller,retainOriginalMediaCallerReturn,withOriginalMultipartInvocation} from "./provider-callers";
 import {readRetainedOriginalMultipartIdentity} from "./multipart-retained-identity";
+import {readOriginalMultipartCertificateCoverage} from "./multipart-certificate-coverage";
 import {sealOriginalMultipartRetirement,type OriginalMultipartRetirementAdmission} from "./multipart-retirement-certificate";
 import {observeTransferRequest,withTransferRequestScope,TransferRequestNotAttemptedError} from "./transfer-requests";
 import {requireDurableMediaRetirementProof} from "./retirement-authority";
@@ -290,6 +291,8 @@ export async function abortOriginalMultipart(uploadId:string,operationId:string)
 }
 /** Existing expiry/erasure authority may retire a known, idle original upload. */
 export async function retireKnownMultipart(uploadId:string):Promise<boolean>{
+ const compact=await db().transaction(async tx=>{await lockTransferInventory(tx);const[resource]=await tx.select().from(mediaMultipartResources).where(eq(mediaMultipartResources.uploadId,uploadId)).limit(1);if(!resource?.redactedAt||resource.objectReceiptId!==null)return undefined;return Boolean(await readOriginalMultipartCertificateCoverage(tx,resource.id));});
+ if(compact!==undefined)return compact;
  return withOriginalMultipartInvocation(async()=>{try{
   const captured=await originalMultipart(uploadId);
   if(captured.resource.retiredAt){const[proven]=await db().execute<{retired:boolean}>(sql`select freeholder_media_multipart_unattempted_retirement(${captured.resource.id}::uuid) or exists(select 1 from media_multipart_operations operation join media_storage_provider_inventories inventory on inventory.multipart_operation_id=operation.id where operation.resource_id=${captured.resource.id}::uuid and freeholder_media_multipart_idle_retirement(operation.id,inventory.id)) as retired`);return proven?.retired===true;}

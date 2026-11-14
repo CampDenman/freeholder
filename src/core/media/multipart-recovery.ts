@@ -4,7 +4,7 @@ import {assertPhysicalStorageAbsence} from "./physical-absence";
 import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C11.08: fresh human evidence resolves each original multipart outcome.
 import {createHash,randomUUID} from "node:crypto";
-import {and,asc,eq,inArray,isNull,isNotNull,ne} from "drizzle-orm";
+import {and,asc,eq,inArray,isNull,isNotNull,ne,sql} from "drizzle-orm";
 import {z} from "zod";
 import {boundStorage} from "@/adapters/storage";
 import {actorString,defineOrchestratedService,ServiceError} from "@/core/service";
@@ -20,6 +20,7 @@ import {abortOriginalMultipart,claimMultipartAbort} from "./multipart-operations
 import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 
 import {sealOriginalMultipartRetirement} from "./multipart-retirement-certificate";
+import {readRetainedOriginalMultipartIdentity} from "./multipart-retained-identity";
 const digest=z.string().regex(/^[a-f0-9]{64}$/),date=z.date();
 const resourceRow=z.object({id:z.uuid(),uploadId:z.uuid(),key:z.string(),namespace:digest.nullable(),providerUploadId:z.string().nullable(),state:z.enum(MULTIPART_STATES),expectedBytes:z.number(),contentType:z.string(),objectReceiptId:z.uuid().nullable(),retiredAt:date.nullable(),updatedAt:date});
 const operationRow=z.object({id:z.uuid(),kind:z.enum(["create","complete","abort","sign"]),state:z.string(),providerAcceptedAt:date.nullable(),updatedAt:date});
@@ -36,6 +37,16 @@ export const listMultipartOperations=defineService({
   for(const resource of resources){
    const operations=await ctx.tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.resourceId,resource.id)).orderBy(asc(mediaMultipartOperations.createdAt),asc(mediaMultipartOperations.id));
    const uncertain=operations.filter(row=>["started","unknown"].includes(row.state)||row.kind==="sign"&&row.state==="accepted"&&!resource.retiredAt);
+   if(resource.state==="unknown"){
+    const first=await readRetainedOriginalMultipartIdentity(ctx.tx,resource.id);
+    if(first.state==="proven"){
+     const abort=operations.find(row=>row.id===first.identity.retirement.operationId&&row.kind==="abort");
+     if(abort&&!uncertain.some(row=>row.id===abort.id)){
+      const[reviewable]=await ctx.tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_repeat_abort_context(${abort.id}::uuid) as proven`);
+      if(reviewable?.proven===true)uncertain.push(abort);
+     }
+    }
+   }
    const upload=(await ctx.tx.select({state:mediaUploads.state}).from(mediaUploads).where(eq(mediaUploads.id,resource.uploadId)).limit(1))[0];
    if(resource.redactedAt&&!uncertain.length&&resource.retiredAt)continue;
    if(!uncertain.length&&!['unverified','creating','completing','aborting','unknown'].includes(resource.state)&&!(upload&&upload.state!=="complete"&&(!resource.retiredAt||resource.objectReceiptId)))continue;

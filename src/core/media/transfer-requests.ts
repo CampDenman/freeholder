@@ -23,6 +23,7 @@ import {assertTransferNamespaceMutation} from "./transfer-namespace-control";
 import {assertOriginalKeyCreator} from "./original-key-tombstone";
 import {assertOriginalNamespaceMutation} from "./original-namespace-fence";
 import {requireTransferCapability} from "./transfer-authority";
+import {readRetainedOriginalMultipartIdentity,requireRetainedMultipartCandidate} from "./multipart-retained-identity";
 import {transferConflict,transferDigest,transferTargetKey} from "./transfer-proof";
 import {checkStorageTransferJob} from "./transfer-job-scope";
 import type {StorageCallerRuntimeIdentity} from "./physical-caller-runtime";
@@ -81,7 +82,11 @@ async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:stri
    if(descriptor.kind==="multipart.complete"){const[proof]=await tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_verified_parts(${parent.id}::uuid) as proven`);if(proof?.proven!==true)transferConflict("Verify every original uploaded part before assembling this upload.");}
    if(descriptor.kind==="multipart.inspect"){
     if(call.kind==="multipart_complete"&&descriptor.partsDigest!==parent.partsDigest)transferConflict("The original completion may inspect only its immutable declared manifest.");
-    if(!["multipart_recovery_inspect","multipart_create","multipart_complete","multipart_abort"].includes(call.kind)||!descriptor.uploadId||descriptor.uploadId!==(parent.providerUploadId??parent.observedProviderUploadId??resource.providerUploadId))transferConflict("Inspect only the original provider-acknowledged session.");
+    if(resource.redactedAt){
+     const first=await readRetainedOriginalMultipartIdentity(tx,resource.id);
+     if(first.state!=="proven"||call.kind!=="multipart_recovery_inspect"||parent.kind!=="abort"||!descriptor.uploadId||!descriptor.key)transferConflict("A minimized original upload permits only its exact fresh recovery read.");
+     requireRetainedMultipartCandidate(first.identity,{namespace:descriptor.binding.namespace,key:descriptor.key,uploadId:descriptor.uploadId,binding:descriptor.binding});
+    }else if(!["multipart_recovery_inspect","multipart_create","multipart_complete","multipart_abort"].includes(call.kind)||!descriptor.uploadId||descriptor.uploadId!==(parent.providerUploadId??parent.observedProviderUploadId??resource.providerUploadId))transferConflict("Inspect only the original provider-acknowledged session.");
    }else if(call.kind!==descriptor.kind.replace(".","_")||descriptor.kind==="multipart.create"&&descriptor.contentType!==resource.contentType||descriptor.kind!=="multipart.create"&&(descriptor.uploadId!==parent.providerUploadId||descriptor.uploadId!==resource.providerUploadId)||descriptor.kind==="multipart.complete"&&(!descriptor.createOnly||descriptor.partsDigest!==parent.partsDigest))transferConflict("The actual multipart request differs from its immutable original session or manifest.");
   }
   if(descriptor.kind==="object.read"&&["multipart_complete","multipart_recovery_inspect"].includes(call.kind)){
