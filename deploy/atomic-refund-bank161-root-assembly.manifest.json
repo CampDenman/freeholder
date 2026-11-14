@@ -1,0 +1,44 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08"
+  ],
+  "status": "ROOT_SOURCE_ASSEMBLED_UNRUN",
+  "qualifiedRootBeforeMerge": "6b770be070d34dd4bdd107fa9614ea4712298f83",
+  "frozenLeaf": "fd123a49925438d26d3d2aa563cc8919f2002398",
+  "leafManifest": {
+    "path": "deploy/controlled-atomic-refund-current-bank84.manifest.json",
+    "sha256": "bae7dfc11aeee7ec249a9ddcc3d9d4c714c3bdbcf23c3c9566843e78bc2d9fe3"
+  },
+  "priorWholePrefix": {
+    "file": "db/migrations/0085_controlled_collection_application.sql",
+    "bytes": 850736,
+    "sha256": "843c5d46f1fb520e805b6e4578dcc1d7f72876ed72d9deb7aac3a0ea627b62f1"
+  },
+  "tail": {
+    "path": "deploy/controlled-atomic-refund-current-bank84.fragment.sql",
+    "bytes": 46817,
+    "sha256": "0ac957e2fc67d8521c9098138da1da0c8c068394357eeca701eb4f12660f9cf6"
+  },
+  "normal85": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "ownedPath": "deploy/sql/0085_controlled_collection_application.unapplied.sql",
+    "bytes": 897579,
+    "sha256": "55a1fb22c590b4469902a0f9ed13bcab27f97fba2dd0bbc206c6b22391e80683"
+  },
+  "normal82Unchanged": {
+    "bytes": 1017398,
+    "sha256": "4e6c7c96fc76325b3787f55db698f09e93cf52e070360af254bbb4438c1409c4"
+  },
+  "newFunctionCount": 1,
+  "successorCount": 3,
+  "wholePredecessorBodiesExactlyReversible": true,
+  "allSixOriginalProtectedSourceFilesExact": true,
+  "noModelsColumnsKindsServicesIndexesGuards": true,
+  "originalWholeNativeAnd180SecondBudgetExact": true,
+  "masterWholeRootAndOnly21LeafLines": true,
+  "capsPublished": false,
+  "sourceSchemaSdkNativeProviderStableAcceptance": false
+}

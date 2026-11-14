@@ -3564,6 +3564,41 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Atomic current-refund bank ROOT assembly2026-11-14 (C12.38/C9.33/C1.08):
+frozenfd123 source follows qualified origin6b and exact financial8df. Entire
+current MASTER+only21newleaflines retained. ONE new SQL bank reader and THREE
+full target/160ready/Aready successors append AFTER WHOLE85073685 prefix;
+all old generic resolver/receipts/captures/MAC/dispatch guards/native180s exact.
+Explicit current bank alternative has real HMAC lineage/source/PG/returned FIN/
+all capture transition checks; full current witness and aggregate5000 retained.
+No new model/column/kind/service/index/guard or post authority. Current source/
+normal/schema/SDK/unchanged native qualification UNRUN. V55 stale-currentness
+failure and readonly full596/HMAC diagnostics preserved. No C/stable closure.
+See `deploy/atomic-refund-bank161-root-assembly.manifest.json`.
+
+
+Atomic current refund bank SOURCE continuation2026-11-14 (C12.38/C9.33/C1.08):
+actual preserved V55 proves newer genuine refund captures stale the old generic
+current receipt while independently authenticated current controlled bank rows
+remain available. ONE new ordinary/SQL per-namespace proof binds exact original
+request/resource/PI/charge/amount/currency, latest actual returned HMAC lineage,
+ALL captures/current callers/fullPG rows under ONE5000; no capture projection,
+old signature rewrite, opaque parent-digest reuse or generic resolver change.
+Historical contradictory status requires EVERY capture authenticate to an
+actually earlier closed returned inspection; detached repeats remain debt.
+Complete target successor adds ONLY exact old resolver OR genuine controlled
+bank proof; old default revision stays exact when unused. Complete160/A readiness
+successors use finite body-pin substitutions/new helper pin, retaining all
+older guards/route/privacy/index/CHECK pins. 0models/columns/kinds/services.
+Twelve pure/thirteen source/four actual desired native controls PREPARED, ALL
+UNRUN; original whole fee native180s/all assertions and generic sources exact.
+Root normal assembly/full source/schema/SDK/native qualification required; no
+C/stable acceptance. B/C/credit-unwind/full-spec requirements remain open. See
+`deploy/controlled-atomic-refund-current-bank84-source-20261114.md` and its
+finite manifest.
+
+
+
 Origin precursor SOURCE qualification2026-11-14 (C1.12/C10.32/C11.08):
 isolated root9d+frozen8dc14979838 fulltypes PASS62.07s; exact same production
 code at173f6400 with only typed TCP-error getter correction/notes. Actual CLI
