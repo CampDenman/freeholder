@@ -16389,3 +16389,16 @@ unfinished caller remains explicit. All authority flags are false. Ten contract
 controls are prepared/UNRUN; genuine producer, parent context, SQL/routing and
 native qualification remain required. See
 `deploy/controlled-collection-cash-contract84-source-20261113.md`.
+
+Source implementation checkpoint 2026-11-13 (C12.38/C9.33/C1.08): the ordinary
+real-context receipt-batch bank reader now consumes genuine latest admission
+lineage, actual returned complete charge/refund/dispute facts and SQL bank policy,
+complete actual manifest/PI/payment inventory, canonical issued-credit/dated-tax/
+fee ownership and all raw occurrence/caller evidence. Partial paid bank amounts
+retain their unpaid balance; no canonical paid/access projection or payment
+eligibility is invented. Separate immutable bank/current namespace revisions feed
+Commerce's required full CURRENT parent/batch authority. Ten new controls are
+PREPARED/UNRUN. Mismatched partial/provider fee allocation remains retained review
+and required recovery work; parent staging/routing, positive factories/orchestration,
+paid effects and actual batch/native/provider acceptance remain required. See
+`deploy/controlled-collection-cash-reader84-source-20261113.md`.
