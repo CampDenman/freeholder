@@ -15879,3 +15879,14 @@ Six pure plus three actual-service controls are PREPARED/UNRUN; new owned SQL ta
 is UNAPPLIED. Complete positive collection/disposition, prospective staging/routing,
 separate paid effects and all source/native/live/security acceptance remain REQUIRED.
 See `deploy/controlled-original-period-factory84-source-20261113.md`.
+
+Source actual-collection checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08): actual
+owner/customer orchestration now executes complete causally ordered invoice/PI/
+line inventory, paused update, exact original draft/item binding, fixed tax/fee,
+manifest/finalize/pay through genuine admitted SDK calls. Actual raw positive cash
+commits before application; lost actual POSTs are not replayed. Nine pure controls
+are PREPARED/UNRUN; owned SQL remains UNAPPLIED. Results never claim application or
+access. Genuine proper-target native/ordering, generated draft disposition, staged
+application/routing, partial remainder recovery, separate paid effects and full
+UI/privacy/live/security acceptance remain REQUIRED.
+See `deploy/controlled-collection-orchestration84-source-20261113.md`.

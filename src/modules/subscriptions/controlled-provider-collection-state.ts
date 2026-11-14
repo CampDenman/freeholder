@@ -45,7 +45,7 @@ export async function controlledCollectionState(tx:Tx,collectionId:string){
  const[binding]=await tx.select().from(subscriptionControlledInvoiceBindings).where(eq(subscriptionControlledInvoiceBindings.collectionId,collection.id)).limit(1);
  const itemReceipts=[];
  for(const component of components){const[item]=await tx.select().from(subscriptionControlledItemReceipts).where(eq(subscriptionControlledItemReceipts.componentId,component.id)).limit(1);if(item)itemReceipts.push(item);}
- const proofs=await tx.select().from(subscriptionControlledInvoiceProofs).where(eq(subscriptionControlledInvoiceProofs.collectionId,collection.id)).orderBy(subscriptionControlledInvoiceProofs.createdAt,subscriptionControlledInvoiceProofs.id).limit(5001);
+ const proofs=await tx.select().from(subscriptionControlledInvoiceProofs).where(eq(subscriptionControlledInvoiceProofs.collectionId,collection.id)).orderBy(subscriptionControlledInvoiceProofs.id).limit(5001);
  if(history.count+canonical.count+components.length+itemReceipts.length+proofs.length+5+(binding?1:0)>5000||!components.length||components.length>250
   ||canonical.digest!==collection.canonicalTargetDigest||canonical.invoice.contactId!==parent.contactId||canonical.invoice.currency!==parent.currency||canonical.invoice.sourceId!==quote.canonicalSourceId
   ||canonical.invoice.subtotalMinor-canonical.invoice.discountMinor!==review.debitNetMinor||canonical.invoice.shippingMinor!==0||canonical.invoice.taxMinor!==review.debitTaxMinor
@@ -106,6 +106,9 @@ export async function controlledCollectionState(tx:Tx,collectionId:string){
   const lineage=assertControlledComponentLine({resource,manifest,review,history,binding},component,creator,source.operation,z.record(z.string(),z.unknown()).parse(raw));
   if(lineage.originKind!==item.originKind||lineage.providerInvoiceItemRef!==item.providerInvoiceItemRef||lineage.providerPriceRef!==item.providerPriceRef)refuse();
  }
+ // Physical operation ordinal orders actual causal reads; transaction clocks
+ // and random UUIDs cannot choose a current bank manifest.
+ proofs.sort((first,second)=>(history.operations.find(op=>op.id===first.operationId)?.ordinal??-1)-(history.operations.find(op=>op.id===second.operationId)?.ordinal??-1));
  for(const proof of proofs){const operation=history.operations.find(row=>row.id===proof.operationId),verification=history.verifications.find(row=>row.operationId===proof.operationId&&row.callId===proof.callId);
   if(!binding||!operation||operation.kind!=="read_manifest"||!verification||verification.actualResult.providerInvoiceRef!==binding.providerInvoiceRef||verification.actualResult.exactManifest!==true
    ||verification.actualResult.manifestDigest!==merchantTaxDigest(manifest)||proof.resultDigest!==verification.actualResultDigest||proof.canonicalTargetDigest!==canonical.digest||proof.customerFinancialDigest!==verification.actualResult.customerFinancialDigest)refuse();}

@@ -16,6 +16,8 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "subscriptions.controlledCollectionOrchestrationState",
+  "subscriptions.bindObservedControlledCollection",
   "subscriptions.planControlledPeriodPreview",
   "subscriptions.retainControlledPeriodQuote",
   "subscriptions.assertControlledPeriodPreviewSource",
@@ -410,6 +412,7 @@ const INTERNAL = [
 const CALLER_AUTHORIZED_PHASES = [
   "subscriptions.assertMyControlledProrationQuoteAccess",
   "subscriptions.assertMyControlledPeriodAccess",
+  "subscriptions.assertMyControlledCollectionAccess",
   // C1.12/C11.08: exact original transfer/request/recovery phases stay private.
   "media.captureTransferErasure",
   "media.admitTransferErasureCall",
