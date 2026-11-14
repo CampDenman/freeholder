@@ -3637,6 +3637,20 @@ acknowledgement or C closure. Consumers/late-identity/re-review, quota/capture/
 cutover and genuine provider acceptance remain required before publication.
 See `deploy/media-multipart-retirement-catchup-source-2026-11-14.md`.
 
+Source-only continuation, 2026-11-14 (C1.12/C11.08): authenticated first idle
+multipart identity now requires agreement of all intact original certificates;
+actual late session facts retain first key/session digests and reopen the same
+original debt without refilling ACK/FIN/canonical rows. Fresh authorized RAW
+same-ABORT READ/two-pass re-review appends a distinct review/seal/job while old
+stop receipts/results/proofs remain immutable. Historical identity is separate
+from current whole-frontier proof and grants no live mutation/remote terminal.
+Five new SQL functions and five full guard/current-review continuations are
+owned/unapplied;10pure+6genuine service/TCP controls are prepared, all UNRUN.
+No model/column/flag/global legacy gate/minimization/C closure. Compact consumers,
+other creator/conflicting-session recovery, quota/capture/cutover and actual
+provider/security acceptance remain required. See
+`deploy/media-multipart-retained-identity-source-2026-11-14.md`.
+
 ### 43.2 Definition of done for every feature
 
 Every feature checkbox below inherits this checklist. If a line does not

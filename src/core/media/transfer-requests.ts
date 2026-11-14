@@ -8,6 +8,7 @@ import type {TransferRequestDescriptor,TransferRequestObservation,TransferReques
 import {db} from "@/core/db";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {actorString,type Actor,type Tx} from "@/core/service";
+import {readRetainedOriginalMultipartIdentity} from "./multipart-retained-identity";
 import {projectOriginalMultipartSessionObservation,reconcileOriginalMultipartPositivePointer,originalSessionObservationDecision} from "./multipart-session-observation";
 import {assertMediaActorLive} from "./upload-ownership";
 import {mediaObjectWrites} from "./write-schema";
@@ -103,7 +104,8 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
  await db().transaction(async tx=>{
   const call=await locked(tx,scope),[request]=await tx.select().from(mediaStorageTransferRequests).where(eq(mediaStorageTransferRequests.id,id)).limit(1).for("update");
   if(!request||request.callId!==call.id||request.tokenDigest!==transferDigest(token)||request.observationCount>=16)transferConflict();
-  if(facts.revision&&(facts.revision.namespace!==call.namespace||objectKeyDigest(facts.revision.key)!==request.keyDigest))transferConflict();
+  const originalSessionFact=Boolean(call.multipartOperationId&&facts.uploadId&&["accepted","session"].includes(facts.stage));
+  if(facts.revision&&(facts.revision.namespace!==call.namespace||objectKeyDigest(facts.revision.key)!==request.keyDigest)&&!originalSessionFact)transferConflict();
   const late=request.state!=="admitted"||call.state!=="admitted";
   if(late&&!["accepted","metadata","body","response","session","response_body","capability"].includes(facts.stage))transferConflict("Only an actual late positive original provider fact can supersede a retired request.");
   if(request.descriptor.kind==="multipart.sign"){
@@ -155,7 +157,7 @@ async function observe(scope:Scope,id:string,token:string,facts:TransferRequestO
    if(late&&!call.objectId&&call.objectReceiptId&&receipt.originalReservationId){await tx.insert(mediaObjects).values({reservationId:receipt.originalReservationId,key:facts.revision.key,role:"original",state:"pending",bytes:receipt.bytes??0,contentType:receipt.contentType}).onConflictDoNothing();scope.receiptIds.add(receipt.id);}
   }
   if(facts.stage==="accepted"&&mutation(request.descriptor)){
-   const now=new Date();await tx.update(mediaStorageTransferCalls).set({...(call.observedAcceptedAt?{}:{observedAcceptedAt:now}),...(late?{state:"unknown" as const}:{}),updatedAt:now}).where(eq(mediaStorageTransferCalls.id,call.id));
+   const now=new Date(),first=call.multipartOperationId?(await tx.select({resourceId:mediaMultipartOperations.resourceId}).from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id,call.multipartOperationId)).limit(1))[0]:null,retained=first?await readRetainedOriginalMultipartIdentity(tx,first.resourceId):null,preserveFirst=retained&&retained.state!=="absent";await tx.update(mediaStorageTransferCalls).set({...(call.observedAcceptedAt||preserveFirst?{}:{observedAcceptedAt:now}),...(late?{state:"unknown" as const}:{}),updatedAt:now}).where(eq(mediaStorageTransferCalls.id,call.id));
    if(call.physicalReceiptId){
     const[receipt]=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id,call.physicalReceiptId)).limit(1).for("update");if(!receipt)transferConflict();receiptId=receipt.id;
     await tx.update(mediaObjectWrites).set({state:"unknown",...(receipt.observedAcceptedAt?{}:{observedAcceptedAt:now}),...(late?{deletedAt:null}:{}),updatedAt:now}).where(eq(mediaObjectWrites.id,receipt.id));

@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 import {admitOriginalMediaCaller,admitOriginalMultipartCaller,originalMultipartCaller,retainOriginalMediaCallerReturn,withOriginalMultipartInvocation} from "./provider-callers";
+import {readRetainedOriginalMultipartIdentity} from "./multipart-retained-identity";
 import {sealOriginalMultipartRetirement,type OriginalMultipartRetirementAdmission} from "./multipart-retirement-certificate";
 import {observeTransferRequest,withTransferRequestScope,TransferRequestNotAttemptedError} from "./transfer-requests";
 import {requireDurableMediaRetirementProof} from "./retirement-authority";
@@ -114,6 +115,13 @@ async function notAttempted(id:string):Promise<void>{
 export async function observeMultipart(id:string,options:{accepted?:boolean;uploadId?:string;verified?:boolean;unknown?:boolean;finished?:boolean;originalKey?:string}):Promise<void>{
  await db().transaction(async tx=>{
   await lockContactIdentityForRead(tx);const{operation,resource}=await lockedOperation(tx,id,Boolean(options.accepted)),now=new Date();
+  const first=await readRetainedOriginalMultipartIdentity(tx,resource.id);
+  if(first.state!=="absent"){
+   // Actual observer facts were already retained. A sealed first ACK/FIN or
+   // canonical locator is never filled by a later projection continuation.
+   await tx.update(mediaMultipartOperations).set({state:"unknown",updatedAt:now}).where(eq(mediaMultipartOperations.id,id));
+   await tx.update(mediaMultipartResources).set({state:"unknown",retiredAt:null,updatedAt:now}).where(eq(mediaMultipartResources.id,resource.id));return;
+  }
   if(resource.redactedAt&&operation.providerAcceptedAt&&operation.state==="accepted"&&resource.retiredAt&&options.accepted)return;
   if(options.uploadId&&resource.providerUploadId&&resource.providerUploadId!==options.uploadId)conflict("The provider named a different original multipart upload.");
   const late=Boolean(resource.redactedAt&&operation.createdAt<=resource.redactedAt&&options.accepted);

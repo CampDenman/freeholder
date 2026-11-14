@@ -47,10 +47,19 @@ const apply=defineMediaService({name:"media.applyOriginalMultipartCompleteReview
  human(ctx.actor);const original=await lockedAppliedMultipartInventory(ctx.tx,input);
  if(original.kind==="abort"){
   const{resource,operation,caller,inventory,proof}=original;if(inventory.state!=="complete"||!inventory.completedAt)transferConflict("Keep the original idle-session ABORT until its two complete physical inventories have genuinely finished.");
-  const evidenceDigest=transferDigest({method:"monotonic-idle-session-removal-v1",originalWitness:original.witness,inventoryId:inventory.id,readCallId:proof.id,stopDrainId:original.stop?.id??null,providerFinalReference:input.providerFinalReference,providerEvidence:input.providerEvidence,reviewedBy:actorString(ctx.actor)}),reviewId=randomUUID(),now=new Date();
-  await ctx.tx.insert(reviews).values({id:reviewId,multipartOperationId:operation.id,inventoryId:inventory.id,callId:caller.id,originalCallWitness:transferDigest(caller),readCallId:proof.id,outcome:"retired",providerEvidenceDigest:evidenceDigest,stopDrainId:original.stop?.id,permitsRetry:false,reviewedBy:actorString(ctx.actor)});
-  for(const request of original.physical)if(["admitted","unknown"].includes(request.state))await ctx.tx.update(requests).set({state:"stopped",stopReceiptId:reviewId}).where(eq(requests.id,request.id));
-  await ctx.tx.update(calls).set({state:"stopped",stoppedAt:caller.stoppedAt??now,stopReceiptId:reviewId,updatedAt:now}).where(eq(calls.id,caller.id));
+  const[repeatEvidence]=original.repeat?await ctx.tx.execute<{digest:string|null}>(sql`select freeholder_media_multipart_repeat_abort_evidence(${operation.id}::uuid,${proof.id}::uuid,${inventory.id}::uuid,${actorString(ctx.actor)}) as digest`):[];
+  const repeatDigest=repeatEvidence?.digest;
+  if(original.repeat&&!repeatDigest)transferConflict("The upload evidence changed during verification. Keep its first review and start a fresh verification.");
+  const evidenceDigest=repeatDigest??transferDigest({method:"monotonic-idle-session-removal-v1",originalWitness:original.witness,inventoryId:inventory.id,readCallId:proof.id,stopDrainId:original.stop?.id??null,providerFinalReference:input.providerFinalReference,providerEvidence:input.providerEvidence,reviewedBy:actorString(ctx.actor)}),reviewId=randomUUID(),now=new Date();
+  await ctx.tx.insert(reviews).values({id:reviewId,multipartOperationId:operation.id,inventoryId:inventory.id,callId:caller.id,originalCallWitness:original.repeat?original.witness:transferDigest(caller),readCallId:proof.id,outcome:"retired",providerEvidenceDigest:evidenceDigest,stopDrainId:original.stop?.id,permitsRetry:false,reviewedBy:actorString(ctx.actor)});
+  if(original.repeat){
+   for(const request of original.physical){if(!request.stopReceiptId&&!request.returnedAt)transferConflict("Keep the original missing request finish; re-review cannot invent one.");await ctx.tx.update(requests).set({state:request.stopReceiptId?"stopped":"returned"}).where(eq(requests.id,request.id));}
+   if(!caller.stopReceiptId&&!caller.returnedAt)transferConflict("Keep the original missing caller return; re-review cannot invent one.");
+   await ctx.tx.update(calls).set({state:caller.stopReceiptId?"stopped":"returned",updatedAt:now}).where(eq(calls.id,caller.id));
+  }else{
+   for(const request of original.physical)if(["admitted","unknown"].includes(request.state))await ctx.tx.update(requests).set({state:"stopped",stopReceiptId:reviewId}).where(eq(requests.id,request.id));
+   await ctx.tx.update(calls).set({state:"stopped",stoppedAt:caller.stoppedAt??now,stopReceiptId:reviewId,updatedAt:now}).where(eq(calls.id,caller.id));
+  }
   // No ACK, return, runtime, nonce or actual/missing FIN is supplied by review.
   await ctx.tx.update(operations).set({state:"accepted",verifiedAt:now,reviewedAt:now,reviewedBy:actorString(ctx.actor),evidenceDigest,updatedAt:now}).where(eq(operations.id,operation.id));
   await ctx.tx.update(resources).set({state:"aborted",retiredAt:sql`transaction_timestamp()`,reviewedAt:now,reviewedBy:actorString(ctx.actor),evidenceDigest,updatedAt:now}).where(eq(resources.id,resource.id));
