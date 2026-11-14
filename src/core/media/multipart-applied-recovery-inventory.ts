@@ -12,6 +12,7 @@ import {mediaStorageProviderInventories as inventories,mediaStorageProviderInven
 import {captureAppliedMultipartContext} from "./multipart-applied-recovery-context";
 import type {MultipartRecoveryConfirmation} from "./multipart-recovery-context";
 import {requireOriginalMultipartCompletedBody} from "./multipart-completed-proof";
+import {requireIdleOriginalMultipartAbsence} from "./multipart-idle-retirement-proof";
 import {requireKnownOriginalEmptySession} from "./multipart-known-create-proof";
 import {requireAppliedOriginalMultipartObject} from "./multipart-complete-recovery-proof";
 import {inventoryResourceDigest,physicalInventoryBytes,providerInventoryDigest} from "./transfer-inventory-proof";
@@ -26,6 +27,7 @@ export async function appliedMultipartReadProof(tx:Tx,input:RecoveryInput,proofC
  const[proof]=await tx.select().from(calls).where(eq(calls.id,proofCallId)).limit(1);
  if(!proof||proof.multipartOperationId!==original.operation.id||proof.objectId||proof.objectReceiptId||proof.kind!=="multipart_recovery_inspect"||proof.namespace!==original.resource.namespace||proof.physicalKey!==original.key||proof.state!=="returned"||!proof.returnedAt||!await transferRequestsDrained(tx,[proof.id]))transferConflict("The genuine fresh original-provider full read must finish before its first inventory.");
  const physical=await tx.select().from(requests).where(eq(requests.callId,proof.id)),facts=physical.length?await tx.select().from(observations).where(inArray(observations.requestId,physical.map(row=>row.id))):[];
+ if(original.kind==="abort"){const[valid]=await tx.execute<{proven:boolean}>(sql`select freeholder_media_multipart_idle_absence_read(${original.operation.id}::uuid,${proof.id}::uuid) as proven`);if(valid?.proven!==true)transferConflict("Verify the exact original idle-session and current object absence using both genuine completed reads; retirement still needs full provider inventories.");return{...original,proof,actual:null};}
  if(original.kind==="create"){
   if(proof.resultDigest!==transferDigest({inspectionDigest:transferDigest({state:"open",parts:[]})})||proof.resultRevision||proof.resultSha256||proof.resultBytes!==null||proof.resultRequestProof||proof.resultAbsent||physical.length!==1||physical[0]?.descriptor.kind!=="multipart.inspect"||physical[0].descriptor.uploadId!==original.resource.providerUploadId||physical[0].descriptor.cursor!=null||!facts.some(row=>row.facts.stage==="response_body"&&row.facts.detailDigest)||!facts.some(row=>row.facts.stage==="inventory"&&row.facts.count===0&&row.facts.uploadId===original.resource.providerUploadId))transferConflict("The exact originally acknowledged session needs a genuine complete empty part inspection; singleton key or current absence is insufficient.");
   return{...original,proof,actual:null};
@@ -41,16 +43,16 @@ export async function appliedMultipartReadProof(tx:Tx,input:RecoveryInput,proofC
 }
 export async function captureAppliedMultipartInventory(tx:Tx,input:RecoveryInput&{proofCallId:string}){
  const original=await appliedMultipartReadProof(tx,input,input.proofCallId);
- const[prior]=await tx.select().from(inventories).where(and(eq(inventories.anchorCallId,original.caller.id),eq(inventories.proofCallId,original.proof.id),eq(inventories.purpose,"recovery"))).limit(1).for("update");
+ const[prior]=await tx.select().from(inventories).where(and(eq(inventories.anchorCallId,original.caller.id),eq(inventories.proofCallId,original.proof.id),eq(inventories.purpose,original.kind==="abort"?"retirement":"recovery"))).limit(1).for("update");
  if(prior){if(prior.multipartOperationId!==original.operation.id||prior.originalWitness!==original.witness)transferConflict();return prior;}
- const[header]=await tx.insert(inventories).values({id:randomUUID(),multipartOperationId:original.operation.id,anchorCallId:original.caller.id,proofCallId:original.proof.id,originalWitness:original.witness,side:"source",purpose:"recovery",binding:original.binding,namespace:original.binding.namespace}).returning();return header!;
+ const[header]=await tx.insert(inventories).values({id:randomUUID(),multipartOperationId:original.operation.id,anchorCallId:original.caller.id,proofCallId:original.proof.id,originalWitness:original.witness,side:"source",purpose:original.kind==="abort"?"retirement":"recovery",binding:original.binding,namespace:original.binding.namespace}).returning();return header!;
 }
 export async function lockedAppliedMultipartInventory(tx:Tx,input:RecoveryInput&{inventoryId:string}){
  const[identity]=await tx.select().from(inventories).where(eq(inventories.id,input.inventoryId)).limit(1);
- if(!identity?.multipartOperationId||!identity.proofCallId||identity.planId||identity.objectReceiptId||identity.side!=="source"||identity.purpose!=="recovery")transferConflict("Restore the exact original multipart recovery inventory header.");
+ if(!identity?.multipartOperationId||!identity.proofCallId||identity.planId||identity.objectReceiptId||identity.side!=="source"||!["recovery","retirement"].includes(identity.purpose))transferConflict("Restore the exact original multipart recovery inventory header.");
  const original=await appliedMultipartReadProof(tx,input,identity.proofCallId);
  const[header]=await tx.select().from(inventories).where(eq(inventories.id,input.inventoryId)).limit(1).for("update");if(!header||header.proofCallId!==identity.proofCallId)transferConflict();
- if(header.multipartOperationId!==original.operation.id||header.anchorCallId!==original.caller.id||header.originalWitness!==original.witness||header.namespace!==original.binding.namespace||transferDigest(header.binding)!==transferDigest(original.binding))transferConflict("The first original multipart inventory cannot be rebound or refilled from current state.");
+ if(header.purpose!==(original.kind==="abort"?"retirement":"recovery")||header.multipartOperationId!==original.operation.id||header.anchorCallId!==original.caller.id||header.originalWitness!==original.witness||header.namespace!==original.binding.namespace||transferDigest(header.binding)!==transferDigest(original.binding))transferConflict("The first original multipart inventory cannot be rebound or refilled from current state.");
  return{...original,inventory:header};
 }
 export async function appliedMultipartInventoryProgress(tx:Tx,input:RecoveryInput&{inventoryId:string}){
@@ -74,7 +76,8 @@ export async function appendAppliedMultipartInventoryPage(tx:Tx,input:RecoveryIn
 export async function finishAppliedMultipartInventory(tx:Tx,input:RecoveryInput&{inventoryId:string}){
  const original=await lockedAppliedMultipartInventory(tx,input),header=original.inventory;if(header.state!=="capturing")return header;
  const first=await readProviderInventoryPass(tx,header,0),confirmed=await readProviderInventoryPass(tx,header,1);
- if(original.kind==="create")requireKnownOriginalEmptySession({key:original.key,uploadId:original.resource.providerUploadId!,first,confirmed});
+ if(original.kind==="abort")requireIdleOriginalMultipartAbsence({key:original.key,first,confirmed});
+ else if(original.kind==="create")requireKnownOriginalEmptySession({key:original.key,uploadId:original.resource.providerUploadId!,first,confirmed});
  else requireAppliedOriginalMultipartObject({creation:original.creationProof,actual:original.actual,parts:original.operation.parts,expectedRevision:original.expectedRevision,uploadId:original.resource.providerUploadId!,namespace:original.binding.namespace,key:original.key,bytes:original.resource.expectedBytes,first,confirmed});
  const firstDigest=providerInventoryDigest(first.configuration,first.entries),confirmedDigest=providerInventoryDigest(confirmed.configuration,confirmed.entries),[saved]=await tx.update(inventories).set({state:"complete",firstDigest,confirmedDigest,configuration:first.configuration,entryCount:first.entries.length,totalBytes:physicalInventoryBytes(first.configuration,first.entries),completedAt:new Date(),updatedAt:new Date()}).where(eq(inventories.id,header.id)).returning();return saved!;
 }

@@ -6,6 +6,7 @@ import {and,asc,eq,inArray,sql} from "drizzle-orm";
 import type {Tx} from "@/core/service";
 import type {StorageBinding} from "@/adapters/storage/types";
 import {retainedKnownCreateReview} from "./multipart-known-create-review";
+import {captureIdleMultipartAbortRecovery} from "./multipart-abort-recovery-context";
 import {captureKnownCreateContext} from "./multipart-known-create-context";
 import {capture,type MultipartRecoveryConfirmation} from "./multipart-recovery-context";
 import {mediaMultipartOperations} from "./multipart-schema";
@@ -17,6 +18,7 @@ import {lockTransferInventory} from "./transfer-authority";
 import {checkedTransferRevision,transferConflict,transferDigest} from "./transfer-proof";
 export async function captureAppliedMultipartContext(tx:Tx,input:MultipartRecoveryConfirmation){
  await lockTransferInventory(tx);const base=await capture(tx,input),{resource,operation}=base;
+ if(operation?.kind==="abort")return captureIdleMultipartAbortRecovery(tx,input);
  if(operation?.kind==="create")return captureKnownCreateContext(tx,input);
  if(input.action!=="applied"||!operation||operation.kind!=="complete"||!["started","unknown"].includes(operation.state)||resource.redactedAt||!resource.originalReservationId||!resource.namespace||resource.storageKind!=="s3"||!resource.providerUploadId||operation.providerUploadId!==resource.providerUploadId||!operation.writerRuntimeId)transferConflict("Recover only the intact original tracked COMPLETE and original session. Legacy or minimized unknown provenance remains pending.");
  const creators=await tx.select().from(mediaMultipartOperations).where(and(eq(mediaMultipartOperations.resourceId,resource.id),eq(mediaMultipartOperations.kind,"create"))).limit(2),creation=creators[0];

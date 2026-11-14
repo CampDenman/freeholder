@@ -114,7 +114,7 @@ export const reconcileMultipartOperation=defineOrchestratedService({
  name:"media.reconcileMultipartOperation",summary:"Verify an original upload resource and record a fresh person's provider evidence.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,auditInputFields:["resourceId","action"],input:confirmation,output:z.object({ok:z.literal(true),needsCleanup:z.boolean()}),
  handler:async(input,actor)=>withOriginalMultipartInvocation(async()=>{
   const original=await claimMultipartRecovery.call(input,actor);
-  if(input.action==="applied"&&["create","complete"].includes(original.operation?.kind??""))return recoverExactOriginalMultipartComplete(input,actor);
+  if(input.action==="applied"&&["create","complete"].includes(original.operation?.kind??"")||input.action==="cleanup"&&original.operation?.kind==="abort")return recoverExactOriginalMultipartComplete(input,actor);
   requireDurableMediaRetirementProof();const captured=await boundStorage();
   const key=input.originalKey??original.resource.key;
   if(captured.binding.namespace!==input.originalNamespace||(original.resource.namespace&&original.resource.namespace!==captured.binding.namespace)||!captured.store.directMultipart?.inspect)throw new ServiceError("conflict","Restore the exact original private multipart resource before verification.");

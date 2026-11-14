@@ -3,7 +3,7 @@
 // Fresh human shared phases only. Provider I/O never occurs in a transaction;
 // actual first ACK/FIN/results of the unknown original are never replaced.
 import {randomUUID} from "node:crypto";
-import {eq} from "drizzle-orm";
+import {and,eq} from "drizzle-orm";
 import {z} from "zod";
 import {actorString,type Actor} from "@/core/service";
 import type {AccountedTransferStore,TransferInventoryPage} from "../../../scripts/media-transfer.mjs";
@@ -14,7 +14,7 @@ import {captureAppliedMultipartInventory,lockedAppliedMultipartInventory,applied
 import {mediaStorageTransferCalls as calls,mediaStorageTransferReviews as reviews,type StorageTransferRevision} from "./transfer-schema";
 import {mediaStorageTransferRequests as requests} from "./transfer-request-schema";
 import {mediaMultipartOperations as operations,mediaMultipartResources as resources} from "./multipart-schema";
-import {mediaUploads} from "./schema";
+import {mediaUploads,mediaObjects} from "./schema";
 import {mediaObjectWrites} from "./write-schema";
 import {admitOriginalMediaCaller,retainOriginalMediaCallerReturn,type OriginalMediaCallerReturn} from "./provider-callers";
 import {actualStorageCallerRuntimeIdentity,currentStorageCallerRuntimeSchema} from "./physical-caller-runtime";
@@ -23,11 +23,11 @@ import {withTransferRequestScope} from "./transfer-requests";
 import {transferConflict,transferDigest} from "./transfer-proof";
 import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 const digest=z.string().regex(/^[a-f0-9]{64}$/),bound=confirmation.extend({originalWitness:digest}),runtime={token:z.string().min(36),runtimeIdentity:currentStorageCallerRuntimeSchema};
-const claim=defineMediaService({name:"media.captureOriginalMultipartCompleteRecovery",summary:"Capture an exact unknown tracked CREATE or COMPLETE without retrying its original request.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,external:false,orchestratedBy:"media.reconcileMultipartOperation",input:confirmation,output:z.custom<Awaited<ReturnType<typeof captureAppliedMultipartContext>>>(),auditInputFields:["resourceId","operationId","action","stopDrainId"],handler:async(input,ctx)=>{human(ctx.actor);return captureAppliedMultipartContext(ctx.tx,input);}});
-const admitRead=defineMediaService({name:"media.admitOriginalMultipartCompleteRead",summary:"Admit a fresh exact known-session inspection or original part-bound file read without restarting a writer.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,external:false,orchestratedBy:"media.reconcileMultipartOperation",input:bound.extend({...runtime,metadataCallId:z.uuid().optional()}),output:z.object({id:z.uuid()}),auditInputFields:["resourceId","operationId","metadataCallId"],handler:async(input,ctx)=>{
+const claim=defineMediaService({name:"media.captureOriginalMultipartCompleteRecovery",summary:"Capture an exact unknown tracked CREATE, COMPLETE or idle ABORT without retrying its original request.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,external:false,orchestratedBy:"media.reconcileMultipartOperation",input:confirmation,output:z.custom<Awaited<ReturnType<typeof captureAppliedMultipartContext>>>(),auditInputFields:["resourceId","operationId","action","stopDrainId"],handler:async(input,ctx)=>{human(ctx.actor);return captureAppliedMultipartContext(ctx.tx,input);}});
+const admitRead=defineMediaService({name:"media.admitOriginalMultipartCompleteRead",summary:"Admit fresh exact session/object inspection or original part-bound bytes without restarting a writer.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,external:false,orchestratedBy:"media.reconcileMultipartOperation",input:bound.extend({...runtime,metadataCallId:z.uuid().optional()}),output:z.object({id:z.uuid()}),auditInputFields:["resourceId","operationId","metadataCallId"],handler:async(input,ctx)=>{
  human(ctx.actor);const original=await captureAppliedMultipartContext(ctx.tx,input);if(original.witness!==input.originalWitness)transferConflict();
  let revision:StorageTransferRevision|undefined=original.expectedRevision;
- if(original.kind==="create"&&input.metadataCallId)transferConflict("Known CREATE recovery inspects only its actual originally acknowledged session.");
+ if(original.kind!=="complete"&&input.metadataCallId)transferConflict("This recovery inspects its exact original session without a replacement revision.");
  if(input.metadataCallId){
   const[metadata]=await ctx.tx.select().from(calls).where(eq(calls.id,input.metadataCallId)).limit(1);
   if(!metadata||original.expectedRevision&&transferDigest(metadata.resultRevision)!==transferDigest(original.expectedRevision)||metadata.multipartOperationId!==original.operation.id||metadata.kind!=="multipart_recovery_inspect"||metadata.namespace!==original.binding.namespace||metadata.physicalKey!==original.key||metadata.state!=="returned"||!metadata.returnedAt||!metadata.resultRevision||metadata.resultAbsent||metadata.resultBytes!==original.resource.expectedBytes||metadata.resultRequestProof?.id!==original.creationProof.id||metadata.resultRequestProof.tokenDigest!==original.creationProof.tokenDigest)transferConflict("The actual fresh original metadata must name the exact CREATE nonce and expected file before its pinned read.");
@@ -44,6 +44,17 @@ const appendPage=defineMediaService({name:"media.appendOriginalMultipartInventor
 const finishInventory=defineMediaService({name:"media.finishOriginalMultipartRecoveryInventory",summary:"Verify both complete original provider passes without calling them remote authority consumption.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,external:false,orchestratedBy:"media.reconcileMultipartOperation",input:bound.extend({inventoryId:z.uuid()}),output:z.object({id:z.uuid()}),auditInputFields:["resourceId","operationId","inventoryId"],handler:async(input,ctx)=>{human(ctx.actor);return{id:(await finishAppliedMultipartInventory(ctx.tx,input)).id};}});
 const apply=defineMediaService({name:"media.applyOriginalMultipartCompleteReview",summary:"Append affirmative original session or object proof without inventing a missing original ACK or FIN.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,external:false,orchestratedBy:"media.reconcileMultipartOperation",input:bound.extend({inventoryId:z.uuid()}),output:z.object({ok:z.literal(true),needsCleanup:z.literal(true)}),auditInputFields:["resourceId","operationId","inventoryId","stopDrainId"],handler:async(input,ctx)=>{
  human(ctx.actor);const original=await lockedAppliedMultipartInventory(ctx.tx,input);
+ if(original.kind==="abort"){
+  const{resource,operation,caller,inventory,proof}=original;if(inventory.state!=="complete"||!inventory.completedAt)transferConflict("Keep the original idle-session ABORT until its two complete physical inventories have genuinely finished.");
+  const evidenceDigest=transferDigest({method:"monotonic-idle-session-removal-v1",originalWitness:original.witness,inventoryId:inventory.id,readCallId:proof.id,stopDrainId:original.stop?.id??null,providerFinalReference:input.providerFinalReference,providerEvidence:input.providerEvidence,reviewedBy:actorString(ctx.actor)}),reviewId=randomUUID(),now=new Date();
+  await ctx.tx.insert(reviews).values({id:reviewId,multipartOperationId:operation.id,inventoryId:inventory.id,callId:caller.id,originalCallWitness:transferDigest(caller),readCallId:proof.id,outcome:"retired",providerEvidenceDigest:evidenceDigest,stopDrainId:original.stop?.id,permitsRetry:false,reviewedBy:actorString(ctx.actor)});
+  for(const request of original.physical)if(["admitted","unknown"].includes(request.state))await ctx.tx.update(requests).set({state:"stopped",stopReceiptId:reviewId}).where(eq(requests.id,request.id));
+  await ctx.tx.update(calls).set({state:"stopped",stoppedAt:caller.stoppedAt??now,stopReceiptId:reviewId,updatedAt:now}).where(eq(calls.id,caller.id));
+  // No ACK, return, runtime, nonce or actual/missing FIN is supplied by review.
+  await ctx.tx.update(operations).set({state:"accepted",verifiedAt:now,reviewedAt:now,reviewedBy:actorString(ctx.actor),evidenceDigest,updatedAt:now}).where(eq(operations.id,operation.id));
+  await ctx.tx.update(resources).set({state:"aborted",retiredAt:now,reviewedAt:now,reviewedBy:actorString(ctx.actor),evidenceDigest,updatedAt:now}).where(eq(resources.id,resource.id));
+  await ctx.tx.delete(mediaObjects).where(and(eq(mediaObjects.reservationId,resource.originalReservationId!),eq(mediaObjects.key,resource.key),eq(mediaObjects.uploadId,resource.uploadId),eq(mediaObjects.state,"pending")));ctx.setSubject("media_multipart_resource",resource.id);return{ok:true as const,needsCleanup:true as const};
+ }
  if(original.kind==="create"){
   const{resource,operation,caller,inventory,proof}=original;
   if(inventory.state!=="complete"||!inventory.completedAt)transferConflict("Retain both complete original known-session provider inventories before applied review.");
@@ -95,8 +106,12 @@ async function collectInventory(input:z.infer<typeof bound>&{inventoryId:string}
 }
 export async function recoverExactOriginalMultipartComplete(input:MultipartRecoveryConfirmation,actor:Actor){
  human(actor);const original=await claim.call(input,actor),boundInput={...input,originalWitness:original.witness},store=await configuredOriginalRequestStore(original.binding);
- if(original.kind==="complete"&&(!store.metadataVersioned||!store.readDigestVersioned)||original.kind==="create"&&!store.inspectMultipart)transferConflict("Restore the original private provider's exact known-session or complete part-bound read support before recovery.");
+ if(original.kind==="complete"&&(!store.metadataVersioned||!store.readDigestVersioned)||original.kind==="create"&&!store.inspectMultipart||original.kind==="abort"&&(!store.inspectMultipart||!store.metadataVersioned))transferConflict("Restore the original private provider's exact known-session or complete part-bound read support before recovery.");
  try{
+  if(original.kind==="abort"){
+   const absence=await originalRead(boundInput,actor,async s=>{const session=await s.inspectMultipart!(original.key,original.resource.providerUploadId!);if(session.state!=="absent")transferConflict("The exact original session still retains bytes. An empty part list is not retirement.");const object=await s.metadataVersioned!(original.key);if(object)transferConflict("Original idle-session removal cannot adopt or delete current object bytes.");return{session:"absent"as const,object:"absent"as const};},value=>({absent:true,inspectionDigest:transferDigest(value)}),store);
+   const header=await beginInventory.call({...boundInput,proofCallId:absence.id},actor);await collectInventory({...boundInput,inventoryId:header.id},store,actor);return apply.call({...boundInput,inventoryId:header.id},actor);
+  }
   if(original.kind==="create"){
    const inspected=await originalRead(boundInput,actor,s=>s.inspectMultipart!(original.key,original.resource.providerUploadId!),value=>({inspectionDigest:transferDigest(value)}),store);
    if(inspected.value.state!=="open"||inspected.value.parts.length)transferConflict("Keep the original known session for review. Absent, populated or foreign session evidence cannot reopen it.");

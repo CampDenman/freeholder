@@ -16120,3 +16120,20 @@ model/column/journal/capability change. No child execution/provider/host action
 or C closure. Unknown/terminal/legacy/session/capture/quota/cutover work, all
 qualification/external/platform/independent review and stable gates remain
 open. See `deploy/media-multipart-idle-retirement-source-2026-11-13.md`.
+
+Source continuation 2026-11-14 (C1.12/C11.08/C3.22): explicit fresh-human
+multipart cleanup can verify a failed/unknown original idle ABORT without a
+new DELETE. Exact original caller/nonce/session, every creator independently
+closed, permanent namespace/key fencing, actual local FIN or independent stop,
+fresh two-request absence and two full immutable provider passes precede a
+typed retired review. Original missing ACK/FIN/first result stay unchanged;
+held/retained/foreign/charged/exposed cohorts refuse. Earlier failed inventory
+is not refilled. Exact actual-FIN reviewed CREATE/ABORT can close its own
+pre-drain cohort without inventing a Linux stop FK; all other drain/plan
+requirements remain. Three functions/nine continuations append after the
+intact idle owned82 prefix, with no trigger/model/column/journal/API/capability
+change. Eight proof/six genuine service/SDK/fictional TCP controls are PREPARED/
+UNRUN, all prior oracle bodies intact. No child execution/provider/host action
+or C closure. Remote authority/unknown/legacy/certificate/quota/capture/cutover,
+full qualification and external/platform/independent security/stable gates
+remain open. See `deploy/media-multipart-abort-recovery-source-2026-11-14.md`.
