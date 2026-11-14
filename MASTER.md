@@ -15932,3 +15932,16 @@ required. Full request/part flags and multipart/capture/quota/cutover/legacy
 recovery completion remain open. No execution/provider/host actions, production
 incident claim or C-item closure occurred. See
 `deploy/media-managed-producers-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): managed multipart requests now
+retain full bounded XML response digest/size and share strict whole-document
+parsing with provider inventory. Duplicate identities, wrappers/nested200 errors,
+invalid entities/UTF8 and redirects refuse before acceptance; NoSuchUpload is
+an absence observation, never a fabricated ABORT ACK/byte retirement. Twelve
+protocol cases are PREPARED/UNRUN and original positive oracle bodies remain
+unchanged. Public primary AWS completion/abort/part contracts were reviewed;
+no actual provider/host operations ran. Original CREATE/session first baseline,
+part capability/body receipts and selected-provider consumption proof, capture,
+quota/cutover and all qualification/acceptance remain open. No full request/part
+capability or C-item closure advances. See
+`deploy/media-multipart-wire-source-2026-11-13.md`.
