@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C1.08: exact source-owned private evidence, bounded and authenticated.
 import { asc, eq, inArray, or } from "drizzle-orm";
-import { env } from "@/core/env";
+import { originalCashEvidenceKeys } from "./original-cash-evidence-keys";
+export { originalCashEvidenceKeys, originalCashSigningKey } from "./original-cash-evidence-keys";
 import { ServiceError, type Tx } from "@/core/service";
 import { originalCashRecoveries, originalCashRecoveryOperations, originalCashRecoveryFacts, originalCashRecoveryClosures } from "./original-cash-recovery-schema";
 import { cashNamespaceKey, verifyOriginalCashRecovery } from "./original-cash-recovery-proof";
@@ -10,8 +11,6 @@ import type { MerchantRefundCashOrigin } from "./merchant-refund-origin";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { originalCashFeedbackFinancialWitness } from "./original-cash-feedback-witness";
 import {merchantAgreementPaymentRoutes} from "./merchant-agreement-schema";
-export function originalCashEvidenceKeys() { const e = env(); return [...new Set([e.CREDENTIAL_KEY, e.CREDENTIAL_KEY_PREVIOUS, e.SESSION_SECRET].filter((key): key is string => Boolean(key)))]; }
-export function originalCashSigningKey() { const e = env(), key = e.CREDENTIAL_KEY ?? e.SESSION_SECRET; if (!key) throw new ServiceError("conflict", "Restore the original financial evidence key."); return key; }
 export function recoveryOwnerBody(row: typeof originalCashRecoveries.$inferSelect) { return { namespaceKey: row.namespaceKey, paymentId: row.paymentId, subscriptionChargeReceiptId: row.subscriptionChargeReceiptId, owner: row.owner }; }
 export function recoveryOperationBody(row: typeof originalCashRecoveryOperations.$inferSelect) { return { recoveryId: row.recoveryId, kind: row.kind, request: row.request, caller: row.caller, nonceHash: row.nonceHash }; }
 export function recoveryFactBody(row: typeof originalCashRecoveryFacts.$inferSelect) { return { recoveryId: row.recoveryId, operationId: row.operationId, sequence: row.sequence, kind: row.kind, evidence: row.evidence }; }
