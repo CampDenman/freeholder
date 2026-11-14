@@ -3577,6 +3577,18 @@ A genuine post-pay fixture GET/retain is pending, with no freshness guard waiver
 No application/access/provider/full-spec/stable closure. See
 `deploy/current-source159-payment-checkpoint-20261113.md` and its hash manifest.
 
+Source fixture correction 2026-11-13 (C12.38/C9.33/C1.08): preserved actual V26
+full application correctly refuses its retained pre-pay manifests33/38 after
+the real admitted pay39. Root read-only evidence confirms exact proof/result/
+canonical identity and the sole later bank mutation; original guard remains
+unchanged. Prepared staged/paid application fixtures now admit, execute and
+retain a genuine post-pay manifest GET before cash inspection/application,
+preserving all prior money/access/rollback oracles. An additional desired native
+retains the stale-proof refusal then proves genuine refresh without a second
+pay POST. Child source-only, all controls UNRUN; root source/fresh native renewal
+required, failed V26 preserved. No C-item/stable/provider/launch acceptance.
+See `deploy/controlled-postpay-manifest84-source-20261113.md`.
+
 Paid-period forward assembly 2026-11-13 (C9.33/C12.38/C1.08): the real
 paid-effect model and existing subscription/event/grant/catalogue mutations now
 compose with actual target-derived invoice/profile history and the ordinary
