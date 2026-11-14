@@ -3564,6 +3564,21 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Actual original fee nativeV5 first failure2026-11-14 (C12.38/C9.33/C1.08):
+current3ba9 source1497/240/524, freshnormalV53 ordinary86/strict161models/
+365guards/415completefunctions/4142queries/2495expressions and actualSDK8 pass.
+Original WHOLE6e positive runs96.10s, real tiny refund succeeds, then first fee
+review stops SQL42702 BEFORE original causal recovery: A resource TABLE output
+payment_id shadows its bare route column. V53 retained/drained, all596 before/
+after snapshots retained; counter negative/A/causal natives remain UNRUN.
+Two full SQL85 successors qualify ONLY route selection and corresponding one
+ready body-hash literal; all fee/evidence/debt predicates otherwise byteexact.
+WHOLE832734 prefix and exact full-body reversals retained. No fixture/global
+variable-conflict setting/amount waiver. Fresh source/schema/SDK and unchanged
+original native must pass before acceptance; no C/stable closure. See
+`deploy/atomic-auxiliary-fee-route-alias85.manifest.json`.
+
+
 Current SQL compilation correction2026-11-14 (C1.12/C11.08): sourceV95 passes
 1497 tests/240 complete files/524 explicit DB skips, fulltypes/lint/metadata.
 Fresh normalV52 then stops SQL42883 in multipart idle minimization: bare outcome
