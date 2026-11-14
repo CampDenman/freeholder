@@ -3564,6 +3564,16 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Source correction 2026-11-13 (C1.12/C11.08/C3.22): root v58 compiler stopped
+before business/native execution on multipart cursor/page inference, a widened
+negative fixture kind and two shadowed fetch type references. An isolated c792
+descendant supplies explicit actual types/literals/global fetch references and
+lists the eight exact existing scoped private recovery phases in the reviewed
+service inventory. All assertions, runtime/SQL/permission/timeout/capability
+semantics remain unchanged. This child ran no qualification/execution/provider/
+host action; root renewal is pending and all readiness gates remain open. See
+`deploy/media-multipart-recovery-types-source-2026-11-13.md`.
+
 Integrated successor checkpoint 2026-11-13 (C1.12/C11.08/C12.38/C9.33):
 latest actual V24 native advances through NET4000 and TAX200 then refuses an
 older mixed-list snapshot before set-fee. Failed database and all raw evidence
