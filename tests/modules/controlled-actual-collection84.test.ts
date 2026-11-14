@@ -9,7 +9,7 @@ import { stopJobs } from "@/core/jobs";
 import { entitlementGrants } from "@/core/entitlements/schema";
 import { invoices,payments } from "@/modules/invoicing/schema";
 import { subscriptions,subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
-import { subscriptionControlledChargeOrigins,subscriptionControlledFinishes,subscriptionControlledCalls,subscriptionControlledOperations } from "@/modules/subscriptions/controlled-provider-schema";
+import { subscriptionControlledChargeOrigins,subscriptionControlledFinishes,subscriptionControlledCalls,subscriptionControlledOperations,subscriptionControlledFacts,subscriptionControlledResources } from "@/modules/subscriptions/controlled-provider-schema";
 import { collectControlledCollection } from "@/modules/subscriptions/controlled-provider-collection-orchestration";
 import { actualControlledPeriod84 } from "../helpers/actual-controlled-period84";
 import { closeDb,hasDatabase,OWNER,truncateSpine } from "../helpers/spine";
@@ -29,6 +29,11 @@ describe.runIf(hasDatabase)("actual controlled canonical target bank sequence",{
  it("runs actual update/draft/NET/tax/fee/finalize/pay once and retains real cash without a fake local payment or access advance",async()=>{
   f=await actualControlledPeriod84();const result=await collectControlledCollection.call({collectionId:f.target.collectionId},OWNER);
   expect(result).toMatchObject({state:"money_retained",applied:false,suppliesAccessAuthority:false});expect(f.remote.counts()).toMatchObject({updatePosts:1,draftPosts:1,itemPosts:2,feePosts:1,finalizePosts:1,payPosts:1});await assertRetained();
+  const facts=await db().select({actual:subscriptionControlledFacts.actual}).from(subscriptionControlledFacts).innerJoin(subscriptionControlledCalls,eq(subscriptionControlledCalls.id,subscriptionControlledFacts.callId))
+   .innerJoin(subscriptionControlledOperations,eq(subscriptionControlledOperations.id,subscriptionControlledCalls.operationId)).innerJoin(subscriptionControlledResources,eq(subscriptionControlledResources.id,subscriptionControlledOperations.resourceId)).where(eq(subscriptionControlledResources.subscriptionId,f.parent.id));
+  const original=facts.find(row=>row.actual.kind==="bootstrap_subscription")?.actual.raw;if(!original)throw Error("The actual signed original bootstrap fact must remain retained.");
+  const zero=facts.filter(row=>row.actual.kind==="invoice_read"&&row.actual.raw.id==="in_actualControlledZero");expect(zero.length).toBeGreaterThan(0);
+  for(const row of zero){for(const field of ["collection_method","default_payment_method","automatic_tax","discounts","default_tax_rates","transfer_data","on_behalf_of"])expect(row.actual.raw[field]).toEqual(original[field]);expect(row.actual.raw).toMatchObject({status:"paid",total:0,amount_paid:0,amount_remaining:0,automatic_tax:{enabled:false},paid_out_of_band:false});}
  });
  it("recovers authentic lost update and draft effects through fresh GET metadata without replaying either original POST or inventing its finish",async()=>{
   f=await actualControlledPeriod84({loseUpdateReply:true,loseDraftReply:true});
