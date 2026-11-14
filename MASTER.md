@@ -3615,6 +3615,17 @@ snapshot. `[ ]` means incomplete, including partially implemented work. An
 item may be checked only in the same change that supplies its evidence. Never
 use prose such as “mostly done” as a substitute for decomposing an item.
 
+Source-only continuation, 2026-11-14 (C1.12/C11.08): the finite immutable
+multipart retirement certificate-birth slice adds one nullable/no-default field
+on existing reviews and a system-only shared service, preserving historical
+NULL reviews and original caller ACK/FIN. Exact complete raw proof/frontier is
+independently checked before sealing/dedup; late evidence or holds keep current
+proof pending. Eight pure and six genuine service/TCP controls are prepared,
+all unrun. No raw/quota minimization, capability publication, new model or C
+closure. Root qualification and full late-evidence/minimization/catch-up,
+issued-authority terminal, quota/capture/cutover/provider acceptance remain open.
+See `deploy/media-multipart-retirement-certificate-source-2026-11-14.md`.
+
 ### 43.2 Definition of done for every feature
 
 Every feature checkbox below inherits this checklist. If a line does not

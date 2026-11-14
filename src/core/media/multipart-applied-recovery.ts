@@ -22,6 +22,7 @@ import {configuredOriginalRequestStore} from "./transfer-storage";
 import {withTransferRequestScope} from "./transfer-requests";
 import {transferConflict,transferDigest} from "./transfer-proof";
 import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
+import {captureOriginalMultipartRetirementAdmission,sealOriginalMultipartRetirement} from "./multipart-retirement-certificate";
 const digest=z.string().regex(/^[a-f0-9]{64}$/),bound=confirmation.extend({originalWitness:digest}),runtime={token:z.string().min(36),runtimeIdentity:currentStorageCallerRuntimeSchema};
 const claim=defineMediaService({name:"media.captureOriginalMultipartCompleteRecovery",summary:"Capture an exact unknown tracked CREATE, COMPLETE or idle ABORT without retrying its original request.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,external:false,orchestratedBy:"media.reconcileMultipartOperation",input:confirmation,output:z.custom<Awaited<ReturnType<typeof captureAppliedMultipartContext>>>(),auditInputFields:["resourceId","operationId","action","stopDrainId"],handler:async(input,ctx)=>{human(ctx.actor);return captureAppliedMultipartContext(ctx.tx,input);}});
 const admitRead=defineMediaService({name:"media.admitOriginalMultipartCompleteRead",summary:"Admit fresh exact session/object inspection or original part-bound bytes without restarting a writer.",kind:"mutation",permission:"scoped",agentCallable:false,stepUp:true,external:false,orchestratedBy:"media.reconcileMultipartOperation",input:bound.extend({...runtime,metadataCallId:z.uuid().optional()}),output:z.object({id:z.uuid()}),auditInputFields:["resourceId","operationId","metadataCallId"],handler:async(input,ctx)=>{
@@ -53,7 +54,7 @@ const apply=defineMediaService({name:"media.applyOriginalMultipartCompleteReview
   // No ACK, return, runtime, nonce or actual/missing FIN is supplied by review.
   await ctx.tx.update(operations).set({state:"accepted",verifiedAt:now,reviewedAt:now,reviewedBy:actorString(ctx.actor),evidenceDigest,updatedAt:now}).where(eq(operations.id,operation.id));
   await ctx.tx.update(resources).set({state:"aborted",retiredAt:now,reviewedAt:now,reviewedBy:actorString(ctx.actor),evidenceDigest,updatedAt:now}).where(eq(resources.id,resource.id));
-  await ctx.tx.delete(mediaObjects).where(and(eq(mediaObjects.reservationId,resource.originalReservationId!),eq(mediaObjects.key,resource.key),eq(mediaObjects.uploadId,resource.uploadId),eq(mediaObjects.state,"pending")));ctx.setSubject("media_multipart_resource",resource.id);return{ok:true as const,needsCleanup:true as const};
+  await ctx.tx.delete(mediaObjects).where(and(eq(mediaObjects.reservationId,resource.originalReservationId!),eq(mediaObjects.key,resource.key),eq(mediaObjects.uploadId,resource.uploadId),eq(mediaObjects.state,"pending")));const admission=await captureOriginalMultipartRetirementAdmission(ctx.tx,resource.id,resource.uploadId,resource.keyDigest,operation.id,inventory.id);await ctx.callAsSystem(sealOriginalMultipartRetirement,admission);ctx.setSubject("media_multipart_resource",resource.id);return{ok:true as const,needsCleanup:true as const};
  }
  if(original.kind==="create"){
   const{resource,operation,caller,inventory,proof}=original;

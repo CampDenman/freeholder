@@ -50,6 +50,7 @@ const INTERNAL = [
   "subscriptions.retainProrationPaymentReadRetirement",
   "subscriptions.verifyProrationCardTask",
   // C1.12/C11.08: exact original transfer/request/recovery phases stay private.
+  "media.sealOriginalMultipartRetirement",
   "media.captureTransferErasure",
   "media.admitTransferErasureCall",
   "media.finishTransferErasure",

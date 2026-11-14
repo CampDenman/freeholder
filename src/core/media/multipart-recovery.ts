@@ -19,6 +19,7 @@ import {withOriginalMultipartInvocation} from "./provider-callers";
 import {abortOriginalMultipart,claimMultipartAbort} from "./multipart-operations";
 import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 
+import {sealOriginalMultipartRetirement} from "./multipart-retirement-certificate";
 const digest=z.string().regex(/^[a-f0-9]{64}$/),date=z.date();
 const resourceRow=z.object({id:z.uuid(),uploadId:z.uuid(),key:z.string(),namespace:digest.nullable(),providerUploadId:z.string().nullable(),state:z.enum(MULTIPART_STATES),expectedBytes:z.number(),contentType:z.string(),objectReceiptId:z.uuid().nullable(),retiredAt:date.nullable(),updatedAt:date});
 const operationRow=z.object({id:z.uuid(),kind:z.enum(["create","complete","abort","sign"]),state:z.string(),providerAcceptedAt:date.nullable(),updatedAt:date});
@@ -120,7 +121,7 @@ export const reconcileMultipartOperation=defineOrchestratedService({
   if(captured.binding.namespace!==input.originalNamespace||(original.resource.namespace&&original.resource.namespace!==captured.binding.namespace)||!captured.store.directMultipart?.inspect)throw new ServiceError("conflict","Restore the exact original private multipart resource before verification.");
   if(input.action==="cleanup"){
    const cleanup=await claimMultipartCleanup.call(input,actor);
-   if(cleanup.operationId)await abortOriginalMultipart(cleanup.uploadId,cleanup.operationId);
+   if(cleanup.operationId){const admission=await abortOriginalMultipart(cleanup.uploadId,cleanup.operationId);await sealOriginalMultipartRetirement.call(admission,{kind:"system"});}
    return{ok:true as const,needsCleanup:!await deleteWithReceipt(cleanup.key,captured)};
   }
   const multipart=captured.store.directMultipart;
@@ -150,4 +151,4 @@ export const reconcileMultipartOperation=defineOrchestratedService({
   await reconcileMediaErasureCohorts({multipartResourceId:input.resourceId}).catch(()=>{});return result;
  }),
 });
-export default[listMultipartOperations,claimMultipartRecovery,applyMultipartRecovery,claimMultipartCleanup,reconcileMultipartOperation,...appliedRecoveryServices];
+export default[sealOriginalMultipartRetirement,listMultipartOperations,claimMultipartRecovery,applyMultipartRecovery,claimMultipartCleanup,reconcileMultipartOperation,...appliedRecoveryServices];
