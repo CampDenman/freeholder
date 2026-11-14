@@ -1,0 +1,68 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "sourceHead": "6791cffa036b5a665f6fde6efc0a978bbe1481ba",
+  "generatedSdkCandidate": "02b44a5ca2367f7fa4110baa9fea67964d082827",
+  "status": "BOUNDED_SOURCE_SCHEMA_SDK_ORIGINAL_COLLECTION_PASS; CURRENT_APPLICATION_FAILED_BEFORE_ADMISSION",
+  "proofs": {
+    "source": {
+      "path": "/tmp/freeholder-current-full86-financial159-source-v63-20261113-result.json",
+      "sha256": "de6b2b6812b7d22ead7154b6c6782ac9319d08e25a52873c2fdd92e7c07ddd1f",
+      "passed": true
+    },
+    "normalV25": {
+      "path": "/tmp/freeholder-current-full86-normal-v25-result-20261113.json",
+      "sha256": "0b0e141fb454c09e3b8a4f2275c41ead7d3cc53b2a75408baa33934bfe031785",
+      "passed": true
+    },
+    "parityV35": {
+      "path": "/tmp/freeholder-current-full86-parity159-v35-result-20261113.json",
+      "sha256": "96486e4f58a76f0f1ebc938c2b84ac05863449eecf6dc004535a22227fdd9656",
+      "passed": true
+    },
+    "sdkGeneration": {
+      "path": "/tmp/freeholder-current-full86-sdk-generation-v10-20261113-result.json",
+      "sha256": "e05aa479afb4b52279c2a2bc7967cc9254101875526372b7b54b87d75ab8f760",
+      "passed": true
+    },
+    "sdkTypes": {
+      "path": "/tmp/freeholder-current-full86-sdk-types-lint-v11-20261113-result.json",
+      "sha256": "0c8f810050d263fb1914a0ab381c9455d78480d09f7b378394425bcedeb84e1d",
+      "passed": true
+    },
+    "originalCollection": {
+      "path": "/tmp/freeholder-current-full86-target-collection-native-v5-20261113-result.json",
+      "sha256": "d62b31119ec90bcec5d34fe27d0dc82096053f9f56b2cb1c951f309523bbef21",
+      "passed": true
+    },
+    "normalV26": {
+      "path": "/tmp/freeholder-current-full86-normal-v26-result-20261113.json",
+      "sha256": "eb76a8bf6188c4d907e64426c770e577f927b87c2c4f749410c7dc0990905163",
+      "passed": true
+    },
+    "parityV36": {
+      "path": "/tmp/freeholder-current-full86-parity159-v36-result-20261113.json",
+      "sha256": "40f93e68684df99861b0b3dee61a53dea43cc480586320bbd02203677a9b7d88",
+      "passed": true
+    },
+    "failedApplication": {
+      "path": "/tmp/freeholder-current-full86-application-full-native-v1-20261113-result.json",
+      "sha256": "85bce9fb0edf8bbeb402807378e008e20b6d55805a513c5abaa9866a583a354b",
+      "passed": false
+    },
+    "manifestDiagnosis": {
+      "path": "/tmp/freeholder-current-full86-native-v26-manifest-order-v1-20261113.json",
+      "sha256": "b5daa7f1985a3faf7bc254c7c35603f470c55a112bb789490d556e52e2538c0e",
+      "passed": true
+    },
+    "parserControls": {
+      "path": "/tmp/freeholder-current-full86-parser159-rename-controls-v1-20261113-result.json",
+      "sha256": "c2c90d4c77179abe78bc76a78827f57082b9371f28543a3a9f185d8ba38e0e35",
+      "passed": true
+    }
+  },
+  "affectedModels": 159,
+  "enabledGuards": 353,
+  "fullFunctionBodies": 351,
+  "providerAccountAcceptance": false,
+  "stableAcceptance": false
+}

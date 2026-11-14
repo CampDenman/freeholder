@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Current159 payment checkpoint 2026-11-13 (C12.38/C9.33/C1.08/C1.12/C11.08):
+source6791 passes1243 actual/196 selected files,433 explicit DB skips and full
+types/lint/metadata. FreshV25/V26 all86 migrations pass; strict159/353 guards/
+351 full bodies/3976 readonly queries pass, with both media capabilities absent.
+Actual SDK generation8+verification8/full types pass. Original provider collection
+now PASSES32.419s at02b44a5c, retaining real4200 CAD minor units with local
+paid0/payment0 and original access. The next full-application native FAILS before
+admission: retained manifest38 precedes actual pay39. All595 whole-row hashes/
+86 journals/sequence remain unchanged across readonly diagnosis; V26 is preserved.
+A genuine post-pay fixture GET/retain is pending, with no freshness guard waiver.
+No application/access/provider/full-spec/stable closure. See
+`deploy/current-source159-payment-checkpoint-20261113.md` and its hash manifest.
+
 Paid-period forward assembly 2026-11-13 (C9.33/C12.38/C1.08): the real
 paid-effect model and existing subscription/event/grant/catalogue mutations now
 compose with actual target-derived invoice/profile history and the ordinary
@@ -4147,7 +4160,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-14. Protected main last verified fdba2817 (PR702:44 PR/43 merge-group checks); PR701 remains older and not green. Current1325527d passes1134 actual assertions/178 complete selected files,405 explicit DB skips, full types/lint/metadata; freshV22 all86 ordinary migrations6.957s; strict154 affected models/340 enabled guards/325 complete bodies/3768 read-only queries13.581s. Actual SDK generation8+verification8 and all154 whole-row/all86 journal/lineage sequence/drain invariance pass; generated full types/lint pass. See deploy/current-source154-writer-checkpoint-20261113.md. New private genuine staged writer and original multipart checksum verification are schema/source-qualified; actual current-target/native application remains UNRUN after precise real-catalogue fixture correction. Failed V19/V20/V21 and original wrapper diagnostics are preserved; both storage capabilities remain absent. Atomic fee endpoint, public apply composition, separate paid effects, latest-bank proration/credit safety, multipart terminal/unknown/legacy/session/quota/cutover, current build/browser/CI, actual provider/platform/recovery and all other unchecked full-spec acceptance remain open. Tony’s C11.10 report/C11.17 signature are pending; no C-item/stable/post closure. |
+| Latest launch audit | 2026-11-14. Protected main last verified fdba2817 (PR702); PR701 remains older and not green. Source6791 passes1243 actual/196 selected files,433 explicit DB skips and full types/lint/metadata. FreshV25/V26 all86 normal migrations and strict159 affected models/353 enabled guards/351 full bodies/3976 readonly queries pass. Actual SDK generation8+verification8/full types pass. Original provider collection PASSES at02b44a5c (32.419s, real4200 retained, localpaid0/payment0, original access); full local application FAILS before admission because retained manifest38 precedespay39. V26/all595 table hashes/86 journals/sequence/drain evidence are preserved, and genuine post-pay fixture proof repair is pending. See deploy/current-source159-payment-checkpoint-20261113.md. Both media capabilities absent. Application/access/refund/recovery/build/browser/CI/provider/platform/independent review and every other unchecked full-spec acceptance remain open. Tony’s C11.10 report/C11.17 signature pending; no stable/post closure. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
