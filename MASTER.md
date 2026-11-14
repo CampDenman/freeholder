@@ -16803,3 +16803,10 @@ assertions. Its old actual current9 generic guard refusal is a separate exact
 negative; duplicate newly prepared positive is consolidated into the original
 file. Five total next-suite actual-service native cases remain UNRUN. No guard or
 acceptance is weakened. See `deploy/controlled-order-oracle84-migration-20261113.md`.
+
+Source original-period guard successor 2026-11-13 (C9.33/C9.38/C12.38): a new owned
+UNAPPLIED tail makes unknown nested original-provider evidence explicitly false
+and refuses target birth unless the real source predicate is true. Full original
+source/mandate/calendar/caller conditions remain; no old SQL identity changed or
+acceptance claimed. Root source/SQL/native qualification remains REQUIRED. See
+`deploy/controlled-period-source-null84-source-20261113.md`.
