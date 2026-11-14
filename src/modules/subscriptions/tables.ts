@@ -15,3 +15,5 @@ export * from "./proration-boundary-schema";
 export * from "./proration-card-schema";
 
 export * from "./controlled-provider-schema";
+
+export * from "./controlled-cash-inspection-lineage-schema";

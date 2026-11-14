@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: independent cash evidence, real read completion and atomic disposition.
+import { retainControlledCashInspectionLineage } from "@/modules/subscriptions/controlled-cash-inspection-lineage";
 import { queueOriginalMerchantRefundRepair } from "./merchant-refund-privacy-repair";
 import { allowOriginalMerchantRefundWrites } from "./merchant-refund-store";
 import { createHash, randomBytes } from "node:crypto";
@@ -46,6 +47,7 @@ export const prepareMerchantCashReturnInspection = defineService({
       providerPlatformAccountId: cash.providerPlatformAccountId, chargeAccountId: cash.chargeAccountId, providerApiVersion: cash.providerApiVersion,
       originalPaymentRef: cash.providerRef, originalCashAmountMinor: cash.amountMinor, currency: cash.currency, sourceHistoryDigest: history.digest,
       caller: merchantPhysicalCaller(), completionNonceHash: hash(completionNonce) }).returning();
+    await retainControlledCashInspectionLineage(ctx,{inspectionId:saved!.id,completionNonce});
     ctx.setSubject(cash.paymentId ? "payment" : "subscription_provider_charge", cash.paymentId ?? cash.subscriptionChargeReceiptId!);
     return { inspectionId: saved!.id, completionNonce, providerPlatformAccountId: cash.providerPlatformAccountId, providerAccountId: cash.chargeAccountId,
       providerApiVersion: cash.providerApiVersion, paymentProviderRef: cash.providerRef };
