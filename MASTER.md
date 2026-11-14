@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Namespace-image isolated SOURCE qualification2026-11-14 (C1.12/C3.28/C11.08):
+frozen418 plus official791-note generation atd1a89172 passes fulltypes64.97s,
+actualCLI copy+emit build with all6 companion/declaration/recipe bytes exact,
+affected lint and93actual/10selected files/17explicit prerequisite skips.
+Existing real legacy gateway controls remain; genuine new-origin TCP requires
+an actual compatible signed image and is not supplied by a fictional label or
+verifier. No provider account, purchase, SSH, claim, owner initialization or
+recovery acceptance occurred. No runtime profile/capability published. Primary
+financial candidate stays unchanged; root composition/full-spec/real-image/
+provider/recovery/security/signature remain open. See
+`deploy/media-image-admission-root-source-checkpoint-20261114.json`.
+
+
 Origin precursor SOURCE qualification2026-11-14 (C1.12/C10.32/C11.08):
 isolated root9d+frozen8dc14979838 fulltypes PASS62.07s; exact same production
 code at173f6400 with only typed TCP-error getter correction/notes. Actual CLI

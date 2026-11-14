@@ -1,0 +1,84 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C1.12",
+    "C3.28",
+    "C11.08"
+  ],
+  "status": "ISOLATED_SOURCE_AND_CLI_PACKAGING_QUALIFIED",
+  "frozenLeaf": "418cf909068618a5e0b7259f89db9e7c6ff32eca",
+  "qualifiedSourceHead": "d1a891721940b59166a06d2e6277eb2b497dacc5",
+  "qualification": {
+    "path": "/tmp/freeholder-media-image-admission-isolated-source-v1-20261114-result.json",
+    "sha256": "f9ab80c85fc68d39ac19d9da9236d8f2b78a13bce88c61dc8407509019a0151f"
+  },
+  "actualPassed": 93,
+  "explicitSkipped": 17,
+  "selectedTestFiles": [
+    "tests/core/media-origin-image-admission.test.ts",
+    "tests/core/media-quota-namespace-origin.test.ts",
+    "tests/core/media-quota-namespace-origin-tcp.native.test.ts",
+    "tests/core/launch-cli.test.ts",
+    "tests/core/deploy-droplet.test.ts",
+    "tests/core/launch-template.test.ts",
+    "tests/core/agent-launch.test.ts",
+    "tests/core/changelog-output.test.ts",
+    "tests/core/doctor.test.ts",
+    "tests/core/doctor-script.test.ts"
+  ],
+  "steps": [
+    {
+      "label": "types",
+      "exit": 0,
+      "seconds": 64.97444944491144
+    },
+    {
+      "label": "cli-copy-companion",
+      "exit": 0,
+      "seconds": 0.03177076601423323
+    },
+    {
+      "label": "cli-build",
+      "exit": 0,
+      "seconds": 0.6146353529766202
+    },
+    {
+      "label": "affected-lint",
+      "exit": 0,
+      "seconds": 5.92364368098788
+    },
+    {
+      "label": "focused-source",
+      "exit": 0,
+      "seconds": 6.324130498920567
+    },
+    {
+      "label": "license",
+      "exit": 0,
+      "seconds": 0.11385912401601672
+    },
+    {
+      "label": "notes",
+      "exit": 0,
+      "seconds": 0.031665963935665786
+    },
+    {
+      "label": "plan",
+      "exit": 0,
+      "seconds": 0.21391876100096852
+    }
+  ],
+  "packagedSourceHashes": {
+    "packages/cli/dist/launch/image-admission.mjs": "9727458734d26eaefb3e7eb1afc54fc9f461d05b11fc85a886289e54a2fcd178",
+    "packages/cli/dist/launch/image-admission.d.mts": "1974ccd9d1d5ec2525f648222ffc4c93fa9ebd759c024b7ee15353410ba4b045",
+    "packages/cli/recipes/digitalocean-droplet/compose.yml": "060e8d3c88ab550eb5e7ff8154fba1e25bd5d7ecade0aed67ebd53c84575ad37",
+    "packages/cli/recipes/digitalocean-droplet/Caddyfile": "bcdfb1b64062c1b7b1f1755b385c22c239ba83596ecb3fd74f81b65fc9fe3093",
+    "packages/cli/recipes/digitalocean-droplet/backup.sh": "70677d36832bd09a66e0b787787bb82a5f43e2be22d067289753d3c3231f9b00",
+    "packages/cli/recipes/digitalocean-droplet/cloud-init.yml": "5db58643cc405b21f920012cf6b96f7d34930bd34314c71769979a0496591a5e"
+  },
+  "all12DependencyDescriptorsExact": true,
+  "primaryFinancialCandidateUnchanged": true,
+  "publishedCompatibleImageActualTcpProviderOwnerInitializationRecoveryAcceptance": false,
+  "capabilityPublication": false,
+  "stableAcceptance": false
+}
