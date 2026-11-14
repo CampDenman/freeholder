@@ -15915,3 +15915,11 @@ and refuses target birth unless the real source predicate is true. Full original
 source/mandate/calendar/caller conditions remain; no old SQL identity changed or
 acceptance claimed. Root source/SQL/native qualification remains REQUIRED. See
 `deploy/controlled-period-source-null84-source-20261113.md`.
+
+Prepared external-partial control 2026-11-13 (C9.33/C9.38/C12.38/C1.08): a real
+owned canonical target is prepared through actual SDK phases to OPEN without a
+pay POST. Fictional external PI1/fee0/transfer1 is then retained and genuinely
+inspected, preserving total4200/remaining4199 and the uncollected fee obligation,
+with no local payment/access invented. This desired native is UNRUN; actual
+partial/batch application, residual recovery and full lifecycle acceptance remain
+REQUIRED. See `deploy/controlled-external-partial-bank84-prepared-20261113.md`.
