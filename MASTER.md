@@ -3564,6 +3564,22 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Original inventory causal ROOT composition2026-11-14 (C12.38/C9.33/C1.08/
+C11.08): frozen6522685b merged atop exact media200/327 and qualified auxiliaryb40;
+entire current MASTER plus only34newleaflines preserved. Actual A holder/oneway
+release/request fields retained. THREE A handler entries acquire genuine v2
+connected identity/resource/parent/canonical/cash/callback prefix before ready/
+basis/phase; old predicates/nonce checks unchanged. Source pin reconstructs ONLY
+2Akind literals+2indexes before requiring entire old schema SHA, preserving old
+MAC/column/default/native oracles; all other oldsource pins checked. Original
+whole6e fee,269privacy and652causal native files exact. No model/SQL/registry
+addition. Complete current source/schema/SDK and all original positive/negative/
+auxiliary/causal business natives UNRUN. Full private current rows/5000/FIN and
+actual bank/credit/fee/source proofs remain independent of historical comparison.
+No broad kind omission, old row re-sign, fake context or C/stable acceptance.
+See `deploy/original-inventory-causal84-root-composition.manifest.json`.
+
+
 Original controlled inventory causal-v2 SOURCE checkpoint2026-11-14
 (C12.38/C9.33/C1.08): actual preserved V48 diagnosis proves its authentic
 inspection+8facts are excluded directly but reintroduced through controlled
