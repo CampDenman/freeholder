@@ -24,6 +24,8 @@ import { controlledProviderCoverage } from "@/modules/subscriptions/controlled-p
 import { controlledCollectionCoverage } from "@/modules/subscriptions/controlled-provider-collection-coverage";
 import { commercialPaymentAttestations } from "./commercial-attestation-schema";
 
+import { merchantFeeObservationMatchesRefund } from "./merchant-fee-observation-match";
+
 const reason = z.enum(["original_scope", "unknown_payment", "unapplied_money", "provider_settlement", "commission", "refund", "dispute"]);
 export const merchantPaymentRecoveryDebt = defineService({
   name: "invoicing.merchantPaymentRecoveryDebt", summary: "Report remaining recorded original customer, settlement, commission and recovery debt before a lifecycle can claim completion.",
@@ -73,7 +75,7 @@ export const merchantPaymentRecoveryDebt = defineService({
     if (unresolvedDispute.length) reasons.add("dispute");
     const [feeState] = await ctx.tx.select({ returned: sql<string>`coalesce(sum(${merchantFeeRefunds.amountMinor}) filter(where ${merchantFeeRefunds.status}='accepted'),0)::text`,
       pending: sql<boolean>`coalesce(bool_or(${merchantFeeRefunds.status} in ('reserved','dispatching','unknown')),false)`,
-      unmatched: sql<boolean>`coalesce(bool_or(${merchantFeeRefunds.status}='accepted' and not exists(select 1 from merchant_fee_observations a where a.operation_id=${merchantFeeRefunds.id} and a.binding_verified and a.provider_ref=${merchantFeeRefunds.providerRef} and a.amount_minor=${merchantFeeRefunds.amountMinor} and a.currency=${merchantFeeRefunds.currency} and a.application_fee_ref=${merchantFeeRefunds.applicationFeeRef})),false)` })
+      unmatched: sql<boolean>`coalesce(bool_or(${merchantFeeRefunds.status}='accepted' and not ${merchantFeeObservationMatchesRefund()}),false)` })
       .from(merchantFeeRefunds).where(eq(merchantFeeRefunds.paymentId, paymentId));
     const unattachedFeeAck = await ctx.tx.select({ id: merchantFeeObservations.id }).from(merchantFeeObservations).innerJoin(merchantFeeRefunds, eq(merchantFeeRefunds.id, merchantFeeObservations.operationId))
       .where(and(eq(merchantFeeRefunds.paymentId, paymentId), sql`${merchantFeeRefunds.status}<>'accepted'`)).limit(1);
