@@ -457,6 +457,10 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  // C9.33/C12.38: independently guarded original paid/access phases stay private.
+  "entitlements.advanceSubscriptionPeriod",
+  "subscriptions.completePaidControlledPeriod",
+  "subscriptions.pendingPaidControlledPeriods",
   // C12.38/C1.08: the genuine staged receipt command remains private.
   "invoicing.applyControlledReceiptBatch",
   // C12.38/C9.33/C9.38: all reviewed original target factory/GET phases remain private.
