@@ -5,12 +5,12 @@
 C1.12/C11.08/C12.36/C12.38. Evidence checkpoint only. MASTER.md §43 remains
 the status authority. No completion checkbox or release sign-off is supplied.
 
-Qualified product source: `f125c218577f1d8ed5cb09b4d2f12044ed1f0291`.
+First qualified product source: `f125c218577f1d8ed5cb09b4d2f12044ed1f0291`.
 This integrates signed media recovery/managed producers `8777873a` and complete
 multipart wire evidence `c22f3e40`, retaining the protected-main multipart signing
 restriction and the root CLI compatibility repair. Both media capabilities stay
-unpublished. Future CREATE source `b8f9480b` and future financial factories and
-application stages are excluded from this qualification.
+unpublished. CREATE source `b8f9480b` and future financial factories and application stages
+are excluded from this first qualification. The CREATE renewal follows below.
 
 Source qualification passed 739 actual assertions in 128 complete files, with
 314 explicitly skipped database-backed assertions. Full TypeScript, affected
@@ -61,3 +61,32 @@ browser journeys, provider/platform acceptance, cross-host byte recovery, Tony's
 independent security review or final signature. Earlier4349 production build and
 four owner browser journeys remain historical evidence only. Stable publication
 and the LinkedIn announcement remain pending.
+
+The next source checkpoint is `aa941edcd3b6f3cfbc54c72dda99e76097f3b655`,
+including genuine first CREATE baseline source `b8f9480b`. Source v37 passes751
+actual assertions in130 complete files, with319 explicit database skips, full
+TypeScript,121-file affected lint and metadata. The v36 compiler-only loop
+inference failure remains preserved; an explicit actual configuration/page union
+fixes it without runtime or original-assertion changes. New lifecycle controls
+remain unrun until the complete request protocol is implemented. No fixture
+publishes a capability or supplies an artificial caller context.
+
+Fresh V18 applies all85 ordinary migrations in6.799s. Normal/owned82 is now
+SHA256 `46f6c2b3c9bef0422d410d960b9568cb6205ed60c31633d9f79f767d1db2bfae`,
+260201 bytes, preserving the complete prior248307-byte prefix. The existing
+`media_multipart_operations` model gains nullable/no-default/no-backfill
+`create_baseline`, its exact check and two guards; no new model table is added.
+Strict v25 passes the same145 targets,301 guards and262 function bodies through
+3491 read-only queries in12.353s, preserving every older model, parser and
+non82 journal control. The manifest SHA256 is
+`e81f5934a35a5a558d332c46841b4450acd9d627ebe80051e38d27e7efa22992`.
+Result/drain prefix: `/tmp/freeholder-current-full85-parity145-v25`.
+
+The actual live SDK then passes8 non-update assertions with no generated-file
+change. The independent inspector again verifies every145 whole-row component
+SHA, all85 journal hashes, unconsumed sequence state, required settings and zero
+remaining clients. Result:
+`/tmp/freeholder-current-full85-sdk-verification-v5-20261113-result.json`.
+The source gate result is
+`/tmp/freeholder-current-full85-media145-source-v37-20261113-result.json`.
+The production/provider/security/stable exclusions above still apply.
