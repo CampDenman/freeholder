@@ -3564,6 +3564,19 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Paid native identity timestamp continuation 2026-11-14 (C12.38/C9.33/C1.08):
+complete source V74 passes1310/207/454 skips after the retirement timestamp
+oracle correction. Read-only source review identifies the same mandatory
+$onUpdate rule in registered grant contact merge and undo. Their two later
+assertions now retain every original field comparison except updatedAt, which
+must equal the actual unique PG operation timestamp, with grant row-XID equal
+the actual merge/undo operation row and exact full-time bounds. No product,
+permission, used/window/createdAt or money predicate changes. Those later
+contexts were NOT reached in V35; no execution acceptance is claimed. Combined
+two oracle manifests reverse to the entire original paid native byte-exact;
+renewed source and fresh full scenario remain required. See
+`deploy/controlled-paid-period-identity-timestamps155.manifest.json`.
+
 Actual paid-effect commit / timestamp oracle correction 2026-11-14
 (C12.38/C9.33/C1.08): b30 source1310/207/454 skips, fresh V35 normal86,
 strict159/356guards/367completefunctions and SDK16 pass. Original paid native

@@ -127,7 +127,14 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
     const survivor = await createContact.call({ name: "Actual paid-period buyer alias", email: "paid-period-alias@example.test" }, OWNER);
     const merge = await mergeContacts.call({ survivingId: survivor.id, duplicateId: f.parent.contactId }, OWNER);
     const moved = await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id);
-    expect(moved).toEqual(current.map(row => ({ ...row, contactId: survivor.id })));
+    const [mergeStamp] = await db().execute<{ stamp: string; count: number; stamp_count: number; actual_tx: boolean }>(sql`select min(g.updated_at)::text as stamp,
+      count(*)::integer as count,count(distinct g.updated_at)::integer as stamp_count,
+      bool_and(g.xmin=operation.xmin and g.updated_at<=operation.merged_at) as actual_tx
+      from entitlement_grants g join contact_merge_operations operation on operation.id=${merge.mergeOperationId}::uuid
+      where g.id in(${sql.join(current.map(row => sql`${row.id}::uuid`), sql`,`)})`);
+    expect(mergeStamp).toMatchObject({ count: current.length, stamp_count: 1, actual_tx: true });
+    const mergedUpdatedAt = z.coerce.date().parse(mergeStamp?.stamp);
+    expect(moved).toEqual(current.map(row => ({ ...row, contactId: survivor.id, updatedAt: mergedUpdatedAt })));
     await db().transaction(async tx => {
       expect((await controlledPaidPeriodWitnesses(tx, { subscriptionIds: [fixture.parent.id] })).entries).toHaveLength(1);
       expect((await controlledFinancialWitness(tx, { invoiceIds: [applied.invoiceId] })).paid?.entries).toEqual(invoiceHistory.paid?.entries);
@@ -135,7 +142,15 @@ describe.runIf(hasDatabase)("actual independent controlled paid-period effect155
       expect(exported.receipts).toHaveLength(1); expect(JSON.stringify(exported.receipts)).not.toMatch(/authentication|beforeEntries|beforeParentFields|bankRevisions|admissionTransaction|nonce/);
     });
     await undoContactMerge.call({ operationId: merge.mergeOperationId }, OWNER);
-    expect(await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id)).toEqual(current);
+    const restored = await db().select().from(entitlementGrants).where(eq(entitlementGrants.sourceSubscriptionId, f.parent.id)).orderBy(entitlementGrants.id);
+    const [undoStamp] = await db().execute<{ stamp: string; count: number; stamp_count: number; actual_tx: boolean }>(sql`select min(g.updated_at)::text as stamp,
+      count(*)::integer as count,count(distinct g.updated_at)::integer as stamp_count,
+      bool_and(g.xmin=operation.xmin and operation.undone_at is not null and g.updated_at>operation.merged_at and g.updated_at<=operation.undone_at) as actual_tx
+      from entitlement_grants g join contact_merge_operations operation on operation.id=${merge.mergeOperationId}::uuid
+      where g.id in(${sql.join(current.map(row => sql`${row.id}::uuid`), sql`,`)})`);
+    expect(undoStamp).toMatchObject({ count: current.length, stamp_count: 1, actual_tx: true });
+    const restoredUpdatedAt = z.coerce.date().parse(undoStamp?.stamp);
+    expect(restored).toEqual(current.map(row => ({ ...row, updatedAt: restoredUpdatedAt })));
   });
   it("applies only the authentic tiny receipt, preserves4199 unpaid and all original access, and creates no paid effect", async () => {
     f = await actualControlledPeriod84(); const open = await actualControlledOpenInvoice84(f);
