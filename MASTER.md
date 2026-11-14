@@ -3564,6 +3564,25 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Original-owner paid-privacy checkpoint2026-11-14 (C1.08/C9.33/C12.38/C11.08):
+exactee7b4a39 sourceV89 PASSES1416 assertions/225 complete files/487 explicit
+DB skips, fulltypes/lint/metadata. FreshV50 ordinary86 +strictV61 PASSES160models/
+362guards/394fullownedfunctions/4074queries/2456expressions; actual liveSDKverify8
+passes with unchanged SDK and all160 rows/journal/sequence. ALL FIVE original
+269 privacy natives PASS237.293s: actual verified buyer+frozen seller erasure
+blocks new access after retained paid money, both actual shared/exclusive
+concurrency directions behave correctly, and direct onset/shared/wrong/foreign
+lock plus request/hold ownership rebindings refuse. Original native whole file
+unchanged; independent596-table/86journal/sequence/caps/drain0 snapshots pass.
+Both prior source-pin failures preserved; exact2+2literal source reversals keep
+entire old undo/cartless code and all native/original manifest oracles unchanged;
+focused15 contracts pass. No fee-positive/media/provider/stable acceptance is
+transferred. Separate actual original-cash GET/closure causal repair, auxiliary/
+credit/proration/media/fullspec and all provider/platform/build/browser/CI/
+recovery/security/signature gates stay required. No C closure. See
+`deploy/controlled-paid-privacy85-root-checkpoint-20261114.json`.
+
+
 Paid-privacy handler-pin composition2026-11-14 (C1.08/C9.33/C12.38): V88
 fulltypes/lint PASS; contracts proceed past exact contacts-file composition then
 stop on old cartless whole paid-handler SHA. The source-pin harness reverses
@@ -4746,7 +4765,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-14. Protected main last verified fdba2817 (PR702); PR701 older/unqualified. Exactc12dff93 sourceV86 passes1412/223 complete selected files/482 explicit DB skips, fulltypes/lint/metadata; freshV48 ordinary86/strict160models/359guards/389fullownedfunctions/4066queries and currentSDKverify8 pass with unchanged SDK/row/journal/sequence proofs. Original full fee nativeV4 FAILS106.292s after actual refund projection4200paid/1returned; original-cash GET inventory reintroduces its own op+8facts through nested controlled parent, confirmed by invariant real readonly query. No fee-native/provider/stable acceptance. Earlier paid/access/undo/rollback proofs remain at explicit financial predecessors; failed datasets preserved. Held privacy/credit/proration/media source and all unchecked full-spec/provider/platform/build/browser/CI/recovery/security/signature gates remain required. Version0.2.0-beta.6; no stable/post closure. |
+| Latest launch audit | 2026-11-14. Protected main last verified fdba2817 (PR702); PR701 older/unqualified. Exactee7b4a39 sourceV89 passes1416/225 complete selected files/487 explicit DB skips, fulltypes/lint/metadata; freshV50 ordinary86/strict160models/362guards/394fullownedfunctions/4074queries and currentSDKverify8 pass. All FIVE unchanged original-owner paid-privacy cases pass237.293s (buyer/seller verified-erasure, both real concurrency directions and independent SQL guards);596-table snapshots/drain0 pass. Prior c12 full fee native fails on original-cash GET own-row reintroduction; exact causal read/closure repair remains unmerged. Earlier paid/undo/rollback evidence stays at explicit predecessors, all failures retained. Held auxiliary/credit/proration/media and every unchecked full-spec/provider/platform/build/browser/CI/recovery/security/signature gate stay required. Version0.2.0-beta.6; no stable/post closure. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |
