@@ -3564,6 +3564,27 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Fee160 actual refund checkpoint2026-11-14 (C12.38/C9.33/C1.08/C11.08):
+exactc12dff93 sourceV86 PASSES1412 assertions/223 complete selected files/482
+explicit DB skips, fulltypes/lint/metadata; freshV48 ordinary86 and strictV59
+160models/359guards/389fullownedfunctions/4066queries/2456expressions PASS.
+Current liveSDKverify8 PASS, generated SDK unchanged, all160 whole rows/journals/
+sequence unchanged and drain0. Original full fee nativeV4 FAILS106.292s AFTER
+real refund settles: paid4200/refunded1/payment2, feeops0. Actual original-cash
+GET+8facts+returnedFIN persist, then current inventory refuses. Same-source real
+systemQUERY with SQLreadonly from startup proves own op+all8facts correctly
+excluded by direct recovery reader but reintroduced by nested controlled parent.
+All596 whole rows/86journals/sequence unchanged across diagnosis. Original whole
+native/money/fee/access assertions untouched. V45/V46/V48 datasets retained;
+V3wrapper rejected intendedSQLdelta beforeDB, V1diagnostic importfailed beforeDB,
+both preserved. V49counter negative prepared/nevercreated/unrun. Fix actual
+identity-bound causal composition before new original-positive/negative natives;
+no broad history exclusions, old HMAC rewrite, cached bank or retry waiver.
+Held privacy/credit/proration/media and every full-spec/provider/platform/build/
+browser/CI/recovery/security/signature gate remain open. No C closure/stable/post.
+See `deploy/fee-refund160-root-checkpoint-20261114.json`.
+
+
 Controlled refund timestamp repair2026-11-14 (C12.38/C9.33/C1.08): original
 fee160 V46 native FAILS96.829s at deferred cash guard after genuine customer
 refund ACK+FIN committed. Readonly actual metadata proves retained processing
@@ -4673,7 +4694,7 @@ what is true now and what remains.
 | Field | Value |
 |---|---|
 | Last reconciled | 2026-10-14 |
-| Latest launch audit | 2026-11-14. Protected main last verified fdba2817 (PR702); PR701 older/unqualified. Exact5df00274 sourceV82 passes1351/218 complete selected files/480 explicit DB skips, full types/lint/metadata; freshV44 ordinary86/strict159models/357guards/377fullfunctions/4009queries and SDK8+8 pass. Original full paid/access/export/mergeundo regression passes64.723s with independent595 snapshots. Earlier clean/new-read/new-refund and injectedundo/equal+unevenatomic rollback pass at explicit financial predecessors; failed datasets preserved. Both media capabilities absent; complete media journeys unrun. Fee residual/proration and all unchecked provider/platform/build/browser/CI/recovery/security/final full-spec gates remain open. Version0.2.0-beta.6; no stable/post closure. |
+| Latest launch audit | 2026-11-14. Protected main last verified fdba2817 (PR702); PR701 older/unqualified. Exactc12dff93 sourceV86 passes1412/223 complete selected files/482 explicit DB skips, fulltypes/lint/metadata; freshV48 ordinary86/strict160models/359guards/389fullownedfunctions/4066queries and currentSDKverify8 pass with unchanged SDK/row/journal/sequence proofs. Original full fee nativeV4 FAILS106.292s after actual refund projection4200paid/1returned; original-cash GET inventory reintroduces its own op+8facts through nested controlled parent, confirmed by invariant real readonly query. No fee-native/provider/stable acceptance. Earlier paid/access/undo/rollback proofs remain at explicit financial predecessors; failed datasets preserved. Held privacy/credit/proration/media source and all unchecked full-spec/provider/platform/build/browser/CI/recovery/security/signature gates remain required. Version0.2.0-beta.6; no stable/post closure. |
 | Evidence snapshot | Owner/agent launch acceptance, 2026-10-06: actual Chromium WebAuthn, recovery download, passwordless login, scoped MCP publishing/refusal and named-agent audit in `tests/browser/agent-launch.spec.ts`; isolated-database auth/key checks, live SDK verification and seven packed-package consumer checks passed. Actual Replit/Lovable account launches remain C3.28. Historical snapshot: on `main` at `3e0af2f` after #397 (§§1–42 claim→evidence map, 118 claims: 108 evidenced / 10 struck, C11.15), #396 (F01–F12 matrix, 286 rows, C0.11/C11.09), #395 (C11.14 trash-every-row), #394 (C3.13 software remainder), #393 (C11.12 Arabic RTL), #385 (mobile→v2 deferral, §43.18, owner decision 2026-09-15), #382 (real queue dispatch) and #381 (note/task trash); dependabot #373–#380 and #83 merged, #109 closed (TS major = deliberate manual upgrade). Digests: `deploy/release-notes-2026-09-16.md`, `deploy/f-criteria-matrix.md`, `deploy/doc-claim-mapping.md`; session snapshot `SESSION_HANDOFF.md`. Full-suite verification: 3,655–3,657 tests passing, 17 deploy-recipe skips, one pre-existing `tests/modules/funnel.test.ts` isolation flake — recorded in the matrix and mapping headers. The 2026-09-04 completion-integrity pass at `8516f45` still stands for the production-boundary, package, webhook, Doctor heartbeat and signed-release evidence below; checked claims that remain shallower than their wording stay reopened. C11.16 recon is `deploy/spec-reconciliation.md`. `HANDOFF.md`, `RESTART_HANDOFF.md` and earlier `SESSION_HANDOFF.md` snapshots are historical, not planning authorities. |
 | Product owner | Tony Aly — [tonyaly.com](https://tonyaly.com) — `tony@paradisemodern.com` |
 | Creator and original author | Tony Aly |

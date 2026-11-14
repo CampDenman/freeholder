@@ -1,0 +1,130 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08",
+    "C11.08"
+  ],
+  "status": "SOURCE_SCHEMA_SDK_PASS_ORIGINAL_NATIVE_RECOVERY_FAIL",
+  "sourceHead": "c12dff93d45c3a3a526aaa92b2a00641b8c6b3cd",
+  "source": {
+    "path": "/tmp/freeholder-current-full86-financial160-source-v86-20261114-result.json",
+    "sha256": "cb6d839e2a1e2175e37fe19eb5d3092263fd83754c8b4986d31a1003105d7911",
+    "passed": true,
+    "actualAssertions": 1412,
+    "completeSelectedFiles": 223,
+    "explicitDatabaseSkips": 482,
+    "fullTypesAndAffectedLintPassed": true
+  },
+  "ordinary": {
+    "path": "/tmp/freeholder-current-full86-normal-v48-result-20261113.json",
+    "sha256": "b08348dbce28998d72da6a020b73932c568eb9af55032dbf22b7ee8555a57e62",
+    "passed": true,
+    "journalEntries": 86,
+    "database": "freeholder_current_full86_financial160_normal_v48_test_20261114",
+    "active": []
+  },
+  "strictSchema": {
+    "path": "/tmp/freeholder-current-full86-parity160-v59-result-20261113.json",
+    "sha256": "9342c8065750accf14f5725dc3fce24c6c6a3bb07e92e1b68f204626d6a10ef4",
+    "passed": true,
+    "manifest": "/tmp/freeholder-current-full86-parity160-v59-manifest-20261113.json",
+    "manifestSha256": "518f543473443eddcb54a8d899dca4e798c7ab2b2dae5841fa733ceca2a75e66",
+    "models": 160,
+    "guards": 359,
+    "completeOwnedFunctionBodies": 389,
+    "queryCount": 4066,
+    "explainExpressionCount": 2456
+  },
+  "currentSdk": {
+    "path": "/tmp/freeholder-current-full86-sdk-verification-v29-20261114-result.json",
+    "sha256": "e3167ca2145e991fe08dab95a6831bdd18d6084d04dc6e945d612fb836f6abf6",
+    "passed": true,
+    "actualVerificationAssertions": 8,
+    "generationUpdate": false,
+    "sdkUnchanged": true,
+    "all160WholeRowsJournalsSequenceUnchanged": true,
+    "privateNamesHidden": 8,
+    "generatedSdkSha256": "03ef130ab3280be047fc51f3fc51f80e621d1abd0ccbc324d085f563d0572fc9"
+  },
+  "originalNative": {
+    "path": "/tmp/freeholder-current-full86-fee160-residual-native-v4-20261114-result.json",
+    "sha256": "2fd8be4288337a2db804a23767e37d4038cea06a938bd19786cca98de85852fb",
+    "passed": false,
+    "actualPassed": 0,
+    "failed": 1,
+    "filtered": 1,
+    "seconds": 106.29233759699855,
+    "wholeOriginalFileUnchanged": true,
+    "file": "tests/modules/controlled-atomic-refund-residual84.test.ts",
+    "sourceSha256": "c627b8fb89a1cefbab815727157a16a430472733474a1eb1ff7971c32a21332f",
+    "independentAfter": {
+      "path": "/tmp/freeholder-current-full86-fee160-residual-native-v4-20261114-after.json",
+      "sha256": "ff30644bcf551494bc455e35916b238807d35a76b4eee22018f7446004b2ed02"
+    },
+    "retainedProjection": {
+      "paidMinor": 4200,
+      "refundedMinor": 1,
+      "payments": 2,
+      "feeOperations": 0
+    },
+    "failure": "Actual returnOriginalCash initial GET current-inventory mismatch; no replay/reset/new native on failed dataset."
+  },
+  "readOnlyFrameworkDiagnosis": {
+    "path": "/tmp/freeholder-current-full86-native-v48-original-inventory-v2-20261114-result.json",
+    "sha256": "279fbf3905a4c495f65bcd47cf4974f3b25d13058c988609d87d7d589232b101",
+    "passed": true,
+    "actualQueryAssertion": 1,
+    "genuineSystemQuery": true,
+    "databaseReadOnlyFromStartup": true,
+    "all596WholeRowsJournalsSequenceUnchanged": true,
+    "ownReadReintroducedByNestedControlledWitness": true,
+    "actualOwnedFacts": 8,
+    "returnedOriginalFinPreserved": true
+  },
+  "refundGuardTransition": {
+    "path": "deploy/controlled-cash-refund-transition85.manifest.json",
+    "sha256": "7acfb0520dbc72ba3983e70ef9d90a6749e5558360bd60fcbc53f9bf0cf5508e",
+    "oldFullSqlPrefixBytes": 725367,
+    "oldFullSqlPrefixPreserved": true,
+    "oneWholeGuardReversesExactly": true,
+    "normal85Bytes": 729144,
+    "normal85Sha256": "842f6d55c642ab790eeeffa4b42cb0b8e4f4e4c06c16a1a324e3dc21c63d41c7"
+  },
+  "preservedFailures": [
+    {
+      "path": "/tmp/freeholder-current-full86-fee160-residual-native-v1-20261114-result.json",
+      "sha256": "97eebdf7a926a9e2ec3dc547f8de0bd59f4e2e02b62cc2dafc24592fd7b8d4c7"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-fee160-residual-native-v2-20261114-result.json",
+      "sha256": "b470dae23a4cb15eaf0bd39c01dcd54027753f45c18d9a9957e0c58d3acf8d7e"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-fee160-residual-native-v3-20261114-harness-failure.json",
+      "sha256": "c787cecaa4ae5cfcd2e50ca80c7731cf49c990f4b025c800229c06b77deea0c2"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-native-v48-original-inventory-v1-20261114-harness-failure.json",
+      "sha256": "b8608ebebc8650f929fe0eaca781660712ecdff9e2a5d3b4f9fd104bfd989d30"
+    }
+  ],
+  "preparedCounterNegative": {
+    "status": "UNRUN",
+    "databaseNeverCreated": "freeholder_current_full86_financial160_normal_v49_test_20261114",
+    "reason": "Positive journey must pass first."
+  },
+  "acceptance": {
+    "noChecklistClosures": true,
+    "mediaCapabilitiesAbsent": true,
+    "mediaBusinessNativesUnrun": true,
+    "feeNativePassed": false,
+    "providerAccount": false,
+    "stable": false,
+    "announcement": false,
+    "independentSecurity": "Tony assigned; review pending",
+    "ownerCompletionSignature": "pending"
+  },
+  "remaining": "All unchecked MASTER43 rows remain required. Exact root cash GET causal composition, held paid-owner privacy/auxiliary owner/typed credit/proration/public completion/media protocols and full provider/platform/build/browser/CI/recovery/security/signature qualification remain open."
+}
