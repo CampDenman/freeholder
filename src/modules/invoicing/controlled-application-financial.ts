@@ -12,6 +12,10 @@ function refuse():never{throw new ServiceError("conflict","Restore the exact com
  * ancestors: those ancestors do not select their other application batches. */
 export async function controlledApplicationFinancialWitness(tx:Tx,scope:ControlledFinancialScope,targets:ControlledTargetHistory,receiptAliases:readonly string[]){
  const scopes:ControlledCashApplicationWitnessScope[]=[],profileIds=unique(scope.profileIds??[]);
+ // Every application batch has an immutable collection FK. The caller has
+ // already validated complete target selection/ancestry; an empty collection
+ // set cannot acquire application descendants or a new legacy read surface.
+ if(!targets.collections.length)return{entries:[] as ControlledCashApplicationWitnessEntry[],scopes};
  const receipts=unique([...(scope.receiptIds??[]),...receiptAliases]);
  if(profileIds.length){
   for(const profileId of profileIds){
