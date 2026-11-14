@@ -1,0 +1,39 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C11.10",
+    "C11.08"
+  ],
+  "status": "READONLY_ACTUAL_MIGRATION_BOUNDARY_REVIEW_NO_IMPLEMENTATION",
+  "rootHead": "5f64717910a931159315308901ab17c40e946a4b",
+  "safeSourceLeaf": "32ab83f45debcc2d136bf13d5cb080a1fc4ff244",
+  "installedDrizzleVersion": "0.45.4",
+  "sourceInputs": [
+    {
+      "path": "src/core/migrate.ts",
+      "bytes": 2711,
+      "sha256": "592dc5e4fd261a106a495bbcde3d65b37e7301b21afe09d64ec8352da1470c1c"
+    },
+    {
+      "path": "node_modules/drizzle-orm/pg-core/dialect.js",
+      "bytes": 43641,
+      "sha256": "a7d7921c939b228a3f1295be5f024a8c264169e368f591c2d29072ffe079b14e"
+    },
+    {
+      "path": "node_modules/drizzle-orm/pg-core/db.d.ts",
+      "bytes": 12255,
+      "sha256": "2ac845b89cae82a74e549c7c1d9f983f993033ba14376ea83cd13b3e38a8537a"
+    },
+    {
+      "path": "node_modules/drizzle-orm/migrator.d.ts",
+      "bytes": 398,
+      "sha256": "bb0519ff5ef245bbf829d51ad1f90002de702b536691f25334136864be259ec5"
+    }
+  ],
+  "actualBehavior": "Current migrateToLatest calls official Drizzle migrate under a dedicated session advisory lock. Installed PgDialect.migrate wraps ALL pending migrations in one session.transaction. Merely adding new journal entry86 does not create a new transaction boundary when earlier entries are also pending.",
+  "requiredBoundary": "Commit genuine actual0..85 ordinary migrations and real journal rows, then run FIRST quiescence guard and definitions86 in a separate real transaction under the SAME existing dedicated session advisory lock. No raw COMMIT/BEGIN inside managed transactions, fabricated migration rows, copied database journal or guard exemption.",
+  "boundedCandidate": "Use official readMigrationFiles and actual PgDialect.migrate engine on pre-boundary, exact86, post-boundary batches with the same real Drizzle orm._.session. Validate actual packaged migration identity/order/hash using source-pinned boundary. Preserve all existing metadata, errors, per-batch engine journal writes, existing skip/noURL behavior, lock lifetime and close. Actual implementation/type/native proof still required.",
+  "externalClosedSetDrain": "Mandatory independently. A second real bootstrap waiting for the existing advisory lock is an actual other backend, so guard refuses it. No rolling-bootstrap success inferred.",
+  "requiredProof": "Actual normal fresh installation, genuine committed-prefix upgrade, real transaction identity/rollback/first-guard evidence, other client/prepared transaction refusal, original product migration concurrency/lock tests, unchanged earlier source/hashes.",
+  "sourceTypesNativePg": "UNRUN"
+}

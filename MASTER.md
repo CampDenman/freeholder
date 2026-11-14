@@ -3591,13 +3591,20 @@ sequence/capabilities/drain PASS. SourceV111 fulltypes/lint/1588actual/254whole
 selected files/543explicitDBskips PASS. No provider-account acceptance inferred.
 See `deploy/atomic-auxiliary-six-native-checkpoint-20261114.json`.
 
-Current ROOT now composes qualified-isolated image admission acb15932 and SOURCE-
-ONLY fixed error-log precursor5d147d11. Entire current82/85 and generatedSDK
-remain BYTE-EXACT; original fee/money predicates unchanged. Combined V112 focused136actual/16files, fulltypes9.08s and actualCLI emit/copy/
-all6packaged bytes PASS; affected lint stops only on two NEW test type/mock
-conventions. Exact test-only lint continuation changes no assertions or production
-behavior; full combined qualification remains REQUIRED. This precursor is
-not full S0 provider-response projection or S1, which remain unfinished.
+Verified ROOT5f647179 composes image admission acb15932 and fixed error-log
+precursor5d147d11. Combined SOURCE V113 PASSES fulltypes/lint,1629actual in258
+complete selected files,543explicit DB skips, actualCLI emit/copy/all6 packaged
+bytes and license/notes/plan checks. Entire82/85 and generatedSDK stayed exact.
+All SEVEN original refund-bank controls PASS779.00s and all FIVE original causal
+controls PASS542.25s, original whole files/dd3/513 and180s per-case limits intact.
+Each suite has its own fresh ordinary86/strict161/365guards/417wholefunctions/
+4144queries/actualSDK8 and independent all596/j86/sequence/capabilities/drain.
+See `deploy/original-refund-bank-seven-checkpoint-20261114.json` and
+`deploy/original-causal-five-checkpoint-20261114.json`. These are original-suite
+acceptance only; current B source composition remains UNQUALIFIED. Full safe-
+response S0 source32ab is frozen and independently reversed, but its13 original
+adapter positives, actual rollout/upgrade, separate migration86 transaction,
+S1 and all qualification remain required. No new stable checklist closure.
 
 Required delivery groups remain the existing open §43 items (no scope change):
 - Payment/subscription/marketplace completion: B fee/credit partitions, C full

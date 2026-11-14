@@ -1,0 +1,266 @@
+{
+  "head": "32ab83f45debcc2d136bf13d5cb080a1fc4ff244",
+  "status": "READONLY_SOURCE_REVERSALS_ONLY_NO_QUALIFICATION",
+  "existing": [
+    {
+      "path": "MASTER.md",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": false
+    },
+    {
+      "path": "src/adapters/payments/stripe-controlled-customer-financials.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/adapters/payments/stripe.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/invoicing/controlled-cash-observation-parent.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-collection-authority.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/invoicing/controlled-target-raw-policy.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-calendar-source.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-cash-observation-source.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-cash-prospective-occurrences.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-cashless-state.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-cash-manifest.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-coverage.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-inventory.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-orchestration.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-plan.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-retention.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-state.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-execution.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-period-economics.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-period-target.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-plan.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proof.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proration-acceptance.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proration-economics.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-quote-proof.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-raw-financial-review.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-runtime.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-update-readback.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-verification.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-zero-policy.ts",
+      "frozenAfterExact": true,
+      "wholeOldReversalExact": true,
+      "primary5fBeforeExact": true
+    }
+  ],
+  "successors": [
+    {
+      "name": "freeholder_controlled_writer",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_controlled_operation_admissible",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_controlled_zero_closure_valid",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_controlled_collection_writer",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_controlled_target_operation_admissible",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_controlled_proration_source",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_controlled_original_period_source",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_controlled_collection_inventory",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_controlled_cash_application_shape",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_controlled_cash_bank_invoice",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_controlled_receipt_bank_observation",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_atomic_auxiliary_fee_prepost_bank",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_controlled_subscription_route_ready",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    },
+    {
+      "name": "freeholder_atomic_auxiliary_fee_ready",
+      "wholeOldReversalExact": true,
+      "primaryLatestOldBodyExact": true
+    }
+  ],
+  "fragment": {
+    "path": "deploy/controlled-safe-response85.fragment.sql",
+    "sha256": "b3d73b06a4de6fa3fe76356414674526e883fbd4fc25bbe978535cc70e2fa8ae",
+    "bytes": 208254
+  },
+  "newHeaders": 3,
+  "modelsAdded": 0,
+  "sourceTypesLintParserPgNativeProvider": "UNRUN"
+}

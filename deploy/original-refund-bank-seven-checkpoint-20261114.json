@@ -1,0 +1,95 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C11.10",
+    "C1.08"
+  ],
+  "status": "ORIGINAL_BANK_SEVEN_NATIVE_PASSED_NOT_FULL_SPEC_ACCEPTANCE",
+  "head": "5f64717910a931159315308901ab17c40e946a4b",
+  "database": "freeholder_current_full86_causal_media161_normal_v76_test_20261114",
+  "result": {
+    "head": "5f64717910a931159315308901ab17c40e946a4b",
+    "database": "freeholder_current_full86_causal_media161_normal_v76_test_20261114",
+    "passed": true,
+    "providerAccountAcceptance": false,
+    "stableAcceptance": false,
+    "exit": 0,
+    "actualPassed": 7,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 779.0031180509832,
+    "independentAfterExit": 0
+  },
+  "wholeNativeExactReference": "dd3ea9b2",
+  "originalPerCaseTimeoutMs": 180000,
+  "cases": [
+    {
+      "fullName": "actual controlled atomic current-refund bank continuation retains ALL repeated captures and proves current399 without rewriting the stale generic receipt or moving money",
+      "status": "passed",
+      "duration": 110357.011549
+    },
+    {
+      "fullName": "actual controlled atomic current-refund bank continuation refuses a genuinely admitted unfinished later GET instead of selecting the older good bank read",
+      "status": "passed",
+      "duration": 104815.37679999998
+    },
+    {
+      "fullName": "actual controlled atomic current-refund bank continuation allows only a genuine earlier closed HMAC inspection's pending\u2192current succeeded transition",
+      "status": "passed",
+      "duration": 106513.455151
+    },
+    {
+      "fullName": "actual controlled atomic current-refund bank continuation retains a genuine foreign-charge refund callback but refuses target authority",
+      "status": "passed",
+      "duration": 103305.81807799998
+    },
+    {
+      "fullName": "actual controlled atomic current-refund bank continuation invalidates an older controlled bank proof after a genuine later original-v2 GET and recovers only with a real new controlled bank read",
+      "status": "passed",
+      "duration": 107892.03608100006
+    },
+    {
+      "fullName": "actual controlled atomic current-refund bank continuation retains real signed late managed_known feedback and refuses the older success without moving canonical cash",
+      "status": "passed",
+      "duration": 127785.94995699998
+    },
+    {
+      "fullName": "actual controlled atomic current-refund bank continuation retains real signed late raw_charge_only feedback and refuses the older success without moving canonical cash",
+      "status": "passed",
+      "duration": 114587.81016999995
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/tmp/freeholder-current-full86-bank161-native-v1-20261114-config.json",
+      "bytes": 1095,
+      "sha256": "83b74e842850c9d16c896262992768d9f30afdfa75e38b10ddb01f7fe87eacc9"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-bank161-native-v1-20261114.json",
+      "bytes": 4030,
+      "sha256": "5b24eefe9b5a921b3af651af88931367066d289a0662cfc3312d3c5e51e08152"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-bank161-native-v1-20261114-result.json",
+      "bytes": 352,
+      "sha256": "bb6be332a23bd1c26b7e40b310da1ea3d8ad5e9ebcae08674460db07eb39ef87"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-bank161-native-v1-20261114-before.json",
+      "bytes": 125865,
+      "sha256": "8944a7f4a5ce10a20ecf87e32a2eb676ef3fcf32e0abda11f092e926f1d6555d"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-bank161-native-v1-20261114-after.json",
+      "bytes": 125932,
+      "sha256": "c0c1ab818835449caafcae00f52153863a60d49d3c8f3502f4c23c06bed24949"
+    }
+  ],
+  "snapshotScope": "One independent all596/journal86/161model/sequence/capability-absence/drain snapshot before and after the entire original seven-case suite; each original case retains its own money/HTTP/HMAC/FIN/currentness assertions. No per-case independent snapshot claim.",
+  "causalFive": "NEXT_REQUIRED_UNRUN",
+  "providerAccountAcceptance": false,
+  "securitySignoff": false,
+  "stableAcceptance": false
+}

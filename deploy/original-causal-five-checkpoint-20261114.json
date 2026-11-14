@@ -1,0 +1,84 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C11.10",
+    "C1.08"
+  ],
+  "status": "ORIGINAL_CAUSAL_FIVE_NATIVE_PASSED_NOT_FULL_SPEC_ACCEPTANCE",
+  "head": "5f64717910a931159315308901ab17c40e946a4b",
+  "database": "freeholder_current_full86_causal_media161_normal_v77_test_20261114",
+  "result": {
+    "head": "5f64717910a931159315308901ab17c40e946a4b",
+    "database": "freeholder_current_full86_causal_media161_normal_v77_test_20261114",
+    "passed": true,
+    "providerAccountAcceptance": false,
+    "stableAcceptance": false,
+    "exit": 0,
+    "actualPassed": 5,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 542.2497497929726,
+    "independentAfterExit": 0
+  },
+  "wholeNativeExactReference": "513f747c",
+  "originalPerCaseTimeoutMs": 180000,
+  "cases": [
+    {
+      "fullName": "actual v2 original inventory and exact closure causal comparison binds the genuine new GET's preimage and FIN while retaining full current rows and safe archive exclusions",
+      "status": "passed",
+      "duration": 71879.90904999999
+    },
+    {
+      "fullName": "actual v2 original inventory and exact closure causal comparison refuses a wrong owner and a genuine other completed GET appearing after this actual caller returned",
+      "status": "passed",
+      "duration": 84850.485755
+    },
+    {
+      "fullName": "actual v2 original inventory and exact closure causal comparison repeats only the independently current exact closure and rejects its old proof after a foreign read or genuine second closure",
+      "status": "passed",
+      "duration": 151285.89779599998
+    },
+    {
+      "fullName": "actual v2 original inventory and exact closure causal comparison fences a genuine foreign namespace admission while the actual v2 finalizer holds its full money prefix",
+      "status": "passed",
+      "duration": 107594.90487800003
+    },
+    {
+      "fullName": "actual v2 original inventory and exact closure causal comparison retains a genuine v2 partial target, reads again after its birth, and keeps its exact partial closure current only until real foreign evidence changes",
+      "status": "passed",
+      "duration": 123069.05303900008
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/tmp/freeholder-current-full86-causal161-native-v1-20261114-config.json",
+      "bytes": 1098,
+      "sha256": "cd6476c2a262c4ac7f2f522f336f83fb4b20d8844b9a3d325dd0aea4782b148b"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-causal161-native-v1-20261114.json",
+      "bytes": 3277,
+      "sha256": "b29f334d9cb927ff543959c3cb7ebe39f124880dbac85f9456986bdbd00b9bcc"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-causal161-native-v1-20261114-result.json",
+      "bytes": 352,
+      "sha256": "78539083a07cf4559a242f84eb350e3af3978f269122ad1fb4baf8ea6f21fb0b"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-causal161-native-v1-20261114-before.json",
+      "bytes": 125865,
+      "sha256": "9d067ef8caa915cfd902e377b088597a1bfb2a52574ac27fb748c37d439ef06d"
+    },
+    {
+      "path": "/tmp/freeholder-current-full86-causal161-native-v1-20261114-after.json",
+      "bytes": 125932,
+      "sha256": "857216ee3f3c3c78dfb74659b1ab54acf6703fc6960dd7253953fb0d82698767"
+    }
+  ],
+  "snapshotScope": "One independent all596/journal86/161model/sequence/capability-absence/drain snapshot before and after the original five-case suite. Original per-case money/source/FIN/currentness/concurrency/partial-closure assertions retained. No per-case independent snapshot claim.",
+  "providerAccountAcceptance": false,
+  "securitySignoff": false,
+  "stableAcceptance": false
+}
