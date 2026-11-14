@@ -30,6 +30,7 @@ import {prorationFinancialWitness} from "./proration-financial-witness";
 import {exportProrationMerchantHistory} from "./proration-merchant-export";
 
 import { controlledFinancialWitness, exportControlledFinancialHistory } from "./controlled-provider-financial-witness";
+import { merchantFeeInvocationFinancialWitness, exportMerchantFeeInvocationHistory, type MerchantFeeInvocationEntry, type MerchantFeeInvocationScope } from "./merchant-fee-invocation-witnesses";
 const scope="commerce.merchantTax";
 export const MERCHANT_TAX_ERASURE_JOB="subscriptions.quiesceMerchantSchedules";
 const witness=z.object({id:z.uuid(),contactId:z.uuid().nullable(),fingerprint:z.string().regex(/^[a-f0-9]{64}$/)});
@@ -55,6 +56,22 @@ async function merchantProfileCashOwners(tx:Tx,profileIds:string[]){
  const subscriptionChargeReceiptIds=[...new Set(originalReceipts.map(row=>row.id))].sort();
  if(paymentIds.length+subscriptionChargeReceiptIds.length>5000)return null;
  return{paymentIds,subscriptionChargeReceiptIds};
+}
+/** Target quote profile AND exact collection restrict fee callers. A shared
+ * platform profile or a sibling payment on one invoice never selects them. */
+async function merchantProfileFeeInvocations(tx:Tx,profileIds:string[],owners:{paymentIds:string[];subscriptionChargeReceiptIds:string[]},controlled:Awaited<ReturnType<typeof controlledFinancialWitness>>){
+ const scopes:MerchantFeeInvocationScope[]=[],entries=new Map<string,MerchantFeeInvocationEntry>();
+ for(const profileId of [...new Set(profileIds)]){
+  const quotes=new Set(controlled.targets?.quotes.filter(row=>row.profileId===profileId).map(row=>row.id)??[]);
+  const collections=controlled.targets?.collections.filter(row=>quotes.has(row.quoteId))??[];
+  const invoiceIds=[...new Set(collections.flatMap(row=>row.invoiceId?[row.invoiceId]:[]))];
+  if(!owners.paymentIds.length&&!owners.subscriptionChargeReceiptIds.length&&!invoiceIds.length)continue;
+  const scope={paymentIds:owners.paymentIds,receiptIds:owners.subscriptionChargeReceiptIds,invoiceIds,profileId,collectionIds:collections.map(row=>row.id)};
+  const selected=await merchantFeeInvocationFinancialWitness(tx,scope);scopes.push(scope);
+  for(const entry of selected.entries){const prior=entries.get(entry.id);if(prior&&prior.fingerprint!==entry.fingerprint)throw new ServiceError("conflict","Restore the exact original merchant fee caller before privacy export.");entries.set(entry.id,entry);}
+ }
+ if(entries.size>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant fee history.");
+ return{scopes,entries:[...entries.values()].sort((a,b)=>a.id.localeCompare(b.id))};
 }
 async function snapshot(tx:Tx,ids:string[]){
  // Preserve the outer identity inside child subqueries: the ORM renders bare
@@ -128,14 +145,20 @@ async function snapshot(tx:Tx,ids:string[]){
  const cashOwners=await merchantProfileCashOwners(tx,profileIds);
  if(!cashOwners)return null;
  const{paymentIds,subscriptionChargeReceiptIds}=cashOwners;
- const children=await merchantRefundDependencyFingerprints(tx,{paymentIds,subscriptionChargeReceiptIds});
- const controlledKeys=new Set(controlledFinancial.entries.map(row=>`${row.table}:${row.id}`));
- if(children.entries.some(row=>controlledKeys.has(`${row.table}:${row.id}`)&&controlledFinancial.entries.find(original=>original.table===row.table&&original.id===row.id)?.fingerprint!==row.fingerprint))return null;
+ const feeInvocations=await merchantProfileFeeInvocations(tx,profileIds,cashOwners,controlledFinancial);
+ const feeEntries=feeInvocations.entries.map(({table,id,fingerprint})=>({table,id,fingerprint})),feeIds=new Set(feeEntries.map(row=>row.id));
+ const allChildren=await merchantRefundDependencyFingerprints(tx,{paymentIds,subscriptionChargeReceiptIds});
+ // This new physical family belongs to its accepted target profile, independently
+ // of an ancestor subscription's earlier profile or another mixed-invoice seller.
+ const children={...allChildren,entries:allChildren.entries.filter(row=>row.table!=="merchant_fee_refund_invocations"||feeIds.has(row.id))};
+ const ownedFinancialEntries=[...controlledFinancial.entries,...feeEntries];
+ const controlledKeys=new Set(ownedFinancialEntries.map(row=>`${row.table}:${row.id}`));
+ if(children.entries.some(row=>controlledKeys.has(`${row.table}:${row.id}`)&&ownedFinancialEntries.find(original=>original.table===row.table&&original.id===row.id)?.fingerprint!==row.fingerprint))return null;
  const distinctChildren=children.entries.filter(row=>!controlledKeys.has(`${row.table}:${row.id}`));
- if(children.incomplete||originalHistoryCount+readerCount+distinctChildren.length+controlledFinancial.entries.length>5000)return null;
+ if(children.incomplete||originalHistoryCount+readerCount+distinctChildren.length+controlledFinancial.entries.length+feeEntries.length>5000)return null;
  // The immutable child set belongs to this entire merge pair. Folding it
  // inside the existing fingerprint keeps its retained JSON shape unchanged.
- return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,providerScopes,providerOperations,providerResources,amendments,resumptions,generations,periodInvoices,periodLines,...(readerCount?{originalReaders}:{}),...(prorationFinancial.entries.length?{prorationFinancial}:{}),...(controlledFinancial.entries.length?{controlledFinancial}:{}),cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
+ return rows.map(({id,contactId,material})=>({id,contactId,fingerprint:merchantTaxDigest({material,acceptedTerms,providerScopes,providerOperations,providerResources,amendments,resumptions,generations,periodInvoices,periodLines,...(readerCount?{originalReaders}:{}),...(prorationFinancial.entries.length?{prorationFinancial}:{}),...(controlledFinancial.entries.length?{controlledFinancial}:{}),...(feeEntries.length?{originalFeeInvocations:feeEntries}:{}),cashOwners:{paymentIds,subscriptionChargeReceiptIds},children})}));
 }
 registerContactReference({
  table:"merchant_tax_profiles",
@@ -215,8 +238,18 @@ registerContactPrivacySource({
   const originalCommercialHistory=await exportProrationMerchantHistory(tx,ids,{existingRows});
   if(existingRows+originalCommercialHistory.entries.length>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant financial export.");
   const controlled=await exportControlledFinancialHistory(tx,{profileIds:ids,receiptIds:owners.subscriptionChargeReceiptIds});
-  if(existingRows+originalCommercialHistory.entries.length+controlled.selected.entries.length+controlled.exported.originalCashReceipts.length>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant controlled history.");
-  return{profiles,versions,registrations,originalCash:exportOriginalCashHistory(cash),...(inspectionStops.stops.length?{originalCashInspectionStops:exportCashInspectionStops(inspectionStops.stops)}:{}),...(inspectionStops.lineages.length?{originalCashInspectionLineages:exportControlledCashInspectionLineages(inspectionStops.lineages)}:{}),...(originalCommercialHistory.entries.length?{originalCommercialHistory}:{}),...(controlled.selected.entries.length?{originalControlledProvider:controlled.exported}:{})};
+  const retainedRows=existingRows+originalCommercialHistory.entries.length+controlled.selected.entries.length+controlled.exported.originalCashReceipts.length;
+  if(retainedRows>5000)throw new ServiceError("conflict","Restore the complete bounded original merchant controlled history.");
+  const feeInvocations=await merchantProfileFeeInvocations(tx,ids,owners,controlled.selected);
+  const feeInvocationExport:Awaited<ReturnType<typeof exportMerchantFeeInvocationHistory>>["exported"]=[];
+  const exportedIds=new Set<string>();
+  for(const feeScope of feeInvocations.scopes){
+   const projection=await exportMerchantFeeInvocationHistory(tx,feeScope,{existingRows:retainedRows+exportedIds.size});
+   if(projection.selected.entries.some(row=>feeInvocations.entries.find(original=>original.id===row.id)?.fingerprint!==row.fingerprint))throw new ServiceError("conflict","Original merchant fee evidence changed during the subject export.");
+   for(const row of projection.exported)if(!exportedIds.has(row.id)){feeInvocationExport.push(row);exportedIds.add(row.id);}
+  }
+  if(exportedIds.size!==feeInvocations.entries.length)throw new ServiceError("conflict","Restore every original merchant fee caller before exporting this subject.");
+  return{profiles,versions,registrations,...(feeInvocationExport.length?{originalFeeInvocations:feeInvocationExport}:{}),originalCash:exportOriginalCashHistory(cash),...(inspectionStops.stops.length?{originalCashInspectionStops:exportCashInspectionStops(inspectionStops.stops)}:{}),...(inspectionStops.lineages.length?{originalCashInspectionLineages:exportControlledCashInspectionLineages(inspectionStops.lineages)}:{}),...(originalCommercialHistory.entries.length?{originalCommercialHistory}:{}),...(controlled.selected.entries.length?{originalControlledProvider:controlled.exported}:{})};
  },
  erase:async(tx,contactId,context)=>{
   const profiles=await tx.select({id:merchantTaxProfiles.id}).from(merchantTaxProfiles).where(eq(merchantTaxProfiles.contactId,contactId));

@@ -23,7 +23,7 @@ export const controlledTransportTables = {
 } as const;
 export type ControlledFinancialHistory = Awaited<ReturnType<typeof controlledProviderWitnesses>>;
 export type ControlledFinancialEntry = { table: string; id: string; fingerprint: string };
-export const controlledFinancialTables = { ...controlledTransportTables, ...controlledTargetTables, ...controlledCashApplicationTables, paidPeriods: "subscription_controlled_paid_period_receipts" };
+export const controlledFinancialTables = { ...controlledTransportTables, ...controlledTargetTables, ...controlledCashApplicationTables, paidPeriods: "subscription_controlled_paid_period_receipts", feeInvocations: "merchant_fee_refund_invocations" };
 const families = Object.keys(controlledTransportTables) as Array<keyof typeof controlledTransportTables>;
 export function controlledFinancialEntries(history: ControlledFinancialHistory): ControlledFinancialEntry[] {
  return families.flatMap(family => history[family].map(row => ({ table: controlledTransportTables[family], id: row.id, fingerprint: row.fingerprint })))

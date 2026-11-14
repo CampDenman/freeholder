@@ -3563,6 +3563,24 @@ open the admin until Thursday still needs to know about Monday.
 ---
 
 ## 43. Product Completion Plan — the live checklist
+
+Fee invocation160 ROOT SOURCE assembly2026-11-14 (C12.38/C9.33/C1.08/C11.08):
+frozen6e87 source now composes with qualified media5df/7322, preserving entire
+current MASTER plus only17newagentlines and the qualified cartless-compatible
+postpay helper. The four central financial/privacy readers and safe archives now
+include actual payment/receipt-owned GETs even with NULL fee operation, complete
+PG row hashes, table+UUID identity and one5000 bound, avoiding double-count with
+externally selected controlled rows. Seller filtering requires accepted target
+quote profile AND exact collection. Eight private names are in BOTH literal
+inventories; actual pair undo callback fence is retained. Owned/normal85 append
+ONLY the two exact frozen tails after whole624213/9b6144 prior prefix; model
+count160, actual publictabletarget596, journal86. Every source/schema/SDK/native
+qualification is UNRUN on this composed source. Same-source auxiliary owner,
+credit/noncash and unknown/external-return work, paid-access privacy repair,
+media/full-spec/provider/platform/build/browser/CI/recovery/security/signature
+remain required. No C closure, actual provider or stable claim. See
+`deploy/fee-invocation160-root-assembly.manifest.json`.
+
 Original atomic-fee residual source checkpoint 2026-11-14 (C12.38/C9.33/
 C1.08/C11.08): real4199/F400+1/F0 captures and tiny principal return retain the
 immutable Fi and explicit whole399 debt until the exact original fee1 return,

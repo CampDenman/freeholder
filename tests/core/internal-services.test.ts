@@ -16,6 +16,14 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "invoicing.atomicFeeBankSource",
+  "invoicing.recordMerchantFeeInvocationObservation",
+  "invoicing.persistMerchantFeeInvocation",
+  "invoicing.assertMerchantFeePostPreflight",
+  "invoicing.prepareMerchantFeePreflight",
+  "invoicing.assertMerchantFeeInvocation",
+  "invoicing.prepareMerchantFeeDispatchInvocation",
+  "invoicing.prepareMerchantFeeSourceInvocation",
   "entitlements.advanceSubscriptionPeriod",
   "subscriptions.completePaidControlledPeriod",
   "subscriptions.pendingPaidControlledPeriods",
@@ -458,6 +466,14 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "invoicing.atomicFeeBankSource",
+  "invoicing.recordMerchantFeeInvocationObservation",
+  "invoicing.persistMerchantFeeInvocation",
+  "invoicing.assertMerchantFeePostPreflight",
+  "invoicing.prepareMerchantFeePreflight",
+  "invoicing.assertMerchantFeeInvocation",
+  "invoicing.prepareMerchantFeeDispatchInvocation",
+  "invoicing.prepareMerchantFeeSourceInvocation",
   // C9.33/C12.38: independently guarded original paid/access phases stay private.
   "entitlements.advanceSubscriptionPeriod",
   "subscriptions.completePaidControlledPeriod",

@@ -16,6 +16,7 @@ import { legacyBankFeedbackFinancialWitness } from "./legacy-bank-feedback-store
 import { originalCashRecoveryFinancialWitness } from "./original-cash-recovery-store";
 import { controlledFinancialWitness } from "./controlled-provider-financial-witness";
 import { cashInspectionFinancialWitness } from "./merchant-cash-inspection-financial";
+import { merchantFeeInvocationFinancialWitness } from "./merchant-fee-invocation-witnesses";
 export interface MerchantRefundDependencyReceipt { version: 1; entries: Array<{ table: string; id: string; fingerprint: string }>; incomplete: boolean }
 const MAX = 5000;
 const ids = (column: string, values: readonly string[]): SQL => values.length
@@ -39,6 +40,9 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
     paymentIds = [...new Set([...paymentIds, ...aliases.map(row => row.id)])];
   }
   if (paymentIds.length > MAX || receiptIds.length > MAX) return incomplete();
+  // NULL-operation source/preflight GETs still belong to their real payment/receipt.
+  const feeInvocations = await merchantFeeInvocationFinancialWitness(tx, { paymentIds, receiptIds });
+  const feeCount = feeInvocations.entries.length;
   const collected: Array<{ table: string; rows: Record<string, unknown>[] }> = [];
   // Include original owners even before their first GET, and signed feedback
   // even before an owner exists. Keep every authorization/closure occurrence.
@@ -105,16 +109,17 @@ export async function merchantRefundDependencyFingerprints(tx: Tx, input: { paym
   await read("merchant_cash_return_primary_observations", tables.merchantCashReturnPrimaryObservations, ids("inspection_id", inspectionIds));
   await read("merchant_cash_return_observations", tables.merchantCashReturnObservations, ids("inspection_id", inspectionIds));
   await read("merchant_unapplied_charge_resolution_refunds", tables.merchantUnappliedChargeResolutionRefunds, ids("resolution_id", resolutionIds));
-  if (overflow || collected.reduce((sum, group) => sum + group.rows.length, 0) > MAX) return incomplete();
+  if (overflow || feeCount + collected.reduce((sum, group) => sum + group.rows.length, 0) > MAX) return incomplete();
   // Includes paid-effect receipts only through validated target invoice FKs;
   // retain them before any cash-route shortcut and within this shared MAX.
   const controlled = await controlledFinancialWitness(tx, { paymentIds, receiptIds });
-  if (controlled.incomplete || collected.reduce((sum, group) => sum + group.rows.length, 0) + controlled.entries.length > MAX) return incomplete();
+  if (controlled.incomplete || feeCount + collected.reduce((sum, group) => sum + group.rows.length, 0) + controlled.entries.length > MAX) return incomplete();
   const inspectionStops = await cashInspectionFinancialWitness(tx, { paymentIds, receiptIds });
   const selectedInspections = new Set(inspectionIds);
   if (inspectionStops.admissions.length !== selectedInspections.size || inspectionStops.admissions.some(row => !selectedInspections.has(row.id))
-    || collected.reduce((sum, group) => sum + group.rows.length, 0) + controlled.entries.length + inspectionStops.entries.length + inspectionStops.lineageEntries.length > MAX) return incomplete();
+    || feeCount + collected.reduce((sum, group) => sum + group.rows.length, 0) + controlled.entries.length + inspectionStops.entries.length + inspectionStops.lineageEntries.length > MAX) return incomplete();
   const entries: MerchantRefundDependencyReceipt["entries"] = [...controlled.entries,
+    ...feeInvocations.entries.map(({ table, id, fingerprint }) => ({ table, id, fingerprint })),
     ...inspectionStops.entries.map(({ table, id, fingerprint }) => ({ table, id, fingerprint })),
     ...inspectionStops.lineageEntries.map(({ table, id, fingerprint }) => ({ table, id, fingerprint }))];
   for (const group of collected) for (const row of group.rows) {

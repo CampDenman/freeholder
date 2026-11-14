@@ -1,0 +1,112 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "checklist": [
+    "C12.38",
+    "C9.33",
+    "C1.08",
+    "C11.08"
+  ],
+  "execution": "SOURCE_ASSEMBLED_UNQUALIFIED",
+  "leaf": "6e87db53547bc1f91a814b36ba0e96a315775b20",
+  "merge": "9b2d666a",
+  "baselineQualifiedMedia": "7322c43f",
+  "newModelCount": 1,
+  "totalAffectedModelTarget": 160,
+  "newPhysicalTables": 1,
+  "newTable": "merchant_fee_refund_invocations",
+  "ordinaryMigrationCount": 86,
+  "normal85": {
+    "path": "db/migrations/0085_controlled_collection_application.sql",
+    "sha256": "d3cf5038787eff2ecf5f9c223fe7214bdb1314f658018f2c19fb39c56c497948",
+    "bytes": 725367,
+    "entirePriorPrefix": {
+      "bytes": 624213,
+      "sha256": "9b6144a71e1a898406f048a441df6178c89a8de0f8073fa3557191525a57f901"
+    },
+    "tailOrder": [
+      {
+        "path": "deploy/controlled-atomic-refund-residual84.fragment.sql",
+        "sha256": "cc1d30e92c78757465c1ff0198e6d5d6548c77a1deba743835a93d3cddedbb83",
+        "bytes": 52377
+      },
+      {
+        "path": "deploy/merchant-fee-invocation84.fragment.sql",
+        "sha256": "335cfe04fcc4868e05952f8414cfbf835a46ef1238f0faf2298213f6ca96224d",
+        "bytes": 48725
+      }
+    ]
+  },
+  "integrationPatch": {
+    "path": "deploy/fee-invocation160-integration.source.patch",
+    "sha256": "d5e94fc07113655bab4aac9ccc63dd26a08d04ce37f5a979274b9b395a0ad648",
+    "wholeSixFilesReverseExactRequired": true
+  },
+  "files": [
+    {
+      "path": "src/modules/invoicing/controlled-provider-financial-witness.ts",
+      "beforeSha256": "5fa8803604a4713abba568c38ce1c7307d4bc1a4e0291df9ffa1364070181386",
+      "afterSha256": "f9f54c6cc62e32785bd92116756bff258f0f7ed55a3af901eed748712edfde10"
+    },
+    {
+      "path": "src/modules/invoicing/merchant-payment-dependencies.ts",
+      "beforeSha256": "7fbeeff48e0eb8a4b9581074585b3dd328b0c35de84dfbf09a5121c0e4ef0e07",
+      "afterSha256": "8eca6e47055ca339aeefa8a15d48ba2c706cf4e9b2d9500240b9eab4ceecbb7b"
+    },
+    {
+      "path": "src/modules/invoicing/merchant-refund-dependencies.ts",
+      "beforeSha256": "1498171242b487aab83b104c714251fb999c949a6ca4d0f645dd8fd7eaf68365",
+      "afterSha256": "9053d7de9ca97dfb781e64487ca95b13d864a2ba2424631f689294418b962616"
+    },
+    {
+      "path": "src/modules/invoicing/merchant-tax-privacy.ts",
+      "beforeSha256": "dd7e85d041f31049f3cd24e061a4d99f52554a134385f4e0db917a39b6a807b6",
+      "afterSha256": "ea66dedd89c2e80b9d150481f21406e798158c22a50cb990caa8288d3ce3c5f3"
+    },
+    {
+      "path": "src/modules/subscriptions/merchant-scope.ts",
+      "beforeSha256": "189594a211f7bfe9430d48f338bdf2d064220a950ed8f46dcd1f87f0b9c069ca",
+      "afterSha256": "cf050b787c53a0b54f9754f4e005d70a783576da3bf3e5578abb1f6c85c9545f"
+    },
+    {
+      "path": "tests/core/internal-services.test.ts",
+      "beforeSha256": "56e7108c7ff9976d7b0bc97ce2c744579d819f55aaf7088c33fcabdd54bdbbab",
+      "afterSha256": "c647562674a1ac9f83676ab25fabe92c7761992a4e4e8ccad2e59c1d2437cd77"
+    }
+  ],
+  "witnessPolicy": "Four central readers include payment/receipt-owned NULL-operation GETs; table+actualUUID+fullPG SHA; one5000 bound, externally selected controlled/fee entries counted once. Original empty shapes stay empty. Merchant ownership uses accepted quote profile AND actual collection, preserving payment filtering.",
+  "safeArchivePolicy": "Explicit exportMerchantFeeInvocationHistory only; no nonce/actor/HMAC/request/raw first-result/process/hosting/bank bodies.",
+  "callbackFence": {
+    "path": "src/core/contacts/service.ts",
+    "lockProvider": "src/modules/invoicing/contact-undo-financial-lock.ts",
+    "lockProviderSha256": "2bfbe0712e82b38e40026133ee076103ee4cdb53329623bc3324d3dc4904617e",
+    "mode": "actual pair financial prefix then NONBLOCKING merchant-fee-invocation:<paymentUUID>; genuine raw callbacks block sharedidentity/cash/samekey beforewrites"
+  },
+  "literalPrivateInventoryNames": [
+    "invoicing.prepareMerchantFeeSourceInvocation",
+    "invoicing.prepareMerchantFeeDispatchInvocation",
+    "invoicing.assertMerchantFeeInvocation",
+    "invoicing.prepareMerchantFeePreflight",
+    "invoicing.assertMerchantFeePostPreflight",
+    "invoicing.persistMerchantFeeInvocation",
+    "invoicing.recordMerchantFeeInvocationObservation",
+    "invoicing.atomicFeeBankSource"
+  ],
+  "publicScopedNames": [
+    "invoicing.merchantFeeInvocationRecoveryList",
+    "invoicing.merchantFeeInvocationStopPlan",
+    "invoicing.reviewMerchantFeeInvocationStopped",
+    "invoicing.reviewAtomicFeeReconciliation",
+    "invoicing.refreshAtomicFeeBankEvidence"
+  ],
+  "rootMergeResolution": "Full current MASTER plus exactly17newagentlines; entire qualified cartless-compatible postpay helper retained",
+  "providerAcceptance": false,
+  "stableAcceptance": false,
+  "required": [
+    "full current-source and strict160 schema/model/guard/function checks",
+    "actual SDK generation and5public names/private nonexposure verification",
+    "current fullpaid regression and two real residual/preflight natives",
+    "same-source auxiliary/credit/unknown/external returns",
+    "new paid-access privacy gate and complete media protocol",
+    "all unchecked MASTER43/provider/platform/recovery/security/final acceptance"
+  ]
+}
