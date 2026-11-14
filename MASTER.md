@@ -3564,6 +3564,22 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Same-owner auxiliary ROOT assembly2026-11-14 (C12.38/C9.33/C1.08/C11.08):
+frozenaf221 source now follows qualified paid-privacy ee7b/fedc, preserving full
+current MASTER plus only12newleaflines and the actual root namespace/type fixes.
+Owned/normal85 append exact74684/ee68ae91 tail AFTER whole758024/9425c8e2 prefix.
+Five new functions/four full reversible successors retain old fee dispatch and
+all old original journal/default history branches; exactly2kind literals append
+after13old kinds and2lifecycle indexes, zero models/columns/triggers. Three new
+system/external:false names appear in BOTH private literal inventories. Same
+existing original owner/op/fact/closure families govern all four root current
+financial/privacy readers; no hash-domain substitution or shared-profile scope.
+All composed source/schema/SDK and desired native qualification UNRUN; actual
+GET/closure causal repair and full credit/proration/unknown/media/provider/spec
+acceptance remain required. No C closure/stable/post. See
+`deploy/atomic-auxiliary-fee84-root-assembly.manifest.json`.
+
+
 Same-owner atomic fee source 2026-11-14 (C12.38/C9.33/C1.08/C11.08): zero
 new models; two explicitly versioned original-journal fee-only fact kinds and
 exact lifecycle indexes preserve original full/partial return semantics and the

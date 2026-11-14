@@ -16,6 +16,9 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "invoicing.retainAtomicAuxiliaryFeeTarget",
+  "invoicing.claimAtomicAuxiliaryFeeReturn",
+  "invoicing.finalizeAtomicAuxiliaryFeeReturn",
   "invoicing.atomicFeeBankSource",
   "invoicing.recordMerchantFeeInvocationObservation",
   "invoicing.persistMerchantFeeInvocation",
@@ -466,6 +469,9 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "invoicing.retainAtomicAuxiliaryFeeTarget",
+  "invoicing.claimAtomicAuxiliaryFeeReturn",
+  "invoicing.finalizeAtomicAuxiliaryFeeReturn",
   "invoicing.atomicFeeBankSource",
   "invoicing.recordMerchantFeeInvocationObservation",
   "invoicing.persistMerchantFeeInvocation",
