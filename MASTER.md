@@ -3598,6 +3598,18 @@ See `deploy/media-origin-tcp-typing-root-continuation.manifest.json`.
   capability, usable initializer or provider/stable acceptance is claimed.
   See `deploy/media-namespace-origin-source-2026-11-14.md`. All rows stay open.
 
+  New-origin image containment 2026-11-14 is SOURCE ONLY: NEW DigitalOcean
+  storage refuses unknown account or unsupported pinned app/source before
+  resource purchase. The reader reuses exact existing signed main-CI image
+  policy and requires actual manifest/config/source-profile bytes. No complete
+  runtime profile or Docker/CI label is published while initializer/fence/
+  journal/recovery consumers remain unfinished.17 prepared controls are UNRUN;
+  inherited generic orchestration explicitly uses retained fictional legacy
+  buckets, preserving its assertions/counters. True-new TCP acceptance now
+  additionally requires a real published compatible immutable image, with
+  genuine public provenance checks; no fixture verifier/ABI supplies authority.
+  See `deploy/media-origin-image-admission-source-2026-11-14.md`. No row closes.
+
 
 Current causal/media161 ROOT checkpoint2026-11-14 (C12.38/C1.12/C11.08/C1.08/
 C9.33): exact8df9e847 current SQL sourceV97 passes1497/240 complete selected

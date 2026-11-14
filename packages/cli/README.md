@@ -77,6 +77,15 @@ beta, so npm's `latest` tag does not carry it. The dry run reads your account
 and prints every step it would take and what it would cost each month, at
 DigitalOcean's own list price; it creates nothing.
 
+New storage requires a verified provider account and an immutable image with
+the complete original-storage initialization and recovery contract. The CLI
+uses GitHub CLI (`gh attestation verify`) to verify the actual published image,
+then checks its exact source profile before buying storage or starting the app.
+The complete profile remains unpublished while its consuming protocol is
+unfinished, so unsupported new launches stop before purchases. A dry run is a
+cost plan, not readiness acceptance. Existing retained legacy storage keeps
+its separate resume path and acquires no new-origin proof.
+
 **Launching with an AI agent.** An agent can run the dry run and show you the
 plan and cost. Run the real launch in your own terminal: it ends by printing
 the owner claim link (and opening it in your browser on a desktop), and that

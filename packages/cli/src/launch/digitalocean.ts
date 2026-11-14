@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { SpacesClient } from "./s3.js";
 import { createNamespaceOrigin, requireReturnedNamespaceOrigin } from "./namespace-origin.js";
+import { requireNamespaceOriginImage } from "./image.js";
 import { LaunchFailure, type LaunchOptions, type LaunchProvider, type LaunchState } from "./types.js";
 
 const API = "https://api.digitalocean.com";
@@ -82,6 +83,7 @@ export function digitalOcean(token: string, fetcher: typeof fetch = fetch, sleep
       const notes: string[] = [];
       const { account } = await api<{ account: { status: string; uuid?: string } }>("GET", "/v2/account");
       actualAccountId = typeof account.uuid === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(account.uuid) ? account.uuid : null;
+      if (!state?.buckets && !actualAccountId && !options.dryRun) throw new LaunchFailure("The original provider account identity could not be verified.", "Keep existing launch records and check the provider account before creating new storage. An unknown account cannot be treated as a legacy bucket.", EXIT_FAILED);
       const { ssh_keys: keys } = await api<{ ssh_keys: { id: number; fingerprint: string; name: string }[] }>("GET", "/v2/account/keys?per_page=200");
       const key = options.sshKey ? keys.find((k) => String(k.id) === options.sshKey || k.fingerprint === options.sshKey) : keys.length === 1 ? keys[0] : undefined;
       if (!key) {
@@ -109,6 +111,16 @@ export function digitalOcean(token: string, fetcher: typeof fetch = fetch, sleep
     async storage(options, state, save, originDirectory) {
       const { endpoint, region } = spacesEndpoint(options.region);
       const buckets = state.buckets ?? { media: `${options.name}-media`, backups: `${options.name}-backups` };
+      if (!state.buckets || state.namespaceOrigin) {
+        if (!originDirectory || !actualAccountId) throw new LaunchFailure("New storage needs its original private launch records and verified provider identity.", "Run the owner launch workflow with a compatible released image. Do not fall back to an unverified legacy bucket.", EXIT_FAILED);
+        await requireNamespaceOriginImage(state.image, fetcher);
+      }
+      // A resumed known origin must revalidate account/binding/first receipt
+      // even when its permanent key already exists and no create is pending.
+      if (state.namespaceOrigin) {
+        if (!originDirectory || !actualAccountId || state.namespaceOrigin.bucket !== buckets.media) throw new LaunchFailure("The original storage creation needs recovery.", "Keep the original launch records. Do not recreate the bucket or replace its first origin receipt.", EXIT_FAILED);
+        await requireReturnedNamespaceOrigin(originDirectory, buckets.media, { accountId: actualAccountId, endpoint, region });
+      }
       if (state.orphanTemporaryKeyId) {
         await deleteKey(state.orphanTemporaryKeyId).catch(() => undefined);
         await save({ orphanTemporaryKeyId: undefined });
@@ -116,10 +128,6 @@ export function digitalOcean(token: string, fetcher: typeof fetch = fetch, sleep
       if (state.spacesKeyId && state.buckets) return;
       // Old/resumed launches retain their actual existing names and behavior.
       // Only a genuinely new launch can acquire this nonce-origin admission.
-      if (state.namespaceOrigin) {
-        if (!originDirectory || !actualAccountId || state.namespaceOrigin.bucket !== buckets.media) throw new LaunchFailure("The original storage creation needs recovery.", "Keep the original launch records. Do not recreate the bucket or replace its first origin receipt.", EXIT_FAILED);
-        await requireReturnedNamespaceOrigin(originDirectory, buckets.media, { accountId: actualAccountId, endpoint, region });
-      }
       const resumedOrigin = Boolean(state.namespaceOrigin);
       const origin = originDirectory && actualAccountId && !state.buckets ? await createNamespaceOrigin(originDirectory, { siteName: options.name, accountId: actualAccountId, endpoint, region }) : null;
       if (origin) { buckets.media = origin.bucket; await save({ buckets, namespaceOrigin: { version: 1, bucket: origin.bucket } }); }
