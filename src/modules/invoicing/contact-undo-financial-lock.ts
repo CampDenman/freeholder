@@ -53,7 +53,7 @@ async function discover(tx: Tx, contactIds: readonly string[]) {
   ), owned(kind,id) as (
    select 'subscription',s.id from subscriptions s where s.contact_id in (${list(contactIds)})
    union select 'invoice',i.id from invoices i where i.contact_id in (${list(contactIds)})
-   union select 'note',n.id from credit_notes n where n.contact_id in (${list(contactIds)})
+   union select 'note',n.id from credit_notes n join invoices i on i.id=n.invoice_id where i.contact_id in (${list(contactIds)})
   ), reachable(kind,id) as (
    select kind,id from owned union select a.b_kind,a.b_id from reachable r join adjacent a on a.a_kind=r.kind and a.a_id=r.id where a.b_id is not null
   ) select kind,id::text from reachable order by kind,id limit 5001`);
@@ -101,6 +101,12 @@ export async function lockContactFinancialUndo(tx: Tx, duplicateId: string, surv
  for (const id of before.inspections) {
   const [read] = await tx.execute<{locked: boolean}>(sql`select pg_try_advisory_xact_lock(hashtext(${`merchant-return-read:${id}`})) as locked`);
   if (read?.locked !== true) refuse();
+ }
+ // Tracked fee callbacks are also bound to the actual payment. Never wait
+ // on their private callback key after taking canonical/cash locks.
+ for (const id of ids("payment")) {
+  const [fee] = await tx.execute<{locked: boolean}>(sql`select pg_try_advisory_xact_lock(hashtext(${`merchant-fee-invocation:${id}`})) as locked`);
+  if (fee?.locked !== true) refuse();
  }
  // A new edge/namespace discovered while acquiring the prefix is refusal,
  // never a late acquisition of an earlier lock category.

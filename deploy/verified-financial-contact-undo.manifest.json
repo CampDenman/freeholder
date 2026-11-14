@@ -1,4 +1,5 @@
 {
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
   "base": "3ec20ddee89330b80b05e7fb03203a0ceaceeabe",
   "execution": "PREPARED_UNRUN_SOURCE_ONLY",
   "sourcePatch": {
@@ -29,7 +30,7 @@
   },
   "lockProvider": {
     "path": "src/modules/invoicing/contact-undo-financial-lock.ts",
-    "sha256": "aa8610e47594de1f1ac5e4a80fd8a75eb81740dafd38aa48a266c40c6ffdf654",
+    "sha256": "2bfbe0712e82b38e40026133ee076103ee4cdb53329623bc3324d3dc4904617e",
     "prefix": [
       "contact-identity-privacy exclusive",
       "ALL controlled-provider advisory and actual resource rows",
@@ -39,6 +40,7 @@
       "ALL sorted credit-note advisory",
       "ALL sorted subscription-cash namespaces",
       "NONBLOCKING merchant-return-read exact inspection keys",
+      "NONBLOCKING merchant-fee-invocation exact payment keys",
       "Full identical FK/namespace/inspection rediscovery before comparison"
     ]
   },
@@ -89,5 +91,23 @@
       "key": "payment:<actual UUID> and original cash namespace; later qualified charge-only successor preserved",
       "sourceSha256": "b1cadc24ef55c967a845de73884528ca52966bd49417b1f8ad780554168e403c"
     }
-  ]
+  ],
+  "rootLockProviderContinuation": {
+    "status": "SOURCE_ONLY_PREPARED_UNRUN",
+    "beforeSha256": "aa8610e47594de1f1ac5e4a80fd8a75eb81740dafd38aa48a266c40c6ffdf654",
+    "afterSha256": "2bfbe0712e82b38e40026133ee076103ee4cdb53329623bc3324d3dc4904617e",
+    "wholeFileReverseExact": true,
+    "finiteDelta": [
+      {
+        "before": "union select 'note',n.id from credit_notes n where n.contact_id in (${list(contactIds)})",
+        "after": "union select 'note',n.id from credit_notes n join invoices i on i.id=n.invoice_id where i.contact_id in (${list(contactIds)})"
+      },
+      {
+        "before": " // A new edge/namespace discovered while acquiring the prefix is refusal,\n",
+        "after": " // Tracked fee callbacks are also bound to the actual payment. Never wait\n // on their private callback key after taking canonical/cash locks.\n for (const id of ids(\"payment\")) {\n  const [fee] = await tx.execute<{locked: boolean}>(sql`select pg_try_advisory_xact_lock(hashtext(${`merchant-fee-invocation:${id}`})) as locked`);\n  if (fee?.locked !== true) refuse();\n }\n // A new edge/namespace discovered while acquiring the prefix is refusal,\n"
+      }
+    ],
+    "reason": "Credit notes own invoice_id, not contact_id; select their actual invoice FK. Tracked fee callbacks additionally use exact actual payment key; only nonblocking refusal added. No original financial fingerprint/edge/bound or canonical lock removed.",
+    "futureFeeActivationDependency": "Actual fee callback implementation must join identity/shared namespace or this exact key before raw writes; fence alone proves no new callback producer."
+  }
 }

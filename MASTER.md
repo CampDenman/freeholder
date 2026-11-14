@@ -3563,6 +3563,19 @@ open the admin until Thursday still needs to know about Monday.
 ---
 
 ## 43. Product Completion Plan — the live checklist
+
+Undo lock-source follow-up 2026-11-14 (C1.08/C12.38): full source V77
+passes1321/210/458 explicit DB skips, but source review then finds one raw SQL
+ownership typo before native execution: credit_notes has invoice_id, no
+contact_id. The lock discovery now joins its real invoice FK before contact
+selection, preserving all recursive edges/bounds. An additional exact actual
+payment callback key uses NONBLOCKING try-lock/refusebusy only for tracked fee
+invocations; no fingerprint or canonical prefix is waived. The complete helper
+reverses byte-exact to the frozen agent source through two explicit deltas;
+new source/native checks remain required. Future fee producer/callback fencing
+is still an activation dependency, not qualified by this key alone. Licensing
+metadata added to the source manifest; original source patch and3original body
+hashes remain unchanged. All full-spec/stable gates stay open.
 Financial merge undo verification SOURCE repair2026-11-14 (C1.08/C12.38):
 actual cartless V39 failed after merge although a genuine read-only diagnostic
 proved all370 current subscription evidence entries exactly equal to its stored
