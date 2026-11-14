@@ -6,9 +6,9 @@ import {db} from "@/core/db";
 import {currentServiceTransaction} from "@/core/plugins/context";
 import type {StorageAdapter} from "@/adapters/storage/types";
 import {mediaStorageTransferObjects,mediaStorageTransferPlans} from "./transfer-schema";
-import {mediaObjectWrites} from "./write-schema";
 import {objectKeyDigest} from "./write-ledger";
 import {transferConflict} from "./transfer-proof";
+import {originalPhysicalLineage} from "./transfer-physical-lineage";
 import {configuredPhysicalStorage} from "./transfer-storage";
 
 export async function adoptedPhysicalObject(key:string){
@@ -22,15 +22,8 @@ export async function adoptedPhysicalObject(key:string){
   return null;
  }
  const verified=await executor.execute<{capability:string}>(sql`select freeholder_media_transfer_request_capability_v1() as capability`);if(verified[0]?.capability!=="verified-original-request-inventory-v1")transferConflict("The exact original adopted-read protocol is unavailable.");
- const rows=await executor.select({object:mediaStorageTransferObjects,plan:mediaStorageTransferPlans,receipt:mediaObjectWrites}).from(mediaStorageTransferObjects)
-  .innerJoin(mediaStorageTransferPlans,eq(mediaStorageTransferPlans.id,mediaStorageTransferObjects.planId))
-  .leftJoin(mediaObjectWrites,eq(mediaObjectWrites.id,mediaStorageTransferObjects.targetReceiptId))
-  .where(and(eq(mediaStorageTransferObjects.keyDigest,objectKeyDigest(key)),isNotNull(mediaStorageTransferPlans.adoptedAt))).limit(2);
- if(!rows.length)return null;
- if(rows.length!==1)transferConflict("The original object has conflicting physical adoption receipts.");
- const{object,plan,receipt}=rows[0]!;
- if(!receipt||object.key!==key||!["adopted","cleanup_pending","complete"].includes(object.state)||!object.targetRevision||receipt.state!=="accepted"||receipt.deletedAt||receipt.redactedAt||receipt.namespace!==plan.targetNamespace||receipt.sha256!==object.sha256||receipt.bytes!==object.bytes||receipt.key!==object.targetKey)transferConflict("The adopted original physical copy needs recovery before it can be read.");
- return{binding:plan.originalTarget,key:object.targetKey,receipt:{sha256:object.sha256,bytes:object.bytes}};
+ const lineage=await originalPhysicalLineage(executor,key);
+ return lineage?{binding:lineage.binding,key:lineage.key,receipt:{sha256:lineage.sha256,bytes:lineage.bytes}}:null;
 }
 /** Read-only facade covers all existing logical-key consumers, including
  * gallery packages, social images and signed URLs. Write methods are untouched.

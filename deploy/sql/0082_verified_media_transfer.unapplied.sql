@@ -281,7 +281,7 @@ $$;
 -- First capture and original physical evidence stay immutable. Redaction is a
 -- separate, one-way transition after every copy/caller actually retires.
 CREATE OR REPLACE FUNCTION freeholder_media_transfer_evidence_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE minimizing boolean:=false; object_id uuid;
+DECLARE minimizing boolean:=false; object_id uuid; source_receipt media_object_writes;
 BEGIN
  IF TG_TABLE_NAME='media_storage_writer_drains' THEN
   IF current_setting('freeholder.media_transfer_operator_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Writer stop evidence belongs to the original operator executor' USING ERRCODE='23514'; END IF;
@@ -289,6 +289,13 @@ BEGIN
   IF current_setting('freeholder.media_transfer_v1',true) IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Use the shared verified-transfer writer' USING ERRCODE='23514'; END IF;
  END IF;
  IF TG_OP='DELETE' THEN RAISE EXCEPTION 'Original transfer evidence cannot be deleted' USING ERRCODE='23514'; END IF;
+ IF TG_TABLE_NAME='media_storage_transfer_receipts' THEN
+  IF TG_OP='INSERT' THEN
+   SELECT * INTO source_receipt FROM media_object_writes WHERE id=NEW.receipt_id;
+   IF NEW.original_snapshot_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(NEW.original_snapshot) OR NEW.original_snapshot->>'id' IS DISTINCT FROM NEW.receipt_id::text THEN RAISE EXCEPTION 'Capture the exact immutable original source receipt before transfer' USING ERRCODE='23514'; END IF;
+   IF source_receipt.operation_kind='put' AND source_receipt.writer_finished_at IS NULL AND (NEW.original_snapshot->'writerFinishedAt' IS DISTINCT FROM 'null'::jsonb OR NOT freeholder_media_transfer_source_review_matches(NEW.object_id,NEW.receipt_id,NEW.original_snapshot)) THEN RAISE EXCEPTION 'A missing original source finish needs its affirmative review in the FIRST capture; never fill an old snapshot from current evidence' USING ERRCODE='23514'; END IF;
+  END IF;
+ END IF;
  IF TG_TABLE_NAME='media_storage_writer_drains' THEN
   IF TG_OP='INSERT' THEN
    IF NEW.state<>'capturing' OR NEW.original_processes<>'{}'::jsonb OR NEW.stop_proof_digest IS NOT NULL OR NEW.verified_at IS NOT NULL OR NEW.released_at IS NOT NULL THEN RAISE EXCEPTION 'A writer drain is born capturing, never stopped or released' USING ERRCODE='23514'; END IF;
@@ -399,7 +406,11 @@ BEGIN
   IF EXISTS(SELECT 1 FROM media_storage_transfer_subjects subject JOIN data_requests request ON request.contact_id=subject.contact_id WHERE subject.object_id=NEW.id AND request.kind='erasure' AND request.status IN ('verified','in_progress','completed','partially_completed')) THEN RAISE EXCEPTION 'The original owner privacy request prevents adoption' USING ERRCODE='23514'; END IF;
  END IF;
  IF TG_TABLE_NAME='media_storage_transfer_plans' AND NEW.adopted_at IS NOT NULL AND OLD.adopted_at IS NULL THEN
-  IF NEW.inventory_count<>(SELECT count(*) FROM media_storage_transfer_objects WHERE plan_id=OLD.id) OR EXISTS(SELECT 1 FROM media_storage_transfer_objects WHERE plan_id=OLD.id AND state<>'adopted') OR EXISTS(SELECT 1 FROM media_objects physical WHERE NOT EXISTS(SELECT 1 FROM media_storage_transfer_objects member WHERE member.plan_id=OLD.id AND physical.key IN (member.object_key,member.target_object_key))) THEN RAISE EXCEPTION 'Only a complete unchanged original inventory can be adopted atomically' USING ERRCODE='23514'; END IF;
+  IF NEW.inventory_count<>(SELECT count(*) FROM media_storage_transfer_objects WHERE plan_id=OLD.id) OR EXISTS(SELECT 1 FROM media_storage_transfer_objects WHERE plan_id=OLD.id AND state<>'adopted') OR EXISTS(SELECT 1 FROM media_objects physical WHERE NOT EXISTS(
+   SELECT 1 FROM media_storage_transfer_objects member WHERE member.plan_id=OLD.id AND (
+    physical.key=member.target_object_key AND EXISTS(SELECT 1 FROM media_object_writes target WHERE target.id=member.target_receipt_id AND target.original_reservation_id=physical.reservation_id AND target.object_key=physical.key)
+    OR member.object_key=coalesce(freeholder_media_transfer_physical_lineage(physical.key,OLD.id)->>'key',physical.key)
+   ))) THEN RAISE EXCEPTION 'Only a complete unchanged original inventory can be adopted atomically' USING ERRCODE='23514'; END IF;
  END IF;
  RETURN NEW;
 END $$;
@@ -1531,3 +1542,96 @@ CREATE FUNCTION freeholder_media_transfer_exact_read_nonce(original_read uuid) R
 $$;
 -- Missing nonce/finish, historical untagged sources and stopped target review
 -- still require their real separate recovery; no new capability is published.
+
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_transfer_source_review_matches(original_object uuid,original_receipt uuid,captured jsonb) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_storage_transfer_objects object JOIN media_storage_transfer_plans plan ON plan.id=object.plan_id JOIN media_object_writes receipt ON receipt.id=original_receipt
+  JOIN media_storage_transfer_calls caller ON caller.id::text=captured->'sourceReview'->>'callId' AND coalesce(caller.physical_receipt_id,caller.object_receipt_id)=receipt.id
+  JOIN media_storage_transfer_reviews review ON review.id=caller.stop_receipt_id JOIN media_storage_writer_drains stop ON stop.id=review.stop_drain_id
+  WHERE object.id=original_object AND receipt.operation_kind='put' AND receipt.original_reservation_id IS NOT NULL AND receipt.writer_runtime_id IS NOT NULL AND receipt.writer_finished_at IS NULL AND receipt.state='accepted'
+   AND receipt.storage_namespace=plan.source_namespace AND receipt.key_digest=object.key_digest AND receipt.sha256=object.sha256 AND receipt.bytes=object.bytes
+   AND captured->>'id'=receipt.id::text AND captured->'writerFinishedAt'='null'::jsonb AND captured->>'originalReservationId'=receipt.original_reservation_id::text AND captured->>'writerRuntimeId'=receipt.writer_runtime_id::text
+   AND captured->'sourceReview'->>'format'='freeholder.original-source-review/v1'
+   AND captured->'sourceReview'->>'receiptId'=receipt.id::text AND captured->'sourceReview'->>'reservationId'=receipt.original_reservation_id::text
+   AND captured->'sourceReview'->>'namespace'=receipt.storage_namespace AND captured->'sourceReview'->>'keyDigest'=receipt.key_digest AND captured->'sourceReview'->>'runtimeId'=receipt.writer_runtime_id::text
+   AND captured->'sourceReview'->>'reviewId'=review.id::text AND captured->'sourceReview'->>'reviewDigest'=review.provider_evidence_digest AND review.provider_evidence_digest=receipt.evidence_digest
+   AND captured->'sourceReview'->>'inventoryId'=review.inventory_id::text AND captured->'sourceReview'->>'stopDrainId'=stop.id::text AND captured->'sourceReview'->>'stopProofDigest'=stop.stop_proof_digest
+   AND captured->'sourceReview'->>'providerRevisionDigest'=receipt.provider_revision_digest AND captured->'sourceReview'->>'sha256'=receipt.sha256 AND captured->'sourceReview'->'bytes'=to_jsonb(receipt.bytes)
+   AND captured->'sourceReview'->>'witness'=freeholder_media_transfer_fact_digest((captured->'sourceReview')-'witness')
+   AND (freeholder_media_original_applied_review(caller.id) OR freeholder_media_transfer_applied_put_review(caller.id))
+ )
+$$;
+
+--> statement-breakpoint
+-- Physical source retirement does not erase the still-live original lineage.
+-- Only the exact completed transfer with a real conditional DELETE and full
+-- provider version/session absence may remove an ancestor from new inventory.
+CREATE FUNCTION freeholder_media_transfer_source_physically_retired(original_receipt uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_storage_transfer_receipts member JOIN media_storage_transfer_objects object ON object.id=member.object_id
+  JOIN media_storage_transfer_plans plan ON plan.id=object.plan_id JOIN media_object_writes original ON original.id=member.receipt_id
+  JOIN media_object_writes deletion ON deletion.id=object.source_delete_receipt_id
+  JOIN media_storage_transfer_calls caller ON caller.object_id=object.id AND caller.kind='source_delete' AND caller.physical_receipt_id=deletion.id
+  WHERE member.receipt_id=original_receipt AND plan.adopted_at IS NOT NULL AND object.state='complete' AND object.redacted_at IS NULL
+   AND member.original_snapshot_digest=freeholder_media_transfer_fact_digest(member.original_snapshot)
+   AND member.original_snapshot->>'id'=original.id::text AND member.original_snapshot->>'namespace'=plan.source_namespace
+   AND member.original_snapshot->>'originalReservationId'=original.original_reservation_id::text AND member.original_snapshot->>'providerRevisionDigest'=original.provider_revision_digest
+   AND original.operation_kind='put' AND original.key_digest=object.key_digest AND original.storage_namespace=plan.source_namespace
+   AND deletion.operation_kind='delete' AND deletion.original_reservation_id=original.original_reservation_id AND deletion.storage_namespace=plan.source_namespace AND deletion.key_digest=original.key_digest
+   AND deletion.state='accepted' AND deletion.deleted_at IS NOT NULL AND deletion.writer_finished_at IS NOT NULL AND deletion.observed_accepted_at IS NOT NULL
+   AND caller.state='returned' AND caller.returned_at IS NOT NULL AND caller.observed_accepted_at IS NOT NULL AND caller.expected_revision=object.source_revision
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=caller.id AND (request.state<>'returned' OR request.returned_at IS NULL))
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=caller.id AND request.descriptor->>'kind'='object.delete' AND request.descriptor->'expectedRevision'=object.source_revision AND fact.facts->>'stage'='accepted')
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_calls absence WHERE absence.object_id=object.id AND absence.kind='source_absence' AND absence.state='returned' AND absence.returned_at IS NOT NULL AND absence.result_absent IS NOT NULL AND absence.namespace=plan.source_namespace AND absence.physical_key=object.object_key AND absence.expected_revision=object.source_revision AND absence.created_at>=caller.created_at
+    AND EXISTS(SELECT 1 FROM media_storage_transfer_requests request JOIN media_storage_transfer_request_observations fact ON fact.request_id=request.id WHERE request.call_id=absence.id AND fact.facts->>'stage'='absence')
+    AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=absence.id AND (request.state<>'returned' OR request.returned_at IS NULL)))
+   AND EXISTS(SELECT 1 FROM media_storage_provider_inventories inventory WHERE inventory.object_id=object.id AND inventory.plan_id=plan.id AND inventory.side='source' AND inventory.purpose='retirement' AND inventory.anchor_call_id=caller.id AND inventory.namespace=plan.source_namespace AND inventory.binding=plan.original_source
+    AND inventory.state='complete' AND inventory.completed_at IS NOT NULL AND inventory.first_digest=inventory.confirmed_digest
+    AND NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_entries entry WHERE entry.inventory_id=inventory.id AND entry.key_digest=object.key_digest)
+    AND NOT EXISTS(SELECT required.pass FROM generate_series(0,1) required(pass) WHERE NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages page WHERE page.inventory_id=inventory.id AND page.pass=required.pass AND page.kind='configuration'))
+    AND NOT EXISTS(SELECT 1 FROM media_storage_provider_inventory_pages page JOIN media_storage_transfer_calls actual ON actual.id=page.call_id WHERE page.inventory_id=inventory.id AND (actual.state<>'returned' OR actual.returned_at IS NULL OR actual.kind<>'source_retirement_inventory' OR page.entry_count<>(SELECT count(*) FROM media_storage_provider_inventory_entries entry WHERE entry.page_id=page.id) OR EXISTS(SELECT 1 FROM media_storage_transfer_requests request WHERE request.call_id=actual.id AND (request.state<>'returned' OR request.returned_at IS NULL)))))
+ )
+$$;
+--> statement-breakpoint
+-- Bound every hop to the previous physical receipt's immutable first capture.
+-- This returns NULL only for genuinely unadopted logical references. Broken,
+-- forked, cyclic or overlong adopted lineage must never fall back to a current
+-- same-key provider object. excluded_plan is for pre-adoption completeness;
+-- the in-progress plan cannot use its own staged target to prove completeness.
+CREATE FUNCTION freeholder_media_transfer_physical_lineage(original_key text,excluded_plan uuid DEFAULT NULL) RETURNS jsonb LANGUAGE plpgsql STABLE AS $$
+DECLARE object media_storage_transfer_objects; plan media_storage_transfer_plans; receipt media_object_writes; next_object uuid; count_edges integer; visited uuid[]:='{}'; member media_storage_transfer_receipts; physical_digest text;
+BEGIN
+ physical_digest:=encode(sha256(convert_to('freeholder:media-object-key:v1','UTF8')||decode('00','hex')||convert_to(original_key,'UTF8')),'hex');
+ SELECT count(*) INTO count_edges FROM media_storage_transfer_objects candidate JOIN media_storage_transfer_plans owner ON owner.id=candidate.plan_id WHERE candidate.object_key=original_key AND candidate.key_digest=physical_digest AND owner.adopted_at IS NOT NULL AND owner.id IS DISTINCT FROM excluded_plan;
+ IF count_edges=0 THEN RETURN NULL; END IF;
+ IF count_edges<>1 THEN RAISE EXCEPTION 'Conflicting original adopted physical roots require recovery' USING ERRCODE='23514'; END IF;
+ SELECT candidate.id INTO next_object FROM media_storage_transfer_objects candidate JOIN media_storage_transfer_plans owner ON owner.id=candidate.plan_id WHERE candidate.object_key=original_key AND candidate.key_digest=physical_digest AND owner.adopted_at IS NOT NULL AND owner.id IS DISTINCT FROM excluded_plan;
+ LOOP
+  IF cardinality(visited)>=32 OR next_object=ANY(visited) THEN RAISE EXCEPTION 'Original physical lineage is cyclic or exceeds its complete bounded proof' USING ERRCODE='23514'; END IF;
+  visited:=array_append(visited,next_object);
+  SELECT * INTO object FROM media_storage_transfer_objects WHERE id=next_object;
+  SELECT * INTO plan FROM media_storage_transfer_plans WHERE id=object.plan_id;
+  SELECT * INTO receipt FROM media_object_writes WHERE id=object.target_receipt_id;
+  IF object.id IS NULL OR plan.adopted_at IS NULL OR plan.redacted_at IS NOT NULL OR object.redacted_at IS NOT NULL OR object.state NOT IN ('adopted','cleanup_pending','complete') OR receipt.id IS NULL OR receipt.operation_kind<>'put' OR receipt.state<>'accepted' OR receipt.deleted_at IS NOT NULL OR receipt.redacted_at IS NOT NULL OR receipt.original_reservation_id IS NULL OR receipt.writer_runtime_id IS NULL
+   OR receipt.object_key IS DISTINCT FROM object.target_object_key OR receipt.key_digest IS DISTINCT FROM object.target_key_digest OR receipt.storage_namespace IS DISTINCT FROM plan.target_namespace OR receipt.sha256 IS DISTINCT FROM object.sha256 OR receipt.bytes IS DISTINCT FROM object.bytes OR receipt.provider_revision IS DISTINCT FROM object.target_revision OR receipt.provider_revision_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(object.target_revision)
+   OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_calls writer WHERE writer.object_id=object.id AND writer.physical_receipt_id=receipt.id AND writer.kind='target_put' AND (writer.state='returned' AND writer.returned_at IS NOT NULL AND writer.observed_accepted_at IS NOT NULL AND receipt.writer_finished_at IS NOT NULL OR freeholder_media_transfer_applied_put_review(writer.id)))
+  THEN RAISE EXCEPTION 'Restore exact original adopted target identity, revision, bytes and caller proof' USING ERRCODE='23514'; END IF;
+  SELECT count(*) INTO count_edges FROM media_storage_transfer_receipts edge JOIN media_storage_transfer_objects child ON child.id=edge.object_id JOIN media_storage_transfer_plans successor ON successor.id=child.plan_id WHERE edge.receipt_id=receipt.id AND successor.adopted_at IS NOT NULL AND successor.id IS DISTINCT FROM excluded_plan;
+  IF count_edges=0 THEN
+   IF freeholder_media_transfer_source_physically_retired(receipt.id) THEN RAISE EXCEPTION 'A retired intermediate physical source has no intact adopted successor' USING ERRCODE='23514'; END IF;
+   RETURN jsonb_build_object('binding',plan.original_target,'key',receipt.object_key,'receiptId',receipt.id,'namespace',receipt.storage_namespace,'keyDigest',receipt.key_digest,'sha256',receipt.sha256,'bytes',receipt.bytes,'hops',cardinality(visited));
+  END IF;
+  IF count_edges<>1 THEN RAISE EXCEPTION 'An original target receipt has conflicting adopted successors' USING ERRCODE='23514'; END IF;
+  SELECT edge.* INTO member FROM media_storage_transfer_receipts edge JOIN media_storage_transfer_objects child ON child.id=edge.object_id JOIN media_storage_transfer_plans successor ON successor.id=child.plan_id WHERE edge.receipt_id=receipt.id AND successor.adopted_at IS NOT NULL AND successor.id IS DISTINCT FROM excluded_plan;
+  IF member.original_snapshot_digest IS DISTINCT FROM freeholder_media_transfer_fact_digest(member.original_snapshot)
+   OR member.original_snapshot->>'id' IS DISTINCT FROM receipt.id::text OR member.original_snapshot->>'originalReservationId' IS DISTINCT FROM receipt.original_reservation_id::text
+   OR member.original_snapshot->>'namespace' IS DISTINCT FROM receipt.storage_namespace OR member.original_snapshot->>'keyDigest' IS DISTINCT FROM receipt.key_digest OR member.original_snapshot->>'providerRevisionDigest' IS DISTINCT FROM receipt.provider_revision_digest
+   OR member.original_snapshot->>'sha256' IS DISTINCT FROM receipt.sha256 OR member.original_snapshot->'bytes' IS DISTINCT FROM to_jsonb(receipt.bytes)
+   OR member.original_snapshot->'providerRevision' IS DISTINCT FROM receipt.provider_revision
+   OR member.original_snapshot->'writerFinishedAt'='null'::jsonb AND NOT freeholder_media_transfer_source_review_matches(member.object_id,receipt.id,member.original_snapshot)
+   OR NOT EXISTS(SELECT 1 FROM media_storage_transfer_objects child JOIN media_storage_transfer_plans successor ON successor.id=child.plan_id WHERE child.id=member.object_id AND child.object_key=receipt.object_key AND child.key_digest=receipt.key_digest AND child.source_revision=receipt.provider_revision AND child.sha256=receipt.sha256 AND child.bytes=receipt.bytes AND successor.source_namespace=receipt.storage_namespace)
+  THEN RAISE EXCEPTION 'A later equal key cannot replace the immutable original physical receipt edge' USING ERRCODE='23514'; END IF;
+  next_object:=member.object_id;
+ END LOOP;
+END $$;

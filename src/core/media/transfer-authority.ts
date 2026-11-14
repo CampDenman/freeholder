@@ -10,6 +10,8 @@ import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartResources} from "./multipart-schema";
 import {mediaStorageTransferCalls,mediaStorageTransferObjects,mediaStorageTransferPlans,mediaStorageTransferReceipts,mediaStorageTransferSubjects,mediaStorageWriterDrains} from "./transfer-schema";
 import {allowMediaReceiptWrites,lockObjectDigest,objectKeyDigest,storageOperationsHeld} from "./write-ledger";
+import {originalPhysicalLineage} from "./transfer-physical-lineage";
+import {captureSourceReview,assertCapturedSourceReview} from "./transfer-source-review";
 import {originalTransferObject,transferInventoryDigest} from "./transfer-witness";
 import {assertOriginalUploadWritable} from "./upload-ownership";
 import {requireCompleteTransferInventory,requireNoOutstandingTransferCalls,transferConflict,transferDigest,transferTargetKey} from "./transfer-proof";
@@ -34,12 +36,33 @@ export async function lockTransferInventory(tx:Tx):Promise<void>{
  await requireTransferCapability(tx);
  await tx.execute(sql`select pg_advisory_xact_lock(1691709,82)`);
 }
-export async function originalTransferInventory(tx:Tx,source:StorageBinding){
+/** All aliases must reach the same immutable terminal receipt. Retired source
+ * PUTs stay live for privacy lineage, but are not counted as physical bytes.
+ * Excluding the in-progress plan prevents adoption from proving itself. */
+async function currentPhysicalKeys(tx:Tx,source:StorageBinding,excludedPlan:string|null=null,ownTargets:readonly(typeof mediaStorageTransferObjects.$inferSelect)[]=[]){
  const reservations=await tx.select().from(mediaObjects).orderBy(asc(mediaObjects.key)).limit(10_001);
  const live=await tx.select().from(mediaObjectWrites).where(isNull(mediaObjectWrites.deletedAt)).orderBy(asc(mediaObjectWrites.id)).limit(10_001);
  if(reservations.length>10_000||live.length>10_000)transferConflict("The complete storage inventory exceeds this bounded transfer. No subset may be adopted.");
- if(live.some(row=>row.namespace!==source.namespace||row.redactedAt||row.state!=="accepted"||row.operation!=="put"))transferConflict("Every original namespace and physical caller must be recovered before a complete transfer.");
- const keys=[...new Set([...reservations.map(row=>row.key),...live.map(row=>row.key)])].sort((a,b)=>objectKeyDigest(a)<objectKeyDigest(b)?-1:1);
+ const targetReceipts=new Map<string,typeof mediaObjectWrites.$inferSelect>();
+ for(const target of ownTargets){if(!target.targetReceiptId)continue;const receipt=live.find(row=>row.id===target.targetReceiptId);if(!receipt||receipt.key!==target.targetKey||receipt.keyDigest!==target.targetKeyDigest||receipt.operation!=="put"||!receipt.originalReservationId)transferConflict("Restore the exact current plan target reservation; equal keys confer no exclusion.");targetReceipts.set(receipt.id,receipt);}
+ const keys=new Set<string>();
+ for(const pointer of reservations){
+  if([...targetReceipts.values()].some(receipt=>receipt.key===pointer.key&&receipt.originalReservationId===pointer.reservationId))continue;
+  const terminal=await originalPhysicalLineage(tx,pointer.key,excludedPlan);
+  if(terminal&&terminal.namespace!==source.namespace)transferConflict("The original alias belongs to a different terminal physical namespace.");
+  keys.add(terminal?.key??pointer.key);
+ }
+ for(const receipt of live){
+  if(targetReceipts.has(receipt.id))continue;
+  const[retirement]=await tx.execute<{retired:boolean}>(sql`select freeholder_media_transfer_source_physically_retired(${receipt.id}::uuid) as retired`);
+  if(retirement?.retired===true)continue;
+  if(receipt.namespace!==source.namespace||receipt.redactedAt||receipt.state!=="accepted"||receipt.operation!=="put")transferConflict("Every original namespace and physical caller must be recovered before a complete transfer.");
+  keys.add(receipt.key);
+ }
+ return[...keys].sort((a,b)=>objectKeyDigest(a)<objectKeyDigest(b)?-1:1);
+}
+export async function originalTransferInventory(tx:Tx,source:StorageBinding){
+ const keys=await currentPhysicalKeys(tx,source);
  if(!keys.length)transferConflict("There are no proven original objects to transfer.");
  for(const key of keys)await lockObjectDigest(tx,objectKeyDigest(key));
  const multipart=await tx.select({id:mediaMultipartResources.id}).from(mediaMultipartResources).where(isNull(mediaMultipartResources.retiredAt)).limit(1);
@@ -53,7 +76,8 @@ export async function originalTransferInventory(tx:Tx,source:StorageBinding){
   const object=originalTransferObject(source,key,history);
   if(await storageOperationsHeld(tx,history.map(row=>row.contactId)))transferConflict("A named hold preserves an original object or its copies.");
   for(const id of object.contactIds)await assertOriginalUploadWritable(tx,id,null);
-  objects.push(object);
+  const sourceReviews=[];for(const receipt of history.filter(row=>row.operation==="put"&&row.state==="accepted"&&!row.deletedAt)){const proof=await captureSourceReview(tx,receipt);if(proof)sourceReviews.push(proof);}
+  objects.push({...object,sourceReviews});
  }
  return objects;
 }
@@ -70,9 +94,10 @@ export async function claimOriginalTransfer(tx:Tx,input:{id:string;requestKey:st
  if(active.length)transferConflict("Finish the existing original transfer before claiming another inventory.");
  const inventory=await originalTransferInventory(tx,input.source),manifestDigest=transferInventoryDigest(input.source,input.target,inventory);
  const births=await tx.select().from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,inventory.flatMap(row=>row.receipts.map(receipt=>receipt.id)))).orderBy(asc(mediaObjectWrites.id));
- if(births.some(row=>row.writerRuntimeId&&!row.writerFinishedAt))transferConflict("A known tracked original caller still lacks its actual finish; another legacy process receipt cannot stand in for it.");
- if(!drain&&births.some(row=>!row.writerRuntimeId||!row.writerFinishedAt))transferConflict("Historical or untracked writers require their exact executor stop witness; new fully tracked cohorts do not require Linux.");
- const sourceStopEvidenceDigest=drain?.stopProofDigest??transferDigest(births.map(row=>({id:row.id,runtimeId:row.writerRuntimeId,finishedAt:row.writerFinishedAt})));
+ const capturedReviews=inventory.flatMap(row=>row.sourceReviews);
+ if(births.some(row=>!row.writerRuntimeId||!row.originalReservationId||!row.writerFinishedAt&&!capturedReviews.some(proof=>proof.receiptId===row.id)))transferConflict("A source needs its actual original tracked birth and finishes or its exact affirmative review. Historical identity cannot be invented by a later stop.");
+ const activeDrains=await tx.select().from(mediaStorageWriterDrains).where(and(eq(mediaStorageWriterDrains.namespace,input.source.namespace),sql`${mediaStorageWriterDrains.state}<>'released'`)).limit(1001);if(activeDrains.length>1000||activeDrains.some(row=>row.id!==input.drainId))transferConflict("Release the actual original recovery drain or explicitly select its verified receipt in this first claim; the original plan cannot be rebound later.");
+ const sourceStopEvidenceDigest=drain?.stopProofDigest??(capturedReviews.length?transferDigest({births:births.map(row=>({id:row.id,runtimeId:row.writerRuntimeId,finishedAt:row.writerFinishedAt})),reviews:capturedReviews}):transferDigest(births.map(row=>({id:row.id,runtimeId:row.writerRuntimeId,finishedAt:row.writerFinishedAt}))));
  const totalBytes=inventory.reduce((sum,row)=>sum+BigInt(row.bytes),0n);
  if(totalBytes>BigInt(Number.MAX_SAFE_INTEGER))transferConflict("The complete original inventory exceeds exact byte accounting limits.");
  const[plan]=await tx.insert(mediaStorageTransferPlans).values({id:input.id,requestKey:input.requestKey,sourceDrainId:drain?.id,originalSource:input.source,originalTarget:input.target,sourceNamespace:input.source.namespace,targetNamespace:input.target.namespace,sourceStopEvidenceDigest,inventoryCount:inventory.length,inventoryBytes:Number(totalBytes),manifestDigest,state:"planned",createdBy:actorString(actor)}).returning();
@@ -80,7 +105,7 @@ export async function claimOriginalTransfer(tx:Tx,input:{id:string;requestKey:st
   const targetKey=transferTargetKey(plan!.id,item.keyDigest);
   const[object]=await tx.insert(mediaStorageTransferObjects).values({planId:plan!.id,key:item.key,keyDigest:item.keyDigest,targetKey,targetKeyDigest:objectKeyDigest(targetKey),sha256:item.sha256,bytes:item.bytes,contentType:item.contentType,originalReceiptSetDigest:item.receiptSetDigest,state:"planned"}).returning();
   const originalRows=await tx.select().from(mediaObjectWrites).where(inArray(mediaObjectWrites.id,item.receipts.map(row=>row.id)));
-  await tx.insert(mediaStorageTransferReceipts).values(item.receipts.map(row=>{const snapshot=originalRows.find(original=>original.id===row.id);if(!snapshot)transferConflict();return{objectId:object!.id,receiptId:row.id,originalWitnessDigest:row.witnessDigest,originalSnapshot:{...snapshot},originalSnapshotDigest:transferDigest(snapshot)};}));
+  await tx.insert(mediaStorageTransferReceipts).values(item.receipts.map(row=>{const rowSnapshot=originalRows.find(original=>original.id===row.id);if(!rowSnapshot)transferConflict();const sourceReview=item.sourceReviews.find(proof=>proof.receiptId===row.id),snapshot={...rowSnapshot,...(sourceReview?{sourceReview}:{})};return{objectId:object!.id,receiptId:row.id,originalWitnessDigest:row.witnessDigest,originalSnapshot:snapshot,originalSnapshotDigest:transferDigest(snapshot)};}));
   if(item.contactIds.length)await tx.insert(mediaStorageTransferSubjects).values(item.contactIds.map(contactId=>({objectId:object!.id,contactId})));
  }
  return plan!;
@@ -100,10 +125,7 @@ export async function assertTransferOwners(tx:Tx,objects:readonly {id:string}[],
  if(!allowErasure)for(const subject of subjects){if(!subject.contactId)transferConflict("The original transfer subject was already minimized.");await assertOriginalUploadWritable(tx,subject.contactId,null);}
 }
 export async function assertTransferOriginalMembership(tx:Tx,plan:typeof mediaStorageTransferPlans.$inferSelect,objects:readonly (typeof mediaStorageTransferObjects.$inferSelect)[]):Promise<void>{
- const all=await tx.select({key:mediaObjects.key}).from(mediaObjects).orderBy(asc(mediaObjects.key)).limit(20_001);
- const live=await tx.select({key:mediaObjectWrites.key}).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.namespace,plan.sourceNamespace),isNull(mediaObjectWrites.deletedAt))).orderBy(asc(mediaObjectWrites.key)).limit(20_001);
- const targets=new Set(objects.map(row=>row.targetKey));
- requireCompleteTransferInventory(objects.map(row=>row.key),[...new Set([...all.map(row=>row.key),...live.map(row=>row.key)].filter(key=>!targets.has(key)))]);
+ requireCompleteTransferInventory(objects.map(row=>row.key),await currentPhysicalKeys(tx,plan.originalSource,plan.id,objects));
  for(const object of objects){
   const membership=await tx.select().from(mediaStorageTransferReceipts).where(eq(mediaStorageTransferReceipts.objectId,object.id)).orderBy(asc(mediaStorageTransferReceipts.receiptId));
   const history=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.keyDigest,object.keyDigest)).orderBy(asc(mediaObjectWrites.id));
@@ -112,7 +134,8 @@ export async function assertTransferOriginalMembership(tx:Tx,plan:typeof mediaSt
   for(const row of history){
    const member=membership.find(value=>value.receiptId===row.id)!;
    if(transferDigest(member.originalSnapshot)!==member.originalSnapshotDigest)transferConflict("Restore the intact original transfer receipt snapshot.");
-   const immutable=(value:Record<string,unknown>)=>Object.fromEntries(Object.entries(value).filter(([key])=>key!=="contactId"));
+   if(member.originalSnapshot.operation==="put"&&!member.originalSnapshot.deletedAt)await assertCapturedSourceReview(tx,object.id,row.id,member.originalSnapshot);
+   const immutable=(value:Record<string,unknown>)=>Object.fromEntries(Object.entries(value).filter(([key])=>key!=="contactId"&&key!=="sourceReview"));
    if(transferDigest(immutable({...row}))!==transferDigest(immutable(member.originalSnapshot))||
     (member.originalSnapshot.contactId===null?row.contactId!==null:!row.contactId||!subjects.some(subject=>subject.contactId===row.contactId)))transferConflict("An original physical fact changed after capture; current ownership alone cannot replace it.");
   }

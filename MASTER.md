@@ -15888,3 +15888,14 @@ required. Full request/part flags, tracked stopped-source chained eligibility,
 unknown DELETE, multipart, quota/cutover and actual provider/platform gates stay
 open. No execution/account/host actions or C-item closure occurred. See
 `deploy/media-target-put-review-source-2026-11-13.md`.
+
+Source continuation 2026-11-13 (C1.12/C11.08): NEW stopped-source claims retain
+an exact affirmative review/actual executor-stop projection in their immutable
+first receipt capture; NULL actual FINs and old captures are never filled.
+Chained physical inventory, reads and adoption follow bounded exact prior
+receipt-to-captured-membership edges; only exact full conditional source
+retirement proof excludes physically retired ancestors, while original privacy
+lineage remains live. Five pure and three native TCP controls are PREPARED/UNRUN.
+No execution/provider/host actions occurred. Request/part capabilities, unknown
+DELETE monotonic-removal fences, multipart/quota/cutover and actual acceptance
+remain open. See `deploy/media-stopped-source-chain-source-2026-11-13.md`.
