@@ -3564,6 +3564,16 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Media boundary-inventory correction2026-11-14 (C1.12/C11.08): V81 fulltypes
+and affected lint pass, then the first contract failure identifies the private
+seal service missing from the SECOND explicit external:false inventory. Its
+system-only inventory entry already exists. The exact private name is now
+listed in both, preserving every permission/HTTP/MCP/SDK nonexposure assertion;
+no production permission or service behavior changes. V81 stopped at42 actual
+assertions and cannot count as a complete source pass. Full source and actual
+schema/worker/native/provider qualification remain required; no C closure.
+
+
 Media composed source correction2026-11-14 (C1.12/C11.08): V80 full types
 PASS70.080s; affected lint stops on one capture helper imported as runtime when
 used only by ReturnType. Exactly that import is now type-only, preserving all

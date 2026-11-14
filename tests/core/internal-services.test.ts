@@ -758,6 +758,7 @@ const CALLER_AUTHORIZED_PHASES = [
   "catalog.anonymizeSellerOrderReceipts",
   "catalog.orderInvoiceRevenue",
   "media.retireOwnedAssetsForErasure",
+  "media.sealOriginalMultipartRetirement",
   "media.reserveProxyObject",
   "catalog.orderInvoiceLineOwners",
   "subscriptions.claimTrialCardSetup",

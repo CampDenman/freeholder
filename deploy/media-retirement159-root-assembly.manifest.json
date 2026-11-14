@@ -109,5 +109,13 @@
     "fullTypesPassed": true,
     "lintFailedOnlyThisTypeImport": true,
     "noSQLOrRuntimeBehaviorChange": true
+  },
+  "privateBoundaryInventoryContinuation": {
+    "path": "tests/core/internal-services.test.ts",
+    "beforeSha256": "cd098c97364c15b4d52d48ff1b4e3d663d2431841ef5d48c3a60d515425d72ca",
+    "afterSha256": "56e7108c7ff9976d7b0bc97ce2c744579d819f55aaf7088c33fcabdd54bdbbab",
+    "finiteDelta": "Add exactly media.sealOriginalMultipartRetirement to existing external:false inventory, retaining its system inventory entry and every permission/projection assertion",
+    "reason": "The service is both permission:system and external:false and must be reviewed in both explicit inventories; permission/public projections unchanged",
+    "preservedV81": "/tmp/freeholder-current-full86-financial159-source-v81-20261114-result.json"
   }
 }
