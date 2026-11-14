@@ -710,6 +710,7 @@ export const createMyDataRequest = defineService({
   }),
   output: dataRequestRow,
   handler: async (input, ctx) => {
+    await lockContactIdentity(ctx.tx);
     const contact = await personalContact(ctx.tx, ctx.actor);
     const [request] = await ctx.tx
       .insert(dataRequests)
@@ -873,6 +874,7 @@ export const verifyDataRequest = defineService({
   input: z.object({ id: z.string().uuid(), method: z.string().trim().min(1).max(200) }),
   output: dataRequestRow,
   handler: async (input, ctx) => {
+    await lockContactIdentity(ctx.tx);
     const [request] = await ctx.tx
       .update(dataRequests)
       .set({
@@ -1693,6 +1695,7 @@ export const reopenErasureJob = defineService({
   output: z.object({ jobId: z.uuid().nullable(), recoveryRequired: z.boolean(), changed: z.boolean() }),
   auditInputFields: ["requestId", "scope"], auditWhen: (output: { jobId: string | null; recoveryRequired: boolean; changed: boolean }) => output.changed,
   handler: async (input, ctx) => {
+    await lockContactIdentity(ctx.tx);
     await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`privacy:${input.requestId}`}))`);
     const [request] = await ctx.tx.select().from(dataRequests).where(eq(dataRequests.id, input.requestId)).for("update");
     if (!request || request.kind !== "erasure") throw new ServiceError("not_found", "Restore the original erasure request before reconciling its late provider evidence.");
