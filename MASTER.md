@@ -3565,6 +3565,22 @@ open the admin until Thursday still needs to know about Monday.
 ## 43. Product Completion Plan — the live checklist
 
 
+Specific original auxiliary GET fixture continuation2026-11-14 (C12.38/C1.08):
+exact0486b428 sourceV106 fulltypes/lint/1587actual/253files/543explicitDBskips
+PASS; freshV69 ordinary86/strict161/365guards/417fullfunctions/4144queries and
+SDK47 actual8 PASS. Original positiveV6 reaches final repeat reconciliation,
+then FAIL160.83s: real adapter requests documented exact fee/refund resource GET,
+but fictional bank only implements list/POST and rejects that URL as unexpected.
+Production SQL/TS and whole original180s assertions stay unchanged. New fixture
+handlers return ONLY its actually-created matching parent/resource map row,
+without a new POST, fabricated resource, equal-amount adoption or counter change.
+Every old branch reverses byte-exact; failedV69 retained. Both documented fee
+refund and transfer reversal specific GETs supported. Fresh native/fullspec/
+provider/security/stable acceptance remains required. See
+`deploy/atomic-auxiliary-specific-get-fixture-root-continuation.manifest.json`.
+
+
+
 Auxiliary closure/owner continuation2026-11-14 (C12.38/C1.08/C11.10): exact
 343851b1 sourceV105 fulltypes/lint/1581actual/251files/540explicitDBskips PASS;
 freshV68 ordinary86/strict161models/365guards/417fullfunctions/4144queries

@@ -94,6 +94,12 @@ export function controlledCollectionEdge84(options:{loseUpdateReply?:true;loseDr
    expect(actual.get("reverse_transfer")??"false").toBe("false");expect(actual.get("refund_application_fee")??"false").toBe("false");principalRefundPosts++;
    const returned:Record<string,unknown>=externallyRefundPayment(bankRef(selected.id),Number(actual.get("amount")));returned.metadata=tag(actual);return Response.json(returned);
   }
+  // Specific recovery GETs return only the already-created exact parent/resource.
+  // Never synthesize a return from an equal amount or another parent's ID.
+  const actualFeeReturn=[...feeReturns.values()].find(row=>url.pathname===`/v1/application_fees/${bankRef(row.fee)}/refunds/${bankRef(row.id)}`);
+  if(actualFeeReturn&&init.method==="GET")return Response.json(actualFeeReturn);
+  const actualTransferReturn=[...transferReturns.values()].find(row=>url.pathname===`/v1/transfers/${bankRef(row.transfer)}/reversals/${bankRef(row.id)}`);
+  if(actualTransferReturn&&init.method==="GET")return Response.json(actualTransferReturn);
   const feeParent=[...intents.values()].find(row=>url.pathname===`/v1/application_fees/${actualFeeRef(row.id)}/refunds`);
   if(feeParent){
    const rows=[...feeReturns.values()].filter(row=>row.fee===actualFeeRef(feeParent.id));
