@@ -39,8 +39,8 @@ export async function withControlledCashProspectiveEvaluation<Result>(ctx:Servic
  const parsed=z.object({collectionId:z.uuid(),receiptIds:z.array(z.uuid()).min(1).max(5000)}).strict().parse(input);
  if(ctx.actor.kind!=="system"||active.has(ctx.tx)||new Set(parsed.receiptIds).size!==parsed.receiptIds.length)refuse();
  const request={collectionId:parsed.collectionId,receiptIds:[...parsed.receiptIds].sort()};
- const{readControlledCollectionCashAuthority}=await import("@/modules/subscriptions/controlled-provider-collection-cash");
- const proof=await readControlledCollectionCashAuthority(ctx,request);
+ const{readControlledAtomicCollectionCashAuthority}=await import("@/modules/subscriptions/controlled-provider-collection-cash");
+ const proof=await readControlledAtomicCollectionCashAuthority(ctx,request);
  const[rawBefore]=await ctx.tx.execute<{snapshot:unknown}>(sql`select freeholder_controlled_cash_parent_snapshot(${proof.collectionId}::uuid) as snapshot`),before=snapshotSchema.parse(rawBefore?.snapshot);
  const physical=new Map(before.entries.map(row=>[`${row.table}:${row.id}`,row.fingerprint]));
  if(physical.size!==before.entries.length||before.physicalRowCount!==before.entries.length||proof.unfinishedControlledCallIds.length||proof.unfinishedInspectionIds.length||proof.unfinishedNamespaceCallers.length
@@ -55,7 +55,7 @@ export async function withControlledCashProspectiveEvaluation<Result>(ctx:Servic
  const projection=freeze({...body,revision:merchantTaxDigest(body)});active.set(ctx.tx,projection);
  try{
   const result=await evaluate(freeze(proof));
-  const afterProof=await readControlledCollectionCashAuthority(ctx,request);
+  const afterProof=await readControlledAtomicCollectionCashAuthority(ctx,request);
   const[rawAfter]=await ctx.tx.execute<{snapshot:unknown}>(sql`select freeholder_controlled_cash_parent_snapshot(${proof.collectionId}::uuid) as snapshot`),after=snapshotSchema.parse(rawAfter?.snapshot);
   if(merchantTaxDigest(afterProof)!==merchantTaxDigest(proof)||after.revision!==before.revision||JSON.stringify(after.entries)!==JSON.stringify(before.entries)||after.physicalRowCount!==before.physicalRowCount)refuse();
   return result;

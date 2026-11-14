@@ -5,6 +5,7 @@ import { inArray,sql } from "drizzle-orm";
 import { z } from "zod";
 import { ServiceError,type ServiceContext } from "@/core/service";
 import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
+import { CONTROLLED_CASH_ATOMIC_PROTOCOL,CONTROLLED_CASH_LEGACY_PROTOCOL } from "./controlled-cash-application-protocol";
 import { readControlledCashApplicationEvaluation } from "./controlled-cash-application-evaluation";
 import { controlledCashApplicationBatches,controlledCashApplicationReceipts } from "./controlled-cash-application-protocol-schema";
 import { signControlledCashBatch,signControlledCashReceipt,verifiedControlledCashBatch,verifiedControlledCashReceipt } from "./controlled-cash-application-protocol-proof";
@@ -66,7 +67,7 @@ export async function admitControlledCashApplication(ctx:ServiceContext,input:{c
  const bankObservations=await ctx.tx.select().from(merchantCashReturnObservations).where(inArray(merchantCashReturnObservations.id,plan.pending.map(row=>row.bankObservationId))).limit(5001);
  if(inspections.length!==plan.pending.length||bankObservations.length!==plan.pending.length)refuse();
  const[transaction]=await ctx.tx.execute<{id:string}>(sql`select txid_current()::text as id`);if(!transaction||!/^\d+$/.test(transaction.id))refuse();
- const batch:Omit<typeof controlledCashApplicationBatches.$inferSelect,"digest"|"authentication">={id:randomUUID(),collectionId:proof.collectionId,quoteId:proof.quoteId,resourceId:proof.resourceId,subscriptionId:proof.subscriptionId,invoiceId:proof.invoiceId,termsId:proof.termsId,protocol:CONTROLLED_COLLECTION_PROTOCOL,
+ const batch:Omit<typeof controlledCashApplicationBatches.$inferSelect,"digest"|"authentication">={id:randomUUID(),collectionId:proof.collectionId,quoteId:proof.quoteId,resourceId:proof.resourceId,subscriptionId:proof.subscriptionId,invoiceId:proof.invoiceId,termsId:proof.termsId,protocol:proof.atomicFeePolicy?CONTROLLED_CASH_ATOMIC_PROTOCOL:CONTROLLED_CASH_LEGACY_PROTOCOL,
   admissionTransactionId:transaction.id,bankRevision:current.bankRevision,parentRevision:current.parentRevision,parentPgRevision:current.parentPgRevision,preApplicationRevision:current.preApplicationRevision,acceptedQuoteDigest:proof.acceptedQuoteDigest,canonicalTargetDigest:proof.canonicalTargetDigest,
   beforeEntries:plan.snapshot.entries,mutableBeforeRows,requestedReceiptIds:plan.requestedReceiptIds,rawBindings:proof.prospectiveRawBindings,invoiceBeforeFingerprint:before.fingerprint,invoiceBeforeStatus:before.status,invoiceBeforePaidMinor:before.paidMinor,invoiceBeforeCreditedMinor:before.creditedMinor,invoiceBeforeRefundedMinor:0,invoiceBeforePaidAt:before.paidAt,invoiceBeforeUpdatedAt:before.updatedAt,
   expectedCashMinor:plan.expectedCashMinor,expectedFeeMinor:plan.expectedFeeMinor,currency:proof.bankInvoice.currency,createdAt:new Date()};

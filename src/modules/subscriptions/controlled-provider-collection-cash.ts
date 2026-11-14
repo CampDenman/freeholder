@@ -9,7 +9,8 @@ import { invoiceOutstanding } from "@/modules/invoicing/invoice-balance";
 import { merchantAgreementPaymentRoutes } from "@/modules/invoicing/merchant-agreement-schema";
 import { payments } from "@/modules/invoicing/schema";
 import { commercialInvoiceCashHistory } from "@/modules/invoicing/commercial-attestations";
-import { invoiceCashFeeAllocation } from "@/modules/invoicing/invoice-credit-cash-fee";
+import { invoiceCashFeeAllocation,invoiceCashFeeBudget } from "@/modules/invoicing/invoice-credit-cash-fee";
+import { controlledAtomicFeeAmounts } from "@/modules/invoicing/controlled-cash-atomic-fee-amounts";
 import { controlledCashBankApplicationEvidence } from "@/modules/invoicing/controlled-cash-application-bank-policy";
 import { originalCashInspectionBankFacts } from "@/modules/invoicing/merchant-cash-inspection-bank-facts";
 import type { MerchantRefundCashOrigin } from "@/modules/invoicing/merchant-refund-origin";
@@ -35,7 +36,7 @@ const bigintNumber=(value:bigint)=>{const number=Number(value);if(!Number.isSafe
  * sorted canonical locks. Namespace locks below follow that prefix. The parent
  * MUST independently authenticate its complete CURRENT batch/caller/privacy/
  * financial graph and recheck this source proof immediately before mutation. */
-export async function readControlledCollectionCashAuthority(ctx:ServiceContext,rawInput:{collectionId:string;receiptIds:string[]}):Promise<ControlledCollectionCashProof>{
+async function readControlledCollectionCash(ctx:ServiceContext,rawInput:{collectionId:string;receiptIds:string[]},atomic:boolean):Promise<ControlledCollectionCashProof>{
  const input=request.parse(rawInput),source=await controlledCollectionState(ctx.tx,input.collectionId),{collection,resource,parent,history,canonical,manifest}=source;
  await requireHeldControlledCashResource(ctx,resource.id);
  if(history.unfinished.length||history.closures.length||!canonical.currentCollectible||canonical.invoice.refundedMinor!==0)refuseControlledCash();
@@ -60,10 +61,7 @@ export async function readControlledCollectionCashAuthority(ctx:ServiceContext,r
   if(existing&&(existing.payment.invoiceId!==canonical.invoice.id||existing.payment.status!=="succeeded"||existing.payment.provider!=="stripe"||existing.payment.providerRef!==receipt.providerPaymentIntentRef||existing.payment.currency!==receipt.currency||existing.payment.amountMinor!==receipt.amountMinor||existing.payment.refundedMinor!==0
    ||existing.route.subscriptionId!==parent.id||existing.route.providerPlatformAccountId!==receipt.providerPlatformAccountId||existing.route.chargeAccountId!==receipt.chargeAccountId||existing.route.providerInvoiceRef!==receipt.providerInvoiceRef))refuseControlledCash();
   const requested=input.receiptIds.includes(receipt.id);if(!existing&&!requested)refuseControlledCash();
-  const allocation=existing?null:await invoiceCashFeeAllocation(ctx,canonical.invoice,canonical.marketPolicy.feeMinor,{amountMinor:receipt.amountMinor,priorCashMinor:plannedCash,priorAllocatedFeeMinor:plannedFee});
-  const feeMinor=existing?.route.applicationFeeMinor??allocation?.feeMinor;if(feeMinor===undefined)refuseControlledCash();
-  const feeAllocation={basis:existing?"existing_original_route" as const:"actual_prior_and_exact_earlier_batch" as const,actualPriorCashMinor,actualPriorAllocatedFeeMinor,precedingReceiptIds:existing?[]:[...precedingReceiptIds],priorCashMinor:existing?actualPriorCashMinor:plannedCash,priorAllocatedFeeMinor:existing?actualPriorAllocatedFeeMinor:plannedFee,feeMinor,
-   revision:merchantTaxDigest({receiptId:receipt.id,originalRoute:existing?.route??null,actualPriorCashMinor,actualPriorAllocatedFeeMinor,precedingReceiptIds:existing?[]:precedingReceiptIds,plannedCash:existing?null:plannedCash,plannedFee:existing?null:plannedFee,allocation})};
+  const allocation=existing||atomic?null:await invoiceCashFeeAllocation(ctx,canonical.invoice,canonical.marketPolicy.feeMinor,{amountMinor:receipt.amountMinor,priorCashMinor:plannedCash,priorAllocatedFeeMinor:plannedFee});
   const latest=await latestControlledCashInspectionLineage(ctx.tx,receipt.id);
   const unfinished=latest.admissions.filter(row=>!latest.finishes.some(finish=>finish.inspectionId===row.id&&finish.callerInstanceId===row.caller.id)&&!latest.stops.some(stop=>stop.inspectionId===row.id));
   unfinishedInspectionIds.push(...unfinished.map(row=>row.id));if(unfinished.length)refuseControlledCash();
@@ -82,6 +80,12 @@ export async function readControlledCollectionCashAuthority(ctx:ServiceContext,r
   if(latest.inspection.subscriptionChargeReceiptId!==receipt.id||latest.inspection.subscriptionChargeObservationId===null)refuseControlledCash();
   const rows=await ctx.tx.execute(sql`select * from freeholder_controlled_receipt_bank_observation(${collection.id}::uuid,${receipt.id}::uuid)`);
   if(rows.length!==1)refuseControlledCash();const sqlBank=bankRow.parse(rows[0]);
+  // An atomic batch uses the fee physically observed on THIS exact charge.
+  // Neutral bank/route/refund/recipient checks below still authenticate it;
+  // only the complete actual endpoint determines the cumulative policy.
+  const feeMinor=existing?.route.applicationFeeMinor??(atomic?sqlBank.current_evidence.fee?.amountMinor??0:allocation?.feeMinor);if(feeMinor===undefined)refuseControlledCash();
+  const feeAllocation={basis:existing?"existing_original_route" as const:atomic?"actual_atomic_batch" as const:"actual_prior_and_exact_earlier_batch" as const,actualPriorCashMinor,actualPriorAllocatedFeeMinor,precedingReceiptIds:existing?[]:[...precedingReceiptIds],priorCashMinor:existing?actualPriorCashMinor:plannedCash,priorAllocatedFeeMinor:existing?actualPriorAllocatedFeeMinor:plannedFee,feeMinor,
+   revision:merchantTaxDigest({receiptId:receipt.id,originalRoute:existing?.route??null,actualPriorCashMinor,actualPriorAllocatedFeeMinor,precedingReceiptIds:existing?[]:precedingReceiptIds,plannedCash:existing?null:plannedCash,plannedFee:existing?null:plannedFee,allocation,...(atomic?{atomicBankFingerprint:sqlBank.immutable_bank_fingerprint}: {})})};
   if(sqlBank.actual_inspection_id!==latest.inspection.id||!sqlBank.bank_witness.some(row=>row.table==="subscription_controlled_cash_inspection_lineages"&&row.id===latest.inspection.id))refuseControlledCash();
   const originalExpectation=controlledCashBankExpectation.parse({providerApiVersion:resource.originalScope.providerApiVersion,providerPlatformAccountId:resource.originalScope.providerPlatformAccountId,providerAccountId:resource.originalScope.providerAccountId,destinationAccountId:resource.originalScope.destinationAccountId,settlementMerchantAccountId:resource.originalScope.settlementMerchantAccountId,
    providerRef:receipt.providerPaymentIntentRef,chargeRef:receipt.providerChargeRef,amountMinor:receipt.amountMinor,currency:receipt.currency,feeMinor,originalFeeRef:receipt.applicationFeeRef,customerChargeVerified:receipt.customerChargeVerified&&actual.customerChargeVerified,merchantRouteVerified:receipt.merchantRouteVerified&&actual.merchantRouteVerified});
@@ -105,14 +109,26 @@ export async function readControlledCollectionCashAuthority(ctx:ServiceContext,r
   if(!existing){plannedCash=bigintNumber(BigInt(plannedCash)+BigInt(receipt.amountMinor));plannedFee=bigintNumber(BigInt(plannedFee)+BigInt(feeMinor));precedingReceiptIds.push(receipt.id);}
  }
  if(proofs.length!==input.receiptIds.length||plannedCash>canonical.invoice.totalMinor-canonical.invoice.creditedMinor)refuseControlledCash();
+ let atomicFeePolicy:ControlledCollectionCashProof["atomicFeePolicy"];
+ if(atomic){
+  const budget=await invoiceCashFeeBudget(ctx,canonical.invoice,canonical.marketPolicy.feeMinor);
+  const amounts=controlledAtomicFeeAmounts({principalMinor:budget.principalMinor,feeTargetMinor:budget.physicalFeeTargetMinor,actualPriorCashMinor,actualPriorAllocatedFeeMinor,
+   receipts:proofs.filter(row=>row.existingPaymentId===null).map(row=>({receiptId:row.receiptId,amountMinor:row.amountMinor,feeMinor:row.feeAllocation.feeMinor}))});
+  const policy={kind:"actual_atomic_batch" as const,principalMinor:budget.principalMinor,feeTargetMinor:budget.physicalFeeTargetMinor,actualPriorCashMinor,actualPriorAllocatedFeeMinor,batchCashMinor:amounts.batchCashMinor,batchFeeMinor:amounts.batchFeeMinor};
+  atomicFeePolicy={...policy,revision:merchantTaxDigest({policy,budget,actualReceipts:proofs.map(row=>({receiptId:row.receiptId,bank:row.immutableBankRevision,fee:row.feeAllocation}))})};
+ }
  const currentCanonical={outstandingMinor:invoiceOutstanding(canonical.invoice),totalMinor:canonical.invoice.totalMinor,creditedMinor:canonical.invoice.creditedMinor,paidMinor:canonical.invoice.paidMinor,refundedMinor:canonical.invoice.refundedMinor,currentCollectible:canonical.currentCollectible,originalCreditNoteId:collection.creditNoteId,
   originalCreditFundingIds:canonical.funding.map(row=>row.id).sort(),creditReservationIds:canonical.reservations.map(row=>row.id).sort(),creditApplicationIds:canonical.applications.map(row=>row.reservationId).sort(),feeDutyId:canonical.feeDuty?.invoiceId??null,feeCreditAssignmentIds:canonical.feeCreditAssignments.map(row=>row.applicationId).sort(),
   creditRevision:merchantTaxDigest({funding:canonical.funding,notes:canonical.notes,noteLines:canonical.noteLines,reservations:canonical.reservations,applications:canonical.applications,releases:canonical.releases}),feeRevision:merchantTaxDigest({originalPolicy:canonical.marketPolicy,duty:canonical.feeDuty,creditAssignments:canonical.feeCreditAssignments,actualPriorCash:prior}),revision:merchantTaxDigest({invoice:canonical.invoice,acceptedTarget:canonical.digest})};
  const prospectiveRawBindings=controlledProspectiveRawBindings(source,bank,ownedReceipts),rawReviewFactIds=controlledRawFinancialReview(resource,history).factIds;
- const preApplicationRevision=merchantTaxDigest({collectionId:collection.id,requestedReceiptIds:input.receiptIds,canonical:currentCanonical,actualBankProofs:allBankProofs.map(row=>({receiptId:row.receiptId,immutableBankRevision:row.immutableBankRevision,namespaceRevision:row.namespaceRevision,originRevision:row.originRevision,feeAllocation:row.feeAllocation})),prospectiveRawBindings,rawReviewFactIds,currentControlledJournalRevision:history.revision});
+ const preApplicationRevision=merchantTaxDigest({collectionId:collection.id,requestedReceiptIds:input.receiptIds,canonical:currentCanonical,actualBankProofs:allBankProofs.map(row=>({receiptId:row.receiptId,immutableBankRevision:row.immutableBankRevision,namespaceRevision:row.namespaceRevision,originRevision:row.originRevision,feeAllocation:row.feeAllocation})),prospectiveRawBindings,rawReviewFactIds,currentControlledJournalRevision:history.revision,...(atomicFeePolicy?{atomicFeePolicy}:{})});
  return controlledCollectionCashProof.parse({protocol:CONTROLLED_COLLECTION_PROTOCOL,collectionId:collection.id,quoteId:collection.quoteId,resourceId:resource.id,subscriptionId:parent.id,invoiceId:canonical.invoice.id,termsId:collection.termsId,acceptedQuoteDigest:collection.acceptedQuoteDigest,canonicalTargetDigest:collection.canonicalTargetDigest,requestedReceiptIds:input.receiptIds,
   bankInvoice:{providerSubscriptionRef:bank.providerSubscriptionRef,providerInvoiceRef:bank.providerInvoiceRef,providerCustomerRef:resource.originalScope.providerCustomerRef,currency:manifest.currency,status:bank.status,totalMinor:bank.totalMinor,paidMinor:bank.paidMinor,remainingMinor:bank.remainingMinor,positiveReceiptIds:ownedReceipts.map(row=>row.id),manifestOperationId:bank.operation.id,manifestCallId:bank.read.callId,manifestResultDigest:bank.read.actualResultDigest,manifestDigest:merchantTaxDigest(manifest),zeroWalletProofDigest:bank.zeroWalletProofDigest},
-  canonical:currentCanonical,receipts:proofs,prospectiveRawBindings,rawReviewFactIds,unfinishedControlledCallIds:history.unfinished,unfinishedInspectionIds,unfinishedNamespaceCallers,preApplicationRevision,sourceRevision:merchantTaxDigest({preApplicationRevision,allActualBankRows:allBankProofs,bankManifestResult:bank.read.actualResultDigest}),suppliesObservationAuthority:false,suppliesPrincipalAuthority:false,suppliesApplicationAuthority:false,suppliesAccessAuthority:false});
+  canonical:currentCanonical,receipts:proofs,...(atomicFeePolicy?{atomicFeePolicy}:{}),prospectiveRawBindings,rawReviewFactIds,unfinishedControlledCallIds:history.unfinished,unfinishedInspectionIds,unfinishedNamespaceCallers,preApplicationRevision,sourceRevision:merchantTaxDigest({preApplicationRevision,allActualBankRows:allBankProofs,bankManifestResult:bank.read.actualResultDigest}),suppliesObservationAuthority:false,suppliesPrincipalAuthority:false,suppliesApplicationAuthority:false,suppliesAccessAuthority:false});
 }
+/** Historical/default singleton and batch readers retain exact prefix floors. */
+export async function readControlledCollectionCashAuthority(ctx:ServiceContext,input:{collectionId:string;receiptIds:string[]}){return readControlledCollectionCash(ctx,input,false);}
+/** Internal real batch writer only. No public DTO/policy selector is accepted. */
+export async function readControlledAtomicCollectionCashAuthority(ctx:ServiceContext,input:{collectionId:string;receiptIds:string[]}){return readControlledCollectionCash(ctx,input,true);}
 /** Singleton is still an explicit actual UUID batch; never amount discovery. */
 export async function readControlledReceiptCashAuthority(ctx:ServiceContext,input:{collectionId:string;receiptId:string}){return readControlledCollectionCashAuthority(ctx,{collectionId:input.collectionId,receiptIds:[input.receiptId]});}

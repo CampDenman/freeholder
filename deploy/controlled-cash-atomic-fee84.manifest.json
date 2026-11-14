@@ -1,0 +1,162 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "status": "SOURCE_ONLY_PREPARED_UNRUN",
+  "sourceRootHead": "1325527d9df9e54eb43ee3637f6c30d78f36d556",
+  "replacement": "deploy/controlled-cash-atomic-fee84.fragment.sql",
+  "replacementSha256": "cc4c6960f2881d2db279132bb7445d5ab4b96259b3fbfdd0c50f4639848cf5e5",
+  "functions": [
+    {
+      "name": "freeholder_controlled_cash_guard_batch",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "sourceSha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
+      "beforeStatementSha256": "87d1e52750f4df52b5dbbd537a4dd63e85c3f12f0e16608d9b4c1f8e5b7e95d6",
+      "originalCreateOrReplace": false,
+      "afterStatementSha256": "5e1fb1ac65f53594d7a62c3f8038e77d9451c83cde2544394de50324f1e95cc4",
+      "changes": [
+        {
+          "before": "IF actual_collection.id IS NULL OR actual_quote.id IS NULL OR actual_invoice.id IS NULL",
+          "after": "IF NEW.protocol NOT IN('controlled_net_gross.v1','controlled_cash_atomic.v1') OR actual_collection.id IS NULL OR actual_quote.id IS NULL OR actual_invoice.id IS NULL"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_cash_guard_receipt",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "sourceSha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
+      "beforeStatementSha256": "5f3ef305db5208317dc7ab419874c34d98e12a801d56659cedf0f31b7307aec1",
+      "originalCreateOrReplace": false,
+      "afterStatementSha256": "1c753d0f5bb159f273f52aa1628ab7957f6a079e82c612dceab9543e8309ebf3",
+      "changes": [
+        {
+          "before": "IF admitted_batch.id IS NULL OR admitted_batch.admission_transaction_id IS DISTINCT FROM txid_current()::text",
+          "after": "IF admitted_batch.id IS NULL OR admitted_batch.protocol NOT IN('controlled_net_gross.v1','controlled_cash_atomic.v1') OR admitted_batch.admission_transaction_id IS DISTINCT FROM txid_current()::text"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_cash_receipts_complete",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "sourceSha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
+      "beforeStatementSha256": "e3c6587fb1116decb16ad5ae2cf0c410b5ea1fe508f2252604b8a19334ea5e3e",
+      "originalCreateOrReplace": false,
+      "afterStatementSha256": "143d214dd85477b5d016165f52746eec00358965feeb958d99660c978498e3f5",
+      "changes": [
+        {
+          "before": "IF admitted_batch.id IS NULL OR admitted_batch.admission_transaction_id IS DISTINCT FROM txid_current()::text",
+          "after": "IF admitted_batch.id IS NULL OR admitted_batch.protocol NOT IN('controlled_net_gross.v1','controlled_cash_atomic.v1') OR admitted_batch.admission_transaction_id IS DISTINCT FROM txid_current()::text"
+        },
+        {
+          "before": "OR receipt_record.fee_minor::numeric IS DISTINCT FROM floor(fee_target*(original_paid+receipt_record.amount_minor::numeric)/cash_principal)-original_fee",
+          "after": "OR(admitted_batch.protocol='controlled_net_gross.v1' AND receipt_record.fee_minor::numeric IS DISTINCT FROM floor(fee_target*(original_paid+receipt_record.amount_minor::numeric)/cash_principal)-original_fee)"
+        },
+        {
+          "before": " END LOOP;\nEND $$;",
+          "after": " END LOOP;\n IF original_fee IS DISTINCT FROM floor(fee_target*original_paid/cash_principal) THEN\n  RAISE EXCEPTION 'Every actual fee must conserve the original cumulative endpoint within this complete atomic batch; unseen future receipts cannot supply a residual' USING ERRCODE='23514';END IF;\nEND $$;"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_cash_before_settlement",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "sourceSha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
+      "beforeStatementSha256": "942fa3ecd797e41d325230cf6e2495ef399367de189117cb26e4811b01793a4c",
+      "originalCreateOrReplace": false,
+      "afterStatementSha256": "1f4491edaa4734e7d8869c38013a8a704c81752806ca9876747eb032f3110b65",
+      "changes": [
+        {
+          "before": "IF link_record.receipt_id IS NULL OR receipt_record.id IS NULL OR batch_record.id IS NULL",
+          "after": "IF link_record.receipt_id IS NULL OR receipt_record.id IS NULL OR batch_record.id IS NULL OR batch_record.protocol NOT IN('controlled_net_gross.v1','controlled_cash_atomic.v1')"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_cash_stage",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "sourceSha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
+      "beforeStatementSha256": "c450fc8b82ddc70d4a3cce9bb269de5c46d92c6224e6155d24d33a0884501305",
+      "originalCreateOrReplace": false,
+      "afterStatementSha256": "47d1b3aa3d005620a1681b1456e5954fb3a25b2f960c96df680956e2e1fd6823",
+      "changes": [
+        {
+          "before": "IF batch_record.id IS NULL OR invoice_record.id IS NULL",
+          "after": "IF batch_record.id IS NULL OR batch_record.protocol NOT IN('controlled_net_gross.v1','controlled_cash_atomic.v1') OR invoice_record.id IS NULL"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_cash_application_shape",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "sourceSha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
+      "beforeStatementSha256": "7848b553c5577f603f9ca25ccc91696e80b88b1cd896479709f6bf8ee4fea740",
+      "originalCreateOrReplace": true,
+      "afterStatementSha256": "7d947a8049e68c3d80040fdb268d5a420e345655e6c855436113f6defda8cd1e",
+      "changes": [
+        {
+          "before": "IF link_row.receipt_id IS NULL OR receipt_proof.id IS NULL OR batch_row.id IS NULL",
+          "after": "IF link_row.receipt_id IS NULL OR receipt_proof.id IS NULL OR batch_row.id IS NULL OR batch_row.protocol NOT IN('controlled_net_gross.v1','controlled_cash_atomic.v1')"
+        },
+        {
+          "before": "IF current_batch.collection_id IS DISTINCT FROM collection_row.id",
+          "after": "IF current_batch.protocol NOT IN('controlled_net_gross.v1','controlled_cash_atomic.v1') OR current_batch.collection_id IS DISTINCT FROM collection_row.id"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_subscription_route_valid",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "sourceSha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
+      "beforeStatementSha256": "10ff07ce77873c64347a984f4ad659eb00997df03487995227e6f6e3ea9a9654",
+      "originalCreateOrReplace": false,
+      "afterStatementSha256": "62a42c1c98db1d8525c46f7f3622ebde9ea17f78861cee045ff9167bdb3de641",
+      "changes": [
+        {
+          "before": "batch_record.protocol IS DISTINCT FROM 'controlled_net_gross.v1'",
+          "after": "batch_record.protocol NOT IN('controlled_net_gross.v1','controlled_cash_atomic.v1')"
+        }
+      ]
+    },
+    {
+      "name": "guard_merchant_agreement_payment_route",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "sourceSha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
+      "beforeStatementSha256": "b229947d2793af8f07fb9ed6fb12424b05d1574d0548956a13b44cddd77545b6",
+      "originalCreateOrReplace": true,
+      "afterStatementSha256": "f4302665e5650a2a1aa4b765a693021b57d326b7dc066922b7f77dec1c46ac27",
+      "changes": [
+        {
+          "before": "OR prior_fee<>floor(duty.cash_fee_target_minor::numeric*paid/duty.cash_principal_minor)\n   OR NEW.application_fee_minor<>floor(duty.cash_fee_target_minor::numeric*(paid+payment.amount_minor)/duty.cash_principal_minor)-prior_fee",
+          "after": "OR(NOT freeholder_controlled_cash_atomic_fee_valid(payment.id,NEW.application_fee_minor,paid,prior_fee) AND(\n    prior_fee<>floor(duty.cash_fee_target_minor::numeric*paid/duty.cash_principal_minor)\n    OR NEW.application_fee_minor<>floor(duty.cash_fee_target_minor::numeric*(paid+payment.amount_minor)/duty.cash_principal_minor)-prior_fee))"
+        },
+        {
+          "before": "OR prior_fee<>floor(policy.fee_minor::numeric*paid/parent.total_minor)\n  OR NEW.application_fee_minor<>floor(policy.fee_minor::numeric*(paid+payment.amount_minor)/parent.total_minor)-prior_fee",
+          "after": "OR(NOT freeholder_controlled_cash_atomic_fee_valid(payment.id,NEW.application_fee_minor,paid,prior_fee) AND(\n   prior_fee<>floor(policy.fee_minor::numeric*paid/parent.total_minor)\n   OR NEW.application_fee_minor<>floor(policy.fee_minor::numeric*(paid+payment.amount_minor)/parent.total_minor)-prior_fee))"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_guard_agreement_fee",
+      "source": "db/migrations/0080_merchant_per_party_collection.sql",
+      "sourceSha256": "a9bd11ede2441c7b66913abbe900da6505ea01e0ab97490119fc4b743fa15af3",
+      "beforeStatementSha256": "76c71d97ff1b651f6f568071e60c68218736ceb20caec5779e50e3f033dc61f6",
+      "originalCreateOrReplace": false,
+      "afterStatementSha256": "dda5d6a753ef04f9f98ebbea2cdbdab1d5be63f58265be1f1b88dab1bd359b01",
+      "changes": [
+        {
+          "before": "OR prior_fee<>floor(duty.cash_fee_target_minor::numeric*prior_cash/duty.cash_principal_minor)\n   OR NEW.fee_obligation_minor<>floor(duty.cash_fee_target_minor::numeric*(prior_cash+p.amount_minor)/duty.cash_principal_minor)-prior_fee",
+          "after": "OR(NOT freeholder_controlled_cash_atomic_fee_valid(p.id,NEW.fee_obligation_minor,prior_cash,prior_fee) AND(\n    prior_fee<>floor(duty.cash_fee_target_minor::numeric*prior_cash/duty.cash_principal_minor)\n    OR NEW.fee_obligation_minor<>floor(duty.cash_fee_target_minor::numeric*(prior_cash+p.amount_minor)/duty.cash_principal_minor)-prior_fee))"
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_subscription_route_ready",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "sourceSha256": "b32853e108aebb3f8cd7dc7914831d1d866507766b60b703641a11f54c1a5236",
+      "beforeStatementSha256": "2c38c4de7b9aed960bd30fdb830491f5c287d6cca4affed15412f0ed9b4146c2",
+      "afterStatementSha256": "cd9f85b3dd9dcdf0a29b1b3b1f4320a4a21d5ba41d4217ebd2d8e736b0389254",
+      "changes": "Exact replacement body SHA pins plus all genuine atomic policy body pins; both original trigger checks preserved."
+    }
+  ],
+  "newFunction": "freeholder_controlled_cash_atomic_fee_valid(uuid,bigint,numeric,numeric)",
+  "targetProtocolUnchanged": "controlled_net_gross.v1",
+  "atomicBatchProtocol": "controlled_cash_atomic.v1"
+}
