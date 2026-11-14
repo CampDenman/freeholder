@@ -3571,13 +3571,18 @@ actual-payment-link models. NEW UNAPPLIED SQL checks complete PG parent preimage
 real bank inventory/partial consideration, original credit and cumulative fee
 ownership, actual held prefix and real first payment UUID birth. Full internal
 PG row SHA, exact-owner safe exports and explicit private/noTTL metadata remain
-separate. Sixteen pure and four source controls are PREPARED/UNRUN; no execution
+separate. Sixteen pure and five source controls are PREPARED/UNRUN; no execution
 or current-root/journal mutation occurred. Subsequent receipt births still
 mechanically refuse until full actual own-canonical staged normalization,
 deferred conservation, prospective parent context and genuine alternate writer
 integration are complete. Application remains unregistered/unactivated; all
 native/security/provider acceptance, full specification, C-items and stable
 remain open. See `deploy/controlled-cash-application-protocol84-source-20261113.md`.
+
+Source-only review follow-up 2026-11-13: the new cumulative receipt loop's PLpgSQL
+record is named distinctly from its actual SQL table aliases. This narrow local
+rename preserves every predicate; the regression remains prepared/UNRUN and no
+database/source qualification is implied.
 
 Controlled bank-order source correction 2026-11-13 (C12.38/C1.08/C9.33):
 isolated source carries the ONE signed actual admission-lineage child and its

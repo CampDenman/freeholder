@@ -97,10 +97,15 @@ context remain required before any application authority can register. Current
 strict no-context principal/recovery paths stay unchanged; an unapplied receipt
 never becomes principalSafe or a fake canonical payment.
 
-Sixteen new pure policy cases and four source-integrity controls are prepared
+Sixteen new pure policy cases and five source-integrity controls are prepared
 and UNRUN. Required actual native controls include before-first-write callback
 invalidation, actual receipt/payment lifetime duplicate refusal, late receipt
 rollback, complete batch/fee/credit/plan conservation, multiple genuine partial
 PIs without paid effects, overage retention and unchanged old default paths.
 They need the complete genuine producer/parent/staged writer fixture; no fake
 ServiceContext, hand-inserted money or invented returned bank proof is supplied.
+
+Source review follow-up: the PLpgSQL cumulative-prefix loop record is named
+`receipt_record`, distinct from each SQL `receipt_proof` table alias. Only that
+local name changed; predicates, models and all original source evidence remain.
+The extra source regression is prepared/UNRUN. No parser/database was executed.

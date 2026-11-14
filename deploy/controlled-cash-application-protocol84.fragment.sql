@@ -717,7 +717,7 @@ CREATE TRIGGER controlled_cash_receipts_immutable BEFORE INSERT OR UPDATE OR DEL
 CREATE FUNCTION freeholder_controlled_cash_receipts_complete(target_batch_uuid uuid) RETURNS void LANGUAGE plpgsql VOLATILE AS $$
 DECLARE admitted_batch controlled_cash_application_batches%ROWTYPE; proof_count integer; actual_ids jsonb; actual_cash numeric; actual_fee numeric;
  actual_invoice invoices%ROWTYPE; original_policy invoice_market_policies%ROWTYPE; actual_duty agreement_fee_duties%ROWTYPE;
- original_paid numeric; original_fee numeric; carried_fee numeric; cash_principal numeric; fee_target numeric; receipt_proof controlled_cash_application_receipts%ROWTYPE;
+ original_paid numeric; original_fee numeric; carried_fee numeric; cash_principal numeric; fee_target numeric; receipt_record controlled_cash_application_receipts%ROWTYPE;
 BEGIN
  SELECT * INTO admitted_batch FROM controlled_cash_application_batches WHERE id=target_batch_uuid;
  IF admitted_batch.id IS NULL OR admitted_batch.admission_transaction_id IS DISTINCT FROM txid_current()::text THEN RAISE EXCEPTION 'Use only the same real immutable application transaction' USING ERRCODE='23514';END IF;
@@ -755,11 +755,11 @@ BEGIN
  END IF;
  IF cash_principal<=0 OR fee_target>cash_principal OR original_fee IS DISTINCT FROM floor(fee_target*original_paid/cash_principal) THEN
   RAISE EXCEPTION 'Restore the exact original cumulative cash commission; never silently reprice historical fee allocations' USING ERRCODE='23514';END IF;
- FOR receipt_proof IN SELECT actual_proof.* FROM controlled_cash_application_receipts actual_proof WHERE actual_proof.batch_id=admitted_batch.id ORDER BY actual_proof.ordinal LOOP
-  IF receipt_proof.prior_cash_minor::numeric IS DISTINCT FROM original_paid OR receipt_proof.prior_allocated_fee_minor::numeric IS DISTINCT FROM original_fee
-   OR receipt_proof.fee_minor::numeric IS DISTINCT FROM floor(fee_target*(original_paid+receipt_proof.amount_minor::numeric)/cash_principal)-original_fee THEN
+ FOR receipt_record IN SELECT actual_proof.* FROM controlled_cash_application_receipts actual_proof WHERE actual_proof.batch_id=admitted_batch.id ORDER BY actual_proof.ordinal LOOP
+  IF receipt_record.prior_cash_minor::numeric IS DISTINCT FROM original_paid OR receipt_record.prior_allocated_fee_minor::numeric IS DISTINCT FROM original_fee
+   OR receipt_record.fee_minor::numeric IS DISTINCT FROM floor(fee_target*(original_paid+receipt_record.amount_minor::numeric)/cash_principal)-original_fee THEN
    RAISE EXCEPTION 'Every later fee plan must bind its exact preceding real receipt prefix and deterministic residual' USING ERRCODE='23514';END IF;
-  original_paid=original_paid+receipt_proof.amount_minor;original_fee=original_fee+receipt_proof.fee_minor;
+  original_paid=original_paid+receipt_record.amount_minor;original_fee=original_fee+receipt_record.fee_minor;
  END LOOP;
 END $$;
 --> statement-breakpoint

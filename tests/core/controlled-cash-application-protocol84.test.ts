@@ -6,6 +6,10 @@ import { describe,expect,it } from "vitest";
 const read=(path:string)=>readFileSync(new URL(`../../${path}`,import.meta.url),"utf8");
 const owned=read("deploy/controlled-cash-application-protocol84.fragment.sql");
 describe("genuine future controlled application admission boundary",()=>{
+ it("does not let a PLpgSQL receipt record shadow the actual receipt-table aliases",()=>{
+  const start=owned.indexOf("CREATE FUNCTION freeholder_controlled_cash_receipts_complete("),end=owned.indexOf("\nEND $$;",start),body=owned.slice(start,end);
+  expect(body).toContain("receipt_record controlled_cash_application_receipts%ROWTYPE");expect(body).toContain("FOR receipt_record IN");expect(body).not.toContain("receipt_proof controlled_cash_application_receipts%ROWTYPE");
+ });
  it("preserves the frozen bank-policy/order fragments and changes no old function body",()=>{
   expect(createHash("sha256").update(read("deploy/subscription-controlled-current-bank82.fragment.sql")).digest("hex")).toBe("b4b4c082356b0da4364c3ea46ef1314b040cdf3472bcd3c6f0ae9ce08198b28e");
   expect(createHash("sha256").update(read("deploy/controlled-bank-read-order84.fragment.sql")).digest("hex")).toBe("0f824c3a92018890f80e46763d3a915c47c1dde22ddfc4865ddecdddfc8bebce");
