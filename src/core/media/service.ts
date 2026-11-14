@@ -36,6 +36,9 @@ import {defineMediaService as defineService} from "./guarded-service";
 import {allowMediaReceiptWrites} from "./write-ledger";
 import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
 import {originalUploadContact,assertOriginalUploadWritable} from "./upload-ownership";
+import {declareOriginalMultipartPartBodies} from "./multipart-part-bodies";
+import {ORIGINAL_MULTIPART_PART_BYTES} from "./multipart-part-bodies-proof";
+import {transferDigest} from "./transfer-proof";
 import {withOriginalMultipartInvocation} from "./provider-callers";
 import {reserveMultipart,createOriginalMultipart,originalMultipart,originalMultipartParts,lockMultipartUpload,claimMultipartComplete,completeOriginalMultipart,adoptCompletedMultipart,claimMultipartAbort,abortOriginalMultipart,retireKnownMultipart} from "./multipart-operations";
 import {
@@ -141,7 +144,7 @@ const completeUploadResult = z.union([
 
 const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
-export const MULTIPART_PART_BYTES = 8 * 1024 * 1024;
+export const MULTIPART_PART_BYTES = ORIGINAL_MULTIPART_PART_BYTES;
 const MAX_MULTIPART_PARTS = 10_000;
 const LEGACY_MAX_BYTES = 2_147_483_647;
 const ALT_TEXT_PROMPT_VERSION = "accessible-image-v1";
@@ -1147,6 +1150,21 @@ export const uploadStatus = defineOrchestratedService({
       failureReason: session.failureReason,
       expiresAt: session.expiresAt,
     };
+  },
+});
+
+export const declareUploadParts = defineService({
+  name:"media.declareUploadParts",
+  summary:"Bind the complete selected file's part sizes and checksums to its original upload.",
+  kind:"mutation",permission:"public",writeClass:"write",auditInputFields:["id"],
+  input:z.object({id:uuid,parts:z.array(z.object({partNumber:z.number().int().min(1).max(MAX_MULTIPART_PARTS),bytes:z.number().int().positive().max(MULTIPART_PART_BYTES),sha256:z.string().regex(/^[a-f0-9]{64}$/)})).min(1).max(MAX_MULTIPART_PARTS)}),
+  output:z.object({declarationId:uuid,digest:z.string().regex(/^[a-f0-9]{64}$/),partCount:z.number().int().positive()}),
+  handler:async(input,ctx)=>{
+    const session=await uploadSession(ctx.tx,input.id);if(!session||session.strategy!=="direct_multipart")throw new ServiceError("not_found","That direct upload is not here.");
+    requireUploadAccess(ctx.actor,session.uploadedBy);
+    const manifest=await declareOriginalMultipartPartBodies(ctx,input.id,input.parts);
+    ctx.setSubject("mediaUpload",input.id);
+    return{declarationId:manifest.id,digest:transferDigest(manifest),partCount:manifest.parts.length};
   },
 });
 
@@ -3431,6 +3449,7 @@ export default [
   reserveProxyObject,
   uploadStatus,
   uploadStatusSource,
+  declareUploadParts,
   signUploadParts,
   signUploadClaim,
   completeUpload,

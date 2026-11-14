@@ -1972,3 +1972,52 @@ END $$;
 CREATE TRIGGER media_multipart_completed_object BEFORE INSERT ON media_object_writes FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_completed_guard();
 --> statement-breakpoint
 CREATE TRIGGER media_multipart_completed_resource BEFORE INSERT OR UPDATE ON media_multipart_resources FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_completed_guard();
+--> statement-breakpoint
+-- A new declared body manifest limits future issuances; it proves no remote
+-- bytes, callback, revocation or local/remote caller finish.
+ALTER TABLE media_multipart_operations ADD COLUMN part_bodies jsonb;
+--> statement-breakpoint
+ALTER TABLE media_multipart_operations ADD CONSTRAINT media_multipart_part_bodies CHECK(part_bodies IS NULL OR (operation_kind='create' AND jsonb_typeof(part_bodies)='object' AND part_bodies->>'format'='original-multipart-part-bodies/v1' AND jsonb_typeof(part_bodies->'parts')='array') IS TRUE);
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_part_body_context(original_creation uuid) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT EXISTS(
+  SELECT 1 FROM media_multipart_operations creation JOIN media_multipart_resources resource ON resource.id=creation.resource_id
+  JOIN media_uploads upload ON upload.id=resource.upload_id
+  JOIN media_storage_transfer_calls caller ON caller.multipart_operation_id=creation.id AND caller.kind='multipart_create'
+  JOIN media_storage_transfer_requests request ON request.call_id=caller.id AND request.descriptor->>'kind'='multipart.create'
+  WHERE creation.id=original_creation AND creation.operation_kind='create' AND creation.state='accepted' AND creation.writer_finished_at IS NOT NULL AND creation.provider_accepted_at IS NOT NULL
+   AND creation.create_baseline->>'state'='complete' AND creation.create_baseline->>'callId'=caller.id::text AND creation.create_baseline->>'namespace'=resource.storage_namespace AND creation.create_baseline->>'keyDigest'=resource.key_digest
+   AND resource.original_reservation_id IS NOT NULL AND resource.state='open' AND resource.redacted_at IS NULL AND resource.retired_at IS NULL AND resource.provider_upload_id IS NOT NULL AND resource.storage_namespace ~ '^[a-f0-9]{64}$'
+   AND upload.state IN ('created','uploading') AND upload.expires_at>clock_timestamp() AND upload.storage_key=resource.object_key AND upload.provider_upload_id=resource.provider_upload_id
+   AND caller.state='returned' AND caller.returned_at IS NOT NULL AND caller.observed_accepted_at IS NOT NULL AND caller.namespace=resource.storage_namespace AND caller.physical_key=resource.object_key
+   AND request.state='returned' AND request.returned_at IS NOT NULL AND request.descriptor->>'key'=resource.object_key AND request.descriptor->'binding'->>'namespace'=resource.storage_namespace
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='response_body' AND fact.facts->>'detailDigest' ~ '^[a-f0-9]{64}$')
+   AND EXISTS(SELECT 1 FROM media_storage_transfer_request_observations fact WHERE fact.request_id=request.id AND fact.facts->>'stage'='session' AND fact.facts->>'uploadId'=resource.provider_upload_id)
+   AND (SELECT count(*) FROM media_multipart_operations other WHERE other.resource_id=resource.id AND other.operation_kind='create')=1
+   AND NOT freeholder_media_original_key_recreation_fenced(resource.storage_namespace,resource.key_digest)
+   AND NOT EXISTS(SELECT 1 FROM media_storage_writer_drains drain WHERE drain.namespace=resource.storage_namespace AND drain.state<>'released')
+   AND NOT EXISTS(SELECT 1 FROM media_storage_transfer_plans plan WHERE plan.source_namespace=resource.storage_namespace AND plan.state<>'cancelled')
+   AND NOT EXISTS(SELECT 1 FROM data_requests privacy WHERE privacy.contact_id=resource.contact_id AND privacy.kind='erasure' AND privacy.status IN ('verified','in_progress','completed','partially_completed'))
+   AND NOT EXISTS(SELECT 1 FROM privacy_retention_exceptions hold JOIN data_requests privacy ON privacy.id=hold.data_request_id WHERE hold.scope IN ('media.storageOperations','media.multipartOperations','media.storageTransfers','members') AND (hold.expires_at IS NULL OR hold.expires_at>clock_timestamp()) AND (resource.contact_id IS NULL OR privacy.contact_id=resource.contact_id))
+ )
+$$;
+--> statement-breakpoint
+CREATE FUNCTION freeholder_media_multipart_part_bodies_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE manifest jsonb; resource media_multipart_resources; caller media_storage_transfer_calls; request media_storage_transfer_requests;
+BEGIN
+ IF TG_OP='INSERT' THEN
+  IF NEW.part_bodies IS NOT NULL THEN RAISE EXCEPTION 'Part bodies bind only after the actual original session acknowledgement' USING ERRCODE='23514'; END IF;
+  RETURN NEW;
+ END IF;
+ IF NEW.part_bodies IS NOT DISTINCT FROM OLD.part_bodies THEN RETURN NEW; END IF;
+ IF OLD.part_bodies IS NOT NULL OR NEW.part_bodies IS NULL OR NOT freeholder_media_multipart_part_body_context(NEW.id) THEN RAISE EXCEPTION 'The original complete declared body is immutable; unknown or legacy creator/session evidence cannot be filled from a current file' USING ERRCODE='23514'; END IF;
+ manifest:=NEW.part_bodies;
+ SELECT * INTO resource FROM media_multipart_resources WHERE id=NEW.resource_id;
+ SELECT * INTO caller FROM media_storage_transfer_calls WHERE multipart_operation_id=NEW.id AND kind='multipart_create';
+ SELECT * INTO request FROM media_storage_transfer_requests WHERE call_id=caller.id AND descriptor->>'kind'='multipart.create';
+ IF NEW.operation_kind<>'create' OR manifest->>'format' IS DISTINCT FROM 'original-multipart-part-bodies/v1' OR coalesce(manifest->>'id','') !~ '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$' OR manifest->>'originalCreateCallId' IS DISTINCT FROM caller.id::text OR manifest->>'originalCreateRequestId' IS DISTINCT FROM request.id::text OR manifest->>'uploadIdDigest' IS DISTINCT FROM freeholder_media_transfer_fact_digest(to_jsonb(resource.provider_upload_id)) OR manifest->>'namespace' IS DISTINCT FROM resource.storage_namespace OR manifest->>'keyDigest' IS DISTINCT FROM resource.key_digest OR jsonb_typeof(manifest->'expectedBytes') IS DISTINCT FROM 'number' OR jsonb_typeof(manifest->'partBytes') IS DISTINCT FROM 'number' OR manifest->>'expectedBytes' IS DISTINCT FROM resource.expected_bytes::text OR manifest->>'partBytes' IS DISTINCT FROM '8388608' OR (manifest-ARRAY['format','id','originalCreateCallId','originalCreateRequestId','uploadIdDigest','namespace','keyDigest','expectedBytes','partBytes','parts'])<>'{}'::jsonb OR jsonb_typeof(manifest->'parts') IS DISTINCT FROM 'array' OR jsonb_array_length(manifest->'parts')<1 OR jsonb_array_length(manifest->'parts')>10000 OR jsonb_array_length(manifest->'parts')<>ceil(resource.expected_bytes::numeric/8388608) THEN RAISE EXCEPTION 'Declare every original part against only its genuine CREATE/session and fixed total byte reservation' USING ERRCODE='23514'; END IF;
+ IF EXISTS(SELECT 1 FROM jsonb_array_elements(manifest->'parts') WITH ORDINALITY AS original(part,ordinal) WHERE jsonb_typeof(part) IS DISTINCT FROM 'object' OR (part-ARRAY['partNumber','bytes','sha256'])<>'{}'::jsonb OR jsonb_typeof(part->'partNumber') IS DISTINCT FROM 'number' OR part->>'partNumber' IS DISTINCT FROM ordinal::text OR jsonb_typeof(part->'bytes') IS DISTINCT FROM 'number' OR part->>'bytes' IS DISTINCT FROM least(8388608::bigint,resource.expected_bytes-(ordinal-1)*8388608)::text OR jsonb_typeof(part->'sha256') IS DISTINCT FROM 'string' OR coalesce(part->>'sha256','') !~ '^[a-f0-9]{64}$') THEN RAISE EXCEPTION 'The complete selected file must retain exact ordered byte sizes and SHA256 declarations without extra private fields' USING ERRCODE='23514'; END IF;
+ RETURN NEW;
+END $$;
+--> statement-breakpoint
+CREATE TRIGGER media_multipart_part_bodies BEFORE INSERT OR UPDATE ON media_multipart_operations FOR EACH ROW EXECUTE FUNCTION freeholder_media_multipart_part_bodies_guard();
