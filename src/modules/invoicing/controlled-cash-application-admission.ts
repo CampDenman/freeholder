@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { inArray,sql } from "drizzle-orm";
 import { z } from "zod";
 import { ServiceError,type ServiceContext } from "@/core/service";
-import { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
+import type { CONTROLLED_COLLECTION_PROTOCOL } from "@/modules/subscriptions/controlled-provider-collection-protocol";
 import { CONTROLLED_CASH_ATOMIC_PROTOCOL,CONTROLLED_CASH_LEGACY_PROTOCOL } from "./controlled-cash-application-protocol";
 import { readControlledCashApplicationEvaluation } from "./controlled-cash-application-evaluation";
 import { controlledCashApplicationBatches,controlledCashApplicationReceipts } from "./controlled-cash-application-protocol-schema";
