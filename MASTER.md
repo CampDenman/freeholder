@@ -15845,3 +15845,15 @@ PREPARED/UNRUN. Mismatched partial/provider fee allocation remains retained revi
 and required recovery work; parent staging/routing, positive factories/orchestration,
 paid effects and actual batch/native/provider acceptance remain required. See
 `deploy/controlled-collection-cash-reader84-source-20261113.md`.
+
+Source factory checkpoint 2026-11-13 (C9.33/C9.38/C12.38/C1.08): shared owner and
+customer provider preview/consent paths now retain authentic actual calendar/
+customer/native/no-proration evidence and create the real canonical gross invoice,
+exclusive old paid credit and fee/job/terms lineage through the same existing
+writer. Historical quoted/full current accepted revisions remain distinct; no
+unaccepted quote reserves money or disappears from coverage. Actual trial end and
+zero trial principal stay intact. Eight pure and three genuine-service native
+controls are PREPARED/UNRUN; new owned SQL tail is UNAPPLIED. Provider paid effects
+still mechanically refuse pending genuine authority; first/normal-period factories,
+full collection/application/recovery/UI/native/live acceptance remain required.
+See `deploy/controlled-proration-canonical-factory82-source-20261113.md`.

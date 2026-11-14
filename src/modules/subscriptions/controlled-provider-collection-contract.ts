@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Explicit canonical target and actual provider collection are different proofs.
 import { z } from "zod";
+import { prorationCardSummary } from "./proration-card-contract";
 import { grossProrationInput,grossProrationReview } from "./proration-review-contract";
 export const CONTROLLED_COLLECTION_PROTOCOL="controlled_net_gross.v1";
 export const CONTROLLED_COLLECTION_POLICY="canonical_gross_target_locked_credit_no_wallet";
@@ -19,9 +20,9 @@ export const controlledProrationCalendar=z.object({kind:z.literal("controlled_pr
  if(value.originalTrialEndsAt!==value.proposedTrialEndsAt)ctx.addIssue({code:"custom",message:"Preserve the actually accepted original trial end; a price change cannot silently end or extend it."});
  if(Date.parse(value.proposedPeriodEnd)<=Date.parse(value.proposedPeriodStart))ctx.addIssue({code:"custom",message:"The actual proposed provider service period must be complete and positive."});
 });
-export const controlledProrationReview=grossProrationReview.omit({calendar:true,payment:true}).extend({calendar:controlledProrationCalendar,payment:z.null(),
+export const controlledProrationReview=grossProrationReview.omit({calendar:true,payment:true}).extend({calendar:controlledProrationCalendar,payment:z.null(),collectionMethod:z.object({kind:z.literal("original_saved_method"),summary:prorationCardSummary}).strict().optional(),
  controlled:z.object({quoteId:z.uuid(),resourceId:z.uuid(),plannedProrationId:z.uuid(),plannedCollectionId:z.uuid(),protocol:z.literal(CONTROLLED_COLLECTION_PROTOCOL),
-  quotedParentRevision:sha,calendarReadOperationId:z.uuid(),customerFinancialOperationId:z.uuid(),nativePreviewOperationId:z.uuid(),updatePreviewOperationId:z.uuid(),
+  methodDigest:sha.optional(),quotedParentRevision:sha,calendarReadOperationId:z.uuid(),customerFinancialOperationId:z.uuid(),nativePreviewOperationId:z.uuid(),updatePreviewOperationId:z.uuid(),
   nativeActualEvidenceDigest:sha,controlledUpdateActualEvidenceDigest:sha,customerFinancialDigest:sha,economicTargetDigest:sha})}).strict();
 export const controlledPeriodInput=z.object({id:z.uuid(),resourceId:z.uuid(),previewAt:z.iso.datetime(),locale:z.enum(["en","fr","es","ar"]).default("en")}).strict();
 export const controlledPeriodReview=controlledProrationReview.omit({controlled:true}).extend({kind:z.literal("period"),canonicalSourceId:z.string().min(1).max(300),

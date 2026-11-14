@@ -10,7 +10,8 @@ import { createStripePayments } from "@/adapters/payments/stripe";
 import { db } from "@/core/db";
 import { setModuleEnabled } from "@/core/settings/service";
 import { cartItems, productVariants } from "@/modules/catalog/schema";
-import { listSavedPaymentMethods, processPaymentProviderEvents } from "@/modules/invoicing/payment-provider-service";
+import { recordOfflinePayment,listSavedPaymentMethods, processPaymentProviderEvents } from "@/modules/invoicing/payment-provider-service";
+import { recordCommercialFee } from "@/modules/invoicing/commercial-attestations";
 import { quoteNewAgreement } from "@/modules/subscriptions/merchant-terms-quote";
 import { createMerchantPhaseProduct } from "@/modules/subscriptions/provider-phase-products";
 import { admitMerchantProviderPhases } from "@/modules/subscriptions/provider-phase-dispatch";
@@ -107,7 +108,10 @@ export function merchantPhaseEdge80(options: { failFirstPrice?: boolean; loseCan
     } };
 }
 
-export async function seedActualProviderSubscription80(options: Parameters<typeof merchantPhaseEdge80>[0] = {}) {
+export async function seedActualProviderSubscription80(options: Parameters<typeof merchantPhaseEdge80>[0] & {
+  /** Explicit actual shared-money test variant; default historical trial unchanged. */
+  paidProrationDay?:true;
+} = {}) {
     const fixture = await seedMerchantCheckout80("destination", 1);
     try {
     const remote = merchantPhaseEdge80(options), { provider } = remote; vi.spyOn(paymentAdapters, "paymentAdapter").mockReturnValue(provider);
@@ -123,12 +127,17 @@ export async function seedActualProviderSubscription80(options: Parameters<typeo
     const saved = await listSavedPaymentMethods.call({ contactId: fixture.buyer.id }, OWNER); expect(saved).toHaveLength(1);
     const [item] = await db().select({ variant: productVariants }).from(cartItems).innerJoin(productVariants, eq(productVariants.id, cartItems.variantId)).where(eq(cartItems.cartId, fixture.cart.id)).limit(1);
     if (!item || !saved[0]) throw new Error("The actual original fixture has no variant or saved method.");
-    const plan = await savePlan.call({ productId: item.variant.productId, name: "Actual original provider trial", interval: "month", trialDays: 7, trialRequiresCard: true, setupFeeMinor: 500,
-      billingMode: "provider", cancelBehaviour: "period_end", proration: "none", status: "active" }, OWNER);
+    const plan = await savePlan.call({ productId: item.variant.productId, name: options.paidProrationDay?"Actual original provider paid day":"Actual original provider trial", interval: options.paidProrationDay?"day":"month", trialDays: options.paidProrationDay?0:7, trialRequiresCard: !options.paidProrationDay, setupFeeMinor: options.paidProrationDay?0:500,
+      billingMode: "provider", cancelBehaviour: "period_end", proration: options.paidProrationDay?"create_prorations":"none", status: "active" }, OWNER);
     const input = { planId: plan.id, productVariantId: item.variant.id, contactId: fixture.buyer.id, paymentMethodId: saved[0].id, currency: "CAD", taxDestination: { country: "CA", region: "BC" } };
     const quote = await quoteNewAgreement.call(input, OWNER); if (!quote) throw new Error("The real provider quote unexpectedly selected legacy terms.");
     const accepted = await subscribe.call({ ...input, commercialTerms: { quoteDigest: quote.quoteDigest, locale: "en", source: "owner_subscription" } }, OWNER);
-    expect(accepted.invoiceId).toBeNull(); expect(accepted.subscription.status).toBe("trialing");
+    if(options.paidProrationDay){
+      if(!accepted.invoiceId)throw new Error("The actual original paid provider period needs its ordinary issued invoice.");
+      const payment=await recordOfflinePayment.call({invoiceId:accepted.invoiceId,method:"bank_transfer",amountMinor:4200,reference:"fictional-controlled-original-principal",evidence:"Explicit fictional external original principal attestation; never bank verification",idempotencyKey:"controlled-original-principal"},OWNER);
+      await recordCommercialFee.call({paymentId:payment.id,amountMinor:400,reference:"fictional-controlled-original-fee",evidence:"Explicit fictional external original fee remittance attestation",idempotencyKey:"controlled-original-fee"},OWNER);
+      expect(accepted.subscription.status).toBe("active");
+    }else{expect(accepted.invoiceId).toBeNull(); expect(accepted.subscription.status).toBe("trialing");}
     await createMerchantPhaseProduct.call({ subscriptionId: accepted.subscription.id }, { kind: "system" });
     const horizon = await quoteMerchantProviderHorizon.call({ subscriptionId: accepted.subscription.id, additionalPeriods: 1 }, { kind: "system" });
     const create = () => admitMerchantProviderPhases.call({ subscriptionId: accepted.subscription.id, additionalPeriods: 1, expectedHorizonDigest: horizon.horizonDigest }, { kind: "system" });

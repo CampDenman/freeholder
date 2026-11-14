@@ -15,6 +15,7 @@ import { controlledCollectionState } from "./controlled-provider-collection-stat
 import { controlledCalendarSource } from "./controlled-provider-calendar-source";
 import { controlledCollectionPayload,controlledCalendarPayload } from "./controlled-provider-adapter-contract";
 import { controlledTargetFinancialAuthority } from "./controlled-provider-target-authority";
+import { planControlledCashlessUpdate } from "./controlled-provider-cashless-plan";
 import { requireControlledCollectionSchema } from "./controlled-provider-collection-schema-guard";
 import { controlledCollectionReadiness } from "./controlled-provider-readiness";
 const kind=z.enum(["update_calendar","create_draft","add_invoice_component","read_manifest","set_invoice_fee","finalize_invoice","pay_invoice"]);
@@ -22,12 +23,16 @@ export { requireControlledCollectionSchema } from "./controlled-provider-collect
 export const planControlledCollectionOperation=defineService({name:"subscriptions.planControlledCollectionOperation",summary:"Freeze one exact next original canonical target request from actual immutable accepted rows, retaining all older callers and source revisions before physical SDK admission.",
  kind:"mutation",permission:"system",external:false,writeClass:"money",input:z.object({collectionId:z.uuid(),kind,componentId:z.uuid().optional()}).strict(),output:z.object({operationId:z.uuid()}),handler:async(input,ctx)=>{
   await lockContactIdentityForRead(ctx.tx);await requireControlledCollectionSchema(ctx);
-  const[reference]=await ctx.tx.select({resourceId:subscriptionControlledQuotes.resourceId}).from(subscriptionControlledCollections).innerJoin(subscriptionControlledQuotes,eq(subscriptionControlledQuotes.id,subscriptionControlledCollections.quoteId)).where(eq(subscriptionControlledCollections.id,input.collectionId)).limit(1);
+  const[reference]=await ctx.tx.select({resourceId:subscriptionControlledQuotes.resourceId,invoiceId:subscriptionControlledCollections.invoiceId}).from(subscriptionControlledCollections).innerJoin(subscriptionControlledQuotes,eq(subscriptionControlledQuotes.id,subscriptionControlledCollections.quoteId)).where(eq(subscriptionControlledCollections.id,input.collectionId)).limit(1);
   if(!reference)throw new ServiceError("not_found","There is no such accepted controlled canonical target.");
   await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`controlled-provider:${reference.resourceId}`}))`);
   const[heldResource]=await ctx.tx.select({id:subscriptionControlledResources.id,subscriptionId:subscriptionControlledResources.subscriptionId}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,reference.resourceId)).limit(1).for("update");
   if(!heldResource)throw new ServiceError("conflict","Retain the exact original resource before target admission.");
   await ctx.tx.select({id:subscriptions.id}).from(subscriptions).where(eq(subscriptions.id,heldResource.subscriptionId)).limit(1).for("update");
+  if(reference.invoiceId===null){
+   if(input.kind!=="update_calendar"||input.componentId)throw new ServiceError("conflict","An uncharged trial has no debit, bank draft, component or payment. Only its exact future-price update can be admitted before a real later paid period.");
+   return planControlledCashlessUpdate(ctx,input.collectionId);
+  }
   let source=await controlledCollectionState(ctx.tx,input.collectionId);
   // Canonical order follows the held resource and parent: original payments, target
   // invoice, then notes. Re-read after the actual parent locks are acquired.

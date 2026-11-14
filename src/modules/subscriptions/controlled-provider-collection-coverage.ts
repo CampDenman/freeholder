@@ -10,6 +10,7 @@ import { controlledProviderJournal } from "./controlled-provider-proof";
 import { controlledProviderCoverage } from "./controlled-provider-coverage";
 import { controlledCollectionWitnesses } from "./controlled-provider-collection-witnesses";
 import { authenticatedControlledQuote } from "./controlled-provider-quote-proof";
+import { controlledCashlessCollectionState } from "./controlled-provider-cashless-state";
 import { controlledCollectionState } from "./controlled-provider-collection-state";
 function refuse():never{throw new ServiceError("conflict","Restore the complete authenticated original controlled quote/target/component/creator/item/read graph. No own quote, admitted caller, positive occurrence or prior target may disappear from financial coverage.");}
 /** Caller holds resource then parent money locks. Pure read, no mutations or
@@ -47,6 +48,7 @@ export async function controlledCollectionCoverage(tx:Tx,input:{subscriptionId:s
    if(!quote||!resource||collection.kind!=="proration"||collection.creditNoteId!==null||witness.components.some(c=>c.collectionId===collection.id)||witness.invoiceBindings.some(b=>b.collectionId===collection.id))refuse();
    const review=authenticatedControlledQuote(quote,resource,await controlledProviderJournal(tx,resource.id)).review;
    if(!review.originalTrialEndsAt||review.debitNetMinor+review.debitTaxMinor+review.creditNetMinor+review.creditTaxMinor+review.cashDueMinor!==0)refuse();
+   await controlledCashlessCollectionState(tx,collection.id);
    actualTargets.push({id:collection.id,kind:"uncharged_trial",prorationId:collection.prorationId,invoiceId:null,canonicalTargetDigest:null});continue;
   }
   const actual=await controlledCollectionState(tx,collection.id);

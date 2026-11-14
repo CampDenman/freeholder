@@ -16,6 +16,9 @@ import {
 import { hiddenFromMcp, serviceForTool, toolName, toolsFor } from "@/mcp/tools";
 
 const INTERNAL = [
+  "subscriptions.planControlledProrationPreview",
+  "subscriptions.retainControlledProrationQuote",
+  "subscriptions.assertControlledProrationPreviewSource",
   // C1.12/C11.08: exact original transfer/request/recovery phases stay private.
   "media.captureTransferErasure",
   "media.admitTransferErasureCall",
@@ -401,6 +404,7 @@ const INTERNAL = [
 ] as const;
 
 const CALLER_AUTHORIZED_PHASES = [
+  "subscriptions.assertMyControlledProrationQuoteAccess",
   // C1.12/C11.08: exact original transfer/request/recovery phases stay private.
   "media.captureTransferErasure",
   "media.admitTransferErasureCall",
