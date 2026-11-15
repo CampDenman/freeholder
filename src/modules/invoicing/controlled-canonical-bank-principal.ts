@@ -95,9 +95,21 @@ export async function readControlledCanonicalBankPrincipal(ctx: ServiceContext, 
   // Existing original epoch policy is reused, including actual Fi on a valid
   // atomic application. A new endpoint or today's bps never reprices this row.
   const retainedFee = await originalMerchantFeeTarget(ctx, payment, routing);
+  // The earliest raw cash receipt may precede observing its actual fee. Only
+  // the genuine committed atomic application can supply that missing identity:
+  // its signed original bank row is independently authenticated, never today's
+  // candidate fee or a caller-supplied same-amount reference. No receipt changes.
+  const originalAtomicFeeOwner = receipt.applicationFeeRef === null && route.applicationFeeMinor > 0
+    ? await (await import("./controlled-atomic-refund-target")).controlledAtomicFeeOwner(ctx, payment.id) : null;
+  if (originalAtomicFeeOwner && (!originalAtomicFeeOwner.applicationFeeRef || originalAtomicFeeOwner.receiptId !== receipt.id
+    || originalAtomicFeeOwner.batchId !== batch.id || originalAtomicFeeOwner.proofId !== proof.id || originalAtomicFeeOwner.collectionId !== batch.collectionId
+    || originalAtomicFeeOwner.invoiceId !== payment.invoiceId || originalAtomicFeeOwner.subscriptionId !== receipt.subscriptionId
+    || originalAtomicFeeOwner.namespaceKey !== `${receipt.providerPlatformAccountId}:${receipt.chargeAccountId ?? ""}:${receipt.providerPaymentIntentRef}`
+    || originalAtomicFeeOwner.providerChargeRef !== receipt.providerChargeRef)) refuse();
+  const originalFeeRef = receipt.applicationFeeRef ?? originalAtomicFeeOwner?.applicationFeeRef ?? null;
   const review = controlledCanonicalBankReview({ amountMinor: payment.amountMinor, currency: payment.currency, refundedMinor: payment.refundedMinor,
     applicationFeeMinor: route.applicationFeeMinor, retainedFeeMinor: retainedFee, collectionKind: route.collectionKind, recipientAccountId: route.recipientAccountId,
-    chargeRef: receipt.providerChargeRef, originalFeeRef: receipt.applicationFeeRef, originalTransferRef: cash.originalTransferRef }, facts.evidence);
+    chargeRef: receipt.providerChargeRef, originalFeeRef, originalTransferRef: cash.originalTransferRef }, facts.evidence);
   const principalMatches = review.routeMatches && currentBankPrincipalMatches({ amountMinor: payment.amountMinor, currency: payment.currency, refundedMinor: payment.refundedMinor,
     apiVersion: cash.providerApiVersion, platform: cash.providerPlatformAccountId, account: cash.chargeAccountId, paymentRef: cash.providerRef, chargeRef: cash.originalChargeRef }, facts.evidence);
   const after = await parentSnapshot(ctx, batch.collectionId), afterBank = await bankSnapshot(ctx, batch.collectionId, receipt.id);
@@ -106,5 +118,6 @@ export async function readControlledCanonicalBankPrincipal(ctx: ServiceContext, 
   return { applies: true as const, principalMatches, ancillaryDebtPending: review.ancillaryDebtPending || namespace.financialCallerDebt,
     collectionId: batch.collectionId, receiptId: receipt.id, inspectionId: latest.inspection.id, observationId: facts.observation.id, physicalEntries,
     revision: merchantTaxDigest({ payment, cash, route, proof, batch, link, origin, namespace, parentRevision: after.revision,
-      immutableBankRevision: afterBank.immutable_bank_fingerprint, namespaceRevision: afterBank.bank_fingerprint, physicalEntries, principalMatches, review }) };
+      immutableBankRevision: afterBank.immutable_bank_fingerprint, namespaceRevision: afterBank.bank_fingerprint, physicalEntries, principalMatches, review,
+      ...(originalAtomicFeeOwner ? { originalAtomicFeeOwner } : {}) }) };
 }

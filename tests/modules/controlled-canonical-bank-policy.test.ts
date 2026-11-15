@@ -45,3 +45,24 @@ describe("current controlled original fee and route policy", () => {
     expect(() => controlledPrincipalPhysicalUnion([rows, [{ table: "payments", id: "additional", fingerprint: "b".repeat(64) }]])).toThrow();
   });
 });
+
+describe("original atomic bank fee identity stays independent from current fee counters", () => {
+  it("requires a proven original fee identity even when the current amount and accepted returned fee are correct", () => {
+    const bank = evidence(); if (!bank.fee) throw Error("Original fee fixture required.");
+    bank.fee.refundedMinor = 1;
+    const expected = { ...original, retainedFeeMinor: 83 };
+    expect(controlledCanonicalBankReview(expected, bank).ancillaryDebtPending).toBe(false);
+    expect(controlledCanonicalBankReview({ ...expected, originalFeeRef: null }, bank).ancillaryDebtPending).toBe(true);
+    expect(controlledCanonicalBankReview({ ...expected, originalFeeRef: "fee_foreign" }, bank).ancillaryDebtPending).toBe(true);
+    bank.fee.providerRef = "fee_latest_only";
+    expect(controlledCanonicalBankReview(expected, bank).ancillaryDebtPending).toBe(true);
+  });
+  it("keeps zero-fee original receipts strict and preserves every actual transfer counter", () => {
+    const bank = evidence(); bank.fee = null;
+    const zero = { ...original, applicationFeeMinor: 0, retainedFeeMinor: 0, originalFeeRef: null };
+    expect(controlledCanonicalBankReview(zero, bank).ancillaryDebtPending).toBe(false);
+    expect(controlledCanonicalBankReview({ ...zero, originalFeeRef: "fee_foreign" }, bank).ancillaryDebtPending).toBe(true);
+    if (!bank.transfer) throw Error("Original transfer fixture required."); bank.transfer.reversedMinor = 1;
+    expect(controlledCanonicalBankReview(zero, bank).ancillaryDebtPending).toBe(true);
+  });
+});

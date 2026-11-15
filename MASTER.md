@@ -3565,6 +3565,24 @@ open the admin until Thursday still needs to know about Monday.
 ## 43. Product Completion Plan — the live checklist
 
 
+B original-fee identity continuation2026-11-14 (C12.38/C9.33/C11.10): sourceV121
+PASSES1688actual/268completefiles/546explicitDBskips, fulltypes/lint/CLI; fresh
+normal80/strict163/369guards/424wholefunctions/actualSDK8/readiness PASS. Original
+B nativeV2 FAIL142.22s before quote: exact unreturned4199 principal and current
+400-minus1 fee are valid, but the earliest immutable cash receipt has NULL fee
+identity. The genuine signed original application bank independently records
+that fee. Readonly actual shared-context traces identify this precise bank-policy
+refusal; all598 whole tables/j86/sequence remain unchanged and failed80 is kept.
+The canonical reader now reuses ONLY the existing authenticated atomic owner,
+matching original receipt/batch/proof/collection/invoice/subscription/namespace/
+charge before comparing that original bank fee. No latest-fee adoption, receipt
+filling, ordinary fallback or financial/caller/fee-policy waiver. Two additional
+counter controls preserve NULL/foreign/current-only fee refusal, zero-fee and
+transfer conservation. Full source/fresh schema/SDK/original B qualification
+REQUIRED; no stable or B acceptance closure. See
+`deploy/atomic-credit-original-fee-root-continuation-20261114.json`.
+
+
 B first actual funding native2026-11-14 (C12.38/C9.33): qualified95c9 sourceV119
 PASSES1679actual/267files/546explicitDBskips, types/lint/CLI and fresh normal79/
 strict163/369guards/424wholefunctions/4215queries/SDK8; installed B/A/invocation
