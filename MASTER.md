@@ -18713,3 +18713,16 @@ C closure. Late-terminal/conflicting recovery, certificates/quota/remote part
 terminal/capture/cutover and all qualification/external/security/stable gates
 remain open. See
 `deploy/media-multipart-conflicting-session-facts-source-2026-11-14.md`.
+
+Source checkpoint 2026-11-14 (C12.38/C9.33/C1.08): a two-file controlled cash
+ancestry continuation now batches actual common-resource occurrence validation
+under one fresh complete journal, retaining all original scalar predicates,
+bootstrap/scope/route/API/digest checks and exact namespace flags/revision on
+unchanged state. Full prior/batch journal and canonical+PG resource equality
+refuse late changes; every distinct cash fact stays represented under one5000.
+No cache/business verdict, caller waiver, schema/service/permission change or
+provider I/O. Four literal source controls/five real desired natives are
+PREPARED/UNRUN; no child execution or measured performance acceptance. Root
+current type-only journal fixes and all original financial/native timeouts
+remain; source/runtime/schema/performance qualification is REQUIRED. See
+`deploy/controlled-cash-origin-batch84-source-20261114.md`.

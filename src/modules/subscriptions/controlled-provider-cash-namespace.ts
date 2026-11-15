@@ -7,7 +7,7 @@ import { ServiceError } from "@/core/service";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { subscriptionProviderChargeReceipts } from "./schema";
 import { subscriptionControlledChargeOrigins,subscriptionControlledResources,subscriptionControlledFacts,subscriptionControlledCalls,subscriptionControlledOperations } from "./controlled-provider-schema";
-import { controlledCashEvidence,readOriginalControlledChargeAuthority } from "./controlled-provider-cash-origin";
+import { controlledCashEvidence,readOriginalControlledChargeAuthorities } from "./controlled-provider-cash-origin";
 import { controlledRawFinancialReview } from "./controlled-provider-raw-financial-review";
 import { controlledProviderJournal } from "./controlled-provider-proof";
 const primaryKinds=new Set(["bootstrap","discover_bootstrap","pause_drafts","read_bootstrap","read_customer_financials","list_invoices","create_schedule","read_calendar","update_calendar","read_invoice","finalize_invoice","pay_invoice","cancel_calendar","void_invoice","delete_draft"]);
@@ -19,7 +19,7 @@ export async function readControlledReceiptNamespace(tx:Tx,receiptId:string){
  const[receipt]=await tx.select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.id,receiptId)).limit(1);
  if(!receipt)throw new ServiceError("not_found","Restore the actual original canonical receipt before reading controlled ancestry.");
  const[origin]=await tx.select().from(subscriptionControlledChargeOrigins).where(eq(subscriptionControlledChargeOrigins.receiptId,receiptId)).limit(1);
- const candidates=await tx.select({resource:subscriptionControlledResources}).from(subscriptionControlledResources)
+ const candidates=await tx.select({resource:subscriptionControlledResources,postgresFingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionControlledResources})::text,'UTF8')),'hex')`}).from(subscriptionControlledResources)
   .innerJoin(subscriptionControlledOperations,eq(subscriptionControlledOperations.resourceId,subscriptionControlledResources.id))
   .innerJoin(subscriptionControlledCalls,eq(subscriptionControlledCalls.operationId,subscriptionControlledOperations.id))
   .innerJoin(subscriptionControlledFacts,eq(subscriptionControlledFacts.callId,subscriptionControlledCalls.id))
@@ -45,14 +45,11 @@ export async function readControlledReceiptNamespace(tx:Tx,receiptId:string){
  const history=await controlledProviderJournal(tx,origin.resourceId),fact=history.facts.find(row=>row.id===origin.factId);
  if(!fact||fact.actual.kind!=="cash_observed")throw new ServiceError("conflict","Restore the original controlled cash bridge's exact actual positive occurrence.");
  const cash=controlledCashEvidence.parse(fact.actual.raw.cash);
- const authority=await readOriginalControlledChargeAuthority(tx,cash,{resourceId:origin.resourceId,callId:origin.callId,factId:origin.factId});
- const verified=authority.controlledOrigin.operationId===origin.operationId&&authority.controlledOrigin.originalEvidenceDigest===origin.originalEvidenceDigest
-  &&cash.providerSubscriptionRef===receipt.providerSubscriptionRef&&cash.providerInvoiceRef===receipt.providerInvoiceRef&&cash.providerPaymentIntentRef===receipt.providerPaymentIntentRef
-  &&cash.amountMinor===receipt.amountMinor&&cash.currency===receipt.currency&&(!receipt.providerChargeRef||!cash.providerChargeRef||receipt.providerChargeRef===cash.providerChargeRef);
  const originalResource=candidates.find(row=>row.resource.id===origin.resourceId)?.resource;
  if(!originalResource)throw new ServiceError("conflict","Restore the actual original controlled resource before classifying its retained raw financial facts.");
  const primaryDebt=history.calls.some(call=>history.unfinished.includes(call.id)&&history.operations.some(operation=>operation.id===call.operationId&&primaryKinds.has(operation.kind)));
  let rawCashReview=controlledRawFinancialReview(originalResource,history).factIds.length>0;
+ const occurrences=[{cash,origin:{resourceId:origin.resourceId,callId:origin.callId,factId:origin.factId}}];
  for(const occurrence of history.facts){
   if(occurrence.actual.kind!=="cash_observed")continue;
   const actual=controlledCashEvidence.safeParse(occurrence.actual.raw.cash);
@@ -61,8 +58,21 @@ export async function readControlledReceiptNamespace(tx:Tx,receiptId:string){
   if(actual.data.providerPlatformAccountId!==receipt.providerPlatformAccountId||(actual.data.providerAccountId??null)!==receipt.chargeAccountId||actual.data.providerPaymentIntentRef!==receipt.providerPaymentIntentRef)continue;
   if(actual.data.providerSubscriptionRef!==receipt.providerSubscriptionRef||actual.data.providerInvoiceRef!==receipt.providerInvoiceRef||actual.data.amountMinor!==receipt.amountMinor||actual.data.currency!==receipt.currency
    ||actual.data.providerChargeRef&&receipt.providerChargeRef&&actual.data.providerChargeRef!==receipt.providerChargeRef)rawCashReview=true;
-  await readOriginalControlledChargeAuthority(tx,actual.data,{resourceId:origin.resourceId,callId:occurrence.callId,factId:occurrence.id});
+  // Only the literal anchor request is already present. A second actual
+  // fact with the same cash remains a distinct required ownership proof.
+  if(occurrence.callId===origin.callId&&occurrence.id===origin.factId){if(merchantTaxDigest(actual.data)!==merchantTaxDigest(cash))throw new ServiceError("conflict","Retain the changed original controlled anchor before reading its namespace.");}
+  else occurrences.push({cash:actual.data,origin:{resourceId:origin.resourceId,callId:occurrence.callId,factId:occurrence.id}});
  }
+ const priorCalls=new Map(history.calls.map(row=>[row.id,row])),priorOperations=new Map(history.operations.map(row=>[row.id,row])),priorFacts=new Map(history.facts.map(row=>[row.id,row]));
+ const batch=await readOriginalControlledChargeAuthorities(tx,{resourceId:origin.resourceId,occurrences}),prior=candidates.find(row=>row.resource.id===origin.resourceId);
+ if(!prior||batch.historyRevision!==history.revision||batch.historyCount!==history.count||batch.postgresFingerprint!==prior.postgresFingerprint||merchantTaxDigest(batch.resource)!==merchantTaxDigest(originalResource)
+  ||batch.authorities.length!==occurrences.length||batch.authorities.some((actual,index)=>{const requested=occurrences[index],call=requested?priorCalls.get(requested.origin.callId):undefined,operation=call?priorOperations.get(call.operationId):undefined,fact=requested?priorFacts.get(requested.origin.factId):undefined;
+   return!requested||!call||!operation||!fact||actual.controlledOrigin.resourceId!==requested.origin.resourceId||actual.controlledOrigin.callId!==requested.origin.callId||actual.controlledOrigin.factId!==requested.origin.factId||actual.controlledOrigin.operationId!==operation.id
+   ||merchantTaxDigest(actual.controlledCash)!==merchantTaxDigest(requested.cash)||actual.controlledOrigin.originalEvidenceDigest!==merchantTaxDigest({resource:originalResource,operation,call,fact,cash:actual.controlledCash});}))throw new ServiceError("conflict","The full original controlled journal or resource changed during ancestry reading. Retain every actual fact and restore its exact current owner before comparison.");
+ const authority=batch.authorities[0];if(!authority)throw new ServiceError("conflict","Restore the exact original controlled anchor authority.");
+ const verified=authority.controlledOrigin.operationId===origin.operationId&&authority.controlledOrigin.originalEvidenceDigest===origin.originalEvidenceDigest
+  &&cash.providerSubscriptionRef===receipt.providerSubscriptionRef&&cash.providerInvoiceRef===receipt.providerInvoiceRef&&cash.providerPaymentIntentRef===receipt.providerPaymentIntentRef
+  &&cash.amountMinor===receipt.amountMinor&&cash.currency===receipt.currency&&(!receipt.providerChargeRef||!cash.providerChargeRef||receipt.providerChargeRef===cash.providerChargeRef);
  return{applies:true as const,verified,resourceId:origin.resourceId,operationId:origin.operationId,factId:origin.factId,financialCallerDebt:history.unfinished.length>0,principalCallerDebt:primaryDebt,
   rawCashReview:rawCashReview||!verified,inventoryCount:history.count,revision:merchantTaxDigest({receipt,origin,historyRevision:history.revision,verified,rawCashReview})};
 }
