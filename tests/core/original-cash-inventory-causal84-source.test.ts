@@ -5,11 +5,21 @@ import {readFileSync} from "node:fs";
 import {describe,expect,it} from "vitest";
 import manifest from "../../deploy/original-cash-inventory-causal84.manifest.json";
 import keyExtraction from "../../deploy/original-cash-key-extraction-root-source-20261114.json";
+import originalFeeContinuation from "../../deploy/atomic-credit-original-fee-root-continuation-20261114.json";
 const read=(path:string)=>readFileSync(new URL(`../../${path}`,import.meta.url)),hash=(body:Uint8Array|string)=>createHash("sha256").update(body).digest("hex");
 describe("original inventory v2 bounded source preservation",()=>{
  it("preserves the complete old RF and parent readers before additive comparison companions",()=>{for(const row of manifest.unchangedPrefixes)expect(hash(read(row.path).subarray(0,row.bytes))).toBe(row.sha256);});
  it("preserves old HMAC/schema/raw classification/safe export and whole natives through only the exact auxiliary schema additions",()=>{
   for(const row of manifest.unchanged){let source=read(row.path).toString();
+   if(row.path==="src/modules/invoicing/controlled-canonical-bank-principal.ts"){
+    const exact=originalFeeContinuation.files.find(file=>file.path===row.path);
+    expect(exact).toBeDefined();if(!exact)throw Error("Require the one exact reviewed original-fee source continuation.");
+    expect(hash(source)).toBe(exact.afterSha256);
+    for(const delta of [...exact.finiteDelta].reverse()){
+     expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);
+    }
+    expect(hash(source)).toBe(exact.beforeSha256);
+   }
    if(row.path===keyExtraction.storePath){
     expect(hash(source)).toBe(keyExtraction.storeAfterSha256);
     expect(read(keyExtraction.leafPath).toString()).toContain(keyExtraction.exactFunctionBlock);
