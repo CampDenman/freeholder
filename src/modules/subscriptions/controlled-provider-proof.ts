@@ -21,22 +21,28 @@ export function originalControlledCall(operation:Operation,call:Call){
   &&p.kind===operation.kind&&sha.safeParse(p.completionDigest).success&&p.admittedSourceRevision===operation.previousEvidenceRevision
   &&birth.success&&birth.data.id===p.callerId&&merchantTaxDigest(call.admission)===call.admissionDigest?proof:null;
 }
-export function finishedControlledCall(operation:Operation,call:Call,finish:Finish|null){
- if(!finish)return false;
- const original=originalControlledCall(operation,call),proof=verifiedProviderReadProof(finish.proof,"finish"),p=proof?.payload;
+function finishedWithOriginal(operation:Operation,call:Call,finish:Finish,original:ReturnType<typeof originalControlledCall>){
+ const proof=verifiedProviderReadProof(finish.proof,"finish"),p=proof?.payload;
  return !!original&&!!proof&&finish.callId===call.id&&proof.publicKey===original.publicKey&&p?.purpose===CONTROLLED_CALL_PURPOSE&&p.callId===call.id
   &&p.operationId===operation.id&&p.resourceId===operation.resourceId&&p.requestDigest===operation.requestDigest&&p.admissionDigest===call.admissionDigest
   &&p.callerId===original.payload.callerId&&p.completionDigest===original.payload.completionDigest&&["returned","threw"].includes(String(p.outcome))
   &&p.outcome===finish.actualResult.outcome&&p.factsDigest===merchantTaxDigest(finish.actualResult)&&finish.proofDigest===merchantTaxDigest(finish.proof);
 }
-export function stoppedControlledCall(operation:Operation,call:Call,stop:Stop|null){
- if(!stop)return false;
- const original=originalControlledCall(operation,call),proof=verifiedProviderReadProof(stop.proof,"stop_review"),p=proof?.payload;
+export function finishedControlledCall(operation:Operation,call:Call,finish:Finish|null){
+ if(!finish)return false;
+ return finishedWithOriginal(operation,call,finish,originalControlledCall(operation,call));
+}
+function stoppedWithOriginal(operation:Operation,call:Call,stop:Stop,original:ReturnType<typeof originalControlledCall>){
+ const proof=verifiedProviderReadProof(stop.proof,"stop_review"),p=proof?.payload;
  return !!original&&!!proof&&stop.callId===call.id&&p?.purpose===CONTROLLED_CALL_PURPOSE&&p.callId===call.id&&p.operationId===operation.id&&p.resourceId===operation.resourceId
   &&p.requestDigest===operation.requestDigest&&p.admissionDigest===call.admissionDigest&&p.callerId===original.payload.callerId
   &&merchantTaxDigest(p.originalAdmission)===merchantTaxDigest(call.admission)&&typeof p.reviewedBy==="string"&&/^user:[a-f0-9-]{36}$/.test(p.reviewedBy)
   &&["original_process_absent","unobservable_host_review"].includes(String(p.mechanicalCheck))&&sha.safeParse(p.hostingEvidenceDigest).success&&sha.safeParse(p.currentEvidenceRevision).success
   &&stop.proofDigest===merchantTaxDigest(stop.proof);
+}
+export function stoppedControlledCall(operation:Operation,call:Call,stop:Stop|null){
+ if(!stop)return false;
+ return stoppedWithOriginal(operation,call,stop,originalControlledCall(operation,call));
 }
 /** A complete actual inventory is read before admitting another caller. No
  * latest-row projection can release an older unresolved original invocation. */
@@ -45,13 +51,17 @@ export async function controlledProviderJournal(tx:Tx,resourceId:string){
  const ids=operations.map(row=>row.id);
  const calls=ids.length?await tx.select().from(subscriptionControlledCalls).where(inArray(subscriptionControlledCalls.operationId,ids)).orderBy(subscriptionControlledCalls.id).limit(5001):[];
  const callIds=calls.map(row=>row.id);
- const facts=callIds.length?await tx.select().from(subscriptionControlledFacts).where(inArray(subscriptionControlledFacts.callId,callIds)).orderBy(subscriptionControlledFacts.callId,subscriptionControlledFacts.ordinal).limit(5001):[];
- const finishes=callIds.length?await tx.select().from(subscriptionControlledFinishes).where(inArray(subscriptionControlledFinishes.callId,callIds)).orderBy(subscriptionControlledFinishes.callId).limit(5001):[];
- const stops=callIds.length?await tx.select().from(subscriptionControlledStops).where(inArray(subscriptionControlledStops.callId,callIds)).orderBy(subscriptionControlledStops.callId).limit(5001):[];
- const verifications=ids.length?await tx.select().from(subscriptionControlledVerifications).where(inArray(subscriptionControlledVerifications.operationId,ids)).orderBy(subscriptionControlledVerifications.operationId).limit(5001):[];
+ // Independent inventories share the SAME real Tx; all original conditional
+ // empty-ID skips, WHERE/order/limits and full rows remain exact.
+ const [facts,finishes,stops,verifications,chargeOrigins,closures]=await Promise.all([
+  callIds.length?tx.select().from(subscriptionControlledFacts).where(inArray(subscriptionControlledFacts.callId,callIds)).orderBy(subscriptionControlledFacts.callId,subscriptionControlledFacts.ordinal).limit(5001):[],
+  callIds.length?tx.select().from(subscriptionControlledFinishes).where(inArray(subscriptionControlledFinishes.callId,callIds)).orderBy(subscriptionControlledFinishes.callId).limit(5001):[],
+  callIds.length?tx.select().from(subscriptionControlledStops).where(inArray(subscriptionControlledStops.callId,callIds)).orderBy(subscriptionControlledStops.callId).limit(5001):[],
+  ids.length?tx.select().from(subscriptionControlledVerifications).where(inArray(subscriptionControlledVerifications.operationId,ids)).orderBy(subscriptionControlledVerifications.operationId).limit(5001):[],
+  tx.select().from(subscriptionControlledChargeOrigins).where(eq(subscriptionControlledChargeOrigins.resourceId,resourceId)).orderBy(subscriptionControlledChargeOrigins.receiptId).limit(5001),
+  tx.select().from(subscriptionControlledClosures).where(eq(subscriptionControlledClosures.resourceId,resourceId)).limit(2),
+ ]);
  verifications.sort((left,right)=>(operations.find(row=>row.id===left.operationId)?.ordinal??0)-(operations.find(row=>row.id===right.operationId)?.ordinal??0));
- const chargeOrigins=await tx.select().from(subscriptionControlledChargeOrigins).where(eq(subscriptionControlledChargeOrigins.resourceId,resourceId)).orderBy(subscriptionControlledChargeOrigins.receiptId).limit(5001);
- const closures=await tx.select().from(subscriptionControlledClosures).where(eq(subscriptionControlledClosures.resourceId,resourceId)).limit(2);
  const count=1+closures.length+chargeOrigins.length+operations.length+calls.length+facts.length+finishes.length+stops.length+verifications.length;
  if(count>5000)throw new ServiceError("conflict","Restore the complete bounded original controlled caller/fact inventory; truncated history cannot authorize another operation.");
  if(operations.some((operation,index)=>operation.resourceId!==resourceId||operation.ordinal!==index+1||merchantTaxDigest(operation.originalRequest)!==operation.requestDigest)
@@ -59,12 +69,21 @@ export async function controlledProviderJournal(tx:Tx,resourceId:string){
  for(const fact of facts){const siblings=facts.filter(row=>row.callId===fact.callId);
   if(fact.actualDigest!==merchantTaxDigest(fact.actual)||siblings.some((row,index)=>row.ordinal!==index+1))throw new ServiceError("conflict","Preserve the complete ordered original raw occurrences without replacement or truncation.");
  }
+ // This local record exists ONLY for the same fetched row objects during the
+ // synchronous validation pass below. No await/yield, global or TX cache.
+ const validatedCalls=new Map<Call,{operation:Operation;call:Call;finish:Finish|null;stop:Stop|null;finished:boolean;stopped:boolean}>();
  for(const call of calls){const operation=operations.find(row=>row.id===call.operationId),finish=finishes.find(row=>row.callId===call.id)??null,stop=stops.find(row=>row.callId===call.id)??null;
-  if(!operation||!originalControlledCall(operation,call)||finish&&!finishedControlledCall(operation,call,finish)||stop&&!stoppedControlledCall(operation,call,stop)||finish&&stop)
-   throw new ServiceError("conflict","Restore authentic original controlled request/admission/actual finish or independent stop; never reconstruct or supersede it.");
+  const original=operation?originalControlledCall(operation,call):null;
+  if(!operation||!original)throw new ServiceError("conflict","Restore authentic original controlled request/admission/actual finish or independent stop; never reconstruct or supersede it.");
+  const finished=finish?finishedWithOriginal(operation,call,finish,original):false;
+  if(finish&&!finished)throw new ServiceError("conflict","Restore authentic original controlled request/admission/actual finish or independent stop; never reconstruct or supersede it.");
+  const stopped=stop?stoppedWithOriginal(operation,call,stop,original):false;
+  if(stop&&!stopped||finish&&stop)throw new ServiceError("conflict","Restore authentic original controlled request/admission/actual finish or independent stop; never reconstruct or supersede it.");
+  validatedCalls.set(call,{operation,call,finish,stop,finished,stopped});
  }
  for(const verification of verifications){const operation=operations.find(row=>row.id===verification.operationId),call=calls.find(row=>row.id===verification.callId),finish=finishes.find(row=>row.callId===verification.callId);
-  if(!operation||!call||call.operationId!==operation.id||!finish||!finishedControlledCall(operation,call,finish)||finish.actualResult.outcome!=="returned"
+  const validated=call?validatedCalls.get(call):undefined;
+  if(!operation||!call||call.operationId!==operation.id||!finish||!validated||validated.operation!==operation||validated.call!==call||validated.finish!==finish||!validated.finished||finish.actualResult.outcome!=="returned"
    ||merchantTaxDigest(finish.actualResult.result)!==verification.actualResultDigest||merchantTaxDigest(verification.actualResult)!==verification.actualResultDigest)
    throw new ServiceError("conflict","A verified result must remain the exact actual original returned SDK value and signed caller.");
  }

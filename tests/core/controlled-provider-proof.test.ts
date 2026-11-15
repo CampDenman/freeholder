@@ -46,4 +46,18 @@ describe("exact original controlled physical caller proof",()=>{
   const first=original(),later=original();expect(finishedControlledCall(later.operation,later.call,finish(later))).toBe(true);
   expect(finishedControlledCall(first.operation,first.call,finish(later))).toBe(false);expect(stoppedControlledCall(first.operation,first.call,stop(later))).toBe(false);
  });
+ it("recomputes an already-warmed caller against the same operation object's changed request",()=>{
+  const source=original(),actual=finish(source);expect(originalControlledCall(source.operation,source.call)).not.toBeNull();expect(finishedControlledCall(source.operation,source.call,actual)).toBe(true);
+  const before=source.operation.originalRequest.payload;source.operation.originalRequest.payload={changedAfterWarm:true};expect(originalControlledCall(source.operation,source.call)).toBeNull();expect(finishedControlledCall(source.operation,source.call,actual)).toBe(false);source.operation.originalRequest.payload=before;expect(finishedControlledCall(source.operation,source.call,actual)).toBe(true);
+ });
+ it("never carries a warmed finish verdict through an actual same-object bank-result mutation",()=>{
+  const source=original(),actual=finish(source),before=actual.actualResult.result.providerSubscriptionRef;expect(finishedControlledCall(source.operation,source.call,actual)).toBe(true);actual.actualResult.result.providerSubscriptionRef="sub_changedAfterWarm";expect(finishedControlledCall(source.operation,source.call,actual)).toBe(false);actual.actualResult.result.providerSubscriptionRef=before;expect(finishedControlledCall(source.operation,source.call,actual)).toBe(true);
+ });
+ it("keeps warm foreign callers and their genuinely signed finishes distinct on every invocation",()=>{
+  const first=original(),second=original(),firstFinish=finish(first),secondFinish=finish(second);expect(finishedControlledCall(first.operation,first.call,firstFinish)).toBe(true);expect(finishedControlledCall(second.operation,second.call,secondFinish)).toBe(true);expect(finishedControlledCall(first.operation,second.call,secondFinish)).toBe(false);expect(finishedControlledCall(second.operation,first.call,firstFinish)).toBe(false);expect(finishedControlledCall(first.operation,first.call,secondFinish)).toBe(false);
+ });
+ it("revalidates stop proof mutations and never promotes a closed stop into a returned finish",()=>{
+  const source=original(),actual=stop(source),before=actual.proofDigest;expect(stoppedControlledCall(source.operation,source.call,actual)).toBe(true);expect(finishedControlledCall(source.operation,source.call,null)).toBe(false);actual.proofDigest="0".repeat(64);expect(stoppedControlledCall(source.operation,source.call,actual)).toBe(false);actual.proofDigest=before;expect(stoppedControlledCall(source.operation,source.call,actual)).toBe(true);expect(finishedControlledCall(source.operation,source.call,finish(source,{outcome:"threw"}))).toBe(false);
+ });
+
 });

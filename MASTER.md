@@ -3564,6 +3564,22 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Controlled journal validation SOURCE checkpoint2026-11-14 (C12.38/C1.08):
+within one synchronous post-fetch pass, the same actual admission/finish/stop
+rows are validated once and reused only for their exact operation/call/finish
+object identities. Exported proof readers still recompute independently; all
+original signatures, binding/outcome/result hashes, unfinished debt and complete
+row/revision projections remain. Six independent inventories use one Promise.all
+on the same real transaction, preserving every query/order/bound and empty-ID
+skip. No global, transaction or cross-call verdict
+cache, schema change or financial waiver. Warm-mutation/foreign-call/stop
+controls and genuine held-GET/FIN/current-revalidation/empty-resource natives are PREPARED,
+UNRUN. No compiler, test, database, provider or performance acceptance is claimed.
+Later S0/S1 composition must finish synchronous validation BEFORE the separate
+existing asynchronous verification-view loop, with exact source reversals;
+independent historical/current proof checks remain. See
+`deploy/controlled-journal-validation84-source-20261114.md`.
+
 
 B original-fee identity continuation2026-11-14 (C12.38/C9.33/C11.10): sourceV121
 PASSES1688actual/268completefiles/546explicitDBskips, fulltypes/lint/CLI; fresh
