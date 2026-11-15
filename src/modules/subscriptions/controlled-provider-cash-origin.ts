@@ -25,12 +25,13 @@ function metadata(invoice:Record<string,unknown>){
  const parent=record.safeParse(invoice.parent),details=record.safeParse(parent.success?parent.data.subscription_details:invoice.subscription_details);
  return details.success?record.parse(details.data.metadata):{};
 }
-export async function readOriginalControlledChargeAuthority(tx:Tx,input:ControlledCashEvidence,origin:ControlledCashOrigin){
- const[resource]=await tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,origin.resourceId)).limit(1);
- const[call]=await tx.select().from(subscriptionControlledCalls).where(eq(subscriptionControlledCalls.id,origin.callId)).limit(1);
- const[operation]=call?await tx.select().from(subscriptionControlledOperations).where(eq(subscriptionControlledOperations.id,call.operationId)).limit(1):[];
- const[fact]=await tx.select().from(subscriptionControlledFacts).where(eq(subscriptionControlledFacts.id,origin.factId)).limit(1);
- const[original]=resource?await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1):[];
+type ControlledChargeJournal=Awaited<ReturnType<typeof controlledProviderJournal>>;
+type ControlledChargeRows={resource:typeof subscriptionControlledResources.$inferSelect|undefined;call:typeof subscriptionControlledCalls.$inferSelect|undefined;operation:typeof subscriptionControlledOperations.$inferSelect|undefined;fact:typeof subscriptionControlledFacts.$inferSelect|undefined;
+ original:{subscription:typeof subscriptions.$inferSelect;scope:typeof subscriptionMerchantScopes.$inferSelect}|undefined};
+/** Two pure stages preserve the scalar's exact pre-journal refusal ordering.
+ * The closure is used immediately within this call, never persisted/cached. */
+function validateOriginalControlledCharge(rows:ControlledChargeRows,input:ControlledCashEvidence,origin:ControlledCashOrigin){
+ const{resource,call,operation,fact,original}=rows;
  if(!resource||!call||!operation||!fact||!original||operation.resourceId!==resource.id||fact.callId!==call.id||fact.actual.kind!=="cash_observed"
   ||!originalControlledCall(operation,call)||fact.actualDigest!==merchantTaxDigest(fact.actual)||input.subscriptionId!==resource.subscriptionId
   ||resource.originalScope.providerPlatformAccountId!==input.providerPlatformAccountId||(resource.originalScope.providerAccountId??null)!==(input.providerAccountId??null)
@@ -47,7 +48,7 @@ export async function readOriginalControlledChargeAuthority(tx:Tx,input:Controll
  const route=merchantIntentEvidence(resource.originalScope,intent);
  if(input.customerChargeVerified!==(intent.status==="succeeded"&&ref(intent.customer)===input.providerCustomerRef&&ref(invoice.customer)===input.providerCustomerRef)
   ||input.merchantRouteVerified!==route.merchantRouteVerified||input.destinationAccountId!==route.destinationAccountId||input.settlementMerchantAccountId!==route.settlementMerchantAccountId)mismatch();
- const journal=await controlledProviderJournal(tx,resource.id);
+ return(journal:ControlledChargeJournal)=>{
  const bootstrap=journal.operations.find(row=>row.kind==="bootstrap"&&row.id===tag.freeholder_bootstrap_operation_id);
  if(!bootstrap||bootstrap.requestDigest!==tag.freeholder_bootstrap_request_digest||!journal.facts.some(row=>{
   const creator=journal.calls.find(value=>value.id===row.callId),creatorOperation=creator?journal.operations.find(value=>value.id===creator.operationId):null;
@@ -61,6 +62,40 @@ export async function readOriginalControlledChargeAuthority(tx:Tx,input:Controll
  const scope=subscriptionMerchantScope.parse(original.scope);
  if(scope.providerPlatformAccountId!==input.providerPlatformAccountId||scope.chargeAccountId!==(input.providerAccountId??null)||scope.providerScheduleApiVersion!==resource.originalScope.providerApiVersion)mismatch();
  return{...original,operation:null,controlledCash:expected,controlledOrigin:{...origin,operationId:operation.id,originalEvidenceDigest:merchantTaxDigest({resource,operation,call,fact,cash:expected})}};
+ };
+}
+export async function readOriginalControlledChargeAuthority(tx:Tx,input:ControlledCashEvidence,origin:ControlledCashOrigin){
+ const[resource]=await tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,origin.resourceId)).limit(1);
+ const[call]=await tx.select().from(subscriptionControlledCalls).where(eq(subscriptionControlledCalls.id,origin.callId)).limit(1);
+ const[operation]=call?await tx.select().from(subscriptionControlledOperations).where(eq(subscriptionControlledOperations.id,call.operationId)).limit(1):[];
+ const[fact]=await tx.select().from(subscriptionControlledFacts).where(eq(subscriptionControlledFacts.id,origin.factId)).limit(1);
+ const[original]=resource?await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1):[];
+ const validate=validateOriginalControlledCharge({resource,call,operation,fact,original},input,origin);
+ if(!resource)mismatch();
+ const journal=await controlledProviderJournal(tx,resource.id);
+ return validate(journal);
+}
+/** Fresh common-resource ancestry only. No supplied journal/proof, lock,
+ * cached business verdict, bank eligibility or caller closure is accepted. */
+export async function readOriginalControlledChargeAuthorities(tx:Tx,requested:{resourceId:string;occurrences:readonly{cash:ControlledCashEvidence;origin:ControlledCashOrigin}[]}){
+ if(!z.uuid().safeParse(requested.resourceId).success||!requested.occurrences.length||requested.occurrences.length>5000
+  ||new Set(requested.occurrences.map(row=>`${row.origin.callId}:${row.origin.factId}`)).size!==requested.occurrences.length
+  ||requested.occurrences.some(row=>!controlledCashOrigin.safeParse(row.origin).success||row.origin.resourceId!==requested.resourceId))mismatch();
+ const[actual]=await tx.select({resource:subscriptionControlledResources,postgresFingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionControlledResources})::text,'UTF8')),'hex')`}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,requested.resourceId)).limit(1);
+ if(!actual||!/^[a-f0-9]{64}$/.test(actual.postgresFingerprint))mismatch();const resource=actual.resource;
+ const[original]=await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1);
+ const journal=await controlledProviderJournal(tx,resource.id);
+ if(!original)mismatch();
+ const identities=new Set([`subscription_controlled_resources:${resource.id}`,`subscriptions:${original.subscription.id}`,`subscription_merchant_scopes:${original.scope.subscriptionId}`,
+  ...journal.operations.map(row=>`subscription_controlled_operations:${row.id}`),...journal.calls.map(row=>`subscription_controlled_calls:${row.id}`),...journal.facts.map(row=>`subscription_controlled_facts:${row.id}`),
+  ...journal.finishes.map(row=>`subscription_controlled_finishes:${row.callId}`),...journal.stops.map(row=>`subscription_controlled_stops:${row.callId}`),...journal.verifications.map(row=>`subscription_controlled_verifications:${row.operationId}`),
+  ...journal.chargeOrigins.map(row=>`subscription_controlled_charge_origins:${row.receiptId}`),...journal.closures.map(row=>`subscription_controlled_closures:${row.resourceId}`)]);
+ if(identities.size!==journal.count+2||identities.size>5000)mismatch();
+ const calls=new Map(journal.calls.map(row=>[row.id,row])),operations=new Map(journal.operations.map(row=>[row.id,row])),facts=new Map(journal.facts.map(row=>[row.id,row]));
+ const authorities=requested.occurrences.map(({cash,origin})=>{const call=calls.get(origin.callId),operation=call?operations.get(call.operationId):undefined,fact=facts.get(origin.factId);
+  return validateOriginalControlledCharge({resource,call,operation,fact,original},cash,origin)(journal);
+ });
+ return{resource,postgresFingerprint:actual.postgresFingerprint,historyRevision:journal.revision,historyCount:journal.count,physicalCount:identities.size,authorities};
 }
 export async function originalControlledChargeAuthority(ctx:ServiceContext,input:ControlledCashEvidence,origin:ControlledCashOrigin){
  await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`controlled-provider:${origin.resourceId}`}))`);
