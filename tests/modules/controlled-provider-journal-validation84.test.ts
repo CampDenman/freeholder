@@ -3,6 +3,7 @@
 import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {z} from "zod";
+import emptyInventoryTypes from "../../deploy/controlled-journal-empty-inventory-types-root-continuation-20261114.json";
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import * as paymentAdapters from "@/adapters/payments";
 import {db} from "@/core/db";
@@ -18,7 +19,7 @@ import {OWNER,closeDb,hasDatabase,truncateSpine} from "../helpers/spine";
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
 it("keeps all current-row validation local/synchronous and reverses every exact original predicate/body",()=>{
  const data=z.object({existing:z.array(z.object({path:z.string(),beforeSha256:z.string(),afterSha256:z.string(),wholeBefore:z.string(),finiteChanges:z.array(z.object({afterStart:z.number().int(),afterEnd:z.number().int(),before:z.string(),after:z.string()}))}))}).parse(JSON.parse(readFileSync("deploy/controlled-journal-validation84.source-preservation.json","utf8")));
- for(const item of data.existing){let source=readFileSync(item.path,"utf8");expect(hash(source)).toBe(item.afterSha256);for(const change of [...item.finiteChanges].reverse()){expect(source.slice(change.afterStart,change.afterEnd)).toBe(change.after);source=source.slice(0,change.afterStart)+change.before+source.slice(change.afterEnd);}expect(source).toBe(item.wholeBefore);expect(hash(source)).toBe(item.beforeSha256);}
+ for(const item of data.existing){let source=readFileSync(item.path,"utf8");if(item.path===emptyInventoryTypes.files[0].path){const exact=emptyInventoryTypes.files[0];expect(hash(source)).toBe(exact.afterSha256);for(const delta of [...exact.finiteDelta].reverse()){expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);}expect(hash(source)).toBe(exact.beforeSha256);}expect(hash(source)).toBe(item.afterSha256);for(const change of [...item.finiteChanges].reverse()){expect(source.slice(change.afterStart,change.afterEnd)).toBe(change.after);source=source.slice(0,change.afterStart)+change.before+source.slice(change.afterEnd);}expect(source).toBe(item.wholeBefore);expect(hash(source)).toBe(item.beforeSha256);}
  const source=readFileSync("src/modules/subscriptions/controlled-provider-proof.ts","utf8"),pass=source.slice(source.indexOf(" const validatedCalls="),source.indexOf(" for(const origin of chargeOrigins)"));expect(pass).not.toMatch(/\bawait\b|\basync\b|\.then\(/);expect(pass).toContain("validated.operation!==operation||validated.call!==call||validated.finish!==finish||!validated.finished");expect(source).toContain("return finishedWithOriginal(operation,call,finish,originalControlledCall(operation,call))");expect(source).toContain("return stoppedWithOriginal(operation,call,stop,originalControlledCall(operation,call))");expect(source.indexOf("const validatedCalls=")).toBeGreaterThan(source.indexOf("export async function controlledProviderJournal"));
  const queries=z.object({parallelQueries:z.array(z.string()).length(6)}).parse(JSON.parse(readFileSync("deploy/controlled-journal-validation84.source-preservation.json","utf8")));expect(source).toContain("[facts,finishes,stops,verifications,chargeOrigins,closures]=await Promise.all([");for(const query of queries.parallelQueries)expect(source).toContain(query);
 });

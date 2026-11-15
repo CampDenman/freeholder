@@ -54,10 +54,10 @@ export async function controlledProviderJournal(tx:Tx,resourceId:string){
  // Independent inventories share the SAME real Tx; all original conditional
  // empty-ID skips, WHERE/order/limits and full rows remain exact.
  const [facts,finishes,stops,verifications,chargeOrigins,closures]=await Promise.all([
-  callIds.length?tx.select().from(subscriptionControlledFacts).where(inArray(subscriptionControlledFacts.callId,callIds)).orderBy(subscriptionControlledFacts.callId,subscriptionControlledFacts.ordinal).limit(5001):[],
-  callIds.length?tx.select().from(subscriptionControlledFinishes).where(inArray(subscriptionControlledFinishes.callId,callIds)).orderBy(subscriptionControlledFinishes.callId).limit(5001):[],
-  callIds.length?tx.select().from(subscriptionControlledStops).where(inArray(subscriptionControlledStops.callId,callIds)).orderBy(subscriptionControlledStops.callId).limit(5001):[],
-  ids.length?tx.select().from(subscriptionControlledVerifications).where(inArray(subscriptionControlledVerifications.operationId,ids)).orderBy(subscriptionControlledVerifications.operationId).limit(5001):[],
+  callIds.length?tx.select().from(subscriptionControlledFacts).where(inArray(subscriptionControlledFacts.callId,callIds)).orderBy(subscriptionControlledFacts.callId,subscriptionControlledFacts.ordinal).limit(5001):[] as Array<typeof subscriptionControlledFacts.$inferSelect>,
+  callIds.length?tx.select().from(subscriptionControlledFinishes).where(inArray(subscriptionControlledFinishes.callId,callIds)).orderBy(subscriptionControlledFinishes.callId).limit(5001):[] as Array<typeof subscriptionControlledFinishes.$inferSelect>,
+  callIds.length?tx.select().from(subscriptionControlledStops).where(inArray(subscriptionControlledStops.callId,callIds)).orderBy(subscriptionControlledStops.callId).limit(5001):[] as Array<typeof subscriptionControlledStops.$inferSelect>,
+  ids.length?tx.select().from(subscriptionControlledVerifications).where(inArray(subscriptionControlledVerifications.operationId,ids)).orderBy(subscriptionControlledVerifications.operationId).limit(5001):[] as Array<typeof subscriptionControlledVerifications.$inferSelect>,
   tx.select().from(subscriptionControlledChargeOrigins).where(eq(subscriptionControlledChargeOrigins.resourceId,resourceId)).orderBy(subscriptionControlledChargeOrigins.receiptId).limit(5001),
   tx.select().from(subscriptionControlledClosures).where(eq(subscriptionControlledClosures.resourceId,resourceId)).limit(2),
  ]);
