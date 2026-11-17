@@ -68,6 +68,16 @@ async function issuedInvoice(key: string, amountMinor = 10_000) {
 const digest = "a".repeat(64);
 const receivedAt = "2026-08-14T12:01:00.000Z";
 
+// Signed refund and dispute feedback is checked against the authenticated
+// platform account before it may be applied, so a verifier fixture has to
+// answer that one read. Everything else must stay inside the test process.
+const platformAccountId = "acct_SyntheticPlatform";
+const platformVerifier: typeof fetch = async (input, init = {}) => {
+  const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+  if (url.href === "https://api.stripe.com/v1/account" && (init.method ?? "GET") === "GET") return Response.json({ id: platformAccountId });
+  throw new Error(`Unexpected webhook verifier transport ${init.method ?? "GET"} ${url.origin}${url.pathname}`);
+};
+
 async function pendingOriginalRefund(input: { paymentId: string; amountMinor: number; reason: string; idempotencyKey: string }, providerRef: string, providerAccountId?: string) {
   const original = adapters.paymentAdapter("stripe");
   const refund = vi.fn<adapters.PaymentAdapter["refund"]>().mockImplementation(async request => {
@@ -100,7 +110,7 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     const {invoice}=await issuedInvoice("expanded-checkout-refund");
     const payment=await createPayment.call({invoiceId:invoice.id,provider:"stripe",method:"hosted_checkout",amountMinor:10000,idempotencyKey:"expanded-checkout-payment"},OWNER);
     await startPayment.call({id:payment.id,providerRef:"cs_OriginalExpanded",providerCheckoutRef:"cs_OriginalExpanded"},OWNER);
-    const at=Math.floor(Date.parse(receivedAt)/1000),adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_expanded"]});
+    const at=Math.floor(Date.parse(receivedAt)/1000),adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_expanded"],fetch:platformVerifier});
     const deliver=async(id:string,type:string,value:Record<string,unknown>)=>{
       const raw=JSON.stringify({id,type,created:at,data:{object:value}}),signature=createHmac("sha256","whsec_expanded").update(`${at}.${raw}`).digest("hex");
       const events=await adapter.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:Uint8Array.from(Buffer.from(raw)),receivedAt});
@@ -129,7 +139,7 @@ describe.runIf(hasDatabase)("payment provider services", () => {
     const at=Math.floor(Date.parse(receivedAt)/1000);
     const raw=JSON.stringify({id:"evt_OriginalCancelled",type:"refund.updated",created:at,...(account?{account}:{}),data:{object:{id:"re_CancelledOriginal",payment_intent:{id:"pi_OriginalCancelledRefund"},amount:500,currency:"cad",status:"canceled"}}});
     const signature=createHmac("sha256","whsec_original_cancel").update(`${at}.${raw}`).digest("hex");
-    const adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_original_cancel"]});
+    const adapter=createStripePayments({secretKey:"sk_synthetic",webhookSecrets:["whsec_original_cancel"],fetch:platformVerifier});
     const events=await adapter.verifyWebhook({headers:{"stripe-signature":`t=${at},v1=${signature}`},body:Uint8Array.from(Buffer.from(raw)),receivedAt});
     await deliver(events);
     expect((await db().select().from(refunds).where(eq(refunds.id,refund.id)))[0]).toMatchObject({status:"failed",failureCode:"provider_cancelled",providerRef:"re_CancelledOriginal"});

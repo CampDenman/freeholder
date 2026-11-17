@@ -45,7 +45,9 @@ describe.runIf(hasDatabase)("fresh explicit consent after a missed provider boun
     const oldPayloadHash = createHash("sha256").update(JSON.stringify(missed.job.data)).digest("hex");
     vi.setSystemTime(actualNow); // The missed boundary is also before the real PostgreSQL clock.
     await expect(quoteMerchantAmendment.call(input, OWNER)).rejects.toMatchObject({ code: "conflict" });
-    const resumeAt = new Date(Date.now() + 3600000).toISOString();
+    // Consent names an exact billing instant: subsecond provider rounding is
+    // refused by reviewedResumptionStart, so choose a whole second.
+    const resumeAt = new Date(Math.ceil((Date.now() + 3600000) / 1000) * 1000).toISOString();
     const fresh = await accept({ ...input, resumeAt });
     const [resumption] = await db().select().from(subscriptionCommercialResumptions).where(eq(subscriptionCommercialResumptions.termsId, fresh.accepted.termsId));
     expect(resumption).toMatchObject({ previousTermsId: oldTerms!.id, originalPeriodEnd: source.accepted.subscription.currentPeriodEnd, acceptedPeriodStart: new Date(resumeAt), generationId: null });
@@ -67,8 +69,10 @@ describe.runIf(hasDatabase)("fresh explicit consent after a missed provider boun
     source = await seedActualProviderSubscription80({ failFirstPrice: true }); await expect(source.create()).rejects.toThrow();
     const before = await source.operations(); expect(before.find(operation => operation.kind === "create")?.positiveObserved).toBe(true);
     vi.setSystemTime(actualNow);
+    // A whole second: otherwise the exact-instant guard refuses this first and
+    // the unknown-creator refusal below is never actually exercised.
     await expect(quoteMerchantAmendment.call({ id: source.accepted.subscription.id, planId: source.plan.id, taxDestination: { country: "CA", region: "BC" },
-      resumeAt: new Date(Date.now() + 3600000).toISOString() }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+      resumeAt: new Date(Math.ceil((Date.now() + 3600000) / 1000) * 1000).toISOString() }, OWNER)).rejects.toMatchObject({ code: "conflict" });
     expect(await source.operations()).toEqual(before); expect(source.remote.schedulePosts()).toBe(1); expect(await db().select().from(subscriptionCommercialResumptions)).toHaveLength(0);
   });
   it("keeps an older admitted product reader as debt and refuses a replacement GET before authentic stop review", async () => {
@@ -87,7 +91,7 @@ describe.runIf(hasDatabase)("fresh explicit consent after a missed provider boun
     expect(history.some(entry => entry.source === "phase_product_read_finished" && entry.readId !== pending.readId && entry.outcome === "returned")).toBe(false);
     vi.setSystemTime(actualNow);
     await expect(quoteMerchantAmendment.call({ id: product.subscriptionId, planId: source.plan.id, taxDestination: { country: "CA", region: "BC" },
-      resumeAt: new Date(Date.now() + 3600000).toISOString() }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+      resumeAt: new Date(Math.ceil((Date.now() + 3600000) / 1000) * 1000).toISOString() }, OWNER)).rejects.toMatchObject({ code: "conflict" });
     expect(source.remote.schedulePosts()).toBe(0); expect(await db().select().from(subscriptionCommercialResumptions)).toHaveLength(0);
   });
 });

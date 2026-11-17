@@ -238,7 +238,11 @@ describe.runIf(hasDatabase)("actual original gross proration, attested cash and 
         if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
         return result;
       } });
-    await expect(delayed.call({ ...input, previousTermsId: quote.previousTermsId, acceptedQuoteDigest: quote.quoteDigest, confirm: true }, { kind: "system" })).rejects.toMatchObject({ cause: { code: "23514" } });
+    // The deadline is a deferred constraint trigger, so PostgreSQL raises it at
+    // COMMIT rather than inside a query: the error arrives unwrapped, without
+    // drizzle's `cause`. Name the guard so only its refusal satisfies this.
+    await expect(delayed.call({ ...input, previousTermsId: quote.previousTermsId, acceptedQuoteDigest: quote.quoteDigest, confirm: true }, { kind: "system" })).rejects.toMatchObject({ code: "23514",
+      message: "A local acceptance cannot commit after its reviewed effective instant; roll back its new documents and obtain fresh consent before any provider caller" });
     expect(Date.now()).toBeGreaterThanOrEqual(old.effectiveAt.getTime());
     expect(reachedActualAcceptance?.prorationId).toMatch(/^[a-f0-9-]{36}$/);
     expect(reachedActualAcceptance?.invoiceId).toBeTruthy();

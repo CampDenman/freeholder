@@ -18,6 +18,7 @@ import { merchantCashReturnInspections,merchantCashReturnInspectionFinishes } fr
 import { controlledCashApplicationBatches,controlledCashApplicationReceipts,controlledCashApplicationLinks } from "@/modules/invoicing/controlled-cash-application-protocol-schema";
 import { readControlledCashApplicationEvaluation } from "@/modules/invoicing/controlled-cash-application-evaluation";
 import { actualControlledPeriod84 } from "../helpers/actual-controlled-period84";
+import { retainActualControlledManifest84 } from "../helpers/actual-controlled-current-manifest84";
 import { closeDb,hasDatabase,OWNER,truncateSpine } from "../helpers/spine";
 const system={kind:"system"} as const;
 const scope=z.object({collectionId:z.uuid(),receiptIds:z.array(z.uuid()).min(1).max(5000),requiredProtocol:z.literal(CONTROLLED_COLLECTION_PROTOCOL)}).strict();
@@ -29,6 +30,10 @@ describe.runIf(hasDatabase)("genuine controlled batch initial parent evaluation"
  let f:Awaited<ReturnType<typeof actualControlledPeriod84>>|undefined;
  beforeAll(ready,60000);beforeEach(truncateSpine);afterEach(()=>{vi.useRealTimers();f?.cleanup();f=undefined;vi.restoreAllMocks();});afterAll(async()=>{await stopJobs();await closeDb();});
  async function actualBank(){f=await actualControlledPeriod84();expect(await collectControlledCollection.call({collectionId:f.target.collectionId},OWNER)).toMatchObject({state:"money_retained",applied:false});
+  // The producer's pre-pay manifest authorized that one bank write only;
+  // evaluating retained cash needs a genuine manifest AFTER the last bank
+  // mutation, exactly as every other application control obtains one.
+  await retainActualControlledManifest84(f);
   const[receipt]=await db().select().from(subscriptionProviderChargeReceipts).where(eq(subscriptionProviderChargeReceipts.subscriptionId,f.parent.id));if(!receipt)throw Error("Use the actual retained original target receipt.");
   const input={collectionId:f.target.collectionId,receiptId:receipt.id};expect(await inspectControlledCashReceipt.call(input,OWNER)).toMatchObject({bankReadReturned:true,completeInventory:true,suppliesMoneyAuthority:false});
   return{input,value:{collectionId:input.collectionId,receiptIds:[input.receiptId],requiredProtocol:CONTROLLED_COLLECTION_PROTOCOL}};
