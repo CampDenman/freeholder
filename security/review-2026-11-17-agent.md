@@ -473,9 +473,43 @@ afterwards". `applyCalendarOAuthCompletion` additionally carries
 `stepUp: true`, `agentCallable: false` and `external: false`, so neither a key
 nor an agent nor MCP can reach it.
 
-### O2/O3 — not yet worked
-Whether tokens leak into logs or doctor output, and whether ciphertext survives
-a lost `CREDENTIAL_KEY` without `CREDENTIAL_KEY_PREVIOUS`, remain open.
+### O3. "Losing `CREDENTIAL_KEY` without `CREDENTIAL_KEY_PREVIOUS` makes every connection `needs_reconnect`. Confirm ciphertext is not deleted." — VERIFIED, no finding
+
+On a rotation pass where a stored credential cannot be decrypted with the
+configured key, the row is **updated, never removed**
+(`src/core/connections/service.ts:545`):
+
+```js
+// gone. It is counted and left alone: destroying it would remove the
+// only record that the connection exists, and the owner needs to see
+// it in order to reconnect.
+failed += 1;
+await ctx.tx.update(connectedAccounts).set({
+  status: "needs_reconnect",
+  lastError: "Stored credentials could not be read with the configured key. Reconnect this account.",
+}).where(eq(connectedAccounts.id, row.id));
+```
+
+Three properties worth recording. The failure is **counted** rather than
+swallowed, so a rotation that silently orphaned every account would be visible
+in its own result. The status moves to a state the rest of the system already
+understands — `grants.ts:96` still lists `needs_reconnect` accounts alongside
+`active` ones, so they remain discoverable rather than disappearing from the
+owner's view. And `lastError` states the cause and the remedy in plain language
+rather than leaving an operator to infer it from a stack trace.
+
+Crucially the ciphertext survives, so restoring the correct
+`CREDENTIAL_KEY_PREVIOUS` later makes the accounts readable again. A design
+that deleted on decrypt failure would convert a recoverable configuration
+mistake into permanent data loss, which is the trap this avoids deliberately.
+
+The only `delete(connectedAccounts)` in the module
+(`src/core/connections/service.ts:411`) is the user-initiated disconnect
+service, which is `permission: "scoped"` with `stepUp: true` and resolves
+`reachable(...)` for the actor first. It is not reachable from a failure path.
+
+### O2 — not yet worked
+Whether tokens leak into logs or doctor output remains open.
 
 ---
 
