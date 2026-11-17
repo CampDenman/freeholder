@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { lockContactIdentity } from "@/core/contacts/identity-lock";
+import { lockContactIdentity, lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { contacts } from "@/core/contacts/schema";
 import { enqueueJob, retryJob } from "@/core/jobs";
 import { jobIdempotencyKeys } from "@/core/jobs/schema";
@@ -38,7 +38,7 @@ const acceptance = input.extend({ previousTermsId: z.uuid(), acceptedQuoteDigest
 const result = z.object({ termsId: z.uuid(), state: z.enum(["pending_stop", "activated"]), effectivePeriodStart: z.iso.datetime() });
 async function own(ctx: ServiceContext, id: string, planId?: string) {
   if (ctx.actor.kind !== "user") throw new ServiceError("permission", "Sign in personally to review your amendment.");
-  await lockContactIdentity(ctx.tx);
+  await lockContactIdentityForRead(ctx.tx);
   const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, id)).limit(1);
   const [buyer] = await ctx.tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.userId, ctx.actor.userId)).limit(1);
   if (!parent || buyer?.id !== parent.contactId) throw new ServiceError("not_found", "There is no such subscription.");

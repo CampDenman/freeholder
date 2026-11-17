@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Actual SDK sequence outside TX; canonical cash application/effects are separate.
+import { requireControlledCurrentVerification } from "./controlled-provider-safe-response-proof";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { defineService,defineOrchestratedService,ServiceError,type Actor } from "@/core/service";
@@ -28,7 +29,9 @@ export const controlledCollectionOrchestrationState=defineService({name:"subscri
  if(history.unfinished.length)refuseControlledCollectionInventory();
  const own=history.operations.filter(op=>operationCollection(op)===collectionId),attempt=(kind:string)=>{const op=own.find(op=>op.kind===kind&&history.calls.some(call=>call.operationId===op.id))??own.filter(op=>op.kind===kind).at(-1);return op?{operationId:op.id,admitted:history.calls.some(call=>call.operationId===op.id),returned:history.verifications.some(row=>row.operationId===op.id)}:null;};
  const lastRead=source.binding?history.operations.filter(op=>op.kind==="read_invoice"&&object(op.originalRequest.payload).providerInvoiceRef===source.binding!.providerInvoiceRef).at(-1):null;
- const bank=lastRead?history.verifications.find(row=>row.operationId===lastRead.id)?.actualResult:null;
+ const bankVerification=lastRead?history.verifications.find(row=>row.operationId===lastRead.id):null;
+ if(bankVerification)requireControlledCurrentVerification(history,bankVerification);
+ const bank=bankVerification?.actualResult??null;
  return{resourceId:source.resource.id,providerInvoiceRef:source.binding?.providerInvoiceRef??null,componentIds:source.components.map(row=>row.id),missingComponentIds:source.components.filter(row=>!source.itemReceipts.some(item=>item.componentId===row.id)).map(row=>row.id),
   update:attempt("update_calendar")?{...attempt("update_calendar")!,observedApplied:controlledUpdateReadback(source)!==null}:null,draftCreate:attempt("create_draft"),admittedComponentIds:own.filter(op=>op.kind==="add_invoice_component"&&history.calls.some(call=>call.operationId===op.id)).map(op=>z.uuid().parse(object(op.originalRequest.payload).componentId)),
   finalizeAdmitted:attempt("finalize_invoice")?.admitted??false,payAdmitted:attempt("pay_invoice")?.admitted??false,feeAdmitted:attempt("set_invoice_fee")?.admitted??false,

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // An applied original session object is not an invented original ACK/FIN or
 // delegated-link terminal proof. Only actual full reads and inventories apply.
-import {createHash} from "node:crypto";
 import type {TransferInventoryConfiguration,TransferInventoryEntry,TransferRequestObservation,TransferRevision} from "../../../scripts/media-transfer.mjs";
 import type {OriginalQuiescentCaller,OriginalQuiescentRequest,OriginalExecutorStop} from "./original-caller-quiescence";
 import {requireOriginalExecutorStop} from "./original-caller-quiescence";
@@ -10,7 +9,8 @@ import {requireOriginalMultipartCompletedBody,type OriginalMultipartCreateProof,
 import {classifySourceInventory,providerInventoryDigest} from "./transfer-inventory-proof";
 import {transferConflict,transferDigest} from "./transfer-proof";
 import type {MultipartPart} from "@/adapters/storage/types";
-const partsDigest=(parts:readonly MultipartPart[])=>createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+import {multipartCompletePartsDigest} from "./multipart-complete-manifest";
+const partsDigest=(parts:readonly MultipartPart[])=>multipartCompletePartsDigest(parts);
 export function requireQuiescentOriginalMultipartComplete(input:{caller:OriginalQuiescentCaller;requests:readonly OriginalQuiescentRequest[];namespace:string;key:string;uploadId:string;parts:readonly MultipartPart[];partsDigest:string;writerFinishedAt:Date|null;facts:readonly{requestId:string;facts:TransferRequestObservation}[];stop:OriginalExecutorStop|null}){
  const{caller,requests}=input;
  if(!requests.length||caller.namespace!==input.namespace||partsDigest(input.parts)!==input.partsDigest||requests.some(row=>row.callId!==caller.id||transferDigest(row.runtimeIdentity)!==transferDigest(caller.runtimeIdentity)||row.descriptorDigest!==transferDigest(row.descriptor)||row.descriptor.binding.namespace!==input.namespace||row.descriptor.key!==input.key||!["multipart.inspect","multipart.complete","object.metadata","object.read"].includes(row.descriptor.kind)))transferConflict("Restore the exact original COMPLETE caller, physical requests and immutable part manifest.");

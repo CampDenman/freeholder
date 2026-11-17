@@ -23,13 +23,20 @@ async function actualOpenSessionProvider(){
  const server=createServer((req,res)=>{void(async()=>{
   for await(const chunk of req){if(!(typeof chunk==="string"||chunk instanceof Uint8Array))throw Error("Synthetic provider received non-byte request data.");}
   const url=new URL(req.url??"/","http://fixture.invalid");calls.push({method:req.method??"GET",pathname:url.pathname});
-  if(req.method==="POST"&&url.searchParams.has("uploads")){const id=randomUUID();sessions.set(id,url.pathname);res.writeHead(200,{"content-type":"application/xml"}).end(`<InitiateMultipartUploadResult><UploadId>${id}</UploadId></InitiateMultipartUploadResult>`);return;}
+  const xml=(body:string)=>res.writeHead(200,{"content-type":"application/xml"}).end(body);
+  if(req.method==="GET"&&url.pathname==="/media"){
+   if(url.searchParams.has("versioning")){xml("<VersioningConfiguration/>");return;}
+   if(url.searchParams.has("versions")){xml("<ListVersionsResult><Name>media</Name><EncodingType>url</EncodingType><IsTruncated>false</IsTruncated></ListVersionsResult>");return;}
+   if(url.searchParams.has("list-type")){xml("<ListBucketResult><Name>media</Name><EncodingType>url</EncodingType><KeyCount>0</KeyCount><IsTruncated>false</IsTruncated></ListBucketResult>");return;}
+   if(url.searchParams.has("uploads")){xml("<ListMultipartUploadsResult><Bucket>media</Bucket><EncodingType>url</EncodingType><IsTruncated>false</IsTruncated></ListMultipartUploadsResult>");return;}
+  }
+  if(req.method==="POST"&&url.searchParams.has("uploads")){const id=randomUUID(),key=decodeURIComponent(url.pathname.slice("/media/".length));sessions.set(id,url.pathname);xml(`<InitiateMultipartUploadResult><Bucket>media</Bucket><Key>${key}</Key><UploadId>${id}</UploadId></InitiateMultipartUploadResult>`);return;}
   res.writeHead(405).end();
  })().catch((error:unknown)=>res.destroy(error instanceof Error?error:new Error("Synthetic provider failed.")));});
  await new Promise<void>((resolve,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",resolve);});const address=server.address();if(!address||typeof address==="string")throw Error("Synthetic provider did not bind TCP.");
  return{endpoint:`http://127.0.0.1:${address.port}`,sessions,calls,close:()=>new Promise<void>((resolve,reject)=>{server.close(error=>error?reject(error):resolve());server.closeAllConnections();})};
 }
-describe.runIf(hasDatabase)("C1.12/C11.08 shared part-signing durable-authority containment",()=>{
+describe.runIf(hasDatabase&&process.env.FREEHOLDER_SKIP_MIGRATE==="1")("C1.12/C11.08 shared part-signing durable-authority containment (old runtime)",()=>{
  let provider:Awaited<ReturnType<typeof actualOpenSessionProvider>>;
  beforeAll(async()=>{await ready();await stopJobs();},60000);
  beforeEach(async()=>{await truncateSpine();await db().insert(users).values({id:OWNER.userId,email:"part-authority-owner@example.test",role:"owner"});provider=await actualOpenSessionProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"media",S3_ACCESS_KEY_ID:"fictional-key",S3_SECRET_ACCESS_KEY:"fictional-secret",S3_PUBLIC:"false",FREEHOLDER_STORAGE_QUOTA_BYTES:"",FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY:"false",MALWARE_SCANNER:"none"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});

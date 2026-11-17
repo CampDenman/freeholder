@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// PREPARED / UNRUN. These real shared-infrastructure/TCP controls depend on the
-// complete future request capability. They NEVER publish a fixture capability,
-// fabricate a ServiceContext/old caller birth or claim actual account support.
+// Scoped fixture qualified on fresh PostgreSQL 2026-11-15 with the complete
+// request capability and synthetic AWS TCP. It NEVER publishes a fixture capability,
+// fabricates a ServiceContext/old caller birth or claims actual account support.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {eq,sql} from "drizzle-orm";
 import {db} from "@/core/db";
@@ -13,7 +13,8 @@ import {ready} from "@/core/runtime";
 import {stopJobs} from "@/core/jobs";
 import {resetEnvForTests} from "@/core/env";
 import {resetStorageForTests} from "@/adapters/storage";
-import {putWithReceipt,deleteWithReceipt} from "@/core/media/write-ledger";
+import {putWithReceipt} from "@/core/media/write-ledger";
+import {deleteWithReceipt} from "@/core/media/delete-with-receipt";
 import {mediaObjects} from "@/core/media/schema";
 import {mediaObjectWrites} from "@/core/media/write-schema";
 import {mediaStorageTransferCalls as calls} from "@/core/media/transfer-schema";
@@ -21,11 +22,12 @@ import {mediaStorageTransferRequests as requests} from "@/core/media/transfer-re
 import {ordinaryMediaRetirementProvider} from "../helpers/media-original-retirement-provider";
 import {closeDb,failure,hasDatabase,OWNER,truncateSpine} from "../helpers/spine";
 const SYSTEM={kind:"system"}as const,key="original-retirement/exact.bin",body=new TextEncoder().encode("exact original physical bytes");
+const syntheticOrigin="https://s3.us-east-1.amazonaws.com",realFetch=globalThis.fetch.bind(globalThis);
 describe.runIf(hasDatabase)("C1.12/C11.08 actual original conditional retirement (complete request capability dependent)",()=>{
  let provider:Awaited<ReturnType<typeof ordinaryMediaRetirementProvider>>;
  beforeAll(async()=>{await ready();await stopJobs();const[capability]=await db().execute<{present:boolean}>(sql`select to_regprocedure('freeholder_media_transfer_request_capability_v1()') is not null as present`);if(capability?.present!==true)throw Error("Prepared ordinary retirement controls require the complete actual request capability; no fixture flag or provider authority is substituted.");},60000);
- beforeEach(async()=>{await truncateSpine();provider=await ordinaryMediaRetirementProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",FREEHOLDER_STORAGE_QUOTA_BYTES:"",FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY:"false"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
- afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
+ beforeEach(async()=>{await truncateSpine();provider=await ordinaryMediaRetirementProvider();vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{const url=new URL(input instanceof Request?input.url:String(input));if(url.origin!==syntheticOrigin)return realFetch(input,init);const target=new URL(`${url.pathname}${url.search}`,provider.endpoint);if(input instanceof Request)return realFetch(target,{method:input.method,headers:input.headers,body:input.body===null?undefined:await input.arrayBuffer()});return realFetch(target,init);});for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:syntheticOrigin,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",FREEHOLDER_STORAGE_QUOTA_BYTES:"",FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY:"false"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
+ afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();vi.unstubAllGlobals();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
  const write=()=>putWithReceipt({key,body,contentType:"application/octet-stream",role:"original"},SYSTEM);
  const history=()=>db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.key,key));
  it("conditionally retires only actual original bytes after all physical requests, pinned absence and complete inventories finish",async()=>{
@@ -42,7 +44,7 @@ describe.runIf(hasDatabase)("C1.12/C11.08 actual original conditional retirement
  it("refuses an actually paused admitted PUT despite real empty inventories and404, then retains its authentic late bytes and caller finish",async()=>{
   const gate=provider.pauseNextSourcePut(),writing=write();try{
    await gate.started;const before=await history();expect(before).toHaveLength(1);expect(before[0]?.writerFinishedAt).toBeNull();expect((await fetch(`${provider.endpoint}/source/${key}`,{method:"HEAD"})).status).toBe(404);expect(await(await fetch(`${provider.endpoint}/source?versions`)).text()).not.toContain("<Version>");expect(await(await fetch(`${provider.endpoint}/source?uploads`)).text()).not.toContain("<Upload>");
-   await failure(deleteWithReceipt(key));expect(await history()).toEqual(before);expect(provider.calls.filter(row=>row.method==="DELETE")).toEqual([]);
+   expect(await deleteWithReceipt(key)).toBe(false);expect(await history()).toEqual(before);expect(provider.calls.filter(row=>row.method==="DELETE")).toEqual([]);
   }finally{gate.release();await writing;}
   expect(provider.objects.get(`/source/${key}`)?.body).toEqual(body);const rows=await history();expect(rows).toHaveLength(1);expect(rows[0]).toMatchObject({state:"accepted",deletedAt:null});expect(rows[0]?.writerFinishedAt).toBeTruthy();expect((await db().select().from(calls)).filter(row=>row.kind==="ordinary_put")[0]?.returnedAt).toBeTruthy();
  },60000);

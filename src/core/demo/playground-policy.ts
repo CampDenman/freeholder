@@ -149,6 +149,7 @@ export const PLAYGROUND_PUBLIC_REFUSED: Readonly<Record<string, string>> = {
   "media.upload": "Uploads are refused on the bounded playground disk.",
   "media.beginUpload": "Uploads are refused on the bounded playground disk.",
   "media.signUploadParts": "Uploads are refused on the bounded playground disk.",
+  "media.declareUploadParts": "Uploads are refused on the bounded playground disk.",
   "media.completeUpload": "Uploads are refused on the bounded playground disk.",
   "media.abortUpload": "Uploads are refused on the bounded playground disk.",
   "media.confirmCapture": "Uploads are refused on the bounded playground disk.",

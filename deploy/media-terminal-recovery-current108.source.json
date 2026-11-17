@@ -1,0 +1,43 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_terminal_recovery_current108.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Unchanged genuine unknown-COMPLETE and lost-ABORT recovery controls pass on fresh migration108 with supporting pure proofs; provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "e0f2cb7f9a698aba635a0913f5d0c52037ecd1c847581b904e1f6d743b7b0791" },
+    { "path": "tests/core/media-multipart-applied-recovery-lifecycle.test.ts", "sha256": "a6f9b1ebeee533f3290bb581234fddcac1f833aa15f7abbe9bdf5d9a7709dd8a" },
+    { "path": "tests/core/media-multipart-abort-recovery-lifecycle.test.ts", "sha256": "479ba8dfa5c65ba4d8d4e804a3364654f04c57a7e29223473d5e0f3e76daf0e3" },
+    { "path": "tests/core/media-multipart-complete-recovery-proof.test.ts", "sha256": "512d3ba159dbdb880fecfc9cd309421ddd6a514f3b221c0ce5235d3acd5c6ca7" },
+    { "path": "tests/core/media-multipart-abort-recovery-proof.test.ts", "sha256": "dc486f8eec70a8f6c9ade704dcb34fb9b7151cc0abe2adfd770b22c179c1b709" },
+    { "path": "tests/core/media-multipart-retirement-certificate-proof.test.ts", "sha256": "841b7a9a21f8704ecdc89bbbf2b5ccf8247b25e588a932430bbb70e0f35ff611" }
+  ],
+  "controls": {
+    "database": "multipart_terminal_recovery_current108_20261116",
+    "nativeFiles": [
+      { "path": "tests/core/media-multipart-applied-recovery-lifecycle.test.ts", "passed": 5, "failed": 0 },
+      { "path": "tests/core/media-multipart-abort-recovery-lifecycle.test.ts", "passed": 6, "failed": 0 }
+    ],
+    "nativeTotal": { "passed": 11, "failed": 0, "durationSeconds": 155.48 },
+    "pureProofs": { "passed": 29, "failed": 0 },
+    "coverage": ["fresh part-bound bytes and two complete inventories", "canonical completion without another POST", "lost ABORT review without another DELETE", "original ACK/FIN/result remain unchanged including NULL", "foreign CREATE nonce and retained session debris refusal", "first failed inventory remains intact during later verification", "paused original and scoped actor refusal before provider IO"],
+    "testOracleChanged": false,
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "Hosted provider, independent executor, clean-room and checklist acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "e0f2cb7f9a698aba635a0913f5d0c52037ecd1c847581b904e1f6d743b7b0791",
+      "beforeSha256": "3651f667139e9cc3e54ac3bcd922b3d7fbe08f27cda0070ad4b14c1b471a3863",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  See `deploy/media-part-consumption-current108.source.json`. Hosted provider and\n  checklist acceptance remain open.\n  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):",
+          "after": "  See `deploy/media-part-consumption-current108.source.json`. Hosted provider and\n  checklist acceptance remain open.\n  Multipart terminal-recovery current108 qualification2026-11-16 (C1.12/C11.08):\n  unchanged genuine COMPLETE/ABORT files PASS11/11 in155.48s on one fresh database,\n  with29/29 supporting pure proofs. Lost replies recover through exact fresh bytes and\n  inventories without another POST/DELETE or invented first ACK/FIN. Foreign nonces,\n  retained debris, wrong namespaces, paused callers and scoped keys remain refused.\n  No test or product source changed. See\n  `deploy/media-terminal-recovery-current108.source.json`. Hosted provider, independent\n  executor and checklist acceptance remain open.\n  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

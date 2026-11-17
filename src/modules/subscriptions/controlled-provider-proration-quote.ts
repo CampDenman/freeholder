@@ -11,7 +11,7 @@ import { publicMerchantTermsQuote } from "./merchant-terms-quote-contract";
 import { controlledProrationInput,controlledChangedPriceReview,controlledProrationCalendar } from "./controlled-provider-collection-contract";
 import { subscriptionControlledQuotes } from "./controlled-provider-collection-schema";
 import { controlledTargetQuoteDigest,authenticatedControlledQuote } from "./controlled-provider-quote-proof";
-import { controlledProrationCandidate,prepareControlledProrationEconomics } from "./controlled-provider-proration-economics";
+import { controlledProrationSource,prepareControlledProrationEconomics } from "./controlled-provider-proration-economics";
 import { planControlledProrationPreview } from "./controlled-provider-preview-plan";
 import { planControlledProviderOperation } from "./controlled-provider-plan";
 import { executeControlledOperation } from "./controlled-provider-execution";
@@ -57,7 +57,7 @@ export const assertMyControlledProrationQuoteAccess=defineService({name:"subscri
  kind:"query",permission:"authenticated",external:false,input:z.object({id:z.uuid(),planId:z.uuid()}).strict(),output:z.literal(true),handler:async(input,ctx)=>{await ownGrossProration(ctx,input.id,input.planId);return true as const;}});
 export const assertControlledProrationPreviewSource=defineService({name:"subscriptions.assertControlledProrationPreviewSource",summary:"Prove exact original resource/subscription ownership and a fresh real unused-period instant before any provider preview read.",
  kind:"query",permission:"system",external:false,auditInputFields:["id","resourceId","planId","effectiveAt"],input:controlledProrationInput,output:z.literal(true),handler:async(input,ctx)=>{
-  await controlledProrationCandidate(ctx,input);return true as const;
+  await controlledProrationSource(ctx,input);return true as const;
  }});
 async function quote(input:z.infer<typeof controlledProrationInput>,actor:Actor){
  const system={kind:"system",request:actor.request} as const;

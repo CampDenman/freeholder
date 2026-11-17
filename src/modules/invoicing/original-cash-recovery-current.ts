@@ -6,6 +6,7 @@ import { originalMerchantRefundCash, lockMerchantRefundCash } from "./merchant-r
 import { merchantRefundCashHistory } from "./merchant-refund-history";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { originalCashRecoveryFinancialWitness, originalCashRecoveryOwner } from "./original-cash-recovery-store";
+import type { OriginalCashClosureShare } from "./original-cash-closure-current";
 export async function boundOriginalCashRecovery(ctx: ServiceContext, recoveryId: string) {
   const owner = await originalCashRecoveryOwner(ctx.tx, recoveryId), cash = await originalMerchantRefundCash(ctx, owner.owner.source);
   await lockMerchantRefundCash(ctx, cash);
@@ -19,13 +20,13 @@ export async function originalCashRecoveryRevision(ctx: ServiceContext, recovery
   if (history.incomplete) throw new ServiceError("conflict", "Restore the complete original cash/caller inventory before current return proof.");
   return { cash, history, revision: merchantTaxDigest({ cash, history: history.digest }) };
 }
-export async function originalCashFullReturnCurrent(ctx: ServiceContext, paymentId: string): Promise<boolean> {
+export async function originalCashFullReturnCurrent(ctx: ServiceContext, paymentId: string, share?: OriginalCashClosureShare): Promise<boolean> {
   const witness = await originalCashRecoveryFinancialWitness(ctx.tx, [paymentId], []);
   for (const owner of witness.owners) {
     if (!owner.owner.cash.applied) continue;
     const v2Closures=witness.closures.filter(closure=>closure.recoveryId===owner.id&&witness.operations.some(operation=>operation.id===closure.operationId&&operation.request.inventoryComparison!==undefined));
     for(const closure of v2Closures){
-      try{const {currentOriginalCashClosure}=await import("./original-cash-closure-current");await currentOriginalCashClosure(ctx,owner.id,closure.id);return true;}
+      try{const {currentOriginalCashClosureShared}=await import("./original-cash-closure-current");await currentOriginalCashClosureShared(ctx,owner.id,closure.id,share);return true;}
       catch(error){if(!(error instanceof ServiceError)||error.code!=="conflict")throw error;}
     }
     if(v2Closures.length){

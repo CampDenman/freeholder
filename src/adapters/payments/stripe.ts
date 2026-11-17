@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Stripe Checkout/refund edge with exact-byte HMAC webhook verification.
 
+import { controlledSafeResponseApi, controlledSafeResponseFactory } from "./stripe-controlled-safe-response";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { AdapterError } from "../types";
 import { env } from "@/core/env";
@@ -447,15 +448,15 @@ export function createStripePayments(options: StripePaymentOptions = {}): Paymen
     },
     capabilities: () => ({ ...capabilities }),
     platformAccountIdentity,
-    ...stripeControlledSubscriptions(chargeApi),
-    ...stripeControlledProrationPreview(chargeApi),
-    ...stripeControlledInvoices(chargeApi),
-    ...stripeControlledProducts(chargeApi),
-    ...stripeControlledDiscovery(chargeApi),
-    ...stripeControlledUpdates(chargeApi),
-    ...stripeControlledCalendarRecovery(chargeApi),
-    ...stripeControlledCustomerFinancials(chargeApi),
-    ...stripeControlledCollections(chargeApi),
+    ...controlledSafeResponseFactory(stripeControlledSubscriptions(controlledSafeResponseApi(chargeApi))),
+    ...controlledSafeResponseFactory(stripeControlledProrationPreview(controlledSafeResponseApi(chargeApi))),
+    ...controlledSafeResponseFactory(stripeControlledInvoices(controlledSafeResponseApi(chargeApi))),
+    ...controlledSafeResponseFactory(stripeControlledProducts(controlledSafeResponseApi(chargeApi))),
+    ...controlledSafeResponseFactory(stripeControlledDiscovery(controlledSafeResponseApi(chargeApi))),
+    ...controlledSafeResponseFactory(stripeControlledUpdates(controlledSafeResponseApi(chargeApi))),
+    ...controlledSafeResponseFactory(stripeControlledCalendarRecovery(controlledSafeResponseApi(chargeApi))),
+    ...controlledSafeResponseFactory(stripeControlledCustomerFinancials(controlledSafeResponseApi(chargeApi))),
+    ...controlledSafeResponseFactory(stripeControlledCollections(controlledSafeResponseApi(chargeApi))),
     ...stripeMerchantFees(chargeApi),
     ...stripeCashAuxiliary(chargeApi),
     ...stripeMerchantRecovery(chargeApi),

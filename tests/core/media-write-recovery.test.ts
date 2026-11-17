@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: recovery proves each original outcome without blind retries.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
@@ -21,6 +22,7 @@ import { listStorageOperations, reconcileStorageOperation } from "@/core/media/w
 import { eraseMediaStorageOperations, MEDIA_WRITE_ERASURE_JOB } from "@/core/media/write-privacy";
 import {eraseMultipartOperations,MULTIPART_ERASURE_JOB,MULTIPART_PRIVACY_SCOPE} from "@/core/media/multipart-privacy";
 import { resetStorageForTests, storage } from "@/adapters/storage";
+import { createLocalStorage } from "@/adapters/storage/local";
 import { resetEnvForTests } from "@/core/env";
 import { ready } from "@/core/runtime";
 import { type Actor } from "@/core/service";
@@ -42,9 +44,17 @@ describe.runIf(hasDatabase)("original media recovery (C1.12/C11.08)", () => {
   afterAll(async () => { await stopJobs(); await closeDb(); });
   const body = () => new Uint8Array(Buffer.from("%PDF-1.7\nOriginal synthetic recovery fixture.\n%%EOF\n"));
   const request = (bytes = body()) => ({ filename: "private.pdf", contentType: "application/pdf", bytes });
-  async function unknownPut(actor: Actor = OWNER) {
+  async function unknownPut(actor: Actor = OWNER, beforeAcceptance = false) {
     const store = storage(), put = store.put.bind(store);
-    const spy = vi.spyOn(store, "put").mockImplementation(async (...args) => { await put(...args); throw new Error("Synthetic lost PUT acknowledgement"); });
+    const spy = vi.spyOn(store, "put").mockImplementation(async (...args) => {
+      if (beforeAcceptance) {
+        const directory = join(root, ".freeholder-original-requests"), name = createHash("sha256").update(`freeholder:local-request-key:v1\0${args[0]}`).digest("hex");
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, `${name}.json`), "Synthetic occupied request sidecar", { flag: "wx" });
+      }
+      await put(...args);
+      throw new Error("Synthetic lost PUT acknowledgement");
+    });
     await failure(uploadAsset.call(request(), actor));
     const [row] = await db().select().from(mediaObjectWrites);
     expect(row?.state).toBe("unknown");
@@ -106,14 +116,18 @@ describe.runIf(hasDatabase)("original media recovery (C1.12/C11.08)", () => {
   });
 
   it("preserves a lost DELETE outcome without another physical call and accepts exact human recovery", async () => {
-    const { store, row } = await positivePending(), remove = store.delete.bind(store);
-    const spy = vi.spyOn(store, "delete").mockImplementation(async key => { await remove(key); throw new Error("Synthetic lost DELETE acknowledgement"); });
+    const { store, row } = await positivePending(), local = await import("@/adapters/storage/local"), create = local.createLocalRequestStore, spy = vi.fn();
+    vi.spyOn(local, "createLocalRequestStore").mockImplementation((config, observer) => {
+      const requests = create(config, observer), remove = requests.deleteVersioned.bind(requests);
+      vi.spyOn(requests, "deleteVersioned").mockImplementation(async (key, revision) => { spy(); await remove(key, revision); throw new Error("Synthetic lost DELETE acknowledgement"); });
+      return requests;
+    });
     await failure(cleanupOrphanedMedia(new Date(Date.now() + 2 * 86_400_000)));
-    await cleanupOrphanedMedia(new Date(Date.now() + 3 * 86_400_000));
-    expect(spy).toHaveBeenCalledTimes(1);
     const [operation] = (await db().select().from(mediaObjectWrites)).filter(receipt => receipt.operation === "delete");
     expect(operation?.state).toBe("unknown");
+    expect(spy).toHaveBeenCalledTimes(1);
     await reconcileStorageOperation.call(review(operation!), OWNER);
+    await cleanupOrphanedMedia(new Date(Date.now() + 3 * 86_400_000));
     expect(spy).toHaveBeenCalledTimes(1);
     expect(await db().select().from(mediaObjects)).toHaveLength(0);
     const [resolved] = await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id, operation!.id));
@@ -144,8 +158,8 @@ describe.runIf(hasDatabase)("original media recovery (C1.12/C11.08)", () => {
   });
 
   it("restores pending ownership if a late positive fact contradicts human absence", async () => {
-    const { row, store } = await unknownPut();
-    await store.delete(row.key);
+    const { row } = await unknownPut(OWNER, true);
+    await createLocalStorage({ root, publicPath: "/media" }).delete(row.key);
     await reconcileStorageOperation.call(review(row, "not_applied"), OWNER);
     expect(await db().select().from(mediaObjects)).toHaveLength(0);
     await observeStorageOperation(row.id, true);

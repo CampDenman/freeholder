@@ -66,9 +66,9 @@ describe("migration S3 transport", () => {
     const requests: Request[] = [];
     vi.stubGlobal("fetch", vi.fn(async (request: Request) => {
       requests.push(request);
-      return new Response(new Uint8Array([1]), { status: 200 });
+      return new Response(new Uint8Array([1]), { status: 200, headers: { "content-length": "1" } });
     }));
-    const store = createS3Store({ ...config, SOURCE_S3_ADDRESSING_STYLE: style }, "SOURCE");
+    const store = createS3Store({ ...config, SOURCE_S3_ENDPOINT: "https://s3.us-east-1.amazonaws.com", SOURCE_S3_ADDRESSING_STYLE: style }, "SOURCE");
     await store.get("folder/%2e%2e/space name.txt");
     await store.put("folder/%2e%2e/space name.txt", new Uint8Array([1]), "application/octet-stream");
     expect(requests).toHaveLength(2);
@@ -76,8 +76,13 @@ describe("migration S3 transport", () => {
       expect(request.redirect).toBe("error");
       expect(new URL(request.url).pathname).toContain("/folder/%252e%252e/space%20name.txt");
       expect(new URL(request.url).hostname).toBe(style === "virtual"
-        ? "synthetic-private-fixture.storage.example.invalid" : "storage.example.invalid");
+        ? "synthetic-private-fixture.s3.us-east-1.amazonaws.com" : "s3.us-east-1.amazonaws.com");
       expect(request.headers.get("authorization")).toContain("AWS4-HMAC-SHA256");
     }
+  });
+
+  it("rejects a direct S3 read whose stream exceeds the declared object bytes", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array([1, 2]), { status: 200, headers: { "content-length": "1" } })));
+    await expect(createS3Store(config, "SOURCE").get("private/original.bin")).rejects.toThrow();
   });
 });

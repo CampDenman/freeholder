@@ -21,7 +21,8 @@ export async function pendingObjectIsOwned(key: string, now = new Date(), tx?: T
 /** A queued deletion never overrides later, explicitly retained ownership. */
 export async function deleteUnownedPendingObjects(keys: readonly string[]): Promise<{ deleted: number }> {
   let deleted = 0;
-  const{deleteWithReceipt,discardUnwrittenObjectReservation}=await import("./write-ledger");
+  const{discardUnwrittenObjectReservation}=await import("./write-ledger");
+  const{deleteWithReceipt}=await import("./delete-with-receipt");
   for (const key of keys) if (!await pendingObjectIsOwned(key)&&(await discardUnwrittenObjectReservation(key)||await deleteWithReceipt(key))) deleted += 1;
   return { deleted };
 }

@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Actual original-customer balances/credit notes remain independently retained.
+import { recordedControlledProjectionHasUnknown } from "./stripe-controlled-safe-response";
 import { AdapterError } from "../types";
 import { object,text } from "./http";
 import { validateMerchantChargeScope } from "./stripe-merchant-scope";
@@ -20,10 +21,11 @@ export function stripeControlledCustomerFinancials(api:Api){return{
   if(customer.id!==request.providerCustomerRef||customer.deleted===true||customer.currency!==null&&customer.currency!==request.currency.toLowerCase())refuse();
   const cashBalance=object(customer.cash_balance),cashZero=customer.cash_balance===null||!!cashBalance&&ref(cashBalance.customer)===request.providerCustomerRef&&zeroMap(cashBalance.available);
   const balancesZero=money(customer.balance)&&customer.balance===0&&zeroMap(customer.invoice_credit_balance)&&cashZero;
+  let projectionUnknown=recordedControlledProjectionHasUnknown(customer);
   const creditNotes:Array<Record<string,unknown>>=[],issuedCreditNoteRefs:string[]=[],seen=new Set<string>(),cursors=new Set<string>();let cursor:string|undefined,complete=false;
   for(let page=0;page<50;page++){
    const query=new URLSearchParams({customer:request.providerCustomerRef,limit:"100",...(cursor?{starting_after:cursor}:{})});
-   const actual=await api(`/v1/credit_notes?${query}`,{method:"GET"},request);await request.onObserved({kind:"customer_credit_notes_read",raw:actual});
+   const actual=await api(`/v1/credit_notes?${query}`,{method:"GET"},request);await request.onObserved({kind:"customer_credit_notes_read",raw:actual});if(recordedControlledProjectionHasUnknown(actual))projectionUnknown=true;
    if(!Array.isArray(actual.data)||typeof actual.has_more!=="boolean")refuse();
    for(const value of actual.data){const note=object(value),id=ref(note?.id);
     if(!note||!id||!/^cn_[A-Za-z0-9_]{1,196}$/.test(id)||seen.has(id)||ref(note.customer)!==request.providerCustomerRef||!/^in_[A-Za-z0-9_]{1,196}$/.test(ref(note.invoice)??"")
@@ -37,7 +39,7 @@ export function stripeControlledCustomerFinancials(api:Api){return{
   // zero. It requires original note/invoice/payment disposition, never amount
   // matching or a synthetic credit/refund. The normal empty/zero path is exact.
   return{providerCustomerRef:request.providerCustomerRef,currency:request.currency,completeCreditNotes:true,customer,creditNotes,
-   balanceState:balancesZero&&!issuedCreditNoteRefs.length?"known_zero":"review",issuedCreditNoteRefs,
+   balanceState:balancesZero&&!issuedCreditNoteRefs.length&&!projectionUnknown?"known_zero":"review",issuedCreditNoteRefs,
    inventoryDigest:controlledSubscriptionFactsDigest({customer,creditNotes}),suppliesPaidAuthority:false};
  },
 };}

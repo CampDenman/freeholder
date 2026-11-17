@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // The real original mandate creates one shared canonical next-period invoice.
+import { requireControlledCurrentVerification,controlledCurrentResultData } from "./controlled-provider-safe-response-proof";
 import { randomUUID } from "node:crypto";
 import { eq,sql } from "drizzle-orm";
 import { z } from "zod";
@@ -61,7 +62,8 @@ async function retain(ctx:ServiceContext,value:z.infer<typeof input>){
  });
  if(review.debitTaxMinor>0){
   const tax=source.history.verifications.filter(row=>source.history.operations.some(op=>op.id===row.operationId&&op.kind==="read_product")).at(-1);
-  const product=z.object({createdProductRef:z.string().regex(/^prod_[A-Za-z0-9_]+$/),component:z.literal("merchant_declared_tax_collection"),taxAuthority:z.literal("canonical_merchant_tax_ledger")}).parse(tax?.actualResult);
+  if(tax)requireControlledCurrentVerification(source.history,tax);
+  const product=z.object({createdProductRef:z.string().regex(/^prod_[A-Za-z0-9_]+$/),component:z.literal("merchant_declared_tax_collection"),taxAuthority:z.literal("canonical_merchant_tax_ledger")}).parse(controlledCurrentResultData(tax?.actualResult));
   const provenance=controlledComponentProvenance.parse({kind:"merchant_declared_tax_collection",providerProductRef:product.createdProductRef,taxQuoteDigest:source.tax.quoteDigest,profileId:quote.profileId,profileVersion:quote.profileVersion});
   components.push({id:randomUUID(),collectionId:quote.plannedCollectionId,position:components.length,kind:"merchant_declared_tax_collection",amountMinor:review.debitTaxMinor,currency:source.parent.currency,periodStart:source.start,periodEnd:source.end,provenance,provenanceDigest:merchantTaxDigest(provenance)});
  }

@@ -4,7 +4,7 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { ServiceError, type ServiceContext } from "@/core/service";
 import { subscriptionCommercialAmendments } from "./commercial-amendment-schema";
-import { subscriptionCommercialTerms, type subscriptions } from "./schema";
+import { subscriptionCommercialTerms, subscriptionMarketPolicies, type subscriptions } from "./schema";
 export function reviewedResumptionStart(value: string | undefined, originalEnd: Date, previousStart: Date, now: Date): Date {
   const missed = originalEnd.getTime() <= now.getTime();
   if (!missed) {
@@ -26,11 +26,19 @@ export async function pendingCommercialAmendment(ctx: ServiceContext, parent: ty
     .orderBy(desc(subscriptionCommercialTerms.revision)).limit(1);
   return accepted?.amendment.planId === parent.pendingPlanId ? accepted : null;
 }
+export async function commercialAmendmentRequired(ctx: ServiceContext, parent: typeof subscriptions.$inferSelect): Promise<boolean> {
+  const [policy] = await ctx.tx.select({ model: subscriptionMarketPolicies.model }).from(subscriptionMarketPolicies).where(eq(subscriptionMarketPolicies.subscriptionId, parent.id)).limit(1);
+  if (policy?.model === "seller_merchant") return true;
+  const [history] = await ctx.tx.select({ id: subscriptionCommercialTerms.id }).from(subscriptionCommercialTerms).where(eq(subscriptionCommercialTerms.subscriptionId, parent.id)).limit(1);
+  return Boolean(history);
+}
 export async function commercialBillingStart(ctx: ServiceContext, parent: typeof subscriptions.$inferSelect) {
   const [gross] = await ctx.tx.execute<{ pending: boolean }>(sql`select exists(select 1 from subscription_prorations p where p.subscription_id=${parent.id}::uuid and p.state in('accepted','preparing','awaiting_invoice','awaiting_payment','awaiting_effective','review')) as pending`);
   if (gross?.pending) return { start: parent.currentPeriodEnd, pending: null, ready: false };
   const pending = await pendingCommercialAmendment(ctx, parent);
-  if (parent.merchantScopeVersion === 1 && parent.pendingPlanId && (!pending || pending.terms.effectivePeriodStart < parent.currentPeriodEnd)) throw new ServiceError("conflict", "Restore the current accepted amendment and original billing boundary before renewal.");
+  if (parent.merchantScopeVersion === 1 && parent.pendingPlanId && (!pending || pending.terms.effectivePeriodStart < parent.currentPeriodEnd) && await commercialAmendmentRequired(ctx, parent)) {
+    throw new ServiceError("conflict", "Restore the current accepted amendment and original billing boundary before renewal.");
+  }
   return { start: pending?.terms.effectivePeriodStart ?? parent.currentPeriodEnd, pending, ready: !pending || pending.amendment.state === "activated" };
 }
 /** Hash actual original database rows. SQL guards reproduce these exact stamps;

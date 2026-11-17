@@ -1,0 +1,24 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "blog_author_closure28.v1",
+  "checklist": ["C2.28"],
+  "status": "C2.28 closed with current native, real-browser, both-theme Axe and existing hosted author-archive evidence; related rows remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "3712529fd2f36f9d08ea81bcfde038bda2074822c32dd7f4f6dd26b615f19057" }
+  ],
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "3712529fd2f36f9d08ea81bcfde038bda2074822c32dd7f4f6dd26b615f19057",
+      "beforeSha256": "416dcaf5a7232843ebf5615919360bbd2ca1ec9cb693d7a6dc95ec4a8f9fafde",
+      "continue": true,
+      "edits": [
+        {
+          "before": "- [ ] **C2.28** Blog authors: account-linked or guest profiles, private email,\n  public bylines/bios and author archives; preserve WordPress authors, terms,\n  post dates and exact archive paths at import. Owner administration and\n  four-locale labels are required before checking this item.",
+          "after": "- [x] **C2.28** Blog authors: account-linked or guest profiles, private email,\n  public bylines/bios and author archives; preserve WordPress authors, terms,\n  post dates and exact archive paths at import. Owner administration and\n  four-locale labels are required before checking this item.\n  *(Closed 2026-11-15. Current native blog/customer/playground controls PASS27/27;\n  the real Chromium owner→guest-author→publication/comment journey and both-theme\n  Axe checks PASS, with private email absent. The verified hosted run on\n  e65773459a9e1d8cde977a0e16432e91bf65d796 additionally edited the author/bio\n  and reached its public archive. Import dates/terms/paths, merge, export and\n  erasure are covered in `tests/core/blog-structure-comments.test.ts`.\n  **F04** `/admin/blog/authors` and the public byline/archive. **F05**\n  `cms.listAuthors`/`saveAuthor`/`deleteAuthor`/`authorAccounts` use the shared\n  scoped service projections. **F07** private email and hidden-publication tests.\n  **F09** `deploy/blog-wordpress-2026-11-07.md`. **F12** the native and Chromium\n  journeys above. Related taxonomy scale, comment and source-cutover acceptance\n  remain with their own rows.)*",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

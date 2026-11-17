@@ -12,6 +12,7 @@ import { merchantTaxDigest } from "./merchant-tax-store";
 import { parentFinancialGraph,lockControlledParentMoney } from "./controlled-provider-financial-parent";
 import { controlledFinancialEntries } from "./controlled-provider-financial-witness";
 import { creditNoteDisposition } from "./credit-disposition";
+import { readOriginalPrincipalAndDebt } from "./principal-authority";
 
 function refuse():never{throw new ServiceError("conflict","Restore this exact original agreement's complete accepted parent, cash/principal, refund/dispute, credit, commission and authentic controlled caller history before new provider admission.");}
 /** Call order is controlled resource → subscription parent → original cash.
@@ -73,10 +74,11 @@ export const controlledProviderFinancialReadiness=defineService({
   const principal=getService("invoicing.originalPrincipalAuthority"),debt=getService("invoicing.merchantPaymentRecoveryDebt");
   if(!principal||!debt)refuse();
   for(const payment of graph.money){
-   const state=z.object({pending:z.boolean()}).passthrough().parse(await ctx.callAsSystem(debt,{paymentId:payment.id}));if(state.pending)refuse();
    if(payment.status==="succeeded"){
-    const actual=z.object({principalSafe:z.boolean(),financialDebtPending:z.boolean()}).passthrough().parse(await ctx.callAsSystem(principal,{paymentId:payment.id}));
-    if(!actual.principalSafe||actual.financialDebtPending)refuse();
+    const{debt:state,principal:proof}=await readOriginalPrincipalAndDebt(ctx,payment.id),actual=z.object({principalSafe:z.boolean(),financialDebtPending:z.boolean()}).passthrough().parse(proof);
+    if(state.pending||!actual.principalSafe||actual.financialDebtPending)refuse();
+   }else{
+    const state=z.object({pending:z.boolean()}).passthrough().parse(await ctx.callAsSystem(debt,{paymentId:payment.id}));if(state.pending)refuse();
    }
   }
   for(const receipt of graph.receipts){

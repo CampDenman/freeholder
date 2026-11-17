@@ -1,0 +1,45 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "preview_mail_delivery36.v1",
+  "checklist": ["C3.36"],
+  "status": "Worker-time private-preview mail boundary repaired and verified; hosted sign-in delivery remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "2e298d2dccc48b3fa99633906f4cad66c8b2b169fe92a5dc377594f0580488ac" },
+    { "path": "src/core/mail/preview.ts", "sha256": "af493ae29aca6413e542bb775691295be46ed2e6690e476c98ff53d3986c82da" },
+    { "path": "src/core/mail/service.ts", "sha256": "98b99ddf2b00a4ac7017ea633ed104f39018de1276065d73635d41e8fd70f2ce" },
+    { "path": "tests/core/preview-mail-delivery-policy.test.ts", "sha256": "b61c4dbf296cf3d64d9a4dc5a9baed74e24ccd19ff99be39f38f0b47ed26f5d3" },
+    { "path": "deploy/launch-template.md", "sha256": "1179472328b446193f09c51f2cdf8e13d4956e841474ec681fcbbb48c1855857" },
+    { "path": ".changeset/preview-mail-delivery-policy.md", "sha256": "8e67ba0ee6c6c242d4a3e04b287919036293e98b49661d5e0dfc76a7abafbaf3" }
+  ],
+  "beforeControl": { "database": "preview_delivery_before_20261115", "scenario": "queue to stranger before preview, enable preview, run worker", "expected": "held", "actual": "submitted", "providerCalled": true },
+  "controls": {
+    "baselineFreshDatabase": { "database": "preview_mail_audit_20261115", "passed": 9, "failed": 0 },
+    "finalFreshDatabase": { "database": "preview_delivery_final_20261115", "passed": 12, "failed": 0 },
+    "ordinaryMailFreshDatabase": { "database": "mail_worker_regression_20261115", "passed": 38, "failed": 0 },
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "fullLint": "passed",
+    "fullNoDatabaseSuite": { "filesPassed": 601, "filesSkipped": 359, "passed": 5125, "intentionallySkipped": 3800, "failed": 0 },
+    "productionBuild": "passed",
+    "standaloneArtifact": { "files": 4392, "bytes": 153624878, "sourceOrEnvironmentLeakage": false },
+    "sourceAndReleaseGates": "passed"
+  },
+  "preservedFailures": [
+    { "database": "preview_delivery_after_20261115", "passed": 11, "fixtureFailures": 1, "fixtureCorrection": "Create the required verified default bulk sender before staging the pre-preview campaign" }
+  ],
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "2e298d2dccc48b3fa99633906f4cad66c8b2b169fe92a5dc377594f0580488ac",
+      "beforeSha256": "6ed95bb6bfd9ccfdab6b9a9006f0e340fd7f61afbd9a846966d028ffba9a8881",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  physical outcomes. Hosted sign-in delivery remains unverified.)*\n- [ ] **C3.37** Service intake and delivery: a form marked as an intake opens\n",
+          "after": "  physical outcomes. Hosted sign-in delivery remains unverified.)*\n  *(Physical-delivery boundary repair, 2026-11-15: an actual native before\n  control queued a stranger's message before preview mode, enabled the preview,\n  and observed the worker return `submitted`. The worker now rechecks recipient,\n  current route and reserved cap before provider I/O, durably holds disallowed\n  transactional mail with its encrypted body, and refuses pre-preview bulk work.\n  The cap check excludes the current delivery's existing reservation. Fresh\n  migration93 controls pass 12/12, including pre-preview stranger, console and\n  bulk transitions plus the existing lost-ACK cap case. TypeScript and focused\n  lint pass. Evidence `deploy/preview-mail-delivery36.source.json`; changeset\n  `preview-mail-delivery-policy.md`. C3.36 remains unchecked until hosted\n  sign-in delivery.)*\n- [ ] **C3.37** Service intake and delivery: a form marked as an intake opens\n",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

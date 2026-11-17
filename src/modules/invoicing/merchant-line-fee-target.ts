@@ -11,15 +11,16 @@ import { merchantRefundRequests } from "./merchant-refund-schema";
 import { creditNoteLines, creditNotes, invoiceLines, invoiceMerchantAllocationLines, invoiceMerchantAllocations, payments, refunds } from "./schema";
 import { creditedOriginalLineFee, originalFeeResourceTargets } from "./merchant-line-fee-amounts";
 import { assertMerchantCreatorsQuiesced, assertMerchantPaymentTerminal } from "./merchant-payment-request";
+import type {ControlledAtomicRefundTarget} from "./controlled-atomic-refund-target";
 
 /** null is explicit incomplete/ambiguous recovery debt, never a new dispatch. */
-export async function originalMerchantFeeTarget(ctx: ServiceContext, payment: typeof payments.$inferSelect, routing: z.infer<typeof paymentRouting>): Promise<number | null> {
+export async function originalMerchantFeeTarget(ctx: ServiceContext, payment: typeof payments.$inferSelect, routing: z.infer<typeof paymentRouting>, knownTarget?:ControlledAtomicRefundTarget|null): Promise<number | null> {
   const fee = routing.applicationFeeMinor;
   if (fee === undefined || !Number.isSafeInteger(fee) || fee < 0 || !Number.isSafeInteger(payment.amountMinor) || payment.amountMinor <= 0
     || !Number.isSafeInteger(payment.refundedMinor) || payment.refundedMinor < 0 || payment.refundedMinor > payment.amountMinor) return null;
   if(routing.originalChargeReceiptId){
     const {controlledAtomicRefundTarget}=await import("./controlled-atomic-refund-target");
-    const atomic=await controlledAtomicRefundTarget(ctx,payment.id);
+    const atomic=knownTarget===undefined?await controlledAtomicRefundTarget(ctx,payment.id):knownTarget;
     if(atomic)return atomic.target;
   }
   const prior = Number(BigInt(fee) * BigInt(payment.amountMinor - payment.refundedMinor) / BigInt(payment.amountMinor));

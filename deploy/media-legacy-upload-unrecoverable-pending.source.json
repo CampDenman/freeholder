@@ -1,0 +1,51 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_legacy_upload_unrecoverable_pending.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Genuine pre-caller full-NULL written uploads remain safely pending without invented birth, DELETE or anchor evidence; positive legacy-anchor controls remain open for an eligible cohort",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "56b7eeb755b25c7131b71648946d7a8e083d544027fcdac729fecaa511a0e448" },
+    { "path": "tests/fixtures/media-legacy-upload-anchor.config.ts", "sha256": "2621cce606bc48d1adc8ec351449ae9d9ef1f7022d981b21ce748d5007b8107b" },
+    { "path": "tests/fixtures/media-legacy-upload-anchor.probe.ts", "sha256": "8a540bb2050d3bebd1c9b448e0a98f8b5e077ab2f66955de348acb2d07146bc7" },
+    { "path": "tests/fixtures/media-legacy-upload-anchor-current.probe.ts", "sha256": "ea5a1959f2a2774f918e35387d7606e40e62c4eb9d4715d8ce9bcebbeeddbebe" },
+    { "path": "tests/core/media-legacy-upload-anchor-upgrade.test.ts", "sha256": "c5efaa40c4cd675d214eeff88d025927caf4c3928277413c3d50df55a43108a7" }
+  ],
+  "controls": {
+    "database": "media_legacy_anchor_unrecoverable_pending3_20261116",
+    "oldRuntimeCommit": "bab980add656e159643a21597ea274cb63d4d282",
+    "oldProducer": { "passed": 1, "failed": 0, "acceptedPut": 1, "originalCaller": 0 },
+    "ordinaryUpgrade": "Current normal migration through108 passed",
+    "currentCaptureProducer": { "passed": 1, "failed": 0, "completeRetainedCapture": true },
+    "native": { "passed": 1, "failed": 0, "selectedSkips": 7 },
+    "workerResult": "Both actual storage and multipart jobs reject; the new request remains in_progress",
+    "preserved": ["original accepted PUT with NULL reservation/runtime", "NULL pointer reservation/key/upload/owner lineage", "all physical requests", "original scope and receipt"],
+    "allowedMutation": "The existing asset-erasure flow detaches the asset and returns its pointer to pending; no physical deletion or historical birth fill occurs",
+    "classification": "The source contract explicitly preserves rows pending when authentic first identity/caller proof is unavailable; this cohort is not anchor-eligible",
+    "unknownRegression": { "database": "media_legacy_anchor_unknown_postclassification_20261116", "oldProducer": 1, "currentProducer": 1, "nativePassed": 1, "failed": 0 },
+    "pureProofRegression": { "passed": 19, "failed": 0 },
+    "rejectedTestDrafts": [
+      { "database": "media_legacy_anchor_unrecoverable_pending_20261116", "reason": "The initial assertion incorrectly required the attached asset pointer to remain unchanged" },
+      { "database": "media_legacy_anchor_unrecoverable_pending2_20261116", "reason": "The second assertion incorrectly required the upload asset link to remain unchanged" }
+    ],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false,
+    "productCodeChanged": false,
+    "remaining": "The six positive anchor controls require a genuinely eligible historical cohort; provider, clean-room, independent review and checklist acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "56b7eeb755b25c7131b71648946d7a8e083d544027fcdac729fecaa511a0e448",
+      "beforeSha256": "9ba45bc8ccf857b5e18e3277a73d7488cbfe7bc8c86e50dd93874c6a22a20f45",
+      "continue": true,
+      "edits": [
+        {
+          "before": "See `deploy/media-legacy-upload-retired-reachability.source.json`. All six retired\ncontrols remain open; no product guard or checklist row changes.\n\nSource-only continuation, 2026-11-14 (C1.12/C10.32/C11.08): transfer quota",
+          "after": "See `deploy/media-legacy-upload-retired-reachability.source.json`. All six retired\ncontrols remain open; no product guard or checklist row changes.\n\nFull-NULL legacy safe-pending classification2026-11-16 (C1.12/C11.08): the genuine\npre82 written producer has no original caller/runtime and retains NULL receipt/pointer\nbirth. The documented anchor contract therefore cannot positively retire or reduce it;\na new UUID or synthetic caller would be false evidence. A new named old→normal108→\ncurrent-capture→native control passes1/1: both actual workers refuse, no DELETE/anchor\nappears, physical/request/capture evidence remains intact, and only the ordinary asset\nlinks detach. The unknown/unwritten full regression and19 pure proof cases pass;\nTypeScript/lint pass. See `deploy/media-legacy-upload-unrecoverable-pending.source.json`.\nThe six positive anchor controls still require a genuinely eligible historical cohort;\nno product code, provider result or checklist row changes.\n\nSource-only continuation, 2026-11-14 (C1.12/C10.32/C11.08): transfer quota",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

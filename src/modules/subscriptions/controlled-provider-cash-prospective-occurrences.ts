@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Exact structured positive occurrence associations; NEVER a fact-ID exemption.
+import { recordedControlledProjectionHasUnknown } from "@/adapters/payments/stripe-controlled-safe-response";
 import type { controlledCashManifest } from "./controlled-provider-collection-cash-manifest";
 import { cashReference } from "./controlled-provider-collection-cash-manifest";
 import { cashObservationSourceMatches } from "./controlled-provider-cash-observation-source";
@@ -29,7 +30,7 @@ export function controlledProspectiveRawBindings(source:ControlledProspectiveRaw
    ||cashReference(raw.latest_charge)&&cashReference(raw.latest_charge)!==receipt.providerChargeRef)return[];return[receipt.id];
  }
  for(const fact of source.history.facts){const call=source.history.calls.find(row=>row.id===fact.callId),operation=call?source.history.operations.find(row=>row.id===call.operationId):null;if(!call||!operation)continue;
-  let ids:string[]=[];const raw=fact.actual.raw;
+  let ids:string[]=[];const raw=fact.actual.raw;if(recordedControlledProjectionHasUnknown(raw))continue;
   if(fact.actual.kind==="cash_observed"){const cash=controlledCashEvidence.safeParse(raw.cash);if(cash.success)ids=receipts.filter(row=>cashObservationSourceMatches(row,cash.data)).map(row=>row.id);}
   else if(fact.actual.kind==="intent_read")ids=intentIds(raw);
   else if(["invoice_read","controlled_draft_created"].includes(fact.actual.kind))ids=invoiceIds(raw);

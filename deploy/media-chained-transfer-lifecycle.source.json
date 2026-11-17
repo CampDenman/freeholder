@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_chained_transfer_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Chained physical transfer lineage qualified on fresh migration108 PostgreSQL and fictional TCP storage; provider-account acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "2e43430056b9405c2b506fdb47350885eafc19ec421b3a1aea09c825a9a3dd6e" },
+    { "path": "tests/core/media-chained-transfer-lifecycle.test.ts", "sha256": "70ead2aad2186d67f39340c5e4b90de7c6f6a358792c441c58825ce579039ba6" }
+  ],
+  "controls": {
+    "final": { "database": "media_chained_transfer_20261116", "passed": 3, "failed": 0, "durationSeconds": 36.21 },
+    "transport": "Synthetic AWS origin mapped through fetch to the fictional TCP provider; every lineage and refusal assertion retained",
+    "coverage": ["two actual physical generations preserve exact original receipt ancestry and logical-alias reads", "real current-source multipart session refuses another source claim", "SQL refuses intermediate-edge rebinding without new provider I/O"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "2e43430056b9405c2b506fdb47350885eafc19ec421b3a1aea09c825a9a3dd6e",
+      "beforeSha256": "3f336762fcfb6937ed3ed4ebcb6b869529b26e177559db3a051611c7e323ddd1",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-transfer-read-provenance-lifecycle.source.json`. No provider\n  account, cross-module or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  `deploy/media-transfer-read-provenance-lifecycle.source.json`. No provider\n  account, cross-module or C-item acceptance follows.\n  Chained-transfer qualification2026-11-16: fresh migration108 passes3/3. Two\n  actual physical generations preserve exact original receipt ancestry and the\n  logical alias; a real current-source session refuses another claim; SQL refuses\n  intermediate-edge rebinding without new provider I/O. Synthetic AWS-to-TCP\n  transport preserves all assertions. Focused lint passes. See\n  `deploy/media-chained-transfer-lifecycle.source.json`. No provider account or\n  C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -4,6 +4,8 @@ import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {describe,expect,it} from "vitest";
 import manifest from "../../deploy/atomic-auxiliary-fee-prepost-bank85.manifest.json";
+import calendarReviewWindows from "../../deploy/controlled-calendar-review-windows.source-preservation.json";
+import publicBoundary from "../../deploy/controlled-safe-public-boundary88.source.json";
 const read=(path:string)=>readFileSync(new URL("../../"+path,import.meta.url));
 const hash=(value:string|Buffer)=>createHash("sha256").update(value).digest("hex");
 const body=(statement:string)=>statement.match(/AS \$\$([\s\S]*)\$\$/)?.[1]??"";
@@ -48,7 +50,14 @@ describe("actual own auxiliary pre-POST bank preservation",()=>{
  });
  it("keeps the real process-held preflight and all original 180-second native assertions",()=>{
   for(const [path,entry] of Object.entries(manifest.preservedOriginalInputs)){
-   const bytes=read(path);expect(bytes.length).toBe(entry.bytes);expect(hash(bytes)).toBe(entry.sha256);
+   let bytes=read(path);if(path==="src/modules/invoicing/controlled-target-raw-classification.ts"){
+    const latest=publicBoundary.files.find(file=>file.path===path);if(!latest)throw Error("Require the newest raw-classification continuation.");expect(hash(bytes)).toBe(latest.afterSha256);
+    for(const delta of [...latest.edits].reverse()){expect(bytes.toString().split(delta.after)).toHaveLength(2);bytes=Buffer.from(bytes.toString().replace(delta.after,()=>delta.before));}expect(hash(bytes)).toBe(latest.beforeSha256);
+    const exact=calendarReviewWindows.files[0];if(!exact)throw Error("Require the exact reviewed-calendar-window continuation.");expect(hash(bytes)).toBe(exact.afterSha256);
+    for(const delta of [...exact.finiteDelta].reverse()){expect(bytes.toString().split(delta.after)).toHaveLength(2);bytes=Buffer.from(bytes.toString().replace(delta.after,()=>delta.before));}
+    expect(hash(bytes)).toBe(exact.beforeSha256);
+   }
+   expect(bytes.length).toBe(entry.bytes);expect(hash(bytes)).toBe(entry.sha256);
   }
   expect(read("tests/modules/atomic-auxiliary-fee84.test.ts").toString()).toContain("timeout:180000");
  });

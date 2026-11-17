@@ -1,0 +1,39 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_upload_reservation_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Five genuine upload-reservation/privacy lifecycle controls pass after correcting retained-receipt request attribution; real provider, legacy-upgrade and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "15cc4983a043265b5a8e8e5881a579f8597b5d8853f318101b59a619432987e5" },
+    { "path": "src/core/media/original-erasure-scope.ts", "sha256": "869bceab93982681b0423ecb4102e8f6ee8e2735cf5a62b4d514af278f96c505" },
+    { "path": "tests/core/media-upload-reservation-lifecycle.test.ts", "sha256": "47a3be7b56fe8c10b0aefdfe832951b2f934bf4f9a1753aeb7412b793804a194" }
+  ],
+  "defect": {
+    "initialFailure": "A later same-subject erasure returned the data_request_artifacts.id where the privacy coordinator requires data_requests.id, causing a false foreign-subject refusal",
+    "correction": "Return the intact prior artifact's actual dataRequestId while preserving every ownership and integrity check",
+    "changeset": ".changeset/media-repeat-erasure-receipts.md"
+  },
+  "controls": {
+    "final": { "database": "media_upload_reservation_fixed_20261116", "passed": 5, "failed": 0, "durationSeconds": 40.6 },
+    "coverage": ["real upload and staged pointer share one immutable original reservation and owner", "customer abort retains the reservation without provider I/O", "future cleanup time cannot manufacture age or custody", "verified unwritten erasure retains the exact UUID and first digest without DELETE", "later verified same-subject request reuses intact first identity without rewriting old scopes"],
+    "regressions": { "database": "media_repeat_erasure_regression_20261116", "passed": 10, "failed": 0, "files": ["tests/core/media-upload-first-identity.test.ts", "tests/core/media-original-first-capture-lifecycle.test.ts"] },
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "15cc4983a043265b5a8e8e5881a579f8597b5d8853f318101b59a619432987e5",
+      "beforeSha256": "c3ab4d7103c7ff64703362072c35747d4c5d9ead9d54708fe5888b1215ac06f0",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  real provider account, hosted platform or checklist acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  real provider account, hosted platform or checklist acceptance follows.\n  Upload-reservation lifecycle qualification2026-11-16 (C1.12/C11.08): fresh\n  migration108 passes5/5 genuine upload/abort/retention/verified-erasure controls.\n  The repeated-request control exposed and fixed an artifact-ID/request-ID mismatch\n  that misclassified valid prior media receipts as foreign. The exact original UUID\n  and key digest survive without provider I/O or rewriting the old scope. Ten\n  neighboring first-capture/identity controls also pass; TypeScript and focused lint\n  pass. See `deploy/media-upload-reservation-lifecycle.source.json`. No provider\n  account, legacy upgrade, hosted erasure or checklist acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -14,7 +14,7 @@ import { controlledProrationCandidate } from "./controlled-provider-proration-ec
 export const planControlledProrationPreview=defineService({name:"subscriptions.planControlledProrationPreview",summary:"Freeze a real original native or no-proration NET preview from the actual current paused calendar and current shared original merchant offer; no issued invoice, credit or access is created.",
  kind:"mutation",permission:"system",external:false,writeClass:"money",auditInputFields:["id","resourceId","planId","kind","effectiveAt"],input:controlledProrationInput.extend({kind:z.enum(["preview_proration","preview_update"])}).strict(),output:z.object({operationId:z.uuid()}),handler:async(input,ctx)=>{
   const originalInput=controlledProrationInput.parse({id:input.id,resourceId:input.resourceId,planId:input.planId,productVariantId:input.productVariantId,effectiveAt:input.effectiveAt,taxDestination:input.taxDestination,locale:input.locale});
-  const{resource,parent,previous,history,economic,currentParent:parentReady}=await controlledProrationCandidate(ctx,originalInput);
+  const{resource,parent,previous,history,economic,currentParent:parentReady}=await controlledProrationCandidate(ctx,originalInput,false);
   if(history.count>=4995)throw new ServiceError("conflict","Retain bounded capacity for the genuine original preview call, facts, finish and verification.");
   const[originalTerms]=await ctx.tx.select().from(subscriptionCommercialTerms).where(eq(subscriptionCommercialTerms.id,resource.termsId)).limit(1);
   if(!originalTerms)throw new ServiceError("conflict","Restore the immutable original resource acceptance before its actual preview.");

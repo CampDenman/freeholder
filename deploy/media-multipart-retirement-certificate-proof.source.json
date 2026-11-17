@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_retirement_certificate_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Safe first original retirement-certificate codec controls pass; the codec alone grants no retirement or provider authority",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "bd4e2ce9f60b2b3d52c29511f0af6a1d6fab91a2376529bc8619b65503dbd0f9" },
+    { "path": "tests/core/media-multipart-retirement-certificate-proof.test.ts", "sha256": "841b7a9a21f8704ecdc89bbbf2b5ccf8247b25e588a932430bbb70e0f35ff611" }
+  ],
+  "controls": {
+    "final": { "passed": 8, "failed": 0, "durationSeconds": 0.718 },
+    "coverage": ["whole versioned safe body and deterministic digest retained without mutation", "real NULL original ACK/FIN preserved under distinct stop review", "raw keys, provider/account locators and unknown fields refused", "changed CREATE/ABORT, namespace, baseline or inventory reference refused", "duplicate/reordered memberships and omitted observation frontiers refused", "detached review/stop references and mismatched stop pairs refused", "incomplete inventory or changed first/confirmed membership refused", "evidence frontiers and member lists bounded without accepting truncated subsets"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "bd4e2ce9f60b2b3d52c29511f0af6a1d6fab91a2376529bc8619b65503dbd0f9",
+      "beforeSha256": "30caef3578875faf35ca88c42eebf949fee3a4d114bfb3df72c092337f99eca7",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  No certificate, kernel stop, provider outcome or compact-erasure proof follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  No certificate, kernel stop, provider outcome or compact-erasure proof follows.\n  Retirement-codec proof qualification2026-11-16: all8 controls pass. The whole\n  versioned safe body has a deterministic digest without input mutation; real NULL\n  ACK/FIN survive an explicit distinct stop review. Raw locators, changed ancestry,\n  duplicate/reordered membership, detached stop/review references, incomplete\n  inventories and truncated frontiers are refused. Focused lint passes. See\n  `deploy/media-multipart-retirement-certificate-proof.source.json`. A safe codec\n  alone grants no retirement or provider authority.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

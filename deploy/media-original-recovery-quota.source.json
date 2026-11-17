@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_original_recovery_quota.v1",
+  "checklist": ["C10.32", "C11.08", "C1.12"],
+  "status": "Original quota-settlement authority controls pass; hosted quota acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "bdfe578a554bb696e64e1e4bcb16a379908da1da6f7741652b675bb518244f2d" },
+    { "path": "tests/core/media-original-recovery-quota.test.ts", "sha256": "0220f51065d032ebca82e645a5e0147263ac0285ded957e5c4418d0d260dd7c8" }
+  ],
+  "controls": {
+    "final": { "passed": 6, "failed": 0, "durationSeconds": 0.707 },
+    "coverage": ["exact original reserved token settles within byte bound", "exact retained settlement token is idempotent without borrowing current key", "another pending token refused despite equal bytes", "old, unattributed or other-operation settled row refused", "missing reservation or smaller byte bound refused", "changed settled byte count refused"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "bdfe578a554bb696e64e1e4bcb16a379908da1da6f7741652b675bb518244f2d",
+      "beforeSha256": "3928d91b22801934cbba161e0fab11af9441263b4ab8c9b4fa8da05dc1d4fda5",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  recovery acceptance remains open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  recovery acceptance remains open.\n  Original recovery-quota qualification2026-11-16 (C10.32/C11.08): all6 controls\n  pass. Only the exact original reserved/settled token is recognized within its\n  byte bound; another operation, missing reservation, changed bytes or smaller\n  bound cannot invent or borrow capacity. Focused lint passes. See\n  `deploy/media-original-recovery-quota.source.json`. Hosted quota acceptance\n  remains open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

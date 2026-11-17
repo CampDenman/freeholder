@@ -1,0 +1,42 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_create_birth_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped original multipart CREATE birth/baseline lifecycle qualified on fresh and upgraded migration97 PostgreSQL; hosted/provider/stopped-executor acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "9e408f39eb494fd2dd9a8d9229fe4ad02e470d891b8f5dca3f6b443b0738b5fd" },
+    { "path": "tests/core/media-multipart-create-birth-lifecycle.test.ts", "sha256": "b60b85f70315d91d7868b9d9e7fe1a3d3ae4ea24c23e428481b3b74fad0a6ade" },
+    { "path": "db/migrations/0095_multipart_resource_fence.sql", "sha256": "1feaf2da713807f70a8b4000af08bad69ab678290d465366098cf757537b16a5" },
+    { "path": "db/migrations/0096_multipart_baseline_append.sql", "sha256": "4d70157671d8f29e72ce082af83679e3d9b9f3a129b44f2374983a9c1732f641" },
+    { "path": "db/migrations/0097_multipart_first_session.sql", "sha256": "c9352e89fcdd96fe3e6cf700d6ccdf85e42970f34ab4fedc9dfcefd4ca448d17" },
+    { "path": "db/migrations/meta/_journal.json", "sha256": "f512dd0e16e417234795970085d9df912f4193e956a0a33febe17c589581386c" },
+    { "path": ".changeset/multipart-resource-fence.md", "sha256": "db726a60f2591b2b90362eaf04ca48928423b11c16e3b21005dab73b13b3af3a" }
+  ],
+  "controls": {
+    "before": { "database": "multipart_create_birth_audit_20261115", "passed": 0, "failed": 5, "defect": "Resource INSERT evaluated operation-only writer fields" },
+    "migration95": { "database": "multipart_create_birth_fixed_20261115", "passed": 1, "failed": 4, "defect": "JSON pages append lacked parentheses around the array selection" },
+    "migration96": { "database": "multipart_create_birth_fixed2_20261115", "passed": 2, "failed": 3, "defect": "First NULL-to-session assignment was treated as clearing an existing session" },
+    "migration97WithFixtureTimeout": { "database": "multipart_create_birth_final_20261115", "passed": 4, "failed": 1, "cause": "A later fixture reset exceeded its 25-second statement timeout; all product paths passed" },
+    "final": { "database": "multipart_create_birth_final2_20261115", "passed": 5, "failed": 0, "durationSeconds": 53.95 },
+    "upgrade": { "database": "multipart_birth_upgrade_2c83a6438b484fc7ad661bcccbc5b24d", "from": 94, "to": 97, "journalEntries": 98, "verifiedFunctionBodies": 3, "passed": true },
+    "coverage": ["two complete pre-dispatch passes and one CREATE", "retained exact-key version refusal before CREATE", "lost CREATE without singleton adoption or replay", "paused CREATE NULL finish and actual late finish", "sealed baseline rewrite refusal"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "9e408f39eb494fd2dd9a8d9229fe4ad02e470d891b8f5dca3f6b443b0738b5fd",
+      "beforeSha256": "7518c7426b515fe010be66c1838306869d44a27acf682b3deeb8cc9bb70e4a52",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  No account, ingress, whole-worker or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "after": "  No account, ingress, whole-worker or C-item acceptance follows.\n  Multipart CREATE qualification2026-11-15: the first genuine current run failed\n  all5 controls on a resource trigger's operation-only fields. Migrations95–97\n  isolate that branch, parenthesize immutable JSON-page append, and distinguish\n  first session assignment from clearing an existing session. Intermediate runs\n  preserved4,3 and1 failures, the last being a fixture-reset statement timeout;\n  no guard was bypassed. Final fresh migration97 execution passes5/5 and the real\n  94→97 official-runner upgrade verifies all98 journals and all3 repaired bodies.\n  Full TypeScript/focused lint pass. See\n  `deploy/multipart-create-birth-lifecycle.source.json`. Hosted/provider and\n  stopped-executor acceptance remain open; no C row closes.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

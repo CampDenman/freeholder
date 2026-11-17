@@ -205,9 +205,13 @@ must still be registered deliberately when introduced.
 ## Retention, backup, and recovery
 
 The daily `core.prunePrivacyArtifacts` job deletes protected artifacts after
-their 30-day delivery window. The request record and checksum remain as audit
-evidence; the file body does not. Normal PostgreSQL backup/restore includes all
-four privacy tables. Before deploying migration `0024_contact-privacy-rights`,
+their 30-day delivery window. One narrow exception is a partially completed
+import-source erasure whose authentic receipt, complete normalized membership,
+fulfillment audit and retired physical evidence are all still required to
+reconstruct that source after a hold is released. Other expired partial receipts
+remain prunable. The request record and checksum remain as audit evidence when
+the file body is deleted. Normal PostgreSQL backup/restore includes all four
+privacy tables. Before deploying migration `0024_contact-privacy-rights`,
 take the ordinary verified database backup. The migration is additive: rollback
 the application first if needed; keep the new tables until the prior version is
 stable, because dropping them would destroy evidence.

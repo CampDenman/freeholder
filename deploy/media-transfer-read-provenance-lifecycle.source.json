@@ -1,0 +1,46 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_read_provenance_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Fresh exact source/target read provenance qualified on fresh and upgraded migration108 PostgreSQL; provider-account and cross-module acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "3f336762fcfb6937ed3ed4ebcb6b869529b26e177559db3a051611c7e323ddd1" },
+    { "path": "tests/core/media-transfer-read-provenance-lifecycle.test.ts", "sha256": "528548b92c9b5de54aea163d6e9812ea510b4da53c197d3b7fd96e64432e3eee" },
+    { "path": "db/migrations/0106_provider_inventory_caller_alias.sql", "sha256": "86462826d5034f40a1fbb46e9ddd95e04a7a59c5d68db0da2bde531fdc67190d" },
+    { "path": "db/migrations/0107_plan_adoption_record_guard.sql", "sha256": "e0d3c72e257d2255d46666b9a72ffb921eddd73f72fe3465fcc617c5cbc13ab9" },
+    { "path": "db/migrations/0108_adoption_target_receipt_alias.sql", "sha256": "506501263e881defe5569d798e53cf27fb8dc35e5a4fde3323586eddbf7bf40d" },
+    { "path": "db/migrations/meta/_journal.json", "sha256": "5234b4a732ac60e81dfc87a6b008bacd30c2db57e216ef536766f055b98a7ce6" },
+    { "path": ".changeset/provider-inventory-caller-alias.md", "sha256": "ac9b57a323c79f9a51f70a34e85298df02cede85ac576823e87ab175fd3318c4" },
+    { "path": ".changeset/plan-adoption-record-guard.md", "sha256": "6219884719f8c4e40496cc96b753d9b19e43b1f070629bb52c6113b1f4e353ba" }
+  ],
+  "controls": {
+    "before": { "database": "media_read_provenance_20261116", "passed": 0, "failed": 4, "defect": "Direct loopback fixture lacked synthetic AWS conditional-write authority" },
+    "transport": "Synthetic AWS origin mapped through fetch to the fictional TCP provider; no product assertion or conditional-write guard weakened",
+    "defects": ["inventory caller alias conflicted with its PL/pgSQL row variable", "plan-only adopted_at was evaluated for object NEW rows", "target receipt alias conflicted with the PL/pgSQL target variable"],
+    "final": { "database": "media_read_provenance_final_20261116", "passed": 4, "failed": 0, "durationSeconds": 39.01 },
+    "upgrade": { "database": "media_read_provenance2_20261116", "from": 105, "to": 108, "journalEntries": 109, "passed": true },
+    "functionBodies": {
+      "freeholder_media_provider_inventory_evidence_guard()": "c7ffc1dfc37ca9ffd7268d1d2478288caef3f0f4889ca901fd3c51cbac1116aa",
+      "freeholder_media_transfer_adoption_guard()": "d5c3f1556f9eb63a449a76d85327072434a80a84c5276258e8c56d8bd40aa4e0"
+    },
+    "coverage": ["different returned source nonce refused before target PUT despite equal bytes/ETag", "fresh target nonce checked again at adoption", "copy-time reads cannot authorize direct SQL adoption", "new exact full-byte source/target proofs support atomic adoption and conditional source retirement while preserving first evidence"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "3f336762fcfb6937ed3ed4ebcb6b869529b26e177559db3a051611c7e323ddd1",
+      "beforeSha256": "40c8a62faeb30c468b723ccd34da696746e4b830a0c79900a08be0af839725b8",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  Focused lint passes. See `deploy/multipart-idle-retirement-lifecycle.source.json`.\n  No provider account or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  Focused lint passes. See `deploy/multipart-idle-retirement-lifecycle.source.json`.\n  No provider account or C-item acceptance follows.\n  Transfer read-provenance qualification2026-11-16: the initial direct-loopback\n  fixture lacked conditional-write authority; synthetic AWS-to-TCP mapping keeps\n  every product assertion intact. Migration106 disambiguates the actual inventory\n  caller,107 reads plan-only adoption fields only for plans, and108 distinguishes\n  the target receipt alias. Fresh108 passes4/4 in39.01s; official105→108 verifies\n  109 journals and both guard bodies. Full TypeScript/focused lint pass. See\n  `deploy/media-transfer-read-provenance-lifecycle.source.json`. No provider\n  account, cross-module or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

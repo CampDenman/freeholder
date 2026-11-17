@@ -146,7 +146,7 @@ export function digitalOcean(token: string, fetcher: typeof fetch = fetch, sleep
           { bucket: buckets.backups, permission: "readwrite" },
         ]);
         await save({ spacesKeyId: permanent.access_key }, {
-          FREEHOLDER_STORAGE: "s3",
+          FREEHOLDER_STORAGE: "spaces",
           S3_BUCKET: buckets.media,
           S3_ENDPOINT: endpoint,
           S3_REGION: region,

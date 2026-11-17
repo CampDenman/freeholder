@@ -7,6 +7,7 @@ import {z} from "zod";
 import type {Tx} from "@/core/service";
 import {defineMediaService} from "./guarded-service";
 import {lockTransferInventory} from "./transfer-authority";
+import {lockContactIdentityForRecovery} from "../contacts/identity-lock";
 import {mediaStorageTransferReviews as reviews} from "./transfer-schema";
 import {requireOriginalMultipartRetirementProof,type OriginalMultipartRetirementProof} from "./multipart-retirement-certificate-proof";
 import {transferConflict,transferDigest} from "./transfer-proof";
@@ -30,6 +31,7 @@ export const sealOriginalMultipartRetirement=defineMediaService({
  name:"media.sealOriginalMultipartRetirement",summary:"Seal independently derived original idle-upload retirement evidence without changing its first receipts.",kind:"mutation",permission:"system",external:false,agentCallable:false,
  input:originalMultipartRetirementAdmission,output:z.object({id:z.uuid(),proofDigest:digest}),auditInputFields:["resourceId","uploadId","operationId","inventoryId","proofDigest"],
  handler:async(input,ctx)=>{
+  await lockContactIdentityForRecovery(ctx.tx);
   await lockTransferInventory(ctx.tx);
   const[existing]=await ctx.tx.select().from(reviews).where(and(eq(reviews.multipartOperationId,input.operationId),eq(reviews.providerEvidenceDigest,input.proofDigest),isNotNull(reviews.retirementProof))).limit(1);
   if(existing){

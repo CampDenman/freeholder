@@ -6,18 +6,44 @@ import {describe,expect,it} from "vitest";
 import manifest from "../../deploy/original-cash-inventory-causal84.manifest.json";
 import keyExtraction from "../../deploy/original-cash-key-extraction-root-source-20261114.json";
 import originalFeeContinuation from "../../deploy/atomic-credit-original-fee-root-continuation-20261114.json";
+import canonicalBankEvidence from "../../deploy/controlled-canonical-bank-evidence-reuse.source-preservation.json";
+import merchantDigestLoop from "../../deploy/merchant-tax-digest-loop.source-preservation.json";
+import merchantKeyOrder from "../../deploy/merchant-tax-key-order88.source.json";
+import merchantKeyIndex from "../../deploy/merchant-tax-key-index89.source.json";
+import calendarReviewWindows from "../../deploy/controlled-calendar-review-windows.source-preservation.json";
+import contentReuse from "../../deploy/controlled-journal-content-reuse84-current.source.json";
+import safeIntegration from "../../deploy/controlled-safe-response-current-integration87.source.json";
+import publicBoundary from "../../deploy/controlled-safe-public-boundary88.source.json";
+import {restoreRowHashLedgerSource} from "../helpers/row-hash-ledger-forward";
+import runtimeDedup from "../../deploy/controlled-runtime-dedup88.source.json";
 const read=(path:string)=>readFileSync(new URL(`../../${path}`,import.meta.url)),hash=(body:Uint8Array|string)=>createHash("sha256").update(body).digest("hex");
 describe("original inventory v2 bounded source preservation",()=>{
- it("preserves the complete old RF and parent readers before additive comparison companions",()=>{for(const row of manifest.unchangedPrefixes)expect(hash(read(row.path).subarray(0,row.bytes))).toBe(row.sha256);});
+ it("preserves the complete old RF and parent readers before additive comparison companions",()=>{for(const row of manifest.unchangedPrefixes){let source=restoreRowHashLedgerSource(row.path,read(row.path).toString());const latest=runtimeDedup.files.find(file=>file.path===row.path);if(latest){expect(hash(source)).toBe(latest.afterSha256);for(const delta of [...latest.edits].reverse()){expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);}expect(hash(source)).toBe(latest.beforeSha256);}expect(hash(Buffer.from(source).subarray(0,row.bytes))).toBe(row.sha256);}});
  it("preserves old HMAC/schema/raw classification/safe export and whole natives through only the exact auxiliary schema additions",()=>{
-  for(const row of manifest.unchanged){let source=read(row.path).toString();
-   if(row.path==="src/modules/invoicing/controlled-canonical-bank-principal.ts"){
-    const exact=originalFeeContinuation.files.find(file=>file.path===row.path);
-    expect(exact).toBeDefined();if(!exact)throw Error("Require the one exact reviewed original-fee source continuation.");
+  for(const row of manifest.unchanged){let source=read(row.path).toString();const boundary=publicBoundary.files.find(file=>file.path===row.path);if(boundary){expect(hash(source)).toBe(boundary.afterSha256);for(const delta of [...boundary.edits].reverse()){expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);}expect(hash(source)).toBe(boundary.beforeSha256);}const latest=contentReuse.files.find(file=>file.path===row.path);if(latest){expect(hash(source)).toBe(latest.afterSha256);for(const delta of [...latest.edits].reverse()){expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);}expect(hash(source)).toBe(latest.beforeSha256);}const forward=safeIntegration.files.find(file=>file.path===row.path);if(forward){expect(hash(source)).toBe(forward.afterSha256);for(const delta of [...forward.edits].reverse()){expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);}expect(hash(source)).toBe(forward.beforeSha256);}
+   if(row.path==="src/modules/invoicing/controlled-canonical-bank-principal.ts")for(const continuation of [canonicalBankEvidence,originalFeeContinuation]){
+    const exact=continuation.files.find(file=>file.path===row.path);
+    expect(exact).toBeDefined();if(!exact)throw Error("Require every exact canonical-bank source continuation.");
     expect(hash(source)).toBe(exact.afterSha256);
     for(const delta of [...exact.finiteDelta].reverse()){
      expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);
     }
+    expect(hash(source)).toBe(exact.beforeSha256);
+   }
+   if(row.path==="src/modules/invoicing/merchant-tax-store.ts"){
+    const indexed=merchantKeyIndex.files[0];if(!indexed)throw Error("Require the exact key-index source continuation.");expect(hash(source)).toBe(indexed.afterSha256);
+    for(const delta of [...indexed.edits].reverse()){expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);}expect(hash(source)).toBe(indexed.beforeSha256);
+    const latest=merchantKeyOrder.files.find(file=>file.path===row.path);if(!latest)throw Error("Require the exact key-order source continuation.");expect(hash(source)).toBe(latest.afterSha256);
+    for(const delta of [...latest.edits].reverse()){expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);}expect(hash(source)).toBe(latest.beforeSha256);
+    const exact=merchantDigestLoop.files.find(file=>file.path===row.path);if(!exact)throw Error("Require the exact digest-loop source continuation.");
+    expect(hash(source)).toBe(exact.afterSha256);
+    for(const delta of [...exact.finiteDelta].reverse()){expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);}
+    expect(hash(source)).toBe(exact.beforeSha256);
+   }
+   if(row.path==="src/modules/invoicing/controlled-target-raw-classification.ts"){
+    const exact=calendarReviewWindows.files.find(file=>file.path===row.path);if(!exact)throw Error("Require the exact reviewed-calendar-window source continuation.");
+    expect(hash(source)).toBe(exact.afterSha256);
+    for(const delta of [...exact.finiteDelta].reverse()){expect(source.split(delta.after)).toHaveLength(2);source=source.replace(delta.after,()=>delta.before);}
     expect(hash(source)).toBe(exact.beforeSha256);
    }
    if(row.path===keyExtraction.storePath){

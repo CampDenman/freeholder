@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
+import type * as NodeFs from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
@@ -31,6 +32,14 @@ const mocks = vi.hoisted(() => {
 vi.mock("postgres", () => ({ default: mocks.postgres }));
 vi.mock("drizzle-orm/postgres-js", () => ({ drizzle: mocks.drizzle }));
 vi.mock("drizzle-orm/postgres-js/migrator", () => ({ migrate: mocks.migrate }));
+// These two original oracles exercise the pre-boundary official-engine path.
+// Pin that cohort explicitly even when the packaged source later includes 86.
+vi.mock("drizzle-orm/migrator", () => ({ readMigrationFiles: () => [] }));
+vi.mock("node:fs", async importOriginal => {
+  const actual = await importOriginal<typeof NodeFs>();
+  return { ...actual, readFileSync: (...args: Parameters<typeof actual.readFileSync>) =>
+    String(args[0]).endsWith("meta/_journal.json") ? '{"entries":[]}' : actual.readFileSync(...args) };
+});
 vi.mock("@/core/env", () => ({
   env: () => ({ DATABASE_URL: "postgres://freeholder:test@localhost/freeholder_test" }),
 }));

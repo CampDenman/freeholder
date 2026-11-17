@@ -186,7 +186,7 @@ describe.runIf(hasDatabase)("rescanning a legacy library", () => {
 
   async function stored(bytes: Uint8Array<ArrayBuffer>, filename: string, mime: string) {
     const key = `legacy/${randomUUID()}/${filename}`;
-    await storage().put(key, bytes, mime);
+    await putWithReceipt({ key, body: bytes, contentType: mime, role: "original" }, { kind: "system" });
     const [asset] = await db()
       .insert(assets)
       .values({

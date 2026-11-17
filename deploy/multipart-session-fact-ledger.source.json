@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_session_fact_ledger.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped multipart session-fact ledger qualified after genuine CREATE on fresh migration97 PostgreSQL; no additional provider ACK or account acceptance",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "64feda0f8ac77fdb751e64de68d43c495f060a2b9f828cc4d39d83e8d6b15489" },
+    { "path": "tests/core/media-multipart-session-fact-ledger.test.ts", "sha256": "56b9e95a235fd2dd99845f502509cae7bb4083075efa9021c3175b65205ef532" }
+  ],
+  "controls": {
+    "final": { "database": "multipart_session_ledger_audit_20261115", "passed": 4, "failed": 0, "durationSeconds": 35.26 },
+    "coverage": ["conflicting scripted positive retained before projection", "post-commit pointer recovery refusal retains fact", "same late identity projects without rewriting first receipts", "unretained matching fact cannot project"],
+    "scriptedFactsAreProviderAcceptance": false,
+    "guardsWeakened": false,
+    "runtimeChanges": false,
+    "focusedLint": "passed"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "64feda0f8ac77fdb751e64de68d43c495f060a2b9f828cc4d39d83e8d6b15489",
+      "beforeSha256": "9e408f39eb494fd2dd9a8d9229fe4ad02e470d891b8f5dca3f6b443b0738b5fd",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  stopped-executor acceptance remain open; no C row closes.\n  Signing containment source2026-11-13",
+          "after": "  stopped-executor acceptance remain open; no C row closes.\n  Multipart session-fact ledger qualification2026-11-15: fresh migration97\n  execution passes4/4. Scripted additional facts test only the real ledger after\n  genuine CREATE: conflicts are retained before projection, first ACK/FIN/session\n  identity and results remain immutable, pointer recovery fails closed, and an\n  unretained fact cannot project. Focused lint passes. See\n  `deploy/multipart-session-fact-ledger.source.json`. No additional provider ACK,\n  credential ingress, account or C-item acceptance is claimed.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

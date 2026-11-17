@@ -11,6 +11,7 @@ import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { subscriptions,subscriptionCommercialTerms } from "./schema";
 import { subscriptionControlledResources,subscriptionControlledOperations,subscriptionControlledVerifications,CONTROLLED_PROVIDER_KINDS } from "./controlled-provider-schema";
 import { controlledProviderJournal } from "./controlled-provider-proof";
+import { controlledSafeCurrentResult } from "./controlled-provider-safe-response-proof";
 import { controlledFinancialReadiness,controlledWorkNeedsParentReadiness } from "./controlled-provider-readiness";
 import { requireControlledProviderSchema } from "./controlled-provider-source";
 const kind=z.enum(["bootstrap","discover_bootstrap","read_bootstrap","pause_drafts","read_invoice","read_customer_financials","list_invoices","read_calendar","cancel_calendar","create_product","read_product"]);
@@ -35,7 +36,7 @@ export const planControlledProviderOperation=defineService({name:"subscriptions.
   const bootstrap=history.operations.find(row=>row.kind==="bootstrap");
   const payload:Record<string,unknown>={};
   if(request.kind==="create_product"){
-   const ready=history.verifications.some(row=>history.operations.some(operation=>operation.id===row.operationId&&operation.kind==="read_bootstrap")&&row.actualResult.collectionPausedAsDraft===true);
+   const ready=history.verifications.some(row=>history.operations.some(operation=>operation.id===row.operationId&&operation.kind==="read_bootstrap")&&controlledSafeCurrentResult(row.actualResult)&&row.actualResult.collectionPausedAsDraft===true);
    if(!ready)throw new ServiceError("conflict","Prove this real zero-only resource's draft pause before creating its merchant-tax collection product.");
    payload.name=`${terms.snapshot.name} / merchant-declared tax collection`;payload.component="merchant_declared_tax_collection";
   }else if(request.kind!=="bootstrap"){
@@ -45,7 +46,9 @@ export const planControlledProviderOperation=defineService({name:"subscriptions.
     const originals=history.facts.filter(fact=>fact.actual.kind==="bootstrap_subscription"&&history.calls.some(call=>call.id===fact.callId&&call.operationId===bootstrap.id)).flatMap(fact=>ref(fact.actual.raw.id)?[ref(fact.actual.raw.id)!]:[]);
     for(const verified of history.verifications){const operation=history.operations.find(row=>row.id===verified.operationId);
      if(operation?.kind!=="discover_bootstrap")continue;
-     const matches=z.object({complete:z.literal(true),matches:z.array(z.object({providerSubscriptionRef:z.string(),providerInvoiceRef:z.string().nullable()})).max(5000)}).safeParse(verified.actualResult);
+     const view=history.verificationViews.find(row=>row.operationId===verified.operationId);
+     if(!view)throw new ServiceError("conflict","Restore the authentic original discovery view.");
+     const matches=z.object({complete:z.literal(true),matches:z.array(z.object({providerSubscriptionRef:z.string(),providerInvoiceRef:z.string().nullable()})).max(5000)}).safeParse(view.resultView);
      if(matches.success)originals.push(...matches.data.matches.map(row=>row.providerSubscriptionRef));
     }
     const refs=[...new Set(originals)];
@@ -55,7 +58,7 @@ export const planControlledProviderOperation=defineService({name:"subscriptions.
   }
   if(request.kind==="pause_drafts"){
    const actual=history.verifications.filter(row=>history.operations.some(operation=>operation.id===row.operationId&&operation.kind==="read_bootstrap")).at(-1)?.actualResult;
-   if(!actual||actual.completeZeroRecurringItem!==true||actual.providerSubscriptionRef!==payload.providerSubscriptionRef)throw new ServiceError("conflict","Independently verify the exact actual original zero-only resource before its pause mutation.");
+   if(!actual||!controlledSafeCurrentResult(actual)||actual.completeZeroRecurringItem!==true||actual.providerSubscriptionRef!==payload.providerSubscriptionRef)throw new ServiceError("conflict","Independently verify the exact actual original zero-only resource before its pause mutation.");
   }
   if(request.kind==="read_invoice"){
    const invoiceRef=request.providerInvoiceRef;
@@ -91,18 +94,20 @@ const scopeResult=z.object({providerApiVersion:z.literal("2026-10-28.endive"),pr
  subscriptionId:z.uuid(),termsId:z.uuid(),generation:z.number().int().positive(),providerCustomerRef:z.string().regex(/^cus_[A-Za-z0-9_]+$/).max(200),providerMethodRef:z.string().regex(/^pm_[A-Za-z0-9_]+$/).max(200),
  providerProductRef:z.string().regex(/^prod_[A-Za-z0-9_]+$/).max(200),currency:z.string().regex(/^[A-Z]{3}$/),interval:z.enum(["day","week","month","year"]),intervalCount:z.number().int().positive(),acceptedPeriodEnd:z.iso.datetime(),acceptedTrialEnd:z.iso.datetime().nullable()}).strict();
 export const controlledOperationRequest=defineService({name:"subscriptions.controlledOperationRequest",summary:"Read one exact frozen original controlled request for its private SDK orchestrator; no current account or reconstructed parameters replace it.",
- kind:"query",permission:"system",external:false,input:z.object({operationId:z.uuid()}),output:z.object({operation:operationResult,scope:scopeResult,verifiedResult:z.record(z.string(),z.unknown()).nullable()}),
+ kind:"query",permission:"system",external:false,input:z.object({operationId:z.uuid()}),output:z.object({operation:operationResult,scope:scopeResult,verifiedResult:z.record(z.string(),z.unknown()).nullable(),verificationView:z.object({verificationKind:z.enum(["safe_current","legacy_historical","legacy_fin_reference"]),storedVerificationDigest:sha,safeViewDigest:sha,resultView:z.record(z.string(),z.unknown()),requiresFreshObservation:z.boolean(),originalSignedFrameDigest:sha.optional(),originalFinishPgSha256:sha.optional()}).nullable()}),
  handler:async({operationId},ctx)=>{
   const[operation]=await ctx.tx.select().from(subscriptionControlledOperations).where(eq(subscriptionControlledOperations.id,operationId)).limit(1);
   const[resource]=operation?await ctx.tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,operation.resourceId)).limit(1):[];
   if(!operation||!resource||merchantTaxDigest(operation.originalRequest)!==operation.requestDigest||operation.originalRequest.scopeDigest!==merchantTaxDigest(resource.originalScope))throw new ServiceError("conflict","Restore the actual original controlled request and immutable resource.");
   const[verified]=await ctx.tx.select().from(subscriptionControlledVerifications).where(eq(subscriptionControlledVerifications.operationId,operation.id)).limit(1);
-  return{operation,scope:resource.originalScope,verifiedResult:verified?.actualResult??null};
+  const history=await controlledProviderJournal(ctx.tx,resource.id),view=history.verificationViews.find(row=>row.operationId===operation.id)??null;
+  if(verified&&!view)throw new ServiceError("conflict","Restore the authentic immutable verification view.");
+  return{operation,scope:resource.originalScope,verifiedResult:view?.verificationKind==="safe_current"?view.resultView:null,verificationView:view};
  }});
 export const controlledPreparationState=defineService({name:"subscriptions.controlledPreparationState",summary:"Read genuine original creation admission and returned zero/pause verification without substituting a successor bank request.",kind:"query",permission:"system",external:false,
  input:z.object({resourceId:z.uuid()}),output:z.object({bootstrapAdmitted:z.boolean(),pausedZeroVerified:z.boolean(),closed:z.boolean()}),handler:async({resourceId},ctx)=>{
   const history=await controlledProviderJournal(ctx.tx,resourceId),bootstrap=history.operations.find(row=>row.kind==="bootstrap");
   return{bootstrapAdmitted:!!bootstrap&&history.calls.some(row=>row.operationId===bootstrap.id),closed:history.closures.length>0,
-   pausedZeroVerified:history.verifications.some(row=>history.operations.some(operation=>operation.id===row.operationId&&operation.kind==="read_bootstrap")&&row.actualResult.completeZeroRecurringItem===true&&row.actualResult.collectionPausedAsDraft===true)};
+   pausedZeroVerified:history.verifications.some(row=>history.operations.some(operation=>operation.id===row.operationId&&operation.kind==="read_bootstrap")&&controlledSafeCurrentResult(row.actualResult)&&row.actualResult.completeZeroRecurringItem===true&&controlledSafeCurrentResult(row.actualResult)&&row.actualResult.collectionPausedAsDraft===true)};
  }});
 export default[planControlledProviderOperation,controlledOperationRequest,controlledPreparationState];

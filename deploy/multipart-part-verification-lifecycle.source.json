@@ -1,0 +1,35 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_part_verification_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped provider-part verification and completion lifecycle qualified on fresh migration99 PostgreSQL; terminal-session/provider acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "9fe6d04bf75a2f7784ecab876b6d322ca16d555f476935980dde970af0522d9d" },
+    { "path": "tests/core/media-multipart-part-verification-lifecycle.test.ts", "sha256": "2646171ba164314383d34458bcd235005f7f652c1ff35e5c86259e7f521f422d" },
+    { "path": "src/core/media/multipart-operations.ts", "sha256": "8d4c5956554c8e957ecfda137e7f75b87cc140db0901bdf2f1f61cc3a9f41210" },
+    { "path": ".changeset/multipart-recovery-only-refusal.md", "sha256": "1cc94b9172a85aeada6b477ce6c2137e3c56ed8a775cdece18c2e21e3e36bc41" }
+  ],
+  "controls": {
+    "before": { "database": "multipart_part_verification_audit_20261115", "passed": 4, "failed": 1, "defect": "Repeated recovery-only refusal rewrote the unknown operation timestamp" },
+    "final": { "database": "multipart_part_verification_final_20261115", "passed": 5, "failed": 0, "durationSeconds": 45.83 },
+    "coverage": ["checksum verification and full original-nonce readback", "issued authority remains pending", "wrong checksum refusal", "unissued part refusal", "lost ListParts remains recovery debt", "repeated completion sends zero COMPLETE POST and preserves rows", "named hold blocks provider reads"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "9fe6d04bf75a2f7784ecab876b6d322ca16d555f476935980dde970af0522d9d",
+      "beforeSha256": "187cd41a1a223ce9c2f757c922b210c53262425c6797e3b666b17da4fc465ba6",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  pass. See `deploy/multipart-known-create-lifecycle.source.json`. No C row closes.\n  Signing containment source2026-11-13",
+          "after": "  pass. See `deploy/multipart-known-create-lifecycle.source.json`. No C row closes.\n  Provider-part verification qualification2026-11-15: the first current run passed\n  4/5; repeated recovery-only refusal changed the unknown operation timestamp.\n  That path now preserves the retained row instead of re-marking it. Final fresh\n  migration99 execution passes5/5 for checksum/full-nonce readback, wrong/unissued\n  part and named-hold refusal, lost ListParts debt and zero repeated COMPLETE POST.\n  Full TypeScript/focused lint pass. See\n  `deploy/multipart-part-verification-lifecycle.source.json`. No terminal session,\n  provider-account or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

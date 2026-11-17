@@ -1,0 +1,39 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_abort_recovery_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped original idle ABORT recovery qualified on fresh/upgraded migration100 PostgreSQL; provider-account and host-stop acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "d7cd936d9932abfecb72df2b42cb578f76f715163551a514bcc0c6e8945f5c23" },
+    { "path": "tests/core/media-multipart-abort-recovery-lifecycle.test.ts", "sha256": "479ba8dfa5c65ba4d8d4e804a3364654f04c57a7e29223473d5e0f3e76daf0e3" },
+    { "path": "db/migrations/0100_multipart_idle_columns.sql", "sha256": "3d04da1315243dadaaef26145900663d849be98693d2491b456e565e2bde6459" },
+    { "path": "db/migrations/meta/_journal.json", "sha256": "8baa6ae420a0dc9e43f59f1c979ac0baced511a08a6e962bdde0ba75a19950db" },
+    { "path": ".changeset/multipart-idle-columns.md", "sha256": "154fc77acc37391e66303b814f636628096ffde13e9f2aad0f0e3fe156bb9dcf" }
+  ],
+  "controls": {
+    "before": { "database": "multipart_abort_recovery_audit_20261115", "passed": 3, "failed": 3, "defect": "Idle guard operation.id was ambiguous with its local variable" },
+    "columnFix": { "database": "multipart_abort_recovery_fixed_20261115", "passed": 5, "failed": 1, "cause": "Retained-debris continuation exceeded its 60-second test deadline" },
+    "repeatDiagnostic": { "database": "multipart_abort_repeat_120_fixed_20261115", "passed": 1, "failed": 0, "durationSeconds": 68.097, "deadlineSeconds": 120 },
+    "final": { "database": "multipart_abort_recovery_final_20261115", "passed": 6, "failed": 0, "durationSeconds": 175.22 },
+    "upgrade": { "database": "abort_recovery_upgrade_27da4c06a514427094b416c51d34823c", "from": 99, "to": 100, "journalEntries": 101, "functionSha256": "cd2a81e1ec5c762b886314723110c3cf1cc29bd024feebdc5b5e14b483133f92", "passed": true },
+    "coverage": ["lost ABORT review without second DELETE or invented ACK/FIN", "retained version refusal", "fresh verification preserves first failed inventory", "paused original refusal before fresh I/O", "wrong namespace refusal", "scoped actor refusal"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "d7cd936d9932abfecb72df2b42cb578f76f715163551a514bcc0c6e8945f5c23",
+      "beforeSha256": "84d67444afe535cbcfcc30775ed27f6ea3bf8d4fbfa654dfb93a8ee65d8bb3b2",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  provider account, host stop, erasure or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "after": "  provider account, host stop, erasure or C-item acceptance follows.\n  Original ABORT recovery qualification2026-11-15: migration100 resolves the\n  idle guard's operation-column ambiguity. Initial execution passed3/6, then5/6;\n  the retained-debris continuation exceeded60s, so only that genuine proof case\n  now allows120s and passes68s. Final fresh execution passes6/6 in167s, preserving\n  first failed inventories, admitting no second DELETE, and refusing active/scoped\n  or wrong-namespace callers. Real99→100 upgrade verifies101 journals and the exact\n  guard body; full TypeScript/focused lint pass. See\n  `deploy/multipart-abort-recovery-lifecycle.source.json`. No provider/host claim.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -6,7 +6,7 @@
 // sees the site's public surface, and nothing the site serves invites a
 // crawler. These tests drive the real proxy and the real robots and sitemap
 // routes with the key set and unset.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { requestContextProxy as proxy } from "../../proxy";
 import { resetEnvForTests } from "@/core/env";
@@ -20,7 +20,9 @@ import {
 } from "@/core/preview/private-preview";
 import { GET as robots } from "../../app/robots.txt/route";
 import { GET as sitemap } from "../../app/sitemap.xml/route";
-import { previewRefusal } from "@/core/preview/route-gate";
+import { previewCredentialRefusal, previewRefusal } from "@/core/preview/route-gate";
+import { dispatch } from "@/core/api/dispatch";
+import { closeDb, hasDatabase } from "../helpers/spine";
 import { previewLink, previewToken } from "../../scripts/preview-link.mjs";
 
 const KEY = "k".repeat(40);
@@ -134,11 +136,55 @@ describe("the proxy in private preview", () => {
     expect(request("/api/v1/pages", { authorization: "Bearer test" }).status).toBe(200);
   });
 
+  it("does not trust an arbitrary Authorization header on a public API route", () => {
+    withKey(KEY);
+    for (const path of ["/api/openapi.json", "/api/popups", "/api/chat"]) {
+      const response = request(path, { authorization: "Bearer forged-preview-credential" });
+      expect(response.status, path).toBe(401);
+      expect(response.headers.get("x-robots-tag")).toContain("noindex");
+    }
+  });
+
   it("changes nothing when no key is set", () => {
     withKey(undefined);
     const response = request("/");
     expect(response.status).toBe(200);
     expect(response.headers.get("x-robots-tag")).toBeNull();
+  });
+});
+
+describe("credential-aware preview routes", () => {
+  it("requires a resolved actor or preview cookie without closing owner and signed-webhook routes", () => {
+    withKey(KEY);
+    const request = new Request("https://preview.test/api/v1/cms.listPages", {
+      headers: { authorization: "Bearer fh_forged_preview_credential" },
+    });
+    expect(previewCredentialRefusal(request, { kind: "anonymous" })?.status).toBe(401);
+    expect(previewCredentialRefusal(request, { kind: "agent", keyId: "key", keyName: "preview", scopes: ["cms.listPages"] })).toBeNull();
+    const token = mintPreviewToken(KEY, Math.floor(Date.now() / 1000) + 600);
+    const viewer = new Request(request, { headers: { cookie: `${PREVIEW_COOKIE}=${token}` } });
+    expect(previewCredentialRefusal(viewer, { kind: "anonymous" })).toBeNull();
+    expect(previewCredentialRefusal(new Request("https://preview.test/api/auth/login", { method: "POST" }), { kind: "anonymous" })).toBeNull();
+    expect(previewCredentialRefusal(new Request("https://preview.test/api/payments/webhooks/stripe", { method: "POST", headers: { "stripe-signature": "present-for-route-verification" } }), { kind: "anonymous" })).toBeNull();
+  });
+});
+
+describe.runIf(hasDatabase)("the actual anonymous service API in private preview", () => {
+  afterAll(async () => closeDb());
+
+  it("refuses a forged bearer before the service and still accepts the signed preview cookie", async () => {
+    withKey(KEY);
+    const forged = await dispatch(new Request("https://preview.test/api/v1/cms.resolvePage?slug=preview-missing", {
+      headers: { authorization: "Bearer fh_forged_preview_credential" },
+    }), "cms.resolvePage");
+    expect(forged.status).toBe(401);
+    expect(await forged.text()).toContain("Private preview");
+
+    const token = mintPreviewToken(KEY, Math.floor(Date.now() / 1000) + 600);
+    const viewer = await dispatch(new Request("https://preview.test/api/v1/cms.resolvePage?slug=preview-missing", {
+      headers: { cookie: `${PREVIEW_COOKIE}=${token}` },
+    }), "cms.resolvePage");
+    expect(viewer.status).toBe(200);
   });
 });
 

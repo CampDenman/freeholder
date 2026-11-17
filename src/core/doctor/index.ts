@@ -233,7 +233,8 @@ async function checkStorage(actor:Actor={kind:"system"}): Promise<Check> {
     const { storage } = await import("@/adapters/storage");
     const store = storage();
     const body = new TextEncoder().encode("freeholder doctor");
-    const{putWithReceipt,deleteWithReceipt}=await import("@/core/media/write-ledger");
+    const{putWithReceipt}=await import("@/core/media/write-ledger");
+    const{deleteWithReceipt}=await import("@/core/media/delete-with-receipt");
     await putWithReceipt({key:probe,body,contentType:"text/plain",role:"staged"},actor);
     const read = await store.get(probe);
     if(!await deleteWithReceipt(probe))throw new Error("The diagnostic file still needs original storage recovery; no absence was inferred.");
@@ -670,7 +671,7 @@ async function checkSecurity(): Promise<Check[]> {
     );
   }
 
-  if (e.FREEHOLDER_STORAGE === "s3" && e.S3_PUBLIC === "true") {
+  if (["s3", "spaces"].includes(configuredStorage) && e.S3_PUBLIC === "true") {
     checks.push(
       warn(
         "security.publicMediaBucket",
@@ -1128,7 +1129,7 @@ async function checkUpdateSeams(): Promise<Check[]> {
         "update.seams.uploads",
         "Uploads seam",
         describeLocalStorage(e),
-        "Set LOCAL_STORAGE_ROOT to a persistent absolute directory, or set adapters.storage to s3 or replit.",
+        "Set LOCAL_STORAGE_ROOT to a persistent absolute directory, or set adapters.storage to spaces, s3 or replit.",
       ),
     );
   } else if (mode === "unsafe") {

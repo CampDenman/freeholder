@@ -9,6 +9,7 @@ import { controlledOperationRequest,planControlledProviderOperation,controlledPr
 import { retainControlledProviderResource,assertControlledProviderPreparationReady } from "./controlled-provider-source";
 import { withControlledProviderCall } from "./controlled-provider-runtime";
 import { retainControlledProviderVerification } from "./controlled-provider-verification";
+import { controlledCurrentResultData } from "./controlled-provider-safe-response-proof";
 import { controlledCalendarPayload,controlledCollectionPayload } from "./controlled-provider-adapter-contract";
 import { createMerchantPhaseProduct } from "./provider-phase-products";
 const original=z.object({bootstrapOperationId:z.uuid(),bootstrapRequestDigest:z.string().regex(/^[a-f0-9]{64}$/),providerSubscriptionRef:z.string().regex(/^sub_[A-Za-z0-9_]+$/).max(200)});
@@ -16,7 +17,8 @@ const product=z.object({name:z.string().min(1).max(500),component:z.literal("mer
 const productRead=product.extend({createdProductRef:z.string().regex(/^prod_[A-Za-z0-9_]+$/).max(200),originalProductOperationId:z.uuid(),originalProductRequestDigest:z.string().regex(/^[a-f0-9]{64}$/)});
 export async function executeControlledOperation(operationId:string,caller:Actor){
  const system={kind:"system",request:caller.request} as const,source=await controlledOperationRequest.call({operationId},system);
- if(source.verifiedResult)return source.verifiedResult;
+ if(source.verificationView?.requiresFreshObservation)throw new ServiceError("conflict","This immutable historical result requires a genuine new same-namespace observation; never replay its original POST or treat its safe view as current authority.");
+ if(source.verifiedResult)return controlledCurrentResultData(source.verifiedResult);
  const adapter=paymentAdapter("stripe"),{operation,scope}=source;
  const payload=z.record(z.string(),z.unknown()).parse(operation.originalRequest.payload),base={...scope,operationId:operation.id,requestDigest:operation.requestDigest,idempotencyKey:operation.idempotencyKey};
  const result=await withControlledProviderCall(operation.id,caller,async onObserved=>{
@@ -54,8 +56,9 @@ export async function executeControlledOperation(operationId:string,caller:Actor
  });
  const actual=z.record(z.string(),z.unknown()).parse(JSON.parse(JSON.stringify(result)));
  const saved=await retainControlledProviderVerification.call({operationId},system);
- if(merchantTaxDigest(saved.result)!==merchantTaxDigest(actual))throw new ServiceError("conflict","Preserve the first actual returned bank result; a successor result cannot replace it.");
- return saved.result;
+ const semantic=controlledCurrentResultData(saved.result);
+ if(merchantTaxDigest(semantic)!==merchantTaxDigest(actual))throw new ServiceError("conflict","Preserve the first actual returned bank result; a successor result cannot replace it.");
+ return semantic;
 }
 async function stage(resourceId:string,kind:"bootstrap"|"discover_bootstrap"|"read_bootstrap"|"pause_drafts"|"create_product"|"read_product"|"read_calendar"|"read_customer_financials"|"cancel_calendar"|"list_invoices",actor:Actor){
  const planned=await planControlledProviderOperation.call({resourceId,kind},{kind:"system",request:actor.request});return executeControlledOperation(planned.operationId,actor);

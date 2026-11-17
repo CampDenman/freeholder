@@ -72,7 +72,7 @@ export function previewMailDailyCap(
  */
 const COUNTED = ["queued", "unknown", "submitted", "delivered", "bounced", "complained", "failed"] as const;
 
-async function sentInLastDay(tx: Tx): Promise<number> {
+async function sentInLastDay(tx: Tx, excludeDeliveryId?: string): Promise<number> {
   const [row] = await tx
     .select({ count: sql<number>`count(*)::int` })
     .from(mailDeliveries)
@@ -81,6 +81,7 @@ async function sentInLastDay(tx: Tx): Promise<number> {
         eq(mailDeliveries.purpose, "transactional"),
         inArray(mailDeliveries.status, [...COUNTED]),
         gt(mailDeliveries.createdAt, sql`now() - interval '24 hours'`),
+        ...(excludeDeliveryId ? [sql`${mailDeliveries.id} <> ${excludeDeliveryId}`] : []),
       ),
     );
   return row?.count ?? 0;
@@ -90,12 +91,14 @@ async function sentInLastDay(tx: Tx): Promise<number> {
  * Whether a preview must hold this transactional message, and why. Null means
  * deliver it. Runs inside the staging transaction; the advisory lock makes the
  * cap exact under concurrent senders, because the lock is held until the
- * caller's new delivery row commits.
+ * caller's new delivery row commits. Physical delivery excludes its own
+ * already-counted reservation from this check.
  */
 export async function previewMailHold(
   tx: Tx,
   recipient: string,
   routeDelivers: boolean,
+  excludeDeliveryId?: string,
 ): Promise<HoldReason | null> {
   if (!routeDelivers) return "no_adapter";
   if (!previewMailAllowList().includes(recipient)) {
@@ -107,7 +110,7 @@ export async function previewMailHold(
     if (!contact) return "recipient";
   }
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('mail-preview-cap'))`);
-  if ((await sentInLastDay(tx)) >= previewMailDailyCap()) return "cap";
+  if ((await sentInLastDay(tx, excludeDeliveryId)) >= previewMailDailyCap()) return "cap";
   return null;
 }
 

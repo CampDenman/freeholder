@@ -1,0 +1,40 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_known_create_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Known original CREATE recovery and full follow-on upload journey qualified on fresh/upgraded migration99 PostgreSQL; hosted/provider/stopped-executor acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "187cd41a1a223ce9c2f757c922b210c53262425c6797e3b666b17da4fc465ba6" },
+    { "path": "tests/core/media-multipart-known-create-lifecycle.test.ts", "sha256": "328a49fb38b3edb814ca15204a0bcd540210fb61d6d97dd4ae1b11fc9d25a1c8" },
+    { "path": "src/core/media/multipart-recovery.ts", "sha256": "e6009be3be0cee562d9775b8c9eeaed4dd17eafd87b6a15cdb76539d194522ce" },
+    { "path": "db/migrations/0099_multipart_complete_parts_columns.sql", "sha256": "0efbbda449aabe76a7f6b6dbac2409e255bec3113e5c436e35f23414a49bf959" },
+    { "path": "db/migrations/meta/_journal.json", "sha256": "b6e833967d81b9778772b3d605d541f72a327d9693945f00142ceaec95e0d843" },
+    { "path": ".changeset/multipart-complete-parts-columns.md", "sha256": "acf81ad4f6649c41ee82ed0967e26e11054abd2fad81d72120f7483c5cfa5df8" }
+  ],
+  "controls": {
+    "precondition": { "database": "multipart_known_create_audit_20261115", "skipped": 5, "cause": "Durable part capability was not yet installed" },
+    "columnGuard": { "database": "multipart_known_create_qualified_20261115", "passed": 3, "failed": 2, "defect": "Completion guard had an ambiguous old.call_id reference" },
+    "listing": { "database": "multipart_known_create_fixed_20261115", "passed": 4, "failed": 1, "defect": "Accepted operation with unresolved physical caller disappeared from owner review" },
+    "final": { "database": "multipart_known_create_final_20261115", "passed": 5, "failed": 0, "durationSeconds": 66.72 },
+    "upgrade": { "database": "known_create_upgrade_e27864cdc24846b4855c02a9511d66f2", "from": 98, "to": 99, "journalEntries": 100, "functionSha256": "c49a8c2388baaea12cb8bbf702853d881cc00c05c5d46d3a51e552cc5bb88444", "passed": true },
+    "coverage": ["first-ACK review and immutable original evidence", "declare/sign/browser PUT/complete with one CREATE", "lost reply never adopts singleton session", "active caller refusal then authentic late review", "untracked parts refusal", "scoped-key refusal before provider reads"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "187cd41a1a223ce9c2f757c922b210c53262425c6797e3b666b17da4fc465ba6",
+      "beforeSha256": "ba7aea8bc0fd85ee5809fc14ec322a84688e28cce3cef351b346616fb4225849",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  stopped/legacy recovery and provider acceptance still govern other controls.\n  Signing containment source2026-11-13",
+          "after": "  stopped/legacy recovery and provider acceptance still govern other controls.\n  Known-CREATE recovery qualification2026-11-15: migration99 resolves a genuine\n  complete-parts variable/column ambiguity, and the owner review listing now keeps\n  accepted operations with unresolved physical callers available. The original\n  precondition run skipped5/5; subsequent controls preserved2 then1 failures.\n  Final fresh execution passes5/5, including review→declare→sign→browser PUT→\n  complete with no second CREATE and no rewritten first results. Real98→99 upgrade\n  verifies100 journals and the exact function body; full TypeScript/focused lint\n  pass. See `deploy/multipart-known-create-lifecycle.source.json`. No C row closes.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -11,6 +11,7 @@ import {mediaErasureCohorts} from "./erasure-schema";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartOperations,mediaMultipartResources} from "./multipart-schema";
 import {allowMediaReceiptWrites} from "./write-ledger";
+import {lockTransferInventory} from "./transfer-authority";
 export async function captureMediaErasureCohort(tx:Tx,requestId:string,scope:"media.storageOperations"|"media.multipartOperations",ids:string[],resourceIds:string[]=[]):Promise<void>{
  await allowMediaReceiptWrites(tx);
  const first=await originalMediaScope(tx,requestId,scope);
@@ -61,6 +62,19 @@ export async function reconcileMediaErasureCohorts(target?:{objectReceiptId?:str
 export async function originalMediaErasureRequests(tx:Tx,ids:string[],resourceIds:string[]=[]){
  if(!ids.length&&!resourceIds.length)return[];
  return tx.select().from(mediaErasureCohorts).where(or(ids.length?inArray(mediaErasureCohorts.objectReceiptId,ids):undefined,resourceIds.length?inArray(mediaErasureCohorts.multipartResourceId,resourceIds):undefined));
+}
+export async function captureOriginalMediaReceiptDescendants(receiptId:string):Promise<void>{
+ await db().transaction(async tx=>{
+  await lockTransferInventory(tx);
+  const[receipt]=await tx.select({id:mediaObjectWrites.id,reservationId:mediaObjectWrites.originalReservationId}).from(mediaObjectWrites).where(eq(mediaObjectWrites.id,receiptId)).limit(1);
+  if(!receipt?.reservationId)return;
+  const originals=await tx.select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(eq(mediaObjectWrites.originalReservationId,receipt.reservationId));
+  const scopes=await originalMediaErasureRequests(tx,originals.map(row=>row.id));
+  for(const scope of scopes){
+   if(scope.scope!=="media.storageOperations"&&scope.scope!=="media.multipartOperations")throw new Error("Unknown original media scope.");
+   await captureMediaErasureCohort(tx,scope.requestId,scope.scope,[receiptId]);
+  }
+ });
 }
 export async function objectCohortIds(tx:Tx,requestId:string,scope:string){return(await tx.select({id:mediaErasureCohorts.objectReceiptId}).from(mediaErasureCohorts).where(and(eq(mediaErasureCohorts.requestId,requestId),eq(mediaErasureCohorts.scope,scope)))).flatMap(row=>row.id?[row.id]:[]);}
 export async function mediaCohortPending(tx:Tx,requestId:string,scope:string):Promise<boolean>{

@@ -3,7 +3,7 @@
 // C1.08/C3.13: provider acknowledgements govern privacy completion.
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { createContact } from "@/core/contacts/service";
 import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
@@ -61,6 +61,15 @@ describe.runIf(hasDatabase)("deferred provider erasure", () => {
     expect(await pruneExpiredPrivacyArtifacts()).toBe(0);
     for (const jobId of jobs) await completeErasureJob.call({ requestId: request.id, scope, jobId }, { kind: "system" });
     await expire();
+    expect(await pruneExpiredPrivacyArtifacts()).toBe(1);
+  });
+  it("prunes an expired partial receipt without an original-source recovery witness", async () => {
+    const { contact, request } = await pendingRequest();
+    tasks.delete(contact.id);
+    await addRetentionException.call({ dataRequestId: request.id, scope, reason: "legal_claim", legalBasis: "Fictional provider record retained for a claim" }, OWNER);
+    const result = await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER);
+    expect(result.request.status).toBe("partially_completed");
+    await db().update(dataRequestArtifacts).set({ expiresAt: sql`${dataRequestArtifacts.createdAt} + interval '1 millisecond'` }).where(eq(dataRequestArtifacts.dataRequestId, request.id));
     expect(await pruneExpiredPrivacyArtifacts()).toBe(1);
   });
   it("commits a provider cleanup job before deleting its room and keeps failed work pending", async () => {

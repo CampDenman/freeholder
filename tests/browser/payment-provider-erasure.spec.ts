@@ -7,6 +7,7 @@ import {expect,test} from "@playwright/test";
 import {eq} from "drizzle-orm";
 import {db,closeDb} from "@/core/db";
 import {contacts} from "@/core/contacts/schema";
+import {lockContactIdentity} from "@/core/contacts/identity-lock";
 import {businessProfile} from "@/core/settings/schema";
 import {dataRequests,dataRequestArtifacts} from "@/core/privacy/schema";
 import {paymentProviderCustomers} from "@/modules/invoicing/schema";
@@ -25,7 +26,10 @@ test.describe("payment-provider erasure (C1.08/C12.38)",()=>{
    await db().update(businessProfile).set({defaultLocale:locale,enabledLocales:["en","es","fr","ar"]}).where(eq(businessProfile.id,1));
    const [contact]=await db().insert(contacts).values({name:"Synthetic payment customer",email:"provider-browser@example.test"}).returning();
    await db().insert(paymentProviderCustomers).values({contactId:contact!.id,provider:"stripe",providerAccountId:"acct_original",providerCustomerRef:"cus_original"});
-   const [request]=await db().insert(dataRequests).values({contactId:contact!.id,kind:"erasure",status:"verified",requestedBy:"owner",details:{kind:"erasure"},verifiedAt:new Date(),verificationMethod:"Synthetic browser identity",responseDueAt:new Date(Date.now()+86400000)}).returning();
+   const [request]=await db().transaction(async tx=>{
+    await lockContactIdentity(tx);
+    return tx.insert(dataRequests).values({contactId:contact!.id,kind:"erasure",status:"verified",requestedBy:"owner",details:{kind:"erasure"},verifiedAt:new Date(),verificationMethod:"Synthetic browser identity",responseDueAt:new Date(Date.now()+86400000)}).returning();
+   });
    const context=await browser.newContext({baseURL:C11_BASE_URL,viewport:{width:320,height:900}});
    await useOwnerSession(context,token);const page=await context.newPage();
    try{

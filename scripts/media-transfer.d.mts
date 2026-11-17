@@ -14,8 +14,8 @@ export interface TransferRevision {
 }
 export interface VersionedTransferStore extends TransferStore {
   accounted?(observer:TransferRequestObserver):AccountedTransferStore;
-  binding: { kind: "s3" | "replit"; namespace: string; location: Readonly<Record<string,string>> };
-  readVersioned(key: string, expectedRevision?:TransferRevision): Promise<{body:Uint8Array<ArrayBuffer>;contentType:string;revision:TransferRevision;requestProof?:OriginalProviderRequestProof}|undefined>;
+  binding: { kind: "s3" | "replit" | "local"; namespace: string; location: Readonly<Record<string,string>> };
+  readVersioned(key: string, expectedRevision?:TransferRevision, expectedBytes?:number): Promise<{body:Uint8Array<ArrayBuffer>;contentType:string;revision:TransferRevision;requestProof?:OriginalProviderRequestProof}|undefined>;
   deleteVersioned(key: string, revision: TransferRevision): Promise<void>;
 }
 

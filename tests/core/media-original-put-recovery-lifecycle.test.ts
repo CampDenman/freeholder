@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// SOURCE PREPARED, UNRUN. Actual shared services + fictional private TCP;
-// no ingress, actual worker/provider account or physical-erasure acceptance.
+// Scoped fixture qualified on fresh PostgreSQL 2026-11-15 through synthetic AWS
+// TCP storage; no ingress, worker/account or physical-erasure acceptance claim.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {randomUUID} from "node:crypto";
 import {eq} from "drizzle-orm";
@@ -22,11 +22,12 @@ import {mediaStorageProviderInventories as inventories} from "@/core/media/trans
 import {ordinaryMediaRecoveryProvider} from "../helpers/media-original-provider-recovery";
 import {closeDb,failure,hasDatabase,OWNER,truncateSpine} from "../helpers/spine";
 const key="private/actual-original.bin",body=new Uint8Array([0,255,13,10,128,0]);
+const syntheticOrigin="https://s3.us-east-1.amazonaws.com",realFetch=globalThis.fetch.bind(globalThis);
 describe.runIf(hasDatabase)("C1.12/C11.08 finished unknown original PUT recovery",()=>{
  let provider:Awaited<ReturnType<typeof ordinaryMediaRecoveryProvider>>,running:Promise<unknown>[];
  beforeAll(async()=>{await ready();await stopJobs();},60000);
- beforeEach(async()=>{running=[];await truncateSpine();await db().insert(users).values({id:OWNER.userId,email:"original-recovery-owner@example.test",role:"owner"});provider=await ordinaryMediaRecoveryProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
- afterEach(async()=>{provider?.releaseAll();await Promise.allSettled(running??[]);await provider?.close();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
+ beforeEach(async()=>{running=[];await truncateSpine();await db().insert(users).values({id:OWNER.userId,email:"original-recovery-owner@example.test",role:"owner"});provider=await ordinaryMediaRecoveryProvider();vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{const url=new URL(input instanceof Request?input.url:String(input));if(url.origin!==syntheticOrigin)return realFetch(input,init);const target=new URL(`${url.pathname}${url.search}`,provider.endpoint);if(input instanceof Request)return realFetch(target,{method:input.method,headers:input.headers,body:input.body===null?undefined:await input.arrayBuffer()});return realFetch(target,init);});for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:syntheticOrigin,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
+ afterEach(async()=>{provider?.releaseAll();await Promise.allSettled(running??[]);await provider?.close();vi.unstubAllEnvs();vi.unstubAllGlobals();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
  function confirmation(row:typeof mediaObjectWrites.$inferSelect){if(!row.namespace)throw new Error("Original fixture namespace is missing");return{id:row.id,expectedUpdatedAt:row.updatedAt.toISOString(),originalNamespace:row.namespace,outcome:"applied"as const,providerFinalReference:"synthetic-original-provider-recovery",providerEvidence:"Fictional private TCP provider: exact original request nonce and complete two-pass physical inventory.",stoppedWriterEvidence:"This manual text is not stop proof. Only the actual retained originating caller/request finishes authorize this portable review.",confirmation:"ORIGINAL STORAGE OUTCOME CONFIRMED"as const};}
  async function unknownOriginal(){provider.loseNextSourcePutReply();await failure(putWithReceipt({key,body,contentType:"application/octet-stream",role:"original"},OWNER));const[row]=await db().select().from(mediaObjectWrites);if(!row)throw new Error("Actual original PUT intent missing");expect(row.state).toBe("unknown");expect(row.writerFinishedAt).toBeInstanceOf(Date);return row;}
  it("recovers only the exact actually finished lost-reply PUT through its nonce, full bytes and complete inventories without replacing original return or retrying PUT",async()=>{
@@ -43,7 +44,7 @@ describe.runIf(hasDatabase)("C1.12/C11.08 finished unknown original PUT recovery
   // Actual fictional operator inventory of a fresh empty bucket, before any
   // reservation. This is not the unfinished automatic initializer contract.
   for(const query of ["list-type=2","versions=","uploads="]){const response=await fetch(`${provider.endpoint}/source?${query}`);expect(response.status).toBe(200);expect(await response.text()).toContain("<IsTruncated>false</IsTruncated>");}
-  expect(provider.objects.size).toBe(0);const namespace=storageNamespace({id:"s3",endpoint:provider.endpoint,bucket:"source"});await initializeStorageQuota(namespace,100,[],storageInventorySha256([]));
+  expect(provider.objects.size).toBe(0);const namespace=storageNamespace({id:"s3",endpoint:syntheticOrigin,bucket:"source"});await initializeStorageQuota(namespace,100,[],storageInventorySha256([]));
   const row=await unknownOriginal(),[caller]=await db().select().from(callers).where(eq(callers.objectReceiptId,row.id)),[reserved]=await db().select().from(storageQuotaObjects);expect(caller?.quotaToken).toBeTruthy();expect(reserved).toMatchObject({namespace,objectKey:key,bytes:body.byteLength,pendingToken:caller!.quotaToken,lastSettledToken:null});
   expect(await reconcileStorageOperation.call(confirmation(row),OWNER)).toEqual({ok:true});expect((await db().select().from(storageQuotaObjects))[0]).toMatchObject({namespace,objectKey:key,bytes:body.byteLength,pendingToken:null,lastSettledToken:caller!.quotaToken});expect(provider.calls.filter(call=>call.method==="PUT")).toHaveLength(1);expect(provider.calls.filter(call=>call.method==="DELETE")).toHaveLength(0);
  },60000);

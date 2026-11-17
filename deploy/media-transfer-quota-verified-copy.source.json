@@ -1,0 +1,37 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_quota_verified_copy.v1",
+  "checklist": ["C1.12", "C10.32", "C11.08"],
+  "status": "Two independent genuine verified-copy cohorts pass concurrent settlement and SQL refusal controls; six other native cases and provider acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "86da034e498f4770838e89f73b24ff3736249bd579453f6bdec65c416e08b9b5" },
+    { "path": "tests/fixtures/media-transfer-quota-role.config.ts", "sha256": "0d1d28bc3924d59fe94fd468722a53024c34291e43d632a7565f41fe219d6a45" },
+    { "path": "tests/fixtures/media-transfer-quota-role.probe.ts", "sha256": "4354e6922e90cc96bb76c1264814409e1ee5853cd58387b7fa1cb8fa8e8e5677" },
+    { "path": "tests/core/media-transfer-quota-role-lifecycle.test.ts", "sha256": "fdcea65715c541cc009f44e5aacb42dfeac8518c2510ea374e905f9bcc1c8503" }
+  ],
+  "controls": {
+    "concurrent": { "database": "media_quota_role_verified_concurrent_20261116", "producerPassed": 1, "nativePassed": 1, "failed": 0 },
+    "sqlRefusals": { "database": "media_quota_role_verified_refusals_20261116", "producerPassed": 1, "nativePassed": 1, "failed": 0 },
+    "coverage": ["ordinary full copy through real service and private TCP provider", "two concurrent settlements preserve exact original token and physical request history", "early zero-byte and foreign settled-token SQL mutations are refused without changing the live charge"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false,
+    "productCodeChanged": false,
+    "remaining": "Six other independent native cohorts plus provider/operator acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "86da034e498f4770838e89f73b24ff3736249bd579453f6bdec65c416e08b9b5",
+      "beforeSha256": "799f5039ba0b2d2366774eb38c20dc042f70e286ed46368414954f2f06b0becb",
+      "continue": true,
+      "edits": [
+        {
+          "before": "live-provider operation and checklist acceptance remain open; no C-item closes.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "after": "live-provider operation and checklist acceptance remain open; no C-item closes.\n\nVerified-copy quota qualification2026-11-16 (C1.12/C10.32/C11.08): two fresh\nservice/TCP cohorts complete the ordinary copy flow. Concurrent settlement reuses the\nexact original token without rewriting physical requests, and SQL refuses early-zero\nand foreign settled-token transitions while preserving the live charge. Both native\ncontrols pass; TypeScript and focused lint pass. See\n`deploy/media-transfer-quota-verified-copy.source.json`. Six other native cohorts and\nprovider/operator/checklist acceptance remain open.\n\n\nSource-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

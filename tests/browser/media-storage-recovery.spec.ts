@@ -2,12 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: real owner recovery, original-resource refusal and private audit.
 import { createHash, randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { boundStorage } from "@/adapters/storage";
-import { storageNamespace } from "@/core/media/storage-quota";
-import { allowMediaReceiptWrites, objectKeyDigest } from "@/core/media/write-ledger";
+import { createLocalStorage } from "@/adapters/storage/local";
+import { putWithReceipt } from "@/core/media/write-ledger";
 import { mediaObjectWrites } from "@/core/media/write-schema";
 import { mediaMultipartOperations, mediaMultipartResources } from "@/core/media/multipart-schema";
 import { mediaObjects } from "@/core/media/schema";
@@ -30,20 +35,30 @@ type Locale = keyof typeof messages;
 async function fixture(locale: Locale) {
   const token = await seedC11Owner("Storage recovery fixture");
   await db().update(businessProfile).set({ defaultLocale: locale, enabledLocales: ["en", "es", "fr", "ar"] }).where(eq(businessProfile.id, 1));
-  const { binding } = await boundStorage();
+  const captured = await boundStorage();
   const key = `fixture/${locale}/${randomUUID()}/${"original-".repeat(18)}.png`;
-  const multipartKey = `fixture/${locale}/${randomUUID()}/multipart.png`;
-  return db().transaction(async tx => {
-    await allowMediaReceiptWrites(tx);
-    // Declared lost-ACK fixtures. No physical PUT is fabricated: the real
-    // local provider will prove absence; the other original provider differs.
-    const [receipt] = await tx.insert(mediaObjectWrites).values({ key, keyDigest: objectKeyDigest(key), namespace: binding.namespace, storageKind: binding.kind, storageLocation: { ...binding.location }, operation: "put", state: "unknown", actor: `user:${OWNER.userId}`, bytes: 3, sha256: createHash("sha256").update("abc").digest("hex"), contentType: "image/png" }).returning();
-    await tx.insert(mediaObjects).values({ key, state: "pending", role: "original", contentType: "image/png", bytes: 3 });
-    const originalLocation = { endpoint: "https://original-private-storage.example", bucket: "private-original-bucket" };
-    const [resource] = await tx.insert(mediaMultipartResources).values({ uploadId: randomUUID(), key: multipartKey, keyDigest: objectKeyDigest(multipartKey), namespace: storageNamespace({ id: "s3", ...originalLocation }), storageKind: "s3", storageLocation: originalLocation, contentType: "image/png", expectedBytes: 3, actor: `user:${OWNER.userId}`, state: "unknown" }).returning();
-    const [operation] = await tx.insert(mediaMultipartOperations).values({ resourceId: resource!.id, kind: "create", state: "unknown", actor: `user:${OWNER.userId}` }).returning();
-    return { token, receipt: receipt!, resource: resource!, operation: operation! };
+  const failing = { ...captured, store: { ...captured.store, put: async (...args: Parameters<typeof captured.store.put>) => { await captured.store.put(...args); throw new Error("Synthetic lost original PUT acknowledgement"); } } };
+  const requestDirectory = join(process.env.LOCAL_STORAGE_ROOT!, ".freeholder-original-requests"), requestName = createHash("sha256").update(`freeholder:local-request-key:v1\0${key}`).digest("hex");
+  mkdirSync(requestDirectory, { recursive: true });
+  writeFileSync(join(requestDirectory, `${requestName}.json`), "Synthetic occupied original request sidecar", { flag: "wx" });
+  const failed = await putWithReceipt({ key, body: new Uint8Array([97, 98, 99]), contentType: "image/png", role: "original" }, OWNER, failing).then(() => false, () => true);
+  if (!failed) throw new Error("The genuine failed original provider call is required.");
+  await createLocalStorage({ root: process.env.LOCAL_STORAGE_ROOT!, publicPath: "/media" }).delete(key);
+  const [receipt] = await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.key, key));
+  if (!receipt || receipt.state !== "unknown" || !receipt.originalReservationId) throw new Error("The admitted original unknown receipt is missing.");
+  const output = `/tmp/freeholder-browser-multipart-${randomUUID()}.json`;
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, ["node_modules/vitest/vitest.mjs", "run", "--config", "tests/fixtures/media-browser-multipart-debt.config.ts"], { env: { ...process.env, TEST_DATABASE_URL: process.env.DATABASE_URL!, FREEHOLDER_MEDIA_BROWSER_MULTIPART_OUTPUT: output }, stdio: ["ignore", "pipe", "pipe"] });
+    let diagnostics = "";
+    child.stdout.on("data", chunk => { diagnostics += String(chunk); }); child.stderr.on("data", chunk => { diagnostics += String(chunk); });
+    child.on("error", reject); child.on("close", code => { if (code === 0) resolve(); else reject(new Error(`The genuine multipart producer failed (${code}): ${diagnostics}`)); });
   });
+  const selected = z.object({ resourceId: z.uuid(), operationId: z.uuid(), originalEndpoint: z.string().url() }).strict().parse(JSON.parse(await readFile(output, "utf8")) as unknown);
+  const [resource] = await db().select().from(mediaMultipartResources).where(eq(mediaMultipartResources.id, selected.resourceId));
+  if (!resource || resource.state !== "unknown" || !resource.originalReservationId) throw new Error("The produced original multipart resource is missing.");
+  const [operation] = await db().select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.id, selected.operationId));
+  if (!operation || operation.resourceId !== resource.id || operation.state !== "unknown") throw new Error("The produced original CREATE operation is missing.");
+  return { token, receipt, resource, operation, originalEndpoint: selected.originalEndpoint };
 }
 
 async function submitProof(page: Page, form: Locator, m: typeof en, multipart = false) {
@@ -82,7 +97,7 @@ test.describe("original storage recovery owner journey (C1.12/C11.08)", () => {
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
           expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
           const html = await page.content();
-          for (const hidden of ["private-original-bucket", "original-private-storage.example"]) expect(html).not.toContain(hidden);
+          expect(html).not.toContain(seeded.originalEndpoint);
           await page.screenshot({ path: test.info().outputPath(`${locale}-${theme}-storage-recovery.png`), fullPage: true });
         }
         const multipart = page.locator(`form:has(input[name="resourceId"][value="${seeded.resource.id}"])`);
@@ -94,7 +109,7 @@ test.describe("original storage recovery owner journey (C1.12/C11.08)", () => {
         await expect.poll(async () => (await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id, seeded.receipt.id)))[0]?.state).toBe("confirmed_absent");
         expect(await db().select().from(mediaObjects).where(eq(mediaObjects.key, seeded.receipt.key))).toHaveLength(0);
         const entries = await db().select().from(auditLog);
-        expect(entries.some(row => row.action === "media.applyStorageRecovery" && row.actor === `user:${OWNER.userId}` && row.subjectId === seeded.receipt.id)).toBe(true);
+        expect(entries.some(row => row.action === "media.applyOriginalPutRecovery" && row.actor === `user:${OWNER.userId}` && row.subjectId === seeded.receipt.id)).toBe(true);
         expect(JSON.stringify(entries)).not.toContain(privateEvidence);
         const privatePhase = await context.request.post("/api/v1/media.claimStorageRecovery", { headers: { Origin: C11_BASE_URL }, data: {} });
         expect(privatePhase.status()).toBe(404);

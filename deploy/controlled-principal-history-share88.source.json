@@ -1,0 +1,74 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_principal_history_share88.v1",
+  "checklist": ["C12.38", "C11.05", "C1.08"],
+  "status": "FORWARD SOURCE CONTINUATION; shares only the initial same-transaction/exact-scope controlled history and preserves the fresh final fence; not acceptance evidence",
+  "files": [
+    {
+      "path": "src/modules/invoicing/original-cash-principal.ts",
+      "beforeSha256": "75b694723f4a76b6304c908070cf5d931df0662936af0cefab86d573192126e2",
+      "afterSha256": "f8521b4e4349c4de0e26c59e76c9c8b62b3d1e0569d511aa3866b33f24de7be4",
+      "edits": [
+        {
+          "before": "import type { OriginalCashClosureShare } from \"./original-cash-closure-current\";",
+          "after": "import { createOriginalCashClosureShare, type OriginalCashClosureShare } from \"./original-cash-closure-current\";"
+        },
+        {
+          "before": "export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, source: MerchantRefundSource, share?: OriginalCashClosureShare) {\n  const cash = await originalMerchantRefundCash(ctx, source);",
+          "after": "export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, source: MerchantRefundSource, share?: OriginalCashClosureShare) {\n  share ??= createOriginalCashClosureShare();\n  const cash = await originalMerchantRefundCash(ctx, source);"
+        },
+        {
+          "before": "    merchantRefundCashHistory(ctx, cash),",
+          "after": "    merchantRefundCashHistory(ctx, cash, undefined, undefined, share),"
+        },
+        {
+          "before": "  if (currentControlled.incomplete || merchantTaxDigest(currentControlled) !== merchantTaxDigest(controlled)) reviewRequired = true;\n  let currentControlledBank:",
+          "after": "  if (currentControlled.incomplete || merchantTaxDigest(currentControlled) !== merchantTaxDigest(controlled)) reviewRequired = true;\n  if(source.kind===\"payment\")share.currentControlled.set(source.paymentId,currentControlled);\n  let currentControlledBank:"
+        },
+        {
+          "before": "import { createOriginalCashClosureShare, type OriginalCashClosureShare } from \"./original-cash-closure-current\";",
+          "after": "import { createOriginalCashClosureShare, type OriginalCashClosureShare } from \"./original-cash-closure-current\";\nimport type { ControlledJournalComposition } from \"@/modules/subscriptions/controlled-provider-journal-composition\";"
+        },
+        {
+          "before": "export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, source: MerchantRefundSource, share?: OriginalCashClosureShare) {",
+          "after": "export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, source: MerchantRefundSource, share?: OriginalCashClosureShare, composition?: ControlledJournalComposition) {"
+        },
+        {
+          "before": "controlledCashFinancialHistoryShared(ctx.tx, receiptIds, controlledParents.map(row => row.id), share)",
+          "after": "controlledCashFinancialHistoryShared(ctx.tx, receiptIds, controlledParents.map(row => row.id), share, composition)"
+        },
+        {
+          "before": "  const [currentWitness,currentControlled] = await Promise.all([originalCashRecoveryFinancialWitness(ctx.tx, paymentIds, receiptIds),controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.id))]);",
+          "after": "  const [currentWitness,currentControlled] = await Promise.all([originalCashRecoveryFinancialWitness(ctx.tx, paymentIds, receiptIds),composition\n    ?controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.id), composition)\n    :controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.id))]);"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/merchant-refund-history.ts",
+      "beforeSha256": "cb941881fbf3297039b3476a48e71b21f5e0f47feceeb9d05bba3a7df030152d",
+      "afterSha256": "8d0b19d09364c4d2f6925a9fca637df32355044bc266adc260756b5d5e745371",
+      "edits": [
+        {
+          "before": "import { controlledCashFinancialHistory, controlledCashFinancialHistoryForOriginalInventory } from \"./controlled-provider-financial-witness\";",
+          "after": "import { controlledCashFinancialHistoryForOriginalInventory, controlledCashFinancialHistoryShared } from \"./controlled-provider-financial-witness\";"
+        },
+        {
+          "before": "import type { OriginalInventoryProjectionContext } from \"./original-cash-inventory-causal-proof\";",
+          "after": "import type { OriginalInventoryProjectionContext } from \"./original-cash-inventory-causal-proof\";\nimport type { OriginalCashClosureShare } from \"./original-cash-closure-current\";"
+        },
+        {
+          "before": "export async function merchantRefundCashHistory(ctx: ServiceContext, cash: MerchantRefundCashOrigin, ownInspectionId?: string, excludeRecoveryOperationId?: string): Promise<MerchantRefundCashHistory> {\n  return readMerchantRefundCashHistory(ctx,cash,ownInspectionId,excludeRecoveryOperationId);\n}",
+          "after": "export async function merchantRefundCashHistory(ctx: ServiceContext, cash: MerchantRefundCashOrigin, ownInspectionId?: string, excludeRecoveryOperationId?: string, share?: OriginalCashClosureShare): Promise<MerchantRefundCashHistory> {\n  return readMerchantRefundCashHistory(ctx,cash,ownInspectionId,excludeRecoveryOperationId,undefined,share);\n}"
+        },
+        {
+          "before": "  originalInventory?: { context?: OriginalInventoryProjectionContext; capture:(entries:OriginalInventoryPreimageEntry[],resolutions:OriginalInventoryResolutionPreimage[])=>void }): Promise<MerchantRefundCashHistory> {",
+          "after": "  originalInventory?: { context?: OriginalInventoryProjectionContext; capture:(entries:OriginalInventoryPreimageEntry[],resolutions:OriginalInventoryResolutionPreimage[])=>void }, share?: OriginalCashClosureShare): Promise<MerchantRefundCashHistory> {"
+        },
+        {
+          "before": "    : await controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.subscriptionId));",
+          "after": "    : await controlledCashFinancialHistoryShared(ctx.tx, receiptIds, controlledParents.map(row => row.subscriptionId), share);"
+        }
+      ]
+    }
+  ]
+}

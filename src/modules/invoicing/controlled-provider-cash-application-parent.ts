@@ -26,6 +26,7 @@ import { originalCashRecoveryFinancialWitness,originalCashCallersFinished } from
 import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations";
 import { creditNoteDisposition } from "./credit-disposition";
 import { originalCreditFeeAllocation } from "./credit-fee-origin";
+import { readOriginalPrincipalAndDebt } from "./principal-authority";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import type { invoices } from "./schema";
 
@@ -125,8 +126,9 @@ export async function readControlledCashApplicationParent(ctx:ServiceContext,inp
  const principalReader=getService("invoicing.originalPrincipalAuthority"),debtReader=getService("invoicing.merchantPaymentRecoveryDebt");if(!principalReader||!debtReader)refuse();
  const paymentProofs=[];
  for(const payment of graph.money){
-  const financial=debt.parse(await ctx.callAsSystem(debtReader,{paymentId:payment.id}));if(financial.pending)refuse();
-  const current=payment.status==="succeeded"?principal.parse(await ctx.callAsSystem(principalReader,{paymentId:payment.id})):null;
+  const combined=payment.status==="succeeded"?await readOriginalPrincipalAndDebt(ctx,payment.id):null;
+  const financial=debt.parse(combined?.debt??await ctx.callAsSystem(debtReader,{paymentId:payment.id}));if(financial.pending)refuse();
+  const current=combined?principal.parse(combined.principal):null;
   if(current&&(!current.principalSafe||current.financialDebtPending||current.witness.paymentId!==payment.id))refuse();
   paymentProofs.push({paymentId:payment.id,financial,current});
  }

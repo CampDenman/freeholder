@@ -135,6 +135,15 @@ describe("the migrations already in the tree", () => {
         expect(assertSchemaRisk("breaking", [later]).ok).toBe(true);
         continue;
       }
+      if (file === "0082_verified_media_transfer.sql") {
+        expect(later.ok).toBe(true);
+        expect(later.acknowledged).toBe(true);
+        expect(later.breaking.map(statement => statement.id)).toEqual(["add-required-column"]);
+        expect(later.reason).toBe("Verified physical lineage requires a new writer. Stop/drain original writers; rollback with matching DB, private configuration and object snapshots, respecting every acknowledged erasure.");
+        expect(assertSchemaRisk("compatible", [later]).ok).toBe(false);
+        expect(assertSchemaRisk("breaking", [later]).ok).toBe(true);
+        continue;
+      }
       if (file === "0076_mail_carrier_operations.sql" || file === "0079_form_original_lead_copies.sql") {
         expect(later.ok).toBe(true);
         expect(later.acknowledged).toBe(true);

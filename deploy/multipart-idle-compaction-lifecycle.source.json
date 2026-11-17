@@ -1,0 +1,57 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_idle_compaction_lifecycle.v1",
+  "checklist": ["C1.12", "C1.08", "C11.08"],
+  "status": "Idle multipart minimization and late same-first re-review qualified on fresh and upgraded migration105 PostgreSQL; provider, hosted executor and clean-room acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "2af6ec0494d08c9593e6a309d2b5c1bce17f108a12805895e1a0273dd5c60301" },
+    { "path": "tests/core/media-multipart-idle-compact-lifecycle.test.ts", "sha256": "d0699432c83260c118a99cbf37820a5cce4b311863f88576ef41306a3e8e60e0" },
+    { "path": "tests/core/privacy-reopen-erasure.test.ts", "sha256": "39b1d02a4091bb6b853608c7d4caafdebc6dea0abc0a1402b27b35ec3210e648" },
+    { "path": "src/core/contacts/identity-lock.ts", "sha256": "06d7ca7c61973ed9169d3fb34c1f69825a81adac1d77ed623c63958939ea75e0" },
+    { "path": "src/core/privacy/service.ts", "sha256": "7deba8b2e28a77525ec55ed06e670cdde8ac10d61256aeb27ae52061450b9aa2" },
+    { "path": "src/core/media/guarded-service.ts", "sha256": "3f56843e8f566b737660e34f185353f68ce7f7952765f627df078ce84639bf63" },
+    { "path": "src/core/media/multipart-privacy.ts", "sha256": "6d792473585ba99f47a690a19ad78cb263fab4f0a35a5b6cc4a1a12315b9db06" },
+    { "path": "src/core/media/multipart-retirement-certificate.ts", "sha256": "7c542a1d05f300a2155209b6fd306932a38dc128480b6dfd421166c5a84d8205" },
+    { "path": "db/migrations/0102_idle_creation_certificate_intact.sql", "sha256": "86e426e2e89df68f5299e6dd7f4a433d7ba36d0c9cbbb5634191797bbd31563d" },
+    { "path": "db/migrations/0103_shared_redacted_certificate.sql", "sha256": "e16e182de8c9afde754f2412b5d6f56bfd5eeb2a438db43259bfc65b74e57648" },
+    { "path": "db/migrations/0104_erased_review_attribution.sql", "sha256": "1a3413b8e03b2a675735c3a16e5b56c13f7f883433b5a8e08628482804297ed8" },
+    { "path": "db/migrations/0105_sequential_retirement_seal.sql", "sha256": "4de051905e3be0516454f6a5340c36d20d592acc5faad2c7576fd1d25435a8be" },
+    { "path": "db/migrations/meta/_journal.json", "sha256": "7d6716314a6db04930ef56d3d36053630b27573b84f241e42c243fef16ce8d0d" },
+    { "path": ".changeset/idle-creation-certificate-intact.md", "sha256": "712312c03c64afeac19c8b572da68a63342b8ad11abfbb516c21b2e9e880b9ca" },
+    { "path": ".changeset/media-recovery-identity-locks.md", "sha256": "3b206b5a8a2ddf1406e8200f7632ad47211232ef7b41ebd25672be193f784766" },
+    { "path": ".changeset/privacy-reopen-coalescing.md", "sha256": "10c05f51e466790aeffffee540160a57f695ace95043b6d1abfbe9a9057f2a3d" }
+  ],
+  "controls": {
+    "before": { "database": "multipart_idle_compact_final4_20261115", "passed": 7, "failed": 1, "defect": "Late same-first re-review accumulated duplicate erasure jobs and could not regain current certificate coverage" },
+    "focused": { "database": "multipart_idle_fixed2_20261115", "passed": 1, "failed": 0, "testSeconds": 91.209, "durationSeconds": 101.55 },
+    "final": { "database": "multipart_idle_final_20261115", "passed": 8, "failed": 0, "durationSeconds": 224.32, "lateReviewSeconds": 70.422 },
+    "supportingProofs": { "database": "multipart_seal_regression_20261115", "files": 4, "passed": 20, "failed": 0, "durationSeconds": 283.15, "repeatAbortPositiveSeconds": 43.498 },
+    "upgrade": { "database": "multipart_idle_trace3_20261115", "from": 102, "to": 105, "journalRowsBefore": 103, "journalRowsAfter": 106, "passed": true },
+    "functionBodies": {
+      "freeholder_media_multipart_retirement_payload(uuid,uuid)": "152bbe1d6ec8ef1239dc09271b064588ea1842ec165b82eb810292231d521b80",
+      "freeholder_media_multipart_certificate_coverage(uuid)": "d9a189131c3954f1086820f029b64f6ce42b23c2065e47f5573565e9614d9190",
+      "freeholder_media_multipart_retirement_seal_admissible(media_storage_transfer_reviews)": "1aeeb19b9537d639c059f4261591746c9efbbd5e8502a3d99ae968bec71c51ba"
+    },
+    "coverage": ["all original parent locators reduced by the actual worker without another DELETE", "copied worker identity refused", "late same-first fact retained and freshly re-reviewed with two inventories", "one identical queued cohort job reused while active or different work is not coalesced", "second certificate current after exact minimized-operation human attribution", "conflicting session, named hold, flag-only wipe and wrong-session candidate refused"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "planLicenseChangelog": "passed",
+    "temporaryInstrumentationRemoved": true,
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "2af6ec0494d08c9593e6a309d2b5c1bce17f108a12805895e1a0273dd5c60301",
+      "beforeSha256": "eb59e3603d98c493f56c6d4345929ff5c4c89cb99acae5936d149576faca0468",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/multipart-retirement-certificate-lifecycle.source.json`. No provider\n  account, independent executor or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  `deploy/multipart-retirement-certificate-lifecycle.source.json`. No provider\n  account, independent executor or C-item acceptance follows.\n  Idle-compaction lifecycle qualification2026-11-16: the initial7/8 aggregate\n  isolated late same-first re-review. Recovery now coalesces identical queued\n  erasure work, recognizes an owning transaction's exclusive identity lock,\n  shares intact-certificate evaluation, and preserves exact human re-review\n  attribution. Migration105 computes the expected proof/identity once before\n  applying the unchanged certificate authority predicate. Fresh105 passes8/8\n  in224.32s; the late case passes70.422s and repeat-ABORT positive43.498s.\n  Privacy/certificate/repeat regressions pass20/20; the official102→105 upgrade\n  verifies106 journals and all three new function bodies. Full TypeScript,\n  focused lint, plan, license and changelog gates pass. See\n  `deploy/multipart-idle-compaction-lifecycle.source.json`. No provider account,\n  hosted executor, clean-room or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

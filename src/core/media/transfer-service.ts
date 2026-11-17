@@ -5,7 +5,7 @@ import {currentStorageCallerRuntimeSchema} from "./physical-caller-runtime";
 import {createHash,randomUUID} from "node:crypto";
 import {asc,eq,inArray,sql} from "drizzle-orm";
 import {z} from "zod";
-import {copyManifestObjects,type AccountedTransferStore,type VersionedTransferStore} from "../../../scripts/media-transfer.mjs";
+import type {AccountedTransferStore,VersionedTransferStore} from "../../../scripts/media-transfer.mjs";
 import {defineOrchestratedService,hasModuleAccess,ServiceError,type Actor} from "@/core/service";
 import {defineMediaService} from "./guarded-service";
 import {mediaObjectWrites} from "./write-schema";
@@ -171,7 +171,7 @@ async function ensureProviderInventory(work:Work,side:"source"|"target",store:Ac
 }
 async function readPhysical(work:Work,object:Work["objects"][number],store:VersionedTransferStore,kind:"source_read"|"target_probe"|"target_verify"|"target_current"|"source_absence",actor:Actor){
  const source=["source_read","source_absence"].includes(kind),key=source?object.key:object.targetKey,expectedRevision=(source?object.sourceRevision:object.targetRevision)??undefined;
- return physical({planId:work.plan.id,objectId:object.id,kind,...(expectedRevision?{expectedRevision}:{})},actor,()=>store.readVersioned(key,expectedRevision),result=>result?{accepted:true,revision:result.revision,...(result.requestProof?{requestProof:result.requestProof}:{}),sha256:transferDigestBytes(result.body),bytes:result.body.byteLength}:{absent:true});
+ return physical({planId:work.plan.id,objectId:object.id,kind,...(expectedRevision?{expectedRevision}:{})},actor,()=>store.readVersioned(key,expectedRevision,object.bytes),result=>result?{accepted:true,revision:result.revision,...(result.requestProof?{requestProof:result.requestProof}:{}),sha256:transferDigestBytes(result.body),bytes:result.body.byteLength}:{absent:true});
 }
 function transferDigestBytes(body:Uint8Array):string {return createHash("sha256").update(body).digest("hex");}
 export const advanceStorageTransfer=defineOrchestratedService({
@@ -200,7 +200,7 @@ export const advanceStorageTransfer=defineOrchestratedService({
    const latest=work.calls.filter(row=>row.objectId===object.id&&row.kind==="target_put").at(-1),prior=transferCallApplied(latest,work.reviews)?latest:undefined;
    if(latest&&!prior&&!transferCallRetryPermitted(latest,work.reviews))transferConflict("Reconcile the actual original target caller; it will not be retried automatically.");
    let sourceReadId:string|undefined,putPerformed=false;
-   await copyManifestObjects({manifest:{format:"freeholder-media-manifest/v1",objects:[{key:object.key,bytes:object.bytes,contentType:object.contentType,checksumSha256:object.sha256}]},source:{get:async()=>{const read=await readPhysical(work,object,source,"source_read",actor);sourceReadId=read.id;if(!read.value)transferConflict("The original source bytes are absent.");verifiedTransferBytes(read.value.body,object);await verifyOriginalProviderRead.call({id:input.id,objectId:object.id,sourceReadId:read.id},actor);return read.value.body;},put:async()=>transferConflict()},target:{get:async()=>{const read=await readPhysical(work,object,target,"target_probe",actor);if(read.value&&!prior&&!putPerformed)transferConflict("The destination key is already occupied; it will not be adopted or overwritten.");return read.value?.body;},put:async(_key,body,type)=>{await physical({planId:input.id,objectId:object.id,kind:"target_put"},actor,()=>target.put(object.targetKey,body,type),()=>({accepted:true}));putPerformed=true;}}});
+   await (await import("../../../scripts/media-transfer.mjs")).copyManifestObjects({manifest:{format:"freeholder-media-manifest/v1",objects:[{key:object.key,bytes:object.bytes,contentType:object.contentType,checksumSha256:object.sha256}]},source:{get:async()=>{const read=await readPhysical(work,object,source,"source_read",actor);sourceReadId=read.id;if(!read.value)transferConflict("The original source bytes are absent.");verifiedTransferBytes(read.value.body,object);await verifyOriginalProviderRead.call({id:input.id,objectId:object.id,sourceReadId:read.id},actor);return read.value.body;},put:async()=>transferConflict()},target:{get:async()=>{const read=await readPhysical(work,object,target,"target_probe",actor);if(read.value&&!prior&&!putPerformed)transferConflict("The destination key is already occupied; it will not be adopted or overwritten.");return read.value?.body;},put:async(_key,body,type)=>{await physical({planId:input.id,objectId:object.id,kind:"target_put"},actor,()=>target.put(object.targetKey,body,type),()=>({accepted:true}));putPerformed=true;}}});
    const verified=await readPhysical(work,object,target,"target_verify",actor);if(!verified.value||!sourceReadId)transferConflict();verifiedTransferBytes(verified.value.body,object);
    await applyCopy.call({id:input.id,objectId:object.id,sourceReadId,targetVerifyId:verified.id},actor);
   }else{

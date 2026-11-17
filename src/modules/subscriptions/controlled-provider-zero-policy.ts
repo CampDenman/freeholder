@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Pure actual-zero transport policy; no service registration or mutation.
+import { recordedControlledProjectionHasUnknown } from "@/adapters/payments/stripe-controlled-safe-response";
 import type { controlledProviderJournal } from "./controlled-provider-proof";
 type Journal=Awaited<ReturnType<typeof controlledProviderJournal>>;
 const record=(value:unknown):Record<string,unknown>|null=>value!==null&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:null;
@@ -9,7 +10,7 @@ const safeKinds=new Set(["bootstrap","discover_bootstrap","read_bootstrap","paus
 /** This bounded policy closes only a genuinely canceled ZERO transport. It is
  * deliberately not the later positive-money applied/returned closure policy. */
 export function controlledZeroTransportProof(history:Journal,currency:string,originalCustomerRef?:string){
- if(history.unfinished.length||history.closures.length||history.chargeOrigins.length||history.operations.some(row=>!safeKinds.has(row.kind))||history.operations.filter(row=>row.kind==="bootstrap").length!==1)return null;
+ if(history.facts.some(fact=>recordedControlledProjectionHasUnknown(fact.actual.raw))||history.unfinished.length||history.closures.length||history.chargeOrigins.length||history.operations.some(row=>!safeKinds.has(row.kind))||history.operations.filter(row=>row.kind==="bootstrap").length!==1)return null;
  const operation=(id:string)=>history.operations.find(row=>row.id===id);
  const customerReads=history.operations.filter(row=>row.kind==="read_customer_financials");
  if(customerReads.length&&(!originalCustomerRef||!history.verifications.some(row=>operation(row.operationId)?.kind==="read_customer_financials"&&row.actualResult.balanceState==="known_zero"&&row.actualResult.completeCreditNotes===true)))return null;

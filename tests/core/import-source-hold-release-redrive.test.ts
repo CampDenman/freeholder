@@ -2,7 +2,7 @@
 // C1.08/C3.47/C11.14: a new verified request finishes a released original hold.
 import { createHash } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, closeDb } from "@/core/db";
 import { users, totpFactors } from "@/core/auth/schema";
@@ -12,7 +12,7 @@ import type { Actor } from "@/core/service";
 import { contacts } from "@/core/contacts/schema";
 import { resolveContact } from "@/core/contacts/service";
 import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
-import { addRetentionException, createDataRequest, fulfillDataRequest, removeRetentionException, verifyDataRequest, erasureArtifactIsIntact } from "@/core/privacy/service";
+import { addRetentionException, createDataRequest, fulfillDataRequest, pruneExpiredPrivacyArtifacts, removeRetentionException, verifyDataRequest, erasureArtifactIsIntact } from "@/core/privacy/service";
 import { importRuns, importSourceEntries, importSourceGraphs, importSourceMedia } from "@/core/plugins/schema";
 import { importSourceErasureMembers, importSourceErasureObjects, importSourceErasureScopes } from "@/core/import/source-erasure-schema";
 import { rollbackImport, startImport } from "@/core/import/service";
@@ -104,7 +104,12 @@ for (const kind of ["wordpress-wxr", "archive"] as const) describe.runIf(hasData
     expect((await db().select().from(contacts).where(eq(contacts.id, contact.id)))[0]?.email).toBeNull();
     expect(await captured(first.id)).toEqual(firstCapture);
     expect(JSON.stringify(await db().select().from(importSourceEntries).where(eq(importSourceEntries.graphId, original.graph.id)))).toContain(EMAIL);
-    const [retainedArtifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, first.id));
+    let [retainedArtifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, first.id));
+    expect(erasureArtifactIsIntact(retainedArtifact)).toBe(true);
+    await db().update(dataRequestArtifacts).set({ expiresAt: sql`${dataRequestArtifacts.createdAt} + interval '1 millisecond'` }).where(eq(dataRequestArtifacts.id, retainedArtifact!.id));
+    expect(await pruneExpiredPrivacyArtifacts()).toBe(0);
+    [retainedArtifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, first.id));
+    expect(retainedArtifact!.expiresAt.getTime()).toBe(retainedArtifact!.createdAt.getTime() + 1);
     expect(erasureArtifactIsIntact(retainedArtifact)).toBe(true);
     const originalWrites = await db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.key, original.key));
     expect(originalWrites.filter(write => write.operation === "put")).toHaveLength(1);

@@ -12,7 +12,9 @@ import {defineMediaService as defineService} from "./guarded-service";
 import {mediaUploads,mediaObjects} from "./schema";
 import {mediaObjectWrites} from "./write-schema";
 import {mediaMultipartOperations,mediaMultipartResources,MULTIPART_STATES} from "./multipart-schema";
-import {allowMediaReceiptWrites,deleteWithReceipt,storageOperationsHeld} from "./write-ledger";
+import {mediaStorageTransferCalls} from "./transfer-schema";
+import {allowMediaReceiptWrites,storageOperationsHeld} from "./write-ledger";
+import {deleteWithReceipt} from "./delete-with-receipt";
 import appliedRecoveryServices,{recoverExactOriginalMultipartComplete} from "./multipart-applied-recovery";
 import {confirmation,capture,fingerprint,human} from "./multipart-recovery-context";
 import {withOriginalMultipartInvocation} from "./provider-callers";
@@ -36,7 +38,8 @@ export const listMultipartOperations=defineService({
   const rows=[];
   for(const resource of resources){
    const operations=await ctx.tx.select().from(mediaMultipartOperations).where(eq(mediaMultipartOperations.resourceId,resource.id)).orderBy(asc(mediaMultipartOperations.createdAt),asc(mediaMultipartOperations.id));
-   const uncertain=operations.filter(row=>["started","unknown"].includes(row.state)||row.kind==="sign"&&row.state==="accepted"&&!resource.retiredAt);
+   const physical=operations.length?await ctx.tx.select({operationId:mediaStorageTransferCalls.multipartOperationId,state:mediaStorageTransferCalls.state,returnedAt:mediaStorageTransferCalls.returnedAt}).from(mediaStorageTransferCalls).where(inArray(mediaStorageTransferCalls.multipartOperationId,operations.map(row=>row.id))):[];
+   const uncertain=operations.filter(row=>["started","unknown"].includes(row.state)||row.kind==="sign"&&row.state==="accepted"&&!resource.retiredAt||physical.some(call=>call.operationId===row.id&&(call.state==="admitted"||call.state==="unknown"||!call.returnedAt)));
    if(resource.state==="unknown"){
     const first=await readRetainedOriginalMultipartIdentity(ctx.tx,resource.id);
     if(first.state==="proven"){

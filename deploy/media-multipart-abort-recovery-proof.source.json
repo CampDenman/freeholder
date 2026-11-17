@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_abort_recovery_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Verification-only original ABORT local-closure controls pass; no remote ACK, provider absence, actual host stop or erasure completion is claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "418bbec7a12c01b2c59b0dbde3e4278051f282d7e71216040ffaff3a2e41605e" },
+    { "path": "tests/core/media-multipart-abort-recovery-proof.test.ts", "sha256": "dc486f8eec70a8f6c9ade704dcb34fb9b7151cc0abe2adfd770b22c179c1b709" }
+  ],
+  "controls": {
+    "final": { "passed": 8, "failed": 0, "durationSeconds": 0.709 },
+    "coverage": ["actual portable local FINs accepted without provider ACK or Linux requirement", "exact independent stop leaves first missing FINs unchanged", "active caller without actual stop refused", "other namespace or UploadId refused", "extra/missing physical requests and creator role refused", "wrong runtime birth or rewritten descriptor refused", "wrong stopped executor and ABORT after captured stop intent refused", "partial or mismatched local FINs refused"],
+    "runtimeChanges": false,
+    "actualHostStop": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "418bbec7a12c01b2c59b0dbde3e4278051f282d7e71216040ffaff3a2e41605e",
+      "beforeSha256": "57a9dba9fee243cc89fdb29e5829da930036b94ba51f289f0736ff26743619bf",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  Fictional proof inputs establish no actual host stop or provider acceptance.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  Fictional proof inputs establish no actual host stop or provider acceptance.\n  ABORT-recovery proof qualification2026-11-16: all8 controls pass. Actual\n  portable FINs need no Linux path; missing FINs retain NULL until exact independent\n  stop proof. Changed namespaces, sessions, request sets, creator roles, runtime\n  births, descriptors, stop identity/timing and partial FINs are refused. Focused\n  lint passes. See `deploy/media-multipart-abort-recovery-proof.source.json`.\n  No remote ACK, provider absence, actual host stop or erasure completion follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

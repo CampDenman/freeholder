@@ -1114,7 +1114,7 @@ export const reconcileFormLeadErasure = defineJob({
   handler: async () => { const { reconcileFormLeadErasure: reconcile } = await import("@/modules/forms/lead-copy-privacy"); return reconcile(); },
 });
 
-export default [
+const coreJobs = [
   ...crawlJobs,
   reconcileImportSourceErasure,
   reconcileFormLeadErasure,
@@ -1197,3 +1197,5 @@ export const reconcileMediaStorageTransfer=defineJob({
  name:"core.reconcileMediaStorageTransfer",summary:"Reconcile late original physical facts against immutable transfer erasure membership.",schedule:"*/5 * * * *",concurrency:1,
  handler:async(_data,context)=>{if(!context)throw Error("Transfer reconciliation requires an actual durable worker identity.");await context.throwIfCancelled();const{reconcileStorageTransferErasure}=await import("@/core/media/transfer-privacy");const result=await reconcileStorageTransferErasure.call({after:transferErasureCursor},{kind:"system"});transferErasureCursor=result.next??undefined;return result;},
 });
+
+export default [...coreJobs,advanceMediaStorageTransfer,eraseMediaStorageTransfer,reconcileMediaStorageTransfer];

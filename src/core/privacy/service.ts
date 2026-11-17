@@ -1723,6 +1723,19 @@ export const reopenErasureJob = defineService({
       if (outcome.completedJobs?.includes(claim.jobId)) return { jobId: claim.jobId, recoveryRequired: false, changed: false };
       throw new ServiceError("conflict", "Restore the original selective-erasure job acknowledgement before replaying this source evidence.");
     }
+    const pendingIds = outcome.pendingJobs ?? [];
+    const jobData = { ...input.jobData, requestId: request.id };
+    const reusable = pendingIds.length ? await ctx.tx.execute<{ id: string }>(sql`
+      select job.id from pgboss.job job
+      where job.name = ${input.jobName}
+        and job.id in (${sql.join(pendingIds.map(id => sql`${id}::uuid`), sql`,`)})
+        and job.state in ('created', 'retry')
+        and job.data - 'originalJobId' = ${JSON.stringify(jobData)}::jsonb
+      order by job.created_on
+      limit 1
+      for update
+    `) : [];
+    if (reusable[0]) return { jobId: reusable[0].id, recoveryRequired: false, changed: false };
     const originalJobId = claim?.jobId ?? randomUUID();
     const job = await enqueueJob(ctx.tx, input.jobName, { ...input.jobData, requestId: request.id, originalJobId }, { id: originalJobId, idempotencyKey });
     if (!retained) outcome.outcome = "pending";
@@ -2002,7 +2015,27 @@ export const downloadMyDataRequestArtifact = defineService({
 export async function pruneExpiredPrivacyArtifacts(): Promise<number> {
   const rows = await db()
     .delete(dataRequestArtifacts)
-    .where(and(lt(dataRequestArtifacts.expiresAt, new Date()), sql`not exists (select 1 from ${dataRequests} where ${dataRequests.id} = ${dataRequestArtifacts.dataRequestId} and ${dataRequests.kind} = 'erasure' and ${dataRequests.status} = 'in_progress')`))
+    .where(and(lt(dataRequestArtifacts.expiresAt, new Date()), sql`not exists (
+      select 1 from ${dataRequests}
+      where ${dataRequests.id} = ${dataRequestArtifacts.dataRequestId}
+       and ${dataRequests.kind} = 'erasure'
+       and (${dataRequests.status} = 'in_progress' or (
+        ${dataRequests.status} = 'partially_completed'
+        and ${dataRequests.verifiedAt} is not null and ${dataRequests.fulfilledAt} is not null
+        and ${dataRequestArtifacts.body}->>'format' = 'freeholder.erasure-receipt'
+        and ${dataRequestArtifacts.body}->>'requestId' = ${dataRequests.id}::text
+        and ${dataRequestArtifacts.body}->>'contactId' = ${dataRequests.contactId}::text
+        and ${dataRequestArtifacts.sha256} = encode(sha256(convert_to(freeholder_source_receipt_canonical(${dataRequestArtifacts.body}),'UTF8')),'hex')
+        and exists(select 1 from jsonb_array_elements(case when jsonb_typeof(${dataRequestArtifacts.body}->'outcomes') = 'array' then ${dataRequestArtifacts.body}->'outcomes' else '[]'::jsonb end) outcome
+         where outcome->>'scope' = 'imports.readerSources' and outcome->>'outcome' = 'retained'
+          and coalesce(outcome->'pendingJobs','[]'::jsonb) = '[]'::jsonb)
+        and exists(select 1 from ${auditLog} where ${auditLog.action} = 'contacts.fulfillDataRequest'
+         and ${auditLog.subjectType} = 'dataRequest' and ${auditLog.subjectId} = ${dataRequests.id}::text)
+        and freeholder_source_erasure_scope_complete(${dataRequests.id})
+        and exists(select 1 from import_source_erasure_members member
+         where member.request_id = ${dataRequests.id} and member.graph_id is not null)
+       ))
+    )`))
     .returning({ id: dataRequestArtifacts.id });
   return rows.length;
 }

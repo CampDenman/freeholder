@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { describe,it,expect,vi } from "vitest";
 import { createStripePayments } from "@/adapters/payments/stripe";
 import { controlledSubscriptionFactsDigest } from "@/adapters/payments/controlled-subscription-digest";
+import { controlledSafeAdapterSession } from "../helpers/controlled-safe-adapter-session";
 import type { MerchantControlledInvoiceActionRequest,MerchantControlledObservation,MerchantControlledCollectionComponent } from "@/adapters/payments";
 function fixture(){
  const start="2026-11-01T00:00:00.000Z",end="2026-12-01T00:00:00.000Z",epoch=(iso:string)=>Date.parse(iso)/1000;
@@ -57,7 +58,8 @@ function fixture(){
   if(path.startsWith("/v1/prices/")){if(paid&&failAfterPay)return Response.json({error:{message:"Actual auxiliary price read failed"}},{status:503});return Response.json({id:path.split("/").at(-1)});}
   throw new Error(`Unexpected actual GET ${path}`);
  });
- const provider=createStripePayments({secretKey:"sk_declared_contract_fixture",apiBase:"https://stripe.example.test",fetch:fetcher}),onObserved=async(actual:MerchantControlledObservation)=>{observed.push(actual);};
+ const actualProvider=createStripePayments({secretKey:"sk_declared_contract_fixture",apiBase:"https://stripe.example.test",fetch:fetcher}),onObserved=async(actual:MerchantControlledObservation)=>{observed.push(actual);};
+ const provider=controlledSafeAdapterSession(actualProvider);
  const calendar={...scope,...original,operationId,requestDigest,idempotencyKey:"original-calendar-projection",onObserved,originalComponents:[{kind:"principal" as const,subscriptionItemRef:"si_originalNet",providerPriceRef:"price_originalNet",providerProductRef:scope.providerProductRef,amountMinor:1000,interval:scope.interval,intervalCount:scope.intervalCount,actualPeriodStart:start,actualPeriodEnd:end,taxQuoteDigest:"a".repeat(64),profileId:components[1]!.profileId!,profileVersion:1}],
   originalAnchor:start,originalProviderTrialEnd:null,originalPeriodStart:start,originalPeriodEnd:end,prorationAt:"2026-11-13T00:00:00.000Z",currentReadDigest:controlledSubscriptionFactsDigest(current),target:{providerProductRef:scope.providerProductRef,principalMinor:1000,interval:scope.interval,intervalCount:1},taxComponent:null};
  const request=():MerchantControlledInvoiceActionRequest=>({...scope,...original,operationId,requestDigest,idempotencyKey:"original-target-physical-call",onObserved,manifest,calendar,providerInvoiceRef:"in_originalTarget",

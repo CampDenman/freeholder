@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_retirement_job_contract.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Original retirement payload and installed execution-identity controls pass; synthetic scopes alone are not genuine pg-boss execution",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "9af1cfb7785740305cc2bb132136c92e09e6ec002c82cb5509414f5ce333b696" },
+    { "path": "tests/core/media-multipart-retirement-job-contract.test.ts", "sha256": "02a95ea82c704f1d732497ac41a1b0601069af0a346eba0915dc613b0cda3703" }
+  ],
+  "controls": {
+    "final": { "passed": 5, "failed": 0, "durationSeconds": 0.382 },
+    "coverage": ["exact safe fixed admission retained and raw provider fields/missing frontier refused", "durable key distinguishes captured proof and original operation", "uninstalled lookalike and equal-valued clone refused", "detached old scope cannot reuse finished execution", "actual installed cancellation remains authoritative"],
+    "runtimeChanges": false,
+    "genuineWorkerExecutionElsewhere": "deploy/multipart-retirement-catchup-lifecycle.source.json",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "9af1cfb7785740305cc2bb132136c92e09e6ec002c82cb5509414f5ce333b696",
+      "beforeSha256": "bd4e2ce9f60b2b3d52c29511f0af6a1d6fab91a2376529bc8619b65503dbd0f9",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  alone grants no retirement or provider authority.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  alone grants no retirement or provider authority.\n  Retirement-job contract qualification2026-11-16: all5 scope controls pass.\n  The fixed safe admission excludes raw provider fields and requires the complete\n  frontier; durable keys distinguish proof and operation. Cloned, uninstalled,\n  detached or cancelled contexts cannot reuse the actual worker execution. Focused\n  lint passes. See `deploy/media-multipart-retirement-job-contract.source.json`.\n  Synthetic scopes alone are not genuine pg-boss execution.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

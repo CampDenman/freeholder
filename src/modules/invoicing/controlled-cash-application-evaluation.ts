@@ -26,6 +26,7 @@ import { reserveOriginalSubscriptionCashApplication } from "./merchant-refund-ap
 import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations";
 import { creditNoteDisposition } from "./credit-disposition";
 import { originalCreditFeeAllocation } from "./credit-fee-origin";
+import { readOriginalPrincipalAndDebt } from "./principal-authority";
 import { merchantTaxDigest } from "./merchant-tax-store";
 const sha=z.string().regex(/^[a-f0-9]{64}$/),ids=z.array(z.uuid()).max(5000);
 const inputSchema=z.object({collectionId:z.uuid(),receiptIds:ids.min(1),requiredProtocol:z.literal(CONTROLLED_COLLECTION_PROTOCOL)}).strict();
@@ -102,10 +103,11 @@ export async function readControlledCashApplicationEvaluation(ctx:ServiceContext
   const principalReader=getService("invoicing.originalPrincipalAuthority"),debtReader=getService("invoicing.merchantPaymentRecoveryDebt");if(!principalReader||!debtReader)refuse();
   const paymentProofs:Array<{paymentId:string;financial:z.infer<typeof debtSchema>;current:z.infer<typeof principalSchema>|null}>=[];
   const feeProofs:Array<{fundingId:string;fee:Awaited<ReturnType<typeof originalCreditFeeAllocation>>}>=[];
-  for(const payment of allPayments){if(["created","processing"].includes(payment.status))refuse();const financial=debtSchema.parse(await ctx.callAsSystem(debtReader,{paymentId:payment.id}));
+  for(const payment of allPayments){if(["created","processing"].includes(payment.status))refuse();const combined=payment.status==="succeeded"?await readOriginalPrincipalAndDebt(ctx,payment.id):null;
+   const financial=debtSchema.parse(combined?.debt??await ctx.callAsSystem(debtReader,{paymentId:payment.id}));
    const creditSources=canonical.funding.filter(row=>row.sourcePaymentId===payment.id);
    if(financial.pending&&(!creditSources.length||financial.reasons.some(reason=>reason!=="commission")))refuse();
-   const current=payment.status==="succeeded"?principalSchema.parse(await ctx.callAsSystem(principalReader,{paymentId:payment.id})):null;
+   const current=combined?principalSchema.parse(combined.principal):null;
    if(current&&(!current.principalSafe||current.witness.paymentId!==payment.id||current.financialDebtPending&&!financial.pending)||creditSources.length&&payment.refundedMinor!==0)refuse();
    paymentProofs.push({paymentId:payment.id,financial,current});
    for(const funding of creditSources){const fee=await originalCreditFeeAllocation(ctx,payment.id,funding.sourceApplicationId,0);

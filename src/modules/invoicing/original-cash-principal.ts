@@ -10,13 +10,16 @@ import { originalCashRecoveryFinancialWitness } from "./original-cash-recovery-s
 import { currentOriginalCashInventory } from "./original-cash-inventory-current";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { payments } from "./schema";
-import { controlledCashFinancialHistory } from "./controlled-provider-financial-witness";
+import { controlledCashFinancialHistory, controlledCashFinancialHistoryShared } from "./controlled-provider-financial-witness";
 import { readControlledCanonicalBankPrincipal } from "./controlled-canonical-bank-principal";
 import { currentBankPrincipalMatches } from "./original-bank-principal-policy";
 import { originalInventoryComparison } from "./original-cash-inventory-causal-contract";
+import { createOriginalCashClosureShare, type OriginalCashClosureShare } from "./original-cash-closure-current";
+import type { ControlledJournalComposition } from "@/modules/subscriptions/controlled-provider-journal-composition";
 export { currentBankPrincipalMatches } from "./original-bank-principal-policy";
 
-export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, source: MerchantRefundSource) {
+export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, source: MerchantRefundSource, share?: OriginalCashClosureShare, composition?: ControlledJournalComposition) {
+  share ??= createOriginalCashClosureShare();
   const cash = await originalMerchantRefundCash(ctx, source);
   const aliases = source.kind === "payment" ? await ctx.tx.select({ id: merchantAgreementPaymentRoutes.originalChargeReceiptId })
     .from(merchantAgreementPaymentRoutes).where(eq(merchantAgreementPaymentRoutes.paymentId, source.paymentId)).limit(2) : [];
@@ -27,9 +30,11 @@ export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, sour
   // merchant observation/application for the refund callback yet.
   const controlledParents = cash.paymentId ? await ctx.tx.select({ id: merchantAgreementPaymentRoutes.subscriptionId }).from(merchantAgreementPaymentRoutes)
     .where(eq(merchantAgreementPaymentRoutes.paymentId, cash.paymentId)).limit(2) : [];
-  const controlled = await controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.id));
-  const witness = await originalCashRecoveryFinancialWitness(ctx.tx, paymentIds, receiptIds);
-  const history = await merchantRefundCashHistory(ctx, cash);
+  const [controlled,witness,history] = await Promise.all([
+    controlledCashFinancialHistoryShared(ctx.tx, receiptIds, controlledParents.map(row => row.id), share, composition),
+    originalCashRecoveryFinancialWitness(ctx.tx, paymentIds, receiptIds),
+    merchantRefundCashHistory(ctx, cash, undefined, undefined, share),
+  ]);
   const [payment] = source.kind === "payment" ? await ctx.tx.select().from(payments).where(eq(payments.id, source.paymentId)).limit(1) : [];
   // The history already counts the exact namespace's owners/operations/raw
   // feedback and ordinary facts. Add only families deliberately excluded from
@@ -59,15 +64,15 @@ export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, sour
         // can enter this branch. Failed known v2 never falls back to v1.
         if(!payment||payment.status!=="succeeded"||payment.refundedMinor!==payment.amountMinor||!cash.applied)reviewRequired=true;
         else{
-          const{currentOriginalCashClosure}=await import("./original-cash-closure-current");
-          const currentClosures:Array<Awaited<ReturnType<typeof currentOriginalCashClosure>>>=[];
+          const{currentOriginalCashClosureShared}=await import("./original-cash-closure-current");
+          const currentClosures:Array<Awaited<ReturnType<typeof currentOriginalCashClosureShared>>>=[];
           let malformed=false;
           for(const closure of v2Closures){
             const operation=witness.operations.find(row=>row.id===closure.operationId&&row.recoveryId===closure.recoveryId),header=originalInventoryComparison.safeParse(operation?.request.inventoryComparison);
             if(!operation||!header.success||header.data.operationId!==operation.id||header.data.recoveryId!==exactOwner.id||header.data.callerId!==operation.caller.id||header.data.nonceHash!==operation.nonceHash||header.data.namespaceKey!==exactOwner.namespaceKey
               ||header.data.sourceCashDigest!==merchantTaxDigest(exactOwner.owner.cash)||header.data.sourceRevision!==operation.request.sourceRevision
               ||header.data.sourceRevision!==merchantTaxDigest({cash:exactOwner.owner.cash,history:header.data.sourceHistoryDigest})||operation.kind!=="inspection"||operation.request.auxiliaryOperationId){malformed=true;continue;}
-            try{currentClosures.push(await currentOriginalCashClosure(ctx,closure.recoveryId,closure.id));}
+            try{currentClosures.push(await currentOriginalCashClosureShared(ctx,closure.recoveryId,closure.id,share));}
             catch(error){if(!(error instanceof ServiceError)||!["conflict","permission","not_found","validation"].includes(error.code))throw error;}
           }
           const current=currentClosures[0];
@@ -118,10 +123,12 @@ export async function readOriginalCashPrincipalHistory(ctx: ServiceContext, sour
   // Independently committed callback ingress can race these ordinary reads.
   // Fence the authentic exact-source inventory again; later state cannot
   // silently supersede a callback that appeared after the first snapshot.
-  const currentWitness = await originalCashRecoveryFinancialWitness(ctx.tx, paymentIds, receiptIds);
+  const [currentWitness,currentControlled] = await Promise.all([originalCashRecoveryFinancialWitness(ctx.tx, paymentIds, receiptIds),composition
+    ?controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.id), composition)
+    :controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.id))]);
   if (merchantTaxDigest(currentWitness) !== merchantTaxDigest(witness)) reviewRequired = true;
-  const currentControlled = await controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.id));
   if (currentControlled.incomplete || merchantTaxDigest(currentControlled) !== merchantTaxDigest(controlled)) reviewRequired = true;
+  if(source.kind==="payment")share.currentControlled.set(source.paymentId,currentControlled);
   let currentControlledBank: Awaited<ReturnType<typeof readControlledCanonicalBankPrincipal>> | null = null;
   if(payment&&controlledBank?.applies){
     try{currentControlledBank=await readControlledCanonicalBankPrincipal(ctx,payment,cash);if(merchantTaxDigest(currentControlledBank)!==merchantTaxDigest(controlledBank))reviewRequired=true;}

@@ -14,8 +14,7 @@
 // container, where that risk does not exist and the convenience is decisive.
 // Anyone who wants the other behaviour sets FREEHOLDER_SKIP_MIGRATE=1 and runs
 // them their own way.
-import { drizzle } from "drizzle-orm/postgres-js";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { runMigrationsOnDedicatedSession } from "@/core/migrate-runner.mjs";
 import postgres from "postgres";
 import { env } from "@/core/env";
 
@@ -24,8 +23,6 @@ import { env } from "@/core/env";
 // outside it could be released before migrate() finishes. Closing this
 // dedicated one-connection client releases the lock even when migration fails
 // or the process exits.
-const MIGRATION_LOCK_NAMESPACE = 0x46726565;
-const MIGRATION_LOCK_KEY = 0x686f6c64;
 
 export interface MigrateResult {
   ran: boolean;
@@ -45,8 +42,7 @@ export async function migrateToLatest(): Promise<MigrateResult> {
   // migration sequence before any process inspects or creates schema objects.
   const client = postgres(url, { max: 1, onnotice: () => {}, connection: { TimeZone: "UTC" } });
   try {
-    await client`select pg_advisory_lock(${MIGRATION_LOCK_NAMESPACE}, ${MIGRATION_LOCK_KEY})`;
-    await migrate(drizzle(client), { migrationsFolder: "db/migrations" });
+    await runMigrationsOnDedicatedSession(client, { migrationsFolder: "db/migrations" });
     return { ran: true };
   } finally {
     // Ending this dedicated session releases its advisory lock on both the

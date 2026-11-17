@@ -11,7 +11,8 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { listed, row, timestamp, uuid } from "@/core/contract";
 import { storageKey } from "@/adapters/storage/types";
-import {putWithReceipt,deleteWithReceipt} from "@/core/media/write-ledger";
+import {putWithReceipt} from "@/core/media/write-ledger";
+import {deleteWithReceipt} from "@/core/media/delete-with-receipt";
 import {
   socialAdapters,
   type SocialInteraction,

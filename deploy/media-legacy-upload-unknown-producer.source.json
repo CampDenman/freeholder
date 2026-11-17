@@ -1,0 +1,49 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_legacy_upload_unknown_producer.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "The genuine unknown/unwritten old-upload path is qualified through normal upgrade and current capture; six retired-written native controls remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "955059f362a095b45768da6663c2132b57fc0d8282ab27f792c86288ace8abc5" },
+    { "path": "tests/fixtures/media-legacy-upload-anchor.config.ts", "sha256": "db7edfdf71908fab40f1e7c9ad739a8132c251180aef31adf6c97ead9c030d55" },
+    { "path": "tests/fixtures/media-legacy-upload-anchor.probe.ts", "sha256": "bd3392016987fd16ad294324863f0e54e6f1753912b8596b155ea7f173f98557" },
+    { "path": "tests/fixtures/media-legacy-upload-anchor-current.probe.ts", "sha256": "945e9c7ff3ea1fae043daa69cf2a64a684d86719f97fa436f927117991d7fa23" },
+    { "path": "tests/core/media-legacy-upload-anchor-upgrade.test.ts", "sha256": "78c2dedfc53ae625e1b384146dbd5281729bc672dd920ea8795974ebf2140e58" }
+  ],
+  "producer": {
+    "runtimeCommit": "bab980add656e159643a21597ea274cb63d4d282",
+    "runtimeModified": false,
+    "schema": "Exact current0..81 migration prefix",
+    "upgrade": "Ordinary current migration through108 with matching journal hashes",
+    "capture": "Current services create a complete retained first capture; the named hold is removed through the public service before an independent verified request",
+    "manifest": "UUID-only; no SQL history, provider result or ServiceContext is supplied"
+  },
+  "controls": {
+    "database": "media_legacy_anchor_unknown_final_20261116",
+    "oldProducer": { "passed": 1, "failed": 0 },
+    "currentCaptureProducer": { "passed": 1, "failed": 0 },
+    "unknownNative": { "passed": 1, "failed": 0, "selectedSkips": 6 },
+    "pureAnchorProofs": { "passed": 8, "failed": 0 },
+    "combinedPureProofsIncludingQuotaRoles": { "passed": 17, "failed": 0 },
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false,
+    "productCodeChanged": false,
+    "remaining": "Six retired-written native cases require independent genuine cohorts; no checklist row closes"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "955059f362a095b45768da6663c2132b57fc0d8282ab27f792c86288ace8abc5",
+      "beforeSha256": "6404640b457c277d763c74b5cb4fb3c2a62eb3b3818037608d34264f6febc097",
+      "continue": true,
+      "edits": [
+        {
+          "before": "remain required. See `deploy/media-legacy-upload-anchor-source-2026-11-14.md`.\n\nSource-only continuation, 2026-11-14 (C1.12/C10.32/C11.08): transfer quota",
+          "after": "remain required. See `deploy/media-legacy-upload-anchor-source-2026-11-14.md`.\n\nLegacy unknown-upload qualification2026-11-16 (C1.12/C11.08): an unmodified\npre82 runtime at `bab980ad` creates the genuine unwritten reservation against the\nexact current0..81 prefix. The ordinary upgrade through108 then produces a complete\ncurrent retained capture, uses real public hold removal, and creates an independent\nverified request. The unknown native control passes1/1 and the pure anchor controls\npass8/8; TypeScript and focused lint pass. No bytes, positive caller or provider proof\nare invented. The six retired-written native controls and their independent cohorts\nremain unrun/open. See `deploy/media-legacy-upload-unknown-producer.source.json`.\nNo provider/security/checklist closure follows.\n\nSource-only continuation, 2026-11-14 (C1.12/C10.32/C11.08): transfer quota",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -3,8 +3,8 @@
 // C12.38/C1.08: lifecycle jobs read durable debt; no provider I/O or attestation.
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { defineService, ServiceError } from "@/core/service";
-import { originalMerchantRefundDebt } from "./merchant-refund-debt";
+import { defineService, ServiceError, type ServiceContext } from "@/core/service";
+import { originalMerchantRefundDebtShared } from "./merchant-refund-debt";
 import { originalMerchantFeeTarget } from "./merchant-line-fee-target";
 import { routingForPayment } from "./merchant-charge";
 import { invoiceMerchantCollections, merchantFeeObservations, merchantFeeRefunds, merchantPaymentObservations, merchantPaymentRoutes } from "./merchant-collection-schema";
@@ -16,10 +16,11 @@ import { invoiceMerchantTaxQuotes } from "./merchant-tax-schema";
 import { subscriptionMerchantScopes } from "@/modules/subscriptions/schema";
 import { paymentDisputes, payments, refunds } from "./schema";
 import { originalCashFullReturnCurrent } from "./original-cash-recovery-current";
+import type { OriginalCashClosureShare } from "./original-cash-closure-current";
 import { originalCashPartialReturnCurrent } from "./original-cash-partial-current";
 import { agreementFeePaymentDebt, agreementFeeProfileDebt } from "./agreement-fee-state";
 import { commercialPrincipalState } from "./commercial-attestations";
-import { controlledCashFinancialHistory, controlledFinancialWitness } from "./controlled-provider-financial-witness";
+import { controlledCashFinancialHistoryShared, controlledFinancialWitness } from "./controlled-provider-financial-witness";
 import { controlledProviderCoverage } from "@/modules/subscriptions/controlled-provider-coverage";
 import { controlledCollectionCoverage } from "@/modules/subscriptions/controlled-provider-collection-coverage";
 import { commercialPaymentAttestations } from "./commercial-attestation-schema";
@@ -30,7 +31,9 @@ const reason = z.enum(["original_scope", "unknown_payment", "unapplied_money", "
 export const merchantPaymentRecoveryDebt = defineService({
   name: "invoicing.merchantPaymentRecoveryDebt", summary: "Report remaining recorded original customer, settlement, commission and recovery debt before a lifecycle can claim completion.",
   kind: "query", permission: "system", external: false, input: z.object({ paymentId: z.uuid() }), output: z.object({ pending: z.boolean(), reasons: z.array(reason) }),
-  handler: async ({ paymentId }, ctx) => {
+  handler: async ({ paymentId }, ctx) => readMerchantPaymentRecoveryDebt(ctx, paymentId),
+});
+export async function readMerchantPaymentRecoveryDebt(ctx: ServiceContext, paymentId: string, share?: OriginalCashClosureShare) {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, paymentId));
     if (!payment) return { pending: true, reasons: ["original_scope" as const] };
     if (payment.provider === "manual") {
@@ -44,15 +47,16 @@ export const merchantPaymentRecoveryDebt = defineService({
     const routing = await routingForPayment(ctx, paymentId), reasons = new Set<z.infer<typeof reason>>();
     const controlledAliases = await ctx.tx.select({ id: merchantAgreementPaymentRoutes.originalChargeReceiptId }).from(merchantAgreementPaymentRoutes)
       .where(eq(merchantAgreementPaymentRoutes.paymentId, paymentId)).limit(2);
-    const controlledRows = await controlledFinancialWitness(ctx.tx, { paymentIds: [paymentId] });
-    const controlled = await controlledCashFinancialHistory(ctx.tx, [...new Set([...controlledAliases.flatMap(row => row.id ? [row.id] : []), ...controlledRows.receiptIds])], controlledRows.history.resources.map(row => row.subscriptionId));
+    const currentControlled = share?.currentControlled.get(paymentId);
+    const controlledRows = currentControlled ?? await controlledFinancialWitness(ctx.tx, { paymentIds: [paymentId] });
+    const controlled = currentControlled ?? await controlledCashFinancialHistoryShared(ctx.tx, [...new Set([...controlledAliases.flatMap(row => row.id ? [row.id] : []), ...controlledRows.receiptIds])], controlledRows.history.resources.map(row => row.subscriptionId), share);
     if (controlledAliases.length > 1 || controlled.incomplete || controlledRows.incomplete) reasons.add("original_scope");
     if (controlled.principalCallerDebt) reasons.add("unknown_payment");
     if (controlled.financialCallerDebt) reasons.add("commission");
     if (!routing.providerPlatformAccountId || routing.applicationFeeMinor === undefined || !Number.isSafeInteger(payment.amountMinor) || payment.amountMinor <= 0
       || !Number.isSafeInteger(payment.refundedMinor) || payment.refundedMinor < 0 || payment.refundedMinor > payment.amountMinor
       || !Number.isSafeInteger(routing.applicationFeeMinor) || routing.applicationFeeMinor < 0 || routing.applicationFeeMinor > payment.amountMinor) return { pending: true, reasons: ["original_scope" as const] };
-    const fullOriginalReturn = payment.refundedMinor === payment.amountMinor && await originalCashFullReturnCurrent(ctx, paymentId);
+    const fullOriginalReturn = payment.refundedMinor === payment.amountMinor && await originalCashFullReturnCurrent(ctx, paymentId, share);
     const partialOriginalReturn = await originalCashPartialReturnCurrent(ctx, paymentId);
     const auxiliaryReturnCurrent = fullOriginalReturn || partialOriginalReturn !== null;
     const{controlledAtomicRefundFeeState}=await import("./controlled-atomic-refund-target");
@@ -70,7 +74,7 @@ export const merchantPaymentRecoveryDebt = defineService({
     const [refundState] = await ctx.tx.select({ returned: sql<string>`coalesce(sum(${refunds.amountMinor}) filter(where ${refunds.status}='succeeded'),0)::text`,
       pending: sql<boolean>`coalesce(bool_or(${refunds.status} in ('created','processing') or (${refunds.status}='failed' and ${refunds.failureCode}='provider_already_refunded')),false)` })
       .from(refunds).where(eq(refunds.paymentId, paymentId));
-    if (refundState?.pending || BigInt(refundState?.returned ?? "0") !== BigInt(payment.refundedMinor) || await originalMerchantRefundDebt(ctx, paymentId)) reasons.add("refund");
+    if (refundState?.pending || BigInt(refundState?.returned ?? "0") !== BigInt(payment.refundedMinor) || await originalMerchantRefundDebtShared(ctx, paymentId, share)) reasons.add("refund");
     const unresolvedDispute = await ctx.tx.select({ id: paymentDisputes.id }).from(paymentDisputes).where(and(eq(paymentDisputes.paymentId, paymentId), inArray(paymentDisputes.status, ["open", "lost"]))).limit(1);
     if (unresolvedDispute.length) reasons.add("dispute");
     const [feeState] = await ctx.tx.select({ returned: sql<string>`coalesce(sum(${merchantFeeRefunds.amountMinor}) filter(where ${merchantFeeRefunds.status}='accepted'),0)::text`,
@@ -106,8 +110,7 @@ export const merchantPaymentRecoveryDebt = defineService({
     if (await agreementFeePaymentDebt(ctx, paymentId)) reasons.add("commission");
     if(atomicFee?.pending)reasons.add("commission");
     return { pending: reasons.size > 0, reasons: [...reasons] };
-  },
-});
+}
 /** Original quote/collection witnesses survive contact merges and profile minimization. */
 export const merchantTaxPaymentDebt = defineService({
   name: "invoicing.merchantTaxPaymentDebt", summary: "Read actual original profile payment debt before minimizing an order, booking or subscription merchant.",

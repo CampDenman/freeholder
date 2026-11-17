@@ -8,7 +8,7 @@ import {randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,isNull,notInArray,or,sql} from "drizzle-orm";
 import {z} from "zod";
 import {db} from "@/core/db";
-import {lockContactIdentity} from "@/core/contacts/identity-lock";
+import {lockContactIdentityForRecovery} from "@/core/contacts/identity-lock";
 import {enqueueJob} from "@/core/jobs";
 import type {JobExecutionContext} from "@/core/jobs";
 import {completeErasureJob,erasureArtifactIsIntact,registerContactPrivacySource} from "@/core/privacy/service";
@@ -18,7 +18,8 @@ import {mediaObjects,mediaUploads,mediaCaptureChunks,mediaCaptureItems,mediaCapt
 import {mediaObjectWrites} from "./write-schema";
 import {mediaOriginalErasureScopes} from "./erasure-schema";
 import {mediaMultipartOperations,mediaMultipartResources} from "./multipart-schema";
-import {allowMediaReceiptWrites,deleteWithReceipt,MEDIA_WRITES_SCOPE,objectKeyDigest,storageOperationsHeld} from "./write-ledger";
+import {allowMediaReceiptWrites,MEDIA_WRITES_SCOPE,objectKeyDigest,storageOperationsHeld} from "./write-ledger";
+import {deleteWithReceipt} from "./delete-with-receipt";
 import {minimizeMediaStorageOperations} from "./write-privacy";
 import {retireKnownMultipart} from "./multipart-operations";
 import {objectCohortIds,mediaCohortPending} from "./erasure-cohorts";
@@ -113,7 +114,7 @@ registerContactPrivacySource({
 export async function eraseMultipartOperations(data:Record<string,unknown>,context?:JobExecutionContext):Promise<{erased:number}>{
  const input=payload.parse(data);
  const captured=await db().transaction(async tx=>{
-  await lockContactIdentity(tx);
+  await lockContactIdentityForRecovery(tx);
   const[request]=await tx.select().from(dataRequests).where(eq(dataRequests.id,input.requestId)).limit(1),[artifact]=await tx.select({body:dataRequestArtifacts.body,sha256:dataRequestArtifacts.sha256}).from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId,input.requestId)).limit(1);
   const original=receipt.safeParse(artifact?.body),outcome=original.success?original.data.outcomes.find(row=>row.scope===MULTIPART_PRIVACY_SCOPE):null;
   if(!request||!artifact||!erasureArtifactIsIntact(artifact)||!original.success||!outcome)throw new Error("The original upload erasure receipt is missing. Restore its exact backup.");
@@ -139,7 +140,7 @@ export async function eraseMultipartOperations(data:Record<string,unknown>,conte
  // Human recovery first establishes their exact original physical outcome.
  for(const resource of captured.resources)if(!resource.retiredAt&&resource.state==="open")await retireKnownMultipart(resource.uploadId);
  for(const key of captured.keys)await deleteWithReceipt(key);
- const pending=await db().transaction(async tx=>{await lockContactIdentity(tx);if(context)for(const resource of captured.resources)if(resource.objectReceiptId===null)await minimizeIdleOriginalMultipart(tx,input,resource.id,context);await minimizeOwned(tx,captured.contactId,input.requestId);const cohortIds=await objectCohortIds(tx,input.requestId,MULTIPART_PRIVACY_SCOPE);await minimizeMediaStorageOperations(tx,cohortIds);const rows=await personalRows(tx,captured.contactId);return rows.resourceIds.length+rows.uploadIds.length+rows.keyDigests.length+Number(await mediaCohortPending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE))+Number(await originalProviderEvidencePending(tx,{receiptIds:cohortIds,resourceIds:captured.resources.map(row=>row.id)}))+Number(await originalMediaScopePending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE,captured.contactId));});
+ const pending=await db().transaction(async tx=>{await lockContactIdentityForRecovery(tx);if(context)for(const resource of captured.resources)if(resource.objectReceiptId===null)await minimizeIdleOriginalMultipart(tx,input,resource.id,context);await minimizeOwned(tx,captured.contactId,input.requestId);const cohortIds=await objectCohortIds(tx,input.requestId,MULTIPART_PRIVACY_SCOPE);await minimizeMediaStorageOperations(tx,cohortIds);const rows=await personalRows(tx,captured.contactId);return rows.resourceIds.length+rows.uploadIds.length+rows.keyDigests.length+Number(await mediaCohortPending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE))+Number(await originalProviderEvidencePending(tx,{receiptIds:cohortIds,resourceIds:captured.resources.map(row=>row.id)}))+Number(await originalMediaScopePending(tx,input.requestId,MULTIPART_PRIVACY_SCOPE,captured.contactId));});
  if(pending)throw new Error("Original upload ownership, a named hold or unresolved provider work keeps this erasure pending.");
  await completeErasureJob.call({requestId:input.requestId,scope:MULTIPART_PRIVACY_SCOPE,jobId:input.originalJobId},{kind:"system"});
  return{erased:captured.keys.length};

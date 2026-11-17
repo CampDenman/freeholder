@@ -25,7 +25,7 @@ export async function controlledCashlessCollectionState(tx:Tx,collectionId:strin
  const[proration]=collection?.prorationId?await tx.select().from(subscriptionProrations).where(eq(subscriptionProrations.id,collection.prorationId)).limit(1):[];
  const[terms]=collection?await tx.select().from(subscriptionCommercialTerms).where(eq(subscriptionCommercialTerms.id,collection.termsId)).limit(1):[];
  if(!collection||!quote||!resource||!parent||!proration||!terms||collection.kind!=="proration"||quote.kind!=="proration"||collection.invoiceId||collection.creditNoteId||!proration.originalTrialEndsAt)refuse();
- const history=await controlledProviderJournal(tx,resource.id),{review}=authenticatedControlledQuote(quote,resource,history);
+ const history=await controlledProviderJournal(tx,resource.id),{review}=authenticatedControlledQuote(quote,resource,history,"accepted_ancestry");
  const[principal]=await tx.select({id:subscriptionProrationPrincipal.id}).from(subscriptionProrationPrincipal).where(eq(subscriptionProrationPrincipal.prorationId,proration.id)).limit(1);
  const[credit]=await tx.select({id:subscriptionProrationCreditUses.id}).from(subscriptionProrationCreditUses).where(eq(subscriptionProrationCreditUses.prorationId,proration.id)).limit(1);
  const[component]=await tx.select({id:subscriptionControlledComponents.id}).from(subscriptionControlledComponents).where(eq(subscriptionControlledComponents.collectionId,collection.id)).limit(1);

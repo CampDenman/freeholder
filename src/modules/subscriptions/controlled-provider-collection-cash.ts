@@ -55,7 +55,7 @@ async function readControlledCollectionCash(ctx:ServiceContext,rawInput:{collect
  for(const receipt of ownedReceipts){
   const actual=bank.cash.find(row=>row.providerPaymentIntentRef===receipt.providerPaymentIntentRef);
   if(!actual||actual.amountMinor!==receipt.amountMinor||actual.currency!==receipt.currency||actual.providerChargeRef!==receipt.providerChargeRef||!receipt.providerChargeRef||receipt.currency!==manifest.currency)refuseControlledCash();
-  const identity=await readControlledCashObservationSource(ctx.tx,{collectionId:collection.id,receiptId:receipt.id});if(identity.unfinishedControlledCallIds.length)refuseControlledCash();
+  const identity=await readControlledCashObservationSource(ctx.tx,{collectionId:collection.id,receiptId:receipt.id},history);if(identity.unfinishedControlledCallIds.length)refuseControlledCash();
   const routes=await ctx.tx.select({route:merchantAgreementPaymentRoutes,payment:payments}).from(merchantAgreementPaymentRoutes).innerJoin(payments,eq(payments.id,merchantAgreementPaymentRoutes.paymentId)).where(eq(merchantAgreementPaymentRoutes.originalChargeReceiptId,receipt.id)).limit(2);
   if(routes.length>1)refuseControlledCash();const existing=routes[0];
   if(existing&&(existing.payment.invoiceId!==canonical.invoice.id||existing.payment.status!=="succeeded"||existing.payment.provider!=="stripe"||existing.payment.providerRef!==receipt.providerPaymentIntentRef||existing.payment.currency!==receipt.currency||existing.payment.amountMinor!==receipt.amountMinor||existing.payment.refundedMinor!==0

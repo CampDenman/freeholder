@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_original_retirement_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Original ordinary physical retirement proof controls pass; real database/private-provider retirement acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "672d0a739394eb287ccaf4877de96a542fc1663c813027bfbee2e1c47ffbf6dc" },
+    { "path": "tests/core/media-original-retirement-proof.test.ts", "sha256": "def7377b6f64b3193eb73007c3c4d81ad33348b8527d226d9072e9bca39375cd" }
+  ],
+  "controls": {
+    "final": { "passed": 16, "failed": 0, "durationSeconds": 0.723 },
+    "coverage": ["finished original and pinned absence callers plus two agreeing inventories required", "paused original writer refused despite logical404", "missing physical PUT finish or original request refused", "second original mutation cannot hide behind logical finish", "other physical resource or generation refused", "unfinished or unknown pinned read refused after reported404", "unpinned metadata and assertion without absence facts refused", "absence subrequest must have actual finish", "corrupted original admission and absence descriptors refused", "retained original version/session/delete-marker debt refused", "policy or physical inventory changes refused", "unrelated private objects and sessions remain unchanged"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "672d0a739394eb287ccaf4877de96a542fc1663c813027bfbee2e1c47ffbf6dc",
+      "beforeSha256": "86a8bab456497f40cfadf163c5a03984b45059046326cadfa7a38183bb215dc6",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  no real executor stop or remote ACK.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  no real executor stop or remote ACK.\n  Ordinary retirement proof qualification2026-11-16: all16 controls pass. Exact\n  original finishes, fresh pinned absence and two complete agreeing inventories\n  are required; paused writers, extra mutations, changed generations, corrupted\n  descriptors and retained version/session/marker debt are refused without adopting\n  unrelated private resources. Focused lint passes. See\n  `deploy/media-original-retirement-proof.source.json`. Real database/private-provider\n  retirement acceptance remains open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

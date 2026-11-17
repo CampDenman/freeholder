@@ -6,7 +6,7 @@ import {randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,sql} from "drizzle-orm";
 import type {TransferRequestDescriptor,TransferRequestObservation,TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
 import {db} from "@/core/db";
-import {lockContactIdentityForRead} from "@/core/contacts/identity-lock";
+import {lockContactIdentityForPhysicalWrite} from "@/core/contacts/identity-lock";
 import {actorString,type Actor,type Tx} from "@/core/service";
 import {projectOriginalMultipartSessionObservation,reconcileOriginalMultipartPositivePointer,originalSessionObservationDecision} from "./multipart-session-observation";
 import {assertMediaActorLive} from "./upload-ownership";
@@ -45,7 +45,7 @@ async function locked(tx:Tx,scope:Scope){
 function mutation(descriptor:TransferRequestDescriptor){return ["object.put","object.delete","multipart.create","multipart.complete","multipart.abort","multipart.sign"].includes(descriptor.kind);}
 async function admit(scope:Scope,descriptor:TransferRequestDescriptor,token:string){
  await checkStorageTransferJob();return db().transaction(async tx=>{
-  await lockContactIdentityForRead(tx);
+  await lockContactIdentityForPhysicalWrite(tx);
   const call=await locked(tx,scope);
   if(call.kind==="multipart_sign"){if(!scope.actor)transferConflict("The actual local signer needs its owning server-resolved principal.");await assertMediaActorLive(tx,scope.actor);}
   if(!scope.active||call.state!=="admitted"||descriptor.binding.namespace!==call.namespace||descriptor.key&&descriptor.key!==call.physicalKey)transferConflict("The physical request does not belong to its exact original logical caller.");

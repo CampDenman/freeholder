@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_transfer_unadmitted_target.v1",
+  "checklist": ["C1.12", "C1.08", "C11.08"],
+  "status": "Foreign target-collision erasure boundary qualified on fresh migration108 PostgreSQL; transport and provider-account acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "06b2933c0ceb37e0859130bde624ade45367f1441955f49a01f30b86a4f2b518" },
+    { "path": "tests/core/media-transfer-unadmitted-target.test.ts", "sha256": "82c75cca83a8d543d5df624c275ac6f652c7b358a6e254e444c3ee99920fe55f" }
+  ],
+  "controls": {
+    "final": { "database": "media_unadmitted_target_20261116", "passed": 1, "failed": 0, "durationSeconds": 18.2 },
+    "transport": "Synthetic AWS origin mapped through fetch to the fictional TCP provider with every collision assertion retained",
+    "coverage": ["identically hashed pre-existing target is not read, adopted or deleted", "actual original source alone is retired", "no target PUT or privacy-delete caller is born", "whole privacy request is not falsely completed"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "06b2933c0ceb37e0859130bde624ade45367f1441955f49a01f30b86a4f2b518",
+      "beforeSha256": "bb107bf648ebd6b7a012a34d4cea106afd0ed1da3d99649c147eda8cdd5484f2",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-storage-transfer-lifecycle.source.json`. No provider account,\n  ingress or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  `deploy/media-storage-transfer-lifecycle.source.json`. No provider account,\n  ingress or C-item acceptance follows.\n  Unadmitted-target qualification2026-11-16: fresh migration108 passes its real\n  collision control. An identically hashed pre-existing target is neither read,\n  adopted nor deleted; only the actual original source retires, with no target\n  PUT/privacy-delete caller and no false whole-request completion. Synthetic\n  AWS-to-TCP transport preserves every assertion. Focused lint passes. See\n  `deploy/media-transfer-unadmitted-target.source.json`. No provider account or\n  C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "full_local_browser_20261116.v1",
+  "checklist": ["C11.17"],
+  "status": "Both named local Chromium journey/accessibility commands pass on fresh disposable databases; hosted and owner-signed acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "795d014a44069051321c86fecfbf0876b72bffb381fcf5b26e90900057b75fe6" },
+    { "path": "tests/browser/journeys.spec.ts", "sha256": "fab0e7fea5249cb62b453850d6507b7a67169566628a3a226b96474011f51313" },
+    { "path": "tests/browser/c11-01-visitor-to-paid.spec.ts", "sha256": "e52b0c11f478e92acb7cbab7ac1bfe5df61bf700510be3a86af7ef5dca13122b" },
+    { "path": "tests/browser/c11-04-capture.spec.ts", "sha256": "bd13bc6526499aa50af6bd11b852b4f70bad932ac3f766e0626b0f707cdbb77c" },
+    { "path": "tests/browser/accessibility.spec.ts", "sha256": "5fd1a075ba6b0505a9cf45e4e4f9a99aba9d5ef7cfd020008af9820f25759ca2" },
+    { "path": "playwright.a11y.config.ts", "sha256": "17b351cd4fd2ddbc5e773062237c504b07b2e5bf313cc88337066c275e133590" }
+  ],
+  "controls": {
+    "journeys": { "command": "pnpm test:journeys", "database": "browser_full_journeys_a11y_20261116", "passed": 3, "failed": 0, "coverage": ["visitor to paid", "app-free phone capture", "setup, auth, editing, publishing, forms, contacts, translations, API keys, MCP and recovery"] },
+    "accessibility": { "command": "pnpm test:a11y", "database": "browser_full_accessibility_a11y_20261116", "passed": 1, "failed": 0, "coverage": ["setup", "admin", "editor", "storefront", "portal"] },
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "Hosted provider, image update/rollback, clean-room independent review and owner signoff remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "795d014a44069051321c86fecfbf0876b72bffb381fcf5b26e90900057b75fe6",
+      "beforeSha256": "0b28a9688882a308d54389ee7619dbb6b8c3bf164a1013b0f1f8f3ac62a6afed",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  and signed acceptance remain open; no C row closes.\n  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old",
+          "after": "  and signed acceptance remain open; no C row closes.\n  Full local browser qualification2026-11-16 (C11.17): the named journey command\n  PASSes3/3 broad Chromium journeys in1.4m on a fresh database, and the separate full\n  accessibility command PASSes1/1 in2.2m on another fresh database. Visitor-to-paid,\n  phone capture, setup/editing/publishing/API/MCP/recovery and setup/admin/editor/\n  storefront/portal accessibility all pass. No product source changed. See\n  `deploy/full-local-browser-20261116.source.json`. Hosted, upgrade and owner-signed\n  acceptance remain open; no C row closes.\n  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

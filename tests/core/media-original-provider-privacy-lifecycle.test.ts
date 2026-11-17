@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// SOURCE PREPARED, UNRUN. Actual shared services/private fictional TCP and
-// registered privacy sources. No ingress/account/full-erasure acceptance.
+// Scoped fixture qualified on fresh PostgreSQL 2026-11-15 through synthetic AWS
+// TCP and registered privacy sources. No ingress/account/full-erasure claim.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {randomUUID} from "node:crypto";
 import {eq} from "drizzle-orm";
@@ -22,12 +22,13 @@ import {originalProviderEvidencePending,originalProviderEvidenceVersion} from "@
 import {ordinaryMediaRecoveryProvider} from "../helpers/media-original-provider-recovery";
 import {closeDb,failure,hasDatabase,OWNER,CUSTOMER,truncateSpine} from "../helpers/spine";
 const key="private/owned-original.bin",foreignKey="foreign/another-subject-secret-name.bin",body=new Uint8Array([0,255,13,10,128,0]);
+const syntheticOrigin="https://s3.us-east-1.amazonaws.com",realFetch=globalThis.fetch.bind(globalThis);
 const evidence=z.object({callers:z.array(z.object({id:z.uuid()})),inventories:z.array(z.object({id:z.uuid()})),resources:z.array(z.object({inventoryId:z.uuid(),keyDigest:z.string(),entryDigest:z.string()}))}).passthrough();
 describe.runIf(hasDatabase)("C1.12/C11.08 exact original provider privacy composition",()=>{
  let provider:Awaited<ReturnType<typeof ordinaryMediaRecoveryProvider>>;
  beforeAll(async()=>{await ready();await stopJobs();},60000);
- beforeEach(async()=>{await truncateSpine();await db().insert(users).values([{id:OWNER.userId,email:"privacy-proof-owner@example.test",role:"owner"},{id:CUSTOMER.userId,email:"privacy-proof-subject@example.test",role:"customer"}]);provider=await ordinaryMediaRecoveryProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
- afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
+ beforeEach(async()=>{await truncateSpine();await db().insert(users).values([{id:OWNER.userId,email:"privacy-proof-owner@example.test",role:"owner"},{id:CUSTOMER.userId,email:"privacy-proof-subject@example.test",role:"customer"}]);provider=await ordinaryMediaRecoveryProvider();vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{const url=new URL(input instanceof Request?input.url:String(input));if(url.origin!==syntheticOrigin)return realFetch(input,init);const target=new URL(`${url.pathname}${url.search}`,provider.endpoint);if(input instanceof Request)return realFetch(target,{method:input.method,headers:input.headers,body:input.body===null?undefined:await input.arrayBuffer()});return realFetch(target,init);});for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:syntheticOrigin,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
+ afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();vi.unstubAllGlobals();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
  async function fixture(){
   const contact=await createContact.call({name:"Original provider subject",email:"privacy-proof-subject@example.test"},OWNER);await db().update(contacts).set({userId:CUSTOMER.userId}).where(eq(contacts.id,contact.id));
   const otherUserId=randomUUID();await db().insert(users).values({id:otherUserId,email:"privacy-proof-foreign@example.test",role:"customer"});const other=await createContact.call({name:"Other original subject",email:"privacy-proof-foreign@example.test"},OWNER);await db().update(contacts).set({userId:otherUserId}).where(eq(contacts.id,other.id));

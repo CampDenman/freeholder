@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_retirement_catchup_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Exact-admission retirement catch-up qualified on fresh migration105 PostgreSQL with real pg-boss workers; provider and OS-stop acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "164f9a5ce6c7192c46c91d69fd3de86498eb48f4855035daf540df38e4ec5be3" },
+    { "path": "tests/core/media-multipart-retirement-catchup-lifecycle.test.ts", "sha256": "d3e7388c5a35d8a1f60fa3fe136f5e8fe2347723d0975be9b5d39b37fe5b2d12" }
+  ],
+  "controls": {
+    "final": { "database": "multipart_retirement_catchup_20261116", "passed": 6, "failed": 0, "durationSeconds": 83.92 },
+    "coverage": ["interrupted owner recovered after committed retirement with identical queued proof", "immediate seal and actual worker delivery deduplicated", "new hold and scripted late fact refuse stale dedup", "copied valid payload without the original claim refused", "post-enqueue fault rolls back resource retirement, job and idempotency claim atomically"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "164f9a5ce6c7192c46c91d69fd3de86498eb48f4855035daf540df38e4ec5be3",
+      "beforeSha256": "2af6ec0494d08c9593e6a309d2b5c1bce17f108a12805895e1a0273dd5c60301",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/multipart-idle-compaction-lifecycle.source.json`. No provider account,\n  hosted executor, clean-room or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  `deploy/multipart-idle-compaction-lifecycle.source.json`. No provider account,\n  hosted executor, clean-room or C-item acceptance follows.\n  Retirement catch-up qualification2026-11-16: fresh migration105 passes6/6\n  through real pg-boss delivery. Interrupted-owner recovery uses the identical\n  queued safe proof without another DELETE; immediate sealing deduplicates;\n  holds, late facts and copied jobs refuse stale authority; post-enqueue failure\n  rolls back retirement, queue and claim together while retaining first ACK/FIN.\n  Focused lint passes. See `deploy/multipart-retirement-catchup-lifecycle.source.json`.\n  No provider account, OS-stop proof or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

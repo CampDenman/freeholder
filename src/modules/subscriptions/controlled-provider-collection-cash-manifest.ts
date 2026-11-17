@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C12.38: whole actual target inventory, including honest partial bank cash.
+import { requireControlledCurrentVerification } from "./controlled-provider-safe-response-proof";
 import { z } from "zod";
 import { ServiceError } from "@/core/service";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
@@ -23,6 +24,7 @@ export function controlledCashManifest(source:Awaited<ReturnType<typeof controll
  if(!read||!operation||!proof||read.actualResult.exactManifest!==true||read.actualResult.suppliesPaidAuthority!==false
   ||read.actualResult.manifestDigest!==merchantTaxDigest(manifest)||proof.canonicalTargetDigest!==canonical.digest||proof.resultDigest!==read.actualResultDigest
   ||history.operations.some(row=>row.ordinal>operation.ordinal&&history.calls.some(call=>call.operationId===row.id)&&!readKinds.has(row.kind)))refuseControlledCash();
+ requireControlledCurrentVerification(history,read);
  const inventory=cashObject(read.actualResult.inventory),invoice=cashObject(inventory.actualInvoice),{total,paid,remaining}=controlledCashManifestBalance({totalMinor:inventory.totalMinor,paidMinor:inventory.paidMinor,remainingMinor:inventory.remainingMinor,status:inventory.status},manifest.cashDueMinor);
  if(inventory.providerInvoiceRef!==binding.providerInvoiceRef||inventory.providerSubscriptionRef!==cashReference(invoice.subscription??cashObject(cashObject(invoice.parent??{}).subscription_details??{}).subscription)
   ||inventory.providerCustomerRef!==resource.originalScope.providerCustomerRef||inventory.currency!==manifest.currency||!['open','paid'].includes(String(inventory.status))||paid<=0

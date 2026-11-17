@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_consent_browser_current.v1",
+  "checklist": ["C8.16", "C11.17"],
+  "status": "Current Chromium publication-consent lifecycle passes; full clean-room and signed acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "7463e5eafc350b6bbe5d985c37869bc71ac5e58bdb82682843e285e63e856017" },
+    { "path": "tests/browser/media-consent.spec.ts", "sha256": "c38239c30e08adad565ad0474daaf94be752bbefe5f8a0ccc2cc20cb3191bd96" }
+  ],
+  "controls": {
+    "database": "browser_media_consent_a11y_current_20261116",
+    "native": { "passed": 1, "failed": 0, "durationSeconds": 20.6 },
+    "coverage": ["time-bounded publication grant", "withdrawal and current refusal", "given/taken-back decision ledger remains visible", "light/dark themes and Axe before/after withdrawal"],
+    "testOracleChanged": false,
+    "productCodeChanged": false,
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "7463e5eafc350b6bbe5d985c37869bc71ac5e58bdb82682843e285e63e856017",
+      "beforeSha256": "bd1af9db602873bcdd55df319e18c634fe3ed88eb63895ba995d4b0ce53fa2cc",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-storage-recovery-browser-current.source.json`. No product code or C row changes.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "after": "  `deploy/media-storage-recovery-browser-current.source.json`. No product code or C row changes.\n  Publication-consent browser qualification2026-11-16 (C8.16/C11.17): the unchanged\n  Chromium journey PASSes1/1 in20.6s on a fresh current database. Grant/expiry/withdrawal,\n  the preserved decision ledger, both themes and Axe pass. No product source changed.\n  See `deploy/media-consent-browser-current.source.json`. Full clean-room and signed\n  acceptance remain open.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

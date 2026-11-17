@@ -9,7 +9,7 @@ import { subscriptionProviderChargeReceipts } from "./schema";
 import { subscriptionControlledChargeOrigins,subscriptionControlledResources,subscriptionControlledFacts,subscriptionControlledCalls,subscriptionControlledOperations } from "./controlled-provider-schema";
 import { controlledCashEvidence,readOriginalControlledChargeAuthorities } from "./controlled-provider-cash-origin";
 import { controlledRawFinancialReview } from "./controlled-provider-raw-financial-review";
-import { controlledProviderJournal } from "./controlled-provider-proof";
+import { createControlledJournalComposition,readComposedControlledProviderJournal } from "./controlled-provider-journal-composition";
 const primaryKinds=new Set(["bootstrap","discover_bootstrap","pause_drafts","read_bootstrap","read_customer_financials","list_invoices","create_schedule","read_calendar","update_calendar","read_invoice","finalize_invoice","pay_invoice","cancel_calendar","void_invoice","delete_draft"]);
 /** verified is ancestry, never paid/refunded/settled authority. The parent must
  * still prove actual principal/route/refunds/disputes/current bank inventory.
@@ -42,7 +42,7 @@ export async function readControlledReceiptNamespace(tx:Tx,receiptId:string){
  if(!origin&&!resourceIds.length)return{applies:false as const,verified:false,resourceId:null,operationId:null,factId:null,financialCallerDebt:false,principalCallerDebt:false,rawCashReview:false,inventoryCount:0,revision:merchantTaxDigest({receiptId,controlled:false})};
  if(candidates.length>5000||resourceIds.length!==1||!origin||!resourceIds.includes(origin.resourceId))return{applies:true as const,verified:false,resourceId:origin?.resourceId??null,operationId:origin?.operationId??null,factId:origin?.factId??null,
   financialCallerDebt:true,principalCallerDebt:true,rawCashReview:true,inventoryCount:candidates.length,revision:merchantTaxDigest({receipt,origin,resourceIds,incomplete:true})};
- const history=await controlledProviderJournal(tx,origin.resourceId),fact=history.facts.find(row=>row.id===origin.factId);
+ const composition=createControlledJournalComposition(),history=await readComposedControlledProviderJournal(tx,origin.resourceId,composition),fact=history.facts.find(row=>row.id===origin.factId);
  if(!fact||fact.actual.kind!=="cash_observed")throw new ServiceError("conflict","Restore the original controlled cash bridge's exact actual positive occurrence.");
  const cash=controlledCashEvidence.parse(fact.actual.raw.cash);
  const originalResource=candidates.find(row=>row.resource.id===origin.resourceId)?.resource;
@@ -64,7 +64,7 @@ export async function readControlledReceiptNamespace(tx:Tx,receiptId:string){
   else occurrences.push({cash:actual.data,origin:{resourceId:origin.resourceId,callId:occurrence.callId,factId:occurrence.id}});
  }
  const priorCalls=new Map(history.calls.map(row=>[row.id,row])),priorOperations=new Map(history.operations.map(row=>[row.id,row])),priorFacts=new Map(history.facts.map(row=>[row.id,row]));
- const batch=await readOriginalControlledChargeAuthorities(tx,{resourceId:origin.resourceId,occurrences}),prior=candidates.find(row=>row.resource.id===origin.resourceId);
+ const batch=await readOriginalControlledChargeAuthorities(tx,{resourceId:origin.resourceId,occurrences},composition),prior=candidates.find(row=>row.resource.id===origin.resourceId);
  if(!prior||batch.historyRevision!==history.revision||batch.historyCount!==history.count||batch.postgresFingerprint!==prior.postgresFingerprint||merchantTaxDigest(batch.resource)!==merchantTaxDigest(originalResource)
   ||batch.authorities.length!==occurrences.length||batch.authorities.some((actual,index)=>{const requested=occurrences[index],call=requested?priorCalls.get(requested.origin.callId):undefined,operation=call?priorOperations.get(call.operationId):undefined,fact=requested?priorFacts.get(requested.origin.factId):undefined;
    return!requested||!call||!operation||!fact||actual.controlledOrigin.resourceId!==requested.origin.resourceId||actual.controlledOrigin.callId!==requested.origin.callId||actual.controlledOrigin.factId!==requested.origin.factId||actual.controlledOrigin.operationId!==operation.id

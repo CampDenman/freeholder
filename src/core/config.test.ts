@@ -14,6 +14,11 @@ describe("defineConfig", () => {
     expect(c.plugins).toEqual([]);
   });
 
+  it("offers DigitalOcean Spaces without changing the existing storage default", () => {
+    expect(defineConfig({ adapters: { storage: "spaces" } }).adapters.storage).toBe("spaces");
+    expect(defineConfig({}).adapters.storage).toBe("local");
+  });
+
   it("accepts every installed payment adapter and rejects unknown ones", () => {
     for (const payments of ["manual", "stripe", "paypal", "square", "mollie", "razorpay", "paystack", "flutterwave"] as const) {
       expect(defineConfig({ adapters: { payments } }).adapters.payments).toBe(payments);

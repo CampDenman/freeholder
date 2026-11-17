@@ -93,6 +93,7 @@ const OPEN_PATHS =
  * and each route verifies that signature over the raw body before any effect.
  */
 const STRIPE_SIGNED_WEBHOOKS = /^\/api\/(?:payouts\/stripe_connect\/webhook|payments\/webhooks\/stripe)$/;
+const CREDENTIAL_API = /^\/api\/(?:v1(?:\/|$)|mcp\/?$)/;
 
 /** What the gate reads from a request besides its path. */
 export interface PreviewGateRequest {
@@ -102,14 +103,15 @@ export interface PreviewGateRequest {
 
 /**
  * Whether `path` needs the preview cookie. The API is gated too — its public
- * reads are the same content as the pages — except for a request that
- * carries its own credential, which the API authenticates itself: a bearer
- * credential, or a POST that Stripe signed to one of its own webhook routes.
- * An unsigned request to those routes stays gated, exactly as before.
+ * reads are the same content as the pages. Only the versioned service API and
+ * MCP accept a bearer credential instead of the preview cookie; their shared
+ * handlers resolve it before any business operation. Other API routes cannot
+ * treat the mere presence of a header as authentication. Stripe's signed POST
+ * remains limited to its own webhook routes.
  */
 export function previewGated(path: string, hasAuthorization: boolean, request: PreviewGateRequest = {}): boolean {
   if (OPEN_PATHS.test(path)) return false;
-  if (hasAuthorization && path.startsWith("/api/")) return false;
+  if (hasAuthorization && CREDENTIAL_API.test(path)) return false;
   if (request.method === "POST" && request.hasStripeSignature && STRIPE_SIGNED_WEBHOOKS.test(path)) return false;
   return true;
 }

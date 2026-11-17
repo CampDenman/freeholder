@@ -17,7 +17,7 @@ function source(){
  const resource={id,subscriptionId,termsId,generation:1,originalSourceRevision:"a".repeat(64),createdAt:new Date(),originalScope:{providerApiVersion:"2026-10-28.endive",providerPlatformAccountId:"acct_originalPlatform",
   subscriptionId,termsId,generation:1,providerCustomerRef:"cus_originalBuyer",providerMethodRef:"pm_originalMethod",providerProductRef:"prod_originalZero",currency:"CAD",interval:"month",intervalCount:1,
   acceptedPeriodEnd:"2026-12-01T00:00:00.000Z",acceptedTrialEnd:null}} satisfies typeof subscriptionControlledResources.$inferSelect;
- const history:Journal={operations:[],calls:[],facts:[],finishes:[],stops:[],verifications:[],chargeOrigins:[],closures:[],unfinished:[],count:1,revision:"0".repeat(64)};
+ const history:Journal={operations:[],calls:[],facts:[],finishes:[],stops:[],verifications:[],verificationViews:[],chargeOrigins:[],closures:[],unfinished:[],count:1,revision:"0".repeat(64)};
  history.revision=merchantTaxDigest({operations:[],calls:[],facts:[],finishes:[],stops:[],verifications:[],chargeOrigins:[],closures:[]});
  function append(kind:typeof subscriptionControlledOperations.$inferSelect["kind"],actual?:MerchantControlledObservation,options:{payload?:Record<string,unknown>;unfinished?:boolean}={}){
   const originalRequest={scopeDigest:merchantTaxDigest(resource.originalScope),payload:options.payload??{},parentFinancialRevision:"b".repeat(64)},operation={id:randomUUID(),resourceId:id,kind,ordinal:history.operations.length+1,

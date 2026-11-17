@@ -47,7 +47,7 @@ test.describe("original merchant trial cards (C12.38)", () => {
       const [priceList]=await db().insert(priceLists).values({name:"Merchant trial CAD",currency:"CAD",active:true}).returning();
       await db().insert(priceListEntries).values({priceListId:priceList!.id,variantId,amountMinor:1000});
       await db().insert(plans).values({id:planId,productId,name:"Studio Rae membership",interval:"month",trialDays:14,trialRequiresCard:true,billingMode:"platform",status:"active"});
-      await db().insert(subscriptions).values({id:subscriptionId,contactId,planId,productVariantId:variantId,currency:"CAD",billingMode:"platform",provider:"stripe",status:"paused",signupPending:true,currentPeriodStart:now,currentPeriodEnd:new Date(now.getTime()+86_400_000)});
+      await db().insert(subscriptions).values({id:subscriptionId,contactId,planId,productVariantId:variantId,currency:"CAD",billingMode:"platform",provider:"stripe",status:"paused",signupPending:true,merchantScopeVersion:0,currentPeriodStart:now,currentPeriodEnd:new Date(now.getTime()+86_400_000)});
       const [merchantContact]=await db().select({id:contacts.id}).from(contacts).where(eq(contacts.userId,sellerId));
       await db().insert(subscriptionMarketPolicies).values({subscriptionId,model:"seller_merchant",adapter:"stripe_connect",siteFeeBps:1000,holdDays:0,sellerUserId:sellerId,merchantName:"Studio Rae",merchantContactId:merchantContact!.id,providerAccountId:"acct_TrialOriginal"});
       const setupAt=new Date(),savedAt=new Date(Date.now()+1);

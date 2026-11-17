@@ -1,0 +1,28 @@
+{
+  "domain": "freeholder.controlled-atomic-fee-state-evidence-reuse.v1",
+  "files": [
+    {
+      "path": "src/modules/invoicing/controlled-atomic-refund-target.ts",
+      "beforeSha256": "0e63d12eed07fe0bd6091095ed862a29467212c1693be93eb7e18e7cb2568ff6",
+      "afterSha256": "4d1c7466351b30d42d5f72cabb66ce9048edb1c3e23f38509c264276a38c9041",
+      "finiteDelta": [
+        {
+          "before": "import type { latestControlledCashInspectionLineage } from \"@/modules/subscriptions/controlled-cash-inspection-lineage\";",
+          "after": "import type { latestControlledCashInspectionLineage } from \"@/modules/subscriptions/controlled-cash-inspection-lineage\";\nimport type { readAtomicFeeReturnResources } from \"./atomic-fee-return-resources\";\nimport type { parentFinancialGraphForTx } from \"./controlled-provider-financial-parent\";\ntype KnownAtomicFeeStateEvidence={physicalReturns:Awaited<ReturnType<typeof readAtomicFeeReturnResources>>;graph:Awaited<ReturnType<typeof parentFinancialGraphForTx>>};"
+        },
+        {
+          "before": "export async function controlledAtomicRefundFeeState(ctx:ServiceContext,paymentId:string):Promise<ControlledAtomicRefundFeeState|null>{\n const target=await controlledAtomicRefundTarget(ctx,paymentId);if(!target)return null;",
+          "after": "export async function controlledAtomicRefundFeeState(ctx:ServiceContext,paymentId:string,knownTarget?:ControlledAtomicRefundTarget|null,known?:KnownAtomicFeeStateEvidence):Promise<ControlledAtomicRefundFeeState|null>{\n const target=knownTarget===undefined?await controlledAtomicRefundTarget(ctx,paymentId):knownTarget;if(!target)return null;"
+        },
+        {
+          "before": "const{readAtomicFeeReturnResources}=await import(\"./atomic-fee-return-resources\");const physicalReturns=await readAtomicFeeReturnResources(ctx,paymentId);",
+          "after": "const{readAtomicFeeReturnResources}=await import(\"./atomic-fee-return-resources\");const physicalReturns=known?known.physicalReturns:await readAtomicFeeReturnResources(ctx,paymentId);"
+        },
+        {
+          "before": "const graph=await parentFinancialGraphForTx(ctx.tx,owner.subscriptionId),feeWitness=await merchantFeeInvocationFinancialWitness(ctx.tx,{invoiceIds:[owner.invoiceId]});",
+          "after": "const graph=known?.graph??await parentFinancialGraphForTx(ctx.tx,owner.subscriptionId),feeWitness=await merchantFeeInvocationFinancialWitness(ctx.tx,{invoiceIds:[owner.invoiceId]});"
+        }
+      ]
+    }
+  ]
+}

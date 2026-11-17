@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Real original provider preview + unchanged canonical principal/tax/fee engines.
+import { requireControlledCurrentVerification,controlledCurrentResultData } from "./controlled-provider-safe-response-proof";
 import { and,desc,eq,inArray,sql } from "drizzle-orm";
 import { ServiceError,type ServiceContext } from "@/core/service";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
@@ -34,7 +35,7 @@ function refuse():never{throw new ServiceError("conflict","Restore current compl
  * original payment/invoice/note locks at acceptance. The latter checks actual
  * current safety and identical economics; its full parent revision is new
  * evidence and never silently replaces historical quotedParentRevision. */
-export async function controlledProrationCandidate(ctx:ServiceContext,rawInput:ControlledProrationInput){
+export async function controlledProrationSource(ctx:ServiceContext,rawInput:ControlledProrationInput){
  const input=controlledProrationInput.parse(rawInput);await lockContactIdentityForRead(ctx.tx);await requireGrossProrationSchema(ctx);await requireAgreementFeeSchema(ctx);await requireProrationBoundarySchema(ctx);await requireControlledCollectionSchema(ctx);
  await lockAtomicCreditSubscriptionPrefix(ctx,input.id,input.resourceId);
  await ctx.tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`controlled-provider:${input.resourceId}`}))`);
@@ -59,7 +60,11 @@ export async function controlledProrationCandidate(ctx:ServiceContext,rawInput:C
   sql`(${privacyRetentionExceptions.expiresAt} is null or ${privacyRetentionExceptions.expiresAt}>clock_timestamp())`)).limit(1);
  if(erasure||hold)refuse();
  const effectiveAt=new Date(input.effectiveAt);if(!Number.isSafeInteger(effectiveAt.getTime())||effectiveAt.getTime()%1000!==0)refuse();
- const basis=await paidProrationBasis(ctx,parent,effectiveAt),history=await controlledProviderJournal(ctx.tx,resource.id);
+ return{input,resource,parent,previous,policy,effectiveAt};
+}
+export async function controlledProrationCandidate(ctx:ServiceContext,rawInput:ControlledProrationInput,includeBasis:boolean=true){
+ const{input,resource,parent,previous,policy,effectiveAt}=await controlledProrationSource(ctx,rawInput);
+ const basis=includeBasis?await paidProrationBasis(ctx,parent,effectiveAt):null,history=await controlledProviderJournal(ctx.tx,resource.id);
  if(history.unfinished.length||history.closures.length)refuse();
  const economic=merchantTermsQuoteOutput.unwrap().parse(await ctx.callAsSystem(quoteOriginalMerchantTerms,{planId:input.planId,productVariantId:input.productVariantId,taxDestination:input.taxDestination,
   contactId:parent.contactId,currency:parent.currency,locale:input.locale,paymentMethodId:parent.paymentMethodId??undefined,amendmentFor:parent.id,calendarStart:parent.currentPeriodEnd}));
@@ -71,8 +76,9 @@ export async function controlledProrationCandidate(ctx:ServiceContext,rawInput:C
 }
 export async function prepareControlledProrationEconomics(ctx:ServiceContext,rawInput:ControlledProrationInput,evidence:{nativeOperationId:string;updateOperationId:string;customerOperationId:string;calendarOperationId:string}){
  const{input,resource,parent,previous,policy,economic,basis,effectiveAt,history,method,currentParent}=await controlledProrationCandidate(ctx,rawInput);
+ if(!basis)refuse();
  function original(id:string,kind:string){const operation=history.operations.find(row=>row.id===id),verified=history.verifications.find(row=>row.operationId===id);
-  if(!operation||operation.kind!==kind||!verified)refuse();return{operation,verified};}
+  if(!operation||operation.kind!==kind||!verified)refuse();requireControlledCurrentVerification(history,verified);return{operation,verified};}
  const native=original(evidence.nativeOperationId,"preview_proration"),update=original(evidence.updateOperationId,"preview_update"),customer=original(evidence.customerOperationId,"read_customer_financials"),calendar=original(evidence.calendarOperationId,"read_calendar");
  for(const source of [native,update])if(source.operation.originalRequest.targetInputDigest!==merchantTaxDigest(input)||source.operation.originalRequest.economicQuoteDigest!==economic.quoteDigest)refuse();
  const request=controlledCalendarPayload.parse(native.operation.originalRequest.payload),updateRequest=controlledCalendarPayload.parse(update.operation.originalRequest.payload);
@@ -80,7 +86,7 @@ export async function prepareControlledProrationEconomics(ctx:ServiceContext,raw
   ||request.target.principalMinor!==economic.snapshot.periodAmountMinor||request.target.interval!==economic.snapshot.interval||request.target.intervalCount!==economic.snapshot.intervalCount
   ||request.providerSubscriptionRef!==calendar.verified.actualResult.providerSubscriptionRef||calendar.verified.actualResult.collectionPausedAsDraft!==true
   ||customer.verified.actualResult.providerCustomerRef!==resource.originalScope.providerCustomerRef||customer.verified.actualResult.balanceState!=="known_zero"||customer.verified.actualResult.completeCreditNotes!==true)refuse();
- const actualNative=controlledActualPreview.parse(native.verified.actualResult),actualUpdate=controlledActualPreview.parse(update.verified.actualResult);
+ const actualNative=controlledActualPreview.parse(controlledCurrentResultData(native.verified.actualResult)),actualUpdate=controlledActualPreview.parse(controlledCurrentResultData(update.verified.actualResult));
  const actual=controlledNativeAmounts({...resource.originalScope,...request,operationId:native.operation.id,requestDigest:native.operation.requestDigest,idempotencyKey:native.operation.idempotencyKey},actualNative,actualUpdate);
  if(actual.trial!==(parent.status==="trialing"))refuse();
  const actualTax=merchantTaxPreviewOutput.parse(await ctx.callAsSystem(previewMerchantTax,{profileId:economic.profile.profileId,profileVersion:economic.profile.profileVersion,contactId:parent.contactId,destination:economic.taxDestination,currency:parent.currency,

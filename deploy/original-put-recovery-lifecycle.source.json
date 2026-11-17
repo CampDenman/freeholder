@@ -1,0 +1,40 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "original_put_recovery_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08", "C10.32"],
+  "status": "Scoped lost-reply original PUT and exact quota recovery qualified on fresh migration93 PostgreSQL; hosted/provider/stopped-writer/physical-erasure acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "f0b2735ed8d0799c0b2abaa5c26916c45781cd4d108cd6afb957dfde117d11bd" },
+    { "path": "tests/core/media-original-put-recovery-lifecycle.test.ts", "sha256": "954584c78fafc21c5786c01e2dc5ffda356080bc2240eb920c71f1f5db3521a0" },
+    { "path": "src/core/media/original-write-recovery.ts", "sha256": "407ca54f2b6c4f98a895f5e066bea1fcbd00e7239396dff058ef7a5fbfb04995" },
+    { "path": "src/core/media/transfer-proof.ts", "sha256": "c7eeab4214aaec9f5ca05cba53eea098ce0617264a9a672ac858fd3296a260cf" },
+    { "path": "scripts/media-transfer-protocol.mjs", "sha256": "204fef804c63e3b453034c86fca87440e293f159dc27d7c1a17e6616fdfce46d" },
+    { "path": ".changeset/original-put-lost-reply-recovery.md", "sha256": "5a888190bc583bd827994f1cef21d4d3f15dc51a23e7e17f0e97fd33b478c260" }
+  ],
+  "controls": {
+    "before": { "database": "original_put_recovery_audit_20261115", "passed": 0, "failed": 4, "unhandledErrors": 1, "cause": "Loopback fixture lacked synthetic AWS-to-TCP conditional-authority transport" },
+    "transportQualified": { "database": "original_put_recovery_repaired_20261115", "passed": 2, "failed": 2, "defect": "Applied recovery required a provider revision that a lost PUT response could never have retained" },
+    "revisionRecovery": { "database": "original_put_recovery_fixed_20261115", "passed": 3, "failed": 1, "defect": "Unversioned S3 VersionId null differed from the current object revision, blocking exact SQL quota settlement" },
+    "final": { "database": "original_put_recovery_final_20261115", "passed": 4, "failed": 0, "durationSeconds": 49.91 },
+    "relatedControls": { "passed": 27, "failed": 0, "files": ["tests/core/media-storage-transfer-proof.test.ts", "tests/core/media-transfer-inventory-proof.test.ts", "tests/core/media-original-metadata-wire.test.ts"] },
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false,
+    "absenceRecovery": "Still requires a pinned provider revision or content-bound local generation"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "f0b2735ed8d0799c0b2abaa5c26916c45781cd4d108cd6afb957dfde117d11bd",
+      "beforeSha256": "8321d04877117120fbed1d3e0aab076a815ff4b0bf0d602e17d831646d27f926",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  required. See `deploy/media-original-first-capture-source-2026-11-13.md`.\n  Signing containment source2026-11-13",
+          "after": "  required. See `deploy/media-original-first-capture-source-2026-11-13.md`.\n  Scoped original PUT recovery qualification2026-11-15: the first fresh native\n  run failed all four cases because its loopback fixture lacked conditional-write\n  authority mapping. With genuine synthetic AWS-to-TCP transport, two controls\n  passed and two exposed genuine recovery defects. A lost PUT response can have\n  no retained revision, so applied recovery now admits a fresh unpinned read but\n  still requires the original request nonce, exact full bytes and two complete\n  inventories; absence recovery still requires its pinned revision. S3's\n  unversioned `VersionId: null` is normalized to the current object revision,\n  matching the existing TypeScript proof and allowing exact SQL quota settlement.\n  Final fresh migration93 execution passes4/4;27 transfer/wire controls, full\n  TypeScript and focused lint pass. See\n  `deploy/original-put-recovery-lifecycle.source.json`. No hosted/provider,\n  stopped-writer, physical-erasure or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

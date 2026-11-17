@@ -1,0 +1,38 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "monotonic_delete_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped monotonic original DELETE recovery qualified on fresh and upgraded migration94 PostgreSQL; hosted/provider/stopped-executor acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "59e2ff72fbaf2ab1dfaca41dfe2f8faaf2fa054235c4a29500bbcaf746e01c61" },
+    { "path": "tests/core/media-monotonic-delete-lifecycle.test.ts", "sha256": "812bd052df40a408a9a1baa36ac7276ac4c34c8aeaeba84bc95b07fb47a7ce40" },
+    { "path": "db/migrations/0094_original_delete_human_review.sql", "sha256": "6f765a86a6b1af3991c117182d2642accfe422dd65c4242fcf9639b146975d03" },
+    { "path": "db/migrations/meta/_journal.json", "sha256": "27db07ae76025579784b205663c60087beb6756ad93a4b9521b4d14eff67948b" },
+    { "path": ".changeset/original-delete-human-review.md", "sha256": "2a581f5c04509004cc9d96cd3bafdaa08544eeaa3b3c5ed77cafec03e5134c43" }
+  ],
+  "controls": {
+    "before": { "database": "monotonic_delete_audit_20261115", "passed": 5, "failed": 1, "defect": "Migration93 admitted a genuine human reviewer but monotonic SQL proof still required system reviewer attribution" },
+    "migrationRefusal": { "database": "monotonic_delete_fixed_20261115", "passed": false, "cause": "Incorrect successor hash from JavaScript replacement-string semantics; fail-closed migration refused it" },
+    "final": { "database": "monotonic_delete_fixed2_20261115", "passed": 6, "failed": 0, "durationSeconds": 62.06 },
+    "upgrade": { "database": "original_review_upgrade_3c38bb572ce1453184ead2c81d47288e", "from": 93, "to": 94, "journalEntries": 95, "functionSha256": "12858fa9d6459ebc6a82ba0a991ca69d8e4d776a4008fe82dfc5e078c4f3a1c9", "passed": true },
+    "coverage": ["lost DELETE response without replay", "permanent namespace/key fencing after minimization", "retained version/session refusal", "fresh-person recovery and not-applied refusal before I/O", "named hold preserving failed removal"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "59e2ff72fbaf2ab1dfaca41dfe2f8faaf2fa054235c4a29500bbcaf746e01c61",
+      "beforeSha256": "a2739b1c545419908f8a19410c6414c98ceb628ed39a0387402994df7a50fdf2",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  Independent stopped-executor and hosted/provider acceptance remain open.\n  Signing containment source2026-11-13",
+          "after": "  Independent stopped-executor and hosted/provider acceptance remain open.\n  Monotonic DELETE continuation2026-11-15: the first qualified run passed5/6;\n  fresh-person recovery failed because migration93 admitted the human reviewer\n  but the monotonic SQL predicate still required the system reviewer. Migration94\n  aligns only that reviewer predicate, preserving actual attribution and every\n  physical/no-replay requirement. The first migration control refused an incorrect\n  successor hash; its literal recomputation and failed database are preserved.\n  Final fresh execution passes6/6, the real93→94 official-runner upgrade verifies\n  all95 journals and the exact function body, and full TypeScript/focused lint pass.\n  See `deploy/monotonic-delete-lifecycle.source.json`. No C row closes.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

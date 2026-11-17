@@ -18,9 +18,18 @@ export function transferDigest(value:unknown):string {
 export function transferConflict(message="The original storage transfer needs recovery before another physical operation."):never {throw new ServiceError("conflict",message);}
 export function checkedTransferRevision(revision:StorageTransferRevision|undefined|null,binding:StorageBinding,key:string):StorageTransferRevision {
  if(!revision||revision.namespace!==binding.namespace||revision.key!==key||
-  (binding.kind==="s3"?revision.kind!=="etag"||!/^"[\x21\x23-\x7e\x80-\xff]+"$/.test(revision.value):binding.kind!=="replit"||revision.kind!=="generation"||!/^[1-9][0-9]{0,19}$/.test(revision.value)))transferConflict("The provider revision does not identify the exact original resource and key.");
+  (binding.kind==="s3"?revision.kind!=="etag"||!/^"[\x21\x23-\x7e\x80-\xff]+"$/.test(revision.value):binding.kind==="replit"?revision.kind!=="generation"||!/^[1-9][0-9]{0,19}$/.test(revision.value):revision.kind!=="generation"||!/^[a-f0-9]{64}$/.test(revision.value)))transferConflict("The provider revision does not identify the exact original resource and key.");
  if(revision.versionId!==undefined&&(binding.kind!=="s3"||!revision.versionId||revision.versionId.length>4096||/[\u0000-\u001f\u007f]/.test(revision.versionId)))transferConflict("The exact original version identifier is invalid.");
  return revision;
+}
+export function originalPutRevisionForRecovery(input:{providerRevision:StorageTransferRevision|null;sha256:string|null;key:string;namespace:string|null},binding:StorageBinding):StorageTransferRevision|null{
+ if(!input.namespace||input.namespace!==binding.namespace)transferConflict();
+ const revision=input.providerRevision??(binding.kind==="local"&&input.sha256?{kind:"generation" as const,key:input.key,namespace:input.namespace,value:input.sha256}:null);
+ return revision?checkedTransferRevision(revision,binding,input.key):null;
+}
+export function originalPutRevisionForAbsence(input:{providerRevision:StorageTransferRevision|null;sha256:string|null;key:string;namespace:string|null},binding:StorageBinding):StorageTransferRevision{
+ const revision=originalPutRevisionForRecovery(input,binding);
+ if(!revision)transferConflict("The original PUT has no provider revision or content-bound local generation to pin for absence recovery.");return revision;
 }
 export function verifiedTransferBytes(body:Uint8Array,expected:{sha256:string;bytes:number}):void {
  if(!/^[a-f0-9]{64}$/.test(expected.sha256)||!Number.isSafeInteger(expected.bytes)||expected.bytes<0||body.byteLength!==expected.bytes||createHash("sha256").update(body).digest("hex")!==expected.sha256)transferConflict("The complete original object bytes do not match their immutable receipt.");

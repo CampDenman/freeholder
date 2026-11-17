@@ -19,7 +19,7 @@ import { AddRegistryForm, CacheRegistryForm, InstallPluginForm, PluginPermission
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
-export default async function PluginsPage({ searchParams }: { searchParams?: Promise<{ review?: string | string[] }> } = {}) {
+export default async function PluginsPage({ searchParams }: { searchParams: Promise<{ review?: string | string[] }> }) {
   const actor = await requireStaffActor("platform");
   const [t, plugins, registries, catalog, compatibility, publisherKeys, permissionReviews] = await Promise.all([
     getT(),
@@ -33,7 +33,7 @@ export default async function PluginsPage({ searchParams }: { searchParams?: Pro
   const isOwner = actor.kind === "user" && actor.role === "owner";
   const canChangeTrust = isOwner && Boolean(actor.security?.stepUpValid);
   const activeKeys = publisherKeys.filter(key => !key.revokedAt);
-  const requested = searchParams ? (await searchParams).review : undefined;
+  const requested = (await searchParams).review;
   const requestedReview = typeof requested === "string" && permissionReviews.some(plugin => plugin.name === requested) ? requested : undefined;
   const areas: Record<string, string> = {
     contacts: t("admin.activity.area.contacts"), invoicing: t("admin.activity.area.invoicing"),

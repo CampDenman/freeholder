@@ -47,6 +47,7 @@ export {
   merchantFeeRefunds, merchantFeeObservations,
 } from "./merchant-collection-schema";
 export { merchantTaxProfiles, merchantTaxProfileVersions, invoiceMerchantTaxQuotes, invoiceMerchantTaxQuoteLines } from "./merchant-tax-schema";
+export { financialRowHashes } from "./financial-row-hash-schema";
 
 export { invoiceMerchantScopes, merchantInvoicePaymentRoutes } from "./merchant-invoice-scope-schema";
 

@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_readback_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped completed multipart full-part readback and contradiction recovery qualified on fresh migration99 PostgreSQL; terminal/provider acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "a0fc620452ba613620eccc43120cb2b2caed8f3b116003c7b1dd6f45329b64f7" },
+    { "path": "tests/core/media-multipart-readback-lifecycle.test.ts", "sha256": "7f9fe978492103e4bea960675631a941480a9ccec4f31c167dc155eb87d3ec0a" }
+  ],
+  "controls": {
+    "final": { "database": "multipart_readback_audit_20261115", "passed": 2, "failed": 0, "durationSeconds": 26.89 },
+    "coverage": ["full-part body fact before object adoption", "no invented link consumption or session retirement", "same-size byte contradiction preserves actual ACK/backend object", "no adoption, deletion or repeated COMPLETE POST"],
+    "guardsWeakened": false,
+    "runtimeChanges": false,
+    "focusedLint": "passed"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "a0fc620452ba613620eccc43120cb2b2caed8f3b116003c7b1dd6f45329b64f7",
+      "beforeSha256": "9fe6d04bf75a2f7784ecab876b6d322ca16d555f476935980dde970af0522d9d",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  provider-account or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "after": "  provider-account or C-item acceptance follows.\n  Multipart readback qualification2026-11-15: fresh migration99 execution passes\n  2/2. Full part-bound body facts precede object adoption without inventing link\n  consumption or session retirement; same-size byte contradiction preserves the\n  actual COMPLETE ACK/backend object as recovery debt, with no adoption, deletion\n  or fresh POST on repeat. Focused lint passes. See\n  `deploy/multipart-readback-lifecycle.source.json`. No terminal/provider claim.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

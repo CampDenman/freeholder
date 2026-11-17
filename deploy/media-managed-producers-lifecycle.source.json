@@ -1,0 +1,35 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_managed_producers_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08", "C12.36", "C8.07"],
+  "status": "Six managed-producer lifecycle controls pass on fresh migration108 PostgreSQL with a fictional private TCP provider; issued-key transport, real provider/platform and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "c3ab4d7103c7ff64703362072c35747d4c5d9ead9d54708fe5888b1215ac06f0" },
+    { "path": "tests/core/media-managed-producers-lifecycle.test.ts", "sha256": "b32510de08f955253e2efcf4dc132d7afb641c4b51bf85e4657f08b9ffd41db4" }
+  ],
+  "controls": {
+    "final": { "database": "media_managed_producers_scope_20261116", "passed": 6, "failed": 0, "durationSeconds": 53.12 },
+    "transport": "Synthetic AWS origin mapped through fetch to the fictional private TCP provider with all product assertions retained",
+    "coverage": ["encrypted member upload, participant access, unsend and exact original conditional retirement with real nonce/FIN evidence", "lost provider PUT reply remains pending without confirmation, rebinding or forgetting", "SQL rejects changed original reservation birth", "authorized gallery archive receives an independent business-owned physical generation", "agent read scope remains passive while explicit owner Doctor mutation is audited", "raw application managed PUT is refused before provider I/O"],
+    "fixtureCorrection": "The initial personal-key actor remained intentionally ineligible for scoped staff diagnostics; the final read-scope policy control uses a restricted agent actor instead",
+    "runtimeChanges": false,
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "c3ab4d7103c7ff64703362072c35747d4c5d9ead9d54708fe5888b1215ac06f0",
+      "beforeSha256": "3c2b7fa98b668bd216f6eda1bb62795f75dc941e937d8e23f597118e625fcfdd",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  remains open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  remains open.\n  Managed-producer lifecycle qualification2026-11-16 (C1.12/C11.08/C12.36/C8.07):\n  fresh migration108 passes6/6 real shared-service/fictional-TCP controls. Encrypted\n  member upload/access/unsend and conditional retirement retain the original nonce,\n  bytes and physical FIN; a lost reply stays pending without confirm/rebind/forget.\n  SQL refuses a different reservation birth. A real authorized gallery archive has\n  its own business-owned generation. Passive Doctor read scope performs no provider\n  mutation; explicit owner probing is audited, and raw managed PUT is refused before\n  provider I/O. TypeScript and focused lint pass. See\n  `deploy/media-managed-producers-lifecycle.source.json`. No issued-key transport,\n  real provider account, hosted platform or checklist acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

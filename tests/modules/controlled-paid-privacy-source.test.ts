@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { restoreRowHashLedgerSource } from "../helpers/row-hash-ledger-forward";
 const file = (path: string) => readFileSync(path, "utf8");
 const sha = (source: string | Buffer) => createHash("sha256").update(source).digest("hex");
 const manifest = z.object({
@@ -29,7 +30,7 @@ describe("paid-access original-owner privacy source contract", () => {
   });
   it("reverses each approved shared writer and paid handler to its entire original source without changing any old business branch", () => {
     for (const entry of manifest.sourceReversals) {
-      let source = file(entry.path); expect(sha(source)).toBe(entry.afterSha256);
+      let source = restoreRowHashLedgerSource(entry.path, file(entry.path)); expect(sha(source)).toBe(entry.afterSha256);
       for (const change of [...entry.changes].reverse()) { expect(source.split(change.after)).toHaveLength(2); source = source.replace(change.after, change.before); }
       expect(sha(source)).toBe(entry.beforeSha256);
     }

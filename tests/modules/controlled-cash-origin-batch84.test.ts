@@ -19,6 +19,7 @@ import * as originApi from "@/modules/subscriptions/controlled-provider-cash-ori
 import {controlledCashEvidence,readOriginalControlledChargeAuthority,readOriginalControlledChargeAuthorities} from "@/modules/subscriptions/controlled-provider-cash-origin";
 import {actualControlledPeriod84} from "../helpers/actual-controlled-period84";
 import {actualControlledOpenInvoice84} from "../helpers/actual-controlled-open-invoice84";
+import {runControlledCashOriginPreUpgradeMalformed} from "../helpers/controlled-cash-origin-old-protocol88";
 import {OWNER,hasDatabase,truncateSpine,closeDb} from "../helpers/spine";
 const system={kind:"system"} as const;
 describe.runIf(hasDatabase)("genuine same-pass controlled cash ancestry",{timeout:180000},()=>{
@@ -73,11 +74,6 @@ describe.runIf(hasDatabase)("genuine same-pass controlled cash ancestry",{timeou
   expect(await db().select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,source.resourceId))).toEqual(before);expect(await db().transaction(tx=>readControlledReceiptNamespace(tx,source.receipt.id))).toMatchObject({verified:true});
  });
  it("retains a scripted malformed late cash callback through the real holder and keeps its raw review flag",async()=>{
-  const source=await actual();if(!f)throw Error("Keep the genuine actual provider.");const before=await financial(),history=await db().transaction(tx=>controlledProviderJournal(tx,source.resourceId)),fact=history.facts.find(row=>row.actual.kind==="cash_observed");if(!fact||fact.actual.kind!=="cash_observed")throw Error("Start from a genuinely retained original cash fact.");
-  const provider=f.remote.provider,inspect=provider.inspectMerchantControlledInvoice?.bind(provider);if(!inspect)throw Error("Use the actual invoice observer.");const malformed={...fact.actual.raw,cash:{...controlledCashEvidence.parse(fact.actual.raw.cash),amountMinor:"scripted malformed provider counter"}};
-  const fault=vi.spyOn(provider,"inspectMerchantControlledInvoice").mockImplementationOnce(async request=>{const actual=await inspect.call(provider,request);if(!request.onObserved)throw Error("Use the real original SDK observer.");await request.onObserved({kind:"cash_observed",raw:malformed});return actual;});
-  const planned=await planControlledProviderOperation.call({resourceId:source.resourceId,kind:"read_invoice",providerInvoiceRef:source.open.providerInvoiceRef},system);await expect(executeControlledOperation(planned.operationId,OWNER)).rejects.toThrow();fault.mockRestore();
-  const current=await db().transaction(tx=>controlledProviderJournal(tx,source.resourceId));expect(current.facts.some(row=>row.actual.kind==="cash_observed"&&row.actual.raw.cash&&typeof row.actual.raw.cash==="object"&&Reflect.get(row.actual.raw.cash,"amountMinor")==="scripted malformed provider counter")).toBe(true);expect(current.unfinished).toEqual([]);
-  expect(await db().transaction(tx=>readControlledReceiptNamespace(tx,source.receipt.id))).toMatchObject({verified:true,rawCashReview:true});expect(await financial()).toEqual(before);
+  const evidence=await runControlledCashOriginPreUpgradeMalformed();expect(evidence).toMatchObject({sourceCommit:"426009a1983711c81cef0447862120c682598515",databasePreserved:true,migrations:86,lastMigration:"0085_controlled_collection_application",passed:1,failed:0,timeoutMs:180000});
  });
 });

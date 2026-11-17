@@ -1,0 +1,33 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_historical_control_routing.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Old-runtime controls are explicitly selected by the migration-freeze switch and pass at their historical boundaries; current media fixture debt and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "36100531d375435a4664f11494c5099510b99ebcce25cb0106b2c9b530e8227a" },
+    { "path": "tests/core/media-empty-first-scope-lifecycle.test.ts", "sha256": "93f28ca8e6939cc4b9972e19ef950302c526c5ae969c62131bfa9e75c40c1ae2" },
+    { "path": "tests/core/media-part-signing-authority-lifecycle.test.ts", "sha256": "2c1e6115ba74182e9dc1436e5a2a537918f46a865a2e8fbc197ceef3af8a024d" }
+  ],
+  "controls": {
+    "emptyScope": { "database": "media_empty_scope_pre92_20261116", "passed": 4, "failed": 0 },
+    "partSigning": { "database": "media_part_signing_pre98_fixture_20261116", "passed": 2, "failed": 0 },
+    "ordinarySelection": "Both files skip without FREEHOLDER_SKIP_MIGRATE=1; assertions are unchanged",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "36100531d375435a4664f11494c5099510b99ebcce25cb0106b2c9b530e8227a",
+      "beforeSha256": "7a295622fef07f5e993b4fb8399bb5fd640179a141722dfa3775f43ce1928b1e",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  account, legacy fixture or checklist acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  account, legacy fixture or checklist acceptance follows.\n  Historical-control routing2026-11-16: empty-scope4/4 and part-signing2/2 PASS again\n  at their genuine pre-capability boundaries. They now run only with the explicit\n  migration-freeze switch, so current suites report them as selected historical skips\n  rather than impossible current-runtime failures. Focused lint and source hashes pass.\n  The full current-media run's remaining transfer-preview historical-receipt, late-\n  erasure and write-ownership fixture failures stay open; no C-item closes.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

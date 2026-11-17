@@ -1,0 +1,60 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_rendition_recovery_lock.v1",
+  "checklist": ["C1.12", "C3.38", "C3.47"],
+  "status": "Parallel physical-writer/recovery lock defect repaired; hosted media acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "e4247c65bec095f7af855d7207383071850f29ba9f2994bbdc975a5e440ff8f1" },
+    { "path": "src/core/contacts/identity-lock.ts", "sha256": "178aaa6eb43f8c988b3e3e8cb2713eda64bb7ca897c8e04d42b9afde497586c2" },
+    { "path": "src/core/import/source-erasure-history.ts", "sha256": "4b9341662663581f20eca762f7a5a58d0be91ba973ab9e0ac6c5b26ec1fa0db9" },
+    { "path": "src/core/import/crawl-privacy.ts", "sha256": "735f951ccdf9660b9fd0770880c66e8fa43b8f9f02bf362ad1988a3fe9d68b6a" },
+    { "path": "src/core/media/transfer-privacy.ts", "sha256": "9e910c2b05e30f74bdb052cc7ca3d54c8a8e7c38b50adca4b229673a05ca7b11" },
+    { "path": "src/core/media/transfer-requests.ts", "sha256": "215dba71d12f0963443172fe11eb66f222975001535398c146782dc05ba7a6e6" },
+    { "path": "src/core/media/write-ledger.ts", "sha256": "d19169997fbab8ca249feaf5f10f4d5dc1a7b9244ca7724830b1005a6524d363" },
+    { "path": "tests/core/media-rejected-upload-recovery.test.ts", "sha256": "3b0f2e82aadcf1c8ca48bcd9a65a0135b1986e9cbc6ad650b33a8584cc3f23fa" },
+    { "path": "tests/core/media-observation-commit.test.ts", "sha256": "aca939d46aed65799949da00920811ccee379faa5df78b3ad59a0033f797892c" },
+    { "path": ".changeset/media-rendition-recovery-lock.md", "sha256": "5a9eacbf4e7f8c2453afcc8d88f4fcbeea46924ae20e9e7dcd0e071ad173caa6" },
+    { "path": "scripts/start-browser-server.mjs", "sha256": "f029e680b4ae88a7827df491ded2a1081522d356452ba0945441d5f9030dbadc" },
+    { "path": "playwright.a11y.config.ts", "sha256": "17b351cd4fd2ddbc5e773062237c504b07b2e5bf313cc88337066c275e133590" },
+    { "path": "src/core/media/transfer-storage.ts", "sha256": "5a5e4ec0dc7e50c4284d7918f0c5b8fb70ec01c78195560889ca185becabb668" },
+    { "path": "src/core/media/transfer-service.ts", "sha256": "789f27b1d5738dd36f7d5f69beb37db1225a1e27ccdf09a223d39f5b87aa3723" },
+    { "path": "tests/browser/intake-project-files.spec.ts", "sha256": "ec7a180d4ad51e0dc793092676f24653e0fa95a06e65372bcb884834695e86a3" },
+    { "path": "tests/core/standalone-artifact.test.ts", "sha256": "910f992e050f00585629747db8670b0fd8134568232a098eae6fd8fc812081f6" }
+  ],
+  "beforeControls": [
+    { "database": "form_file_audit_20261115", "passed": 14, "failed": 1, "actual": "dependent storage recovery error during valid image upload" },
+    { "database": "rejected_upload_domain_trace_20261115", "rootCause": "non-blocking exclusive recovery locks conflicted across parallel rendition receipts" },
+    { "database": "rejected_upload_postlock_20261115", "rootCause": "non-blocking shared crawl recovery conflicted with exclusive recovery" },
+    { "database": "media_recovery_lock_final_20261115", "rootCause": "non-blocking shared physical admission conflicted with recovery" },
+    { "database": "form_file_browser_test_20261115", "failedBeforeTests": true, "actual": "web server connection tripped migration86 drain guard" },
+    { "database": "form_file_browser_retry_test_20261115", "failedBeforeTests": true, "actual": "same migration startup race repeated" }
+  ],
+  "controls": {
+    "finalFreshDatabase": { "database": "media_recovery_all_final_20261115", "passed": 21, "failed": 0 },
+    "dependentPrivacyFreshDatabase": { "database": "media_lock_privacy_regression_20261115", "passed": 33, "failed": 0 },
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "fullLint": "passed",
+    "fullNoDatabaseSuite": { "filesPassed": 601, "filesSkipped": 360, "passed": 5126, "intentionallySkipped": 3801, "failed": 0 },
+    "productionBuild": "passed",
+    "standaloneArtifact": { "files": 4395, "bytes": 153640064, "sourceOrEnvironmentLeakage": false },
+    "realBrowser": { "database": "form_file_browser_csrf_test_20261115", "passed": 1, "failed": 0, "ownerHttpUpload": true, "bothThemesAndAxe": true },
+    "sourceAndReleaseGates": "passed"
+  },
+  "fixtureRepair": "media-observation-commit creates a genuine media_objects reservation and binds its originalReservationId; migration guards unchanged",
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "e4247c65bec095f7af855d7207383071850f29ba9f2994bbdc975a5e440ff8f1",
+      "beforeSha256": "2e298d2dccc48b3fa99633906f4cad66c8b2b169fe92a5dc377594f0580488ac",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `intake-files-on-projects.md`. The hosted-preview acceptance remains open.)*\n- [ ] **C3.39** Launch spec version 2 for a working preview. It adds customer\n",
+          "after": "  `intake-files-on-projects.md`. The hosted-preview acceptance remains open.)*\n  *(Physical-recovery lock repair, 2026-11-15, also C1.12/C3.47: the current\n  file suite failed a valid image after a rejected disguise. A deterministic\n  native probe traced parallel rendition recovery to non-blocking shared and\n  exclusive contact-identity locks rejecting one another without any merge.\n  Background physical writers now take a waiting shared lock and dependent\n  recovery a waiting exclusive lock; interactive identity behavior is unchanged.\n  The observation fixture creates its required genuine reservation rather than\n  weakening migration guards. Fresh migration93 controls pass 21/21 across form\n  files, accepted-after-rejected image recovery and committed-observation debt.\n  TypeScript and focused lint pass. The browser launcher now completes the\n  dedicated migration before opening the app; two prior startup failures had\n  tripped migration86's drain guard. Existing `.mjs` helpers load lazily inside\n  their async factories, preserving behavior. The corrected browser fixture uses\n  genuine owner HTTP reservation/upload and CSRF evidence. Real Chromium passes\n  private download, both themes, Axe, quarantine and anonymous refusal. Evidence\n  `deploy/media-rendition-recovery-lock.source.json`; changeset\n  `media-rendition-recovery-lock.md`. Hosted file acceptance remains open.)*\n- [ ] **C3.39** Launch spec version 2 for a working preview. It adds customer\n",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

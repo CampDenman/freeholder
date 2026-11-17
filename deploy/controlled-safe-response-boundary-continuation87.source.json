@@ -1,0 +1,60 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "path": "tests/core/migrate-boundary.test.ts",
+  "predecessorSha256": "cbda7ed31026172b2e1075dbae2f50d7ed994b720acccc462abde8e910202e4a",
+  "successorSha256": "476d45265d40032b16f136de6cad96724db2d9c3f09188ef00aa59267a494d20",
+  "metadata": {
+    "path": "db/migrations/meta/controlled-safe-response-boundary.json",
+    "predecessorSha256": "d97e585b0d547a34f42c4ed1603c84119c9df1f76caab6d0109c08210fade445",
+    "successorSha256": "0831ae1de105431d5c1177478a315a2728bc307dae678bfa66c1289baab64d7b",
+    "edits": [
+      { "before": "\"predecessor85Sha256\": null", "after": "\"predecessor85Sha256\": \"8c914cf178bad249a8d60d332f9c5e3b3fc92af0c2d0ecc46bdc7b648e87c2cb\"" },
+      { "before": "\"whole86Sha256\": null", "after": "\"whole86Sha256\": \"b3d73b06a4de6fa3fe76356414674526e883fbd4fc25bbe978535cc70e2fa8ae\"" },
+      { "before": "\"prefix0To85Sha256\": null", "after": "\"prefix0To85Sha256\": \"8c0994ab8debdc7e0afcea285bdf321f9a6bf173ad704523890be505a16cb73b\"" }
+    ]
+  },
+  "pgBoundary": {
+    "path": "tests/modules/migrate-boundary86.test.ts",
+    "predecessorSha256": "ae40f3264b0ef79b93ff937b79d77f4b4822ab666f84b27472e7abbbd1993cf8",
+    "successorSha256": "cf165e09644bb8f0dfd9a6999a515d534787b71aee4d1763017cc308a62fd396",
+    "edits": [
+      { "before": "drizzle(client)._.session, { migrationsFolder: f.folder }", "after": "drizzle(client)._.session as Parameters<PgDialect[\"migrate\"]>[1], { migrationsFolder: f.folder }" },
+      { "before": "env: { PATH: process.env.PATH }, encoding: \"utf8\"", "after": "env: { PATH: process.env.PATH, NODE_ENV: \"test\" }, encoding: \"utf8\"" }
+    ]
+  },
+  "migrationCore": {
+    "path": "tests/core/migrate.test.ts",
+    "predecessorSha256": "07b8a91a890f0f7d532c953d94bd520d84e05a81111150f795f8b6686670643c",
+    "successorSha256": "6ef32a40ec1d08f07ba742f9bb5147bac53cabaecbb550b5854fd1299adfc5a0",
+    "edits": [
+      { "before": "import { beforeEach, describe, expect, it, vi } from \"vitest\";", "after": "import type * as NodeFs from \"node:fs\";\nimport { beforeEach, describe, expect, it, vi } from \"vitest\";" },
+      { "before": "importOriginal<typeof import(\"node:fs\")>()", "after": "importOriginal<typeof NodeFs>()" }
+    ]
+  },
+  "edits": [
+    {
+      "before": "refuses unassembled final hashes instead of inventing source identity",
+      "after": "refuses synthetic NULL hashes and computes the assembled production identity"
+    },
+    {
+      "before": "    const actual: unknown = JSON.parse(readFileSync(\"db/migrations/meta/controlled-safe-response-boundary.json\", \"utf8\"));\n    expect(actual).toMatchObject({ predecessor85Sha256: null, whole86Sha256: null, prefix0To85Sha256: null });",
+      "after": "    const migrations = readMigrationFiles({ migrationsFolder: \"db/migrations\" });\n    const journal = z.object({ entries: z.array(z.object({ idx: z.number(), version: z.string(), tag: z.string(), when: z.number(), breakpoints: z.boolean() })) }).parse(JSON.parse(readFileSync(\"db/migrations/meta/_journal.json\", \"utf8\")));\n    const actual: unknown = JSON.parse(readFileSync(\"db/migrations/meta/controlled-safe-response-boundary.json\", \"utf8\"));\n    expect(actual).toMatchObject({ predecessor85Sha256: migrations[85]?.hash, whole86Sha256: migrations[86]?.hash, prefix0To85Sha256: migrationPrefixFingerprint(journal.entries, migrations) });"
+    },
+    {
+      "before": "    const env = { PATH: process.env.PATH };",
+      "after": "    const env = { PATH: process.env.PATH, NODE_ENV: \"test\" as const };"
+    },
+    {
+      "before": "{ env: { PATH: process.env.PATH }, encoding: \"utf8\" }",
+      "after": "{ env: { PATH: process.env.PATH, NODE_ENV: \"test\" }, encoding: \"utf8\" }"
+    },
+    {
+      "before": "  const current = readFileSync(path);",
+      "after": "  let current = readFileSync(path);\n  if ([\"db/migrations/meta/controlled-safe-response-boundary.json\", \"tests/modules/migrate-boundary86.test.ts\", \"tests/core/migrate.test.ts\"].includes(path)) {\n    const container = z.record(z.string(), z.unknown()).parse(JSON.parse(readFileSync(\"deploy/controlled-safe-response-boundary-continuation87.source.json\", \"utf8\")));\n    const key = path === \"tests/modules/migrate-boundary86.test.ts\" ? \"pgBoundary\" : path === \"tests/core/migrate.test.ts\" ? \"migrationCore\" : \"metadata\";\n    const continuation = z.object({ path: z.literal(path), predecessorSha256: z.string().regex(/^[a-f0-9]{64}$/), successorSha256: z.string().regex(/^[a-f0-9]{64}$/), edits: z.array(z.object({ before: z.string(), after: z.string() }).strict()) }).strict().parse(container[key]);\n    expect(sha(current)).toBe(continuation.successorSha256);\n    let source = current.toString(\"utf8\");\n    for (const edit of [...continuation.edits].reverse()) {\n      expect(source.split(edit.after)).toHaveLength(2);\n      source = source.replace(edit.after, () => edit.before);\n    }\n    expect(sha(source)).toBe(continuation.predecessorSha256);\n    if (path === \"db/migrations/meta/controlled-safe-response-boundary.json\") return Buffer.from(source);\n    current = Buffer.from(source);\n  }"
+    },
+    {
+      "before": "  expect(sha(current)).toBe(entry.afterSha256);",
+      "after": "  if (path === \"tests/core/migrate-boundary.test.ts\") {\n    const continuation = z.object({ copyright: z.string(), path: z.literal(path), predecessorSha256: z.literal(entry.afterSha256), successorSha256: z.string().regex(/^[a-f0-9]{64}$/), metadata: z.unknown(), pgBoundary: z.unknown(), migrationCore: z.unknown(), edits: z.array(z.object({ before: z.string(), after: z.string() }).strict()) }).strict().parse(JSON.parse(readFileSync(\"deploy/controlled-safe-response-boundary-continuation87.source.json\", \"utf8\")));\n    expect(sha(current)).toBe(continuation.successorSha256);\n    let source = current.toString(\"utf8\");\n    for (const edit of [...continuation.edits].reverse()) {\n      expect(source.split(edit.after)).toHaveLength(2);\n      source = source.replace(edit.after, () => edit.before);\n    }\n    current = Buffer.from(source);\n  }\n  expect(sha(current)).toBe(entry.afterSha256);"
+    }
+  ]
+}

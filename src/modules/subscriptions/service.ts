@@ -62,7 +62,7 @@ import { contacts } from "@/core/contacts/schema";
 import { getBusiness } from "@/core/settings/service";
 import { productVariants, products } from "@/modules/catalog/schema";
 import { resolvePrice } from "@/modules/catalog/pricing";
-import { commercialBillingStart, pendingCommercialAmendment } from "./commercial-amendment-calendar";
+import { commercialAmendmentRequired, commercialBillingStart, pendingCommercialAmendment } from "./commercial-amendment-calendar";
 import { assertPaidAmendmentInvoice } from "./commercial-amendment-payment";
 import { invoiceSettled } from "@/modules/invoicing/invoice-balance";
 import { originalMerchantPlan, originalMerchantTerms } from "./merchant-terms-read";
@@ -318,7 +318,7 @@ export async function applyPendingPlan(
   // variant would bill the old price at every renewal after the switch. A
   // plan with nothing on sale is not switched to; the change stays pending.
   const amendment = await pendingCommercialAmendment(ctx, subscription);
-  if (subscription.merchantScopeVersion === 1 && amendment?.amendment.state !== "activated") return subscription;
+  if (subscription.merchantScopeVersion === 1 && (amendment ? amendment.amendment.state !== "activated" : await commercialAmendmentRequired(ctx, subscription))) return subscription;
   if (amendment) {
     if (amendment.terms.effectivePeriodStart.getTime() > Date.now() || amendment.terms.effectivePeriodStart < subscription.currentPeriodEnd) return subscription;
     // Acceptance authorizes billing; only the canonical paid period authorizes

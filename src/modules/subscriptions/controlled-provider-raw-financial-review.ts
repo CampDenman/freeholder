@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Transport9 is ZERO-only. Raw money cannot disappear before cash_observed exists.
+import { recordedControlledProjectionHasUnknown } from "@/adapters/payments/stripe-controlled-safe-response";
 import { ServiceError } from "@/core/service";
 import type { controlledProviderJournal } from "./controlled-provider-proof";
 import type { subscriptionControlledResources } from "./controlled-provider-schema";
@@ -36,7 +37,7 @@ export function controlledRawFinancialReview(resource:Resource,history:Journal){
     if(price&&(!zero(price.unit_amount)||price.unit_amount_decimal!==undefined&&price.unit_amount_decimal!=="0"))reasons.add("nonzero_recurring_item");
    }
   }
-  const raw=fact.actual.raw;
+  const raw=fact.actual.raw;if(recordedControlledProjectionHasUnknown(raw))reasons.add("unproved_bank_document");
   // Forward-compatible observation names do not grant any positive protocol.
   // On a later schema these ACKs can commit before its next invoice/PI GET.
   // The nine-family classifier still reports their actual money as review.

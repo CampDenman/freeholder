@@ -1,0 +1,43 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_retirement_certificate_current108.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Unchanged repeat-ABORT and immutable retirement-certificate controls pass on fresh migration108 with supporting pure proofs; provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "937fcf3bf24639e2a29c359a4e9c03c2183432e4d5cf82f0faa1680d4778f5a5" },
+    { "path": "tests/core/media-multipart-repeat-abort-lifecycle.test.ts", "sha256": "f3010687cbd693868d8d0666e2c9718471da4149fea929477c070d4366c764e6" },
+    { "path": "tests/core/media-multipart-retirement-certificate-lifecycle.test.ts", "sha256": "95e6977f5f6b44ad9154cdab9cc929e650f7000358f0893b00817a88c44fee34" },
+    { "path": "tests/core/media-multipart-retained-identity-proof.test.ts", "sha256": "bf31bbbc5a66bf2710c03cb837a6beceaa1327de69b67551c3206f51fcd971b4" },
+    { "path": "tests/core/media-original-retirement-proof.test.ts", "sha256": "def7377b6f64b3193eb73007c3c4d81ad33348b8527d226d9072e9bca39375cd" },
+    { "path": "tests/core/media-monotonic-delete-local-closure.test.ts", "sha256": "02c41f971b1eeb5bc9dfc2814e9db11f543b71d3f86f0901f8f9b8bd80de000b" }
+  ],
+  "controls": {
+    "database": "multipart_retirement_certificate_current108_20261116",
+    "nativeFiles": [
+      { "path": "tests/core/media-multipart-repeat-abort-lifecycle.test.ts", "passed": 6, "failed": 0 },
+      { "path": "tests/core/media-multipart-retirement-certificate-lifecycle.test.ts", "passed": 6, "failed": 0 }
+    ],
+    "nativeTotal": { "passed": 12, "failed": 0, "durationSeconds": 204.44 },
+    "pureProofs": { "passed": 36, "failed": 0 },
+    "coverage": ["same-original late-fact re-review with fresh reads/two inventories and new seal/job", "no first stop/ACK/FIN/body replacement or DELETE replay", "conflicting session fact remains debt without current-key cleanup authority", "new named hold, scoped key, foreign locator/stop and live signing refusal", "immutable certificate seal/dedup and separate system recovery certificate", "flag-only, rewritten and stale-frontier certificate refusal"],
+    "testOracleChanged": false,
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "Hosted provider, independent executor, clean-room and checklist acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "937fcf3bf24639e2a29c359a4e9c03c2183432e4d5cf82f0faa1680d4778f5a5",
+      "beforeSha256": "e0f2cb7f9a698aba635a0913f5d0c52037ecd1c847581b904e1f6d743b7b0791",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-terminal-recovery-current108.source.json`. Hosted provider, independent\n  executor and checklist acceptance remain open.\n  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):",
+          "after": "  `deploy/media-terminal-recovery-current108.source.json`. Hosted provider, independent\n  executor and checklist acceptance remain open.\n  Retirement-certificate current108 qualification2026-11-16 (C1.12/C11.08): unchanged\n  repeat-ABORT/certificate files PASS12/12 in204.44s on one fresh database, with36/36\n  supporting identity/retirement/local-closure proofs. Same-original late-fact re-review\n  uses fresh reads/inventories and a new seal/job without DELETE replay or first-result\n  replacement. Holds, foreign locators/stops, scoped keys, live signing and rewritten\n  certificates refuse. No test or product source changed. See\n  `deploy/media-retirement-certificate-current108.source.json`. Hosted/provider and\n  checklist acceptance remain open.\n  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

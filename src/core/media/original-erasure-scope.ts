@@ -42,7 +42,7 @@ async function priorAuthority(tx:Tx,requestId:string,contactId:string,scope:Orig
   }
   receiptIds.push(...first.receipts.map(row=>row.id));resourceIds.push(...first.resources.map(row=>row.id));uploadIds.push(...first.uploads.map(row=>row.id));reservationIds.push(...first.reservations.map(row=>row.id));legacyScopes.push(...first.legacyScopes);
   for(const upload of first.uploads)uploadCandidates.set(upload.id,[...uploadCandidates.get(upload.id)??[],upload.reservationId&&upload.keyDigest?{id:upload.id,reservationId:upload.reservationId,keyDigest:upload.keyDigest}:null]);
-  if(artifact)artifactIds.push(artifact.id);
+  if(artifact)artifactIds.push(artifact.dataRequestId);
   // Only exact genuine descendants of these wholly-owned immutable captures
   // may follow their original source. Equal current keys never add a member.
   receiptIds.push(...members.flatMap(row=>row.objectReceiptId?[row.objectReceiptId]:[]));resourceIds.push(...members.flatMap(row=>row.multipartResourceId?[row.multipartResourceId]:[]));

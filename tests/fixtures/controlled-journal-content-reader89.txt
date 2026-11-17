@@ -1,0 +1,47 @@
+Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
+async function readJournalContent(tx:Tx,resourceId:string,includeInventory:boolean){
+ journalColumns(subscriptionControlledResources);
+ const[actual]=await tx.execute(sql`/* controlled-journal-content-certificate.v1 */
+  WITH actual_resource AS MATERIALIZED(SELECT r.* FROM subscription_controlled_resources r WHERE r.id=${resourceId}::uuid),
+  actual_operations AS MATERIALIZED(SELECT o.* FROM subscription_controlled_operations o WHERE o.resource_id=${resourceId}::uuid ORDER BY o.ordinal LIMIT 5001),
+  actual_calls AS MATERIALIZED(SELECT c.* FROM subscription_controlled_calls c JOIN actual_operations o ON o.id=c.operation_id ORDER BY c.id LIMIT 5001),
+  actual_facts AS MATERIALIZED(SELECT f.* FROM subscription_controlled_facts f JOIN actual_calls c ON c.id=f.call_id ORDER BY f.call_id,f.ordinal LIMIT 5001),
+  actual_finishes AS MATERIALIZED(SELECT f.* FROM subscription_controlled_finishes f JOIN actual_calls c ON c.id=f.call_id ORDER BY f.call_id LIMIT 5001),
+  actual_stops AS MATERIALIZED(SELECT s.* FROM subscription_controlled_stops s JOIN actual_calls c ON c.id=s.call_id ORDER BY s.call_id LIMIT 5001),
+  actual_verifications AS MATERIALIZED(SELECT v.* FROM subscription_controlled_verifications v JOIN actual_operations o ON o.id=v.operation_id ORDER BY v.operation_id LIMIT 5001),
+  actual_origins AS MATERIALIZED(SELECT o.* FROM subscription_controlled_charge_origins o WHERE o.resource_id=${resourceId}::uuid ORDER BY o.receipt_id LIMIT 5001),
+  actual_closures AS MATERIALIZED(SELECT c.* FROM subscription_controlled_closures c WHERE c.resource_id=${resourceId}::uuid LIMIT 2),
+  physical_rows AS MATERIALIZED(
+   SELECT 'subscription_controlled_resources'::text AS family,r.id::text AS identity,h.row_sha256 AS fingerprint,h.row_bytes AS bytes FROM actual_resource r JOIN subscription_controlled_row_hashes h ON h.table_name='subscription_controlled_resources' AND h.row_id=r.id
+   UNION ALL SELECT 'subscription_controlled_operations',o.id::text,h.row_sha256,h.row_bytes FROM actual_operations o JOIN subscription_controlled_row_hashes h ON h.table_name='subscription_controlled_operations' AND h.row_id=o.id
+   UNION ALL SELECT 'subscription_controlled_calls',c.id::text,h.row_sha256,h.row_bytes FROM actual_calls c JOIN subscription_controlled_row_hashes h ON h.table_name='subscription_controlled_calls' AND h.row_id=c.id
+   UNION ALL SELECT 'subscription_controlled_facts',f.id::text,h.row_sha256,h.row_bytes FROM actual_facts f JOIN subscription_controlled_row_hashes h ON h.table_name='subscription_controlled_facts' AND h.row_id=f.id
+   UNION ALL SELECT 'subscription_controlled_finishes',f.call_id::text,h.row_sha256,h.row_bytes FROM actual_finishes f JOIN subscription_controlled_row_hashes h ON h.table_name='subscription_controlled_finishes' AND h.row_id=f.call_id
+   UNION ALL SELECT 'subscription_controlled_stops',s.call_id::text,h.row_sha256,h.row_bytes FROM actual_stops s JOIN subscription_controlled_row_hashes h ON h.table_name='subscription_controlled_stops' AND h.row_id=s.call_id
+   UNION ALL SELECT 'subscription_controlled_verifications',v.operation_id::text,h.row_sha256,h.row_bytes FROM actual_verifications v JOIN subscription_controlled_row_hashes h ON h.table_name='subscription_controlled_verifications' AND h.row_id=v.operation_id
+   UNION ALL SELECT 'subscription_controlled_charge_origins',o.receipt_id::text,h.row_sha256,h.row_bytes FROM actual_origins o JOIN subscription_controlled_row_hashes h ON h.table_name='subscription_controlled_charge_origins' AND h.row_id=o.receipt_id
+   UNION ALL SELECT 'subscription_controlled_closures',c.resource_id::text,h.row_sha256,h.row_bytes FROM actual_closures c JOIN subscription_controlled_row_hashes h ON h.table_name='subscription_controlled_closures' AND h.row_id=c.resource_id
+  )
+  SELECT 'controlled_journal_pg_content.v1'::text AS domain,${resourceId}::text AS "resourceId",
+   encode(sha256(convert_to(coalesce((SELECT jsonb_agg(jsonb_build_array(p.family,p.identity,p.fingerprint) ORDER BY p.family,p.identity) FROM physical_rows p),'[]'::jsonb)::text,'UTF8')),'hex') AS fingerprint,
+   jsonb_build_object('resources',(SELECT count(*)::integer FROM actual_resource),'operations',(SELECT count(*)::integer FROM actual_operations),'calls',(SELECT count(*)::integer FROM actual_calls),'facts',(SELECT count(*)::integer FROM actual_facts),'finishes',(SELECT count(*)::integer FROM actual_finishes),'stops',(SELECT count(*)::integer FROM actual_stops),'verifications',(SELECT count(*)::integer FROM actual_verifications),'chargeOrigins',(SELECT count(*)::integer FROM actual_origins),'closures',(SELECT count(*)::integer FROM actual_closures)) AS counts,
+   (SELECT count(*)::integer FROM physical_rows) AS "physicalCount",coalesce((SELECT sum(p.bytes)::text FROM physical_rows p),'0') AS "physicalBytes",
+   CASE WHEN ${includeInventory}::boolean THEN jsonb_build_object(
+    'operations',coalesce((SELECT jsonb_agg(${journalRowWire(subscriptionControlledOperations,"o")} ORDER BY o.ordinal) FROM actual_operations o),'[]'::jsonb),
+    'calls',coalesce((SELECT jsonb_agg(${journalRowWire(subscriptionControlledCalls,"c")} ORDER BY c.id) FROM actual_calls c),'[]'::jsonb),
+    'facts',coalesce((SELECT jsonb_agg(${journalRowWire(subscriptionControlledFacts,"f")} ORDER BY f.call_id,f.ordinal) FROM actual_facts f),'[]'::jsonb),
+    'finishes',coalesce((SELECT jsonb_agg(${journalRowWire(subscriptionControlledFinishes,"f")} ORDER BY f.call_id) FROM actual_finishes f),'[]'::jsonb),
+    'stops',coalesce((SELECT jsonb_agg(${journalRowWire(subscriptionControlledStops,"s")} ORDER BY s.call_id) FROM actual_stops s),'[]'::jsonb),
+    'verifications',coalesce((SELECT jsonb_agg(${journalRowWire(subscriptionControlledVerifications,"v")} ORDER BY v.operation_id) FROM actual_verifications v),'[]'::jsonb),
+    'chargeOrigins',coalesce((SELECT jsonb_agg(${journalRowWire(subscriptionControlledChargeOrigins,"o")} ORDER BY o.receipt_id) FROM actual_origins o),'[]'::jsonb),
+    'closures',coalesce((SELECT jsonb_agg(${journalRowWire(subscriptionControlledClosures,"c")}) FROM actual_closures c),'[]'::jsonb)
+   ) ELSE NULL END AS inventory`);
+ const wire=journalWire.safeParse(actual);if(!wire.success)refuseJournalContent();
+ const{inventory,...fields}=wire.data,bytes=z.string().regex(/^(0|[1-9][0-9]*)$/).safeParse(fields.physicalBytes);
+ if(!bytes.success)refuseJournalContent();
+ const parsed=journalContent.safeParse({...fields,physicalBytes:Number(bytes.data)});if(!parsed.success)refuseJournalContent();
+ const content=parsed.data,physicalCount=journalFamilies.reduce((sum,family)=>sum+content.counts[family],0);
+ if(content.resourceId!==resourceId||content.physicalCount!==physicalCount||(!includeInventory&&inventory!==null))refuseJournalContent();
+ if(1+physicalCount-content.counts.resources>5000)throw new ServiceError("conflict","Restore the complete bounded original controlled caller/fact inventory; truncated history cannot authorize another operation.");
+ return{content,inventory};
+}

@@ -10,13 +10,15 @@ import {verifiedControlledCashBatch} from "./controlled-cash-application-protoco
 import {controlledCollectionState} from "@/modules/subscriptions/controlled-provider-collection-state";
 import {controlledAtomicFeeOwner,controlledAtomicRefundTarget,controlledAtomicRefundFeeState} from "./controlled-atomic-refund-target";
 import {readControlledAtomicRefundBankState} from "./controlled-atomic-refund-bank-state";
-import {controlledAtomicCreditFeePartition} from "./atomic-credit-fee-partition";
+import {controlledAtomicCreditFeePartition,type KnownPartitionEvidence} from "./atomic-credit-fee-partition";
 import {readAtomicCreditFeeDispositionAncestry} from "./atomic-credit-fee-ancestry";
 import {readAtomicFeeReturnResources} from "./atomic-fee-return-resources";
 import {assertAtomicCreditSourcePrefix} from "./atomic-credit-source-prefix";
 import {readControlledCanonicalBankPrincipal} from "./controlled-canonical-bank-principal";
 import {originalMerchantRefundCash} from "./merchant-refund-origin";
 import {principalAuthorityResult} from "./principal-authority-contract";
+import {readOriginalPrincipalAndDebt} from "./principal-authority";
+import {createControlledJournalComposition,finishControlledJournalComposition} from "@/modules/subscriptions/controlled-provider-journal-composition";
 import {controlledObservationEntries,type ObservationFingerprint} from "./controlled-cash-observation-revision";
 import {parentFinancialGraphForTx} from "./controlled-provider-financial-parent";
 import {merchantTaxDigest} from "./merchant-tax-store";
@@ -50,18 +52,21 @@ async function readDisposition(ctx:ServiceContext,input:{subscriptionId:string;o
   ||successful.reduce((sum,row)=>sum+BigInt(row.refundedMinor),0n)!==BigInt(invoice.refundedMinor))refuse();
  for(const payment of money.filter(row=>row.status!=="succeeded"))await assertMerchantPaymentTerminal(ctx,payment.id);
  const principalService=getService("invoicing.originalPrincipalAuthority");if(!principalService)refuse();
+ const feeStateGraph=await parentFinancialGraphForTx(ctx.tx,input.subscriptionId);
  const siblings=[];
  const physical:ObservationFingerprint[]=[];
  let whole:Awaited<ReturnType<typeof controlledAtomicRefundTarget>>=null;
+ const journalComposition=createControlledJournalComposition();
  for(const payment of successful){
   const owner=await controlledAtomicFeeOwner(ctx,payment.id);if(!owner||owner.collectionId!==collectionId||owner.invoiceId!==invoice.id||owner.subscriptionId!==input.subscriptionId)refuse();
   const[link]=await ctx.tx.select().from(controlledCashApplicationLinks).where(eq(controlledCashApplicationLinks.paymentId,payment.id));
   if(!link||link.batchId!==owner.batchId||link.receiptId!==owner.receiptId||link.receiptProofId!==owner.proofId)refuse();
-  const original=await originalMerchantRefundCash(ctx,{kind:"payment",paymentId:payment.id}),bank=await readControlledCanonicalBankPrincipal(ctx,payment,original);
-  const principal=principalAuthorityResult.parse(await ctx.callAsSystem(principalService,{paymentId:payment.id}));
+  const feeTarget=await controlledAtomicRefundTarget(ctx,payment.id);
+  const original=await originalMerchantRefundCash(ctx,{kind:"payment",paymentId:payment.id}),bank=await readControlledCanonicalBankPrincipal(ctx,payment,original,{target:feeTarget,owner});
+  const principal=principalAuthorityResult.parse((await readOriginalPrincipalAndDebt(ctx,payment.id,undefined,journalComposition)).principal);
   if(!bank.applies||!bank.principalMatches||bank.ancillaryDebtPending||bank.receiptId!==owner.receiptId||principal.witness.paymentId!==payment.id)refuse();
   if(payment.refundedMinor===0&&(!principal.principalSafe||principal.currentPrincipalMinor!==payment.amountMinor||principal.financialDebtPending))refuse();
-  const feeTarget=await controlledAtomicRefundTarget(ctx,payment.id),feeState=await controlledAtomicRefundFeeState(ctx,payment.id),feeReturns=await readAtomicFeeReturnResources(ctx,payment.id);
+  const feeReturns=await readAtomicFeeReturnResources(ctx,payment.id),feeState=await controlledAtomicRefundFeeState(ctx,payment.id,feeTarget,{physicalReturns:feeReturns,graph:feeStateGraph});
   if(!feeReturns||feeReturns.pendingOperationIds.length||feeReturns.unfinishedIds.length||feeTarget&&(feeTarget.target===null||feeTarget.unassignedDutyMinor!==0||!feeState||feeState.pending))refuse();
   if(invoice.refundedMinor>0&&!feeTarget)refuse();
   // A returned sibling supplies NO new funding/principal authority. Preserve
@@ -76,12 +81,12 @@ async function readDisposition(ctx:ServiceContext,input:{subscriptionId:string;o
    const resource=feeTarget.resources.find(row=>row.paymentId===payment.id);
    if(!resource||resource.receiptId!==owner.receiptId||resource.amountMinor!==payment.amountMinor||resource.refundedMinor!==payment.refundedMinor||resource.feeReturnedMinor!==feeReturns.returnedMinor)refuse();
   }
-  const ancestry=await readAtomicCreditFeeDispositionAncestry(ctx.tx,payment.id);
+  const partition=payment.refundedMinor===0?await controlledAtomicCreditFeePartition(ctx,{paymentId:payment.id,sourceApplicationId:null,takeMinor:0},{prefix,owner,originalCash:original,bank,principal,target:feeTarget,state:feeState,returns:feeReturns}):null;
+  if(payment.refundedMinor===0&&!partition)refuse();
+  const ancestry=partition?.ancestry??await readAtomicCreditFeeDispositionAncestry(ctx.tx,payment.id);
   // A returned sibling stays explicit and cannot supply another loan. An
   // existing promise against that returned source is a conflict, not capacity.
   if(payment.refundedMinor!==0&&ancestry.funding.length)refuse();
-  const partition=payment.refundedMinor===0?await controlledAtomicCreditFeePartition(ctx,{paymentId:payment.id,sourceApplicationId:null,takeMinor:0}):null;
-  if(payment.refundedMinor===0&&!partition)refuse();
   const disposition=payment.refundedMinor===0?"unreturned" as const:payment.refundedMinor===payment.amountMinor?"fully_returned" as const:"partially_returned" as const;
   siblings.push({payment,owner,link,original,bank,principal,currentRefundBank,feeTarget,feeState,feeReturns,ancestry,partition,disposition,
    currentPrincipalMinor:payment.amountMinor-payment.refundedMinor,availableForNewFundingMinor:partition?.plan.availablePrincipalMinor??0,
@@ -94,6 +99,7 @@ async function readDisposition(ctx:ServiceContext,input:{subscriptionId:string;o
    if(entry.schedule_stable)physical.push({table,id,fingerprint:entry.schedule_stable,domain:"schedule_stable"});
   }
  }
+ await finishControlledJournalComposition(ctx.tx,journalComposition);
  if(whole&&whole.resources.length!==successful.length)refuse();
  for(const subscriptionId of prefix.subscriptionIds){
   const graph=await parentFinancialGraphForTx(ctx.tx,subscriptionId);
@@ -108,12 +114,19 @@ async function readDisposition(ctx:ServiceContext,input:{subscriptionId:string;o
   if(!reservation||!funding||application.invoiceId!==invoice.id||reservation.targetSourceId!==invoice.sourceId)refuse();return{application,reservation,funding};
  });
  if(inherited.reduce((sum,row)=>sum+BigInt(row.reservation.amountMinor),0n)!==BigInt(invoice.creditedMinor))refuse();
+ const[physicalSnapshot]=await ctx.tx.execute<{revision:string}>(sql`select freeholder_controlled_cash_parent_snapshot(${collectionId}::uuid)->>'revision' as revision`);
+ if(!physicalSnapshot||!/^[a-f0-9]{64}$/.test(physicalSnapshot.revision))refuse();
  const source={invoice:{id:invoice.id,postgresRowFingerprint:invoiceEntry.postgres_row,totalMinor:invoice.totalMinor,paidMinor:invoice.paidMinor,refundedMinor:invoice.refundedMinor,creditedMinor:invoice.creditedMinor,currency:invoice.currency},
   subscriptionId:input.subscriptionId,collectionId,resourceId:target.resource.id,termsId:target.terms.id,periodStart:target.review.calendar.proposedPeriodStart,periodEnd:target.review.calendar.proposedPeriodEnd,
   originalPrincipalMinor:target.manifest.grossMinor,targetCashDueMinor:target.manifest.cashDueMinor,originalFeeMinor:target.manifest.applicationFeeMinor,
   wholeTargetFeeMinor:whole?siblings.reduce((sum,row)=>sum+(row.feeTarget?.target??0),0):target.manifest.applicationFeeMinor,unassignedDutyMinor:whole?.unassignedDutyMinor??0,
   siblings,money,batches,inherited,prefix,entries,suppliesFundingAuthority:false as const};
- return{kind:"atomic_sibling_disposition.v1" as const,...source,revision:merchantTaxDigest(source)};
+ return{kind:"atomic_sibling_disposition.v1" as const,...source,physicalRevision:physicalSnapshot.revision,revision:merchantTaxDigest(source)};
+}
+export function knownAtomicCreditFeeEvidence(disposition:Awaited<ReturnType<typeof readAtomicCreditInvoiceDisposition>>|null,paymentId:string):KnownPartitionEvidence|undefined{
+ if(disposition?.kind!=="atomic_sibling_disposition.v1")return undefined;
+ const sibling=disposition.siblings.find(row=>row.payment.id===paymentId);
+ return sibling?{prefix:disposition.prefix,owner:sibling.owner,originalCash:sibling.original,bank:sibling.bank,principal:sibling.principal,target:sibling.feeTarget,state:sibling.feeState,returns:sibling.feeReturns}:undefined;
 }
 /** Readonly comparison context, not cached quote authority. Quote and accept
  * invoke independently under the complete discovered resource/parent prefix.
@@ -123,7 +136,8 @@ export async function readAtomicCreditInvoiceDisposition(ctx:ServiceContext,inpu
  if(!z.uuid().safeParse(input.subscriptionId).success||!z.uuid().safeParse(input.originalInvoiceId).success)refuse();
  try{
   const before=await readDisposition(ctx,input);if(before.kind==="ordinary")return before;
-  const after=await readDisposition(ctx,input);if(after.kind!=="atomic_sibling_disposition.v1"||after.revision!==before.revision)refuse();return after;
+  const[after]=await ctx.tx.execute<{revision:string}>(sql`select freeholder_controlled_cash_parent_snapshot(${before.collectionId}::uuid)->>'revision' as revision`);
+  if(after?.revision!==before.physicalRevision)refuse();return before;
  }catch(error){
   if(error instanceof ServiceError&&["conflict","validation","not_found","permission"].includes(error.code)||error instanceof z.ZodError)return{kind:"review" as const,invoiceId:input.originalInvoiceId,suppliesFundingAuthority:false as const};
   throw error;

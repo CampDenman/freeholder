@@ -1,0 +1,92 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_safe_response85_composition87.v1",
+  "checklist": ["C11.10", "C1.08", "C12.38"],
+  "status": "COMPOSED SOURCE; real native/provider/rollout qualification remains open",
+  "sourceSuccessor": {
+    "path": "tests/modules/controlled-safe-response-source85.test.ts",
+    "beforeSha256": "fb5f83d46bc02b65a5f68949b9b0a337e4bdc928fc652fcb76fc8819bd465966",
+    "afterSha256": "5f50a5def4fa0e8e25063ac7321a28e09e2de0bc68a0ecdc731ba5c38fca8a25",
+    "before": "reversed=reversed.replace(edit.after,edit.before);",
+    "after": "reversed=reversed.replace(edit.after,()=>edit.before);"
+  },
+  "preservedNewer": [
+    { "path": "tests/modules/controlled-cash-origin-batch84.test.ts", "sha256": "2999aa013127e1a9a93df670a2b8e7b87f4ab2b2ec320cc36179ead55d51e4b9" },
+    { "path": "deploy/controlled-cash-origin-batch84.source-preservation.json", "sha256": "ff35cf3871335fee12348b03564997c058f4d744448e091fd82fc0c54880113e" }
+  ],
+  "composed": [
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-state.ts",
+      "beforeSha256": "1830f6501b8fe3df6ee4086fa971810c4dbe67e89ca91bc51e5ac7e36bf1d2a1",
+      "afterSha256": "f9fb450f98d9c0e5ec214a4ab54533a4e4892a0112d79757fadae714ddcbb2cf",
+      "edits": [
+        { "before": "authenticatedControlledQuote(quote,resource,history);", "after": "authenticatedControlledQuote(quote,resource,history,\"accepted_ancestry\");" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proration-acceptance.ts",
+      "beforeSha256": "0ab295d18be26eeb2917d4b9c76bf384b5cc309726c30a406f3c5de0be1f2c54",
+      "afterSha256": "d728accb252b88ee85354d303074c462dde0a8223956a638fc1f721dd0306da0",
+      "edits": [
+        { "before": "import { randomUUID } from \"node:crypto\";", "after": "import { requireControlledCurrentVerification } from \"./controlled-provider-safe-response-proof\";\nimport { randomUUID } from \"node:crypto\";" },
+        { "before": "   const tax=source.history.verifications.filter(row=>source.history.operations.some(op=>op.id===row.operationId&&op.kind===\"read_product\")).at(-1);\n   const product=", "after": "   const tax=source.history.verifications.filter(row=>source.history.operations.some(op=>op.id===row.operationId&&op.kind===\"read_product\")).at(-1);\n   if(tax)requireControlledCurrentVerification(source.history,tax);\n   const product=" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proration-economics.ts",
+      "beforeSha256": "f515c1fea71708d1c6f63956414a8f866afff303dd439bc03086e0707e784206",
+      "afterSha256": "06fbc3cfb2174758ec49cb92fdaba07a07a00725247aa21c1de46bebcb716959",
+      "edits": [
+        { "before": "import { and,desc,eq,inArray,sql } from \"drizzle-orm\";", "after": "import { requireControlledCurrentVerification } from \"./controlled-provider-safe-response-proof\";\nimport { and,desc,eq,inArray,sql } from \"drizzle-orm\";" },
+        { "before": "if(!operation||operation.kind!==kind||!verified)refuse();return{operation,verified};", "after": "if(!operation||operation.kind!==kind||!verified)refuse();requireControlledCurrentVerification(history,verified);return{operation,verified};" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-quote-proof.ts",
+      "beforeSha256": "cd2efe0425d82f3dc6e078ba96b58dbdbabb6aceea2330c6d934bf6c1875bb6a",
+      "afterSha256": "943b5eb77fc16bf5656978bdb423df789f0d166a8273689e9864f742aff9540e",
+      "edits": [
+        { "before": "import { z } from \"zod\";", "after": "import { requireControlledCurrentVerification } from \"./controlled-provider-safe-response-proof\";\nimport { z } from \"zod\";" },
+        { "before": "export function authenticatedControlledQuote(quote:Quote,resource:Resource,history:History){", "after": "export function authenticatedControlledQuote(quote:Quote,resource:Resource,history:History,role:\"current_authority\"|\"accepted_ancestry\"=\"current_authority\"){" },
+        { "before": "if(!op||op.resourceId!==resource.id||op.kind!==kind||!verified)refuse();return{operation:op,verification:verified};", "after": "if(!op||op.resourceId!==resource.id||op.kind!==kind||!verified)refuse();if(role===\"current_authority\")requireControlledCurrentVerification(history,verified);return{operation:op,verification:verified};" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-verification.ts",
+      "beforeSha256": "31e78f64f4ae017e6a0e03135d5af736dd54acac52a4be9f50fe7697759d1f45",
+      "afterSha256": "e959f048299693472a0d435690057e603ca86eeae970289776525368f76841d4",
+      "edits": [
+        { "before": "result[CONTROLLED_PROJECTION_KEY]", "after": "originalResult[CONTROLLED_PROJECTION_KEY]" },
+        { "before": "result:safe?result:z.record(z.string(),z.unknown()).parse(result.safeView)", "after": "result:z.record(z.string(),z.unknown()).parse(safe?result:result.safeView)" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proof.ts",
+      "beforeSha256": "e37498dde8b862e987c6f08e0d6f6a43b308d996430d74a4ea38fe4bce843c0a",
+      "afterSha256": "8518b8dd70af4f406db8848234a2d64778679b4ba3c31344c8b01a18e05ce5ea",
+      "edits": [
+        { "before": "import { verifiedProviderReadProof } from \"./provider-read-signatures\";\nimport { subscriptionControlledOperations", "after": "import { verifiedProviderReadProof } from \"./provider-read-signatures\";\nimport { CONTROLLED_HISTORICAL_FIN_PROTOCOL } from \"@/adapters/payments/merchant-controlled-safe-response-contract\";\nimport { resolveControlledVerificationView } from \"./controlled-provider-safe-response-proof\";\nimport { subscriptionControlledOperations" },
+        { "before": " for(const verification of verifications){const operation=operations.find(row=>row.id===verification.operationId),call=calls.find(row=>row.id===verification.callId),finish=finishes.find(row=>row.callId===verification.callId);\n  const validated=call?validatedCalls.get(call):undefined;\n  if(!operation||!call||call.operationId!==operation.id||!finish||!validated||validated.operation!==operation||validated.call!==call||validated.finish!==finish||!validated.finished||finish.actualResult.outcome!==\"returned\"\n   ||merchantTaxDigest(finish.actualResult.result)!==verification.actualResultDigest||merchantTaxDigest(verification.actualResult)!==verification.actualResultDigest)\n   throw new ServiceError(\"conflict\",\"A verified result must remain the exact actual original returned SDK value and signed caller.\");\n }", "after": " const verificationViews=[];\n for(const verification of verifications){const operation=operations.find(row=>row.id===verification.operationId),call=calls.find(row=>row.id===verification.callId),finish=finishes.find(row=>row.callId===verification.callId);\n  const validated=call?validatedCalls.get(call):undefined;\n  if(!operation||!call||call.operationId!==operation.id||!finish||!validated||validated.operation!==operation||validated.call!==call||validated.finish!==finish||!validated.finished||finish.actualResult.outcome!==\"returned\"\n   ||verification.actualResult.protocol!==CONTROLLED_HISTORICAL_FIN_PROTOCOL&&merchantTaxDigest(finish.actualResult.result)!==verification.actualResultDigest||merchantTaxDigest(verification.actualResult)!==verification.actualResultDigest)\n   throw new ServiceError(\"conflict\",\"A verified result must remain the exact actual original returned SDK value and signed caller.\");\n  verificationViews.push(await resolveControlledVerificationView(tx,operation,call,finish,verification));\n }" },
+        { "before": "return {operations,calls,facts,finishes,stops,verifications,chargeOrigins,closures,unfinished,count,revision:", "after": "return {operations,calls,facts,finishes,stops,verifications,verificationViews,chargeOrigins,closures,unfinished,count,revision:" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-safe-response-proof.ts",
+      "beforeSha256": "4bccef534d49b2a8c5426e301a5707285d2864d3bd001b72a664386bae736fac",
+      "afterSha256": "68be5bd965a8327982e92cf58134a86addad8f0dcfd0c3a0ced6491c34788806",
+      "edits": [
+        { "before": "item.map(value=>{if(safeScalar(value))return value;unknown++;return null;})", "after": "item.map((value:unknown)=>{if(safeScalar(value))return value;unknown++;return null;})" }
+      ]
+    },
+    {
+      "path": "tests/modules/controlled-cash-origin-batch84.test.ts",
+      "beforeSha256": "03dfdcb56bd7fbb9f19846a84946502babae7b327d971205644707f393b05e7d",
+      "afterSha256": "2999aa013127e1a9a93df670a2b8e7b87f4ab2b2ec320cc36179ead55d51e4b9",
+      "edits": [
+        { "before": "error=>({state:\"refused\" as const,error})", "after": "(error: unknown)=>({state:\"refused\" as const,error})" },
+        { "before": "provider=f.remote.provider,inspect=provider.inspectMerchantControlledInvoice;if(!inspect)throw Error(\"Use the actual provider read method.\")", "after": "provider=f.remote.provider,inspect=provider.inspectMerchantControlledInvoice?.bind(provider);if(!inspect)throw Error(\"Use the actual provider read method.\")" },
+        { "before": "provider=f.remote.provider,inspect=provider.inspectMerchantControlledInvoice;if(!inspect)throw Error(\"Use the actual invoice observer.\")", "after": "provider=f.remote.provider,inspect=provider.inspectMerchantControlledInvoice?.bind(provider);if(!inspect)throw Error(\"Use the actual invoice observer.\")" }
+      ]
+    }
+  ]
+}

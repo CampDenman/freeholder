@@ -1,0 +1,35 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_part_signing_authority_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Old-runtime part-signing refusal controls pass against migration97 before durable-part capability publication; issued-URL/old-binary recovery and provider acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "9bbfdce2baf2049d1605d822f0f85e697801474ce16e58482dbf718bf2972fc5" },
+    { "path": "tests/core/media-part-signing-authority-lifecycle.test.ts", "sha256": "2c1e6115ba74182e9dc1436e5a2a537918f46a865a2e8fbc197ceef3af8a024d" }
+  ],
+  "controls": {
+    "initial": { "database": "media_part_signing_pre98_20261116", "passed": 0, "failed": 2, "cause": "The fictional provider lacked the required pre-CREATE baseline and exact CREATE context, so neither case reached signer refusal" },
+    "final": { "database": "media_part_signing_pre98_fixture_20261116", "passed": 2, "failed": 0, "durationSeconds": 15.74 },
+    "runtime": "Official migrations0through97; freeholder_media_original_part_capability_v1 remains absent",
+    "coverage": ["intact created open session refuses actual signer issuance", "intact uploading open session refuses actual signer issuance", "signer is never called and all original upload/object/resource/operation/provider state remains unchanged"],
+    "fixtureChanges": "Added empty bucket configuration/object/version/session baseline responses and exact bucket/key in CREATE XML; every refusal assertion is unchanged",
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "9bbfdce2baf2049d1605d822f0f85e697801474ce16e58482dbf718bf2972fc5",
+      "beforeSha256": "7769504e748b438dbe3d022ef57b859cd55bbed3c9c7f2eb452d2331d167b588",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  supply no real kernel-stop, provider, upgrade or checklist acceptance.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  supply no real kernel-stop, provider, upgrade or checklist acceptance.\n  Part-signing old-runtime qualification2026-11-16 (C1.12/C11.08): the unchanged\n  refusal oracle PASSes2/2 against a genuinely migrated97 prefix, before the durable\n  part capability exists. Real open CREATE sessions in both created/uploading states\n  preserve all original rows and provider state; the configured signer is never called.\n  The fixture was completed only with actual empty baseline reads and exact bucket/key\n  CREATE context after its first run failed before reaching the oracle. TypeScript and\n  focused lint pass. See `deploy/media-part-signing-authority-lifecycle.source.json`.\n  Issued URLs, old-binary recovery, current provider acceptance and C closure stay open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

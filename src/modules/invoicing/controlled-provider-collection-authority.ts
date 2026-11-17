@@ -1,5 +1,6 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // C12.38: exact target current money safety is separate from authenticated coverage.
+import { requireControlledCurrentVerification,controlledCurrentResultData } from "@/modules/subscriptions/controlled-provider-safe-response-proof";
 import { eq,sql } from "drizzle-orm";
 import { z } from "zod";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
@@ -17,6 +18,7 @@ import { paymentMethods } from "./schema";
 import { merchantTaxProfiles } from "./merchant-tax-schema";
 import { creditNoteDisposition } from "./credit-disposition";
 import { originalCreditFeeAllocation } from "./credit-fee-origin";
+import { readOriginalPrincipalAndDebt } from "./principal-authority";
 import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { parentFinancialGraph,lockControlledParentMoney } from "./controlled-provider-financial-parent";
@@ -72,6 +74,7 @@ export const controlledProviderCollectionAuthority=defineService({
      and h.scope in('commerce.money','commerce.merchantTax','subscriptions.agreements','privacy.records') and(h.expires_at is null or h.expires_at>clock_timestamp())) as ready`);
    if(!privateState?.ready)refuse();
    const customer=history.verifications.filter(row=>history.operations.some(operation=>operation.id===row.operationId&&operation.kind==="read_customer_financials")).at(-1);
+   if(customer)requireControlledCurrentVerification(history,customer);
    if(!customer||customer.actualResult.providerCustomerRef!==resource.originalScope.providerCustomerRef||customer.actualResult.balanceState!=="known_zero"||customer.actualResult.completeCreditNotes!==true)refuse();
    currentProofs.push({customerOperationId:customer.operationId,customerResultDigest:customer.actualResultDigest});
    if(collection.kind==="period"){
@@ -88,11 +91,12 @@ export const controlledProviderCollectionAuthority=defineService({
    await assertNoUnappliedMerchantCharge(ctx,canonical.invoice.id);
    const principalReader=getService("invoicing.originalPrincipalAuthority"),debtReader=getService("invoicing.merchantPaymentRecoveryDebt");if(!principalReader||!debtReader)refuse();
    for(const payment of graph.money){
-    const actualDebt=debt.parse(await ctx.callAsSystem(debtReader,{paymentId:payment.id}));currentProofs.push({paymentId:payment.id,debt:actualDebt});
+    const combined=payment.status==="succeeded"?await readOriginalPrincipalAndDebt(ctx,payment.id):null;
+    const actualDebt=debt.parse(combined?.debt??await ctx.callAsSystem(debtReader,{paymentId:payment.id}));currentProofs.push({paymentId:payment.id,debt:actualDebt});
     const creditSources=canonical.funding.filter(row=>row.sourcePaymentId===payment.id);
     if(actualDebt.pending&&(!creditSources.length||actualDebt.reasons.some(reason=>reason!=="commission")))refuse();
-    if(payment.status==="succeeded"){
-     const actual=principal.parse(await ctx.callAsSystem(principalReader,{paymentId:payment.id}));currentProofs.push(actual);
+    if(combined){
+     const actual=principal.parse(combined.principal);currentProofs.push(actual);
      if(!actual.principalSafe||actual.witness.paymentId!==payment.id||creditSources.length>0&&payment.refundedMinor!==0||actual.financialDebtPending&&!actualDebt.pending)refuse();
      for(const funding of creditSources){
       const fee=await originalCreditFeeAllocation(ctx,payment.id,funding.sourceApplicationId,0);currentProofs.push({fundingId:funding.id,fee});
@@ -117,7 +121,8 @@ export const controlledProviderCollectionAuthority=defineService({
     ||calendar.originalProviderTrialEnd!==(beforeUpdate?review.calendar.originalProviderTrialEndsAt:review.calendar.expectedProviderTrialEndsAt))refuse();
    if(["finalize_invoice","pay_invoice"].includes(input.kind)){
     const proof=source.proofs.at(-1),verification=proof?history.verifications.find(row=>row.operationId===proof.operationId&&row.callId===proof.callId):null;
-    const actual=verification?z.object({manifestDigest:sha,customerFinancialDigest:sha,exactManifest:z.literal(true),suppliesPaidAuthority:z.literal(false),inventory:z.object({status:z.enum(["draft","open"]),paidMinor:z.literal(0),remainingMinor:z.number().int().nonnegative(),completePayments:z.literal(true),completeLines:z.literal(true),autoAdvance:z.literal(false),actualCash:z.array(z.unknown()).length(0),actualIntents:z.array(record)})}).safeParse(verification.actualResult):null;
+    if(verification)requireControlledCurrentVerification(history,verification);
+    const actual=verification?z.object({manifestDigest:sha,customerFinancialDigest:sha,exactManifest:z.literal(true),suppliesPaidAuthority:z.literal(false),inventory:z.object({status:z.enum(["draft","open"]),paidMinor:z.literal(0),remainingMinor:z.number().int().nonnegative(),completePayments:z.literal(true),completeLines:z.literal(true),autoAdvance:z.literal(false),actualCash:z.array(z.unknown()).length(0),actualIntents:z.array(record)})}).safeParse(controlledCurrentResultData(verification.actualResult)):null;
     const ownMutation=history.operations.filter(operation=>["update_calendar","create_draft","add_invoice_component","set_invoice_fee","finalize_invoice","pay_invoice"].includes(operation.kind))
      .filter(operation=>{const payload=record.safeParse(operation.originalRequest.payload);if(!payload.success)return false;const manifest=z.object({collectionId:z.uuid()}).safeParse(payload.data.manifest);return payload.data.collectionId===collection.id||manifest.success&&manifest.data.collectionId===collection.id;})
      .filter(operation=>operation.id!==input.excludeUnadmittedOperationId).at(-1);

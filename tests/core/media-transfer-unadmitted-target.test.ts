@@ -23,16 +23,18 @@ import { stopJobs } from "@/core/jobs";
 import { mediaTransferInventoryProvider } from "../helpers/media-transfer-inventory-provider";
 import { closeDb, hasDatabase, OWNER, CUSTOMER, truncateSpine } from "../helpers/spine";
 
+const syntheticOrigin="https://s3.us-east-1.amazonaws.com",realFetch=globalThis.fetch.bind(globalThis);
 describe.runIf(hasDatabase)("C1.12/C11.08 foreign target collision is outside original erasure lineage",()=>{
  let provider:Awaited<ReturnType<typeof mediaTransferInventoryProvider>>;
  beforeAll(async()=>{await ready();await stopJobs();},60000);
  beforeEach(async()=>{
   await truncateSpine();await db().insert(users).values([{id:OWNER.userId,email:"owner@example.test",role:"owner"},{id:CUSTOMER.userId,email:"subject@example.test",role:"customer"}]);
   provider=await mediaTransferInventoryProvider();
-  for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",MEDIA_TRANSFER_TARGET_STORAGE:"s3",MEDIA_TRANSFER_TARGET_S3_ENDPOINT:provider.endpoint,MEDIA_TRANSFER_TARGET_S3_REGION:"fixture",MEDIA_TRANSFER_TARGET_S3_BUCKET:"target",MEDIA_TRANSFER_TARGET_S3_ACCESS_KEY_ID:"synthetic",MEDIA_TRANSFER_TARGET_S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);
+  vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{const url=new URL(input instanceof Request?input.url:String(input));if(url.origin!==syntheticOrigin)return realFetch(input,init);const target=new URL(`${url.pathname}${url.search}`,provider.endpoint);if(input instanceof Request)return realFetch(target,{method:input.method,headers:input.headers,body:input.body===null?undefined:await input.arrayBuffer()});return realFetch(target,init);});
+  for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:syntheticOrigin,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",MEDIA_TRANSFER_TARGET_STORAGE:"s3",MEDIA_TRANSFER_TARGET_S3_ENDPOINT:syntheticOrigin,MEDIA_TRANSFER_TARGET_S3_REGION:"fixture",MEDIA_TRANSFER_TARGET_S3_BUCKET:"target",MEDIA_TRANSFER_TARGET_S3_ACCESS_KEY_ID:"synthetic",MEDIA_TRANSFER_TARGET_S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);
   resetEnvForTests();resetStorageForTests();
  });
- afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
+ afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();vi.unstubAllGlobals();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
  it("preserves an identically hashed pre-existing target without reading, adopting or deleting it, while erasing only the actual original source",async()=>{
   const contact=await createContact.call({name:"Original subject",email:"subject@example.test"},OWNER);await db().update(contacts).set({userId:CUSTOMER.userId}).where(eq(contacts.id,contact.id));
   const body=new Uint8Array([0,255,13,10,128,0]),key="private/original.bin";

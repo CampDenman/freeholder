@@ -88,8 +88,10 @@ characters. Then:
 
 - every public path is refused with `401` unless the browser holds a current
   `fh_preview` cookie. That covers pages, media, `/og`, `llms.txt`, the
-  sitemap and the anonymous API. A request with its own `Authorization`
-  header is left to the API's own authentication;
+  sitemap and the anonymous API. Only `/api/v1` and `/api/mcp` accept a
+  genuine resolved API/session credential instead of the cookie; a forged or
+  unknown bearer value is refused. Other API routes never treat the mere
+  presence of an `Authorization` header as authentication;
 - Stripe's two webhook routes, `/api/payouts/stripe_connect/webhook` and
   `/api/payments/webhooks/stripe`, accept a `POST` that carries a
   `Stripe-Signature` header without the cookie. Each route verifies that
@@ -125,7 +127,10 @@ set, transactional mail follows a preview policy:
 - A message is **delivered** only when its recipient is on the allow-list or
   is already a contact of this site, a delivering mail adapter is configured
   (`MAIL_ADAPTER`, or a verified default sender), and the daily cap has room.
-  Paradise Modern is the intended adapter (`deploy/paradise-modern.md`). The
+  The worker checks the current recipient, route and cap again immediately
+  before provider I/O, so mail queued before preview mode was enabled cannot
+  bypass the boundary. Paradise Modern is the intended adapter
+  (`deploy/paradise-modern.md`). The
   site is unreachable without the signed link, so every contact on a preview
   arrived through the preview itself or was entered by the owner.
 - Every other message is **held**, and so is every message while no adapter

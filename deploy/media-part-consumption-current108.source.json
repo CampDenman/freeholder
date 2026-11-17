@@ -1,0 +1,44 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_part_consumption_current108.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Unchanged signed-part declaration, verification, readback and withheld-disposition lifecycles pass on fresh migration108; hosted provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "3651f667139e9cc3e54ac3bcd922b3d7fbe08f27cda0070ad4b14c1b471a3863" },
+    { "path": "tests/core/media-multipart-part-verification-lifecycle.test.ts", "sha256": "2646171ba164314383d34458bcd235005f7f652c1ff35e5c86259e7f521f422d" },
+    { "path": "tests/core/media-multipart-readback-lifecycle.test.ts", "sha256": "7f9fe978492103e4bea960675631a941480a9ccec4f31c167dc155eb87d3ec0a" },
+    { "path": "tests/core/media-multipart-part-manifest-lifecycle.test.ts", "sha256": "92178bc1e2bb001535df9310b117b1f48bcd4123917b795590a1baba7f9abcd3" },
+    { "path": "tests/core/media-multipart-part-withheld-lifecycle.test.ts", "sha256": "e83f3fa1bd1fba6da52b7ae231f7bf37c15c0ace404f99eb6475195b4e0e5838" },
+    { "path": "src/core/media/write-ledger.ts", "sha256": "84c3cf5c87875de994335721d99bcb29cdb614063b9e696310ca44858a8623d2" }
+  ],
+  "controls": {
+    "database": "multipart_part_consumption_current108_20261116",
+    "files": [
+      { "path": "tests/core/media-multipart-part-verification-lifecycle.test.ts", "passed": 5, "failed": 0 },
+      { "path": "tests/core/media-multipart-readback-lifecycle.test.ts", "passed": 2, "failed": 0 },
+      { "path": "tests/core/media-multipart-part-manifest-lifecycle.test.ts", "passed": 5, "failed": 0 },
+      { "path": "tests/core/media-multipart-part-withheld-lifecycle.test.ts", "passed": 6, "failed": 0 }
+    ],
+    "total": { "passed": 18, "failed": 0, "durationSeconds": 136.21 },
+    "coverage": ["genuine CREATE-bound declarations and idempotent repeat", "wrong size, changed bytes, foreign customer and named-hold refusal", "actual provider checksum and original-nonce readback before completion", "lost ListParts remains debt with zero repeated COMPLETE POST", "full stored-part body facts and same-size contradiction recovery", "withheld/exposed first dispositions remain immutable and additional positive facts reopen debt"],
+    "testOracleChanged": false,
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "Hosted provider, clean-room, independent review and checklist acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "3651f667139e9cc3e54ac3bcd922b3d7fbe08f27cda0070ad4b14c1b471a3863",
+      "beforeSha256": "1262d0d0538091853ab55123c5fb5a90bffcdb83d7335a2cc0fc0eb7da5a01f8",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-part-signing-current108.source.json`. Actual consumption, hosted provider\n  and checklist acceptance remain open.\n  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):",
+          "after": "  `deploy/media-part-signing-current108.source.json`. Actual consumption, hosted provider\n  and checklist acceptance remain open.\n  Signed-part consumption current108 regression qualification2026-11-16\n  (C1.12/C11.08): four unchanged genuine lifecycle files PASS18/18 in136.21s on one\n  fresh current database. Declarations, actual checksum/full-nonce readback, lost\n  ListParts recovery, wrong/foreign/held refusal, full stored-part facts, contradictory\n  bytes, and withheld/exposed first dispositions preserve exact evidence without a\n  repeated COMPLETE or invented adoption/retirement. No test or product source changed.\n  See `deploy/media-part-consumption-current108.source.json`. Hosted provider and\n  checklist acceptance remain open.\n  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

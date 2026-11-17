@@ -10,7 +10,7 @@ import {createContact} from "@/core/contacts/service";
 import {contacts} from "@/core/contacts/schema";
 import {addRetentionException,createDataRequest,verifyDataRequest,fulfillDataRequest} from "@/core/privacy/service";
 import {dataRequests} from "@/core/privacy/schema";
-import {getJob} from "@/core/jobs";
+import {getJob,listJobs} from "@/core/jobs";
 import {TRANSFER_PRIVACY_SCOPE,TRANSFER_ERASURE_JOB} from "@/core/media/transfer-privacy";
 import {eraseStorageTransferLineage} from "@/core/media/transfer-erasure";
 import {db} from "@/core/db";
@@ -25,16 +25,18 @@ import {advanceStorageTransfer,planStorageTransfer} from "@/core/media/transfer-
 import {mediaTransferProvider} from "../helpers/media-transfer-provider";
 import {closeDb,failure,hasDatabase,OWNER,CUSTOMER,truncateSpine} from "../helpers/spine";
 const body=new Uint8Array(Buffer.from("%PDF-1.7\nOriginal fictional private byte witness.\n%%EOF\n")),key="original/private.pdf";
+const syntheticOrigin="https://s3.us-east-1.amazonaws.com",realFetch=globalThis.fetch.bind(globalThis);
 describe.runIf(hasDatabase)("durable verified media-transfer lifecycle",()=>{
  let provider:Awaited<ReturnType<typeof mediaTransferProvider>>,running:Promise<unknown>[];
- beforeAll(ready,60_000);
+ beforeAll(async()=>{await ready();for(const name of["core.advanceMediaStorageTransfer","core.eraseMediaStorageTransfer","core.reconcileMediaStorageTransfer"])expect(listJobs().has(name)).toBe(true);},60_000);
  beforeEach(async()=>{
   running=[];await truncateSpine();await db().insert(users).values({id:OWNER.userId,email:"transfer-owner@example.test",role:"owner"});
   provider=await mediaTransferProvider();
-  for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",MEDIA_TRANSFER_TARGET_STORAGE:"s3",MEDIA_TRANSFER_TARGET_S3_ENDPOINT:provider.endpoint,MEDIA_TRANSFER_TARGET_S3_REGION:"fixture",MEDIA_TRANSFER_TARGET_S3_BUCKET:"target",MEDIA_TRANSFER_TARGET_S3_ACCESS_KEY_ID:"synthetic",MEDIA_TRANSFER_TARGET_S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);
+  vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{const url=new URL(input instanceof Request?input.url:String(input));if(url.origin!==syntheticOrigin)return realFetch(input,init);const target=new URL(`${url.pathname}${url.search}`,provider.endpoint);if(input instanceof Request)return realFetch(target,{method:input.method,headers:input.headers,body:input.body===null?undefined:await input.arrayBuffer()});return realFetch(target,init);});
+  for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:syntheticOrigin,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",MEDIA_TRANSFER_TARGET_STORAGE:"s3",MEDIA_TRANSFER_TARGET_S3_ENDPOINT:syntheticOrigin,MEDIA_TRANSFER_TARGET_S3_REGION:"fixture",MEDIA_TRANSFER_TARGET_S3_BUCKET:"target",MEDIA_TRANSFER_TARGET_S3_ACCESS_KEY_ID:"synthetic",MEDIA_TRANSFER_TARGET_S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);
   resetEnvForTests();resetStorageForTests();await putWithReceipt({key,body,contentType:"application/pdf",role:"original"},OWNER);
  });
- afterEach(async()=>{provider?.releaseAll();await Promise.allSettled(running??[]);await provider?.close();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
+ afterEach(async()=>{provider?.releaseAll();await Promise.allSettled(running??[]);await provider?.close();vi.unstubAllEnvs();vi.unstubAllGlobals();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
  async function subjectOriginal(){
   const userId=randomUUID();await db().insert(users).values({id:userId,email:`transfer-subject-${userId}@example.test`,role:"customer"});
   const contact=await createContact.call({name:"Original private fixture subject",email:`transfer-subject-${userId}@example.test`},OWNER);

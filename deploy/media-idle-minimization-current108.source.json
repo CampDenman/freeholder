@@ -1,0 +1,47 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_idle_minimization_current108.v1",
+  "checklist": ["C1.12", "C1.08", "C11.08"],
+  "status": "Unchanged idle multipart compaction, catch-up, retirement and privacy-reopening controls pass on current migration108; provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "fcdfd023a1440f6a26a01533f7915a57cf8d8b742287a0b9d4f1a5bb55ac50ce" },
+    { "path": "tests/core/media-multipart-idle-compact-lifecycle.test.ts", "sha256": "d0699432c83260c118a99cbf37820a5cce4b311863f88576ef41306a3e8e60e0" },
+    { "path": "tests/core/media-multipart-retirement-catchup-lifecycle.test.ts", "sha256": "d3e7388c5a35d8a1f60fa3fe136f5e8fe2347723d0975be9b5d39b37fe5b2d12" },
+    { "path": "tests/core/media-multipart-idle-retirement-lifecycle.test.ts", "sha256": "018dab1a78badcc93ab62d5cc173fb9d5e2f7ac226ec0350ef57065b1cfafa08" },
+    { "path": "tests/core/privacy-reopen-erasure.test.ts", "sha256": "39b1d02a4091bb6b853608c7d4caafdebc6dea0abc0a1402b27b35ec3210e648" },
+    { "path": "tests/core/media-multipart-idle-retirement-proof.test.ts", "sha256": "4ee6904346db99685e937780d9474cec07484484f2d9963aa89c7311dd53053a" },
+    { "path": "tests/core/media-multipart-retirement-job-contract.test.ts", "sha256": "02a95ea82c704f1d732497ac41a1b0601069af0a346eba0915dc613b0cda3703" },
+    { "path": "tests/core/media-multipart-complete-manifest.test.ts", "sha256": "0c00c64f3cf934fa7f442b745ac1d49ac9f97a002a18e487af391eec47ce8efa" }
+  ],
+  "controls": {
+    "database": "multipart_idle_minimization_current108_20261116",
+    "nativeFiles": [
+      { "path": "tests/core/media-multipart-idle-compact-lifecycle.test.ts", "passed": 8, "failed": 0 },
+      { "path": "tests/core/media-multipart-retirement-catchup-lifecycle.test.ts", "passed": 6, "failed": 0 },
+      { "path": "tests/core/media-multipart-idle-retirement-lifecycle.test.ts", "passed": 7, "failed": 0 }
+    ],
+    "nativeTotal": { "passed": 21, "failed": 0, "durationSeconds": 408.22 },
+    "privacyReopening": { "database": "multipart_privacy_reopen_current108_20261116", "passed": 5, "failed": 0, "durationSeconds": 49.33 },
+    "pureProofs": { "passed": 20, "failed": 0 },
+    "coverage": ["actual worker reduces every exact original parent locator without another DELETE", "late same-first facts receive fresh READ-only review and current certificate coverage", "real pg-boss catch-up deduplicates only exact claimed work", "post-enqueue fault rolls back retirement, queue and claim atomically", "copied worker payloads, named holds, exposed links, retained debris, lost ABORT and wrong sessions refuse"],
+    "testOracleChanged": false,
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "Hosted provider, independent executor, clean-room and checklist acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "fcdfd023a1440f6a26a01533f7915a57cf8d8b742287a0b9d4f1a5bb55ac50ce",
+      "beforeSha256": "937fcf3bf24639e2a29c359a4e9c03c2183432e4d5cf82f0faa1680d4778f5a5",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-retirement-certificate-current108.source.json`. Hosted/provider and\n  checklist acceptance remain open.\n  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):",
+          "after": "  `deploy/media-retirement-certificate-current108.source.json`. Hosted/provider and\n  checklist acceptance remain open.\n  Idle-minimization current108 qualification2026-11-16 (C1.12/C1.08/C11.08):\n  unchanged compact/catch-up/retirement files PASS21/21 in408.22s on one fresh database;\n  shared privacy reopening PASSes5/5 separately and20/20 supporting proofs pass. Real\n  workers reduce exact original locators, re-review late facts and roll back failed\n  enqueue/claim atomically without another DELETE. Copied jobs, named holds, exposed\n  links, retained debris, unknown ABORT and wrong sessions remain refused. No test or\n  product source changed. See `deploy/media-idle-minimization-current108.source.json`.\n  Hosted provider, independent executor and checklist acceptance remain open.\n  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

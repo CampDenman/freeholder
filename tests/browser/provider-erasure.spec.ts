@@ -7,6 +7,7 @@ import { expect, test } from "@playwright/test";
 import { roles, roleGrants, users, totpFactors } from "@/core/auth/schema";
 import { createSession } from "@/core/auth/sessions";
 import { contacts } from "@/core/contacts/schema";
+import { lockContactIdentity } from "@/core/contacts/identity-lock";
 import { dataRequests, dataRequestArtifacts } from "@/core/privacy/schema";
 import { THEME_COOKIE } from "@/core/design/theme";
 import { db, closeDb } from "@/core/db";
@@ -17,8 +18,11 @@ test("pending erasure explains recovery and respects staff job access", async ({
   const token = await seedC11Owner("Privacy studio");
   try {
     const [contact] = await db().insert(contacts).values({ name: "Erased contact" }).returning();
-    const [request] = await db().insert(dataRequests).values({ contactId: contact!.id, kind: "erasure", status: "in_progress",
-      requestedBy: "owner", verifiedAt: new Date(), responseDueAt: new Date(Date.now() + 86_400_000) }).returning();
+    const [request] = await db().transaction(async tx => {
+      await lockContactIdentity(tx);
+      return tx.insert(dataRequests).values({ contactId: contact!.id, kind: "erasure", status: "in_progress",
+        requestedBy: "owner", verifiedAt: new Date(), responseDueAt: new Date(Date.now() + 86_400_000) }).returning();
+    });
     const body = { format: "freeholder.erasure-receipt", outcomes: [{ scope: "plugins.voice-video.rooms", outcome: "pending" }] };
     await db().insert(dataRequestArtifacts).values({ dataRequestId: request!.id, filename: "erasure.json", body,
       sha256: createHash("sha256").update(JSON.stringify(body)).digest("hex"), expiresAt: new Date(Date.now() + 86_400_000) });

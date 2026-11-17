@@ -6,6 +6,7 @@ import { controlledCollectionState } from "@/modules/subscriptions/controlled-pr
 import type { controlledCollectionCoverage } from "@/modules/subscriptions/controlled-provider-collection-coverage";
 import { subscriptionProviderChargeReceipts } from "@/modules/subscriptions/schema";
 import { controlledProviderJournal } from "@/modules/subscriptions/controlled-provider-proof";
+import { readComposedControlledProviderJournal, type ControlledJournalComposition } from "@/modules/subscriptions/controlled-provider-journal-composition";
 import { subscriptionControlledResources } from "@/modules/subscriptions/controlled-provider-schema";
 import { subscriptionControlledChargeOrigins } from "@/modules/subscriptions/controlled-provider-schema";
 import { merchantAgreementPaymentRoutes } from "./merchant-agreement-schema";
@@ -18,7 +19,7 @@ import { controlledCashProspectiveProjection } from "./controlled-cash-prospecti
 type Coverage=Awaited<ReturnType<typeof controlledCollectionCoverage>>;
 const hash=(row:unknown)=>sql<string>`encode(sha256(convert_to(to_jsonb(${row})::text,'UTF8')),'hex')`;
 function refuse():never{throw new ServiceError("conflict","Restore complete exact original target, current bank facts, canonical receipt/route/payment and parent financial witnesses before resolving raw review.");}
-export async function controlledTargetRawClassification(tx:Tx,subscriptionId:string,coverage:Coverage,knownParent?:Awaited<ReturnType<typeof parentFinancialGraphForTx>>){
+export async function controlledTargetRawClassification(tx:Tx,subscriptionId:string,coverage:Coverage,knownParent?:Awaited<ReturnType<typeof parentFinancialGraphForTx>>,composition?:ControlledJournalComposition){
  const graph=knownParent??await parentFinancialGraphForTx(tx,subscriptionId),entries=new Map<string,string>();
  const add=(table:string,id:string,fingerprint:string)=>{const key=`${table}:${id}`,prior=entries.get(key);if(prior&&prior!==fingerprint)refuse();entries.set(key,fingerprint);if(entries.size>5000)refuse();};
  for(const row of [...graph.physical,...graph.children.entries,...graph.proration.entries,...graph.controlled.entries])add(row.table,row.id,row.fingerprint);
@@ -51,24 +52,34 @@ export async function controlledTargetRawClassification(tx:Tx,subscriptionId:str
   cash.push({receiptId:receipt.id,paymentId:payment.id,resourceId:origin.resourceId,canonicalInvoiceId:payment.invoiceId,providerInvoiceRef:receipt.providerInvoiceRef,
    providerIntentRef:receipt.providerPaymentIntentRef,providerChargeRef:receipt.providerChargeRef,amountMinor:receipt.amountMinor,currency:receipt.currency});
  }
- const additionalReviewFactIds:string[]=[];
+ const additionalReviewFactIds:string[]=[],journals=new Map<string,Awaited<ReturnType<typeof controlledProviderJournal>>>();
  const resources=coverage.transport.resourceIds.length?await tx.select({resource:subscriptionControlledResources,fingerprint:hash(subscriptionControlledResources)}).from(subscriptionControlledResources)
   .where(inArray(subscriptionControlledResources.id,coverage.transport.resourceIds)).limit(5001):[];
  if(resources.length!==coverage.transport.resourceIds.length)refuse();
  for(const row of resources){if(row.resource.subscriptionId!==subscriptionId)refuse();add("subscription_controlled_resources",row.resource.id,row.fingerprint);
-  const history=await controlledProviderJournal(tx,row.resource.id);additionalReviewFactIds.push(...controlledCustomerRawReview(row.resource,history));
+  const history=await readComposedControlledProviderJournal(tx,row.resource.id,composition);journals.set(row.resource.id,history);additionalReviewFactIds.push(...controlledCustomerRawReview(row.resource,history));
  }
  const targets:ControlledRawTarget[]=[];
  for(const collection of coverage.witness.collections){if(!collection.invoiceId)continue;
-  const actual=await controlledCollectionState(tx,collection.id);
+  const quote=coverage.witness.quotes.find(row=>row.id===collection.quoteId),known=quote?journals.get(quote.resourceId):undefined;if(!quote||!known)refuse();
+  const actual=await controlledCollectionState(tx,collection.id,{resourceId:quote.resourceId,history:known});
   if(actual.parent.id!==subscriptionId||actual.resource.subscriptionId!==subscriptionId||actual.collection.invoiceId!==collection.invoiceId)refuse();
   const prospective=controlledCashProspectiveProjection(tx,{resourceId:actual.resource.id,collectionId:actual.collection.id,invoiceId:actual.canonical.invoice.id});
   targets.push({resource:actual.resource,history:actual.history,manifest:actual.manifest,binding:actual.binding,proofs:actual.proofs,itemReceipts:actual.itemReceipts,components:actual.components,
    period:{periodAmountMinor:actual.terms.snapshot.periodAmountMinor,interval:actual.terms.snapshot.interval,intervalCount:actual.terms.snapshot.intervalCount},
    calendarAuthority:{periodStart:actual.review.calendar.expectedProviderPeriodStart,periodEnd:actual.review.calendar.expectedProviderPeriodEnd,anchor:actual.review.calendar.expectedProviderBillingAnchor,trialEnd:actual.review.calendar.expectedProviderTrialEndsAt,
     periodAmountMinor:actual.terms.snapshot.periodAmountMinor,interval:actual.terms.snapshot.interval,intervalCount:actual.terms.snapshot.intervalCount,
-    ...(actual.collection.kind==="period"?{reviewedPeriodWindows:actual.review.calendar.nativeForecasts.filter(forecast=>!forecast.proration&&forecast.amountMinor===actual.terms.snapshot.periodAmountMinor).map(forecast=>({periodStart:forecast.periodStart,periodEnd:forecast.periodEnd}))}:{})},
+    ...(actual.collection.kind==="period"?{reviewedPeriodWindows:[
+     {periodStart:actual.review.calendar.originalApplicationPeriodStart,periodEnd:actual.review.calendar.originalApplicationPeriodEnd},
+     {periodStart:actual.review.calendar.proposedPeriodStart,periodEnd:actual.review.calendar.proposedPeriodEnd},
+     ...actual.review.calendar.nativeForecasts.filter(forecast=>!forecast.proration&&forecast.amountMinor===actual.terms.snapshot.periodAmountMinor).map(forecast=>({periodStart:forecast.periodStart,periodEnd:forecast.periodEnd})),
+    ]}:{})},
    canonicalCount:actual.canonical.count,canonicalPaidMinor:actual.canonical.invoice.paidMinor,canonicalRefundedMinor:actual.canonical.invoice.refundedMinor,cash:cash.filter(row=>row.resourceId===actual.resource.id&&row.canonicalInvoiceId===actual.canonical.invoice.id),...(prospective?{prospective}:{})});
+ }
+ if(!composition)for(const row of resources){const before=journals.get(row.resource.id);if(!before||!targets.some(target=>target.resource.id===row.resource.id))continue;
+  const[current]=await tx.select({fingerprint:hash(subscriptionControlledResources)}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,row.resource.id)).limit(1);
+  const after=await controlledProviderJournal(tx,row.resource.id);
+  if(current?.fingerprint!==row.fingerprint||after.revision!==before.revision)refuse();
  }
  const resolved=coverage.transport.unfinishedCalls.length?{resolutions:[],unresolvedFactIds:coverage.transport.rawCashReviewFactIds}:classifyControlledTargetRawFacts(targets);
  const unresolvedFactIds=[...new Set([...additionalReviewFactIds,...resolved.unresolvedFactIds,...coverage.transport.rawCashReviewFactIds.filter(id=>!resolved.resolutions.some(row=>row.factId===id))])].sort();

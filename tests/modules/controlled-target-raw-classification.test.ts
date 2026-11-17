@@ -21,7 +21,7 @@ function vector(options:{bootstrapZero?:boolean;paid?:boolean;partial?:boolean;c
   subscriptionId:"",termsId:"",generation:1,providerApiVersion:"2026-10-28.endive",providerPlatformAccountId:"acct_originalPlatform",providerAccountId:"acct_originalSeller",
   providerCustomerRef:"cus_original",providerMethodRef:"pm_original",providerProductRef:"prod_original",currency:"CAD",interval:"month",intervalCount:1,acceptedPeriodEnd:end,acceptedTrialEnd:null}};
  resource.originalScope.subscriptionId=resource.subscriptionId;resource.originalScope.termsId=resource.termsId;
- const history:History={operations:[],calls:[],facts:[],finishes:[],stops:[],verifications:[],chargeOrigins:[],closures:[],unfinished:[],count:1,revision:sha};
+ const history:History={operations:[],calls:[],facts:[],finishes:[],stops:[],verifications:[],verificationViews:[],chargeOrigins:[],closures:[],unfinished:[],count:1,revision:sha};
  function append(kind:Operation["kind"],payload:Record<string,unknown>,make:(operation:Operation)=>{facts:MerchantControlledObservation[];result:Record<string,unknown>},unfinished=false){
   const originalRequest={scopeDigest:merchantTaxDigest(resource.originalScope),payload,parentFinancialRevision:sha},operation:Operation={id:randomUUID(),resourceId:resource.id,kind,ordinal:history.operations.length+1,
    originalRequest,requestDigest:merchantTaxDigest(originalRequest),idempotencyKey:`raw-target:${randomUUID()}`,previousEvidenceRevision:history.revision,acceptedQuoteDigest:sha,createdAt:new Date()};

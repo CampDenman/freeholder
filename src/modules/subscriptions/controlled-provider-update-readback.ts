@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // A fresh bank GET proves actual update effects; it never invents the old finish.
+import { requireControlledCurrentVerification } from "./controlled-provider-safe-response-proof";
 import { z } from "zod";
 import { controlledCalendarSource } from "./controlled-provider-calendar-source";
 import type { controlledCollectionState } from "./controlled-provider-collection-state";
@@ -10,6 +11,7 @@ export function controlledUpdateReadback(source:Awaited<ReturnType<typeof contro
  if(updates.length!==1)return null;const update=updates[0]!;
  const read=history.operations.filter(op=>op.kind==="read_calendar"&&op.ordinal>update.ordinal).at(-1),verification=read?history.verifications.find(row=>row.operationId===read.id):null;
  if(!read||!verification||history.unfinished.length||history.closures.length)return null;
+ requireControlledCurrentVerification(history,verification);
  const raw=z.record(z.string(),z.unknown()).parse(verification.actualResult.actualRaw),tag=z.record(z.string(),z.unknown()).parse(raw.metadata);
  if(tag.freeholder_controlled_price_epoch_id!==collection.id||tag.freeholder_controlled_update_operation_id!==update.id
   ||tag.freeholder_controlled_update_request_digest!==update.requestDigest||tag.freeholder_controlled_accepted_quote_digest!==collection.acceptedQuoteDigest

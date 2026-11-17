@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // No arbitrary bank payload: actual accepted canonical rows select every next call.
+import { requireControlledCurrentVerification } from "./controlled-provider-safe-response-proof";
 import { randomUUID } from "node:crypto";
 import { eq,sql } from "drizzle-orm";
 import { z } from "zod";
@@ -84,6 +85,7 @@ export const planControlledCollectionOperation=defineService({name:"subscription
     if(!updateReadback||!collectionInventory||updateReadback.providerInvoiceRef!==null&&!history.verifications.some(row=>collectionInventory.invoiceReadOperationIds.includes(row.operationId)&&row.actualResult.providerInvoiceRef===updateReadback.providerInvoiceRef))throw new ServiceError("conflict","Independently discover/bind the actual original calendar update and its generated draft before choosing a separate exact target draft.");
    }else if(!binding||!creator)throw new ServiceError("conflict","Retain the exact actual original target draft binding and genuine creator before component, fee, finalize or pay admission.");
    const proof=source.proofs.at(-1),verified=proof?history.verifications.find(row=>row.operationId===proof.operationId):null;
+   if(["finalize_invoice","pay_invoice"].includes(input.kind)&&verified)requireControlledCurrentVerification(history,verified);
    if(["finalize_invoice","pay_invoice"].includes(input.kind)&&(!proof||!verified||verified.actualResult.canonicalTargetDigest!==undefined&&verified.actualResult.canonicalTargetDigest!==source.canonical.digest))throw new ServiceError("conflict","Perform a new complete exact manifest/customer/fee read before finalization or payment.");
    if(input.kind==="add_invoice_component"&&(!input.componentId||!source.components.some(row=>row.id===input.componentId)||source.itemReceipts.some(row=>row.componentId===input.componentId)))throw new ServiceError("conflict","Only an actual missing immutable canonical component can acquire its one original bank item.");
    payload=controlledCollectionPayload.parse({bootstrapOperationId:calendar.bootstrapOperationId,bootstrapRequestDigest:calendar.bootstrapRequestDigest,providerSubscriptionRef:calendar.providerSubscriptionRef,

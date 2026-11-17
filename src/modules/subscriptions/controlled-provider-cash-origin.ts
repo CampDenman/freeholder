@@ -9,7 +9,9 @@ import { merchantIntentEvidence } from "@/adapters/payments/stripe-merchant-scop
 import { subscriptionMerchantScope } from "./merchant-scope-contract";
 import { subscriptionMerchantScopes,subscriptionProviderChargeReceipts,subscriptions } from "./schema";
 import { subscriptionControlledResources,subscriptionControlledOperations,subscriptionControlledCalls,subscriptionControlledFacts,subscriptionControlledChargeOrigins } from "./controlled-provider-schema";
-import { originalControlledCall,controlledProviderJournal } from "./controlled-provider-proof";
+import { originalControlledCall } from "./controlled-provider-proof";
+import type { controlledProviderJournal } from "./controlled-provider-proof";
+import { readComposedControlledProviderJournal,type ControlledJournalComposition } from "./controlled-provider-journal-composition";
 const account=z.string().regex(/^acct_[A-Za-z0-9]+$/).max(200),reference=z.string().min(1).max(200);
 export const controlledCashOrigin=z.object({resourceId:z.uuid(),callId:z.uuid(),factId:z.uuid()}).strict();
 export const controlledCashEvidence=z.object({provider:z.literal("stripe"),subscriptionId:z.uuid(),providerSubscriptionRef:reference,providerPlatformAccountId:account,providerAccountId:account.optional(),
@@ -64,7 +66,7 @@ function validateOriginalControlledCharge(rows:ControlledChargeRows,input:Contro
  return{...original,operation:null,controlledCash:expected,controlledOrigin:{...origin,operationId:operation.id,originalEvidenceDigest:merchantTaxDigest({resource,operation,call,fact,cash:expected})}};
  };
 }
-export async function readOriginalControlledChargeAuthority(tx:Tx,input:ControlledCashEvidence,origin:ControlledCashOrigin){
+export async function readOriginalControlledChargeAuthority(tx:Tx,input:ControlledCashEvidence,origin:ControlledCashOrigin,composition?:ControlledJournalComposition){
  const[resource]=await tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,origin.resourceId)).limit(1);
  const[call]=await tx.select().from(subscriptionControlledCalls).where(eq(subscriptionControlledCalls.id,origin.callId)).limit(1);
  const[operation]=call?await tx.select().from(subscriptionControlledOperations).where(eq(subscriptionControlledOperations.id,call.operationId)).limit(1):[];
@@ -72,19 +74,20 @@ export async function readOriginalControlledChargeAuthority(tx:Tx,input:Controll
  const[original]=resource?await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1):[];
  const validate=validateOriginalControlledCharge({resource,call,operation,fact,original},input,origin);
  if(!resource)mismatch();
- const journal=await controlledProviderJournal(tx,resource.id);
+ const journal=await readComposedControlledProviderJournal(tx,resource.id,composition);
  return validate(journal);
 }
-/** Fresh common-resource ancestry only. No supplied journal/proof, lock,
- * cached business verdict, bank eligibility or caller closure is accepted. */
-export async function readOriginalControlledChargeAuthorities(tx:Tx,requested:{resourceId:string;occurrences:readonly{cash:ControlledCashEvidence;origin:ControlledCashOrigin}[]}){
+/** Common-resource ancestry may share one explicitly composed raw journal;
+ * its final fresh certificate remains mandatory. No lock, business verdict,
+ * bank eligibility or caller closure is supplied by this reader. */
+export async function readOriginalControlledChargeAuthorities(tx:Tx,requested:{resourceId:string;occurrences:readonly{cash:ControlledCashEvidence;origin:ControlledCashOrigin}[]},composition?:ControlledJournalComposition){
  if(!z.uuid().safeParse(requested.resourceId).success||!requested.occurrences.length||requested.occurrences.length>5000
   ||new Set(requested.occurrences.map(row=>`${row.origin.callId}:${row.origin.factId}`)).size!==requested.occurrences.length
   ||requested.occurrences.some(row=>!controlledCashOrigin.safeParse(row.origin).success||row.origin.resourceId!==requested.resourceId))mismatch();
  const[actual]=await tx.select({resource:subscriptionControlledResources,postgresFingerprint:sql<string>`encode(sha256(convert_to(to_jsonb(${subscriptionControlledResources})::text,'UTF8')),'hex')`}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,requested.resourceId)).limit(1);
  if(!actual||!/^[a-f0-9]{64}$/.test(actual.postgresFingerprint))mismatch();const resource=actual.resource;
  const[original]=await tx.select({subscription:subscriptions,scope:subscriptionMerchantScopes}).from(subscriptions).innerJoin(subscriptionMerchantScopes,eq(subscriptionMerchantScopes.subscriptionId,subscriptions.id)).where(eq(subscriptions.id,resource.subscriptionId)).limit(1);
- const journal=await controlledProviderJournal(tx,resource.id);
+ const journal=await readComposedControlledProviderJournal(tx,resource.id,composition);
  if(!original)mismatch();
  const identities=new Set([`subscription_controlled_resources:${resource.id}`,`subscriptions:${original.subscription.id}`,`subscription_merchant_scopes:${original.scope.subscriptionId}`,
   ...journal.operations.map(row=>`subscription_controlled_operations:${row.id}`),...journal.calls.map(row=>`subscription_controlled_calls:${row.id}`),...journal.facts.map(row=>`subscription_controlled_facts:${row.id}`),

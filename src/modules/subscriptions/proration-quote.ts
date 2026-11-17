@@ -4,7 +4,7 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 import { contacts } from "@/core/contacts/schema";
-import { lockContactIdentity } from "@/core/contacts/identity-lock";
+import { lockContactIdentity, lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { translator } from "@/core/i18n";
 import { dataRequests, privacyRetentionExceptions } from "@/core/privacy/schema";
 import { defineService, ServiceError, type ServiceContext } from "@/core/service";
@@ -33,7 +33,7 @@ export async function requireGrossProrationSchema(ctx: ServiceContext) {
 }
 export async function ownGrossProration(ctx: ServiceContext, id: string, planId?: string) {
   if (ctx.actor.kind !== "user") throw new ServiceError("permission", "Sign in personally to review your own subscription change.");
-  await lockContactIdentity(ctx.tx);
+  await lockContactIdentityForRead(ctx.tx);
   const [parent] = await ctx.tx.select().from(subscriptions).where(eq(subscriptions.id, id)).limit(1);
   const [person] = await ctx.tx.select({ id: contacts.id }).from(contacts).where(eq(contacts.userId, ctx.actor.userId)).limit(1);
   if (!parent || parent.contactId !== person?.id) throw new ServiceError("not_found", "There is no such subscription.");

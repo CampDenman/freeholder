@@ -3564,6 +3564,90 @@ open the admin until Thursday still needs to know about Monday.
 
 ## 43. Product Completion Plan — the live checklist
 
+Atomic credit confirmation continuation2026-11-15 (C12.38/C9.33/C11.05/C1.08):
+migration91 admits only the genuine same-transaction proration credit confirmation
+bound to its actual application, reservation, funding, acceptance, target and
+evidence digest. Both deferred guards and current readiness retain exact function
+hashes, and exact trusted-system acceptance attribution remains valid. A fresh
+PostgreSQL parent certificate replaces the duplicate full disposition evaluation.
+The complete unchanged three-case payment file PASSes on fresh migration91:
+positive171.042s, caught-fault rollback120.523s and deferred birth120.258s. The
+nonfinancial preview/source optimization reduced that fixture from about116s to
+71s. Missing controlled roots retain their certified empty-journal behavior; the
+focused native empty/mutation/savepoint/fault controls PASS. No row closes.
+See `deploy/controlled-preview-basis91.source.json`.
+
+Controlled journal-head continuation2026-11-15 (C12.38/C11.05/C1.08): migration90
+maintains a guarded per-resource certificate from the actual immutable row ledger.
+Deterministic deeply frozen safe views reuse only the same fresh certificate; raw
+retainers contain no views or authority verdicts. The complete six-case native
+journal file PASSes on fresh migration91, including empty/missing roots, mutation,
+savepoint ABA and fresh-certificate fault refusal. Earlier payment timeouts were
+resolved by the successor recorded above. No row closes. See
+`deploy/controlled-journal-heads90.source.json` and
+`deploy/controlled-view-cache90.source.json`.
+
+Row-hash ledger and payment-profile continuation2026-11-15
+(C12.38/C11.05/C1.08/C11.10): fresh ordinary migrations88/89 and their real
+insert/update/rollback/direct-write controls PASS; all42 parent source tables and
+nine controlled families have exact stored fingerprints. Focused source reversals,
+TypeScript and affected lint PASS. Earlier CPU-profiled payment timeouts and the
+later complete native result are both preserved in this checkpoint history. No
+checklist row closes.
+See `deploy/controlled-row-hash-ledger88.source.json`,
+`deploy/financial-row-hash-ledger89.source.json`,
+`deploy/merchant-tax-key-index89.source.json` and
+`deploy/controlled-safe-view-digest89.source.json`.
+
+Safe-response public-boundary and payment-performance continuation2026-11-15
+(C11.10/C1.08/C12.38/C11.05): new controlled adapter fixtures now enter the real
+safe-response session, while the reserved projection marker stays on the
+authenticated retained snapshot instead of changing public SDK result equality.
+Current and cached executions compare the same semantic result; pure inventory
+fixtures explicitly use recorded ancestry. Fifty focused adapter/HTTP/source
+cases and the forward reversal controls PASS after those repairs. Payment source
+also shares exact-scope initial principal history, combines principal/debt reads,
+reuses the fresh final witness, batches canonical target rows, and composes one
+journal scope with fresh final certificates. These are NOT accepted performance
+closures: repeated genuine positive attempts on separate fresh databases still
+TIMEOUT at the unchanged180s; the original native SHA remains
+71dd0c0efccab135da068a09cc833939c629f14e15d49a350685b20857dce25c. Full current
+source qualification, provider acceptance, independent review and stable release
+remain open. See `deploy/controlled-safe-public-boundary88.source.json`,
+`deploy/controlled-principal-history-share88.source.json`,
+`deploy/controlled-principal-debt-read88.source.json` and
+`deploy/merchant-tax-key-order88.source.json`.
+
+Controlled cash old-protocol admitted-harness continuation2026-11-15
+(C12.38/C9.33/C1.08/C11.10): the integrated five-case cash-origin file keeps its
+four current safe-protocol positives and runs the unchanged malformed late-callback
+oracle from actual pinned pre-upgrade commit426009a198 through its real old adapter,
+holder and database transactions on a fresh0..85 database. The focused malformed
+case and full five-case file PASS on separate fresh current databases, with the
+old malformed fact retained under a NULL new-protocol admission and raw review.
+No classifier, current ticket check, production predicate, assertion, retention
+mock or180-second timeout changes; no product behavior or schema change. Exact
+forward test reversal and focused source controls PASS. The initial old-child
+setup-timeout failure and every success/failure database are preserved. Provider,
+external drain, S1, security and stable acceptance remain open. See
+`deploy/controlled-cash-origin-old-protocol88.source.json`.
+
+Bounded safe-response migration composition2026-11-15 (C11.10/C1.08/C12.38/C9.33):
+real86 is byte-identical to frozen32ab S0 and its complete predecessor/whole/prefix
+identity is assembled. Real87 corrects both merchant-fee birth comparisons with
+numeric modulo epochs and composes merchant, auxiliary and final credit pins. A
+fifth exact safe-readiness successor changes only the auxiliary pin; without it,
+actual fresh S0 readiness and both native journeys fail closed. Source reversals,
+full types, focused adapter/source tests, real fresh/upgrade88, all five readiness
+checks and both genuine safe-response retention journeys PASS. Seven real boundary
+cases PASS; prepared-transaction proof remains OPEN on max_prepared_transactions=0
+and the real packaged-artifact probe remains UNRUN. The integrated-newer cash-origin
+suite retains its assertions but its five old adapter positives still require the
+safe-protocol admitted-harness continuation; they are not acceptance passes. No
+provider, external closed-set drain, S1, security or stable closure is claimed. See
+`deploy/controlled-safe-response85-composition87.manifest.json` and
+`deploy/merchant-fee-xid-epoch87.manifest.json`.
+
 Controlled journal validation SOURCE checkpoint2026-11-14 (C12.38/C1.08):
 within one synchronous post-fetch pass, the same actual admission/finish/stop
 rows are validated once and reused only for their exact operation/call/finish
@@ -4304,6 +4388,36 @@ hold/terminal-old-receipt reachability must pass first. No provider/security/
 stable/C closure. Issued-authority, capture/quota/cutover and full real acceptance
 remain required. See `deploy/media-legacy-upload-anchor-source-2026-11-14.md`.
 
+Legacy unknown-upload qualification2026-11-16 (C1.12/C11.08): an unmodified
+pre82 runtime at `bab980ad` creates the genuine unwritten reservation against the
+exact current0..81 prefix. The ordinary upgrade through108 then produces a complete
+current retained capture, uses real public hold removal, and creates an independent
+verified request. The unknown native control passes1/1 and the pure anchor controls
+pass8/8; TypeScript and focused lint pass. No bytes, positive caller or provider proof
+are invented. The six retired-written native controls and their independent cohorts
+remain open; their first reachability result follows. See `deploy/media-legacy-upload-unknown-producer.source.json`.
+No provider/security/checklist closure follows.
+
+Retired-upload reachability control2026-11-16 (C1.12/C11.08): a genuine old
+accepted PUT, ordinary upgrade, retained capture, hold removal and second verified
+erasure reach the actual current multipart worker. Its immutable legacy receipt keeps
+`birthDebt`, so the worker refuses before a DELETE or anchor can be created. The failed
+cohort is preserved; no retirement/native assertion is claimed. The shared producer's
+unknown old→upgrade→native regression passes again. TypeScript and focused lint pass.
+See `deploy/media-legacy-upload-retired-reachability.source.json`. All six retired
+controls remain open; no product guard or checklist row changes.
+
+Full-NULL legacy safe-pending classification2026-11-16 (C1.12/C11.08): the genuine
+pre82 written producer has no original caller/runtime and retains NULL receipt/pointer
+birth. The documented anchor contract therefore cannot positively retire or reduce it;
+a new UUID or synthetic caller would be false evidence. A new named old→normal108→
+current-capture→native control passes1/1: both actual workers refuse, no DELETE/anchor
+appears, physical/request/capture evidence remains intact, and only the ordinary asset
+links detach. The unknown/unwritten full regression and19 pure proof cases pass;
+TypeScript/lint pass. See `deploy/media-legacy-upload-unrecoverable-pending.source.json`.
+The six positive anchor controls still require a genuinely eligible historical cohort;
+no product code, provider result or checklist row changes.
+
 Source-only continuation, 2026-11-14 (C1.12/C10.32/C11.08): transfer quota
 settlement/release now follows actual original caller tokens and separate
 source/target physical roles. Real accepted request accounting may precede
@@ -4317,6 +4431,79 @@ native controls PREPARED/UNRUN; all qualification remains UNRUN in this child.
 Actual namespace initialization, issued-authority closure, capture/cutover,
 external provider/operator/security and final stable gates remain required.
 See `deploy/media-transfer-quota-role-source-2026-11-14.md`.
+
+Quota ACK-before-FIN qualification2026-11-16 (C1.12/C10.32/C11.08): the
+independent current producer performs real source/target TCP inventory and quota
+initialization, admits the actual target caller, writes exact bytes, retains accepted
+provider facts, and settles the original token before deliberately omitting outer FIN.
+Its native control passes1/1; all9 pure accounting proofs and static checks pass.
+See `deploy/media-transfer-quota-ack-producer.source.json`. Eight other native cohorts,
+live-provider operation and checklist acceptance remain open; no C-item closes.
+
+Verified-copy quota qualification2026-11-16 (C1.12/C10.32/C11.08): two fresh
+service/TCP cohorts complete the ordinary copy flow. Concurrent settlement reuses the
+exact original token without rewriting physical requests, and SQL refuses early-zero
+and foreign settled-token transitions while preserving the live charge. Both native
+controls pass; TypeScript and focused lint pass. See
+`deploy/media-transfer-quota-verified-copy.source.json`. Six other native cohorts and
+provider/operator/checklist acceptance remain open.
+
+Source-retirement quota qualification2026-11-16 (C1.12/C10.32/C11.08): two
+fresh adopted cohorts preserve synthetic object bytes/revisions across genuine TCP
+producer/native handoff. Conditional source cleanup releases only source capacity while
+target charge and original privacy lineage remain live; a newly named hold refuses
+duplicate old-source release before dedup. Both native controls pass. TypeScript and
+focused lint pass. See `deploy/media-transfer-quota-source-retirement.source.json`.
+Four other native cohorts and actual provider/checklist acceptance remain open.
+
+Privacy quota reachability2026-11-16 (C1.12/C10.32/C11.08): a genuine copied
+cohort produces a verified erasure and real pending transfer/storage/multipart jobs.
+Actual retries then reject one another's later physical receipts as outside immutable
+first captures; the transfer remains unredacted after150s. This is a cross-scope
+coordination defect, not a provider or timeout pass. The failed cohort is preserved and
+the short test deadline restored. TypeScript/lint pass; no product guard changes. See
+`deploy/media-transfer-privacy-scope-reachability.source.json`. Repair and native
+acceptance remain open; no C-item closes.
+
+Privacy descendant-recovery qualification2026-11-16 (C1.12/C10.32/C11.08):
+the preceding failure is repaired without changing first capture bodies. Exact-reservation
+DELETE descendants now join every existing original cohort under genuine transfer
+authority, and an already fully retired transfer returns without more physical/quota
+work. A fresh genuine pg-boss cohort converges and its native control passes after
+108.782s of actual retries. Late-erasure4/4, quota pure9/9 and transfer lifecycle9/9
+regressions pass; TypeScript/lint pass. See
+`deploy/media-transfer-privacy-descendant-recovery.source.json` and changeset
+`media-privacy-descendant-recovery.md`. Hosted/provider and checklist acceptance remain open.
+
+Unknown-target quota qualification2026-11-16 (C1.12/C10.32/C11.08): a genuine
+TCP reply loss after physical dispatch retains an unknown request/caller, pending token
+and charge. The evidence assertion now recognizes a valid failed call with no response
+observation while requiring its unknown frame/finish and rejecting any not-attempted
+fact; release refusal and unchanged-state checks are intact. Producer and native control
+pass1/1 each; TypeScript/lint pass. See
+`deploy/media-transfer-quota-unknown-target.source.json`. The unattempted-retry and
+late-original cohorts remain open; no C-item closes.
+
+Unattempted-target quota qualification2026-11-16 (C1.12/C10.32/C11.08): a
+genuine admitted caller records its actual notAttempted finish without provider I/O.
+The native control releases only that original token, then performs a real same-object
+copy whose new caller has a distinct token and exact settled bytes. Producer/native
+controls pass1/1 each; TypeScript/lint pass. See
+`deploy/media-transfer-quota-unattempted-target.source.json`. Only the late-original
+cohort remains open in this group; no provider or checklist acceptance follows.
+
+Late-original quota recovery2026-11-16 (C1.12/C10.32/C11.08): a fresh genuine
+copy/adopt/retire cohort physically reapplies the exact source bytes over TCP, reads
+them back, and submits the retained original provider revision. The unchanged native
+control first proves the old path wrongly leaves its original caller returned. The
+shared observation path now reopens only callers bound to that exact receipt and
+reconciles the same original quota token. Producer/native controls pass1/1 each;
+release is refused without changing observations. All nine native role cases pass
+on fresh independent post-repair cohorts, including the genuine82.774s privacy worker.
+Fifteen pure quota proofs, nine ordinary recovery cases, TypeScript and focused lint
+pass. See
+`deploy/media-transfer-quota-late-original.source.json` and changeset
+`media-late-original-quota-recovery.md`. No provider or checklist acceptance follows.
 
 
 Source-only continuation, 2026-11-14 (C1.12/C11.08): the idle multipart
@@ -6139,6 +6326,677 @@ reading chat logs.
   prepared but unrun;16 models/owned UNAPPLIED82 stay inactive, and physical
   retirement/multipart/crash/cutover implementation and actual acceptance remain
   required. See `deploy/media-original-first-capture-source-2026-11-13.md`.
+  Scoped original PUT recovery qualification2026-11-15: the first fresh native
+  run failed all four cases because its loopback fixture lacked conditional-write
+  authority mapping. With genuine synthetic AWS-to-TCP transport, two controls
+  passed and two exposed genuine recovery defects. A lost PUT response can have
+  no retained revision, so applied recovery now admits a fresh unpinned read but
+  still requires the original request nonce, exact full bytes and two complete
+  inventories; absence recovery still requires its pinned revision. S3's
+  unversioned `VersionId: null` is normalized to the current object revision,
+  matching the existing TypeScript proof and allowing exact SQL quota settlement.
+  Final fresh migration93 execution passes4/4;27 transfer/wire controls, full
+  TypeScript and focused lint pass. See
+  `deploy/original-put-recovery-lifecycle.source.json`. No hosted/provider,
+  stopped-writer, physical-erasure or C-item acceptance follows.
+  Original provider privacy continuation2026-11-15: both prepared controls first
+  failed at the same loopback fixture authority boundary. With genuine synthetic
+  AWS-to-TCP transport and the repaired applied recovery, fresh migration93
+  execution passes2/2. Subject export excludes foreign physical resources and
+  original request tokens, new immutable provider facts change the evidence
+  version without replacing the first ACK, and unminimized evidence stays pending.
+  Focused lint passes. See `deploy/original-provider-privacy-lifecycle.source.json`.
+  No ingress, provider-account, worker or full-erasure acceptance follows.
+  Original conditional retirement continuation2026-11-15: with genuine synthetic
+  AWS-to-TCP transport, six prepared controls passed immediately. The paused-PUT
+  control expected an exception although the actual non-throwing cleanup contract
+  correctly returned false before DELETE or receipt mutation; only that fixture
+  assertion changed. Final fresh migration93 execution passes7/7 for exact
+  conditional retirement, retained version/session and active-writer refusal,
+  privacy holds, and interrupted/unattempted continuation with no DELETE replay.
+  Focused lint passes. See `deploy/original-retirement-lifecycle.source.json`.
+  No runtime defect or hosted/provider acceptance follows.
+  Applied-review retirement continuation2026-11-15: fresh migration93 execution
+  passes3/3 through genuine lost-reply review, one exact conditional DELETE and
+  guarded raw-evidence minimization. Original returns, request/review/inventory
+  evidence and digests remain intact; a later named hold admits no DELETE. Focused
+  lint passes. See `deploy/original-applied-retirement-lifecycle.source.json`.
+  Independent stopped-executor and hosted/provider acceptance remain open.
+  Monotonic DELETE continuation2026-11-15: the first qualified run passed5/6;
+  fresh-person recovery failed because migration93 admitted the human reviewer
+  but the monotonic SQL predicate still required the system reviewer. Migration94
+  aligns only that reviewer predicate, preserving actual attribution and every
+  physical/no-replay requirement. The first migration control refused an incorrect
+  successor hash; its literal recomputation and failed database are preserved.
+  Final fresh execution passes6/6, the real93→94 official-runner upgrade verifies
+  all95 journals and the exact function body, and full TypeScript/focused lint pass.
+  See `deploy/monotonic-delete-lifecycle.source.json`. No C row closes.
+  Finished DELETE recovery qualification2026-11-15: a genuine migration94 local
+  commit fault after actual provider ACK passes1/1 on fresh PostgreSQL. Recovery
+  retains the first failed return, ACK, request and facts, requires fresh complete
+  physical absence, and sends exactly one DELETE. Focused lint passes; see
+  `deploy/finished-delete-recovery-lifecycle.source.json`. No hosted acceptance.
+  First-capture lifecycle qualification2026-11-15: fresh migration94 execution
+  passes2/2. A first empty hold capture stays unchanged while a separately verified
+  request captures the later authentic writer birth; a mismatched actual queue
+  payload is refused before provider I/O with capture/erasure receipts unchanged.
+  Focused lint passes. See `deploy/original-first-capture-lifecycle.source.json`.
+  No account, ingress, whole-worker or C-item acceptance follows.
+  Multipart CREATE qualification2026-11-15: the first genuine current run failed
+  all5 controls on a resource trigger's operation-only fields. Migrations95–97
+  isolate that branch, parenthesize immutable JSON-page append, and distinguish
+  first session assignment from clearing an existing session. Intermediate runs
+  preserved4,3 and1 failures, the last being a fixture-reset statement timeout;
+  no guard was bypassed. Final fresh migration97 execution passes5/5 and the real
+  94→97 official-runner upgrade verifies all98 journals and all3 repaired bodies.
+  Full TypeScript/focused lint pass. See
+  `deploy/multipart-create-birth-lifecycle.source.json`. Hosted/provider and
+  stopped-executor acceptance remain open; no C row closes.
+  Multipart session-fact ledger qualification2026-11-15: fresh migration97
+  execution passes4/4. Scripted additional facts test only the real ledger after
+  genuine CREATE: conflicts are retained before projection, first ACK/FIN/session
+  identity and results remain immutable, pointer recovery fails closed, and an
+  unretained fact cannot project. Focused lint passes. See
+  `deploy/multipart-session-fact-ledger.source.json`. No additional provider ACK,
+  credential ingress, account or C-item acceptance is claimed.
+  Durable part capability qualification2026-11-15: migration98 publishes only a
+  runtime-predicated authority tag, returning unavailable to old presence-only
+  callers. Fresh execution passes6/6 for once-only body-bound local mint/FIN,
+  raw signer and unrelated-principal refusal, named holds, and delegated authority
+  remaining pending after return. The real97→98 upgrade verifies all99 journals
+  and unavailable untagged capability; full TypeScript/focused lint pass. See
+  `deploy/multipart-part-issuance-lifecycle.source.json`. Actual consumption,
+  stopped/legacy recovery and provider acceptance still govern other controls.
+  Known-CREATE recovery qualification2026-11-15: migration99 resolves a genuine
+  complete-parts variable/column ambiguity, and the owner review listing now keeps
+  accepted operations with unresolved physical callers available. The original
+  precondition run skipped5/5; subsequent controls preserved2 then1 failures.
+  Final fresh execution passes5/5, including review→declare→sign→browser PUT→
+  complete with no second CREATE and no rewritten first results. Real98→99 upgrade
+  verifies100 journals and the exact function body; full TypeScript/focused lint
+  pass. See `deploy/multipart-known-create-lifecycle.source.json`. No C row closes.
+  Provider-part verification qualification2026-11-15: the first current run passed
+  4/5; repeated recovery-only refusal changed the unknown operation timestamp.
+  That path now preserves the retained row instead of re-marking it. Final fresh
+  migration99 execution passes5/5 for checksum/full-nonce readback, wrong/unissued
+  part and named-hold refusal, lost ListParts debt and zero repeated COMPLETE POST.
+  Full TypeScript/focused lint pass. See
+  `deploy/multipart-part-verification-lifecycle.source.json`. No terminal session,
+  provider-account or C-item acceptance follows.
+  Multipart readback qualification2026-11-15: fresh migration99 execution passes
+  2/2. Full part-bound body facts precede object adoption without inventing link
+  consumption or session retirement; same-size byte contradiction preserves the
+  actual COMPLETE ACK/backend object as recovery debt, with no adoption, deletion
+  or fresh POST on repeat. Focused lint passes. See
+  `deploy/multipart-readback-lifecycle.source.json`. No terminal/provider claim.
+  Part-manifest lifecycle qualification2026-11-15: fresh migration99 execution
+  passes5/5. Complete declarations bind to the genuine CREATE caller and repeat
+  idempotently; changed same-size bytes, wrong sizes, other customers and named
+  holds are refused before new provider calls or signing authority. Focused lint
+  passes. See `deploy/multipart-part-manifest-lifecycle.source.json`. No provider
+  consumption, transport authentication or C-item acceptance follows.
+  Withheld-part lifecycle qualification2026-11-15: the first current run passed
+  5/6; its final direct observation insert lacked the shared request capability.
+  Using the genuine capability without weakening guards gives final6/6 on fresh
+  migration99. Private refusal, later genuine issuance, exposed/withheld immutable
+  dispositions, paused callers and additional positive-fact debt reopening retain
+  their original returns and evidence. Focused lint passes. See
+  `deploy/multipart-part-withheld-lifecycle.source.json`. No revocation/provider
+  account or C-item acceptance follows.
+  Unknown-COMPLETE recovery qualification2026-11-15: the first current run passed
+  4/5; JSONB key reordering made the retained part manifest fail its original
+  digest. Creation and recovery now share canonical field ordering, preserving
+  existing digest values. Final fresh migration99 execution passes5/5, including
+  canonical completion without another POST, nonce/session/debris refusals and
+  active/scoped-caller controls. Full TypeScript/focused lint pass. See
+  `deploy/multipart-applied-recovery-lifecycle.source.json`. No invented ACK/FIN,
+  provider account, host stop, erasure or C-item acceptance follows.
+  Original ABORT recovery qualification2026-11-15: migration100 resolves the
+  idle guard's operation-column ambiguity. Initial execution passed3/6, then5/6;
+  the retained-debris continuation exceeded60s, so only that genuine proof case
+  now allows120s and passes68s. Final fresh execution passes6/6 in167s, preserving
+  first failed inventories, admitting no second DELETE, and refusing active/scoped
+  or wrong-namespace callers. Real99→100 upgrade verifies101 journals and the exact
+  guard body; full TypeScript/focused lint pass. See
+  `deploy/multipart-abort-recovery-lifecycle.source.json`. No provider/host claim.
+  Repeat-ABORT qualification2026-11-15: the unchanged positive passed in281.6s;
+  phase profiling isolated195.5s to certificate insertion and found three triggers
+  repeating the identical seal predicate. A 3% async-local cache experiment was
+  rejected and reverted. Migration101 retains the dedicated mandatory certificate
+  guard while removing only its two duplicate evaluations. Positive124.1s, final
+  aggregate6/6 in282s, and real100→101 upgrade verifies102 journals/both bodies.
+  Full TypeScript/focused lint pass. See
+  `deploy/multipart-repeat-abort-lifecycle.source.json`. No provider/host closure.
+  Retirement-certificate lifecycle qualification2026-11-15: fresh migration101
+  execution passes6/6. Sealing is idempotent; human/system reviews remain separate;
+  forged/stale certificates and non-system callers are refused; named holds and
+  scripted late facts reopen current debt without rewriting first certificates,
+  ACK/FIN or provider history. Focused lint passes. See
+  `deploy/multipart-retirement-certificate-lifecycle.source.json`. No provider
+  account, independent executor or C-item acceptance follows.
+  Idle-compaction lifecycle qualification2026-11-16: the initial7/8 aggregate
+  isolated late same-first re-review. Recovery now coalesces identical queued
+  erasure work, recognizes an owning transaction's exclusive identity lock,
+  shares intact-certificate evaluation, and preserves exact human re-review
+  attribution. Migration105 computes the expected proof/identity once before
+  applying the unchanged certificate authority predicate. Fresh105 passes8/8
+  in224.32s; the late case passes70.422s and repeat-ABORT positive43.498s.
+  Privacy/certificate/repeat regressions pass20/20; the official102→105 upgrade
+  verifies106 journals and all three new function bodies. Full TypeScript,
+  focused lint, plan, license and changelog gates pass. See
+  `deploy/multipart-idle-compaction-lifecycle.source.json`. No provider account,
+  hosted executor, clean-room or C-item acceptance follows.
+  Retirement catch-up qualification2026-11-16: fresh migration105 passes6/6
+  through real pg-boss delivery. Interrupted-owner recovery uses the identical
+  queued safe proof without another DELETE; immediate sealing deduplicates;
+  holds, late facts and copied jobs refuse stale authority; post-enqueue failure
+  rolls back retirement, queue and claim together while retaining first ACK/FIN.
+  Focused lint passes. See `deploy/multipart-retirement-catchup-lifecycle.source.json`.
+  No provider account, OS-stop proof or C-item acceptance follows.
+  Idle-session retirement qualification2026-11-16: fresh migration105 passes7/7.
+  Genuine ACK/FIN, two-request absence and two complete inventories retire only
+  the never-exposed original; retained-first-ACK CREATE recovery composes without
+  replacing its failed first result. Exposed links, named holds, retained physical
+  debris, lost ABORT replies and paused writers preserve honest recovery debt.
+  Focused lint passes. See `deploy/multipart-idle-retirement-lifecycle.source.json`.
+  No provider account or C-item acceptance follows.
+  Transfer read-provenance qualification2026-11-16: the initial direct-loopback
+  fixture lacked conditional-write authority; synthetic AWS-to-TCP mapping keeps
+  every product assertion intact. Migration106 disambiguates the actual inventory
+  caller,107 reads plan-only adoption fields only for plans, and108 distinguishes
+  the target receipt alias. Fresh108 passes4/4 in39.01s; official105→108 verifies
+  109 journals and both guard bodies. Full TypeScript/focused lint pass. See
+  `deploy/media-transfer-read-provenance-lifecycle.source.json`. No provider
+  account, cross-module or C-item acceptance follows.
+  Chained-transfer qualification2026-11-16: fresh migration108 passes3/3. Two
+  actual physical generations preserve exact original receipt ancestry and the
+  logical alias; a real current-source session refuses another claim; SQL refuses
+  intermediate-edge rebinding without new provider I/O. Synthetic AWS-to-TCP
+  transport preserves all assertions. Focused lint passes. See
+  `deploy/media-chained-transfer-lifecycle.source.json`. No provider account or
+  C-item acceptance follows.
+  Target-PUT review qualification2026-11-16: fresh migration108 passes6/6. A
+  finished lost-response target is affirmed by its original nonce/full bytes and
+  complete inventory, then resumes without another PUT. Foreign nonces, retained
+  versions/sessions and named holds remain refused; the first NULL result digest
+  stays sealed. Synthetic AWS-to-TCP transport preserves every assertion. Focused
+  lint passes. See `deploy/media-target-put-review-lifecycle.source.json`. No
+  provider account, executor stop or C-item acceptance follows.
+  Drain-association qualification2026-11-16: fresh migration108 passes4/4.
+  Capture-only metadata grants no release; subset caller cohorts and fabricated
+  terminal births are refused; a genuinely pre-admitted target PUT stays fenced
+  even when the later capture names its exact current plan. Synthetic AWS-to-TCP
+  transport preserves every refusal. Focused lint passes. See
+  `deploy/media-transfer-drain-association-lifecycle.source.json`. No kernel stop,
+  provider account or C-item acceptance follows.
+  Original namespace-fence qualification2026-11-16: fresh migration108 passes6/6.
+  Cold/warm ordinary writers and raw children remain fenced without blocking exact
+  GET recovery; active claims reject same-key admission; matching transfer ancestry
+  conditionally retires its source; already-dispatched late bytes retain their
+  original facts. Initial failures were test wrapper assumptions, not bypasses;
+  exact SQLSTATE/message assertions now match the actual error boundary. Focused
+  lint passes. See `deploy/media-original-namespace-fence-lifecycle.source.json`.
+  No provider account, executor stop or C-item acceptance follows.
+  Controller-fence qualification2026-11-16: fresh migration108 passes2/2. A new
+  unrelated namespace drain refuses both SQL and actual-factory children of plan
+  A's authentic admitted target caller; plan B cannot capture while plan A owns
+  that caller. Synthetic AWS-to-TCP transport preserves every assertion. Focused
+  lint passes. See `deploy/media-transfer-controller-fence-lifecycle.source.json`.
+  No provider account, process stop or C-item acceptance follows.
+  Main storage-transfer qualification2026-11-16: the synthetic fixture now serves
+  bounded inventory XML and original request proof while preserving its target
+  pause/lost-reply behavior. Three transfer jobs declared after the old core list
+  were genuinely unregistered; normal boot now includes advance, erase and late-
+  fact reconciliation, with explicit registry assertions. Fresh108 passes9/9 in
+  63.65s, including conditional retirement, privacy holds and admitted-PUT debt.
+  Full TypeScript/focused lint pass. See
+  `deploy/media-storage-transfer-lifecycle.source.json`. No provider account,
+  ingress or C-item acceptance follows.
+  Unadmitted-target qualification2026-11-16: fresh migration108 passes its real
+  collision control. An identically hashed pre-existing target is neither read,
+  adopted nor deleted; only the actual original source retires, with no target
+  PUT/privacy-delete caller and no false whole-request completion. Synthetic
+  AWS-to-TCP transport preserves every assertion. Focused lint passes. See
+  `deploy/media-transfer-unadmitted-target.source.json`. No provider account or
+  C-item acceptance follows.
+  Multipart wire qualification2026-11-16: all13 protocol controls pass. Exact
+  full-response digests survive keep-alive framing; malformed/oversized XML,
+  entity expansion, duplicate fields, wrong buckets and HTTP200 errors never
+  become acceptance. NoSuchUpload remains absence, not ABORT proof. Focused lint
+  passes. See `deploy/media-multipart-complete-wire.source.json`. No real auth,
+  provider account or terminal caller-consumption acceptance follows.
+  Part-capability wire qualification2026-11-16: all10 actual SigV4 controls pass.
+  Signed URLs bind exact session/part/size/checksum/public nonce; raw server-held
+  tokens stay out of responses and durable facts; no network call or provider ACK
+  is invented. Missing identity, altered signer output, excessive deadlines and
+  retention failure preserve the original boundary. Focused lint passes. See
+  `deploy/media-multipart-part-capability-wire.source.json`. No app authorization
+  or provider acceptance follows.
+  Part-verification wire qualification2026-11-16: all12 checksum-bound controls
+  pass. Complete page identities require exact checksums, sizes, ETags and browser
+  receipts; later errors, missing/extra parts and NoSuchUpload never invent done
+  or authority consumption. CREATE/COMPLETE retain their checksum configuration,
+  canonical manifest and create-only condition. Focused lint passes. See
+  `deploy/media-multipart-part-verification-wire.source.json`. No service account
+  or terminal acceptance follows.
+  Multipart readback wire qualification2026-11-16: all6 controls pass. Actual
+  bounded chunks retain whole SHA, exact part digest, original CREATE nonce and
+  pinned revision. Altered, truncated, excessive or unchecksummed bytes never
+  certify the original; absence stays absence and legacy full reads remain
+  explicit. Focused lint passes. See `deploy/media-multipart-readback-wire.source.json`.
+  No real authorization, original writer FIN or terminal acceptance follows.
+  Completed-stream wire qualification2026-11-16: all7 controls pass. Every actual
+  chunk is hashed at the exact pinned version without returning another full body
+  buffer; actual bytes, not declared length, determine the count. Oversized and
+  interrupted streams cannot emit proof, changed revisions are refused, missing
+  CREATE metadata stays unknown and404 remains absence. Focused lint passes. See
+  `deploy/media-completed-stream-wire.source.json`. No account/auth or terminal
+  acceptance follows.
+  Original-metadata wire qualification2026-11-16: all6 actual HEAD controls pass.
+  Discovered/pinned revisions, byte size and original CREATE nonce retain their
+  exact evidence; changed versions and malformed sizes are refused;404 remains
+  an observation and missing metadata never invents a nonce. Focused lint passes.
+  See `deploy/media-original-metadata-wire.source.json`. Metadata alone proves no
+  original body, ACK, FIN, complete physical absence or executor stop.
+  Part-disposition qualification2026-11-16: all6 actual process-local controls
+  pass. Only the exact active invocation/token can assert withheld authority;
+  returned URLs cannot acquire it; success, failure and detached work expire it;
+  concurrent siblings and nested callers cannot borrow it. Focused lint passes.
+  See `deploy/media-multipart-part-disposition.source.json`. No remote proof or
+  provider acceptance follows.
+  Completion-manifest qualification2026-11-16: all8 controls pass. Browser ETags
+  remain exact while sizes/checksums derive only from the immutable declaration;
+  missing, extra, reordered, duplicate, resized or malformed parts are refused
+  without mutating either input or inventing received/consumed evidence. Focused
+  lint passes. See `deploy/media-multipart-complete-manifest.source.json`. No
+  provider or consumption acceptance follows.
+  Part-body declaration qualification2026-11-16: all8 controls pass. Fixed part
+  boundaries, final remainder, canonical ordering, SHA256 and bounded whole-file
+  reservations are enforced without changing the submitted declaration. Resume
+  detects a same-size different file without replacing the first manifest. Focused
+  lint passes. See `deploy/media-multipart-part-bodies-proof.source.json`. Client
+  declarations grant no provider receipt, FIN or actual I/O acceptance.
+  CREATE-baseline qualification2026-11-16: all12 controls pass. Sealing requires
+  both exact complete policy/object/version/session passes with cursor and request
+  ancestry. Existing physical resources, policy changes, truncated loops, duplicate
+  requests and sealed rewrites are refused without copying foreign private locators.
+  Focused lint passes. See `deploy/media-multipart-create-baseline-proof.source.json`.
+  No session assignment, FIN or remote terminal acceptance follows.
+  Known-CREATE proof qualification2026-11-16: all8 controls pass. Portable actual
+  finishes require no Linux path; unknown first ACK, changed UploadId, active
+  callers, incomplete pre-CREATE baselines, foreign stops, retained debris and
+  altered review/read/physical identities are refused without filling NULL FINs.
+  Focused lint passes. See `deploy/media-multipart-known-create-proof.source.json`.
+  Fictional proof inputs establish no actual host stop or provider acceptance.
+  ABORT-recovery proof qualification2026-11-16: all8 controls pass. Actual
+  portable FINs need no Linux path; missing FINs retain NULL until exact independent
+  stop proof. Changed namespaces, sessions, request sets, creator roles, runtime
+  births, descriptors, stop identity/timing and partial FINs are refused. Focused
+  lint passes. See `deploy/media-multipart-abort-recovery-proof.source.json`.
+  No remote ACK, provider absence, actual host stop or erasure completion follows.
+  Idle-retirement proof qualification2026-11-16: all7 controls pass. Exact actual
+  ABORT ACK/FIN and one original physical request are required;404, unknown replies,
+  active callers and changed identity cannot substitute. Full agreeing absence
+  accepts no retained original object/version/session or policy difference and does
+  not adopt unrelated observations. Focused lint passes. See
+  `deploy/media-multipart-idle-retirement-proof.source.json`. No real provider
+  retirement or executor claim follows.
+  Unknown-COMPLETE proof qualification2026-11-16: all13 controls pass. Exact
+  original nonce, selected parts, byte budget, physical timing and independent
+  closure are required; duplicate/overwrite requests, foreign pages, changed
+  policy, absence and later equal-body generations are refused without inventing
+  ACK/FIN or terminal fields. Focused lint passes. See
+  `deploy/media-multipart-complete-recovery-proof.source.json`. No host stop,
+  provider terminal authority, business acceptance or independent review follows.
+  Retained-identity proof qualification2026-11-16: all10 controls pass. Historical
+  first resource/CREATE/ABORT/physical identities remain distinct from current
+  permission. Late sessions compare against first digests without refilling raw
+  NULLs; exact caller/request/token/runtime and ephemeral candidate checks refuse
+  foreign evidence, mutation use and historical local-closure promotion. Focused
+  lint passes. See `deploy/media-multipart-retained-identity-proof.source.json`.
+  No certificate, kernel stop, provider outcome or compact-erasure proof follows.
+  Retirement-codec proof qualification2026-11-16: all8 controls pass. The whole
+  versioned safe body has a deterministic digest without input mutation; real NULL
+  ACK/FIN survive an explicit distinct stop review. Raw locators, changed ancestry,
+  duplicate/reordered membership, detached stop/review references, incomplete
+  inventories and truncated frontiers are refused. Focused lint passes. See
+  `deploy/media-multipart-retirement-certificate-proof.source.json`. A safe codec
+  alone grants no retirement or provider authority.
+  Retirement-job contract qualification2026-11-16: all5 scope controls pass.
+  The fixed safe admission excludes raw provider fields and requires the complete
+  frontier; durable keys distinguish proof and operation. Cloned, uninstalled,
+  detached or cancelled contexts cannot reuse the actual worker execution. Focused
+  lint passes. See `deploy/media-multipart-retirement-job-contract.source.json`.
+  Synthetic scopes alone are not genuine pg-boss execution.
+  Original applied-review proof qualification2026-11-16: all9 controls pass.
+  Exact affirmative review, original nonce/descriptor, positive inventory and
+  independent closure are required; retry, substituted references, retained debt
+  and stale/unfinished absence are refused. Portable reviewed finishes need no
+  Linux path and missing original returns remain NULL. Focused lint passes. See
+  `deploy/media-original-applied-review-proof.source.json`. Fictional proof values
+  establish no actual executor acceptance or provider outcome.
+  Target-review proof qualification2026-11-16: all4 controls pass. Exact target
+  object review preserves missing caller/physical returns; another target with
+  equal key/nonce/bytes is refused. Ordinary receipt reviews cannot become transfer
+  authority, and target reviews cannot become ordinary standalone retirement proof.
+  Focused lint passes. See `deploy/media-target-put-review-proof.source.json`.
+  Fictional scoped values establish no actual stop or provider acceptance.
+  Monotonic-DELETE closure qualification2026-11-16: all10 controls pass. Actual
+  local finish or exact independent stop is required; ambiguous DELETE is not
+  replayed by default. Missing result/ACK/FIN remain NULL, while paused, unverified,
+  foreign-birth, changed-generation, duplicate, post-fence and wrong-operation
+  attempts are refused. Focused lint passes. See
+  `deploy/media-monotonic-delete-local-closure.source.json`. Fictional stops prove
+  no real executor stop or remote ACK.
+  Ordinary retirement proof qualification2026-11-16: all16 controls pass. Exact
+  original finishes, fresh pinned absence and two complete agreeing inventories
+  are required; paused writers, extra mutations, changed generations, corrupted
+  descriptors and retained version/session/marker debt are refused without adopting
+  unrelated private resources. Focused lint passes. See
+  `deploy/media-original-retirement-proof.source.json`. Real database/private-provider
+  retirement acceptance remains open.
+  Original request-recovery proof qualification2026-11-16: all12 controls pass.
+  Exact original nonce, bytes, revision, runtime and matching complete inventories
+  are required; active callers, missing frames, extra mutations, foreign request
+  tags, retained debt and changed policy are refused without adopting unrelated
+  resources. Focused lint passes. See
+  `deploy/media-original-request-recovery-proof.source.json`. Actual DB/provider
+  recovery acceptance remains open.
+  Original recovery-quota qualification2026-11-16 (C10.32/C11.08): all6 controls
+  pass. Only the exact original reserved/settled token is recognized within its
+  byte bound; another operation, missing reservation, changed bytes or smaller
+  bound cannot invent or borrow capacity. Focused lint passes. See
+  `deploy/media-original-recovery-quota.source.json`. Hosted quota acceptance
+  remains open.
+  Late-fact quota proof qualification2026-11-16 (C10.32/C11.08): all6 controls
+  pass. Exact original charges are restored/retained without inventing a new token;
+  stale settlement reopens only for that token; smaller charges regain their
+  immutable admitted bound while larger charges stay intact. Conflicting rows and
+  invalid bounds refuse capacity changes. Focused lint passes. See
+  `deploy/media-original-quota-late-fact-proof.source.json`. Hosted acceptance
+  remains open.
+  Managed-producer lifecycle qualification2026-11-16 (C1.12/C11.08/C12.36/C8.07):
+  fresh migration108 passes6/6 real shared-service/fictional-TCP controls. Encrypted
+  member upload/access/unsend and conditional retirement retain the original nonce,
+  bytes and physical FIN; a lost reply stays pending without confirm/rebind/forget.
+  SQL refuses a different reservation birth. A real authorized gallery archive has
+  its own business-owned generation. Passive Doctor read scope performs no provider
+  mutation; explicit owner probing is audited, and raw managed PUT is refused before
+  provider I/O. TypeScript and focused lint pass. See
+  `deploy/media-managed-producers-lifecycle.source.json`. No issued-key transport,
+  real provider account, hosted platform or checklist acceptance follows.
+  Upload-reservation lifecycle qualification2026-11-16 (C1.12/C11.08): fresh
+  migration108 passes5/5 genuine upload/abort/retention/verified-erasure controls.
+  The repeated-request control exposed and fixed an artifact-ID/request-ID mismatch
+  that misclassified valid prior media receipts as foreign. The exact original UUID
+  and key digest survive without provider I/O or rewriting the old scope. Ten
+  neighboring first-capture/identity controls also pass; TypeScript and focused lint
+  pass. See `deploy/media-upload-reservation-lifecycle.source.json`. No provider
+  account, legacy upgrade, hosted erasure or checklist acceptance follows.
+  Empty-first-scope old-runtime qualification2026-11-16 (C1.12/C11.08/C11.14):
+  the unchanged four-case control PASSes against a genuinely migrated91 prefix,
+  before request-capability publication. Real empty original/transfer captures seal;
+  request/contact/scope and warm-runtime ABI mismatches refuse; a later actual upload
+  cannot rewrite the old capture or artifact. No provider privilege, physical request
+  or provider I/O is acquired. The test bootstrap now honors the existing migration-
+  skip switch for this historical boundary. TypeScript and focused lint pass. See
+  `deploy/media-empty-first-scope-lifecycle.source.json`. No current-runtime/provider
+  acceptance or C-item closure follows.
+  Empty-first-scope current-runtime qualification2026-11-16
+  (C1.12/C11.08/C11.14): a separate current108 control leaves the old-runtime oracle
+  unchanged and PASSes3/3 on a fresh database. Actual empty original/transfer captures
+  and their artifact seal; the complete-protocol lock has its documented transaction-
+  scoped authority but creates no caller/request or provider call; a forged capture
+  refuses; a later real upload cannot rewrite the sealed evidence. The first draft's
+  assumption that the full lock withheld its capability was corrected before the final
+  fresh run. TypeScript/focused lint pass. See
+  `deploy/media-empty-first-scope-current.source.json`. No product code, hosted provider
+  or checklist acceptance changes.
+  Media pure-proof qualification2026-11-16 (C1.12/C10.32/C11.08): all29 controls
+  pass across exact quota-token settlement/release, original multipart session-fact
+  classification, first-captured stopped-source review and legacy NULL-upload anchor
+  handling. Equal keys, replacement identities, missing birth/stop proof and mutable
+  historical captures remain refused. Focused lint passes. See
+  `deploy/media-pure-proof-qualification.source.json`. These immutable projections
+  supply no real kernel-stop, provider, upgrade or checklist acceptance.
+  Part-signing old-runtime qualification2026-11-16 (C1.12/C11.08): the unchanged
+  refusal oracle PASSes2/2 against a genuinely migrated97 prefix, before the durable
+  part capability exists. Real open CREATE sessions in both created/uploading states
+  preserve all original rows and provider state; the configured signer is never called.
+  The fixture was completed only with actual empty baseline reads and exact bucket/key
+  CREATE context after its first run failed before reaching the oracle. TypeScript and
+  focused lint pass. See `deploy/media-part-signing-authority-lifecycle.source.json`.
+  Issued URLs, old-binary recovery, current provider acceptance and C closure stay open.
+  Part-signing current108 regression qualification2026-11-16 (C1.12/C11.08): the
+  unchanged six-case genuine local issuer file PASSes6/6 on a fresh current database
+  after the late-original observation/quota repair. Once-only body-bound mint/FIN,
+  raw-signer/foreign-principal/named-hold refusal, pending delegated authority and old
+  untagged-call refusal all remain intact. No test or product source changed. See
+  `deploy/media-part-signing-current108.source.json`. Actual consumption, hosted provider
+  and checklist acceptance remain open.
+  Signed-part consumption current108 regression qualification2026-11-16
+  (C1.12/C11.08): four unchanged genuine lifecycle files PASS18/18 in136.21s on one
+  fresh current database. Declarations, actual checksum/full-nonce readback, lost
+  ListParts recovery, wrong/foreign/held refusal, full stored-part facts, contradictory
+  bytes, and withheld/exposed first dispositions preserve exact evidence without a
+  repeated COMPLETE or invented adoption/retirement. No test or product source changed.
+  See `deploy/media-part-consumption-current108.source.json`. Hosted provider and
+  checklist acceptance remain open.
+  Multipart terminal-recovery current108 qualification2026-11-16 (C1.12/C11.08):
+  unchanged genuine COMPLETE/ABORT files PASS11/11 in155.48s on one fresh database,
+  with29/29 supporting pure proofs. Lost replies recover through exact fresh bytes and
+  inventories without another POST/DELETE or invented first ACK/FIN. Foreign nonces,
+  retained debris, wrong namespaces, paused callers and scoped keys remain refused.
+  No test or product source changed. See
+  `deploy/media-terminal-recovery-current108.source.json`. Hosted provider, independent
+  executor and checklist acceptance remain open.
+  Retirement-certificate current108 qualification2026-11-16 (C1.12/C11.08): unchanged
+  repeat-ABORT/certificate files PASS12/12 in204.44s on one fresh database, with36/36
+  supporting identity/retirement/local-closure proofs. Same-original late-fact re-review
+  uses fresh reads/inventories and a new seal/job without DELETE replay or first-result
+  replacement. Holds, foreign locators/stops, scoped keys, live signing and rewritten
+  certificates refuse. No test or product source changed. See
+  `deploy/media-retirement-certificate-current108.source.json`. Hosted/provider and
+  checklist acceptance remain open.
+  Idle-minimization current108 qualification2026-11-16 (C1.12/C1.08/C11.08):
+  unchanged compact/catch-up/retirement files PASS21/21 in408.22s on one fresh database;
+  shared privacy reopening PASSes5/5 separately and20/20 supporting proofs pass. Real
+  workers reduce exact original locators, re-review late facts and roll back failed
+  enqueue/claim atomically without another DELETE. Copied jobs, named holds, exposed
+  links, retained debris, unknown ABORT and wrong sessions remain refused. No test or
+  product source changed. See `deploy/media-idle-minimization-current108.source.json`.
+  Hosted provider, independent executor and checklist acceptance remain open.
+  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):
+  all29 fictional-transport controls pass. DigitalOcean origin creation is one-shot,
+  unpredictably named and separately signed to its installed namespace; existing,
+  missing-request-ID and lost-reply results remain debt without another PUT. Strict
+  source/image/profile validation, safe CDN redirects and actual account/image refusal
+  occur before provider mutations. Focused lint passes. See
+  `deploy/media-namespace-origin-admission.source.json`. No real account, compatible
+  published image, installed runtime, launch or checklist acceptance follows.
+  Managed-adapter/completed-body/drain proof qualification2026-11-16
+  (C1.12/C11.08): all21 controls pass. Application raw object/session/part mutations
+  stay refused before provider I/O while reads remain unchanged. Completed multipart
+  bodies require exact original CREATE nonce, FIN, descriptor, full bytes and revision;
+  transfer-drain release requires the complete unchanged captured/current cohort.
+  Focused lint passes. See `deploy/media-adapter-completed-drain-proof.source.json`.
+  These structural controls do not close provider, kernel-stop or C-item acceptance.
+  Stored-part readback qualification2026-11-16 (C1.12/C11.08): all7 controls pass.
+  Original part boundaries and canonical SHA256 are verified independently of stream
+  chunks; altered/missing/extra bytes, malformed manifests and verifier replay refuse.
+  The result retains only the exact selected manifest digest, never a full body or
+  caller FIN. Focused lint passes. See `deploy/media-stored-part-readback.source.json`.
+  No provider, caller-terminal or checklist acceptance follows.
+  Current resumable-media qualification2026-11-16 (C1.12/C11.10): the focused
+  private-S3 and expiring-phone controls pass2/2 on fresh migration108. The positive
+  control now exercises actual declaration, signing, body-bound PUT, inspection,
+  COMPLETE, exact original CREATE/readback binding, asset registration and idempotent
+  retry; all prior final assertions remain. TypeScript and focused lint pass. See
+  `deploy/media-current-resumable-lifecycle.source.json`. The earlier broad media run
+  TIMED OUT at600s; its initial fixture failures are superseded only for these two
+  cases. Capture timeout/trailing resets and raw-write raster fixtures remain open.
+  Complete current-media regression qualification2026-11-16 (C1.12/C11.10): after
+  the focused capture/raster/ownership repairs, the unchanged complete media file now
+  PASSes48/48 in241.58s on a fresh current108 database. Validation, asset/rendition
+  lifecycle, malware/quarantine, deletion, private resumable upload, expiration and
+  usage-reference controls all compose; the earlier600s timeout does not reproduce.
+  Seven stored-part proofs also pass. No test or product source changed. See
+  `deploy/media-current-complete-current108.source.json`. Hosted provider/performance
+  and checklist acceptance remain open.
+  Integrated fast-gate qualification2026-11-16 (C11.17): `pnpm gates` PASSes full
+  TypeScript, full ESLint139.9s, license/release/plan/playground checks and44 contract
+  files with387 passing/26 explicit database-skipped cases. No failure is hidden and no
+  product source changed. Browser, recipe, SEO, upgrade, hosted and clean-room suites
+  remain separate and open. See `deploy/integrated-fast-gates-20261116.source.json`;
+  no checklist row closes.
+  Production-artifact qualification2026-11-16 (C11.17): `pnpm build` exits0 in216.72s
+  and runs the standalone gate:4395 files/153667318 bytes with no source or environment
+  leakage. Build-only locales/packages/src roots were scrubbed. Existing optional ts-mls
+  module warnings and the expected missing production DB/session build-page message stay
+  visible; neither is called a runtime startup pass. No product source changed. See
+  `deploy/production-build-20261116.source.json`. Hosted startup and C11.17 remain open.
+  Package-consumer qualification2026-11-16 (C11.17): `pnpm packages:verify` PASSes,
+  packing/installing/exercising all7 published packages outside the workspace. No product
+  source changed. See `deploy/package-artifacts-20261116.source.json`. Ownership drill and
+  image upgrade remain unrun locally because psql/Docker are unavailable; C11.17 is open.
+  Local Linux-release smoke qualification2026-11-16 (C3.44/C11.17): the normal dirty
+  guard first refused; explicit local-only `--allow-dirty` packaging then produced the
+ 83.8MB beta6 x64 tarball with SHA256 ee8d7e9b0338f609bb2d056fdeb9e4b8977b23ea164cfb3c9311b47108c2f7a0.
+  A freshly extracted copy migrated a new database with its bundled runtime, then booted
+  with the genuine worker: health and DB both ok:true,124 registered/mounted jobs and
+  one current worker. The smoke server was stopped. This is not an official release,
+  owner claim or hosted acceptance. See `deploy/local-release-smoke-20261116.source.json`.
+  Source-continuation repair2026-11-16 (C11.17/C1.08/C11.14): the full standard source
+  run had5124 passes and three exact-hash failures. Approved successors predated current
+  privacy-coalescing, migration-skip and commercial-amendment deltas. Exact forward
+  continuations now restore those approved predecessors before the unchanged original
+  oracles; all three focused files PASS24/24. One intermediate continuation literal was
+  corrected without touching source. See `deploy/source-continuity-current108-20261116.source.json`.
+  Renewed full source PASSes601 files/5127 cases with zero failures in667.00s;361 files/
+  3806 cases explicitly skip without a database, and full ESLint passes. Hosted, clean-room
+  and signed acceptance remain open; no C row closes.
+  Full local browser qualification2026-11-16 (C11.17): the named journey command
+  PASSes3/3 broad Chromium journeys in1.4m on a fresh database, and the separate full
+  accessibility command PASSes1/1 in2.2m on another fresh database. Visitor-to-paid,
+  phone capture, setup/editing/publishing/API/MCP/recovery and setup/admin/editor/
+  storefront/portal accessibility all pass. No product source changed. See
+  `deploy/full-local-browser-20261116.source.json`. Hosted, upgrade and owner-signed
+  acceptance remain open; no C row closes.
+  Complete-browser failure audit and repair2026-11-16 (C1.08/C1.12/C3.22/C5.19/C9.38/
+  C11.17/C12.23/C12.38): the actual189-case run was NOT GREEN:156 passed,31 failed,
+  2 skipped. Nine raw privacy fixtures now use the required identity lock; the member
+  upload fixture restores real contact ownership; archive cleanup has a cycle-free
+  guarded deletion entry; the legacy merchant trial declares its actual scope version.
+  Focused privacy/import PASS13/13 and archive/member/trial PASS9/9. All35 selected
+  media controls pass after isolating database-resetting files. The real pending-membership
+  parallel-read fix PASSes native1/1 and its production-browser control. Genuine signed
+  return-callback controls PASS2/2 and all8 localized return journeys PASS. Every original
+  failure now has a focused pass, but the complete source/browser reruns remain required.
+  See `deploy/browser-failure-repairs-20261116.source.json`; no C row closes.
+  Native media-isolation repair2026-11-16 (C1.12/C11.17): three full-source attempts
+  timed out; the second exposed eight capture failures after an erasure case stalled.
+  The third passed capture/subscription-billing before the harness deadline. The stalled
+  case generated3182 entries from accumulated shared local media. Vitest
+  now supplies a unique temporary media root per run unless explicitly configured.
+  The complete capture file PASSes17/17 under that ordinary configuration, including
+  its concurrent-upload control. The final full source/browser reruns remain open.
+  Framework security/performance qualification2026-11-16 (C11.10/C11.17): Next.js
+  moves16.4.2→16.4.6, including the official November security fixes
+  (https://nextjs.org/blog/november-2026-security-release). The dependency audit now
+  reports no known advisories. Small-dataset performance PASSes10/10 on a fresh database;
+  the patched build/artifact gate passes with4399 files/152787678 bytes and no leakage;
+  all7 package consumers pass again. A source-continuation entry covers the exact Next
+  version delta and its two affected contracts PASS52/52. Final full source PASSes601
+  files/5127 cases with zero failures in662.16s, preserving361 files/3806 explicit skips.
+  See `deploy/next-security-performance-20261116.source.json`. No independent
+  security review or stable acceptance follows.
+  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old
+  fixture's direct NULL-birth PUT/resource inserts were correctly refused by current
+  guards. Genuine failed ordinary PUT evidence now uses the native sidecar/absence
+  pattern, and genuine lost-CREATE evidence comes from a separate current Vitest producer
+  with UUID-only handoff. The stale audit assertion names applyOriginalPutRecovery.
+  Final Chromium PASSes4/4 across en/es/fr/ar with step-up,320px/RTL,both themes,Axe,
+  exact recovery, private audit and anonymous refusal. TypeScript/focused lint pass. See
+  `deploy/media-storage-recovery-browser-current.source.json`. No product code or C row changes.
+  Publication-consent browser qualification2026-11-16 (C8.16/C11.17): the unchanged
+  Chromium journey PASSes1/1 in20.6s on a fresh current database. Grant/expiry/withdrawal,
+  the preserved decision ledger, both themes and Axe pass. No product source changed.
+  See `deploy/media-consent-browser-current.source.json`. Full clean-room and signed
+  acceptance remain open.
+  Editor-media browser qualification2026-11-16 (C1.12/C11.17): the unchanged Chromium
+  journey PASSes1/1 in37.0s on a fresh current database: canvas upload, crop/focal point,
+  save and published-page rendering. Local disposable storage supplies no hosted claim.
+  No product source changed. See `deploy/editor-media-browser-current.source.json`.
+  Full clean-room and signed acceptance remain open.
+  Hosted-source media browser qualification2026-11-16 (C3.22/C11.17): unchanged
+  Chromium journeys PASS4/4 in46.9s across en/es/fr/ar on a fresh current database.
+  Origin approval, staged-media review and cancellation pass. Local/synthetic fixtures
+  supply no live provider or C-item acceptance. See
+  `deploy/import-hosted-media-browser-current.source.json`. No product source changed.
+  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15
+  on fresh migration108. Three legacy fixtures now seed through genuine original
+  receipt admission rather than forbidden raw managed PUT. SVG never reaches Sharp;
+  changed stored bytes and non-raster registration still refuse, and valid JPEG/PNG
+  rescan/rendition assertions are unchanged. TypeScript and focused lint pass. See
+  `deploy/media-raster-guard-lifecycle.source.json`. Capture timeout/reset and actual
+  provider/checklist acceptance remain open.
+  Capture-erasure lifecycle qualification2026-11-16 (C1.12/C11.08/C11.10): the
+  previously timed-out original-pointer case reproduced in isolation without a lock
+  wait and completed its genuine evidence work in61.9s. A120s per-case ceiling replaces
+  the inappropriate30s default without changing any oracle. The full capture file now
+  passes17/17, including79s erasure and all trailing resets. TypeScript/focused lint
+  pass. See `deploy/media-capture-erasure-lifecycle.source.json`. Provider, hosted
+  performance and checklist acceptance remain open.
+  Watermark-backfill fixture qualification2026-11-16 (C1.12/C8.04): all11
+  controls pass on fresh migration108 after three legacy setups move to genuine
+  original-receipt admission. Visible marks, non-image skip, repeat suppression and
+  pending-race sweep behavior retain every original assertion. TypeScript and focused
+  lint pass. See `deploy/media-watermark-backfill-lifecycle.source.json`. Actual
+  provider/checklist acceptance and the older multipart-receipt fixture repairs stay open.
+  Multipart-receipt/current-recovery qualification2026-11-16 (C1.12/C11.08):
+  the full older file passes9/9 on fresh migration108. Its fixture now exercises real
+  declaration/signing/PUT and retained CREATE/readback evidence. Lost CREATE remains
+  unadopted/pending; COMPLETE uses exact applied review; ABORT never replays; active
+  assets stay unretired. A genuine TS/SQL digest mismatch for absent unversioned S3
+  versionId was fixed; all12 inventory proofs pass. TypeScript/lint/changelog output
+  pass. See `deploy/media-multipart-receipts-current.source.json`. No real provider
+  account, legacy fixture or checklist acceptance follows.
+  Historical-control routing2026-11-16: empty-scope4/4 and part-signing2/2 PASS again
+  at their genuine pre-capability boundaries. They now run only with the explicit
+  migration-freeze switch, so current suites report them as selected historical skips
+  rather than impossible current-runtime failures. Focused lint and source hashes pass.
+  Transfer-preview historical-receipt fixture qualification follows below; no
+  C-item closes.
+  Write-ownership fixture qualification2026-11-16 (C1.12/C3.22/C11.08): all5
+  controls pass on fresh migration108. Active-write mocks now retain genuine observer
+  context; late bytes use the low-level owned provider fixture only after application
+  failure. Original witnesses, parallel renditions and unresolved reservations survive.
+  Replacement local roots explicitly refuse cleanup without deleting original bytes.
+  TypeScript and focused lint pass. See `deploy/media-write-ownership-lifecycle.source.json`.
+  No C closure follows.
+  Late-erasure qualification2026-11-16 (C1.12/C11.08): all4 controls pass on fresh
+  migration108 with genuine synthetic TCP. A real provider-controlled late reapplication
+  of a retired original PUT exposed that accepted+deleted receipts did not reopen their
+  erasure cohort. Positive late facts now clear that retirement marker and reopen recovery;
+  minimized proof still requires exact restoration before cleanup. Published/unrelated
+  assets and both named holds retain their original guarantees. TypeScript/lint/changelog
+  pass. See `deploy/media-late-erasure-lifecycle.source.json`. No hosted/provider/C closure.
+  Write/late-erasure post-repair qualification2026-11-16 (C1.12/C3.22/C11.08):
+  the unchanged ownership and late-erasure files PASS9/9 in108.23s on one fresh current
+  database after the shared late-original caller/quota repair. Original and parallel
+  rendition witnesses survive lost ACKs, unresolved writers never expire into absence,
+  replacement namespaces cannot acknowledge deletion, and late bytes reopen exact
+  erasure debt while published/unrelated/held assets remain protected. No test or
+  product source changed. See `deploy/media-write-late-erasure-current108.source.json`.
+  Hosted provider and checklist acceptance remain open.
+  Transfer-preview historical cohort qualification2026-11-16 (C1.12/C11.08):
+  each new scratch database builds the genuine0..81 prefix, retains explicit accepted,
+  repeated and unknown historical receipts before the reservation guard, then runs the
+  real82..108 upgrade. All3 current preview controls pass47.63s: repeated receipts
+  change inventory proof, unknown history and wrong principals/resources stay refused,
+  named holds persist, and neither provider I/O nor receipt mutation occurs. TypeScript
+  and focused lint pass. See `deploy/media-transfer-preview-history.source.json`.
+  This test-only repair supplies no provider/copy/closure acceptance; no C-item closes.
   Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and
   signer handoff require a dedicated unpublished durable-part capability;
   generic storage/request flags cannot mint new browser PUT URLs. Existing
@@ -7278,7 +8136,7 @@ human, collaboratively, without code, lock-in markup or accidental publication.
 - [x] **C2.26** Deliver a public blog index with published post discovery, pagination, locale-aware links and metadata, an editable index block and an owner publish workflow. Drafts and gated bodies remain private.
   *(Closed 2026-10-14 against `C2.26` on `main` (`f9b155be`, released as 0.2.0-beta.3 and live on freeholder.ai). Evidence: `tests/modules/customer-surfaces.test.ts` (published-only listing, drafts and working copies hidden, page 2 pagination, reviewed fr translation) and `tests/browser/customer-surfaces.spec.ts` (owner writes and publishes at /admin/blog; post appears on /blog only after publish; Axe light/dark); /blog serves 200 with a canonical link; scope and limits in `deploy/customer-surfaces-2026-10-07.md`; F01–F12 rows in `deploy/f-criteria-matrix.md`. **F04** `app/(admin)/admin/blog/page.tsx` and `/blog`. **F05** `cms.listBlogPosts` in `src/modules/cms/blog.tsx`, projected to HTTP/MCP and `packages/sdk/src/generated.ts`. **F07** customer ownership and privacy in `tests/modules/customer-surfaces.test.ts`. **F09** provider and deployment limits recorded in `deploy/customer-surfaces-2026-10-07.md`. **F12** `tests/browser/customer-surfaces.spec.ts` composed journey. Live payment-provider settlement stays with C11.05.)*
 
-- [ ] **C2.27** Blog categories and tags: hierarchical categories, flat tags,
+- [x] **C2.27** Blog categories and tags: hierarchical categories, flat tags,
   owner CRUD, post assignment, public archive pages, sitemap and slug-move
   redirects through the same scoped services on UI, HTTP and MCP.
   Hosted qualification 2026-11-10 on `demo.freeholder.ai` at main
@@ -7296,11 +8154,33 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   `deploy/blog-wordpress-2026-11-07.md` records the exact image and limits.
   Scale and source-specific qualification remain open; this is not stable
   or production acceptance.
-- [ ] **C2.28** Blog authors: account-linked or guest profiles, private email,
+  *(Closed 2026-11-15 for the stated taxonomy scope. Current native blog controls
+  PASS27/27 and the real Chromium category-create/assign/publish/move journey
+  PASSes with both-theme Axe. The hosted run above proves parent/child archives,
+  sitemap entries and one literal301. **F04** `/admin/blog/categories`,
+  `/admin/blog/tags` and public archives. **F05** `cms.listTerms`/`saveTerm`/
+  `deleteTerm` use the shared scoped projections. **F07** published-only archive,
+  draft/privacy and redirect-isolation controls. **F09** the qualification/limits
+  document above. **F12** `tests/core/blog-structure-comments.test.ts`,
+  `tests/core/blog-playground.test.ts` and `tests/browser/blog-structure.spec.ts`.
+  Scale and source-specific cutover remain explicitly outside this closure.)*
+- [x] **C2.28** Blog authors: account-linked or guest profiles, private email,
   public bylines/bios and author archives; preserve WordPress authors, terms,
   post dates and exact archive paths at import. Owner administration and
   four-locale labels are required before checking this item.
-- [ ] **C2.29** Public blog comments: moderated threads with owner controls,
+  *(Closed 2026-11-15. Current native blog/customer/playground controls PASS27/27;
+  the real Chromium owner→guest-author→publication/comment journey and both-theme
+  Axe checks PASS, with private email absent. The verified hosted run on
+  e65773459a9e1d8cde977a0e16432e91bf65d796 additionally edited the author/bio
+  and reached its public archive. Import dates/terms/paths, merge, export and
+  erasure are covered in `tests/core/blog-structure-comments.test.ts`.
+  **F04** `/admin/blog/authors` and the public byline/archive. **F05**
+  `cms.listAuthors`/`saveAuthor`/`deleteAuthor`/`authorAccounts` use the shared
+  scoped service projections. **F07** private email and hidden-publication tests.
+  **F09** `deploy/blog-wordpress-2026-11-07.md`. **F12** the native and Chromium
+  journeys above. Related taxonomy scale, comment and source-cutover acceptance
+  remain with their own rows.)*
+- [x] **C2.29** Public blog comments: moderated threads with owner controls,
   spam/honeypot and rate limits, unified contacts resolution/merge/privacy,
   notifications and WordPress comment import. Never expose a comment email.
   *(Import-reader privacy repair 2026-11-11: actual PostgreSQL repros found
@@ -7369,6 +8249,19 @@ human, collaboratively, without code, lock-in markup or accidental publication.
   child refusal, original receipt/source ownership and existing hold/erasure
   checks. Evidence: `deploy/import-reader-privacy.md`. Protected qualification
   and the full existing C2.29/C3.46 requirements remain open.)*
+
+  *(Closed 2026-11-15 for the stated comment scope. Current native moderation
+  controls and 49 reader/import privacy/provenance controls PASS; real Chromium
+  proves pending→approved publication, escaped text, replies and no private-email
+  exposure, with both-theme Axe. **F04** `/admin/blog/comments` and the public
+  thread. **F05** `cms.submitReaderComment`/`listReaderComments`/
+  `moderateReaderComment`/`readerCommentsForOwner`/`importReaderComment` use the
+  shared service boundary. **F07** honeypot/rate/publication/privacy/merge/erasure
+  controls in the named native files. **F09** `deploy/blog-wordpress-2026-11-07.md`
+  and `deploy/import-reader-privacy.md`. **F12**
+  `tests/core/blog-structure-comments.test.ts`, the four current reader/import
+  files and `tests/browser/blog-structure.spec.ts`. Source-specific cutover and
+  independent product-wide review remain with C3.46/C3.47/C11.10.)*
 
 ### 43.8 C3 — Living contract, plugins, packages, and portable operation
 
@@ -8353,6 +9246,18 @@ deployments are portable, testable and incapable of silently forking the truth.
   reader 78 preserves identical product and migration source; its ancestry
   differences contain documentation and test corrections only. Protected
   qualification and actual provider acceptance remain open. C3.34 remains unchecked.)*
+  *(Destination-boundary re-audit, 2026-11-15: the original account/key checks
+  and frozen request precede provider I/O. A fresh migration93 database passed
+  the existing 49 form/intake controls. The added accepted legacy-event control
+  proves that an enquiry with no original notice or destination cannot use a
+  replacement account or create a lead-copy witness. A fresh focused run passed
+  all five original-delivery, legacy-refusal, origin/key-replacement and
+  unknown-outcome controls. Two complete reruns also passed every product
+  assertion they reached; three setup-only failures were the unchanged 25-second
+  full-schema reset timing out under disk-sync load, not behavioral failures.
+  TypeScript, focused lint and an independent static audit found no new defect.
+  See `deploy/form-lead-destination34.source.json`. This supplies no live
+  provider acceptance; C3.34 remains unchecked.)*
   *(Credential-binding follow-up, 2026-11-12: protected CodeQL identified an
   unkeyed provider-secret fingerprint. Its replacement uses a purpose-separated
   HMAC with independently configured private material and explicit retained
@@ -8452,7 +9357,19 @@ deployments are portable, testable and incapable of silently forking the truth.
   `tests/core/launch-template.test.ts`, `tests/core/private-preview.test.ts`;
   changeset `launch-template-private-preview.md`. A free intro call is a
   request form, not a calendar booking: the booking flow prices every
-  bookable service, and a zero price is refused.)* *(Progress 2026-11-06:
+  bookable service, and a zero price is refused.)*
+  *(Credential-boundary repair, 2026-11-15: an actual before control showed that
+  any `Authorization` header bypassed the proxy for every API path. The gate now
+  limits header exemptions to `/api/v1` and `/api/mcp`; their shared handlers
+  require a genuinely resolved actor or the signed preview cookie before any
+  business operation. Other API routes cannot trust a forged header. The real
+  dispatcher refuses a forged bearer and serves an anonymous public read with
+  the signed cookie. Fresh migration93 controls pass 23/23 for preview and
+  signed webhooks, 41/41 for shared HTTP/proxy behavior, and the interrupted MCP
+  ping control passes separately. TypeScript and focused lint pass. See
+  `deploy/private-preview-credential35.source.json` and changeset
+  `private-preview-api-authorization.md`. C3.35 remains unchecked until its
+  hosted real-plan acceptance.)* *(Progress 2026-11-06:
   Stripe's signed webhooks reach a preview. A `POST` with `Stripe-Signature`
   to exactly `/api/payouts/stripe_connect/webhook` or
   `/api/payments/webhooks/stripe` passes the gate; the route verifies the
@@ -8486,6 +9403,17 @@ deployments are portable, testable and incapable of silently forking the truth.
   `tests/core/preview-mail-unknown-cap.test.ts` reproduced a second queued
   message after a cap of one, then passed after the count included unknown
   physical outcomes. Hosted sign-in delivery remains unverified.)*
+  *(Physical-delivery boundary repair, 2026-11-15: an actual native before
+  control queued a stranger's message before preview mode, enabled the preview,
+  and observed the worker return `submitted`. The worker now rechecks recipient,
+  current route and reserved cap before provider I/O, durably holds disallowed
+  transactional mail with its encrypted body, and refuses pre-preview bulk work.
+  The cap check excludes the current delivery's existing reservation. Fresh
+  migration93 controls pass 12/12, including pre-preview stranger, console and
+  bulk transitions plus the existing lost-ACK cap case. TypeScript and focused
+  lint pass. Evidence `deploy/preview-mail-delivery36.source.json`; changeset
+  `preview-mail-delivery-policy.md`. C3.36 remains unchecked until hosted
+  sign-in delivery.)*
 - [ ] **C3.37** Service intake and delivery: a form marked as an intake opens
   a project for the person who sent it. In the portal it reads New,
   In progress or Delivered (`enquiry`/`active`/`complete`). The owner's
@@ -8543,6 +9471,30 @@ deployments are portable, testable and incapable of silently forking the truth.
   links and erasure; `tests/browser/intake-project-files.spec.ts` covers the
   owner view, private bytes, quarantine and both themes. Changeset
   `intake-files-on-projects.md`. The hosted-preview acceptance remains open.)*
+  *(Physical-recovery lock repair, 2026-11-15, also C1.12/C3.47: the current
+  file suite failed a valid image after a rejected disguise. A deterministic
+  native probe traced parallel rendition recovery to non-blocking shared and
+  exclusive contact-identity locks rejecting one another without any merge.
+  Background physical writers now take a waiting shared lock and dependent
+  recovery a waiting exclusive lock; interactive identity behavior is unchanged.
+  The observation fixture creates its required genuine reservation rather than
+  weakening migration guards. Fresh migration93 controls pass 21/21 across form
+  files, accepted-after-rejected image recovery and committed-observation debt.
+  TypeScript and focused lint pass. The browser launcher now completes the
+  dedicated migration before opening the app; two prior startup failures had
+  tripped migration86's drain guard. Existing `.mjs` helpers load lazily inside
+  their async factories, preserving behavior. The corrected browser fixture uses
+  genuine owner HTTP reservation/upload and CSRF evidence. Real Chromium passes
+  private download, both themes, Axe, quarantine and anonymous refusal. Evidence
+  `deploy/media-rendition-recovery-lock.source.json`; changeset
+  `media-rendition-recovery-lock.md`. Hosted file acceptance remains open.)*
+  *(Current Chromium requalification2026-11-16: the unchanged intake-file journey
+  PASSes1/1 in27.2s on a fresh current database. Genuine owner HTTP upload, exact private
+  download bytes/no-store, both themes with Axe, anonymous404 and quarantine refusal pass.
+  Two initial launcher selections were rejected before app startup because they lacked an
+  explicit compliant disposable database; the final named a11y database passed. See
+  `deploy/intake-files-current-browser.source.json`. Local test storage supplies no hosted
+  acceptance; C3.38 remains open.)*
 - [ ] **C3.39** Launch spec version 2 for a working preview. It adds customer
   accounts in the navigation (sign in, My Account), an onboarding intake
   form with optional file fields on `/start`, intake on offer requests, and
@@ -8700,6 +9652,15 @@ deployments are portable, testable and incapable of silently forking the truth.
   final combined catalog before types/native qualification. All new controls
   remain UNRUN; no C-item/provider/stable acceptance follows. See
   `deploy/import-transport-acceptance-2026-11-13.md`.
+  *(Transport qualification 2026-11-15: the current combined migration93 source
+  now passes each prepared leaf independently and all three together on fresh
+  PostgreSQL, 3/3 in 117.16 seconds. Real incoming TCP, generated typed SDK and
+  MCP cover the exact501 WXR upload/resume/review/draft/publish/rollback, the
+  scoped/uploader/helper/revocation refusals with no business writes, and501
+  actual REST records with eight private original responses and exact rollback.
+  The combined generated SDK contains both crawl wrappers. No unexpected failure
+  occurred. This is not a deployed Next server, official MCP client, packed-SDK,
+  source-cutover or provider/owner acceptance. C3.47 remains open.)*
   This splits a required delivery portion from C3.22; both remain open until
   their complete source and acceptance criteria pass. Migration 73 follows
   merged mail recovery 72 in the contiguous journal.
@@ -9764,6 +10725,15 @@ owner operations, never substitute for them.
   browser feedback is seeded; actual enabled-provider and full fulfillment
   acceptance remain required. C5.19 stays open. See `deploy/commerce-payments.md` and
   changeset `return-provider-reconciliation.md`.
+  Current-protocol fulfillment qualification2026-11-16 (C5.19/C12.38): the
+  direct-seller fixture now uses actual merchant collection, tax and accepted-quote
+  services; retains authenticated charge evidence before settlement; verifies the
+  current per-party route and absence of a legacy route; and exercises the current
+  refund create/ACK/observe and exact-resource recovery protocol. Wrong-account
+  feedback and premature closure remain refused. Fresh108 passes26/26; TypeScript
+  and focused lint pass. This test-only repair supplies no enabled-provider or
+  browser acceptance and closes no checklist row. See
+  `deploy/catalog-fulfillment-current-protocol.source.json`.
 - [x] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,
   cross-device restore, price/stock refresh and abandonment events.
   *(Evidence: `carts`, `cart_items`, `wishlists`, `wishlist_items` in
@@ -12364,6 +13334,14 @@ customer has one secure, comprehensible home for the relationship.
   `subscriptions.cancelMine`, which resolves the contact from the session and
   can only ever reach their own row.
   Migration `0140_subscriptions.sql`; `tests/modules/subscriptions.test.ts`. **F04** `/admin/subscriptions` plans. **F05** `subscriptions.enroll`/`list`/`get`/`cancel`/`changePlan` at `/api/v1/subscriptions.*`, MCP `subscriptions_*`. **F07** `tests/modules/subscriptions.test.ts` covers permission, refusal and recovery. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/modules/subscriptions.test.ts` is the composition proof.)
+  Current-period billing repair2026-11-16 (C9.13/C9.33/C11.05/C12.38): a genuine
+  first-period stored-method charge was skipped because its period end was mistaken
+  for a future start. The guard now targets only future periods/plan changes. Ordinary
+  deferred plans no longer invent a seller-merchant amendment requirement; retained
+  commercial evidence still gates entitlement. The final native billing file passes58/58
+  and both commercial-amendment security controls pass. TypeScript/lint/changelog pass.
+  See `deploy/subscription-current-period-billing.source.json`. Provider/hosted acceptance
+  and the checklist row remain open.
 - [x] **C9.14** Build entitlements/grants for subscriptions, passes, retainers,
   one-time unlocks, loyalty tiers and manually granted access.
   (Access lives in core, not in the subscriptions module: a grantor can be a
@@ -13026,7 +14004,13 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   C10.33 in `deploy/f-criteria-matrix.md`; do not weaken those gates. This is a
   source packaging/documentation defect, separate from storage runtime quality.
   Focused source checks do not close hosted build or operational acceptance.
-
+  *(Scoped-fixture qualification 2026-11-15: the first current run had nine
+  failures because its direct calls predated original-caller admission. The
+  repaired controls use genuine started intents, admitted original callers and
+  observed synthetic TCP S3 responses, with no weakened SQL guards. Independent
+  fresh migration93 execution passes 11/11; TypeScript and focused lint pass.
+  See `deploy/storage-quota-scoped-fixture.source.json`. No runtime defect or
+  hosted acceptance follows.)*
 
 - [ ] **C10.33** Make hosted cutover use a durable operation-owned app/DB
   admission fence shared with member/group call starts and canonical jobs.
@@ -18251,6 +19235,38 @@ whatever is best for the people using the site.
   no real provider request or legal report was sent by these tests.
 
 ---
+
+Safe-response migration boundary SOURCE checkpoint (2026-11-14,
+C11.10/C11.08/C1.08): boot, test setup, the manual Node CLI and both actual
+playground migration calls now share one env-free dedicated-session runner.
+The existing Free/hold session lock spans official Drizzle prefix, exact86 and
+later batches, each a real engine transaction; actual committed journal member
+hashes are checked between batches. Boundary86's exact tag/time and whole
+2038-byte first guard are pinned. Final85/whole86/prefix identities remain NULL,
+so installing86 refuses until real final assembly supplies reviewed hashes.
+No normal0..85 SQL/journal bytes change. Six real PostgreSQL boundary proof
+groups, fake-env/default/preference child controls and actual packaged-runtime
+import checks are PREPARED/UNRUN. A temporary exact-guard86 probe proves only
+transaction boundaries, never full S0 schema, provider or feature acceptance.
+Actual prepared-transaction capability, artifact dependency resolution and
+external closed-set OS/runtime/backend/prepared drain remain mandatory; the
+SQL inventories do not close a new-backend race. No raw transaction-control
+injection, fabricated journal, migration guard exemption or new business
+service is introduced. C11.10/C11.08/C1.08 and stable acceptance stay open.
+See deploy/controlled-safe-migration-boundary-20261114.md.
+
+Migration boundary finite SOURCE correction (2026-11-14, C11.10/C11.08):
+the shared official-engine runner now always verifies the complete actual
+committed journal after its optional later-migration batch, including an empty
+later batch. Frozen68b source and its entire manifest are unchanged. Two new
+actual PostgreSQL contexts are PREPARED/UNRUN: genuine later87 SELECT succeeds
+only with all88 actual source hashes; a clearly labelled adversarial later87
+corrupts an ALREADY genuinely engine-applied real journal hash and must refuse
+FH_MIGRATION_PREFIX_MISMATCH at the final check. The corrupted scratch DB is
+preserved as negative evidence, never fabricated successful prefix/schema
+acceptance. No new normal SQL/journal/DDL, service, model or waiver. Final
+source pins, real execution, packaging and external closed-set drain stay open.
+See deploy/controlled-safe-migration-boundary-final-20261114.md.
 
 ## 44. Members, Social, Messaging, Calls, and Marketplace
 

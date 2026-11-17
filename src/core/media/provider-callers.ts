@@ -133,10 +133,7 @@ export async function retainOriginalMediaCallerReturn(id:string,token:string,res
   if(result.requestProof&&!observations.some(row=>row.facts.stage==="metadata"&&transferDigest(row.facts.requestProof)===transferDigest(result.requestProof)&&transferDigest(row.facts.revision)===transferDigest(result.revision)))transferConflict("The actual returned original request proof has no matching physical metadata observation.");
   const write=["ordinary_put","ordinary_delete","multipart_create","multipart_complete","multipart_abort","multipart_sign"].includes(call.kind);
   const unresolved=requests.some(row=>["admitted","unknown"].includes(row.state));
-  if(write&&result.accepted&&!observations.some(row=>row.facts.stage==="accepted")){
-   const[parent]=call.objectReceiptId?await tx.select({kind:mediaObjectWrites.storageKind}).from(mediaObjectWrites).where(eq(mediaObjectWrites.id,call.objectReceiptId)).limit(1):[];
-   if(parent?.kind!=="local")transferConflict("A genuine original provider acceptance fact is required before a successful write can be retained.");
-  }
+  if(write&&result.accepted&&!observations.some(row=>row.facts.stage==="accepted"))transferConflict("A genuine original provider acceptance fact is required before a successful write can be retained.");
   if(result.notAttempted&&(observations.some(row=>row.facts.stage==="accepted")||requests.some(row=>!observations.some(fact=>fact.requestId===row.id&&fact.facts.stage==="not_attempted"))))transferConflict("An admitted original provider operation cannot be declared unattempted.");
   const now=new Date(),late=Boolean(call.stoppedAt)||call.state==="stopped";
   const settled=!late&&!unresolved&&!(write&&result.failed);

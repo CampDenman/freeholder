@@ -12,6 +12,7 @@ import { users } from "@/core/auth/schema";
 import { mediaObjects, mediaUploads, assets } from "@/core/media/schema";
 import { beginUpload, cleanupOrphanedMedia, uploadAsset } from "@/core/media/service";
 import { resetStorageForTests, storage } from "@/adapters/storage";
+import { createLocalStorage } from "@/adapters/storage/local";
 import { resetEnvForTests } from "@/core/env";
 import { ready } from "@/core/runtime";
 import {allowMediaReceiptWrites} from "@/core/media/write-ledger";
@@ -44,9 +45,9 @@ describe.runIf(hasDatabase)("media provider-write ownership (C1.12/C3.22)", () =
   it("keeps the original object witness when a completed PUT loses its acknowledgement", async () => {
     const store = storage(), put = store.put.bind(store), body = pdf();
     let writtenKey = "";
-    vi.spyOn(store, "put").mockImplementation(async (key, bytes, contentType) => {
+    vi.spyOn(store, "put").mockImplementation(async (key, bytes, contentType, observation) => {
       writtenKey = key;
-      await put(key, bytes, contentType);
+      await put(key, bytes, contentType, observation);
       throw new Error("Synthetic lost provider PUT acknowledgement");
     });
     await failure(uploadAsset.call({ filename: "original.pdf", contentType: "application/pdf", bytes: body }, OWNER));
@@ -56,16 +57,15 @@ describe.runIf(hasDatabase)("media provider-write ownership (C1.12/C3.22)", () =
   });
 
   it("keeps ownership when an unknown PUT writes bytes after its caller already failed", async () => {
-    const store = storage(), put = store.put.bind(store), body = pdf();
-    const gate = new Promise<void>(resolve => { releaseLate = resolve; });
+    const store = storage(), body = pdf();
     let writtenKey = "";
-    vi.spyOn(store, "put").mockImplementation(async (key, bytes, contentType) => {
+    vi.spyOn(store, "put").mockImplementation(async (key) => {
       writtenKey = key;
-      lateWrites.push(gate.then(() => put(key, bytes, contentType)));
       throw new Error("Synthetic timeout before the provider's later write");
     });
     await failure(uploadAsset.call({ filename: "late.pdf", contentType: "application/pdf", bytes: body }, OWNER));
-    releaseLate!(); await Promise.all(lateWrites);
+    const physical = createLocalStorage({ root, publicPath: "/media" });
+    await physical.put(writtenKey, body, "application/pdf");
     expect(await store.get(writtenKey)).toEqual(body);
     expect((await db().select().from(mediaObjects)).map(row => row.key)).toContain(writtenKey);
   });
@@ -74,8 +74,8 @@ describe.runIf(hasDatabase)("media provider-write ownership (C1.12/C3.22)", () =
     const store = storage(), put = store.put.bind(store);
     const body = new Uint8Array(await sharp({ create: { width: 1800, height: 1200, channels: 3, background: { r: 40, g: 90, b: 140 } } }).png().toBuffer());
     const variantKeys: string[] = [];
-    vi.spyOn(store, "put").mockImplementation(async (key, bytes, contentType) => {
-      const writing = put(key, bytes, contentType);
+    vi.spyOn(store, "put").mockImplementation(async (key, bytes, contentType, observation) => {
+      const writing = put(key, bytes, contentType, observation);
       lateWrites.push(writing);
       const stored = await writing;
       if (contentType !== "image/png") {
@@ -95,12 +95,10 @@ describe.runIf(hasDatabase)("media provider-write ownership (C1.12/C3.22)", () =
   });
 
   it("does not forget an unresolved writer merely because the orphan window passed", async () => {
-    const store = storage(), put = store.put.bind(store), body = pdf();
-    const gate = new Promise<void>(resolve => { releaseLate = resolve; });
+    const store = storage(), body = pdf();
     let writtenKey = "";
-    vi.spyOn(store, "put").mockImplementation(async (key, bytes, contentType) => {
+    vi.spyOn(store, "put").mockImplementation(async (key) => {
       writtenKey = key;
-      lateWrites.push(gate.then(() => put(key, bytes, contentType)));
       throw new Error("Synthetic unknown writer still has an outstanding provider operation");
     });
     await failure(uploadAsset.call({ filename: "unresolved.pdf", contentType: "application/pdf", bytes: body }, OWNER));
@@ -110,7 +108,8 @@ describe.runIf(hasDatabase)("media provider-write ownership (C1.12/C3.22)", () =
       await db().insert(mediaObjects).values({ key: writtenKey, role: "original", state: "pending", bytes: body.byteLength, contentType: "application/pdf" });
     }
     const result = await cleanupOrphanedMedia(new Date(Date.now() + 2 * 86_400_000));
-    releaseLate!(); await Promise.all(lateWrites);
+    const physical = createLocalStorage({ root, publicPath: "/media" });
+    await physical.put(writtenKey, body, "application/pdf");
     expect(await store.get(writtenKey)).toEqual(body);
     expect(result.orphanedObjects).toBe(0);
     expect((await db().select().from(mediaObjects)).map(row => row.key)).toContain(writtenKey);
@@ -120,9 +119,9 @@ describe.runIf(hasDatabase)("media provider-write ownership (C1.12/C3.22)", () =
     const original = storage(), put = original.put.bind(original), body = pdf();
     const reservation = await beginUpload.call({ filename: "original-store.pdf", contentType: "application/pdf", bytes: body.byteLength }, OWNER);
     let writtenKey = "";
-    vi.spyOn(original, "put").mockImplementation(async (key, bytes, contentType) => {
+    vi.spyOn(original, "put").mockImplementation(async (key, bytes, contentType, observation) => {
       writtenKey = key;
-      const result = await put(key, bytes, contentType);
+      const result = await put(key, bytes, contentType, observation);
       await db().transaction(async tx=>{await allowMediaReceiptWrites(tx);await tx.update(mediaUploads).set({ state: "aborted" }).where(eq(mediaUploads.id, reservation.id));});
       return result;
     });
@@ -132,9 +131,9 @@ describe.runIf(hasDatabase)("media provider-write ownership (C1.12/C3.22)", () =
     try {
       vi.stubEnv("LOCAL_STORAGE_ROOT", replacementRoot);
       resetEnvForTests(); resetStorageForTests();
-      const result = await cleanupOrphanedMedia(new Date(Date.now() + 2 * 86_400_000));
+      const refused = await failure(cleanupOrphanedMedia(new Date(Date.now() + 2 * 86_400_000)));
+      expect(refused.message).toContain("exact original local storage root");
       expect(await original.get(writtenKey)).toEqual(body);
-      expect(result.orphanedObjects).toBe(0);
       expect((await db().select().from(mediaObjects)).map(row => row.key)).toContain(writtenKey);
     } finally { rmSync(replacementRoot, { recursive: true, force: true }); }
   });

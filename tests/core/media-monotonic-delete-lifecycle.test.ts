@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// PREPARED / UNRUN. These real shared-infrastructure/TCP controls depend on the
-// complete future request capability. They NEVER publish a fixture capability,
-// fabricate a ServiceContext/old caller birth or claim actual account support.
+// Scoped fixture qualified on fresh migration94 PostgreSQL 2026-11-15 with the
+// complete request capability and synthetic AWS TCP. It NEVER publishes fixture
+// authority, fabricates old caller birth or claims actual provider-account support.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {randomUUID} from "node:crypto";
 import {eq,sql} from "drizzle-orm";
@@ -15,7 +15,8 @@ import {ready} from "@/core/runtime";
 import {stopJobs} from "@/core/jobs";
 import {resetEnvForTests} from "@/core/env";
 import {resetStorageForTests} from "@/adapters/storage";
-import {putWithReceipt,deleteWithReceipt,objectKeyDigest} from "@/core/media/write-ledger";
+import {putWithReceipt,objectKeyDigest} from "@/core/media/write-ledger";
+import {deleteWithReceipt} from "@/core/media/delete-with-receipt";
 import {mediaObjects} from "@/core/media/schema";
 import {mediaObjectWrites} from "@/core/media/write-schema";
 import {minimizeMediaStorageOperations} from "@/core/media/write-privacy";
@@ -26,11 +27,12 @@ import {mediaStorageTransferRequests as requests} from "@/core/media/transfer-re
 import {monotonicDeleteProvider} from "../helpers/media-monotonic-delete-provider";
 import {closeDb,failure,hasDatabase,OWNER,truncateSpine} from "../helpers/spine";
 const SYSTEM={kind:"system"}as const,key="original-retirement/exact.bin",body=new TextEncoder().encode("exact original physical bytes");
+const syntheticOrigin="https://s3.us-east-1.amazonaws.com",realFetch=globalThis.fetch.bind(globalThis);
 describe.runIf(hasDatabase)("monotonic original DELETE recovery (complete request capability dependent)",()=>{
  let provider:Awaited<ReturnType<typeof monotonicDeleteProvider>>;
  beforeAll(async()=>{await ready();await stopJobs();const[capability]=await db().execute<{present:boolean}>(sql`select to_regprocedure('freeholder_media_transfer_request_capability_v1()') is not null as present`);if(capability?.present!==true)throw Error("Prepared ordinary retirement controls require the complete actual request capability; no fixture flag or provider authority is substituted.");},60000);
- beforeEach(async()=>{await truncateSpine();provider=await monotonicDeleteProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",FREEHOLDER_STORAGE_QUOTA_BYTES:"",FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY:"false"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
- afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
+ beforeEach(async()=>{await truncateSpine();provider=await monotonicDeleteProvider();vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{const url=new URL(input instanceof Request?input.url:String(input));if(url.origin!==syntheticOrigin)return realFetch(input,init);const target=new URL(`${url.pathname}${url.search}`,provider.endpoint);if(input instanceof Request)return realFetch(target,{method:input.method,headers:input.headers,body:input.body===null?undefined:await input.arrayBuffer()});return realFetch(target,init);});for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:syntheticOrigin,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",FREEHOLDER_STORAGE_QUOTA_BYTES:"",FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY:"false"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
+ afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();vi.unstubAllGlobals();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
  const write=()=>putWithReceipt({key,body,contentType:"application/octet-stream",role:"original"},SYSTEM);
  const history=()=>db().select().from(mediaObjectWrites).where(eq(mediaObjectWrites.key,key));
  const lose=async()=>{await write();provider.loseNextDeleteReply();await failure(deleteWithReceipt(key));const rows=await history(),deletion=rows.find(row=>row.operation==="delete"),caller=(await db().select().from(calls)).find(row=>row.objectReceiptId===deletion?.id&&row.kind==="ordinary_delete");if(!deletion||!caller)throw Error("Actual original lost-DELETE-response evidence missing");expect(caller.observedAcceptedAt).toBeNull();expect(deletion.observedAcceptedAt).toBeNull();expect(caller.returnedAt).toBeInstanceOf(Date);expect(deletion.writerFinishedAt).toBeInstanceOf(Date);expect(provider.calls.filter(row=>row.method==="DELETE")).toHaveLength(1);expect(provider.objects.has(`/source/${key}`)).toBe(false);return{rows,deletion,caller};};

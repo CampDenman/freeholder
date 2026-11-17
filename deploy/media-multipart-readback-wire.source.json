@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_readback_wire.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Actual pinned multipart full-part readback wire controls pass; no real authorization, original writer FIN or terminal acceptance is claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "66e3d9d0bf8b0189d42b1458443eed389480a9d29d9df273e45b9ddd4d70aeb5" },
+    { "path": "tests/core/media-multipart-readback-wire.test.ts", "sha256": "584920e5df78b4cd4182431f5a4e4b24c394de11c6a9d7e122eeced31035413b" }
+  ],
+  "controls": {
+    "final": { "passed": 6, "failed": 0, "durationSeconds": 0.399 },
+    "coverage": ["whole SHA and exact original part digest retained after all actual chunks", "original CREATE nonce and pinned version/ETag retained", "same-size altered bytes refused without complete-body fact", "truncated bytes refused despite asserted Content-Length", "excessive stream cancelled without certification", "absent original version remains absence", "invalid part checksum refused before request while legacy full reads stay explicit"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "66e3d9d0bf8b0189d42b1458443eed389480a9d29d9df273e45b9ddd4d70aeb5",
+      "beforeSha256": "aca34703c8be06da8a88ff858af8aabcd9f5a99757239e79f75625aa82e2a3f0",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-multipart-part-verification-wire.source.json`. No service account\n  or terminal acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  `deploy/media-multipart-part-verification-wire.source.json`. No service account\n  or terminal acceptance follows.\n  Multipart readback wire qualification2026-11-16: all6 controls pass. Actual\n  bounded chunks retain whole SHA, exact part digest, original CREATE nonce and\n  pinned revision. Altered, truncated, excessive or unchecksummed bytes never\n  certify the original; absence stays absence and legacy full reads remain\n  explicit. Focused lint passes. See `deploy/media-multipart-readback-wire.source.json`.\n  No real authorization, original writer FIN or terminal acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_original_quota_late_fact_proof.v1",
+  "checklist": ["C10.32", "C11.08", "C1.12"],
+  "status": "Actual late original quota-charge decision controls pass; hosted provider acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "3c2b7fa98b668bd216f6eda1bb62795f75dc941e937d8e23f597118e625fcfdd" },
+    { "path": "tests/core/media-original-quota-late-fact-proof.test.ts", "sha256": "9b8abf884fa274e45a6e0e3909c44b986eded435fc45f393d936f2ef15954337" }
+  ],
+  "controls": {
+    "final": { "passed": 6, "failed": 0, "durationSeconds": 0.79 },
+    "coverage": ["missing exact-original charge restored without new admission token", "already held exact-original charge retained", "genuine late fact reopens only the exact originally settled token", "smaller charge restored to immutable admitted bound without reducing larger charge", "conflicting pending/settled rows preserved instead of rebinding another token", "inexact or invalid byte bound refuses capacity change"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "3c2b7fa98b668bd216f6eda1bb62795f75dc941e937d8e23f597118e625fcfdd",
+      "beforeSha256": "bdfe578a554bb696e64e1e4bcb16a379908da1da6f7741652b675bb518244f2d",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  remains open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  remains open.\n  Late-fact quota proof qualification2026-11-16 (C10.32/C11.08): all6 controls\n  pass. Exact original charges are restored/retained without inventing a new token;\n  stale settlement reopens only for that token; smaller charges regain their\n  immutable admitted bound while larger charges stay intact. Conflicting rows and\n  invalid bounds refuse capacity changes. Focused lint passes. See\n  `deploy/media-original-quota-late-fact-proof.source.json`. Hosted acceptance\n  remains open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

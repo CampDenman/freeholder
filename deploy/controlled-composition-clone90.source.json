@@ -1,0 +1,107 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_composition_clone90.v1",
+  "checklist": ["C12.38", "C11.05", "C1.08"],
+  "status": "FORWARD SOURCE CONTINUATION; composed readers retain final fresh certificates, cloned journal values preserve validated data, and absent roots retain their exact empty-journal semantics; not payment acceptance",
+  "artifacts": [
+    { "path": "src/modules/subscriptions/controlled-provider-proof.ts", "sha256": "5115e1435e79cf7c91a16d9c2252b8966e7d12180e16a516d074a506da46663d" },
+    { "path": "src/modules/subscriptions/controlled-provider-cash-origin.ts", "sha256": "00bbfdaf6180fdf7b838179a53605f462070552cef91ba6b2111669e03157c70" },
+    { "path": "src/modules/subscriptions/controlled-provider-coverage.ts", "sha256": "076adc16066a9c74a6ed85c4ab4dbb8bcad4a85ba980179925ca85704e6b4e60" },
+    { "path": "src/modules/subscriptions/controlled-provider-cash-namespace.ts", "sha256": "40201c25a5055c081f1d8ef059059ab5ff6f9d3ce2f8beaa45366cd36b22b56e" },
+    { "path": "src/modules/subscriptions/controlled-provider-cash-observation-source.ts", "sha256": "bf597f917efa82041bf91294cf880587721d9b80a1fea523debd499d99443248" }
+  ],
+  "sourceTables": [
+    "subscription_controlled_resources",
+    "subscription_controlled_operations",
+    "subscription_controlled_calls",
+    "subscription_controlled_facts",
+    "subscription_controlled_finishes",
+    "subscription_controlled_stops",
+    "subscription_controlled_verifications",
+    "subscription_controlled_charge_origins",
+    "subscription_controlled_closures"
+  ],
+  "testContinuations": [
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proof.ts",
+      "afterSha256": "5115e1435e79cf7c91a16d9c2252b8966e7d12180e16a516d074a506da46663d",
+      "beforeSha256": "acaf63dfae54869639e3c318b098d89728a4f3691275bc211244bf317c690fe6",
+      "continue": true,
+      "edits": [
+        { "before": "WITH actual_operations", "after": "WITH actual_resource AS MATERIALIZED(SELECT r.id FROM subscription_controlled_resources r WHERE r.id=${resourceId}::uuid),\n  actual_operations", "occurrences": 1 },
+        { "before": ":await tx.execute(sql`SELECT", "after": ":await tx.execute(sql`WITH actual_resource AS MATERIALIZED(SELECT r.id FROM subscription_controlled_resources r WHERE r.id=${resourceId}::uuid),\n   head AS MATERIALIZED(SELECT h.* FROM subscription_controlled_journal_heads h WHERE h.resource_id=${resourceId}::uuid)\n   SELECT", "occurrences": 1 },
+        { "before": "SELECT 'controlled_journal_pg_content.v1'::text AS domain,${resourceId}::text AS \"resourceId\",h.fingerprint,h.counts,\n   h.physical_count AS \"physicalCount\",h.physical_bytes::text AS \"physicalBytes\",", "after": "SELECT 'controlled_journal_pg_content.v1'::text AS domain,${resourceId}::text AS \"resourceId\",\n   coalesce(h.fingerprint,encode(sha256(convert_to('[]','UTF8')),'hex')) AS fingerprint,\n   coalesce(h.counts,jsonb_build_object('resources',0,'operations',0,'calls',0,'facts',0,'finishes',0,'stops',0,'verifications',0,'chargeOrigins',0,'closures',0)) AS counts,\n   coalesce(h.physical_count,0) AS \"physicalCount\",coalesce(h.physical_bytes,0)::text AS \"physicalBytes\",", "occurrences": 2 },
+        { "before": ") AS inventory FROM head h", "after": ") AS inventory FROM (VALUES(1)) AS required(_) LEFT JOIN actual_resource r ON TRUE LEFT JOIN head h ON TRUE\n   WHERE (r.id IS NULL)=(h.resource_id IS NULL)", "occurrences": 1 },
+        { "before": "NULL AS inventory\n   FROM subscription_controlled_journal_heads h WHERE h.resource_id=${resourceId}::uuid", "after": "NULL AS inventory\n   FROM (VALUES(1)) AS required(_) LEFT JOIN actual_resource r ON TRUE LEFT JOIN head h ON TRUE\n   WHERE (r.id IS NULL)=(h.resource_id IS NULL)", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proof.ts",
+      "afterSha256": "acaf63dfae54869639e3c318b098d89728a4f3691275bc211244bf317c690fe6",
+      "beforeSha256": "537ad69b5f68b95fe2b52b533b8f781e0addae1a872e39c2c4c16565d209d47c",
+      "continue": true,
+      "edits": [
+        {
+          "before": "",
+          "after": "function cloneJournalValue(value:unknown):unknown{\n if(value instanceof Date)return new Date(value.getTime());\n if(Array.isArray(value))return value.map(child=>cloneJournalValue(child));\n if(value&&typeof value===\"object\")return Object.fromEntries(Object.entries(value).map(([key,child])=>[key,cloneJournalValue(child)]));\n return value;\n}\n",
+          "occurrences": 1
+        },
+        {
+          "before": "structuredClone(rows)",
+          "after": "cloneJournalValue(rows) as JournalRows",
+          "occurrences": 1
+        },
+        {
+          "before": "structuredClone(retained.rows)",
+          "after": "cloneJournalValue(retained.rows) as JournalRows",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-cash-origin.ts",
+      "afterSha256": "00bbfdaf6180fdf7b838179a53605f462070552cef91ba6b2111669e03157c70",
+      "beforeSha256": "96106c1eaf361460df5c1781d19c9cde40b04f54005f6d2c0d6d2582a5b9548d",
+      "edits": [
+        { "before": "import { originalControlledCall,controlledProviderJournal } from \"./controlled-provider-proof\";", "after": "import { originalControlledCall } from \"./controlled-provider-proof\";\nimport type { controlledProviderJournal } from \"./controlled-provider-proof\";\nimport { readComposedControlledProviderJournal,type ControlledJournalComposition } from \"./controlled-provider-journal-composition\";", "occurrences": 1 },
+        { "before": "origin:ControlledCashOrigin){", "after": "origin:ControlledCashOrigin,composition?:ControlledJournalComposition){", "occurrences": 1 },
+        { "before": "origin:ControlledCashOrigin}[]}){", "after": "origin:ControlledCashOrigin}[]},composition?:ControlledJournalComposition){", "occurrences": 1 },
+        { "before": "await controlledProviderJournal(tx,resource.id)", "after": "await readComposedControlledProviderJournal(tx,resource.id,composition)", "occurrences": 2 },
+        { "before": "/** Fresh common-resource ancestry only. No supplied journal/proof, lock,\n * cached business verdict, bank eligibility or caller closure is accepted. */", "after": "/** Common-resource ancestry may share one explicitly composed raw journal;\n * its final fresh certificate remains mandatory. No lock, business verdict,\n * bank eligibility or caller closure is supplied by this reader. */", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-coverage.ts",
+      "afterSha256": "076adc16066a9c74a6ed85c4ab4dbb8bcad4a85ba980179925ca85704e6b4e60",
+      "beforeSha256": "d06054002506f6ac3c2ad756081aabcd9e31a9d7630462ceba0199dca03db77e",
+      "edits": [
+        { "before": "factId:origin.factId});", "after": "factId:origin.factId},composition);", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-cash-namespace.ts",
+      "afterSha256": "40201c25a5055c081f1d8ef059059ab5ff6f9d3ce2f8beaa45366cd36b22b56e",
+      "beforeSha256": "5d5cefaabb889dd8837399e42397a91869632e8a031214e766c087d260ae73ec",
+      "edits": [
+        { "before": "import { controlledProviderJournal } from \"./controlled-provider-proof\";", "after": "import { createControlledJournalComposition,readComposedControlledProviderJournal } from \"./controlled-provider-journal-composition\";", "occurrences": 1 },
+        { "before": " const history=await controlledProviderJournal(tx,origin.resourceId),", "after": " const composition=createControlledJournalComposition(),history=await readComposedControlledProviderJournal(tx,origin.resourceId,composition),", "occurrences": 1 },
+        { "before": "occurrences}),prior=", "after": "occurrences},composition),prior=", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-cash-observation-source.ts",
+      "afterSha256": "bf597f917efa82041bf91294cf880587721d9b80a1fea523debd499d99443248",
+      "beforeSha256": "8fb5ddce06b25bbb73ddada94490b088f1960dac24143e1e076736283e2d85ce",
+      "edits": [
+        { "before": "import { controlledProviderJournal } from \"./controlled-provider-proof\";", "after": "import type { controlledProviderJournal } from \"./controlled-provider-proof\";\nimport { createControlledJournalComposition,readComposedControlledProviderJournal } from \"./controlled-provider-journal-composition\";", "occurrences": 1 },
+        { "before": " const history=journal??await controlledProviderJournal(tx,resource.id),", "after": " const composition=createControlledJournalComposition();if(journal)composition.set(resource.id,Promise.resolve(journal));\n const history=await readComposedControlledProviderJournal(tx,resource.id,composition),", "occurrences": 1 },
+        { "before": "factId:origin.factId})", "after": "factId:origin.factId},composition)", "occurrences": 1 }
+      ]
+    }
+  ],
+  "originalPaymentOracle": {
+    "path": "tests/modules/atomic-credit-fee-persistence84.test.ts",
+    "sha256": "71dd0c0efccab135da068a09cc833939c629f14e15d49a350685b20857dce25c",
+    "timeoutSeconds": 180
+  }
+}

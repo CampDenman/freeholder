@@ -1,0 +1,21 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "blog_comments_closure29.v1",
+  "checklist": ["C2.29"],
+  "status": "C2.29 closed for moderated public comments with current native, reader/import privacy, real-browser and both-theme Axe evidence; source cutover and product-wide review stay separate",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "a7c1ce48988c7474ae23f68d8b1c3befe80db68bf02cdb6bb03c4c730f158fdb" }
+  ],
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "a7c1ce48988c7474ae23f68d8b1c3befe80db68bf02cdb6bb03c4c730f158fdb",
+      "beforeSha256": "d706f14ce4aaa7ee63c71446b42962f71da67c4aa47d7790ed053ea9e7b60bea",
+      "continue": true,
+      "edits": [
+        { "before": "- [ ] **C2.29** Public blog comments: moderated threads with owner controls,", "after": "- [x] **C2.29** Public blog comments: moderated threads with owner controls,", "occurrences": 1 },
+        { "before": "  and the full existing C2.29/C3.46 requirements remain open.)*\n\n### 43.8 C3", "after": "  and the full existing C2.29/C3.46 requirements remain open.)*\n\n  *(Closed 2026-11-15 for the stated comment scope. Current native moderation\n  controls and 49 reader/import privacy/provenance controls PASS; real Chromium\n  proves pending→approved publication, escaped text, replies and no private-email\n  exposure, with both-theme Axe. **F04** `/admin/blog/comments` and the public\n  thread. **F05** `cms.submitReaderComment`/`listReaderComments`/\n  `moderateReaderComment`/`readerCommentsForOwner`/`importReaderComment` use the\n  shared service boundary. **F07** honeypot/rate/publication/privacy/merge/erasure\n  controls in the named native files. **F09** `deploy/blog-wordpress-2026-11-07.md`\n  and `deploy/import-reader-privacy.md`. **F12**\n  `tests/core/blog-structure-comments.test.ts`, the four current reader/import\n  files and `tests/browser/blog-structure.spec.ts`. Source-specific cutover and\n  independent product-wide review remain with C3.46/C3.47/C11.10.)*\n\n### 43.8 C3", "occurrences": 1 }
+      ]
+    }
+  ]
+}

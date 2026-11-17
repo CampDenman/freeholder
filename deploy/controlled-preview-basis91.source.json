@@ -1,0 +1,65 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_preview_basis91.v1",
+  "checklist": ["C12.38", "C9.33", "C11.05", "C1.08"],
+  "status": "FORWARD SOURCE CONTINUATION; nonfinancial preview plans do not compute unused paid-credit basis; exact genuine proration credit confirmations are admitted by both deferred atomic birth guards; positive native payment passed once, full acceptance remains open",
+  "artifacts": [
+    { "path": "db/migrations/0091_atomic_credit_confirmation_birth.sql", "sha256": "2fae7ef0af664ef6629d70cefb4f7fd72a3699e2680491881d78dae79951aca2" },
+    { "path": "src/modules/subscriptions/controlled-provider-proration-economics.ts", "sha256": "1d165ed1c42dc77f559a6e6742ce6668b64b5addf8d62a9383778b1aa061b599" },
+    { "path": "src/modules/subscriptions/controlled-provider-preview-plan.ts", "sha256": "b69c28965401d25fd838c84416541dbb1ab7480b20c84d37c7555fa9082b6341" },
+    { "path": "MASTER.md", "sha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3" },
+    { "path": "src/modules/invoicing/atomic-credit-invoice-disposition.ts", "sha256": "632d1adc20911adc584fbb8d855187e0c6f2ca04e7c721e5293b3e9d19ffdee7" }
+  ],
+  "testContinuations": [
+    {
+      "path": "src/modules/invoicing/atomic-credit-invoice-disposition.ts",
+      "afterSha256": "632d1adc20911adc584fbb8d855187e0c6f2ca04e7c721e5293b3e9d19ffdee7",
+      "beforeSha256": "2a6b67b9bb464d03396a905f93dbbbd50a65bfa86377b417aefcf7d559b3dff6",
+      "continue": true,
+      "edits": [
+        { "before": "", "after": " const[physicalSnapshot]=await ctx.tx.execute<{revision:string}>(sql`select freeholder_controlled_cash_parent_snapshot(${collectionId}::uuid)->>'revision' as revision`);\n if(!physicalSnapshot||!/^[a-f0-9]{64}$/.test(physicalSnapshot.revision))refuse();\n", "occurrences": 1 },
+        { "before": "return{kind:\"atomic_sibling_disposition.v1\" as const,...source,revision:merchantTaxDigest(source)};", "after": "return{kind:\"atomic_sibling_disposition.v1\" as const,...source,physicalRevision:physicalSnapshot.revision,revision:merchantTaxDigest(source)};", "occurrences": 1 },
+        { "before": "  const after=await readDisposition(ctx,input);if(after.kind!==\"atomic_sibling_disposition.v1\"||after.revision!==before.revision)refuse();return after;", "after": "  const[after]=await ctx.tx.execute<{revision:string}>(sql`select freeholder_controlled_cash_parent_snapshot(${before.collectionId}::uuid)->>'revision' as revision`);\n  if(after?.revision!==before.physicalRevision)refuse();return before;", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "MASTER.md",
+      "afterSha256": "416dcaf5a7232843ebf5615919360bbd2ca1ec9cb693d7a6dc95ec4a8f9fafde",
+      "beforeSha256": "332e0037a2bf3eaa6f52e274e15dd9ddd6dc08c7b06bb94543750fde15ff43b3",
+      "continue": true,
+      "edits": [
+        { "before": "Controlled journal-head continuation2026-11-15 (C12.38/C11.05/C1.08): migration90\nmaintains a guarded per-resource certificate from the actual immutable row ledger;\nits independent fresh-database integrity/refusal control and both genuine journal\nrevalidation controls PASS. Heads reduced diagnostic journal work but the first\nunchanged positive run still TIMED OUT at180s. Deterministic deeply frozen safe\nviews may now reuse only the same fresh content certificate; raw retainers never\ncontain them and no authority verdict is cached. Its separate positive run remains\nrequired. No row closes. See `deploy/controlled-journal-heads90.source.json` and", "after": "Controlled journal-head continuation2026-11-15 (C12.38/C11.05/C1.08): migration90\nmaintains a guarded per-resource certificate from the actual immutable row ledger.\nDeterministic deeply frozen safe views reuse only the same fresh certificate; raw\nretainers contain no views or authority verdicts. The complete six-case native\njournal file PASSes on fresh migration91, including empty/missing roots, mutation,\nsavepoint ABA and fresh-certificate fault refusal. Earlier payment timeouts were\nresolved by the successor recorded above. No row closes. See\n`deploy/controlled-journal-heads90.source.json` and", "occurrences": 1 },
+        { "before": "TypeScript and affected lint PASS. The unchanged positive native still TIMES OUT\nat180s on separate fresh databases before proration acceptance, including a CPU-\nprofiled run. Canonicalization, snapshot cloning, garbage collection and idle work\nremain measured costs; the key-index and authenticated frozen-view digest repairs\nare source-qualified only until their genuine native runs. No checklist row closes.", "after": "TypeScript and affected lint PASS. Earlier CPU-profiled payment timeouts and the\nlater complete native result are both preserved in this checkpoint history. No\nchecklist row closes.", "occurrences": 1 },
+        { "before": "", "after": "Atomic credit confirmation continuation2026-11-15 (C12.38/C9.33/C11.05/C1.08):\nmigration91 admits only the genuine same-transaction proration credit confirmation\nbound to its actual application, reservation, funding, acceptance, target and\nevidence digest. Both deferred guards and current readiness retain exact function\nhashes, and exact trusted-system acceptance attribution remains valid. A fresh\nPostgreSQL parent certificate replaces the duplicate full disposition evaluation.\nThe complete unchanged three-case payment file PASSes on fresh migration91:\npositive171.042s, caught-fault rollback120.523s and deferred birth120.258s. The\nnonfinancial preview/source optimization reduced that fixture from about116s to\n71s. Missing controlled roots retain their certified empty-journal behavior; the\nfocused native empty/mutation/savepoint/fault controls PASS. No row closes.\nSee `deploy/controlled-preview-basis91.source.json`.\n\n", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proration-economics.ts",
+      "afterSha256": "1d165ed1c42dc77f559a6e6742ce6668b64b5addf8d62a9383778b1aa061b599",
+      "beforeSha256": "4162c6407bf9b3138c7768f042f0580b331d9b321a97fcbb7903170b9964f0b0",
+      "edits": [
+        { "before": "controlledProrationCandidate(ctx:ServiceContext,rawInput:ControlledProrationInput)", "after": "controlledProrationCandidate(ctx:ServiceContext,rawInput:ControlledProrationInput,includeBasis:boolean=true)", "occurrences": 1 },
+        { "before": "const basis=await paidProrationBasis(ctx,parent,effectiveAt),history=", "after": "const basis=includeBasis?await paidProrationBasis(ctx,parent,effectiveAt):null,history=", "occurrences": 1 },
+        { "before": "", "after": " if(!basis)refuse();\n", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-preview-plan.ts",
+      "afterSha256": "b69c28965401d25fd838c84416541dbb1ab7480b20c84d37c7555fa9082b6341",
+      "beforeSha256": "3e10f0bf3a79934ef4a4eb898c4371b1eafedee044ac693cd0311e58042be9b4",
+      "edits": [
+        { "before": "controlledProrationCandidate(ctx,originalInput)", "after": "controlledProrationCandidate(ctx,originalInput,false)", "occurrences": 1 }
+      ]
+    }
+  ],
+  "originalPaymentOracle": {
+    "path": "tests/modules/atomic-credit-fee-persistence84.test.ts",
+    "sha256": "71dd0c0efccab135da068a09cc833939c629f14e15d49a350685b20857dce25c",
+    "timeoutSeconds": 180
+  },
+  "functionBodies": {
+    "freeholder_credit_atomic_fee_birth_guard": "5a727d45ec5ab73658816423da8c3e4e34924e25f052bd2903b2d2ad8c2899ef",
+    "freeholder_credit_atomic_reservation_birth_guard": "57e86220dad8671c29d4894560f603d1f4300fb77cbfa390cc6e0b65d2a34407",
+    "freeholder_credit_atomic_fee_ready": "e34d9d62a18172c8b0a4c9565bc775906115204677ee422b258e547ed0497b12"
+  }
+}

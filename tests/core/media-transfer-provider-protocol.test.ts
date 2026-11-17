@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: provider-shaped local controls, not account acceptance.
 import { createHash } from "node:crypto";
+import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { createS3TransferProtocol, createReplitTransferProtocol } from "../../scripts/media-transfer-protocol.mjs";
 import type { TransferRequestDescriptor, TransferRequestObservation, TransferRequestObserver } from "../../scripts/media-transfer.mjs";
@@ -18,18 +19,25 @@ function ledger() {
   };
   return { observer, requests };
 }
-function s3Store(request: typeof fetch, observer?: TransferRequestObserver) {
-  return createS3TransferProtocol({ client: { fetch: request }, binding: s3, url: value => `https://storage.example.test/original-media/${value.split("/").map(encodeURIComponent).join("/")}`, observer });
+function s3Store(request: typeof fetch, observer?: TransferRequestObserver, origin = "https://s3.us-east-1.amazonaws.com/original-media") {
+  return createS3TransferProtocol({ client: { fetch: request }, binding: s3, url: value => `${origin}/${value.split("/").map(encodeURIComponent).join("/")}`, observer });
 }
 const list = (kind: "objects" | "versions" | "sessions", body: string, more = "false") => `<${kind === "objects" ? "ListBucketResult" : kind === "versions" ? "ListVersionsResult" : "ListMultipartUploadsResult"}><${kind === "objects" ? "Name" : "Bucket"}>original-media</${kind === "objects" ? "Name" : "Bucket"}><EncodingType>url</EncodingType><IsTruncated>${more}</IsTruncated>${kind === "objects" ? "<KeyCount>1</KeyCount>" : ""}${body}</${kind === "objects" ? "ListBucketResult" : kind === "versions" ? "ListVersionsResult" : "ListMultipartUploadsResult"}>`;
 
 describe("C1.12/C11.08 actual provider protocol boundaries", () => {
   it("retains actual S3 metadata and complete exact binary-body SHA in one physical request", async () => {
-    const journal = ledger(), request = vi.fn(async () => new Response(bytes, { headers: { etag: '"original-etag"', "x-amz-version-id": "original-version", "content-type": "application/octet-stream" } }));
+    const journal = ledger(), request = vi.fn(async () => new Response(bytes, { headers: { etag: '"original-etag"', "x-amz-version-id": "original-version", "content-type": "application/octet-stream", "content-length": String(bytes.byteLength) } }));
     const result = await s3Store(request, journal.observer).readVersioned(key);
     expect(result?.body).toEqual(bytes); expect(result?.revision.versionId).toBe("original-version");
     expect(journal.requests).toHaveLength(1); expect(journal.requests[0]?.returned).toBe(true);
     expect(journal.requests[0]?.facts.at(-1)).toMatchObject({ stage: "body", sha256: checksum, bytes: bytes.byteLength, status: 200 });
+  });
+  it("bounds an S3 body at the expected bytes plus one without calling arrayBuffer", async () => {
+    let pulls = 0, cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({ pull(controller) { pulls++; controller.enqueue(new Uint8Array(bytes.byteLength + 1)); }, cancel() { cancelled = true; } });
+    const arrayBuffer = vi.fn(), response = { status: 200, ok: true, headers: new Headers({ etag: '"original-etag"', "content-length": String(bytes.byteLength) }), body: stream, arrayBuffer } as unknown as Response;
+    await expect(s3Store(vi.fn(async () => response)).readVersioned(key, undefined, bytes.byteLength)).rejects.toThrow();
+    expect(arrayBuffer).not.toHaveBeenCalled(); expect(pulls).toBeLessThanOrEqual(2); expect(cancelled).toBe(true);
   });
   it("retains original S3 version identity in conditional retirement without fallback", async () => {
     const request = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 412 })), store = s3Store(request);
@@ -41,6 +49,20 @@ describe("C1.12/C11.08 actual provider protocol boundaries", () => {
     expect(url.pathname).toBe("/original-media/private/original.bin");
     expect(new Headers(init?.headers).get("if-match")).toBe('"original-etag"');
     expect(init?.method).toBe("DELETE");
+  });
+  it.each(["put", "delete"] as const)("fails closed before an unversioned S3-compatible %s when conditional authority is unknown", async operation => {
+    let current: Uint8Array | undefined = new TextEncoder().encode("newer generation");
+    const request = vi.fn(async () => { current = undefined; return new Response(null, { status: 200 }); });
+    const store = s3Store(request, undefined, "https://storage.example.test/original-media");
+    const revision = { kind: "etag" as const, key, namespace: s3.namespace, value: '"original-etag"' };
+    await expect(operation === "put" ? store.put(key, bytes, "application/octet-stream") : store.deleteVersioned(key, revision)).rejects.toThrow();
+    expect(request).not.toHaveBeenCalled(); expect(current).toEqual(new TextEncoder().encode("newer generation"));
+  });
+  it("uses an exact S3 version as deletion authority even when a compatible provider ignores If-Match", async () => {
+    const current: Uint8Array | undefined = new TextEncoder().encode("newer generation"); let retired: string | undefined;
+    const request = vi.fn(async (input: RequestInfo | URL) => { const target = new URL(input instanceof Request ? input.url : input.toString()); retired = target.searchParams.get("versionId") ?? undefined; return new Response(null, { status: 204 }); });
+    await s3Store(request, undefined, "https://storage.example.test/original-media").deleteVersioned(key, { kind: "etag", key, namespace: s3.namespace, value: '"original-etag"', versionId: "original-version" });
+    expect(retired).toBe("original-version"); expect(current).toEqual(new TextEncoder().encode("newer generation")); expect(request).toHaveBeenCalledTimes(1);
   });
   it("enumerates retained S3 versions, delete markers and multipart sessions separately", async () => {
     const bodies = [list("versions", `<Version><Key>private%2Foriginal.bin</Key><VersionId>original-version</VersionId><IsLatest>false</IsLatest><ETag>&quot;original-etag&quot;</ETag><Size>6</Size></Version><DeleteMarker><Key>private%2Foriginal.bin</Key><VersionId>delete-marker</VersionId><IsLatest>true</IsLatest></DeleteMarker>`), list("sessions", `<Upload><Key>private%2Foriginal.bin</Key><UploadId>unassigned-session</UploadId></Upload>`)], journal = ledger();
@@ -64,14 +86,20 @@ describe("C1.12/C11.08 actual provider protocol boundaries", () => {
   it("records Replit metadata and pinned binary body as distinct original requests", async () => {
     const journal = ledger(), calls: Array<{ name: string; options: unknown }> = [];
     const metadata = { name: key, bucket: replit.location.bucket, generation: "18446744073709551615", size: "6", contentType: "application/octet-stream" };
-    const download = vi.fn(async () => [Buffer.from(bytes)]), getMetadata = vi.fn(async () => [metadata]);
-    const store = createReplitTransferProtocol({ binding: replit, destination: async () => ({ file: (name: string, options?: unknown) => { calls.push({ name, options }); return { getMetadata, download }; } }), requireOriginalEndpoint: () => {}, observer: journal.observer });
+    const createReadStream = vi.fn(() => Readable.from([Buffer.from(bytes)], { objectMode: false })), download = vi.fn(), getMetadata = vi.fn(async () => [metadata]);
+    const store = createReplitTransferProtocol({ binding: replit, destination: async () => ({ file: (name: string, options?: unknown) => { calls.push({ name, options }); return { getMetadata, createReadStream, download }; } }), requireOriginalEndpoint: () => {}, observer: journal.observer });
     const result = await store.readVersioned(key);
     expect(result?.revision.value).toBe(metadata.generation); expect(result?.body).toEqual(bytes);
     expect(calls).toEqual([{ name: key, options: undefined }, { name: key, options: { generation: metadata.generation } }]);
-    expect(download).toHaveBeenCalledWith({ validation: false, decompress: false });
+    expect(createReadStream).toHaveBeenCalledWith({ validation: false, decompress: false, start: 0, end: 6 }); expect(download).not.toHaveBeenCalled();
     expect(journal.requests.map(row => row.descriptor.kind)).toEqual(["object.metadata", "object.body"]);
     expect(journal.requests[1]?.facts.at(-1)).toMatchObject({ stage: "body", status: null, sha256: checksum, bytes: 6 });
+  });
+  it("stops and rejects an oversized Replit generation without buffering it through download", async () => {
+    const stream = Readable.from([Buffer.alloc(bytes.byteLength + 1)], { objectMode: false }), download = vi.fn();
+    const store = createReplitTransferProtocol({ binding: replit, destination: async () => ({ file: () => ({ getMetadata: async () => [{ name: key, bucket: replit.location.bucket, generation: "123", size: String(bytes.byteLength) }], createReadStream: () => stream, download }) }), requireOriginalEndpoint: () => {} });
+    await expect(store.readVersioned(key, undefined, bytes.byteLength)).rejects.toThrow();
+    expect(stream.destroyed).toBe(true); expect(download).not.toHaveBeenCalled();
   });
   it("retains Replit CREATE-only non-resumable upload ACK before later metadata failure", async () => {
     const journal = ledger(), file = { metadata: { name: "different-generation-key", bucket: replit.location.bucket, generation: "123", size: "6" }, save: vi.fn(async () => {}) };
@@ -88,8 +116,8 @@ describe("C1.12/C11.08 actual provider protocol boundaries", () => {
     expect(removed).toHaveBeenCalledWith({ ifGenerationMatch: "9007199254740993" });
   });
   it("does not invent current absence when a pinned Replit generation read fails", async () => {
-    const journal = ledger(), download = vi.fn(async () => { throw Object.assign(new Error("Original pinned generation not found"), { code: 404 }); });
-    const store = createReplitTransferProtocol({ binding: replit, destination: async () => ({ file: () => ({ getMetadata: async () => [{ name: key, bucket: replit.location.bucket, generation: "123", size: "6" }], download }) }), requireOriginalEndpoint: () => {}, observer: journal.observer });
+    const journal = ledger(), createReadStream = vi.fn(() => new Readable({ read() { this.destroy(Object.assign(new Error("Original pinned generation not found"), { code: 404 })); } }));
+    const store = createReplitTransferProtocol({ binding: replit, destination: async () => ({ file: () => ({ getMetadata: async () => [{ name: key, bucket: replit.location.bucket, generation: "123", size: "6" }], createReadStream }) }), requireOriginalEndpoint: () => {}, observer: journal.observer });
     await expect(store.readVersioned(key)).rejects.toThrow();
     expect(journal.requests[0]?.returned).toBe(true); expect(journal.requests[1]?.returned).toBe(false);
     expect(journal.requests[1]?.facts.some(fact => fact.stage === "absence")).toBe(false);

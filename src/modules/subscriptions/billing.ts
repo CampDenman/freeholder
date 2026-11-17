@@ -87,8 +87,8 @@ const claimCharge = defineService({
       .for("update");
     if (!subscription) throw new ServiceError("not_found", "There is no such subscription.");
     const current = mayChargePlatform(subscription) && subscription.merchantScopeVersion !== 1 ? await applyPendingPlan(ctx, subscription) : subscription;
-    const calendar = await commercialBillingStart(ctx, current);
-    if (!mayChargePlatform(current) || !calendar.ready || current.merchantScopeVersion === 1 && calendar.start.getTime() > Date.now()) {
+    const calendar = await commercialBillingStart(ctx, current), billingNow = Date.now();
+    if (!mayChargePlatform(current) || !calendar.ready || current.merchantScopeVersion === 1 && calendar.start.getTime() > billingNow && (current.pendingPlanId || current.currentPeriodStart.getTime() > billingNow)) {
       return {
         skip: true,
         subscriptionId: current.id,

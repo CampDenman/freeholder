@@ -23,15 +23,25 @@ import {controlledObservationEntries,type ObservationFingerprint} from "./contro
 import {principalAuthorityResult} from "./principal-authority-contract";
 import {merchantTaxDigest} from "./merchant-tax-store";
 function refuse():never{throw new ServiceError("conflict","Restore the complete current original atomic fee, every sibling disposition and exact unreturned credit source; a planned target, older bank read or missing partition cannot supply collected capacity.");}
+export type KnownPartitionEvidence={
+ prefix:Awaited<ReturnType<typeof assertAtomicCreditSourcePrefix>>;
+ owner:NonNullable<Awaited<ReturnType<typeof controlledAtomicFeeOwner>>>;
+ originalCash:Awaited<ReturnType<typeof originalMerchantRefundCash>>;
+ bank:Awaited<ReturnType<typeof readControlledCanonicalBankPrincipal>>;
+ principal:z.infer<typeof principalAuthorityResult>;
+ target:Awaited<ReturnType<typeof controlledAtomicRefundTarget>>;
+ state:Awaited<ReturnType<typeof controlledAtomicRefundFeeState>>;
+ returns:Awaited<ReturnType<typeof readAtomicFeeReturnResources>>;
+};
 /** Ordinary real-context reader only. No money/access authority, registration,
  * provider I/O, lock acquisition or caller/debt exclusion. The outer writer
  * discovers and holds the COMPLETE prefix before any canonical source lock.
  * Known atomic sources never fall back when the genuine installed proof fails.
  */
-export async function controlledAtomicCreditFeePartition(ctx:ServiceContext,input:{paymentId:string;sourceApplicationId:string|null;takeMinor:number}){
+export async function controlledAtomicCreditFeePartition(ctx:ServiceContext,input:{paymentId:string;sourceApplicationId:string|null;takeMinor:number},known?:KnownPartitionEvidence){
  if(!z.uuid().safeParse(input.paymentId).success||input.sourceApplicationId!==null&&!z.uuid().safeParse(input.sourceApplicationId).success||!Number.isSafeInteger(input.takeMinor)||input.takeMinor<0)refuse();
- const owner=await controlledAtomicFeeOwner(ctx,input.paymentId);if(!owner)return null;
- const prefix=await assertAtomicCreditSourcePrefix(ctx,[input.paymentId]);
+ const owner=known?.owner??await controlledAtomicFeeOwner(ctx,input.paymentId);if(!owner)return null;
+ const prefix=known?.prefix??await assertAtomicCreditSourcePrefix(ctx,[input.paymentId]);
  const[installed]=await ctx.tx.execute<{present:boolean}>(sql`select to_regprocedure('freeholder_credit_atomic_fee_ready()') is not null as present`);if(installed?.present!==true)refuse();
  const[ready]=await ctx.tx.execute<{ready:boolean}>(sql`select freeholder_credit_atomic_fee_ready() as ready`);if(ready?.ready!==true)refuse();
  const ancestry=await readAtomicCreditFeeAncestry(ctx.tx,input.paymentId),payment=ancestry.payment;
@@ -39,12 +49,12 @@ export async function controlledAtomicCreditFeePartition(ctx:ServiceContext,inpu
  const routing=await routingForPayment(ctx,payment.id);
  if(routing.originalChargeReceiptId!==owner.receiptId||routing.applicationFeeMinor===undefined)refuse();
  const frozenOriginalPaymentFeeMinor=routing.applicationFeeMinor;
- const originalCash=await originalMerchantRefundCash(ctx,{kind:"payment",paymentId:payment.id});
- const bank=await readControlledCanonicalBankPrincipal(ctx,payment,originalCash);
+ const originalCash=known?.originalCash??await originalMerchantRefundCash(ctx,{kind:"payment",paymentId:payment.id});
+ const bank=known?.bank??await readControlledCanonicalBankPrincipal(ctx,payment,originalCash);
  if(!bank.applies||!bank.principalMatches||bank.ancillaryDebtPending||bank.receiptId!==owner.receiptId||bank.collectionId!==owner.collectionId)refuse();
  const authority=getService("invoicing.originalPrincipalAuthority");if(!authority)refuse();
- const principal=principalAuthorityResult.parse(await ctx.callAsSystem(authority,{paymentId:payment.id}));if(!principal.principalSafe||principal.witness.paymentId!==payment.id)refuse();
- const target=await controlledAtomicRefundTarget(ctx,payment.id),state=await controlledAtomicRefundFeeState(ctx,payment.id),returns=await readAtomicFeeReturnResources(ctx,payment.id);
+ const principal=known?.principal??principalAuthorityResult.parse(await ctx.callAsSystem(authority,{paymentId:payment.id}));if(!principal.principalSafe||principal.witness.paymentId!==payment.id)refuse();
+ const target=known?known.target:await controlledAtomicRefundTarget(ctx,payment.id),state=known?known.state:await controlledAtomicRefundFeeState(ctx,payment.id,target),returns=known?known.returns:await readAtomicFeeReturnResources(ctx,payment.id);
  if(!returns||returns.pendingOperationIds.length||returns.unfinishedIds.length||returns.binding.route.applicationFeeMinor!==routing.applicationFeeMinor)refuse();
  // With no principal refund the original full Fi must still be physically
  // present. An out-of-band fee return is not a new smaller economic epoch.
@@ -166,6 +176,7 @@ export async function controlledAtomicCreditFeePartition(ctx:ServiceContext,inpu
  if(afterPrefix.revision!==prefix.revision||!afterOwner||afterOwner.revision!==owner.revision||!afterReturns||afterReturns.revision!==returns.revision
   ||await readBankRevision()!==bankNamespaceRevision||merchantTaxDigest(await currentEntries())!==currentParentRevision||merchantTaxDigest(await sqlCandidate())!==merchantTaxDigest(actualSql))refuse();
  return{kind:"atomic_partition" as const,requiresChild:retired>0||ancestry.originalInvoice.refundedMinor>0,owner,bank,principal,ancestry,plan,storedEconomics,beforeEntries,
-  allocation:{feeObligationMinor:plan.takeAssignedFeeMinor,provenCollectedMinor:plan.takeProvenCollectedMinor,collectionState:plan.takeAssignedFeeMinor===0?"not_due" as const:plan.takeOwedFeeMinor===0?"verified_collected" as const:"owed" as const,unexpectedFee:false,evidenceDigest:feeEvidenceDigest},
+  allocation:{feeObligationMinor:plan.takeAssignedFeeMinor,provenCollectedMinor:plan.takeProvenCollectedMinor,collectionState:plan.takeAssignedFeeMinor===0?"not_due" as const:plan.takeOwedFeeMinor===0?"verified_collected" as const:"owed" as const,
+   sourceCollectionState:plan.originalFeeMinor===0?"not_due" as const:plan.currentOwedAssignedFeeMinor>0||plan.actualCollectedFeeMinor===0?"owed" as const:"verified_collected" as const,unexpectedFee:false,evidenceDigest:feeEvidenceDigest},
   revision:merchantTaxDigest({storedEconomics,beforeEntries,bankRevision:bank.revision,principal,sourceOwner:owner.revision,physicalReturns:returns.revision})};
 }

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// PREPARED / UNRUN. Genuine shared services/private fictional TCP. The portable
-// review exercises the same consumer; actual stopped-executor acceptance still
+// Scoped fixture qualified on fresh PostgreSQL 2026-11-15 with synthetic AWS TCP.
+// The portable review exercises the same consumer; stopped-executor acceptance
 // needs an independently executed platform witness, never seeded kernel proof.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {eq,sql} from "drizzle-orm";
@@ -13,7 +13,8 @@ import {ready} from "@/core/runtime";
 import {stopJobs} from "@/core/jobs";
 import {resetEnvForTests} from "@/core/env";
 import {resetStorageForTests} from "@/adapters/storage";
-import {putWithReceipt,deleteWithReceipt,allowMediaReceiptWrites} from "@/core/media/write-ledger";
+import {putWithReceipt,allowMediaReceiptWrites} from "@/core/media/write-ledger";
+import {deleteWithReceipt} from "@/core/media/delete-with-receipt";
 import {reconcileStorageOperation} from "@/core/media/write-recovery";
 import {minimizeOriginalProviderReservation} from "@/core/media/original-provider-minimization";
 import {mediaObjectWrites} from "@/core/media/write-schema";
@@ -23,11 +24,12 @@ import {mediaStorageProviderInventories as inventories} from "@/core/media/trans
 import {ordinaryMediaRetirementProvider} from "../helpers/media-original-retirement-provider";
 import {closeDb,failure,hasDatabase,OWNER,truncateSpine} from "../helpers/spine";
 const key="private/applied-retirement.bin",body=new Uint8Array([0,255,13,10,128,0]);
+const syntheticOrigin="https://s3.us-east-1.amazonaws.com",realFetch=globalThis.fetch.bind(globalThis);
 describe.runIf(hasDatabase)("C1.12/C11.08 original applied-review retirement consumer (complete protocol dependent)",()=>{
  let provider:Awaited<ReturnType<typeof ordinaryMediaRetirementProvider>>;
  beforeAll(async()=>{await ready();await stopJobs();const[capability]=await db().execute<{present:boolean}>(sql`select to_regprocedure('freeholder_media_transfer_request_capability_v1()') is not null as present`);if(capability?.present!==true)throw Error("Prepared original applied-review retirement requires the actual complete protocol; no fixture capability is substituted.");},60000);
- beforeEach(async()=>{await truncateSpine();await db().insert(users).values({id:OWNER.userId,email:"applied-retirement-owner@example.test",role:"owner"});provider=await ordinaryMediaRetirementProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",FREEHOLDER_STORAGE_QUOTA_BYTES:"",FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY:"false"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
- afterEach(async()=>{provider?.releaseAll();await provider?.close();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
+ beforeEach(async()=>{await truncateSpine();await db().insert(users).values({id:OWNER.userId,email:"applied-retirement-owner@example.test",role:"owner"});provider=await ordinaryMediaRetirementProvider();vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{const url=new URL(input instanceof Request?input.url:String(input));if(url.origin!==syntheticOrigin)return realFetch(input,init);const target=new URL(`${url.pathname}${url.search}`,provider.endpoint);if(input instanceof Request)return realFetch(target,{method:input.method,headers:input.headers,body:input.body===null?undefined:await input.arrayBuffer()});return realFetch(target,init);});for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:syntheticOrigin,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",FREEHOLDER_STORAGE_QUOTA_BYTES:"",FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY:"false"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
+ afterEach(async()=>{provider?.releaseAll();await provider?.close();vi.unstubAllEnvs();vi.unstubAllGlobals();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
  async function applied(){
   provider.loseNextSourcePutReply();await failure(putWithReceipt({key,body,contentType:"application/octet-stream",role:"original"},OWNER));const[row]=await db().select().from(mediaObjectWrites);if(!row?.namespace||!row.originalReservationId)throw Error("Actual original birth missing");
   await reconcileStorageOperation.call({id:row.id,expectedUpdatedAt:row.updatedAt.toISOString(),originalNamespace:row.namespace,outcome:"applied",providerFinalReference:"fictional-original-revision",providerEvidence:"Actual fictional TCP original nonce, exact full bytes and complete two-pass inventory.",stoppedWriterEvidence:"Actual originating finish is retained. This text is not executor proof.",confirmation:"ORIGINAL STORAGE OUTCOME CONFIRMED"},OWNER);

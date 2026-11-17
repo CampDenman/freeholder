@@ -11,6 +11,7 @@ import { env } from "@/core/env";
 import { createLocalStorage } from "@/adapters/storage/local";
 import { createReplitStorage } from "@/adapters/storage/replit";
 import { createS3Storage } from "@/adapters/storage/s3";
+import { createSpacesStorage, spacesEndpoint } from "@/adapters/storage/spaces";
 import type { StorageAdapter, StorageBinding } from "@/adapters/storage/types";
 import { withStorageQuota } from "@/adapters/storage/quota";
 import { postgresStorageQuota, storageNamespace, withVerifiedEmptyInitialization } from "@/core/media/storage-quota";
@@ -26,6 +27,16 @@ function buildUnbounded(): StorageAdapter {
   const choice = e.FREEHOLDER_STORAGE ?? config.adapters.storage;
 
   switch (choice) {
+    case "spaces": {
+      const missing = (["S3_REGION", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const)
+        .filter(name => !e[name]).map(name => name);
+      if (missing.length) throw new Error(`Storage is set to "spaces" but ${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} not set. See .env.example.`);
+      return createSpacesStorage({
+        region: e.S3_REGION!, bucket: e.S3_BUCKET!, accessKeyId: e.S3_ACCESS_KEY_ID!, secretAccessKey: e.S3_SECRET_ACCESS_KEY!,
+        addressingStyle: e.S3_ADDRESSING_STYLE, publicBaseUrl: e.S3_PUBLIC_BASE_URL, isPublic: e.S3_PUBLIC === "true",
+      });
+    }
+
     case "s3": {
       // Named rather than defaulted: a half-configured bucket that silently
       // falls back to the local disk would lose an owner's files at the exact
@@ -92,8 +103,8 @@ export function storage(): StorageAdapter {
     } else instance = inner;
     if (!instance.binding && inner.id !== "replit") {
       const location: Record<string, string> = inner.id === "local"
-        ? { root: resolve(e.LOCAL_STORAGE_ROOT ?? ".data/media") }
-        : { endpoint: e.S3_ENDPOINT!, bucket: e.S3_BUCKET! };
+        ? { root: resolve(/* turbopackIgnore: true */ e.LOCAL_STORAGE_ROOT ?? ".data/media") }
+        : { endpoint: (e.FREEHOLDER_STORAGE ?? config.adapters.storage) === "spaces" ? spacesEndpoint(e.S3_REGION!) : e.S3_ENDPOINT!, bucket: e.S3_BUCKET! };
       const namespace = storageNamespace({ id: inner.id, ...location });
       const binding: StorageBinding = Object.freeze({ kind: inner.id, namespace, location: Object.freeze(location) });
       instance.binding = async () => binding;

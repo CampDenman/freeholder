@@ -487,6 +487,18 @@ describe.runIf(hasDatabase)("screening and the lead sink with a database", () =>
     expect(remoteCopies).toBe(1);
   });
 
+  it("refuses an accepted legacy event without original notice or destination evidence", async () => {
+    const values = answers();
+    const { submissionId } = await submitCommitted({ slug: "contact", values, screening: sealScreening("unscreened", "contact", values) }, ANONYMOUS);
+    const payload = await submittedPayload(submissionId);
+    expect(payload).toMatchObject({ fromSiteForm: true, leadRequested: false });
+    configure({ ...SINK, PARADISEMODERN_API_KEY: "fictional-replacement-key", PARADISEMODERN_URL: "https://replacement-lead.example.test" });
+    await expect(copySubmissionToLeadSink({ ...payload, leadRequested: true })).rejects.toThrow("original notice or destination evidence");
+    expect(calls).toHaveLength(0);
+    expect((await only()).status).toBe("received");
+    expect(await db().select().from(formLeadCopies)).toEqual([]);
+  });
+
   it("never copies quarantined submissions", async () => {
     configure(SINK);
     const values = answers({ [HONEYPOT_FIELD]: "filled" });

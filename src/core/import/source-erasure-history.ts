@@ -3,7 +3,7 @@
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { defineService } from "@/core/service";
-import { lockContactIdentity } from "@/core/contacts/identity-lock";
+import { lockContactIdentityForRecovery } from "@/core/contacts/identity-lock";
 import { dataRequestArtifacts, dataRequests } from "@/core/privacy/schema";
 import { erasureArtifactIsIntact, reopenErasureJob } from "@/core/privacy/service";
 import { registerStorageObservationReconciler } from "@/core/media/observation-hooks";
@@ -21,7 +21,7 @@ export const reconcileOriginalSourceErasure = defineService({
   output: z.object({ next: z.uuid().nullable(), reopened: z.number().int().nonnegative(), recoveryRequired: z.number().int().nonnegative(), changed: z.boolean() }),
   auditInputFields: ["originalJobId", "receiptId"], auditWhen: (output: { changed: boolean }) => output.changed,
   handler: async (input, ctx) => {
-    await lockContactIdentity(ctx.tx);
+    await lockContactIdentityForRecovery(ctx.tx);
     // Select only retained self-bound original tasks and verified
     // requests; check the applied audit witness before admitting any retry. No current run, upload, graph or media membership is
     // queried to supply missing original erasure evidence.

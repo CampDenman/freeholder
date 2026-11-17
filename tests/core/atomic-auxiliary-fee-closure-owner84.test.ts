@@ -6,6 +6,8 @@ import {describe,expect,it} from "vitest";
 import readyContinuation from "../../deploy/atomic-credit-fee-ready-identity85.manifest.json";
 import bAssembly from "../../deploy/atomic-credit-fee-root-assembly-20261114.json";
 import manifest from "../../deploy/atomic-auxiliary-fee-closure-owner85.manifest.json";
+import calendarNativePreservation from "../../deploy/controlled-calendar-native-preservation84.source-preservation.json";
+import publicBoundary from "../../deploy/controlled-safe-public-boundary88.source.json";
 const read=(path:string)=>readFileSync(new URL("../../"+path,import.meta.url));
 const hash=(value:string|Buffer)=>createHash("sha256").update(value).digest("hex");
 const body=(statement:string)=>statement.match(/AS \$\$([\s\S]*)\$\$/)?.[1]??"";
@@ -38,7 +40,12 @@ describe("whole auxiliary closure and original-owner continuation",()=>{
   for(const count of [manifest.newFunctions,manifest.newModels,manifest.newColumns,manifest.newTriggers,manifest.newServices])expect(count).toBe(0);
  });
  it("keeps the predecessor prefix control exact through its one declared extension",()=>{
-  const change=manifest.predecessorSourceControlContinuation,actual=read(change.path).toString();
+  const change=manifest.predecessorSourceControlContinuation;let actual=read(change.path).toString();
+  const latest=publicBoundary.files.find(file=>file.path===change.path);if(!latest)throw Error("Require the newest predecessor continuation.");expect(hash(actual)).toBe(latest.afterSha256);
+  for(const delta of [...latest.edits].reverse()){expect(actual.split(delta.after)).toHaveLength(2);actual=actual.replace(delta.after,()=>delta.before);}expect(hash(actual)).toBe(latest.beforeSha256);
+  const exact=calendarNativePreservation.files[0];if(!exact)throw Error("Require the exact calendar-native preservation continuation.");expect(hash(actual)).toBe(exact.afterSha256);
+  for(const delta of [...exact.finiteDelta].reverse()){expect(actual.split(delta.after)).toHaveLength(2);actual=actual.replace(delta.after,()=>delta.before);}
+  expect(hash(actual)).toBe(exact.beforeSha256);
   expect(hash(actual)).toBe(change.afterSha256);
   expect(actual.replace(change.finiteDelta.after,()=>change.finiteDelta.before)).toBe(change.beforeWholeFile);
   expect(hash(change.beforeWholeFile)).toBe(change.beforeSha256);

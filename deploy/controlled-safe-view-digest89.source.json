@@ -1,0 +1,53 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_safe_view_digest89.v1",
+  "checklist": ["C12.38", "C11.05", "C11.10"],
+  "status": "FORWARD SOURCE CONTINUATION; reuse digests only after authenticating and deeply freezing the exact view; not payment acceptance",
+  "artifacts": [
+    { "path": "src/modules/subscriptions/controlled-provider-safe-response-proof.ts", "sha256": "c65de3cad3c7a5a1c78f390f359c2a14c9bfc9013cac5b0edfac2c82340c14c4" }
+  ],
+  "testContinuations": [
+    {
+      "path": "src/modules/subscriptions/controlled-provider-safe-response-proof.ts",
+      "afterSha256": "c65de3cad3c7a5a1c78f390f359c2a14c9bfc9013cac5b0edfac2c82340c14c4",
+      "beforeSha256": "bb660c1bd4691df84872167ec090e6f20d306d2e945a16696c6a7e85fd5a6ed7",
+      "edits": [
+        {
+          "before": " const admission=verifiedProviderReadProof(call.admission,\"admission\"),proof=verifiedProviderReadProof(finish.proof,\"finish\"),p=proof?.payload;",
+          "after": " const admission=verifiedProviderReadProof(call.admission,\"admission\"),proof=verifiedProviderReadProof(finish.proof,\"finish\"),p=proof?.payload,actualResultDigest=merchantTaxDigest(finish.actualResult);",
+          "occurrences": 1
+        },
+        {
+          "before": "p.factsDigest!==merchantTaxDigest(finish.actualResult)",
+          "after": "p.factsDigest!==actualResultDigest",
+          "occurrences": 1
+        },
+        {
+          "before": " return{proof,result:record.parse(finish.actualResult.result)};",
+          "after": " const result=record.parse(finish.actualResult.result);return{proof,result,resultDigest:merchantTaxDigest(result)};",
+          "occurrences": 1
+        },
+        {
+          "before": "merchantTaxDigest(original.result)",
+          "after": "original.resultDigest",
+          "occurrences": 3
+        },
+        {
+          "before": "safeViewDigest:merchantTaxDigest(resultView)",
+          "after": "safeViewDigest:safe?storedVerificationDigest:merchantTaxDigest(resultView)",
+          "occurrences": 1
+        },
+        {
+          "before": "storedVerificationDigest:string;resultView:Record<string,unknown>;",
+          "after": "storedVerificationDigest:string;safeViewDigest:string;resultView:Record<string,unknown>;",
+          "occurrences": 1
+        },
+        {
+          "before": "view.storedVerificationDigest!==verification.actualResultDigest||merchantTaxDigest(view.resultView)!==verification.actualResultDigest",
+          "after": "view.storedVerificationDigest!==verification.actualResultDigest||view.safeViewDigest!==verification.actualResultDigest",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "protocol": "controlled_safe_response_migration_boundary.v1",
+  "index": 86,
+  "tag": "0086_controlled_safe_response",
+  "when": 1793310000066,
+  "breakpoints": true,
+  "firstStatementSha256": "14b90f4109f06e5457ddaa0b0c0210516092f0e2e6d8965d067eca7c3370b8d4",
+  "predecessor85Sha256": "8c914cf178bad249a8d60d332f9c5e3b3fc92af0c2d0ecc46bdc7b648e87c2cb",
+  "whole86Sha256": "b3d73b06a4de6fa3fe76356414674526e883fbd4fc25bbe978535cc70e2fa8ae",
+  "prefix0To85Sha256": "8c0994ab8debdc7e0afcea285bdf321f9a6bf173ad704523890be505a16cb73b"
+}

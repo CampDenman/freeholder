@@ -1,0 +1,39 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "local_release_smoke_20261116.v1",
+  "checklist": ["C3.44", "C11.17"],
+  "status": "Explicit local-only dirty-tree Linux release migrates and boots healthily after extraction; official release, owner claim and hosted acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "f4be50d84c9427419f9303ce7cf5d0107a8b4b9caaadb2d92996b819fbce3c53" },
+    { "path": "scripts/build-release.mjs", "sha256": "7f81ba20e3ce4fce9e121c3453d431a1765fdecac23e161d6099f69d48ca500b" },
+    { "path": "package.json", "sha256": "60f7f7c88f9323474ce6823c88813bafad18b1dd3c6b7fc49341145965308b60" }
+  ],
+  "controls": {
+    "initialGuard": "Ordinary release:build refused the dirty tree before packaging",
+    "localCommand": "pnpm release:build --allow-dirty",
+    "package": { "path": "dist/release/freeholder-0.2.0-beta.6-linux-x64.tar.gz", "bytesReportedMiB": 83.8, "sha256": "ee8d7e9b0338f609bb2d056fdeb9e4b8977b23ea164cfb3c9311b47108c2f7a0" },
+    "database": "release_package_smoke_20261116",
+    "migration": "Fresh database migrated successfully using the extracted package's bundled Node runtime",
+    "health": { "ok": true, "version": "0.2.0-beta.6", "modules": 38, "services": 2393, "listeners": 53, "registeredJobs": 124, "mountedWorkers": 124, "scheduledJobs": 84, "producers": 1, "workers": 1, "currentVersionWorkers": 1, "ready": true },
+    "databaseHealth": { "ok": true },
+    "serverStopped": true,
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "No official release identity, owner claim, hosted deployment, clean-room signoff or previous-image upgrade/rollback is claimed"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "f4be50d84c9427419f9303ce7cf5d0107a8b4b9caaadb2d92996b819fbce3c53",
+      "beforeSha256": "1d3a7abdd8da0fffc485384eeb46ea29447cfdde817ac03e6ad8221927473ad2",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  image upgrade remain unrun locally because psql/Docker are unavailable; C11.17 is open.\n  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old",
+          "after": "  image upgrade remain unrun locally because psql/Docker are unavailable; C11.17 is open.\n  Local Linux-release smoke qualification2026-11-16 (C3.44/C11.17): the normal dirty\n  guard first refused; explicit local-only `--allow-dirty` packaging then produced the\n 83.8MB beta6 x64 tarball with SHA256 ee8d7e9b0338f609bb2d056fdeb9e4b8977b23ea164cfb3c9311b47108c2f7a0.\n  A freshly extracted copy migrated a new database with its bundled runtime, then booted\n  with the genuine worker: health and DB both ok:true,124 registered/mounted jobs and\n  one current worker. The smoke server was stopped. This is not an official release,\n  owner claim or hosted acceptance. See `deploy/local-release-smoke-20261116.source.json`.\n  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

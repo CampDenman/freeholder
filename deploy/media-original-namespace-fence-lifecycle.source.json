@@ -1,0 +1,34 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_original_namespace_fence_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Ordinary logical and physical namespace fences qualified on fresh migration108 PostgreSQL; provider-account and executor-stop acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "2a900653d0fa37e5bfb72ee1b6fc9d2916c1a00c92839485085f3cdcfc4ce108" },
+    { "path": "tests/core/media-original-namespace-fence-lifecycle.test.ts", "sha256": "18f8119d4c8f7fd0f6474b82c01806722fdd742af5fd741627a75b5127e5c6cc" }
+  ],
+  "controls": {
+    "initial": { "passed": 4, "failed": 2, "defect": "Tests expected the fence message on the wrong error wrapper; both actual writes were refused with SQLSTATE23514" },
+    "final": { "database": "media_namespace_fence_20261116", "passed": 6, "failed": 0, "durationSeconds": 40.52 },
+    "transport": "Synthetic AWS origin mapped through fetch to the fictional TCP provider; all product assertions retained",
+    "coverage": ["cold ordinary writer under captured drain refused before provider I/O", "flag-only same-key parent refused", "warm raw/factory mutation children fenced while exact GET recovery succeeds", "active source claim refuses ordinary same-key admission", "matching transfer ancestry conditionally retires its source", "already-dispatched late PUT and mismatched later child preserve original facts"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "2a900653d0fa37e5bfb72ee1b6fc9d2916c1a00c92839485085f3cdcfc4ce108",
+      "beforeSha256": "18159c9b6652ce60199f0b1ef4f738a0bdb5c269e074aad59a66f6426b867abe",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-transfer-drain-association-lifecycle.source.json`. No kernel stop,\n  provider account or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  `deploy/media-transfer-drain-association-lifecycle.source.json`. No kernel stop,\n  provider account or C-item acceptance follows.\n  Original namespace-fence qualification2026-11-16: fresh migration108 passes6/6.\n  Cold/warm ordinary writers and raw children remain fenced without blocking exact\n  GET recovery; active claims reject same-key admission; matching transfer ancestry\n  conditionally retires its source; already-dispatched late bytes retain their\n  original facts. Initial failures were test wrapper assumptions, not bypasses;\n  exact SQLSTATE/message assertions now match the actual error boundary. Focused\n  lint passes. See `deploy/media-original-namespace-fence-lifecycle.source.json`.\n  No provider account, executor stop or C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

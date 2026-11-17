@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Original browser ETags select the completion manifest; provider listings
 // verify it and never replace it. Body checksums come from the first declaration.
+import {createHash} from "node:crypto";
 import type {MultipartPart} from "@/adapters/storage/types";
+
+export function multipartCompletePartsDigest(parts:readonly MultipartPart[]):string{
+ const canonical=parts.map(({partNumber,etag,bytes,checksumSha256})=>({partNumber,etag,...(bytes===undefined?{}:{bytes}),...(checksumSha256===undefined?{}:{checksumSha256})}));
+ return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
 import type {OriginalMultipartPartBodies} from "./multipart-part-bodies-proof";
 import {exactMultipartPartBodies} from "./multipart-part-bodies-proof";
 import {transferConflict} from "./transfer-proof";

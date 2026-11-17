@@ -5,7 +5,7 @@ import {randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,isNull,sql} from "drizzle-orm";
 import {z} from "zod";
 import {db} from "@/core/db";
-import {lockContactIdentity} from "@/core/contacts/identity-lock";
+import {lockContactIdentity,lockContactIdentityForRecovery} from "@/core/contacts/identity-lock";
 import {enqueueJob,type JobExecutionContext} from "@/core/jobs";
 import {completeErasureJob,erasureArtifactIsIntact,registerContactPrivacySource} from "@/core/privacy/service";
 import {dataRequestArtifacts,dataRequests} from "@/core/privacy/schema";
@@ -129,7 +129,7 @@ export async function eraseMediaStorageTransfer(data:Record<string,unknown>,cont
  await completeErasureJob.call({requestId:input.requestId,scope:TRANSFER_PRIVACY_SCOPE,jobId:input.originalJobId},SYSTEM);return{erased};
 }
 export const reconcileStorageTransferErasure=defineService({name:"media.reconcileStorageTransferErasure",summary:"Reopen original transfer erasure debt from exact immutable members after physical facts commit.",kind:"mutation",permission:"system",external:false,input:z.object({receiptId:z.uuid().optional(),after:z.uuid().optional()}),output:z.object({reopened:z.number().int().nonnegative(),next:z.uuid().nullable()}),handler:async(input,ctx)=>{
- await lockContactIdentity(ctx.tx);await lockTransferInventory(ctx.tx);const original=input.receiptId?await ctx.tx.select().from(mediaStorageTransferReceipts).where(eq(mediaStorageTransferReceipts.receiptId,input.receiptId)):[];
+ await lockContactIdentityForRecovery(ctx.tx);await lockTransferInventory(ctx.tx);const original=input.receiptId?await ctx.tx.select().from(mediaStorageTransferReceipts).where(eq(mediaStorageTransferReceipts.receiptId,input.receiptId)):[];
  const observed=input.receiptId?await ctx.tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.physicalReceiptId,input.receiptId)):[];
  const ids=[...new Set([...original.map(row=>row.objectId),...observed.map(row=>row.objectId)])];
  const scopes=await ctx.tx.execute<{request_id:string}>(sql`select distinct scope.request_id from media_storage_transfer_erasure_scopes scope join media_storage_transfer_erasure_members member on member.request_id=scope.request_id join data_requests request on request.id=scope.request_id where scope.complete and request.kind='erasure' and request.verified_at is not null and request.status in ('completed','partially_completed','in_progress') and (${input.after??null}::uuid is null or scope.request_id>${input.after??null}::uuid) ${input.receiptId?sql`and member.object_id in (${ids.length?sql.join(ids.map(id=>sql`${id}::uuid`),sql`,`):sql`null::uuid`})`:sql``} order by scope.request_id limit 100`);

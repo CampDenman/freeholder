@@ -261,6 +261,10 @@ test.describe("members (C12.01)", () => {
       { userId: MEMBER_ID, handle: "rae", displayName: "Rae Lane", ageAttestedAt: now, isPrivate: false },
       { userId: SAM_ID, handle: "sam", displayName: "Sam Ito", ageAttestedAt: now, isPrivate: false },
     ]);
+    await db().insert(contacts).values([
+      { email: "rae@example.test", name: "Rae Lane", userId: MEMBER_ID },
+      { email: "sam@example.test", name: "Sam Ito", userId: SAM_ID },
+    ]);
     await db().insert(memberFollows).values([{ followerId: MEMBER_ID, followeeId: SAM_ID, status: "active" as const }, { followerId: SAM_ID, followeeId: MEMBER_ID, status: "active" as const }]);
     const [rae, sam, samAgain] = await Promise.all([MEMBER_ID, SAM_ID, SAM_ID].map((id) => db().transaction((tx) => createSession(tx, id))));
     const open = async (token: string) => {

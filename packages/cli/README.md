@@ -63,7 +63,8 @@ look broken.
 Stand up a new hosted Freeholder site with one command, ending in a one-click
 owner claim link. DigitalOcean first: a droplet running the
 [`digitalocean-droplet` recipe](https://github.com/CampDenman/freeholder/tree/main/deploy/digitalocean-droplet),
-with media and nightly backups in Spaces.
+with media and nightly backups in Spaces. New launches record the explicit
+`FREEHOLDER_STORAGE=spaces` choice; existing `s3` configurations remain valid.
 
 ```sh
 doctl auth init                    # or export DIGITALOCEAN_TOKEN in your own shell
@@ -154,8 +155,11 @@ if it is empty, because media and backups are your data. If a deletion fails,
 the CLI says which resource to remove in the DigitalOcean console. **Spaces
 billing continues after `--destroy`**: the $5/month Spaces subscription (and
 any bucket kept because it holds files) is billed until you empty the
-buckets and cancel Spaces in the DigitalOcean console. The local
-`freeholder.env` is kept, so delete it yourself once you no longer need it.
+buckets and cancel Spaces in the DigitalOcean console. The complete local
+launch generation—including `freeholder.env` and storage-creation evidence—is
+moved to a non-overwriting `<name>.destroyed` archive, so delete that archive
+yourself once you no longer need it. A later launch may use the original name
+without changing the archived generation.
 
 Exit codes follow `freeholder update`: `0` done, `2` a step failed (the
 message says how to recover), `3` DigitalOcean could not be reached or

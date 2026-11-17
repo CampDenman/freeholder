@@ -1,0 +1,39 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "intake_files_current_browser.v1",
+  "checklist": ["C3.38", "C11.17"],
+  "status": "Current real-Chromium private intake-file journey passes; hosted preview acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "c65c9b486a7738d9e5771d79111ea250b7f944eface866258a923ebe408406cd" },
+    { "path": "tests/browser/intake-project-files.spec.ts", "sha256": "ec7a180d4ad51e0dc793092676f24653e0fa95a06e65372bcb884834695e86a3" },
+    { "path": "playwright.a11y.config.ts", "sha256": "17b351cd4fd2ddbc5e773062237c504b07b2e5bf313cc88337066c275e133590" }
+  ],
+  "controls": {
+    "database": "browser_intake_files_a11y_current_20261116",
+    "browser": "Chromium via Playwright",
+    "native": { "passed": 1, "failed": 0, "durationSeconds": 27.2 },
+    "coverage": ["genuine owner HTTP reservation/upload with CSRF", "owner project link and exact downloaded bytes with no-store/attachment headers", "light/dark keyboard focus and Axe WCAG scans", "anonymous private route and physical URL return404", "quarantined asset link/download refused"],
+    "launcherRefusals": ["Missing explicit disposable database", "First selected name lacked required test/a11y marker"],
+    "launcherRefusalsReachedApp": false,
+    "storage": "Explicit local disposable browser storage; not a hosted provider",
+    "testOracleChanged": false,
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "Hosted preview file upload/type/size acceptance, clean-room and owner signoff remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "c65c9b486a7738d9e5771d79111ea250b7f944eface866258a923ebe408406cd",
+      "beforeSha256": "3bc209cf0c743c38feb0cc502bf769839c4c29f3471b1bda1aab0bd354731219",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `media-rendition-recovery-lock.md`. Hosted file acceptance remains open.)*\n- [ ] **C3.39**",
+          "after": "  `media-rendition-recovery-lock.md`. Hosted file acceptance remains open.)*\n  *(Current Chromium requalification2026-11-16: the unchanged intake-file journey\n  PASSes1/1 in27.2s on a fresh current database. Genuine owner HTTP upload, exact private\n  download bytes/no-store, both themes with Axe, anonymous404 and quarantine refusal pass.\n  Two initial launcher selections were rejected before app startup because they lacked an\n  explicit compliant disposable database; the final named a11y database passed. See\n  `deploy/intake-files-current-browser.source.json`. Local test storage supplies no hosted\n  acceptance; C3.38 remains open.)*\n- [ ] **C3.39**",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

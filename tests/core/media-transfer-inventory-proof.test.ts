@@ -3,7 +3,7 @@
 // C1.12/C11.08: enumeration never supplies missing original birth authority.
 import { describe, expect, it } from "vitest";
 import type { TransferInventoryConfiguration, TransferInventoryEntry } from "../../scripts/media-transfer.mjs";
-import { classifySourceInventory, originalResourceAbsent, physicalInventoryBytes, providerInventoryDigest, requireCompletePages, sameProviderRevision } from "@/core/media/transfer-inventory-proof";
+import { classifySourceInventory, inventoryResourceDigest, originalResourceAbsent, physicalInventoryBytes, providerInventoryDigest, requireCompletePages, sameProviderRevision } from "@/core/media/transfer-inventory-proof";
 const namespace = "a".repeat(64), key = "private/original.bin";
 const configuration: TransferInventoryConfiguration = { versioning: "Enabled", softDeleteSeconds: 0, retentionSeconds: 0 };
 const revision = { kind: "etag" as const, key, namespace, value: '"original-etag"', versionId: "original-version" };
@@ -58,6 +58,10 @@ describe("C1.12/C11.08 provider-complete original inventory", () => {
   });
   it("refuses a different generation even when its actual current ETag and full byte count equal the original",()=>{
     expect(classifySourceInventory(configuration,[current,version],[{...original,originalRevision:{...revision,versionId:"different-original-generation"}}],namespace)).toEqual({complete:false,reason:"unproven_original_provider_revision"});
+  });
+  it("matches the SQL resource identity for an unversioned S3 inventory entry",()=>{
+    const unversioned:TransferInventoryEntry={kind:"version",key,bytes:6,revision:{kind:"etag",key,namespace,value:revision.value},current:true};
+    expect(inventoryResourceDigest(unversioned)).toBe("358bce5295870475e99695c3ca85c6c4c1f82b01581e46456d0ef10fad336eff");
   });
 
 });

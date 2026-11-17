@@ -24,6 +24,7 @@ COPY . .
 # The build must not need secrets: env.ts validates lazily so `next build`
 # succeeds with no database attached (§14).
 RUN pnpm build
+RUN mkdir -p /app/migration-dependencies && cp -RL /app/node_modules/postgres /app/node_modules/drizzle-orm /app/node_modules/zod /app/migration-dependencies/
 
 FROM node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS runtime
 LABEL io.freeholder.storage.quota.version="1" \
@@ -40,13 +41,19 @@ ENV NODE_ENV=production \
 RUN groupadd --system --gid 1001 freeholder \
  && useradd --system --uid 1001 --gid freeholder freeholder
 COPY --from=build --chown=freeholder:freeholder /app/.next/standalone ./
+COPY --from=build --chown=freeholder:freeholder /app/migration-dependencies/postgres ./node_modules/postgres
+COPY --from=build --chown=freeholder:freeholder /app/migration-dependencies/drizzle-orm ./node_modules/drizzle-orm
+COPY --from=build --chown=freeholder:freeholder /app/migration-dependencies/zod ./node_modules/zod
 COPY --from=build --chown=freeholder:freeholder /app/.next/static ./.next/static
 COPY --from=build --chown=freeholder:freeholder /app/public ./public
 # Migrations travel with the image so a release can never be newer than the
 # schema it expects.
 COPY --from=build --chown=freeholder:freeholder /app/db ./db
-# The way back in when nobody can sign in. Needs only node:crypto, which is
-# why it can live in an image whose node_modules holds four packages.
+# The manual CLI uses the same runner and relative imports as boot.
+COPY --from=build --chown=freeholder:freeholder /app/scripts/migrate.mjs ./scripts/migrate.mjs
+COPY --from=build --chown=freeholder:freeholder /app/src/core/migrate-runner.mjs ./src/core/migrate-runner.mjs
+# The way back in when nobody can sign in. Needs only node:crypto, not the
+# separately packaged migration driver.
 COPY --from=build --chown=freeholder:freeholder /app/scripts/owner-password.mjs ./scripts/owner-password.mjs
 COPY --from=build --chown=freeholder:freeholder /app/scripts/deployment-admission.mjs ./scripts/deployment-admission.mjs
 # C3.44: the docker-selfhost media volume mounts here. Docker copies this

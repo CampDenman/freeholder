@@ -1,0 +1,16 @@
+{
+  "domain": "freeholder.merchant-tax-digest-loop.v1",
+  "files": [
+    {
+      "path": "src/modules/invoicing/merchant-tax-store.ts",
+      "beforeSha256": "53e53dfbd4cb3f5abe71991f262fad935fdfee9774b14d6d18c62c44d5c6e51b",
+      "afterSha256": "3f3be610773d454dd7b40d6150d3435eddbbb9ec557000947a844f38773f56c5",
+      "finiteDelta": [
+        {
+          "before": "function canonical(value:unknown):string{\n if(value instanceof Date)return JSON.stringify(value.toISOString());\n if(Array.isArray(value))return`[${value.map(canonical).join(\",\")}]`;\n if(value&&typeof value===\"object\")return`{${Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b)).map(([key,item])=>`${JSON.stringify(key)}:${canonical(item)}`).join(\",\")}}`;\n return JSON.stringify(value)??\"null\";\n}\n",
+          "after": "function canonical(value:unknown):string{\n if(value instanceof Date)return JSON.stringify(value.toISOString());\n if(Array.isArray(value)){let result=\"[\";for(let index=0;index<value.length;index++){if(index)result+=\",\";if(index in value)result+=canonical(value[index]);}return`${result}]`;}\n if(value&&typeof value===\"object\"){\n  const entries=Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b));let result=\"{\";let first=true;\n  for(const[key,item]of entries){if(!first)result+=\",\";result+=`${JSON.stringify(key)}:${canonical(item)}`;first=false;}\n  return`${result}}`;\n }\n return JSON.stringify(value)??\"null\";\n}\n"
+        }
+      ]
+    }
+  ]
+}

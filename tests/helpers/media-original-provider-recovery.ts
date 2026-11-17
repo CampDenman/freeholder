@@ -6,8 +6,9 @@ import {createHash} from "node:crypto";
 export async function ordinaryMediaRecoveryProvider(){
  const objects=new Map<string,{body:Uint8Array<ArrayBuffer>;type:string;etag:string}>();
  const calls:Array<{method:string;key:string;condition:string|undefined;body:Uint8Array<ArrayBuffer>}>=[];
+ const applications=new Map<string,{body:Uint8Array<ArrayBuffer>;type:string;etag:string}>();
  const originalRequestTags=new Map<string,{id:string;token:string}>();
- let losePutReply=false,pause:undefined|{started:()=>void;wait:Promise<void>};
+ let losePutReply=false,deferPut=false,pause:undefined|{started:()=>void;wait:Promise<void>},deferred:undefined|(()=>void);
  const releases=new Set<()=>void>();
  const server=createServer((req,res)=>{void(async()=>{
   const chunks:Buffer[]=[];for await(const chunk of req){const input:unknown=chunk;if(typeof input==="string")chunks.push(Buffer.from(input));else if(input instanceof Uint8Array)chunks.push(Buffer.from(input));else throw Error("Synthetic provider received a non-byte request chunk.");}
@@ -31,9 +32,10 @@ export async function ordinaryMediaRecoveryProvider(){
    if(req.headers["if-none-match"]==="*"&&object){res.writeHead(412).end();return;}
    if(pause&&key.startsWith("/source/")){const gate=pause;pause=undefined;gate.started();await gate.wait;}
    const type=String(req.headers["content-type"]??"application/octet-stream"),etag=`"${createHash("sha256").update(body).digest("hex")}"`;
-   objects.set(key,{body,type,etag});
    const requestId=req.headers["x-amz-meta-freeholder-original-request"],requestToken=req.headers["x-amz-meta-freeholder-original-token"];
-   if(typeof requestId==="string"&&typeof requestToken==="string")originalRequestTags.set(key,{id:requestId,token:requestToken});
+   const apply=()=>{const application={body,type,etag};objects.set(key,application);applications.set(key,application);if(typeof requestId==="string"&&typeof requestToken==="string")originalRequestTags.set(key,{id:requestId,token:requestToken});};
+   if(deferPut&&key.startsWith("/source/")){deferPut=false;deferred=apply;res.writeHead(500).end();return;}
+   apply();
    if(losePutReply&&key.startsWith("/source/")){losePutReply=false;req.socket.destroy();return;}
    res.writeHead(200,{etag}).end();return;
   }
@@ -47,5 +49,5 @@ export async function ordinaryMediaRecoveryProvider(){
  })().catch((error:unknown)=>{res.destroy(error instanceof Error?error:new Error("Synthetic provider handler failed."));});});
  await new Promise<void>((resolve,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",resolve);});
  const address=server.address();if(!address||typeof address==="string")throw Error("Synthetic provider did not bind TCP.");
- return{pauseNextSourcePut(){let start!:()=>void,release!:()=>void;const started=new Promise<void>(resolve=>{start=resolve;}),wait=new Promise<void>(resolve=>{release=resolve;});releases.add(release);pause={started:start,wait};return{started,release:()=>{release();releases.delete(release);}};},releaseAll(){for(const release of releases)release();releases.clear();},endpoint:`http://127.0.0.1:${address.port}`,objects,calls,originalRequestTags,loseNextSourcePutReply(){losePutReply=true;},close:()=>new Promise<void>((resolve,reject)=>{for(const release of releases)release();releases.clear();server.close(error=>error?reject(error):resolve());server.closeAllConnections();})};
+ return{pauseNextSourcePut(){let start!:()=>void,release!:()=>void;const started=new Promise<void>(resolve=>{start=resolve;}),wait=new Promise<void>(resolve=>{release=resolve;});releases.add(release);pause={started:start,wait};return{started,release:()=>{release();releases.delete(release);}};},releaseAll(){for(const release of releases)release();releases.clear();},endpoint:`http://127.0.0.1:${address.port}`,objects,calls,originalRequestTags,reapplyOriginalSourcePut(key:string){const application=applications.get(key);if(!application)throw Error("The actual original PUT application is missing");objects.set(key,application);},deferNextSourcePutApplication(){if(deferPut||deferred)throw Error("A deferred original PUT already exists");deferPut=true;},releaseDeferredSourcePut(){const apply=deferred;if(!apply)throw Error("The actual deferred original PUT is missing");deferred=undefined;apply();},loseNextSourcePutReply(){losePutReply=true;},close:()=>new Promise<void>((resolve,reject)=>{for(const release of releases)release();releases.clear();server.close(error=>error?reject(error):resolve());server.closeAllConnections();})};
 }

@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { createStripePayments } from "@/adapters/payments/stripe";
+import { controlledSafeAdapterSession } from "../helpers/controlled-safe-adapter-session";
 import type { MerchantControlledBootstrapRequest, MerchantControlledSubscriptionReadRequest } from "@/adapters/payments";
 function scope(){return{providerApiVersion:"2026-10-28.endive" as const,providerPlatformAccountId:"acct_originalPlatform",destinationAccountId:"acct_originalSeller",settlementMerchantAccountId:"acct_originalSeller",
  subscriptionId:randomUUID(),termsId:randomUUID(),generation:1,providerCustomerRef:"cus_originalControlled",providerMethodRef:"pm_originalControlled",providerProductRef:"prod_originalControlled",
@@ -16,7 +17,7 @@ describe("birth-safe controlled provider transport",()=>{
    expect(new Headers(init.headers).get("stripe-version")).toBe("2026-10-28.endive");expect(new Headers(init.headers).has("stripe-account")).toBe(false);
    expect(url.pathname).toBe("/v1/subscriptions");expect(init.method).toBe("POST");form=new URLSearchParams(init.body as URLSearchParams);
    return Response.json({id:"sub_originalControlled",latest_invoice:"in_originalPreparation"});});
-  const provider=createStripePayments({secretKey:"sk_declared_controlled_fixture",apiBase:"https://stripe.example.test",fetch:fetcher});
+  const provider=controlledSafeAdapterSession(createStripePayments({secretKey:"sk_declared_controlled_fixture",apiBase:"https://stripe.example.test",fetch:fetcher}));
   const request:MerchantControlledBootstrapRequest={...scope(),operationId:randomUUID(),requestDigest:"a".repeat(64),idempotencyKey:"original-controlled-zero",onObserved:async actual=>{observed.push(actual);}};
   expect(await provider.createMerchantControlledBootstrap!(request)).toEqual({providerSubscriptionRef:"sub_originalControlled",providerInvoiceRef:"in_originalPreparation"});
   expect(form!.get("payment_behavior")).toBe("default_incomplete");expect(form!.get("items[0][price_data][unit_amount]")).toBe("0");expect(form!.has("items[1][price_data][unit_amount]")).toBe(false);expect(form!.get("proration_behavior")).toBe("none");
@@ -36,7 +37,7 @@ describe("birth-safe controlled provider transport",()=>{
   const fetcher=vi.fn<typeof fetch>(async(input,init={})=>{const url=new URL(input instanceof Request?input.url:input instanceof URL?input.href:input);if(url.pathname==="/v1/account")return Response.json({id:accepted.providerPlatformAccountId});
    if(init.method==="POST"){expect(new URLSearchParams(init.body as URLSearchParams).get("pause_collection[behavior]")).toBe("keep_as_draft");return Response.json({...value,pause_collection:{behavior:"keep_as_draft",resumes_at:null}});}
    return Response.json(value);});
-  const provider=createStripePayments({secretKey:"sk_declared_controlled_fixture",apiBase:"https://stripe.example.test",fetch:fetcher});
+  const provider=controlledSafeAdapterSession(createStripePayments({secretKey:"sk_declared_controlled_fixture",apiBase:"https://stripe.example.test",fetch:fetcher}));
   const request:MerchantControlledSubscriptionReadRequest={...accepted,bootstrapOperationId:operationId,bootstrapRequestDigest:"a".repeat(64),providerSubscriptionRef:value.id,onObserved:async actual=>{observed.push(actual);}};
   await provider.pauseMerchantControlledBootstrap!({...request,operationId:randomUUID(),requestDigest:"b".repeat(64),idempotencyKey:"original-pause"});
   const actual=await provider.inspectMerchantControlledBootstrap!(request);
@@ -45,7 +46,7 @@ describe("birth-safe controlled provider transport",()=>{
  });
  it("retains an unexpected positive raw bootstrap response before refusing its unproved identity",async()=>{
   const retained:unknown[]=[];const fetcher=vi.fn<typeof fetch>(async input=>new URL(input instanceof Request?input.url:input instanceof URL?input.href:input).pathname==="/v1/account"?Response.json({id:"acct_originalPlatform"}):Response.json({id:"unexpected-resource",latest_invoice:{id:"in_actualUnexpected",total:500,status:"open",auto_advance:false}}));
-  const provider=createStripePayments({secretKey:"sk_declared_controlled_fixture",apiBase:"https://stripe.example.test",fetch:fetcher});
+  const provider=controlledSafeAdapterSession(createStripePayments({secretKey:"sk_declared_controlled_fixture",apiBase:"https://stripe.example.test",fetch:fetcher}));
   await expect(provider.createMerchantControlledBootstrap!({...scope(),operationId:randomUUID(),requestDigest:"c".repeat(64),idempotencyKey:"declared-original-bootstrap",onObserved:async actual=>{retained.push(actual);}})).rejects.toThrow();
   expect(retained).toMatchObject([{kind:"bootstrap_subscription",raw:{latest_invoice:{total:500,auto_advance:false}}}]);
  });

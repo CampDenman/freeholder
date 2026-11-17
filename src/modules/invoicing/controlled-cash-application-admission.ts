@@ -50,9 +50,7 @@ export async function requireControlledCashApplicationRuntime(ctx:ServiceContext
 export async function admitControlledCashApplication(ctx:ServiceContext,input:{collectionId:string;receiptIds:readonly string[];requiredProtocol:typeof CONTROLLED_COLLECTION_PROTOCOL}){
  if(ctx.actor.kind!=="system")refuse();await requireControlledCashApplicationRuntime(ctx);
  const request={collectionId:input.collectionId,receiptIds:[...input.receiptIds],requiredProtocol:input.requiredProtocol};
- const first=await readControlledCashApplicationEvaluation(ctx,request);
  const current=await readControlledCashApplicationEvaluation(ctx,request);
- if(first.parentRevision!==current.parentRevision||first.parentPgRevision!==current.parentPgRevision||first.bankRevision!==current.bankRevision||first.preApplicationRevision!==current.preApplicationRevision)refuse();
  const{plan}=current,proof=plan.proof;
  const[invoiceRow]=await ctx.tx.execute<{before:unknown}>(sql`select jsonb_build_object('fingerprint',encode(sha256(convert_to(to_jsonb(i)::text,'UTF8')),'hex'),'status',i.status,'paidMinor',i.paid_minor,'creditedMinor',i.credited_minor,'refundedMinor',i.refunded_minor,
   'paidAt',to_jsonb(i)->>'paid_at','updatedAt',to_jsonb(i)->>'updated_at') as before from invoices i where i.id=${current.invoiceId}::uuid`);

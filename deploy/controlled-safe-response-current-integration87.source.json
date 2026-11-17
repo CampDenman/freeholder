@@ -1,0 +1,222 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_safe_response_current_integration87.v1",
+  "status": "SOURCE CONTINUATION; preserves current-tree edits and frozen predecessor manifests; not acceptance evidence",
+  "files": [
+    {
+      "path": "MASTER.md",
+      "beforeSha256": "2f54ae40d1f2e1a3e54d89eb1b7686e3a61661ac0b700238e7a01edcf64a5819",
+      "afterSha256": "78a98db602222423b32ec0c7b6407a1604e90fbe33b7738600885218c52bd389",
+      "edits": [
+        {
+          "before": "",
+          "after": "Bounded safe-response migration composition2026-11-15 (C11.10/C1.08/C12.38/C9.33):\nreal86 is byte-identical to frozen32ab S0 and its complete predecessor/whole/prefix\nidentity is assembled. Real87 corrects both merchant-fee birth comparisons with\nnumeric modulo epochs and composes merchant, auxiliary and final credit pins. A\nfifth exact safe-readiness successor changes only the auxiliary pin; without it,\nactual fresh S0 readiness and both native journeys fail closed. Source reversals,\nfull types, focused adapter/source tests, real fresh/upgrade88, all five readiness\nchecks and both genuine safe-response retention journeys PASS. Seven real boundary\ncases PASS; prepared-transaction proof remains OPEN on max_prepared_transactions=0\nand the real packaged-artifact probe remains UNRUN. The integrated-newer cash-origin\nsuite retains its assertions but its five old adapter positives still require the\nsafe-protocol admitted-harness continuation; they are not acceptance passes. No\nprovider, external closed-set drain, S1, security or stable closure is claimed. See\n`deploy/controlled-safe-response85-composition87.manifest.json` and\n`deploy/merchant-fee-xid-epoch87.manifest.json`.\n\n"
+        },
+        {
+          "before": "",
+          "after": "Safe-response migration boundary SOURCE checkpoint (2026-11-14,\nC11.10/C11.08/C1.08): boot, test setup, the manual Node CLI and both actual\nplayground migration calls now share one env-free dedicated-session runner.\nThe existing Free/hold session lock spans official Drizzle prefix, exact86 and\nlater batches, each a real engine transaction; actual committed journal member\nhashes are checked between batches. Boundary86's exact tag/time and whole\n2038-byte first guard are pinned. Final85/whole86/prefix identities remain NULL,\nso installing86 refuses until real final assembly supplies reviewed hashes.\nNo normal0..85 SQL/journal bytes change. Six real PostgreSQL boundary proof\ngroups, fake-env/default/preference child controls and actual packaged-runtime\nimport checks are PREPARED/UNRUN. A temporary exact-guard86 probe proves only\ntransaction boundaries, never full S0 schema, provider or feature acceptance.\nActual prepared-transaction capability, artifact dependency resolution and\nexternal closed-set OS/runtime/backend/prepared drain remain mandatory; the\nSQL inventories do not close a new-backend race. No raw transaction-control\ninjection, fabricated journal, migration guard exemption or new business\nservice is introduced. C11.10/C11.08/C1.08 and stable acceptance stay open.\nSee deploy/controlled-safe-migration-boundary-20261114.md.\n\nMigration boundary finite SOURCE correction (2026-11-14, C11.10/C11.08):\nthe shared official-engine runner now always verifies the complete actual\ncommitted journal after its optional later-migration batch, including an empty\nlater batch. Frozen68b source and its entire manifest are unchanged. Two new\nactual PostgreSQL contexts are PREPARED/UNRUN: genuine later87 SELECT succeeds\nonly with all88 actual source hashes; a clearly labelled adversarial later87\ncorrupts an ALREADY genuinely engine-applied real journal hash and must refuse\nFH_MIGRATION_PREFIX_MISMATCH at the final check. The corrupted scratch DB is\npreserved as negative evidence, never fabricated successful prefix/schema\nacceptance. No new normal SQL/journal/DDL, service, model or waiver. Final\nsource pins, real execution, packaging and external closed-set drain stay open.\nSee deploy/controlled-safe-migration-boundary-final-20261114.md.\n\n"
+        }
+      ]
+    },
+    {
+      "path": "package.json",
+      "beforeSha256": "e06f954b085c816dac613385b69d9729b296833931150bd7162c2c40de69b8a3",
+      "afterSha256": "60f7f7c88f9323474ce6823c88813bafad18b1dd3c6b7fc49341145965308b60",
+      "edits": [
+        { "before": "next build", "after": "next build --webpack" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-calendar-source.ts",
+      "beforeSha256": "fdad22539cb6453f66e992c5046cbea60409f0556fa751972e3477bda1ba484a",
+      "afterSha256": "2e3e370039f075daa910fb10f6b415a740ed146a627bb07d6870f2d8014223b0",
+      "edits": [
+        { "before": "", "after": "import { requireControlledCurrentVerification } from \"./controlled-provider-safe-response-proof\";\n" },
+        { "before": "", "after": " if(verification)requireControlledCurrentVerification(history,verification,options?.observationOnly?\"observation_identity\":\"current_authority\");\n" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-cash-observation-source.ts",
+      "beforeSha256": "1e206419bdc33e8cdc69a5d5126c6ac2339817e314c92bd856c3041790e28790",
+      "afterSha256": "8fb5ddce06b25bbb73ddada94490b088f1960dac24143e1e076736283e2d85ce",
+      "edits": [
+        { "before": "authenticatedControlledQuote(quote,resource,history)", "after": "authenticatedControlledQuote(quote,resource,history,\"accepted_ancestry\")" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proof.ts",
+      "beforeSha256": "f0a94e6f40fbd00025f11979355dc6dcee3161e3d03f90bcfaa19bec12244428",
+      "afterSha256": "292ebf4799a0383d7928ba3c1b897f4cbb57dc88e6d0bba6a1969b832fbda8af",
+      "edits": [
+        { "before": "", "after": "import { CONTROLLED_HISTORICAL_FIN_PROTOCOL } from \"@/adapters/payments/merchant-controlled-safe-response-contract\";\nimport { resolveControlledVerificationView } from \"./controlled-provider-safe-response-proof\";\n" },
+        { "before": "merchantTaxDigest(finish.actualResult.result)", "after": "verification.actualResult.protocol!==CONTROLLED_HISTORICAL_FIN_PROTOCOL&&merchantTaxDigest(finish.actualResult.result)" },
+        { "before": "", "after": " const verificationViews=[];\n for(const verification of verifications){const operation=operationsById.get(verification.operationId),call=callsById.get(verification.callId),finish=finishesByCall.get(verification.callId);\n  if(!operation||!call||!finish)throw new ServiceError(\"conflict\",\"Restore the validated original verification ancestry before resolving its safe view.\");\n  verificationViews.push(await resolveControlledVerificationView(tx,operation,call,finish,verification));\n }\n" },
+        { "before": " const verificationViews=[];\n for(const verification of verifications){const operation=operationsById.get(verification.operationId),call=callsById.get(verification.callId),finish=finishesByCall.get(verification.callId);\n  if(!operation||!call||!finish)throw new ServiceError(\"conflict\",\"Restore the validated original verification ancestry before resolving its safe view.\");\n  verificationViews.push(await resolveControlledVerificationView(tx,operation,call,finish,verification));\n }\n", "after": " const verificationViews=await Promise.all(verifications.map(verification=>{\n  const operation=operationsById.get(verification.operationId),call=callsById.get(verification.callId),finish=finishesByCall.get(verification.callId);\n  if(!operation||!call||!finish)throw new ServiceError(\"conflict\",\"Restore the validated original verification ancestry before resolving its safe view.\");\n  return resolveControlledVerificationView(tx,operation,call,finish,verification);\n }));\n" },
+        { "before": "stops,verifications,chargeOrigins", "after": "stops,verifications,verificationViews,chargeOrigins" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proration-economics.ts",
+      "beforeSha256": "6e5a15e243ed15194050cdcc0d3c19dd64ac7025e18032b4f99f5c80e8db48b1",
+      "afterSha256": "4162c6407bf9b3138c7768f042f0580b331d9b321a97fcbb7903170b9964f0b0",
+      "edits": [
+        { "before": "", "after": "import { requireControlledCurrentVerification,controlledCurrentResultData } from \"./controlled-provider-safe-response-proof\";\n" },
+        { "before": "", "after": "requireControlledCurrentVerification(history,verified);" },
+        { "before": "const actualNative=controlledActualPreview.parse(native.verified.actualResult),actualUpdate=controlledActualPreview.parse(update.verified.actualResult);", "after": "const actualNative=controlledActualPreview.parse(controlledCurrentResultData(native.verified.actualResult)),actualUpdate=controlledActualPreview.parse(controlledCurrentResultData(update.verified.actualResult));" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-quote-proof.ts",
+      "beforeSha256": "5bb34274161ea21d59aa9d115f274c1749dd6bdecd02ba42a6aab132a4718e9a",
+      "afterSha256": "a81b49e32e0db17b681182276593a8dc3b48432f5281c23aa02d9dc755372822",
+      "edits": [
+        { "before": "", "after": "import { requireControlledCurrentVerification } from \"./controlled-provider-safe-response-proof\";\n" },
+        { "before": "export function authenticatedControlledQuote(quote:Quote,resource:Resource,history:History){", "after": "export function authenticatedControlledQuote(quote:Quote,resource:Resource,history:History,role:\"current_authority\"|\"accepted_ancestry\"=\"current_authority\"){" },
+        { "before": "", "after": "if(role===\"current_authority\")requireControlledCurrentVerification(history,verified);" }
+      ]
+    },
+    {
+      "path": "tests/modules/controlled-cash-origin-batch84.test.ts",
+      "beforeSha256": "074dc686ca5adba367044792bbc93737a3b31e47a0d1019083d1145f2e2317d2",
+      "afterSha256": "074dc686ca5adba367044792bbc93737a3b31e47a0d1019083d1145f2e2317d2",
+      "edits": []
+    },
+    {
+      "path": "tests/adapters/controlled-safe-response.test.ts",
+      "beforeSha256": "84d345ef2eb81bc4d4651d628a07d5234a6a3bc3fe6406cd994797e0cd7d3f97",
+      "afterSha256": "b6c48f99bc28488354db7800fff5fb0c969fa9c1335af0601e1b6e2de045cc62",
+      "edits": [
+        { "before": "", "after": "import { createHash } from \"node:crypto\";\n" },
+        { "before": "", "after": "import { controlledSubscriptionFactsDigest } from \"@/adapters/payments/controlled-subscription-digest\";\n" },
+        { "before": "", "after": "import { controlledCurrentResultData } from \"@/modules/subscriptions/controlled-provider-safe-response-proof\";\n" },
+        {
+          "before": "",
+          "after": " it(\"keeps producer metadata out of financial equality without changing legacy bytes\",()=>{\n  const first={...invoice(),[CONTROLLED_PROJECTION_KEY]:{context:\"inspectMerchantControlledCalendar\"}},second={...invoice(),[CONTROLLED_PROJECTION_KEY]:{context:\"previewMerchantControlledProration\"}};\n  expect(controlledSubscriptionFactsDigest(first)).toBe(controlledSubscriptionFactsDigest(second));\n  const data=controlledCurrentResultData(first);expect(data).not.toHaveProperty(CONTROLLED_PROJECTION_KEY);expect(first).toHaveProperty(CONTROLLED_PROJECTION_KEY);expect(data.amount_paid).toBe(4200);\n  const legacy=(value:unknown):string=>Array.isArray(value)?`[${value.map(legacy).join(\",\")}]`:value&&typeof value===\"object\"?`{${Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b)).map(([key,item])=>`${JSON.stringify(key)}:${legacy(item)}`).join(\",\")}}`:JSON.stringify(value)??\"null\";\n  expect(controlledSubscriptionFactsDigest(invoice())).toBe(createHash(\"sha256\").update(legacy(invoice())).digest(\"hex\"));\n  expect(controlledSubscriptionFactsDigest({...first,amount_paid:4199})).not.toBe(controlledSubscriptionFactsDigest(first));\n });\n"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-target-raw-policy.ts",
+      "beforeSha256": "c0d975005debcf93e48cb6889c350442dfca57f6014ec621ed7f084520a404f7",
+      "afterSha256": "f2fb7358b08fac4ea28cf28b233dd05d9657c1a2c9a2620a73b8bc4788611dda",
+      "edits": [
+        { "before": "", "after": "import { recordedControlledProjectionHasUnknown } from \"@/adapters/payments/stripe-controlled-safe-response\";\n" },
+        { "before": "", "after": "if(recordedControlledProjectionHasUnknown(raw))return true;" },
+        { "before": "readControlledCollectionInventory(source,boundary)", "after": "readControlledCollectionInventory(source,boundary,\"recorded_ancestry\")" },
+        { "before": "", "after": "if(recordedControlledProjectionHasUnknown(raw))continue;" },
+        { "before": "", "after": "import { controlledCurrentResultData } from \"@/modules/subscriptions/controlled-provider-safe-response-proof\";\n" },
+        { "before": "const parsed=verification&&completeManifest?result.safeParse(verification.actualResult):null,observedBank=verification&&!completeManifest?bank.safeParse(verification.actualResult):null;", "after": "const parsed=verification&&completeManifest?result.safeParse(controlledCurrentResultData(verification.actualResult)):null,observedBank=verification&&!completeManifest?bank.safeParse(controlledCurrentResultData(verification.actualResult)):null;" },
+        { "before": "safeParse(listed.actualResult)", "after": "safeParse(controlledCurrentResultData(listed.actualResult))" },
+        { "before": "const parsed=bank.safeParse(verification.actualResult);", "after": "const parsed=bank.safeParse(controlledCurrentResultData(verification.actualResult));" },
+        { "before": "const parsed=operation.kind===\"read_manifest\"?result.safeParse(verification.actualResult):null,ordinary=operation.kind===\"read_invoice\"?bank.safeParse(verification.actualResult):null;", "after": "const parsed=operation.kind===\"read_manifest\"?result.safeParse(controlledCurrentResultData(verification.actualResult)):null,ordinary=operation.kind===\"read_invoice\"?bank.safeParse(controlledCurrentResultData(verification.actualResult)):null;" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proration-acceptance.ts",
+      "beforeSha256": "d728accb252b88ee85354d303074c462dde0a8223956a638fc1f721dd0306da0",
+      "afterSha256": "cf5640375c983318633970f38dfda4fbd0c9fff4c56c309f9caa93e3e2022eea",
+      "edits": [
+        { "before": "import { requireControlledCurrentVerification } from \"./controlled-provider-safe-response-proof\";", "after": "import { requireControlledCurrentVerification,controlledCurrentResultData } from \"./controlled-provider-safe-response-proof\";" },
+        { "before": "}).parse(tax?.actualResult);", "after": "}).parse(controlledCurrentResultData(tax?.actualResult));" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-safe-response-proof.ts",
+      "beforeSha256": "68be5bd965a8327982e92cf58134a86addad8f0dcfd0c3a0ced6491c34788806",
+      "afterSha256": "bb660c1bd4691df84872167ec090e6f20d306d2e945a16696c6a7e85fd5a6ed7",
+      "edits": [
+        { "before": "", "after": "export function controlledCurrentResultData(value:unknown):Record<string,unknown> {\n const result={...record.parse(value)};delete result[CONTROLLED_PROJECTION_KEY];return result;\n}\n" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-inventory.ts",
+      "beforeSha256": "72c1886987d661c624bd922fa1338c3e493631f8faa2dc31258a517ef5622e6a",
+      "afterSha256": "eb7a4d8257490c1703c357cb1c239c9efb8a83779b337541953c7f535711490a",
+      "edits": [
+        { "before": "import { requireControlledCurrentVerification } from \"./controlled-provider-safe-response-proof\";", "after": "import { requireControlledCurrentVerification,controlledCurrentResultData } from \"./controlled-provider-safe-response-proof\";" },
+        { "before": "}).parse(verified.actualResult);", "after": "}).parse(controlledCurrentResultData(verified.actualResult));" },
+        { "before": "const actual=returnedInvoice.parse(verification.actualResult);", "after": "const actual=returnedInvoice.parse(controlledCurrentResultData(verification.actualResult));" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-period-economics.ts",
+      "beforeSha256": "98726f8a0ada390a1b83ace7d66af00ee12d4415f9b06f0d34b71778c9035366",
+      "afterSha256": "45caa4cb9f588e5372902d0e3dc0b55996c9a0eeb7596ffe33749c871b624912",
+      "edits": [
+        { "before": "import { requireControlledCurrentVerification } from \"./controlled-provider-safe-response-proof\";", "after": "import { requireControlledCurrentVerification,controlledCurrentResultData } from \"./controlled-provider-safe-response-proof\";" },
+        { "before": "const actualNative=controlledActualPreview.parse(native.verification.actualResult),actualUpdate=controlledActualPreview.parse(update.verification.actualResult),actual=", "after": "const actualNative=controlledActualPreview.parse(controlledCurrentResultData(native.verification.actualResult)),actualUpdate=controlledActualPreview.parse(controlledCurrentResultData(update.verification.actualResult)),actual=" }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-period-target.ts",
+      "beforeSha256": "3caf26a247cca0ebc073fb682df1aa435f4de425942b083b9b48cd86b2cc5d18",
+      "afterSha256": "35408508c0c8b9b103307e226b096e3ecb764d4e4ad1ed65c38444728335c2ff",
+      "edits": [
+        { "before": "import { requireControlledCurrentVerification } from \"./controlled-provider-safe-response-proof\";", "after": "import { requireControlledCurrentVerification,controlledCurrentResultData } from \"./controlled-provider-safe-response-proof\";" },
+        { "before": "}).parse(tax?.actualResult);", "after": "}).parse(controlledCurrentResultData(tax?.actualResult));" }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-collection-authority.ts",
+      "beforeSha256": "080cef3b8a77082dd602f0de923ebc9cce05b725b8dd35143033769a67ad3746",
+      "afterSha256": "810cc3aac96533145e86ca3abeda679b82efaf6fb37fb04b8dd56ad625f42815",
+      "edits": [
+        { "before": "import { requireControlledCurrentVerification } from \"@/modules/subscriptions/controlled-provider-safe-response-proof\";", "after": "import { requireControlledCurrentVerification,controlledCurrentResultData } from \"@/modules/subscriptions/controlled-provider-safe-response-proof\";" },
+        { "before": "}).safeParse(verification.actualResult):null;", "after": "}).safeParse(controlledCurrentResultData(verification.actualResult)):null;" }
+      ]
+    },
+    {
+      "path": "Dockerfile",
+      "beforeSha256": "648a8b3e626922b30df10d06abc8b75528805471cc0f795cee8067a0c6c1f4ec",
+      "afterSha256": "f4015b0a944125be360c3fca499cd37e8cf60f5da8a66901ec37111456622366",
+      "edits": [
+        { "before": "RUN pnpm build", "after": "RUN pnpm build\nRUN mkdir -p /app/migration-dependencies && cp -RL /app/node_modules/postgres /app/node_modules/drizzle-orm /app/node_modules/zod /app/migration-dependencies/" },
+        { "before": "COPY --from=build --chown=freeholder:freeholder /app/.next/standalone ./", "after": "COPY --from=build --chown=freeholder:freeholder /app/.next/standalone ./\nCOPY --from=build --chown=freeholder:freeholder /app/migration-dependencies/postgres ./node_modules/postgres\nCOPY --from=build --chown=freeholder:freeholder /app/migration-dependencies/drizzle-orm ./node_modules/drizzle-orm\nCOPY --from=build --chown=freeholder:freeholder /app/migration-dependencies/zod ./node_modules/zod" },
+        { "before": "# The way back in when nobody can sign in. Needs only node:crypto, which is\n# why it can live in an image whose node_modules holds four packages.", "after": "# The way back in when nobody can sign in. Needs only node:crypto, not the\n# separately packaged migration driver." }
+      ]
+    },
+    {
+      "path": "scripts/build-release.mjs",
+      "beforeSha256": "87d7680e2e7bc37e83d3e8420f2e9458ecc70fb3ac1ac4bccd0945d75f8352ea",
+      "afterSha256": "7f81ba20e3ce4fce9e121c3453d431a1765fdecac23e161d6099f69d48ca500b",
+      "edits": [
+        { "before": "  await cp(resolve(root, \"src\", \"core\", \"migrate-runner.mjs\"), resolve(stage, \"app\", \"src\", \"core\", \"migrate-runner.mjs\"));", "after": "  await cp(resolve(root, \"src\", \"core\", \"migrate-runner.mjs\"), resolve(stage, \"app\", \"src\", \"core\", \"migrate-runner.mjs\"));\n  for (const dependency of [\"postgres\", \"drizzle-orm\", \"zod\"]) await cp(resolve(root, \"node_modules\", dependency), resolve(stage, \"app\", \"node_modules\", dependency), { recursive: true, dereference: true });" }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-cash-application-complete-proof.ts",
+      "beforeSha256": "6bed9c187ac846b1b4c9992d85f6fa6356403cef0d37bd8e7fcd1887b6edb79a",
+      "afterSha256": "bd32f1813699c5bf9322ca32f701d6bb969e1e18f42825ad7f95a88022d294b7",
+      "edits": [
+        { "before": "export const CONTROLLED_CASH_APPLICATION_SHAPE_SHA=\"3f878d26d2ead57e5d1ae5b159404eee172c947aee20bb78d4e27fbf7e7a32fa\";", "after": "export const CONTROLLED_CASH_APPLICATION_SHAPE_SHA=\"027064eb6d584f33c68dee5e671d2184affa381d9673fcd0706a467839c9929e\";" }
+      ]
+    },
+    {
+      "path": "tests/core/controlled-cash-staged-writer84.test.ts",
+      "beforeSha256": "659fa033cb3fc1f4accfc4ecb962b12eca34c3dadb4cea0b51a0525376cac6ea",
+      "afterSha256": "dfe2e745063930678311879e9bd71de5b0c16abea3fe54c940ed680706098e62",
+      "edits": [
+        { "before": "const atomic=read(\"deploy/controlled-cash-atomic-fee84.fragment.sql\")", "after": "const atomic=read(\"db/migrations/0086_controlled_safe_response.sql\")" }
+      ]
+    },
+    {
+      "path": "tests/modules/controlled-safe-response-composition87.test.ts",
+      "beforeSha256": "79dda3f8e5adc30f5d1e568c2096d8fd477595cf5af3f07102f94971ccd0cdbb",
+      "afterSha256": "61efb555fff50f213e2ab07d07dae7b16783316dc006e1cdc0b0d893c4698dc5",
+      "edits": [
+        { "before": "    const views = proof.indexOf(\"verificationViews.push(await resolveControlledVerificationView\");\n    expect(validated).toBeGreaterThan(-1);\n    expect(views).toBeGreaterThan(validated);", "after": "    const views = proof.indexOf(\"const verificationViews=await Promise.all(verifications.map\");\n    expect(validated).toBeGreaterThan(-1);\n    expect(views).toBeGreaterThan(validated);\n    expect(proof).toContain(\"return resolveControlledVerificationView(tx,operation,call,finish,verification)\");" }
+      ]
+    },
+    {
+      "path": "tests/core/migrate-boundary.test.ts",
+      "beforeSha256": "476d45265d40032b16f136de6cad96724db2d9c3f09188ef00aa59267a494d20",
+      "afterSha256": "b1491001f96e46ea27f23c8651bf0bf1045576b5c19047d35fe058b4c52017b7",
+      "edits": [
+        {
+          "before": "",
+          "after": "  const currentIntegration = z.object({ copyright: z.string(), protocol: z.string(), status: z.string(), files: z.array(z.object({ path: z.string(), beforeSha256: z.string(), afterSha256: z.string(), edits: z.array(z.object({ before: z.string(), after: z.string() }).strict()) }).strict()) }).strict().parse(JSON.parse(readFileSync(\"deploy/controlled-safe-response-current-integration87.source.json\", \"utf8\"))).files.find(row => row.path === path);\n  if (currentIntegration) {\n    expect(sha(current)).toBe(currentIntegration.afterSha256);\n    let source = current.toString(\"utf8\");\n    for (const edit of [...currentIntegration.edits].reverse()) {\n      expect(source.split(edit.after)).toHaveLength(2);\n      source = source.replace(edit.after, () => edit.before);\n    }\n    expect(sha(source)).toBe(currentIntegration.beforeSha256);\n    current = Buffer.from(source);\n  }\n"
+        }
+      ]
+    }
+  ]
+}

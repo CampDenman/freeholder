@@ -15,10 +15,11 @@ import { cashInspectionStops } from "./merchant-cash-inspection-stops";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { merchantRefundObservationCaptures } from "./merchant-refund-current-schema";
 import { originalCashCallersFinished, originalCashHistoricalFeesQuiesced, originalCashRecoveryCashWitness } from "./original-cash-recovery-store";
-import { controlledCashFinancialHistory, controlledCashFinancialHistoryForOriginalInventory } from "./controlled-provider-financial-witness";
+import { controlledCashFinancialHistoryForOriginalInventory, controlledCashFinancialHistoryShared } from "./controlled-provider-financial-witness";
 import { originalInventoryPreimageCollector } from "./original-cash-inventory-preimage";
 import type { OriginalInventoryPreimageEntry, OriginalInventoryResolutionPreimage } from "./original-cash-inventory-causal-contract";
 import type { OriginalInventoryProjectionContext } from "./original-cash-inventory-causal-proof";
+import type { OriginalCashClosureShare } from "./original-cash-closure-current";
 const MAX = 5000;
 const sorted = (rows: readonly object[]) => rows.map(row => merchantTaxDigest(row)).toSorted();
 export type MerchantRefundCashHistory = {
@@ -26,8 +27,8 @@ export type MerchantRefundCashHistory = {
   digest: string; incomplete: boolean; inventoryCount: number; principalCreatorsQuiesced: boolean; creatorsQuiesced: boolean; feeDebt: boolean;
   refundRequests: Array<{ id: string; amountMinor: number; currency: string; dispatched: boolean; retired: boolean; resourceRefs: string[]; definitelyRefused: boolean }>;
 };
-export async function merchantRefundCashHistory(ctx: ServiceContext, cash: MerchantRefundCashOrigin, ownInspectionId?: string, excludeRecoveryOperationId?: string): Promise<MerchantRefundCashHistory> {
-  return readMerchantRefundCashHistory(ctx,cash,ownInspectionId,excludeRecoveryOperationId);
+export async function merchantRefundCashHistory(ctx: ServiceContext, cash: MerchantRefundCashOrigin, ownInspectionId?: string, excludeRecoveryOperationId?: string, share?: OriginalCashClosureShare): Promise<MerchantRefundCashHistory> {
+  return readMerchantRefundCashHistory(ctx,cash,ownInspectionId,excludeRecoveryOperationId,undefined,share);
 }
 /** Explicit private snapshot/causal companion, never an override to a public
  * DTO. The ordinary full history and its digest expression remain unchanged. */
@@ -51,7 +52,7 @@ export async function merchantRefundCashHistoryForOriginalInventory(ctx: Service
   return {history,preimageEntries,controlledResolutionPreimages};
 }
 async function readMerchantRefundCashHistory(ctx: ServiceContext, cash: MerchantRefundCashOrigin, ownInspectionId?: string, excludeRecoveryOperationId?: string,
-  originalInventory?: { context?: OriginalInventoryProjectionContext; capture:(entries:OriginalInventoryPreimageEntry[],resolutions:OriginalInventoryResolutionPreimage[])=>void }): Promise<MerchantRefundCashHistory> {
+  originalInventory?: { context?: OriginalInventoryProjectionContext; capture:(entries:OriginalInventoryPreimageEntry[],resolutions:OriginalInventoryResolutionPreimage[])=>void }, share?: OriginalCashClosureShare): Promise<MerchantRefundCashHistory> {
   const scope = (platform: typeof merchantRefundRequests.providerPlatformAccountId, account: typeof merchantRefundRequests.chargeAccountId) =>
     and(eq(platform, cash.providerPlatformAccountId), sql`${account} is not distinct from ${cash.chargeAccountId}`);
   const requests = await ctx.tx.select().from(merchantRefundRequests).where(and(scope(merchantRefundRequests.providerPlatformAccountId, merchantRefundRequests.chargeAccountId),
@@ -110,7 +111,7 @@ async function readMerchantRefundCashHistory(ctx: ServiceContext, cash: Merchant
     .where(inArray(merchantAgreementPaymentRoutes.paymentId, paymentIds)).limit(MAX + 1) : [];
   const controlled = originalInventory?.context
     ? await controlledCashFinancialHistoryForOriginalInventory(ctx.tx,receiptIds,controlledParents.map(row=>row.subscriptionId),originalInventory.context)
-    : await controlledCashFinancialHistory(ctx.tx, receiptIds, controlledParents.map(row => row.subscriptionId));
+    : await controlledCashFinancialHistoryShared(ctx.tx, receiptIds, controlledParents.map(row => row.subscriptionId), share);
   const inventory = { requests, retirements, observations, observationCaptures, dispatches, finishes, stops, refusals, terminals, bindings, paymentCash, subscriptionCash, receiptRows, aliases, fees, feeObservations, otherPrimary, otherReturns,
     recoveryOwners: recovery.owners, recoveryOperations: recovery.operations, recoveryFacts: recovery.facts.filter(fact => !["partial_closure", "unassigned_refund_review", "partial_target"].includes(fact.kind)), recoveryFeedback:recovery.feedback, ...(otherInspectionStops.length?{cashInspectionStops:otherInspectionStops}:{}), ...(otherInspectionAdmissions.length||otherInspectionFinishes.length?{cashInspectionAdmissions:otherInspectionAdmissions,cashInspectionFinishes:otherInspectionFinishes}:{}), ...(controlled.entries.length ? { controlledFinancial: controlled.entries } : {}) };
   if(originalInventory){

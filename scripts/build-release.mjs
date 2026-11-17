@@ -123,6 +123,10 @@ async function main() {
   await cp(resolve(root, "db"), resolve(stage, "app", "db"), { recursive: true });
   await mkdir(resolve(stage, "app", "scripts"), { recursive: true });
   await cp(resolve(root, "scripts", "owner-password.mjs"), resolve(stage, "app", "scripts", "owner-password.mjs"));
+  await cp(resolve(root, "scripts", "migrate.mjs"), resolve(stage, "app", "scripts", "migrate.mjs"));
+  await mkdir(resolve(stage, "app", "src", "core"), { recursive: true });
+  await cp(resolve(root, "src", "core", "migrate-runner.mjs"), resolve(stage, "app", "src", "core", "migrate-runner.mjs"));
+  for (const dependency of ["postgres", "drizzle-orm", "zod"]) await cp(resolve(root, "node_modules", dependency), resolve(stage, "app", "node_modules", dependency), { recursive: true, dereference: true });
   // Next writes its runtime cache here. The installer points it at a
   // directory the service may write, so the release itself stays read-only.
   await rm(resolve(stage, "app", ".next", "cache"), { recursive: true, force: true });

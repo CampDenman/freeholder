@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "original_first_capture_lifecycle.v1",
+  "checklist": ["C1.08", "C1.12", "C11.08"],
+  "status": "Scoped first-capture hold and queue-payload controls qualified on fresh migration94 PostgreSQL; account, ingress and whole-worker acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "7518c7426b515fe010be66c1838306869d44a27acf682b3deeb8cc9bb70e4a52" },
+    { "path": "tests/core/media-original-first-capture-lifecycle.test.ts", "sha256": "20b445636ec78121ec9498245bbc47cb9434176edc4b684a847612c885f9a993" }
+  ],
+  "controls": {
+    "final": { "database": "original_first_capture_audit_20261115", "passed": 2, "failed": 0, "durationSeconds": 23.49 },
+    "coverage": ["immutable first empty hold capture", "separately verified new request captures later authentic writer birth", "mismatched queue payload refused before provider I/O", "capture and erasure receipts unchanged"],
+    "guardsWeakened": false,
+    "runtimeChanges": false,
+    "focusedLint": "passed"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "7518c7426b515fe010be66c1838306869d44a27acf682b3deeb8cc9bb70e4a52",
+      "beforeSha256": "196cb97b884a23a37d14548d9bcea6dc98610661f2f40c706797992a2c5fa2f6",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/finished-delete-recovery-lifecycle.source.json`. No hosted acceptance.\n  Signing containment source2026-11-13",
+          "after": "  `deploy/finished-delete-recovery-lifecycle.source.json`. No hosted acceptance.\n  First-capture lifecycle qualification2026-11-15: fresh migration94 execution\n  passes2/2. A first empty hold capture stays unchanged while a separately verified\n  request captures the later authentic writer birth; a mismatched actual queue\n  payload is refused before provider I/O with capture/erasure receipts unchanged.\n  Focused lint passes. See `deploy/original-first-capture-lifecycle.source.json`.\n  No account, ingress, whole-worker or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

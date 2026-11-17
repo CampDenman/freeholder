@@ -7,7 +7,7 @@ import {sealOriginalMultipartRetirement,type OriginalMultipartRetirementAdmissio
 import {observeTransferRequest,withTransferRequestScope,TransferRequestNotAttemptedError} from "./transfer-requests";
 import {requireDurableMediaRetirementProof} from "./retirement-authority";
 // C1.12/C11.08: commit original intent, call its provider, then record facts.
-import {createHash,randomUUID} from "node:crypto";
+import {randomUUID} from "node:crypto";
 import {and,asc,eq,inArray,sql} from "drizzle-orm";
 import {boundStorage} from "@/adapters/storage";
 import type {StorageTransferRevision} from "./transfer-schema";
@@ -33,14 +33,14 @@ import {retainedKnownCreateReview} from "./multipart-known-create-review";
 import {lockedIdleOriginalMultipart} from "./multipart-idle-retirement-context";
 import {finishIdleOriginalMultipartRetirement} from "./multipart-idle-retirement";
 import {lockTransferInventory} from "./transfer-authority";
-import {originalMultipartCompleteManifest} from "./multipart-complete-manifest";
+import {multipartCompletePartsDigest,originalMultipartCompleteManifest} from "./multipart-complete-manifest";
 import {mediaStorageTransferRequests,mediaStorageTransferRequestObservations} from "./transfer-request-schema";
 
 type Resource=typeof mediaMultipartResources.$inferSelect;
 type Upload=typeof mediaUploads.$inferSelect;
 export type BoundMultipart=Awaited<ReturnType<typeof boundStorage>>&{resource:Resource};
 const uncertain=["started","unknown"]as const;
-const partsHash=(parts:MultipartPart[])=>createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+const partsHash=(parts:MultipartPart[])=>multipartCompletePartsDigest(parts);
 function conflict(message="This original multipart operation needs recovery before another physical call."):never{throw new ServiceError("conflict",message);}
 
 /** Caller has already authorized this logical reservation in the same TX. */
@@ -224,7 +224,7 @@ export async function completeOriginalMultipart(uploadId:string,operationId:stri
    acknowledged=true;await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:true,finished:true});
   }
   return captured;
- }catch(error){if(caller)await retainOriginalMediaCallerReturn(caller.id,caller.token,error instanceof TransferRequestNotAttemptedError?{notAttempted:true}:{failed:true}).catch(()=>{});await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true,finished:true}).catch(()=>{});throw error;}
+ }catch(error){if(caller)await retainOriginalMediaCallerReturn(caller.id,caller.token,error instanceof TransferRequestNotAttemptedError?{notAttempted:true}:{failed:true}).catch(()=>{});if(!recoverOnly)await observeMultipart(operationId,{originalKey:captured.resource.key,accepted:acknowledged,unknown:true,finished:true}).catch(()=>{});throw error;}
 }
 
 /** The COMPLETE intent already committed before I/O; this is its object fact. */

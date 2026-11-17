@@ -1,0 +1,35 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_pure_proof_qualification.v1",
+  "checklist": ["C1.12", "C10.32", "C11.08"],
+  "status": "Twenty-nine immutable media proof controls pass; no real kernel-stop, provider, upgrade or checklist acceptance is claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "7769504e748b438dbe3d022ef57b859cd55bbed3c9c7f2eb452d2331d167b588" },
+    { "path": "tests/core/media-transfer-quota-role-proof.test.ts", "sha256": "71ca0c5647488337d135ee97b61469a7adf7b494b1ca8cb799e92a8fac8e4829" },
+    { "path": "tests/core/media-multipart-session-observation.test.ts", "sha256": "a8ba947d4aba6c0417cd7d561c0200a2f1c985875213b5aa524861c5acbc991a" },
+    { "path": "tests/core/media-stopped-source-first-capture.test.ts", "sha256": "c0cec43200c6b328d2bca2c2630a9dc9a9d1022b20975f7af31c0d0a915fab7a" },
+    { "path": "tests/core/media-legacy-upload-anchor-proof.test.ts", "sha256": "a98c98aeaee5988749cc43ef118fd331a7774285ab532ac6451146447083a5a1" }
+  ],
+  "controls": {
+    "final": { "files": 4, "passed": 29, "failed": 0, "durationSeconds": 2.05 },
+    "coverage": ["exact original quota token and byte-bound settlement/release", "actual multipart session ACK/FIN identity classification", "first-captured stopped-source revision and separate stop proof", "legacy NULL upload anchoring without canonical backfill or locator disclosure"],
+    "focusedLint": "passed",
+    "testOraclesChanged": false,
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "7769504e748b438dbe3d022ef57b859cd55bbed3c9c7f2eb452d2331d167b588",
+      "beforeSha256": "79171220a886a3ee222d4d8d914efc4311853421bcdb41fa50b381fb97de41a2",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  acceptance or C-item closure follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  acceptance or C-item closure follows.\n  Media pure-proof qualification2026-11-16 (C1.12/C10.32/C11.08): all29 controls\n  pass across exact quota-token settlement/release, original multipart session-fact\n  classification, first-captured stopped-source review and legacy NULL-upload anchor\n  handling. Equal keys, replacement identities, missing birth/stop proof and mutable\n  historical captures remain refused. Focused lint passes. See\n  `deploy/media-pure-proof-qualification.source.json`. These immutable projections\n  supply no real kernel-stop, provider, upgrade or checklist acceptance.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

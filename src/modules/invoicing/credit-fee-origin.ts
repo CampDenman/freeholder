@@ -15,18 +15,19 @@ import { invoiceCreditApplications, invoiceCreditFunding, invoiceCreditReservati
 import { routingForPayment } from "./merchant-charge";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import { proportionalFeeCarry } from "./credit-fee-amounts";
+import type {KnownPartitionEvidence} from "./atomic-credit-fee-partition";
 
 
 /** The caller already holds original payment locks before committing a new
  * allocation. Reads retain actual immutable original resource/receipt IDs. */
-export async function originalCreditFeeAllocation(ctx: ServiceContext, paymentId: string, sourceApplicationId: string | null, takeMinor: number) {
+export async function originalCreditFeeAllocation(ctx: ServiceContext, paymentId: string, sourceApplicationId: string | null, takeMinor: number, known?:KnownPartitionEvidence) {
   const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, paymentId)).limit(1);
   if (!payment || payment.status !== "succeeded" || payment.refundedMinor !== 0) throw new ServiceError("conflict", "Restore the exact unreturned original principal before assigning its fee obligation.");
   const routing = await routingForPayment(ctx, paymentId);
   const [originalInvoice] = await ctx.tx.select({refundedMinor:invoices.refundedMinor}).from(invoices).where(eq(invoices.id,payment.invoiceId)).limit(1);
   if(originalInvoice&&originalInvoice.refundedMinor>0){
     const{controlledAtomicCreditFeePartition}=await import("./atomic-credit-fee-partition");
-    const partition=await controlledAtomicCreditFeePartition(ctx,{paymentId,sourceApplicationId,takeMinor});
+    const partition=await controlledAtomicCreditFeePartition(ctx,{paymentId,sourceApplicationId,takeMinor},known);
     if(partition)return creditFeeAllocation.parse(partition.allocation);
   }
   let originalFeeMinor: number, state: FeeCollectionState, proof: unknown, unexpectedFee = false, sourceRows = 0;

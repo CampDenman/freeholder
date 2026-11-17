@@ -65,11 +65,15 @@ export async function paidProrationBasis(ctx: ServiceContext, parent: Parent, ef
     throw new ServiceError("conflict", "Restore the complete original cash and immutable noncash applications; an unknown caller or partial inventory cannot supply credit.");
   const { assertInvoiceMerchantCreatorsQuiesced } = await import("@/modules/invoicing/merchant-payment-request");
   const { assertNoUnappliedMerchantCharge } = await import("@/modules/invoicing/merchant-payment-observations");
-  await assertInvoiceMerchantCreatorsQuiesced(ctx, invoice.id); await assertNoUnappliedMerchantCharge(ctx, invoice.id);
+  if(!atomicSiblings){await assertInvoiceMerchantCreatorsQuiesced(ctx, invoice.id); await assertNoUnappliedMerchantCharge(ctx, invoice.id);}
   const witness = await prorationMoneyWitnesses(ctx.tx, [invoice.id]);
   if (witness.incomplete) throw new ServiceError("conflict", "Restore the bounded complete original credit lineage before quoting another promise.");
   const principal: ProrationPrincipal[] = [], currentFacts: unknown[] = [];
   let remaining = BigInt(creditNetMinor) + BigInt(creditTaxMinor);
+  const knownPartitionEvidence=(paymentId:string)=>{
+   if(atomicSiblings?.kind!=="atomic_sibling_disposition.v1")return undefined;
+   const sibling=atomicSiblings.siblings.find(row=>row.payment.id===paymentId);return sibling?{prefix:atomicSiblings.prefix,owner:sibling.owner,originalCash:sibling.original,bank:sibling.bank,principal:sibling.principal,target:sibling.feeTarget,state:sibling.feeState,returns:sibling.feeReturns}:undefined;
+  };
   for (const payment of cash.filter(row => row.status === "succeeded")) {
     if (payment.refundedMinor !== 0) {
       const sibling=atomicSiblings?.kind==="atomic_sibling_disposition.v1"?atomicSiblings.siblings.find(row=>row.payment.id===payment.id):null;
@@ -77,10 +81,10 @@ export async function paidProrationBasis(ctx: ServiceContext, parent: Parent, ef
         throw new ServiceError("conflict", "Returned original principal cannot fund another unused credit.");
       currentFacts.push({paymentId:payment.id,returnedAtomicSibling:sibling});continue;
     }
-    currentFacts.push({ paymentId: payment.id, state: await safeProrationPrincipal(ctx, payment.id) });
+    currentFacts.push({ paymentId: payment.id, state: knownPartitionEvidence(payment.id)?.principal ?? await safeProrationPrincipal(ctx, payment.id) });
     const [budget] = await ctx.tx.execute<{ available: string }>(sql`select freeholder_proration_principal_capacity(${payment.id}::uuid,null)::text as available`);
     const take = remaining < BigInt(budget?.available ?? "0") ? remaining : BigInt(budget?.available ?? "0");
-    if (take > 0n) { const fee = await originalCreditFeeAllocation(ctx, payment.id, null, Number(take)); principal.push({ sourcePaymentId: payment.id, sourceApplicationId: null, amountMinor: Number(take),
+    if (take > 0n) { const fee = await originalCreditFeeAllocation(ctx, payment.id, null, Number(take),knownPartitionEvidence(payment.id)); principal.push({ sourcePaymentId: payment.id, sourceApplicationId: null, amountMinor: Number(take),
       feeObligationMinor: fee.feeObligationMinor, feeProvenCollectedMinor: fee.provenCollectedMinor, feeCollectionState: fee.collectionState, feeEvidenceDigest: fee.evidenceDigest, feeUnexpected: fee.unexpectedFee }); remaining -= take; }
   }
   const inheritedIds = [...new Set(inherited.map(row => row.funding.sourcePaymentId))];
@@ -88,10 +92,10 @@ export async function paidProrationBasis(ctx: ServiceContext, parent: Parent, ef
   for (const row of inherited) {
     const payment = inheritedCash.find(value => value.id === row.funding.sourcePaymentId);
     if (!payment || payment.status !== "succeeded" || payment.refundedMinor !== 0 || payment.currency !== parent.currency) throw new ServiceError("conflict", "Restore the exact actual principal behind the original applied credit.");
-    currentFacts.push({ paymentId: payment.id, applicationId: row.application.reservationId, state: await safeProrationPrincipal(ctx, payment.id) });
+    currentFacts.push({ paymentId: payment.id, applicationId: row.application.reservationId, state: knownPartitionEvidence(payment.id)?.principal ?? await safeProrationPrincipal(ctx, payment.id) });
     const [budget] = await ctx.tx.execute<{ available: string }>(sql`select freeholder_proration_principal_capacity(${payment.id}::uuid,${row.application.reservationId}::uuid)::text as available`);
     const take = remaining < BigInt(budget?.available ?? "0") ? remaining : BigInt(budget?.available ?? "0");
-    if (take > 0n) { const fee = await originalCreditFeeAllocation(ctx, payment.id, row.application.reservationId, Number(take)); principal.push({ sourcePaymentId: payment.id, sourceApplicationId: row.application.reservationId, amountMinor: Number(take),
+    if (take > 0n) { const fee = await originalCreditFeeAllocation(ctx, payment.id, row.application.reservationId, Number(take),knownPartitionEvidence(payment.id)); principal.push({ sourcePaymentId: payment.id, sourceApplicationId: row.application.reservationId, amountMinor: Number(take),
       feeObligationMinor: fee.feeObligationMinor, feeProvenCollectedMinor: fee.provenCollectedMinor, feeCollectionState: fee.collectionState, feeEvidenceDigest: fee.evidenceDigest, feeUnexpected: fee.unexpectedFee }); remaining -= take; }
   }
   if (remaining) throw new ServiceError("conflict", "The original unused principal already backs another credit or refund promise; recover that exact ownership before another quote.");

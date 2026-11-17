@@ -10,7 +10,7 @@
 // their own email and password or passkey.
 import { promises as dns } from "node:dns";
 import { existsSync } from "node:fs";
-import { readFile, rename } from "node:fs/promises";
+import { lstat, readFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isPinned, resolveEdgeImage } from "./image.js";
@@ -101,6 +101,10 @@ export async function runLaunch(options: LaunchOptions, deps: LaunchDeps): Promi
     if (options.dryRun) {
       printPlan(options, state, envPath, out, preflight.cost);
       return LAUNCH_EXIT.ok;
+    }
+    if (!state) {
+      const archived = await recoverPreviouslyDestroyedOrigin(dir);
+      if (archived) progress(`Storage recovery records from the previously destroyed launch are kept as ${archived}.`);
     }
     state ??= { version: 1, name: options.name, provider: options.provider, domain: options.domain, region: options.region, size: options.size, done: [] };
     state.sshKeyId = preflight.sshKeyId;
@@ -341,13 +345,63 @@ async function cutover(options: LaunchOptions, deps: LaunchDeps, dir: string, st
   throw new LaunchFailure(`https://${host} did not come up after the cutover.`, "Caddy may still be getting a certificate; run the cutover again in a few minutes.", LAUNCH_EXIT.failed);
 }
 
+function missingFile(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
+
+async function unusedArchivePath(path: string): Promise<string> {
+  for (let generation = 1; ; generation++) {
+    const archive = generation === 1 ? `${path}.destroyed` : `${path}.destroyed-${generation}`;
+    try {
+      await lstat(archive);
+    } catch (error) {
+      if (missingFile(error)) return archive;
+      throw error;
+    }
+  }
+}
+
+async function recoverPreviouslyDestroyedOrigin(dir: string): Promise<string | null> {
+  let destroyed: LaunchState;
+  try {
+    destroyed = JSON.parse(await readFile(join(dir, "state.destroyed.json"), "utf8")) as LaunchState;
+  } catch (error) {
+    if (missingFile(error)) return null;
+    throw new LaunchFailure("The previous launch's destruction record could not be read.", "Keep the launch records and restore a readable state.destroyed.json before launching again.", LAUNCH_EXIT.failed);
+  }
+  if (!destroyed.namespaceOrigin) return null;
+  const origin = join(dir, "namespace-origin");
+  try {
+    await lstat(origin);
+  } catch (error) {
+    if (missingFile(error)) return null;
+    throw error;
+  }
+  let admission: { body?: { binding?: { bucket?: string } } };
+  try {
+    admission = JSON.parse(await readFile(join(origin, "admission.json"), "utf8")) as typeof admission;
+  } catch {
+    throw new LaunchFailure("The previous launch's storage origin could not be read.", "Keep the original namespace-origin records and restore admission.json before launching again.", LAUNCH_EXIT.failed);
+  }
+  if (admission.body?.binding?.bucket !== destroyed.namespaceOrigin.bucket) throw new LaunchFailure("The retained storage origin does not belong to the destroyed launch.", "Keep both sets of launch records and recover their original association; nothing was replaced.", LAUNCH_EXIT.failed);
+  const archive = await unusedArchivePath(origin);
+  await rename(origin, archive);
+  return archive;
+}
+
+async function archiveDestroyedLaunch(dir: string): Promise<string> {
+  const archive = await unusedArchivePath(dir);
+  await rename(dir, archive);
+  return archive;
+}
+
 async function destroy(options: LaunchOptions, deps: LaunchDeps, dir: string, state: LaunchState | null, progress: (l: string) => void): Promise<number> {
   if (!state) throw new LaunchFailure(`There is no launch record for ${options.name}.`, "Pass the --name you launched with. Nothing was deleted.", LAUNCH_EXIT.failed);
   const answer = options.confirm ?? (options.nonInteractive || !deps.prompt ? "" : await deps.prompt(`This deletes the server for ${state.domain} and its Spaces key (buckets only if empty). Type ${options.name} to confirm: `));
   if (answer.trim() !== options.name) throw new LaunchFailure("Not confirmed. Nothing was deleted.", `Type the site name, or pass --confirm ${options.name}.`, LAUNCH_EXIT.failed);
   await deps.provider.destroy(state, progress);
-  await rename(join(dir, "state.json"), join(dir, "state.destroyed.json"));
-  progress(`The launch record is kept as ${join(dir, "state.destroyed.json")}; ${join(dir, "freeholder.env")} is kept too.`);
+  const archive = await archiveDestroyedLaunch(dir);
+  progress(`The destroyed launch, including its storage recovery records and freeholder.env, is kept as ${archive}.`);
   progress("DigitalOcean bills Spaces as a subscription (at least $5/month) until you cancel Spaces in its console; deleting buckets does not cancel it.");
   return LAUNCH_EXIT.ok;
 }

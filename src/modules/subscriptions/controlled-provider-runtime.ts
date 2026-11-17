@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C1.08: original actual SDK caller owns its nonce, raw observations and real finish.
 import { createHash,randomBytes,randomUUID } from "node:crypto";
+import { CONTROLLED_SAFE_RESPONSE_PROTOCOL } from "@/adapters/payments/merchant-controlled-safe-response-contract";
+import { withControlledSafeResponseSession, controlledSafeOwnedSnapshot, controlledSafePendingResponses, assertControlledSafeSnapshot } from "@/adapters/payments/stripe-controlled-safe-response";
 import type { MerchantControlledObservation } from "@/adapters/payments";
-import { eq,sql } from "drizzle-orm";
+import { eq,inArray,sql } from "drizzle-orm";
 import { z } from "zod";
 import { defineService,ServiceError,type Actor,type ServiceContext } from "@/core/service";
 import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
@@ -23,7 +25,7 @@ import { signProviderReadProof } from "./provider-read-signatures";
 const digest=(nonce:string)=>createHash("sha256").update(nonce).digest("hex");
 type Actual=MerchantControlledObservation;
 function isOriginalRecord(value:unknown):value is Record<string,unknown>{return value!==null&&typeof value==="object"&&!Array.isArray(value);}
-type Held={operationId:string;nonce:string;invoked:boolean;completed:boolean;actualResult?:Record<string,unknown>;facts:Map<number,{id:string;actual:Actual}>};
+type Held={operationId:string;nonce:string;invoked:boolean;completed:boolean;actualResult?:Record<string,unknown>;facts:Map<number,{id:string;actual:Actual}>;durable:Set<number>};
 const slot=Symbol.for("freeholder.controlled-provider.original-callers.v1");
 const runtime=globalThis as typeof globalThis&{[slot]?:Map<string,Held>};
 const held=runtime[slot]??=new Map<string,Held>();
@@ -50,8 +52,10 @@ async function actualHolder(ctx:ServiceContext,input:z.infer<typeof holder>){
 }
 export const claimControlledProviderCall=defineService({name:"subscriptions.claimControlledProviderCall",summary:"Admit this exact current immutable operation's actual physical caller; an old queued body cannot claim or stop a successor.",
  kind:"mutation",permission:"system",external:false,writeClass:"money",input:z.object({operationId:z.uuid()}),
- output:z.object({callId:z.uuid(),nonce:z.string(),operationId:z.uuid()}),handler:async(input,ctx)=>{
+ output:z.object({callId:z.uuid(),nonce:z.string(),operationId:z.uuid(),requestDigest:z.string().regex(/^[a-f0-9]{64}$/),resourceId:z.uuid(),kind:z.string()}),handler:async(input,ctx)=>{
   const source=await original(ctx,input.operationId),history=await controlledProviderJournal(ctx.tx,source.resource.id);
+  const[projectionReady]=await ctx.tx.execute<{ready:boolean}>(sql`select freeholder_controlled_safe_response_ready() as ready`);
+  if(projectionReady?.ready!==true)throw new ServiceError("conflict","Install the complete original safe-response guards before admitting any actual controlled provider I/O.");
   const last=history.operations[history.operations.length-1];
   if(history.count>4996)throw new ServiceError("conflict","Retain capacity for the actual original caller, raw result and distinct finish before admitting another bounded bank invocation.");
   if(history.closures.length||!last||last.id!==source.operation.id||history.unfinished.length||history.calls.some(call=>call.operationId===source.operation.id))throw new ServiceError("conflict","Recover every actual original caller and its bank result first. A stale operation or previously admitted physical invocation cannot be dispatched again.");
@@ -79,16 +83,19 @@ export const claimControlledProviderCall=defineService({name:"subscriptions.clai
   if(allowed?.allowed!==true)throw new ServiceError("conflict","This actual original controlled operation lacks its required current consent, deadline, cash disposition or prior bank proof.");
   const callId=randomUUID(),nonce=randomBytes(32).toString("base64url"),caller=merchantPhysicalCaller();
   const admission=signProviderReadProof("admission",{purpose:CONTROLLED_CALL_PURPOSE,callId,operationId:source.operation.id,resourceId:source.resource.id,kind:source.operation.kind,
-   requestDigest:source.operation.requestDigest,callerId:caller.id,caller,completionDigest:digest(nonce),admittedSourceRevision:merchantTaxDigest(before)});
+   requestDigest:source.operation.requestDigest,callerId:caller.id,caller,completionDigest:digest(nonce),admittedSourceRevision:merchantTaxDigest(before),responseProjectionProtocol:CONTROLLED_SAFE_RESPONSE_PROTOCOL});
   await ctx.tx.execute(sql`select set_config('freeholder.controlled_provider_v1','1',true)`);
   await ctx.tx.insert(subscriptionControlledCalls).values({id:callId,operationId:source.operation.id,admission,admissionDigest:merchantTaxDigest(admission)});
-  return{callId,nonce,operationId:source.operation.id};
+  const[storedAdmission]=await ctx.tx.execute<{allowed:boolean}>(sql`select freeholder_controlled_safe_call_admissible(${callId}::uuid) as allowed`);
+  if(storedAdmission?.allowed!==true)throw new ServiceError("conflict","Restore the installed safe-response admission guard before any actual controlled provider I/O.");
+  return{callId,nonce,operationId:source.operation.id,requestDigest:source.operation.requestDigest,resourceId:source.resource.id,kind:source.operation.kind};
  }});
 export const retainControlledProviderFact=defineService({name:"subscriptions.retainControlledProviderFact",summary:"Retain the original actual SDK observation before interpretation or auxiliary failures, under its independent stop fence.",
  kind:"mutation",permission:"system",external:false,writeClass:"money",auditInputFields:["callId","ordinal"],input:holder.extend({ordinal:z.number().int().min(1).max(5000)}),output:z.object({retained:z.literal(true)}),
  handler:async(input,ctx)=>{
   const source=await actualHolder(ctx,input),actual=source.local.facts.get(input.ordinal);
   if(!actual||Buffer.byteLength(JSON.stringify(actual.actual))>256000)throw new ServiceError("conflict","Retain this actual original observation's complete bounded evidence; a replacement caller cannot invent or truncate it.");
+  assertControlledSafeSnapshot(actual.actual.raw,{operationId:source.operation.id,callId:source.call.id,requestDigest:source.operation.requestDigest,resourceId:source.resource.id,kind:source.operation.kind});
   const[prior]=await ctx.tx.select().from(subscriptionControlledFacts).where(eq(subscriptionControlledFacts.id,actual.id)).limit(1);
   if(prior){if(prior.callId!==source.call.id||prior.ordinal!==input.ordinal||prior.actualDigest!==merchantTaxDigest(actual.actual))throw new ServiceError("conflict","Preserve the exact first original observed occurrence.");return{retained:true as const};}
   const inventory=await controlledProviderJournal(ctx.tx,source.resource.id);
@@ -114,7 +121,11 @@ export const finishControlledProviderCall=defineService({name:"subscriptions.fin
  kind:"mutation",permission:"system",external:false,writeClass:"money",auditInputFields:["callId"],input:holder,output:z.object({finished:z.literal(true)}),handler:async(input,ctx)=>{
   const source=await actualHolder(ctx,input);
   if(!source.local.completed||!source.local.actualResult)throw new ServiceError("permission","The actual physical SDK call has not completed in its original process.");
-  for(const[ordinal,actual]of source.local.facts){const[stored]=await ctx.tx.select().from(subscriptionControlledFacts).where(eq(subscriptionControlledFacts.id,actual.id)).limit(1);
+  if(source.local.actualResult.outcome==="returned")assertControlledSafeSnapshot(source.local.actualResult.result,{operationId:source.operation.id,callId:source.call.id,requestDigest:source.operation.requestDigest,resourceId:source.resource.id,kind:source.operation.kind});
+  const ids=[...source.local.facts.values()].map(row=>row.id),storedFacts=ids.length?await ctx.tx.select().from(subscriptionControlledFacts).where(inArray(subscriptionControlledFacts.id,ids)).limit(5001):[];
+  if(storedFacts.length!==source.local.facts.size)throw new ServiceError("conflict","Retain every genuine original observation before signing the actual caller finish.");
+  const storedById=new Map(storedFacts.map(row=>[row.id,row]));
+  for(const[ordinal,actual]of source.local.facts){const stored=storedById.get(actual.id);
    if(!stored||stored.callId!==source.call.id||stored.ordinal!==ordinal||stored.actualDigest!==merchantTaxDigest(actual.actual))throw new ServiceError("conflict","Retain every genuine original observation before signing the actual caller finish.");}
   const[existing]=await ctx.tx.select().from(subscriptionControlledFinishes).where(eq(subscriptionControlledFinishes.callId,source.call.id)).limit(1);
   if(existing){if(!finishedControlledCall(source.operation,source.call,existing)||merchantTaxDigest(existing.actualResult)!==merchantTaxDigest(source.local.actualResult))throw new ServiceError("conflict","Preserve the first genuine original caller result; a cached finish cannot rewrite it.");return{finished:true as const};}
@@ -130,7 +141,7 @@ export const finishControlledProviderCall=defineService({name:"subscriptions.fin
  }});
 export async function flushControlledProviderFinishes(operationId:string){
  for(const[callId,local]of held)if(local.operationId===operationId&&local.completed){
-  for(const ordinal of local.facts.keys())await retainControlledProviderFact.call({callId,nonce:local.nonce,ordinal},{kind:"system"});
+  for(const ordinal of local.facts.keys())if(!local.durable.has(ordinal))await retainControlledProviderFact.call({callId,nonce:local.nonce,ordinal},{kind:"system"});
   await finishControlledProviderCall.call({callId,nonce:local.nonce},{kind:"system"});held.delete(callId);
  }
 }
@@ -139,22 +150,29 @@ export async function flushControlledProviderFinishes(operationId:string){
 export async function withControlledProviderCall<T>(operationId:string,actor:Actor,work:(observe:(actual:Actual)=>Promise<void>)=>Promise<T>):Promise<T>{
  await flushControlledProviderFinishes(operationId);
  const system={kind:"system",request:actor.request} as const,claim=await claimControlledProviderCall.call({operationId},system);
- const local:Held={operationId,nonce:claim.nonce,invoked:true,completed:false,facts:new Map()};held.set(claim.callId,local);
- const observe=async(actual:Actual)=>{const ordinal=local.facts.size+1,snapshot:unknown=JSON.parse(JSON.stringify(actual));
+ return withControlledSafeResponseSession({operationId,callId:claim.callId,requestDigest:claim.requestDigest,resourceId:claim.resourceId,kind:claim.kind},async()=>{
+ const local:Held={operationId,nonce:claim.nonce,invoked:true,completed:false,facts:new Map(),durable:new Set()};held.set(claim.callId,local);
+ const capture=(actual:Actual)=>{const ordinal=local.facts.size+1,raw=controlledSafeOwnedSnapshot(actual.raw),snapshot:unknown={kind:actual.kind,raw};
   if(!isOriginalRecord(snapshot)||snapshot.kind!==actual.kind||!isOriginalRecord(snapshot.raw))throw new ServiceError("conflict","Preserve this original SDK observation as its complete unchanged JSON object.");
-  const retained:Actual={...snapshot,kind:actual.kind,raw:snapshot.raw};local.facts.set(ordinal,{id:randomUUID(),actual:retained});
-  await retainControlledProviderFact.call({callId:claim.callId,nonce:claim.nonce,ordinal},system);
+  const retained:Actual=Object.freeze({...snapshot,kind:actual.kind,raw:snapshot.raw});local.facts.set(ordinal,{id:randomUUID(),actual:retained});return ordinal;};
+ const observe=async(actual:Actual)=>{const ordinal=capture(actual);
+  await retainControlledProviderFact.call({callId:claim.callId,nonce:claim.nonce,ordinal},system);local.durable.add(ordinal);
   // A separate committed transaction deliberately follows the raw occurrence.
   // Bridge/domain refusal cannot roll that authentic positive fact back.
   if(actual.kind==="cash_observed")await retainControlledProviderCashFact.call({callId:claim.callId,nonce:claim.nonce,ordinal},system);};
  let result:T|undefined;
- try{result=await work(observe);local.completed=true;local.actualResult={outcome:"returned",result:JSON.parse(JSON.stringify(result??null))};return result;}
+ try{result=await work(observe);local.actualResult={outcome:"returned",result:controlledSafeOwnedSnapshot(result)};local.completed=true;return result;}
  finally{
+  for(const pending of controlledSafePendingResponses()){
+   const kind=z.enum(["bootstrap_subscription","pause_subscription","subscription_read","invoice_read","proration_preview","intent_read","cash_observed","invoice_payments_read","invoice_lines_read","price_read","product_created","product_read","subscription_list_read","calendar_updated","calendar_canceled","invoice_list_read","customer_financial_read","customer_credit_notes_read","controlled_draft_created","controlled_item_created","controlled_invoice_updated","controlled_invoice_finalized","controlled_invoice_paid"]).parse(pending.kind);
+   capture({kind,raw:pending.raw});
+  }
   if(!local.completed){local.completed=true;local.actualResult={outcome:"threw"};}
   // Preserve real SDK completion independently of the caller's later domain
   // application. Failed commits remain in this actual holder's replay cache.
-  for(const ordinal of local.facts.keys())await retainControlledProviderFact.call({callId:claim.callId,nonce:claim.nonce,ordinal},system);
+  for(const ordinal of local.facts.keys())if(!local.durable.has(ordinal))await retainControlledProviderFact.call({callId:claim.callId,nonce:claim.nonce,ordinal},system);
   await finishControlledProviderCall.call({callId:claim.callId,nonce:claim.nonce},system);held.delete(claim.callId);
  }
+ });
 }
 export default[claimControlledProviderCall,retainControlledProviderFact,retainControlledProviderCashFact,finishControlledProviderCall];

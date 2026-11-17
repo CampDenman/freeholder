@@ -1,0 +1,360 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "controlled_safe_public_boundary88.v1",
+  "checklist": ["C11.10", "C1.08", "C12.38"],
+  "status": "FORWARD SOURCE CONTINUATION; preserves frozen manifests and separates public SDK results from authenticated retained metadata; not payment or provider acceptance",
+  "files": [
+    {
+      "path": "src/adapters/payments/stripe-controlled-safe-response.ts",
+      "beforeSha256": "1cedd15925662f38eb49e46227c24f1adc1c14b43b10c4cf682faab72ba2d6d0",
+      "afterSha256": "5c91f9bde1fcde3055c92f7255ab3f9ed8c9bc77d685c08558740501dea08e12",
+      "edits": [
+        {
+          "before": "    const result:unknown=await Reflect.apply(member,target,[bound]);return sealDerived(result,session);",
+          "after": "    const result:unknown=await Reflect.apply(member,target,[bound]),sealed=sealDerived(result,session),ticket=tickets.get(sealed);if(!ticket)deny();\n    const publicResult=frozen(Object.fromEntries(Object.entries(sealed).filter(([name])=>name!==CONTROLLED_PROJECTION_KEY)));\n    tickets.set(publicResult,{...ticket,snapshot:publicResult,fingerprint:fingerprint(publicResult),parents:[ticket]});return publicResult;"
+        },
+        {
+          "before": "export function controlledSafeOwnedSnapshot(value:unknown):Readonly<Record<string,unknown>> {\n if(!record(value))deny();const session=current();authenticateTicket(value,session);\n const snapshot:unknown=JSON.parse(JSON.stringify(value));if(!record(snapshot)||JSON.stringify(snapshot)!==JSON.stringify(value))deny();\n const original=tickets.get(value);if(!original)deny();const owned=frozen(snapshot);tickets.set(owned,{...original,snapshot:owned,fingerprint:fingerprint(owned),parents:[original]});return owned;\n}",
+          "after": "export function controlledSafeOwnedSnapshot(value:unknown):Readonly<Record<string,unknown>> {\n if(!record(value))deny();const session=current();authenticateTicket(value,session);\n const original=tickets.get(value);if(!original)deny();const snapshot:unknown=JSON.parse(JSON.stringify(value));if(!record(snapshot)||JSON.stringify(snapshot)!==JSON.stringify(value))deny();\n if(!Object.hasOwn(value,CONTROLLED_PROJECTION_KEY))snapshot[CONTROLLED_PROJECTION_KEY]=original.metadata;\n const owned=frozen(snapshot);tickets.set(owned,{...original,snapshot:owned,fingerprint:fingerprint(owned),parents:[original]});return owned;\n}"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-execution.ts",
+      "beforeSha256": "395e2d9a2e5bc59c2d76fc19a09aa65a1672df45e47a1add5f88bd80e6478696",
+      "afterSha256": "d07b6e150fb94d71b63b37350bc13f62192329bff8613c1989f66a40143991ce",
+      "edits": [
+        {
+          "before": "import { retainControlledProviderVerification } from \"./controlled-provider-verification\";\n",
+          "after": "import { retainControlledProviderVerification } from \"./controlled-provider-verification\";\nimport { controlledCurrentResultData } from \"./controlled-provider-safe-response-proof\";\n"
+        },
+        {
+          "before": " if(source.verifiedResult)return source.verifiedResult;",
+          "after": " if(source.verifiedResult)return controlledCurrentResultData(source.verifiedResult);"
+        },
+        {
+          "before": " if(merchantTaxDigest(saved.result)!==merchantTaxDigest(actual))throw new ServiceError(\"conflict\",\"Preserve the first actual returned bank result; a successor result cannot replace it.\");\n return saved.result;",
+          "after": " const semantic=controlledCurrentResultData(saved.result);\n if(merchantTaxDigest(semantic)!==merchantTaxDigest(actual))throw new ServiceError(\"conflict\",\"Preserve the first actual returned bank result; a successor result cannot replace it.\");\n return semantic;"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-proof.ts",
+      "beforeSha256": "06fbfc60a51fefb80b65b8b4fde7865781554c9a50965f75926392b59c8c6d31",
+      "afterSha256": "016c3b15d37e18958880749d2d901770bd99ee2b06f42a8e8f3e17610174309f",
+      "edits": [
+        {
+          "before": "function sameJournalContent(left:JournalContent,right:JournalContent){return left.domain===right.domain&&left.resourceId===right.resourceId&&left.fingerprint===right.fingerprint&&left.physicalCount===right.physicalCount&&left.physicalBytes===right.physicalBytes&&journalFamilies.every(family=>left.counts[family]===right.counts[family]);}",
+          "after": "function sameJournalContent(a:JournalContent,b:JournalContent){return a.domain===b.domain&&a.resourceId===b.resourceId&&a.fingerprint===b.fingerprint&&a.physicalCount===b.physicalCount&&a.physicalBytes===b.physicalBytes&&journalFamilies.every(family=>a.counts[family]===b.counts[family]);}"
+        },
+        {
+          "before": "export function finishedControlledCall(operation:Operation,call:Call,finish:Finish|null){\n if(!finish)return false;\n return finishedWithOriginal(operation,call,finish,originalControlledCall(operation,call));\n}",
+          "after": "export function finishedControlledCall(operation:Operation,call:Call,finish:Finish|null,original?:ReturnType<typeof originalControlledCall>){\n if(!finish)return false;\n return finishedWithOriginal(operation,call,finish,original===undefined?originalControlledCall(operation,call):original);\n}"
+        },
+        {
+          "before": "export function stoppedControlledCall(operation:Operation,call:Call,stop:Stop|null){\n if(!stop)return false;\n return stoppedWithOriginal(operation,call,stop,originalControlledCall(operation,call));\n}",
+          "after": "export function stoppedControlledCall(operation:Operation,call:Call,stop:Stop|null,original?:ReturnType<typeof originalControlledCall>){\n if(!stop)return false;\n return stoppedWithOriginal(operation,call,stop,original===undefined?originalControlledCall(operation,call):original);\n}"
+        },
+        {
+          "before": "const decodedControlledJournals=new WeakMap<Tx,Map<string,RetainedJournal>>();",
+          "after": "const decodedControlledJournals=new WeakMap<Tx,Map<string,RetainedJournal>>();\nconst journalCertificates=new WeakMap<object,string>();\nexport function controlledJournalPgCertificate(history:object){const certificate=journalCertificates.get(history);if(!certificate)throw new ServiceError(\"conflict\",\"Require the journal's actual fresh PostgreSQL content certificate.\");return certificate;}"
+        },
+        {
+          "before": " return {operations,calls,facts,finishes,stops,verifications,verificationViews,chargeOrigins,closures,unfinished,count,revision};",
+          "after": " const result={operations,calls,facts,finishes,stops,verifications,verificationViews,chargeOrigins,closures,unfinished,count,revision};journalCertificates.set(result,after.content.fingerprint);return result;"
+        }
+      ]
+    },
+    {
+      "path": "tests/adapters/controlled-safe-response.test.ts",
+      "beforeSha256": "b6c48f99bc28488354db7800fff5fb0c969fa9c1335af0601e1b6e2de045cc62",
+      "afterSha256": "78aec415f4825af835385ff3b838cfdfd248834324aed9573e054f25b1a28f12",
+      "edits": [
+        {
+          "before": "   expect(actual).toMatchObject({kind:\"invoice_read\",raw:{amount_paid:4200}});expect(JSON.stringify(result)).not.toContain(secret);\n   const owned=controlledSafeOwnedSnapshot(result);expect(Object.isFrozen(owned)).toBe(true);expect(()=>controlledSafeOwnedSnapshot(JSON.parse(JSON.stringify(result)))).toThrow();",
+          "after": "   expect(actual).toMatchObject({kind:\"invoice_read\",raw:{amount_paid:4200}});expect(JSON.stringify(result)).not.toContain(secret);expect(result).not.toHaveProperty(CONTROLLED_PROJECTION_KEY);\n   const owned=controlledSafeOwnedSnapshot(result);expect(Object.isFrozen(owned)).toBe(true);expect(owned).toHaveProperty(CONTROLLED_PROJECTION_KEY);expect(()=>controlledSafeOwnedSnapshot(JSON.parse(JSON.stringify(result)))).toThrow();"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-financial-witness.ts",
+      "beforeSha256": "bcdb444f614f1f973b62ac85366a48688411c9abcc13b6efcb5c5db7437fdf0a",
+      "afterSha256": "3683e02022c1737a82270d9300e9e3219e918f2c8f00904ad11980e49f311b5a",
+      "edits": [
+        {
+          "before": "import type {OriginalCashClosureShare} from \"./original-cash-closure-current\";",
+          "after": "import type {OriginalCashClosureShare} from \"./original-cash-closure-current\";\nimport { createControlledJournalComposition, finishControlledJournalComposition } from \"@/modules/subscriptions/controlled-provider-journal-composition\";"
+        },
+        {
+          "before": "async function readControlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context?:OriginalInventoryProjectionContext){\n let witness=",
+          "after": "async function readControlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context?:OriginalInventoryProjectionContext){\n const composition=createControlledJournalComposition();\n let witness="
+        },
+        {
+          "before": "  Promise.all(targetIds.map(id=>controlledCollectionCoverage(tx,{subscriptionId:id}))),\n  Promise.all(coverageIds.map(id=>controlledProviderCoverage(tx,{subscriptionId:id}))),",
+          "after": "  Promise.all(targetIds.map(id=>controlledCollectionCoverage(tx,{subscriptionId:id},composition))),\n  Promise.all(coverageIds.map(id=>controlledProviderCoverage(tx,{subscriptionId:id},composition))),"
+        },
+        {
+          "before": "   return controlledTargetRawClassification(tx,subscriptions[0]!,actual,graph);\n  }\n  return controlledTargetRawClassification(tx,subscriptions[0]!,actual);",
+          "after": "   return controlledTargetRawClassification(tx,subscriptions[0]!,actual,graph,composition);\n  }\n  return controlledTargetRawClassification(tx,subscriptions[0]!,actual,undefined,composition);"
+        },
+        {
+          "before": " const classifiedEntries=[...entries.values()].sort((a,b)=>a.table.localeCompare(b.table)||a.id.localeCompare(b.id));\n\n return{",
+          "after": " const classifiedEntries=[...entries.values()].sort((a,b)=>a.table.localeCompare(b.table)||a.id.localeCompare(b.id));\n await finishControlledJournalComposition(tx,composition);\n\n return{"
+        },
+        {
+          "before": "import { createControlledJournalComposition, finishControlledJournalComposition } from \"@/modules/subscriptions/controlled-provider-journal-composition\";",
+          "after": "import { createControlledJournalComposition, finishControlledJournalComposition, type ControlledJournalComposition } from \"@/modules/subscriptions/controlled-provider-journal-composition\";"
+        },
+        {
+          "before": "export async function controlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[] = []){\n return readControlledCashFinancialHistory(tx,receiptIds,subscriptionIds);\n}",
+          "after": "export async function controlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[] = [],composition?:ControlledJournalComposition){\n return readControlledCashFinancialHistory(tx,receiptIds,subscriptionIds,undefined,composition);\n}"
+        },
+        {
+          "before": "export async function controlledCashFinancialHistoryShared(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[] = [],share?:OriginalCashClosureShare) {\n if(!share)return controlledCashFinancialHistory(tx,receiptIds,subscriptionIds);\n const key=JSON.stringify({receiptIds:[...receiptIds].sort(),subscriptionIds:[...subscriptionIds].sort()});\n const existing=share.controlledCashFinancialHistory.find(row=>row.tx===tx&&row.key===key);\n if(existing)return existing.promise as Promise<Awaited<ReturnType<typeof controlledCashFinancialHistory>>>;\n const current=controlledCashFinancialHistory(tx,receiptIds,subscriptionIds);\n share.controlledCashFinancialHistory.push({tx,key,promise:current});\n return current;\n}",
+          "after": "export async function controlledCashFinancialHistoryShared(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[] = [],share?:OriginalCashClosureShare,composition?:ControlledJournalComposition) {\n if(!share)return controlledCashFinancialHistory(tx,receiptIds,subscriptionIds,composition);\n const key=JSON.stringify({receiptIds:[...receiptIds].sort(),subscriptionIds:[...subscriptionIds].sort()});\n const existing=share.controlledCashFinancialHistory.find(row=>row.tx===tx&&row.key===key&&row.composition===composition);\n if(existing)return existing.promise as Promise<Awaited<ReturnType<typeof controlledCashFinancialHistory>>>;\n const current=controlledCashFinancialHistory(tx,receiptIds,subscriptionIds,composition);\n share.controlledCashFinancialHistory.push({tx,key,composition,promise:current});\n return current;\n}"
+        },
+        {
+          "before": "async function readControlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context?:OriginalInventoryProjectionContext){\n const composition=createControlledJournalComposition();",
+          "after": "async function readControlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context?:OriginalInventoryProjectionContext,externalComposition?:ControlledJournalComposition){\n const composition=externalComposition??createControlledJournalComposition();"
+        },
+        {
+          "before": " await finishControlledJournalComposition(tx,composition);",
+          "after": " if(!externalComposition)await finishControlledJournalComposition(tx,composition);"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-coverage.ts",
+      "beforeSha256": "19b9fd58216066685c4c7cbce695be4f5c00c2730f22fc43c44bac5c610e9f07",
+      "afterSha256": "e8719b7a4c0a50b962c04768c0ef3cecc27f2ed5bd3a3e9af9fd21009ea9513e",
+      "edits": [
+        {
+          "before": "import { controlledProviderJournal } from \"./controlled-provider-proof\";",
+          "after": "import { readComposedControlledProviderJournal, type ControlledJournalComposition } from \"./controlled-provider-journal-composition\";"
+        },
+        {
+          "before": "export async function controlledCollectionCoverage(tx:Tx,input:{subscriptionId:string;excludeUnadmittedOperationId?:string}){\n const transport=await controlledProviderCoverage(tx,input),",
+          "after": "export async function controlledCollectionCoverage(tx:Tx,input:{subscriptionId:string;excludeUnadmittedOperationId?:string},composition?:ControlledJournalComposition){\n const transport=await controlledProviderCoverage(tx,input,composition),"
+        },
+        {
+          "before": "const history=await controlledProviderJournal(tx,resource.id);",
+          "after": "const history=await readComposedControlledProviderJournal(tx,resource.id,composition);"
+        },
+        {
+          "before": "authenticatedControlledQuote(quote,resource,await controlledProviderJournal(tx,resource.id),\"accepted_ancestry\")",
+          "after": "authenticatedControlledQuote(quote,resource,await readComposedControlledProviderJournal(tx,resource.id,composition),\"accepted_ancestry\")"
+        },
+        {
+          "before": "  const actual=await controlledCollectionState(tx,collection.id);",
+          "after": "  const quote=quotes.find(row=>row.id===collection.quoteId),resource=quote?resources.find(row=>row.id===quote.resourceId):null;if(!quote||!resource)refuse();\n  const history=await readComposedControlledProviderJournal(tx,resource.id,composition),actual=await controlledCollectionState(tx,collection.id,{resourceId:resource.id,history});"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-runtime.ts",
+      "beforeSha256": "0f14837710cf2f4a32be494c0064521563235ad4c105133a8c537a88d49742c1",
+      "afterSha256": "9939b77860b0648d80656e3e578889ba0d63eb0ecb11762fa94b6241903bb187",
+      "edits": [
+        {
+          "before": "import { eq,sql } from \"drizzle-orm\";",
+          "after": "import { eq,inArray,sql } from \"drizzle-orm\";"
+        },
+        {
+          "before": "type Held={operationId:string;nonce:string;invoked:boolean;completed:boolean;actualResult?:Record<string,unknown>;facts:Map<number,{id:string;actual:Actual}>};",
+          "after": "type Held={operationId:string;nonce:string;invoked:boolean;completed:boolean;actualResult?:Record<string,unknown>;facts:Map<number,{id:string;actual:Actual}>;durable:Set<number>};"
+        },
+        {
+          "before": "  for(const[ordinal,actual]of source.local.facts){const[stored]=await ctx.tx.select().from(subscriptionControlledFacts).where(eq(subscriptionControlledFacts.id,actual.id)).limit(1);\n   if(!stored||stored.callId!==source.call.id||stored.ordinal!==ordinal||stored.actualDigest!==merchantTaxDigest(actual.actual))throw new ServiceError(\"conflict\",\"Retain every genuine original observation before signing the actual caller finish.\");}",
+          "after": "  const ids=[...source.local.facts.values()].map(row=>row.id),storedFacts=ids.length?await ctx.tx.select().from(subscriptionControlledFacts).where(inArray(subscriptionControlledFacts.id,ids)).limit(5001):[];\n  if(storedFacts.length!==source.local.facts.size)throw new ServiceError(\"conflict\",\"Retain every genuine original observation before signing the actual caller finish.\");\n  const storedById=new Map(storedFacts.map(row=>[row.id,row]));\n  for(const[ordinal,actual]of source.local.facts){const stored=storedById.get(actual.id);\n   if(!stored||stored.callId!==source.call.id||stored.ordinal!==ordinal||stored.actualDigest!==merchantTaxDigest(actual.actual))throw new ServiceError(\"conflict\",\"Retain every genuine original observation before signing the actual caller finish.\");}"
+        },
+        {
+          "before": "  for(const ordinal of local.facts.keys())await retainControlledProviderFact.call({callId,nonce:local.nonce,ordinal},{kind:\"system\"});\n  await finishControlledProviderCall.call({callId,nonce:local.nonce},{kind:\"system\"});held.delete(callId);",
+          "after": "  for(const ordinal of local.facts.keys())if(!local.durable.has(ordinal))await retainControlledProviderFact.call({callId,nonce:local.nonce,ordinal},{kind:\"system\"});\n  await finishControlledProviderCall.call({callId,nonce:local.nonce},{kind:\"system\"});held.delete(callId);"
+        },
+        {
+          "before": "  for(const ordinal of local.facts.keys())await retainControlledProviderFact.call({callId:claim.callId,nonce:claim.nonce,ordinal},system);\n  await finishControlledProviderCall.call({callId:claim.callId,nonce:claim.nonce},system);held.delete(claim.callId);",
+          "after": "  for(const ordinal of local.facts.keys())if(!local.durable.has(ordinal))await retainControlledProviderFact.call({callId:claim.callId,nonce:claim.nonce,ordinal},system);\n  await finishControlledProviderCall.call({callId:claim.callId,nonce:claim.nonce},system);held.delete(claim.callId);"
+        },
+        {
+          "before": "facts:new Map()};held.set",
+          "after": "facts:new Map(),durable:new Set()};held.set"
+        },
+        {
+          "before": "  await retainControlledProviderFact.call({callId:claim.callId,nonce:claim.nonce,ordinal},system);",
+          "after": "  await retainControlledProviderFact.call({callId:claim.callId,nonce:claim.nonce,ordinal},system);local.durable.add(ordinal);"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-coverage.ts",
+      "beforeSha256": "7385dd64cf8540ed197523901c9a331c8eb5f7ef49df483115eed1fb7ebbe0a8",
+      "afterSha256": "d06054002506f6ac3c2ad756081aabcd9e31a9d7630462ceba0199dca03db77e",
+      "edits": [
+        {
+          "before": "import { controlledProviderJournal } from \"./controlled-provider-proof\";",
+          "after": "import { readComposedControlledProviderJournal, type ControlledJournalComposition } from \"./controlled-provider-journal-composition\";"
+        },
+        {
+          "before": "export async function controlledProviderCoverage(tx:Tx,input:{subscriptionId:string;excludeUnadmittedOperationId?:string}){",
+          "after": "export async function controlledProviderCoverage(tx:Tx,input:{subscriptionId:string;excludeUnadmittedOperationId?:string},composition?:ControlledJournalComposition){"
+        },
+        {
+          "before": "const history=await controlledProviderJournal(tx,resource.id);count+=history.count;",
+          "after": "const history=await readComposedControlledProviderJournal(tx,resource.id,composition);count+=history.count;"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-collection-state.ts",
+      "beforeSha256": "f9fb450f98d9c0e5ec214a4ab54533a4e4892a0112d79757fadae714ddcbb2cf",
+      "afterSha256": "d87c2a525df999371ae965230047d0249ca31ac8d6b1e303bc0cbca350a5ca6d",
+      "edits": [
+        {
+          "before": "export async function controlledCollectionState(tx:Tx,collectionId:string){",
+          "after": "export async function controlledCollectionState(tx:Tx,collectionId:string,knownJournal?:{resourceId:string;history:Awaited<ReturnType<typeof controlledProviderJournal>>}){"
+        },
+        {
+          "before": " const history=await controlledProviderJournal(tx,resource.id);authenticatedControlledQuote(quote,resource,history,\"accepted_ancestry\");",
+          "after": " if(knownJournal&&knownJournal.resourceId!==resource.id)refuse();\n const history=knownJournal?.history??await controlledProviderJournal(tx,resource.id);authenticatedControlledQuote(quote,resource,history,\"accepted_ancestry\");"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-target-raw-classification.ts",
+      "beforeSha256": "ff70b562229ce4713a0c8ad5c6b7f1a64c4f0ddbe5124e95bd578ce65eac46e7",
+      "afterSha256": "dca001ff2b27766da508dfde115d951b9788b0d8eb311604a0da2ee6b4bf9966",
+      "edits": [
+        {
+          "before": "import { controlledProviderJournal } from \"@/modules/subscriptions/controlled-provider-proof\";",
+          "after": "import { controlledProviderJournal } from \"@/modules/subscriptions/controlled-provider-proof\";\nimport { readComposedControlledProviderJournal, type ControlledJournalComposition } from \"@/modules/subscriptions/controlled-provider-journal-composition\";"
+        },
+        {
+          "before": "export async function controlledTargetRawClassification(tx:Tx,subscriptionId:string,coverage:Coverage,knownParent?:Awaited<ReturnType<typeof parentFinancialGraphForTx>>){",
+          "after": "export async function controlledTargetRawClassification(tx:Tx,subscriptionId:string,coverage:Coverage,knownParent?:Awaited<ReturnType<typeof parentFinancialGraphForTx>>,composition?:ControlledJournalComposition){"
+        },
+        {
+          "before": "const history=await controlledProviderJournal(tx,row.resource.id);additionalReviewFactIds.push(...controlledCustomerRawReview(row.resource,history));",
+          "after": "const history=await readComposedControlledProviderJournal(tx,row.resource.id,composition);journals.set(row.resource.id,history);additionalReviewFactIds.push(...controlledCustomerRawReview(row.resource,history));"
+        },
+        {
+          "before": " const resolved=coverage.transport.unfinishedCalls.length?{resolutions:[],unresolvedFactIds:coverage.transport.rawCashReviewFactIds}:classifyControlledTargetRawFacts(targets);",
+          "after": " if(!composition)for(const row of resources){const before=journals.get(row.resource.id);if(!before||!targets.some(target=>target.resource.id===row.resource.id))continue;\n  const[current]=await tx.select({fingerprint:hash(subscriptionControlledResources)}).from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,row.resource.id)).limit(1);\n  const after=await controlledProviderJournal(tx,row.resource.id);\n  if(current?.fingerprint!==row.fingerprint||after.revision!==before.revision)refuse();\n }\n const resolved=coverage.transport.unfinishedCalls.length?{resolutions:[],unresolvedFactIds:coverage.transport.rawCashReviewFactIds}:classifyControlledTargetRawFacts(targets);"
+        },
+        {
+          "before": " const additionalReviewFactIds:string[]=[];",
+          "after": " const additionalReviewFactIds:string[]=[],journals=new Map<string,Awaited<ReturnType<typeof controlledProviderJournal>>>();"
+        },
+        {
+          "before": "  const actual=await controlledCollectionState(tx,collection.id);",
+          "after": "  const quote=coverage.witness.quotes.find(row=>row.id===collection.quoteId),known=quote?journals.get(quote.resourceId):undefined;if(!quote||!known)refuse();\n  const actual=await controlledCollectionState(tx,collection.id,{resourceId:quote.resourceId,history:known});"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-target-raw-policy.ts",
+      "beforeSha256": "f2fb7358b08fac4ea28cf28b233dd05d9657c1a2c9a2620a73b8bc4788611dda",
+      "afterSha256": "e6d35e746890f3355617546e571db7f6850be3703dc7807b3b797d3b3e3ee6d0",
+      "edits": [
+        {
+          "before": "  &&history.calls.every(call=>{const op=history.operations.find(row=>row.id===call.operationId),finish=history.finishes.find(row=>row.callId===call.id),stop=history.stops.find(row=>row.callId===call.id);\n   return !!op&&!!originalControlledCall(op,call)&&!(finish&&stop)&&(finishedControlledCall(op,call,finish??null)||stoppedControlledCall(op,call,stop??null));})",
+          "after": "  &&history.calls.every(call=>{const op=history.operations.find(row=>row.id===call.operationId),finish=history.finishes.find(row=>row.callId===call.id),stop=history.stops.find(row=>row.callId===call.id),original=op?originalControlledCall(op,call):null;\n   return !!op&&!!original&&!(finish&&stop)&&(finishedControlledCall(op,call,finish??null,original)||stoppedControlledCall(op,call,stop??null,original));})"
+        },
+        {
+          "before": "function bootstrapZeroProof(target:ControlledRawTarget){\n if(!safeMinor(target.canonicalCount)||target.canonicalCount>5000||!authentic(target.resource,target.history))return null;",
+          "after": "function bootstrapZeroProof(target:ControlledRawTarget,authenticated=authentic(target.resource,target.history)){\n if(!safeMinor(target.canonicalCount)||target.canonicalCount>5000||!authenticated)return null;"
+        },
+        {
+          "before": "function currentProof(target:ControlledRawTarget){\n const{history,manifest,binding}=target;if(!binding||!authentic(target.resource,history)||!safeMinor(target.canonicalRefundedMinor)||target.canonicalRefundedMinor>target.canonicalPaidMinor)return null;",
+          "after": "function currentProof(target:ControlledRawTarget,authenticated=authentic(target.resource,target.history)){\n const{history,manifest,binding}=target;if(!binding||!authenticated||!safeMinor(target.canonicalRefundedMinor)||target.canonicalRefundedMinor>target.canonicalPaidMinor)return null;"
+        },
+        {
+          "before": "function calendarRead(target:ControlledRawTarget){\n if(!authentic(target.resource,target.history)||!target.calendarAuthority)return null;",
+          "after": "function calendarRead(target:ControlledRawTarget,authenticated=authentic(target.resource,target.history)){\n if(!authenticated||!target.calendarAuthority)return null;"
+        },
+        {
+          "before": " const preparations=new Map(targets.map(target=>[target,bootstrapZeroProof(target)]));\n const proofs=new Map(targets.map(target=>[target,currentProof(target)]));",
+          "after": " const authenticated=new Map(targets.map(target=>[target,authentic(target.resource,target.history)]));\n const preparations=new Map(targets.map(target=>[target,bootstrapZeroProof(target,authenticated.get(target))]));\n const proofs=new Map(targets.map(target=>[target,currentProof(target,authenticated.get(target))]));"
+        },
+        {
+          "before": " for(const target of targets){const proof=proofFor(target),calendar=calendarRead(target);",
+          "after": " for(const target of targets){const proof=proofFor(target),calendar=calendarRead(target,authenticated.get(target));"
+        }
+      ]
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-collection-authority.ts",
+      "beforeSha256": "810cc3aac96533145e86ca3abeda679b82efaf6fb37fb04b8dd56ad625f42815",
+      "afterSha256": "1c6ca55e9b1f68c3875d9ba867c4c2eb266db18cfd5ba186949d64f82bfd0c78",
+      "edits": [
+        {
+          "before": "import { originalCreditFeeAllocation } from \"./credit-fee-origin\";",
+          "after": "import { originalCreditFeeAllocation } from \"./credit-fee-origin\";\nimport { readOriginalPrincipalAndDebt } from \"./principal-authority\";"
+        },
+        {
+          "before": "   for(const payment of graph.money){\n    const actualDebt=debt.parse(await ctx.callAsSystem(debtReader,{paymentId:payment.id}));currentProofs.push({paymentId:payment.id,debt:actualDebt});\n    const creditSources=canonical.funding.filter(row=>row.sourcePaymentId===payment.id);\n    if(actualDebt.pending&&(!creditSources.length||actualDebt.reasons.some(reason=>reason!==\"commission\")))refuse();\n    if(payment.status===\"succeeded\"){\n     const actual=principal.parse(await ctx.callAsSystem(principalReader,{paymentId:payment.id}));currentProofs.push(actual);",
+          "after": "   for(const payment of graph.money){\n    const combined=payment.status===\"succeeded\"?await readOriginalPrincipalAndDebt(ctx,payment.id):null;\n    const actualDebt=debt.parse(combined?.debt??await ctx.callAsSystem(debtReader,{paymentId:payment.id}));currentProofs.push({paymentId:payment.id,debt:actualDebt});\n    const creditSources=canonical.funding.filter(row=>row.sourcePaymentId===payment.id);\n    if(actualDebt.pending&&(!creditSources.length||actualDebt.reasons.some(reason=>reason!==\"commission\")))refuse();\n    if(combined){\n     const actual=principal.parse(combined.principal);currentProofs.push(actual);"
+        }
+      ]
+    },
+    {
+      "path": ".changeset/controlled-safe-provider-responses.md",
+      "beforeSha256": "af1e2c71fb0847c29d96b7298d5e2fb357403f6885cdb1985a05ceb478d6ea6f",
+      "afterSha256": "7e54e5f97441b6df8f9ccc29d78bf3a64e6e9f9344f2a3998f4a212bd5ecba0e",
+      "edits": [
+        {
+          "before": "Project new controlled provider responses before retaining them. Preserve actual money and unknown financial facts for review, keep private provider fields out of new evidence, and require fresh observations when historical results cannot supply current authority.",
+          "after": "Project new controlled provider responses before retaining them. Preserve actual money and unknown financial facts for review, keep private provider fields out of new evidence, and require fresh observations when historical results cannot supply current authority. Keep reserved projection metadata on authenticated retained snapshots rather than changing the public adapter result shape."
+        }
+      ]
+    },
+    {
+      "path": "tests/core/atomic-auxiliary-fee-prepost-bank84.test.ts",
+      "beforeSha256": "493af9baaaf424df901ceabb350713928dc5bad7bc4a2fd110dd8eb2e3eecdbf",
+      "afterSha256": "92cbea66d3081ee787d56936cf19397baff3f9c28fe982f5ee9062f9d93576b2",
+      "edits": [
+        {
+          "before": "import calendarReviewWindows from \"../../deploy/controlled-calendar-review-windows.source-preservation.json\";",
+          "after": "import calendarReviewWindows from \"../../deploy/controlled-calendar-review-windows.source-preservation.json\";\nimport publicBoundary from \"../../deploy/controlled-safe-public-boundary88.source.json\";"
+        },
+        {
+          "before": "   let bytes=read(path);if(path===\"src/modules/invoicing/controlled-target-raw-classification.ts\"){\n    const exact=calendarReviewWindows.files[0];",
+          "after": "   let bytes=read(path);if(path===\"src/modules/invoicing/controlled-target-raw-classification.ts\"){\n    const latest=publicBoundary.files.find(file=>file.path===path);if(!latest)throw Error(\"Require the newest raw-classification continuation.\");expect(hash(bytes)).toBe(latest.afterSha256);\n    for(const delta of [...latest.edits].reverse()){expect(bytes.toString().split(delta.after)).toHaveLength(2);bytes=Buffer.from(bytes.toString().replace(delta.after,()=>delta.before));}expect(hash(bytes)).toBe(latest.beforeSha256);\n    const exact=calendarReviewWindows.files[0];"
+        }
+      ]
+    },
+    {
+      "path": "MASTER.md",
+      "beforeSha256": "199c991a7592090a6750b99dabf12df5508b4a987ce2bf78c5faeea84b2d8a93",
+      "afterSha256": "b2d22136bbd58a0e29b082c23cfb57176980b60ded7cd8d8ea642a432216345d",
+      "edits": [
+        {
+          "before": "## 43. Product Completion Plan — the live checklist\n",
+          "after": "## 43. Product Completion Plan — the live checklist\n\nSafe-response public-boundary and payment-performance continuation2026-11-15\n(C11.10/C1.08/C12.38/C11.05): new controlled adapter fixtures now enter the real\nsafe-response session, while the reserved projection marker stays on the\nauthenticated retained snapshot instead of changing public SDK result equality.\nCurrent and cached executions compare the same semantic result; pure inventory\nfixtures explicitly use recorded ancestry. Fifty focused adapter/HTTP/source\ncases and the forward reversal controls PASS after those repairs. Payment source\nalso shares exact-scope initial principal history, combines principal/debt reads,\nreuses the fresh final witness, batches canonical target rows, and composes one\njournal scope with fresh final certificates. These are NOT accepted performance\nclosures: repeated genuine positive attempts on separate fresh databases still\nTIMEOUT at the unchanged180s; the original native SHA remains\n71dd0c0efccab135da068a09cc833939c629f14e15d49a350685b20857dce25c. Full current\nsource qualification, provider acceptance, independent review and stable release\nremain open. See `deploy/controlled-safe-public-boundary88.source.json`,\n`deploy/controlled-principal-history-share88.source.json`,\n`deploy/controlled-principal-debt-read88.source.json` and\n`deploy/merchant-tax-key-order88.source.json`.\n"
+        }
+      ]
+    },
+    {
+      "path": "tests/modules/controlled-safe-response-composition87.test.ts",
+      "beforeSha256": "5b07371264e7593a342d5b7d53a2bddb16076c31a1be2517b8c8051dd92b10ae",
+      "afterSha256": "6f0697f3d8568005809f2f95c7d6fb87fd9347b2c05bd89ef79a1ec75f674d9f",
+      "edits": [
+        {
+          "before": "const integratedPaths = new Set(integration.files.map(row => row.path));",
+          "after": "const publicBoundary = z.object({ files: z.array(composed) }).passthrough().parse(JSON.parse(read(\"deploy/controlled-safe-public-boundary88.source.json\")));\nconst integratedPaths = new Set(integration.files.map(row => row.path));\nconst publicBoundaryPaths = new Set(publicBoundary.files.map(row => row.path));"
+        },
+        {
+          "before": "    const latest = contentReuse.files.find(file => file.path === row.path);\n    if (latest) {\n      expect(sha(restored)).toBe(latest.afterSha256);\n      for (const delta of [...latest.edits].reverse()) {\n        expect(restored.split(delta.after)).toHaveLength(2);\n        restored = restored.replace(delta.after, () => delta.before);\n      }\n      expect(sha(restored)).toBe(latest.beforeSha256);\n    }\n    if (row.path === oldProtocol.successor.path) {",
+          "after": "    const boundary = publicBoundary.files.find(file => file.path === row.path);\n    if (boundary) {\n      expect(sha(restored)).toBe(boundary.afterSha256);\n      for (const delta of [...boundary.edits].reverse()) {\n        expect(restored.split(delta.after)).toHaveLength(2);\n        restored = restored.replace(delta.after, () => delta.before);\n      }\n      expect(sha(restored)).toBe(boundary.beforeSha256);\n    }\n    const latest = contentReuse.files.find(file => file.path === row.path);\n    if (latest) {\n      expect(sha(restored)).toBe(latest.afterSha256);\n      for (const delta of [...latest.edits].reverse()) {\n        expect(restored.split(delta.after)).toHaveLength(2);\n        restored = restored.replace(delta.after, () => delta.before);\n      }\n      expect(sha(restored)).toBe(latest.beforeSha256);\n    }\n    if (row.path === oldProtocol.successor.path) {"
+        },
+        {
+          "before": "  it(\"keeps every non-conflicting frozen runtime successor byte-identical\", () => {\n    const exceptions = new Set([...manifest.composed.map(row => row.path), ...integratedPaths, \"MASTER.md\"]);\n    for (const row of frozen.existing.filter(row => !exceptions.has(row.path))) expect(sha(read(row.path))).toBe(row.afterSha256);\n  });\n\n  it(\"keeps frozen new files exact except declared composition successors\", () => {\n    const exceptions = new Set([manifest.sourceSuccessor.path, ...manifest.composed.map(row => row.path), ...integratedPaths]);",
+          "after": "  it.each(publicBoundary.files.filter(row => !integratedPaths.has(row.path)))(\"reverses only public-boundary edits to the exact predecessor: $path\", row => {\n    let restored = read(row.path);\n    expect(sha(restored)).toBe(row.afterSha256);\n    for (const delta of [...row.edits].reverse()) {\n      expect(restored.split(delta.after)).toHaveLength(2);\n      restored = restored.replace(delta.after, () => delta.before);\n    }\n    expect(sha(restored)).toBe(row.beforeSha256);\n  });\n\n  it(\"keeps every non-conflicting frozen runtime successor byte-identical\", () => {\n    const exceptions = new Set([...manifest.composed.map(row => row.path), ...integratedPaths, ...publicBoundaryPaths, \"MASTER.md\"]);\n    for (const row of frozen.existing.filter(row => !exceptions.has(row.path))) expect(sha(read(row.path))).toBe(row.afterSha256);\n  });\n\n  it(\"keeps frozen new files exact except declared composition successors\", () => {\n    const exceptions = new Set([manifest.sourceSuccessor.path, ...manifest.composed.map(row => row.path), ...integratedPaths, ...publicBoundaryPaths]);"
+        },
+        {
+          "before": "it.each(manifest.composed.filter(row => !integratedPaths.has(row.path)))",
+          "after": "it.each(manifest.composed.filter(row => !integratedPaths.has(row.path) && !publicBoundaryPaths.has(row.path)))"
+        }
+      ]
+    }
+  ]
+}

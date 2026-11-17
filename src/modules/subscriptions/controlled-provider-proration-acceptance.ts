@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Fresh actual source safety and unchanged economics precede canonical promises.
+import { requireControlledCurrentVerification,controlledCurrentResultData } from "./controlled-provider-safe-response-proof";
 import { randomUUID } from "node:crypto";
 import { eq,sql } from "drizzle-orm";
 import { z } from "zod";
@@ -74,7 +75,8 @@ async function accept(ctx:ServiceContext,input:z.infer<typeof controlledProratio
   const components:Array<typeof subscriptionControlledComponents.$inferInsert>=[{id:randomUUID(),collectionId:quote.plannedCollectionId,position:0,kind:"net",amountMinor:review.debitNetMinor,currency:source.parent.currency,periodStart,periodEnd,provenance,provenanceDigest:merchantTaxDigest(provenance)}];
   if(review.debitTaxMinor>0){
    const tax=source.history.verifications.filter(row=>source.history.operations.some(op=>op.id===row.operationId&&op.kind==="read_product")).at(-1);
-   const product=z.object({createdProductRef:z.string().regex(/^prod_[A-Za-z0-9_]+$/),component:z.literal("merchant_declared_tax_collection"),taxAuthority:z.literal("canonical_merchant_tax_ledger")}).parse(tax?.actualResult);
+   if(tax)requireControlledCurrentVerification(source.history,tax);
+   const product=z.object({createdProductRef:z.string().regex(/^prod_[A-Za-z0-9_]+$/),component:z.literal("merchant_declared_tax_collection"),taxAuthority:z.literal("canonical_merchant_tax_ledger")}).parse(controlledCurrentResultData(tax?.actualResult));
    const taxProvenance=controlledComponentProvenance.parse({kind:"merchant_declared_tax_collection",providerProductRef:product.createdProductRef,taxQuoteDigest:source.debitTaxQuote.quoteDigest,profileId:quote.profileId,profileVersion:quote.profileVersion});
    components.push({id:randomUUID(),collectionId:quote.plannedCollectionId,position:components.length,kind:"merchant_declared_tax_collection",amountMinor:review.debitTaxMinor,currency:source.parent.currency,periodStart,periodEnd,provenance:taxProvenance,provenanceDigest:merchantTaxDigest(taxProvenance)});
   }

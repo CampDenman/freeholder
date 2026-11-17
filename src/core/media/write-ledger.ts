@@ -7,7 +7,7 @@ import { boundStorage } from "@/adapters/storage";
 import type {StoredObjectRevision} from "@/adapters/storage/types";
 import { db } from "@/core/db";
 import { contacts } from "@/core/contacts/schema";
-import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
+import { lockContactIdentityForPhysicalWrite, lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { dataRequests, privacyRetentionExceptions } from "@/core/privacy/schema";
 import { actorString, ServiceError, type Actor, type Tx } from "@/core/service";
 import { assets, mediaObjects, mediaUploads } from "./schema";
@@ -20,6 +20,7 @@ import {mediaMultipartResources} from "./multipart-schema";
 import {reconcileCommittedStorageObservation} from "./observation-hooks";
 import {assertOriginalUploadWritable,assertMediaActorLive} from "./upload-ownership";
 import {reconcileMediaErasureCohorts} from "./erasure-cohorts";
+import {mediaStorageTransferCalls as calls} from "./transfer-schema";
 
 export const MEDIA_WRITES_SCOPE = "media.storageOperations";
 const unsettled = new Set(["unverified", "started", "unknown"]);
@@ -99,7 +100,7 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:C
   const { store, binding } = captured??await boundStorage();
   const sha256 = createHash("sha256").update(body).digest("hex"),token=randomUUID()+randomUUID(),runtimeIdentity=await actualStorageCallerRuntimeIdentity();
   const admission = await db().transaction(async tx => {
-    await lockContactIdentityForRead(tx);
+    await lockContactIdentityForPhysicalWrite(tx);
     await assertMediaActorLive(tx,actor);
     await lockObject(tx, input.key);
     await allowMediaReceiptWrites(tx);
@@ -137,7 +138,9 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:C
     const contactId=originalOwner===undefined?contact?.id??null:originalOwner;
     await assertOriginalUploadWritable(tx,contactId,originalActor);
     const id = randomUUID();
-    const[pointer]=await tx.insert(mediaObjects).values({key:input.key,reservationId:randomUUID(),contentType:input.contentType,role:input.role,bytes:body.byteLength,uploadId:input.uploadId,ownerContactId:contactId,state:"pending"})
+    const reservationId=!input.originalKey&&reserved?reserved.reservationId:randomUUID();
+    if(!reservationId)throw new ServiceError("conflict","This legacy reservation has no original birth witness. Keep it for exact recovery rather than assigning a new historical identity.");
+    const[pointer]=await tx.insert(mediaObjects).values({key:input.key,reservationId,contentType:input.contentType,role:input.role,bytes:body.byteLength,uploadId:input.uploadId,ownerContactId:contactId,state:"pending"})
       .onConflictDoUpdate({target:mediaObjects.key,set:{contentType:input.contentType,role:input.role,bytes:body.byteLength,updatedAt:new Date()}}).returning();
     if(!pointer?.reservationId)throw new ServiceError("conflict","This legacy reservation has no original birth witness. Keep it for exact recovery rather than assigning a new historical identity.");
     await tx.insert(mediaObjectWrites).values({id,originalReservationId:pointer.reservationId,operation:"put",key:input.key,keyDigest:objectKeyDigest(input.key),namespace:binding.namespace,storageKind:binding.kind,
@@ -166,6 +169,7 @@ export async function putWithReceipt(input: TrackedPut, actor: Actor,captured?:C
 }
 
 export async function observeStorageOperation(id: string, accepted: boolean, settled = true,revision?:StoredObjectRevision): Promise<void> {
+  let latePositive=false;
   await db().transaction(async tx => {
     await allowMediaReceiptWrites(tx);
     const [intent] = await tx.select({ keyDigest: mediaObjectWrites.keyDigest }).from(mediaObjectWrites).where(eq(mediaObjectWrites.id, id)).limit(1);
@@ -174,21 +178,25 @@ export async function observeStorageOperation(id: string, accepted: boolean, set
     const [row] = await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.id, id)).limit(1).for("update");
     if (!row) throw new ServiceError("conflict", "The original storage receipt is missing. Restore its exact backup.");
     if(revision){
-      if(!accepted||revision.key!==row.key||revision.namespace!==row.namespace||(revision.kind==="etag"?row.storageKind!=="s3":row.storageKind!=="replit"))throw new ServiceError("conflict","The actual original provider result names another resource.");
+      if(!accepted||revision.key!==row.key||revision.namespace!==row.namespace||(revision.kind==="etag"?row.storageKind!=="s3":row.storageKind!=="replit"&&row.storageKind!=="local"))throw new ServiceError("conflict","The actual original provider result names another resource.");
       const digest=(await import("./transfer-proof")).transferDigest(revision);
       if(row.providerRevisionDigest&&row.providerRevisionDigest!==digest)throw new ServiceError("conflict","The original provider revision cannot be replaced by a later generation.");
       await tx.update(mediaObjectWrites).set({providerRevision:revision,providerRevisionDigest:digest}).where(eq(mediaObjectWrites.id,id));
     }
     if (!accepted && row.state === "accepted") return;
-    const contradiction = accepted && row.state === "confirmed_absent";
+    const contradiction = accepted && (row.state === "confirmed_absent" || row.operation === "put" && row.deletedAt !== null);
+    const originalCallers=accepted?await tx.select().from(calls).where(and(inArray(calls.kind,["ordinary_put","target_put"]),sql`(${calls.physicalReceiptId}=${id}::uuid or ${calls.objectReceiptId}=${id}::uuid)`)).for("update"):[];
+    latePositive=accepted&&(contradiction||!settled&&originalCallers.some(call=>call.state!=="admitted"));
     await tx.update(mediaObjectWrites).set({ state: contradiction || !settled ? "unknown" : accepted ? "accepted" : "unknown",
       ...(accepted&&!row.observedAcceptedAt ? { observedAcceptedAt: new Date() } : {}), ...(contradiction ? { deletedAt: null } : {}), updatedAt: new Date() }).where(eq(mediaObjectWrites.id, id));
+    if(latePositive){await(await import("./transfer-authority")).requireTransferCapability(tx);await tx.update(calls).set({state:"unknown",updatedAt:new Date()}).where(and(inArray(calls.kind,["ordinary_put","target_put"]),sql`(${calls.physicalReceiptId}=${id}::uuid or ${calls.objectReceiptId}=${id}::uuid)`));}
     if (contradiction && !row.redactedAt&&row.originalReservationId) {
       // A late positive fact supersedes a human's absence assertion. Restore
       // the pending pointer as well as the receipt so sweepers cannot lose it.
       await tx.insert(mediaObjects).values({ key: row.key,reservationId:row.originalReservationId, role: "original", state: "pending", contentType: row.contentType, bytes: row.bytes ?? 0 }).onConflictDoNothing();
     }
   });
+  if(latePositive&&!await(await import("./original-quota-evidence")).reconcileActualOriginalQuota(id))throw new ServiceError("conflict","The actual original physical facts are retained; their exact quota charge still needs recovery.");
   await reconcileMediaErasureCohorts({objectReceiptId:id}).catch(()=>{});
   await reconcileCommittedStorageObservation(id);
 }
@@ -199,13 +207,4 @@ export async function storageOperationsHeld(tx: Tx, owners: Array<string | null>
     .where(and(inArray(privacyRetentionExceptions.scope, [MEDIA_WRITES_SCOPE, "media.multipartOperations", "media.storageTransfers", "members"]),
       sql`(${privacyRetentionExceptions.expiresAt} is null or ${privacyRetentionExceptions.expiresAt}>clock_timestamp())`));
   return holds.some(hold => owners.includes(null) || owners.includes(hold.contactId));
-}
-
-/** The existing cleanup lifecycle delegates to exact original physical proof.
- * Captured adapters cannot grant recovery authority or substitute a namespace.
- */
-export async function deleteWithReceipt(key:string,captured?:CapturedStorage):Promise<boolean>{
- const transferred=await(await import("./transfer-erasure")).deleteTransferredLineage(key);
- if(transferred!==undefined)return transferred;
- return(await import("./original-retirement")).retireOriginalMediaObject(key,captured?.binding);
 }

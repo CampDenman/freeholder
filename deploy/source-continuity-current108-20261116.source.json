@@ -1,0 +1,78 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "source_continuity_current108_20261116.v1",
+  "checklist": ["C11.17", "C1.08", "C11.14"],
+  "status": "Exact current-to-approved source continuations restore three older oracles; full-suite acceptance remains open",
+  "artifacts": [
+    { "path": "src/core/privacy/service.ts", "sha256": "7deba8b2e28a77525ec55ed06e670cdde8ac10d61256aeb27ae52061450b9aa2" },
+    { "path": "tests/setup/migrate.ts", "sha256": "3c3b78f9eb64fb63166f1ffeff6bcd655931005331be64aa527e91ce5f538ac8" },
+    { "path": "src/modules/subscriptions/service.ts", "sha256": "690f63f82676cf0213ed09fe94d7f6e77fead8666d04df020de79358aca5e7e1" },
+    { "path": "MASTER.md", "sha256": "0b28a9688882a308d54389ee7619dbb6b8c3bf164a1013b0f1f8f3ac62a6afed" },
+    { "path": "tests/modules/controlled-paid-privacy-source.test.ts", "sha256": "bca35449e34bbe19a306c935414b117d8315f6bca9b05c3cc5d4836752fabfa0" },
+    { "path": "tests/core/migrate-boundary.test.ts", "sha256": "d279a85aa9be64d0636ec0f2f9b158509548ac352fcae5ab8bc69aeb18fe1cfa" },
+    { "path": "tests/core/verified-financial-contact-undo.test.ts", "sha256": "e5295ce4aa7c3cb0978c2458c92d2e5a0fb1e4b34bb8bf69a1dcbabbf82b6fd9" }
+  ],
+  "controls": {
+    "fullSourceRun": { "filesPassed": 598, "filesFailed": 3, "filesSkipped": 361, "passed": 5124, "failed": 3, "skipped": 3806, "durationSeconds": 660.93 },
+    "failedContracts": ["controlled-paid-privacy-source.test.ts", "migrate-boundary.test.ts", "verified-financial-contact-undo.test.ts"],
+    "cause": "Three exact source oracles predated the current privacy-coalescing, migration-skip and commercial-amendment deltas",
+    "focusedAfter": { "filesPassed": 3, "filesFailed": 0, "passed": 24, "failed": 0 },
+    "intermediateCorrection": "One privacy continuation SQL separator had an extra space; the literal was corrected before the green run without changing product source",
+    "fullSuiteRenewal": { "filesPassed": 601, "filesFailed": 0, "filesSkipped": 361, "passed": 5127, "failed": 0, "skipped": 3806, "durationSeconds": 667.0 },
+    "fullLintAfter": "passed",
+    "productCodeChanged": false,
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "src/core/privacy/service.ts",
+      "afterSha256": "7deba8b2e28a77525ec55ed06e670cdde8ac10d61256aeb27ae52061450b9aa2",
+      "beforeSha256": "98a396373aa27f09aee6c2263410d7249c0301f279f3b8e8c983c22374abfed5",
+      "continue": false,
+      "edits": [
+        { "before": "", "after": "    const pendingIds = outcome.pendingJobs ?? [];\n    const jobData = { ...input.jobData, requestId: request.id };\n    const reusable = pendingIds.length ? await ctx.tx.execute<{ id: string }>(sql`\n      select job.id from pgboss.job job\n      where job.name = ${input.jobName}\n        and job.id in (${sql.join(pendingIds.map(id => sql`${id}::uuid`), sql`,`)})\n        and job.state in ('created', 'retry')\n        and job.data - 'originalJobId' = ${JSON.stringify(jobData)}::jsonb\n      order by job.created_on\n      limit 1\n      for update\n    `) : [];\n    if (reusable[0]) return { jobId: reusable[0].id, recoveryRequired: false, changed: false };\n", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "tests/setup/migrate.ts",
+      "afterSha256": "3c3b78f9eb64fb63166f1ffeff6bcd655931005331be64aa527e91ce5f538ac8",
+      "beforeSha256": "12904e782d66b5907fc2bbaed0e9860279921cc16763bede826234fe90c8215f",
+      "continue": false,
+      "edits": [
+        { "before": "  if (!url) return;", "after": "  if (!url || process.env.FREEHOLDER_SKIP_MIGRATE === \"1\") return;", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/service.ts",
+      "afterSha256": "690f63f82676cf0213ed09fe94d7f6e77fead8666d04df020de79358aca5e7e1",
+      "beforeSha256": "28f3f267929778df6a70f23851df4812eacc896c6eef68cfd178523bceaeb497",
+      "continue": false,
+      "edits": [
+        { "before": "import { commercialBillingStart, pendingCommercialAmendment } from \"./commercial-amendment-calendar\";", "after": "import { commercialAmendmentRequired, commercialBillingStart, pendingCommercialAmendment } from \"./commercial-amendment-calendar\";", "occurrences": 1 },
+        { "before": "  if (subscription.merchantScopeVersion === 1 && amendment?.amendment.state !== \"activated\") return subscription;", "after": "  if (subscription.merchantScopeVersion === 1 && (amendment ? amendment.amendment.state !== \"activated\" : await commercialAmendmentRequired(ctx, subscription))) return subscription;", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "package.json",
+      "afterSha256": "31db8e0400084cd839dcd66caf07fa2e26aca1ac1f396cc88b33974637072a4d",
+      "beforeSha256": "60f7f7c88f9323474ce6823c88813bafad18b1dd3c6b7fc49341145965308b60",
+      "continue": false,
+      "edits": [
+        { "before": "\"next\": \"~16.4.2\"", "after": "\"next\": \"~16.4.6\"", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "MASTER.md",
+      "afterSha256": "0b28a9688882a308d54389ee7619dbb6b8c3bf164a1013b0f1f8f3ac62a6afed",
+      "beforeSha256": "f4be50d84c9427419f9303ce7cf5d0107a8b4b9caaadb2d92996b819fbce3c53",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  owner claim or hosted acceptance. See `deploy/local-release-smoke-20261116.source.json`.\n  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old",
+          "after": "  owner claim or hosted acceptance. See `deploy/local-release-smoke-20261116.source.json`.\n  Source-continuation repair2026-11-16 (C11.17/C1.08/C11.14): the full standard source\n  run had5124 passes and three exact-hash failures. Approved successors predated current\n  privacy-coalescing, migration-skip and commercial-amendment deltas. Exact forward\n  continuations now restore those approved predecessors before the unchanged original\n  oracles; all three focused files PASS24/24. One intermediate continuation literal was\n  corrected without touching source. See `deploy/source-continuity-current108-20261116.source.json`.\n  Renewed full source PASSes601 files/5127 cases with zero failures in667.00s;361 files/\n  3806 cases explicitly skip without a database, and full ESLint passes. Hosted, clean-room\n  and signed acceptance remain open; no C row closes.\n  Recovery-browser current qualification2026-11-16 (C1.12/C11.08/C11.17): the old",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

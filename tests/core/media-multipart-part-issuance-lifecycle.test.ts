@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// PREPARED / UNRUN. Real shared services/DB/local SDK signer with a fictional
-// owned TCP CREATE fixture. No fixture capability/ServiceContext/provider claim.
+// Qualified on fresh migration98 PostgreSQL 2026-11-15 with real shared services,
+// local SDK signer and synthetic AWS TCP. No ServiceContext/provider-account claim.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {createHash,randomUUID} from "node:crypto";
 import {AwsClient} from "aws4fetch";
@@ -23,12 +23,13 @@ import {addRetentionException,createDataRequest,verifyDataRequest} from "@/core/
 import {multipartBirthProvider} from "../helpers/media-multipart-birth-provider";
 import {closeDb,failure,hasDatabase,OWNER,truncateSpine} from "../helpers/spine";
 const body=new TextEncoder().encode("actual"),sha256=createHash("sha256").update(body).digest("hex"),parts=[{partNumber:1,bytes:body.byteLength,sha256}];
+const syntheticOrigin="https://s3.us-east-1.amazonaws.com",realFetch=globalThis.fetch.bind(globalThis);
 function sqlCode(error:unknown):unknown{if(error&&typeof error==="object"){if("code"in error)return error.code;if("cause"in error)return sqlCode(error.cause);}return null;}
 describe.runIf(hasDatabase)("genuine local multipart part issuance (full part capability dependent)",()=>{
  let provider:Awaited<ReturnType<typeof multipartBirthProvider>>;
  beforeAll(async()=>{await ready();await stopJobs();const[capability]=await db().execute<{present:boolean}>(sql`select to_regprocedure('freeholder_media_transfer_request_capability_v1()') is not null and to_regprocedure('freeholder_media_original_part_capability_v1()') is not null as present`);if(capability?.present!==true)throw Error("Prepared issuer controls require both genuine complete capabilities; no fixture function or fabricated context may enable them.");},60000);
- beforeEach(async()=>{await truncateSpine();await db().insert(users).values({id:OWNER.userId,email:"issuer-owner@example.test",role:"owner"});provider=await multipartBirthProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fictional",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"fictional-owned",S3_SECRET_ACCESS_KEY:"fictional-owned",S3_PUBLIC:"false",FREEHOLDER_STORAGE_QUOTA_BYTES:"",FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY:"false"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
- afterEach(async()=>{await provider?.close();vi.restoreAllMocks();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
+ beforeEach(async()=>{await truncateSpine();await db().insert(users).values({id:OWNER.userId,email:"issuer-owner@example.test",role:"owner"});provider=await multipartBirthProvider();vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{const url=new URL(input instanceof Request?input.url:String(input));if(url.origin!==syntheticOrigin)return realFetch(input,init);const target=new URL(`${url.pathname}${url.search}`,provider.endpoint);if(input instanceof Request)return realFetch(target,{method:input.method,headers:input.headers,body:input.body===null?undefined:await input.arrayBuffer()});return realFetch(target,init);});for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:syntheticOrigin,S3_REGION:"fictional",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"fictional-owned",S3_SECRET_ACCESS_KEY:"fictional-owned",S3_PUBLIC:"false",FREEHOLDER_STORAGE_QUOTA_BYTES:"",FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY:"false"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
+ afterEach(async()=>{await provider?.close();vi.restoreAllMocks();vi.unstubAllEnvs();vi.unstubAllGlobals();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
  async function prepare(){const upload=await beginUpload.call({filename:"original.pdf",contentType:"application/pdf",bytes:body.byteLength},OWNER);await declareUploadParts.call({id:upload.id,parts},OWNER);return upload;}
  it("retains a once-only actual local mint and genuine FIN before returning its exact body-bound URL, with no provider ACK or uploaded-byte receipt",async()=>{
   const upload=await prepare(),beforeProvider=[...provider.calls],signed=await signUploadParts.call({id:upload.id,partNumbers:[1]},OWNER),part=signed.parts[0];if(!part)throw Error("The actual signer must return the admitted part");

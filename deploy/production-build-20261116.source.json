@@ -1,0 +1,37 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "production_build_20261116.v1",
+  "checklist": ["C11.17"],
+  "status": "Current production build and standalone artifact gate pass; hosted startup and clean-room acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "3bc209cf0c743c38feb0cc502bf769839c4c29f3471b1bda1aab0bd354731219" },
+    { "path": "scripts/standalone-artifact-gate.mjs", "sha256": "261e3e0d04da0438a578827f4921efc9cb178de1c9ab918a79d262716962eba7" },
+    { "path": "next.config.ts", "sha256": "6eb8d3ec2794736eebf917955b238a468eaed35ac7c98b79a2b652f1f8b263ef" },
+    { "path": "package.json", "sha256": "60f7f7c88f9323474ce6823c88813bafad18b1dd3c6b7fc49341145965308b60" }
+  ],
+  "controls": {
+    "command": "NODE_OPTIONS=--max-old-space-size=8192 pnpm build",
+    "exitCode": 0,
+    "durationSeconds": 216.72,
+    "artifactGate": { "passed": true, "files": 4395, "bytes": 153667318, "sourceOrEnvironmentLeakage": false, "scrubbed": ["locales/", "packages/", "src/"] },
+    "visibleWarnings": ["Optional ts-mls module-resolution warnings remain in the build log", "Static page-data generation logs the expected missing production DATABASE_URL/SESSION_SECRET message; no hosted startup is claimed"],
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "Hosted startup, provider, browser, clean-room, independent review and owner signoff remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "3bc209cf0c743c38feb0cc502bf769839c4c29f3471b1bda1aab0bd354731219",
+      "beforeSha256": "8e7efe20e38a5d507db41c7a6f65438bc8b5aa04343a23cc2679df4b82065c9e",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  remain separate and open. See `deploy/integrated-fast-gates-20261116.source.json`;\n  no checklist row closes.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "after": "  remain separate and open. See `deploy/integrated-fast-gates-20261116.source.json`;\n  no checklist row closes.\n  Production-artifact qualification2026-11-16 (C11.17): `pnpm build` exits0 in216.72s\n  and runs the standalone gate:4395 files/153667318 bytes with no source or environment\n  leakage. Build-only locales/packages/src roots were scrubbed. Existing optional ts-mls\n  module warnings and the expected missing production DB/session build-page message stay\n  visible; neither is called a runtime startup pass. No product source changed. See\n  `deploy/production-build-20261116.source.json`. Hosted startup and C11.17 remain open.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -6,7 +6,7 @@ import { ServiceError,type Tx } from "@/core/service";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
 import { subscriptionControlledResources } from "./controlled-provider-schema";
 import { subscriptionControlledQuotes } from "./controlled-provider-collection-schema";
-import { controlledProviderJournal } from "./controlled-provider-proof";
+import { readComposedControlledProviderJournal, type ControlledJournalComposition } from "./controlled-provider-journal-composition";
 import { controlledProviderCoverage } from "./controlled-provider-coverage";
 import { controlledCollectionWitnesses } from "./controlled-provider-collection-witnesses";
 import { authenticatedControlledQuote } from "./controlled-provider-quote-proof";
@@ -17,8 +17,8 @@ function refuse():never{throw new ServiceError("conflict","Restore the complete 
  * parent->resource locking. complete means COVERAGE ONLY. It never supplies
  * money quiescence, paid principal, fee remittance, consent or collection access.
  * One aggregate5000 includes all nine original families plus these six. */
-export async function controlledCollectionCoverage(tx:Tx,input:{subscriptionId:string;excludeUnadmittedOperationId?:string}){
- const transport=await controlledProviderCoverage(tx,input),witness=await controlledCollectionWitnesses(tx,{subscriptionIds:[input.subscriptionId]});
+export async function controlledCollectionCoverage(tx:Tx,input:{subscriptionId:string;excludeUnadmittedOperationId?:string},composition?:ControlledJournalComposition){
+ const transport=await controlledProviderCoverage(tx,input,composition),witness=await controlledCollectionWitnesses(tx,{subscriptionIds:[input.subscriptionId]});
  const count=witness.quotes.length+witness.collections.length+witness.components.length+witness.invoiceBindings.length+witness.itemReceipts.length+witness.invoiceProofs.length;
  if(witness.incomplete||count+transport.inventoryCount>5000)refuse();
  const excluded=input.excludeUnadmittedOperationId;
@@ -28,7 +28,7 @@ export async function controlledCollectionCoverage(tx:Tx,input:{subscriptionId:s
  const quotes=witness.quotes.length?await tx.select().from(subscriptionControlledQuotes).where(inArray(subscriptionControlledQuotes.id,witness.quotes.map(row=>row.id))).limit(5001):[];
  if(quotes.length!==witness.quotes.length||resources.length!==transport.resourceIds.length)refuse();
  const actualQuotes=[],actualTargets=[],redactedQuoteIds:string[]=[];
- for(const quote of quotes){const resource=resources.find(r=>r.id===quote.resourceId);if(!resource)refuse();const history=await controlledProviderJournal(tx,resource.id);
+ for(const quote of quotes){const resource=resources.find(r=>r.id===quote.resourceId);if(!resource)refuse();const history=await readComposedControlledProviderJournal(tx,resource.id,composition);
   if(quote.redactedAt){
    // An erased unaccepted quote cannot become a usable consent. Only actual
    // authenticated closed zero-resource ancestry permits its opaque retained
@@ -36,7 +36,7 @@ export async function controlledCollectionCoverage(tx:Tx,input:{subscriptionId:s
    if(quote.input!==null||quote.review!==null||witness.collections.some(c=>c.quoteId===quote.id)||history.closures.length!==1||history.closures[0]?.kind!=="zero_transport")refuse();
    redactedQuoteIds.push(quote.id);actualQuotes.push({id:quote.id,redacted:true,inputDigest:quote.inputDigest,reviewDigest:quote.reviewDigest,quoteDigest:quote.quoteDigest,closureDigest:history.closures[0].proofDigest});continue;
   }
-  const actual=authenticatedControlledQuote(quote,resource,history);
+  const actual=authenticatedControlledQuote(quote,resource,history,"accepted_ancestry");
   actualQuotes.push({id:quote.id,quoteDigest:quote.quoteDigest,inputDigest:quote.inputDigest,reviewDigest:quote.reviewDigest,
    calendarResultDigest:actual.calendar.verification.actualResultDigest,customerResultDigest:actual.customer.verification.actualResultDigest,nativeResultDigest:actual.native.verification.actualResultDigest,updateResultDigest:actual.update.verification.actualResultDigest});
  }
@@ -46,12 +46,13 @@ export async function controlledCollectionCoverage(tx:Tx,input:{subscriptionId:s
    // credit and no bank debit. It is not a fabricated ordinary period.
    const quote=quotes.find(q=>q.id===collection.quoteId),resource=quote?resources.find(r=>r.id===quote.resourceId):null;
    if(!quote||!resource||collection.kind!=="proration"||collection.creditNoteId!==null||witness.components.some(c=>c.collectionId===collection.id)||witness.invoiceBindings.some(b=>b.collectionId===collection.id))refuse();
-   const review=authenticatedControlledQuote(quote,resource,await controlledProviderJournal(tx,resource.id)).review;
+   const review=authenticatedControlledQuote(quote,resource,await readComposedControlledProviderJournal(tx,resource.id,composition),"accepted_ancestry").review;
    if(!review.originalTrialEndsAt||review.debitNetMinor+review.debitTaxMinor+review.creditNetMinor+review.creditTaxMinor+review.cashDueMinor!==0)refuse();
    await controlledCashlessCollectionState(tx,collection.id);
    actualTargets.push({id:collection.id,kind:"uncharged_trial",prorationId:collection.prorationId,invoiceId:null,canonicalTargetDigest:null});continue;
   }
-  const actual=await controlledCollectionState(tx,collection.id);
+  const quote=quotes.find(row=>row.id===collection.quoteId),resource=quote?resources.find(row=>row.id===quote.resourceId):null;if(!quote||!resource)refuse();
+  const history=await readComposedControlledProviderJournal(tx,resource.id,composition),actual=await controlledCollectionState(tx,collection.id,{resourceId:resource.id,history});
   actualTargets.push({id:collection.id,kind:collection.kind,prorationId:collection.prorationId,invoiceId:collection.invoiceId,canonicalTargetDigest:actual.canonical.digest,
    invoiceStatus:actual.canonical.invoice.status,currentCollectible:actual.canonical.currentCollectible,paidMinor:actual.canonical.invoice.paidMinor,refundedMinor:actual.canonical.invoice.refundedMinor,
    bindingDigest:actual.binding?.originalEvidenceDigest??null,itemDigests:actual.itemReceipts.map(row=>row.originalEvidenceDigest),readDigests:actual.proofs.map(row=>row.resultDigest)});

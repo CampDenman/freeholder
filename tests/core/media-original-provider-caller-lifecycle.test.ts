@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// SOURCE PREPARED, UNRUN. Actual shared infrastructure + private fictional TCP
-// storage. No genuine ingress, worker, account, stop or full erasure claim.
+// Scoped fixture qualified on fresh PostgreSQL 2026-11-15 through synthetic AWS
+// TCP storage. No genuine ingress, worker, account, stop or full erasure claim.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {createHash,randomUUID} from "node:crypto";
 import {eq} from "drizzle-orm";
@@ -25,11 +25,12 @@ import {transferDigest} from "@/core/media/transfer-proof";
 import {ordinaryMediaRequestProvider} from "../helpers/media-original-provider-requests";
 import {closeDb,failure,hasDatabase,OWNER,CUSTOMER,truncateSpine} from "../helpers/spine";
 const body=new Uint8Array([0,255,13,10,128,0]),key="private/exact-original.bin";
+const syntheticOrigin="https://s3.us-east-1.amazonaws.com",realFetch=globalThis.fetch.bind(globalThis);
 describe.runIf(hasDatabase)("C1.12/C11.08 original ordinary provider caller lifecycle",()=>{
  let provider:Awaited<ReturnType<typeof ordinaryMediaRequestProvider>>,running:Promise<unknown>[];
  beforeAll(async()=>{await ready();await stopJobs();},60000);
- beforeEach(async()=>{running=[];await truncateSpine();await db().insert(users).values([{id:OWNER.userId,email:"original-owner@example.test",role:"owner"},{id:CUSTOMER.userId,email:"original-subject@example.test",role:"customer"}]);provider=await ordinaryMediaRequestProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
- afterEach(async()=>{provider?.releaseAll();await Promise.allSettled(running??[]);await provider?.close();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
+ beforeEach(async()=>{running=[];await truncateSpine();await db().insert(users).values([{id:OWNER.userId,email:"original-owner@example.test",role:"owner"},{id:CUSTOMER.userId,email:"original-subject@example.test",role:"customer"}]);provider=await ordinaryMediaRequestProvider();vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{const url=new URL(input instanceof Request?input.url:String(input));if(url.origin!==syntheticOrigin)return realFetch(input,init);const target=new URL(`${url.pathname}${url.search}`,provider.endpoint);if(input instanceof Request)return realFetch(target,{method:input.method,headers:input.headers,body:input.body===null?undefined:await input.arrayBuffer()});return realFetch(target,init);});for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:syntheticOrigin,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
+ afterEach(async()=>{provider?.releaseAll();await Promise.allSettled(running??[]);await provider?.close();vi.unstubAllEnvs();vi.unstubAllGlobals();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
  it("retains the original admission, exact actual PUT nonce, provider revision and independent caller/request finishes",async()=>{
   await putWithReceipt({key,body,contentType:"application/octet-stream",role:"original"},OWNER);
   const[receipt]=await db().select().from(mediaObjectWrites),[caller]=await db().select().from(mediaStorageTransferCalls),[request]=await db().select().from(mediaStorageTransferRequests),facts=await db().select().from(mediaStorageTransferRequestObservations);

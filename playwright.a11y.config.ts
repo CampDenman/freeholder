@@ -60,9 +60,9 @@ Object.assign(process.env, {
   CREDENTIAL_KEY: credentialKey,
   DATABASE_URL: databaseUrl,
   FREEHOLDER_JOBS: "off",
-  // Playwright's global setup owns this disposable database migration. The
-  // server starts before global setup, so allowing both paths to migrate would
-  // manufacture a schema race that no browser behaviour depends on.
+  // The launcher migrates before opening the application server; global setup
+  // may enter the same dedicated-session migration lock afterwards. The boot
+  // path itself stays disabled so it cannot race that explicit boundary.
   FREEHOLDER_SKIP_MIGRATE: "1",
   FREEHOLDER_UNSAFE_LOCAL_STORAGE: "1",
   LOCAL_STORAGE_ROOT: resolve("test-results/browser-media"),

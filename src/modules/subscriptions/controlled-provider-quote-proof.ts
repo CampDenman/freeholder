@@ -1,9 +1,11 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // An unaccepted review is evidence, never a principal reservation or mandate.
+import { requireControlledCurrentVerification } from "./controlled-provider-safe-response-proof";
 import { z } from "zod";
 import { ServiceError } from "@/core/service";
 import { merchantTaxDigest } from "@/modules/invoicing/merchant-tax-store";
+import { controlledSubscriptionFactsDigest } from "@/adapters/payments/controlled-subscription-digest";
 import {controlledStoredTargetReview} from "./controlled-provider-private-review-contract";
 import {atomicCreditFeeDeclarationKeys,verifiedAtomicCreditFeeDeclaration} from "@/modules/invoicing/atomic-credit-fee-declaration-proof";
 import type { subscriptionControlledQuotes } from "./controlled-provider-collection-schema";
@@ -21,7 +23,7 @@ export function controlledTargetQuoteDigest(input:NonNullable<Quote["input"]>,re
  return merchantTaxDigest({version:1,kind:"controlled_target_review",input,review:economic,profileId,profileVersion});
 }
 function refuse():never{throw new ServiceError("conflict","Restore the exact complete original native/update previews, dated canonical economics and independently retained original calendar/customer reads before using this quote.");}
-export function authenticatedControlledQuote(quote:Quote,resource:Resource,history:History){
+export function authenticatedControlledQuote(quote:Quote,resource:Resource,history:History,role:"current_authority"|"accepted_ancestry"="current_authority"){
  if(!quote.input||!quote.review||quote.redactedAt||quote.inputDigest!==merchantTaxDigest(quote.input)||quote.reviewDigest!==merchantTaxDigest(quote.review))refuse();
  const review=controlledStoredTargetReview.parse(quote.review),c=review.controlled;
  if(review.kind==="proration"&&review.atomicCreditFeeDeclaration){
@@ -34,13 +36,13 @@ export function authenticatedControlledQuote(quote:Quote,resource:Resource,histo
   ||controlledTargetQuoteDigest(quote.input,review,quote.profileId,quote.profileVersion)!==quote.quoteDigest
   ||quote.calendarReadOperationId!==c.calendarReadOperationId||quote.customerFinancialOperationId!==c.customerFinancialOperationId||quote.nativePreviewOperationId!==c.nativePreviewOperationId||quote.updatePreviewOperationId!==c.updatePreviewOperationId)refuse();
  function returned(id:string,kind:string){const op=history.operations.find(row=>row.id===id),verified=history.verifications.find(row=>row.operationId===id);
-  if(!op||op.resourceId!==resource.id||op.kind!==kind||!verified)refuse();return{operation:op,verification:verified};}
+  if(!op||op.resourceId!==resource.id||op.kind!==kind||!verified)refuse();if(role==="current_authority")requireControlledCurrentVerification(history,verified);return{operation:op,verification:verified};}
  if(review.kind==="period"&&(review.controlled.originalPeriodConsentDigest!==review.quote.quoteDigest||quote.canonicalSourceId!==`${resource.subscriptionId}:${review.calendar.proposedPeriodStart}`
   ||review.effectiveAt!==review.calendar.proposedPeriodStart||record.parse(quote.input).previewAt!==review.calendar.prorationAt))refuse();
  const previewAt=review.kind==="period"?review.calendar.prorationAt:review.effectiveAt;
  const calendar=returned(quote.calendarReadOperationId,"read_calendar"),customer=returned(quote.customerFinancialOperationId,"read_customer_financials"),native=returned(quote.nativePreviewOperationId,"preview_proration"),update=returned(quote.updatePreviewOperationId,"preview_update");
  const source=record.parse(calendar.verification.actualResult.actualRaw),actualCalendar=calendar.verification.actualResult;
- if(actualCalendar.collectionPausedAsDraft!==true||actualCalendar.calendarCanceled!==false||actualCalendar.currentReadDigest!==merchantTaxDigest(source)
+ if(actualCalendar.collectionPausedAsDraft!==true||actualCalendar.calendarCanceled!==false||actualCalendar.currentReadDigest!==controlledSubscriptionFactsDigest(source)
   ||actualCalendar.providerSubscriptionRef!==native.verification.actualResult.providerSubscriptionRef||actualCalendar.providerSubscriptionRef!==update.verification.actualResult.providerSubscriptionRef
   ||customer.verification.actualResult.providerCustomerRef!==resource.originalScope.providerCustomerRef||customer.verification.actualResult.balanceState!=="known_zero"||customer.verification.actualResult.completeCreditNotes!==true
   ||customer.verification.actualResult.inventoryDigest!==c.customerFinancialDigest||native.verification.actualResultDigest!==c.nativeActualEvidenceDigest||update.verification.actualResultDigest!==c.controlledUpdateActualEvidenceDigest)refuse();

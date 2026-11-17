@@ -603,6 +603,167 @@
       "when": 1793310000065,
       "tag": "0085_controlled_collection_application",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1793310000066,
+      "tag": "0086_controlled_safe_response",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1793310000067,
+      "tag": "0087_merchant_fee_xid_epoch",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1793310000068,
+      "tag": "0088_controlled_row_hash_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1793310000069,
+      "tag": "0089_financial_row_hash_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1793310000070,
+      "tag": "0090_controlled_journal_heads",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1793310000071,
+      "tag": "0091_atomic_credit_confirmation_birth",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1793310000072,
+      "tag": "0092_media_request_capability",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1793310000073,
+      "tag": "0093_local_original_media",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1793310000074,
+      "tag": "0094_original_delete_human_review",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1793310000075,
+      "tag": "0095_multipart_resource_fence",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1793310000076,
+      "tag": "0096_multipart_baseline_append",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1793310000077,
+      "tag": "0097_multipart_first_session",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1793310000078,
+      "tag": "0098_original_part_capability",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1793310000079,
+      "tag": "0099_multipart_complete_parts_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1793310000080,
+      "tag": "0100_multipart_idle_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1793310000081,
+      "tag": "0101_retirement_seal_guard_dedup",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1793310000082,
+      "tag": "0102_idle_creation_certificate_intact",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1793310000083,
+      "tag": "0103_shared_redacted_certificate",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1793310000084,
+      "tag": "0104_erased_review_attribution",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1793310000085,
+      "tag": "0105_sequential_retirement_seal",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1793310000086,
+      "tag": "0106_provider_inventory_caller_alias",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1793310000087,
+      "tag": "0107_plan_adoption_record_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1793310000088,
+      "tag": "0108_adoption_target_receipt_alias",
+      "breakpoints": true
     }
   ]
 }

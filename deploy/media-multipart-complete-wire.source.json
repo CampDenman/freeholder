@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_complete_wire.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Whole original multipart response-document controls pass; no real auth, provider account or terminal caller-consumption acceptance is claimed",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "bf699f793395895eebb21df720fe686e2985667fc968b0c2d7a20c5eaaa9ec4b" },
+    { "path": "tests/core/media-multipart-complete-wire.test.ts", "sha256": "2fac9dcce851a459f79affe09f66ac57beeec184c716ffc5b6962dd0b5888a9d" }
+  ],
+  "controls": {
+    "final": { "passed": 13, "failed": 0, "durationSeconds": 0.398 },
+    "coverage": ["exact full wire digest before COMPLETE acceptance", "multiple roots, nested/namespaced Error and duplicate fields refused", "success substring wrappers and DTD/entity expansion refused", "numeric XML references decoded exactly once", "wrong original bucket refused", "failed CREATE retains whole response without replay", "HTTP200 ABORT Error is not acknowledgement", "NoSuchUpload is absence only", "oversized and invalid UTF8 documents refused"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "bf699f793395895eebb21df720fe686e2985667fc968b0c2d7a20c5eaaa9ec4b",
+      "beforeSha256": "06b2933c0ceb37e0859130bde624ade45367f1441955f49a01f30b86a4f2b518",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-transfer-unadmitted-target.source.json`. No provider account or\n  C-item acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  `deploy/media-transfer-unadmitted-target.source.json`. No provider account or\n  C-item acceptance follows.\n  Multipart wire qualification2026-11-16: all13 protocol controls pass. Exact\n  full-response digests survive keep-alive framing; malformed/oversized XML,\n  entity expansion, duplicate fields, wrong buckets and HTTP200 errors never\n  become acceptance. NoSuchUpload remains absence, not ABORT proof. Focused lint\n  passes. See `deploy/media-multipart-complete-wire.source.json`. No real auth,\n  provider account or terminal caller-consumption acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

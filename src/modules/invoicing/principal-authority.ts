@@ -11,14 +11,17 @@ import { merchantPaymentObservations } from "./merchant-collection-schema";
 import { routingForPayment } from "./merchant-charge";
 import { assertMerchantCreatorsQuiesced } from "./merchant-payment-request";
 import { assertNoUnappliedMerchantCharge } from "./merchant-payment-observations";
-import { originalMerchantRefundDebt } from "./merchant-refund-debt";
+import { originalMerchantRefundDebtShared } from "./merchant-refund-debt";
 import { invoices, paymentDisputes, payments, refunds } from "./schema";
 import { readOriginalCashPrincipalHistory } from "./original-cash-principal";
 import { evaluateProviderPrincipal, principalAuthorityResult } from "./principal-authority-contract";
+import { createOriginalCashClosureShare, type OriginalCashClosureShare } from "./original-cash-closure-current";
+import type { ControlledJournalComposition } from "@/modules/subscriptions/controlled-provider-journal-composition";
+import { readMerchantPaymentRecoveryDebt } from "./merchant-payment-debt";
 
 /** Principal evidence is independent of ancillary fee-debt queries. Reusers
  * must not recursively ask the full debt service while proving its sources. */
-export async function readOriginalPrincipalEvidence(ctx: ServiceContext, paymentId: string) {
+export async function readOriginalPrincipalEvidence(ctx: ServiceContext, paymentId: string, share?: OriginalCashClosureShare, composition?: ControlledJournalComposition) {
     const [payment] = await ctx.tx.select().from(payments).where(eq(payments.id, paymentId)).limit(1);
     if (!payment) throw new ServiceError("not_found", "The original customer principal is unavailable.");
     const [invoice] = await ctx.tx.select().from(invoices).where(eq(invoices.id, payment.invoiceId)).limit(1);
@@ -39,11 +42,11 @@ export async function readOriginalPrincipalEvidence(ctx: ServiceContext, payment
     try { await assertNoUnappliedMerchantCharge(ctx, payment.invoiceId); } catch (error) { if (error instanceof ServiceError && error.code === "conflict") unappliedCash = true; else throw error; }
     const returned = await ctx.tx.select().from(refunds).where(eq(refunds.paymentId, paymentId)).orderBy(refunds.id).limit(5001);
     const disputes = await ctx.tx.select().from(paymentDisputes).where(and(eq(paymentDisputes.paymentId, paymentId), inArray(paymentDisputes.status, ["open", "lost"]))).limit(5001);
-    const originalRefundDebt = await originalMerchantRefundDebt(ctx, paymentId);
+    const originalRefundDebt = await originalMerchantRefundDebtShared(ctx, paymentId, share);
     const refundDebt = originalRefundDebt || returned.some(row => ["created", "processing"].includes(row.status) || row.status === "failed" && row.failureCode === "provider_already_refunded")
       || returned.filter(row => row.status === "succeeded").reduce((sum, row) => sum + BigInt(row.amountMinor), 0n) !== BigInt(payment.refundedMinor);
     let raw: Awaited<ReturnType<typeof readOriginalCashPrincipalHistory>> | null = null, rawUnknown = false;
-    try { raw = await readOriginalCashPrincipalHistory(ctx, { kind: "payment", paymentId }); }
+    try { raw = await readOriginalCashPrincipalHistory(ctx, { kind: "payment", paymentId }, share, composition); }
     catch (error) { if (error instanceof ServiceError && ["conflict", "not_found", "permission", "validation"].includes(error.code)) rawUnknown = true; else throw error; }
     const facts = { payment, route: { platform: routing.providerPlatformAccountId ?? null, chargeAccount: routing.providerAccountId ?? null, recipient: routing.destinationAccountId ?? routing.providerAccountId ?? null,
       settlementMerchant: routing.settlementMerchantAccountId ?? routing.providerAccountId ?? null },
@@ -57,14 +60,17 @@ export async function readOriginalPrincipalEvidence(ctx: ServiceContext, payment
       witness: { paymentId, originalRouteDigest, revision: merchantTaxDigest({ payment, observation, facts, returned, disputes, originalRefundDebt, originalRouteDigest, raw }),
         observationId: observation?.id ?? null, observationDigest: observation ? merchantTaxDigest(observation) : null, settlementVerified: observation?.settlementVerified ?? null } };
 }
+export async function readOriginalPrincipalAndDebt(ctx: ServiceContext, paymentId: string, share?: OriginalCashClosureShare, composition?: ControlledJournalComposition) {
+  share ??= createOriginalCashClosureShare();
+  const { additionalFinancialDebtPending, ...proof } = await readOriginalPrincipalEvidence(ctx, paymentId, share, composition);
+  const debtService = getService("invoicing.merchantPaymentRecoveryDebt");
+  const debt = z.object({ pending: z.boolean() }).passthrough().parse(await readMerchantPaymentRecoveryDebt(ctx, paymentId, share));
+  const financialDebtPending = !debtService || debt.pending;
+  return { principal: { ...proof, financialDebtPending: financialDebtPending || additionalFinancialDebtPending }, debt };
+}
 export const originalPrincipalAuthority = defineService({ name: "invoicing.originalPrincipalAuthority", summary: "Prove original customer principal and actual merchant route independently from still-owed fee or ancillary transfer settlement duties.",
   kind: "query", permission: "system", external: false, input: z.object({ paymentId: z.uuid() }), output: principalAuthorityResult,
-  handler: async ({ paymentId }, ctx) => {
-    const { additionalFinancialDebtPending, ...proof } = await readOriginalPrincipalEvidence(ctx, paymentId);
-    const debt = getService("invoicing.merchantPaymentRecoveryDebt");
-    const financialDebtPending = !debt || z.object({ pending: z.boolean() }).passthrough().parse(await ctx.callAsSystem(debt, { paymentId })).pending;
-    return { ...proof, financialDebtPending: financialDebtPending || additionalFinancialDebtPending };
-  },
+  handler: async ({ paymentId }, ctx) => (await readOriginalPrincipalAndDebt(ctx, paymentId)).principal,
 });
 export const originalReceiptPrincipalReview = defineService({ name: "invoicing.originalReceiptPrincipalReview", summary: "Retain the authentic original NULL-payment receipt's raw cash/caller review without inventing a canonical payment or credit/access principal.",
   kind: "query", permission: "system", external: false, input: z.object({ receiptId: z.uuid(), observationId: z.uuid() }),

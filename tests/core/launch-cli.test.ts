@@ -4,7 +4,7 @@
 // DigitalOcean's API, Spaces' S3, GitHub's registry, the new site, DNS and
 // SSH. No real infrastructure is touched.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, statSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -12,6 +12,8 @@ import { parseLaunchArgs } from "../../packages/cli/src/launch/args";
 import { digitalOcean, digitalOceanToken } from "../../packages/cli/src/launch/digitalocean";
 import { resolveEdgeImage } from "../../packages/cli/src/launch/image";
 import { CRON_LINE, defaultName, runLaunch, sslipHost, type LaunchDeps } from "../../packages/cli/src/launch/launch";
+import { createNamespaceOrigin, requireReturnedNamespaceOrigin, type NamespaceOriginReceipt, type SignedOrigin } from "../../packages/cli/src/launch/namespace-origin";
+import { SpacesClient } from "../../packages/cli/src/launch/s3";
 import { claimLink, Redactor } from "../../packages/cli/src/launch/secrets";
 import { parseEnv } from "../../packages/cli/src/launch/state";
 import type { LaunchOptions, LaunchState, Remote } from "../../packages/cli/src/launch/types";
@@ -78,15 +80,21 @@ function fakeFetch(w: World): typeof fetch {
     if (url.host === "nyc3.digitaloceanspaces.com") {
       expect(new Headers(init.headers).get("authorization")).toMatch(/^AWS4-HMAC-SHA256 Credential=DOKEY\d+\//);
       const bucket = url.pathname.split("/")[1]!;
+      if (method === "GET" && url.pathname === "/") return new Response(`<ListAllMyBucketsResult><Buckets>${[...w.buckets].sort().map((name) => `<Bucket><Name>${name}</Name><CreationDate>2026-11-14T12:00:00.000Z</CreationDate></Bucket>`).join("")}</Buckets></ListAllMyBucketsResult>`, { status: 200 });
       if (method === "PUT" && url.search === "?versioning") { w.versioned.add(bucket); return new Response("", { status: 200 }); }
       if (method === "PUT") {
         if (w.failBucket) return new Response("<Error><Code>InternalError</Code></Error>", { status: 500 });
         if (w.buckets.has(bucket)) return new Response("<Error><Code>BucketAlreadyOwnedByYou</Code></Error>", { status: 409 });
         w.buckets.add(bucket);
-        return new Response("", { status: 200 });
+        return new Response("", { status: 200, headers: { date: "Sat, 14 Nov 2026 12:00:00 GMT", "x-amz-request-id": "fictional-actual-create-request" } });
       }
       if (method === "GET") return new Response(`<ListBucketResult>${(w.bucketObjects.get(bucket) ?? []).map((k) => `<Contents><Key>${k}</Key></Contents>`).join("")}</ListBucketResult>`, { status: 200 });
-      if (method === "DELETE") return (w.bucketObjects.get(bucket) ?? []).length ? new Response("<Error><Code>BucketNotEmpty</Code></Error>", { status: 409 }) : new Response(null, { status: 204 });
+      if (method === "DELETE") {
+        if ((w.bucketObjects.get(bucket) ?? []).length) return new Response("<Error><Code>BucketNotEmpty</Code></Error>", { status: 409 });
+        w.buckets.delete(bucket);
+        w.versioned.delete(bucket);
+        return new Response(null, { status: 204 });
+      }
     }
     if (url.host === "ghcr.io" && url.pathname === "/token") return json({ token: "anon" });
     if (url.host === "ghcr.io") return json({ manifests: [{ digest: `sha256:${"b".repeat(64)}`, platform: { os: "linux", architecture: "arm64" } }, { digest: DIGEST, platform: { os: "linux", architecture: "amd64" } }] });
@@ -139,6 +147,37 @@ function setup(w: World, root: string): LaunchDeps {
   };
 }
 
+function originSetup(w: World, root: string): LaunchDeps {
+  const deps = setup(w, root);
+  const provider = digitalOcean("do-token", deps.fetcher, async () => undefined);
+  const endpoint = "https://nyc3.digitaloceanspaces.com", region = "nyc3", accountId = "00000000-0000-4000-8000-000000000101";
+  return {
+    ...deps,
+    provider: {
+      ...provider,
+      preflight: async () => ({ sshKeyId: 11, notes: [] }),
+      async storage(options, state, save, originDirectory) {
+        if (!originDirectory) throw new Error("The origin test needs its private directory");
+        if (state.namespaceOrigin) {
+          await requireReturnedNamespaceOrigin(originDirectory, state.namespaceOrigin.bucket, { accountId, endpoint, region });
+          return;
+        }
+        const origin = await createNamespaceOrigin(originDirectory, { siteName: options.name, accountId, endpoint, region });
+        const buckets = { media: origin.bucket, backups: `${options.name}-backups` };
+        await save({ buckets, namespaceOrigin: { version: 1, bucket: origin.bucket } });
+        const spaces = new SpacesClient(endpoint, region, { accessKeyId: "DOKEY1", secretAccessKey: "fictional-secret" }, deps.fetcher);
+        await origin.create(spaces);
+        await spaces.createBucket(buckets.backups);
+        await spaces.enableVersioning(buckets.backups);
+        await save({}, {
+          FREEHOLDER_STORAGE: "s3", S3_BUCKET: buckets.media, S3_ENDPOINT: endpoint, S3_REGION: region, S3_ADDRESSING_STYLE: "path",
+          S3_ACCESS_KEY_ID: "DOKEY1", S3_SECRET_ACCESS_KEY: "fictional-secret", BACKUP_BUCKET: buckets.backups,
+        });
+      },
+    },
+  };
+}
+
 const args = (...extra: string[]) => parseLaunchArgs(["launch", "--domain", "example.com", "--no-open", ...extra], {});
 
 describe("generic launch orchestration over retained fictional legacy storage (C3.30 component)", () => {
@@ -181,7 +220,7 @@ describe("generic launch orchestration over retained fictional legacy storage (C
     const env = parseEnv(readFileSync(join(dir, "freeholder.env"), "utf8"));
     for (const name of ["BOOTSTRAP_SECRET", "SESSION_SECRET", "CREDENTIAL_KEY", "POSTGRES_PASSWORD"]) expect(env[name]).toMatch(/^[0-9a-f]{64}$/);
     expect(new Set([env.BOOTSTRAP_SECRET, env.SESSION_SECRET, env.CREDENTIAL_KEY, env.POSTGRES_PASSWORD]).size).toBe(4);
-    expect(env).toMatchObject({ APP_URL: `https://${HOST}`, FREEHOLDER_DOMAIN: HOST, FREEHOLDER_PRIMARY_DOMAIN: HOST, FREEHOLDER_IMAGE: `ghcr.io/campdenman/freeholder@${DIGEST}`, S3_BUCKET: "example-com-media", BACKUP_BUCKET: "example-com-backups", S3_ENDPOINT: "https://nyc3.digitaloceanspaces.com" });
+    expect(env).toMatchObject({ APP_URL: `https://${HOST}`, FREEHOLDER_DOMAIN: HOST, FREEHOLDER_PRIMARY_DOMAIN: HOST, FREEHOLDER_IMAGE: `ghcr.io/campdenman/freeholder@${DIGEST}`, FREEHOLDER_STORAGE: "spaces", S3_BUCKET: "example-com-media", BACKUP_BUCKET: "example-com-backups", S3_ENDPOINT: "https://nyc3.digitaloceanspaces.com" });
     expect(statSync(join(dir, "freeholder.env")).mode & 0o777).toBe(0o600);
     expect(statSync(join(dir, "state.json")).mode & 0o777).toBe(0o600);
 
@@ -294,7 +333,9 @@ describe("generic launch orchestration over retained fictional legacy storage (C
     const said = w.out.join("\n");
     expect(said).toMatch(/Deleted the empty bucket example-com-media/);
     expect(said).toMatch(/Kept example-com-backups: it still holds files/);
-    expect(existsSync(join(root, "example-com", "state.destroyed.json"))).toBe(true);
+    expect(existsSync(join(root, "example-com.destroyed", "state.json"))).toBe(true);
+    expect(existsSync(join(root, "example-com.destroyed", "freeholder.env"))).toBe(true);
+    expect(existsSync(join(root, "example-com"))).toBe(false);
     expect(said).toMatch(/Deleted the site's Spaces key/);
     expect(said).toMatch(/bills Spaces as a subscription/);
   });
@@ -353,5 +394,99 @@ describe("generic launch orchestration over retained fictional legacy storage (C
     for (const file of ["compose.yml", "Caddyfile", "backup.sh", "cloud-init.yml"]) {
       expect(readFileSync(join("packages/cli/recipes/digitalocean-droplet", file), "utf8")).toBe(readFileSync(join("deploy/digitalocean-droplet/infra", file), "utf8"));
     }
+  });
+});
+
+describe("destroy and same-name rebirth with one-shot namespace origins", () => {
+  let root: string;
+  let w: World;
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "freeholder-rebirth-"));
+    w = world();
+  });
+
+  const launch = () => runLaunch(args("--image", `ghcr.io/campdenman/freeholder@${DIGEST}`), originSetup(w, root));
+  const destroy = () => runLaunch(parseLaunchArgs(["launch", "--destroy", "--name", "example-com", "--confirm", "example-com"], {}), originSetup(w, root));
+
+  it("archives the complete destroyed generation and starts a fresh origin without overwriting prior evidence", async () => {
+    expect(await launch()).toBe(0);
+    const dir = join(root, "example-com"), firstArchive = `${dir}.destroyed`;
+    const firstState = JSON.parse(readFileSync(join(dir, "state.json"), "utf8")) as LaunchState;
+    const firstAdmission = readFileSync(join(dir, "namespace-origin", "admission.json"), "utf8");
+    const firstReceipt = readFileSync(join(dir, "namespace-origin", "receipt.json"), "utf8");
+
+    expect(await destroy()).toBe(0);
+    expect(existsSync(dir)).toBe(false);
+    expect(readFileSync(join(firstArchive, "namespace-origin", "admission.json"), "utf8")).toBe(firstAdmission);
+    expect(readFileSync(join(firstArchive, "namespace-origin", "receipt.json"), "utf8")).toBe(firstReceipt);
+    expect(existsSync(join(firstArchive, "freeholder.env"))).toBe(true);
+
+    expect(await launch()).toBe(0);
+    const secondState = JSON.parse(readFileSync(join(dir, "state.json"), "utf8")) as LaunchState;
+    expect(secondState.namespaceOrigin?.bucket).toMatch(/^example-com-media-[a-f0-9]{32}$/);
+    expect(secondState.namespaceOrigin?.bucket).not.toBe(firstState.namespaceOrigin?.bucket);
+    expect(readFileSync(join(dir, "namespace-origin", "receipt.json"), "utf8")).not.toBe(firstReceipt);
+    expect(readFileSync(join(firstArchive, "namespace-origin", "admission.json"), "utf8")).toBe(firstAdmission);
+
+    expect(await destroy()).toBe(0);
+    expect(existsSync(join(root, "example-com.destroyed-2", "namespace-origin", "receipt.json"))).toBe(true);
+    expect(readFileSync(join(firstArchive, "namespace-origin", "admission.json"), "utf8")).toBe(firstAdmission);
+    expect(readFileSync(join(firstArchive, "namespace-origin", "receipt.json"), "utf8")).toBe(firstReceipt);
+  });
+
+  it("recovers the old partial archive layout only after dry-run leaves it untouched", async () => {
+    expect(await launch()).toBe(0);
+    const dir = join(root, "example-com");
+    const firstState = JSON.parse(readFileSync(join(dir, "state.json"), "utf8")) as LaunchState;
+    const admission = readFileSync(join(dir, "namespace-origin", "admission.json"), "utf8");
+    await originSetup(w, root).provider.destroy(firstState, () => undefined);
+    renameSync(join(dir, "state.json"), join(dir, "state.destroyed.json"));
+
+    expect(await runLaunch(args("--dry-run", "--image", `ghcr.io/campdenman/freeholder@${DIGEST}`), originSetup(w, root))).toBe(0);
+    expect(existsSync(join(dir, "namespace-origin", "admission.json"))).toBe(true);
+    expect(existsSync(join(dir, "namespace-origin.destroyed"))).toBe(false);
+
+    expect(await launch()).toBe(0);
+    expect(readFileSync(join(dir, "namespace-origin.destroyed", "admission.json"), "utf8")).toBe(admission);
+    const reborn = JSON.parse(readFileSync(join(dir, "state.json"), "utf8")) as LaunchState;
+    expect(reborn.namespaceOrigin?.bucket).not.toBe(firstState.namespaceOrigin?.bucket);
+  });
+
+  it("refuses legacy rebirth when the origin's admission is missing instead of replacing its evidence", async () => {
+    expect(await launch()).toBe(0);
+    const dir = join(root, "example-com");
+    const firstState = JSON.parse(readFileSync(join(dir, "state.json"), "utf8")) as LaunchState;
+    await originSetup(w, root).provider.destroy(firstState, () => undefined);
+    renameSync(join(dir, "state.json"), join(dir, "state.destroyed.json"));
+    renameSync(join(dir, "namespace-origin", "admission.json"), join(dir, "namespace-origin", "admission.missing.json"));
+    const writes = w.requests.filter((request) => request.method === "PUT").length;
+
+    expect(await launch()).toBe(2);
+    expect(w.err.join("\n")).toMatch(/storage origin could not be read/);
+    expect(existsSync(join(dir, "namespace-origin", "admission.missing.json"))).toBe(true);
+    expect(existsSync(join(dir, "namespace-origin", "admission.json"))).toBe(false);
+    expect(existsSync(join(dir, "state.json"))).toBe(false);
+    expect(w.requests.filter((request) => request.method === "PUT")).toHaveLength(writes);
+  });
+
+  it("retains an unconfirmed provider creation as unknown evidence across confirmed destroy and rebirth", async () => {
+    w.failBucket = true;
+    expect(await launch()).toBe(2);
+    const dir = join(root, "example-com");
+    const admission = readFileSync(join(dir, "namespace-origin", "admission.json"), "utf8");
+    const receipt = readFileSync(join(dir, "namespace-origin", "receipt.json"), "utf8");
+    const original = JSON.parse(receipt) as SignedOrigin<NamespaceOriginReceipt>;
+    expect(original.body.disposition).toBe("unknown");
+    expect(original.body.response?.status).toBe(500);
+
+    expect(await destroy()).toBe(0);
+    const archive = `${dir}.destroyed`;
+    expect(readFileSync(join(archive, "namespace-origin", "admission.json"), "utf8")).toBe(admission);
+    expect(readFileSync(join(archive, "namespace-origin", "receipt.json"), "utf8")).toBe(receipt);
+    expect((JSON.parse(readFileSync(join(archive, "namespace-origin", "receipt.json"), "utf8")) as SignedOrigin<NamespaceOriginReceipt>).body.disposition).toBe("unknown");
+
+    w.failBucket = false;
+    expect(await launch()).toBe(0);
+    expect(readFileSync(join(archive, "namespace-origin", "receipt.json"), "utf8")).toBe(receipt);
   });
 });

@@ -3,7 +3,7 @@
 // C1.12/C11.08: actual installed SDK upload path, memory transport only.
 import type { Storage as GoogleStorage } from "@google-cloud/storage";
 import { createRequire } from "node:module";
-import { Writable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { errorResponse } from "@/core/http/respond";
 import { createReplitStorage } from "@/adapters/storage/replit";
@@ -12,25 +12,27 @@ const require = createRequire(import.meta.url);
 const sdkPath = require.resolve("@google-cloud/storage").replace("/build/cjs/", "/build/esm/");
 const { Storage } = await import(sdkPath) as { Storage: typeof GoogleStorage };
 const bytes = Buffer.from("synthetic original upload bytes"), replacement = Buffer.from("synthetic concurrent owner bytes");
-interface UploadDuplex { on(event: string, listener: () => void): void; setWritable(stream: Writable): void; emit(event: string): void }
+interface UploadDuplex { on(event: string, listener: () => void): void; setWritable(stream: Writable): void; emit(event: string, error?: Error): void }
 function transport(mode: "matching" | "replacement" | "read-error" | "upload-error") {
   const state = { deletes: 0, uploads: 0, reads: 0, bytes: replacement, autoRetry: undefined as boolean | undefined };
   const original = Object.getOwnPropertyDescriptor(Storage.prototype, "bucket")!.value as GoogleStorage["bucket"];
   vi.spyOn(Storage.prototype, "bucket").mockImplementation(function (this: InstanceType<typeof Storage>, name, options) {
     state.autoRetry = this.retryOptions.autoRetry;
     const bucket = original.call(this, name, options), file = bucket.file("synthetic-target");
-    const internal = file as unknown as { startResumableUpload_: (stream: UploadDuplex) => void };
-    if (mode === "upload-error") Object.defineProperty(this.authClient, "request", { value: async () => { state.uploads++; throw Object.assign(new Error("synthetic lost upload reply"), { code: 503 }); } });
-    else internal.startResumableUpload_ = duplex => {
+    const internal = file as unknown as { startResumableUpload_: (stream: UploadDuplex) => void; startSimpleUpload_: (stream: UploadDuplex) => void };
+    const upload = (duplex: UploadDuplex) => {
       state.uploads++;
       duplex.on("error", () => {});
       duplex.setWritable(new Writable({ write(_chunk, _encoding, done) { done(); }, final(done) {
+        if (mode === "upload-error") { duplex.emit("error", Object.assign(new Error("synthetic lost upload reply"), { code: 503 })); done(); return; }
         state.bytes = mode === "matching" ? bytes : replacement;
-        file.metadata = { crc32c: "AAAAAA==", generation: "111" }; duplex.emit("metadata"); duplex.emit("complete"); done();
+        file.metadata = { crc32c: "AAAAAA==", name: "synthetic-target", bucket: "synthetic-original-bucket", generation: "111", size: String(bytes.byteLength) }; duplex.emit("metadata"); duplex.emit("complete"); done();
       } }));
     };
+    internal.startResumableUpload_ = upload; internal.startSimpleUpload_ = upload;
     Object.defineProperty(file, "delete", { value: async () => { state.deletes++; throw new Error("Autonomous deletion is forbidden"); } });
-    Object.defineProperty(file, "download", { value: async () => { state.reads++; if (mode === "read-error") throw new Error("synthetic-private-provider-transport-detail"); return [state.bytes]; } });
+    Object.defineProperty(file, "download", { value: async () => { throw new Error("Unbounded download is forbidden"); } });
+    Object.defineProperty(file, "createReadStream", { value: () => { state.reads++; return mode === "read-error" ? new Readable({ read() { this.destroy(new Error("synthetic-private-provider-transport-detail")); } }) : Readable.from([state.bytes], { objectMode: false }); } });
     vi.spyOn(bucket, "file").mockReturnValue(file);
     return bucket;
   });

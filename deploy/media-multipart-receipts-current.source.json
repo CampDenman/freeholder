@@ -1,0 +1,41 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_multipart_receipts_current.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Nine current-runtime multipart receipt controls and twelve inventory proofs pass; a real unversioned-S3 digest defect was corrected; provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "7a295622fef07f5e993b4fb8399bb5fd640179a141722dfa3775f43ce1928b1e" },
+    { "path": "src/core/media/transfer-inventory-proof.ts", "sha256": "d2d90e59abc533d6da3a042bd4f458dd8b0fff7b53f388c533c29a042835ce98" },
+    { "path": "tests/core/media-transfer-inventory-proof.test.ts", "sha256": "9b5dd2ca6f1c5251cea2d04b3cd89eb5c323a91ba54c210cb3ada70be555de94" },
+    { "path": "tests/core/media-multipart-receipts.test.ts", "sha256": "71c7dd2cb87039ae68694f4834f26b1e53a8c68d42ad3de6a069259f4a6e6624" }
+  ],
+  "defect": {
+    "failure": "TypeScript hashed an absent versionId as null while PostgreSQL omitted it, rejecting genuine unversioned S3 recovery inventory",
+    "correction": "The TypeScript identity projection now omits absent versionId exactly like the SQL guard",
+    "changeset": ".changeset/media-unversioned-inventory-digest.md"
+  },
+  "controls": {
+    "receipts": { "database": "media_multipart_receipts_accepted_20261116", "passed": 9, "failed": 0, "durationSeconds": 102.36 },
+    "inventoryProofs": { "passed": 12, "failed": 0 },
+    "coverage": ["genuine declaration/signing/body-bound PUT and exact CREATE/readback identity", "lost CREATE cannot adopt identity from current-key inventory and remains pending through erasure", "acknowledged COMPLETE receives exact applied review before retry", "ABORT is refused while retained and verified after independent removal without DELETE replay", "changed peer completion returns only the original finalized asset without another provider call"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "changelogOutput": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "7a295622fef07f5e993b4fb8399bb5fd640179a141722dfa3775f43ce1928b1e",
+      "beforeSha256": "2a1f1ae2ec907c5af16b015412a846f29b738b799bebfbd26c477440ff88cd96",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  provider/checklist acceptance and the older multipart-receipt fixture repairs stay open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  provider/checklist acceptance and the older multipart-receipt fixture repairs stay open.\n  Multipart-receipt/current-recovery qualification2026-11-16 (C1.12/C11.08):\n  the full older file passes9/9 on fresh migration108. Its fixture now exercises real\n  declaration/signing/PUT and retained CREATE/readback evidence. Lost CREATE remains\n  unadopted/pending; COMPLETE uses exact applied review; ABORT never replays; active\n  assets stay unretired. A genuine TS/SQL digest mismatch for absent unversioned S3\n  versionId was fixed; all12 inventory proofs pass. TypeScript/lint/changelog output\n  pass. See `deploy/media-multipart-receipts-current.source.json`. No real provider\n  account, legacy fixture or checklist acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

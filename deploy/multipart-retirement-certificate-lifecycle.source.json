@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_retirement_certificate_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Scoped immutable original retirement-certificate lifecycle qualified on fresh migration101 PostgreSQL; provider/executor acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "eb59e3603d98c493f56c6d4345929ff5c4c89cb99acae5936d149576faca0468" },
+    { "path": "tests/core/media-multipart-retirement-certificate-lifecycle.test.ts", "sha256": "95e6977f5f6b44ad9154cdab9cc929e650f7000358f0893b00817a88c44fee34" }
+  ],
+  "controls": {
+    "final": { "database": "multipart_retirement_certificate_audit_20261115", "passed": 6, "failed": 0, "durationSeconds": 115.84 },
+    "coverage": ["real complete ABORT seal and idempotent dedup", "separate system certificate after lost-ABORT human review", "owner/scoped-key refusal", "flag-only body and rewrite refusal", "new named hold rechecked before dedup", "scripted late fact retained outside sealed prefix and reopens debt"],
+    "guardsWeakened": false,
+    "runtimeChanges": false,
+    "focusedLint": "passed"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "eb59e3603d98c493f56c6d4345929ff5c4c89cb99acae5936d149576faca0468",
+      "beforeSha256": "81d0d1945574b575d4813af6cb533017e9ae408f830639ddb9412d0e75d0786d",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/multipart-repeat-abort-lifecycle.source.json`. No provider/host closure.\n  Signing containment source2026-11-13",
+          "after": "  `deploy/multipart-repeat-abort-lifecycle.source.json`. No provider/host closure.\n  Retirement-certificate lifecycle qualification2026-11-15: fresh migration101\n  execution passes6/6. Sealing is idempotent; human/system reviews remain separate;\n  forged/stale certificates and non-system callers are refused; named holds and\n  scripted late facts reopen current debt without rewriting first certificates,\n  ACK/FIN or provider history. Focused lint passes. See\n  `deploy/multipart-retirement-certificate-lifecycle.source.json`. No provider\n  account, independent executor or C-item acceptance follows.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

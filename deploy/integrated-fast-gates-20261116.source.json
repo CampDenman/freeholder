@@ -1,0 +1,38 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "integrated_fast_gates_20261116.v1",
+  "checklist": ["C11.17"],
+  "status": "Selected integrated local fast gates pass; browser, recipe, SEO, upgrade, hosted and clean-room acceptance remain separate and open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "8e7efe20e38a5d507db41c7a6f65438bc8b5aa04343a23cc2679df4b82065c9e" },
+    { "path": "scripts/fast-gates.mjs", "sha256": "b7ba78c9950225635114a67a58b4aac65d5aa07c46ca6ebff8ecdec8aef33e21" },
+    { "path": "package.json", "sha256": "60f7f7c88f9323474ce6823c88813bafad18b1dd3c6b7fc49341145965308b60" }
+  ],
+  "controls": {
+    "command": "NODE_OPTIONS=--max-old-space-size=8192 pnpm gates",
+    "passed": true,
+    "durationSeconds": 195.51,
+    "typecheck": "passed",
+    "fullLint": { "passed": true, "durationSeconds": 139.9 },
+    "licenseReleasePlanPlayground": "passed",
+    "contracts": { "filesPassed": 44, "filesFailed": 0, "passed": 387, "explicitDatabaseSkips": 26, "durationSeconds": 45.11 },
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "This selected local gate run supplies no browser, recipe, SEO, upgrade, hosted-provider, independent-review, clean-room or owner-signoff acceptance"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "8e7efe20e38a5d507db41c7a6f65438bc8b5aa04343a23cc2679df4b82065c9e",
+      "beforeSha256": "8cf3432984c7e19849000bbb0367a354ab8cf6d3234f54762a694f9bdb11d72f",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-current-complete-current108.source.json`. Hosted provider/performance\n  and checklist acceptance remain open.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "after": "  `deploy/media-current-complete-current108.source.json`. Hosted provider/performance\n  and checklist acceptance remain open.\n  Integrated fast-gate qualification2026-11-16 (C11.17): `pnpm gates` PASSes full\n  TypeScript, full ESLint139.9s, license/release/plan/playground checks and44 contract\n  files with387 passing/26 explicit database-skipped cases. No failure is hidden and no\n  product source changed. Browser, recipe, SEO, upgrade, hosted and clean-room suites\n  remain separate and open. See `deploy/integrated-fast-gates-20261116.source.json`;\n  no checklist row closes.\n  Raster-fixture qualification2026-11-16 (C1.12/C11.10): the full file passes15/15",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

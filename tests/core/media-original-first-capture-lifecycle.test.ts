@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// SOURCE PREPARED, UNRUN. Actual shared capture/queue services + private
-// fictional TCP; no actual account, ingress or whole-worker acceptance claim.
+// Qualified on fresh migration94 PostgreSQL 2026-11-15 with synthetic AWS TCP;
+// no actual account, ingress or whole-worker acceptance claim.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {eq,and} from "drizzle-orm";
 import {z} from "zod";
@@ -22,11 +22,12 @@ import {eraseMediaStorageOperations,MEDIA_WRITE_ERASURE_JOB} from "@/core/media/
 import {ordinaryMediaRecoveryProvider} from "../helpers/media-original-provider-recovery";
 import {closeDb,failure,hasDatabase,OWNER,CUSTOMER,truncateSpine} from "../helpers/spine";
 const key="private/later-generation.bin",body=new Uint8Array([0,255,13,10,128,0]);
+const syntheticOrigin="https://s3.us-east-1.amazonaws.com",realFetch=globalThis.fetch.bind(globalThis);
 describe.runIf(hasDatabase)("C1.12/C11.08 first original media capture lifecycle",()=>{
  let provider:Awaited<ReturnType<typeof ordinaryMediaRecoveryProvider>>;
  beforeAll(async()=>{await ready();await stopJobs();},60000);
- beforeEach(async()=>{await truncateSpine();await db().insert(users).values([{id:OWNER.userId,email:"first-capture-owner@example.test",role:"owner"},{id:CUSTOMER.userId,email:"first-capture-subject@example.test",role:"customer"}]);provider=await ordinaryMediaRecoveryProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
- afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
+ beforeEach(async()=>{await truncateSpine();await db().insert(users).values([{id:OWNER.userId,email:"first-capture-owner@example.test",role:"owner"},{id:CUSTOMER.userId,email:"first-capture-subject@example.test",role:"customer"}]);provider=await ordinaryMediaRecoveryProvider();vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{const url=new URL(input instanceof Request?input.url:String(input));if(url.origin!==syntheticOrigin)return realFetch(input,init);const target=new URL(`${url.pathname}${url.search}`,provider.endpoint);if(input instanceof Request)return realFetch(target,{method:input.method,headers:input.headers,body:input.body===null?undefined:await input.arrayBuffer()});return realFetch(target,init);});for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:syntheticOrigin,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
+ afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();vi.unstubAllGlobals();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
  async function subject(){const contact=await createContact.call({name:"Original first-scope subject",email:"first-capture-subject@example.test"},OWNER);await db().update(contacts).set({userId:CUSTOMER.userId}).where(eq(contacts.id,contact.id));return contact;}
  it("keeps an actual first empty hold capture unchanged while a separately verified new request captures the later authentic writer birth",async()=>{
   const contact=await subject(),old=await createDataRequest.call({contactId:contact.id,request:{kind:"erasure"}},OWNER);await addRetentionException.call({dataRequestId:old.id,scope:"media.storageOperations",reason:"legal_obligation",legalBasis:"Fictional first empty original media hold capture."},OWNER);

@@ -30,7 +30,7 @@ export const APP_ROUTE_ROOTS: ReadonlySet<string> = new Set([
   "preview",
   // app/(public), except the catch-all
   "book", "browse", "buy", "c", "call", "cart", "checkout", "community",
-  "contribute", "feed", "gifts", "join", "m", "market", "memberships",
+  "components", "contribute", "feed", "gifts", "join", "m", "market", "memberships",
   "messages", "orders", "p", "report", "search", "tags",
 ]);
 

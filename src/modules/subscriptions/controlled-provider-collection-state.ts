@@ -21,7 +21,7 @@ const ref=(value:unknown)=>typeof value==="string"?value:value&&typeof value==="
 /** Pure read, with no service call and no lock-order reversal. This validates
  * signed actual caller/raw evidence but does NOT release outstanding callers,
  * declare current principal safe, or waive any financial obligation. */
-export async function controlledCollectionState(tx:Tx,collectionId:string){
+export async function controlledCollectionState(tx:Tx,collectionId:string,knownJournal?:{resourceId:string;history:Awaited<ReturnType<typeof controlledProviderJournal>>}){
  const[collection]=await tx.select().from(subscriptionControlledCollections).where(eq(subscriptionControlledCollections.id,collectionId)).limit(1);
  const[quote]=collection?await tx.select().from(subscriptionControlledQuotes).where(eq(subscriptionControlledQuotes.id,collection.quoteId)).limit(1):[];
  const[resource]=quote?await tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,quote.resourceId)).limit(1):[];
@@ -37,7 +37,8 @@ export async function controlledCollectionState(tx:Tx,collectionId:string){
   ||merchantTaxDigest(terms.snapshot)!==merchantTaxDigest(review.quote.snapshot)||collection.kind==="proration"&&terms.acceptedQuoteDigest!==review.quoteDigest
   ||collection.kind==="period"&&collection.acceptanceKind!=="original_period_mandate"||collection.kind==="proration"&&collection.acceptanceKind!=="explicit_change")refuse();
  assertControlledOriginalConsent(collection,review,terms);
- const history=await controlledProviderJournal(tx,resource.id);authenticatedControlledQuote(quote,resource,history);
+ if(knownJournal&&knownJournal.resourceId!==resource.id)refuse();
+ const history=knownJournal?.history??await controlledProviderJournal(tx,resource.id);authenticatedControlledQuote(quote,resource,history,"accepted_ancestry");
  const canonical=await controlledCanonicalTarget(tx,collection.invoiceId,collection.creditNoteId);
  const[market]=await tx.select().from(subscriptionMarketPolicies).where(eq(subscriptionMarketPolicies.subscriptionId,parent.id)).limit(1);
  if(!market||market.model!=="seller_merchant"||canonical.marketPolicy.sellerUserId!==market.sellerUserId||canonical.marketPolicy.siteFeeBps!==market.siteFeeBps

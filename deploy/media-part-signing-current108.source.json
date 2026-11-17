@@ -1,0 +1,36 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_part_signing_current108.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Unchanged genuine local part-issuer lifecycle passes on fresh migration108 after late-original observation/quota repair; provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "1262d0d0538091853ab55123c5fb5a90bffcdb83d7335a2cc0fc0eb7da5a01f8" },
+    { "path": "tests/core/media-multipart-part-issuance-lifecycle.test.ts", "sha256": "796e976f32a6c923e56cb63e88a81c1fd6c3d09f9d0158cf8112f3eaefec95ee" },
+    { "path": "src/core/media/write-ledger.ts", "sha256": "84c3cf5c87875de994335721d99bcb29cdb614063b9e696310ca44858a8623d2" },
+    { "path": "db/migrations/0108_adoption_target_receipt_alias.sql", "sha256": "506501263e881defe5569d798e53cf27fb8dc35e5a4fde3323586eddbf7bf40d" }
+  ],
+  "controls": {
+    "database": "multipart_part_issuance_current108_20261116",
+    "native": { "passed": 6, "failed": 0, "durationSeconds": 48.01 },
+    "coverage": ["once-only body-bound local mint and genuine FIN", "raw managed signer refusal before SDK", "unrelated customer refusal before admission/SDK", "named original hold refusal", "delegated physical authority remains pending after local return", "old untagged presence-gate remains unavailable"],
+    "testOracleChanged": false,
+    "productCodeChanged": false,
+    "guardsWeakened": false,
+    "remaining": "Actual signed-part consumption, hosted provider, clean-room, independent review and checklist acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "1262d0d0538091853ab55123c5fb5a90bffcdb83d7335a2cc0fc0eb7da5a01f8",
+      "beforeSha256": "d2bfc3a9e6b845b218819dc74f754a673ca1d83db18019e1d87cc0ca3ea421f5",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  Issued URLs, old-binary recovery, current provider acceptance and C closure stay open.\n  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):",
+          "after": "  Issued URLs, old-binary recovery, current provider acceptance and C closure stay open.\n  Part-signing current108 regression qualification2026-11-16 (C1.12/C11.08): the\n  unchanged six-case genuine local issuer file PASSes6/6 on a fresh current database\n  after the late-original observation/quota repair. Once-only body-bound mint/FIN,\n  raw-signer/foreign-principal/named-hold refusal, pending delegated authority and old\n  untagged-call refusal all remain intact. No test or product source changed. See\n  `deploy/media-part-signing-current108.source.json`. Actual consumption, hosted provider\n  and checklist acceptance remain open.\n  Namespace-origin/image-admission qualification2026-11-16 (C3.44/C10.32/C11.08):",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

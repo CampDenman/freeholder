@@ -14,7 +14,7 @@ import {assertTransferCallDrain,assertTransferOwners,lockedTransfer,requireTrans
 import {requireFinishedTransferRead,transferConflict,transferDigest,transferTargetKey} from "./transfer-proof";
 import {mediaWriterRuntimeId,actualStorageCallerRuntimeIdentity,type StorageCallerRuntimeIdentity} from "./physical-caller-runtime";
 import {objectKeyDigest} from "./write-ledger";
-import {captureMediaErasureCohort,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
+import {captureMediaErasureCohort,captureOriginalMediaReceiptDescendants,originalMediaErasureRequests,reconcileMediaErasureCohorts} from "./erasure-cohorts";
 import {reconcileCommittedStorageObservation} from "./observation-hooks";
 
 import {assertExactTransferRead} from "./transfer-read-provenance";
@@ -94,6 +94,7 @@ export async function retainTransferReturn(id:string,token:string,result:ActualT
   await tx.execute(sql`select pg_advisory_xact_lock(1691709,82)`);
   const[call]=await tx.select().from(mediaStorageTransferCalls).where(eq(mediaStorageTransferCalls.id,id)).limit(1).for("update");
   if(!call||call.callerTokenDigest!==transferDigest(token))transferConflict("The actual original caller receipt cannot be authenticated.");
+  receiptId=call.physicalReceiptId;
   if(call.returnedAt&&call.resultDigest===transferDigest(result))return;
   if(call.resultDigest&&call.resultDigest!==transferDigest(result))transferConflict("A later physical fact cannot replace the original returned result; review its append-only observation.");
   if(call.state==="returned"){
@@ -127,6 +128,7 @@ export async function retainTransferReturn(id:string,token:string,result:ActualT
   }
  });
  if(receiptId){
+  await captureOriginalMediaReceiptDescendants(receiptId);
   await reconcileMediaErasureCohorts({objectReceiptId:receiptId}).catch(()=>{});
   await reconcileCommittedStorageObservation(receiptId);
  }

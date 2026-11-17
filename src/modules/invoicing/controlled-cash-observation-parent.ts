@@ -142,7 +142,7 @@ async function snapshot(ctx:ServiceContext,input:ControlledCashObservationInput,
  for(const quote of quotes){const resource=resources.find(row=>row.id===quote.resourceId);if(!resource)refuse();const journal=await controlledProviderJournal(ctx.tx,resource.id);
   if(quote.redactedAt){if(quote.input!==null||quote.review!==null||graph.controlled.targets?.collections.some(row=>row.quoteId===quote.id)||journal.closures.length!==1||journal.closures[0]?.kind!=="zero_transport")refuse();
    quoteEvidence.push({id:quote.id,inputDigest:quote.inputDigest,reviewDigest:quote.reviewDigest,quoteDigest:quote.quoteDigest});
-  }else{const authenticated=authenticatedControlledQuote(quote,resource,journal);quoteEvidence.push({id:quote.id,quoteDigest:quote.quoteDigest,calendar:authenticated.calendar.verification.actualResultDigest,customer:authenticated.customer.verification.actualResultDigest,native:authenticated.native.verification.actualResultDigest,update:authenticated.update.verification.actualResultDigest});}
+  }else{const authenticated=authenticatedControlledQuote(quote,resource,journal,"accepted_ancestry");quoteEvidence.push({id:quote.id,quoteDigest:quote.quoteDigest,calendar:authenticated.calendar.verification.actualResultDigest,customer:authenticated.customer.verification.actualResultDigest,native:authenticated.native.verification.actualResultDigest,update:authenticated.update.verification.actualResultDigest});}
  }
  const callers=await readControlledOriginalCallers(ctx,graph,sourceSubscriptionIds);
  // Ownership uses the actual current aliases independently of immutable quote

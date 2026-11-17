@@ -1,0 +1,50 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_empty_first_scope_current.v1",
+  "checklist": ["C1.12", "C11.08", "C11.14"],
+  "status": "Current migration108 empty-first-scope controls pass with genuine services and no provider IO; old-runtime oracle and all product guards remain unchanged",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "d2bfc3a9e6b845b218819dc74f754a673ca1d83db18019e1d87cc0ca3ea421f5" },
+    { "path": "tests/core/media-empty-first-scope-current.test.ts", "sha256": "52fd55a6bbbc61779cf02b938346a2f375730b6ad4e9fe375ff80a8a787e19a4" },
+    { "path": "src/core/media/empty-scope-authority.ts", "sha256": "415154906e692d6b5b538d70293484317f2c6c4cefa1db9cd9e0d95f803662f9" },
+    { "path": "db/migrations/0108_adoption_target_receipt_alias.sql", "sha256": "506501263e881defe5569d798e53cf27fb8dc35e5a4fde3323586eddbf7bf40d" }
+  ],
+  "controls": {
+    "database": "media_empty_scope_current108_final_20261116",
+    "migration": "Ordinary current migration through108",
+    "native": { "passed": 3, "failed": 0, "durationSeconds": 28.16 },
+    "coverage": [
+      "Real empty original and transfer captures seal with an intact erasure artifact",
+      "The complete-protocol lock uses transaction-scoped current capability without creating callers, requests or provider calls",
+      "A forged original capture is refused with SQL check23514",
+      "A genuine later upload reservation cannot rewrite the first captures or artifact"
+    ],
+    "rejectedDraft": {
+      "database": "media_empty_scope_current108_20261116",
+      "passed": 2,
+      "failed": 1,
+      "reason": "The draft incorrectly expected the complete-protocol lock to withhold its current transfer capability; the test was corrected to the documented behavior and rerun on a fresh database"
+    },
+    "oldRuntimeOracleChanged": false,
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false,
+    "productCodeChanged": false,
+    "remaining": "Hosted provider, clean-room, independent review and checklist acceptance remain open"
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "d2bfc3a9e6b845b218819dc74f754a673ca1d83db18019e1d87cc0ca3ea421f5",
+      "beforeSha256": "56b7eeb755b25c7131b71648946d7a8e083d544027fcdac729fecaa511a0e448",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-empty-first-scope-lifecycle.source.json`. No current-runtime/provider\n  acceptance or C-item closure follows.\n  Media pure-proof qualification2026-11-16 (C1.12/C10.32/C11.08): all29 controls",
+          "after": "  `deploy/media-empty-first-scope-lifecycle.source.json`. No current-runtime/provider\n  acceptance or C-item closure follows.\n  Empty-first-scope current-runtime qualification2026-11-16\n  (C1.12/C11.08/C11.14): a separate current108 control leaves the old-runtime oracle\n  unchanged and PASSes3/3 on a fresh database. Actual empty original/transfer captures\n  and their artifact seal; the complete-protocol lock has its documented transaction-\n  scoped authority but creates no caller/request or provider call; a forged capture\n  refuses; a later real upload cannot rewrite the sealed evidence. The first draft's\n  assumption that the full lock withheld its capability was corrected before the final\n  fresh run. TypeScript/focused lint pass. See\n  `deploy/media-empty-first-scope-current.source.json`. No product code, hosted provider\n  or checklist acceptance changes.\n  Media pure-proof qualification2026-11-16 (C1.12/C10.32/C11.08): all29 controls",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

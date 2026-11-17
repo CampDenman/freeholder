@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/core/db";
 import { ready } from "@/core/runtime";
 import { mediaObjectWrites } from "@/core/media/write-schema";
+import { mediaObjects } from "@/core/media/schema";
 import { allowMediaReceiptWrites,objectKeyDigest,observeStorageOperation } from "@/core/media/write-ledger";
 import { registerStorageObservationReconciler } from "@/core/media/observation-hooks";
 import { closeDb,hasDatabase,truncateSpine } from "../helpers/spine";
@@ -18,7 +19,8 @@ describe.runIf(hasDatabase)("physical storage observation commit boundary",()=>{
   // Explicit prior physical-dispatch fixture, not an asserted provider result.
   await db().transaction(async tx=>{
    await allowMediaReceiptWrites(tx);
-   await tx.insert(mediaObjectWrites).values({id,operation:"put",key,keyDigest:objectKeyDigest(key),namespace:"a".repeat(64),storageKind:"s3",storageLocation:{endpoint:"https://synthetic.example.test",bucket:"original"},sha256:"b".repeat(64),bytes:3,contentType:"text/plain",actor:"system:observation-fixture",state:"started"});
+   const[pointer]=await tx.insert(mediaObjects).values({key,role:"original",state:"pending",bytes:3,contentType:"text/plain"}).returning();
+   await tx.insert(mediaObjectWrites).values({id,originalReservationId:pointer!.reservationId,operation:"put",key,keyDigest:objectKeyDigest(key),namespace:"a".repeat(64),storageKind:"s3",storageLocation:{endpoint:"https://synthetic.example.test",bucket:"original"},sha256:"b".repeat(64),bytes:3,contentType:"text/plain",actor:"system:observation-fixture",state:"started"});
   });
   const seen:Array<{id:string;state:string;accepted:boolean}>=[];
   remove=registerStorageObservationReconciler("test.committedStorage",async receiptId=>{

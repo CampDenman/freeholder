@@ -1,0 +1,115 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "merchant_fee_xid_epoch87.v1",
+  "checklist": ["C12.38", "C9.33"],
+  "status": "SOURCE_CONTINUATION; real fresh/upgrade qualification required",
+  "migration": {
+    "path": "db/migrations/0087_merchant_fee_xid_epoch.sql",
+    "bytes": 67836,
+    "sha256": "0e27d2b997c47b68955fac3d706eb019a501160229a899547f1c666230bd011a",
+    "index": 87,
+    "tag": "0087_merchant_fee_xid_epoch",
+    "when": 1793310000067
+  },
+  "predecessors": {
+    "0085": "8c914cf178bad249a8d60d332f9c5e3b3fc92af0c2d0ecc46bdc7b648e87c2cb",
+    "0086": "b3d73b06a4de6fa3fe76356414674526e883fbd4fc25bbe978535cc70e2fa8ae"
+  },
+  "successors": [
+    {
+      "name": "freeholder_merchant_fee_birth_guard",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "beforeBodySha256": "32d551973c0a224908af2ea21bce08a7ad961c7a1bfb5020788d35fa632ee54f",
+      "afterBodySha256": "9883723488eed7e57ae2af972c9f8553a5dd16128ed17dbf9e657f77cde37d0f",
+      "replacements": [
+        {
+          "before": "CREATE FUNCTION freeholder_merchant_fee_birth_guard",
+          "after": "CREATE OR REPLACE FUNCTION freeholder_merchant_fee_birth_guard",
+          "count": 1
+        },
+        {
+          "before": "born_fee.xmin::text=txid_current()::text",
+          "after": "born_fee.xmin::text::numeric=mod(txid_current()::numeric,4294967296)",
+          "count": 1
+        },
+        {
+          "before": "born_post.xmin::text=txid_current()::text",
+          "after": "born_post.xmin::text::numeric=mod(txid_current()::numeric,4294967296)",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "freeholder_merchant_fee_invocations_ready",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "beforeBodySha256": "98a0b6c71aafd07c27bb3b7b198040041ba80e80ab3161e09497041cbc5da047",
+      "afterBodySha256": "bfd70129e27dfd69fb009dd2b13961564c5a7667c453d4aa0c3ab6e35a871fc7",
+      "replacements": [
+        {
+          "before": "32d551973c0a224908af2ea21bce08a7ad961c7a1bfb5020788d35fa632ee54f",
+          "after": "9883723488eed7e57ae2af972c9f8553a5dd16128ed17dbf9e657f77cde37d0f",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "freeholder_atomic_auxiliary_fee_ready",
+      "source": "db/migrations/0086_controlled_safe_response.sql",
+      "beforeBodySha256": "6e9efda50f54615516ea2af80aba2ed14fca509d029e3343ec5b7297c9b203d1",
+      "afterBodySha256": "f5d5a2ae2152f22bba02dcf74bac1d8228fd4568dbb0c1b105b8f85ca7283df2",
+      "replacements": [
+        {
+          "before": "98a0b6c71aafd07c27bb3b7b198040041ba80e80ab3161e09497041cbc5da047",
+          "after": "bfd70129e27dfd69fb009dd2b13961564c5a7667c453d4aa0c3ab6e35a871fc7",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "freeholder_credit_atomic_fee_ready",
+      "source": "db/migrations/0085_controlled_collection_application.sql",
+      "beforeBodySha256": "3097fe0f0e85eca399433ca72c3f4be49b61fa24dfb263a6f7ebe8322af7d638",
+      "afterBodySha256": "fa5338dd568a084d60a777e53245c7c7ffd894d55c84433d239c924afe1a30a0",
+      "replacements": [
+        {
+          "before": "a6bbff06bac4dae6697bd420369d9409b6b955c62d6a0daa9f23b6754d39b0dd",
+          "after": "f5d5a2ae2152f22bba02dcf74bac1d8228fd4568dbb0c1b105b8f85ca7283df2",
+          "count": 1
+        },
+        {
+          "before": "98a0b6c71aafd07c27bb3b7b198040041ba80e80ab3161e09497041cbc5da047",
+          "after": "bfd70129e27dfd69fb009dd2b13961564c5a7667c453d4aa0c3ab6e35a871fc7",
+          "count": 1
+        },
+        {
+          "before": "426b6fc0c205dbdf1de66617f24b0a2e5464af26379cbc4962392ad453b3d99b",
+          "after": "5aaddf28a223fa95a2c5bc6dc592764b3689427e8481034b9369b72eb4689213",
+          "count": 1
+        },
+        {
+          "before": "abaf44dcfdd99b05d01e41b0ae52b6aef6aa7861087a20628ffe17ad3f13b731",
+          "after": "c3602be822c07bbb6c3fda64ef3f112b8f9e3d94f7203a3f5a25eb4335ad7995",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "freeholder_controlled_safe_response_ready",
+      "source": "db/migrations/0086_controlled_safe_response.sql",
+      "beforeBodySha256": "9bbf4e740e64b8da24fc0e2a56964443f3cfa90522c9ceb35892804b03116ac5",
+      "afterBodySha256": "014949a7c246c79b65cb5b9f5ab09c3635dd24592b55603a83545f5f80c06903",
+      "replacements": [
+        {
+          "before": "CREATE FUNCTION freeholder_controlled_safe_response_ready()",
+          "after": "CREATE OR REPLACE FUNCTION freeholder_controlled_safe_response_ready()",
+          "count": 1
+        },
+        {
+          "before": "6e9efda50f54615516ea2af80aba2ed14fca509d029e3343ec5b7297c9b203d1",
+          "after": "f5d5a2ae2152f22bba02dcf74bac1d8228fd4568dbb0c1b105b8f85ca7283df2",
+          "count": 1
+        }
+      ]
+    }
+  ]
+}

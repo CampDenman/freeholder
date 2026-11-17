@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // C12.38/C9.33: original controlled transport has its own real admission lineage.
 import { sql } from "drizzle-orm";
-import { check, index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { bigint, check, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAtColumn } from "@/core/db/columns";
 import { subscriptionCommercialTerms, subscriptionMerchantScopes, subscriptionProviderChargeReceipts } from "./schema";
 import type { MerchantControlledSubscriptionScope, MerchantControlledObservation } from "@/adapters/payments";
@@ -65,3 +65,13 @@ export const subscriptionControlledClosures=pgTable("subscription_controlled_clo
  kind:text("kind",{enum:["zero_transport"]}).notNull(),originalEvidenceRevision:text("original_evidence_revision").notNull(),
  proof:jsonb("proof").$type<Record<string,unknown>>().notNull(),proofDigest:text("proof_digest").notNull(),createdAt:createdAtColumn(),
 },t=>[check("subscription_controlled_closures_original",sql`${t.kind}='zero_transport' and ${t.originalEvidenceRevision} ~ '^[a-f0-9]{64}$' and ${t.proofDigest} ~ '^[a-f0-9]{64}$' and jsonb_typeof(${t.proof})='object'`)]);
+
+export const subscriptionControlledRowHashes=pgTable("subscription_controlled_row_hashes",{
+ tableName:text("table_name").notNull(),rowId:uuid("row_id").notNull(),resourceId:uuid("resource_id").references(()=>subscriptionControlledResources.id,{onDelete:"restrict"}),rowSha256:text("row_sha256").notNull(),rowBytes:bigint("row_bytes",{mode:"number"}).notNull(),
+},t=>[primaryKey({columns:[t.tableName,t.rowId]}),index("subscription_controlled_row_hashes_resource").on(t.resourceId),check("subscription_controlled_row_hashes_value",sql`${t.rowSha256} ~ '^[a-f0-9]{64}$' and ${t.rowBytes}>=0`)]);
+
+export const subscriptionControlledJournalHeads=pgTable("subscription_controlled_journal_heads",{
+ resourceId:uuid("resource_id").primaryKey().references(()=>subscriptionControlledResources.id,{onDelete:"restrict"}),fingerprint:text("fingerprint").notNull(),
+ counts:jsonb("counts").$type<Record<string,number>>().notNull(),physicalCount:integer("physical_count").notNull(),physicalBytes:bigint("physical_bytes",{mode:"number"}).notNull(),
+},t=>[check("subscription_controlled_journal_heads_value",sql`${t.fingerprint} ~ '^[a-f0-9]{64}$' and jsonb_typeof(${t.counts})='object' and ${t.physicalCount}>=1 and ${t.physicalBytes}>=0`),
+ check("subscription_controlled_journal_heads_counts",sql`${t.counts}->>'resources'~'^[0-9]+$' and ${t.counts}->>'operations'~'^[0-9]+$' and ${t.counts}->>'calls'~'^[0-9]+$' and ${t.counts}->>'facts'~'^[0-9]+$' and ${t.counts}->>'finishes'~'^[0-9]+$' and ${t.counts}->>'stops'~'^[0-9]+$' and ${t.counts}->>'verifications'~'^[0-9]+$' and ${t.counts}->>'chargeOrigins'~'^[0-9]+$' and ${t.counts}->>'closures'~'^[0-9]+$'`)]);

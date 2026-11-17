@@ -13,7 +13,7 @@ export const reviewAtomicFeeReconciliation=defineService({name:"invoicing.review
   const actual=await ctx.tx.select().from(payments).where(eq(payments.invoiceId,invoiceId)).limit(5001);if(actual.length>5000)throw new ServiceError("conflict","Restore every original payment before reviewing its commission.");
   const rows:Array<z.infer<typeof feeRow>>=[];
   for(const payment of actual){const target=await controlledAtomicRefundTarget(ctx,payment.id);if(!target)continue;
-   const state=await controlledAtomicRefundFeeState(ctx,payment.id),routing=await routingForPayment(ctx,payment.id);
+   const state=await controlledAtomicRefundFeeState(ctx,payment.id,target),routing=await routingForPayment(ctx,payment.id);
    if(!state||routing.applicationFeeMinor===undefined)throw new ServiceError("conflict","Restore the actual original fee resource and current bank evidence before showing a reconciled balance.");
    rows.push({paymentId:payment.id,originalFeeMinor:routing.applicationFeeMinor,targetRetainedFeeMinor:target.target,actualRetainedFeeMinor:state.actualRetainedFeeMinor,currency:payment.currency,pending:state.pending});
   }

@@ -1,0 +1,57 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_legacy_upload_retired_reachability.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "OPEN: the genuine retired-written producer reaches a current birthDebt refusal before physical retirement; unknown/unwritten regression passes; all six retired native controls remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "bcbfd3cd1c0c04ca178b75f420e4c53d56be50791c368e3a0b90e133931533e0" },
+    { "path": "tests/fixtures/media-legacy-upload-anchor.config.ts", "sha256": "4c4fb7dc03c774776c280d8539c77479fee133b205080e48a5600bd1868bddd6" },
+    { "path": "tests/fixtures/media-legacy-upload-anchor.probe.ts", "sha256": "7defe68c671ee990c355070d402784e950473b34dffa075749e6de9b8b0ed2ac" },
+    { "path": "tests/fixtures/media-legacy-upload-anchor-current.probe.ts", "sha256": "ed2230047c3b01ec6837e4f6ba36d490d79e618e984854b2fd282714eecc91f2" }
+  ],
+  "retiredControl": {
+    "database": "media_legacy_anchor_retired_pointer_20261116",
+    "oldAcceptedPutProduced": true,
+    "ordinaryUpgradePassed": true,
+    "currentRetainedCaptureProduced": true,
+    "holdRemovedThroughService": true,
+    "secondVerifiedErasureProduced": true,
+    "worker": "core.eraseMediaMultipartOperations",
+    "result": "REFUSED: The first original upload scope or birth proof is incomplete, or later data requires a new verified request. Do not replace its original capture.",
+    "cause": "The immutable legacy receipt and pointer retain null original reservation identity, so originalMediaBirthDebt is true",
+    "deleteCreated": false,
+    "legacyAnchorCreated": false,
+    "nativeAssertionClaimed": false
+  },
+  "unknownRegression": {
+    "database": "media_legacy_anchor_unknown_regression_20261116",
+    "oldProducer": "passed",
+    "ordinaryUpgrade": "passed",
+    "currentProducer": "passed",
+    "native": "1 passed,6 selected skips"
+  },
+  "typecheck": "passed",
+  "focusedLint": "passed",
+  "guardsWeakened": false,
+  "productCodeChanged": false,
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "bcbfd3cd1c0c04ca178b75f420e4c53d56be50791c368e3a0b90e133931533e0",
+      "beforeSha256": "955059f362a095b45768da6663c2132b57fc0d8282ab27f792c86288ace8abc5",
+      "continue": true,
+      "edits": [
+        {
+          "before": "are invented. The six retired-written native controls and their independent cohorts\nremain unrun/open. See `deploy/media-legacy-upload-unknown-producer.source.json`.",
+          "after": "are invented. The six retired-written native controls and their independent cohorts\nremain open; their first reachability result follows. See `deploy/media-legacy-upload-unknown-producer.source.json`.",
+          "occurrences": 1
+        },
+        {
+          "before": "No provider/security/checklist closure follows.\n\nSource-only continuation, 2026-11-14 (C1.12/C10.32/C11.08): transfer quota",
+          "after": "No provider/security/checklist closure follows.\n\nRetired-upload reachability control2026-11-16 (C1.12/C11.08): a genuine old\naccepted PUT, ordinary upgrade, retained capture, hold removal and second verified\nerasure reach the actual current multipart worker. Its immutable legacy receipt keeps\n`birthDebt`, so the worker refuses before a DELETE or anchor can be created. The failed\ncohort is preserved; no retirement/native assertion is claimed. The shared producer's\nunknown old→upgrade→native regression passes again. TypeScript and focused lint pass.\nSee `deploy/media-legacy-upload-retired-reachability.source.json`. All six retired\ncontrols remain open; no product guard or checklist row changes.\n\nSource-only continuation, 2026-11-14 (C1.12/C10.32/C11.08): transfer quota",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

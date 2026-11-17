@@ -9,6 +9,9 @@ import { CONTROLLED_CASH_ATOMIC_PROTOCOL } from "./controlled-cash-application-p
 import { controlledAtomicRefundAmounts,type AtomicRefundResource } from "./controlled-atomic-refund-amounts";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import type { latestControlledCashInspectionLineage } from "@/modules/subscriptions/controlled-cash-inspection-lineage";
+import type { readAtomicFeeReturnResources } from "./atomic-fee-return-resources";
+import type { parentFinancialGraphForTx } from "./controlled-provider-financial-parent";
+type KnownAtomicFeeStateEvidence={physicalReturns:Awaited<ReturnType<typeof readAtomicFeeReturnResources>>;graph:Awaited<ReturnType<typeof parentFinancialGraphForTx>>};
 export type ControlledAtomicRefundTarget={applies:true;target:number|null;revision:string|null;resources:AtomicRefundResource[];unassignedDutyMinor:number|null};
 export type ControlledAtomicRefundFeeProof={paymentId:string;receiptId:string;inspectionId:string;bankObservationId:string;bankNamespaceRevision:string;namespaceKey:string;originalFeeRef:string|null;originalFeeMinor:number;acceptedReturnedFeeMinor:number;targetRetainedFeeMinor:number;actualRetainedFeeMinor:number;feeOperationIds:string[];invocationIds:string[];revision:string};
 export type ControlledAtomicRefundFeeState={pending:true;actualRetainedFeeMinor:number|null;proof:null}|{pending:false;actualRetainedFeeMinor:number;proof:ControlledAtomicRefundFeeProof};
@@ -148,8 +151,8 @@ export async function lockControlledAtomicRefundEvidence(ctx:ServiceContext,paym
 /** A planned target is not an actual physical return. In particular the
  * whole-invoice duty must keep the cent pending until the original fee ACK
  * and an actual bank observation agree with its exact retained resources. */
-export async function controlledAtomicRefundFeeState(ctx:ServiceContext,paymentId:string):Promise<ControlledAtomicRefundFeeState|null>{
- const target=await controlledAtomicRefundTarget(ctx,paymentId);if(!target)return null;
+export async function controlledAtomicRefundFeeState(ctx:ServiceContext,paymentId:string,knownTarget?:ControlledAtomicRefundTarget|null,known?:KnownAtomicFeeStateEvidence):Promise<ControlledAtomicRefundFeeState|null>{
+ const target=knownTarget===undefined?await controlledAtomicRefundTarget(ctx,paymentId):knownTarget;if(!target)return null;
  if(target.target===null)return{pending:true,actualRetainedFeeMinor:null,proof:null};
  const[state]=await ctx.tx.execute<SqlFeeState>(sql`select * from freeholder_controlled_atomic_refund_fee_state(${paymentId}::uuid)`);
  let authenticBank:Awaited<ReturnType<typeof latestControlledCashInspectionLineage>>|null=null;
@@ -167,12 +170,12 @@ export async function controlledAtomicRefundFeeState(ctx:ServiceContext,paymentI
  const resource=target.resources.find(row=>row.paymentId===paymentId),invocations=await merchantFeeInvocations(ctx.tx,paymentId);
  if(!resource||invocations.length+fees.length>5000||!state.inspection_id||!state.observation_id||!state.bank_namespace_revision)return{pending:true,actualRetainedFeeMinor:state.actual_retained_fee_minor,proof:null};
  const owner=await controlledAtomicFeeOwner(ctx,paymentId);if(!owner)return{pending:true,actualRetainedFeeMinor:state.actual_retained_fee_minor,proof:null};
- const{readAtomicFeeReturnResources}=await import("./atomic-fee-return-resources");const physicalReturns=await readAtomicFeeReturnResources(ctx,paymentId);
+ const{readAtomicFeeReturnResources}=await import("./atomic-fee-return-resources");const physicalReturns=known?known.physicalReturns:await readAtomicFeeReturnResources(ctx,paymentId);
  if(!physicalReturns||physicalReturns.pendingOperationIds.length||physicalReturns.unfinishedIds.length||physicalReturns.returnedMinor!==resource.feeReturnedMinor)return{pending:true,actualRetainedFeeMinor:state.actual_retained_fee_minor,proof:null};
  const{parentFinancialGraphForTx}=await import("./controlled-provider-financial-parent");
  const{controlledObservationEntries}=await import("./controlled-cash-observation-revision");
  const{merchantFeeInvocationFinancialWitness}=await import("./merchant-fee-invocation-witnesses");
- const graph=await parentFinancialGraphForTx(ctx.tx,owner.subscriptionId),feeWitness=await merchantFeeInvocationFinancialWitness(ctx.tx,{invoiceIds:[owner.invoiceId]});
+ const graph=known?.graph??await parentFinancialGraphForTx(ctx.tx,owner.subscriptionId),feeWitness=await merchantFeeInvocationFinancialWitness(ctx.tx,{invoiceIds:[owner.invoiceId]});
  const physical=controlledObservationEntries([
   ...graph.physical.map(row=>({...row,domain:row.table==="subscription_provider_schedule_resources"?"schedule_stable" as const:"postgres_row" as const})),
   ...graph.children.entries.map(row=>({...row,domain:row.table.startsWith("subscription_controlled_")||row.table==="merchant_cash_return_inspection_stops"||row.table==="merchant_fee_refund_invocations"?"postgres_row" as const:"dependency_canonical" as const})),

@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // C1.12/C11.08: synthetic actual protocol tags, no provider/account acceptance.
+import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import {z} from "zod";
 import type { SaveOptions } from "@google-cloud/storage";
@@ -16,9 +17,9 @@ describe("C1.12/C11.08 original provider request tag round trip",()=>{
   const request=vi.fn(async(_input:RequestInfo|URL,init?:RequestInit)=>{
    if(init?.method==="PUT"){stored=new Headers(init.headers);return new Response(null,{headers:{etag:'"original-etag"',"x-amz-version-id":"original-version"}});}
    if(!stored)throw new Error("Original actual PUT was not observed");
-   return new Response(body,{headers:{etag:'"original-etag"',"x-amz-version-id":"original-version","x-amz-meta-freeholder-original-request":stored.get("x-amz-meta-freeholder-original-request")!,"x-amz-meta-freeholder-original-token":stored.get("x-amz-meta-freeholder-original-token")!}});
+   return new Response(body,{headers:{etag:'"original-etag"',"x-amz-version-id":"original-version","content-length":String(body.byteLength),"x-amz-meta-freeholder-original-request":stored.get("x-amz-meta-freeholder-original-request")!,"x-amz-meta-freeholder-original-token":stored.get("x-amz-meta-freeholder-original-token")!}});
   });
-  const store=createS3TransferProtocol({client:{fetch:request},binding,url:value=>`https://storage.example.test/original-private/${value}`,observer:runtime.observer});
+  const store=createS3TransferProtocol({client:{fetch:request},binding,url:value=>`https://s3.us-east-1.amazonaws.com/original-private/${value}`,observer:runtime.observer});
   await store.put(key,body,"application/octet-stream");const first=runtime.identities[0]!;
   expect(stored?.get("if-none-match")).toBe("*");expect(stored?.get("x-amz-meta-freeholder-original-request")).toBe(first.id);expect(stored?.get("x-amz-meta-freeholder-original-token")).toBe(first.token);
   const actual=await store.readVersioned(key);expect(actual?.body).toEqual(body);expect(actual?.requestProof).toEqual({id:first.id,tokenDigest:transferDigest(first.token)});
@@ -28,12 +29,12 @@ describe("C1.12/C11.08 original provider request tag round trip",()=>{
   const runtime=server(),binding={kind:"replit"as const,namespace:"b".repeat(64),location:{bucket:"original-private"}};
   const metadata={name:key,bucket:binding.location.bucket,generation:"9007199254740993",size:String(body.byteLength),metadata:{}as Record<string,string>};
   const save=vi.fn(async(_body:Buffer,options:SaveOptions)=>{const values:unknown=options.metadata?.metadata;const parsed=z.object({freeholderOriginalRequest:z.string(),freeholderOriginalToken:z.string()}).safeParse(values);if(!parsed.success)throw new Error("Original server request tags are missing");metadata.metadata=parsed.data;});
-  const download=vi.fn(async()=>[Buffer.from(body)]),files:Array<{key:string;generation:unknown}>=[];
-  const store=createReplitTransferProtocol({binding,destination:async()=>({file:(name:string,options?:{generation?:string})=>{files.push({key:name,generation:options?.generation});return{metadata,save,getMetadata:async()=>[metadata],download};}}),requireOriginalEndpoint:()=>{},observer:runtime.observer});
+  const createReadStream=vi.fn(()=>Readable.from([Buffer.from(body)],{objectMode:false})),download=vi.fn(),files:Array<{key:string;generation:unknown}>=[];
+  const store=createReplitTransferProtocol({binding,destination:async()=>({file:(name:string,options?:{generation?:string})=>{files.push({key:name,generation:options?.generation});return{metadata,save,getMetadata:async()=>[metadata],createReadStream,download};}}),requireOriginalEndpoint:()=>{},observer:runtime.observer});
   await store.put(key,body,"application/octet-stream");const first=runtime.identities[0]!;
   expect(save).toHaveBeenCalledWith(Buffer.from(body),expect.objectContaining({resumable:false,validation:false,preconditionOpts:{ifGenerationMatch:0}}));
   const actual=await store.readVersioned(key,{kind:"generation",key,namespace:binding.namespace,value:metadata.generation});
   expect(actual?.requestProof).toEqual({id:first.id,tokenDigest:transferDigest(first.token)});expect(actual?.body).toEqual(body);expect(JSON.stringify(actual)).not.toContain(first.token);
-  expect(files.at(-1)).toEqual({key,generation:metadata.generation});expect(download).toHaveBeenCalledWith({validation:false,decompress:false});expect(runtime.identities).toHaveLength(3);
+  expect(files.at(-1)).toEqual({key,generation:metadata.generation});expect(createReadStream).toHaveBeenCalledWith({validation:false,decompress:false,start:0,end:body.byteLength});expect(download).not.toHaveBeenCalled();expect(runtime.identities).toHaveLength(3);
  });
 });

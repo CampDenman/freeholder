@@ -9,7 +9,7 @@ import * as coreDatabase from "@/core/db";
 import { reconcileJobDeploymentAdmission, startJobProducer, stopJobs } from "@/core/jobs";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { runMigrationsOnDedicatedSession } from "@/core/migrate-runner.mjs";
 import { eq, sql } from "drizzle-orm";
 import postgres from "postgres";
 import { closeDb, db } from "@/core/db";
@@ -642,7 +642,7 @@ async function freshDatabase(name: string): Promise<string> {
   const url = originalDatabaseUrl.replace(/\/[^/]+$/, `/${name}`);
   const client = postgres(url, { max: 1, onnotice: () => {} });
   try {
-    await migrate(drizzle(client), { migrationsFolder: "db/migrations" });
+    await runMigrationsOnDedicatedSession(client, { migrationsFolder: "db/migrations" });
   } finally {
     await client.end();
   }
@@ -807,7 +807,7 @@ describe.runIf(hasDatabase)("actual playground producer poll target switch", () 
       } finally { await admin.end(); }
       const url = originalDatabaseUrl.replace(/\/[^/]+$/, `/${name}`); urls.push(url);
       const client = postgres(url, { max: 1, onnotice: () => {}, connection: { TimeZone: "UTC" } });
-      try { await migrate(drizzle(client), { migrationsFolder: "db/migrations" }); }
+      try { await runMigrationsOnDedicatedSession(client, { migrationsFolder: "db/migrations" }); }
       finally { await client.end(); }
       return url;
     };

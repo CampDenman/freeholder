@@ -8,6 +8,7 @@ import { merchantRefundDispatches, merchantRefundObservations, merchantRefundReq
 import { originalMerchantRefundCurrentStates, refundObservationHasCurrentBinding } from "./merchant-refund-current-state";
 import { payments, refunds } from "./schema";
 import { bankReplacementFinancialState, bankReplacementPromiseState, readBankReplacementChain } from "./merchant-bank-replacement-store";
+import type { OriginalCashClosureShare } from "./original-cash-closure-current";
 
 /** A returned bank payment does not cancel the accepted refund promise. Only
  * the original frozen source can prove a replacement discharged that promise;
@@ -109,4 +110,12 @@ export async function originalMerchantRefundDebt(ctx: ServiceContext, paymentId:
   // Until that full payment-side disposition is integrated, keep the debt
   // visible rather than treating a missing logical refund as completion.
   return requests.some(row => row.purpose !== "invoice_refund" || row.resolved !== true);
+}
+export async function originalMerchantRefundDebtShared(ctx: ServiceContext, paymentId: string, share?: OriginalCashClosureShare): Promise<boolean> {
+  if (!share) return originalMerchantRefundDebt(ctx, paymentId);
+  const existing = share.originalMerchantRefundDebt.get(paymentId);
+  if (existing) return existing;
+  const current = originalMerchantRefundDebt(ctx, paymentId);
+  share.originalMerchantRefundDebt.set(paymentId, current);
+  return current;
 }

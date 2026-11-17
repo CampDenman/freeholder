@@ -1,0 +1,39 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_capture_erasure_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08", "C11.10"],
+  "status": "All seventeen capture controls pass after sizing the full-erasure case to its measured evidence workload; provider, hosted-performance and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "b0b68cc3e3296b42b69523d464b0d5c95227315e14f13760ba0151a844df587f" },
+    { "path": "tests/core/media-capture.test.ts", "sha256": "4cd4a6ea30c89daa4d697437721a778f26293432914a81560f38fd71e58a2bd9" }
+  ],
+  "diagnosis": {
+    "initialTimeoutSeconds": 30,
+    "isolatedReproduction": true,
+    "lockWaitObserved": false,
+    "measuredSuccessSeconds": 61.898,
+    "correction": "Use a 120-second per-case ceiling for genuine full-erasure/provider-evidence work; no assertion changed"
+  },
+  "controls": {
+    "final": { "database": "media_capture_full_20261116", "passed": 17, "failed": 0, "durationSeconds": 191.65, "erasureCaseSeconds": 78.924 },
+    "coverage": ["subject-owned capture pointers retire before physical erasure", "unrelated session, bytes and chunks remain intact", "original privacy jobs complete and following fixture resets no longer race abandoned work"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "b0b68cc3e3296b42b69523d464b0d5c95227315e14f13760ba0151a844df587f",
+      "beforeSha256": "c161648d9eabba2271e3c609f99b83131e28c79efe50a7caca62ae31db435550",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  provider/checklist acceptance remain open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  provider/checklist acceptance remain open.\n  Capture-erasure lifecycle qualification2026-11-16 (C1.12/C11.08/C11.10): the\n  previously timed-out original-pointer case reproduced in isolation without a lock\n  wait and completed its genuine evidence work in61.9s. A120s per-case ceiling replaces\n  the inappropriate30s default without changing any oracle. The full capture file now\n  passes17/17, including79s erasure and all trailing resets. TypeScript/focused lint\n  pass. See `deploy/media-capture-erasure-lifecycle.source.json`. Provider, hosted\n  performance and checklist acceptance remain open.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

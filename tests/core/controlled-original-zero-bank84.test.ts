@@ -5,11 +5,12 @@ import { describe,expect,it } from "vitest";
 import type { MerchantControlledBootstrapRequest,MerchantControlledObservation,MerchantControlledInvoiceReadRequest } from "@/adapters/payments";
 import { merchantIntentEvidence } from "@/adapters/payments/stripe-merchant-scope";
 import { controlledCollectionEdge84 } from "../helpers/merchant-controlled-collection84";
+import { controlledSafeAdapterSession } from "../helpers/controlled-safe-adapter-session";
 async function source(){
  const remote=controlledCollectionEdge84(),observed:MerchantControlledObservation[]=[],request:MerchantControlledBootstrapRequest={providerApiVersion:"2026-10-28.endive",providerPlatformAccountId:"acct_fixturePlatform",destinationAccountId:"acct_originalSeller",settlementMerchantAccountId:"acct_originalSeller",
   subscriptionId:randomUUID(),termsId:randomUUID(),generation:1,providerCustomerRef:"cus_originalBootstrap",providerMethodRef:"pm_originalBootstrap",providerProductRef:"prod_originalBootstrap",currency:"CAD",interval:"month",intervalCount:1,acceptedPeriodEnd:"2027-01-01T00:00:00.000Z",acceptedTrialEnd:null,
   operationId:randomUUID(),requestDigest:"a".repeat(64),idempotencyKey:`prepared-original-zero:${randomUUID()}`,onObserved:async actual=>{observed.push(actual);}};
- const create=remote.provider.createMerchantControlledBootstrap?.bind(remote.provider),read=remote.provider.inspectMerchantControlledInvoice?.bind(remote.provider);if(!create||!read)throw Error("Use the actual controlled HTTP adapter methods.");
+ const provider=controlledSafeAdapterSession(remote.provider),create=provider.createMerchantControlledBootstrap?.bind(provider),read=provider.inspectMerchantControlledInvoice?.bind(provider);if(!create||!read)throw Error("Use the actual controlled HTTP adapter methods.");
  const acknowledgment=await create(request);if(!acknowledgment.providerInvoiceRef)throw Error("The actual original fictional bootstrap invoice must exist.");
  const input:MerchantControlledInvoiceReadRequest={...request,bootstrapOperationId:request.operationId,bootstrapRequestDigest:request.requestDigest,providerSubscriptionRef:acknowledgment.providerSubscriptionRef,providerInvoiceRef:acknowledgment.providerInvoiceRef};
  return{remote,observed,request,input,read};

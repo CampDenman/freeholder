@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
 // Observed bank ownership is retained separately from its original creator.
+import { requireControlledCurrentVerification } from "./controlled-provider-safe-response-proof";
 import { randomUUID } from "node:crypto";
 import { eq,sql } from "drizzle-orm";
 import { z } from "zod";
@@ -67,6 +68,7 @@ export const retainControlledInvoiceProof=defineService({name:"subscriptions.ret
   const source=await lockControlledCollection(ctx,input.collectionId),operation=source.history.operations.find(row=>row.id===input.operationId),verification=source.history.verifications.find(row=>row.operationId===input.operationId);
   if(!source.binding||!operation||operation.kind!=="read_manifest"||!verification||verification.actualResult.exactManifest!==true||verification.actualResult.suppliesPaidAuthority!==false
    ||verification.actualResult.providerInvoiceRef!==source.binding.providerInvoiceRef||verification.actualResult.manifestDigest!==merchantTaxDigest(source.manifest))refuse();
+  requireControlledCurrentVerification(source.history,verification);
   const customerFinancialDigest=z.string().regex(/^[a-f0-9]{64}$/).parse(verification.actualResult.customerFinancialDigest);
   const prior=source.proofs.find(row=>row.operationId===operation.id);if(prior)return{proofId:prior.id};
   const id=randomUUID();await write(ctx);await ctx.tx.insert(subscriptionControlledInvoiceProofs).values({id,collectionId:source.collection.id,operationId:operation.id,callId:verification.callId,

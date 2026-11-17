@@ -1,0 +1,32 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_original_metadata_wire.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Actual original pinned storage metadata wire controls pass; metadata alone proves no body, ACK, FIN, complete absence or stop",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "a20dc49a75effcdf92e0d02ed4f51acaabfda387a0538b5cd2ef399424c2f566" },
+    { "path": "tests/core/media-original-metadata-wire.test.ts", "sha256": "38d37de1cbf61d773f704834537fd00b606a35c4a46cc2309e591be99f3b3ec9" }
+  ],
+  "controls": {
+    "final": { "passed": 6, "failed": 0, "durationSeconds": 0.386 },
+    "coverage": ["explicit HEAD retains actual revision, bytes and original CREATE nonce", "existing exact version/ETag pins the request", "different actual version refused before matching metadata", "current404 remains observation only", "malformed or unsafe byte metadata refused", "missing original request metadata never invents a CREATE nonce"],
+    "runtimeChanges": false,
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "a20dc49a75effcdf92e0d02ed4f51acaabfda387a0538b5cd2ef399424c2f566",
+      "beforeSha256": "023ede81e298225edecee98abd1ea884ae5abb4be3c21605398c612b808bef30",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/media-completed-stream-wire.source.json`. No account/auth or terminal\n  acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  `deploy/media-completed-stream-wire.source.json`. No account/auth or terminal\n  acceptance follows.\n  Original-metadata wire qualification2026-11-16: all6 actual HEAD controls pass.\n  Discovered/pinned revisions, byte size and original CREATE nonce retain their\n  exact evidence; changed versions and malformed sizes are refused;404 remains\n  an observation and missing metadata never invents a nonce. Focused lint passes.\n  See `deploy/media-original-metadata-wire.source.json`. Metadata alone proves no\n  original body, ACK, FIN, complete physical absence or executor stop.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

@@ -18,6 +18,8 @@ import { currentBankPrincipalMatches } from "./original-bank-principal-policy";
 import { controlledCanonicalBankReview, controlledPrincipalPhysicalUnion, controlledCanonicalLegacyEmpty } from "./controlled-canonical-bank-policy";
 import { merchantTaxDigest } from "./merchant-tax-store";
 import type { payments } from "./schema";
+import type {ControlledAtomicRefundTarget,controlledAtomicFeeOwner} from "./controlled-atomic-refund-target";
+type KnownCanonicalBankEvidence={target:ControlledAtomicRefundTarget|null;owner:NonNullable<Awaited<ReturnType<typeof controlledAtomicFeeOwner>>>};
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const physical = z.object({ table: z.string().min(1), id: z.string().min(1), fingerprint: sha }).strict();
 const parentShape = z.object({ entries: z.array(physical.extend({ hashDomain: z.literal("postgres_row") })).min(1).max(5000), revision: sha, physicalRowCount: z.number().int().min(1).max(5000) }).strict();
@@ -38,7 +40,7 @@ async function bankSnapshot(ctx: ServiceContext, collectionId: string, receiptId
 /** Plain real-context reader, no service registration, resource acquisition,
  * bank I/O, access grant, prospective b3 or same-TX application-stage reuse.
  * Existing principal/refund/caller authorities still run independently. */
-export async function readControlledCanonicalBankPrincipal(ctx: ServiceContext, payment: typeof payments.$inferSelect, cash: MerchantRefundCashOrigin) {
+export async function readControlledCanonicalBankPrincipal(ctx: ServiceContext, payment: typeof payments.$inferSelect, cash: MerchantRefundCashOrigin, known?:KnownCanonicalBankEvidence) {
   const receipts = await ctx.tx.select().from(subscriptionProviderChargeReceipts).where(and(
     eq(subscriptionProviderChargeReceipts.providerPlatformAccountId, cash.providerPlatformAccountId),
     sql`${subscriptionProviderChargeReceipts.chargeAccountId} is not distinct from ${cash.chargeAccountId}`,
@@ -94,13 +96,13 @@ export async function readControlledCanonicalBankPrincipal(ctx: ServiceContext, 
   if (routing.applicationFeeMinor !== route.applicationFeeMinor) refuse();
   // Existing original epoch policy is reused, including actual Fi on a valid
   // atomic application. A new endpoint or today's bps never reprices this row.
-  const retainedFee = await originalMerchantFeeTarget(ctx, payment, routing);
+  const retainedFee = await originalMerchantFeeTarget(ctx, payment, routing, known?.target);
   // The earliest raw cash receipt may precede observing its actual fee. Only
   // the genuine committed atomic application can supply that missing identity:
   // its signed original bank row is independently authenticated, never today's
   // candidate fee or a caller-supplied same-amount reference. No receipt changes.
   const originalAtomicFeeOwner = receipt.applicationFeeRef === null && route.applicationFeeMinor > 0
-    ? await (await import("./controlled-atomic-refund-target")).controlledAtomicFeeOwner(ctx, payment.id) : null;
+    ? known?.owner??await (await import("./controlled-atomic-refund-target")).controlledAtomicFeeOwner(ctx, payment.id) : null;
   if (originalAtomicFeeOwner && (!originalAtomicFeeOwner.applicationFeeRef || originalAtomicFeeOwner.receiptId !== receipt.id
     || originalAtomicFeeOwner.batchId !== batch.id || originalAtomicFeeOwner.proofId !== proof.id || originalAtomicFeeOwner.collectionId !== batch.collectionId
     || originalAtomicFeeOwner.invoiceId !== payment.invoiceId || originalAtomicFeeOwner.subscriptionId !== receipt.subscriptionId

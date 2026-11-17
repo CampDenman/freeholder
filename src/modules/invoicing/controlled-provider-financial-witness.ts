@@ -17,6 +17,8 @@ import {controlledCashApplicationTables} from "./controlled-cash-application-wit
 import {controlledApplicationFinancialWitness,exportControlledApplicationFinancialHistory,type ControlledApplicationFinancialHistory} from "./controlled-application-financial";
 import {atomicCreditFinancialWitness,exportAtomicCreditFinancialHistory,type AtomicCreditFinancialHistory} from "./atomic-credit-financial-integration";
 import {atomicCreditFeeTables} from "./atomic-credit-fee-financial";
+import type {OriginalCashClosureShare} from "./original-cash-closure-current";
+import { createControlledJournalComposition, finishControlledJournalComposition, type ControlledJournalComposition } from "@/modules/subscriptions/controlled-provider-journal-composition";
 
 export const controlledTransportTables = {
  resources: "subscription_controlled_resources", operations: "subscription_controlled_operations", calls: "subscription_controlled_calls",
@@ -104,9 +106,11 @@ export async function controlledFinancialWitness(tx: Tx, scope: ControlledFinanc
  const targetEntries=controlledTargetEntries(targets),entries=[...controlledFinancialEntries(history),...targetEntries].sort((a,b)=>a.table.localeCompare(b.table)||a.id.localeCompare(b.id));
  if(groups.some(group=>group.incomplete)||entries.length>5000||!controlledFinancialAncestryComplete(history)||!controlledTargetAncestryComplete(targets,history))return failed();
  if(input.profileIds.length&&!input.subscriptionIds.length&&!input.receiptIds.length&&history.resources.some(row=>!input.profileIds.includes(row.profileId)&&!targets.quotes.some(quote=>quote.resourceId===row.id&&input.profileIds.includes(quote.profileId))))return failed();
- const application=await controlledApplicationFinancialWitness(tx,scope,targets,input.receiptIds);
- const paid=await controlledPaidFinancialWitness(tx,scope,targets);
- const atomicCredit=await atomicCreditFinancialWitness(tx,scope,targets);
+ const [application,paid,atomicCredit]=await Promise.all([
+  controlledApplicationFinancialWitness(tx,scope,targets,input.receiptIds),
+  controlledPaidFinancialWitness(tx,scope,targets),
+  atomicCreditFinancialWitness(tx,scope,targets),
+ ]);
  const uniqueEntries=new Map<string,ControlledFinancialEntry>();
  for(const row of [...entries,...application.entries,...paid.entries,...atomicCredit.entries,...atomicCredit.dependencyEntries]){const key=`${row.table}:${row.id}`,prior=uniqueEntries.get(key);if(prior&&prior.fingerprint!==row.fingerprint)return failed();uniqueEntries.set(key,row);}
  const allEntries=[...uniqueEntries.values()].sort((a,b)=>a.table.localeCompare(b.table)||a.id.localeCompare(b.id));if(allEntries.length>5000)return failed();
@@ -115,8 +119,17 @@ export async function controlledFinancialWitness(tx: Tx, scope: ControlledFinanc
 /** Authentication/debt is separate from a privacy fingerprint. Missing exact
  * controlled bridge must remain applies=true debt, never a legacy fallback. */
 const primaryControlledKinds=new Set(["read_customer_financials","create_draft","add_invoice_component","read_manifest","bootstrap","discover_bootstrap","pause_drafts","read_bootstrap","list_invoices","create_schedule","read_calendar","update_calendar","read_invoice","finalize_invoice","pay_invoice","cancel_calendar","void_invoice","delete_draft"]);
-export async function controlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[] = []){
- return readControlledCashFinancialHistory(tx,receiptIds,subscriptionIds);
+export async function controlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[] = [],composition?:ControlledJournalComposition){
+ return readControlledCashFinancialHistory(tx,receiptIds,subscriptionIds,undefined,composition);
+}
+export async function controlledCashFinancialHistoryShared(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[] = [],share?:OriginalCashClosureShare,composition?:ControlledJournalComposition) {
+ if(!share)return controlledCashFinancialHistory(tx,receiptIds,subscriptionIds,composition);
+ const key=JSON.stringify({receiptIds:[...receiptIds].sort(),subscriptionIds:[...subscriptionIds].sort()});
+ const existing=share.controlledCashFinancialHistory.find(row=>row.tx===tx&&row.key===key&&row.composition===composition);
+ if(existing)return existing.promise as Promise<Awaited<ReturnType<typeof controlledCashFinancialHistory>>>;
+ const current=controlledCashFinancialHistory(tx,receiptIds,subscriptionIds,composition);
+ share.controlledCashFinancialHistory.push({tx,key,composition,promise:current});
+ return current;
 }
 import type { OriginalInventoryProjectionContext } from "./original-cash-inventory-causal-proof";
 
@@ -124,22 +137,26 @@ import type { OriginalInventoryProjectionContext } from "./original-cash-invento
 export async function controlledCashFinancialHistoryForOriginalInventory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context:OriginalInventoryProjectionContext){
  return readControlledCashFinancialHistory(tx,receiptIds,subscriptionIds,context);
 }
-async function readControlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context?:OriginalInventoryProjectionContext){
+async function readControlledCashFinancialHistory(tx:Tx,receiptIds:readonly string[],subscriptionIds:readonly string[],context?:OriginalInventoryProjectionContext,externalComposition?:ControlledJournalComposition){
+ const composition=externalComposition??createControlledJournalComposition();
  let witness=await controlledFinancialWitness(tx,{receiptIds,subscriptionIds});
  const actualSubscriptions=[...new Set(witness.history.resources.map(row=>row.subscriptionId))];
  if(witness.targets&&actualSubscriptions.some(id=>!subscriptionIds.includes(id)))witness=await controlledFinancialWitness(tx,{receiptIds,subscriptionIds:actualSubscriptions});
- const namespaces=[];for(const id of [...new Set(receiptIds)].sort())namespaces.push({receiptId:id,...await readControlledReceiptNamespace(tx,id)});
- const targetCoverage:Awaited<ReturnType<typeof controlledCollectionCoverage>>[]=[];
- if(witness.targets)for(const id of [...new Set(witness.targets.quotes.map(row=>row.subscriptionId))].sort())targetCoverage.push(await controlledCollectionCoverage(tx,{subscriptionId:id}));
- const coverage:Awaited<ReturnType<typeof controlledProviderCoverage>>[]=[];for(const id of [...new Set(witness.history.resources.map(row=>row.subscriptionId))].sort())coverage.push(await controlledProviderCoverage(tx,{subscriptionId:id}));
- const rawClassifications=[];
- for(const actual of targetCoverage){const subscriptions=[...new Set(actual.witness.quotes.map(row=>row.subscriptionId))];if(subscriptions.length!==1)throw new ServiceError("conflict","Restore the exact controlled target subscription before classifying its raw facts.");
+ const namespaces=await Promise.all([...new Set(receiptIds)].sort().map(async id=>({receiptId:id,...await readControlledReceiptNamespace(tx,id)})));
+ const targetIds=witness.targets?[...new Set(witness.targets.quotes.map(row=>row.subscriptionId))].sort():[],coverageIds=[...new Set(witness.history.resources.map(row=>row.subscriptionId))].sort();
+ const [targetCoverage,coverage]=await Promise.all([
+  Promise.all(targetIds.map(id=>controlledCollectionCoverage(tx,{subscriptionId:id},composition))),
+  Promise.all(coverageIds.map(id=>controlledProviderCoverage(tx,{subscriptionId:id},composition))),
+ ]);
+ const rawClassifications=await Promise.all(targetCoverage.map(async actual=>{
+  const subscriptions=[...new Set(actual.witness.quotes.map(row=>row.subscriptionId))];if(subscriptions.length!==1)throw new ServiceError("conflict","Restore the exact controlled target subscription before classifying its raw facts.");
   if(context){
    const {parentFinancialGraphForOriginalInventory}=await import("./controlled-provider-financial-parent");
    const graph=await parentFinancialGraphForOriginalInventory(tx,subscriptions[0]!,context);
-   rawClassifications.push(await controlledTargetRawClassification(tx,subscriptions[0]!,actual,graph));
-  }else rawClassifications.push(await controlledTargetRawClassification(tx,subscriptions[0]!,actual));
- }
+   return controlledTargetRawClassification(tx,subscriptions[0]!,actual,graph,composition);
+  }
+  return controlledTargetRawClassification(tx,subscriptions[0]!,actual,undefined,composition);
+ }));
  const resolvedFacts=new Set(rawClassifications.flatMap(actual=>actual.resolutions.map(row=>row.factId)));
  const unresolvedRawFacts=[...coverage.flatMap(actual=>actual.rawCashReviewFactIds.filter(id=>!resolvedFacts.has(id))),...rawClassifications.flatMap(actual=>actual.unresolvedFactIds)];
  const resourceResolved=(resourceId:string|null)=>resourceId!==null&&targetCoverage.some(actual=>actual.transport.resourceIds.includes(resourceId))
@@ -147,6 +164,7 @@ async function readControlledCashFinancialHistory(tx:Tx,receiptIds:readonly stri
  const entries=new Map(witness.entries.map(row=>[`${row.table}:${row.id}`,row]));
  for(const actual of rawClassifications)for(const entry of actual.evidenceEntries){const key=`${entry.table}:${entry.id}`,prior=entries.get(key);if(prior&&prior.fingerprint!==entry.fingerprint)throw new ServiceError("conflict","The actual controlled parent changed during raw financial classification.");entries.set(key,entry);}
  const classifiedEntries=[...entries.values()].sort((a,b)=>a.table.localeCompare(b.table)||a.id.localeCompare(b.id));
+ if(!externalComposition)await finishControlledJournalComposition(tx,composition);
 
  return{...witness,entries:classifiedEntries,namespaces,coverage,...(targetCoverage.length?{targetCoverage,rawClassifications}:{}),incomplete:witness.incomplete||classifiedEntries.length>5000||namespaces.some(row=>row.applies&&(!row.verified||row.rawCashReview&&!resourceResolved(row.resourceId)))
    ||unresolvedRawFacts.length>0,

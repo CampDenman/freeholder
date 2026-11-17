@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// PREPARED / UNRUN. Actual shared provider path plus a narrowly scoped real
-// local commit fault after genuine DELETE ACK; no authorization/context mock.
+// Qualified on fresh migration94 PostgreSQL 2026-11-15 with synthetic AWS TCP and
+// a real local commit fault after genuine DELETE ACK; no authorization/context mock.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {eq,sql} from "drizzle-orm";
 import {db} from "@/core/db";
@@ -9,18 +9,20 @@ import {ready} from "@/core/runtime";
 import {stopJobs} from "@/core/jobs";
 import {resetEnvForTests} from "@/core/env";
 import {resetStorageForTests} from "@/adapters/storage";
-import {putWithReceipt,deleteWithReceipt} from "@/core/media/write-ledger";
+import {putWithReceipt} from "@/core/media/write-ledger";
+import {deleteWithReceipt} from "@/core/media/delete-with-receipt";
 import {mediaObjectWrites} from "@/core/media/write-schema";
 import {mediaStorageTransferCalls as calls,mediaStorageTransferReviews as reviews} from "@/core/media/transfer-schema";
 import {mediaStorageTransferRequests as requests,mediaStorageTransferRequestObservations as facts} from "@/core/media/transfer-request-schema";
 import {ordinaryMediaRetirementProvider} from "../helpers/media-original-retirement-provider";
 import {closeDb,failure,hasDatabase,truncateSpine} from "../helpers/spine";
 const SYSTEM={kind:"system"}as const,key="finished-delete/original.bin",body=new TextEncoder().encode("original acknowledged delete bytes");
+const syntheticOrigin="https://s3.us-east-1.amazonaws.com",realFetch=globalThis.fetch.bind(globalThis);
 describe.runIf(hasDatabase)("actual acknowledged DELETE finish recovery (complete request capability dependent)",()=>{
  let provider:Awaited<ReturnType<typeof ordinaryMediaRetirementProvider>>;
  beforeAll(async()=>{await ready();await stopJobs();const[capability]=await db().execute<{present:boolean}>(sql`select to_regprocedure('freeholder_media_transfer_request_capability_v1()') is not null as present`);if(capability?.present!==true)throw Error("Prepared acknowledged DELETE recovery requires complete real request protocol; no fixture capability is enabled.");},60000);
- beforeEach(async()=>{await truncateSpine();provider=await ordinaryMediaRetirementProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",FREEHOLDER_STORAGE_QUOTA_BYTES:""}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
- afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
+ beforeEach(async()=>{await truncateSpine();provider=await ordinaryMediaRetirementProvider();vi.stubGlobal("fetch",async(input:RequestInfo|URL,init?:RequestInit)=>{const url=new URL(input instanceof Request?input.url:String(input));if(url.origin!==syntheticOrigin)return realFetch(input,init);const target=new URL(`${url.pathname}${url.search}`,provider.endpoint);if(input instanceof Request)return realFetch(target,{method:input.method,headers:input.headers,body:input.body===null?undefined:await input.arrayBuffer()});return realFetch(target,init);});for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:syntheticOrigin,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",FREEHOLDER_STORAGE_QUOTA_BYTES:""}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
+ afterEach(async()=>{await provider?.close();vi.unstubAllEnvs();vi.unstubAllGlobals();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
  it("keeps the actual first failed local return/ACK and closes only fresh full physical proof with exactly one DELETE",async()=>{
   await putWithReceipt({key,body,contentType:"application/octet-stream",role:"original"},SYSTEM);
   // New test-only function/trigger names, never replacement of a product

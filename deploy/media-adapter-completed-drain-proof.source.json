@@ -1,0 +1,34 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_adapter_completed_drain_proof.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Twenty-one managed-adapter, completed-multipart ancestry and transfer-drain association controls pass; provider, kernel-stop and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "be44f1e7399959f39b17e41da64c6b041ff7becfdbb1b4927541c5668031dc1d" },
+    { "path": "tests/core/media-managed-adapter-authority.test.ts", "sha256": "e767000d1a749fcecf4c436d9d5ad868779e8bded66054e7e8546c25814e46ab" },
+    { "path": "tests/core/media-multipart-completed-proof.test.ts", "sha256": "0ac0699da4a2c69abfa6d30cd5063a08fc33c2601bb8a8075031197ed25eec1e" },
+    { "path": "tests/core/media-transfer-drain-association-proof.test.ts", "sha256": "4e24424680039a8f9df046fa84751ae9740093a0672fda272f720e16ce8e2460" }
+  ],
+  "controls": {
+    "final": { "files": 3, "passed": 21, "failed": 0, "durationSeconds": 0.859 },
+    "coverage": ["raw managed object/session/part mutations refuse before provider I/O while reads remain unchanged", "completed multipart body requires exact CREATE nonce, FIN, descriptor, full bytes, namespace and revision", "transfer-drain association requires the complete unchanged captured/current cohort and explicit original plan"],
+    "descriptionCorrection": "Raw part signing remains forbidden because it is outside the durable original-caller protocol, not because that protocol is still unfinished",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "be44f1e7399959f39b17e41da64c6b041ff7becfdbb1b4927541c5668031dc1d",
+      "beforeSha256": "8a68e093cbbb0490c184f7731b0253c943407c1db095aeb71c7866ecd20cb533",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  published image, installed runtime, launch or checklist acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  published image, installed runtime, launch or checklist acceptance follows.\n  Managed-adapter/completed-body/drain proof qualification2026-11-16\n  (C1.12/C11.08): all21 controls pass. Application raw object/session/part mutations\n  stay refused before provider I/O while reads remain unchanged. Completed multipart\n  bodies require exact original CREATE nonce, FIN, descriptor, full bytes and revision;\n  transfer-drain release requires the complete unchanged captured/current cohort.\n  Focused lint passes. See `deploy/media-adapter-completed-drain-proof.source.json`.\n  These structural controls do not close provider, kernel-stop or C-item acceptance.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

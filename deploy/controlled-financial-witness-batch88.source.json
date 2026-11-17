@@ -1,0 +1,20 @@
+{
+  "domain": "freeholder.controlled-financial-witness-batch88.v1",
+  "files": [
+    {
+      "path": "src/modules/invoicing/controlled-provider-financial-witness.ts",
+      "beforeSha256": "20915ea857cbd8e66a2e6ea1c167a8fe97cb5260a1adac7190546ba4373c5227",
+      "afterSha256": "bcdb444f614f1f973b62ac85366a48688411c9abcc13b6efcb5c5db7437fdf0a",
+      "finiteDelta": [
+        {
+          "before": " const application=await controlledApplicationFinancialWitness(tx,scope,targets,input.receiptIds);\n const paid=await controlledPaidFinancialWitness(tx,scope,targets);\n const atomicCredit=await atomicCreditFinancialWitness(tx,scope,targets);\n",
+          "after": " const [application,paid,atomicCredit]=await Promise.all([\n  controlledApplicationFinancialWitness(tx,scope,targets,input.receiptIds),\n  controlledPaidFinancialWitness(tx,scope,targets),\n  atomicCreditFinancialWitness(tx,scope,targets),\n ]);\n"
+        },
+        {
+          "before": " const namespaces=[];for(const id of [...new Set(receiptIds)].sort())namespaces.push({receiptId:id,...await readControlledReceiptNamespace(tx,id)});\n const targetCoverage:Awaited<ReturnType<typeof controlledCollectionCoverage>>[]=[];\n if(witness.targets)for(const id of [...new Set(witness.targets.quotes.map(row=>row.subscriptionId))].sort())targetCoverage.push(await controlledCollectionCoverage(tx,{subscriptionId:id}));\n const coverage:Awaited<ReturnType<typeof controlledProviderCoverage>>[]=[];for(const id of [...new Set(witness.history.resources.map(row=>row.subscriptionId))].sort())coverage.push(await controlledProviderCoverage(tx,{subscriptionId:id}));\n const rawClassifications=[];\n for(const actual of targetCoverage){const subscriptions=[...new Set(actual.witness.quotes.map(row=>row.subscriptionId))];if(subscriptions.length!==1)throw new ServiceError(\"conflict\",\"Restore the exact controlled target subscription before classifying its raw facts.\");\n  if(context){\n   const {parentFinancialGraphForOriginalInventory}=await import(\"./controlled-provider-financial-parent\");\n   const graph=await parentFinancialGraphForOriginalInventory(tx,subscriptions[0]!,context);\n   rawClassifications.push(await controlledTargetRawClassification(tx,subscriptions[0]!,actual,graph));\n  }else rawClassifications.push(await controlledTargetRawClassification(tx,subscriptions[0]!,actual));\n }\n",
+          "after": " const namespaces=await Promise.all([...new Set(receiptIds)].sort().map(async id=>({receiptId:id,...await readControlledReceiptNamespace(tx,id)})));\n const targetIds=witness.targets?[...new Set(witness.targets.quotes.map(row=>row.subscriptionId))].sort():[],coverageIds=[...new Set(witness.history.resources.map(row=>row.subscriptionId))].sort();\n const [targetCoverage,coverage]=await Promise.all([\n  Promise.all(targetIds.map(id=>controlledCollectionCoverage(tx,{subscriptionId:id}))),\n  Promise.all(coverageIds.map(id=>controlledProviderCoverage(tx,{subscriptionId:id}))),\n ]);\n const rawClassifications=await Promise.all(targetCoverage.map(async actual=>{\n  const subscriptions=[...new Set(actual.witness.quotes.map(row=>row.subscriptionId))];if(subscriptions.length!==1)throw new ServiceError(\"conflict\",\"Restore the exact controlled target subscription before classifying its raw facts.\");\n  if(context){\n   const {parentFinancialGraphForOriginalInventory}=await import(\"./controlled-provider-financial-parent\");\n   const graph=await parentFinancialGraphForOriginalInventory(tx,subscriptions[0]!,context);\n   return controlledTargetRawClassification(tx,subscriptions[0]!,actual,graph);\n  }\n  return controlledTargetRawClassification(tx,subscriptions[0]!,actual);\n }));\n"
+        }
+      ]
+    }
+  ]
+}

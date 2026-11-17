@@ -12,8 +12,8 @@ import {mediaStorageTransferCalls as calls,mediaStorageWriterDrains as drains,me
 import {mediaStorageTransferRequests as requests,mediaStorageTransferRequestObservations as observations} from "./transfer-request-schema";
 import {mediaStorageProviderInventories as inventories,mediaStorageProviderInventoryPages as pages,mediaStorageProviderInventoryEntries as entries} from "./transfer-inventory-schema";
 import {lockTransferInventory} from "./transfer-authority";
-import {transferConflict,transferDigest} from "./transfer-proof";
-import {checkedTransferBinding} from "./transfer-witness";
+import {originalPutRevisionForAbsence,transferConflict,transferDigest} from "./transfer-proof";
+import {checkedOriginalStorageBinding} from "./transfer-witness";
 import {objectKeyDigest} from "./write-ledger";
 import {requireQuiescentOriginalPut,requireStoppedPutRecoveryProof} from "./original-caller-quiescence";
 import {requireFinishedOriginalPut,requireOriginalPutRecoveryProof} from "./original-request-recovery-proof";
@@ -78,7 +78,7 @@ async function captureFinishedOriginalPutInternal(tx:Tx,receiptId:string,options
   }
   if(!write||!executorStop)transferConflict("The original caller has neither actual finishes nor its exact independently verified executor stop. Never backfill an earlier writer birth or finish.");
  }
- const binding=checkedTransferBinding(write.descriptor.binding);
+ const binding=checkedOriginalStorageBinding(write.descriptor.binding);
  if(binding.namespace!==receipt.namespace||transferDigest(binding.location)!==transferDigest(receipt.storageLocation)||binding.kind!==receipt.storageKind||write.descriptor.key!==receipt.key||write.descriptor.sha256!==receipt.sha256||write.descriptor.bytes!==receipt.bytes)transferConflict("The immutable original admission names another physical resource or payload.");
  return{receipt,caller,requests:physical,binding,write,executorStop,appliedReview,transferContext,witness:transferContext?transferDigest({receipt,caller,requests:physical,executorStop,transferContext,...(appliedReview?{appliedReview}:{})}):transferDigest(appliedReview?{receipt,caller,requests:physical,executorStop,appliedReview}:executorStop?{receipt,caller,requests:physical,executorStop}:{receipt,caller,requests:physical})};
 }
@@ -89,13 +89,13 @@ async function originalContext(tx:Tx,receiptId:string,originalCallId:string,proo
  if(!proof||(original.transferContext?proof.objectId!==original.transferContext.objectId||proof.kind!=="recovery_read":proof.objectReceiptId!==receipt.id||proof.kind!=="ordinary_recovery_read")||proof.namespace!==receipt.namespace||proof.physicalKey!==receipt.key||proof.state!=="returned"||!proof.returnedAt||!await transferRequestsDrained(tx,[proof.id]))transferConflict("A fresh actual original-provider read must finish before its inventory is captured.");
  if(purpose==="retirement"){
   if(original.transferContext)transferConflict("Transfer-copy retirement keeps its own original all-copy protocol; this inventory cannot authorize standalone deletion.");
-  if(original.executorStop&&!original.appliedReview)transferConflict("A stop alone cannot authorize retirement; retain the exact completed affirmative applied review first.");
-  if(!receipt.providerRevision||!receipt.providerRevisionDigest||transferDigest(receipt.providerRevision)!==receipt.providerRevisionDigest)transferConflict("The original revision must be retained before physical retirement.");
-  const absenceRequests=await tx.select().from(requests).where(eq(requests.callId,proof.id));
+  if(original.executorStop&&!original.appliedReview&&receipt.state==="accepted")transferConflict("A stop alone cannot authorize accepted-byte retirement; retain the exact completed affirmative applied review first.");
+  if(receipt.providerRevision&&(!receipt.providerRevisionDigest||transferDigest(receipt.providerRevision)!==receipt.providerRevisionDigest))transferConflict("The retained original revision is inconsistent.");
+  const absenceRevision=originalPutRevisionForAbsence(receipt,binding),absenceRequests=await tx.select().from(requests).where(eq(requests.callId,proof.id));
   const absenceFacts=absenceRequests.length?await tx.select().from(observations).where(inArray(observations.requestId,absenceRequests.map(row=>row.id))):[];
   const absenceRequestIds=absenceFacts.filter(row=>row.facts.stage==="absence").map(row=>row.requestId);
-  requireOriginalAbsenceRead({key:receipt.key,namespace:binding.namespace,revision:receipt.providerRevision,absence:proof,requests:absenceRequests,absenceRequestIds});
-  return{...original,proof,actual:null,absenceRequests,absenceRequestIds};
+  requireOriginalAbsenceRead({key:receipt.key,namespace:binding.namespace,revision:absenceRevision,absence:proof,requests:absenceRequests,absenceRequestIds});
+  return{...original,proof,actual:null,absenceRevision,absenceRequests,absenceRequestIds};
  }
  if(proof.resultAbsent||!proof.resultRevision||!proof.resultSha256||proof.resultBytes===null||!proof.resultRequestProof)transferConflict("A fresh actual full-byte original-provider read must finish before its recovery inventory is captured.");
  const actual={key:receipt.key,namespace:binding.namespace,sha256:proof.resultSha256,bytes:proof.resultBytes,revision:proof.resultRevision,requestProof:proof.resultRequestProof};
@@ -137,8 +137,7 @@ async function finishOriginalInventoryInternal(tx:Tx,id:string):Promise<Inventor
  const original=await lockedOriginalInventoryInternal(tx,id),{inventory}=original;if(inventory.state!=="capturing")return inventory;
  const first=await readProviderInventoryPass(tx,inventory,0),confirmed=await readProviderInventoryPass(tx,inventory,1),firstDigest=providerInventoryDigest(first.configuration,first.entries),confirmedDigest=providerInventoryDigest(confirmed.configuration,confirmed.entries);
  if(inventory.purpose==="retirement"){
-  if(!original.receipt.providerRevision)transferConflict();
-  const proof={caller:original.caller,requests:original.requests,key:original.receipt.key,namespace:original.binding.namespace,revision:original.receipt.providerRevision,absence:original.proof,absenceRequests:original.absenceRequests,absenceRequestIds:original.absenceRequestIds,first,confirmed};
+  const proof={caller:original.caller,requests:original.requests,key:original.receipt.key,namespace:original.binding.namespace,revision:originalPutRevisionForAbsence(original.receipt,original.binding),absence:original.proof,absenceRequests:original.absenceRequests,absenceRequestIds:original.absenceRequestIds,first,confirmed};
   if(original.appliedReview)requireOriginalPhysicalAbsenceProof(original.write,proof);
   else requireOriginalPutRetirementProof(proof);
  }else{
@@ -155,8 +154,14 @@ export const originalInventoryLifecycle={captureTransferPut:(tx:Tx,receiptId:str
 // Existing freshly verified human recovery surface keeps every original gate.
 export async function captureFinishedOriginalPut(tx:Tx,receiptId:string,actor:Actor){human(actor);return captureFinishedOriginalPutInternal(tx,receiptId);}
 export async function captureRecoverableOriginalPut(tx:Tx,receiptId:string,actor:Actor,stopDrainId?:string){human(actor);return captureFinishedOriginalPutInternal(tx,receiptId,{stopDrainId});}
-export async function lockedOriginalRecoveryInventory(tx:Tx,id:string,actor:Actor){human(actor);const result=await lockedOriginalInventoryInternal(tx,id);if(result.inventory.purpose!=="recovery"||!result.actual)transferConflict();return{...result,actual:result.actual};}
-export async function captureOriginalRecoveryInventory(tx:Tx,input:{receiptId:string;originalCallId:string;proofCallId:string;stopDrainId?:string},actor:Actor){human(actor);return captureOriginalInventoryInternal(tx,input,"recovery");}
-export async function originalRecoveryInventoryProgress(tx:Tx,id:string,actor:Actor){await lockedOriginalRecoveryInventory(tx,id,actor);return originalInventoryProgressInternal(tx,id);}
-export async function appendOriginalRecoveryInventoryPage(tx:Tx,input:OriginalInventoryPageResult,actor:Actor){await lockedOriginalRecoveryInventory(tx,input.inventoryId,actor);return appendOriginalInventoryPageInternal(tx,input);}
-export async function finishOriginalRecoveryInventory(tx:Tx,id:string,actor:Actor):Promise<Inventory>{await lockedOriginalRecoveryInventory(tx,id,actor);return finishOriginalInventoryInternal(tx,id);}
+export async function lockedOriginalReviewInventory(tx:Tx,id:string,actor:Actor){
+ human(actor);const result=await lockedOriginalInventoryInternal(tx,id);
+ if(result.inventory.purpose==="recovery"){if(!result.actual)transferConflict();return result;}
+ if(result.inventory.purpose!=="retirement"||result.actual||result.receipt.observedAcceptedAt||!result.proof.resultAbsent)transferConflict("Original PUT absence review requires an unacknowledged write and fresh pinned physical absence.");return result;
+}
+export async function lockedOriginalRecoveryInventory(tx:Tx,id:string,actor:Actor){const result=await lockedOriginalReviewInventory(tx,id,actor);if(result.inventory.purpose!=="recovery"||!result.actual)transferConflict();return{...result,actual:result.actual};}
+export async function lockedOriginalAbsenceInventory(tx:Tx,id:string,actor:Actor){const result=await lockedOriginalReviewInventory(tx,id,actor);if(result.inventory.purpose!=="retirement"||result.actual)transferConflict();return{...result,actual:null};}
+export async function captureOriginalRecoveryInventory(tx:Tx,input:{receiptId:string;originalCallId:string;proofCallId:string;stopDrainId?:string},actor:Actor,purpose:"recovery"|"retirement"="recovery"){human(actor);return captureOriginalInventoryInternal(tx,input,purpose);}
+export async function originalRecoveryInventoryProgress(tx:Tx,id:string,actor:Actor){await lockedOriginalReviewInventory(tx,id,actor);return originalInventoryProgressInternal(tx,id);}
+export async function appendOriginalRecoveryInventoryPage(tx:Tx,input:OriginalInventoryPageResult,actor:Actor){await lockedOriginalReviewInventory(tx,input.inventoryId,actor);return appendOriginalInventoryPageInternal(tx,input);}
+export async function finishOriginalRecoveryInventory(tx:Tx,id:string,actor:Actor):Promise<Inventory>{await lockedOriginalReviewInventory(tx,id,actor);return finishOriginalInventoryInternal(tx,id);}

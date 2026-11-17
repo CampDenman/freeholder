@@ -41,6 +41,7 @@ import {
   type Actor,
 } from "@/core/service";
 import { hiddenFromMcp, serviceForTool, toolsFor } from "@/mcp/tools";
+import { previewCredentialRefusal } from "@/core/preview/route-gate";
 
 /** The revision this implements. Echoed back when a client asks for it. */
 export const PROTOCOL_VERSION = "2025-06-18";
@@ -276,6 +277,8 @@ export async function handleMcp(
   const refused = refuseUnsafeTransport(request);
   if (refused) return refused;
   const actor = await actorFromRequest(request);
+  const previewRefusal = previewCredentialRefusal(request, actor);
+  if (previewRefusal) return previewRefusal;
 
   let body: unknown;
   try {

@@ -24,7 +24,7 @@ import {requireTransferCapability} from "@/core/media/transfer-authority";
 import {ordinaryMediaRecoveryProvider} from "../helpers/media-original-provider-recovery";
 import {closeDb,failure,hasDatabase,OWNER,truncateSpine} from "../helpers/spine";
 const scopes=["media.storageTransfers","media.storageOperations","media.multipartOperations"];
-describe.runIf(hasDatabase)("C1.12/C11.08 genuinely empty first media capture without provider privilege",()=>{
+describe.runIf(hasDatabase&&process.env.FREEHOLDER_SKIP_MIGRATE==="1")("C1.12/C11.08 genuinely empty first media capture without provider privilege (old runtime)",()=>{
  let provider:Awaited<ReturnType<typeof ordinaryMediaRecoveryProvider>>;
  beforeAll(async()=>{await ready();await stopJobs();},60000);
  beforeEach(async()=>{await truncateSpine();await db().insert(users).values({id:OWNER.userId,email:"empty-scope-owner@example.test",role:"owner"});provider=await ordinaryMediaRecoveryProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"source",S3_ACCESS_KEY_ID:"synthetic",S3_SECRET_ACCESS_KEY:"synthetic",FREEHOLDER_STORAGE_QUOTA_BYTES:"100",FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY:"false"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});

@@ -67,6 +67,14 @@ verified-empty bootstrap races and immutable inventory. Parser/transport tests
 exercise signed fixed-bucket reads, malformed XML, retained multipart uploads,
 versioning, redirects and bounded replies. No provider resources are required.
 
+On 2026-11-15 the first current-source run exposed nine fixture failures because
+its direct ledger calls predated original-caller admission. The repaired fixture
+uses real started intents, admitted original callers and observed responses from
+the synthetic TCP S3 provider. Independent fresh migration93 runs pass 11/11.
+This was a test-evidence repair, not a quota runtime defect or hosted acceptance.
+The earlier red runs and final source hashes are preserved in
+`deploy/storage-quota-scoped-fixture.source.json`.
+
 Source validation is separate from C10.32's OPEN hosted acceptance: qualify the
 actual image/configuration and scoped provider permissions, owner sign-in and
 scoped agent, ordinary upload/variant/read/delete, over-quota refusal, recovery

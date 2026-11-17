@@ -30,7 +30,7 @@ import {mediaStorageWriterDrains as drains} from "./transfer-schema";
 import {requireLocallyClosedConditionalDelete} from "./original-delete-local-closure";
 import {originalDeleteContinuation,type EarlierOriginalDelete} from "./original-delete-continuation";
 const SYSTEM={kind:"system"}as const;
-type Claim={originalId:string;deleteId:string;originalCallId:string;key:string;reservationId:string;verificationOnly?:boolean;stopDrainId?:string};
+type Claim={originalId:string;deleteId:string;originalCallId:string;key:string;reservationId:string;verificationOnly?:boolean;stopDrainId?:string;reviewedBy?:string};
 async function earlierDeletes(tx:Tx,history:readonly(typeof mediaObjectWrites.$inferSelect)[],exceptId?:string,stopDrainId?:string){
  const result:Array<EarlierOriginalDelete&{objectReceiptId:string|null;writerFinishedAt:Date|null;executorStop:typeof drains.$inferSelect|null}&typeof calls.$inferSelect&{requests:(typeof mediaStorageTransferRequests.$inferSelect)[]}>=[];
  for(const deletion of history.filter(row=>row.operation==="delete"&&row.id!==exceptId)){
@@ -89,7 +89,7 @@ export async function assertOrdinaryRetirementRequest(tx:Tx,call:typeof calls.$i
  const family=await tx.select().from(mediaObjectWrites).where(eq(mediaObjectWrites.originalReservationId,deletion.originalReservationId));
  if(originalDeleteContinuation(await earlierDeletes(tx,family,deletion.id))!=="new_caller")transferConflict("An acknowledged original physical DELETE permits fresh verification only.");
 }
-async function capture(key:string,expectedBinding?:StorageBinding,expectedDeleteId?:string,stopDrainId?:string){
+async function capture(key:string,expectedBinding?:StorageBinding,expectedDeleteId?:string,stopDrainId?:string,reviewedBy?:string){
  const token=randomUUID()+randomUUID(),runtimeIdentity=await actualStorageCallerRuntimeIdentity();
  return db().transaction(async tx=>{
   await lockTransferInventory(tx);await lockObjectDigest(tx,objectKeyDigest(key));await allowMediaReceiptWrites(tx);
@@ -108,13 +108,13 @@ async function capture(key:string,expectedBinding?:StorageBinding,expectedDelete
   if(continuation==="verification_only"){
    const actual=prior.find(row=>row.resultDigest!==transferDigest({notAttempted:true})&&row.requests.length===1);const deletion=history.find(row=>row.id===actual?.objectReceiptId);
    if(!actual||!deletion||expectedDeleteId&&deletion.id!==expectedDeleteId)transferConflict("The exact original retirement receipt is missing or changed; no other caller can replace it.");
-   const claim={originalId:receipt.id,deleteId:deletion.id,originalCallId:original.caller.id,key,reservationId:receipt.originalReservationId,verificationOnly:true,stopDrainId};await locked(tx,claim);
+   const claim={originalId:receipt.id,deleteId:deletion.id,originalCallId:original.caller.id,key,reservationId:receipt.originalReservationId,verificationOnly:true,stopDrainId,reviewedBy};await locked(tx,claim);
    return{done:false as const,claim,original,deleteCall:null};
   }
   if(expectedDeleteId)transferConflict("This original DELETE has no verification-only continuation. Recovery cannot admit a new DELETE.");
   const id=randomUUID();
   await tx.insert(mediaObjectWrites).values({id,originalReservationId:receipt.originalReservationId,operation:"delete",key,keyDigest:receipt.keyDigest,namespace:receipt.namespace,storageKind:receipt.storageKind,storageLocation:receipt.storageLocation,sha256:receipt.sha256,bytes:receipt.bytes,contentType:receipt.contentType,actor:"system:media-cleanup",contactId:receipt.contactId,state:"started",writerRuntimeId:mediaWriterRuntimeId});
-  const claim={originalId:receipt.id,deleteId:id,originalCallId:original.caller.id,key,reservationId:receipt.originalReservationId};await locked(tx,claim);
+  const claim={originalId:receipt.id,deleteId:id,originalCallId:original.caller.id,key,reservationId:receipt.originalReservationId,reviewedBy};await locked(tx,claim);
   const call=await admitOriginalMediaCaller(tx,{kind:"ordinary_delete",objectReceiptId:id,token,runtimeIdentity,expectedRevision:receipt.providerRevision},SYSTEM);
   for(const request of await originalMediaErasureRequests(tx,[receipt.id]))await captureMediaErasureCohort(tx,request.requestId,request.scope as "media.storageOperations"|"media.multipartOperations",[id]);
   return{done:false as const,claim,original,deleteCall:{id:call.id,token,runtimeIdentity}};
@@ -132,7 +132,7 @@ async function reviewLocallyClosedDelete(tx:Tx,claim:Claim,absenceCallId:string,
  // Fresh absence/full inventories plus permanent key fencing prove monotonic
  // byte removal. No remote ACK/finish is inferred, no DELETE is replayed and
  // actual first failed/NULL result, ACK and local FIN fields stay untouched.
- await tx.insert(reviews).values({id,objectId:null,objectReceiptId:claim.deleteId,callId:actual.id,originalCallWitness,readCallId:absenceCallId,inventoryId,outcome:"retired",providerEvidenceDigest:evidenceDigest,stopDrainId:localClosure.stopDrainId,reviewedBy:"system:media-cleanup"});
+ await tx.insert(reviews).values({id,objectId:null,objectReceiptId:claim.deleteId,callId:actual.id,originalCallWitness,readCallId:absenceCallId,inventoryId,outcome:"retired",providerEvidenceDigest:evidenceDigest,stopDrainId:localClosure.stopDrainId,reviewedBy:claim.reviewedBy??"system:media-cleanup"});
  for(const request of actual.requests)if(["admitted","unknown"].includes(request.state))await tx.update(mediaStorageTransferRequests).set({state:"stopped",stopReceiptId:id}).where(eq(mediaStorageTransferRequests.id,request.id));
  await tx.update(calls).set({state:"stopped",stoppedAt:now,stopReceiptId:id,updatedAt:now}).where(eq(calls.id,actual.id));
 }
@@ -163,9 +163,10 @@ async function completeInventory(claim:Claim,store:AccountedTransferStore,proofC
 /** Real existing cleanup callers reach this through deleteWithReceipt. A
  * returned DELETE may be verified again, but its physical dispatch is never
  * replayed. Unknown originating/retirement callers stay recovery debt. */
-export async function retireOriginalMediaObject(key:string,expectedBinding?:StorageBinding,expectedDeleteId?:string,stopDrainId?:string):Promise<boolean>{
+export async function retireOriginalMediaObject(key:string,expectedBinding?:StorageBinding,expectedDeleteId?:string,stopDrainId?:string,reviewedBy?:string):Promise<boolean>{
  if(await pendingObjectIsOwned(key))return false;
- const captured=await capture(key,expectedBinding,expectedDeleteId,stopDrainId);if(captured.done)return true;
+ if(!expectedDeleteId&&(await db().select({id:mediaObjectWrites.id}).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.keyDigest,objectKeyDigest(key)),eq(mediaObjectWrites.operation,"put"),inArray(mediaObjectWrites.state,["unverified","started","unknown"]))).limit(1)).length)return false;
+ const captured=await capture(key,expectedBinding,expectedDeleteId,stopDrainId,reviewedBy);if(captured.done)return true;
  const{claim,original,deleteCall}=captured,revision=original.receipt.providerRevision!;
  let deleteReturned=deleteCall===null,deleteAttempted=false;
  try{
@@ -192,7 +193,7 @@ export async function retireOriginalMediaObject(key:string,expectedBinding?:Stor
    const proof=await tx.execute<{proven:boolean}>(sql`select freeholder_media_ordinary_retirement_proven(${claim.reservationId}::uuid) as proven`);if(proof[0]?.proven!==true||complete.state!=="complete")transferConflict("The complete original physical retirement proof is not intact.");
    await releaseRetiredOriginalQuota(tx,current.caller,current.receipt.bytes!);
    const now=new Date(),deletions=await tx.select().from(mediaObjectWrites).where(and(eq(mediaObjectWrites.originalReservationId,claim.reservationId),eq(mediaObjectWrites.operation,"delete")));
-   for(const deletion of deletions)await tx.update(mediaObjectWrites).set({state:deletion.observedAcceptedAt?"accepted":"confirmed_absent",deletedAt:now,evidenceDigest:deletion.evidenceDigest??transferDigest({originalWitness:current.witness,absenceCallId:absence.id,inventoryId:complete.id}),updatedAt:now}).where(eq(mediaObjectWrites.id,deletion.id));
+   for(const deletion of deletions)await tx.update(mediaObjectWrites).set({state:deletion.observedAcceptedAt?"accepted":"confirmed_absent",deletedAt:now,evidenceDigest:deletion.evidenceDigest??transferDigest({originalWitness:current.witness,absenceCallId:absence.id,inventoryId:complete.id}),...(deletion.id===claim.deleteId&&claim.reviewedBy?{reviewedAt:now,reviewedBy:claim.reviewedBy}:{}),updatedAt:now}).where(eq(mediaObjectWrites.id,deletion.id));
    await tx.update(mediaObjectWrites).set({deletedAt:now,updatedAt:now}).where(eq(mediaObjectWrites.id,claim.originalId));
    await tx.delete(mediaObjects).where(and(eq(mediaObjects.reservationId,claim.reservationId),eq(mediaObjects.state,"pending")));
   });

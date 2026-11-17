@@ -9,7 +9,8 @@ import { subscriptionCommercialTerms,subscriptionProviderChargeObservations,subs
 import { subscriptionControlledChargeOrigins,subscriptionControlledResources } from "./controlled-provider-schema";
 import { subscriptionControlledCollections,subscriptionControlledInvoiceBindings,subscriptionControlledQuotes } from "./controlled-provider-collection-schema";
 import { controlledCashEvidence,readOriginalControlledChargeAuthority,type ControlledCashEvidence } from "./controlled-provider-cash-origin";
-import { controlledProviderJournal } from "./controlled-provider-proof";
+import type { controlledProviderJournal } from "./controlled-provider-proof";
+import { createControlledJournalComposition,readComposedControlledProviderJournal } from "./controlled-provider-journal-composition";
 import { assertControlledOriginalConsent } from "./controlled-provider-original-consent";
 import { authenticatedControlledQuote } from "./controlled-provider-quote-proof";
 import { controlledRawFinancialReview } from "./controlled-provider-raw-financial-review";
@@ -40,7 +41,7 @@ function refuse():never{throw new ServiceError("conflict","Restore the exact acc
  * GET authority may require closure. No paid/principal/fee predicate is asserted:
  * observing unexpected partial, over-captured or disputed money is necessary
  * to recover it. The same proof can never authorize its application or return. */
-export async function readControlledCashObservationSource(tx:Tx,input:{collectionId:string;receiptId:string}):Promise<ControlledCashObservationProof>{
+export async function readControlledCashObservationSource(tx:Tx,input:{collectionId:string;receiptId:string},journal?:Awaited<ReturnType<typeof controlledProviderJournal>>):Promise<ControlledCashObservationProof>{
  const[collection]=await tx.select().from(subscriptionControlledCollections).where(eq(subscriptionControlledCollections.id,input.collectionId)).limit(1);
  const[quote]=collection?await tx.select().from(subscriptionControlledQuotes).where(eq(subscriptionControlledQuotes.id,collection.quoteId)).limit(1):[];
  const[resource]=quote?await tx.select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,quote.resourceId)).limit(1):[];
@@ -53,12 +54,13 @@ export async function readControlledCashObservationSource(tx:Tx,input:{collectio
   ||terms.subscriptionId!==parent.id||receipt.subscriptionId!==parent.id||receipt.providerApiVersion!=="2026-10-28.endive"
   ||collection.id!==quote.plannedCollectionId||collection.prorationId!==quote.plannedProrationId||collection.kind!==quote.kind||collection.collectionPolicy!==CONTROLLED_COLLECTION_POLICY
   ||collection.acceptedQuoteDigest!==quote.quoteDigest||binding.providerInvoiceRef!==receipt.providerInvoiceRef)refuse();
- const history=await controlledProviderJournal(tx,resource.id),authenticated=authenticatedControlledQuote(quote,resource,history);
+ const composition=createControlledJournalComposition();if(journal)composition.set(resource.id,Promise.resolve(journal));
+ const history=await readComposedControlledProviderJournal(tx,resource.id,composition),authenticated=authenticatedControlledQuote(quote,resource,history,"accepted_ancestry");
  assertControlledOriginalConsent(collection,authenticated.review,terms);
  if(authenticated.review.controlled.plannedCollectionId!==collection.id||authenticated.review.subscriptionId!==parent.id)refuse();
  const ownFact=history.facts.find(row=>row.id===origin.factId),ownCall=history.calls.find(row=>row.id===origin.callId);
  if(!ownFact||!ownCall||ownCall.operationId!==origin.operationId||ownFact.callId!==ownCall.id||ownFact.actual.kind!=="cash_observed")refuse();
- const actualCash=controlledCashEvidence.parse(ownFact.actual.raw.cash),actualOrigin=await readOriginalControlledChargeAuthority(tx,actualCash,{resourceId:origin.resourceId,callId:origin.callId,factId:origin.factId});
+ const actualCash=controlledCashEvidence.parse(ownFact.actual.raw.cash),actualOrigin=await readOriginalControlledChargeAuthority(tx,actualCash,{resourceId:origin.resourceId,callId:origin.callId,factId:origin.factId},composition);
  if(actualOrigin.controlledOrigin.operationId!==origin.operationId||actualOrigin.controlledOrigin.originalEvidenceDigest!==origin.originalEvidenceDigest
   ||!cashObservationSourceMatches(receipt,actualCash))refuse();
  const creator=history.operations.find(row=>row.id===binding.creatorOperationId),observer=history.operations.find(row=>row.id===binding.operationId),observingCall=history.calls.find(row=>row.id===binding.callId),observingFact=history.facts.find(row=>row.id===binding.factId);

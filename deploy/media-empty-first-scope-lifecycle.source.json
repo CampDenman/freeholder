@@ -1,0 +1,35 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_empty_first_scope_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08", "C11.14"],
+  "status": "Unchanged old-runtime empty-first-scope controls pass against a genuine migration91 prefix before request-capability publication; current-runtime, provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "79171220a886a3ee222d4d8d914efc4311853421bcdb41fa50b381fb97de41a2" },
+    { "path": "tests/core/media-empty-first-scope-lifecycle.test.ts", "sha256": "93f28ca8e6939cc4b9972e19ef950302c526c5ae969c62131bfa9e75c40c1ae2" },
+    { "path": "tests/setup/migrate.ts", "sha256": "3c3b78f9eb64fb63166f1ffeff6bcd655931005331be64aa527e91ce5f538ac8" }
+  ],
+  "controls": {
+    "final": { "database": "media_empty_scope_pre92_20261116", "passed": 4, "failed": 0, "durationSeconds": 27.37 },
+    "runtime": "Migrations0through91 applied by the official dedicated-session runner; FREEHOLDER_SKIP_MIGRATE=1 prevented later capability publication during the old-runtime control",
+    "coverage": ["actual empty original and transfer captures seal with an intact erasure artifact", "metadata authority binds exact request, contact and scope while provider capability remains absent", "missing original-scope runtime ABI refuses without a capture", "later genuine upload cannot rewrite sealed captures or erasure artifacts"],
+    "testOracleChanged": false,
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "79171220a886a3ee222d4d8d914efc4311853421bcdb41fa50b381fb97de41a2",
+      "beforeSha256": "15cc4983a043265b5a8e8e5881a579f8597b5d8853f318101b59a619432987e5",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  account, legacy upgrade, hosted erasure or checklist acceptance follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  account, legacy upgrade, hosted erasure or checklist acceptance follows.\n  Empty-first-scope old-runtime qualification2026-11-16 (C1.12/C11.08/C11.14):\n  the unchanged four-case control PASSes against a genuinely migrated91 prefix,\n  before request-capability publication. Real empty original/transfer captures seal;\n  request/contact/scope and warm-runtime ABI mismatches refuse; a later actual upload\n  cannot rewrite the old capture or artifact. No provider privilege, physical request\n  or provider I/O is acquired. The test bootstrap now honors the existing migration-\n  skip switch for this historical boundary. TypeScript and focused lint pass. See\n  `deploy/media-empty-first-scope-lifecycle.source.json`. No current-runtime/provider\n  acceptance or C-item closure follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

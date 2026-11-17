@@ -1,7 +1,7 @@
 <!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
 # Import transport acceptance controls
 
-C3.22/C3.46/C3.47/F05 remain open. This is a **source-only, unqualified test checkpoint** from frozen imports738/SQL81 `43808cb3`. It does not change product code, regenerate the SDK, run a server, use a database or touch provider accounts. Every original import/privacy/native oracle remains unchanged.
+C3.22/C3.46/C3.47/F05 remain open. This began as a **source-only, unqualified test checkpoint** from frozen imports738/SQL81 `43808cb3`. On 2026-11-15 the current combined migration93 source passed all three controls together on fresh PostgreSQL in 117.16 seconds. The combined SDK contains both crawl wrappers. This is local TCP/SDK/MCP qualification, not a deployed Next.js server, external-client interoperability or provider-account claim. Every original import/privacy/native oracle remains unchanged.
 
 ## Missing proof map
 
@@ -31,6 +31,6 @@ Each new native leaf has its own bounded180s maximum, finite phase loops and no 
 
 ## Qualification and evidence requirements
 
-**UNRUN:** full/incremental types, lint, unit/native/server/database/transport execution, final combined SDK generation and provider/owner acceptance. No local dependency install, build or database action is performed by this checkpoint. The known SDK generation dependency is explicit above.
+**Current qualification:** each leaf passed independently on its own fresh database, then all three passed together on `import_transport_all_20261115` in 117.16 seconds with no failures or retries. The combined generated catalog includes `imports.advanceCrawl` and `imports.crawlProgress`. This does not supply final clean-room, packed-SDK, production-host, external-client, provider/owner or independent-review acceptance.
 
 When granted, the parent should first regenerate/check the combined catalog and run source qualification; then use a genuinely new combined-schema database with exact journal/model/guard proof. Run one actual leaf at a time, preserving the first unexpected failure, and independently read minimal exact-request/scope/receipt/storage/audit facts, all migration hashes, UTC/fsyncON/jitOFF and closed database clients before the next owned passing fixture reset. Do not clone or export old failure databases. Existing originals and independent proofs remain authoritative for their original bounded claims. No C-item, stable tag, deployment, social announcement, independent review or owner signature follows from source preparation.

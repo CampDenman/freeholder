@@ -1,0 +1,44 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "catalog_fulfillment_current_protocol.v1",
+  "checklist": ["C5.19", "C12.38"],
+  "status": "The direct-seller fulfillment fixture now follows current merchant charge evidence and refund recovery protocols; all26 fulfillment cases and static checks pass; enabled-provider, browser and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "a494a9e4b6d161e993c2e28df32b08215915a1bb54ae55d67f8019dc0abb4d86" },
+    { "path": "tests/core/catalog-fulfillment.test.ts", "sha256": "0bf42b75d98026fce5e526b8fbfdaeca2348b8b75d505efc869d9161c2478dc8" }
+  ],
+  "defects": [
+    "The direct-seller fixture bypassed committed webhook evidence retention before applying paid money",
+    "The fixture asserted a legacy payment route even though current merchant payments deliberately use the per-party route",
+    "The fixture used an invalid PaymentIntent-shaped reference and the legacy refund adapter instead of current create/ACK/observe/recovery"
+  ],
+  "controls": {
+    "focused": { "database": "fulfillment_current_refund2_20261116", "passed": 1, "failed": 0 },
+    "full": { "database": "fulfillment_full_current_20261116", "passed": 26, "failed": 0, "durationSeconds": 189.94 },
+    "finalRerun": { "database": "fulfillment_full_final_20261116", "passed": 26, "failed": 0, "durationSeconds": 179.51 },
+    "sourceChain": { "passed": 8, "failed": 0 },
+    "coverage": ["actual merchant collection, zero-rate tax profile and accepted checkout quote", "authenticated charge retention precedes settlement", "current route, seller identity and frozen fee are asserted while legacy routing stays absent", "wrong-account refund feedback is refused", "current refund ACK/observation and exact-resource recovery precede closure"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "planGate": "326 checked,47 open",
+    "licenseGate": "passed",
+    "changelogGate": "passed",
+    "guardsWeakened": false,
+    "productCodeChanged": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "a494a9e4b6d161e993c2e28df32b08215915a1bb54ae55d67f8019dc0abb4d86",
+      "beforeSha256": "3ab1fb1f597ddc2e22f0ee596f94facc06bcf1aebc5cd68dd7c9ac70db2c227a",
+      "continue": true,
+      "edits": [
+        {
+          "before": "- [x] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,",
+          "after": "  Current-protocol fulfillment qualification2026-11-16 (C5.19/C12.38): the\n  direct-seller fixture now uses actual merchant collection, tax and accepted-quote\n  services; retains authenticated charge evidence before settlement; verifies the\n  current per-party route and absence of a legacy route; and exercises the current\n  refund create/ACK/observe and exact-resource recovery protocol. Wrong-account\n  feedback and premature closure remain refused. Fresh108 passes26/26; TypeScript\n  and focused lint pass. This test-only repair supplies no enabled-provider or\n  browser acceptance and closes no checklist row. See\n  `deploy/catalog-fulfillment-current-protocol.source.json`.\n- [x] **C5.20** Build persistent/contact-attached carts, saved carts/wishlists,",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

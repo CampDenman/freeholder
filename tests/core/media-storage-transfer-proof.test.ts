@@ -27,6 +27,11 @@ describe("verified original storage-transfer authority",()=>{
   expect(checkedTransferRevision(revision,replit,key).value).toBe("9007199254740993123");
   expect(()=>checkedTransferRevision({...revision,value:"9.007199254740993e18"},replit,key)).toThrow();
  });
+ it("requires a content-bound local generation in the exact key and namespace",()=>{
+  const local={kind:"local" as const,namespace:"c".repeat(64),location:{root:"/original/local"}},revision={kind:"generation" as const,key,namespace:local.namespace,value:sha256};
+  expect(checkedTransferRevision(revision,local,key)).toEqual(revision);
+  for(const changed of [{...revision,value:"not-a-hash"},{...revision,versionId:"1"},{...revision,key:"other"},{...revision,namespace:"d".repeat(64)}])expect(()=>checkedTransferRevision(changed,local,key)).toThrow();
+ });
  it("refuses an admitted or unknown caller even after its timeout or physical reply",()=>{
   for(const state of ["admitted","unknown"])expect(()=>requireNoOutstandingTransferCalls([{state,returnedAt:new Date()}])).toThrow();
   expect(()=>requireNoOutstandingTransferCalls([{state:"returned",returnedAt:null}])).toThrow();

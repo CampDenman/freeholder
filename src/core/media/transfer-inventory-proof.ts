@@ -9,7 +9,7 @@ export function sameProviderRevision(a:TransferRevision|undefined|null,b:Transfe
  return version(a.versionId)===version(b.versionId);
 }
 export function inventoryResourceDigest(entry:TransferInventoryEntry):string{
- const identity=entry.kind==="session"?{sessionId:entry.sessionId}:entry.kind==="delete_marker"?{versionId:entry.versionId}:entry.kind==="object"?{current:true}:entry.revision?.kind==="generation"?{generation:entry.revision.value}:{versionId:entry.revision?.versionId};
+ const identity=entry.kind==="session"?{sessionId:entry.sessionId}:entry.kind==="delete_marker"?{versionId:entry.versionId}:entry.kind==="object"?{current:true}:entry.revision?.kind==="generation"?{generation:entry.revision.value}:entry.revision?.versionId===undefined?{}:{versionId:entry.revision.versionId};
  return transferDigest({kind:entry.kind,key:entry.key,namespace:entry.revision?.namespace??null,identity});
 }
 export function currentProviderObjects(configuration:TransferInventoryConfiguration,entries:readonly TransferInventoryEntry[]){

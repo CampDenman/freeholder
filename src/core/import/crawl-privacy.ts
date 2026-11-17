@@ -6,7 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, asc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
-import { lockContactIdentityForRead } from "@/core/contacts/identity-lock";
+import { lockContactIdentityForRead, lockContactIdentityForRecovery } from "@/core/contacts/identity-lock";
 import { registerPendingObjectOwner } from "@/core/media/object-ledger";
 import { registerStorageObservationReconciler } from "@/core/media/observation-hooks";
 import { mediaObjects } from "@/core/media/schema";
@@ -16,7 +16,8 @@ import { privacyRetentionExceptions } from "@/core/privacy/schema";
 import { completeRetentionSourceSnapshot, retentionSourceSnapshotIsComplete } from "@/core/privacy/retention-snapshots";
 import { importRuns, importSourceGraphs } from "@/core/plugins/schema";
 import { defineService, ServiceError, type ServiceContext, type Tx } from "@/core/service";
-import { deleteWithReceipt, discardUnwrittenObjectReservation } from "@/core/media/write-ledger";
+import { discardUnwrittenObjectReservation } from "@/core/media/write-ledger";
+import { deleteWithReceipt } from "@/core/media/delete-with-receipt";
 import { boundStorage } from "@/adapters/storage";
 import { importCrawlRequests, importCrawlResponseErasures, importCrawlResponses, importCrawlSources } from "./crawl-schema";
 import { markImportCrawlWriter } from "./crawl-writer";
@@ -273,7 +274,7 @@ export const reconcileCrawlOriginalObservation = defineService({
   kind: "mutation", permission: "system", external: false,
   auditInputFields: ["receiptId"], input: z.object({ receiptId: z.uuid().optional(), after: z.uuid().optional() }), output: z.object({ next: z.uuid().nullable(), recoveryRequired: z.number().int().nonnegative() }),
   handler: async (input, ctx) => {
-    await lockContactIdentityForRead(ctx.tx);
+    await lockContactIdentityForRecovery(ctx.tx);
     if (input.receiptId) {
       const cleanup = await ctx.tx.execute<{ key: string }>(sql`
         select original.storage_key as key from import_crawl_responses original

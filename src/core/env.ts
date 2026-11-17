@@ -320,7 +320,7 @@ const envSchema = z.object({
    * environment overrides it, which is the only arrangement where a shared
    * image and a per-instance configuration can both be true.
    */
-  FREEHOLDER_STORAGE: z.enum(["s3", "replit", "local"]).optional(),
+  FREEHOLDER_STORAGE: z.enum(["s3", "spaces", "replit", "local"]).optional(),
 
   /** C10.32: opt-in exact-namespace inventory is required before writes. */
   FREEHOLDER_STORAGE_QUOTA_BYTES: z.string().regex(/^[1-9]\d{0,15}$/)

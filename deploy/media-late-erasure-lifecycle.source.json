@@ -1,0 +1,41 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "media_late_erasure_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Four late-erasure controls pass and a retired-original reopening defect is fixed; hosted provider and checklist acceptance remain open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "fdd834ca2c4c817ecfb9ded4cc7e3d094c642296260cf6bb5e710ee6a6e52e15" },
+    { "path": "src/core/media/write-ledger.ts", "sha256": "9b666b537db1c238a1cb1a1dd40073ffd5da8e6d50089b920142cc09dfa03890" },
+    { "path": "tests/core/media-late-erasure.test.ts", "sha256": "df0dc0d2fdcc1483a33df5359bc8f771c515a327e25759d1c40de7552a7226b9" },
+    { "path": "tests/helpers/media-original-provider-recovery.ts", "sha256": "eb2e241537d928ac73d446a9e8339d4531b429c6c388fa0428111d411adb0186" }
+  ],
+  "defect": {
+    "failure": "An accepted original PUT with deletedAt set did not reopen its completed erasure when the provider later reapplied the preserved original request",
+    "correction": "Treat a positive observation for a retired original PUT as contradictory evidence, clear deletedAt and reopen its original cohort",
+    "changeset": ".changeset/media-late-retired-original.md"
+  },
+  "controls": {
+    "final": { "database": "media_late_erasure_pending_20261116", "passed": 4, "failed": 0, "durationSeconds": 55.98 },
+    "providerFixture": "Real synthetic AWS-to-TCP requests preserve the original bytes/request identity and allow provider-controlled late reapplication after actual retirement",
+    "coverage": ["completed erasure reopens after contradictory late original PUT", "wrong-key and incomplete minimized proof cannot authorize cleanup", "original published asset retires without touching unrelated media", "both named media holds preserve bytes and truthful partial outcomes"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "changelogOutput": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "fdd834ca2c4c817ecfb9ded4cc7e3d094c642296260cf6bb5e710ee6a6e52e15",
+      "beforeSha256": "db5ae22ab0d650bb1328c12f9863ebc0285b30380e6c835638862f53b0123e4f",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  Late-erasure and genuine historical preview fixtures remain open; no C closure follows.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "after": "  Late-erasure and genuine historical preview fixtures remain open; no C closure follows.\n  Late-erasure qualification2026-11-16 (C1.12/C11.08): all4 controls pass on fresh\n  migration108 with genuine synthetic TCP. A real provider-controlled late reapplication\n  of a retired original PUT exposed that accepted+deleted receipts did not reopen their\n  erasure cohort. Positive late facts now clear that retirement marker and reopen recovery;\n  minimized proof still requires exact restoration before cleanup. Published/unrelated\n  assets and both named holds retain their original guarantees. TypeScript/lint/changelog\n  pass. See `deploy/media-late-erasure-lifecycle.source.json`. No hosted/provider/C closure.\n  Signing containment source2026-11-13 (C1.12/C11.08): shared part claims and",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}

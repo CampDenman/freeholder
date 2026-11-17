@@ -1,0 +1,40 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "multipart_repeat_abort_lifecycle.v1",
+  "checklist": ["C1.12", "C11.08"],
+  "status": "Same-original append-only ABORT re-review qualified on fresh/upgraded migration101 PostgreSQL with materially reduced duplicate seal work; provider/host acceptance remains open",
+  "artifacts": [
+    { "path": "MASTER.md", "sha256": "81d0d1945574b575d4813af6cb533017e9ae408f830639ddb9412d0e75d0786d" },
+    { "path": "tests/core/media-multipart-repeat-abort-lifecycle.test.ts", "sha256": "f3010687cbd693868d8d0666e2c9718471da4149fea929477c070d4366c764e6" },
+    { "path": "db/migrations/0101_retirement_seal_guard_dedup.sql", "sha256": "815611ff33371d342a3ead7ef66cd27d975e68bf7fe4259f6f9a3449701a71c9" },
+    { "path": "db/migrations/meta/_journal.json", "sha256": "304159c269b6d4c4880041e0d1efbc455bcd3d0b54f419a184b660e27018540a" },
+    { "path": ".changeset/retirement-seal-guard-dedup.md", "sha256": "e728c6517665172e7c53c52049ba53886f7d2ec17713abf152da8af3ee20b70c" }
+  ],
+  "controls": {
+    "before": { "positiveSeconds": 281.563, "aggregatePassed": 5, "aggregateFailed": 1, "defect": "Three triggers repeated the identical certificate seal predicate; measured certificate insertion took 195.453s" },
+    "rejectedExperiment": "A security-sensitive async-local snapshot optimization saved only 3% and was reverted completely",
+    "positiveAfter": { "database": "multipart_repeat_abort_dedup_20261115", "passed": 1, "failed": 0, "durationSeconds": 124.107 },
+    "final": { "database": "multipart_repeat_abort_final_20261115", "passed": 6, "failed": 0, "durationSeconds": 282.23, "positiveSeconds": 119.855 },
+    "upgrade": { "database": "repeat_abort_upgrade2_54a7f03b802a4403ba236a6afd0c0cf4", "from": 100, "to": 101, "journalEntries": 102, "verifiedFunctionBodies": 2, "passed": true },
+    "supportingProofs": { "passed": 25, "failed": 0 },
+    "coverage": ["fresh re-review with new seal/job and no first-result replacement", "conflicting late fact retained without cleanup read", "new hold refused before repeat read", "scoped/foreign locator/stop/live signing refused", "old review cannot cross changed mutation frontier", "safe baseline/body/issue declarations retained"],
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "guardsWeakened": false
+  },
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "81d0d1945574b575d4813af6cb533017e9ae408f830639ddb9412d0e75d0786d",
+      "beforeSha256": "d7cd936d9932abfecb72df2b42cb578f76f715163551a514bcc0c6e8945f5c23",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  `deploy/multipart-abort-recovery-lifecycle.source.json`. No provider/host claim.\n  Signing containment source2026-11-13",
+          "after": "  `deploy/multipart-abort-recovery-lifecycle.source.json`. No provider/host claim.\n  Repeat-ABORT qualification2026-11-15: the unchanged positive passed in281.6s;\n  phase profiling isolated195.5s to certificate insertion and found three triggers\n  repeating the identical seal predicate. A 3% async-local cache experiment was\n  rejected and reverted. Migration101 retains the dedicated mandatory certificate\n  guard while removing only its two duplicate evaluations. Positive124.1s, final\n  aggregate6/6 in282s, and real100→101 upgrade verifies102 journals/both bodies.\n  Full TypeScript/focused lint pass. See\n  `deploy/multipart-repeat-abort-lifecycle.source.json`. No provider/host closure.\n  Signing containment source2026-11-13",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}
