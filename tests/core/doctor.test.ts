@@ -9,7 +9,7 @@
 // *tried* something and one that read a setting back.
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { formatReport, runDoctor } from "@/core/doctor";
-import { doctor } from "@/core/doctor/service";
+import { doctor, doctorStatus } from "@/core/doctor/service";
 import { checkTimezoneData, probeInstants, type ZoneProbe } from "@/core/doctor/timezone";
 import { db } from "@/core/db";
 import { businessProfile } from "@/core/settings/schema";
@@ -329,19 +329,27 @@ describe.runIf(hasDatabase)("who may ask", () => {
     // Which adapters are configured and how each is failing is precisely the
     // reconnaissance somebody probing an instance would like. /api/health
     // stays public and stays shallow.
-    expect((await failure(doctor.call({}, ANONYMOUS))).code).toBe("permission");
-    expect(
-      (await failure(doctor.call({}, { ...STAFF, grants: [] }))).code,
-    ).toBe("permission");
+    for (const service of [doctor, doctorStatus]) {
+      expect((await failure(service.call({}, ANONYMOUS))).code).toBe("permission");
+      expect(
+        (await failure(service.call({}, { ...STAFF, grants: [] }))).code,
+      ).toBe("permission");
+    }
+
+    // The two doors differ in what they do, so they differ in what they need.
+    // `platform.doctor` reads the passive report and is satisfied by `view`.
+    const viewer = { ...STAFF, grants: [{ module: "platform", access: "view" as const }] };
+    await expect(doctorStatus.call({}, viewer)).resolves.toHaveProperty("verdict");
+
+    // `platform.probeDoctor` is a mutation: it round-trips a real diagnostic
+    // file through storage. A read grant must not buy that write, or `view`
+    // would quietly carry the right to make the instance do work.
+    expect((await failure(doctor.call({}, viewer))).code).toBe("permission");
     await expect(
-      doctor.call(
-        {},
-        {
-          ...STAFF,
-          grants: [{ module: "platform", access: "view" }],
-        },
-      ),
+      doctor.call({}, { ...STAFF, grants: [{ module: "platform", access: "manage" }] }),
     ).resolves.toHaveProperty("verdict");
+
     await expect(doctor.call({}, OWNER)).resolves.toHaveProperty("verdict");
+    await expect(doctorStatus.call({}, OWNER)).resolves.toHaveProperty("verdict");
   });
 });

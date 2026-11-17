@@ -46,7 +46,8 @@ import { quoteDeliveryAction, shopperCheckoutAction } from "../../app/(public)/c
 import { AddedNotice, addedNoticeKind } from "../../app/(public)/buy/AddedNotice";
 import { AddToCart } from "../../app/(public)/buy/AddToCart";
 import { orders } from "@/modules/catalog/schema";
-import { FORM_RETURN_COOKIE } from "@/core/http/public-form-return";
+import { decodeFormReturn, FORM_RETURN_COOKIE, returnedValues } from "@/core/http/public-form-return";
+import { CHECKOUT_RETURN_KEY } from "@/modules/catalog/checkout-fields";
 import { createContact } from "@/core/contacts/service";
 import { updateBusiness } from "@/core/settings/service";
 import { localeDirection } from "@/core/i18n";
@@ -603,12 +604,31 @@ describe.runIf(hasDatabase)("the public cart, checkout and confirmation pages", 
     expect(parcel.id).not.toBe(pickup.id);
   });
 
-  it("forgets kept answers once the verification email is sent", async () => {
+  it("replaces stale kept answers with this submission's while email proof is outstanding", async () => {
     await calendarInCart();
     jarState.cookies[FORM_RETURN_COOKIE] = "stale";
     const target = await redirectOf(shopperCheckoutAction(checkoutForm({ email: "new@example.test" })));
     expect(target).toBe("/checkout?sent=1");
-    expect(jarState.cookies[FORM_RETURN_COOKIE]).toBeUndefined();
+
+    // The shopper has not finished: they still have to click a link in their
+    // email. So their own answers are handed back to their own browser for
+    // the return trip, in the same short-lived httpOnly cookie a refusal
+    // uses, rather than put in the URL. What must not survive is the earlier
+    // submission's copy.
+    const kept = returnedValues(
+      decodeFormReturn(jarState.cookies[FORM_RETURN_COOKIE]),
+      CHECKOUT_RETURN_KEY,
+    );
+    expect(kept?.email).toBe("new@example.test");
+    // Bounded to the fields the action declares, so nothing from "stale" and
+    // no payment or terms answer rides along.
+    expect(Object.keys(kept ?? {}).sort()).toEqual(
+      [
+        "billingCity", "billingCountry", "billingPostalCode", "billingRegion",
+        "city", "country", "couponCode", "email", "name", "postalCode",
+        "region", "shippingMethodId", "street1",
+      ],
+    );
   });
 
   it("quotes the 'From' price from what a shopper can buy", () => {

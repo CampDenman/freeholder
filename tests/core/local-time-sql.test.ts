@@ -16,6 +16,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { bucketKey, inBuckets } from "@/core/db/buckets";
 import { db, SESSION_SETTINGS } from "@/core/db";
 import { localBuckets } from "@/core/i18n/zoned";
+import { serverRuntimeId } from "@/core/runtime-identity";
 import { closeDb, hasDatabase } from "../helpers/spine";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
@@ -95,9 +96,20 @@ describe.runIf(hasDatabase)("every database session runs in UTC", () => {
   });
 
   it("pins TimeZone on the connection rather than trusting the server default", async () => {
+    // The media runtime flags travel on the same connection string, and
+    // migration 0082's triggers refuse a physical caller whose
+    // `freeholder.media_caller_runtime_uuid` is not this process's own
+    // runtime identity. Spelling the UUID as `serverRuntimeId` rather than a
+    // literal is the point: a hard-coded or absent one would let a historical
+    // writer birth pass for a live one.
     expect(SESSION_SETTINGS).toEqual({
       TimeZone: "UTC",
-      options: "-c freeholder.media_runtime_v1=1",
+      options:
+        "-c freeholder.media_runtime_v1=1" +
+        " -c freeholder.media_transfer_runtime_v1=1" +
+        " -c freeholder.media_transfer_requests_runtime_v1=1" +
+        ` -c freeholder.media_caller_runtime_uuid=${serverRuntimeId}` +
+        " -c freeholder.media_original_scope_runtime_v1=1",
     });
     // The app's own pool, asked the way an operator would ask psql.
     const shown = await db().execute<{ TimeZone: string }>(sql`show timezone`);
