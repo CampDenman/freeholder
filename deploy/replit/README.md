@@ -4,6 +4,37 @@ The root `.replit` and `replit.nix` define a Node 22/PostgreSQL workspace and a
 production Deployment. Workspace storage is ephemeral; media uses private
 Replit Object Storage through the official SDK.
 
+## Start here: import, then reset
+
+Replit's **Import from GitHub** runs an agentic importer that treats an
+unfamiliar repository as something to port. On Freeholder it commits a
+`pnpm_workspace migration scaffold`: the whole project is moved into
+`.migration-backup/`, an importer `package.json`, `pnpm-workspace.yaml` and
+`replit.md` are written at the workspace root, and the checked-in `.replit` is
+replaced by a generated one naming `nodejs-24` and an `autoscale` deployment,
+with no PostgreSQL module and no port mapping.
+
+Freeholder needs none of that. The repository ships its own first-class
+`.replit` and `replit.nix`, so the first thing to do after importing is drop
+that commit:
+
+```sh
+git reset --hard origin/main
+```
+
+Then confirm before going further:
+
+- `.replit` names `modules = ["nodejs-22", "postgresql-16"]`, runs
+  `pnpm start:replit`, and maps `localPort = 3000` to `externalPort = 80`.
+- The project is at the workspace root and `.migration-backup/` is gone.
+- `git status --short` prints nothing.
+
+Do not ask Replit Agent to port, migrate or "set up" the project, and decline
+the paid-plan upgrade it offers for that work: there is nothing to port, and
+the agent run would only be undoing the importer. Provisioning PostgreSQL and
+Object Storage from the workspace Tools pane, plus the steps below, is all a
+launch needs.
+
 ## Install
 
 Start with the [agent launch guide](../agent-launch.md) and its ready-to-paste

@@ -31,6 +31,10 @@ history all hang off one CRM timeline.
 - [Build a member site with an AI builder](deploy/members-vibe-coding.md):
   demo community, the member services, and prompts for Replit, Lovable and
   coding agents.
+- [Launch on Replit](deploy/replit/README.md): import the repository, run
+  `git reset --hard origin/main` to drop Replit's importer scaffold, then
+  provision PostgreSQL and Object Storage and press Run. The repository
+  carries its own `.replit`; nothing needs porting.
 - [Launch with a coding agent](deploy/agent-launch.md): prepare private
   configuration for Replit, complete owner setup with a passkey, then connect
   your assistant at `/admin/connect`. Lovable connects to a hosted Freeholder
