@@ -32,7 +32,7 @@ describe.runIf(hasDatabase)("WXR private index completion containment (C1.08/C3.
   beforeEach(async () => { await truncateSpine(); resetStorageForTests(); });
   afterEach(() => { vi.useRealTimers(); });
   afterAll(async () => { await stopJobs(); await closeDb(); });
-  it("keeps the original receipt pending after raw deletion while the private index needs recovery", async () => {
+  it("minimizes the private normalized index with the raw bytes and completes the original receipt", async () => {
     await db().insert(users).values({ id: OWNER.userId, email: "fictional-wxr-index-owner@example.test", role: "owner" });
     await db().insert(totpFactors).values({ userId: OWNER.userId, encryptedSecret: "fictional-wxr-index-factor" });
     const session = await db().transaction(tx => createSession(tx, OWNER.userId, { twoFactorVerified: true }));
@@ -74,18 +74,32 @@ describe.runIf(hasDatabase)("WXR private index completion containment (C1.08/C3.
     expect(pendingJobs).toHaveLength(1);
     const job = await getJob(eraseImportSourceObjects.name, pendingJobs![0]!);
     if (!job) throw new Error("The real original WXR privacy task is missing.");
-    await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/private normalized import index/);
+    // On a guarded database the private normalized index is MINIMIZED in the
+    // same acknowledgement as the raw bytes (`minimizeOriginalUploadProjections`
+    // behind `originalSourceErasureScopeAvailable`), so the receipt completes
+    // and nothing of the reader survives in the index. The older containment
+    // branch — receipt left pending with the index intact — remains reachable
+    // only when those guard functions/triggers are absent.
+    expect(await eraseImportSourceObjects.handler(job.data, context(job.id))).toEqual({ erased: upload.chunkCount });
     const [artifact] = await db().select().from(dataRequestArtifacts).where(eq(dataRequestArtifacts.dataRequestId, request.id));
-    expect(outcomes.parse(artifact?.body).outcomes.find(value => value.scope === IMPORT_SOURCE_ERASURE_SCOPE)).toMatchObject({ outcome: "pending", pendingJobs });
-    expect((await db().select().from(dataRequests).where(eq(dataRequests.id, request.id)))[0]?.status).toBe("in_progress");
+    const acknowledged = outcomes.parse(artifact?.body).outcomes.find(value => value.scope === IMPORT_SOURCE_ERASURE_SCOPE);
+    expect(acknowledged).toMatchObject({ outcome: "erased" });
+    expect(acknowledged?.pendingJobs ?? []).toEqual([]);
     for (let index = 0; index < upload.chunkCount; index++) expect(await storage().get(`imports/${run.id}/${upload.uploadId}/${String(index).padStart(5, "0")}.part`)).toBeUndefined();
-    const [pendingRequest] = await db().select().from(dataRequests).where(eq(dataRequests.id, request.id));
-    expect(pendingRequest?.fulfilledAt).toBeNull();
-    expect(pendingRequest?.resolution).toContain("private normalized import index");
+    const [completedRequest] = await db().select().from(dataRequests).where(eq(dataRequests.id, request.id));
+    expect(completedRequest?.status).toBe("completed");
+    expect(completedRequest?.fulfilledAt).not.toBeNull();
     const [retired] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.id, graph.id));
     expect(retired?.state).toBe("invalidated");
     const entries = await db().select().from(importSourceEntries).where(eq(importSourceEntries.graphId, graph.id));
     const media = await db().select().from(importSourceMedia).where(eq(importSourceMedia.graphId, graph.id));
-    expect(JSON.stringify({ header: retired?.headerMetadata, catalog: retired?.planMetadata, entries, media }).includes(marker)).toBe(true);
+    // Every original row is retained as a minimized shell, not deleted.
+    expect(entries).toHaveLength(initial.length);
+    expect(media.every(row => row.key.startsWith("redacted:") && row.assetId === null)).toBe(true);
+    expect(JSON.stringify({ header: retired?.headerMetadata, catalog: retired?.planMetadata, entries, media }).includes(marker)).toBe(false);
+    const [minimized] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
+    expect(minimized?.origin).toBeNull();
+    expect(minimized?.preview).toEqual({ sourceFormat: "redacted-uploaded-input" });
+    expect(JSON.stringify(minimized).includes(marker)).toBe(false);
   });
 });

@@ -11,6 +11,10 @@ import { seedDefaultRoles } from "@/core/roles/defaults";
 import { seedCoreGuidanceFlows } from "@/core/guidance/definitions";
 import { seedReviewedBuiltinPlugins } from "../helpers/plugin-consent";
 import { previewFromUrl, startImport } from "@/core/import/service";
+import { advanceCrawl } from "@/core/import/crawl-advance";
+import { importCrawlSources } from "@/core/import/crawl-schema";
+import { importRuns, importSourceEntries, importSourceGraphs } from "@/core/plugins/schema";
+import { eq } from "drizzle-orm";
 import { OWNER, closeDb, hasDatabase } from "../helpers/spine";
 
 const download = vi.hoisted(() => vi.fn<typeof PinnedDownload.requestPinnedBytes>());
@@ -41,8 +45,24 @@ describe.runIf(hasDatabase)("selected REST instance path (C3.22/C3.47)", () => {
   afterAll(async () => { await stopJobs(); await closeDb(); });
   it("keeps the actual selected subdirectory in the persisted source, real crawl targets and staged site", async () => {
     const run = await startImport.call({ origin: INSTANCE, kind: "wordpress-rest" }, OWNER);
-    const previewed = await previewFromUrl.call({ id: run.id, url: run.origin! }, OWNER);
-    const preview = z.object({ wordpress: z.object({ site: z.object({ url: z.string() }) }), pages: z.array(z.object({ title: z.string() })) }).parse(previewed.preview);
-    expect({ origin: run.origin, requests: download.mock.calls.map(([raw]) => new URL(raw).pathname).filter(path => path.includes("/wp-json/")), site: preview.wordpress.site.url, title: preview.pages[0]?.title }).toEqual({ origin: INSTANCE, requests: ["/site-a/wp-json/wp/v2/pages", "/site-a/wp-json/wp/v2/posts"], site: INSTANCE, title: "Selected instance article" });
+    // previewFromUrl only admits the source now; the real REST phases run
+    // through advanceCrawl, so drive them until the staged preview exists.
+    await previewFromUrl.call({ id: run.id, url: run.origin! }, OWNER);
+    const [source] = await db().select().from(importCrawlSources).where(eq(importCrawlSources.runId, run.id));
+    if (!source) throw new Error("The admitted REST source was not saved.");
+    let previewed = run;
+    for (let phase = 0; phase < 10 && previewed.status !== "previewed"; phase++) {
+      await advanceCrawl.call({ id: run.id, generation: source.generation }, OWNER);
+      [previewed] = await db().select().from(importRuns).where(eq(importRuns.id, run.id)) as [typeof run];
+    }
+    expect(previewed.status).toBe("previewed");
+    // The staged site and its pages live in the normalized source graph now;
+    // `preview` only names that graph generation.
+    const [graph] = await db().select().from(importSourceGraphs).where(eq(importSourceGraphs.runId, run.id));
+    if (!graph) throw new Error("The staged REST source graph was not saved.");
+    const header = z.object({ kind: z.literal("wordpress-rest"), siteUrl: z.string(), sourceUrl: z.string() }).parse(graph.headerMetadata);
+    const entries = await db().select().from(importSourceEntries).where(eq(importSourceEntries.graphId, graph.id));
+    const titles = z.array(z.object({ title: z.string() })).parse(entries.map(entry => entry.metadata));
+    expect({ origin: run.origin, requests: download.mock.calls.map(([raw]) => new URL(raw).pathname).filter(path => path.includes("/wp-json/")), site: header.siteUrl, source: header.sourceUrl, title: titles[0]?.title }).toEqual({ origin: INSTANCE, requests: ["/site-a/wp-json/wp/v2/pages", "/site-a/wp-json/wp/v2/posts"], site: INSTANCE, source: INSTANCE, title: "Selected instance article" });
   });
 });
