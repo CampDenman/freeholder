@@ -1,7 +1,17 @@
 // Copyright (C) 2026 Tony Aly
 // SPDX-License-Identifier: Apache-2.0
-// PREPARED / UNRUN. Actual shared service and configured S3 signer, fictional
-// private TCP provider. No mocked authorization/context or fixture capability.
+// Qualified on the migration-0098 runtime with the actual shared service and
+// configured S3 signer, fictional private TCP provider. No mocked
+// authorization/context or fixture capability.
+//
+// This file used to assert the pre-0098 refusal, where the durable per-part
+// capability was simply ABSENT. Migration 0098 installs it, so that premise is
+// now structurally impossible here and the current-runtime successor for a
+// DECLARED part lives in media-multipart-part-issuance-lifecycle.test.ts. What
+// is re-aimed and kept below is the containment layer that successor never
+// exercises: an intact created/uploading open provider session, with the
+// complete request/part capabilities installed, still confers NO part-signing
+// authority on its own.
 import {afterAll,afterEach,beforeAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {createServer} from "node:http";
 import {randomUUID} from "node:crypto";
@@ -36,13 +46,16 @@ async function actualOpenSessionProvider(){
  await new Promise<void>((resolve,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",resolve);});const address=server.address();if(!address||typeof address==="string")throw Error("Synthetic provider did not bind TCP.");
  return{endpoint:`http://127.0.0.1:${address.port}`,sessions,calls,close:()=>new Promise<void>((resolve,reject)=>{server.close(error=>error?reject(error):resolve());server.closeAllConnections();})};
 }
-describe.runIf(hasDatabase&&process.env.FREEHOLDER_SKIP_MIGRATE==="1")("C1.12/C11.08 shared part-signing durable-authority containment (old runtime)",()=>{
+describe.runIf(hasDatabase)("C1.12/C11.08 shared part-signing durable-authority containment",()=>{
  let provider:Awaited<ReturnType<typeof actualOpenSessionProvider>>;
- beforeAll(async()=>{await ready();await stopJobs();},60000);
+ beforeAll(async()=>{await ready();await stopJobs();const[capability]=await db().execute<{present:boolean}>(sql`select to_regprocedure('freeholder_media_transfer_request_capability_v1()') is not null and to_regprocedure('freeholder_media_original_part_capability_v1()') is not null as present`);if(capability?.present!==true)throw Error("Prepared part-signing containment requires both genuinely completed capabilities; no fixture function may supply them.");},60000);
  beforeEach(async()=>{await truncateSpine();await db().insert(users).values({id:OWNER.userId,email:"part-authority-owner@example.test",role:"owner"});provider=await actualOpenSessionProvider();for(const[name,value]of Object.entries({NODE_ENV:"test",FREEHOLDER_STORAGE:"s3",S3_ENDPOINT:provider.endpoint,S3_REGION:"fixture",S3_BUCKET:"media",S3_ACCESS_KEY_ID:"fictional-key",S3_SECRET_ACCESS_KEY:"fictional-secret",S3_PUBLIC:"false",FREEHOLDER_STORAGE_QUOTA_BYTES:"",FREEHOLDER_STORAGE_QUOTA_INITIALIZE_EMPTY:"false",MALWARE_SCANNER:"none"}))vi.stubEnv(name,value);resetEnvForTests();resetStorageForTests();});
  afterEach(async()=>{vi.restoreAllMocks();await provider?.close();vi.unstubAllEnvs();resetEnvForTests();resetStorageForTests();});afterAll(closeDb);
- for(const state of ["created","uploading"]as const)it(`refuses actual signer issuance for an intact ${state} open provider session when durable per-part authority is unavailable`,async()=>{
-  const[capability]=await db().execute<{part:string|null}>(sql`select to_regprocedure('freeholder_media_original_part_capability_v1()')::text as part`);expect(capability?.part).toBeNull();
+ for(const state of ["created","uploading"]as const)it(`refuses actual signer issuance for an intact ${state} open provider session with no verified complete original file declaration`,async()=>{
+  // The durable part capability is installed, yet it only answers inside the
+  // current compiled issuer's own transaction: an ordinary transaction is not
+  // eligible and reads "unavailable", never the authority tag.
+  const[capability]=await db().execute<{part:string|null;eligible:boolean;answer:string}>(sql`select to_regprocedure('freeholder_media_original_part_capability_v1()')::text as part,freeholder_media_original_part_runtime_eligible() as eligible,freeholder_media_original_part_capability_v1() as answer`);expect(capability?.part).not.toBeNull();expect(capability?.eligible).toBe(false);expect(capability?.answer).toBe("unavailable");
   const upload=await beginUpload.call({filename:"original.pdf",contentType:"application/pdf",bytes:9},OWNER);expect(upload.strategy).toBe("direct_multipart");const captured=await originalMultipart(upload.id);expect(captured.resource.state).toBe("open");expect(captured.resource.providerUploadId).toBeTruthy();expect(provider.sessions.get(captured.resource.providerUploadId!)).toContain(captured.resource.key);
   // Only metadata selects the already-uploading legacy branch. The actual
   // CREATE/session/receipt above is genuine; no physical part or finish is
@@ -50,6 +63,6 @@ describe.runIf(hasDatabase&&process.env.FREEHOLDER_SKIP_MIGRATE==="1")("C1.12/C1
   if(state==="uploading")await db().transaction(async tx=>{await allowMediaReceiptWrites(tx);await tx.update(mediaUploads).set({state:"uploading"}).where(eq(mediaUploads.id,upload.id));});
   const multipart=captured.store.directMultipart;if(!multipart)throw Error("Actual configured private S3 signer is missing.");const signer=vi.spyOn(multipart,"signPart");expect((await originalMultipart(upload.id)).store.directMultipart).toBe(multipart);
   const before={uploads:await db().select().from(mediaUploads),objects:await db().select().from(mediaObjects),resources:await db().select().from(mediaMultipartResources),operations:await db().select().from(mediaMultipartOperations)},callsBefore=structuredClone(provider.calls),sessionsBefore=[...provider.sessions];
-  const denied=await failure(signUploadParts.call({id:upload.id,partNumbers:[1]},OWNER));expect(denied.code).toBe("conflict");expect(denied.message).toContain("upload recovery is fully supported");expect(signer).not.toHaveBeenCalled();expect(await db().select().from(mediaUploads)).toEqual(before.uploads);expect(await db().select().from(mediaObjects)).toEqual(before.objects);expect(await db().select().from(mediaMultipartResources)).toEqual(before.resources);expect(await db().select().from(mediaMultipartOperations)).toEqual(before.operations);expect(provider.calls).toEqual(callsBefore);expect([...provider.sessions]).toEqual(sessionsBefore);expect((await db().select().from(mediaMultipartResources))[0]?.retiredAt).toBeNull();
+  const denied=await failure(signUploadParts.call({id:upload.id,partNumbers:[1]},OWNER));expect(denied.code).toBe("conflict");expect(denied.message).toContain("Select and verify the same complete original file before requesting upload links.");expect(signer).not.toHaveBeenCalled();expect(await db().select().from(mediaUploads)).toEqual(before.uploads);expect(await db().select().from(mediaObjects)).toEqual(before.objects);expect(await db().select().from(mediaMultipartResources)).toEqual(before.resources);expect(await db().select().from(mediaMultipartOperations)).toEqual(before.operations);expect(provider.calls).toEqual(callsBefore);expect([...provider.sessions]).toEqual(sessionsBefore);expect((await db().select().from(mediaMultipartResources))[0]?.retiredAt).toBeNull();
  },60000);
 });
