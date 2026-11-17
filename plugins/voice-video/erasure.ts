@@ -6,7 +6,9 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { defineJob, enqueueJob } from "@/core/jobs";
 import { completeErasureJob } from "@/core/privacy/service";
-import { storage } from "@/adapters/storage";
+import { boundStorage } from "@/adapters/storage";
+import { deleteWithReceipt } from "@/core/media/delete-with-receipt";
+import { discardUnwrittenObjectReservation } from "@/core/media/write-ledger";
 import type { Tx } from "@/core/service";
 import { voiceVideoProvider } from "./adapter";
 import { voiceVideoArtifacts, voiceVideoRooms } from "./schema";
@@ -42,10 +44,19 @@ export const eraseImportedCopies = defineJob({
     if (!context) throw new Error("Owner-storage erasure requires a durable job identity.");
     const input = storagePayload.parse(data);
     await context.throwIfCancelled();
-    // Deleting an already-absent object is a successful retry, matching the
-    // provider worker. A storage failure throws and the durable retry
-    // re-runs; the receipt stays in progress until every copy is gone.
-    for (const key of input.keys) await storage().delete(key);
+    // Physical bytes are removed only through the shared original-file
+    // removal service, so every delete carries its own admitted caller and
+    // proof. A key whose original generation is already retired reports true,
+    // which keeps an already-absent object a successful retry, matching the
+    // provider worker. Anything else throws and the durable retry re-runs;
+    // the receipt stays in progress until every copy is provably gone.
+    const captured = await boundStorage();
+    for (const key of input.keys) {
+      if (await discardUnwrittenObjectReservation(key)) continue;
+      if (!await deleteWithReceipt(key, captured)) {
+        throw new Error("The owner-storage copy, or its unresolved original storage operation, keeps this erasure pending.");
+      }
+    }
     await context.throwIfCancelled();
     await completeErasureJob.call({ requestId: input.requestId, scope: artifactScope, jobId: input.originalJobId }, { kind: "system" });
     return { erased: true };
