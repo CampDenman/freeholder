@@ -153,7 +153,10 @@ describe.runIf(hasDatabase)("legacy refund original physical dispatch", () => {
     });
     await expect(submitProviderRefund.call(request, OWNER)).rejects.toMatchObject({ code: "conflict" });
     const pending = await row(request.idempotencyKey);
-    expect(pending).toMatchObject({ status: "processing", providerRef: "re_CorruptJournal" });
+    // A corrupt admission cannot bind the resource onto the row: that binding
+    // is caller-ACK authority. The actual positive is kept as recovery
+    // evidence in the journal fact below, where no guard can read it as proof.
+    expect(pending).toMatchObject({ status: "processing", providerRef: null });
     const facts = await db().select().from(moneyStateEvents).where(and(eq(moneyStateEvents.subjectId, pending.id), eq(moneyStateEvents.toState, "provider_result_observed")));
     expect(facts).toHaveLength(1);
     expect(facts[0]?.metadata).toMatchObject({ recoveryRequired: true, original: { paymentId: original.id, amountMinor: 1000, currency: "CAD" }, result: { status: "succeeded", providerRef: "re_CorruptJournal" } });
@@ -225,7 +228,13 @@ describe.runIf(hasDatabase)("legacy refund original physical dispatch", () => {
       data: { object: { id: "re_PendingTerminal", payment_intent: original.providerRef, amount: 1000, currency: "cad", status: "failed" } } });
     const secret = "whsec_synthetic_original_pending";
     const signature = createHmac("sha256", secret).update(`${at}.${raw}`).digest("hex");
-    const adapter = createStripePayments({ secretKey: "sk_synthetic", webhookSecrets: [secret] });
+    // Signed refund feedback is checked against the authenticated platform
+    // account before it is applied; answer that one read and nothing else.
+    const adapter = createStripePayments({ secretKey: "sk_synthetic", webhookSecrets: [secret], fetch: async (input, init = {}) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (url.href === "https://api.stripe.com/v1/account" && (init.method ?? "GET") === "GET") return Response.json({ id: "acct_SyntheticPlatform" });
+      throw new Error(`Unexpected webhook verifier transport ${init.method ?? "GET"} ${url.origin}${url.pathname}`);
+    } });
     const observed = await adapter.verifyWebhook({ headers: { "stripe-signature": `t=${at},v1=${signature}` }, body: Uint8Array.from(Buffer.from(raw)), receivedAt });
     await processPaymentProviderEvents.call({ provider: "stripe", bodySha256: createHash("sha256").update(raw).digest("hex"), receivedAt, events: [...observed] }, { kind: "system" });
     expect(await row(request.idempotencyKey)).toMatchObject({ status: "failed", failureCode: "provider_failed" });

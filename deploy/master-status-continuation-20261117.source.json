@@ -1,0 +1,37 @@
+{
+  "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
+  "protocol": "master_status_continuation_20261117.v1",
+  "checklist": [
+    "C1.12",
+    "C11.17",
+    "C12.38"
+  ],
+  "status": "MASTER.md advanced past the recorded source-continuation head without a continuation entry: commit a2f8aaea (an explicitly unreviewed WIP snapshot) inserted the two §43 status paragraphs below between the `full-local-browser-20261116` paragraph and the `next-security-performance-20261116` paragraph, while the deploy records committed beside them still pin the predecessor a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3 as current. Every *-source test that reverses the MASTER.md ledger therefore stopped at the raw current bytes instead of the recorded head. This record carries the exact delta so the chain back to the last reviewed MASTER.md stays verifiable; it asserts nothing about the two qualifications the paragraphs describe, which remain the owning workstreams' to evidence.",
+  "productBehaviorChanged": false,
+  "unrecordedIn": "a2f8aaeaa532cfb8ed0dbd9f4ef7841e66e7a7c8",
+  "lastReviewedMaster": {
+    "commit": "e2b17318",
+    "sha256": "2f54ae40d1f2e1a3e54d89eb1b7686e3a61661ac0b700238e7a01edcf64a5819"
+  },
+  "artifacts": [
+    {
+      "path": "MASTER.md",
+      "sha256": "b9d3a5688911e915a81e568d3a1006b421283da280fa4d9599dbc3c7115c00bd"
+    }
+  ],
+  "testContinuations": [
+    {
+      "path": "MASTER.md",
+      "afterSha256": "b9d3a5688911e915a81e568d3a1006b421283da280fa4d9599dbc3c7115c00bd",
+      "beforeSha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3",
+      "continue": true,
+      "edits": [
+        {
+          "before": "  acceptance remain open; no C row closes.\n  Framework security/performance qualification2026-11-16",
+          "after": "  acceptance remain open; no C row closes.\n  Complete-browser failure audit and repair2026-11-16 (C1.08/C1.12/C3.22/C5.19/C9.38/\n  C11.17/C12.23/C12.38): the actual189-case run was NOT GREEN:156 passed,31 failed,\n  2 skipped. Nine raw privacy fixtures now use the required identity lock; the member\n  upload fixture restores real contact ownership; archive cleanup has a cycle-free\n  guarded deletion entry; the legacy merchant trial declares its actual scope version.\n  Focused privacy/import PASS13/13 and archive/member/trial PASS9/9. All35 selected\n  media controls pass after isolating database-resetting files. The real pending-membership\n  parallel-read fix PASSes native1/1 and its production-browser control. Genuine signed\n  return-callback controls PASS2/2 and all8 localized return journeys PASS. Every original\n  failure now has a focused pass, but the complete source/browser reruns remain required.\n  See `deploy/browser-failure-repairs-20261116.source.json`; no C row closes.\n  Native media-isolation repair2026-11-16 (C1.12/C11.17): three full-source attempts\n  timed out; the second exposed eight capture failures after an erasure case stalled.\n  The third passed capture/subscription-billing before the harness deadline. The stalled\n  case generated3182 entries from accumulated shared local media. Vitest\n  now supplies a unique temporary media root per run unless explicitly configured.\n  The complete capture file PASSes17/17 under that ordinary configuration, including\n  its concurrent-upload control. The final full source/browser reruns remain open.\n  Framework security/performance qualification2026-11-16",
+          "occurrences": 1
+        }
+      ]
+    }
+  ]
+}
