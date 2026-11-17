@@ -6,7 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, asc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/core/db";
-import { lockContactIdentityForRead, lockContactIdentityForRecovery } from "@/core/contacts/identity-lock";
+import { lockContactIdentityForObservationReconcile, lockContactIdentityForRead } from "@/core/contacts/identity-lock";
 import { registerPendingObjectOwner } from "@/core/media/object-ledger";
 import { registerStorageObservationReconciler } from "@/core/media/observation-hooks";
 import { mediaObjects } from "@/core/media/schema";
@@ -283,7 +283,7 @@ export const reconcileCrawlOriginalObservation = defineService({
   kind: "mutation", permission: "system", external: false,
   auditInputFields: ["receiptId"], input: z.object({ receiptId: z.uuid().optional(), after: z.uuid().optional() }), output: z.object({ next: z.uuid().nullable(), recoveryRequired: z.number().int().nonnegative() }),
   handler: async (input, ctx) => {
-    await lockContactIdentityForRecovery(ctx.tx);
+    await lockContactIdentityForObservationReconcile(ctx.tx);
     if (input.receiptId) {
       const cleanup = await ctx.tx.execute<{ key: string }>(sql`
         select original.storage_key as key from import_crawl_responses original
