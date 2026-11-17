@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/core/db";
 import { dispatch } from "@/core/api/dispatch";
-import { storage } from "@/adapters/storage";
+import { fixtureStorage } from "../helpers/raw-storage";
 import { assets } from "@/core/media/schema";
 import { authorizeObjectDelivery, resolveImage } from "@/core/media/service";
 import { createContact } from "@/core/contacts/service";
@@ -27,7 +27,7 @@ describe.runIf(hasDatabase)("adversarial gallery delivery", () => {
     await updateBusiness.call({ name: "Privacy proofs", country: "CA", baseCurrency: "CAD", timezone: "America/Vancouver" }, OWNER);
   });
   afterAll(async () => {
-    for (const key of storedKeys) await storage().delete(key);
+    for (const key of storedKeys) await fixtureStorage().delete(key);
     await closeDb();
   });
 
@@ -42,8 +42,8 @@ describe.runIf(hasDatabase)("adversarial gallery delivery", () => {
     const key = `test/security-${crypto.randomUUID()}.jpg`;
     const marked = `${key}.wm.webp`;
     const body = new TextEncoder().encode("PRIVATE GALLERY ORIGINAL");
-    await storage().put(key, body, "image/jpeg");
-    await storage().put(marked, body, "image/webp");
+    await fixtureStorage().put(key, body, "image/jpeg");
+    await fixtureStorage().put(marked, body, "image/webp");
     storedKeys.add(key); storedKeys.add(marked);
     const [asset] = await db().insert(assets).values({
       kind: "image", storageKey: key, filename: "private.jpg", mime: "image/jpeg",
