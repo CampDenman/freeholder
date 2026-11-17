@@ -20,6 +20,87 @@ Reviewer: Claude Opus 5, session `freeholder`, working tree
 
 ---
 
+## Summary for the independent reviewer
+
+**Read this first; the detail is below, surface by surface.**
+
+### What was verified, and what that is worth
+
+Nine surfaces were worked against the residuals in
+`security/independent-review-packet.md`: Auth (4/4), Payments (3/3), Webhooks
+(W1), MCP/agents (M2, M3, M4), OAuth (O1, O2, O3), Plugins (PL1), Updater (U1),
+Uploads/media (UP1, UP2), Customer privacy (CP1, CP2).
+
+**No critical or high findings.** Two low-severity findings and a set of
+residuals are listed below. This is a read-only review: it establishes what can
+be established from the source, and stops where a live instance is needed.
+
+### Findings
+
+| # | Severity | Surface | Finding |
+|---|---|---|---|
+| 1 | Low | Payments | `bodySha256` is written on every provider event and **never compared**. A replay of one `providerEventId` carrying a different body is counted as a duplicate and discarded silently, indistinguishable from a benign retry. Money is never double-applied, so this is a missed *detection*, not a safety hole — but the column exists precisely to support the comparison. |
+| 2 | Low | Service layer | `assertOutput` strips unknown keys only when validation **succeeds**. In production a result failing its own output schema is logged and returned **raw**. The stripping property that keeps secrets out of responses is therefore conditional, and the fallback applies only in the environment where a leak would matter. |
+
+### Residuals a human must judge
+
+1. **"Pending" erasure is only as true as the worker behind it.** The privacy
+   engine records a scope as pending and delegates to a durable job; nothing
+   verifies the job can ever succeed. A live instance of exactly this was found
+   and repaired on 2026-11-17 (`crawl-privacy.ts` counted its own in-flight
+   DELETE as proof the object was live, so private crawled bodies were never
+   physically erased while the request sat correctly as pending). What detects
+   a pending erasure that has stopped progressing?
+2. **`stepUp ⇒ scoped` is true but not enforced.** Every step-up service is
+   currently `permission: "scoped"`, which is what keeps personal API keys away
+   from them. A future `stepUp` service declared `authenticated` would be
+   reachable by a key with no 2FA. Worth a registry gate test.
+3. **`SESSION_SECRET` serves two purposes** — session/link signing and a
+   fallback financial-evidence signing key. Rotating it for session reasons
+   also rotates financial evidence signing. Confirm the runbook says so.
+4. **CSP path redaction misses short secrets.** `OPAQUE_SEGMENT` matches 24+
+   characters, so a secret-bearing URL segment shorter than that, and neither
+   UUID nor numeric, is stored verbatim in violation rows.
+5. **No recipe mentions `MALWARE_SCANNER`.** It defaults to `none`; Doctor warns
+   honestly and even proves a configured scanner with EICAR, but Doctor is
+   opt-in and the seven recipe `.env.example` files are the onboarding path.
+6. **Plugin ownership resolution is fail-closed by `?.`, not by assertion.**
+   A service whose owner cannot be resolved gets the restricted plugin actor,
+   which is the right direction but is implied rather than stated.
+
+### Still open — these need a running instance, not more reading
+
+Probing MCP with a real client (M1); webhook signature tolerance against the
+documented receiver contract and replay-as-new-delivery semantics (W2/W3);
+whether the embedded release-feed public key matches what CI publishes, and a
+killed PID mid-cutover on a real target (U2/U3); that local storage refuses
+production without the unsafe flag (UP3); the C11.14 undelete-every-row scope
+(CP3); and the timing side-channel the packet already scopes out.
+
+### What this review is not
+
+It does not close C11.10 and does not sign it. The packet's own rule governs —
+*"This is not the review; the checkbox stays open until an independent reviewer
+signs it"* — and C11.10 separately records that an audit by three adversarial
+agents "does not provide independent sign-off". This review is by an agent of
+the same class, with commits in this repository. Its purpose is to shrink the
+independent reviewer's job to confirmation rather than exploration.
+
+### The impression worth passing on
+
+The controls here are better than the average of what this kind of review
+usually finds, and in several places the code anticipates the attack and says
+so in a comment: the webhook transport checks *every* DNS answer rather than
+the one it selects; `hiddenFromMcp` evaluates the system boundary before any
+opt-in override; the untrusted-input envelope uses an unguessable per-envelope
+marker *and* clamps autonomy in code so a successful injection still cannot
+act; the budget limiter discloses its own one-turn overshoot rather than hiding
+it. The defects found on 2026-11-17 were not sloppiness — they were seams where
+in-flight refactors had not finished crossing.
+
+
+---
+
 ## Auth
 
 ### R1. "Confirm a stolen customer magic link cannot mint a staff session." — VERIFIED, no finding
@@ -737,9 +818,37 @@ true as the worker behind it — is unguarded, and a reviewer should ask what
 detects a pending erasure that has stopped making progress. A dead-letter or
 age alarm on erasure jobs would close it.
 
-### CP1/CP3 — not yet worked
-Artifact download existence-leak behaviour on a guessed UUID, and the C11.14
-undelete-every-row scope, remain open. The packet is right that contact-privacy
+### CP1. "Artifact download is session-bound and `no-store`. Confirm a guessed UUID 404s without leaking existence beyond timing." — VERIFIED, no finding
+
+`app/privacy/artifacts/[id]/route.ts` resolves an actor first and splits on
+capability: a caller with `contacts:manage` reaches
+`downloadDataRequestArtifact`, everyone else reaches
+`downloadMyDataRequestArtifact`, which is `permission: "authenticated"` so an
+anonymous caller never reaches it at all.
+
+The existence question resolves cleanly. An artifact that exists but belongs to
+another contact throws the *same* error as one that does not exist:
+
+```js
+if (row.request.contactId !== contact.id) {
+  throw new ServiceError("not_found", "That privacy artifact is not here.");
+}
+```
+
+Same code, same wording — so the response distinguishes neither. The packet's
+"beyond timing" caveat remains accurate (the not-yours path completes a lookup
+before comparing, the missing path fails at lookup), and timing is explicitly
+out of scope for this packet.
+
+Delivery headers are strong and worth recording: `private, no-store,
+max-age=0`, `pragma: no-cache`, `referrer-policy: no-referrer`,
+`x-content-type-options: nosniff`, `content-security-policy: default-src
+'none'; sandbox` — so an exported HTML body cannot execute or phone home — plus
+an `x-freeholder-content-sha256` integrity header, and a filename sanitized by
+allowlist before it reaches `content-disposition`.
+
+### CP3 — not yet worked
+The C11.14 undelete-every-row scope remains open. The packet is right that contact-privacy
 tests are not coverage of every user-owned table.
 
 ---
