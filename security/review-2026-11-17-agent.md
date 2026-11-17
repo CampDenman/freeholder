@@ -351,9 +351,60 @@ goes to the exact address that was checked — there is no second resolution.
 **Redirects are not followed at all** (`transport.ts:3`), so a 302 to a private
 address cannot launder past the checks.
 
-### W2/W3 — not yet worked
-Signature timestamp tolerance (300s) versus the documented receiver contract,
-and whether replay-as-new-delivery is the intended contract, remain open.
+### W2. "Signature timestamp tolerance is 300s. Confirm receivers documented in `deploy/webhook-delivery.md` match the implementation." — FINDING (documentation gap). The implementation is sound; the contract it depends on is unwritten.
+
+**The scheme itself is well designed and the reasoning is in the source.**
+`signPayload` (`src/core/webhooks/sign.ts`) emits `t=<unix seconds>,v1=<hex hmac>`
+over `HMAC-SHA256(secret, `${t}.${body}`)`. Two deliberate choices, each
+explained in the comment:
+
+- the timestamp is *inside* the signed material — *"a signature over the body
+  alone is replayable forever by anyone who ever saw one request, and a
+  receiver has no way to tell a retry from an attack"*;
+- the scheme is versioned (`v1=`) because *"changing an HMAC later without a
+  version is a flag day for every receiver at once."*
+
+`verifySignature` is exported and tested as the reference implementation, with
+a note that *"documentation of a signing scheme that nobody has run is
+documentation of an intention"* — which is exactly the right instinct. It uses
+a symmetric window (`Math.abs(now - timestamp) > tolerance`), so clock skew in
+either direction is handled, and compares with a constant-time buffer equal.
+
+**The finding.** `deploy/webhook-delivery.md` is 36 lines and documents the
+*transport* boundary only — HTTPS, DNS pinning, private-range refusal,
+no-redirects, bounded time and bytes. It is accurate and thorough on that, and
+it is what W1 above verifies. But it says **nothing** about the signature: not
+the header name, not `t=…,v1=…`, not that the signed string is `${t}.${body}`
+rather than the body alone, not SHA-256, not the versioning intent, and not
+that the 300-second value is the *receiver's* choice rather than a protocol
+constant (the comment is explicit: it lets receivers "reject anything older
+than their own tolerance"; 300 is only this codebase's verification default).
+
+So the residual as posed cannot be satisfied: there is no documented receiver
+contract to compare the implementation against. The practical consequence is
+not theoretical — a third-party receiver that is told only "we sign your
+payload" will plausibly HMAC the body alone, or skip the timestamp check, and
+**a receiver that does not verify the timestamp gets no replay protection at
+all**, which is the single property this design exists to provide. The careful
+work in `sign.ts` is only as good as the receiver's half, and the receiver's
+half is currently undocumented.
+
+**Suggested remedy** (documentation, no code change): add a "Verifying a
+delivery" section to `deploy/webhook-delivery.md` giving the header name and
+format, the exact signed string, the algorithm, a worked example, the advice to
+choose a tolerance and reject outside it, and a pointer to `verifySignature` as
+the reference. The function is already exported and tested for this purpose.
+
+### W3. "Replay is a new delivery with a new idempotency key, not a byte-for-byte resend. Confirm that is the intended contract." — partially verified; same documentation gap
+
+The signing design makes the intent clear: a byte-for-byte resend would carry
+its original `t`, and any receiver honouring its own tolerance would reject it
+once that window passed, so replay necessarily re-signs at the current time and
+is a *new* delivery. That is consistent with the residual's description.
+However the same document does not state the contract to receivers, so a
+receiver cannot know whether to expect a repeated idempotency key. Folding this
+into the same "Verifying a delivery" section would close both.
+
 
 ---
 
