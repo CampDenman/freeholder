@@ -25,7 +25,8 @@ import { startImport } from "@/core/import/service";
 import { beginSourceUpload, uploadSourceChunk, previewFromUpload } from "@/core/import/source-upload";
 import { OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
 import { reviewOriginalImportedReader } from "../helpers/import-reader-review";
-import { confirmStoppedUnappliedDelete } from "../helpers/stopped-storage-delete";
+import { fixtureStorage } from "../helpers/raw-storage";
+import { faultOriginalProviderDelete } from "../helpers/original-delete-faults";
 
 const EMAIL = "raw-erasure-reader@example.test";
 const bytes = new TextEncoder().encode(`<rss xmlns:wp="http://wordpress.org/export/1.2/"><channel><title>Fixture</title><item><title>Fixture page</title><wp:post_id>10</wp:post_id><wp:post_type>post</wp:post_type><wp:comment><wp:comment_id>20</wp:comment_id><wp:comment_author>Private reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Private source copy.</wp:comment_content></wp:comment></item></channel></rss>`);
@@ -86,12 +87,18 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
     const result = await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER);
     const job = await jobFor(result);
     await expire(run.id);
-    const failure = vi.spyOn(storage(), "delete").mockRejectedValueOnce(new Error("Synthetic provider outage"));
+    const failure = await faultOriginalProviderDelete({ kind: "unresolved", message: "Synthetic provider outage" });
     await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/provider outage/);
+    expect(failure.attempts).toHaveBeenCalled();
     expect(await status(request.id)).toBe("in_progress");
-    failure.mockRestore();
-    await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/unresolved physical/);
-    await confirmStoppedUnappliedDelete(key);
+    failure.restore();
+    // The admitted DELETE has an unresolved physical outcome, so the product
+    // refuses to dispatch another one rather than guessing it applied.
+    await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/physical object remains/);
+    // The dispatched DELETE did land after all. Only its verified absence can
+    // retire the receipt: the earlier request is never replayed, and the
+    // timeout on its own proved nothing.
+    await fixtureStorage().delete(key);
     await eraseImportSourceObjects.handler(job.data, context(job.id));
     expect(await storage().get(key)).toBeUndefined();
     expect(await status(request.id)).toBe("completed");
@@ -104,8 +111,11 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
     const result = await fulfillDataRequest.call({ id: request.id, confirmation: "ERASE" }, OWNER);
     const job = await jobFor(result);
     await expire(run.id);
-    vi.spyOn(storage(), "delete").mockResolvedValueOnce(undefined);
-    await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/not confirmed|still present/);
+    // The provider acknowledges the DELETE and the bytes stay. The original
+    // absence read is what refuses, so no receipt can be acknowledged.
+    const unapplied = await faultOriginalProviderDelete({ kind: "unapplied" });
+    try { await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/physical object remains/); }
+    finally { unapplied.restore(); }
     expect(await storage().get(key)).toBeDefined();
     expect(await status(request.id)).toBe("in_progress");
   });
@@ -132,7 +142,10 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
       await expire(run.id);
       select(rootB);
       const replacement = storage(), other = new TextEncoder().encode("Fictional independent object in the replacement store.");
-      await replacement.put(key, other, "application/octet-stream");
+      // Independent bytes in the disposable replacement namespace. The managed
+      // store refuses an unattributed put, so seed through the sanctioned
+      // low-level provider; this grants no authority over the original.
+      await fixtureStorage().put(key, other, "application/octet-stream");
       const refused = await eraseImportSourceObjects.handler(job.data, context(job.id)).then(() => false, () => true);
       expect({ refused, originalPresent: Boolean(await original.get(key)), replacementUnchanged: Buffer.from(await replacement.get(key) ?? []).equals(Buffer.from(other)), requestStatus: await status(request.id) }).toEqual({ refused: true, originalPresent: true, replacementUnchanged: true, requestStatus: "in_progress" });
       select(rootA);
@@ -142,7 +155,9 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
       expect(await status(request.id)).toBe("completed");
       select(rootB);
       const currentReplacement = storage(), deletes = vi.spyOn(currentReplacement, "delete"), puts = vi.spyOn(currentReplacement, "put");
-      await expect(eraseImportSourceObjects.handler(job.data, context(job.id))).rejects.toThrow(/original|resource|pending/);
+      // The receipt is already complete, so the replayed task is an idempotent
+      // no-op. What matters is that it reaches no provider in this namespace.
+      expect(await eraseImportSourceObjects.handler(job.data, context(job.id))).toEqual({ erased: 0 });
       await expect(putWithReceipt({ key, body: bytes, contentType: "application/octet-stream", role: "staged" }, OWNER)).rejects.toThrow(/original storage resource/);
       expect(deletes).not.toHaveBeenCalled();
       expect(puts).not.toHaveBeenCalled();
@@ -169,7 +184,7 @@ describe.runIf(hasDatabase)("raw source erasure receipt", () => {
       await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, OWNER);
       expect(await original.get(key)).toEqual(bytes);
       select(rootB);
-      await replacement.put(key, bytes, "application/octet-stream");
+      await fixtureStorage().put(key, bytes, "application/octet-stream");
       await expect(previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).rejects.toThrow(/original storage resource/);
       expect(await replacement.get(key)).toEqual(bytes);
     } finally {

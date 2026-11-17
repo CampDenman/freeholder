@@ -30,3 +30,18 @@ export function fixtureStorage(): StorageAdapter {
     publicPath: MEDIA_PATH,
   });
 }
+
+/** Replace bytes already at rest, keeping the provider self-consistent.
+ *
+ * A bare `put` over an existing object leaves the accounted request record
+ * (written by `createLocalRequestStore`) describing the OLD digest, and
+ * `actualObject` then throws "local bytes differ from their original request
+ * generation" for that key. Physical retirement inventories the WHOLE root, so
+ * one such object makes every later retirement in the run fail — a fixture
+ * artefact, not the refusal under test. Deleting first drops the stale record
+ * with the bytes, so the key simply holds an object no receipt describes. */
+export async function replaceFixtureBytes(key: string, body: Uint8Array<ArrayBuffer>, contentType = "application/octet-stream"): Promise<void> {
+  const provider = fixtureStorage();
+  await provider.delete(key);
+  await provider.put(key, body, contentType);
+}

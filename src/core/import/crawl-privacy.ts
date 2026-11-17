@@ -173,12 +173,21 @@ export function registerCrawlPrivacy(): void {
     },
     eraseUnheld: (tx, _contactId, context) => eraseUnheldCrawlOriginals(tx, context),
   });
+  // C3.47: ownership here guards against an unresolved write RECREATING bytes,
+  // so only an unresolved PUT counts — the same rule retireOriginalMediaObject
+  // applies before it captures a retirement. Counting any unresolved receipt
+  // made this self-blocking: capture() inserts the conditional DELETE receipt
+  // in state "started", then locked() re-checks ownership inside that same
+  // transaction and saw its own delete row, so no verified crawl erasure could
+  // ever retire its private HTTP bytes. An unresolved DELETE cannot write, and
+  // the delete-continuation/local-closure guards already govern it.
   registerPendingObjectOwner("import-crawl/", async (key, _now, tx?: Tx) => {
     const [row] = await (tx ?? db()).execute<{ owned: boolean }>(sql`
       select exists(select 1 from import_crawl_responses original
        where original.storage_key=${key} and (original.retired_at is null
          or freeholder_crawl_response_held(original.id)
-         or exists(select 1 from media_object_writes physical where physical.key_digest=original.key_digest and physical.state in ('unverified','started','unknown')))) as owned
+         or exists(select 1 from media_object_writes physical where physical.key_digest=original.key_digest
+            and physical.operation_kind='put' and physical.state in ('unverified','started','unknown')))) as owned
     `);
     return Boolean(row?.owned);
   });

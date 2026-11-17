@@ -18,7 +18,8 @@ import { cleanupOrphanedMedia } from "@/core/media/service";
 import { startImport } from "@/core/import/service";
 import { beginSourceUpload, previewFromUpload, uploadSourceChunk } from "@/core/import/source-upload";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
-import { confirmStoppedUnappliedDelete } from "../helpers/stopped-storage-delete";
+import { fixtureStorage, replaceFixtureBytes } from "../helpers/raw-storage";
+import { faultOriginalProviderDelete } from "../helpers/original-delete-faults";
 
 const EMAIL = "raw-reader@example.test";
 const source = new TextEncoder().encode(`<rss xmlns:wp="http://wordpress.org/export/1.2/" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Raw source fixture</title><link>https://source.example</link><item><title>Fixture article</title><link>https://source.example/article</link><wp:post_id>10</wp:post_id><wp:post_name>article</wp:post_name><wp:post_type>post</wp:post_type><wp:status>publish</wp:status><content:encoded>Ordinary article</content:encoded><wp:comment><wp:comment_id>20</wp:comment_id><wp:comment_author>Fixture reader</wp:comment_author><wp:comment_author_email>${EMAIL}</wp:comment_author_email><wp:comment_content>Private source reader data.</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment></item></channel></rss>`);
@@ -43,16 +44,20 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
     await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes: source }, OWNER);
     const key = `imports/${run.id}/${upload.uploadId}/00000.part`;
     const store = storage();
-    const unavailable = vi.spyOn(store, "delete").mockRejectedValueOnce(new Error("Synthetic temporary provider outage"));
+    const unavailable = await faultOriginalProviderDelete({ kind: "unresolved", message: "Synthetic temporary provider outage" });
     const staged = await previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER);
     expect(staged.status).toBe("previewed");
+    expect(unavailable.attempts).toHaveBeenCalled();
     const jobs = await listJobHistory({ name: "core.deleteCaptureObjects", limit: 100 });
     expect(jobs.items.filter(job => JSON.stringify(job.data.keys) === JSON.stringify([key])).length).toBeGreaterThanOrEqual(2);
     expect(new TextDecoder().decode(await store.get(key))).toContain(EMAIL);
-    unavailable.mockRestore();
-    await confirmStoppedUnappliedDelete(key);
+    unavailable.restore();
+    // The dispatched DELETE did land after all. The sweep may only verify that
+    // absence and retire the receipt; it never replays the earlier request.
+    await fixtureStorage().delete(key);
     await cleanupOrphanedMedia(new Date(Date.now() + 25 * 60 * 60 * 1000));
     expect(await store.get(key)).toBeUndefined();
+    expect(await db().select().from(mediaObjects).where(eq(mediaObjects.key, key))).toEqual([]);
   });
 
   it("refuses a public storage configuration before reserving or writing private source input", async () => {
@@ -99,7 +104,10 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
   it("rejects corrupted provider bytes before staging a source preview", async () => {
     const { run, upload, key } = await uploaded();
     const changed = source.slice(); changed[changed.length - 10] = changed[changed.length - 10]! ^ 1;
-    await storage().put(key, changed, "application/octet-stream");
+    // Corrupting bytes already at rest is fixture arrangement, not a product
+    // write: the managed store refuses an unattributed put by design. What this
+    // case asserts is that previewFromUpload refuses the changed object.
+    await replaceFixtureBytes(key, changed);
     await expect(previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).rejects.toThrow(/differs from its verified upload/);
     const [saved] = await db().select().from(importRuns).where(eq(importRuns.id, run.id));
     expect(saved?.status).not.toBe("previewed");
@@ -221,12 +229,18 @@ describe.runIf(hasDatabase)("raw import-source byte cleanup", () => {
   it("does not infer cancellation when PUT rejects before a provider write finishes later", async () => {
     const run = await startImport.call({ origin: "https://source.example", kind: "wordpress-wxr" }, OWNER);
     const upload = await beginSourceUpload.call({ id: run.id, filename: "source.xml", bytes: source.byteLength }, OWNER);
-    const key = `imports/${run.id}/${upload.uploadId}/00000.part`, store = storage(), put = store.put.bind(store);
+    // The late completion models the PROVIDER finishing a write the client
+    // already gave up on. That byte landing has no live caller scope, so it is
+    // seeded through the low-level provider rather than the managed store.
+    const key = `imports/${run.id}/${upload.uploadId}/00000.part`, store = storage(), provider = fixtureStorage();
+    // Only key/body/type: forwarding the service's observation would send the
+    // low-level provider back through the caller fence it has no scope for.
+    const put = provider.put.bind(provider);
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     let providerCompletion: ReturnType<typeof put> | undefined;
     vi.spyOn(store, "put").mockImplementationOnce(async (...args) => {
-      providerCompletion = gate.then(() => put(...args));
+      providerCompletion = gate.then(() => put(args[0], args[1], args[2]));
       throw new Error("Synthetic client outcome unknown while provider is still running");
     });
     try {

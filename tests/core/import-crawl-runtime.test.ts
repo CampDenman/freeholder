@@ -38,6 +38,11 @@ async function actualSite() {
   return `http://fictional-live-recovery.example:${(server.address() as AddressInfo).port}/`;
 }
 async function actualOwner(id = randomUUID()) {
+  // `users_single_owner_idx` permits exactly one owner, so a second person can
+  // only hold recovery authority after a real handover. Retire the previous
+  // owner first; the original executor identity is a committed JSON fact on the
+  // response and is deliberately not reconstructed from the live user row.
+  await db().delete(users).where(eq(users.role, "owner"));
   await db().insert(users).values({ id, email: `fictional-crawl-recovery-${id}@example.test`, role: "owner" });
   await db().insert(totpFactors).values({ userId: id, encryptedSecret: "fictional-recovery-enrolled-factor" });
   return freshOwnerSession(id);

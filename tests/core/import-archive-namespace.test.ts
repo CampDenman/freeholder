@@ -14,6 +14,7 @@ import { startImport } from "@/core/import/service";
 import { beginSourceUpload, previewFromUpload, uploadSourceChunk } from "@/core/import/source-upload";
 import { originalStaticZip } from "../helpers/original-static-zip";
 import { closeDb, hasDatabase, OWNER, truncateSpine } from "../helpers/spine";
+import { fixtureStorage } from "../helpers/raw-storage";
 
 const originalBytes = originalStaticZip(Array.from({ length: 501 }, (_, index) => ({
   path: `site/page-${index}.html`, body: `<html><title>Original ${index}</title><p>Fictional source ${index}.</p></html>`,
@@ -39,7 +40,11 @@ describe.runIf(hasDatabase)("ZIP graph original storage namespace (C3.47)", { ti
       const replacement = storage(), replacementGet = replacement.get.bind(replacement);
       // Independent same-key bytes are deliberately installed in the disposable
       // replacement namespace; they supply no authority over the original.
-      await replacement.put(key, originalBytes, "application/zip");
+      // Seeded through the low-level provider: the managed store refuses an
+      // unattributed put, and a fixture cannot hold storage authority over a
+      // namespace it never wrote. fixtureStorage() reads the stubbed
+      // LOCAL_STORAGE_ROOT, so the bytes land in the replacement root.
+      await fixtureStorage().put(key, originalBytes, "application/zip");
       const reads = vi.spyOn(replacement, "get"), deletes = vi.spyOn(replacement, "delete"), puts = vi.spyOn(replacement, "put");
       await expect(previewFromUpload.call({ id: run.id, uploadId: upload.uploadId }, OWNER)).rejects.toThrow(/original storage resource/);
       expect(reads).not.toHaveBeenCalled(); expect(deletes).not.toHaveBeenCalled(); expect(puts).not.toHaveBeenCalled();

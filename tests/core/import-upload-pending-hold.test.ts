@@ -13,12 +13,14 @@ import { createDataRequest, addRetentionException, removeRetentionException } fr
 import { privacyRetentionExceptions } from "@/core/privacy/schema";
 import { privacyRetentionSourceSnapshots } from "@/core/privacy/retention-schema";
 import { mediaObjectWrites } from "@/core/media/write-schema";
+import { mediaStorageTransferRequests } from "@/core/media/transfer-request-schema";
 import { importRuns } from "@/core/plugins/schema";
 import { startImport, rollbackImport } from "@/core/import/service";
 import { beginSourceUpload, uploadSourceChunk } from "@/core/import/source-upload";
 import { deleteCaptureObjects } from "@/core/media/capture";
 import { stopJobs } from "@/core/jobs";
 import { OWNER, closeDb, hasDatabase, truncateSpine } from "../helpers/spine";
+import { faultOriginalProviderDelete } from "../helpers/original-delete-faults";
 
 const readerEmail = "fictional-pending-upload-reader@example.test";
 const bytes = new TextEncoder().encode(`<rss xmlns:wp="http://wordpress.org/export/1.2/" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>Original held-source fixture</title><link>https://fictional-upload-source.example/</link><item><title>Actual source article</title><link>https://fictional-upload-source.example/article</link><wp:post_id>10</wp:post_id><wp:post_type>post</wp:post_type><wp:status>publish</wp:status><content:encoded>Original article text.</content:encoded><wp:comment><wp:comment_id>20</wp:comment_id><wp:comment_author_email>${readerEmail}</wp:comment_author_email><wp:comment_content>PRIVATE_ORIGINAL_UPLOADED_READER_BODY</wp:comment_content><wp:comment_approved>1</wp:comment_approved></wp:comment></item></channel></rss>`);
@@ -110,11 +112,15 @@ describe.runIf(hasDatabase)("original uploaded source pending retention (C3.47/C
     await uploadSourceChunk.call({ id: run.id, uploadId: upload.uploadId, index: 0, bytes }, owner);
     const key = `imports/${run.id}/${upload.uploadId}/00000.part`;
     await rollbackImport.call({ id: run.id }, owner);
-    const provider = vi.spyOn(storage(), "delete").mockRejectedValueOnce(new Error("Synthetic provider DELETE result is unknown"));
+    const provider = await faultOriginalProviderDelete({ kind: "unresolved", message: "Synthetic provider DELETE result is unknown" });
     try { await expect(deleteCaptureObjects([key])).rejects.toThrow("Synthetic provider DELETE result is unknown"); }
-    finally { provider.mockRestore(); }
+    finally { provider.restore(); }
     expect(await storage().get(key)).toEqual(bytes);
-    expect(await db().select({ state: mediaObjectWrites.state }).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.key, key), eq(mediaObjectWrites.operation, "delete")))).toEqual([{ state: "unknown" }]);
+    // The receipt stays unsettled at "started": it only moves to "unknown" once
+    // a positive provider fact arrives, and none did. The dispatched request
+    // itself is what records the unresolved outcome.
+    expect(await db().select({ state: mediaObjectWrites.state }).from(mediaObjectWrites).where(and(eq(mediaObjectWrites.key, key), eq(mediaObjectWrites.operation, "delete")))).toEqual([{ state: "started" }]);
+    expect((await db().select({ state: mediaStorageTransferRequests.state }).from(mediaStorageTransferRequests)).filter(row => row.state !== "returned").map(row => row.state)).toEqual(["unknown"]);
     const request = await createDataRequest.call({ contactId: reader.id, request: { kind: "erasure" } }, owner);
     await expect(addRetentionException.call({ dataRequestId: request.id, scope: "cms.readerComments", reason: "legal_claim", legalBasis: "Synthetic hold cannot undo an admitted DELETE" }, owner)).rejects.toThrow("An original import deletion is unresolved");
     expect(await db().select().from(privacyRetentionExceptions).where(eq(privacyRetentionExceptions.dataRequestId, request.id))).toEqual([]);
