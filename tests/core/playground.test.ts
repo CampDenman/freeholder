@@ -5,6 +5,7 @@
 // construction, and that the hourly reset recovers a clean, signed-out,
 // reseeded playground.
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import * as coreDatabase from "@/core/db";
 import { reconcileJobDeploymentAdmission, startJobProducer, stopJobs } from "@/core/jobs";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -141,6 +142,20 @@ function sqlRawCount(table: string) {
   // closes a static cycle); this count is the test-side proof each name is
   // the real physical table.
   return sql.raw(`select count(*)::int as count from "${table.replaceAll('"', '""')}"`);
+}
+
+/**
+ * The migration head as `db/migrations` declares it, shaped like a row of
+ * `drizzle.__drizzle_migrations`. Read rather than hard-coded so adding a
+ * migration cannot turn an unrelated assertion red.
+ */
+function migrationHead(): { entries: number; latest: string } {
+  const journal = JSON.parse(
+    readFileSync("db/migrations/meta/_journal.json", "utf8"),
+  ) as { entries: { when: number }[] };
+  const last = journal.entries.at(-1);
+  if (!last) throw new Error("db/migrations/meta/_journal.json declares no migrations.");
+  return { entries: journal.entries.length, latest: String(last.when) };
 }
 
 describe.runIf(hasDatabase)("disposable playground", () => {
@@ -860,8 +875,13 @@ describe.runIf(hasDatabase)("actual playground producer poll target switch", () 
       // physical cross-database writes. No product-leak inference is assumed.
       expect(directProd[0]).toMatchObject({ name: prodName, pages: 1, graffiti: 0, sentinel: 1 });
       expect(directPlay[0]).toMatchObject({ name: playName, pages: 1, graffiti: 1, sentinel: 0 });
-      expect(prodJournal).toMatchObject([{ entries: 80, latest: "1793310000059" }]);
-      expect(playJournal).toMatchObject([{ entries: 80, latest: "1793310000059" }]);
+      // The property is that both databases are fully and identically
+      // migrated to the current head — neither was dropped, reset, or left
+      // behind by the switch. The head itself is whatever db/migrations
+      // declares, so it is read rather than frozen: a literal count here
+      // fails on every new migration while saying nothing about the switch.
+      expect(prodJournal).toMatchObject([migrationHead()]);
+      expect(playJournal).toMatchObject([migrationHead()]);
       expect(coreSelected).toBe(prodName); expect(coreGraffiti).toHaveLength(0);
     } finally {
       releaseClose?.(); await switching?.catch(() => {}); vi.restoreAllMocks();

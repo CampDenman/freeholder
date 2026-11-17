@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import sharp from "sharp";
 import { eq } from "drizzle-orm";
 import { users } from "@/core/auth/schema";
-import { storage } from "@/adapters/storage";
+import type * as DeleteWithReceiptModule from "@/core/media/delete-with-receipt";
 import { contacts } from "@/core/contacts/schema";
 import { conversations, messages } from "@/core/messaging/schema";
 import { assets } from "@/core/media/schema";
@@ -30,6 +30,20 @@ const changedEnvironment = new Map<string, string | undefined>();
 const downloadSocialMedia = vi.hoisted(() => vi.fn());
 
 vi.mock("@/adapters/social/media", () => ({ downloadSocialMedia }));
+
+// Staged-object cleanup goes through the receipted removal service, not
+// `storage().delete` — the managed store refuses a raw delete outright so the
+// exact physical bytes and caller can be verified. The spy wraps the real
+// implementation rather than replacing it, so the removal still happens and
+// the test observes both that the sanctioned door was used and that it
+// succeeded.
+const deleteWithReceipt = vi.hoisted(() => vi.fn());
+
+vi.mock("@/core/media/delete-with-receipt", async (importOriginal) => {
+  const actual = await importOriginal<typeof DeleteWithReceiptModule>();
+  deleteWithReceipt.mockImplementation(actual.deleteWithReceipt);
+  return { deleteWithReceipt };
+});
 
 function environment(values: Record<string, string | undefined>): void {
   for (const [name, value] of Object.entries(values)) {
@@ -215,14 +229,18 @@ describe.runIf(hasDatabase)("social ingest", { timeout: 60_000 }, () => {
 
   it("removes a staged object when media registration rejects it", async () => {
     const profileId = await connectedProfile();
-    const remove = vi.spyOn(storage(), "delete");
+    deleteWithReceipt.mockClear();
     downloadSocialMedia.mockResolvedValue(new Uint8Array([1, 2, 3]));
 
     await runProfileIngest(profileId);
 
     const [pack] = await packageList.call({}, OWNER);
     expect(pack!.assetIds).toEqual([]);
-    expect(remove).toHaveBeenCalledOnce();
+    expect(deleteWithReceipt).toHaveBeenCalledOnce();
+    // The staged key, and a true result: the bytes were actually retired, not
+    // merely left as sweepable litter.
+    expect(deleteWithReceipt.mock.calls[0]![0]).toMatch(/\.png$/);
+    await expect(deleteWithReceipt.mock.results[0]!.value).resolves.toBe(true);
   });
 
   it("routes a comment with an email onto the spine, and leaves a handle-only comment off it", async () => {
