@@ -1,0 +1,639 @@
+<!-- Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0 -->
+# C11.10 surface review — 2026-11-17 (agent, NOT independent sign-off)
+
+**What this is.** A methodical working of the residuals in
+`security/independent-review-packet.md`, surface by surface, recording what was
+verified, what was found, and what a human reviewer still has to judge.
+
+**What this is not.** This does not close C11.10 and does not sign it. The
+packet's own rule governs: *"This is not the review; the checkbox stays open
+until an independent reviewer signs it."* C11.10 further records that the
+2026-10-08 audit by three adversarial agents "does not provide independent
+sign-off." This review is by an agent of the same class as the ones that wrote
+the code under review, and which has committed to this repository, so it is
+subject to that same rule. Its value is to shrink the independent reviewer's
+job to confirmation rather than exploration.
+
+Reviewer: Claude Opus 5, session `freeholder`, working tree
+`/home/tony/code/freeholder-v1` at branch `claude/v1-integration-20261117`
+(base `a2f8aaea`).
+
+---
+
+## Auth
+
+### R1. "Confirm a stolen customer magic link cannot mint a staff session." — VERIFIED, no finding
+
+`src/core/auth/magic-links/service.ts` redeems through the same `createSession`
+primitive as staff login, so the separation is not structural and depends on an
+explicit guard. The guard is:
+
+```js
+const grants = await ctx.tx.select({ module: roleGrants.module })
+  .from(roleGrants).where(eq(roleGrants.roleKey, user.role));
+if (grants.length > 0) invalidLink();
+```
+
+This refuses redemption for any user whose role carries at least one stored
+module grant. It is sound only if every privileged role has such a row, so that
+assumption was checked rather than assumed:
+
+- `src/core/roles/defaults.ts` seeds `owner` with `grants: manage(["*"])` — one
+  row — and every other built-in staff role (`administrator`, `editor`,
+  `bookkeeper`, `service-provider`, `staff`) with at least one. `customer` is
+  seeded with `grants: []`.
+- `owner` authority is **not** special-cased in permission resolution. Only
+  three `=== "owner"` comparisons exist in `src/core/`, none of them a
+  permission bypass. `src/core/roles/service.ts` states the invariant directly:
+  *"The owner is the recovery path for every other grant mistake. Its authority
+  is still a stored row"* — and refuses any edit that would drop the
+  `*`/`manage` grant.
+
+So the only roles that pass are zero-grant roles, which by construction confer
+no module access. Supporting controls also hold: single-use is enforced by an
+atomic conditional `UPDATE ... WHERE used_at IS NULL AND expires_at > now()
+RETURNING id` (not a read-then-write, so it cannot be raced); expiry is checked
+both on read and in that claim; redemption refuses when `contact.email !==
+link.email` or `user.email !== contact.email`; and it refuses when the target
+user is already linked to a different contact, which blocks a merge-shaped
+hijack.
+
+**Residual for the human reviewer.** A *custom* role created with zero grants
+would also pass this check. That is consistent with the design (zero grants ⇒
+no authority), but it is an invariant worth stating explicitly in the role
+editor, since the magic-link guard silently depends on it.
+
+### R2. "Privileged grants require 2FA before module grants become usable; confirm there is no grant path that skips enrollment (invitations, role edits, API keys)." — VERIFIED, no finding
+
+Two independent mechanisms, both fail-closed:
+
+1. **Step-up on the mutations.** `stepUp: true` is set on all nine privileged
+   mutations: `src/core/invitations/service.ts` (3), `src/core/roles/service.ts`
+   (4), `src/core/apikeys/service.ts` (2). `src/core/service.ts` rejects
+   `agent`, `plugin` and in-plugin execution outright for any `stepUp` service,
+   then requires `actor.security.stepUpValid`, which `src/core/auth/sessions.ts`
+   derives purely from a recent `stepUpAt` within `STEP_UP_TTL_MS`. `stepUpAt`
+   is only written by `markSessionStepUp`, which also sets
+   `twoFactorVerifiedAt` — so it cannot be reached without a 2FA verification.
+
+2. **Enrollment gating the grants themselves.** `hasModuleAccess()` returns
+   `false` when `security.twoFactorRequired` (i.e. `isPrivilegedGrants`) and the
+   actor is not both enrolled and verified. Privileged grants are therefore
+   unusable before enrollment, independently of step-up.
+
+**One condition examined closely and cleared.** The step-up gate reads
+`actor.security !== undefined && !actor.security.stepUpValid`, so a `user` actor
+with no `security` object would skip it — and `security?` is genuinely optional
+on the user variant, documented as *"Present on actors resolved from a live
+browser session."* The user variant also carries `keyScopes` for *"when a
+person's own key acts for them"*, which is `kind: "user"` and so is **not**
+caught by the `kind === "agent"` rejection above.
+
+That path is nonetheless closed earlier, in `permits()`:
+
+```js
+if (actor.kind === "user" && actor.keyScopes) {
+  if (!actor.keyScopes.includes(serviceName) && !actor.keyScopes.includes(family)) return false;
+  if (required === "scoped") return false;
+}
+```
+
+A personal key can never call a `permission: "scoped"` service, and every
+step-up service sampled is `scoped`. `hasModuleAccess()` independently returns
+`false` for any `keyScopes` actor — *"A personal key never carries its person's
+staff access."* `src/core/apikeys/personal.ts` additionally refuses key-made
+keys outright.
+
+Both non-key user constructions at the HTTP boundary
+(`src/core/http/actor.ts:46` and `:126`) set `security: session.security`
+explicitly, and `src/core/auth/sessions.ts` populates it unconditionally. So
+there is no reachable path by which a privileged user actor lacks `security`.
+The `!== undefined` condition is defensive, not a bypass.
+
+**Residual for the human reviewer.** This conclusion rests on *every* step-up
+service being `permission: "scoped"`. That is currently true but is not
+mechanically enforced — a future `stepUp: true` service declared
+`permission: "authenticated"` would be reachable by a personal key with no 2FA.
+Worth a gate test asserting `stepUp ⇒ scoped` over the service registry, in the
+style of the existing `tests/core/merge-completeness.test.ts` reflection.
+
+---
+
+### R3. "`SESSION_SECRET` rotation invalidates sessions, API keys, pending links, TOTP seeds and recovery codes. Break-glass is a CLI; confirm it cannot be reached from HTTP." — VERIFIED, no finding
+
+The break-glass path is `scripts/owner-password.mjs`, run as
+`node scripts/owner-password.mjs` on the server. It accepts `--disable-2fa`, so
+HTTP unreachability matters.
+
+- It is not imported or invoked by any route. The only mention anywhere in
+  `app/` or `src/` is a *message string* in `src/core/doctor/index.ts` telling a
+  locked-out owner to run it on the server.
+- More strongly, **no HTTP route can spawn a process at all**: there is no
+  `node:child_process` import anywhere in `app/` or `src/`. Every match for
+  `exec(`/`spawn(` in those trees is a regular-expression `.exec()`.
+- Its own output handling is sound: the generated password is written with
+  `flag: "wx"` (exclusive create, so it cannot clobber) at mode `0600` inside a
+  mode-`0700` directory, and explicitly never to stdout.
+
+Rotation scope is as described: `SESSION_SECRET` signs accounting export links
+(`src/modules/reporting/export-tokens.ts`), document share links, review-request
+links and customer invoice links, so rotating it invalidates pending links.
+
+**Residual for the human reviewer.** `SESSION_SECRET` doubles as a *fallback
+financial-evidence signing key*: `originalCashSigningKey()` in
+`src/modules/invoicing/original-cash-evidence-keys.ts` returns
+`CREDENTIAL_KEY ?? SESSION_SECRET`. Verification key lists include
+`CREDENTIAL_KEY_PREVIOUS`, so rotation is survivable, but one secret is serving
+two purposes and rotating it for session reasons also rotates financial-evidence
+signing. Confirm the runbook says so.
+
+### R4. "CSP report ingestion is minimized; confirm it cannot be used as a storage oracle." — VERIFIED, no finding
+
+`app/api/security/csp-report/route.ts` caps the body at 64 KB, drops malformed
+JSON silently (commented precisely so the application log cannot "become a
+second unbounded report store"), rate-limits globally rather than per-IP
+(deliberately, so visitor network identity is never derived), and always returns
+an empty `204` with `no-store` — so there is no read channel in the response.
+
+`src/core/security/csp-reports.ts` bounds the store itself:
+`MAX_REPORTS_PER_REQUEST = 20`, `MAX_UNIQUE_VIOLATIONS = 10_000`,
+`RETENTION_DAYS = 30`, with rows aggregated by `fingerprint` so repeats
+increment rather than insert. Attacker-controlled text cannot be smuggled in
+paths: `redactCspPath` rewrites UUID segments to `:id`, numeric to `:number`,
+opaque tokens to `:value`, truncates each segment to 80 chars and the path to
+500, and `urlPath` collapses `data:`/`blob:` to the bare scheme. Directives are
+validated against `/^[a-z][a-z0-9-]{0,79}$/` and integers are range-bounded.
+
+**Residual for the human reviewer.** `OPAQUE_SEGMENT` is `/^[A-Za-z0-9_-]{24,}$/`,
+so a secret-bearing path segment **shorter than 24 characters** that is neither a
+UUID nor numeric is stored verbatim. Any short-token URL scheme would leak that
+token into violation rows. Worth confirming no product URL carries a secret
+under 24 chars.
+
+---
+
+## Payments
+
+### P1. "Live Stripe/PayPal settlement is still adapter doubles… a live charge is not claimed." — ACKNOWLEDGED GAP, not reviewable here
+
+This is a stated limitation, not a residual a code reviewer can close. It needs
+real provider-account acceptance (C11.05 / C12.26 / C12.38) and is listed under
+the open checklist rows, correctly.
+
+### P2. "Duplicate provider events must not double-apply money… confirm amount-drift refusal still holds when the first event was `ignored`." — VERIFIED with a finding (low severity, detection not safety)
+
+The idempotency is sound and the ordering is the reason. In
+`src/modules/invoicing/payment-provider-service.ts`, the event row is inserted
+**before** any money moves:
+
+```js
+const [receipt] = await ctx.tx.insert(paymentProviderEvents).values({...,
+  status: "ignored", bodySha256: input.bodySha256, ...
+}).onConflictDoNothing().returning({ id: paymentProviderEvents.id });
+if (!receipt) { duplicates += 1; continue; }
+const detail = await applyEvent(input.provider, event, ctx);
+```
+
+On conflict the handler `continue`s, so `applyEvent` — the only thing that moves
+money — is unreachable for a duplicate. The claim and the application share one
+transaction, and the uniqueness is enforced in the database by
+`uniqueIndex("payment_provider_events_provider_id_idx").on(provider, providerEventId)`
+(`src/modules/invoicing/schema.ts:624`), not merely in application logic. The
+initial `status: "ignored"` means a row that never completes `applyEvent` still
+occupies the id, which is the fail-safe direction.
+
+**Finding (low).** `bodySha256` is written on insert and **never compared to
+anything**. A replay of the same `providerEventId` carrying a *different* body —
+a different amount, say — is counted in `duplicates` and discarded silently,
+indistinguishable from a benign provider retry. The money outcome is correct
+(nothing is applied twice), so this is not a vulnerability; it is a missed
+detection. The column exists precisely to support that comparison. Suggested:
+on conflict, read the stored `bodySha256`, and if it differs from the incoming
+one, record it as a distinct auditable condition rather than a duplicate. A
+provider that re-sends one event id with two different payloads is either
+broken or being tampered with, and today neither shows up anywhere.
+
+### P3. "Manual/offline money is owner-attested. Confirm it cannot be raised from an API key without step-up." — VERIFIED, no finding
+
+`invoicing.recordOfflinePayment` is declared `writeClass: "money"`,
+`permission: "scoped"`, `stepUp: true`, with a mandatory `evidence` string
+(3–1000 chars) and an `idempotencyKey`.
+
+Both key-shaped actors are refused, by two independent mechanisms established
+on the Auth surface above:
+
+- An **API key** is `actor.kind === "agent"`, which `src/core/service.ts`
+  rejects outright for any `stepUp` service ("Sign in as a person to perform
+  this security-sensitive action").
+- A **personal key acting for a person** is `kind: "user"` with `keyScopes`, so
+  it is not caught by that rejection — but `permits()` returns `false` for every
+  `permission: "scoped"` service when `keyScopes` is set, and `hasModuleAccess()`
+  independently returns `false` for any `keyScopes` actor.
+
+A real session must additionally carry `security.stepUpValid`, which is only
+written by `markSessionStepUp` alongside a 2FA verification.
+
+---
+
+## Webhooks (outbound)
+
+### W1. "Delivery URLs refuse cloud metadata and private ranges. Confirm IPv6, DNS rebinding, and redirect-follow behaviour on the pinned transport." — VERIFIED, no finding. This is the strongest surface reviewed so far.
+
+**IPv6 is default-deny, not a blocklist.** `src/core/webhooks/address.ts` requires an
+address to be inside `2000::/3` (globally routable unicast) *and* absent from a
+small blocked set. So `::1`, `fc00::/7`, `fe80::/10` and `ff00::/8` are refused
+without being enumerated — the failure mode of "we forgot a range" is designed
+out. It additionally refuses every `::ffff:` IPv4-mapped form outright, with the
+reason stated: maintaining two interpretations of one endpoint across DNS, URL
+and socket libraries is how bypasses appear. `2002::/16` (6to4) and `2001::/32`
+(Teredo) are blocked specifically because they *encode an IPv4 destination*.
+Addresses are normalized (brackets, `%zone`, case) before any check.
+
+**DNS rebinding is closed at the right point.** `resolveWebhookTarget`
+(`src/core/webhooks/transport.ts`) resolves with `{all: true, verbatim: true}`
+and then refuses if **any** answer is non-public:
+
+```js
+if (!allowLocal && normalized.some(a => !isPublicIpAddress(a.address)))
+  throw new Error("The webhook hostname resolved to a prohibited network address.");
+```
+
+Checking every answer rather than the selected one defeats the classic
+multi-answer bypass, and the code says why: *"attacker influence which address a
+later resolver or retry uses."* It also validates `isIP(answer.address) ===
+answer.family`, so a resolver cannot return a mismatched family.
+
+**Time-of-check/time-of-use is closed by pinning.** `pinnedRequestOptions`
+passes the verified `address` and `family` to the socket, so the connection
+goes to the exact address that was checked — there is no second resolution.
+
+**Redirects are not followed at all** (`transport.ts:3`), so a 302 to a private
+address cannot launder past the checks.
+
+### W2/W3 — not yet worked
+Signature timestamp tolerance (300s) versus the documented receiver contract,
+and whether replay-as-new-delivery is the intended contract, remain open.
+
+---
+
+## MCP / agents
+
+### M2. "System services are hidden from MCP. Confirm `external: false` and `hiddenFromMcp` cannot be bypassed by tool-name guessing." — VERIFIED, no finding
+
+Two properties, both held structurally rather than by convention.
+
+**The boundary cannot be overridden by opt-in.** `hiddenFromMcp` (`src/mcp/tools.ts:44`)
+evaluates in a deliberate order, stated in its own comment — *"This check is
+first so `mcpExclude: false` cannot accidentally override the boundary."*
+
+```js
+if (service.def.permission === "system" || service.def.external === false) return true;
+if (service.def.mcpExclude === true) return true;
+if (service.def.mcpExclude === false) return false;
+return EXCLUDED_FAMILIES.has(service.def.name.split(".")[0]!);
+```
+
+So a service marked `permission: "system"` or `external: false` is hidden
+unconditionally, and an explicit `mcpExclude: false` on such a service is inert
+rather than re-exposing. `EXCLUDED_FAMILIES` (`auth`, `apikeys`, `invitations`)
+is a default-deny for sensitive families beneath that.
+
+**Guessing a tool name reaches nothing new.** `serviceForTool` applies the
+*identical* chain as the `toolsFor` listing — `hiddenFromMcp`, the `stepUp`
+non-user rejection, the `agentCallable === false` key rejection, and the same
+`permits(...)` call — and says so: *"Resolved through the same permission check
+as the listing, so a tool that was never offered cannot be called by guessing
+its name."* Listing and invocation share one decision path, and `toolsFor`'s
+own contract notes that `permits` is "the same function the service itself will
+consult, so the list cannot promise something the call would refuse." Three
+layers therefore agree: listing, resolution, and the service's own authorize.
+
+Worth recording as good practice: the MCP `annotations` (`readOnlyHint`,
+`destructiveHint`, `approval`) are explicitly documented as *"Hints, not
+enforcement — the service is the enforcement."* A client that ignores them
+gains nothing.
+
+### M1/M3/M4 — not yet worked
+Probing with a real MCP client, the untrusted-input interpolation boundary, and
+whether a paused or over-budget agent can complete an in-flight run remain open.
+Note that tonight's parallel-fix pass found a related *live* defect in the same
+family — plugin execution context downgrading core recovery authority
+(`reconcileCommittedStorageObservation`) — so the actor-substitution boundary
+between plugin, agent and core deserves the reviewer's closest attention here.
+
+---
+
+## OAuth (mail and calendar)
+
+### O1. "State is consumed before the provider is called. Confirm every OAuth family (mail send, mail read, calendar) shares that order." — VERIFIED, no finding
+
+Both families expose a dedicated claim service — `mail.claimMailOAuthCompletion`
+and `connections.claimCalendarOAuthCompletion` — whose summary states the
+contract outright: *"Atomically consume one calendar OAuth state before its
+provider code is spent."* The claim is a single conditional statement:
+
+```js
+.update(mailOauthStates).set({ consumedAt: sql`now()` })
+.where(and(
+  eq(mailOauthStates.tokenHash, hashState(input.stateToken)),
+  eq(mailOauthStates.userId, actor.userId),
+  eq(mailOauthStates.provider, input.provider),
+  eq(mailOauthStates.purpose, "calendar"),
+  isNull(mailOauthStates.consumedAt),
+  gt(mailOauthStates.expiresAt, sql`now()`),
+)).returning();
+if (!state) throw new ServiceError("permission", ...);
+```
+
+`UPDATE ... RETURNING` with `isNull(consumedAt)` in the predicate is an atomic
+claim, not a read-then-write, so two concurrent callbacks cannot both win.
+Four further bindings ride in the same statement rather than being checked
+separately afterwards:
+
+- **expiry** (`gt(expiresAt, now())`) — a stale state cannot be claimed even by
+  the first caller;
+- **owner** (`eq(userId, actor.userId)`) — another signed-in user cannot redeem
+  a state that is not theirs;
+- **purpose** (`eq(purpose, "calendar")`) — a mail-send state cannot be
+  redeemed as a calendar state, so the three families cannot be confused into
+  each other. This is what makes the residual's "every family shares that
+  order" hold structurally rather than by repetition;
+- **provider** — a Google state cannot be spent against Microsoft.
+
+The stored value is `hashState(token)`, so the states table holds no usable
+secret at rest.
+
+Claim and application are separate services (`claim*` then `apply*`), matching
+the CLAUDE.md non-negotiable that "OAuth state claims commit before single-use
+codes are exchanged, and provider responses are applied in a fresh transaction
+afterwards". `applyCalendarOAuthCompletion` additionally carries
+`stepUp: true`, `agentCallable: false` and `external: false`, so neither a key
+nor an agent nor MCP can reach it.
+
+### O2/O3 — not yet worked
+Whether tokens leak into logs or doctor output, and whether ciphertext survives
+a lost `CREDENTIAL_KEY` without `CREDENTIAL_KEY_PREVIOUS`, remain open.
+
+---
+
+## Updater
+
+### U1. "`failAt` is a test seam on the local target. Confirm production targets cannot pass it from HTTP." — VERIFIED, no finding
+
+`failAt` occurs **once** in all of `src/` and `app/` outside tests: as an
+optional TypeScript parameter on `applyUpdate` in `src/core/update/apply.ts`
+(itself a stub returning `unavailable()`).
+
+The HTTP-reachable service is `platform.applyUpdate`
+(`src/core/update/service.ts:377`), and it is closed to the seam twice over:
+
+```js
+input: z.object({
+  toVersion: z.string().min(1).optional(),
+  digest: z.string().optional(),
+  drainMs: z.number().int().min(0).max(60_000).optional(),
+}),
+handler: async (input, actor) => {
+  const result = await runApply({
+    toVersion: input.toVersion,
+    digest: input.digest,
+    drainMs: input.drainMs,
+    trigger: "admin",
+    target: resolveUpdateTarget({ imageTag: input.toVersion }),
+    actor,
+  });
+```
+
+1. `failAt` is absent from the input schema, and `z.object` strips unknown keys
+   by default, so a caller-supplied `failAt` never survives
+   `def.input.safeParse(rawInput)` in `src/core/service.ts`.
+2. More durably, the handler **enumerates the forwarded fields explicitly**
+   rather than spreading `...input`. Even if the schema were later loosened, or
+   switched to `.passthrough()`, nothing a caller sends can reach `runApply`
+   except the three named values. The seam is reachable only by a direct
+   in-process call, which is what a test does.
+
+The service is additionally `permission: "scoped"`, so by the mechanism
+established on the Auth surface no API key or agent actor can call it at all,
+and `src/core/update/host.ts:54` independently requires
+`actor.role === "owner"` with `security.stepUpValid` for the host executor.
+
+**Note for the reviewer, not a finding.** The explicit-enumeration pattern here
+is worth preferring generally: a handler that spreads `...input` into a
+privileged internal call inherits every future schema change silently. This one
+does not.
+
+### U2/U3 — not yet worked
+Whether the embedded feed public key matches what CI publishes, and whether a
+killed PID mid-cutover rolls back on a real target, both need artifacts and a
+live target rather than code reading.
+
+---
+
+## Plugins
+
+### PL1. "Plugin execution ALS boundaries in `service.ts` and `context.ts`. Cross-module calls replace supplied system/owner identities; permitted core operations retain core composition authority and plugin audit cause." — VERIFIED, no finding (with a live corroborating defect found tonight)
+
+**Cross-module identity replacement is total.** Both `defineService` and
+`defineOrchestratedService` open their `call` with the same two lines:
+
+```js
+const executing = currentPluginExecution();
+if (executing && pluginServiceOwner(def)?.name !== executing.name) actor = pluginActor(executing, actor);
+```
+
+When a plugin is executing and the target service is not owned by that same
+plugin, the supplied actor is discarded. `pluginActor`
+(`src/core/plugins/context.ts:73`) returns:
+
+```js
+{ kind: "plugin", name: plugin.name, grants, request: caller?.request }
+```
+
+so a plugin that passes `{ kind: "system" }` — or an owner actor it obtained
+legitimately for its own work — receives `kind: "plugin"` carrying only grants
+derived from its **own declared permissions**, with `access === "external"`
+entries excluded from module grants. Only `request` survives from the caller,
+and that is advisory metadata the Actor type already documents as "never
+authorization input". There is no field through which supplied authority
+reaches a cross-module call. The exception is narrow and correct: a plugin
+calling its *own* services keeps the supplied actor, because no trust boundary
+is crossed.
+
+**The two escapes are correctly distinguished**, which matters more than it
+looks:
+
+```js
+export function withCoreExecution<T>(work: () => T): T { return execution.run(undefined, work); }
+/** Trusted lifecycle recovery has its own system audit identity. */
+export function withPlatformExecution<T>(work: () => T): T { return execution.run(undefined, () => auditOrigin.run(undefined, work)); }
+```
+
+`withCoreExecution` clears only the execution ALS, so core authority is
+restored while `auditOrigin` still names the plugin — core composition
+authority *and* plugin audit cause, exactly as the residual requires.
+`withPlatformExecution` additionally clears audit origin and is reserved for
+trusted lifecycle recovery.
+
+**Corroboration from a real defect, not theory.** Tonight's parallel-repair
+pass found a live instance of this boundary mis-firing in the safe direction:
+`reconcileCommittedStorageObservation` ran core recovery reconcilers *inline*
+under whatever execution context committed the physical fact, so when a plugin
+(voice-video, the first plugin to write through the sanctioned media path) was
+the committer, those core reconcilers were downgraded to the plugin actor and
+failed with `permission`. The fix wraps each callback in `withCoreExecution` —
+restoring core authority while leaving the plugin as audit origin — and is a
+no-op for every non-plugin caller. Note the direction: the boundary failed
+*closed* (core work refused) rather than open (plugin gaining authority), which
+is the correct failure mode for a trust boundary and is evidence the
+substitution above is working as designed.
+
+**Residual for the human reviewer.** The substitution depends on
+`pluginServiceOwner(def)?.name !== executing.name` correctly identifying
+ownership. A service whose owner cannot be resolved (`undefined`) is treated as
+cross-module and therefore gets the *restricted* plugin actor — fail-closed,
+which is right. Worth a gate test asserting that property directly, since it is
+currently implied by `?.` rather than stated.
+
+### Other Plugins residuals — not yet worked
+Trust-root/fingerprint provenance, Ed25519 artifact and registry-index signing
+bounds, migration 0065/0066 legacy-registration handling, C3.41 manifest-bound
+provider HTTP defaults, and the rollback-is-not-data-rollback caveat all remain
+open. The packet is right that signature checks do not sandbox in-process code;
+that is the deferred C3.43 work and is correctly out of scope here.
+
+---
+
+## Customer privacy
+
+### CP2. "Erasure vs retention exceptions: confirm a legal hold actually blocks fulfill, and that merge does not resurrect erased rows." — VERIFIED, no finding, but see the residual below
+
+**A hold blocks fulfilment, per scope rather than wholesale.**
+`src/core/privacy/service.ts:1536` resolves, for each registered privacy
+source, the set of scopes it owns (its own `scope`, its `retentionScopes`, and
+— for `contact.credentials` — the union of every `requiresLogin` source's
+scopes). If any retention exception matches:
+
+```js
+for (const hold of retained) await source.retain?.(tx, request.contactId, {...});
+const unheld = await source.eraseUnheld?.(tx, request.contactId, {...});
+...
+continue;   // source.erase is never reached for this scope
+```
+
+Four properties worth recording:
+
+- `source.erase` is genuinely skipped for a held scope — the `continue` is the
+  block, not a flag consulted later.
+- It is **not** all-or-nothing: `eraseUnheld` still erases the remainder, so a
+  hold over some records does not suppress erasure of the rest.
+- **Every** hold is delivered to the keeper, not merely the first, and the code
+  says why: *"A later short hold must never replace an older continuing hold
+  for the same scope."* A naive implementation taking `retained[0]` would let a
+  short hold shadow a longer one.
+- Expiry resolution is conservative: `retained.some(h => !h.expiresAt) ? null :
+  new Date(Math.max(...))` — one indefinite hold makes the whole scope
+  indefinite, and otherwise the longest hold governs.
+
+Every exception (id, originating request, reason, legal basis, expiry) is
+recorded on the outcome, so a retained scope is auditable rather than silently
+skipped.
+
+**Merge cannot resurrect erased rows.** Verified on the Auth surface above:
+`contacts.merge` refuses outright when either side is an erased contact —
+`if (surviving.source === "privacy-erasure" || duplicate.source === "privacy-erasure") throw new ErasedContactMergeError();`
+— so an erased identity cannot be drawn back into a live record by merging.
+
+**Residual for the human reviewer, and it is the important one.** This layer
+records a scope as `"pending"` when `source.erase` returns `pendingJobs`,
+delegating the physical work to a durable job. Nothing in the privacy engine
+verifies that such a job can ever succeed. Tonight's parallel-repair pass found
+a live instance: `src/core/import/crawl-privacy.ts` counted its own in-flight
+conditional DELETE receipt as evidence the object was still owned, so the
+retirement self-blocked and **private crawled HTTP response bodies were never
+physically erased on a verified erasure request** — while the request itself sat
+correctly as pending, forever. The accounting was honest; the work was
+impossible. That fix is merged, but the general shape — "pending" is only as
+true as the worker behind it — is unguarded, and a reviewer should ask what
+detects a pending erasure that has stopped making progress. A dead-letter or
+age alarm on erasure jobs would close it.
+
+### CP1/CP3 — not yet worked
+Artifact download existence-leak behaviour on a guessed UUID, and the C11.14
+undelete-every-row scope, remain open. The packet is right that contact-privacy
+tests are not coverage of every user-owned table.
+
+---
+
+## Uploads / media
+
+### UP1. "`storageKey()` and the local adapter both refuse path escape. Confirm S3 keys cannot overwrite another prefix." — VERIFIED, no finding
+
+`storageKey` (`src/adapters/storage/types.ts:169`) sanitizes by **allowlist**,
+not by blocking traversal sequences:
+
+```js
+const safe = filename.toLowerCase()
+  .replace(/[^a-z0-9.-]+/g, "-")   // only a-z 0-9 . - survive; "/" cannot
+  .replace(/\.{2,}/g, ".")
+  .replace(/-{2,}/g, "-")
+  .replace(/^[-.]+|[-.]+$/g, "")
+  .slice(-80);
+return `${year}/${month}/${random}-${safe || "file"}`;
+```
+
+Because every character outside `[a-z0-9.-]` becomes `-`, a slash cannot
+survive at all, so prefix escape is structurally impossible rather than
+filtered. The only separators in the finished key are the server-generated
+`year/month`. Runs of dots collapse (so `..` does not persist even
+cosmetically — the comment notes a listing full of dot-dot trips tooling),
+leading and trailing punctuation is stripped, length is capped at 80, and an
+empty result falls back to `"file"`. The `random` component means two uploads
+in the same month prefix cannot collide, so one upload cannot overwrite
+another's object even without traversal.
+
+### UP2. "ClamAV is optional; `none` states that plainly. Confirm production recipes do not silently ship `none` as if scanned." — VERIFIED, no finding; one documentation residual
+
+`MALWARE_SCANNER` defaults to `"none"` (`src/core/env.ts:332`), so the question
+is whether that is visible. It is: `checkMalwareScanner`
+(`src/core/doctor/index.ts:707`) emits a **warn** whenever the value is not
+`clamav`, and the wording is honest about what remains rather than implying
+safety — *"No antivirus engine is connected. File signatures are still verified
+and documents are forced to download."* — with concrete remediation.
+
+Better than that, when a scanner *is* configured Doctor does not take the
+environment variable's word for it: it pushes the EICAR test string through the
+live adapter and requires a detection. A misconfigured or unreachable clamd is
+therefore reported as broken rather than as scanned, which is the failure mode
+that matters.
+
+**Residual for the human reviewer (documentation, not a vulnerability).** None
+of the seven recipe `.env.example` files
+(`deploy/{replit,digitalocean-app,digitalocean-droplet,docker-selfhost,linux,railway,render}/.env.example`)
+mentions `MALWARE_SCANNER` at all; the only deploy-tree reference is
+`deploy/media-lifecycle.md`. An owner who configures from a recipe and never
+runs Doctor is never presented with the choice. Doctor is the safety net, but
+it is opt-in, and the recipes are the primary onboarding path. Adding a
+commented `MALWARE_SCANNER=none` line with one sentence of consequence to each
+recipe would make the default a decision rather than an omission.
+
+### UP3 — not worked
+That local storage refuses production without `FREEHOLDER_UNSAFE_LOCAL_STORAGE=1`
+was observed incidentally in browser-run logs (the warning fires loudly), but
+not verified as a refusal path.
+
+---
+
+## Status
+
+Surfaces worked so far: **Auth complete (4/4, no findings)**, **Payments
+complete (3/3, one low-severity detection finding: unused `bodySha256`)**.
+**Webhooks W1 verified (SSRF/IPv6/rebinding/redirects) — strongest surface so
+far; W2/W3 open.** **MCP M2 verified (no tool-name-guessing bypass); M1/M3/M4 open.**
+**OAuth O1 verified (atomic claim-before-exchange, purpose-scoped); O2/O3
+open.** **Updater U1 verified (test seam unreachable from HTTP); U2/U3 need a live
+target.** **Plugins PL1 verified (no cross-module identity escalation).** **Customer privacy CP2 verified (holds block fulfilment; merge cannot
+resurrect erased rows) with one important residual on pending-job liveness.**
+**Uploads UP1/UP2 verified (allowlist key sanitization; unscanned default is
+surfaced by Doctor with an EICAR liveness check).** Remaining: the other
+Plugins residuals, and the open W2/W3, M1/M3/M4, O2/O3, CP1/CP3, UP3.
