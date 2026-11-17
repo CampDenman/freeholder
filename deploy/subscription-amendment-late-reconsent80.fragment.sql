@@ -62,7 +62,7 @@ BEGIN
   OR (SELECT count(*) FROM subscription_provider_schedule_operations o WHERE o.subscription_id=parent.id)<>resource.operation_revision
   OR NOT freeholder_subscription_resumption_callers_closed(parent.id)
   OR EXISTS(SELECT 1 FROM invoices i WHERE i.source_type='subscription' AND i.source_id IN(parent.id::text||':'||to_char(NEW.original_period_end AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),CASE WHEN NEW.previous_effective_start>=NEW.original_period_end THEN parent.id::text||':'||to_char(NEW.previous_effective_start AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') ELSE NULL END) AND(i.status<>'void' OR i.paid_minor<>0))
-  OR NOT((resource.state='uncreated' AND NOT resource.recovery_pending AND resource.provider_subscription_ref IS NULL AND resource.provider_customer_ref IS NULL AND parent.provider_ref IS NULL
+  OR NOT((resource.state='uncreated' AND NOT resource.recovery_pending AND resource.provider_subscription_ref IS NULL AND resource.provider_customer_ref IS NULL AND parent.provider_schedule_ref_v1 IS NULL
     AND NOT EXISTS(SELECT 1 FROM subscription_provider_schedule_operations o WHERE o.subscription_id=parent.id AND(o.kind<>'create_product' OR o.state<>'confirmed'
      OR o.original_request->>'resourceKind' IS DISTINCT FROM 'phase_product' OR o.original_request->'physical'->>'method' IS DISTINCT FROM 'POST' OR o.original_request->'physical'->>'path' IS DISTINCT FROM '/v1/products'
      OR o.provider_observation->'productProof'->>'operationId' IS DISTINCT FROM o.id::text OR o.provider_observation->'productProof'->>'requestDigest' IS DISTINCT FROM o.request_digest

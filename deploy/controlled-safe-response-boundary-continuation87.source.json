@@ -6,11 +6,11 @@
   "metadata": {
     "path": "db/migrations/meta/controlled-safe-response-boundary.json",
     "predecessorSha256": "d97e585b0d547a34f42c4ed1603c84119c9df1f76caab6d0109c08210fade445",
-    "successorSha256": "0831ae1de105431d5c1177478a315a2728bc307dae678bfa66c1289baab64d7b",
+    "successorSha256": "2945e8506d52580ba190d8ee12504518e2272f8829dae9a822808d9965ce2af8",
     "edits": [
       { "before": "\"predecessor85Sha256\": null", "after": "\"predecessor85Sha256\": \"8c914cf178bad249a8d60d332f9c5e3b3fc92af0c2d0ecc46bdc7b648e87c2cb\"" },
       { "before": "\"whole86Sha256\": null", "after": "\"whole86Sha256\": \"b3d73b06a4de6fa3fe76356414674526e883fbd4fc25bbe978535cc70e2fa8ae\"" },
-      { "before": "\"prefix0To85Sha256\": null", "after": "\"prefix0To85Sha256\": \"8c0994ab8debdc7e0afcea285bdf321f9a6bf173ad704523890be505a16cb73b\"" }
+      { "before": "\"prefix0To85Sha256\": null", "after": "\"prefix0To85Sha256\": \"e3effea01f92abfe406ed010e9f8097572fadb1dd529fbc6ef7874c2f0781d23\"" }
     ]
   },
   "pgBoundary": {

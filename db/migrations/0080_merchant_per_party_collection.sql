@@ -3999,7 +3999,7 @@ END $$;
 CREATE TRIGGER subscription_provider_generation_observed_facts BEFORE UPDATE ON subscription_provider_generations FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_generation_observed_refs();
 --> statement-breakpoint
 -- Source: deploy/subscription-amendment-late-reconsent80.fragment.sql
--- SHA256: b1d81309401ee88a5f5f60a6e5e9ac4f040cbf2538f64ffaab38c30bc60b1ace
+-- SHA256: 7c7a11aea3fd9ee9cfe3f517fa7a84256042f6e2dfda42a1805c75c5478733f1
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- C12.38/C9.38: OWNED UNAPPLIED suffix AFTER fcfe7f1bddfe288691c6325ece22763d96dd81cdb8c901b08e3ff690ed90df97.
@@ -4064,7 +4064,7 @@ BEGIN
   OR (SELECT count(*) FROM subscription_provider_schedule_operations o WHERE o.subscription_id=parent.id)<>resource.operation_revision
   OR NOT freeholder_subscription_resumption_callers_closed(parent.id)
   OR EXISTS(SELECT 1 FROM invoices i WHERE i.source_type='subscription' AND i.source_id IN(parent.id::text||':'||to_char(NEW.original_period_end AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),CASE WHEN NEW.previous_effective_start>=NEW.original_period_end THEN parent.id::text||':'||to_char(NEW.previous_effective_start AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') ELSE NULL END) AND(i.status<>'void' OR i.paid_minor<>0))
-  OR NOT((resource.state='uncreated' AND NOT resource.recovery_pending AND resource.provider_subscription_ref IS NULL AND resource.provider_customer_ref IS NULL AND parent.provider_ref IS NULL
+  OR NOT((resource.state='uncreated' AND NOT resource.recovery_pending AND resource.provider_subscription_ref IS NULL AND resource.provider_customer_ref IS NULL AND parent.provider_schedule_ref_v1 IS NULL
     AND NOT EXISTS(SELECT 1 FROM subscription_provider_schedule_operations o WHERE o.subscription_id=parent.id AND(o.kind<>'create_product' OR o.state<>'confirmed'
      OR o.original_request->>'resourceKind' IS DISTINCT FROM 'phase_product' OR o.original_request->'physical'->>'method' IS DISTINCT FROM 'POST' OR o.original_request->'physical'->>'path' IS DISTINCT FROM '/v1/products'
      OR o.provider_observation->'productProof'->>'operationId' IS DISTINCT FROM o.id::text OR o.provider_observation->'productProof'->>'requestDigest' IS DISTINCT FROM o.request_digest
@@ -4570,7 +4570,7 @@ BEGIN
 END $$;
 --> statement-breakpoint
 -- Source: deploy/subscription-commercial-attestation80.fragment.sql
--- SHA256: e6657f737a7a9c98e9e2a71be59de897d7d3984653c45295a01588b621778f8c
+-- SHA256: 6e18a5559b99466d1a658fc67deb7fe6b749c893e4a31a2ceb1a33382fd6356e
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- C12.38/C9.33: OWNED UNAPPLIED attested-money tail AFTER1da78852ed7ba94a2e77596fe8b41bebc3ce3c174d79dacc7a60c933a98b4d46.
@@ -4718,7 +4718,7 @@ END $$;
 CREATE CONSTRAINT TRIGGER commercial_refund_projection_guard AFTER INSERT OR UPDATE ON refunds DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION guard_commercial_refund_projection();
 --> statement-breakpoint
 -- Source: deploy/subscription-proration-credit80.fragment.sql
--- SHA256: 9e35bc9a7a9f4e4200e940608da22501c34049037e6d8bbbaed451bec4b42305
+-- SHA256: 33430fa1663a0165e93e34299ce0dae6aff10eb5bf1fff36258c16731b0e5f2f
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- C9.33/C12.38: OWNED UNAPPLIED lifecycle tail AFTER1da78852ed7ba94a2e77596fe8b41bebc3ce3c174d79dacc7a60c933a98b4d46.
@@ -4945,7 +4945,7 @@ END $$;
 CREATE CONSTRAINT TRIGGER invoice_credit_application_projection AFTER INSERT ON invoice_credit_applications DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION freeholder_credit_application_projection();
 --> statement-breakpoint
 -- Source: deploy/subscription-gross-proration80.fragment.sql
--- SHA256: 16313012c670721e1e0519c039a5e7754a2d59f82058e0bbacc2b10acbd3b8c4
+-- SHA256: 4668c7bde9f5b0ebf566408408304c3f1d6b4a8ff5dc4afd2d7962cdd2af582b
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- C9.33/C9.38/C12.38: OWNED UNAPPLIED continuation AFTER bf4a36c9 credit tail
@@ -5410,7 +5410,7 @@ BEGIN
 END $$;
 --> statement-breakpoint
 -- Source: deploy/subscription-agreement-fee80.fragment.sql
--- SHA256: 89f8d98bbd6fdd6ad20fdbeef715bd68c01dee4af4acc4d80e79bb1be710c108
+-- SHA256: 678abe5ddbdbf1e30d77bad87c902e334bf620d34dd85875bd30024756a1e858
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- C12.38/C9.33: OWNED UNAPPLIED tail AFTER frozen34837db8 gross31e3acdc.
@@ -6086,7 +6086,7 @@ END $$;
 CREATE TRIGGER subscription_proration_card_dispatch_guard BEFORE INSERT ON merchant_payment_dispatches FOR EACH ROW EXECUTE FUNCTION freeholder_subscription_proration_card_dispatch();
 --> statement-breakpoint
 -- Source: deploy/subscription-controlled-provider80.fragment.sql
--- SHA256: 5d69500ce72cdd08d82702277db819d3ffd29caadb0d588a38a33af735c39814
+-- SHA256: 41a79e6671cd9fbdc969990505d8017e4435286085019914cc91f1c764657d7d
 -- Copyright (C) 2026 Tony Aly
 -- SPDX-License-Identifier: Apache-2.0
 -- OWNED UNAPPLIED suffix AFTER09dd6e8d1ad6a03c84c5c000d1bab7bc9fc329b958a1c3afdf9e110120e5e170.

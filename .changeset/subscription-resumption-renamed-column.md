@@ -1,0 +1,5 @@
+---
+"freeholder": patch
+---
+
+Fresh consent after a missed subscription boundary works again. Accepting replacement terms for a subscription whose period had already ended — the "late re-consent" path — failed outright with a database error (`42703: record "parent" has no field "provider_ref"`), so the feature could not execute at all on any install. The guard that checks the subscription has no live provider schedule was still reading a column that the same migration renames a few thousand lines earlier, and the column it now reads is `provider_schedule_ref_v1`. The fix is one token in `deploy/subscription-amendment-late-reconsent80.fragment.sql`, from which `db/migrations/0080_merchant_per_party_collection.sql` is generated; three other readers of a `provider_ref` on the `payments` table are correct and untouched, because only `subscriptions` was renamed. Re-running the fragment assembler also refreshed five `-- SHA256:` provenance comments that had drifted from their fragments, and the migration-boundary prefix fingerprint in `db/migrations/meta/controlled-safe-response-boundary.json` was deliberately re-frozen for the new migration bytes.
