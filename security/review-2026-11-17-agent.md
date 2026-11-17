@@ -508,8 +508,50 @@ The only `delete(connectedAccounts)` in the module
 service, which is `permission: "scoped"` with `stepUp: true` and resolves
 `reachable(...)` for the actor first. It is not reachable from a failure path.
 
-### O2 — not yet worked
-Whether tokens leak into logs or doctor output remains open.
+### O2. "Tokens never appear in API responses. Confirm logs and doctor output match." — VERIFIED for the stated claim, with one conditional worth recording (low severity)
+
+**API responses.** No output schema in `src/core/connections/service.ts`
+declares a token, refresh-token or secret field, and every service return is
+passed through `assertOutput` (`src/core/service.ts:678` for orchestrated
+services and `:808` for ordinary ones). On the success path that returns
+`parsed.data`, so zod strips unknown keys — a handler that accidentally
+attached a token to its result would have it removed before the caller saw it.
+
+**Doctor output.** Doctor interpolates exactly three environment values into
+its messages — `APP_URL` twice and `BUILDER_CODE_REPOSITORY` once — all
+non-secret. Secrets are only ever tested for presence (`if (!e.SESSION_SECRET)`)
+and reported as set/unset, never echoed. The malware check similarly reports a
+scanner's liveness rather than its configuration.
+
+**The conditional (low severity, worth a line in the packet).** The stripping
+guarantee holds only while validation *succeeds*:
+
+```js
+const parsed = def.output.safeParse(out);
+if (parsed.success) return parsed.data as Out;
+const message = `${def.name} returned a shape its output schema rejects: ...`;
+if (process.env.NODE_ENV === "production") {
+  console.error(message);
+  return out;            // raw, unvalidated
+}
+throw new ServiceError("internal", message);
+```
+
+In production, a handler whose result fails its own output schema has the
+**raw object returned to the caller** rather than being refused. The trade-off
+is deliberate and defensible — a schema drift should not take a running site
+down, and the mismatch is logged — but it means "the output schema prevents
+secrets reaching the caller" is true exactly when the schema matches, and the
+fallback applies only in the environment where a leak would matter. Two
+conditions must coincide for harm (a handler returning a non-conforming shape
+*and* that shape carrying a secret), and dev/test throws so such a bug should
+surface earlier, which is why this is low rather than medium.
+
+Worth the reviewer's judgement: whether the production fallback should strip
+to the schema's known keys on a best-effort basis before returning, rather than
+returning the object untouched. That would preserve availability while keeping
+the stripping property unconditional.
+
 
 ---
 
