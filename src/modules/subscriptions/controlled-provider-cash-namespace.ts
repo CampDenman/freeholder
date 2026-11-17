@@ -9,7 +9,7 @@ import { subscriptionProviderChargeReceipts } from "./schema";
 import { subscriptionControlledChargeOrigins,subscriptionControlledResources,subscriptionControlledFacts,subscriptionControlledCalls,subscriptionControlledOperations } from "./controlled-provider-schema";
 import { controlledCashEvidence,readOriginalControlledChargeAuthorities } from "./controlled-provider-cash-origin";
 import { controlledRawFinancialReview } from "./controlled-provider-raw-financial-review";
-import { createControlledJournalComposition,readComposedControlledProviderJournal } from "./controlled-provider-journal-composition";
+import { createControlledJournalComposition,finishControlledJournalComposition,readComposedControlledProviderJournal } from "./controlled-provider-journal-composition";
 const primaryKinds=new Set(["bootstrap","discover_bootstrap","pause_drafts","read_bootstrap","read_customer_financials","list_invoices","create_schedule","read_calendar","update_calendar","read_invoice","finalize_invoice","pay_invoice","cancel_calendar","void_invoice","delete_draft"]);
 /** verified is ancestry, never paid/refunded/settled authority. The parent must
  * still prove actual principal/route/refunds/disputes/current bank inventory.
@@ -73,6 +73,10 @@ export async function readControlledReceiptNamespace(tx:Tx,receiptId:string){
  const verified=authority.controlledOrigin.operationId===origin.operationId&&authority.controlledOrigin.originalEvidenceDigest===origin.originalEvidenceDigest
   &&cash.providerSubscriptionRef===receipt.providerSubscriptionRef&&cash.providerInvoiceRef===receipt.providerInvoiceRef&&cash.providerPaymentIntentRef===receipt.providerPaymentIntentRef
   &&cash.amountMinor===receipt.amountMinor&&cash.currency===receipt.currency&&(!receipt.providerChargeRef||!cash.providerChargeRef||receipt.providerChargeRef===cash.providerChargeRef);
+ // The journal above is memoised, so the batch comparison is self-consistent
+ // by construction. Only this final fresh certificate can prove the
+ // controlled journal did not change during the ancestry evaluation.
+ await finishControlledJournalComposition(tx,composition);
  return{applies:true as const,verified,resourceId:origin.resourceId,operationId:origin.operationId,factId:origin.factId,financialCallerDebt:history.unfinished.length>0,principalCallerDebt:primaryDebt,
   rawCashReview:rawCashReview||!verified,inventoryCount:history.count,revision:merchantTaxDigest({receipt,origin,historyRevision:history.revision,verified,rawCashReview})};
 }

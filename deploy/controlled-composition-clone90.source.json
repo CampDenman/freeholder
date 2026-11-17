@@ -7,7 +7,7 @@
     { "path": "src/modules/subscriptions/controlled-provider-proof.ts", "sha256": "5115e1435e79cf7c91a16d9c2252b8966e7d12180e16a516d074a506da46663d" },
     { "path": "src/modules/subscriptions/controlled-provider-cash-origin.ts", "sha256": "00bbfdaf6180fdf7b838179a53605f462070552cef91ba6b2111669e03157c70" },
     { "path": "src/modules/subscriptions/controlled-provider-coverage.ts", "sha256": "076adc16066a9c74a6ed85c4ab4dbb8bcad4a85ba980179925ca85704e6b4e60" },
-    { "path": "src/modules/subscriptions/controlled-provider-cash-namespace.ts", "sha256": "40201c25a5055c081f1d8ef059059ab5ff6f9d3ce2f8beaa45366cd36b22b56e" },
+    { "path": "src/modules/subscriptions/controlled-provider-cash-namespace.ts", "sha256": "b231dfdc3f87303aff05e1ea968140150d13f37f4cc937b546b6c851af33c2a1" },
     { "path": "src/modules/subscriptions/controlled-provider-cash-observation-source.ts", "sha256": "bf597f917efa82041bf91294cf880587721d9b80a1fea523debd499d99443248" }
   ],
   "sourceTables": [
@@ -76,6 +76,16 @@
       "beforeSha256": "d06054002506f6ac3c2ad756081aabcd9e31a9d7630462ceba0199dca03db77e",
       "edits": [
         { "before": "factId:origin.factId});", "after": "factId:origin.factId},composition);", "occurrences": 1 }
+      ]
+    },
+    {
+      "path": "src/modules/subscriptions/controlled-provider-cash-namespace.ts",
+      "afterSha256": "b231dfdc3f87303aff05e1ea968140150d13f37f4cc937b546b6c851af33c2a1",
+      "beforeSha256": "40201c25a5055c081f1d8ef059059ab5ff6f9d3ce2f8beaa45366cd36b22b56e",
+      "continue": true,
+      "edits": [
+        { "before": "import { createControlledJournalComposition,readComposedControlledProviderJournal } from \"./controlled-provider-journal-composition\";", "after": "import { createControlledJournalComposition,finishControlledJournalComposition,readComposedControlledProviderJournal } from \"./controlled-provider-journal-composition\";", "occurrences": 1 },
+        { "before": " return{applies:true as const,verified,resourceId:origin.resourceId,", "after": " // The journal above is memoised, so the batch comparison is self-consistent\n // by construction. Only this final fresh certificate can prove the\n // controlled journal did not change during the ancestry evaluation.\n await finishControlledJournalComposition(tx,composition);\n return{applies:true as const,verified,resourceId:origin.resourceId,", "occurrences": 1 }
       ]
     },
     {

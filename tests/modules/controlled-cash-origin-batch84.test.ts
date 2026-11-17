@@ -49,7 +49,7 @@ describe.runIf(hasDatabase)("genuine same-pass controlled cash ancestry",{timeou
  });
  it("refuses a genuinely later cash/FIN cohort between the prior journal and the batch, preserving all retained facts",async()=>{
   const source=await actual(),before=await financial(),entered=Promise.withResolvers<void>(),release=Promise.withResolvers<void>(),read=originApi.readOriginalControlledChargeAuthorities;
-  const fault=vi.spyOn(originApi,"readOriginalControlledChargeAuthorities").mockImplementationOnce(async(tx,input)=>{entered.resolve();await release.promise;return read(tx,input);});
+  const fault=vi.spyOn(originApi,"readOriginalControlledChargeAuthorities").mockImplementationOnce(async(tx,input,composition)=>{entered.resolve();await release.promise;return read(tx,input,composition);});
   const running=db().transaction(tx=>readControlledReceiptNamespace(tx,source.receipt.id));const outcome=running.then(()=>({state:"returned" as const}),(error:unknown)=>({state:"refused" as const,error}));
   await entered.promise;const prior=await db().transaction(tx=>controlledProviderJournal(tx,source.resourceId));
   try{await readInvoice(source.resourceId,source.open.providerInvoiceRef);}finally{release.resolve();}
@@ -70,7 +70,7 @@ describe.runIf(hasDatabase)("genuine same-pass controlled cash ancestry",{timeou
   // Deliberate helper-contract fault injection after its REAL DB fetch. No
   // fabricated row is retained and no fake transaction/context is supplied.
   const read=originApi.readOriginalControlledChargeAuthorities;
-  for(const mode of ["canonical","postgres"] as const){const fault=vi.spyOn(originApi,"readOriginalControlledChargeAuthorities").mockImplementationOnce(async(tx,input)=>{const actual=await read(tx,input);return mode==="canonical"?{...actual,resource:{...actual.resource,createdAt:new Date(actual.resource.createdAt.getTime()+1)}}:{...actual,postgresFingerprint:actual.postgresFingerprint==="f".repeat(64)?"e".repeat(64):"f".repeat(64)};});await expect(db().transaction(tx=>readControlledReceiptNamespace(tx,source.receipt.id))).rejects.toThrow();fault.mockRestore();}
+  for(const mode of ["canonical","postgres"] as const){const fault=vi.spyOn(originApi,"readOriginalControlledChargeAuthorities").mockImplementationOnce(async(tx,input,composition)=>{const actual=await read(tx,input,composition);return mode==="canonical"?{...actual,resource:{...actual.resource,createdAt:new Date(actual.resource.createdAt.getTime()+1)}}:{...actual,postgresFingerprint:actual.postgresFingerprint==="f".repeat(64)?"e".repeat(64):"f".repeat(64)};});await expect(db().transaction(tx=>readControlledReceiptNamespace(tx,source.receipt.id))).rejects.toThrow();fault.mockRestore();}
   expect(await db().select().from(subscriptionControlledResources).where(eq(subscriptionControlledResources.id,source.resourceId))).toEqual(before);expect(await db().transaction(tx=>readControlledReceiptNamespace(tx,source.receipt.id))).toMatchObject({verified:true});
  });
  it("retains a scripted malformed late cash callback through the real holder and keeps its raw review flag",async()=>{
