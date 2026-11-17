@@ -313,9 +313,48 @@ Worth recording as good practice: the MCP `annotations` (`readOnlyHint`,
 enforcement — the service is the enforcement."* A client that ignores them
 gains nothing.
 
-### M1/M3/M4 — not yet worked
-Probing with a real MCP client, the untrusted-input interpolation boundary, and
-whether a paused or over-budget agent can complete an in-flight run remain open.
+### M4. "Autonomous writes are budgeted and approval-gated. Confirm a paused or over-budget agent cannot complete an in-flight run." — VERIFIED, no finding
+
+**Pause is enforced per write, not per run.** The propose-write handler
+(`src/core/agents/writes.ts:121`) resolves the agent through
+`agentForActor(ctx.tx, ctx.actor)` on every call, and the comment states the
+intent: *"Resolves through the key join and refuses paused agents and paused
+connections — the same gate every other agent verb passes through, so the kill
+switch also stops writes mid-lease."* So pausing takes effect on the agent's
+next write even if a run is already underway and holding a lease; authority is
+not established once at run start and then trusted.
+
+The failure path is handled rather than assumed
+(`src/core/agents/managed.ts:524`): a paused agent's next service call refuses,
+the run closes as a failure the board can display, and *"If even closing is
+refused, the lease reaper reclaims the task — never silently lost."* A kill
+switch that could wedge a task would be a poor kill switch; this one cannot.
+
+**Budget is enforced twice, and the second is stronger than a check.**
+
+1. At claim time (`src/core/agents/execution.ts:204`), `spent >= agent.budgetCents`
+   throws, so an exhausted agent cannot take new work.
+2. Per turn (`src/core/agents/managed.ts:420`), the output allowance is *made*
+   affordable rather than merely validated — a turn is asked for only as many
+   tokens as the remaining budget can pay for.
+
+**The code discloses its own residual exposure, which is why this is worth
+recording as good practice rather than a finding.** Quoting the comment: the
+input half cannot be known before sending, so it is estimated from the largest
+input the run has seen with a floor, and *"That leaves exactly one exposure: a
+first turn whose real input dwarfs the floor can overshoot by one turn. It is
+then recorded in full and blocks every further claim, which is the honest bound
+— not a silent one."*
+
+That is the correct treatment of a bound that cannot be made exact: name it,
+cap it at one turn, record the overshoot in full, and let it block every
+subsequent claim. A reviewer should confirm the recorded spend really does
+include the overshoot (the claim gate reads `spentThisPeriod`, so it does by
+construction), but there is no hidden loss here.
+
+### M1/M3 — not yet worked
+Probing with a real MCP client and the untrusted-input interpolation boundary
+remain open.
 Note that tonight's parallel-fix pass found a related *live* defect in the same
 family — plugin execution context downgrading core recovery authority
 (`reconcileCommittedStorageObservation`) — so the actor-substitution boundary
