@@ -10,7 +10,7 @@
   "defaultCheckout": {
     "path": "tests/helpers/merchant-checkout80.ts",
     "name": "seedMerchantCheckout80",
-    "bodySha256": "084d571c3c1758b2e0da88b22306c22b7ad27d56627570b5323b4e57ff6001fe",
+    "bodySha256": "24a845171d88aa99287f46230ce422e189800ee6d7e8337ac14af1c97fd06847",
     "byteIdentical": true
   },
   "defaultProvider": {
