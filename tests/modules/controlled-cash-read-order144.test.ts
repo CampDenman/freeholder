@@ -55,6 +55,21 @@ describe.runIf(hasDatabase)("actual controlled cash ordering is admission order,
    const aStarted=await Promise.race([started.promise,outcome.then(result=>{if(!result.ok)throw result.error;throw Error("The delayed actual TX returned before its admission barrier.");})]);
    // A missing genuine future parent/producer is a real failure. Never catch
    // it as a pass, bypass it or fall back to the legacy strict generic lane.
+   //
+   // Wait for the database clock to leave A's millisecond before opening B's
+   // transaction. createdAt is transaction_timestamp(), which PostgreSQL keeps
+   // to microseconds and this column truncates to milliseconds, so B opening a
+   // few hundred microseconds after A gives both the SAME getTime() and the
+   // premise below -- A started before B, yet was admitted after it -- is no
+   // longer demonstrated by the fixture at all. That makes this suite fail on
+   // a fast cluster and pass on a slow one. Relaxing the comparison would hide
+   // it and let the ordering proof pass vacuously, which is the opposite of
+   // what it is for; the fixture has to actually create the situation.
+   for(let guard=0;guard<200;guard+=1){
+    const[clock]=await db().execute<{at:string}>(sql`select clock_timestamp()::text as at`);
+    if(clock&&z.coerce.date().parse(clock.at).getTime()>new Date(aStarted).getTime())break;
+    await new Promise(resolve=>setTimeout(resolve,2));
+   }
    const b=await prepareControlledCashInspection.call(input,system);await perform(b);
    expect((await db().transaction(tx=>latestControlledCashInspectionLineage(tx,receipt.id))).inspection.id).toBe(b.inspectionId);
    const[admittedB]=await db().select().from(merchantCashReturnInspections).where(eq(merchantCashReturnInspections.id,b.inspectionId));
