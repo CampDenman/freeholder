@@ -6,7 +6,7 @@
   "artifacts": [
     { "path": "MASTER.md", "sha256": "bd1af9db602873bcdd55df319e18c634fe3ed88eb63895ba995d4b0ce53fa2cc" },
     { "path": "tests/browser/media-storage-recovery.spec.ts", "sha256": "0497358f17008127862fe9a17ac891b2c939578e20dd677e50ba8c2f0aec4849" },
-    { "path": "tests/fixtures/media-browser-multipart-debt.config.ts", "sha256": "fe19fe2a9844eb736a261119ab80e817f1ceb75f5bb8ef7448eff8fdd0d963aa" },
+    { "path": "tests/fixtures/media-browser-multipart-debt.config.ts", "sha256": "f2ecd32b7e6c634bdff25b582666bcacdf29d7002d2e17b0df09f41959e5ee42" },
     { "path": "tests/fixtures/media-browser-multipart-debt.probe.ts", "sha256": "7c02cf94d7aa1d314ee1bfdfeec533fbadd8f0f5a3241d0afd3fe7ac99ae8210" },
     { "path": "playwright.a11y.config.ts", "sha256": "17b351cd4fd2ddbc5e773062237c504b07b2e5bf313cc88337066c275e133590" }
   ],

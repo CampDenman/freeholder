@@ -57,7 +57,7 @@
     { "path": "tests/browser/members.spec.ts", "sha256": "845b2dc9e8e9f24e4e06ad031a533da365c2ac1183728da26b3a5c0306ac38b2" },
     { "path": "tests/browser/merchant-trial.spec.ts", "sha256": "06c5f21fdddc9925e8c1ff1383320291591ccec2e4dbf1d436d87ebb4bf0318a" },
     { "path": "tests/browser/return-refund.spec.ts", "sha256": "a420e3c62dcd7193cf5250bb24178becb51b8ca4af43f7a7a099b00eb2ae42ac" },
-    { "path": "tests/fixtures/return-refund-browser.config.ts", "sha256": "0fae8de031bc674ac63e311187082ec70c827e1d484bab8c48b0e2bd34355507" },
+    { "path": "tests/fixtures/return-refund-browser.config.ts", "sha256": "a70fb39c528ab60ce47a509b1bf7109cf4f220c673fff97324dfba6610bf7cbe" },
     { "path": "tests/fixtures/return-refund-browser.probe.ts", "sha256": "10f5d31917710899dcd4bda1ca4e7bd959bdd88c77be5db12d973019c7bf9e75" },
     { "path": "tests/modules/subscription-status-read-lock.test.ts", "sha256": "a3b30ebb8c9a8cfbe48fb3e8a5b9ee0e027e1150155ce27a5db467c26ef60624" }
   ],
