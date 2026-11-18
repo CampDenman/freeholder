@@ -1,5 +1,30 @@
 // Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0
 // PREPARED/UNRUN. Real services and HTTP facts; no synthetic context or row fill.
+//
+// COST, measured 2026-11-18 on a tmpfs PostgreSQL 16 with fsync off. This
+// fixture takes ~61s, and four single service calls are 44s of it:
+//
+//   13811ms  quoteControlledProration         (1 call)
+//   12345ms  applyControlledCashReceipts      (1 call)
+//   10158ms  returnOriginalCash               (1 call)
+//    8140ms  reconcileMerchantApplicationFee  (1 call)
+//     3367ms completePaidControlledPeriod     (3 calls)
+//     3229ms inspectControlledCashReceipt     (5 calls)
+//
+// For contrast, in the same run `ready()` was 1.1s and `truncateSpine` 274ms,
+// so neither boot nor the 601-table reset is what costs anything here.
+//
+// This is why `atomic-credit-fee-persistence84` and
+// `atomic-credit-stage-profile89` -- the only two suites that use this fixture
+// -- time out in CI while passing locally. `.github/workflows/ci.yml` records
+// that a hosted runner executes DB-backed files at a measured 6.7x degraded
+// rate, which puts this fixture alone at ~409s per test there, above the 180s
+// ceiling before a single assertion runs. Raising the ceiling cannot fix it:
+// three tests at that cost exceed the job's 25-minute budget, which is why
+// C11.13 added shards instead of raising timeouts.
+//
+// So the fix is to make those four services cheaper, or to stop rebuilding
+// the whole fixture per test. Please do not "fix" this by relaxing a timeout.
 import {eq} from "drizzle-orm";
 import {db} from "@/core/db";
 import {stopJobs} from "@/core/jobs";
