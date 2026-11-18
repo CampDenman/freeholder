@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // The customer-app audit allowance policy (C1.20, §36).
 import { describe, expect, it } from "vitest";
-// @ts-expect-error -- plain ESM gate script, no type declarations
 import { evaluateMobileAudit } from "../../scripts/mobile-audit.mjs";
 
 const NOW = new Date("2026-11-18T00:00:00Z");

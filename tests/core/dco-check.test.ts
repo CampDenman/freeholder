@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // The DCO contract, enforced from commit objects rather than a capped API.
 import { describe, expect, it } from "vitest";
-// @ts-expect-error -- plain ESM gate script, no type declarations
 import { evaluateSignOffs } from "../../scripts/dco-check.mjs";
 
 const OWNER = { authorName: "Tony Aly", authorEmail: "tony@example.test" };
@@ -25,7 +24,7 @@ describe("DCO sign-off evaluation", () => {
   it("rejects a commit with no trailer at all", () => {
     const failures = evaluateSignOffs([commit({ message: "do a thing\n" })]);
     expect(failures).toHaveLength(1);
-    expect(failures[0].reason).toContain("no Signed-off-by");
+    expect(failures[0]?.reason).toContain("no Signed-off-by");
   });
 
   it("accepts a sign-off matching the committer when the author differs", () => {
@@ -38,7 +37,7 @@ describe("DCO sign-off evaluation", () => {
       message: "x\n\nSigned-off-by: Someone Else <nobody@example.test>\n",
     })]);
     expect(failures).toHaveLength(1);
-    expect(failures[0].reason).toContain("matches neither author");
+    expect(failures[0]?.reason).toContain("matches neither author");
   });
 
   it("is case-insensitive about the identity, as git addresses are", () => {
@@ -97,6 +96,6 @@ describe("DCO sign-off evaluation", () => {
       commit({ sha: "2".repeat(40) }),
       commit({ sha: "3".repeat(40), message: "c\n" }),
     ]);
-    expect(failures.map((f: { sha: string }) => f.sha)).toEqual(["1".repeat(40), "3".repeat(40)]);
+    expect(failures.map((failure) => failure.sha)).toEqual(["1".repeat(40), "3".repeat(40)]);
   });
 });
