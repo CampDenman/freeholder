@@ -1,0 +1,21 @@
+# Copyright (C) 2026 Tony Aly
+# SPDX-License-Identifier: Apache-2.0
+# DCO app configuration (https://github.com/probot/dco).
+#
+# `allowRemediationCommits.individual` lets an author retroactively sign off
+# one of their own earlier commits with a later commit, instead of rewriting
+# history to add the trailer.
+#
+# This repository needs it for exactly one commit:
+# a2f8aaeaa532cfb8ed0dbd9f4ef7841e66e7a7c8 ("wip: preserve uncommitted work
+# before /tmp worktree reclaim"). That commit carries no Signed-off-by, and it
+# cannot be rebased to add one, because its own 40-character sha is pinned as
+# provenance in deploy/master-status-continuation-20261117.source.json
+# ("unrecordedIn"). Rewriting it would change that sha and silently invalidate
+# the record the pin exists to protect.
+#
+# Only `individual` is enabled. Third-party remediation — one person signing
+# off on another's commit — stays off, because the DCO is an attestation about
+# authorship and nobody here can make it on someone else's behalf.
+allowRemediationCommits:
+  individual: true
