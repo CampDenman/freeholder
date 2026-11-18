@@ -461,6 +461,30 @@ const envSchema = z.object({
    * the digest, not which registry serves it. Hardcoding the registry meant a
    * forge-hosted or mirrored instance could never roll back at all.
    */
+  /**
+   * Extra hosts a contributed code link may point at (§4.8, C1.33).
+   *
+   * Comma-separated hostnames. `github.com` is always accepted because it is
+   * the upstream merge path; this adds the forge an instance actually keeps
+   * its code on, so a contributor can cite the repository they worked in.
+   * It stays an allowlist on purpose: `externalUrl` arrives from outside and
+   * is rendered to a reviewer, so an open field would be a phishing surface.
+   */
+  FREEHOLDER_CODE_LINK_HOSTS: z
+    .string()
+    .trim()
+    .max(500)
+    .refine(
+      (value) =>
+        value
+          .split(",")
+          .map((host) => host.trim())
+          .filter(Boolean)
+          .every((host) => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(host)),
+      "must be a comma-separated list of hostnames, without scheme or path",
+    )
+    .optional(),
+
   FREEHOLDER_IMAGE_REPOSITORY: z
     .string()
     .trim()

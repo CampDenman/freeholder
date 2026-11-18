@@ -7413,7 +7413,14 @@ reading chat logs.
 - [x] **C1.33** Code submissions: patch/diff/PR URL, DCO attestation, license
   notice, never auto-merge; a determination may cite a §43 ID;
   CONTRIBUTING.md and SECURITY.md pointers.
-  (patch without DCO refused; `externalUrl` GitHub-only; determination
+  (patch without DCO refused; `externalUrl` restricted to an allowlist of
+  hosts — `github.com` always, plus any host named in
+  `FREEHOLDER_CODE_LINK_HOSTS`, compared against a parsed URL so scheme,
+  userinfo and look-alike suffixes are settled explicitly
+  (`isAcceptedCodeLink`, proved by `tests/core/contribute-code-link.test.ts`);
+  it was GitHub-only until 2026-11-18, which left an instance keeping its code
+  on its own forge unable to cite the repository the work was done in;
+  determination
   `checklistId`; CONTRIBUTING.md channel paragraph **F04** `/admin/contribute` code-submission kind. **F05** `contribute.submit` with the code-submission kind at `/api/v1/contribute.submit`, MCP `contribute_submit` (never auto-merge). **F07** service permission checks and destructive confirmation on the caller. **F09** N/A as C11.14 — this item uses the shared audit/outbox; product-wide export/restore/retention/erasure proof is still open. **F12** `tests/core/contribute.test.ts` is the composition proof.)
 - [x] **C1.34** Reply hub determinations to the speaking instance: store a
   reply URL and capability token on ingest, POST status on determine, apply
