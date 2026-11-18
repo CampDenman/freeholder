@@ -78,6 +78,10 @@ export const SEARCH_TABLE_OPT_OUTS: Record<string, string> = {
   media_multipart_resources:"Private original multipart resource identities; inspect through human storage recovery.",
   import_reader_ownership_receipts: "Private keyed source-reader ownership proof; source digests, contact pointers and erased-reimport fences are never search hits.",
   mail_record_subjects: "Private ownership join; mail status uses its own scoped service and receipt identities are not searchable titles.",
+  tracked_subscriptions:
+    "A member's private register of what they pay for; find the person, then their subscriptions through their own capability. Surfacing \"Netflix\" as an owner-facing hit would expose one member's spending through global search.",
+  renewal_alerts:
+    "Operational record that a warning was sent; no searchable title, and it reveals the register above. Find the person, then their alerts.",
   contact_relationships:
     "Join table of two contacts; find each person through the contact source.",
   customer_magic_links:
