@@ -16,13 +16,13 @@
   "artifacts": [
     {
       "path": "MASTER.md",
-      "sha256": "dd35805450adb3241becf05a8e5f01dfceb8c5bc47647813e98a5aaedb1f76b6"
+      "sha256": "1b12828a6d5844089185fa87f1b36d185ce5066311f34cab5d17fedc2533f506"
     }
   ],
   "testContinuations": [
     {
       "path": "MASTER.md",
-      "afterSha256": "dd35805450adb3241becf05a8e5f01dfceb8c5bc47647813e98a5aaedb1f76b6",
+      "afterSha256": "1b12828a6d5844089185fa87f1b36d185ce5066311f34cab5d17fedc2533f506",
       "beforeSha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3",
       "continue": true,
       "edits": [
@@ -49,6 +49,11 @@
         {
           "before": "  refusal asserted in `tests/core/update-targets.test.ts` (38 tests) and, for\n  the gate script, exercised against the real recipes. **F09** SPDX headers on\n",
           "after": "  refusal asserted in `tests/core/update-targets.test.ts` (41 tests) and, for\n  the gate script, exercised against the real recipes. The repository half of\n  that pin became `FREEHOLDER_IMAGE_REPOSITORY` on 2026-11-18: the safety\n  property is the **digest**, never which registry serves it, and hardcoding\n  `ghcr.io/campdenman/freeholder` meant an instance serving its own images\n  from a mirror or its own forge could not roll back at all — the deployments\n  most likely to need one. `isImmutableImageDigest` keeps refusing a bare\n  repository, a moving tag, and a short, over-long, upper-case or non-hex\n  digest, each asserted directly. **F09** SPDX headers on\n",
+          "occurrences": 1
+        },
+        {
+          "before": "",
+          "after": "Migration boundary guard correction (2026-11-18, C11.10/C11.08/C1.08): the\nexact first guard of boundary86 no longer censuses pg_stat_activity, and the\nwhole first guard is now **2599 bytes** (be98ff6d...), not the 2038 bytes\npinned above. The census refused the rollout whenever any other client backend\nwas connected to the target database. It could not deliver that property -- a\nbackend may arrive the moment after it passes, which the guard's own header\nconceded while requiring it -- and it made every packaged deploy unbootable:\nFreeholder applies migrations in-process at boot while the web server is\nalready answering readiness probes, so the migrating instance's own pool was\nalways \"another client\". The failure was not a refused write but an instance\nthat never became ready, reported as `migration unavailable (Error)` with\nnothing named, because the driver wraps the server error and the readiness\ndiscriminator read only the outermost code. Both failure reporters now read a\nbounded code from the cause chain, never a message. What remains is the control\nthat holds: LOCK TABLE ... IN ACCESS EXCLUSIVE MODE NOWAIT over the nine\nsubscription_controlled_* tables, which conflicts with every lock mode and so\nrefuses the instant another session holds any lock on them, plus the\nprepared-transaction check for its named error. Two PostgreSQL proofs replace\nthe single census proof: an idle target-database client no longer blocks the\nrollout, and a client genuinely holding a lock on those tables is refused with\n55P03. External closed-set OS/runtime drain remains the operator's practice for\na multi-replica estate; it is no longer asserted by counting connections.\nC11.10/C11.08/C1.08 and stable acceptance stay open.\n\n",
           "occurrences": 1
         }
       ]

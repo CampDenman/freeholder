@@ -33,7 +33,7 @@ function sourceFixture(failLater = false, laterMigration: "none" | "select" | "c
     const from = join("db/migrations", `${entry.tag}.sql`), to = join(folder, `${entry.tag}.sql`);
     cpSync(from, to); expect(sha(readFileSync(to))).toBe(sha(readFileSync(from)));
   }
-  expect(Buffer.byteLength(guard)).toBe(2038); expect(sha(guard)).toBe(SAFE_RESPONSE_BOUNDARY.firstStatementSha256);
+  expect(Buffer.byteLength(guard)).toBe(2599); expect(sha(guard)).toBe(SAFE_RESPONSE_BOUNDARY.firstStatementSha256);
   const later = `\nCREATE TABLE public.safe_boundary_probe(xid text NOT NULL, prefix_xmin text NOT NULL);\nINSERT INTO public.safe_boundary_probe SELECT txid_current()::text,xmin::text FROM drizzle.__drizzle_migrations WHERE created_at=1793310000065;\n${failLater ? "DO $$ BEGIN RAISE EXCEPTION 'deliberate boundary-only rollback probe' USING ERRCODE='P0001'; END $$;" : ""}\n`;
   writeFileSync(join(folder, `${SAFE_RESPONSE_BOUNDARY.tag}.sql`), `${guard}--> statement-breakpoint${later}`);
   const entries = [...prefix, { idx: 86, version: "7", when: SAFE_RESPONSE_BOUNDARY.when, tag: SAFE_RESPONSE_BOUNDARY.tag, breakpoints: true }];
@@ -153,11 +153,40 @@ describe.runIf(Boolean(url))("actual official migration 86 transaction boundary 
     try { expect(await client`select to_regclass('public.safe_boundary_probe')::text as probe`).toEqual([{ probe: null }]); }
     finally { await client.end(); }
   });
-  it("refuses another actual target-database client before any probe or row 86", async () => {
-    const target = await database("other-client"), f = sourceFixture(); const before = await stagePrefix(target, f);
+  // These two replace a single test that refused ANY other client backend, by
+  // censusing pg_stat_activity. That census could not deliver what it claimed
+  // -- a backend may arrive the moment after it passes -- and it broke every
+  // packaged deploy, because Freeholder migrates in-process at boot while the
+  // web server is already answering readiness probes, so the migrating
+  // instance's own pool was always "another client". ACCESS EXCLUSIVE NOWAIT
+  // is the control that holds, and these assert both of its edges.
+  it("ignores an idle target-database client, which is what the migrating instance's own pool is", async () => {
+    const target = await database("idle-client"), f = sourceFixture(); await stagePrefix(target, f);
     const other = target.connect();
-    try { await other`select pg_backend_pid()`; await rejection(run(target, f), "55006"); }
+    try { await other`select pg_backend_pid()`; await run(target, f); }
     finally { await other.end(); }
+    expect(await observe(target)).toHaveLength(87);
+  });
+  it("refuses a client that actually holds a lock on the controlled tables", async () => {
+    const target = await database("locked-tables"), f = sourceFixture(); const before = await stagePrefix(target, f);
+    // The holder announces the lock from inside its own transaction. Polling
+    // pg_locks instead would be a race: it is cluster-wide, so a relation OID
+    // can match a same-named table in another database on the same server, and
+    // the rollout then runs before this lock is granted.
+    const holder = target.connect();
+    let release: (() => void) | undefined, acquired: (() => void) | undefined;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const ready = new Promise<void>(resolve => { acquired = resolve; });
+    const holding = holder.begin(async tx => {
+      await tx`lock table subscription_controlled_calls in access share mode`;
+      acquired?.(); await held;
+    });
+    try {
+      await Promise.race([ready, holding.then(() => { throw new Error("The lock holder finished before it could hold anything."); })]);
+      await rejection(run(target, f), "55P03");
+    } finally {
+      release?.(); await holding.catch(() => undefined); await holder.end();
+    }
     expect(await observe(target)).toEqual(before);
   });
   it("refuses a genuine prepared transaction (max_prepared_transactions>0 is an explicit required prerequisite)", async () => {
@@ -175,7 +204,7 @@ describe.runIf(Boolean(url))("actual official migration 86 transaction boundary 
     }
     expect(await observe(target)).toEqual(before);
   });
-  it("refuses a real bootstrap waiting on the same session lock and cancels/drains it before release", async () => {
+  it("completes the rollout while a real second bootstrap waits on the same session lock, then cancels/drains it", async () => {
     const target = await database("waiting-bootstrap"), f = sourceFixture(); const before = await stagePrefix(target, f);
     const first = target.connect(), second = target.connect(); let secondOutcome: Promise<{ ok: boolean }> | undefined;
     try {
@@ -188,14 +217,23 @@ describe.runIf(Boolean(url))("actual official migration 86 transaction boundary 
         waiter = rows[0]?.pid; if (!waiter) await new Promise(resolve => setTimeout(resolve, 20));
       }
       expect(waiter).toBeDefined(); if (!waiter) throw new Error("Observe the genuine waiting second bootstrap.");
-      await rejection(runMigrationsOnDedicatedSession(first, { migrationsFolder: f.folder }), "55006");
+      // The census used to refuse right here, purely because a second
+      // bootstrap was connected and waiting. Proceeding is the correct
+      // behaviour: the advisory lock already stops the waiter from running any
+      // migration until this session releases it, and ACCESS EXCLUSIVE refuses
+      // an actual conflict. Refusing instead gave a boot loop, not safety.
+      await runMigrationsOnDedicatedSession(first, { migrationsFolder: f.folder });
+      const applied = await journal(first);
+      expect(applied).toHaveLength(87);
+      expect(applied.slice(0, 86)).toEqual(before);
       await first`select pg_cancel_backend(${waiter})`;
       expect(await secondOutcome).toEqual({ ok: false }); await second.end();
     } finally {
       // Do not release the first lock until the waiting client is truly closed.
       await second.end({ timeout: 1 }); await first.end();
     }
-    expect(await observe(target)).toEqual(before);
+    // Exactly one row 86: the cancelled waiter applied nothing of its own.
+    expect(await observe(target)).toHaveLength(87);
   });
 });
 

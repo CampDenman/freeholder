@@ -1,0 +1,7 @@
+---
+"freeholder": patch
+---
+
+A fresh install and a packaged image can start again. Migration 86 refused to run while anything else was connected to its database, and Freeholder applies migrations inside the web process at boot, while that process is already answering health probes — so its own connection pool always tripped the refusal and the instance never became ready. Every new deploy was affected, and so was every upgrade from a release older than that migration. The check it was making could not actually be made this way: another connection can arrive the moment after it passes. What protects the change is a lock the database enforces for the whole migration, which refuses at once if any other session is holding one of those tables, and that is what remains. A stopped-and-drained database is still the right practice for an estate running several copies of a site; it is no longer asserted by counting connections.
+
+Both start-up failure reports also now name the real cause when the database driver wraps it. A refused migration read `migration unavailable (Error)`, which named nothing, and the manual `scripts/migrate.mjs` printed `MIGRATION_FAILED` even for the conditions it is written to name. They now look through the wrapper for a short, bounded failure code — refining the earlier note that said a nested cause is never read at all. Still never a message, a stack, a query or anything else from it, because those carry SQL, connection strings and provider payloads.

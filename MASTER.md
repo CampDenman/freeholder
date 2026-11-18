@@ -19296,6 +19296,30 @@ acceptance. No new normal SQL/journal/DDL, service, model or waiver. Final
 source pins, real execution, packaging and external closed-set drain stay open.
 See deploy/controlled-safe-migration-boundary-final-20261114.md.
 
+Migration boundary guard correction (2026-11-18, C11.10/C11.08/C1.08): the
+exact first guard of boundary86 no longer censuses pg_stat_activity, and the
+whole first guard is now **2599 bytes** (be98ff6d...), not the 2038 bytes
+pinned above. The census refused the rollout whenever any other client backend
+was connected to the target database. It could not deliver that property -- a
+backend may arrive the moment after it passes, which the guard's own header
+conceded while requiring it -- and it made every packaged deploy unbootable:
+Freeholder applies migrations in-process at boot while the web server is
+already answering readiness probes, so the migrating instance's own pool was
+always "another client". The failure was not a refused write but an instance
+that never became ready, reported as `migration unavailable (Error)` with
+nothing named, because the driver wraps the server error and the readiness
+discriminator read only the outermost code. Both failure reporters now read a
+bounded code from the cause chain, never a message. What remains is the control
+that holds: LOCK TABLE ... IN ACCESS EXCLUSIVE MODE NOWAIT over the nine
+subscription_controlled_* tables, which conflicts with every lock mode and so
+refuses the instant another session holds any lock on them, plus the
+prepared-transaction check for its named error. Two PostgreSQL proofs replace
+the single census proof: an idle target-database client no longer blocks the
+rollout, and a client genuinely holding a lock on those tables is refused with
+55P03. External closed-set OS/runtime drain remains the operator's practice for
+a multi-replica estate; it is no longer asserted by counting connections.
+C11.10/C11.08/C1.08 and stable acceptance stay open.
+
 ## 44. Members, Social, Messaging, Calls, and Marketplace
 
 *Owner decision 2026-10-14.* Freeholder started as the operating system for a

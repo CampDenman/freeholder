@@ -19,12 +19,27 @@ export function migrationDatabaseUrl() {
   // Match drizzle.config.ts exactly, including an explicitly empty value.
   return process.env.DATABASE_URL ?? DEFAULT_MIGRATION_URL;
 }
+// The driver wraps: DrizzleQueryError carries no code of its own and puts the
+// real PostgresError in `cause`. Reading only the outermost own code made
+// every PostgreSQL code in this list unreachable -- 55006 and 55P03 have
+// always been named here and could never be reported -- so a refused
+// migration printed MIGRATION_FAILED and named nothing. The walk is bounded
+// and cycle-safe, and still reads own data properties only: never a getter's
+// return, never a message, never a query.
 export function migrationFailureCode(error) {
   try {
-    const descriptor = error && typeof error === "object" ? Object.getOwnPropertyDescriptor(error, "code") : undefined;
-    const code = descriptor && "value" in descriptor ? descriptor.value : undefined;
     const allowed = new Set(["FH_MIGRATION_BOUNDARY_IDENTITY", "FH_MIGRATION_BOUNDARY_UNPINNED", "FH_MIGRATION_PREFIX_MISMATCH", "55006", "55P03"]);
-    return typeof code === "string" && allowed.has(code) ? code : "MIGRATION_FAILED";
+    const own = (target, key) => {
+      const descriptor = Object.getOwnPropertyDescriptor(target, key);
+      return descriptor && "value" in descriptor ? descriptor.value : undefined;
+    };
+    const seen = new Set();
+    for (let current = error; current && typeof current === "object" && !seen.has(current) && seen.size < 4; current = own(current, "cause")) {
+      seen.add(current);
+      const code = own(current, "code");
+      if (typeof code === "string" && allowed.has(code)) return code;
+    }
+    return "MIGRATION_FAILED";
   } catch { return "MIGRATION_FAILED"; }
 }
 export async function main() {

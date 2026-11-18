@@ -48,7 +48,7 @@
       "path": "src/core/migrate-runner.d.mts",
       "scope": "core",
       "beforeSha256": null,
-      "afterSha256": "226e516664e2b51e49706d51720feecedef30a782db41a9dd170bad997605482",
+      "afterSha256": "e37d4d54bbb9de8e4f6c697cd00dec6191ea383acac07dbcf677cddb21eeabd5",
       "beforeWhole": null,
       "edits": []
     },
@@ -95,7 +95,7 @@
       "path": "tests/fixtures/controlled-safe-response-first-guard86.sql",
       "scope": "core",
       "beforeSha256": null,
-      "afterSha256": "14b90f4109f06e5457ddaa0b0c0210516092f0e2e6d8965d067eca7c3370b8d4",
+      "afterSha256": "be98ff6d34b55b22adec262f4e3833cc653ab268e4767d9530d2b98c7835919f",
       "beforeWhole": null,
       "edits": []
     },
@@ -103,7 +103,7 @@
       "path": "scripts/migrate.mjs",
       "scope": "core",
       "beforeSha256": null,
-      "afterSha256": "c98e182ba64d8c7f1f011c59da13559bbfa49d708f88537d61766aa4347c9b7d",
+      "afterSha256": "6ba0fbb35c8bf56236228087087ad5b69ed3b2270c387fce0f7071ae190352b7",
       "beforeWhole": null,
       "edits": []
     },

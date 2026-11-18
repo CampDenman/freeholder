@@ -30,7 +30,7 @@ afterEach(() => { for (const root of folders.splice(0)) rmSync(root, { recursive
 
 describe("reviewed migration boundary source identity (unit fixtures only)", () => {
   it("keeps the whole first statement, including comments and newlines", () => {
-    expect(Buffer.byteLength(guard)).toBe(2038);
+    expect(Buffer.byteLength(guard)).toBe(2599);
     expect(sha(guard)).toBe(SAFE_RESPONSE_BOUNDARY.firstStatementSha256);
     const f = fixture(); const plan = readMigrationPlan({ migrationsFolder: f.root });
     expect(plan.kind).toBe("boundary");
@@ -75,9 +75,9 @@ describe("reviewed migration boundary source identity (unit fixtures only)", () 
     run({ ...env, DATABASE_URL: "postgres://fake:fake@invalid.test/exported", FREEHOLDER_SKIP_MIGRATE: "1" }, "postgres://fake:fake@invalid.test/exported", true);
     run({ ...env, DATABASE_URL: "" }, "", true);
   });
-  it("manual failure output never adopts hostile error properties", () => {
+  it("manual failure output reads a wrapped code and still never adopts hostile error properties", () => {
     const cli = pathToFileURL(resolve("scripts/migrate.mjs")).href;
-    const child = spawnSync(process.execPath, ["--input-type=module", "-e", `const m=await import(${JSON.stringify(cli)});const hostile={get code(){throw new Error("PRIVATE")}};const proxy=new Proxy({},{getOwnPropertyDescriptor(){throw new Error("PRIVATE")}});const ok=m.migrationFailureCode({code:"55006",message:"PRIVATE"})==="55006"&&m.migrationFailureCode({code:"PRIVATE",query:"PRIVATE",cause:"PRIVATE"})==="MIGRATION_FAILED"&&m.migrationFailureCode(hostile)==="MIGRATION_FAILED"&&m.migrationFailureCode(proxy)==="MIGRATION_FAILED";process.stdout.write(ok?"SAFE":"UNSAFE");`], { env: { PATH: process.env.PATH, NODE_ENV: "test" }, encoding: "utf8" });
+    const child = spawnSync(process.execPath, ["--input-type=module", "-e", `const m=await import(${JSON.stringify(cli)});const hostile={get code(){throw new Error("PRIVATE")}};const proxy=new Proxy({},{getOwnPropertyDescriptor(){throw new Error("PRIVATE")}});const ok=m.migrationFailureCode({code:"55006",message:"PRIVATE"})==="55006"&&m.migrationFailureCode({code:"PRIVATE",query:"PRIVATE",cause:"PRIVATE"})==="MIGRATION_FAILED"&&m.migrationFailureCode(hostile)==="MIGRATION_FAILED"&&m.migrationFailureCode(proxy)==="MIGRATION_FAILED"&&m.migrationFailureCode({message:"PRIVATE",query:"PRIVATE",cause:{code:"55P03",message:"PRIVATE"}})==="55P03"&&m.migrationFailureCode({cause:{cause:{code:"FH_MIGRATION_PREFIX_MISMATCH"}}})==="FH_MIGRATION_PREFIX_MISMATCH"&&m.migrationFailureCode({cause:{cause:{code:"PRIVATE"}}})==="MIGRATION_FAILED"&&m.migrationFailureCode({cause:{get code(){throw new Error("PRIVATE")}}})==="MIGRATION_FAILED";process.stdout.write(ok?"SAFE":"UNSAFE");`], { env: { PATH: process.env.PATH, NODE_ENV: "test" }, encoding: "utf8" });
     expect(child.status).toBe(0); expect(child.stderr).toBe(""); expect(child.stdout).toBe("SAFE");
   });
   it("packages the exact two manual runtime files and keeps all migration metadata", () => {
@@ -158,7 +158,7 @@ function boundarySuccessorSource(path: string): Buffer {
   return restored;
 }
 it("keeps the whole frozen68 source manifest and the always-final real journal check", () => {
-  expect(sha(readFileSync("deploy/controlled-safe-migration-boundary-20261114.source.json"))).toBe("b8ff2f954f038c43c09ba02854ab7f53c477d2f78127f3267e531cc9e0306e51");
+  expect(sha(readFileSync("deploy/controlled-safe-migration-boundary-20261114.source.json"))).toBe("ecd8e8124c73d20cecb1a108fd67b6a77127b2bb73cc5d6ab4344eb7f18cfd11");
   const current = readFileSync("src/core/migrate-runner.mjs", "utf8");
   expect(current).toContain("if (plan.after.length) await dialect.migrate(plan.after, session, config);\n  await verifyCommittedPrefix(session, plan.all, plan.all.length, config);\n}");
   expect(boundarySuccessorSource("src/core/migrate-runner.mjs").toString("utf8")).not.toContain("await verifyCommittedPrefix(session, plan.all, plan.all.length, config);");

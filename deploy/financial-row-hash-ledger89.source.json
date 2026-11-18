@@ -99,7 +99,7 @@
     },
     {
       "path": "tests/core/migrate-boundary.test.ts",
-      "afterSha256": "ab621f1f55487abefa09f8d27406ef6394030873e39e6e2b463dedc0d08b17b9",
+      "afterSha256": "7d7b1cf319ee7335a6f8c62f22f7d47139d6926618be5dd1c6bf332c60403a95",
       "beforeSha256": "c0dbb628485b8fe2c5341987bee2b8b6311162c9865267b859d645334137d4f9",
       "edits": [
         {
@@ -110,6 +110,26 @@
         {
           "before": "  let current = readFileSync(path);",
           "after": "  let current = Buffer.from(restoreRowHashLedgerSource(path, readFileSync(path, \"utf8\")));",
+          "occurrences": 1
+        },
+        {
+          "before": "    expect(Buffer.byteLength(guard)).toBe(2038);\n",
+          "after": "    expect(Buffer.byteLength(guard)).toBe(2599);\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  it(\"manual failure output never adopts hostile error properties\", () => {\n",
+          "after": "  it(\"manual failure output reads a wrapped code and still never adopts hostile error properties\", () => {\n",
+          "occurrences": 1
+        },
+        {
+          "before": "    const child = spawnSync(process.execPath, [\"--input-type=module\", \"-e\", `const m=await import(${JSON.stringify(cli)});const hostile={get code(){throw new Error(\"PRIVATE\")}};const proxy=new Proxy({},{getOwnPropertyDescriptor(){throw new Error(\"PRIVATE\")}});const ok=m.migrationFailureCode({code:\"55006\",message:\"PRIVATE\"})===\"55006\"&&m.migrationFailureCode({code:\"PRIVATE\",query:\"PRIVATE\",cause:\"PRIVATE\"})===\"MIGRATION_FAILED\"&&m.migrationFailureCode(hostile)===\"MIGRATION_FAILED\"&&m.migrationFailureCode(proxy)===\"MIGRATION_FAILED\";process.stdout.write(ok?\"SAFE\":\"UNSAFE\");`], { env: { PATH: process.env.PATH, NODE_ENV: \"test\" }, encoding: \"utf8\" });\n",
+          "after": "    const child = spawnSync(process.execPath, [\"--input-type=module\", \"-e\", `const m=await import(${JSON.stringify(cli)});const hostile={get code(){throw new Error(\"PRIVATE\")}};const proxy=new Proxy({},{getOwnPropertyDescriptor(){throw new Error(\"PRIVATE\")}});const ok=m.migrationFailureCode({code:\"55006\",message:\"PRIVATE\"})===\"55006\"&&m.migrationFailureCode({code:\"PRIVATE\",query:\"PRIVATE\",cause:\"PRIVATE\"})===\"MIGRATION_FAILED\"&&m.migrationFailureCode(hostile)===\"MIGRATION_FAILED\"&&m.migrationFailureCode(proxy)===\"MIGRATION_FAILED\"&&m.migrationFailureCode({message:\"PRIVATE\",query:\"PRIVATE\",cause:{code:\"55P03\",message:\"PRIVATE\"}})===\"55P03\"&&m.migrationFailureCode({cause:{cause:{code:\"FH_MIGRATION_PREFIX_MISMATCH\"}}})===\"FH_MIGRATION_PREFIX_MISMATCH\"&&m.migrationFailureCode({cause:{cause:{code:\"PRIVATE\"}}})===\"MIGRATION_FAILED\"&&m.migrationFailureCode({cause:{get code(){throw new Error(\"PRIVATE\")}}})===\"MIGRATION_FAILED\";process.stdout.write(ok?\"SAFE\":\"UNSAFE\");`], { env: { PATH: process.env.PATH, NODE_ENV: \"test\" }, encoding: \"utf8\" });\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  expect(sha(readFileSync(\"deploy/controlled-safe-migration-boundary-20261114.source.json\"))).toBe(\"b8ff2f954f038c43c09ba02854ab7f53c477d2f78127f3267e531cc9e0306e51\");\n",
+          "after": "  expect(sha(readFileSync(\"deploy/controlled-safe-migration-boundary-20261114.source.json\"))).toBe(\"ecd8e8124c73d20cecb1a108fd67b6a77127b2bb73cc5d6ab4344eb7f18cfd11\");\n",
           "occurrences": 1
         }
       ]
