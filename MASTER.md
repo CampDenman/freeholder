@@ -13939,6 +13939,40 @@ whatever is best for the people using the site.
   remains required. A historical OpenMLS
   audit does not audit this revision or integration; members are still not told
   their messages are safe against a compromised server.
+- [ ] **C12.40** Renewal alerts: warn a member before a charge somebody else
+  is about to make. A `renewal-alerts` module, off by default, holding a
+  register of third-party subscriptions against the contact spine and one
+  daily look-ahead job on the pg-boss registry that sends a transactional
+  notice through the configured mail adapter. It is deliberately NOT
+  `modules/subscriptions`, which is the site's own billing: nothing here
+  charges anyone, holds money or integrates a payment provider, and the two
+  must not acquire a dependency on each other, so `requires` is core alone.
+  Three properties are design decisions rather than implementation details,
+  because the obvious build of this feature gets each of them wrong.
+  Suppression is a unique row per (subscription, renewal) rather than
+  arithmetic over a "last alerted" timestamp: a window derived from the
+  renewal date and the lead time is correct only near its middle, double-sends
+  or goes silent at the boundaries, and leaves nothing to point at when a
+  member asks whether they were told. The pass is one scheduled job rather
+  than an interval timer in the web process, which on an autoscaled deployment
+  runs only when traffic happens to wake an instance and fires again on every
+  boot. And a failed send is counted and returned rather than swallowed: a
+  pass that logs only when something succeeded writes no trace at all once the
+  mail route stops working, which is the failure mode a notification product
+  can least afford. Erasure deletes rather than anonymises, because a list of
+  what somebody pays for has no aggregate anyone else is entitled to and an
+  anonymised copy is residue rather than data. Source progress 2026-11-18:
+  schema, contact-merge and privacy registration, look-ahead job and message
+  land with `db/migrations/0080_renewal_alerts.sql`,
+  `tests/modules/renewal-alerts.test.ts` (11) and
+  `tests/core/merge-completeness.test.ts` (7) passing and typecheck clean;
+  changeset `renewal-alerts.md`. **Still required to close:** the write
+  services and the in-tree dashboard and settings screens, since plugin
+  capabilities carry no routes or pages; a database-backed test of the pass
+  itself, which has not run yet because the suite skips database-backed tests
+  when no `TEST_DATABASE_URL` is set rather than failing; and one observed
+  real delivery end to end. No alert has been delivered by this code.
+
 - [ ] **C12.30** Hash-match known abuse imagery on upload, once member
   attachments (C12.21) exist, through a provider adapter, blocking the upload,
   preserving evidence and reporting through the legal path for the site's
