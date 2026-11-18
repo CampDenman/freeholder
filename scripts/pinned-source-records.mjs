@@ -94,7 +94,28 @@ for (const name of readdirSync("deploy").filter(file => file.endsWith(".json")).
 }
 
 if (hits.length === 0) console.log("  not pinned by any deploy record");
-for (const { name, where, sha } of hits) {
-  const flag = sha === null ? "" : sha === current ? "  MATCHES current" : "  STALE vs current";
-  console.log(`  ${name}\n      ${where} = ${sha ?? "(none)"}${flag}`);
+
+// The live pins go FIRST and are counted. A long list of STALE rows above a
+// single MATCHES row reads as "all these pins are already stale, so editing is
+// free" — which is how MASTER.md's live pin got broken on 2026-11-18 after this
+// very tool reported it. Stale pins are history; a matching pin is a tripwire.
+const live = hits.filter(hit => hit.sha === current);
+const stale = hits.filter(hit => hit.sha !== current);
+if (live.length > 0) {
+  console.log(`\n  ${live.length} LIVE pin(s) — editing this file breaks these unless re-anchored:`);
+  for (const { name, where } of live) console.log(`    ${name}\n        ${where}`);
+} else {
+  console.log("\n  0 LIVE pins — no record currently matches this file's content.");
 }
+if (stale.length > 0) {
+  console.log(`\n  ${stale.length} stale or unhashed reference(s), for context only:`);
+  for (const { name, where, sha } of stale) {
+    console.log(`    ${name}\n        ${where} = ${sha ?? "(none)"}${sha === null ? "" : "  STALE"}`);
+  }
+}
+console.log(
+  `\n  summary: ${live.length} live, ${stale.length} stale/unhashed.` +
+  (live.length > 0
+    ? " Re-anchor every live pin in the SAME change, then run the tests that read those records."
+    : " Nothing to re-anchor."),
+);

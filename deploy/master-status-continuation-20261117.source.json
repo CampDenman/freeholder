@@ -16,19 +16,39 @@
   "artifacts": [
     {
       "path": "MASTER.md",
-      "sha256": "b9d3a5688911e915a81e568d3a1006b421283da280fa4d9599dbc3c7115c00bd"
+      "sha256": "dd35805450adb3241becf05a8e5f01dfceb8c5bc47647813e98a5aaedb1f76b6"
     }
   ],
   "testContinuations": [
     {
       "path": "MASTER.md",
-      "afterSha256": "b9d3a5688911e915a81e568d3a1006b421283da280fa4d9599dbc3c7115c00bd",
+      "afterSha256": "dd35805450adb3241becf05a8e5f01dfceb8c5bc47647813e98a5aaedb1f76b6",
       "beforeSha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3",
       "continue": true,
       "edits": [
         {
           "before": "  acceptance remain open; no C row closes.\n  Framework security/performance qualification2026-11-16",
           "after": "  acceptance remain open; no C row closes.\n  Complete-browser failure audit and repair2026-11-16 (C1.08/C1.12/C3.22/C5.19/C9.38/\n  C11.17/C12.23/C12.38): the actual189-case run was NOT GREEN:156 passed,31 failed,\n  2 skipped. Nine raw privacy fixtures now use the required identity lock; the member\n  upload fixture restores real contact ownership; archive cleanup has a cycle-free\n  guarded deletion entry; the legacy merchant trial declares its actual scope version.\n  Focused privacy/import PASS13/13 and archive/member/trial PASS9/9. All35 selected\n  media controls pass after isolating database-resetting files. The real pending-membership\n  parallel-read fix PASSes native1/1 and its production-browser control. Genuine signed\n  return-callback controls PASS2/2 and all8 localized return journeys PASS. Every original\n  failure now has a focused pass, but the complete source/browser reruns remain required.\n  See `deploy/browser-failure-repairs-20261116.source.json`; no C row closes.\n  Native media-isolation repair2026-11-16 (C1.12/C11.17): three full-source attempts\n  timed out; the second exposed eight capture failures after an erasure case stalled.\n  The third passed capture/subscription-billing before the harness deadline. The stalled\n  case generated3182 entries from accumulated shared local media. Vitest\n  now supplies a unique temporary media root per run unless explicitly configured.\n  The complete capture file PASSes17/17 under that ordinary configuration, including\n  its concurrent-upload control. The final full source/browser reruns remain open.\n  Framework security/performance qualification2026-11-16",
+          "occurrences": 1
+        },
+        {
+          "before": "  (patch without DCO refused; `externalUrl` GitHub-only; determination\n",
+          "after": "  (patch without DCO refused; `externalUrl` restricted to an allowlist of\n  hosts — `github.com` always, plus any host named in\n  `FREEHOLDER_CODE_LINK_HOSTS`, compared against a parsed URL so scheme,\n  userinfo and look-alike suffixes are settled explicitly\n  (`isAcceptedCodeLink`, proved by `tests/core/contribute-code-link.test.ts`);\n  it was GitHub-only until 2026-11-18, which left an instance keeping its code\n  on its own forge unable to cite the repository the work was done in;\n  determination\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  forward-only commit ancestry via the public compare endpoint, a private\n",
+          "after": "  forward-only commit ancestry via the public compare endpoint,\n  with an optional root-configured `publisher` block (2026-11-18) for an\n  installation that publishes and signs its own images — all of\n  `image`/`cosign_key`/`compare_api` or none, a root-owned non-group-writable\n  key, `cosign verify --key` *instead of* the keyless identity rather than\n  beside it, and a Forgejo-shaped ancestry proof, since that API returns\n  `total_commits` with no `status` or `merge_base_commit` and the upstream\n  reading would refuse every candidate while looking like a bad signature\n  (`validate_publisher`/`verify_forward_on_forge`, 16 added drills in\n  `tests/host/test_docker_updater.py`, 90 passing); its publishing half is\n  `.forgejo/workflows/publish-image.yml`, which builds at an exact revision,\n  refuses one with no successful forge CI run, signs the pushed digest and\n  verifies that signature against the public half in the same run, a private\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  artifact (matrix gate), image-swap rollback refuses without a\n  `ghcr.io/campdenman/freeholder@sha256:<64>` digest\n",
+          "after": "  artifact (matrix gate), image-swap rollback refuses without an immutable\n  `<repository>@sha256:<64>` digest, where `<repository>` is\n  `FREEHOLDER_IMAGE_REPOSITORY` and defaults to\n  `ghcr.io/campdenman/freeholder`\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  refusal asserted in `tests/core/update-targets.test.ts` (38 tests) and, for\n  the gate script, exercised against the real recipes. **F09** SPDX headers on\n",
+          "after": "  refusal asserted in `tests/core/update-targets.test.ts` (41 tests) and, for\n  the gate script, exercised against the real recipes. The repository half of\n  that pin became `FREEHOLDER_IMAGE_REPOSITORY` on 2026-11-18: the safety\n  property is the **digest**, never which registry serves it, and hardcoding\n  `ghcr.io/campdenman/freeholder` meant an instance serving its own images\n  from a mirror or its own forge could not roll back at all — the deployments\n  most likely to need one. `isImmutableImageDigest` keeps refusing a bare\n  repository, a moving tag, and a short, over-long, upper-case or non-hex\n  digest, each asserted directly. **F09** SPDX headers on\n",
           "occurrences": 1
         }
       ]

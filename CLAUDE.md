@@ -67,9 +67,17 @@ or backlog.
   that several suites walk, so a correct one-line repair can redden
   `controlled-safe-response-composition87` or `tests/core/migrate-boundary.test.ts`
   with a failure that names a hash and not the file that moved. Move the
-  records in the same commit. Two cautions the script prints and cannot
-  enforce: a sha that looks replaceable may be a historical blob sha at a
-  pinned commit (verify with `git show <commit>:<path> | sha256sum`), and a
-  record declaring `archivalEncoding` escapes every period as `\u002e`, so
-  re-serializing it with a JSON writer silently discards that — edit those as
-  text.
+  records in the same commit. **Read the LIVE count, not the list.** MASTER.md
+  has 3 live pins among 366 stale references; scrolling a long list of `STALE`
+  rows and concluding "these are all historical, so editing is free" is how
+  its live pin was broken on 2026-11-18 — after this tool had already reported
+  it. The script now prints live pins first and ends with a count, because
+  stale pins are history and a matching pin is a tripwire. Three cautions it
+  prints and cannot enforce: a sha that looks replaceable may be a historical
+  blob sha at a pinned commit (verify with
+  `git show <commit>:<path> | sha256sum`); a record declaring
+  `archivalEncoding` escapes every period as `\u002e`, so re-serializing it
+  with a JSON writer silently discards that — edit those as text, and check
+  any record round-trips byte-identically before rewriting it; and the script
+  reads `deploy/*.json` only, so a sha hardcoded in a test file is invisible
+  to it.
