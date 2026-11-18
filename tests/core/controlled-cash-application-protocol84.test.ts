@@ -25,8 +25,23 @@ describe("genuine future controlled application admission boundary",()=>{
   expect(owned).toContain("actual_bank.immutable_bank_fingerprint IS DISTINCT FROM NEW.immutable_bank_revision");expect(owned).toContain("actual_bank.bank_fingerprint IS DISTINCT FROM NEW.namespace_revision");
   expect(owned).toContain("IF total_count>5000");expect(owned).not.toContain("admitted_source_history_digest=NEW.parent_pg_revision");expect(owned).not.toContain("current_setting(");
  });
- it("registers all three as private/noTTL and exports only exact-owned safe columns with one combined bound",()=>{
-  for(const table of ["controlled_cash_application_batches","controlled_cash_application_receipts","controlled_cash_application_links"]){expect(read("src/core/search/registry.ts")).toContain(`${table}:`);expect(read("src/core/retention/registry.ts")).toContain(`${table}:`);}
+ it("keeps all three outside the contact-keyed search and retention contract, and exports only exact-owned safe columns with one combined bound",()=>{
+  // These three tables carry no contact_id column, so they are deliberately
+  // ABSENT from both registries rather than declared in them. Both
+  // SEARCH_TABLE_OPT_OUTS and RETENTION_TABLE_OPT_OUTS are documented as
+  // "Contact-FK tables", and the completeness checks in
+  // tests/core/c11-14-search.test.ts and tests/core/c11-14-retention.test.ts
+  // refuse an entry naming a table with no contact foreign key as `stale`. An
+  // earlier revision of this contract required a declaration here, which made
+  // the two assertions mutually exclusive: one of them had to be red.
+  // Absence is the mechanism, not an omission — a table that is neither a
+  // source nor an opt-out is unreachable by owner-facing search and by every
+  // age-based purge. The contact scope these rows belong to is resolved
+  // transitively through subscriptions, invoices and tax profiles, which the
+  // owned fragment does itself.
+  for(const table of ["controlled_cash_application_batches","controlled_cash_application_receipts","controlled_cash_application_links"]){expect(read("src/core/search/registry.ts")).not.toContain(`${table}:`);expect(read("src/core/retention/registry.ts")).not.toContain(`${table}:`);expect(owned).toContain(`CREATE TABLE ${table} (`);}
+  expect(owned).not.toContain("contact_id uuid");
+  expect(owned).toContain("SELECT actual_parent.contact_id AS id FROM subscriptions actual_parent");
   const helper=read("src/modules/invoicing/controlled-cash-application-witnesses.ts");expect(helper).toContain("if(input.profileId)refuse()");expect(helper).toContain("resource_row.subscription_id=batch_row.subscription_id");
   expect(helper).toContain("existing+batches.length+receipts.length+links.length>5000");expect(helper).toContain("options.merchant?sql");expect(helper).not.toContain("select batch_row.* from controlled_cash_application_batches batch_row where batch_row.id in");
  });
