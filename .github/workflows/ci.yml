@@ -577,12 +577,26 @@ jobs:
           # here: a store that cannot retain versions must fail at its own
           # setup step, not later inside Freeholder where it reads as a
           # Freeholder defect.
-          curl -fsS -o /dev/null -X PUT --data-binary \
+          # Print what the endpoint actually answers. The first version of this
+          # step reported only "did not report versioning", which does not
+          # distinguish a store that has no versioning from a malformed request
+          # of ours -- the same nameless-failure trap this change set spent the
+          # day removing elsewhere.
+          put=$(curl -sS -o /tmp/versioning-put.xml -w '%{http_code}' -X PUT \
+            -H 'Content-Type: application/xml' --data-binary \
             '<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Status>Enabled</Status></VersioningConfiguration>' \
-            'http://127.0.0.1:9000/freeholder-recipe-gate?versioning'
-          if ! curl -fsS 'http://127.0.0.1:9000/freeholder-recipe-gate?versioning' | grep -q '<Status>Enabled</Status>'; then
+            'http://127.0.0.1:9000/freeholder-recipe-gate?versioning' || true)
+          get=$(curl -sS -o /tmp/versioning-get.xml -w '%{http_code}' \
+            'http://127.0.0.1:9000/freeholder-recipe-gate?versioning' || true)
+          echo "versioning: PUT $put, GET $get"
+          echo "PUT body: $(head -c 400 /tmp/versioning-put.xml 2>/dev/null)"
+          echo "GET body: $(head -c 400 /tmp/versioning-get.xml 2>/dev/null)"
+          if ! grep -q '<Status>Enabled</Status>' /tmp/versioning-get.xml 2>/dev/null; then
             docker logs freeholder-s3
-            echo 'the recipe-gate bucket did not report versioning Enabled'
+            echo 'the recipe-gate bucket did not report versioning Enabled; an'
+            echo 'observed physical write to a non-AWS endpoint needs retained'
+            echo 'versions as well as proven conditional semantics, so this'
+            echo 'fixture cannot exercise that path until it can keep versions.'
             exit 1
           fi
       - run: bash scripts/recipe-matrix.sh
