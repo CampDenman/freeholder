@@ -453,6 +453,24 @@ const envSchema = z.object({
   FREEHOLDER_UPDATE_FEED_URL: z.string().url().optional(),
 
   /**
+   * The container repository an image-swap rollback must pin to (§39.8,
+   * C10.10). Default is the upstream registry; an instance that mirrors or
+   * self-hosts its images sets its own. The digest requirement is NOT relaxed
+   * by this: `rollbackCutover` still refuses anything that is not an
+   * immutable `<repository>@sha256:<64 hex>`, because the safety property is
+   * the digest, not which registry serves it. Hardcoding the registry meant a
+   * forge-hosted or mirrored instance could never roll back at all.
+   */
+  FREEHOLDER_IMAGE_REPOSITORY: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .refine((value) => /^[a-z0-9]+([._-][a-z0-9]+)*(\.[a-z0-9]+([._-][a-z0-9]+)*)*(:[0-9]+)?(\/[a-z0-9]+([._-][a-z0-9]+)*)+$/.test(value),
+      "must be a lowercase registry/path repository with no tag or digest")
+    .optional(),
+
+  /**
    * Upstream, for the fork lane (§39.7, C10.09).
    *
    * Only forks read these. An instance updating by image swap never fetches a
