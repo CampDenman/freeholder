@@ -214,7 +214,46 @@ describe.runIf(hasDatabase)("immutable member merchant agreements (C12.38)", () 
     expect(await startCardTrial.call({subscriptionId:started.subscription.id,paymentMethodId:method!.id},BUYER)).toEqual({id:started.subscription.id,started:true});
   });
 
-  it("records an authenticated scheduled charge on its original account after a seller is disabled, without losing its refund reference", async () => {
+  it("refuses to admit a NEW merchant provider schedule while that admission is closed", async () => {
+    const manual = adapters.createManualPayments();
+    const createRecurringSchedule = vi.fn<adapters.PaymentAdapter["createRecurringSchedule"]>().mockResolvedValue({ providerRef: "sub_direct", providerAccountId: "acct_original", applicationFeePercent: 10 });
+    const cancelRecurringSchedule = vi.fn<adapters.PaymentAdapter["cancelRecurringSchedule"]>().mockResolvedValue();
+    const refund = vi.fn<adapters.PaymentAdapter["refund"]>().mockImplementation(async request=>{
+      expect(request.providerAccountId).toBe("acct_original");
+      expect(request.providerRef).toBe("pi_direct_period");
+      return {providerRef:"re_direct_period",providerAccountId:"acct_original",status:"pending"};
+    });
+    const stripe = { ...manual, id: "stripe", createRecurringSchedule, cancelRecurringSchedule, refund, capabilities: () => ({ ...manual.capabilities(), subscriptions: true, offSessionCharges: true, savedMethods: true, sellerMerchantCharges: true }) };
+    vi.spyOn(adapters,"paymentAdapter").mockReturnValue(stripe);
+    const planId = await offer("provider");
+    await directModel();
+    const [method] = await db().insert(paymentMethods).values({ contactId, provider: "stripe", providerAccountId: "acct_original", providerPlatformAccountId: PLATFORM_ACCOUNT, providerMethodRef: "pm_direct", providerCustomerRef: "cus_direct", kind: "card", label: "Card ending 4242", consentSource: "provider_checkout", consentedAt: new Date(), providerStatusAt: new Date() }).returning();
+    const started = await acceptDirect(planId, { paymentMethodId: method!.id });
+    // NEW merchant provider admission is closed deliberately: baf84350
+    // (C12.38) added this refusal and said so in MASTER.md in the same change
+    // -- "NEW merchant provider admission is closed while accepted immutable
+    // recurring terms, period quotations, original payment dispatch,
+    // quiescence jobs, amendments and safe resumption are implemented."
+    // There is no replacement path yet, so the live assertion is the refusal.
+    await expect(attachProviderSchedule.call({ subscriptionId: started.subscription.id }, OWNER)).rejects.toMatchObject({ code: "conflict" });
+    expect(createRecurringSchedule).not.toHaveBeenCalled();
+    expect(cancelRecurringSchedule).not.toHaveBeenCalled();
+  });
+
+  // SKIPPED, not deleted, and not rewritten to pass. This proves the whole
+  // seller-as-merchant schedule lifecycle -- an authenticated period charge on
+  // the seller's own account, the application fee, payout, refund, payout
+  // reversal, an interval change taking effect on a paid renewal, and
+  // cancellation. Every part of it is downstream of the admission that
+  // baf84350 closed, and it cannot be stood up by hand: the webhook path runs
+  // through subscriptions.resolveProviderWebhookScope, which resolves "an
+  // original new agreement or admitted physical operation" and needs a
+  // subscriptionProviderScheduleOperations row -- the "durable schedule
+  // journal" the refusal above names. Only the admission writes that row, so
+  // faking one would invent the evidence this test exists to check.
+  // Restore this the moment C12.38 lands accepted immutable recurring terms
+  // and period quotations; the fixture below is unchanged and still correct.
+  it.skip("records an authenticated scheduled charge on its original account after a seller is disabled, without losing its refund reference", async () => {
     const manual = adapters.createManualPayments();
     const createRecurringSchedule = vi.fn<adapters.PaymentAdapter["createRecurringSchedule"]>().mockResolvedValue({ providerRef: "sub_direct", providerAccountId: "acct_original", applicationFeePercent: 10 });
     const cancelRecurringSchedule = vi.fn<adapters.PaymentAdapter["cancelRecurringSchedule"]>().mockResolvedValue();
