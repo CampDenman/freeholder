@@ -123,7 +123,16 @@ export async function readReplitObjectBody(file,expected){
 async function xml(response,notify){
  return readOriginalStorageXml(response,notify,{stage:"inventory_raw",requireSuccess:true});
 }
-function root(document,name,bucket){const value=document[name];if(!value||typeof value!=="object"||Array.isArray(value)||entities(value.Name??value.Bucket)!==bucket)failure("list_root");return value;}
+// Two different failures, two different fixes: a provider that answered with
+// another root element (or an error document) is not the same as one that
+// answered about another bucket. `name` is one of three literals this file
+// chooses, so naming it leaks nothing and says which listing was refused.
+function root(document,name,bucket){
+ const value=document[name];
+ if(!value||typeof value!=="object"||Array.isArray(value))failure(`list_root_absent:${name}`);
+ if(entities(value.Name??value.Bucket)!==bucket)failure("list_root_bucket");
+ return value;
+}
 function rows(value){return value===undefined?[]:Array.isArray(value)?value:[value];}
 function objectEntry(binding,key,bytes,rev,kind="object",current=true){return{kind,key:objectKey(key),bytes,revision:rev,current};}
 function parsedS3Page(document,kind,binding,cursor){

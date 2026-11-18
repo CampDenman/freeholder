@@ -219,3 +219,31 @@ describe("the binding stays a minimal evidence projection (C1.12/C11.08)", () =>
     }
   });
 });
+
+describe("a refused listing says which listing and why (C1.12/C11.08)", () => {
+  // `list_root` used to cover both "the provider answered with another root
+  // element, or an error document" and "the provider answered about another
+  // bucket". Those have different fixes, and the recipe gate reported only the
+  // shared token, so the cause had to be guessed at.
+  const bucket = "original-media";
+  const answering = (body: string) => createS3TransferProtocol({
+    client: { fetch: async () => new Response(body, { status: 200, headers: { "content-type": "application/xml" } }) },
+    binding: { kind: "s3", namespace: "a".repeat(64), location: { endpoint: "http://127.0.0.1:9000", bucket } },
+    url: (value: string) => `http://127.0.0.1:9000/${bucket}/${value}`,
+  });
+  const reason = async (body: string, kind: "objects" | "versions" | "sessions") => {
+    try { await answering(body).inventoryPage(kind); } catch (error) { return (error as { reason?: string }).reason; }
+    throw new Error("The listing must be refused.");
+  };
+
+  it("names a listing that answered about another bucket", async () => {
+    await expect(reason(list("objects", "", "false").replace(bucket, "somebody-else"), "objects")).resolves.toBe("list_root_bucket");
+  });
+
+  it("names the root element a provider never sent", async () => {
+    // A store without ListObjectVersions or ListMultipartUploads answers an
+    // error document, which is a missing root rather than a wrong bucket.
+    await expect(reason("<Error><Code>NotImplemented</Code></Error>", "versions")).resolves.toBe("list_root_absent:ListVersionsResult");
+    await expect(reason("<Error><Code>NotImplemented</Code></Error>", "sessions")).resolves.toBe("list_root_absent:ListMultipartUploadsResult");
+  });
+});
