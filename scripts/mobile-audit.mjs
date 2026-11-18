@@ -27,25 +27,18 @@ import { fileURLToPath } from "node:url";
 const MOBILE = fileURLToPath(new URL("../apps/mobile", import.meta.url));
 
 /**
- * Every allowance is a dated argument, not a mute.
+ * Every allowance is a dated argument, not a mute. There are none right now.
  *
- * GHSA-fc5q-39xc-vjpf — picomatch, ReDoS through single-branch repeated
- * extglobs. Every published version of picomatch is affected, so there is no
- * upgrade to take: npm's own suggested "fix" is a semver-major DOWNGRADE of
- * expo/react-native that still does not resolve it. picomatch reaches this
- * tree only as build tooling — metro, jest, fdir, micromatch, @expo/cli — and
- * the glob patterns it compiles come from this repository's own build config,
- * not from anything a customer or a network peer supplies. The mobile app is
- * a v2 deferral in MASTER.md §43.18 and ships no signed binary from this job.
+ * The first and so far only entry was GHSA-fc5q-39xc-vjpf (picomatch, ReDoS
+ * through single-branch repeated extglobs), and GitHub WITHDREW that advisory
+ * on 2026-11-18 at 15:38 UTC, hours after it was written. `pnpm audit` reports
+ * nothing against this tree, so the allowance became dead weight and the
+ * unused-allowance refusal below is what said so — it is cheaper to delete an
+ * argument than to leave one standing for a finding nobody makes any more.
+ * An empty map is meaningful evidence, exactly as the empty exception ledger
+ * is for the root audit: no accepted customer-app dependency risk.
  */
-const ALLOWED = new Map([
-  ["GHSA-fc5q-39xc-vjpf", {
-    package: "picomatch",
-    reviewedAt: "2026-11-18",
-    expiresAt: "2027-02-16",
-    reason: "No patched version exists; build-tooling only, patterns are our own build config.",
-  }],
-]);
+const ALLOWED = new Map([]);
 
 const MAX_ALLOWANCE_DAYS = 90;
 
