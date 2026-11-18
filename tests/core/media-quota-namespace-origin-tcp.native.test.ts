@@ -50,7 +50,11 @@ describe.skipIf(!enabled || !publishedImage)("genuine fictional TCP namespace bi
       if (path.pathname.startsWith("/spaces/")) {
         const actual = new URL(`https://nyc3.digitaloceanspaces.com${path.pathname.slice(7)}${path.search}`), auth = request.headers.authorization;
         if (typeof auth !== "string") throw new Error("Actual S3 authentication missing");
-        const access = /Credential=([^/]+)\//.exec(auth)?.[1], secret = access ? keys.get(access) : undefined, amz = request.headers["x-amz-date"];
+        // Split rather than scan. `/Credential=([^/]+)\//` is an unanchored search
+        // for a literal that can recur, so the engine retries at every offset and
+        // CodeQL flags it as polynomial ReDoS (js/polynomial-redos) on a header
+        // it treats as uncontrolled. Splitting is linear and reads the same.
+        const access = auth.split("Credential=")[1]?.split("/")[0], secret = access ? keys.get(access) : undefined, amz = request.headers["x-amz-date"];
         if (!access || !secret || typeof amz !== "string") throw new Error("Actual temporary or scoped S3 credential is not owned by the fictional account");
         const timestamp = new Date(`${amz.slice(0, 4)}-${amz.slice(4, 6)}-${amz.slice(6, 8)}T${amz.slice(9, 11)}:${amz.slice(11, 13)}:${amz.slice(13, 15)}Z`);
         const expected = signS3({ method, url: actual, body, region: "nyc3", credentials: { accessKeyId: access, secretAccessKey: secret }, now: timestamp });
