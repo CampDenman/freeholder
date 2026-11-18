@@ -29,7 +29,14 @@ concurrency:
 jobs:
   deploy:
     name: Pin and deploy the published image
-    runs-on: freeholder-release
+    # `freeholder-release` was carried by no runner in the fleet, and Forgejo
+    # has no fallback: a job asking for a label nothing holds waits forever
+    # rather than failing, so this workflow would have hung on dispatch instead
+    # of telling anyone why. Verified against the admin runners API on
+    # 2026-11-18 — 12 runners, 0 with `freeholder-release`, 11 with
+    # `ubuntu-latest`. Adding a label narrows the gate, it never speeds it up;
+    # see site-registry docs/forgejo-ci-runners.md.
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Require explicit production confirmation
