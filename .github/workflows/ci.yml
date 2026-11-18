@@ -460,6 +460,11 @@ jobs:
       - uses: ./.github/actions/setup-project
       - name: Build the release image
         run: docker build --tag freeholder:ci .
+      # Before the playground gate, because the playground's only report of a
+      # failed migration is "migration unavailable (Error)" -- deliberately
+      # nameless, so a production log carries no SQL. This one prints it.
+      - name: Prove the packaged image migrates an empty database
+        run: sh scripts/image-migration-gate.sh
       - name: Prove the isolated public playground boots and signs in
         run: sh scripts/playground-gate.sh
       - name: Prove dependency failure separates liveness from readiness
