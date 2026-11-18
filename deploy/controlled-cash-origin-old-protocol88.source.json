@@ -20,8 +20,8 @@
   },
   "successor": {
     "path": "tests/modules/controlled-cash-origin-batch84.test.ts",
-    "beforeSha256": "074dc686ca5adba367044792bbc93737a3b31e47a0d1019083d1145f2e2317d2",
-    "afterSha256": "bbe0a1d2e087f8f186035cc786ee2bc8e1b0f97f7bf3e38c6e6b6bf669dc7022",
+    "beforeSha256": "65d57d8d39b5afb9622db22dec1bcd6ed66500ee2d552fdfd0abe618999280dd",
+    "afterSha256": "14628754cc5e7f80093632da489968834906fcc89f00f673dacd974fde3da2cb",
     "edits": [
       {
         "before": "",
