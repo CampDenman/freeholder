@@ -276,6 +276,28 @@ jobs:
           # the commit that deleted 0000_core-spine.sql. Depth 1 cannot see it.
           fetch-depth: 0
       - uses: ./.github/actions/setup-project
+      # max_prepared_transactions defaults to 0 and is a postmaster setting, so
+      # tests/modules/migrate-boundary86.test.ts cannot run its real
+      # prepared-transaction proof and throws "OPEN prerequisite" instead —
+      # the state MASTER.md §43.1 records as "prepared-transaction proof
+      # remains OPEN on max_prepared_transactions=0". A service container
+      # takes no `command:`, so set it on the running postmaster and restart.
+      # Deliberately not a skip: a gate that can be skipped is not a gate, and
+      # `skipped` reports as success.
+      - name: Enable prepared transactions for the migration-86 boundary proof
+        env:
+          PG: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$PG" psql -U postgres -c 'ALTER SYSTEM SET max_prepared_transactions = 10'
+          docker restart "$PG"
+          for _ in $(seq 1 30); do
+            docker exec "$PG" pg_isready -U postgres >/dev/null 2>&1 && break
+            sleep 2
+          done
+          docker exec "$PG" pg_isready -U postgres
+          observed=$(docker exec "$PG" psql -U postgres -tAc 'show max_prepared_transactions')
+          echo "max_prepared_transactions=$observed"
+          test "$observed" -ge 1
       - run: pnpm exec vitest run --shard=${{ matrix.shard }}
 
   ownership:

@@ -54,6 +54,7 @@
 #       --auth=trust --no-instructions
 #   cat >> /dev/shm/fh-pg/postgresql.conf <<'CONF'
 #   max_locks_per_transaction = 512
+#   max_prepared_transactions = 10
 #   shared_buffers = 2GB
 #   work_mem = 64MB
 #   maintenance_work_mem = 1GB
@@ -70,6 +71,17 @@
 # fsync = off and full_page_writes = off are correct here and ONLY here: this
 # cluster holds disposable test data and does not survive a reboot. Never copy
 # those two settings to anything that keeps data.
+#
+# 5. max_prepared_transactions must be > 0, and it defaults to 0. Without it
+#    tests/modules/migrate-boundary86.test.ts throws "OPEN prerequisite: run
+#    this real prepared-transaction proof on a disposable server with
+#    max_prepared_transactions > 0" and the migration-86 boundary proof cannot
+#    run at all -- which is the state MASTER.md 43.1 records as "prepared-
+#    transaction proof remains OPEN on max_prepared_transactions=0". It is a
+#    postmaster setting, so it needs a restart, not a SET. Note it also enters
+#    the lock-table sizing from note 1: slots are
+#    max_locks_per_transaction * (max_connections + max_prepared_transactions),
+#    so raising it raises shared-memory need rather than lowering it.
 #
 # USAGE
 #   bash scripts/test-sharded.sh                  # 10 shards
