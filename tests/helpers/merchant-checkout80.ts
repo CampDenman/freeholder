@@ -25,7 +25,16 @@ import { ANONYMOUS, CUSTOMER, OWNER } from "./spine";
 export const MERCHANT_FIXTURE_BUYER_EMAIL = "merchant-fixture-buyer@example.test";
 export const MERCHANT_FIXTURE_DESTINATION = { country: "CA", region: "BC" };
 export const MERCHANT_FIXTURE_SELLERS = [CUSTOMER, { ...CUSTOMER, userId: "00000000-0000-4000-8000-0000000000c2" }] as const;
-export async function seedMerchantCheckout80(collectionKind: "direct" | "destination" = "direct", sellerCount: 1 | 2 = 1) {
+/**
+ * `declareExportZone` additionally declares an explicit 0% US jurisdiction for
+ * every fixture seller. A registered merchant with no declared policy for the
+ * transaction location is refused by design -- see
+ * `selectDeclaredMerchantTaxRule` -- so a test that sells into the United
+ * States and expects no tax has to declare that, rather than rely on an
+ * absence. Default off: the other users of this fixture only sell to CA/BC,
+ * and a second registration would change their frozen profile snapshots.
+ */
+export async function seedMerchantCheckout80(collectionKind: "direct" | "destination" = "direct", sellerCount: 1 | 2 = 1, declareExportZone = false) {
   const previous = payoutAdapters().find(adapter => adapter.id === "stripe_connect")!;
   registerPayoutAdapter({ ...previous, models: [...previous.models, "seller_merchant"] });
   const manual = paymentAdapters.createManualPayments();
@@ -42,6 +51,12 @@ export async function seedMerchantCheckout80(collectionKind: "direct" | "destina
     await configureMerchantCollection.call({ collectionKind }, OWNER);
     const zone = await createTaxZone.call({ name: "Fixture merchant jurisdiction", country: "CA", regions: ["BC"], basis: "destination", pricesIncludeTax: false, roundingScope: "line", roundingMode: "half_up" }, OWNER);
     const rate = await addTaxRate.call({ zoneId: zone.id, name: "Fixture business tax", jurisdiction: "Synthetic fixture jurisdiction", ratePpm: 50000, appliesToShipping: true }, OWNER);
+    const exportZone = declareExportZone
+      ? await createTaxZone.call({ name: "Fixture declared export jurisdiction", country: "US", regions: [], basis: "destination", pricesIncludeTax: false, roundingScope: "line", roundingMode: "half_up" }, OWNER)
+      : undefined;
+    const exportRate = exportZone
+      ? await addTaxRate.call({ zoneId: exportZone.id, name: "Fixture declared export tax", jurisdiction: "Synthetic declared export jurisdiction", ratePpm: 0, appliesToShipping: true }, OWNER)
+      : undefined;
     const buyer = (await resolveContact.call({ email: MERCHANT_FIXTURE_BUYER_EMAIL, name: "Fixture buyer" }, OWNER)).contact;
     const cart = (await getOrCreateCart.call({ contactId: buyer.id, currency: "CAD" }, OWNER)).cart;
     const profiles = [];
@@ -50,7 +65,10 @@ export async function seedMerchantCheckout80(collectionKind: "direct" | "destina
       await db().insert(memberPayoutAccounts).values({ userId: seller.userId, adapter: "stripe_connect", externalAccountId: `acct_fixtureSeller${index}`, status: "ready", chargesReady: true,
         merchantName: `Original merchant ${index}`, merchantSupport: { email: `support-${index}@merchant.example`, phone: null, url: null, address: null } });
       const configuration = await merchantTaxZoneConfiguration.call({ zoneId: zone.id }, seller);
-      const profile = await saveMyMerchantTaxProfile.call({ expectedVersion: 0, idempotencyKey: randomUUID(), acceptPolicy: true, liability: "seller", origin: MERCHANT_FIXTURE_DESTINATION, collectionStatus: "registered", registrations: [{ zoneId: zone.id, number: `FIXTURE-TAX-${index}`, rateIds: [rate.id], configurationDigest: configuration.configurationDigest, status: "active" }] }, seller);
+      const exportConfiguration = exportZone ? await merchantTaxZoneConfiguration.call({ zoneId: exportZone.id }, seller) : undefined;
+      const profile = await saveMyMerchantTaxProfile.call({ expectedVersion: 0, idempotencyKey: randomUUID(), acceptPolicy: true, liability: "seller", origin: MERCHANT_FIXTURE_DESTINATION, collectionStatus: "registered",
+        registrations: [{ zoneId: zone.id, number: `FIXTURE-TAX-${index}`, rateIds: [rate.id], configurationDigest: configuration.configurationDigest, status: "active" },
+          ...(exportZone && exportRate && exportConfiguration ? [{ zoneId: exportZone.id, number: `FIXTURE-EXPORT-TAX-${index}`, rateIds: [exportRate.id], configurationDigest: exportConfiguration.configurationDigest, status: "active" as const }] : [])] }, seller);
       profiles.push(profile);
       const listing = await createListing.call({ title: `Original merchant download ${index}`, kind: "digital", price: index === 0 ? "40" : "10", acceptPolicy: true }, seller);
       const variant = (await getProductVariants.call({ productId: listing.productId }, OWNER)).variants[0]!;

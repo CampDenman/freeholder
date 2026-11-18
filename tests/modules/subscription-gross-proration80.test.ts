@@ -49,7 +49,11 @@ describe.runIf(hasDatabase)("actual original gross proration, attested cash and 
     // Restoring Date does not advance PostgreSQL or fake an effect receipt.
     const effectiveAt = new Date(Date.now() + 45000);
     vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(effectiveAt.getTime() - 43200000);
-    fixture = await seedMerchantCheckout80("destination", 1);
+    // The seller declares an explicit 0% US jurisdiction. A registered merchant
+    // with no declared policy for the transaction location is refused by design
+    // (selectDeclaredMerchantTaxRule), so "the new destination is untaxed" has
+    // to be a declaration, not an absence.
+    fixture = await seedMerchantCheckout80("destination", 1, true);
     await setModuleEnabled.call({ module: "subscriptions", enabled: true }, OWNER);
     const [item] = await db().select({ variant: productVariants }).from(cartItems).innerJoin(productVariants, eq(productVariants.id, cartItems.variantId)).where(eq(cartItems.cartId, fixture.cart.id)).limit(1);
     if (!item) throw new Error("The real original merchant listing has no variant.");
