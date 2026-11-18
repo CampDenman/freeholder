@@ -14421,8 +14421,10 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   deployment nor recoverability, and target recipes remain manual operator
   procedures *requiring a tested backup and immutable image pins*. The pins
   half was already enforced — `operations.rollback` must name a `PREVIOUS_*`
-  artifact (matrix gate), image-swap rollback refuses without a
-  `ghcr.io/campdenman/freeholder@sha256:<64>` digest
+  artifact (matrix gate), image-swap rollback refuses without an immutable
+  `<repository>@sha256:<64>` digest, where `<repository>` is
+  `FREEHOLDER_IMAGE_REPOSITORY` and defaults to
+  `ghcr.io/campdenman/freeholder`
   (`recipeUpdateTarget.rollbackCutover` in `src/core/update/targets.ts`), and
   both compose files interpolate `${FREEHOLDER_IMAGE:-…}` so the pin actually
   selects the image. The tested-backup half landed with this change:
@@ -14441,8 +14443,15 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   **F07** a target with no rollback command refuses; image-swap rollback
   refuses a non-digest pin; a recipe with no backup, a plain-text dump, a
   missing restore or a non-`pg_restore` restore fails the matrix — each
-  refusal asserted in `tests/core/update-targets.test.ts` (38 tests) and, for
-  the gate script, exercised against the real recipes. **F09** SPDX headers on
+  refusal asserted in `tests/core/update-targets.test.ts` (41 tests) and, for
+  the gate script, exercised against the real recipes. The repository half of
+  that pin became `FREEHOLDER_IMAGE_REPOSITORY` on 2026-11-18: the safety
+  property is the **digest**, never which registry serves it, and hardcoding
+  `ghcr.io/campdenman/freeholder` meant an instance serving its own images
+  from a mirror or its own forge could not roll back at all — the deployments
+  most likely to need one. `isImmutableImageDigest` keeps refusing a bare
+  repository, a moving tag, and a short, over-long, upper-case or non-hex
+  digest, each asserted directly. **F09** SPDX headers on
   `src/core/update/targets.ts`, `scripts/recipe-update-actions.mjs` and
   `tests/core/update-targets.test.ts`. **F12** the recipe matrix runs the gate
   once per target on every PR (`scripts/recipe-matrix.sh:138`; workflow run

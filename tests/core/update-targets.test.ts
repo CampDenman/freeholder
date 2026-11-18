@@ -17,6 +17,9 @@ import {
   UPDATE_STRATEGIES,
   configuredTarget,
   resolveUpdateTarget,
+  isImmutableImageDigest,
+  imageRepository,
+  DEFAULT_IMAGE_REPOSITORY,
   type CommandRunner,
 } from "@/core/update/targets";
 
@@ -321,5 +324,45 @@ describe("per-target update actions (C10.10)", () => {
         expect(STRATEGIES[strategy].rollbackArtifact).toBeTruthy();
       }
     });
+  });
+});
+
+describe("which image an image-swap rollback will accept (C10.10)", () => {
+  const DIGEST = "a".repeat(64);
+
+  it("still demands an immutable digest, which is the actual safety property", () => {
+    // The registry became configurable; none of these became acceptable.
+    expect(isImmutableImageDigest(undefined)).toBe(false);
+    expect(isImmutableImageDigest("")).toBe(false);
+    expect(isImmutableImageDigest(DEFAULT_IMAGE_REPOSITORY)).toBe(false);
+    // A moving tag is exactly what a rollback must never pin to.
+    expect(isImmutableImageDigest(`${DEFAULT_IMAGE_REPOSITORY}:0.2.0`)).toBe(false);
+    expect(isImmutableImageDigest(`${DEFAULT_IMAGE_REPOSITORY}:latest`)).toBe(false);
+    // Short, over-long, upper-case and non-hex digests stay refused.
+    expect(isImmutableImageDigest(`${DEFAULT_IMAGE_REPOSITORY}@sha256:${"a".repeat(63)}`)).toBe(false);
+    expect(isImmutableImageDigest(`${DEFAULT_IMAGE_REPOSITORY}@sha256:${"a".repeat(65)}`)).toBe(false);
+    expect(isImmutableImageDigest(`${DEFAULT_IMAGE_REPOSITORY}@sha256:${"A".repeat(64)}`)).toBe(false);
+    expect(isImmutableImageDigest(`${DEFAULT_IMAGE_REPOSITORY}@sha256:${"g".repeat(64)}`)).toBe(false);
+    // And a second digest appended cannot smuggle one past the split.
+    expect(
+      isImmutableImageDigest(`${DEFAULT_IMAGE_REPOSITORY}@sha256:${DIGEST}@sha256:${DIGEST}`),
+    ).toBe(false);
+  });
+
+  it("accepts the upstream registry by default and nothing else", () => {
+    expect(imageRepository(undefined)).toBe(DEFAULT_IMAGE_REPOSITORY);
+    expect(isImmutableImageDigest(`${DEFAULT_IMAGE_REPOSITORY}@sha256:${DIGEST}`)).toBe(true);
+    // A different registry is refused while the default is in force, so the
+    // configuration is a decision an operator makes, never a loosening.
+    expect(isImmutableImageDigest(`forge.example.test/freeholder@sha256:${DIGEST}`)).toBe(false);
+  });
+
+  it("lets an instance that serves its own images roll back to them", () => {
+    // Hardcoding the registry did not make anything safer; it made rollback
+    // impossible for a mirrored or self-forged deployment.
+    const own = "forge.example.test/freeholder";
+    expect(isImmutableImageDigest(`${own}@sha256:${DIGEST}`, own)).toBe(true);
+    expect(isImmutableImageDigest(`${DEFAULT_IMAGE_REPOSITORY}@sha256:${DIGEST}`, own)).toBe(false);
+    expect(isImmutableImageDigest(`${own}:0.2.0`, own)).toBe(false);
   });
 });
