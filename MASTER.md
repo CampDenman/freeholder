@@ -6339,6 +6339,27 @@ reading chat logs.
   TypeScript and focused lint pass. See
   `deploy/original-put-recovery-lifecycle.source.json`. No hosted/provider,
   stopped-writer, physical-erasure or C-item acceptance follows.
+  Non-AWS conditional authority2026-11-18 (C1.12/C11.08): an observed physical
+  CREATE or current-key DELETE was trusted only on an `*.amazonaws.com`
+  endpoint, because `if-none-match: *` IS the create-only guarantee and
+  `if-match` the delete one, and a provider that accepts and ignores either
+  answers "created" for a write that landed on a live key. That fail-closed
+  rule left every other S3-compatible store unusable for observed writes --
+  including the recipe gate's own fixture, which is why the entries above
+  reached for "genuine synthetic AWS-to-TCP transport" rather than a real
+  endpoint, and why the demo seed refused with `conditional_authority` the
+  first time that gate ran on this branch. Such an endpoint is now trusted
+  once BOTH facts are established at setup and carried on the binding:
+  `proveS3ConditionalSemantics` watched this endpoint refuse a second create
+  and a stale `if-match`, and the bucket reports versioning Enabled so a later
+  provider regression writes a new version instead of destroying one. Neither
+  alone suffices; both absent, the endpoint stays fail-closed exactly as
+  before, and the refusal now names which fact is missing. AWS is unchanged and
+  is never probed. The recipe gate enables and reads back bucket versioning in
+  its own setup step, so a store that cannot retain versions fails there rather
+  than inside Freeholder. No provider-account, hosted or C-item acceptance
+  follows: this is the conditional-semantics half the earlier entries recorded
+  as pending, not storage acceptance.
   Original provider privacy continuation2026-11-15: both prepared controls first
   failed at the same loopback fixture authority boundary. With genuine synthetic
   AWS-to-TCP transport and the repaired applied recovery, fresh migration93

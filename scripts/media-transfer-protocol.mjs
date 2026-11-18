@@ -42,14 +42,73 @@ export async function readS3ObjectBody(response,expected){
  if(bytes!==bound)failure("body_length_mismatch");return joined(chunks,bytes);
 }
 function awsS3Host(hostname){return /(?:^|\.)s3(?:[.-](?:dualstack\.)?[a-z0-9-]+)?\.amazonaws\.com$/.test(hostname);}
-function s3ConditionalAuthority(binding,url,key){
+function s3AwsAuthority(binding,url,key){
  let endpoint,target;try{endpoint=new URL(typeof binding.location.endpoint==="string"?binding.location.endpoint:url(key));target=new URL(url(key));}catch{failure("endpoint_url");}
  return awsS3Host(endpoint.hostname)&&awsS3Host(target.hostname);
 }
+/**
+ * Where an unversioned CREATE or current-key DELETE may be trusted.
+ *
+ * `put` sends `if-none-match: *` and its descriptor says `createOnly: true`:
+ * that header IS the create-only guarantee, not merely protection against
+ * losing bytes. `deleteVersioned` sends `if-match`. A provider that accepts
+ * and ignores either one answers "created" for a write that landed on a live
+ * key, which is a worse failure than refusing to write at all -- so AWS, whose
+ * semantics are known, was the only endpoint allowed here.
+ *
+ * Any other S3-compatible endpoint now needs BOTH facts, established once at
+ * setup and carried on the binding:
+ *
+ *   conditional: "proven"  -- proveS3ConditionalSemantics() below actually
+ *                             watched this endpoint refuse a second create and
+ *                             a stale if-match, rather than it being assumed.
+ *   versioning:  "enabled" -- so that if the provider later regresses, an
+ *                             ignored precondition writes a new version and
+ *                             cannot destroy what was there.
+ *
+ * Neither alone is enough: the probe proves today's behaviour and versioning
+ * covers tomorrow's. Both absent, the endpoint stays fail-closed as before.
+ */
 export function requireS3ConditionalAuthority(binding,url,key,versionId){
- // Other S3-compatible providers stay fail-closed for CREATE and current-key
- // DELETE until their actual conditional semantics pass provider acceptance.
- if(versionId===undefined&&!s3ConditionalAuthority(binding,url,key))failure("conditional_authority");
+ if(versionId!==undefined)return;
+ if(s3AwsAuthority(binding,url,key))return;
+ // Versioning first: it is read without writing anything, so an endpoint that
+ // never qualifies is named for the reason an operator can act on, rather than
+ // for a probe that was skipped because it could not have helped.
+ if(binding.location.versioning!=="enabled")failure("conditional_unversioned");
+ if(binding.location.conditional!=="proven")failure("conditional_unproven");
+}
+const PROBE_PREFIX="__freeholder_conditional_probe__";
+/**
+ * Provider acceptance for the two preconditions this protocol relies on.
+ *
+ * Writes one disposable key under a reserved prefix, then requires the
+ * endpoint to REFUSE a second create and to REFUSE a delete carrying a stale
+ * etag. A store that allows either is not one whose "created" answer can be
+ * believed. 412 is what AWS returns; 409 is accepted for the create conflict
+ * because several S3-compatible stores answer Conflict there, and it is still
+ * a refusal. Anything else -- including a success -- is a refusal of the
+ * endpoint, named so an operator can see which precondition was ignored.
+ *
+ * On a versioned bucket the cleanup delete leaves a delete marker over the
+ * probe key rather than removing it, which is why the key is reserved and
+ * obviously named instead of looking like media.
+ */
+export async function proveS3ConditionalSemantics({client,url,probeKey}){
+ const key=objectKey(probeKey??`${PROBE_PREFIX}/${createHash("sha256").update(String(Date.now())).digest("hex").slice(0,32)}`);
+ const body=new Blob([new Uint8Array([70,72])],{type:"application/octet-stream"});
+ const created=await client.fetch(url(key),{method:"PUT",redirect:"error",body,headers:{"content-length":"2","if-none-match":"*"}});
+ if(!created.ok)failure("conditional_probe_create");
+ const etag=created.headers.get("etag");
+ const again=await client.fetch(url(key),{method:"PUT",redirect:"error",body,headers:{"content-length":"2","if-none-match":"*"}});
+ if(![412,409].includes(again.status))failure("conditional_probe_create_only");
+ const stale=await client.fetch(url(key),{method:"DELETE",redirect:"error",headers:{"if-match":'"00000000000000000000000000000000"'}});
+ if(stale.status!==412)failure("conditional_probe_if_match");
+ if(typeof etag==="string"){
+  const removed=await client.fetch(url(key),{method:"DELETE",redirect:"error",headers:{"if-match":etag}});
+  if(!removed.ok&&removed.status!==404)failure("conditional_probe_cleanup");
+ }
+ return{conditional:"proven"};
 }
 export async function readReplitObjectBody(file,expected){
  const bound=expectedBytes(expected),stream=file.createReadStream({validation:false,decompress:false,...(bound>0?{start:0,end:bound}:{})}),chunks=[];let bytes=0;

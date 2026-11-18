@@ -6,3 +6,4 @@ export function createReplitTransferProtocol(input:{destination:()=>Promise<unkn
 export function readS3ObjectBody(response:Response,expectedBytes?:number):Promise<Uint8Array<ArrayBuffer>>;
 export function readReplitObjectBody(file:unknown,expectedBytes:number):Promise<Uint8Array<ArrayBuffer>>;
 export function requireS3ConditionalAuthority(binding:VersionedTransferStore["binding"],url:(key:string)=>string,key:string,versionId?:string):void;
+export function proveS3ConditionalSemantics(input:{client:{fetch:typeof fetch};url:(key:string)=>string;probeKey?:string}):Promise<{conditional:"proven"}>;

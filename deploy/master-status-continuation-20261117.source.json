@@ -16,13 +16,13 @@
   "artifacts": [
     {
       "path": "MASTER.md",
-      "sha256": "1b12828a6d5844089185fa87f1b36d185ce5066311f34cab5d17fedc2533f506"
+      "sha256": "941ff7ff64b5a067a3ed38e95410d53542ffe1770ba5cbc81ca5051953d69665"
     }
   ],
   "testContinuations": [
     {
       "path": "MASTER.md",
-      "afterSha256": "1b12828a6d5844089185fa87f1b36d185ce5066311f34cab5d17fedc2533f506",
+      "afterSha256": "941ff7ff64b5a067a3ed38e95410d53542ffe1770ba5cbc81ca5051953d69665",
       "beforeSha256": "a52835c139d0495be50650c3a9f067fb1227f2f4c5ad4fb90553168d6ecbefd3",
       "continue": true,
       "edits": [
@@ -54,6 +54,11 @@
         {
           "before": "",
           "after": "Migration boundary guard correction (2026-11-18, C11.10/C11.08/C1.08): the\nexact first guard of boundary86 no longer censuses pg_stat_activity, and the\nwhole first guard is now **2599 bytes** (be98ff6d...), not the 2038 bytes\npinned above. The census refused the rollout whenever any other client backend\nwas connected to the target database. It could not deliver that property -- a\nbackend may arrive the moment after it passes, which the guard's own header\nconceded while requiring it -- and it made every packaged deploy unbootable:\nFreeholder applies migrations in-process at boot while the web server is\nalready answering readiness probes, so the migrating instance's own pool was\nalways \"another client\". The failure was not a refused write but an instance\nthat never became ready, reported as `migration unavailable (Error)` with\nnothing named, because the driver wraps the server error and the readiness\ndiscriminator read only the outermost code. Both failure reporters now read a\nbounded code from the cause chain, never a message. What remains is the control\nthat holds: LOCK TABLE ... IN ACCESS EXCLUSIVE MODE NOWAIT over the nine\nsubscription_controlled_* tables, which conflicts with every lock mode and so\nrefuses the instant another session holds any lock on them, plus the\nprepared-transaction check for its named error. Two PostgreSQL proofs replace\nthe single census proof: an idle target-database client no longer blocks the\nrollout, and a client genuinely holding a lock on those tables is refused with\n55P03. External closed-set OS/runtime drain remains the operator's practice for\na multi-replica estate; it is no longer asserted by counting connections.\nC11.10/C11.08/C1.08 and stable acceptance stay open.\n\n",
+          "occurrences": 1
+        },
+        {
+          "before": "",
+          "after": "  Non-AWS conditional authority2026-11-18 (C1.12/C11.08): an observed physical\n  CREATE or current-key DELETE was trusted only on an `*.amazonaws.com`\n  endpoint, because `if-none-match: *` IS the create-only guarantee and\n  `if-match` the delete one, and a provider that accepts and ignores either\n  answers \"created\" for a write that landed on a live key. That fail-closed\n  rule left every other S3-compatible store unusable for observed writes --\n  including the recipe gate's own fixture, which is why the entries above\n  reached for \"genuine synthetic AWS-to-TCP transport\" rather than a real\n  endpoint, and why the demo seed refused with `conditional_authority` the\n  first time that gate ran on this branch. Such an endpoint is now trusted\n  once BOTH facts are established at setup and carried on the binding:\n  `proveS3ConditionalSemantics` watched this endpoint refuse a second create\n  and a stale `if-match`, and the bucket reports versioning Enabled so a later\n  provider regression writes a new version instead of destroying one. Neither\n  alone suffices; both absent, the endpoint stays fail-closed exactly as\n  before, and the refusal now names which fact is missing. AWS is unchanged and\n  is never probed. The recipe gate enables and reads back bucket versioning in\n  its own setup step, so a store that cannot retain versions fails there rather\n  than inside Freeholder. No provider-account, hosted or C-item acceptance\n  follows: this is the conditional-semantics half the earlier entries recorded\n  as pending, not storage acceptance.\n",
           "occurrences": 1
         }
       ]

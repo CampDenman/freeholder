@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
-import { createS3TransferProtocol, createReplitTransferProtocol } from "../../scripts/media-transfer-protocol.mjs";
+import { createS3TransferProtocol, createReplitTransferProtocol, proveS3ConditionalSemantics, requireS3ConditionalAuthority } from "../../scripts/media-transfer-protocol.mjs";
 import type { TransferRequestDescriptor, TransferRequestObservation, TransferRequestObserver } from "../../scripts/media-transfer.mjs";
 
 const s3 = { kind: "s3" as const, namespace: "a".repeat(64), location: { bucket: "original-media" } };
@@ -140,4 +140,50 @@ describe("C1.12/C11.08 actual provider protocol boundaries", () => {
     expect(journal.requests[0]?.descriptor.expectedRevision).toEqual(original);expect(journal.requests[0]?.facts.at(-1)).toMatchObject({stage:"absence",status:404});
   });
 
+});
+
+describe("non-AWS conditional authority (C1.12/C11.08)", () => {
+  const url = (value: string) => `http://127.0.0.1:9000/original-media/${value.split("/").map(encodeURIComponent).join("/")}`;
+  const awsUrl = (value: string) => `https://s3.us-east-1.amazonaws.com/original-media/${value.split("/").map(encodeURIComponent).join("/")}`;
+  const authority = (location: Record<string, string>, target = url, versionId?: string) =>
+    requireS3ConditionalAuthority({ kind: "s3", namespace: "a".repeat(64), location }, target, "private/original.bin", versionId);
+  const refusal = (run: () => void) => {
+    try { run(); } catch (error) { return (error as { reason?: string }).reason; }
+    throw new Error("The authority check must refuse.");
+  };
+
+  it("trusts AWS alone, and any other endpoint only once versioning and the probe both hold", () => {
+    expect(() => authority({ endpoint: "https://s3.us-east-1.amazonaws.com", bucket: "original-media" }, awsUrl)).not.toThrow();
+    // An unversioned non-AWS bucket is named for the fact an operator can
+    // change, not for the probe that could not have rescued it.
+    expect(refusal(() => authority({ endpoint: "http://127.0.0.1:9000", bucket: "original-media" }))).toBe("conditional_unversioned");
+    expect(refusal(() => authority({ endpoint: "http://127.0.0.1:9000", bucket: "original-media", versioning: "enabled" }))).toBe("conditional_unproven");
+    expect(refusal(() => authority({ endpoint: "http://127.0.0.1:9000", bucket: "original-media", conditional: "proven" }))).toBe("conditional_unversioned");
+    expect(() => authority({ endpoint: "http://127.0.0.1:9000", bucket: "original-media", versioning: "enabled", conditional: "proven" })).not.toThrow();
+    // A supplied version id addresses one immutable version, so it never
+    // needed the preconditions in the first place.
+    expect(() => authority({ endpoint: "http://127.0.0.1:9000", bucket: "original-media" }, url, "version-1")).not.toThrow();
+  });
+
+  it("proves the two preconditions, and refuses a provider that accepts either while ignoring it", async () => {
+    const store = (behaviour: (method: string, headers: Record<string, string>) => Response) => ({
+      fetch: (async (_target: unknown, init: { method?: string; headers?: Record<string, string> } = {}) =>
+        behaviour(init.method ?? "GET", init.headers ?? {})) as unknown as typeof fetch,
+    });
+    const honest = () => { let present = false; return store((method, headers) => {
+      if (method === "PUT") { if (present && headers["if-none-match"] === "*") return new Response(null, { status: 412 }); present = true; return new Response(null, { status: 200, headers: { etag: '"probe"' } }); }
+      if (method === "DELETE") { if (headers["if-match"] !== '"probe"') return new Response(null, { status: 412 }); present = false; return new Response(null, { status: 204 }); }
+      return new Response(null, { status: 404 }); }); };
+    await expect(proveS3ConditionalSemantics({ client: honest(), url })).resolves.toEqual({ conditional: "proven" });
+
+    const ignoresCreateOnly = store(method => method === "PUT"
+      ? new Response(null, { status: 200, headers: { etag: '"probe"' } })
+      : new Response(null, { status: 412 }));
+    await expect(proveS3ConditionalSemantics({ client: ignoresCreateOnly, url })).rejects.toMatchObject({ reason: "conditional_probe_create_only" });
+
+    const ignoresIfMatch = (() => { let present = false; return store(method => {
+      if (method === "PUT") { if (present) return new Response(null, { status: 412 }); present = true; return new Response(null, { status: 200, headers: { etag: '"probe"' } }); }
+      return new Response(null, { status: 204 }); }); })();
+    await expect(proveS3ConditionalSemantics({ client: ignoresIfMatch, url })).rejects.toMatchObject({ reason: "conditional_probe_if_match" });
+  });
 });

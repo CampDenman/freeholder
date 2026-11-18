@@ -570,6 +570,21 @@ jobs:
             echo 'the recipe-gate bucket never became readable'
             exit 1
           fi
+          # Versioning, because an observed physical write to a non-AWS
+          # endpoint is only trusted once the bucket retains versions AND the
+          # endpoint has been watched honouring if-none-match/if-match
+          # (scripts/media-transfer-protocol.mjs). Enabled and then read back
+          # here: a store that cannot retain versions must fail at its own
+          # setup step, not later inside Freeholder where it reads as a
+          # Freeholder defect.
+          curl -fsS -o /dev/null -X PUT --data-binary \
+            '<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Status>Enabled</Status></VersioningConfiguration>' \
+            'http://127.0.0.1:9000/freeholder-recipe-gate?versioning'
+          if ! curl -fsS 'http://127.0.0.1:9000/freeholder-recipe-gate?versioning' | grep -q '<Status>Enabled</Status>'; then
+            docker logs freeholder-s3
+            echo 'the recipe-gate bucket did not report versioning Enabled'
+            exit 1
+          fi
       - run: bash scripts/recipe-matrix.sh
       - run: bash scripts/public-gates.sh
       - name: Registry login for the previous release
