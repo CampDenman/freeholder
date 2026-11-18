@@ -62,3 +62,14 @@ or backlog.
 - Commits are signed off (`git commit -s`) — DCO, no CLA.
 - `main` is protected: PR + green checks only.
 - Release notes are religion: every user-facing change gets a note.
+- **Before editing a file, check whether a `deploy/*.json` source record pins
+  its sha256:** `node scripts/pinned-source-records.mjs <path>`. Those records form reversal ladders
+  that several suites walk, so a correct one-line repair can redden
+  `controlled-safe-response-composition87` or `tests/core/migrate-boundary.test.ts`
+  with a failure that names a hash and not the file that moved. Move the
+  records in the same commit. Two cautions the script prints and cannot
+  enforce: a sha that looks replaceable may be a historical blob sha at a
+  pinned commit (verify with `git show <commit>:<path> | sha256sum`), and a
+  record declaring `archivalEncoding` escapes every period as `\u002e`, so
+  re-serializing it with a JSON writer silently discards that — edit those as
+  text.
