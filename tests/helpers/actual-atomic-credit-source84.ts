@@ -37,11 +37,35 @@
 //   2189x  select ... from subscription_controlled_... by id
 //   1352x  three further per-row lookups, each exactly 1352 times
 //
-// That is an N+1 in the controlled-provider money path, not a test artefact:
-// the same services answer a customer's proration quote, and
-// quoteControlledProration alone is 13.8s of the 61s here. Whoever takes this
-// on should start from the 4156 lookups, since a single id repeated that often
-// is a cache or a join that was never made.
+// Those counts are the most FREQUENT statements, not the most expensive ones,
+// and the difference matters: 4156 lookups at ~0.14ms are about 0.6s of the
+// 61. Aggregated by total time instead, the cost is:
+//
+//   3375ms over  856  commit                                   857 transactions
+//   2555ms over   76  freeholder_controlled_atomic_refund_bank_state   33ms each
+//   1875ms over   40  freeholder_controlled_atomic_refund_targets      47ms each
+//   1767ms over   16  freeholder_controlled_cash_stage                110ms each
+//   1631ms over  445  controlled-journal-content-certificate
+//   1067ms over  796  sha256(to_jsonb(subscription_controlled_facts))
+//   1043ms over   70  freeholder_controlled_cash_parent_snapshot       15ms each
+//
+// So there are two separate costs, and neither is an N+1 over a missing index.
+//
+// 1. Round trips. 236k statements and 857 transactions cost ~29s of the 61s
+//    OUTSIDE the server, since only 32.3s is server time. Fewer, larger
+//    statements would win that back; caching the journal certification would
+//    not, because the `before`/`after` reads in controlledProviderJournal are
+//    the freshness proof -- memoising those is the exact defect
+//    DEFECT-PATCHES-2026-11-17 recorded as a tautological guard.
+//
+// 2. The money SQL functions are expensive per call regardless of size. This
+//    database holds 51 operations, 51 calls and 175 facts, and
+//    `freeholder_controlled_cash_stage` still takes 110ms per call. That is
+//    per-row hashing and jsonb serialisation, not a scan, so it does not get
+//    better with an index and it gets worse with real merchant data. The same
+//    functions run on customer-facing paths.
+//
+// Treat this as a product cost with a test that reports it, not a slow test.
 //
 // So the fix is to make those four services cheaper, or to stop rebuilding
 // the whole fixture per test. Please do not "fix" this by relaxing a timeout.
