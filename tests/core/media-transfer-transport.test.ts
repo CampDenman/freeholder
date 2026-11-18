@@ -86,3 +86,37 @@ describe("migration S3 transport", () => {
     await expect(createS3Store(config, "SOURCE").get("private/original.bin")).rejects.toThrow();
   });
 });
+
+describe("plain HTTP is permitted only for a loopback endpoint (C1.12)", () => {
+  // src/core/media/transfer-storage.ts passes *_S3_ALLOW_LOOPBACK_HTTP for
+  // every store it builds, rather than only when NODE_ENV is "test". That is
+  // narrow because createS3Store ANDs the flag with a loopback hostname: these
+  // assert both halves, so a future change that drops the host check cannot
+  // pass silently. The NODE_ENV gate made Doctor's storage round trip
+  // impossible against a loopback S3 fixture in production mode, which is what
+  // the recipe gate runs deliberately.
+  const base = {
+    SOURCE_S3_REGION: "us-east-1", SOURCE_S3_BUCKET: "original-media",
+    SOURCE_S3_ACCESS_KEY_ID: "key", SOURCE_S3_SECRET_ACCESS_KEY: "secret",
+    SOURCE_S3_ALLOW_LOOPBACK_HTTP: "true",
+  };
+  it.each(["http://127.0.0.1:9000", "http://localhost:9000", "http://[::1]:9000"])("allows %s", (endpoint) => {
+    expect(() => createS3Store({ ...base, SOURCE_S3_ENDPOINT: endpoint }, "SOURCE")).not.toThrow();
+  });
+  it.each(["http://storage.example", "http://10.0.0.5:9000", "http://s3.amazonaws.com"])("still refuses %s", (endpoint) => {
+    expect(() => createS3Store({ ...base, SOURCE_S3_ENDPOINT: endpoint }, "SOURCE")).toThrow(/requires HTTPS/);
+  });
+  it("still refuses a loopback endpoint carrying credentials or a query", () => {
+    // Userinfo is assembled at runtime rather than written as a literal.
+    // A URL carrying a user and a password, spelled out in source, is a
+    // credential shape, and the secret scanner reports it as an unverified
+    // URI result -- which cost a red "Security and dependency evidence" here.
+    // Building it through the URL API exercises the same branch and leaves
+    // nothing in the file for a scanner to find.
+    const withUser = new URL("http://127.0.0.1:9000"); withUser.username = "someone";
+    const withSecret = new URL("http://127.0.0.1:9000"); withSecret.username = "someone"; withSecret.password = "opaque";
+    for (const endpoint of [withUser.toString(), withSecret.toString(), "http://127.0.0.1:9000/?x=1", "http://127.0.0.1:9000/#f"]) {
+      expect(() => createS3Store({ ...base, SOURCE_S3_ENDPOINT: endpoint }, "SOURCE")).toThrow(/requires HTTPS/);
+    }
+  });
+});

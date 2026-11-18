@@ -30,12 +30,31 @@ export function configuredRetainedOriginalBinding(namespace:string,bindingDigest
  const binding=matched[0]!;checkedTransferBinding(binding);return binding;
 }
 
+/**
+ * `*_S3_ALLOW_LOOPBACK_HTTP` is passed unconditionally, and that is narrower
+ * than it reads. createS3Store honours it only when the endpoint's hostname is
+ * literally 127.0.0.1, localhost or [::1] -- it is `flag && loopback` there --
+ * so this permits plain HTTP exactly where the bytes cannot cross a network,
+ * and refuses every other http:// endpoint as before. The plain-HTTP warning
+ * still fires, and credentials, query and fragment in the endpoint stay
+ * refused for every scheme.
+ *
+ * It used to be granted only when NODE_ENV was "test". That made Doctor's
+ * storage round trip impossible to satisfy against a loopback S3 fixture in
+ * production mode, which is what the recipe gate runs on purpose: it exists to
+ * prove the PRODUCTION recipe boots. The gate had passed on the merge-base and
+ * broke when this file routed the round trip through the verified-transfer
+ * store. The alternative the error message advertises,
+ * MEDIA_TRANSFER_ALLOW_INSECURE_HTTP, cannot work here at all: these
+ * environments are built key by key from env(), which strips anything its
+ * schema does not declare, so that opt-out only ever reached the CLI.
+ */
 export async function configuredTransferStores():Promise<{source:AccountedTransferStore;target:AccountedTransferStore}> {
  const e=env(),configured=await boundStorage();
  if(configured.store.isPublic||!["s3","replit"].includes(configured.binding.kind))transferConflict("Verified transfer requires the configured original private S3 or Replit storage.");
  const explicit=e.MEDIA_TRANSFER_SOURCE_STORAGE!==undefined,sourceKind=e.MEDIA_TRANSFER_SOURCE_STORAGE??configured.binding.kind;
- const sourceEnvironment:Record<string,string|undefined>={SOURCE_S3_ENDPOINT:explicit?e.MEDIA_TRANSFER_SOURCE_S3_ENDPOINT:e.S3_ENDPOINT,SOURCE_S3_REGION:explicit?e.MEDIA_TRANSFER_SOURCE_S3_REGION:e.S3_REGION,SOURCE_S3_BUCKET:explicit?e.MEDIA_TRANSFER_SOURCE_S3_BUCKET:e.S3_BUCKET,SOURCE_S3_ACCESS_KEY_ID:explicit?e.MEDIA_TRANSFER_SOURCE_S3_ACCESS_KEY_ID:e.S3_ACCESS_KEY_ID,SOURCE_S3_SECRET_ACCESS_KEY:explicit?e.MEDIA_TRANSFER_SOURCE_S3_SECRET_ACCESS_KEY:e.S3_SECRET_ACCESS_KEY,SOURCE_S3_ADDRESSING_STYLE:explicit?e.MEDIA_TRANSFER_SOURCE_S3_ADDRESSING_STYLE:e.S3_ADDRESSING_STYLE,SOURCE_REPLIT_BUCKET_ID:explicit?e.MEDIA_TRANSFER_SOURCE_REPLIT_BUCKET_ID:e.REPLIT_BUCKET_ID,SOURCE_S3_ALLOW_LOOPBACK_HTTP:e.NODE_ENV==="test"?"true":undefined};
- const targetEnvironment:Record<string,string|undefined>={TARGET_S3_ENDPOINT:e.MEDIA_TRANSFER_TARGET_S3_ENDPOINT,TARGET_S3_REGION:e.MEDIA_TRANSFER_TARGET_S3_REGION,TARGET_S3_BUCKET:e.MEDIA_TRANSFER_TARGET_S3_BUCKET,TARGET_S3_ACCESS_KEY_ID:e.MEDIA_TRANSFER_TARGET_S3_ACCESS_KEY_ID,TARGET_S3_SECRET_ACCESS_KEY:e.MEDIA_TRANSFER_TARGET_S3_SECRET_ACCESS_KEY,TARGET_S3_ADDRESSING_STYLE:e.MEDIA_TRANSFER_TARGET_S3_ADDRESSING_STYLE,TARGET_REPLIT_BUCKET_ID:e.MEDIA_TRANSFER_TARGET_REPLIT_BUCKET_ID,TARGET_S3_ALLOW_LOOPBACK_HTTP:e.NODE_ENV==="test"?"true":undefined};
+ const sourceEnvironment:Record<string,string|undefined>={SOURCE_S3_ENDPOINT:explicit?e.MEDIA_TRANSFER_SOURCE_S3_ENDPOINT:e.S3_ENDPOINT,SOURCE_S3_REGION:explicit?e.MEDIA_TRANSFER_SOURCE_S3_REGION:e.S3_REGION,SOURCE_S3_BUCKET:explicit?e.MEDIA_TRANSFER_SOURCE_S3_BUCKET:e.S3_BUCKET,SOURCE_S3_ACCESS_KEY_ID:explicit?e.MEDIA_TRANSFER_SOURCE_S3_ACCESS_KEY_ID:e.S3_ACCESS_KEY_ID,SOURCE_S3_SECRET_ACCESS_KEY:explicit?e.MEDIA_TRANSFER_SOURCE_S3_SECRET_ACCESS_KEY:e.S3_SECRET_ACCESS_KEY,SOURCE_S3_ADDRESSING_STYLE:explicit?e.MEDIA_TRANSFER_SOURCE_S3_ADDRESSING_STYLE:e.S3_ADDRESSING_STYLE,SOURCE_REPLIT_BUCKET_ID:explicit?e.MEDIA_TRANSFER_SOURCE_REPLIT_BUCKET_ID:e.REPLIT_BUCKET_ID,SOURCE_S3_ALLOW_LOOPBACK_HTTP:"true"};
+ const targetEnvironment:Record<string,string|undefined>={TARGET_S3_ENDPOINT:e.MEDIA_TRANSFER_TARGET_S3_ENDPOINT,TARGET_S3_REGION:e.MEDIA_TRANSFER_TARGET_S3_REGION,TARGET_S3_BUCKET:e.MEDIA_TRANSFER_TARGET_S3_BUCKET,TARGET_S3_ACCESS_KEY_ID:e.MEDIA_TRANSFER_TARGET_S3_ACCESS_KEY_ID,TARGET_S3_SECRET_ACCESS_KEY:e.MEDIA_TRANSFER_TARGET_S3_SECRET_ACCESS_KEY,TARGET_S3_ADDRESSING_STYLE:e.MEDIA_TRANSFER_TARGET_S3_ADDRESSING_STYLE,TARGET_REPLIT_BUCKET_ID:e.MEDIA_TRANSFER_TARGET_REPLIT_BUCKET_ID,TARGET_S3_ALLOW_LOOPBACK_HTTP:"true"};
  const{createS3Store,createReplitStore}=await import("../../../scripts/media-transfer.mjs");
  const source=sourceKind==="s3"?createS3Store(sourceEnvironment,"SOURCE"):await createReplitStore(sourceEnvironment,"SOURCE");
  const target=e.MEDIA_TRANSFER_TARGET_STORAGE==="s3"?createS3Store(targetEnvironment,"TARGET"):e.MEDIA_TRANSFER_TARGET_STORAGE==="replit"?await createReplitStore(targetEnvironment,"TARGET"):transferConflict("Configure the explicit private transfer destination before planning a transfer.");
@@ -75,7 +94,7 @@ export async function configuredOriginalRequestStore(binding:StorageBinding):Pro
  ]:[];
  for(const candidate of candidates){
   if(!candidate.endpoint||!candidate.bucket||!candidate.region||!candidate.access||!candidate.secret||storageNamespace({id:"s3",endpoint:candidate.endpoint,bucket:candidate.bucket})!==binding.namespace)continue;
-  const store=createS3Store({ORIGINAL_S3_ENDPOINT:candidate.endpoint,ORIGINAL_S3_REGION:candidate.region,ORIGINAL_S3_BUCKET:candidate.bucket,ORIGINAL_S3_ACCESS_KEY_ID:candidate.access,ORIGINAL_S3_SECRET_ACCESS_KEY:candidate.secret,ORIGINAL_S3_ADDRESSING_STYLE:candidate.style,ORIGINAL_S3_ALLOW_LOOPBACK_HTTP:e.NODE_ENV==="test"?"true":undefined},"ORIGINAL");
+  const store=createS3Store({ORIGINAL_S3_ENDPOINT:candidate.endpoint,ORIGINAL_S3_REGION:candidate.region,ORIGINAL_S3_BUCKET:candidate.bucket,ORIGINAL_S3_ACCESS_KEY_ID:candidate.access,ORIGINAL_S3_SECRET_ACCESS_KEY:candidate.secret,ORIGINAL_S3_ADDRESSING_STYLE:candidate.style,ORIGINAL_S3_ALLOW_LOOPBACK_HTTP:"true"},"ORIGINAL");
   if(transferDigest(store.binding)!==transferDigest(binding)||!store.accounted)transferConflict("The configured provider differs from its exact original binding.");return store.accounted(observeTransferRequest);
  }
  if(binding.kind==="replit")for(const bucket of [e.REPLIT_BUCKET_ID,e.MEDIA_TRANSFER_SOURCE_REPLIT_BUCKET_ID,e.MEDIA_TRANSFER_TARGET_REPLIT_BUCKET_ID]){
