@@ -23,6 +23,26 @@
 // three tests at that cost exceed the job's 25-minute budget, which is why
 // C11.13 added shards instead of raising timeouts.
 //
+// WHERE the time goes, measured the same day with the server logging every
+// statement for this database alone. Building this fixture once issues
+//
+//   236,252 statements in 857 transactions, 32.3s of server time in 61s wall
+//
+// and NOT ONE of them exceeds 900ms. Nothing here is a slow query; the cost is
+// the number of round trips. The single most repeated shape is a per-row
+// lookup of one resource by id:
+//
+//   4156x  WITH actual_resource AS MATERIALIZED(
+//            SELECT r.id FROM subscription_controlled_resources r WHERE r.id=$1::uuid)
+//   2189x  select ... from subscription_controlled_... by id
+//   1352x  three further per-row lookups, each exactly 1352 times
+//
+// That is an N+1 in the controlled-provider money path, not a test artefact:
+// the same services answer a customer's proration quote, and
+// quoteControlledProration alone is 13.8s of the 61s here. Whoever takes this
+// on should start from the 4156 lookups, since a single id repeated that often
+// is a cache or a join that was never made.
+//
 // So the fix is to make those four services cheaper, or to stop rebuilding
 // the whole fixture per test. Please do not "fix" this by relaxing a timeout.
 import {eq} from "drizzle-orm";
