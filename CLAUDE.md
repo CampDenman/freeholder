@@ -81,3 +81,15 @@ or backlog.
   any record round-trips byte-identically before rewriting it; and the script
   reads `deploy/*.json` only, so a sha hardcoded in a test file is invisible
   to it.
+- **A pin does not have to sit beside a `path`.** The script used to collect
+  shas only from record objects carrying `path: <your file>`, so
+  `merchant-fee-xid-epoch87.manifest.json` — which pins
+  `predecessors: { "0085": <sha>, "0086": <sha> }`, keyed by migration number,
+  and whose test hashes `db/migrations/0086_*.sql` straight against it —
+  was reported as *"named, but no sha256 on that path"*. The 0086 boundary
+  repair on 2026-11-18 was therefore made believing 0086 had **no** live pin,
+  and reddened that suite in a full run hours later. It now also reports any
+  sha256 anywhere in a record that equals the file's current digest, because a
+  digest of this content is a pin on this content whatever field holds it. The
+  deeper rule: targeted suites confirm what you expected to touch, and only the
+  whole suite finds what you did not.

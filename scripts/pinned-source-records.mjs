@@ -32,6 +32,15 @@
 //     `git show <commit>:<path> | sha256sum` before touching a value.
 //   - It does not tell you whether a record is ASSERTED. Some are archival and
 //     have no reader; grep tests/ src/ scripts/ for the record name.
+//   - A pin need not sit beside a `path`. merchant-fee-xid-epoch87.manifest.json
+//     holds `predecessors: { "0085": <sha>, "0086": <sha> }`, keyed by
+//     migration number, and its test hashes db/migrations/0086_*.sql against
+//     it directly. Scanning only path-scoped fields reported that file as
+//     "named, but no sha256 on that path", so the 0086 boundary repair on
+//     2026-11-18 went out believing 0086 had no live pin and reddened that
+//     suite. Any sha256 anywhere in a record that EQUALS this file's current
+//     content is therefore reported as live too, whatever field holds it: if a
+//     value is this content's digest, it refers to this content.
 //   - It cannot know a record's own serialization. Several declare
 //     `archivalEncoding` and escape every period as a JSON Unicode escape;
 //     re-serializing such a file with a JSON writer silently discards that,
@@ -66,7 +75,7 @@ for (const name of readdirSync("deploy").filter(file => file.endsWith(".json")).
   } catch {
     continue;
   }
-  if (!text.includes(target)) continue;
+  if (!text.includes(target) && !text.includes(current)) continue;
   let document;
   try {
     document = JSON.parse(text);
@@ -74,7 +83,10 @@ for (const name of readdirSync("deploy").filter(file => file.endsWith(".json")).
     hits.push({ name, where: "unparseable JSON", sha: null });
     continue;
   }
-  const found = [];
+  // Keyed by JSON trail: a path-scoped field whose value also equals this
+  // file's digest is ONE pin, and reporting it twice inflates the live count
+  // that a reader acts on.
+  const found = new Map();
   const walk = (node, trail) => {
     if (Array.isArray(node)) {
       node.forEach((value, index) => walk(value, `${trail}[${index}]`));
@@ -83,14 +95,21 @@ for (const name of readdirSync("deploy").filter(file => file.endsWith(".json")).
     if (node === null || typeof node !== "object") return;
     if (node.path === target) {
       for (const [key, value] of Object.entries(node)) {
-        if (typeof value === "string" && SHA256.test(value)) found.push({ key: `${trail || "root"}.${key}`, value });
+        if (typeof value === "string" && SHA256.test(value)) found.set(`${trail || "root"}.${key}`, value);
       }
     }
-    for (const [key, value] of Object.entries(node)) walk(value, trail ? `${trail}.${key}` : key);
+    for (const [key, value] of Object.entries(node)) {
+      // A digest of this exact content is a pin on this exact content, in
+      // whatever field it sits -- including one with no `path` beside it.
+      if (typeof value === "string" && value === current) {
+        found.set(trail ? `${trail}.${key}` : key, value);
+      }
+      walk(value, trail ? `${trail}.${key}` : key);
+    }
   };
   walk(document, "");
-  if (found.length === 0) hits.push({ name, where: "named, but no sha256 on that path", sha: null });
-  else for (const { key, value } of found) hits.push({ name, where: key, sha: value });
+  if (found.size === 0) hits.push({ name, where: "named, but no sha256 on that path", sha: null });
+  else for (const [key, value] of found) hits.push({ name, where: key, sha: value });
 }
 
 if (hits.length === 0) console.log("  not pinned by any deploy record");
