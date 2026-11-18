@@ -1,15 +1,34 @@
 {
   "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
   "protocol": "financial_row_hash_ledger89.v1",
-  "checklist": ["C12.38", "C11.05", "C1.08"],
+  "checklist": [
+    "C12.38",
+    "C11.05",
+    "C1.08"
+  ],
   "status": "FORWARD SOURCE CONTINUATION; real fresh-database insert/update/rollback/refusal controls pass; not payment acceptance",
   "previousSourceRecord": "deploy/controlled-runtime-dedup88.source.json",
   "artifacts": [
-    { "path": "db/migrations/0089_financial_row_hash_ledger.sql", "sha256": "52f29ffc916111e416ba4949f1c6898d6c8b2fc5de70ebaea7fcb060623a57bc" },
-    { "path": "src/modules/invoicing/financial-row-hash-schema.ts", "sha256": "b1ddc92496cfaf3a2a3cb1231f6fd2bb060715d31587207bb17b40cc818a0b2e" },
-    { "path": "src/modules/invoicing/controlled-provider-financial-parent.ts", "sha256": "9d9c6fb41437aba4f190228491a7ced14768c3c4c7246e19b5947c107fea2d9e" },
-    { "path": "src/modules/invoicing/tables.ts", "sha256": "e843f314de96ff4427a646439e975d5a3cdba6f404bf853320f5ea1aaca8d7d2" },
-    { "path": "tests/modules/financial-row-hash-ledger89.test.ts", "sha256": "b4344e60714da3abde32d88b1576ce52f8ddb8efe4368ea185487f4836f908ef" }
+    {
+      "path": "db/migrations/0089_financial_row_hash_ledger.sql",
+      "sha256": "52f29ffc916111e416ba4949f1c6898d6c8b2fc5de70ebaea7fcb060623a57bc"
+    },
+    {
+      "path": "src/modules/invoicing/financial-row-hash-schema.ts",
+      "sha256": "b1ddc92496cfaf3a2a3cb1231f6fd2bb060715d31587207bb17b40cc818a0b2e"
+    },
+    {
+      "path": "src/modules/invoicing/controlled-provider-financial-parent.ts",
+      "sha256": "9d9c6fb41437aba4f190228491a7ced14768c3c4c7246e19b5947c107fea2d9e"
+    },
+    {
+      "path": "src/modules/invoicing/tables.ts",
+      "sha256": "e843f314de96ff4427a646439e975d5a3cdba6f404bf853320f5ea1aaca8d7d2"
+    },
+    {
+      "path": "tests/modules/financial-row-hash-ledger89.test.ts",
+      "sha256": "b4344e60714da3abde32d88b1576ce52f8ddb8efe4368ea185487f4836f908ef"
+    }
   ],
   "sourceTables": [
     "subscriptions",
@@ -61,18 +80,38 @@
       "afterSha256": "76424c00c4c11ae0013954495cc4ecdc2e8481828438f5da41be839b1eab3c1b",
       "beforeSha256": "6f0697f3d8568005809f2f95c7d6fb87fd9347b2c05bd89ef79a1ec75f674d9f",
       "edits": [
-        { "before": "", "after": "import { restoreRowHashLedgerSource } from \"../helpers/row-hash-ledger-forward\";\n", "occurrences": 1 },
-        { "before": "    let restored = read(row.path);", "after": "    let restored = restoreRowHashLedgerSource(row.path, read(row.path));", "occurrences": 3 },
-        { "before": "    const views = proof.indexOf(\"const verificationViews=await Promise.all(verifications.map\");", "after": "    const views = proof.indexOf(\"Promise.all(verifications.map\");", "occurrences": 1 }
+        {
+          "before": "",
+          "after": "import { restoreRowHashLedgerSource } from \"../helpers/row-hash-ledger-forward\";\n",
+          "occurrences": 1
+        },
+        {
+          "before": "    let restored = read(row.path);",
+          "after": "    let restored = restoreRowHashLedgerSource(row.path, read(row.path));",
+          "occurrences": 3
+        },
+        {
+          "before": "    const views = proof.indexOf(\"const verificationViews=await Promise.all(verifications.map\");",
+          "after": "    const views = proof.indexOf(\"Promise.all(verifications.map\");",
+          "occurrences": 1
+        }
       ]
     },
     {
       "path": "tests/core/migrate-boundary.test.ts",
-      "afterSha256": "d279a85aa9be64d0636ec0f2f9b158509548ac352fcae5ab8bc69aeb18fe1cfa",
-      "beforeSha256": "d33993a7a4031f217f20baca964e9d7db1a9b324d1fcb090fd12bd968b4c371b",
+      "afterSha256": "ab621f1f55487abefa09f8d27406ef6394030873e39e6e2b463dedc0d08b17b9",
+      "beforeSha256": "c0dbb628485b8fe2c5341987bee2b8b6311162c9865267b859d645334137d4f9",
       "edits": [
-        { "before": "", "after": "import { restoreRowHashLedgerSource } from \"../helpers/row-hash-ledger-forward\";\n", "occurrences": 1 },
-        { "before": "  let current = readFileSync(path);", "after": "  let current = Buffer.from(restoreRowHashLedgerSource(path, readFileSync(path, \"utf8\")));", "occurrences": 1 }
+        {
+          "before": "",
+          "after": "import { restoreRowHashLedgerSource } from \"../helpers/row-hash-ledger-forward\";\n",
+          "occurrences": 1
+        },
+        {
+          "before": "  let current = readFileSync(path);",
+          "after": "  let current = Buffer.from(restoreRowHashLedgerSource(path, readFileSync(path, \"utf8\")));",
+          "occurrences": 1
+        }
       ]
     },
     {
@@ -80,8 +119,16 @@
       "afterSha256": "332e0037a2bf3eaa6f52e274e15dd9ddd6dc08c7b06bb94543750fde15ff43b3",
       "beforeSha256": "b2d22136bbd58a0e29b082c23cfb57176980b60ded7cd8d8ea642a432216345d",
       "edits": [
-        { "before": "", "after": "Row-hash ledger and payment-profile continuation2026-11-15\n(C12.38/C11.05/C1.08/C11.10): fresh ordinary migrations88/89 and their real\ninsert/update/rollback/direct-write controls PASS; all42 parent source tables and\nnine controlled families have exact stored fingerprints. Focused source reversals,\nTypeScript and affected lint PASS. The unchanged positive native still TIMES OUT\nat180s on separate fresh databases before proration acceptance, including a CPU-\nprofiled run. Canonicalization, snapshot cloning, garbage collection and idle work\nremain measured costs; the key-index and authenticated frozen-view digest repairs\nare source-qualified only until their genuine native runs. No checklist row closes.\nSee `deploy/controlled-row-hash-ledger88.source.json`,\n`deploy/financial-row-hash-ledger89.source.json`,\n`deploy/merchant-tax-key-index89.source.json` and\n`deploy/controlled-safe-view-digest89.source.json`.\n\n", "occurrences": 1 },
-        { "before": "", "after": "Controlled journal-head continuation2026-11-15 (C12.38/C11.05/C1.08): migration90\nmaintains a guarded per-resource certificate from the actual immutable row ledger;\nits independent fresh-database integrity/refusal control and both genuine journal\nrevalidation controls PASS. Heads reduced diagnostic journal work but the first\nunchanged positive run still TIMED OUT at180s. Deterministic deeply frozen safe\nviews may now reuse only the same fresh content certificate; raw retainers never\ncontain them and no authority verdict is cached. Its separate positive run remains\nrequired. No row closes. See `deploy/controlled-journal-heads90.source.json` and\n`deploy/controlled-view-cache90.source.json`.\n\n", "occurrences": 1 }
+        {
+          "before": "",
+          "after": "Row-hash ledger and payment-profile continuation2026-11-15\n(C12.38/C11.05/C1.08/C11.10): fresh ordinary migrations88/89 and their real\ninsert/update/rollback/direct-write controls PASS; all42 parent source tables and\nnine controlled families have exact stored fingerprints. Focused source reversals,\nTypeScript and affected lint PASS. The unchanged positive native still TIMES OUT\nat180s on separate fresh databases before proration acceptance, including a CPU-\nprofiled run. Canonicalization, snapshot cloning, garbage collection and idle work\nremain measured costs; the key-index and authenticated frozen-view digest repairs\nare source-qualified only until their genuine native runs. No checklist row closes.\nSee `deploy/controlled-row-hash-ledger88.source.json`,\n`deploy/financial-row-hash-ledger89.source.json`,\n`deploy/merchant-tax-key-index89.source.json` and\n`deploy/controlled-safe-view-digest89.source.json`.\n\n",
+          "occurrences": 1
+        },
+        {
+          "before": "",
+          "after": "Controlled journal-head continuation2026-11-15 (C12.38/C11.05/C1.08): migration90\nmaintains a guarded per-resource certificate from the actual immutable row ledger;\nits independent fresh-database integrity/refusal control and both genuine journal\nrevalidation controls PASS. Heads reduced diagnostic journal work but the first\nunchanged positive run still TIMED OUT at180s. Deterministic deeply frozen safe\nviews may now reuse only the same fresh content certificate; raw retainers never\ncontain them and no authority verdict is cached. Its separate positive run remains\nrequired. No row closes. See `deploy/controlled-journal-heads90.source.json` and\n`deploy/controlled-view-cache90.source.json`.\n\n",
+          "occurrences": 1
+        }
       ]
     }
   ],

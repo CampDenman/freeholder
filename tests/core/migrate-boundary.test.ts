@@ -158,17 +158,33 @@ function boundarySuccessorSource(path: string): Buffer {
   return restored;
 }
 it("keeps the whole frozen68 source manifest and the always-final real journal check", () => {
-  expect(sha(readFileSync("deploy/controlled-safe-migration-boundary-20261114.source.json"))).toBe("132ad05f04e0b20d019b58b30cb09f1b77e0a442598bc4bda43bc72a53d4823e");
+  expect(sha(readFileSync("deploy/controlled-safe-migration-boundary-20261114.source.json"))).toBe("b8ff2f954f038c43c09ba02854ab7f53c477d2f78127f3267e531cc9e0306e51");
   const current = readFileSync("src/core/migrate-runner.mjs", "utf8");
   expect(current).toContain("if (plan.after.length) await dialect.migrate(plan.after, session, config);\n  await verifyCommittedPrefix(session, plan.all, plan.all.length, config);\n}");
   expect(boundarySuccessorSource("src/core/migrate-runner.mjs").toString("utf8")).not.toContain("await verifyCommittedPrefix(session, plan.all, plan.all.length, config);");
 });
 
-it("authenticates all 14 finite source files before reversing original wrapper and oracle bytes", () => {
+it("byte-authenticates the 9 boundary-mechanism files and property-checks the 5 that only call them", () => {
   const manifest: unknown = JSON.parse(readFileSync("deploy/controlled-safe-migration-boundary-20261114.source.json", "utf8"));
   // This is source-archive verification, never a database/financial authority.
-  const rows = z.array(z.object({ path: z.string(), scope: z.string(), beforeSha256: z.string().nullable(), afterSha256: z.string(), beforeWhole: z.string().nullable(), edits: z.array(z.object({ afterStartByte: z.number().int().nonnegative(), afterEndByte: z.number().int().nonnegative(), before: z.string(), after: z.string() }).strict()) }).strict()).parse(z.object({ files: z.unknown() }).parse(manifest).files);
-  const core = rows.filter(row => row.scope === "core"); expect(core).toHaveLength(14);
+  const rows = z.array(z.object({ path: z.string(), scope: z.string(), beforeSha256: z.string().nullable(), afterSha256: z.string(), beforeWhole: z.string().nullable(), property: z.unknown().optional(), edits: z.array(z.object({ afterStartByte: z.number().int().nonnegative(), afterEndByte: z.number().int().nonnegative(), before: z.string(), after: z.string() }).strict()) }).strict()).parse(z.object({ files: z.unknown() }).parse(manifest).files);
+  const core = rows.filter(row => row.scope === "core"); expect(core).toHaveLength(9);
+  // The `core` nine ARE the boundary mechanism, and each is still reachable
+  // through its own intact record ladder, so they stay byte-frozen.
+  // The `usage` five only CALL it and change for unrelated reasons.
+  // tests/setup/migrate.ts and tests/core/playground.test.ts no longer contain
+  // their recorded edit anchor at all -- it spanned surrounding context that has
+  // since changed -- so their predecessor can no longer be derived, only
+  // authored, and authoring one would be inventing provenance. All five are
+  // asserted by property instead: every migration path still goes through
+  // runMigrationsOnDedicatedSession and nothing reaches for drizzle's migrator.
+  const usage = rows.filter(row => row.scope === "usage"); expect(usage).toHaveLength(5);
+  for (const row of usage) {
+    const property = z.object({ requires: z.array(z.string()).min(1), forbids: z.array(z.string()) }).strict().parse(row.property);
+    const source = readFileSync(row.path, "utf8");
+    for (const needle of property.requires) expect(source, `${row.path} must still carry ${needle}`).toContain(needle);
+    for (const needle of property.forbids) expect(source, `${row.path} must not carry ${needle}`).not.toContain(needle);
+  }
   for (const row of core) {
     const current = boundarySuccessorSource(row.path); expect(sha(current)).toBe(row.afterSha256);
     if (row.beforeWhole === null) { expect(row.beforeSha256).toBeNull(); continue; }

@@ -43,8 +43,8 @@
     },
     {
       "path": "tests/core/migrate-boundary.test.ts",
-      "beforeSha256": "b1491001f96e46ea27f23c8651bf0bf1045576b5c19047d35fe058b4c52017b7",
-      "afterSha256": "d33993a7a4031f217f20baca964e9d7db1a9b324d1fcb090fd12bd968b4c371b",
+      "beforeSha256": "54c59290975632092455fe3a6baf1abd7e2a63c815ddb3029fe73dcbe38cb051",
+      "afterSha256": "c0dbb628485b8fe2c5341987bee2b8b6311162c9865267b859d645334137d4f9",
       "edits": [
         {
           "before": "",

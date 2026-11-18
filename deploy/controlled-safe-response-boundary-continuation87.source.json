@@ -1,16 +1,25 @@
 {
   "copyright": "Copyright (C) 2026 Tony Aly; SPDX-License-Identifier: Apache-2.0",
   "path": "tests/core/migrate-boundary.test.ts",
-  "predecessorSha256": "cbda7ed31026172b2e1075dbae2f50d7ed994b720acccc462abde8e910202e4a",
-  "successorSha256": "476d45265d40032b16f136de6cad96724db2d9c3f09188ef00aa59267a494d20",
+  "predecessorSha256": "9dbdfb114118d5daa60149575f0d306be23d46d1ee8dffe511d26120783d5df4",
+  "successorSha256": "90076ad93e6c2d9659969aa02752a19dbcaa3308c5ea836ce532d3a6aeab2019",
   "metadata": {
     "path": "db/migrations/meta/controlled-safe-response-boundary.json",
     "predecessorSha256": "d97e585b0d547a34f42c4ed1603c84119c9df1f76caab6d0109c08210fade445",
     "successorSha256": "2945e8506d52580ba190d8ee12504518e2272f8829dae9a822808d9965ce2af8",
     "edits": [
-      { "before": "\"predecessor85Sha256\": null", "after": "\"predecessor85Sha256\": \"8c914cf178bad249a8d60d332f9c5e3b3fc92af0c2d0ecc46bdc7b648e87c2cb\"" },
-      { "before": "\"whole86Sha256\": null", "after": "\"whole86Sha256\": \"b3d73b06a4de6fa3fe76356414674526e883fbd4fc25bbe978535cc70e2fa8ae\"" },
-      { "before": "\"prefix0To85Sha256\": null", "after": "\"prefix0To85Sha256\": \"e3effea01f92abfe406ed010e9f8097572fadb1dd529fbc6ef7874c2f0781d23\"" }
+      {
+        "before": "\"predecessor85Sha256\": null",
+        "after": "\"predecessor85Sha256\": \"8c914cf178bad249a8d60d332f9c5e3b3fc92af0c2d0ecc46bdc7b648e87c2cb\""
+      },
+      {
+        "before": "\"whole86Sha256\": null",
+        "after": "\"whole86Sha256\": \"b3d73b06a4de6fa3fe76356414674526e883fbd4fc25bbe978535cc70e2fa8ae\""
+      },
+      {
+        "before": "\"prefix0To85Sha256\": null",
+        "after": "\"prefix0To85Sha256\": \"e3effea01f92abfe406ed010e9f8097572fadb1dd529fbc6ef7874c2f0781d23\""
+      }
     ]
   },
   "pgBoundary": {
@@ -18,8 +27,14 @@
     "predecessorSha256": "ae40f3264b0ef79b93ff937b79d77f4b4822ab666f84b27472e7abbbd1993cf8",
     "successorSha256": "cf165e09644bb8f0dfd9a6999a515d534787b71aee4d1763017cc308a62fd396",
     "edits": [
-      { "before": "drizzle(client)._.session, { migrationsFolder: f.folder }", "after": "drizzle(client)._.session as Parameters<PgDialect[\"migrate\"]>[1], { migrationsFolder: f.folder }" },
-      { "before": "env: { PATH: process.env.PATH }, encoding: \"utf8\"", "after": "env: { PATH: process.env.PATH, NODE_ENV: \"test\" }, encoding: \"utf8\"" }
+      {
+        "before": "drizzle(client)._.session, { migrationsFolder: f.folder }",
+        "after": "drizzle(client)._.session as Parameters<PgDialect[\"migrate\"]>[1], { migrationsFolder: f.folder }"
+      },
+      {
+        "before": "env: { PATH: process.env.PATH }, encoding: \"utf8\"",
+        "after": "env: { PATH: process.env.PATH, NODE_ENV: \"test\" }, encoding: \"utf8\""
+      }
     ]
   },
   "migrationCore": {
@@ -27,8 +42,14 @@
     "predecessorSha256": "07b8a91a890f0f7d532c953d94bd520d84e05a81111150f795f8b6686670643c",
     "successorSha256": "6ef32a40ec1d08f07ba742f9bb5147bac53cabaecbb550b5854fd1299adfc5a0",
     "edits": [
-      { "before": "import { beforeEach, describe, expect, it, vi } from \"vitest\";", "after": "import type * as NodeFs from \"node:fs\";\nimport { beforeEach, describe, expect, it, vi } from \"vitest\";" },
-      { "before": "importOriginal<typeof import(\"node:fs\")>()", "after": "importOriginal<typeof NodeFs>()" }
+      {
+        "before": "import { beforeEach, describe, expect, it, vi } from \"vitest\";",
+        "after": "import type * as NodeFs from \"node:fs\";\nimport { beforeEach, describe, expect, it, vi } from \"vitest\";"
+      },
+      {
+        "before": "importOriginal<typeof import(\"node:fs\")>()",
+        "after": "importOriginal<typeof NodeFs>()"
+      }
     ]
   },
   "edits": [
