@@ -5,7 +5,7 @@
   "status": "Idle multipart minimization and late same-first re-review qualified on fresh and upgraded migration105 PostgreSQL; provider, hosted executor and clean-room acceptance remain open",
   "artifacts": [
     { "path": "MASTER.md", "sha256": "2af6ec0494d08c9593e6a309d2b5c1bce17f108a12805895e1a0273dd5c60301" },
-    { "path": "tests/core/media-multipart-idle-compact-lifecycle.test.ts", "sha256": "d0699432c83260c118a99cbf37820a5cce4b311863f88576ef41306a3e8e60e0" },
+    { "path": "tests/core/media-multipart-idle-compact-lifecycle.test.ts", "sha256": "e95c34242e509fe942717a8648dd664429b028f86ed4ac4ba073ce79111873d3" },
     { "path": "tests/core/privacy-reopen-erasure.test.ts", "sha256": "39b1d02a4091bb6b853608c7d4caafdebc6dea0abc0a1402b27b35ec3210e648" },
     { "path": "src/core/contacts/identity-lock.ts", "sha256": "06d7ca7c61973ed9169d3fb34c1f69825a81adac1d77ed623c63958939ea75e0" },
     { "path": "src/core/privacy/service.ts", "sha256": "7deba8b2e28a77525ec55ed06e670cdde8ac10d61256aeb27ae52061450b9aa2" },

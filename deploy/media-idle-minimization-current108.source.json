@@ -5,7 +5,7 @@
   "status": "Unchanged idle multipart compaction, catch-up, retirement and privacy-reopening controls pass on current migration108; provider and checklist acceptance remain open",
   "artifacts": [
     { "path": "MASTER.md", "sha256": "fcdfd023a1440f6a26a01533f7915a57cf8d8b742287a0b9d4f1a5bb55ac50ce" },
-    { "path": "tests/core/media-multipart-idle-compact-lifecycle.test.ts", "sha256": "d0699432c83260c118a99cbf37820a5cce4b311863f88576ef41306a3e8e60e0" },
+    { "path": "tests/core/media-multipart-idle-compact-lifecycle.test.ts", "sha256": "e95c34242e509fe942717a8648dd664429b028f86ed4ac4ba073ce79111873d3" },
     { "path": "tests/core/media-multipart-retirement-catchup-lifecycle.test.ts", "sha256": "d3e7388c5a35d8a1f60fa3fe136f5e8fe2347723d0975be9b5d39b37fe5b2d12" },
     { "path": "tests/core/media-multipart-idle-retirement-lifecycle.test.ts", "sha256": "018dab1a78badcc93ab62d5cc173fb9d5e2f7ac226ec0350ef57065b1cfafa08" },
     { "path": "tests/core/privacy-reopen-erasure.test.ts", "sha256": "39b1d02a4091bb6b853608c7d4caafdebc6dea0abc0a1402b27b35ec3210e648" },
