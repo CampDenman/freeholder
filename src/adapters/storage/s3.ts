@@ -13,6 +13,7 @@ import { AwsClient } from "aws4fetch";
 import {createS3MultipartProtocol} from "../../../scripts/media-multipart-protocol.mjs";
 import {createS3MultipartPartIssuer} from "../../../scripts/media-part-capability.mjs";
 import {createS3TransferProtocol,proveS3ConditionalSemantics} from "../../../scripts/media-transfer-protocol.mjs";
+import type {S3ConditionalAuthority} from "../../../scripts/media-transfer-protocol.mjs";
 import type {TransferRequestObserver} from "../../../scripts/media-transfer.mjs";
 import {verifyS3PhysicalAbsence} from "./physical-absence";
 import {storageNamespace} from "@/core/media/storage-quota";
@@ -93,7 +94,9 @@ export function createS3Storage(config: S3Config): StorageAdapter {
    * `requireS3ConditionalAuthority` trusts an unversioned CREATE or
    * current-key DELETE on AWS, whose `if-none-match: *` and `if-match`
    * semantics are known, and on any other endpoint only once BOTH facts are
-   * established: that this endpoint was actually watched refusing a second
+   * established (passed beside the binding, never inside its `location`,
+   * which transfer-witness.ts parses strictly as evidence): that this endpoint
+   * was actually watched refusing a second
    * create and a stale if-match, and that the bucket retains versions so a
    * later regression cannot destroy what was there.
    *
@@ -103,17 +106,17 @@ export function createS3Storage(config: S3Config): StorageAdapter {
    * nothing: a bucket that does not retain versions can never qualify, so
    * probing it would write an object to earn a refusal it already had.
    */
-  let establishing: Promise<Record<string, string>> | undefined;
-  const transferLocation = (): Promise<Record<string, string>> => {
+  let establishing: Promise<S3ConditionalAuthority> | undefined;
+  const conditionalAuthority = (): Promise<S3ConditionalAuthority> => {
     establishing ??= (async () => {
-      const base = { endpoint: config.endpoint, bucket: config.bucket };
-      if (/(?:^|\.)s3(?:[.-](?:dualstack\.)?[a-z0-9-]+)?\.amazonaws\.com$/.test(new URL(config.endpoint).hostname)) return base;
+      if (/(?:^|\.)s3(?:[.-](?:dualstack\.)?[a-z0-9-]+)?\.amazonaws\.com$/.test(new URL(config.endpoint).hostname)) return {};
       const namespace = storageNamespace({ id: "s3", endpoint: config.endpoint, bucket: config.bucket });
-      const inspect = createS3TransferProtocol({ client, binding: { kind: "s3", namespace, location: base }, url: objectUrl });
+      const location = { endpoint: config.endpoint, bucket: config.bucket };
+      const inspect = createS3TransferProtocol({ client, binding: { kind: "s3", namespace, location }, url: objectUrl });
       const configuration = await inspect.inventoryConfiguration();
-      if (configuration.versioning !== "Enabled") return base;
+      if (configuration.versioning !== "Enabled") return {};
       const proven = await proveS3ConditionalSemantics({ client, url: objectUrl });
-      return { ...base, versioning: "enabled", conditional: proven.conditional };
+      return { versioning: "enabled", conditional: proven.conditional };
     })();
     return establishing;
   };
@@ -290,7 +293,7 @@ export function createS3Storage(config: S3Config): StorageAdapter {
         let originalRevision:StoredObjectRevision|undefined;
         const request:TransferRequestObserver=(descriptor,operation)=>observation.request!(descriptor,async(notify,identity)=>operation(async facts=>{await notify(facts);if(facts.stage==="metadata"&&facts.revision)originalRevision=facts.revision;},identity));
         const namespace=storageNamespace({id:"s3",endpoint:config.endpoint,bucket:config.bucket});
-        const protocol=createS3TransferProtocol({client,binding:{kind:"s3",namespace,location:await transferLocation()},url:objectUrl,observer:request});
+        const protocol=createS3TransferProtocol({client,binding:{kind:"s3",namespace,location:{endpoint:config.endpoint,bucket:config.bucket}},url:objectUrl,observer:request,authority:await conditionalAuthority()});
         await protocol.put(key,body,contentType);await observation.onAccepted?.({revision:originalRevision});
         return{key,bytes:body.byteLength,contentType};
       }

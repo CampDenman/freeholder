@@ -5,6 +5,8 @@ import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { createS3TransferProtocol, createReplitTransferProtocol, proveS3ConditionalSemantics, requireS3ConditionalAuthority } from "../../scripts/media-transfer-protocol.mjs";
+import { checkedTransferBinding } from "@/core/media/transfer-witness";
+import { storageNamespace } from "@/core/media/storage-quota";
 import type { TransferRequestDescriptor, TransferRequestObservation, TransferRequestObserver } from "../../scripts/media-transfer.mjs";
 
 const s3 = { kind: "s3" as const, namespace: "a".repeat(64), location: { bucket: "original-media" } };
@@ -145,24 +147,30 @@ describe("C1.12/C11.08 actual provider protocol boundaries", () => {
 describe("non-AWS conditional authority (C1.12/C11.08)", () => {
   const url = (value: string) => `http://127.0.0.1:9000/original-media/${value.split("/").map(encodeURIComponent).join("/")}`;
   const awsUrl = (value: string) => `https://s3.us-east-1.amazonaws.com/original-media/${value.split("/").map(encodeURIComponent).join("/")}`;
-  const authority = (location: Record<string, string>, target = url, versionId?: string) =>
-    requireS3ConditionalAuthority({ kind: "s3", namespace: "a".repeat(64), location }, target, "private/original.bin", versionId);
+  const bucket = { endpoint: "http://127.0.0.1:9000", bucket: "original-media" };
+  const aws = { endpoint: "https://s3.us-east-1.amazonaws.com", bucket: "original-media" };
+  // Authority travels BESIDE the binding. It must never be added to
+  // `location`: transfer-witness.ts parses that strictly, so an extra field
+  // there refuses every recorded write with "without credentials or extra
+  // fields" -- which is how the recipe gate caught exactly that mistake.
+  const authority = (facts: Record<string, string>, location = bucket, target = url, versionId?: string) =>
+    requireS3ConditionalAuthority({ kind: "s3", namespace: "a".repeat(64), location }, target, "private/original.bin", versionId, facts);
   const refusal = (run: () => void) => {
     try { run(); } catch (error) { return (error as { reason?: string }).reason; }
     throw new Error("The authority check must refuse.");
   };
 
   it("trusts AWS alone, and any other endpoint only once versioning and the probe both hold", () => {
-    expect(() => authority({ endpoint: "https://s3.us-east-1.amazonaws.com", bucket: "original-media" }, awsUrl)).not.toThrow();
+    expect(() => authority({}, aws, awsUrl)).not.toThrow();
     // An unversioned non-AWS bucket is named for the fact an operator can
     // change, not for the probe that could not have rescued it.
-    expect(refusal(() => authority({ endpoint: "http://127.0.0.1:9000", bucket: "original-media" }))).toBe("conditional_unversioned");
-    expect(refusal(() => authority({ endpoint: "http://127.0.0.1:9000", bucket: "original-media", versioning: "enabled" }))).toBe("conditional_unproven");
-    expect(refusal(() => authority({ endpoint: "http://127.0.0.1:9000", bucket: "original-media", conditional: "proven" }))).toBe("conditional_unversioned");
-    expect(() => authority({ endpoint: "http://127.0.0.1:9000", bucket: "original-media", versioning: "enabled", conditional: "proven" })).not.toThrow();
+    expect(refusal(() => authority({}))).toBe("conditional_unversioned");
+    expect(refusal(() => authority({ versioning: "enabled" }))).toBe("conditional_unproven");
+    expect(refusal(() => authority({ conditional: "proven" }))).toBe("conditional_unversioned");
+    expect(() => authority({ versioning: "enabled", conditional: "proven" })).not.toThrow();
     // A supplied version id addresses one immutable version, so it never
     // needed the preconditions in the first place.
-    expect(() => authority({ endpoint: "http://127.0.0.1:9000", bucket: "original-media" }, url, "version-1")).not.toThrow();
+    expect(() => authority({}, bucket, url, "version-1")).not.toThrow();
   });
 
   it("proves the two preconditions, and refuses a provider that accepts either while ignoring it", async () => {
@@ -185,5 +193,29 @@ describe("non-AWS conditional authority (C1.12/C11.08)", () => {
       if (method === "PUT") { if (present) return new Response(null, { status: 412 }); present = true; return new Response(null, { status: 200, headers: { etag: '"probe"' } }); }
       return new Response(null, { status: 204 }); }); })();
     await expect(proveS3ConditionalSemantics({ client: ignoresIfMatch, url })).rejects.toMatchObject({ reason: "conditional_probe_if_match" });
+  });
+});
+
+describe("the binding stays a minimal evidence projection (C1.12/C11.08)", () => {
+  // The first version of the conditional-authority work carried its two facts
+  // inside `binding.location`. Every unit suite passed, and the recipe gate
+  // then refused every recorded write with "Choose an explicit S3 or Replit
+  // storage resource without credentials or extra fields", because
+  // transferBindingSchema parses `location` .strict() so that nothing can ride
+  // along into recorded evidence -- and because the namespace digest is
+  // derived from endpoint and bucket alone. This asserts the rule directly,
+  // since no other local test covered the path that caught it.
+  const endpoint = "https://s3.us-east-1.amazonaws.com", bucket = "original-media";
+  const binding = { kind: "s3" as const, namespace: storageNamespace({ id: "s3", endpoint, bucket }), location: { endpoint, bucket } };
+
+  it("accepts the binding the S3 adapter builds", () => {
+    expect(checkedTransferBinding(binding)).toMatchObject({ kind: "s3", location: { endpoint, bucket } });
+  });
+
+  it("refuses a binding whose location carries the conditional-authority facts", () => {
+    for (const extra of [{ versioning: "enabled" }, { conditional: "proven" }, { versioning: "enabled", conditional: "proven" }]) {
+      expect(() => checkedTransferBinding({ ...binding, location: { ...binding.location, ...extra } }))
+        .toThrow(/without credentials or extra fields/);
+    }
   });
 });

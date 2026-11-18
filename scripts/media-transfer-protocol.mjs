@@ -57,7 +57,12 @@ function s3AwsAuthority(binding,url,key){
  * semantics are known, was the only endpoint allowed here.
  *
  * Any other S3-compatible endpoint now needs BOTH facts, established once at
- * setup and carried on the binding:
+ * setup and passed beside the binding -- never inside it. `location` is a
+ * deliberately minimal evidence projection: transfer-witness.ts parses it
+ * `.strict()` so no credential or extra field can ride along into recorded
+ * evidence, and the namespace digest is computed from its endpoint and bucket.
+ * Authority is a runtime capability of this process, not part of the
+ * resource's identity, so it travels separately:
  *
  *   conditional: "proven"  -- proveS3ConditionalSemantics() below actually
  *                             watched this endpoint refuse a second create and
@@ -69,14 +74,14 @@ function s3AwsAuthority(binding,url,key){
  * Neither alone is enough: the probe proves today's behaviour and versioning
  * covers tomorrow's. Both absent, the endpoint stays fail-closed as before.
  */
-export function requireS3ConditionalAuthority(binding,url,key,versionId){
+export function requireS3ConditionalAuthority(binding,url,key,versionId,authority={}){
  if(versionId!==undefined)return;
  if(s3AwsAuthority(binding,url,key))return;
  // Versioning first: it is read without writing anything, so an endpoint that
  // never qualifies is named for the reason an operator can act on, rather than
  // for a probe that was skipped because it could not have helped.
- if(binding.location.versioning!=="enabled")failure("conditional_unversioned");
- if(binding.location.conditional!=="proven")failure("conditional_unproven");
+ if(authority.versioning!=="enabled")failure("conditional_unversioned");
+ if(authority.conditional!=="proven")failure("conditional_unproven");
 }
 const PROBE_PREFIX="__freeholder_conditional_probe__";
 /**
@@ -143,7 +148,7 @@ function parsedS3Page(document,kind,binding,cursor){
  }else if(value.NextContinuationToken||value.NextVersionIdMarker||value.NextUploadIdMarker)failure("page_cursor_unexpected");
  return{entries,next};
 }
-export function createS3TransferProtocol({client,url,binding,observer}){
+export function createS3TransferProtocol({client,url,binding,observer,authority={}}){
  const bucketUrl=new URL(url("__freeholder_inventory__"));bucketUrl.pathname=bucketUrl.pathname.slice(0,bucketUrl.pathname.lastIndexOf("/"));
  async function readVersioned(key,expected,expectedObjectBytes){objectKey(key);if(expectedObjectBytes!==undefined)expectedBytes(expectedObjectBytes);const pinned=expected?exactRevision(expected,binding,key):undefined,target=new URL(url(key));if(pinned?.versionId!==undefined)target.searchParams.set("versionId",pinned.versionId);return observed(observer,{kind:"object.read",binding,key,...(pinned?{expectedRevision:pinned}:{}),...(expectedObjectBytes!==undefined?{bytes:expectedObjectBytes}:{})},async notify=>{
   const response=await client.fetch(target,{redirect:"error",headers:{"accept-encoding":"identity",...(pinned?{"if-match":pinned.value}:{})}});
@@ -180,11 +185,11 @@ export function createS3TransferProtocol({client,url,binding,observer}){
   },
   async get(key){return(await readVersioned(key))?.body;},
   async put(key,body,contentType){objectKey(key);return observed(observer,{kind:"object.put",binding,key,createOnly:true,sha256:digest(body),bytes:body.byteLength},async(notify,identity)=>{
-   requireS3ConditionalAuthority(binding,url,key);const response=await client.fetch(url(key),{method:"PUT",redirect:"error",body:new Blob([body],{type:contentType}),headers:{"content-length":String(body.byteLength),"if-none-match":"*",...originalRequestHeaders(identity)}});
+   requireS3ConditionalAuthority(binding,url,key,undefined,authority);const response=await client.fetch(url(key),{method:"PUT",redirect:"error",body:new Blob([body],{type:contentType}),headers:{"content-length":String(body.byteLength),"if-none-match":"*",...originalRequestHeaders(identity)}});
    await notify({stage:"response",status:response.status});if(!response.ok)failure("write_response");await notify({stage:"accepted",status:response.status});const written=revision(binding,key,response.headers.get("etag"),response.headers.get("x-amz-version-id")??undefined);await notify({stage:"metadata",status:response.status,revision:written});
   });},
   async deleteVersioned(key,input){const rev=exactRevision(input,binding,key),target=new URL(url(key));if(rev.versionId!==undefined)target.searchParams.set("versionId",rev.versionId);
-   return observed(observer,{kind:"object.delete",binding,key,expectedRevision:rev},async notify=>{requireS3ConditionalAuthority(binding,url,key,rev.versionId);const response=await client.fetch(target,{method:"DELETE",redirect:"error",headers:{"if-match":rev.value}});await notify({stage:"response",status:response.status});if(!response.ok)failure("delete_response");await notify({stage:"accepted",status:response.status});});
+   return observed(observer,{kind:"object.delete",binding,key,expectedRevision:rev},async notify=>{requireS3ConditionalAuthority(binding,url,key,rev.versionId,authority);const response=await client.fetch(target,{method:"DELETE",redirect:"error",headers:{"if-match":rev.value}});await notify({stage:"response",status:response.status});if(!response.ok)failure("delete_response");await notify({stage:"accepted",status:response.status});});
   },
   async inventoryPage(kind,cursor=null){
    if(!["objects","versions","sessions"].includes(kind))failure("inventory_kind");const target=new URL(bucketUrl);target.searchParams.set("encoding-type","url");
