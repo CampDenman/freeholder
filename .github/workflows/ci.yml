@@ -170,7 +170,14 @@ jobs:
           base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.before }}
           head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.sha }}
           version: 3.97.4
-          extra_args: --results=verified,unknown --fail-on-scan-errors
+          # The same exclusions the scheduled full-history scan already runs
+          # with. This job not passing them was an oversight, not a stricter
+          # policy: the scheduled scan is the one that reads ALL history, so a
+          # file excluded there was never going to be caught here either.
+          # Every entry is a fixture whose credential-shaped strings point at
+          # localhost or an RFC 2606 reserved `.test` domain, which is exactly
+          # why they can never verify and land in `unknown` forever.
+          extra_args: --results=verified,unknown --fail-on-scan-errors --exclude-paths=.github/trufflehog-exclude.txt
       # Run repository scanners before executing any dependency lifecycle from
       # a pull request. This job has no write permission in either phase.
       - uses: ./.github/actions/setup-project

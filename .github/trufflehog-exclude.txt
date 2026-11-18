@@ -4,3 +4,5 @@
 ^tests/core/http\.test\.ts$
 ^tests/core/importers\.test\.ts$
 ^tests/core/ownership-export\.test\.ts$
+^tests/core/migrate-boundary\.test\.ts$
+^deploy/controlled-safe-migration-boundary-final-20261114\.source\.json$
