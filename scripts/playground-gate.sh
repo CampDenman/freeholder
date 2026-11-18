@@ -9,7 +9,34 @@ export PLAYGROUND_DOMAIN=demo.example.test
 export PLAYGROUND_DB_PASSWORD="$(openssl rand -hex 32)"
 export PLAYGROUND_SESSION_SECRET="$(openssl rand -hex 32)"
 compose() { docker compose --project-name freeholder-playground --file deploy/docker-selfhost/playground/compose.yml "$@"; }
-cleanup() { result=$?; if [ "$result" != 0 ]; then compose logs --tail 100 app; fi; compose down --timeout 10 >/dev/null 2>&1 || true; docker network rm freeholder-playground-proxy >/dev/null 2>&1 || true; }
+# On failure, say WHY. `compose logs` alone reports only
+# "migration unavailable (Error)", because instrumentation.node.ts prints an
+# error's code or class name and never its message -- right for a production
+# log, useless here. This playground is disposable, its password came from
+# `openssl rand`, and the log goes nowhere but this CI job, so the error itself
+# is safe to print. It runs the image's OWN shipped runner, in the app
+# container, with the app's environment and network: if migration succeeds here
+# while boot reports it failing, the fault is in the boot path, not the
+# migration.
+diagnose() {
+  echo '--- the shipped migration runner, in the app container ---'
+  compose exec -T app node -e '
+    (async () => {
+      const { default: postgres } = await import("postgres");
+      const { runMigrationsOnDedicatedSession } = await import("/app/src/core/migrate-runner.mjs");
+      const client = postgres(process.env.DATABASE_URL, { max: 1, onnotice: () => {} });
+      try {
+        await runMigrationsOnDedicatedSession(client, { migrationsFolder: "db/migrations" });
+        console.log("Migration SUCCEEDED from inside the app container: the migration phase is not what is failing.");
+      } catch (error) {
+        console.error(`name=${error?.name} code=${error?.code}`);
+        console.error(String(error?.message ?? "").slice(0, 4000));
+        console.error(String(error?.stack ?? "").slice(0, 4000));
+      } finally { await client.end(); }
+    })().catch((error) => console.error("probe itself failed:", error?.message));
+  ' 2>&1 || echo 'the probe could not run in the app container'
+}
+cleanup() { result=$?; if [ "$result" != 0 ]; then compose logs --tail 100 app; diagnose; fi; compose down --timeout 10 >/dev/null 2>&1 || true; docker network rm freeholder-playground-proxy >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 docker network create --internal freeholder-playground-proxy
 compose up -d
