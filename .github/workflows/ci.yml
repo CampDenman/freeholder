@@ -69,9 +69,14 @@ jobs:
       - name: Install the customer app
         working-directory: apps/mobile
         run: npm ci --no-audit --no-fund
+      # npm audit has no per-advisory allowance, so one unpatchable advisory
+      # could only be passed by raising --audit-level until the step stopped
+      # meaning anything. This keeps the severity and names the exceptions,
+      # the same shape as `allow-ghsas` on the dependency-review step above,
+      # and fails on an advisory that is not named, an expired allowance, or
+      # an allowance that no longer matches anything.
       - name: Audit the customer app dependency tree
-        working-directory: apps/mobile
-        run: npm audit --package-lock-only --audit-level=moderate
+        run: node scripts/mobile-audit.mjs
       - name: Typecheck the customer app
         working-directory: apps/mobile
         run: npx tsc -p tsconfig.json --noEmit
