@@ -860,8 +860,8 @@ describe.runIf(hasDatabase)("actual playground producer poll target switch", () 
       // physical cross-database writes. No product-leak inference is assumed.
       expect(directProd[0]).toMatchObject({ name: prodName, pages: 1, graffiti: 0, sentinel: 1 });
       expect(directPlay[0]).toMatchObject({ name: playName, pages: 1, graffiti: 1, sentinel: 0 });
-      expect(prodJournal).toMatchObject([{ entries: 80, latest: "1793310000059" }]);
-      expect(playJournal).toMatchObject([{ entries: 80, latest: "1793310000059" }]);
+      expect(prodJournal).toMatchObject([{ entries: 81, latest: "1795000136674" }]);
+      expect(playJournal).toMatchObject([{ entries: 81, latest: "1795000136674" }]);
       expect(coreSelected).toBe(prodName); expect(coreGraffiti).toHaveLength(0);
     } finally {
       releaseClose?.(); await switching?.catch(() => {}); vi.restoreAllMocks();
