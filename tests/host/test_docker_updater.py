@@ -7,6 +7,7 @@ import http.client
 import importlib.util
 import json
 import io
+import os
 from pathlib import Path
 import socket
 import socketserver
@@ -626,5 +627,179 @@ class SocketServerTests(unittest.TestCase):
         with self.assertRaisesRegex(updater.Refused, "non-socket"):
             updater.prepare_socket_path(config)
 
+
+class SelfPublishedInstallation(unittest.TestCase):
+    """C10.31: a private installation that signs its own images."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.key = self.root / "cosign.pub"
+        self.key.write_text("-----BEGIN PUBLIC KEY-----\n")
+        self.key.chmod(0o644)
+        self.publisher = {
+            "image": "forge.example.test/tony/freeholder",
+            "cosign_key": str(self.key),
+            "compare_api": "https://forge.example.test/api/v1/repos/tony/freeholder/compare",
+        }
+
+    def accept(self, publisher):
+        # The key check requires root ownership, which a test process does not
+        # have; everything else about the block is still validated.
+        with patch.object(updater.Path, "stat", lambda _self: os.stat_result((0o100644, 0, 0, 1, 0, 0, 0, 0, 0, 0))):
+            updater.validate_publisher(publisher)
+
+    def test_absent_publisher_changes_nothing(self):
+        updater.validate_publisher(None)
+
+    def test_a_complete_block_is_accepted(self):
+        self.accept(self.publisher)
+
+    def test_two_of_three_fields_is_an_unsigned_image_and_is_refused(self):
+        for field in updater.PUBLISHER_FIELDS:
+            partial = {k: v for k, v in self.publisher.items() if k != field}
+            with self.subTest(missing=field):
+                with self.assertRaises(updater.Refused):
+                    self.accept(partial)
+            with self.subTest(blank=field):
+                with self.assertRaises(updater.Refused):
+                    self.accept(dict(self.publisher, **{field: "   "}))
+
+    def test_refuses_a_publisher_that_is_not_an_object(self):
+        for value in ("forge.example.test", [], 7, True):
+            with self.subTest(value=value), self.assertRaises(updater.Refused):
+                updater.validate_publisher(value)
+
+    def test_image_must_be_a_repository_not_a_tag_or_digest(self):
+        for image in ("forge.example.test/tony/freeholder:latest",
+                      "forge.example.test/tony/freeholder@sha256:" + "a" * 64,
+                      "Forge.Example.Test/tony/freeholder", "freeholder", ""):
+            with self.subTest(image=image), self.assertRaises(updater.Refused):
+                self.accept(dict(self.publisher, image=image))
+
+    def test_compare_api_must_be_https(self):
+        for endpoint in ("http://forge.example.test/api", "ftp://forge.example.test", "forge.example.test"):
+            with self.subTest(endpoint=endpoint), self.assertRaises(updater.Refused):
+                self.accept(dict(self.publisher, compare_api=endpoint))
+
+    def test_refuses_a_key_anyone_could_rewrite(self):
+        # Not absolute.
+        with self.assertRaises(updater.Refused):
+            self.accept(dict(self.publisher, cosign_key="cosign.pub"))
+        # Not root-owned: the real stat of a file this test owns.
+        with self.assertRaisesRegex(updater.Refused, "root-owned"):
+            updater.validate_publisher(self.publisher)
+        # Root-owned but group-writable is just as fatal.
+        with patch.object(updater.Path, "stat", lambda _self: os.stat_result((0o100664, 0, 0, 1, 0, 0, 0, 0, 0, 0))):
+            with self.assertRaisesRegex(updater.Refused, "root-owned"):
+                updater.validate_publisher(self.publisher)
+
+    def test_refuses_a_key_that_is_not_readable(self):
+        # Not via accept(): that patches stat, which is the very call under test.
+        with self.assertRaisesRegex(updater.Refused, "not readable"):
+            updater.validate_publisher(dict(self.publisher, cosign_key=str(self.root / "absent.pub")))
+
+
+class SelfPublishedVerification(unittest.TestCase):
+    def executor(self, publisher=None):
+        root = Path(tempfile.mkdtemp())
+        config = {"directory": str(root), "state_directory": str(root / "state"),
+                  "socket": "/run/freeholder-updater/updater.sock"}
+        if publisher:
+            config["publisher"] = publisher
+        executor = RealExecutor(config)
+        executor.commands = []
+        executor.run = lambda args, **kwargs: executor.commands.append(args) or ""
+        return executor
+
+    PUBLISHER = {"image": "forge.example.test/tony/freeholder", "cosign_key": "/etc/freeholder/cosign.pub",
+                 "compare_api": "https://forge.example.test/api/v1/repos/tony/freeholder/compare"}
+
+    def test_upstream_still_requires_the_exact_keyless_identity(self):
+        executor = self.executor()
+        executor.verify("sha256:" + "c" * 64)
+        argv = executor.commands[0]
+        self.assertIn("--certificate-identity", argv)
+        self.assertIn("--certificate-oidc-issuer", argv)
+        self.assertIn(updater.IMAGE + "@sha256:" + "c" * 64, argv)
+        self.assertNotIn("--key", argv)
+
+    def test_a_self_published_image_is_verified_against_one_key_only(self):
+        executor = self.executor(self.PUBLISHER)
+        executor.verify("sha256:" + "c" * 64)
+        argv = executor.commands[0]
+        self.assertIn("--key", argv)
+        self.assertIn("/etc/freeholder/cosign.pub", argv)
+        self.assertIn("forge.example.test/tony/freeholder@sha256:" + "c" * 64, argv)
+        # Two accepted chains would mean either could admit an image.
+        self.assertNotIn("--certificate-identity", argv)
+        self.assertNotIn("--certificate-oidc-issuer", argv)
+        self.assertNotIn(updater.IMAGE, " ".join(argv))
+
+    def test_a_bad_digest_is_still_refused_before_any_command_runs(self):
+        executor = self.executor(self.PUBLISHER)
+        with self.assertRaises(updater.Refused):
+            executor.verify("sha256:" + "z" * 64)
+        self.assertEqual(executor.commands, [])
+
+
+class ForgeAncestry(unittest.TestCase):
+    """Forgejo's compare is not GitHub's; this is what makes it safe to use."""
+
+    PREVIOUS, CANDIDATE = "a" * 40, "b" * 40
+
+    def executor(self, payload=None, error=None):
+        root = Path(tempfile.mkdtemp())
+        executor = RealExecutor({"directory": str(root), "state_directory": str(root / "state"),
+                                 "socket": "/run/freeholder-updater/updater.sock",
+                                 "publisher": {"image": "forge.example.test/tony/freeholder",
+                                               "cosign_key": "/etc/freeholder/cosign.pub",
+                                               "compare_api": "https://forge.example.test/api/v1/repos/tony/freeholder/compare"}})
+        self.requested = []
+
+        @contextlib.contextmanager
+        def opener(request, timeout=None):
+            self.requested.append(request.full_url)
+            if error:
+                raise error
+            yield io.BytesIO(json.dumps(payload).encode())
+
+        self.opener = opener
+        return executor
+
+    def run_check(self, executor):
+        with patch.object(updater.urllib.request, "urlopen", self.opener):
+            executor.verify_forward_on_forge(self.PREVIOUS, self.CANDIDATE)
+
+    def test_zero_commits_behind_proves_the_previous_image_is_an_ancestor(self):
+        executor = self.executor({"total_commits": 0, "commits": [], "files": []})
+        self.run_check(executor)
+        # Asked candidate...previous, which is the direction that proves it.
+        self.assertTrue(self.requested[0].endswith(self.CANDIDATE + "..." + self.PREVIOUS))
+
+    def test_a_downgrade_or_a_divergent_candidate_is_refused(self):
+        executor = self.executor({"total_commits": 3, "commits": [], "files": []})
+        with self.assertRaisesRegex(updater.Refused, "forward update"):
+            self.run_check(executor)
+
+    def test_a_github_shaped_payload_is_not_silently_accepted(self):
+        # The trap this exists to stop: GitHub's keys with no total_commits.
+        executor = self.executor({"status": "ahead", "merge_base_commit": {"sha": PREVIOUS_SHA}})
+        with self.assertRaisesRegex(updater.Refused, "usable commit comparison"):
+            self.run_check(executor)
+
+    def test_a_non_integer_or_boolean_count_is_not_a_zero(self):
+        for payload in ({"total_commits": None}, {"total_commits": "0"}, {"total_commits": False}, {}):
+            with self.subTest(payload=payload):
+                executor = self.executor(payload)
+                with self.assertRaisesRegex(updater.Refused, "usable commit comparison"):
+                    self.run_check(executor)
+
+    def test_an_unreachable_forge_changes_no_deployment(self):
+        executor = self.executor(error=OSError("unreachable"))
+        with self.assertRaisesRegex(updater.Refused, "No deployment was changed"):
+            self.run_check(executor)
+
+
+PREVIOUS_SHA = "a" * 40
 
 if __name__ == "__main__": unittest.main()

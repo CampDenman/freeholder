@@ -14324,7 +14324,16 @@ the spine without surveillance, shadow ledgers or channel-specific silos.
   (`load_config`), the standard app/db/caddy + S3 recipe enforced by
   `inventory()`, exact publisher cosign identity
   (`publish-image.yml@refs/heads/main` + GitHub OIDC issuer) in `verify()`,
-  forward-only commit ancestry via the public compare endpoint, a private
+  forward-only commit ancestry via the public compare endpoint,
+  with an optional root-configured `publisher` block (2026-11-18) for an
+  installation that publishes and signs its own images — all of
+  `image`/`cosign_key`/`compare_api` or none, a root-owned non-group-writable
+  key, `cosign verify --key` *instead of* the keyless identity rather than
+  beside it, and a Forgejo-shaped ancestry proof, since that API returns
+  `total_commits` with no `status` or `merge_base_commit` and the upstream
+  reading would refuse every candidate while looking like a bad signature
+  (`validate_publisher`/`verify_forward_on_forge`, 16 added drills in
+  `tests/host/test_docker_updater.py`, 90 passing), a private
   root:operator-group 0660 Unix socket exposing only GET /status and
   POST /apply (`make_handler`/`prepare_socket_path`), restored-backup rehearsal
   into a no-egress scratch DB with the unchanged schema+journal sha256 gate

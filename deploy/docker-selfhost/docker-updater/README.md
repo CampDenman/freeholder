@@ -57,6 +57,58 @@ only when the running image matches that exact digest. Never guess its commit
 from a mutable tag. New candidate images must carry their own revision label;
 the bootstrap baseline cannot authorize an unlabelled candidate.
 
+## A private installation that publishes and signs its own images
+
+By default this executor trusts the upstream chain: images from
+`ghcr.io/campdenman/freeholder`, signed by the `publish-image.yml` workflow's
+keyless identity, with commit ancestry read from GitHub's compare endpoint.
+
+An installation that builds its own images — a private forge, an internal
+mirror — signs them itself, and names the whole chain in one `publisher` block:
+
+```json
+"publisher": {
+  "image": "forge.example.test/tony/freeholder",
+  "cosign_key": "/etc/freeholder/cosign.pub",
+  "compare_api": "https://forge.example.test/api/v1/repos/tony/freeholder/compare"
+}
+```
+
+All three fields are required together. Two of three is refused rather than
+assumed, because an image with no key is an unsigned image and a key with no
+compare endpoint cannot prove a candidate is a forward update. There is
+deliberately no setting that verifies less.
+
+- `cosign_key` must be an **absolute path, root-owned and not writable by group
+  or other**. Whoever can rewrite that file decides which images may run, so it
+  is held to the same standard as this configuration.
+- Verification becomes `cosign verify --key`. The keyless identity flags are
+  **not** also passed: two accepted chains would mean either one could admit an
+  image.
+- `compare_api` must be `https`.
+
+### Why the ancestry check is written the other way round
+
+Forgejo's compare API is **not** GitHub's. It returns `{total_commits, commits,
+files}` with no `status` and no `merge_base_commit`. Pointing the upstream
+reading at it does not fail loudly: `status` reads as absent, every candidate
+is refused, and it looks like a broken signature rather than a mismatched
+payload shape.
+
+What Forgejo does return is exactly `git rev-list --count base..head`, verified
+against this repository in both directions. So the executor asks for the
+commits reachable from the **previous** image but not from the **candidate**.
+Zero proves the previous image is an ancestor of the candidate; anything else
+is a divergent build or a downgrade from a stale tag, and is refused. A payload
+without an integer `total_commits` is treated as unrecognised, never as zero.
+
+### What the publishing side must provide
+
+This is the verifying half only. A private installation also needs a workflow
+that builds the image, pushes it to that repository, and signs the pushed
+digest with the private half of `cosign_key`. Until that exists, leave
+`publisher` out and the upstream chain applies unchanged.
+
 Every candidate is signature-checked, restored against a real database backup
 and checked against upstream commit history so a stale channel tag cannot
 downgrade the installation. Missing revision labels, unavailable commit-history
